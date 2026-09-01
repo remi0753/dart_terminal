@@ -22,21 +22,29 @@ enum _RuntimeMode {
 }
 
 final class _Options {
-  const _Options({required this.mode, required this.bundlePath});
+  const _Options({
+    required this.mode,
+    required this.bundlePath,
+    required this.launchArchitecture,
+  });
 
   final _RuntimeMode mode;
   final String bundlePath;
+  final String? launchArchitecture;
 }
 
 _Options _parseOptions(List<String> arguments) {
   _RuntimeMode? mode;
   String? bundlePath;
+  String? launchArchitecture;
   for (final String argument in arguments) {
     if (argument.startsWith('--mode=')) {
       final String value = argument.substring('--mode='.length);
       mode = _RuntimeMode.values
           .where((_RuntimeMode candidate) => candidate.name == value)
           .firstOrNull;
+    } else if (argument.startsWith('--launch-architecture=')) {
+      launchArchitecture = argument.substring('--launch-architecture='.length);
     } else if (argument.startsWith('-')) {
       throw _SmokeException('unknown argument: $argument');
     } else if (bundlePath != null) {
@@ -51,7 +59,18 @@ _Options _parseOptions(List<String> arguments) {
   if (bundlePath == null) {
     throw const _SmokeException('one app bundle is required');
   }
-  return _Options(mode: mode, bundlePath: bundlePath);
+  if (launchArchitecture != null &&
+      launchArchitecture != 'arm64' &&
+      launchArchitecture != 'x86_64') {
+    throw const _SmokeException(
+      '--launch-architecture must be arm64 or x86_64',
+    );
+  }
+  return _Options(
+    mode: mode,
+    bundlePath: bundlePath,
+    launchArchitecture: launchArchitecture,
+  );
 }
 
 Future<String> _plistValue(String plistPath, String key) async {
@@ -123,9 +142,19 @@ Future<void> _runSmoke(_Options options) async {
   }
 
   final Stopwatch stopwatch = Stopwatch()..start();
+  final String processExecutable = options.launchArchitecture == null
+      ? executablePath
+      : '/usr/bin/arch';
+  final List<String> processArguments = options.launchArchitecture == null
+      ? launchArguments
+      : <String>[
+          '-${options.launchArchitecture}',
+          executablePath,
+          ...launchArguments,
+        ];
   final Process process = await Process.start(
-    executablePath,
-    launchArguments,
+    processExecutable,
+    processArguments,
     workingDirectory: Directory.current.path,
   );
   final Future<String> stdoutText = process.stdout
@@ -169,6 +198,7 @@ Future<void> _runSmoke(_Options options) async {
 
   stdout.writeln(
     'RUNTIME_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'elapsed_ms=${stopwatch.elapsedMilliseconds}',
   );
 }

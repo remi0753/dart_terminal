@@ -4,6 +4,10 @@
 エミュレーターです。Ghostty は機能・品質の比較基準としてのみ参照し、
 Ghostty や `libghostty` を製品へ組み込みません。
 
+主要な開発・実機受け入れ baseline は Apple M1/arm64 です。x86_64 は M1 上の
+明示的 cross-build、Rosetta compatibility smoke、厳密な Universal audit を主要
+gate とし、Intel-native 実機確認は主要ゴール後の低優先 follow-up として扱います。
+
 現在の通常エントリーポイントはまだ command console ですが、Phase 0 の
 feasibility gate と仕様凍結は完了しています。release AOT、worker isolate、
 安全な PTY child、64 KiB batching、Metal、CoreText、日本語 IME、packed grid、
@@ -29,58 +33,123 @@ make engine
 ```
 
 その後、このディレクトリで依存関係を解決し、製品の developer JIT
-bundle を起動します。
+bundle を起動します。thin runtime target は architecture の省略や推測を
+許可しないため、`RUNTIME_ARCH=arm64` または `RUNTIME_ARCH=x86_64` を必ず
+指定します。
 
 ```shell
 dart pub get
-make developer-jit-run
+make RUNTIME_ARCH=arm64 developer-jit-run
 ```
 
 開始ディレクトリなどのアプリ引数は `RUNTIME_ARGUMENTS` で渡します。
 
 ```shell
-make developer-jit-run RUNTIME_ARGUMENTS="--working-directory=/tmp"
+make RUNTIME_ARCH=arm64 developer-jit-run \
+  RUNTIME_ARGUMENTS="--working-directory=/tmp"
 ```
 
 自動終了を含む integration smoke:
 
 ```shell
-make developer-jit-integration
+make RUNTIME_ARCH=arm64 developer-jit-integration
 ```
 
 developer JIT は、full linked Kernel と JIT Engine を含む開発専用 bundle
-です。配布物には使用しません。
+です。成果物は
+`build/runtime/<architecture>/developer-jit/DartTerminalDeveloper.app` に
+作られ、配布物には使用しません。
 
 ## Release AOT
 
-現在の host architecture 用の thin release-AOT bundle を構築・監査・起動
+arm64 または x86_64 の thin release-AOT bundle を明示的に構築・監査・起動
 できます。
 
 ```shell
-make release-aot-build
-make release-aot-audit
-make release-aot-run
+make RUNTIME_ARCH=arm64 release-aot-build
+make RUNTIME_ARCH=arm64 release-aot-audit
+make RUNTIME_ARCH=arm64 release-aot-run
 ```
 
-成果物は `build/runtime/release-aot/DartTerminal.app` です。製品の
+成果物は `build/runtime/<architecture>/release-aot/DartTerminal.app` です。製品の
 `bin/main.dart` を AOT snapshot として含み、Kernel、JIT Engine、VM service
-asset は含みません。現時点では host architecture の thin、ad-hoc signed
-bundle であり、Universal Binary や配布署名済みアプリではありません。
+asset は含みません。各 thin bundle は単一 architecture の ad-hoc signed
+中間成果物であり、Universal Binary や配布署名済みアプリとは呼びません。
+build ごとの manifest は source/revision、実効設定、toolchain、および実際に
+使用した Engine/compiler/platform/snapshotter の hash を common provenance と
+architecture lane に分けて記録します。audit は署名済み bundle 全体の seal を
+`build/runtime/<architecture>/<mode>/thin-audit.json` に保存します。bundle と
+この receipt は一組の immutable handoff artifact として扱います。
+
+両 architecture を独立監査し、revision・設定・全非 Mach-O 資産が一致する
+場合だけ、fresh staging で Universal release-AOT bundle を組み立てます。
+
+```shell
+make universal-release-aot-audit
+make universal-release-aot-integration
+```
+
+成果物は `build/runtime/universal/release-aot/DartTerminal.app` です。
+launcher、Product AOT Engine、AOT snapshot のすべてが正確に arm64/x86_64 の
+2 slice を持ち、組み立て後に再度 ad-hoc 署名されます。これはローカル整合性
+確認用で、Developer ID 署名、hardened runtime、notarization を終えた配布物では
+ありません。Apple Silicon 上の x86_64 smoke は Rosetta 互換性の証拠であり、
+Intel 実機テストの代替にはなりません。
+
+Universal assembly は監査済み thin input を変更せず、全検証と再署名を
+sibling staging で終えてから atomic publish します。既存の正常出力がある場合も、
+失敗時は最後の bundle と2つの receipt を同じ世代のまま保持します。組立記録は
+`assembly-report.json`、独立した署名済み bundle receipt は
+`universal-audit.json` に保存され、3成果物を含む親ディレクトリが一度だけ
+atomic publish されます。
+
+### 低優先の Intel-native handoff
+
+Intel Mac では、転送済みの x86_64 thin bundle、Universal bundle、および
+対応する3つの audit receipt だけを再監査・native smoke できます。この target に
+build 依存関係はなく、Rosetta または Apple Silicon host では開始前に失敗します。
+主要ゴール後に追加互換性証跡を得る際は、すべての path に絶対 path、evidence
+出力に未作成の path を指定してください。
+
+```shell
+make intel-native-runtime-verify \
+  INTEL_DEVELOPER_JIT_BUNDLE=/abs/handoff/x86_64/developer/DartTerminalDeveloper.app \
+  INTEL_DEVELOPER_JIT_REPORT=/abs/handoff/x86_64/developer/thin-audit.json \
+  INTEL_RELEASE_AOT_BUNDLE=/abs/handoff/x86_64/release/DartTerminal.app \
+  INTEL_RELEASE_AOT_REPORT=/abs/handoff/x86_64/release/thin-audit.json \
+  INTEL_UNIVERSAL_BUNDLE=/abs/handoff/universal/DartTerminal.app \
+  INTEL_UNIVERSAL_REPORT=/abs/handoff/universal/universal-audit.json \
+  INTEL_HARDWARE_LABEL=intel-ci-runner-name \
+  INTEL_EVIDENCE_OUTPUT=/abs/evidence/intel-native-runtime.json
+```
+
+成功時は host model/CPU/macOS build、receipt hash、fresh audit、3つの native
+smoke を上書き不可の evidence JSON に保存します。この evidence がないローカル
+matrix 結果は明示的に「Intel-native 未実施」と表示しますが、Apple M1 baseline の
+Universal task や主要ゴールの完了を阻害しません。Rosetta を Intel-native とみなさない
+区別自体は維持します。
 
 ## ローカルチェック
 
 ```shell
 make runtime-source-check
-make runtime-bundle-audit
-make runtime-integration
+make RUNTIME_ARCH=arm64 runtime-bundle-audit
+make RUNTIME_ARCH=arm64 runtime-integration
 ```
 
 developer JIT と release AOT の source check、build、bundle audit、共通
 integration suite をまとめて実行する場合:
 
 ```shell
-make runtime-verify
+make RUNTIME_ARCH=arm64 runtime-verify
+make RUNTIME_ARCH=x86_64 runtime-verify
+make runtime-matrix-verify
 ```
+
+`runtime-matrix-verify` は両 thin lane、Universal assembly/audit、fail-closed
+負テスト、freshness 回帰、利用可能な native/Rosetta smoke をまとめて実行
+します。Intel 実機 handoff は主要ゴール後の別 follow-up であるため、この command
+は最後に未実施状態を情報として表示します。
 
 Phase 0 全体（debug/JIT、全 release-AOT spike、benchmark、bundle 監査）を
 歴史的な feasibility regression として再検証する場合:
@@ -90,7 +159,9 @@ make phase0-verify
 ```
 
 個別の再現方法と測定結果は [`docs/phase0`](docs/phase0)、設計判断は
-[`docs/adr`](docs/adr) にあります。
+[`docs/adr`](docs/adr)、runtime matrix と Universal assembly の契約は
+[`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)
+にあります。
 
 ## 構成
 

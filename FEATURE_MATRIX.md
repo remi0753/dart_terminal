@@ -1,8 +1,9 @@
 # Dart Terminal feature matrix
 
-最終更新: 2026-08-31  
+最終更新: 2026-09-02<br>
 比較基準: [`ghostty-org/ghostty@d4d8f62262cb1a974a7d2470d5f79f811fab15e4`](https://github.com/ghostty-org/ghostty/tree/d4d8f62262cb1a974a7d2470d5f79f811fab15e4)  
-対象: macOS 14 以降、Flutter 不使用
+対象: macOS 14 以降、Flutter 不使用<br>
+主要実機 baseline: Apple M1/arm64
 
 ## 目的と読み方
 
@@ -47,6 +48,10 @@ font、input、config、macOS UI、release workflow の実装とテストを確�
 現在の Dart Terminal は AppKit main thread 上の JIT root isolate と単一 `TextView`、
 コマンドごとの `zsh -lc` までである。下表の「現在」が `未実装` でも欠落ではなく、
 指定 Phase まで明示的に defer した backlog である。
+
+実機受け入れは Apple M1/arm64 を優先する。x86_64 は M1 cross-build、Rosetta
+compatibility、Universal exact-slice audit を主要 gate とし、Intel-native handoff は
+主要ゴール後の低優先 follow-up であって各 Phase や最終完了の必須条件ではない。
 
 ## Runtime、PTY、process lifecycle
 
@@ -198,7 +203,7 @@ font、input、config、macOS UI、release workflow の実装とテストを確�
 | PERF-01 | parser AOT ≥100 MiB/s、AppKit event p95 <1 ms、key→PTY p95 <2 ms | P0 | 0–11 | `G:src/benchmark/`, `G:macos/Tests/BenchmarkTests.swift` | Phase 0 harness |
 | PERF-02 | 100 MiB burst で UI hang 0、bounded memory/queue。1 pane flood が他 pane latency を2倍にしない | P0/P1 | 2/7/11 | Ghostty termio/renderer threaded design | Phase 0 harness starts |
 | REL-01 | child/GPU/isolate fault、late event/double dispose、sleep/wake/display change、24/72h soak | P0/P1 | 1–11 | pinned tests, crash and renderer recovery paths | 未実装 |
-| DIST-01 | release AOT `.app`、arm64/x86_64、Universal Binary | P0 | 1/11 | native Ghostty app and universal release workflow | AOT Phase 0 gate |
+| DIST-01 | release AOT `.app`、arm64/x86_64、Universal Binary | P0 | 1/11 | native Ghostty app and universal release workflow | Phase 1 完了: M1-native arm64、Rosetta x86_64、Universal audit |
 | DIST-02 | Developer ID、hardened runtime、notarization、minimal entitlements | P0/P1 | 11 | `G:.github/workflows/release-tag.yml`, `G:macos/Ghostty.entitlements` | 未実装 |
 | DIST-03 | signed update feed、rollback/failure path、release notes | P2 | 11 | `G:macos/Sources/Features/Update/`, `G:dist/macos/` | 未実装 |
 | DIST-04 | local crash/hang metadata と privacy-safe diagnostics | P1 | 11 | `G:src/crash/`, release dSYM workflow | 未実装 |

@@ -1,11 +1,15 @@
 # Dart Terminal — Ghostty クラス品質への詳細ロードマップ
 
-最終更新: 2026-09-01  
+最終更新: 2026-09-02<br>
 対象: macOS 14 以降、Flutter 不使用  
 Ghostty 調査基準: `ghostty-org/ghostty` main の
 `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`  
 ローカル基準: `dart_appkit` の
 `5613950f15cf9837e5a025a9943c5b8010be4218`
+
+主要な開発・実機受け入れ baseline は Apple M1/arm64 とする。x86_64 は M1 上の
+cross-build、Rosetta compatibility、Universal audit を主要 gate とし、
+Intel-native 実機証跡は主要ゴール後の低優先 follow-up とする。
 
 ## 1. 目標
 
@@ -489,7 +493,9 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 目的: 現在の hello-window 用 `dart_appkit` を製品の土台へする。
 
 - [x] debug JIT と release AOT の build/run path を分離
-- [ ] arm64/x86_64 の build matrix と Universal Binary 組み立て
+- [x] arm64/x86_64 の build matrix と Universal Binary 組み立て（M1-native、
+  Rosetta x86_64 compatibility、Universal audit。詳細は
+  [`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)）
 - [ ] VM/isolate の起動、error、uncaught exception、shutdown contract
 - [ ] native event wire format の versioning と backward compatibility
 - [ ] handle registry に thread-domain と asynchronous destruction を追加
@@ -716,6 +722,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - known limitation が文書化され、silent misbehavior がない。
 - 30 日の daily-driver と 72 時間の automated soak を通る。
 
+### 主要ゴール後の低優先 follow-up
+
+- [ ] Intel-native no-rebuild runtime handoff と追加互換性証跡（主要ゴール達成後に
+  実施し、
+  [`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)
+  を実施時に参照する）
+
 ## 8. テスト戦略
 
 | レベル | 対象 | 必須内容 |
@@ -792,6 +805,9 @@ Phase 0 で baseline machine、Ghostty build、corpus、測定方法を固定し
 ## 11. 完了定義
 
 Ghostty クラス到達を宣言できるのは、次をすべて満たしたときだけとする。
+主要実機 baseline は Apple M1/arm64 とし、x86_64 は cross-build、Rosetta、
+Universal audit で主要互換性を受け入れる。Intel-native の追加証跡は上記の
+主要ゴール後 follow-up であり、この完了定義の必須条件には含めない。
 
 - pinned feature matrix の P0/P1 に未説明の欠落がない。
 - compatibility suite と daily-use program matrix が release AOT で通る。
