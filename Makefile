@@ -6,18 +6,30 @@ MACOSX_DEPLOYMENT_TARGET ?= 14.0
 DART_APPKIT_ROOT ?= $(abspath $(PROJECT_ROOT)/../dart_appkit)
 DART_ENGINE_ROOT ?= $(DART_APPKIT_ROOT)/.dart_tool/dart-engine/sdk
 HOST_ARCH := $(shell uname -m)
+DART_EXECUTABLE := $(shell command -v dart)
+DART_SDK_ROOT ?= $(shell realpath $(DART_EXECUTABLE) | xargs dirname | xargs dirname)
+DART_SDK_VERSION := $(shell cat $(DART_SDK_ROOT)/version)
+DART_SDK_REVISION := $(shell cat $(DART_SDK_ROOT)/revision)
+DART_SDK_HASH := $(shell cut -c1-10 $(DART_SDK_ROOT)/revision)
 
 ifeq ($(HOST_ARCH),arm64)
 DART_ENGINE_RELEASE_ARCH := ARM64
+DART_ENGINE_SHARED_TOOLCHAIN := clang_arm64_shared
 else ifeq ($(HOST_ARCH),x86_64)
 DART_ENGINE_RELEASE_ARCH := X64
+DART_ENGINE_SHARED_TOOLCHAIN := clang_x64_shared
 else
 $(error Unsupported host architecture: $(HOST_ARCH))
 endif
 
 DART_ENGINE_OUT ?= $(DART_ENGINE_ROOT)/xcodebuild/Product$(DART_ENGINE_RELEASE_ARCH)
+DART_ENGINE_JIT_OUT ?= $(DART_ENGINE_ROOT)/xcodebuild/Release$(DART_ENGINE_RELEASE_ARCH)
 DART_ENGINE_NINJA ?= $(DART_ENGINE_ROOT)/buildtools/ninja/ninja
 DART_ENGINE_AOT_LIBRARY ?= $(DART_ENGINE_OUT)/libdart_engine_aot_shared.dylib
+DART_ENGINE_JIT_LIBRARY ?= $(DART_ENGINE_JIT_OUT)/libdart_engine_jit_shared.dylib
+DART_ENGINE_KERNEL_COMPILER ?= $(DART_ENGINE_JIT_OUT)/bootstrap_gen_kernel.exe
+DART_ENGINE_PLATFORM_KERNEL ?= \
+	$(DART_ENGINE_JIT_OUT)/$(DART_ENGINE_SHARED_TOOLCHAIN)/vm_platform.dill
 DART_ENGINE_WORKER_PATCH := \
 	$(PROJECT_ROOT)/patches/dart-engine-worker-isolates.patch
 
@@ -121,7 +133,86 @@ PHASE0_BUNDLES := \
 	$(CORETEXT_BUNDLE) \
 	$(IME_BUNDLE)
 
-.PHONY: help phase0-engine-worker-support phase0-aot-engine \
+RUNTIME_BUILD_DIR ?= $(PROJECT_ROOT)/build/runtime
+RUNTIME_PACKAGE_CONFIG := $(PROJECT_ROOT)/.dart_tool/package_config.json
+RUNTIME_DART_SOURCES := \
+	$(wildcard $(PROJECT_ROOT)/bin/*.dart) \
+	$(wildcard $(PROJECT_ROOT)/lib/*.dart) \
+	$(wildcard $(PROJECT_ROOT)/lib/src/*.dart) \
+	$(wildcard $(DART_APPKIT_ROOT)/packages/dart_appkit/lib/*.dart) \
+	$(wildcard $(DART_APPKIT_ROOT)/packages/dart_appkit/lib/src/*.dart) \
+	$(wildcard $(DART_APPKIT_ROOT)/packages/dart_appkit/lib/src/api/*.dart) \
+	$(wildcard $(DART_APPKIT_ROOT)/packages/dart_appkit/lib/src/native/*.dart)
+RUNTIME_BRIDGE_HEADERS := \
+	$(DART_APPKIT_ROOT)/native/bridge/include/dart_appkit.h \
+	$(DART_APPKIT_ROOT)/native/bridge/src/AppKitObjects.h \
+	$(DART_APPKIT_ROOT)/native/bridge/src/BridgeInternal.h \
+	$(DART_APPKIT_ROOT)/native/bridge/src/ObjectRegistry.h
+RUNTIME_BRIDGE_SOURCES := \
+	$(DART_APPKIT_ROOT)/native/bridge/src/AppKitBridge.mm \
+	$(DART_APPKIT_ROOT)/native/bridge/src/EventSink.mm \
+	$(DART_APPKIT_ROOT)/native/bridge/src/ObjectRegistry.mm \
+	$(DART_APPKIT_ROOT)/native/bridge/src/TextView.mm
+RUNTIME_JIT_RUNNER_HEADERS := \
+	$(DART_APPKIT_ROOT)/native/runner/AppDelegate.h \
+	$(DART_APPKIT_ROOT)/native/runner/DartHost.h \
+	$(DART_APPKIT_ROOT)/native/runner/DartMessagePump.h \
+	$(DART_APPKIT_ROOT)/native/runner/RunnerArguments.h \
+	$(DART_APPKIT_ROOT)/native/runner/RunnerConfiguration.h
+RUNTIME_JIT_RUNNER_SOURCES := \
+	$(DART_APPKIT_ROOT)/native/runner/main.mm \
+	$(DART_APPKIT_ROOT)/native/runner/AppDelegate.mm \
+	$(DART_APPKIT_ROOT)/native/runner/DartHost.mm \
+	$(DART_APPKIT_ROOT)/native/runner/DartMessagePump.mm \
+	$(DART_APPKIT_ROOT)/native/runner/RunnerArguments.cc
+RUNTIME_MESSAGE_PUMP_HEADERS := \
+	$(DART_APPKIT_ROOT)/native/runner/DartMessagePump.h
+RUNTIME_MESSAGE_PUMP_SOURCE := \
+	$(DART_APPKIT_ROOT)/native/runner/DartMessagePump.mm
+RUNTIME_AUDIT_SOURCE := $(PROJECT_ROOT)/tool/runtime_bundle_audit.dart
+RUNTIME_INTEGRATION_SOURCE := \
+	$(PROJECT_ROOT)/tool/runtime_integration_smoke.dart
+RUNTIME_ARGUMENTS ?=
+
+DEVELOPER_JIT_BUILD_DIR := $(RUNTIME_BUILD_DIR)/developer-jit
+DEVELOPER_JIT_RUNNER_BUILD_DIR := \
+	$(DEVELOPER_JIT_BUILD_DIR)/dart-appkit-runner
+DEVELOPER_JIT_RUNNER := \
+	$(DEVELOPER_JIT_RUNNER_BUILD_DIR)/native/dart_appkit_runner
+DEVELOPER_JIT_KERNEL := $(DEVELOPER_JIT_BUILD_DIR)/application.dill
+DEVELOPER_JIT_KERNEL_DEPFILE := $(DEVELOPER_JIT_KERNEL).d
+DEVELOPER_JIT_BUNDLE := \
+	$(DEVELOPER_JIT_BUILD_DIR)/DartTerminalDeveloper.app
+DEVELOPER_JIT_EXECUTABLE := \
+	$(DEVELOPER_JIT_BUNDLE)/Contents/MacOS/dart_terminal_developer_jit
+DEVELOPER_JIT_BUNDLED_KERNEL := \
+	$(DEVELOPER_JIT_BUNDLE)/Contents/Resources/application.dill
+DEVELOPER_JIT_BUNDLE_STAMP := \
+	$(DEVELOPER_JIT_BUILD_DIR)/.developer-jit-built
+DEVELOPER_JIT_INFO_PLIST := \
+	$(PROJECT_ROOT)/native/macos/runtime/DeveloperJit-Info.plist
+
+RELEASE_AOT_BUILD_DIR := $(RUNTIME_BUILD_DIR)/release-aot
+RELEASE_AOT_SNAPSHOT := $(RELEASE_AOT_BUILD_DIR)/application.aot
+RELEASE_AOT_HOST := $(RELEASE_AOT_BUILD_DIR)/dart_terminal_release_aot
+RELEASE_AOT_BUNDLE := $(RELEASE_AOT_BUILD_DIR)/DartTerminal.app
+RELEASE_AOT_EXECUTABLE := \
+	$(RELEASE_AOT_BUNDLE)/Contents/MacOS/dart_terminal_release_aot
+RELEASE_AOT_BUNDLE_STAMP := \
+	$(RELEASE_AOT_BUILD_DIR)/.release-aot-built
+RELEASE_AOT_HOST_SOURCE := \
+	$(PROJECT_ROOT)/native/macos/runtime/ReleaseAotRunner.mm
+RELEASE_AOT_INFO_PLIST := \
+	$(PROJECT_ROOT)/native/macos/runtime/ReleaseAot-Info.plist
+
+-include $(DEVELOPER_JIT_KERNEL_DEPFILE)
+
+.PHONY: help dart-engine-worker-support release-aot-engine \
+	developer-jit-build developer-jit-run developer-jit-audit \
+	developer-jit-integration release-aot-build release-aot-run \
+	release-aot-audit release-aot-integration runtime-source-check \
+	runtime-bundle-audit runtime-integration runtime-verify \
+	phase0-engine-worker-support phase0-aot-engine \
 	phase0-aot-build phase0-aot-run \
 	phase0-worker-build phase0-worker-run \
 	phase0-pty-child-audit phase0-pty-build phase0-pty-run \
@@ -136,7 +227,17 @@ PHASE0_BUNDLES := \
 	phase0-bundle-audit phase0-universal-bundle-audit phase0-verify
 
 help:
-	@echo "Dart Terminal Phase 0 targets:"
+	@echo "Dart Terminal product runtime targets:"
+	@echo "  make developer-jit-build Build the product developer-JIT app"
+	@echo "  make developer-jit-run   Run the product developer-JIT app"
+	@echo "  make developer-jit-audit Audit the JIT-only bundle contract"
+	@echo "  make release-aot-build   Build the thin release-AOT product app"
+	@echo "  make release-aot-run     Run the thin release-AOT product app"
+	@echo "  make release-aot-audit   Audit the AOT-only bundle contract"
+	@echo "  make runtime-integration Run one common smoke suite in both modes"
+	@echo "  make runtime-verify      Check, build, audit, and smoke both modes"
+	@echo ""
+	@echo "Historical Phase 0 feasibility/regression targets:"
 	@echo "  make phase0-engine-worker-support Patch the pinned embedder for workers"
 	@echo "  make phase0-aot-engine  Build the revision-matched AOT Dart Engine"
 	@echo "  make phase0-aot-build   Build the release AOT AppKit spike bundle"
@@ -166,10 +267,153 @@ help:
 	@echo "  make phase0-universal-bundle-audit Audit UNIVERSAL_BUNDLE arm64+x86_64"
 	@echo "  make phase0-verify        Run the complete local Phase 0 acceptance path"
 
+$(RUNTIME_PACKAGE_CONFIG): pubspec.yaml pubspec.lock
+	dart pub get
+
+$(DEVELOPER_JIT_RUNNER): $(RUNTIME_BRIDGE_HEADERS) \
+		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_JIT_RUNNER_HEADERS) \
+		$(RUNTIME_JIT_RUNNER_SOURCES) $(DART_APPKIT_ROOT)/Makefile \
+		$(DART_ENGINE_JIT_LIBRARY)
+	$(MAKE) -C $(DART_APPKIT_ROOT) \
+		BUILD_DIR=$(DEVELOPER_JIT_RUNNER_BUILD_DIR) \
+		DART_SDK=$(DART_SDK_ROOT) \
+		DART_ENGINE_ROOT=$(DART_ENGINE_ROOT) \
+		DART_ENGINE_LIBRARY=$(DART_ENGINE_JIT_LIBRARY) runner
+
+$(DEVELOPER_JIT_KERNEL): $(RUNTIME_DART_SOURCES) $(RUNTIME_PACKAGE_CONFIG) \
+		$(DART_ENGINE_KERNEL_COMPILER) $(DART_ENGINE_PLATFORM_KERNEL)
+	@mkdir -p $(DEVELOPER_JIT_BUILD_DIR)
+	$(DART_ENGINE_KERNEL_COMPILER) \
+		--platform=$(DART_ENGINE_PLATFORM_KERNEL) \
+		--packages=$(RUNTIME_PACKAGE_CONFIG) \
+		--no-aot --link-platform --no-embed-sources \
+		--output=$@ --depfile=$(DEVELOPER_JIT_KERNEL_DEPFILE) \
+		-Dsdk_hash=$(DART_SDK_HASH) \
+		-Ddart.vm.product=false -Ddart.vm.asan=false \
+		-Ddart.vm.msan=false -Ddart.vm.tsan=false \
+		$(PROJECT_ROOT)/bin/main.dart
+
+$(DEVELOPER_JIT_BUNDLE_STAMP): $(DEVELOPER_JIT_RUNNER) \
+		$(DEVELOPER_JIT_KERNEL) $(DART_ENGINE_JIT_LIBRARY) \
+		$(DEVELOPER_JIT_INFO_PLIST) $(DART_ENGINE_ROOT)/LICENSE Makefile
+	@rm -rf $(DEVELOPER_JIT_BUNDLE)
+	@mkdir -p $(DEVELOPER_JIT_BUNDLE)/Contents/MacOS
+	@mkdir -p $(DEVELOPER_JIT_BUNDLE)/Contents/Frameworks
+	@mkdir -p $(DEVELOPER_JIT_BUNDLE)/Contents/Resources
+	cp $(DEVELOPER_JIT_RUNNER) $(DEVELOPER_JIT_EXECUTABLE)
+	cp $(DART_ENGINE_JIT_LIBRARY) \
+		$(DEVELOPER_JIT_BUNDLE)/Contents/Frameworks/libdart_engine_jit_shared.dylib
+	cp $(DEVELOPER_JIT_KERNEL) $(DEVELOPER_JIT_BUNDLED_KERNEL)
+	cp $(DART_ENGINE_ROOT)/LICENSE \
+		$(DEVELOPER_JIT_BUNDLE)/Contents/Resources/DART_SDK_LICENSE.txt
+	cp $(DEVELOPER_JIT_INFO_PLIST) \
+		$(DEVELOPER_JIT_BUNDLE)/Contents/Info.plist
+	chmod 755 $(DEVELOPER_JIT_EXECUTABLE)
+	codesign --force --deep --sign - $(DEVELOPER_JIT_BUNDLE)
+	touch $@
+
+developer-jit-build: $(DEVELOPER_JIT_BUNDLE_STAMP)
+
+developer-jit-run: developer-jit-build
+	$(DEVELOPER_JIT_EXECUTABLE) \
+		--kernel $(DEVELOPER_JIT_BUNDLED_KERNEL) \
+		--sdk-version $(DART_SDK_VERSION) \
+		--sdk-revision $(DART_SDK_REVISION) -- $(RUNTIME_ARGUMENTS)
+
+developer-jit-audit: developer-jit-build
+	dart run $(RUNTIME_AUDIT_SOURCE) --mode=developer-jit \
+		--expected-architectures=$(HOST_ARCH) \
+		--deployment-target=$(MACOSX_DEPLOYMENT_TARGET) \
+		$(DEVELOPER_JIT_BUNDLE)
+
+developer-jit-integration: developer-jit-build
+	dart run $(RUNTIME_INTEGRATION_SOURCE) --mode=developer-jit \
+		$(DEVELOPER_JIT_BUNDLE)
+
+$(RELEASE_AOT_SNAPSHOT): $(RUNTIME_DART_SOURCES) $(RUNTIME_PACKAGE_CONFIG)
+	@mkdir -p $(RELEASE_AOT_BUILD_DIR)
+	dart compile aot-snapshot --verbosity=warning -o $@ \
+		$(PROJECT_ROOT)/bin/main.dart
+
+$(RELEASE_AOT_HOST): $(RELEASE_AOT_HOST_SOURCE) \
+		$(RUNTIME_BRIDGE_HEADERS) $(RUNTIME_BRIDGE_SOURCES) \
+		$(RUNTIME_MESSAGE_PUMP_HEADERS) $(RUNTIME_MESSAGE_PUMP_SOURCE) \
+		$(DART_ENGINE_AOT_LIBRARY)
+	@mkdir -p $(RELEASE_AOT_BUILD_DIR)
+	$(CLANGXX) $(NATIVE_FLAGS) -fblocks -fvisibility=hidden \
+		-DDT_DART_SDK_VERSION=\"$(DART_SDK_VERSION)\" \
+		-I$(DART_APPKIT_ROOT)/native/bridge/include \
+		-I$(DART_APPKIT_ROOT)/native/bridge/src \
+		-I$(DART_APPKIT_ROOT)/native/runner \
+		-I$(DART_ENGINE_ROOT)/runtime \
+		-I$(DART_ENGINE_ROOT)/runtime/engine \
+		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_MESSAGE_PUMP_SOURCE) \
+		$(RELEASE_AOT_HOST_SOURCE) $(DART_ENGINE_AOT_LIBRARY) \
+		-framework AppKit -framework CoreFoundation \
+		-Wl,-rpath,@executable_path/../Frameworks \
+		-Wl,-export_dynamic -o $@
+
+$(RELEASE_AOT_BUNDLE_STAMP): $(RELEASE_AOT_HOST) \
+		$(RELEASE_AOT_SNAPSHOT) $(DART_ENGINE_AOT_LIBRARY) \
+		$(RELEASE_AOT_INFO_PLIST) $(DART_ENGINE_ROOT)/LICENSE Makefile
+	@rm -rf $(RELEASE_AOT_BUNDLE)
+	@mkdir -p $(RELEASE_AOT_BUNDLE)/Contents/MacOS
+	@mkdir -p $(RELEASE_AOT_BUNDLE)/Contents/Frameworks
+	@mkdir -p $(RELEASE_AOT_BUNDLE)/Contents/Resources
+	cp $(RELEASE_AOT_HOST) $(RELEASE_AOT_EXECUTABLE)
+	cp $(DART_ENGINE_AOT_LIBRARY) \
+		$(RELEASE_AOT_BUNDLE)/Contents/Frameworks/libdart_engine_aot_shared.dylib
+	cp $(RELEASE_AOT_SNAPSHOT) \
+		$(RELEASE_AOT_BUNDLE)/Contents/Resources/application.aot
+	cp $(DART_ENGINE_ROOT)/LICENSE \
+		$(RELEASE_AOT_BUNDLE)/Contents/Resources/DART_SDK_LICENSE.txt
+	cp $(RELEASE_AOT_INFO_PLIST) \
+		$(RELEASE_AOT_BUNDLE)/Contents/Info.plist
+	chmod 755 $(RELEASE_AOT_EXECUTABLE)
+	codesign --force --deep --sign - $(RELEASE_AOT_BUNDLE)
+	touch $@
+
+release-aot-build: $(RELEASE_AOT_BUNDLE_STAMP)
+
+release-aot-run: release-aot-build
+	$(RELEASE_AOT_EXECUTABLE) $(RUNTIME_ARGUMENTS)
+
+release-aot-audit: release-aot-build
+	dart run $(RUNTIME_AUDIT_SOURCE) --mode=release-aot \
+		--expected-architectures=$(HOST_ARCH) \
+		--deployment-target=$(MACOSX_DEPLOYMENT_TARGET) \
+		$(RELEASE_AOT_BUNDLE)
+
+release-aot-integration: release-aot-build
+	dart run $(RUNTIME_INTEGRATION_SOURCE) --mode=release-aot \
+		$(RELEASE_AOT_BUNDLE)
+
+runtime-source-check:
+	dart format --output=none --set-exit-if-changed \
+		bin lib test tool benchmark
+	xcrun clang-format --style=file:$(DART_APPKIT_ROOT)/.clang-format \
+		--dry-run --Werror $(RELEASE_AOT_HOST_SOURCE)
+	plutil -lint $(DEVELOPER_JIT_INFO_PLIST) $(RELEASE_AOT_INFO_PLIST)
+	dart analyze
+	dart run test/run_tests.dart
+
+runtime-bundle-audit: developer-jit-build release-aot-build
+	@$(MAKE) developer-jit-audit
+	@$(MAKE) release-aot-audit
+
+runtime-integration: developer-jit-build release-aot-build
+	@$(MAKE) developer-jit-integration
+	@$(MAKE) release-aot-integration
+
+runtime-verify:
+	@$(MAKE) runtime-source-check
+	@$(MAKE) runtime-bundle-audit
+	@$(MAKE) runtime-integration
+
 $(DART_ENGINE_OUT)/build.ninja:
 	$(DART_ENGINE_ROOT)/tools/gn.py --mode=product --arch=$(HOST_ARCH)
 
-phase0-engine-worker-support:
+dart-engine-worker-support:
 	@if git -C $(DART_ENGINE_ROOT) apply --reverse --check \
 		$(DART_ENGINE_WORKER_PATCH) >/dev/null 2>&1; then \
 		echo "Dart Engine worker-isolate patch already applied"; \
@@ -179,9 +423,13 @@ phase0-engine-worker-support:
 		git -C $(DART_ENGINE_ROOT) apply $(DART_ENGINE_WORKER_PATCH); \
 	fi
 
-$(DART_ENGINE_AOT_LIBRARY): phase0-engine-worker-support \
+phase0-engine-worker-support: dart-engine-worker-support
+
+$(DART_ENGINE_AOT_LIBRARY): dart-engine-worker-support \
 		$(DART_ENGINE_OUT)/build.ninja
 	$(DART_ENGINE_NINJA) -C $(DART_ENGINE_OUT) dart_engine_aot_shared
+
+release-aot-engine: $(DART_ENGINE_AOT_LIBRARY)
 
 phase0-aot-engine: $(DART_ENGINE_AOT_LIBRARY)
 

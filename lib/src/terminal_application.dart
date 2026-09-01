@@ -6,7 +6,7 @@ import 'package:dart_appkit/dart_appkit.dart';
 import 'terminal_session.dart';
 
 const String terminalUsage = '''
-Usage: dart run dart_appkit:run bin/main.dart [-- application-options]
+Usage: Dart Terminal [application-options]
 
 Application options:
   --working-directory=PATH   Initial command working directory.

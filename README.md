@@ -28,36 +28,62 @@ cd ../dart_appkit
 make engine
 ```
 
-その後、このディレクトリで依存関係を解決して起動します。
+その後、このディレクトリで依存関係を解決し、製品の developer JIT
+bundle を起動します。
 
 ```shell
 dart pub get
-dart run dart_appkit:run bin/main.dart
+make developer-jit-run
 ```
 
-開始ディレクトリを指定する場合は、Runner の `--` より後ろにアプリ用の
-引数を渡します。
+開始ディレクトリなどのアプリ引数は `RUNTIME_ARGUMENTS` で渡します。
 
 ```shell
-dart run dart_appkit:run bin/main.dart -- --working-directory=/tmp
+make developer-jit-run RUNTIME_ARGUMENTS="--working-directory=/tmp"
 ```
 
-3 秒で自動終了するスモーク実行:
+自動終了を含む integration smoke:
 
 ```shell
-dart run dart_appkit:run bin/main.dart -- --auto-close-after=3
+make developer-jit-integration
 ```
+
+developer JIT は、full linked Kernel と JIT Engine を含む開発専用 bundle
+です。配布物には使用しません。
+
+## Release AOT
+
+現在の host architecture 用の thin release-AOT bundle を構築・監査・起動
+できます。
+
+```shell
+make release-aot-build
+make release-aot-audit
+make release-aot-run
+```
+
+成果物は `build/runtime/release-aot/DartTerminal.app` です。製品の
+`bin/main.dart` を AOT snapshot として含み、Kernel、JIT Engine、VM service
+asset は含みません。現時点では host architecture の thin、ad-hoc signed
+bundle であり、Universal Binary や配布署名済みアプリではありません。
 
 ## ローカルチェック
 
 ```shell
-dart analyze
-dart run test/run_tests.dart
-dart compile kernel bin/main.dart -o build/dart_terminal.dill
+make runtime-source-check
+make runtime-bundle-audit
+make runtime-integration
+```
+
+developer JIT と release AOT の source check、build、bundle audit、共通
+integration suite をまとめて実行する場合:
+
+```shell
+make runtime-verify
 ```
 
 Phase 0 全体（debug/JIT、全 release-AOT spike、benchmark、bundle 監査）を
-再検証する場合:
+歴史的な feasibility regression として再検証する場合:
 
 ```shell
 make phase0-verify

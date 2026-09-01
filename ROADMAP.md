@@ -488,7 +488,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 目的: 現在の hello-window 用 `dart_appkit` を製品の土台へする。
 
-- [ ] debug JIT と release AOT の build/run path を分離
+- [x] debug JIT と release AOT の build/run path を分離
 - [ ] arm64/x86_64 の build matrix と Universal Binary 組み立て
 - [ ] VM/isolate の起動、error、uncaught exception、shutdown contract
 - [ ] native event wire format の versioning と backward compatibility
