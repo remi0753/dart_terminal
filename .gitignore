@@ -1,0 +1,4 @@
+.dart_tool/
+build/
+*.dill
+.DS_Store

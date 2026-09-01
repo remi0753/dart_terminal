@@ -1,0 +1,58 @@
+{
+  "format": "dart-terminal-benchmark-baseline",
+  "version": 1,
+  "id": "phase0-macos-arm64-m1",
+  "recorded_at": "2026-09-01",
+  "environment": {
+    "os": "macos",
+    "abi": "macos_arm64",
+    "host_label": "MacBookPro17,1 / Apple M1 8-core / 16 GB",
+    "dart_sdk": "3.13.2",
+    "os_version": "Version 26.6.2 (Build 25G83)",
+    "build_mode": "release-aot"
+  },
+  "provenance": {
+    "ghostty_reference_commit": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
+    "ghostty_zig_version": "0.16.0",
+    "ghostty_build_command": "zig build -Doptimize=ReleaseFast",
+    "ghostty_macos_configuration": "ReleaseLocal",
+    "parser_corpus_format_version": 1,
+    "parser_corpus_sha256": "37414501d31cede8a3e39f70fceaae5ae2500e0be40ce5b10178e6e4ce2fb8be",
+    "parser_workload": "phase0-mixed-v1",
+    "damage_packet_version": 1,
+    "input_probe_version": 1,
+    "measurement_policy_version": 1
+  },
+  "metrics": {
+    "parser.mixed.throughput": {
+      "stat": "p50",
+      "reference": 174.0,
+      "relative_tolerance": 0.15,
+      "absolute_slack": 0.0
+    },
+    "render.damage.full_pack_latency": {
+      "stat": "p95",
+      "reference": 260.0,
+      "relative_tolerance": 0.3,
+      "absolute_slack": 100.0
+    },
+    "render.damage.sparse_pack_latency": {
+      "stat": "p95",
+      "reference": 28.0,
+      "relative_tolerance": 0.5,
+      "absolute_slack": 25.0
+    },
+    "render.damage.transfer_latency": {
+      "stat": "p95",
+      "reference": 210.0,
+      "relative_tolerance": 0.5,
+      "absolute_slack": 200.0
+    },
+    "input.key_to_queue_latency": {
+      "stat": "p95",
+      "reference": 42.0,
+      "relative_tolerance": 1.0,
+      "absolute_slack": 250.0
+    }
+  }
+}

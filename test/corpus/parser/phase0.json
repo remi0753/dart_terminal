@@ -1,0 +1,107 @@
+{
+  "format": "dart-terminal-parser-corpus",
+  "version": 1,
+  "cases": [
+    {
+      "id": "plain-utf8",
+      "description": "ASCII, three-byte CJK, and four-byte emoji survive every chunk split",
+      "input_hex": "41 e6 97 a5 f0 9f 98 80 42",
+      "snapshot": [
+        "TEXT \"A日😀B\""
+      ]
+    },
+    {
+      "id": "c0-and-escape",
+      "description": "C0 execution and two simple ESC dispatches retain ordering",
+      "input_hex": "41 0d 0a 1b 37 1b 38 42",
+      "snapshot": [
+        "TEXT \"A\"",
+        "EXEC CR (0x0d)",
+        "EXEC LF (0x0a)",
+        "ESC \"\\e7\"",
+        "ESC \"\\e8\"",
+        "TEXT \"B\""
+      ]
+    },
+    {
+      "id": "csi-parameters",
+      "description": "semicolon parameters and colon-form SGR remain byte-exact in dispatch",
+      "input_hex": "1b 5b 33 31 3b 31 6d 72 65 64 1b 5b 30 6d 1b 5b 33 38 3a 32 3a 3a 31 3a 32 3a 33 6d 58",
+      "snapshot": [
+        "CSI \"\\e[31;1m\"",
+        "TEXT \"red\"",
+        "CSI \"\\e[0m\"",
+        "CSI \"\\e[38:2::1:2:3m\"",
+        "TEXT \"X\""
+      ]
+    },
+    {
+      "id": "string-protocols",
+      "description": "OSC BEL/ST, DCS ST, and APC ST terminate incrementally",
+      "input_hex": "1b 5d 30 3b 74 69 74 6c 65 07 1b 5d 38 3b 3b 68 74 74 70 73 3a 2f 2f 65 78 61 6d 70 6c 65 1b 5c 1b 50 24 71 6d 1b 5c 1b 5f 70 61 79 6c 6f 61 64 1b 5c",
+      "snapshot": [
+        "OSC \"\\e]0;title\\a\"",
+        "OSC \"\\e]8;;https://example\\e\\\\\"",
+        "DCS \"\\eP$qm\\e\\\\\"",
+        "APC \"\\e_payload\\e\\\\\""
+      ]
+    },
+    {
+      "id": "cancel-and-recover",
+      "description": "CAN and SUB cancel incomplete CSI/OSC and printable input recovers",
+      "input_hex": "1b 5b 31 32 3b 33 34 18 4f 4b 1b 5d 62 61 64 1a 5a",
+      "snapshot": [
+        "CANCEL state=csi byte=CAN",
+        "TEXT \"OK\"",
+        "CANCEL state=osc byte=SUB",
+        "TEXT \"Z\""
+      ]
+    },
+    {
+      "id": "malformed-utf8",
+      "description": "invalid starts, continuations, and an incomplete tail recover deterministically",
+      "input_hex": "41 c0 af 42 e2 28 a1 43 f0 9f 92",
+      "snapshot": [
+        "TEXT \"A��B�(�C�\""
+      ]
+    },
+    {
+      "id": "bounded-sequences",
+      "description": "parameter, numeric, and string caps discard bounded sequences then recover",
+      "input_hex": "1b 5b 31 3b 32 3b 33 3b 34 3b 35 6d 4f 4b 1b 5b 31 30 30 6d 4e 1b 5d 31 32 33 34 35 36 37 38 39 07 5a",
+      "limits": {
+        "max_sequence_bytes": 32,
+        "max_string_bytes": 8,
+        "max_parameters": 4,
+        "max_numeric_value": 99
+      },
+      "snapshot": [
+        "LIMIT state=csi",
+        "TEXT \"OK\"",
+        "LIMIT state=csi",
+        "TEXT \"N\"",
+        "LIMIT state=osc",
+        "TEXT \"Z\""
+      ]
+    },
+    {
+      "id": "incomplete-at-eof",
+      "description": "EOF records an incomplete CSI after preserving prior printable text",
+      "input_hex": "41 1b 5b 31 32",
+      "snapshot": [
+        "TEXT \"A\"",
+        "INCOMPLETE state=csi"
+      ]
+    },
+    {
+      "id": "escape-restarts-sequence",
+      "description": "ESC cancels an unfinished CSI and starts the next sequence",
+      "input_hex": "1b 5b 33 31 1b 5b 30 6d 58",
+      "snapshot": [
+        "CANCEL state=csi byte=ESC",
+        "CSI \"\\e[0m\"",
+        "TEXT \"X\""
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+name: dart_terminal
+description: An independent Dart-first macOS terminal emulator built on dart_appkit.
+publish_to: none
+
+environment:
+  sdk: '>=3.13.2 <3.14.0'
+
+dependencies:
+  dart_appkit:
+    path: ../dart_appkit/packages/dart_appkit

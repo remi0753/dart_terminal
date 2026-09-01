@@ -1,0 +1,41 @@
+diff --git a/runtime/engine/engine.cc b/runtime/engine/engine.cc
+index 4594b06569f..ba0fbec8da0 100644
+--- a/runtime/engine/engine.cc
++++ b/runtime/engine/engine.cc
+@@ -88,10 +88,26 @@ DartEngine_SnapshotData Engine::AotFromFile(const char* path, char** error) {
+ }
+ 
+ namespace {
++bool InitializeChildIsolate(void** child_isolate_data, char** error) {
++  *child_isolate_data = nullptr;
++  Dart_EnterScope();
++  Dart_Handle result = bin::DartUtils::SetupCoreLibraries(
++      /*is_service_isolate=*/false, /*trace_loading=*/false,
++      /*flag_profile_microtasks=*/false, bin::DartIoSettings{});
++  if (Dart_IsError(result)) {
++    *error = Utils::StrDup(Dart_GetError(result));
++    Dart_ExitScope();
++    return false;
++  }
++  Dart_ExitScope();
++  return true;
++}
++
+ Dart_InitializeParams CreateInitializeParams() {
+   Dart_InitializeParams params;
+   memset(&params, 0, sizeof(params));
+   params.version = DART_INITIALIZE_PARAMS_CURRENT_VERSION;
++  params.initialize_isolate = InitializeChildIsolate;
+   params.shutdown_isolate = nullptr;
+   params.create_group = nullptr;
+   return params;
+@@ -183,7 +199,8 @@ Dart_Isolate Engine::StartIsolate(DartEngine_SnapshotData snapshot,
+   // without it).
+   Dart_Handle core_libs_result = bin::DartUtils::SetupCoreLibraries(
+       /*is_service_isolate=*/false, /*trace_loading=*/false,
+-      /*flag_profile_microtasks=*/false, bin::DartIoSettings{});
++      /*flag_profile_microtasks=*/false,
++      bin::DartIoSettings{.script_uri = snapshot.script_uri});
+   if (Dart_IsError(core_libs_result)) {
+     *error = Utils::StrDup(Dart_GetError(core_libs_result));
+     Dart_ShutdownIsolate();

@@ -1,0 +1,81 @@
+#include "PtySpawn.h"
+
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <util.h>
+
+static int set_close_on_exec(int fd) {
+  const int flags = fcntl(fd, F_GETFD);
+  if (flags < 0) {
+    return -1;
+  }
+  return fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+}
+
+int32_t dt_pty_spawn(const DtPtySpawnConfig* config,
+                     DtPtySpawnResult* result,
+                     int32_t* out_error_number) {
+  if (config == NULL || result == NULL || out_error_number == NULL ||
+      config->executable == NULL || config->argv == NULL ||
+      config->envp == NULL) {
+    if (out_error_number != NULL) {
+      *out_error_number = EINVAL;
+    }
+    return 1;
+  }
+
+  result->child_pid = -1;
+  result->master_fd = -1;
+  result->exec_error_fd = -1;
+  *out_error_number = 0;
+
+  int exec_error_pipe[2] = {-1, -1};
+  if (pipe(exec_error_pipe) != 0 ||
+      set_close_on_exec(exec_error_pipe[0]) != 0 ||
+      set_close_on_exec(exec_error_pipe[1]) != 0) {
+    const int saved_errno = errno;
+    if (exec_error_pipe[0] >= 0) {
+      (void)close(exec_error_pipe[0]);
+    }
+    if (exec_error_pipe[1] >= 0) {
+      (void)close(exec_error_pipe[1]);
+    }
+    *out_error_number = saved_errno;
+    return 2;
+  }
+
+  int master_fd = -1;
+  struct winsize initial_size = config->initial_size;
+  const pid_t child_pid = forkpty(&master_fd, NULL, NULL, &initial_size);
+  if (child_pid == 0) {
+    dt_pty_exec_child(exec_error_pipe[0], exec_error_pipe[1],
+                      config->executable, config->argv, config->envp);
+  }
+  if (child_pid < 0) {
+    const int saved_errno = errno;
+    (void)close(exec_error_pipe[0]);
+    (void)close(exec_error_pipe[1]);
+    *out_error_number = saved_errno;
+    return 3;
+  }
+
+  (void)close(exec_error_pipe[1]);
+  if (set_close_on_exec(master_fd) != 0) {
+    const int saved_errno = errno;
+    (void)kill(child_pid, SIGKILL);
+    (void)waitpid(child_pid, NULL, 0);
+    (void)close(master_fd);
+    (void)close(exec_error_pipe[0]);
+    *out_error_number = saved_errno;
+    return 4;
+  }
+
+  result->child_pid = child_pid;
+  result->master_fd = master_fd;
+  result->exec_error_fd = exec_error_pipe[0];
+  return 0;
+}
