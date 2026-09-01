@@ -1,9 +1,68 @@
 # DT-012 — Debug, release, and Universal bundle CI design
 
-- Status: accepted design; arm64 local path verified
+- Status: accepted design; arm64 local path verified; hardware completion
+  policy amended below
 - Date: 2026-09-01
 - Scope: Phase 0 build/release boundary and final integrated acceptance
 - Related: ROADMAP Phase 0, Phase 1 runtime substrate, and Phase 11 distribution
+
+## 2026-09-02 addendum — Apple M1 baseline completion policy
+
+The 2026-09-02 roadmap decision makes Apple M1/arm64 the primary development
+and real-hardware acceptance baseline. It supersedes only this document's
+original requirement that both arm64-native and Intel-native smoke evidence be
+available before the Phase 1 matrix/Universal task or the project's main goals
+can complete. Under the current accepted policy, that task completes when all
+of the following pass on the M1 baseline:
+
+- native arm64 developer-JIT and release-AOT build, audit, launch, and clean
+  shutdown;
+- explicit M1 cross-build of x86_64 developer-JIT and release-AOT thin
+  artifacts, with exact x86_64 slice and the same strict audit contract;
+- explicitly labelled x86_64 Rosetta compatibility smoke for the thin and
+  Universal products;
+- exact arm64+x86_64 Universal assembly, provenance and non-Mach equality,
+  dependency/install-name/RPATH policy, nested and outer signature checks,
+  immutable receipts, failure preservation, and atomic publication; and
+- source, freshness, fail-closed negative, integration, and Phase 0 regression
+  gates recorded in the Phase 1 task memo.
+
+Rosetta remains compatibility evidence only. It is not, and must never be
+reported as, proof of execution on Intel hardware. The implemented
+`intel-native-runtime-verify` no-rebuild handoff, its genuine-Intel host guard,
+immutable input receipts, fresh re-audits and native smokes, and write-once
+evidence JSON contract are retained unchanged. Positive Intel-native evidence
+has moved to the roadmap's post-Phase-11, post-main-goal low-priority follow-up;
+its absence no longer blocks Phase 1 or the main completion definition.
+
+All other DT-012 contracts remain accepted and mandatory:
+
+1. developer JIT, thin release AOT, and Universal release AOT are distinct,
+   non-interchangeable products;
+2. architecture selection is explicit and cannot fall back silently to the
+   host or label a thin artifact as Universal;
+3. every thin lane is bound to the matching SDK/Engine revision,
+   configuration, source/tool identity, architecture, and immutable audit
+   receipt;
+4. Universal assembly accepts only matching audited thin inputs, compares
+   non-Mach resources and common provenance, and requires the exact
+   `{arm64, x86_64}` set in every expected Mach-O;
+5. signed thin inputs are never modified in place; assembly uses fresh staging,
+   nested-then-outer signing, strict re-audit, and crash-safe atomic
+   publication;
+6. cache hits are not provenance and must pass the same freshness and audit
+   gates;
+7. Developer ID signing, hardened runtime, notarization, stapling, update
+   metadata, and distribution validation remain Phase 11 requirements; and
+8. the Phase 0 M1 hardware, correctness, performance, and bundle-audit gates
+   remain regression requirements.
+
+The original CI graph and the later references below to two native-hardware
+lanes remain the historical and optional full-coverage design. Where they state
+that Intel-native smoke is required for Universal/Phase 1 completion, this
+dated addendum is the controlling current acceptance policy. See
+[`ROADMAP.md`](../../ROADMAP.md) and the
+[Phase 1 matrix task memo](../phase1/universal-runtime-matrix.md).
 
 ## Question
 

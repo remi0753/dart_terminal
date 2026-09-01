@@ -1922,3 +1922,64 @@ must continue to distinguish genuine Intel hardware from Rosetta.
   14 task files remained intact. This is a repository metadata permission
   failure, not a validation or content failure; the memo was then staged and
   the same reviewed commit retried with repository-write permission.
+
+## 2026-09-02 — DT-012 hardware-evidence contract alignment
+
+### Independent-review finding
+
+The M1-baseline policy was aligned in `ROADMAP.md`, `README.md`, this memo, and
+`FEATURE_MATRIX.md`, but the accepted Phase 0 DT-012 design still said that
+both native-hardware smoke lanes, including Intel hardware, were mandatory
+before the Universal/Phase 1 work could complete. Because DT-012 is a linked
+acceptance authority, leaving that statement unqualified created a P2
+documentation contradiction even though the implementation, tests, and
+roadmap ordering were correct.
+
+### Decision and correction
+
+DT-012 receives a prominent dated addendum immediately after its status. The
+addendum is the controlling policy only for the hardware evidence needed to
+complete Phase 1 and the project's main goals: Apple M1-native arm64,
+M1-cross-built x86_64 with explicitly labelled Rosetta compatibility, and the
+strict Universal audit are sufficient under the user-selected priority.
+
+The correction does not delete or reinterpret the historical CI graph.
+Rosetta remains non-native evidence. The genuine-Intel-only no-rebuild target,
+immutable receipts, fresh audits/smokes, and evidence JSON remain implemented
+and documented for the post-Phase-11 low-priority follow-up. The addendum also
+enumerates the DT-012 contracts that remain mandatory: product separation,
+explicit architecture/no fallback, exact lane provenance, exact Universal
+slices and non-Mach equality, immutable thin inputs, fresh signing/audit and
+atomic publication, cache revalidation, Phase 11 distribution requirements,
+and Phase 0 M1 regression gates.
+
+No runtime implementation, test, roadmap, README, or feature-matrix change is
+needed for this follow-up. Validation is limited to both changed documents:
+local Markdown links, whitespace/diff checks, an explicit search for the old
+and new evidence language, and staged-scope review. `runtime-source-check` is
+not repeated because the follow-up changes no source or source-facing contract;
+the successful source check in the immediately preceding completion commit
+remains applicable.
+
+### Follow-up validation
+
+- `git diff --name-only` listed exactly the two intended documents:
+  `docs/phase0/DT-012-build-ci-design.md` and this memo. `ROADMAP.md`,
+  `README.md`, `FEATURE_MATRIX.md`, build/runtime sources, and tests have no
+  follow-up diff.
+- The local Markdown-link check covered both changed documents and reported
+  `MARKDOWN_LINK_CHECK failures=0`. The new links resolve from the Phase 0
+  document to the repository roadmap and this Phase 1 memo.
+- The explicit consistency check confirmed that the dated addendum is at line
+  9, before the original question at line 67, and contains the four controlling
+  assertions: Rosetta is compatibility-only, Intel evidence is post-Phase-11,
+  all other contracts remain mandatory, and the addendum governs conflicting
+  Intel-completion language below it.
+- `git diff --check` passed. A source check was intentionally not rerun because
+  the diff is documentation-only and the preceding task commit's successful
+  source check covers the unchanged implementation; running it would add no
+  source-facing evidence.
+- Staged-scope review contains exactly these two documents, has no unstaged
+  diff, and passes `git diff --cached --check`. No runtime source, roadmap,
+  user-facing README, feature matrix, generated artifact, or adjacent-repository
+  change is included.
