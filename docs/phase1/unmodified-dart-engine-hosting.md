@@ -701,6 +701,13 @@ The prototype separates those checks and explicitly unlocks the successful
 late-notification case. This matters once shutdown is idempotent and later API
 calls are expected to fail cleanly rather than block.
 
+The first direct invocation of the newly built `xcodebuild/ReleaseARM64/dart`
+to run `embedder_samples_test.dart` exited 255 with `Unable to locate the Dart
+VM executable`. The `dart` target is the dartdev launcher and expects the VM in
+an SDK layout; it is not itself the standalone VM executable required by this
+test. Inspection identified the standalone `dartvm` target, which was then
+built and used for the successful official test-suite run recorded below.
+
 ### 2026-09-03 — general Engine improvement result
 
 The isolated prototype now satisfies the proposed Engine contract without
@@ -764,11 +771,124 @@ workspace sandbox denied creation of `.git/index.lock`. No index or worktree
 content was changed by that attempt. The same narrowly scoped add/commit will
 be repeated with Git metadata write access.
 
-The first direct invocation of the newly built `xcodebuild/ReleaseARM64/dart`
-to run `embedder_samples_test.dart` exited 255 with `Unable to locate the Dart
-VM executable`. The `dart` target is the dartdev launcher and expects the VM in
-an SDK layout; it is not itself the standalone VM executable required by this
-test. The sample targets and source change remain valid. The official route
-will be retried using the output's standalone `dart_precompiled_runtime`/VM
-target or a generated SDK layout, after inspecting the build targets rather
-than assuming the launcher path.
+### 2026-09-03 — process/IPC fallback design before implementation
+
+Purpose: determine whether the currently published Dart toolchain can provide
+the required dynamic worker ownership without any Engine change while keeping
+the AppKit/root process independent.
+
+The probe has the following bounded design:
+
+- Developer JIT launches the selected, revision-matched official `dart`
+  executable with the probe source and `--worker`. Release AOT uses `dart
+  compile exe` on that same source with a compile-time self-exec flag; the
+  resulting official Dart-produced executable launches itself with
+  `--worker`. Neither mode links `dart_engine`, a VM library, a private header,
+  or an SDK source file.
+- The supervisor owns the child `Process`, its stdin/stdout endpoints, stderr
+  capture, and the authoritative `exitCode` future. The worker owns only its
+  command loop. A process exit, rather than an error message, is the resource
+  release boundary.
+- Binary stdio IPC uses a small fixed header (message type, request/sequence
+  id, payload length) and bounded 1 MiB frames. Protocol logging stays on
+  stderr so stdout remains exclusively framed. This probe framing is local to
+  the hosting comparison and does not pre-implement the later product
+  native-event versioning task.
+- The positive path requires ready, ping/pong, ordered and marker-validated
+  128 MiB transfer, graceful stop acknowledgement, and exit zero. Negative
+  paths require an intentionally uncaught worker exception with preserved
+  stderr and nonzero exit, an unresponsive worker terminated with `SIGKILL`,
+  and successful replacement after each failure.
+- The runner imposes an outer timeout, validates exact semantic markers and
+  empty supervisor stderr, builds/runs both JIT and AOT, and records startup,
+  bulk throughput, and termination classifications. A threshold is not chosen
+  until the first measurement; the comparison will report the measured cost
+  rather than weakening the existing lifecycle semantics to meet a number.
+
+Out of scope for this probe are product bundle placement, code signing,
+Universal assembly, and replacing `RuntimeLifecycleController`; those belong
+to the later ordered migration only if this option is selected. This subtask
+is complete when both modes pass the lifecycle matrix and inspection proves
+that the child executable is the only Dart runtime dependency on the worker
+side.
+
+The first formatting/analysis invocation formatted both new Dart sources, but
+the analyzer itself did not start: Dart attempted to update
+`~/.dart-tool/dart-flutter-telemetry-session.json`, which the workspace sandbox
+does not permit. This is an execution-environment failure rather than an
+analyzer result. The unchanged analysis command will be rerun with the narrow
+filesystem access needed by the selected Dart tool.
+
+With that access, the first analyzer run reached the sources and reported two
+type errors in the runner: the validated nullable `mode` and architecture
+option values had not been copied to non-null locals before being passed to a
+function and a typed marker map. No probe process had run yet. The runner will
+make the post-validation narrowing explicit and be analyzed again.
+
+The next analyzer run showed that assignment alone was not enough: flow
+analysis did not promote values checked inside the compound invalid-argument
+condition, even though `_usage` returns `Never`. The two post-validation
+assignments therefore need explicit non-null assertions. This remains a
+compile-time typing correction; no runtime probe was started by either run.
+
+The first `make process-worker-probe` built the official AOT executable, then
+stopped before launching any worker because the runner's source-boundary audit
+matched the formatted `bool.fromEnvironment` declaration with a
+whitespace-sensitive multiline literal. Formatting had placed the opening
+parenthesis and define name differently. The audit will check the API call and
+define name as independent tokens so it continues to reject a missing
+compile-time mode switch without depending on formatter layout.
+
+After that correction, formatting and targeted static analysis passed. The
+first complete `make process-worker-probe` then passed in both modes against
+the clean pinned Engine checkout:
+
+- JIT: 128 MiB in 198,508 us (644.81 MiB/s), with 151,537 us mean ready time
+  across the five processes.
+- AOT: 128 MiB in 169,285 us (756.12 MiB/s), with 14,141 us mean ready time.
+- Both modes reported graceful exit 0, intentional uncaught-exception exit
+  255 with the exact stderr diagnostic preserved, forced exit -9 after
+  `SIGKILL`, two successful replacements, distinct supervisor/worker PIDs,
+  and zero outstanding child processes.
+- Before either run and after each run, the runner confirmed that the pinned
+  Engine checkout remained clean. It also confirmed the executed arm64 slice;
+  for AOT it rejected any separate `libdart_engine`, `libdart_jit`,
+  `libdart_aotruntime`, or `libdart` dependency using Mach-O inspection.
+
+These are first-run measurements, not yet the repeated evidence used for the
+comparison decision.
+
+An attempted five-run repetition did not start the runner or any worker in any
+iteration. Each top-level `dart run` was denied while updating the same
+telemetry session file under `~/.dart-tool`; the shell loop continued and
+reported all five identical environment failures. These attempts add no
+runtime samples. The five repetitions will be rerun with the same narrow Dart
+tool filesystem access already required by analysis.
+
+The controlled five-run repetition then passed all five JIT executions and
+all five AOT executions. Every execution repeated the graceful, uncaught
+exception, forced kill, and two replacement paths and ended with zero
+outstanding processes. Across those repetitions:
+
+- JIT bulk throughput was 659.62--677.87 MiB/s and mean worker-ready time was
+  148,405--152,372 us.
+- AOT bulk throughput was 762.52--797.12 MiB/s and mean worker-ready time was
+  12,307--16,709 us.
+
+The final artifact audit identified the executable as arm64. Its complete
+dynamic dependency list contained only macOS `libSystem`, Security,
+CoreFoundation, `libobjc`, Foundation, and CoreServices; there is no separate
+Dart Engine/VM dylib. The selected Engine checkout remained clean at
+`60a57cd42d64dc03e9f07aa60a2e250755c1ef28`. Full-repository `dart analyze`,
+`dart run test/run_tests.dart`, and `git diff --check` all passed.
+
+Conclusion for this subtask: process separation is a viable published-Dart
+fallback in both developer JIT and release AOT. It preserves a hard ownership
+and cleanup boundary without an Engine source change. This conclusion does
+not yet select it for product migration; the next ordered subtask compares it
+with the general Engine correction, including packaging and upstream wait.
+
+The first repository staging attempt was blocked before modifying the index
+because the workspace sandbox denied creation of `.git/index.lock`. The five
+task files remain only as worktree changes. Their narrowly scoped staging and
+commit will be retried with Git metadata write access.

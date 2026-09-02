@@ -77,6 +77,14 @@ override PUBLIC_EMBEDDER_WORKER_PROBE_AOT_HOST := \
 	$(PUBLIC_EMBEDDER_WORKER_PROBE_BUILD_DIR)/public_worker_aot_probe
 override PUBLIC_EMBEDDER_WORKER_PROBE_JIT_HOST := \
 	$(PUBLIC_EMBEDDER_WORKER_PROBE_BUILD_DIR)/public_worker_jit_probe
+override PROCESS_WORKER_PROBE_BUILD_DIR := \
+	$(PROJECT_ROOT)/build/runtime-probes/process-worker/$(HOST_ARCH)
+override PROCESS_WORKER_PROBE_SOURCE := \
+	$(PROJECT_ROOT)/tool/process_worker_probe.dart
+override PROCESS_WORKER_PROBE_RUNNER_SOURCE := \
+	$(PROJECT_ROOT)/tool/process_worker_probe_runner.dart
+override PROCESS_WORKER_PROBE_AOT_EXECUTABLE := \
+	$(PROCESS_WORKER_PROBE_BUILD_DIR)/process_worker_probe
 override DART_ENGINE_WORKER_PATCH := \
 	$(PROJECT_ROOT)/patches/dart-engine-worker-isolates.patch
 override DART_ENGINE_LIFECYCLE_PATCH := \
@@ -383,6 +391,7 @@ INTEL_EVIDENCE_OUTPUT ?=
 	unmodified-engine-probe-jit-engine \
 	unmodified-engine-multiple-root-probe \
 	public-embedder-worker-probe \
+	process-worker-probe \
 	developer-jit-build developer-jit-run developer-jit-audit \
 	developer-jit-integration developer-jit-lifecycle \
 	release-aot-build release-aot-run release-aot-audit \
@@ -414,6 +423,7 @@ help:
 	@echo "  Thin targets require RUNTIME_ARCH=arm64 or RUNTIME_ARCH=x86_64"
 	@echo "  make unmodified-engine-multiple-root-probe"
 	@echo "  make public-embedder-worker-probe"
+	@echo "  make process-worker-probe Validate official Dart process workers"
 	@echo "  make developer-jit-build Build one thin product developer-JIT app"
 	@echo "  make developer-jit-run   Run one thin product developer-JIT app"
 	@echo "  make developer-jit-audit Audit one JIT-only thin bundle contract"
@@ -667,6 +677,32 @@ public-embedder-worker-probe: \
 		--dart-source=$(PUBLIC_EMBEDDER_WORKER_PROBE_DART_SOURCE) \
 		--native-source=$(PUBLIC_EMBEDDER_WORKER_PROBE_HOST_SOURCE) \
 		--mode=jit
+
+$(PROCESS_WORKER_PROBE_AOT_EXECUTABLE): $(PROCESS_WORKER_PROBE_SOURCE) | \
+		runtime-dart-tool-check
+	@mkdir -p $(PROCESS_WORKER_PROBE_BUILD_DIR)
+	"$(RUNTIME_DART_EXECUTABLE)" compile exe --verbosity=warning \
+		-DPROCESS_PROBE_SELF_EXEC=true \
+		-o $@ $(PROCESS_WORKER_PROBE_SOURCE)
+
+process-worker-probe: unmodified-engine-sdk-clean \
+		$(PROCESS_WORKER_PROBE_SOURCE) \
+		$(PROCESS_WORKER_PROBE_RUNNER_SOURCE) \
+		$(PROCESS_WORKER_PROBE_AOT_EXECUTABLE)
+	"$(RUNTIME_DART_EXECUTABLE)" run \
+		$(PROCESS_WORKER_PROBE_RUNNER_SOURCE) \
+		--engine-root=$(DART_ENGINE_ROOT) \
+		--command=$(RUNTIME_DART_EXECUTABLE) \
+		--source=$(PROCESS_WORKER_PROBE_SOURCE) \
+		--expected-arch=$(HOST_ARCH) \
+		--mode=jit
+	"$(RUNTIME_DART_EXECUTABLE)" run \
+		$(PROCESS_WORKER_PROBE_RUNNER_SOURCE) \
+		--engine-root=$(DART_ENGINE_ROOT) \
+		--command=$(PROCESS_WORKER_PROBE_AOT_EXECUTABLE) \
+		--source=$(PROCESS_WORKER_PROBE_SOURCE) \
+		--expected-arch=$(HOST_ARCH) \
+		--mode=aot
 
 runtime-fingerprint-force:
 

@@ -505,7 +505,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] 不採用時は公開 Dart Embedder API による製品所有 host を実証して採否を決める
   - [ ] 公開 API が不足する場合は汎用的な `dart_engine` 改善案と process 分離を比較する
     - [x] disposable SDK checkout で汎用 Engine 改善と上流回帰テストを実証する
-    - [ ] 公式 Dart executable を使う process/IPC fallback を実証する
+    - [x] 公式 Dart executable を使う process/IPC fallback を実証する
     - [ ] 所有権、性能、配布、上流採用待ちを比較して現在の製品経路を選定する
   - [ ] 選定した公式または上流採用済みの方式へ JIT/AOT lifecycle を移行する
   - [ ] patch、patch 適用処理、patch 来歴を撤去して clean Engine 前提の全 matrix を通す
