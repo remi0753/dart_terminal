@@ -505,6 +505,9 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] 固定判定基準を一度だけ適用し、採用 topology と実装所有者を確定する
   - [x] 選定された `dart_appkit` host contract を実装して回帰試験を通す
   - [ ] M1/arm64 Developer JIT 製品を選定 contract へ移行する
+    - [ ] versioned process protocol と process-owned lifecycle coordinator を実装し、公開 Dart 実行ファイルで unit contract を通す
+    - [ ] clean SDK を必須にした Developer worker Kernel・bundle・provenance/audit 経路へ移す
+    - [ ] M1 Developer GUI/lifecycle/failure/backpressure 統合試験を通し、移行記録を閉じる
   - [ ] M1/arm64 Release AOT 製品を同じ contract へ移行する
   - [ ] patch 本体、適用処理、hash・来歴・監査・fixture をすべて削除する
   - [ ] M1 の JIT/AOT 横断 lifecycle、性能、終了順序、clean SDK を検証して移行を閉じる

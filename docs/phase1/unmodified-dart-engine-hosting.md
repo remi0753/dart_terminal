@@ -1388,3 +1388,59 @@ SDK worktrees were clean, and `dart_appkit` resolved to the full baseline above.
 This completes the generic host dependency without executing a patch-applying
 product target. The next first unchecked ROADMAP item is the M1 Developer JIT
 product migration.
+
+### 2026-09-03 — M1 Developer migration decomposition
+
+The Developer migration crosses the Dart lifecycle layer, native Runner
+arguments, bundle construction, build provenance/audit, and real AppKit
+integration. It is therefore divided into three ordered completion commits
+without adding or reconsidering an architecture:
+
+1. **Process protocol and lifecycle coordinator.** Replace the in-process
+   `Isolate.spawn` coordinator with a versioned, bounded stdin/stdout protocol
+   and an official-Dart child process. Add a dedicated worker entrypoint and
+   run the existing normal/startup/sync-error/async-error/unexpected-exit/
+   idle-error/idle-exit/stop-error/timeout/late/double-shutdown unit inventory
+   against actual child processes. Preserve the public outcome enums and
+   machine-event ordering. Completion requires no import or call of a Dart
+   Embedder/Engine interface in the process layer, authoritative `exitCode`
+   plus drained streams, no outstanding process/subscription, malformed-frame
+   bounds, formatting, analysis, and the unit harness.
+2. **Clean Developer build, bundle, and provenance.** Build a dedicated worker
+   Kernel with the configured official Dart SDK and place it beside the UI
+   Kernel. Make the product Runner supply the exact trusted Dart executable and
+   bundled worker payload as internal application configuration. Change only
+   the Developer Engine prerequisite from patch application to fail-closed
+   clean-source build. Extend the Developer manifest and audit to bind the
+   worker payload, runtime identity, stock-Engine policy, bundle seal, and
+   rebuild inputs. Release remains untouched and must not be executed.
+3. **M1 Developer integration closeout.** Run the signed/ad-hoc Developer GUI,
+   complete lifecycle fault suite, source/bundle audits, clean-SDK checks,
+   worker process cleanup/replacement checks, and bounded traffic/fairness
+   observations. Update current user/architecture documentation only after the
+   product evidence passes, then close the parent Developer item.
+
+Shared dependencies are the official Dart 3.13.2 executable, clean stock JIT
+Engine artifacts, `dart_appkit` baseline
+`77e355387a0ea50034632d9e3d4b35f629155c35`, existing lifecycle outcome names,
+and the selected process proof. Release AOT helper packaging, deletion of patch
+files/machinery, and x86_64/Universal changes are explicitly outside these
+three units.
+
+The selected process format begins with fixed magic/version/type/generation/
+operation/payload-length fields, rejects payloads above 1 MiB, reserves stdout
+for frames and stderr for bounded diagnostics, and uses process exit plus
+drained stdout/stderr as the cleanup barrier. The final implementation may
+choose field widths, but it may not weaken the ADR-002 semantic envelope.
+
+The key build constraint is that the embedded UI root cannot reliably derive a
+worker payload from `Platform.script` on the stock host. Developer therefore
+uses a separate worker Kernel, and the native Runner passes its bundle path and
+the exact trusted Dart executable into the UI root. Unit tests inject the same
+command abstraction but launch the worker source through the current official
+Dart executable, keeping tests independent of an Engine build.
+
+Decomposition validation passed `git diff --check`, full-repository
+`dart analyze`, and `dart run test/run_tests.dart`. The diff contains only the
+ordered ROADMAP children and this implementation contract; no runtime, build,
+SDK, or adjacent source changed.
