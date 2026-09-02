@@ -508,10 +508,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] versioned process protocol と process-owned lifecycle coordinator を実装し、公開 Dart 実行ファイルで unit contract を通す
     - [x] clean SDK を必須にした Developer worker Kernel・bundle・provenance/audit 経路へ移す
     - [x] M1 Developer GUI/lifecycle/failure/backpressure 統合試験を通し、移行記録を閉じる
-  - [ ] M1/arm64 Release AOT 製品を同じ contract へ移行する
+  - [x] M1/arm64 Release AOT 製品を同じ contract へ移行する
     - [x] clean Product Engine、公式 self-contained AOT worker、host-owned launch、bundle/sign 経路へ移す
     - [x] Release manifest/audit/freshness/negative gate を clean process-worker contract へ移す
-    - [ ] M1 Release GUI/lifecycle/failure/backpressure/PID 統合試験を通し、移行記録を閉じる
+    - [x] M1 Release GUI/lifecycle/failure/backpressure/PID 統合試験を通し、移行記録を閉じる
   - [ ] patch 本体、適用処理、hash・来歴・監査・fixture をすべて削除する
   - [ ] M1 の JIT/AOT 横断 lifecycle、性能、終了順序、clean SDK を検証して移行を閉じる
   - [ ] x86_64/Rosetta/Universal compatibility を M1 完了後に検証する（追記：x86_64の優先度は低いため、ブロッカーにはしない。M1 で全て問題なければ先へ進んで良い）

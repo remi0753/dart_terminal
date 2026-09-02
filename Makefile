@@ -433,7 +433,8 @@ INTEL_EVIDENCE_OUTPUT ?=
 	developer-jit-integration developer-jit-lifecycle developer-jit-traffic \
 	release-aot-build release-aot-run release-aot-audit \
 	release-aot-clean-sdk-test \
-	release-aot-integration release-aot-lifecycle runtime-source-check \
+	release-aot-integration release-aot-lifecycle release-aot-traffic \
+	runtime-source-check \
 	runtime-bundle-audit runtime-integration \
 	runtime-lifecycle-integration runtime-verify \
 	runtime-matrix-build runtime-matrix-audit runtime-matrix-integration \
@@ -471,6 +472,7 @@ help:
 	@echo "  make release-aot-run     Run one thin release-AOT product app"
 	@echo "  make release-aot-audit   Audit one AOT-only thin bundle contract"
 	@echo "  make release-aot-clean-sdk-test Verify stock-SDK AOT worker provenance"
+	@echo "  make release-aot-traffic Verify bounded worker traffic and GUI close"
 	@echo "  make runtime-integration Run one common smoke suite in both modes"
 	@echo "  make runtime-lifecycle-integration Run shared lifecycle faults"
 	@echo "  make runtime-verify      Verify both modes for one explicit architecture"
@@ -1193,6 +1195,12 @@ release-aot-integration: release-aot-build
 release-aot-lifecycle: release-aot-build
 	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_INTEGRATION_SOURCE) \
 		--mode=release-aot --suite=lifecycle \
+		--launch-architecture=$(RUNTIME_ARCH) \
+		$(RELEASE_AOT_BUNDLE)
+
+release-aot-traffic: release-aot-build
+	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_INTEGRATION_SOURCE) \
+		--mode=release-aot --suite=traffic \
 		--launch-architecture=$(RUNTIME_ARCH) \
 		$(RELEASE_AOT_BUNDLE)
 

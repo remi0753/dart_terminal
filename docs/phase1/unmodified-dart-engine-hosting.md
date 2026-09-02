@@ -2161,3 +2161,164 @@ backpressure, and PID closeout matrix. Patch files and historical patch targets
 remain deliberately untouched until the later explicit deletion unit, and
 x86_64/Rosetta/Universal behavior remains non-blocking and deferred until the
 M1 work is complete.
+
+### M1 Release AOT integration closeout: start
+
+Purpose: prove on the primary M1/arm64 environment that the audited Release AOT
+application preserves the selected process-worker contract across real GUI
+startup, normal work, failure, bounded traffic, and application termination.
+
+Background: `2f6c1267b05c7f761805048472ca88afa264b716` introduced the
+official self-contained worker and host-owned launch path;
+`ab9ad65eb34806c53647aae1846b2838cda85f41` made its signed artifacts and
+provenance fail closed. The Release migration is not complete until the same
+observable lifecycle contract already accepted for Developer JIT passes in the
+actual Release app and leaves no child process behind.
+
+Scope: map the existing arm64 GUI/lifecycle/traffic suites to the Release
+process topology; run or minimally correct normal startup, request/response,
+worker failure and replacement boundaries, bounded backpressure, signal/exit
+ordering, GUI close, drained streams, and PID reaping; record exact results and
+close only the Release integration item.
+
+Out of scope: changing Dart or Dart Engine; changing the selected topology or
+wire protocol; adding product features; deleting legacy patches; cross-mode
+closeout; and x86_64, Rosetta, Universal, or Intel-native validation.
+
+Dependencies: the frozen stock-runtime plan, the completed Developer
+integration contract, the official clean SDK at
+`60a57cd42d64dc03e9f07aa60a2e250755c1ef28`, clean `dart_appkit` at
+`77e355387a0ea50034632d9e3d4b35f629155c35`, and the two completed Release
+migration commits above.
+
+Completion conditions: the audited arm64 Release bundle passes the common GUI
+smoke, lifecycle fault, and bounded-traffic suites; every scenario observes a
+separate worker PID, authoritative exit plus drained stdout/stderr, bounded
+in-flight traffic, deterministic termination, and zero surviving child or
+coordinator-owned processes; source checks and Release assurance regressions
+remain green; SDK and AppKit stay clean.
+
+Validation plan: inspect the existing integration harness and Developer
+closeout evidence before changing code; identify any assertions still tied to
+Engine isolates or Kernel-mode workers; run the smallest focused Release suites
+first; fix only Release process-contract gaps; then run the full arm64 Release
+integration group, source/unit checks, assurance regression, repository-boundary
+checks, and diff review.
+
+The unchanged Release GUI smoke passed on arm64 in 1,774 ms. It used the
+bundle-relative self-contained helper, emitted one valid parent/child spawn and
+in-process reap pair, completed normal request/response and graceful stop, and
+the harness confirmed the worker PID was absent after the application exited.
+No Release-specific expectation or runtime change was required for this first
+suite.
+
+The unchanged Release lifecycle suite also passed all sixteen arm64 GUI
+launches. Normal and contained worker failures returned 0; forced shutdown
+returned 75; root/host fatal cases returned 70; usage failure returned 64.
+This includes startup, synchronous, asynchronous, idle, stop-time, and
+unexpected-exit failures; forced `SIGKILL`; late-completion suppression;
+idempotent shutdown; root-only fault containment; and a 201 ms replacement case
+with two generations and distinct child PIDs. Every expected in-process reap
+was paired with its spawn, the root-uncaught pipe-closure case was reconciled
+after parent death, and every child PID was absent after its application
+process exited. No Release-specific code change was required.
+
+The first traffic invocation did not reach the application because Make had no
+`release-aot-traffic` target. The common integration tool already supports the
+Release mode and traffic suite, but only the Developer convenience target had
+been wired. This is a product build-interface omission, not a runtime, Engine,
+or AppKit failure. Add the symmetric Release target and keep the suite itself
+unchanged.
+
+After adding the missing symmetric Make entry point, the unchanged Release
+traffic suite passed. All 256 requests received the expected response; 384
+saturated submissions were explicitly backpressured and retried; peak in-flight
+work was exactly 64; the GUI close timer fired while traffic was active; worker
+traffic completed in 986 ms and the full application exited in 1,623 ms. The
+single worker spawn/reap pair was valid and its PID was absent after exit.
+
+The final Release source-boundary inspection found exactly one
+`DartEngine_CreateIsolate` call in `ReleaseAotRunner.mm`, which is the selected
+AppKit-hosted UI root. The product worker path contains no `dart:isolate`,
+`Isolate.spawn`, public/private isolate-creation call, worker-patch reference,
+or second Engine root. The shared coordinator increments ownership only after
+`Process.start`, treats `Process.exitCode` as the reap signal, and emits
+`worker-exit` only after both protocol stdout and diagnostic stderr have
+drained and termination evidence can be reconciled. Admission remains bounded
+at 64. The SDK and AppKit worktrees were clean during this inspection.
+
+### M1 Release AOT integration closeout: result
+
+No Release runtime or protocol correction was needed. The Developer closeout
+had already made the integration harness and lifecycle owner mode-independent,
+and the signed self-contained Release helper satisfies that same observable
+contract. The sole implementation change in this unit is the missing symmetric
+`release-aot-traffic` Make target and help entry.
+
+Final arm64 evidence gathered on the Apple M1 baseline:
+
+- Release GUI smoke passed in 1,774 ms with one distinct worker PID, a matched
+  spawn/reap pair, graceful request/shutdown, clean stderr, and post-exit PID
+  absence.
+- All sixteen Release lifecycle GUI launches passed. The normal and contained
+  worker cases returned 0, forced timeout returned 75, root/host fatal cases
+  returned 70, and usage rejection returned 64. Replacement used two distinct
+  process generations and completed in 201 ms. Exit-first and error-first
+  cases retained the same classification through the common stream barriers.
+- Release traffic passed with 256/256 responses, 384 explicit backpressure
+  rejections and retries, exactly 64 maximum in flight, a fired GUI close
+  timer, 986 ms worker traffic, 1,623 ms application lifetime, one matched
+  spawn/reap pair, and no remaining worker PID.
+- `make RUNTIME_ARCH=arm64 runtime-source-check` passed after the Make change:
+  all 41 Dart files were formatted, native formatting/header syntax and plists
+  passed, whole-project analysis found no issues, and `dart_terminal tests
+  passed`.
+- `make RUNTIME_ARCH=arm64 release-aot-clean-sdk-test` passed after the Make
+  change with `patch_activity=0`, all positive/negative helper checks, three
+  launcher-side invalid-helper rejections, 19/19 stable no-op artifacts, and
+  19/19 regenerated artifacts.
+- The Release source boundary contains one Engine isolate creation for the
+  AppKit UI root and no worker isolate mechanism. The exact SDK/Engine remained
+  clean at `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`; `dart_appkit`
+  remained clean at `77e355387a0ea50034632d9e3d4b35f629155c35`.
+
+The M1/arm64 Release AOT product migration is complete. The next ordered unit
+is deletion of the legacy patch files and every remaining application,
+provenance, audit, and fixture path that refers to them. Cross-mode M1 closeout
+comes only after that deletion; x86_64/Rosetta/Universal remains later and
+non-blocking.
+
+Post-record validation exposed an environment-level GUI registration failure
+that must not be mistaken for a passing Release closeout. The freshly audited
+Release bundle passed its complete static audit, but the next direct GUI launch
+terminated with signal 6 before emitting any application or lifecycle output.
+Its macOS crash report places the abort in `_RegisterApplication` from
+`+[NSApplication sharedApplication]`, before Dart Engine initialization and
+before worker configuration. A direct retry reproduced it. The existing
+Developer bundle then failed at the same AppKit registration point, showing the
+condition is not Release worker, AOT snapshot, or Engine specific. Earlier in
+the same session, Release smoke, all sixteen lifecycle launches, and traffic
+had passed. The ROADMAP completion state must not be committed until this
+post-suite host condition is understood or the final GUI validation can run
+again without weakening process assertions.
+
+That condition was isolated to the workspace sandbox rather than the product.
+The sandbox also caused `/usr/bin/open` to report the valid, strictly signed
+bundle as missing its executable. With explicit GUI permission, the same app
+launched and closed normally through Launch Services. Apple documents Launch
+Services as the Finder-equivalent app launch path and documents that
+`NSApplication.sharedApplication` establishes the WindowServer connection;
+both observations match the failure boundary. The existing direct harness was
+then run outside the sandbox, preserving its stronger child PID, process exit
+status, and stdout/stderr assertions. Its final combined `--suite=all` run
+passed: smoke took 1,260 ms; all sixteen lifecycle cases passed with replacement
+at 199 ms; traffic returned 256/256 responses with 384 explicit backpressure
+retries, maximum 64 in flight, 976 ms traffic time, and 1,159 ms application
+time. No retry, fallback, OS-specific suppression, Dart change, or Engine
+change was added. This resolves the post-suite condition and leaves the Release
+completion state valid.
+
+Primary references consulted for this distinction:
+
+- <https://developer.apple.com/documentation/coreservices/launch_services>
+- <https://developer.apple.com/documentation/appkit/nsapplication/shared>
