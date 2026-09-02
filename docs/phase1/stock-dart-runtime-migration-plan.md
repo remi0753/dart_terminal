@@ -39,7 +39,7 @@ provenance, audit, and test path that treats a patched Engine as valid.
 
 | Route | Actual validation state | Fixed disposition |
 | --- | --- | --- |
-| Full product-owned embedder through public `dart_api.h`-family interfaces | Originally proposed, but never implemented as a complete VM owner. The later lightweight-child probe did not test this architecture. | **Open and first.** This is the only missing same-process proof. |
+| Full product-owned embedder through public `dart_api.h`-family interfaces | Implemented in `dart_appkit` as a complete public-only VM owner and exercised on M1/arm64 in both JIT and AOT. Root creation, synchronous Dart, and cleanup passed; `Platform.script`, microtasks, and worker lifecycle could not be initialized without unexported `runtime/bin` bootstrap. | **Closed/rejected.** The actual full-host proof is complete; do not replace the missing bootstrap with private code. |
 | Multiple stock `DartEngine_CreateIsolate` roots | JIT/AOT creation, ports, errors, replacement creation, bulk transfer, and global shutdown passed. The public Engine API cannot retire/unregister one root, so dynamic workers accumulate until process exit. | **Closed/rejected** for pane-owned workers. Do not repeat. |
 | Public `Dart_CreateIsolateInGroup` hybrid under stock `dart_engine` | JIT/AOT lifecycle mechanics worked, but child microtasks and original uncaught-error diagnostics failed because the Engine installed no child initializer. | **Closed/rejected.** Do not use private setup helpers or weaken semantics. |
 | Modified Engine, whether patch or normal SDK commit | A general prototype passed broad Engine tests. | **Prohibited by invariant**, regardless of technical quality. |

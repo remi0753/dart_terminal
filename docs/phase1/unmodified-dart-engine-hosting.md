@@ -1,6 +1,11 @@
 # Unmodified Dart Engine hosting migration
 
-- Status: in progress; same-process Engine/AppKit integration selected
+- Status: in progress; full public host rejected, fixed decision application next
+- Normative execution contract:
+  [`stock-dart-runtime-migration-plan.md`](stock-dart-runtime-migration-plan.md).
+  Earlier entries that considered any Dart Engine modification are retained
+  only as historical evidence and are superseded by its immutable-Dart
+  invariant.
 - Started: 2026-09-02
 - Scope: corrective Phase 1 task inserted immediately after the completed
   VM/isolate lifecycle contract
@@ -1171,3 +1176,74 @@ package analysis, API tests, and launcher tests also passed, and its nested SDK
 remained clean at the official revision. This checkpoint changes planning and
 evidence documents only; the next and only active implementation item is the
 full public-host proof.
+
+### 2026-09-03 — full public `dart_api.h` host result
+
+The originally proposed product-owned embedder has now been tested as the
+complete VM owner; this is not the earlier lightweight child created inside an
+already initialized Engine. The implementation and reproducible decision
+target are in adjacent `dart_appkit` commit `77e3553` (`Enforce stock Dart root
+hosting`):
+
+- `native/runner/PublicDartApiHostProbe.cc` includes only the public
+  `dart_api.h` and `dart_native_api.h` interfaces. It owns VM flags and
+  initialization, isolate callbacks, message notification/handling, JIT Kernel
+  and AOT Mach-O snapshot inputs, native reporting, root shutdown, and
+  `Dart_Cleanup`;
+- `tool/public_dart_api_host_probe.dart` exercises synchronous Dart,
+  `Platform.script`, microtasks, ordinary worker creation, worker fault,
+  forced stop, replacement, a live child during final cleanup, and a native
+  process-main-thread callback;
+- `tool/public_dart_api_host_probe_runner.dart` enforces the exact SDK
+  revision and clean tracked worktree before and after execution, rejects
+  private headers/helpers in the host source, audits public exports, runs JIT
+  and AOT hosts under an outer timeout, and emits one decision;
+- `make public-dart-api-host-probe` builds stock ReleaseARM64 JIT and
+  ProductARM64 AOT artifacts from the exact official checkout. It does not
+  apply either Dart Terminal patch or use a local Dart commit/fork.
+
+Both runtime modes produced the same boundary result:
+
+| Gate | JIT | AOT |
+| --- | --- | --- |
+| Native host/root on process main thread | passed | passed |
+| VM and root creation | passed | passed |
+| Synchronous Dart invocation | passed | passed |
+| `Platform.script` | failed: embedder value was null | failed: embedder value was null |
+| `scheduleMicrotask` | failed: `Unsupported operation: Microtasks are not supported` | same failure |
+| ordinary worker lifecycle | timed out before progress; 0 child initializations | same result |
+| root/VM cleanup | passed; isolate/group cleanup callbacks each ran once | same result |
+| repeated host shutdown guard | passed | passed |
+
+The linked JIT and AOT libraries expose every public `Dart_*` symbol used by
+the host, but neither exports `dart::embedder::InitOnce` nor
+`bin::DartUtils::SetupCoreLibraries`. Stock `dart_engine` calls those private
+`runtime/bin` facilities to supply platform values, builtin/IO native
+resolvers, the IO event handler, the `dart:async` immediate-scheduler closure,
+and isolate hooks. Calling them, including their private headers, or copying
+their implementation would violate the frozen public boundary.
+
+The full public host is therefore rejected for Dart 3.13.2. Its low-level VM
+lifecycle is functional, but it cannot meet the existing Dart semantics by
+documented public interfaces alone. The final probe decision was:
+
+```text
+PUBLIC_DART_API_HOST_DECISION accepted=false public_platform_bootstrap=false jit_runtime=false aot_runtime=false
+```
+
+Adjacent verification also passed C++ and Dart formatting, focused analysis,
+`make test`, `make engine-check`, and the real AppKit GUI smoke. The GUI root
+remained on the process main thread, ran three Timer ticks, received native
+close, released handles, and exited zero. The nested SDK ended clean at exact
+revision `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`, and the `dart_appkit`
+worktree was clean after its task commit.
+
+This completes only the public-host proof item. The next ordered item is to
+apply the frozen decision rule once and record the selected topology and
+owners in Dart Terminal; no product runtime or patch machinery changes in this
+checkpoint.
+
+Public-host proof closeout passed `git diff --check`, full-repository
+`dart analyze`, and `dart run test/run_tests.dart`. The main-repository diff is
+limited to this evidence, the normalized evidence row, and the corresponding
+single ROADMAP checkbox; runtime and build sources remain unchanged.
