@@ -1,6 +1,6 @@
 # Unmodified Dart Engine hosting migration
 
-- Status: in progress; official process workers selected, product migration next
+- Status: in progress; same-process Engine/AppKit integration selected
 - Started: 2026-09-02
 - Scope: corrective Phase 1 task inserted immediately after the completed
   VM/isolate lifecycle contract
@@ -969,8 +969,8 @@ The two choices solve different time horizons:
 | Intel/Universal | Existing Engine build machinery already has thin lanes | macOS cross-architecture `compile exe` is unsupported; a separate official x64 SDK/host is needed, as the [official compile documentation](https://dart.dev/tools/dart-compile) limits cross-compilation to Linux targets | Recorded for the lower-priority later full matrix; does not block M1 |
 | Upstream wait | Unknown review/API/release time and outcome | None for the APIs used | Product cannot wait on or predict acceptance |
 
-Current product decision: migrate pane-owned workers to official Dart child
-processes, starting with M1/arm64. Keep the one AppKit-main-thread UI root in
+Product decision at comparison closeout (superseded below): migrate pane-owned
+workers to official Dart child processes, starting with M1/arm64. Keep the one AppKit-main-thread UI root in
 the clean, unmodified `dart_engine`. Release workers use a self-contained AOT
 helper; developer-JIT workers use the selected revision-matched official Dart
 toolchain while the migration determines the smallest non-distributable
@@ -1022,3 +1022,85 @@ Selection closeout passed `git diff --check`, full-repository `dart analyze`,
 and `dart run test/run_tests.dart`. A final SDK check again reported the exact
 pinned revision and an empty worktree. The only repository changes for this
 subtask are this memo and the two comparison checkboxes in `ROADMAP.md`.
+
+### 2026-09-03 — decision revision: `dart_appkit` owns same-process adoption
+
+User direction prioritizes the best long-term architecture over the previously
+selected immediately published fallback. Since the Engine candidate keeps
+native Dart ports, avoids a VM process per pane, and fits the existing
+AppKit-main-thread host naturally, same-process workers are now the primary
+product path. The process implementation/probe remains evidence and a bounded
+fallback, not the planned product migration.
+
+Inspection of `../dart_appkit` confirms that it is the correct integration
+owner: its native Runner initializes `dart_engine`, owns the AppKit run loop,
+sets the message scheduler, and performs final Engine shutdown. It must own the
+supported worker contract and regression tests rather than making each product
+rediscover Engine behavior.
+
+Changing `dart_appkit` alone, however, cannot implement the two missing Engine
+responsibilities safely:
+
+1. `Dart_InitializeParams.initialize_isolate` is fixed when
+   `DartEngine_Init` calls `Dart_Initialize`. The caller cannot install it
+   afterward. The callback's `dart:io`/core setup uses the private helper that
+   `dart_engine` already encapsulates; copying that helper into `dart_appkit`
+   would create a new private-SDK dependency.
+2. Calling `Dart_Cleanup` outside `DartEngine_Shutdown` cannot be ordered
+   safely around Engine-owned root isolates, persistent handles, snapshots,
+   and loaded AOT libraries. Calling before shutdown invalidates state Engine
+   still uses; calling after shutdown is too late for live same-group children
+   and released snapshot memory.
+
+The adopted design is therefore coordinated but has one responsibility per
+repository:
+
+- Dart SDK: carry the already validated product-independent Engine commit that
+  initializes same-group children and completes Engine-owned VM cleanup. It is
+  an actual commit based on the exact upstream revision, with upstream sample
+  regressions—not a patch file applied by a product build.
+- `dart_appkit`: declare this Engine behavior as a host capability, add a real
+  same-group worker conformance example/test, preserve AppKit main-thread and
+  bounded scheduling, and fail closed when its configured Engine does not meet
+  the contract.
+- Dart Terminal: consume the `dart_appkit` contract using ordinary
+  `Isolate.spawn`/ports, remove its own patch/provenance machinery, and retain
+  the existing lifecycle classifications.
+
+This explicitly supersedes the “published process worker as current product
+path” decision recorded in `0d26e58`. It also refines, rather than reverses,
+the no-product-patch rule: a general Dart Engine source change with its own
+commit, tests, and upstream review path is allowed by the user's earlier
+clarification; an opaque `.patch` reapplied for Dart Terminal remains
+forbidden. Until the Engine commit is accepted upstream, the dependency must
+be identified honestly as a maintained candidate revision and cannot be
+misrepresented as stock Dart 3.13.2.
+
+The revised ordered migration is:
+
+1. Register a new active task and design/acceptance record in `dart_appkit`.
+2. Integrate the general Engine candidate as a commit, then add and pass
+   `dart_appkit` worker/future/microtask/error/shutdown conformance tests.
+3. Point Dart Terminal's M1 Developer JIT and Release AOT paths at that
+   explicit contract, removing product-owned patch application only after
+   both modes pass.
+4. Close the M1 lifecycle/performance/shutdown matrix first. Intel/Universal
+   remains lower-priority follow-up as directed by the user.
+
+The first migration unit is documentation/task registration in
+`../dart_appkit`; no adjacent source will change before its roadmap and
+worklog state the purpose, scope, exclusions, dependency boundary, completion
+conditions, and verification plan.
+
+That registration is complete in `dart_appkit` commit `a2149ff` (`Define
+same-group Engine contract`). Its roadmap now has one active task covering the
+general Engine commit, fail-closed capability validation, hosted worker
+conformance, and documentation; its worklog records the Engine/AppKit/
+application ownership split and explicitly forbids copying private SDK helpers
+or presenting the candidate as stock Dart. No `dart_appkit` runtime source was
+changed in this registration unit.
+
+Registration closeout passed `git diff --check`, full `dart analyze`, and
+`dart run test/run_tests.dart`. The adjacent `dart_appkit` worktree was clean
+at `a2149ff` after its commit. This repository unit changes only the roadmap
+route and this decision record; product runtime code remains unchanged.

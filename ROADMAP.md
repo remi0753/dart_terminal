@@ -507,7 +507,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] disposable SDK checkout で汎用 Engine 改善と上流回帰テストを実証する
     - [x] 公式 Dart executable を使う process/IPC fallback を実証する
     - [x] 所有権、性能、配布、上流採用待ちを比較して現在の製品経路を選定する
-  - [ ] 選定した公式または上流採用済みの方式へ JIT/AOT lifecycle を移行する
+  - [ ] 汎用 Engine 改善 commit と `dart_appkit` 所有の same-process contract へ JIT/AOT lifecycle を移行する
+    - [x] `../dart_appkit` に same-group worker lifecycle の task、責務境界、完了条件を登録する
+    - [ ] 汎用 Engine 改善を patch 適用ではない SDK commit として統合し `dart_appkit` の回帰試験を通す
+    - [ ] M1/arm64 Developer JIT 製品を改修済み `dart_appkit` contract へ移行する
+    - [ ] M1/arm64 Release AOT 製品を同じ `dart_appkit` contract へ移行する
+    - [ ] M1 の JIT/AOT 横断 lifecycle、性能、終了順序を検証して移行を閉じる
   - [ ] patch、patch 適用処理、patch 来歴を撤去して clean Engine 前提の全 matrix を通す
   - [ ] 必要な `dart_engine` 改善を再現・API・test 込みの上流向け提案としてまとめる
 - [ ] native event wire format の versioning と backward compatibility
