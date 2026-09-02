@@ -2322,3 +2322,73 @@ Primary references consulted for this distinction:
 
 - <https://developer.apple.com/documentation/coreservices/launch_services>
 - <https://developer.apple.com/documentation/appkit/nsapplication/shared>
+
+### Legacy Engine patch removal: decomposition and start
+
+Purpose: remove the last repository paths that can modify Dart Engine or treat
+a patched Engine as an acceptable input, now that both primary arm64 product
+modes use the selected stock-root plus official process-worker topology.
+
+Background: Developer JIT and Release AOT have passed their clean-SDK build,
+audit, lifecycle, failure, backpressure, GUI-close, and PID-reap gates. The two
+legacy patch payloads and their Phase 0 application target remain in the tree,
+and generic release tooling still retains patch-era composition and provenance
+code even though current product manifests deliberately omit it. Leaving those
+paths would preserve an accidental route back to a locally modified SDK and
+would contradict the frozen migration invariant.
+
+Scope and ordered decomposition:
+
+1. Delete both patch payloads and every Make variable, recipe, dependency, and
+   help entry capable of applying them. Retire only the Phase 0 embedded-worker
+   build/run entry points whose semantics required those patches; preserve
+   their source and measured records as superseded historical evidence. Keep
+   stock-compatible historical targets only when they terminate at the clean
+   official Engine gate.
+2. Delete the patch-specific provenance list, dirty-Engine policy allowance,
+   exact-patch composition helper, focus mode, generated patch fixture, legacy
+   manifest-key/path assertions, and hostile Make overrides. Preserve and, where
+   necessary, tighten the positive `official-clean` repository and exact-schema
+   checks used by the current Developer and Release products.
+3. Update current README/feature/source-inventory language, mark historical
+   reproduction instructions as superseded where they prescribe the removed
+   path, prove no executable patch mechanism or accepted patch schema remains,
+   and run the arm64 source, build, audit, lifecycle, traffic, freshness, and
+   clean-repository regression gates before closing the parent item.
+
+Out of scope: changing any Dart SDK or Dart Engine source or generated output;
+changing the selected process topology or protocol; porting Phase 0 in-process
+isolate spikes to child processes; deleting historical measurements merely
+because they describe past work; M1 cross-mode closeout beyond patch-removal
+regression; and x86_64, Rosetta, Universal, or Intel-native revalidation.
+
+Dependencies: frozen migration plan; AppKit host commit
+`77e355387a0ea50034632d9e3d4b35f629155c35`; official SDK revision
+`60a57cd42d64dc03e9f07aa60a2e250755c1ef28`; Developer completion through
+`affe00c757f6df6aa60a23e51fef84ed9f7396e8`; and Release completion through
+`3343f26`.
+
+Completion conditions: neither patch file exists; no Make target can invoke
+`git apply` against the SDK; no current manifest, fingerprint, audit, or test
+accepts or constructs a patched Engine; current documentation prescribes only
+the stock topology; the exact SDK and AppKit repositories remain clean at their
+pinned revisions; all affected M1/arm64 gates pass. The parent and its three
+children remain unchecked until their own implementation, validation, record,
+and commit are complete in order.
+
+Validation plan: use repository-wide source searches and Make database/dry-run
+inspection after each deletion unit; format and analyze all Dart edits; run
+focused clean-SDK/freshness tests before normal product builds; then run the
+full arm64 product source, audit, integration, lifecycle, and traffic gates.
+Review staged scope and repository boundaries before each completion commit.
+
+Initial inventory on 2026-09-03 found exactly two patch payloads under
+`patches/`; two Make variables, two `git apply` recipes, three support target
+names, and the legacy `DART_ENGINE_AOT_LIBRARY` dependency that could reach
+them; one patch provenance list and one exact-composition helper in shared
+release support; one dirty-Engine policy allowance in the fingerprint tool;
+one generated Git/patch fixture plus its focus mode and patch-era output/schema
+assertions in the freshness test; and stale active guidance in README and the
+feature matrix. The current Developer and Release product dependency graphs
+already terminate at `unmodified-engine-sdk-clean`; the hazardous residual
+path is confined to patch-era Phase 0 build entry points and generic tooling.
