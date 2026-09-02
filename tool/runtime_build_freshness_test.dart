@@ -13,10 +13,15 @@ final class _FreshnessException implements Exception {
 }
 
 final class _Options {
-  const _Options({required this.projectRoot, required this.make});
+  const _Options({
+    required this.projectRoot,
+    required this.make,
+    required this.focus,
+  });
 
   final String projectRoot;
   final String make;
+  final String? focus;
 }
 
 _Options _parseOptions(List<String> arguments) {
@@ -33,9 +38,10 @@ _Options _parseOptions(List<String> arguments) {
     }
     values[name] = value;
   }
-  const Set<String> expected = <String>{'project-root', 'make'};
-  final Set<String> unknown = values.keys.toSet().difference(expected);
-  final Set<String> missing = expected.difference(values.keys.toSet());
+  const Set<String> allowed = <String>{'project-root', 'make', 'focus'};
+  const Set<String> required = <String>{'project-root', 'make'};
+  final Set<String> unknown = values.keys.toSet().difference(allowed);
+  final Set<String> missing = required.difference(values.keys.toSet());
   if (unknown.isNotEmpty || missing.isNotEmpty) {
     throw _FreshnessException(
       'unknown=${unknown.join(',')} missing=${missing.join(',')}',
@@ -45,7 +51,15 @@ _Options _parseOptions(List<String> arguments) {
       !File(values['make']!).isAbsolute) {
     throw const _FreshnessException('paths must be absolute');
   }
-  return _Options(projectRoot: values['project-root']!, make: values['make']!);
+  final String? focus = values['focus'];
+  if (focus != null && focus != 'engine-patch-composition') {
+    throw _FreshnessException('unknown focus: $focus');
+  }
+  return _Options(
+    projectRoot: values['project-root']!,
+    make: values['make']!,
+    focus: focus,
+  );
 }
 
 Future<void> _runBuild(
@@ -422,11 +436,179 @@ Future<Map<String, DateTime>> _modificationTimes(List<String> paths) async {
   return result;
 }
 
+Future<void> _expectGitSuccess(
+  List<String> arguments, {
+  required String description,
+}) async {
+  final ProcessResult result = await Process.run('/usr/bin/git', arguments);
+  if (result.exitCode != 0) {
+    throw _FreshnessException(
+      '$description failed: ${result.stdout}${result.stderr}',
+    );
+  }
+}
+
+Future<void> _verifyEnginePatchCompositionNegative(Directory temporary) async {
+  final Directory fixture = Directory('${temporary.path}/engine-fixture');
+  final File engine = File('${fixture.path}/runtime/engine/engine.cc');
+  await engine.parent.create(recursive: true);
+  await engine.writeAsString(
+    'void WorkerSupport() {\n'
+    '  root();\n'
+    '}\n'
+    '\n'
+    'void Shutdown() {\n'
+    '  root();\n'
+    '}\n',
+    flush: true,
+  );
+  await _expectGitSuccess(<String>[
+    'init',
+    '--quiet',
+    fixture.path,
+  ], description: 'Engine fixture initialization');
+  await _expectGitSuccess(<String>[
+    '-C',
+    fixture.path,
+    'add',
+    'runtime/engine/engine.cc',
+  ], description: 'Engine fixture staging');
+  await _expectGitSuccess(<String>[
+    '-C',
+    fixture.path,
+    '-c',
+    'user.name=Dart Terminal Test',
+    '-c',
+    'user.email=dart-terminal-test.invalid',
+    'commit',
+    '--quiet',
+    '-m',
+    'base',
+  ], description: 'Engine fixture commit');
+
+  final File workerPatch = File('${temporary.path}/worker.patch');
+  await workerPatch.writeAsString(
+    'diff --git a/runtime/engine/engine.cc b/runtime/engine/engine.cc\n'
+    '--- a/runtime/engine/engine.cc\n'
+    '+++ b/runtime/engine/engine.cc\n'
+    '@@ -1,3 +1,4 @@\n'
+    ' void WorkerSupport() {\n'
+    '   root();\n'
+    '+  workers();\n'
+    ' }\n',
+    flush: true,
+  );
+  final File lifecyclePatch = File('${temporary.path}/lifecycle.patch');
+  await lifecyclePatch.writeAsString(
+    'diff --git a/runtime/engine/engine.cc b/runtime/engine/engine.cc\n'
+    '--- a/runtime/engine/engine.cc\n'
+    '+++ b/runtime/engine/engine.cc\n'
+    '@@ -6,3 +6,4 @@\n'
+    ' void Shutdown() {\n'
+    '   root();\n'
+    '+  cleanup();\n'
+    ' }\n',
+    flush: true,
+  );
+  for (final File patch in <File>[workerPatch, lifecyclePatch]) {
+    await _expectGitSuccess(<String>[
+      '-C',
+      fixture.path,
+      'apply',
+      patch.path,
+    ], description: 'Engine fixture patch application');
+  }
+  await verifyRuntimeEnginePatchComposition(
+    engineRoot: fixture.path,
+    engineFile: 'runtime/engine/engine.cc',
+    patches: <String>[workerPatch.path, lifecyclePatch.path],
+  );
+  final String exactPatchedContents = await engine.readAsString();
+  final String exactPatchedHash = await runtimeSha256File(engine.path);
+
+  await engine.writeAsString(
+    '$exactPatchedContents\nvoid UnrelatedHandEdit() {}\n',
+    flush: true,
+  );
+  for (final File patch in <File>[workerPatch, lifecyclePatch]) {
+    await _expectGitSuccess(<String>[
+      '-C',
+      fixture.path,
+      'apply',
+      '--reverse',
+      '--check',
+      patch.path,
+    ], description: 'Engine fixture reverse check with extra edit');
+  }
+  var rejected = false;
+  try {
+    await verifyRuntimeEnginePatchComposition(
+      engineRoot: fixture.path,
+      engineFile: 'runtime/engine/engine.cc',
+      patches: <String>[workerPatch.path, lifecyclePatch.path],
+    );
+  } on RuntimeAuditException catch (error) {
+    rejected = error.message.contains('does not exactly match');
+  }
+  if (!rejected) {
+    throw const _FreshnessException(
+      'non-overlapping Engine hand edit was not rejected',
+    );
+  }
+  stdout.writeln('RUNTIME_BUILD_FRESHNESS_PASS extra_engine_edit_rejected=1');
+
+  await engine.writeAsString(exactPatchedContents, flush: true);
+  final ProcessResult chmod = await Process.run('/bin/chmod', <String>[
+    '755',
+    engine.path,
+  ]);
+  if (chmod.exitCode != 0) {
+    throw _FreshnessException(
+      'could not create Engine mode-only edit: ${chmod.stderr}',
+    );
+  }
+  if (await runtimeSha256File(engine.path) != exactPatchedHash) {
+    throw const _FreshnessException(
+      'Engine mode-only fixture unexpectedly changed file contents',
+    );
+  }
+  for (final File patch in <File>[workerPatch, lifecyclePatch]) {
+    await _expectGitSuccess(<String>[
+      '-C',
+      fixture.path,
+      'apply',
+      '--reverse',
+      '--check',
+      patch.path,
+    ], description: 'Engine fixture reverse check with mode-only edit');
+  }
+  rejected = false;
+  try {
+    await verifyRuntimeEnginePatchComposition(
+      engineRoot: fixture.path,
+      engineFile: 'runtime/engine/engine.cc',
+      patches: <String>[workerPatch.path, lifecyclePatch.path],
+    );
+  } on RuntimeAuditException catch (error) {
+    rejected = error.message.contains('does not exactly match');
+  }
+  if (!rejected) {
+    throw const _FreshnessException(
+      'mode-only Engine hand edit was not rejected',
+    );
+  }
+  stdout.writeln('RUNTIME_BUILD_FRESHNESS_PASS engine_mode_edit_rejected=1');
+}
+
 Future<void> _runTest(_Options options) async {
   final Directory temporary = await Directory.systemTemp.createTemp(
     'dart-terminal-runtime-freshness-',
   );
   try {
+    if (options.focus == 'engine-patch-composition') {
+      await _verifyEnginePatchCompositionNegative(temporary);
+      return;
+    }
     final String buildRoot = '${temporary.path}/runtime';
     final String selectedSdkRoot = await runtimeCommandStdout(
       '/usr/bin/xcrun',
@@ -502,6 +684,7 @@ Future<void> _runTest(_Options options) async {
     final String engineRoot = await Directory(
       '${options.projectRoot}/../dart_appkit/.dart_tool/dart-engine/sdk',
     ).resolveSymbolicLinks();
+    await _verifyEnginePatchCompositionNegative(temporary);
     final Directory hostileRoot = Directory('${temporary.path}/hostile-inputs');
     await hostileRoot.create();
     final File hostileMarker = File('${hostileRoot.path}/executed.txt');
@@ -555,11 +738,15 @@ Future<void> _runTest(_Options options) async {
       'DART_ENGINE_KERNEL_COMPILER': hostileExecutable.path,
       'DART_ENGINE_PLATFORM_KERNEL': hostileFile.path,
       'DART_ENGINE_WORKER_PATCH': hostileFile.path,
+      'DART_ENGINE_LIFECYCLE_PATCH': hostileFile.path,
       'RUNTIME_DEFAULT_PACKAGE_CONFIG': hostileFile.path,
       'RUNTIME_DART_EXECUTABLE': hostileExecutable.path,
       'RUNTIME_DART_SOURCES': hostileDart.path,
       'RUNTIME_BRIDGE_HEADERS': hostileHeader.path,
       'RUNTIME_BRIDGE_SOURCES': hostileSource.path,
+      'RUNTIME_LIFECYCLE_HEADER': hostileHeader.path,
+      'RUNTIME_LIFECYCLE_SOURCE': hostileSource.path,
+      'RUNTIME_JIT_MAIN_SOURCE': hostileSource.path,
       'RUNTIME_JIT_RUNNER_HEADERS': hostileHeader.path,
       'RUNTIME_JIT_RUNNER_SOURCES': hostileSource.path,
       'RUNTIME_MESSAGE_PUMP_HEADERS': hostileHeader.path,

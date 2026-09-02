@@ -45,9 +45,10 @@ font、input、config、macOS UI、release workflow の実装とテストを確�
 照合に使った。公式サイトは更新されるため、機能凍結の根拠は常に pinned source を
 優先する。
 
-現在の Dart Terminal は AppKit main thread 上の JIT root isolate と単一 `TextView`、
-コマンドごとの `zsh -lc` までである。下表の「現在」が `未実装` でも欠落ではなく、
-指定 Phase まで明示的に defer した backlog である。
+現在の Dart Terminal は developer JIT / release AOT 共通の AppKit main-thread root、
+長寿命 lifecycle worker、単一 `TextView`、コマンドごとの `zsh -lc` までである。
+下表の「現在」が `未実装` でも欠落ではなく、指定 Phase まで明示的に defer した
+backlog である。
 
 実機受け入れは Apple M1/arm64 を優先する。x86_64 は M1 cross-build、Rosetta
 compatibility、Universal exact-slice audit を主要 gate とし、Intel-native handoff は
@@ -57,9 +58,9 @@ compatibility、Universal exact-slice audit を主要 gate とし、Intel-native
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| RT-01 | release AOT root isolate が AppKit main thread に attach し、main run loop を所有しない | P0 | 1 | `G:macos/Sources/App/main.swift`, native macOS app lifecycle | Phase 0 gate |
-| RT-02 | pane ごとの長寿命 engine worker と window ごとの render coordinator を起動、停止、異常回収できる | P0 | 1 | `G:src/termio/Thread.zig`, `G:src/renderer/Thread.zig` | Phase 0 gate |
-| RT-03 | UI、PTY I/O、terminal state、render resource の thread/owner が一意 | P0 | 1 | `G:src/termio/mailbox.zig`, `G:src/renderer/message.zig` | ADR で凍結 |
+| RT-01 | release AOT root isolate が AppKit main thread に attach し、main run loop を所有しない | P0 | 1 | `G:macos/Sources/App/main.swift`, native macOS app lifecycle | Phase 1 完了: JIT/AOT 共通 root lifecycle |
+| RT-02 | pane ごとの長寿命 engine worker と window ごとの render coordinator を起動、停止、異常回収できる | P0 | 1 | `G:src/termio/Thread.zig`, `G:src/renderer/Thread.zig` | lifecycle contract 完了、pane/render 結線は後続 |
+| RT-03 | UI、PTY I/O、terminal state、render resource の thread/owner が一意 | P0 | 1 | `G:src/termio/mailbox.zig`, `G:src/renderer/message.zig` | root/worker owner contract、PTY/render は後続 |
 | PTY-01 | 1 pane = 1 persistent PTY。slave が controlling terminal になり、新 session/process group を持つ | P0 | 2 | `G:src/pty.zig`, `G:src/pty.c`, `G:src/termio/Exec.zig` | Phase 0 gate |
 | PTY-02 | shell/command を `argv`、`envp`、cwd で起動し、shell interpolation を行わない | P0 | 2 | `G:src/Command.zig`, `G:src/termio/Exec.zig` | 未実装 |
 | PTY-03 | macOS login shell、`TERM`、`COLORTERM`、locale、initial cwd が zero-config で妥当 | P0 | 2 | `G:src/termio/Exec.zig`, `G:src/os/shell.zig` | 未実装 |
@@ -202,7 +203,7 @@ compatibility、Universal exact-slice audit を主要 gate とし、Intel-native
 | QA-02 | xterm/Ghostty/Kitty black-box differential と real-app matrix。bug を最小 byte regression に還元 | P1 | 6 | `G:src/terminal/` tests and VT C examples | 未実装 |
 | PERF-01 | parser AOT ≥100 MiB/s、AppKit event p95 <1 ms、key→PTY p95 <2 ms | P0 | 0–11 | `G:src/benchmark/`, `G:macos/Tests/BenchmarkTests.swift` | Phase 0 harness |
 | PERF-02 | 100 MiB burst で UI hang 0、bounded memory/queue。1 pane flood が他 pane latency を2倍にしない | P0/P1 | 2/7/11 | Ghostty termio/renderer threaded design | Phase 0 harness starts |
-| REL-01 | child/GPU/isolate fault、late event/double dispose、sleep/wake/display change、24/72h soak | P0/P1 | 1–11 | pinned tests, crash and renderer recovery paths | 未実装 |
+| REL-01 | child/GPU/isolate fault、late event/double dispose、sleep/wake/display change、24/72h soak | P0/P1 | 1–11 | pinned tests, crash and renderer recovery paths | isolate fault/late/double lifecycle 完了、他は後続 |
 | DIST-01 | release AOT `.app`、arm64/x86_64、Universal Binary | P0 | 1/11 | native Ghostty app and universal release workflow | Phase 1 完了: M1-native arm64、Rosetta x86_64、Universal audit |
 | DIST-02 | Developer ID、hardened runtime、notarization、minimal entitlements | P0/P1 | 11 | `G:.github/workflows/release-tag.yml`, `G:macos/Ghostty.entitlements` | 未実装 |
 | DIST-03 | signed update feed、rollback/failure path、release notes | P2 | 11 | `G:macos/Sources/Features/Update/`, `G:dist/macos/` | 未実装 |

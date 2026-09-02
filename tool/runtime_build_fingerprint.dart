@@ -31,6 +31,7 @@ final class _Options {
     required this.runtimeBuildRoot,
     required this.packageConfig,
     required this.workerPatch,
+    required this.lifecyclePatch,
     required this.engineLibrary,
     required this.kernelCompiler,
     required this.platformDill,
@@ -62,6 +63,7 @@ final class _Options {
   final String runtimeBuildRoot;
   final String packageConfig;
   final String workerPatch;
+  final String lifecyclePatch;
   final String engineLibrary;
   final String kernelCompiler;
   final String platformDill;
@@ -108,6 +110,7 @@ _Options _parseOptions(List<String> arguments) {
     'runtime-build-root',
     'package-config',
     'worker-patch',
+    'lifecycle-patch',
     'engine-library',
     'kernel-compiler',
     'platform-dill',
@@ -185,6 +188,7 @@ _Options _parseOptions(List<String> arguments) {
     runtimeBuildRoot: values['runtime-build-root']!,
     packageConfig: values['package-config']!,
     workerPatch: values['worker-patch']!,
+    lifecyclePatch: values['lifecycle-patch']!,
     engineLibrary: values['engine-library']!,
     kernelCompiler: values['kernel-compiler']!,
     platformDill: values['platform-dill']!,
@@ -227,10 +231,10 @@ Future<Map<String, Object?>> _repositoryIdentity(
   if (policy == 'clean' && status.isNotEmpty) {
     throw _FingerprintException('$root is not clean: $status');
   }
-  if (policy == 'engine-worker-only' &&
+  if (policy == 'engine-lifecycle-patches' &&
       status != 'M runtime/engine/engine.cc') {
     throw _FingerprintException(
-      'Dart Engine modifications are not worker-only: '
+      'Dart Engine modifications are not the lifecycle patch set: '
       '${status.isEmpty ? '(none)' : status}',
     );
   }
@@ -916,6 +920,7 @@ Future<Map<String, Object?>> _createFingerprint(_Options options) async {
   }
   for (final String file in <String>[
     options.workerPatch,
+    options.lifecyclePatch,
     options.engineLibrary,
     options.kernelCompiler,
     options.platformDill,
@@ -937,19 +942,36 @@ Future<Map<String, Object?>> _createFingerprint(_Options options) async {
   if (!File(options.output).isAbsolute) {
     throw _FingerprintException('output must be absolute: ${options.output}');
   }
-  final ProcessResult reversePatch = await Process.run('/usr/bin/git', <String>[
-    '-C',
-    options.dartEngineRoot,
-    'apply',
-    '--reverse',
-    '--check',
-    options.workerPatch,
-  ]);
-  if (reversePatch.exitCode != 0) {
-    throw _FingerprintException(
-      'worker patch is not the exact applied Engine modification: '
-      '${reversePatch.stdout}${reversePatch.stderr}',
+  for (final MapEntry<String, String> patch in <String, String>{
+    'worker': options.workerPatch,
+    'lifecycle': options.lifecyclePatch,
+  }.entries) {
+    final ProcessResult reversePatch = await Process.run(
+      '/usr/bin/git',
+      <String>[
+        '-C',
+        options.dartEngineRoot,
+        'apply',
+        '--reverse',
+        '--check',
+        patch.value,
+      ],
     );
+    if (reversePatch.exitCode != 0) {
+      throw _FingerprintException(
+        '${patch.key} patch is not an exact applied Engine modification: '
+        '${reversePatch.stdout}${reversePatch.stderr}',
+      );
+    }
+  }
+  try {
+    await verifyRuntimeEnginePatchComposition(
+      engineRoot: options.dartEngineRoot,
+      engineFile: 'runtime/engine/engine.cc',
+      patches: <String>[options.workerPatch, options.lifecyclePatch],
+    );
+  } on RuntimeAuditException catch (error) {
+    throw _FingerprintException(error.message);
   }
 
   final String sdkVersion = (await File(
@@ -960,7 +982,7 @@ Future<Map<String, Object?>> _createFingerprint(_Options options) async {
   ).readAsString()).trim();
   final Map<String, Object?> engineRepository = await _repositoryIdentity(
     options.dartEngineRoot,
-    policy: 'engine-worker-only',
+    policy: 'engine-lifecycle-patches',
   );
   if (sdkRevision != engineRepository['revision']) {
     throw _FingerprintException(
@@ -1039,6 +1061,9 @@ Future<Map<String, Object?>> _createFingerprint(_Options options) async {
       'dart_engine': <String, Object?>{
         'revision': engineRepository['revision'],
         'worker_patch_sha256': await runtimeSha256File(options.workerPatch),
+        'lifecycle_patch_sha256': await runtimeSha256File(
+          options.lifecyclePatch,
+        ),
         'gn_arguments': engineArguments['common'],
         'repository': engineRepository,
       },

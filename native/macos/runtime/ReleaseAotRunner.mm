@@ -17,6 +17,7 @@
 #include "BridgeInternal.h"
 #include "DartMessagePump.h"
 #include "ObjectRegistry.h"
+#include "RuntimeLifecycleBridge.h"
 #include "include/dart_api.h"
 #include "include/dart_engine.h"
 #include "include/dart_native_api.h"
@@ -27,9 +28,6 @@
 
 namespace dart_terminal {
 namespace {
-
-constexpr int kInputExitCode = 66;
-constexpr int kSoftwareExitCode = 70;
 
 class EnteredIsolate final {
  public:
@@ -374,7 +372,7 @@ std::atomic<ReleaseAotHost*> ReleaseAotHost::active_host_{nullptr};
   std::string error;
   if (!message_pump_->Start(&error)) {
     std::fprintf(stderr, "Release AOT startup failed: %s\n", error.c_str());
-    exit_code_ = dart_terminal::kSoftwareExitCode;
+    exit_code_ = dart_terminal::kRuntimeSoftwareExitCode;
     dart_terminal::RequestApplicationTermination();
     return;
   }
@@ -383,7 +381,7 @@ std::atomic<ReleaseAotHost*> ReleaseAotHost::active_host_{nullptr};
       std::make_unique<dart_terminal::ReleaseAotHost>(message_pump_.get());
   if (!dart_host_->Start(snapshot_path_, application_arguments_, &error)) {
     std::fprintf(stderr, "Release AOT startup failed: %s\n", error.c_str());
-    exit_code_ = dart_terminal::kSoftwareExitCode;
+    exit_code_ = dart_terminal::kRuntimeSoftwareExitCode;
     dart_terminal::RequestApplicationTermination();
     return;
   }
@@ -405,7 +403,7 @@ std::atomic<ReleaseAotHost*> ReleaseAotHost::active_host_{nullptr};
   if (dart_host_ != nullptr && dart_host_->has_fatal_error()) {
     std::fprintf(stderr, "Dart isolate terminated with an error: %s\n",
                  dart_host_->fatal_error().c_str());
-    exit_code_ = dart_terminal::kSoftwareExitCode;
+    exit_code_ = dart_terminal::kRuntimeSoftwareExitCode;
   }
 
   const size_t leaked_handles =
@@ -415,7 +413,7 @@ std::atomic<ReleaseAotHost*> ReleaseAotHost::active_host_{nullptr};
         stderr,
         "Dart Terminal release shutdown releasing %zu live native handle(s)\n",
         leaked_handles);
-    exit_code_ = dart_terminal::kSoftwareExitCode;
+    exit_code_ = dart_terminal::kRuntimeSoftwareExitCode;
   }
 
   dart_appkit::ShutdownBridge();
@@ -425,18 +423,24 @@ std::atomic<ReleaseAotHost*> ReleaseAotHost::active_host_{nullptr};
   if (dart_host_ != nullptr) {
     dart_host_->Shutdown();
   }
+  dart_terminal::RuntimeLifecycleCompleteApplicationTermination(exit_code_);
 }
 
 @end
 
 int main(int argc, const char* argv[]) {
   @autoreleasepool {
+    if (dart_terminal::RuntimeLifecycleShouldFailHostStartup()) {
+      std::fprintf(stderr,
+                   "RUNTIME_LIFECYCLE_FATAL class=host-startup status=70\n");
+      return dart_terminal::kRuntimeSoftwareExitCode;
+    }
     NSString* snapshot = [[NSBundle mainBundle] pathForResource:@"application"
                                                          ofType:@"aot"];
     if (snapshot == nil ||
         !std::filesystem::is_regular_file(snapshot.fileSystemRepresentation)) {
       std::fprintf(stderr, "Release AOT snapshot not found in app bundle\n");
-      return dart_terminal::kInputExitCode;
+      return dart_terminal::kRuntimeInputExitCode;
     }
 
     std::vector<std::string> application_arguments;
@@ -453,6 +457,6 @@ int main(int argc, const char* argv[]) {
             applicationArguments:application_arguments];
     application.delegate = delegate;
     [application run];
-    return delegate.exitCode;
+    return dart_terminal::RuntimeLifecycleEffectiveExitCode(delegate.exitCode);
   }
 }

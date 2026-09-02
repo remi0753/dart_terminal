@@ -12,6 +12,9 @@ gate とし、Intel-native 実機確認は主要ゴール後の低優先 follow-
 feasibility gate と仕様凍結は完了しています。release AOT、worker isolate、
 安全な PTY child、64 KiB batching、Metal、CoreText、日本語 IME、packed grid、
 parser corpus、性能 baseline を、独立した Dart/native spike で実機検証済みです。
+製品の developer JIT と release AOT は同じ root/worker isolate lifecycle 契約を
+使い、起動、ready、request、正常停止、worker 障害、root 障害、bounded shutdown を
+同じ integration suite で検証します。
 
 ## 現在できること
 
@@ -22,6 +25,7 @@ parser corpus、性能 baseline を、独立した Dart/native spike で実機�
 - `help`、`clear`、`cd PATH`、`exit` の組み込みコマンド
 - Control-C による実行中プロセスへの割り込み
 - ウィンドウサイズに合わせた簡易表示行数の調整
+- AppKit main-thread root と長寿命 worker isolate の bounded lifecycle
 
 ## 起動
 
@@ -59,6 +63,36 @@ developer JIT は、full linked Kernel と JIT Engine を含む開発専用 bund
 です。成果物は
 `build/runtime/<architecture>/developer-jit/DartTerminalDeveloper.app` に
 作られ、配布物には使用しません。
+
+## Runtime lifecycle
+
+通常起動では、root isolate が AppKit へ attach した後に同一 isolate group の
+長寿命 worker を起動し、ready と request/reply を確認してから window lifecycle を
+継続します。終了時は worker の stop acknowledgement と authoritative `onExit` を
+期限内に回収し、期限を超えた場合は強制停止します。worker の uncaught error は
+isolate 内へ封じ込め、root/host の fatal failure とは別に扱います。Engine teardown
+は root を停止した後に VM-wide cleanup を行うため、root fatal 時に worker が残っても
+snapshot storage より先に停止します。
+
+integration で検証する終了状態は、正常または isolate-contained failure が `0`、
+不正な application option が `64`、root/host fatal が `70`、shutdown timeout による
+forced cleanup が `75` です。fault scenario の選択は integration-test gate がない通常
+起動では拒否されます。
+
+通常 smoke と lifecycle fault suite を別々に実行する場合:
+
+```shell
+make RUNTIME_ARCH=arm64 developer-jit-integration
+make RUNTIME_ARCH=arm64 developer-jit-lifecycle
+make RUNTIME_ARCH=arm64 release-aot-integration
+make RUNTIME_ARCH=arm64 release-aot-lifecycle
+```
+
+両 runtime mode の lifecycle suite だけをまとめる場合:
+
+```shell
+make RUNTIME_ARCH=arm64 runtime-lifecycle-integration
+```
 
 ## Release AOT
 
@@ -151,6 +185,9 @@ make runtime-matrix-verify
 します。Intel 実機 handoff は主要ゴール後の別 follow-up であるため、この command
 は最後に未実施状態を情報として表示します。
 
+`runtime-integration` と `runtime-verify` は通常 smoke に加え、developer JIT と
+release AOT の同一 lifecycle fault suite も実行します。
+
 Phase 0 全体（debug/JIT、全 release-AOT spike、benchmark、bundle 監査）を
 歴史的な feasibility regression として再検証する場合:
 
@@ -168,6 +205,8 @@ make phase0-verify
 ```text
 bin/main.dart                         エントリーポイント
 lib/src/terminal_application.dart    AppKit ウィンドウとキーイベント
+lib/src/runtime_lifecycle.dart       root/worker lifecycle coordinator
+native/macos/runtime/                JIT/AOT lifecycle host integration
 lib/src/terminal_session.dart        コマンド実行バックエンド
 lib/src/terminal_buffer.dart         入力、履歴、スクロールバック
 test/run_tests.dart                  UI 非依存部分の最小テスト

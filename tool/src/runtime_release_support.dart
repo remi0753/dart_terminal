@@ -6,10 +6,10 @@ const String runtimeBundleAuditFormat = 'dart-terminal-runtime-bundle-audit';
 const int runtimeBundleAuditVersion = 3;
 const String runtimeBuildFingerprintFormat =
     'dart-terminal-runtime-build-fingerprint';
-const int runtimeBuildFingerprintVersion = 3;
+const int runtimeBuildFingerprintVersion = 4;
 const String runtimeBuildManifestFormat =
     'dart-terminal-runtime-build-manifest';
-const int runtimeBuildManifestVersion = 5;
+const int runtimeBuildManifestVersion = 6;
 const String runtimeBuildManifestRelativePath =
     'Resources/runtime-build-manifest.json';
 const String runtimeMachOPolicy = 'dart-terminal-macos-runtime-v1';
@@ -19,6 +19,7 @@ const List<String> runtimeProjectProvenanceFiles = <String>[
   'pubspec.yaml',
   'pubspec.lock',
   'patches/dart-engine-worker-isolates.patch',
+  'patches/dart-engine-lifecycle-shutdown.patch',
   'tool/runtime_build_fingerprint.dart',
   'tool/runtime_build_freshness_test.dart',
   'tool/runtime_build_manifest.dart',
@@ -473,6 +474,123 @@ Future<String> runtimeSha256Text(String value) async {
     final File input = File('${temporary.path}/input');
     await input.writeAsString(value, flush: true);
     return await runtimeSha256File(input.path);
+  } finally {
+    await temporary.delete(recursive: true);
+  }
+}
+
+Future<void> verifyRuntimeEnginePatchComposition({
+  required String engineRoot,
+  required String engineFile,
+  required List<String> patches,
+}) async {
+  runtimeExpect(
+    Directory(engineRoot).isAbsolute,
+    'Engine root must be absolute',
+  );
+  runtimeExpect(
+    !engineFile.startsWith('/') && !engineFile.split('/').contains('..'),
+    'Engine file must be a repository-relative path',
+  );
+  runtimeExpect(patches.isNotEmpty, 'Engine patch list must not be empty');
+  for (final String patch in patches) {
+    runtimeExpect(
+      File(patch).isAbsolute,
+      'Engine patch must be absolute: $patch',
+    );
+  }
+
+  final Directory temporary = await Directory.systemTemp.createTemp(
+    'dart-terminal-engine-patches-',
+  );
+  try {
+    final ProcessResult baseMode = await Process.run('/usr/bin/git', <String>[
+      '-C',
+      engineRoot,
+      'ls-tree',
+      'HEAD',
+      '--',
+      engineFile,
+    ]);
+    runtimeExpect(
+      baseMode.exitCode == 0,
+      'could not read pinned Engine base mode: ${baseMode.stderr}',
+    );
+    final RegExpMatch? baseModeMatch = RegExp(
+      r'^(100644|100755)\s+blob\s+[0-9a-f]+\t',
+    ).firstMatch((baseMode.stdout as String).trim());
+    runtimeExpect(
+      baseModeMatch != null,
+      'pinned Engine base is not one regular tracked file: ${baseMode.stdout}',
+    );
+    final String baseGitMode = baseModeMatch!.group(1)!;
+    final ProcessResult base = await Process.run('/usr/bin/git', <String>[
+      '-C',
+      engineRoot,
+      'show',
+      'HEAD:$engineFile',
+    ]);
+    runtimeExpect(
+      base.exitCode == 0,
+      'could not read pinned Engine base file: ${base.stderr}',
+    );
+    final ProcessResult initialized = await Process.run(
+      '/usr/bin/git',
+      <String>['init', '--quiet', temporary.path],
+    );
+    runtimeExpect(
+      initialized.exitCode == 0,
+      'could not initialize Engine patch verification: ${initialized.stderr}',
+    );
+    final File expected = File('${temporary.path}/$engineFile');
+    await expected.parent.create(recursive: true);
+    await expected.writeAsString(base.stdout! as String, flush: true);
+    await runRuntimeCommand('/bin/chmod', <String>[
+      baseGitMode == '100755' ? '755' : '644',
+      expected.path,
+    ]);
+    for (final String patch in patches) {
+      final ProcessResult checked = await Process.run('/usr/bin/git', <String>[
+        '-C',
+        temporary.path,
+        'apply',
+        '--check',
+        patch,
+      ]);
+      runtimeExpect(
+        checked.exitCode == 0,
+        'pinned Engine patch does not apply to its base: '
+        '${checked.stdout}${checked.stderr}',
+      );
+      final ProcessResult applied = await Process.run('/usr/bin/git', <String>[
+        '-C',
+        temporary.path,
+        'apply',
+        patch,
+      ]);
+      runtimeExpect(
+        applied.exitCode == 0,
+        'could not compose pinned Engine patch: '
+        '${applied.stdout}${applied.stderr}',
+      );
+    }
+
+    final String expectedHash = await runtimeSha256File(expected.path);
+    final String actualHash = await runtimeSha256File(
+      '$engineRoot/$engineFile',
+    );
+    final FileStat expectedStat = await expected.stat();
+    final FileStat actualStat = await File('$engineRoot/$engineFile').stat();
+    final String expectedGitMode = expectedStat.mode & 0x40 == 0
+        ? '100644'
+        : '100755';
+    final String actualGitMode = actualStat.mode & 0x40 == 0
+        ? '100644'
+        : '100755';
+    runtimeExpect(
+      actualHash == expectedHash && actualGitMode == expectedGitMode,
+      'Dart Engine working tree does not exactly match the pinned patch set',
+    );
   } finally {
     await temporary.delete(recursive: true);
   }
@@ -1314,6 +1432,7 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
     sameStringSet(engine.keys, const <String>{
       'revision',
       'worker_patch_sha256',
+      'lifecycle_patch_sha256',
       'gn_arguments',
       'repository',
     }),
@@ -1328,10 +1447,13 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
     engineRevision == dartSdk['revision'],
     'runtime build manifest Dart SDK/Engine revisions differ',
   );
-  runtimeRequiredString(
-    engine,
-    'worker_patch_sha256',
-    'runtime build manifest dart_engine',
+  _validateSha256(
+    engine['worker_patch_sha256'],
+    'runtime build manifest dart_engine.worker_patch_sha256',
+  );
+  _validateSha256(
+    engine['lifecycle_patch_sha256'],
+    'runtime build manifest dart_engine.lifecycle_patch_sha256',
   );
   final Map<String, Object?> engineGnArguments = runtimeStringMap(
     engine['gn_arguments'],

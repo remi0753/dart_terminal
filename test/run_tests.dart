@@ -3,12 +3,15 @@ import 'dart:io';
 import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal/src/terminal_session.dart';
 
+import 'runtime_lifecycle_test.dart';
+
 Future<void> main() async {
   _testEditing();
   _testUnicodeEditing();
   _testHistoryNavigation();
   _testTranscriptLimitAndViewport();
   _testOptions();
+  await runRuntimeLifecycleTests().timeout(const Duration(seconds: 10));
   await _testCommandSession();
   stdout.writeln('dart_terminal tests passed');
 }
@@ -78,6 +81,21 @@ void _testOptions() {
   _expect(
     options.autoCloseAfter == const Duration(seconds: 3),
     'auto-close option',
+  );
+  final TerminalOptions faultOptions = TerminalOptions.parse(
+    <String>['--runtime-lifecycle-scenario=worker-sync-uncaught'],
+    environment: const <String, String>{'DT_RUNTIME_LIFECYCLE_TEST': '1'},
+  );
+  _expect(
+    faultOptions.runtimeLifecycleScenario ==
+        RuntimeLifecycleScenario.workerSyncUncaught,
+    'gated lifecycle scenario option',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(<String>[
+      '--runtime-lifecycle-scenario=worker-sync-uncaught',
+    ], environment: const <String, String>{}),
+    'lifecycle scenario gate',
   );
   _expectThrows(
     () => TerminalOptions.parse(<String>['--unknown']),

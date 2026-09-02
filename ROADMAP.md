@@ -496,7 +496,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [x] arm64/x86_64 の build matrix と Universal Binary 組み立て（M1-native、
   Rosetta x86_64 compatibility、Universal audit。詳細は
   [`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)）
-- [ ] VM/isolate の起動、error、uncaught exception、shutdown contract
+- [x] VM/isolate の起動、error、uncaught exception、shutdown contract
 - [ ] native event wire format の versioning と backward compatibility
 - [ ] handle registry に thread-domain と asynchronous destruction を追加
 - [ ] generic `View`、focus、visibility、occlusion、backing scale、screen event

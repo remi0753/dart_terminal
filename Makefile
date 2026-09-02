@@ -44,6 +44,8 @@ override DART_ENGINE_PLATFORM_KERNEL := \
 	$(DART_ENGINE_JIT_OUT)/$(DART_ENGINE_SHARED_TOOLCHAIN)/vm_platform.dill
 override DART_ENGINE_WORKER_PATCH := \
 	$(PROJECT_ROOT)/patches/dart-engine-worker-isolates.patch
+override DART_ENGINE_LIFECYCLE_PATCH := \
+	$(PROJECT_ROOT)/patches/dart-engine-lifecycle-shutdown.patch
 
 CLANGXX ?= $(shell xcrun --find clang++)
 CLANG := $(shell xcrun --find clang)
@@ -170,6 +172,12 @@ override RUNTIME_BRIDGE_SOURCES := \
 	$(DART_APPKIT_ROOT)/native/bridge/src/EventSink.mm \
 	$(DART_APPKIT_ROOT)/native/bridge/src/ObjectRegistry.mm \
 	$(DART_APPKIT_ROOT)/native/bridge/src/TextView.mm
+override RUNTIME_LIFECYCLE_HEADER := \
+	$(PROJECT_ROOT)/native/macos/runtime/RuntimeLifecycleBridge.h
+override RUNTIME_LIFECYCLE_SOURCE := \
+	$(PROJECT_ROOT)/native/macos/runtime/RuntimeLifecycleBridge.mm
+override RUNTIME_JIT_MAIN_SOURCE := \
+	$(PROJECT_ROOT)/native/macos/runtime/DeveloperJitRunner.mm
 override RUNTIME_JIT_RUNNER_HEADERS := \
 	$(DART_APPKIT_ROOT)/native/runner/AppDelegate.h \
 	$(DART_APPKIT_ROOT)/native/runner/DartHost.h \
@@ -177,7 +185,7 @@ override RUNTIME_JIT_RUNNER_HEADERS := \
 	$(DART_APPKIT_ROOT)/native/runner/RunnerArguments.h \
 	$(DART_APPKIT_ROOT)/native/runner/RunnerConfiguration.h
 override RUNTIME_JIT_RUNNER_SOURCES := \
-	$(DART_APPKIT_ROOT)/native/runner/main.mm \
+	$(RUNTIME_JIT_MAIN_SOURCE) \
 	$(DART_APPKIT_ROOT)/native/runner/AppDelegate.mm \
 	$(DART_APPKIT_ROOT)/native/runner/DartHost.mm \
 	$(DART_APPKIT_ROOT)/native/runner/DartMessagePump.mm \
@@ -334,11 +342,14 @@ INTEL_EVIDENCE_OUTPUT ?=
 .PHONY: help runtime-architecture-check runtime-dart-tool-check \
 	runtime-fingerprint-force \
 	runtime-jit-engine \
-	runtime-aot-engine dart-engine-worker-support release-aot-engine \
+	runtime-aot-engine dart-engine-worker-support \
+	dart-engine-lifecycle-support release-aot-engine \
 	developer-jit-build developer-jit-run developer-jit-audit \
-	developer-jit-integration release-aot-build release-aot-run \
-	release-aot-audit release-aot-integration runtime-source-check \
-	runtime-bundle-audit runtime-integration runtime-verify \
+	developer-jit-integration developer-jit-lifecycle \
+	release-aot-build release-aot-run release-aot-audit \
+	release-aot-integration release-aot-lifecycle runtime-source-check \
+	runtime-bundle-audit runtime-integration \
+	runtime-lifecycle-integration runtime-verify \
 	runtime-matrix-build runtime-matrix-audit runtime-matrix-integration \
 	runtime-matrix-verify runtime-build-freshness-test \
 	universal-release-aot-build universal-release-aot-assemble \
@@ -369,6 +380,7 @@ help:
 	@echo "  make release-aot-run     Run one thin release-AOT product app"
 	@echo "  make release-aot-audit   Audit one AOT-only thin bundle contract"
 	@echo "  make runtime-integration Run one common smoke suite in both modes"
+	@echo "  make runtime-lifecycle-integration Run shared lifecycle faults"
 	@echo "  make runtime-verify      Verify both modes for one explicit architecture"
 	@echo "  make runtime-matrix-build Build arm64 and x86_64 thin products"
 	@echo "  make runtime-matrix-audit Audit the complete thin-product matrix"
@@ -440,7 +452,7 @@ runtime-dart-tool-check:
 runtime-fingerprint-force:
 
 runtime-jit-engine: runtime-architecture-check runtime-dart-tool-check \
-		dart-engine-worker-support
+		dart-engine-lifecycle-support
 	"$(RUNTIME_ENGINE_PYTHON)" "$(DART_ENGINE_GN)" --mode=release \
 		--arch=$(RUNTIME_DART_TARGET_ARCH)
 	"$(DART_ENGINE_NINJA)" -C $(RUNTIME_ENGINE_RELEASE_OUT) \
@@ -450,7 +462,7 @@ runtime-jit-engine: runtime-architecture-check runtime-dart-tool-check \
 	@test -f $(RUNTIME_ENGINE_PLATFORM_KERNEL)
 
 runtime-aot-engine: runtime-architecture-check runtime-dart-tool-check \
-		dart-engine-worker-support
+		dart-engine-lifecycle-support
 	"$(RUNTIME_ENGINE_PYTHON)" "$(DART_ENGINE_GN)" --mode=product \
 		--arch=$(RUNTIME_DART_TARGET_ARCH)
 	"$(DART_ENGINE_NINJA)" -C $(RUNTIME_ENGINE_PRODUCT_OUT) \
@@ -481,6 +493,7 @@ $(DEVELOPER_JIT_FINGERPRINT): runtime-fingerprint-force \
 		--runtime-build-root=$(RUNTIME_BUILD_DIR) \
 		--package-config=$(RUNTIME_PACKAGE_CONFIG) \
 		--worker-patch=$(DART_ENGINE_WORKER_PATCH) \
+		--lifecycle-patch=$(DART_ENGINE_LIFECYCLE_PATCH) \
 		--engine-library=$(RUNTIME_ENGINE_JIT_LIBRARY) \
 		--kernel-compiler=$(RUNTIME_ENGINE_KERNEL_COMPILER) \
 		--platform-dill=$(RUNTIME_ENGINE_PLATFORM_KERNEL) \
@@ -513,6 +526,7 @@ $(RELEASE_AOT_FINGERPRINT): runtime-fingerprint-force \
 		--runtime-build-root=$(RUNTIME_BUILD_DIR) \
 		--package-config=$(RUNTIME_PACKAGE_CONFIG) \
 		--worker-patch=$(DART_ENGINE_WORKER_PATCH) \
+		--lifecycle-patch=$(DART_ENGINE_LIFECYCLE_PATCH) \
 		--engine-library=$(RUNTIME_ENGINE_AOT_LIBRARY) \
 		--kernel-compiler=$(RUNTIME_ENGINE_AOT_KERNEL_COMPILER) \
 		--platform-dill=$(RUNTIME_ENGINE_AOT_PLATFORM_KERNEL) \
@@ -529,7 +543,8 @@ $(RELEASE_AOT_FINGERPRINT): runtime-fingerprint-force \
 		$(RUNTIME_EXTRA_BUILD_INPUT_ARGUMENT) --output=$@
 
 $(DEVELOPER_JIT_RUNNER): $(RUNTIME_BRIDGE_HEADERS) \
-		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_JIT_RUNNER_HEADERS) \
+		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_LIFECYCLE_HEADER) \
+		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_JIT_RUNNER_HEADERS) \
 		$(RUNTIME_JIT_RUNNER_SOURCES) $(DART_APPKIT_ROOT)/Makefile \
 		$(DEVELOPER_JIT_FINGERPRINT)
 	@mkdir -p $(DEVELOPER_JIT_BUILD_DIR)
@@ -540,9 +555,11 @@ $(DEVELOPER_JIT_RUNNER): $(RUNTIME_BRIDGE_HEADERS) \
 		-I$(DART_APPKIT_ROOT)/native/bridge/include \
 		-I$(DART_APPKIT_ROOT)/native/bridge/src \
 		-I$(DART_APPKIT_ROOT)/native/runner \
+		-I$(PROJECT_ROOT)/native/macos/runtime \
 		-I$(DART_ENGINE_ROOT)/runtime \
 		-I$(DART_ENGINE_ROOT)/runtime/engine \
-		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_JIT_RUNNER_SOURCES) \
+		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_LIFECYCLE_SOURCE) \
+		$(RUNTIME_JIT_RUNNER_SOURCES) \
 		$(RUNTIME_ENGINE_JIT_LIBRARY) \
 		-framework AppKit -framework CoreFoundation \
 		-Wl,-rpath,@executable_path/../Frameworks \
@@ -625,6 +642,12 @@ developer-jit-integration: developer-jit-build
 		--launch-architecture=$(RUNTIME_ARCH) \
 		$(DEVELOPER_JIT_BUNDLE)
 
+developer-jit-lifecycle: developer-jit-build
+	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_INTEGRATION_SOURCE) \
+		--mode=developer-jit --suite=lifecycle \
+		--launch-architecture=$(RUNTIME_ARCH) \
+		$(DEVELOPER_JIT_BUNDLE)
+
 $(RELEASE_AOT_KERNEL): $(RUNTIME_DART_SOURCES) $(RUNTIME_PACKAGE_CONFIG) \
 		$(RELEASE_AOT_FINGERPRINT)
 	@mkdir -p $(RELEASE_AOT_BUILD_DIR)
@@ -648,6 +671,7 @@ $(RELEASE_AOT_SNAPSHOT): $(RELEASE_AOT_KERNEL) $(RELEASE_AOT_FINGERPRINT)
 
 $(RELEASE_AOT_HOST): $(RELEASE_AOT_HOST_SOURCE) \
 		$(RUNTIME_BRIDGE_HEADERS) $(RUNTIME_BRIDGE_SOURCES) \
+		$(RUNTIME_LIFECYCLE_HEADER) $(RUNTIME_LIFECYCLE_SOURCE) \
 		$(RUNTIME_MESSAGE_PUMP_HEADERS) $(RUNTIME_MESSAGE_PUMP_SOURCE) \
 		$(RELEASE_AOT_FINGERPRINT)
 	@mkdir -p $(RELEASE_AOT_BUILD_DIR)
@@ -658,9 +682,11 @@ $(RELEASE_AOT_HOST): $(RELEASE_AOT_HOST_SOURCE) \
 		-I$(DART_APPKIT_ROOT)/native/bridge/include \
 		-I$(DART_APPKIT_ROOT)/native/bridge/src \
 		-I$(DART_APPKIT_ROOT)/native/runner \
+		-I$(PROJECT_ROOT)/native/macos/runtime \
 		-I$(DART_ENGINE_ROOT)/runtime \
 		-I$(DART_ENGINE_ROOT)/runtime/engine \
-		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_MESSAGE_PUMP_SOURCE) \
+		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_LIFECYCLE_SOURCE) \
+		$(RUNTIME_MESSAGE_PUMP_SOURCE) \
 		$(RELEASE_AOT_HOST_SOURCE) $(RUNTIME_ENGINE_AOT_LIBRARY) \
 		-framework AppKit -framework CoreFoundation \
 		-Wl,-rpath,@executable_path/../Frameworks \
@@ -729,12 +755,24 @@ release-aot-integration: release-aot-build
 		--launch-architecture=$(RUNTIME_ARCH) \
 		$(RELEASE_AOT_BUNDLE)
 
+release-aot-lifecycle: release-aot-build
+	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_INTEGRATION_SOURCE) \
+		--mode=release-aot --suite=lifecycle \
+		--launch-architecture=$(RUNTIME_ARCH) \
+		$(RELEASE_AOT_BUNDLE)
+
 runtime-source-check: runtime-dart-tool-check
 	"$(RUNTIME_DART_EXECUTABLE)" format --output=none \
 		--set-exit-if-changed \
 		bin lib test tool benchmark
 	/usr/bin/xcrun clang-format --style=file:$(DART_APPKIT_ROOT)/.clang-format \
-		--dry-run --Werror $(RELEASE_AOT_HOST_SOURCE)
+		--dry-run --Werror $(RUNTIME_LIFECYCLE_HEADER) \
+		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_JIT_MAIN_SOURCE) \
+		$(RELEASE_AOT_HOST_SOURCE)
+	/usr/bin/xcrun clang -x c -std=c11 -Wall -Wextra -Wpedantic -Werror \
+		-fsyntax-only $(RUNTIME_LIFECYCLE_HEADER)
+	/usr/bin/xcrun clang++ -x c++ -std=c++20 -Wall -Wextra -Wpedantic \
+		-Werror -fsyntax-only $(RUNTIME_LIFECYCLE_HEADER)
 	/usr/bin/plutil -lint \
 		$(DEVELOPER_JIT_INFO_PLIST) $(RELEASE_AOT_INFO_PLIST)
 	"$(RUNTIME_DART_EXECUTABLE)" analyze
@@ -747,6 +785,11 @@ runtime-bundle-audit: developer-jit-build release-aot-build
 runtime-integration: developer-jit-build release-aot-build
 	@$(MAKE) developer-jit-integration
 	@$(MAKE) release-aot-integration
+	@$(MAKE) runtime-lifecycle-integration
+
+runtime-lifecycle-integration: developer-jit-build release-aot-build
+	@$(MAKE) developer-jit-lifecycle
+	@$(MAKE) release-aot-lifecycle
 
 runtime-verify:
 	@$(MAKE) runtime-source-check
@@ -864,9 +907,20 @@ dart-engine-worker-support:
 			$(DART_ENGINE_WORKER_PATCH); \
 	fi
 
-phase0-engine-worker-support: dart-engine-worker-support
+dart-engine-lifecycle-support: dart-engine-worker-support
+	@if /usr/bin/git -C $(DART_ENGINE_ROOT) apply --reverse --check \
+		$(DART_ENGINE_LIFECYCLE_PATCH) >/dev/null 2>&1; then \
+		echo "Dart Engine lifecycle-shutdown patch already applied"; \
+	else \
+		/usr/bin/git -C $(DART_ENGINE_ROOT) apply --check \
+			$(DART_ENGINE_LIFECYCLE_PATCH); \
+		/usr/bin/git -C $(DART_ENGINE_ROOT) apply \
+			$(DART_ENGINE_LIFECYCLE_PATCH); \
+	fi
 
-$(DART_ENGINE_AOT_LIBRARY): dart-engine-worker-support \
+phase0-engine-worker-support: dart-engine-lifecycle-support
+
+$(DART_ENGINE_AOT_LIBRARY): dart-engine-lifecycle-support \
 		$(DART_ENGINE_OUT)/build.ninja
 	$(DART_ENGINE_NINJA) -C $(DART_ENGINE_OUT) dart_engine_aot_shared
 
