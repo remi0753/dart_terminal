@@ -249,6 +249,9 @@ Future<Map<String, Object?>> _repositoryIdentity(
   String root, {
   required String policy,
 }) async {
+  if (policy != 'clean' && policy != 'record') {
+    throw _FingerprintException('unknown repository policy: $policy');
+  }
   final String status = await _git(root, <String>[
     'status',
     '--porcelain=v1',
@@ -256,13 +259,6 @@ Future<Map<String, Object?>> _repositoryIdentity(
   ]);
   if (policy == 'clean' && status.isNotEmpty) {
     throw _FingerprintException('$root is not clean: $status');
-  }
-  if (policy == 'engine-lifecycle-patches' &&
-      status != 'M runtime/engine/engine.cc') {
-    throw _FingerprintException(
-      'Dart Engine modifications are not the lifecycle patch set: '
-      '${status.isEmpty ? '(none)' : status}',
-    );
   }
   final String diff = await _git(root, <String>['diff', '--binary', 'HEAD']);
   return <String, Object?>{
@@ -795,20 +791,14 @@ Future<void> _addDirectory(
 
 Future<SplayTreeMap<String, Object?>> _sourceInventory(_Options options) async {
   final SplayTreeMap<String, String> files = SplayTreeMap<String, String>();
-  for (final String relative in runtimeProjectProvenanceFilesForMode(
-    options.mode,
-  )) {
+  for (final String relative in runtimeProjectProvenanceFiles) {
     await _addFile(
       files,
       'dart_terminal:$relative',
       '${options.projectRoot}/$relative',
     );
   }
-  for (final String directory in <String>[
-    'bin',
-    'lib',
-    'native/macos/runtime',
-  ]) {
+  for (final String directory in runtimeProjectProvenanceDirectories) {
     await _addDirectory(files, 'dart_terminal', options.projectRoot, directory);
   }
   for (final String relative in runtimeAppKitProvenanceFiles) {
@@ -818,12 +808,7 @@ Future<SplayTreeMap<String, Object?>> _sourceInventory(_Options options) async {
       '${options.dartAppKitRoot}/$relative',
     );
   }
-  for (final String directory in <String>[
-    'native/bridge/include',
-    'native/bridge/src',
-    'native/runner',
-    'packages/dart_appkit/lib',
-  ]) {
+  for (final String directory in runtimeAppKitProvenanceDirectories) {
     await _addDirectory(
       files,
       'dart_appkit',

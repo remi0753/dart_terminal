@@ -2441,3 +2441,65 @@ Focused validation:
 This completes only the first ordered deletion child. Patch-era provenance,
 composition-audit, and generated-fixture code intentionally remains for the
 next child and is not accepted as current product behavior in the interim.
+
+### Patch-era provenance, audit, and fixture removal: result
+
+The shared release support now has one mode-independent project provenance file
+list and explicit allowed source directories. The obsolete second list that
+added the deleted payloads, its mode-selection shim, and the helper that
+reconstructed a modified Engine tree with `git apply` are removed. Fingerprint
+generation no longer has a dirty-Engine policy exception: its only accepted
+repository policies are `clean` for SDK/AppKit dependencies and `record` for
+the product source identity.
+
+The former source-inventory rejection named one historical directory. It is
+replaced by a general allowlist contract covering only canonical relative paths
+under the exact Dart Terminal and AppKit build-input roots, plus the one named
+effective override. Unknown owners, unlisted roots, absolute paths, backslash
+paths, empty segments, and `.` or `..` segments are rejected. This means a
+deleted or future ad-hoc Engine-modification input cannot be smuggled into a
+valid manifest, without retaining a special schema for the removed mechanism.
+The freshness test directly exercises representative valid and invalid keys.
+
+The freshness tool no longer offers the obsolete composition focus mode,
+creates a temporary Git repository or generated diff payload, scans build
+output for removed target names, accepts old Engine hash fields, or protects
+deleted Make variables from overrides. Developer Engine metadata is now checked
+against the same exact four-field schema already used by Release. Both modes
+still require `source_policy=official-clean`, `repository.dirty=false`, exact
+SDK revision and artifact attestation, clean dependency graphs, and clean
+repositories before and after their focused build.
+
+Validation results on arm64:
+
+- The first plain `dart format` invocation formatted the shared support file
+  but returned 1 only because the workspace sandbox denied a timestamp update
+  to the user-level Dart telemetry session file. Re-running with the same
+  `dart --suppress-analytics` form used by the build returned 0 with all three
+  files unchanged. No product or SDK file was affected by the telemetry error.
+- `make RUNTIME_ARCH=arm64 runtime-source-check` passed: all 41 Dart files were
+  formatted, native source/header and plist checks passed, analysis found no
+  issue, and all repository unit tests passed.
+- `developer-jit-clean-sdk-test` passed with an official clean Engine, the new
+  source-inventory policy, worker round trip and negative cases, and 9/9 stable
+  no-op plus 9/9 regenerated artifacts.
+- `release-aot-clean-sdk-test` passed with an official clean Engine, the new
+  source-inventory policy, self-contained worker and all helper negative cases,
+  ten protected Make values, and 19/19 stable no-op plus 19/19 regenerated
+  artifacts.
+- The complete `runtime-build-freshness-test` passed after removing the old
+  fixture. It preserved 106 internal Make values, consumed no hostile dry-run
+  input, rejected a self-authenticating SDK and two runner replacements,
+  verified six tool identities, handled space-containing toolchain paths,
+  rejected 28 external header/response/forwarding cases with zero stale reuse,
+  preserved and regenerated all nine affected products as expected, and
+  rejected both a forged package root and a missing override.
+- A non-document repository search found no remaining whole-word reference to
+  the removed mechanism, its former manifest keys/policy, or an SDK `git apply`
+  operation. The SDK remained clean at
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`; AppKit remained clean at
+  `77e355387a0ea50034632d9e3d4b35f629155c35`.
+
+This completes the second ordered child. Current README/feature guidance and
+historical reproduction instructions are intentionally handled in the final
+documentation/source-inventory and M1 regression child.
