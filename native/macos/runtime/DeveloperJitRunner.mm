@@ -27,14 +27,14 @@ constexpr std::string_view kRuntimeWorkerKernelPrefix =
     "--runtime-worker-kernel=";
 constexpr std::string_view kRuntimeWorkerKernelName = "runtime_worker.dill";
 
-bool ConfigureRuntimeWorker(const char *launcher_argument,
-                            dart_appkit::RunnerConfiguration *configuration,
-                            std::string *out_error) {
+bool ConfigureRuntimeWorker(const char* launcher_argument,
+                            dart_appkit::RunnerConfiguration* configuration,
+                            std::string* out_error) {
   if (launcher_argument == nullptr || configuration == nullptr ||
       out_error == nullptr) {
     return false;
   }
-  for (const std::string &argument : configuration->application_arguments) {
+  for (const std::string& argument : configuration->application_arguments) {
     if (argument.starts_with(kRuntimeWorkerExecutablePrefix) ||
         argument.starts_with(kRuntimeWorkerKernelPrefix)) {
       *out_error = "runtime worker configuration is host-owned";
@@ -83,21 +83,21 @@ bool ConfigureRuntimeWorker(const char *launcher_argument,
   return true;
 }
 
-} // namespace
+}  // namespace
 
 @interface DartTerminalDeveloperJitDelegate : DartAppKitAppDelegate
 @end
 
 @implementation DartTerminalDeveloperJitDelegate
 
-- (void)applicationWillTerminate:(NSNotification *)notification {
+- (void)applicationWillTerminate:(NSNotification*)notification {
   [super applicationWillTerminate:notification];
   dart_terminal::RuntimeLifecycleCompleteApplicationTermination(self.exitCode);
 }
 
 @end
 
-int main(int argc, const char *argv[]) {
+int main(int argc, const char* argv[]) {
   @autoreleasepool {
     dart_appkit::RunnerConfiguration configuration;
     std::string error;
@@ -122,9 +122,9 @@ int main(int argc, const char *argv[]) {
       return dart_terminal::kRuntimeSoftwareExitCode;
     }
 
-    NSApplication *application = [NSApplication sharedApplication];
+    NSApplication* application = [NSApplication sharedApplication];
     [application setActivationPolicy:NSApplicationActivationPolicyRegular];
-    DartTerminalDeveloperJitDelegate *delegate =
+    DartTerminalDeveloperJitDelegate* delegate =
         [[DartTerminalDeveloperJitDelegate alloc]
             initWithConfiguration:configuration];
     application.delegate = delegate;

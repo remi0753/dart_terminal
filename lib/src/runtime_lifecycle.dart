@@ -17,6 +17,8 @@ enum RuntimeLifecycleScenario {
   shutdownTimeout('shutdown-timeout'),
   lateCompletion('late-completion'),
   doubleShutdown('double-shutdown'),
+  workerReplacement('worker-replacement'),
+  workerTraffic('worker-traffic'),
   rootStartupFailure('root-startup-failure'),
   rootUncaught('root-uncaught');
 
@@ -52,6 +54,32 @@ typedef RuntimeLifecycleObserver = void Function(
   RuntimeLifecycleObservation observation,
 );
 
+enum RuntimeLifecycleProcessEvent { spawned, reaped }
+
+final class RuntimeLifecycleProcessObservation {
+  const RuntimeLifecycleProcessObservation({
+    required this.event,
+    required this.generation,
+    required this.processId,
+  });
+
+  final RuntimeLifecycleProcessEvent event;
+  final int generation;
+  final int processId;
+
+  String machineLine(
+    RuntimeLifecycleScenario scenario, {
+    required int parentProcessId,
+  }) =>
+      'RUNTIME_WORKER_PROCESS event=${event.name} scenario=${scenario.name} '
+      'generation=$generation parent_pid=$parentProcessId '
+      'worker_pid=$processId';
+}
+
+typedef RuntimeLifecycleProcessObserver = void Function(
+  RuntimeLifecycleProcessObservation observation,
+);
+
 enum RuntimeLifecycleStartStatus { ready, startupFailure }
 
 enum RuntimeLifecycleRequestStatus {
@@ -59,6 +87,7 @@ enum RuntimeLifecycleRequestStatus {
   uncaughtError,
   unexpectedExit,
   cancelled,
+  backpressured,
 }
 
 final class RuntimeLifecycleRequestResult {
@@ -168,11 +197,18 @@ final class RuntimeLifecycleWorkerCommand {
   List<String> invocationArguments(
     RuntimeLifecycleScenario scenario,
     int generation,
-  ) => <String>[
-    ...arguments,
-    '--scenario=${scenario.name}',
-    '--generation=$generation',
-  ];
+  ) {
+    final RuntimeLifecycleScenario workerScenario = switch (scenario) {
+      RuntimeLifecycleScenario.rootStartupFailure ||
+      RuntimeLifecycleScenario.rootUncaught => RuntimeLifecycleScenario.normal,
+      _ => scenario,
+    };
+    return <String>[
+      ...arguments,
+      '--scenario=${workerScenario.name}',
+      '--generation=$generation',
+    ];
+  }
 }
 
 enum _ShutdownSignal { stopAcknowledged, workerExited }
@@ -184,11 +220,24 @@ final class RuntimeLifecycleCoordinator {
     required this.scenario,
     required this.observer,
     this.workerCommand = const RuntimeLifecycleWorkerCommand.unconfigured(),
+    this.workerScenario,
+    this.processObserver,
+    this.maximumInFlightRequests = 64,
+    int initialGeneration = 0,
     this.startupTimeout = const Duration(seconds: 1),
     this.requestTimeout = const Duration(seconds: 1),
     this.shutdownTimeout = const Duration(milliseconds: 250),
     this.forcedExitTimeout = const Duration(milliseconds: 250),
-  });
+  }) : _generation = initialGeneration {
+    if (maximumInFlightRequests <= 0 ||
+        initialGeneration < 0 ||
+        initialGeneration >= 0xffffffff) {
+      throw ArgumentError(
+        'request capacity must be positive and generation must leave room '
+        'for one unsigned 32-bit increment',
+      );
+    }
+  }
 
   static const int _maximumDiagnosticBytes = 64 * 1024;
   static int _outstandingProcessCount = 0;
@@ -196,14 +245,20 @@ final class RuntimeLifecycleCoordinator {
   final RuntimeLifecycleScenario scenario;
   final RuntimeLifecycleObserver observer;
   final RuntimeLifecycleWorkerCommand workerCommand;
+  final RuntimeLifecycleScenario? workerScenario;
+  final RuntimeLifecycleProcessObserver? processObserver;
+  final int maximumInFlightRequests;
   final Duration startupTimeout;
   final Duration requestTimeout;
   final Duration shutdownTimeout;
   final Duration forcedExitTimeout;
 
   _CoordinatorState _state = _CoordinatorState.idle;
-  int _generation = 0;
+  int _generation;
   int _nextOperation = 1;
+  int _backpressureRejectionCount = 0;
+  int _maximumInFlightObserved = 0;
+  bool _backpressureActive = false;
   bool _acceptResponses = false;
   bool _workerWasReady = false;
   bool _shutdownRequested = false;
@@ -240,6 +295,8 @@ final class RuntimeLifecycleCoordinator {
   int get generation => _generation;
   int? get workerPid => _workerPid;
   Object? get protocolFailure => _protocolFailure;
+  int get backpressureRejectionCount => _backpressureRejectionCount;
+  int get maximumInFlightObserved => _maximumInFlightObserved;
 
   String get workerDiagnostics {
     final String text = utf8.decode(
@@ -272,7 +329,10 @@ final class RuntimeLifecycleCoordinator {
     try {
       final Process worker = await Process.start(
         workerCommand.executable,
-        workerCommand.invocationArguments(scenario, _generation),
+        workerCommand.invocationArguments(
+          workerScenario ?? scenario,
+          _generation,
+        ),
         workingDirectory: workerCommand.workingDirectory,
         environment: workerCommand.environment.isEmpty
             ? null
@@ -299,6 +359,7 @@ final class RuntimeLifecycleCoordinator {
         cancelOnError: false,
       );
       unawaited(worker.exitCode.then(_handleWorkerExit));
+      _emitProcess(RuntimeLifecycleProcessEvent.spawned, worker.pid);
     } on Object {
       _state = _CoordinatorState.stopped;
       _emit('worker-startup-failure');
@@ -344,12 +405,25 @@ final class RuntimeLifecycleCoordinator {
         _terminationEvidence.sawExit) {
       throw StateError('runtime lifecycle worker is not ready');
     }
+    if (_responses.length >= maximumInFlightRequests) {
+      ++_backpressureRejectionCount;
+      if (!_backpressureActive) {
+        _backpressureActive = true;
+        _emit('worker-backpressure');
+      }
+      return const RuntimeLifecycleRequestResult(
+        RuntimeLifecycleRequestStatus.backpressured,
+      );
+    }
     final int operation = _nextOperation++;
     if (operation > 0xffffffff) {
       throw StateError('runtime lifecycle operation space is exhausted');
     }
     final Completer<int> response = Completer<int>();
     _responses[operation] = response;
+    if (_responses.length > _maximumInFlightObserved) {
+      _maximumInFlightObserved = _responses.length;
+    }
     _emit('worker-request');
     try {
       await _writer!.send(
@@ -384,6 +458,9 @@ final class RuntimeLifecycleCoordinator {
       }
     } finally {
       _responses.remove(operation);
+      if (_responses.length < maximumInFlightRequests) {
+        _backpressureActive = false;
+      }
     }
 
     final RuntimeLifecycleWorkerTermination termination =
@@ -623,6 +700,7 @@ final class RuntimeLifecycleCoordinator {
       throw StateError('worker process count underflow');
     }
     --_outstandingProcessCount;
+    _emitProcess(RuntimeLifecycleProcessEvent.reaped, _workerPid!);
     _terminationEvidence.recordExit();
     if (!(_exitSignal?.isCompleted ?? true)) {
       _exitSignal!.complete();
@@ -690,6 +768,16 @@ final class RuntimeLifecycleCoordinator {
   void _emit(String event) {
     observer(
       RuntimeLifecycleObservation(event: event, generation: _generation),
+    );
+  }
+
+  void _emitProcess(RuntimeLifecycleProcessEvent event, int processId) {
+    processObserver?.call(
+      RuntimeLifecycleProcessObservation(
+        event: event,
+        generation: _generation,
+        processId: processId,
+      ),
     );
   }
 
@@ -793,6 +881,9 @@ Future<void> runRuntimeLifecycleWorkerProcess(List<String> arguments) async {
           }
           if (scenario == RuntimeLifecycleScenario.workerUnexpectedExit) {
             exit(0);
+          }
+          if (scenario == RuntimeLifecycleScenario.workerTraffic) {
+            await Future<void>.delayed(const Duration(milliseconds: 2));
           }
           final RuntimeWorkerFrame response = RuntimeWorkerFrame(
             type: RuntimeWorkerMessageType.response,

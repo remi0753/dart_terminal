@@ -1673,3 +1673,167 @@ The first staging attempt was denied when the workspace sandbox prevented Git
 from creating `.git/index.lock`; it made no index or worktree change. The same
 explicit file set was staged through the repository-authorized Git path before
 the completion commit.
+
+### M1 Developer integration closeout unit: start
+
+Purpose: prove that the signed arm64 Developer application, not only its unit
+coordinator and bundle metadata, satisfies the selected official-process worker
+contract through the real AppKit GUI lifecycle.
+
+Background: the preceding two units established the versioned process protocol,
+process-owned cleanup, clean-SDK build, trusted worker command, separate worker
+Kernel, and bundle provenance. The existing integration harness still encodes
+some observations from the former in-process Engine-isolate implementation and
+does not yet prove that child PIDs are absent after each launched GUI process or
+that bounded traffic preserves AppKit shutdown responsiveness.
+
+Scope:
+
+- reconcile the Developer-only smoke and lifecycle expectations with the
+  process protocol without weakening any ready/error/forced/replacement/late/
+  double-shutdown semantic outcome;
+- add authoritative parent/worker PID and process-reaping observations that can
+  be checked after each GUI launch;
+- exercise bounded multi-request traffic through the bundled worker while the
+  AppKit root remains responsive to its scheduled close;
+- rerun the focused clean-SDK/provenance gate, signed bundle audit, Developer
+  smoke, complete lifecycle fault suite, and clean-repository checks on M1;
+- update current user-facing runtime documentation only after all evidence
+  passes, then close the Developer parent ROADMAP item.
+
+Out of scope: Release AOT migration, patch removal, cross-mode closeout,
+x86_64/Rosetta/Universal compatibility, terminal-pane/PTY integration, and any
+change to `dart_appkit` or Dart/Engine source.
+
+Dependencies: main-repository commits `3fc1894` and `beb86bf`, `dart_appkit`
+commit `77e355387a0ea50034632d9e3d4b35f629155c35`, the official Dart revision
+`60a57cd42d64dc03e9f07aa60a2e250755c1ef28`, and the arm64 Developer audit
+receipt from the preceding unit.
+
+Completion conditions: normal GUI startup/close, every lifecycle fault case,
+process exit plus drained streams, forced timeout, late-message suppression,
+idempotent shutdown, root/host fatal handling, worker replacement evidence,
+bounded request traffic, and post-case orphan checks all pass through the
+signed Developer bundle; the SDK and AppKit repository remain clean; current
+README/feature descriptions identify process workers rather than Engine worker
+isolates.
+
+Validation plan: inspect the current harness and runtime event boundary; run it
+unchanged once to expose stale expectations; implement only Developer
+integration evidence needed by the completion conditions; format/analyze/unit
+test; repeat clean-SDK, audit, smoke, lifecycle, traffic, process-table, and
+source-boundary gates; record exact outcomes here before updating ROADMAP and
+committing this unit.
+
+The unchanged GUI smoke passed in 2,098 ms. The unchanged lifecycle suite then
+passed its first twelve sequential application launches, including forced
+`SIGKILL` and the root-startup fatal case, but failed at `root-uncaught`.
+Running that case alone reproduced the same deterministic sequence: the worker
+reported stderr, startup failure, and exit before root readiness. Inspection
+showed that the coordinator forwarded the root-only `root-uncaught` fault name
+to the child process; the worker correctly rejects both root-only scenarios.
+The parent must therefore translate a root-only scenario to a normal worker
+scenario at the process-command boundary while retaining the root scenario for
+parent observations. This is an application/coordinator mapping defect, not an
+SDK, Engine, AppKit, or timing failure. A unit regression will cover the
+translation before the GUI suite is repeated.
+
+### M1 Developer integration closeout unit: implementation and findings
+
+The root-only scenario defect was corrected in
+`RuntimeLifecycleWorkerCommand.invocationArguments`: `root-startup-failure`
+and `root-uncaught` retain their parent-side scenario and observations, but the
+child receives `normal`. A focused unit proves that the ordinary child becomes
+ready, answers, and shuts down while the parent retains the root fault.
+
+The process owner now publishes a separate machine-readable observation for
+every spawned and reaped PID, including scenario, generation, parent PID, and
+worker PID. `Process.exitCode` is the authoritative OS exit/reap signal. The
+existing `worker-exit` lifecycle event remains later: it is emitted only after
+both stdout protocol and stderr diagnostics have drained and termination has
+been classified. The integration launcher records every spawned PID and, after
+the GUI application exits, checks that none remains in the process table. This
+also covers `root-uncaught`, where the root process can die before it writes an
+in-process reap observation and pipe closure must terminate the child.
+
+The real GUI replacement case now starts generation 1 with an intentionally
+exiting child, waits for its authoritative termination, then starts generation
+2 in a distinct process, verifies a request/reply, and shuts it down normally.
+Generation seeds are rejected if the next increment would exceed the unsigned
+32-bit wire field; request capacity must also be positive.
+
+Request admission is bounded at 64 in-flight operations. Saturated calls return
+an explicit `backpressured` result without allocating an operation or sending a
+frame, and the coordinator records both rejection count and peak in-flight
+count. The GUI traffic scenario submits 256 requests, retries only explicit
+backpressure results, verifies every response, and closes the AppKit window by
+timer while traffic is active. The worker's integration-only traffic scenario
+adds a small per-request delay so the bound is exercised deterministically.
+
+The integration tool now has distinct `smoke`, `lifecycle`, and `traffic`
+suites. It validates process ownership/reap pairs and post-exit PID absence in
+addition to lifecycle event order. The lifecycle suite contains sixteen GUI
+launches, including worker startup/request/idle/stop failures, unexpected exit,
+forced timeout, late completion, idempotent shutdown, replacement, root
+startup/uncaught failures, host startup failure, and usage failure.
+
+Current documentation was reconciled with the frozen migration plan. README,
+FEATURE_MATRIX, and the Phase 1 end condition now distinguish the historical
+Phase 0 worker-isolate spike from the selected stock-Dart process worker. They
+state that only M1/arm64 Developer JIT has completed this migration, Release AOT
+is next, patch-dependent Release/Universal/Phase-0 aggregate targets are not
+current acceptance instructions, and every x86_64/Rosetta/Universal lane is a
+non-blocking follow-up after M1 JIT/AOT and patch removal.
+
+One additional failure was found by the complete source gate after the first
+successful final audit: `DeveloperJitRunner.mm`, introduced in the preceding
+Developer build unit, did not match the repository clang-format style. No
+semantic defect was involved. It was mechanically formatted, which changed the
+launcher input hash; therefore the clean-SDK test, build, signing, all three GUI
+suites, and bundle audit were rerun rather than retaining the earlier receipt.
+
+### M1 Developer integration closeout unit: validation
+
+All final validation below ran on 2026-09-03 with `RUNTIME_ARCH=arm64` on the
+Apple M1 baseline. No Release, Universal, Rosetta, x86_64, Phase 0 patch target,
+or Dart/Engine source modification was executed.
+
+- `make runtime-source-check` passed: 41 Dart files required no formatting;
+  Objective-C++ format, C/C++ header syntax, both plists, Dart analysis, and the
+  complete unit suite passed.
+- The unit suite covers the four-request admission bound, explicit retries,
+  root-fault child translation, PID spawn/reap pairing, generation bounds, and
+  zero outstanding child ownership. It ended with `dart_terminal tests passed`.
+- `make RUNTIME_ARCH=arm64 developer-jit-clean-sdk-test` passed after the final
+  source state with `developer_clean_sdk=1`, `patch_activity=0`,
+  `worker_kernel=1`, `worker_smoke=1`, `missing_worker_rejected=1`,
+  `host_override_rejected=1`, `stable_noop=9`, and `regenerated=9`.
+- The final signed GUI smoke passed in 2,061 ms, including one matched child
+  spawn/reap pair and post-application PID absence.
+- All sixteen final lifecycle launches passed. Normal returned 0; contained
+  worker faults returned 0; forced shutdown returned 75; root/host fatal cases
+  returned 70; usage failure returned 64. The replacement case passed in 363 ms
+  with distinct generation-1 and generation-2 child PIDs. Every recorded child
+  PID was absent after its parent application exited.
+- The final traffic run returned all 256 responses, explicitly rejected and
+  retried 384 saturated submissions, observed exactly 64 maximum in flight,
+  fired the GUI close timer, completed traffic in 1,054 ms, and exited the
+  application in 1,373 ms.
+- The final Developer bundle audit passed for one arm64 slice with
+  `source_policy=official-clean`, `worker_topology=official-dart-child-process`,
+  and protocol version 1. Its manifest SHA-256 is
+  `a737b26d32aa22426f5807de6e5485210fcd2e998e99cd3d52b005974e6e7a09`;
+  its artifact digest is
+  `0e91621fc9235f17cdcff988f14ec684c4e6868bb99ce0480c2c9fc471357a1b`.
+- The exact Dart/Engine repository remained clean at
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`; `dart_appkit` remained clean at
+  `77e355387a0ea50034632d9e3d4b35f629155c35`. A focused source-boundary search
+  found no `dart:isolate`, `Isolate.spawn`, public/private isolate creation API,
+  or worker-patch reference in the Developer process layer. `git diff --check`
+  passed.
+
+The M1 Developer migration is complete. The next and only permissible runtime
+migration unit is M1/arm64 Release AOT on the same observable process contract.
+Patch files and their remaining build/audit/test machinery deliberately remain
+tracked until that Release unit passes; deleting them earlier would hide the
+still-unmigrated Release dependency rather than prove its replacement.

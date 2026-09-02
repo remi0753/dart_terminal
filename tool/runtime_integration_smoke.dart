@@ -21,7 +21,7 @@ enum _RuntimeMode {
   final String payloadName;
 }
 
-enum _Suite { smoke, lifecycle, all }
+enum _Suite { smoke, lifecycle, traffic, all }
 
 final class _Options {
   const _Options({
@@ -54,16 +54,36 @@ final class _Invocation {
 
 final class _ProcessObservation {
   const _ProcessObservation({
+    required this.processId,
     required this.status,
     required this.stdoutText,
     required this.stderrText,
     required this.elapsed,
+    required this.workerProcesses,
   });
 
+  final int processId;
   final int status;
   final String stdoutText;
   final String stderrText;
   final Duration elapsed;
+  final List<_WorkerProcessObservation> workerProcesses;
+}
+
+final class _WorkerProcessObservation {
+  const _WorkerProcessObservation({
+    required this.event,
+    required this.scenario,
+    required this.generation,
+    required this.parentProcessId,
+    required this.workerProcessId,
+  });
+
+  final String event;
+  final String scenario;
+  final int generation;
+  final int parentProcessId;
+  final int workerProcessId;
 }
 
 final class _LifecycleCase {
@@ -75,6 +95,8 @@ final class _LifecycleCase {
     this.machineScenario,
     this.environment = const <String, String>{},
     this.expectedStderrMarker,
+    this.expectedWorkerProcessCount = 1,
+    this.requireInProcessReap = true,
   });
 
   final String name;
@@ -84,6 +106,8 @@ final class _LifecycleCase {
   final int expectedStatus;
   final List<String> expectedObservations;
   final String? expectedStderrMarker;
+  final int expectedWorkerProcessCount;
+  final bool requireInProcessReap;
 }
 
 _Options _parseOptions(List<String> arguments) {
@@ -103,7 +127,9 @@ _Options _parseOptions(List<String> arguments) {
           .where((_Suite candidate) => candidate.name == value)
           .firstOrNull;
       if (selected == null) {
-        throw const _SmokeException('--suite must be smoke, lifecycle, or all');
+        throw const _SmokeException(
+          '--suite must be smoke, lifecycle, traffic, or all',
+        );
       }
       suite = selected;
     } else if (argument.startsWith('--launch-architecture=')) {
@@ -256,13 +282,130 @@ Future<_ProcessObservation> _launch(
   } finally {
     stopwatch.stop();
   }
+  final String completedStdout = await stdoutText;
+  final String completedStderr = await stderrText;
+  final List<_WorkerProcessObservation> workerProcesses = _parseWorkerProcesses(
+    completedStdout,
+  );
+  for (final int workerProcessId
+      in workerProcesses
+          .where(
+            (_WorkerProcessObservation observation) =>
+                observation.event == 'spawned',
+          )
+          .map(
+            (_WorkerProcessObservation observation) =>
+                observation.workerProcessId,
+          )) {
+    await _expectProcessAbsent(workerProcessId);
+  }
   return _ProcessObservation(
+    processId: process.pid,
     status: status,
-    stdoutText: await stdoutText,
-    stderrText: await stderrText,
+    stdoutText: completedStdout,
+    stderrText: completedStderr,
     elapsed: stopwatch.elapsed,
+    workerProcesses: workerProcesses,
   );
 }
+
+List<_WorkerProcessObservation> _parseWorkerProcesses(String output) {
+  final RegExp pattern = RegExp(
+    r'^RUNTIME_WORKER_PROCESS event=(spawned|reaped) '
+    r'scenario=([a-z-]+) generation=([0-9]+) '
+    r'parent_pid=([0-9]+) worker_pid=([0-9]+)$',
+  );
+  final List<_WorkerProcessObservation> observations =
+      <_WorkerProcessObservation>[];
+  for (final String line in output.split('\n')) {
+    if (!line.startsWith('RUNTIME_WORKER_PROCESS ')) {
+      continue;
+    }
+    final RegExpMatch? match = pattern.firstMatch(line);
+    _expect(match != null, 'malformed worker process observation: $line');
+    observations.add(
+      _WorkerProcessObservation(
+        event: match!.group(1)!,
+        scenario: match.group(2)!,
+        generation: int.parse(match.group(3)!),
+        parentProcessId: int.parse(match.group(4)!),
+        workerProcessId: int.parse(match.group(5)!),
+      ),
+    );
+  }
+  return observations;
+}
+
+Future<void> _expectProcessAbsent(int processId) async {
+  final Stopwatch deadline = Stopwatch()..start();
+  while (deadline.elapsed < const Duration(seconds: 2)) {
+    final ProcessResult result = await Process.run('/bin/ps', <String>[
+      '-p',
+      '$processId',
+      '-o',
+      'pid=',
+    ]);
+    if (result.exitCode != 0 || (result.stdout as String).trim().isEmpty) {
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 25));
+  }
+  throw _SmokeException('worker process remained after app exit: $processId');
+}
+
+void _expectWorkerProcessContract(
+  _ProcessObservation observation, {
+  required String scenario,
+  required int expectedCount,
+  bool requireInProcessReap = true,
+}) {
+  final List<_WorkerProcessObservation> spawned = observation.workerProcesses
+      .where((_WorkerProcessObservation value) => value.event == 'spawned')
+      .toList();
+  final List<_WorkerProcessObservation> reaped = observation.workerProcesses
+      .where((_WorkerProcessObservation value) => value.event == 'reaped')
+      .toList();
+  _expect(
+    spawned.length == expectedCount,
+    '$scenario spawned ${spawned.length} workers, expected $expectedCount',
+  );
+  final Set<int> spawnedIds = <int>{
+    for (final _WorkerProcessObservation value in spawned)
+      value.workerProcessId,
+  };
+  final Set<int> reapedIds = <int>{
+    for (final _WorkerProcessObservation value in reaped) value.workerProcessId,
+  };
+  _expect(
+    spawnedIds.length == spawned.length &&
+        spawned.every(
+          (_WorkerProcessObservation value) =>
+              value.scenario == scenario &&
+              value.parentProcessId == observation.processId &&
+              value.workerProcessId != observation.processId &&
+              value.generation > 0,
+        ),
+    '$scenario emitted invalid or duplicate spawned-process evidence',
+  );
+  _expect(
+    reaped.every(
+      (_WorkerProcessObservation value) =>
+          value.scenario == scenario &&
+          value.parentProcessId == observation.processId &&
+          spawnedIds.contains(value.workerProcessId),
+    ),
+    '$scenario emitted a reaped process without matching ownership',
+  );
+  if (requireInProcessReap) {
+    _expect(
+      reapedIds.length == reaped.length && _sameIntSets(spawnedIds, reapedIds),
+      '$scenario did not observe every child exit in-process',
+    );
+  }
+}
+
+bool _sameIntSets(Set<int> left, Set<int> right) =>
+    left.length == right.length && left.containsAll(right);
 
 Future<void> _runSmoke(_Options options, _Invocation invocation) async {
   final _ProcessObservation observation = await _launch(
@@ -288,6 +431,11 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
       'missing smoke observation: $expected',
     );
   }
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
+  );
   stdout.writeln(
     'RUNTIME_INTEGRATION_PASS mode=${options.mode.name} '
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
@@ -503,6 +651,33 @@ List<_LifecycleCase> _lifecycleCases() => <_LifecycleCase>[
     ]),
   ),
   _LifecycleCase(
+    name: 'worker-replacement',
+    machineScenario: 'worker-replacement',
+    applicationArguments: const <String>[
+      '--runtime-lifecycle-scenario=worker-replacement',
+    ],
+    environment: _lifecycleGate,
+    expectedStatus: 0,
+    expectedWorkerProcessCount: 2,
+    expectedObservations: const <String>[
+      'root-start:0',
+      'worker-start:1',
+      'worker-ready:1',
+      'root-ready:1',
+      'worker-request:1',
+      'worker-unexpected-exit:1',
+      'worker-exit:1',
+      'worker-start:2',
+      'worker-ready:2',
+      'worker-request:2',
+      'worker-response:2',
+      'worker-stop-request:2',
+      'worker-stop-ack:2',
+      'worker-exit:2',
+      'root-exit:2',
+    ],
+  ),
+  _LifecycleCase(
     name: 'root-startup-failure',
     machineScenario: 'root-startup-failure',
     applicationArguments: const <String>[
@@ -513,6 +688,7 @@ List<_LifecycleCase> _lifecycleCases() => <_LifecycleCase>[
     expectedObservations: _expected(const <String>['root-start']),
     expectedStderrMarker:
         'RUNTIME_LIFECYCLE_FATAL class=root-startup status=70',
+    expectedWorkerProcessCount: 0,
   ),
   _LifecycleCase(
     name: 'root-uncaught',
@@ -533,6 +709,7 @@ List<_LifecycleCase> _lifecycleCases() => <_LifecycleCase>[
     ]),
     expectedStderrMarker:
         'RUNTIME_LIFECYCLE_FATAL class=root-uncaught status=70',
+    requireInProcessReap: false,
   ),
   const _LifecycleCase(
     name: 'host-startup-failure',
@@ -542,6 +719,7 @@ List<_LifecycleCase> _lifecycleCases() => <_LifecycleCase>[
     expectedObservations: <String>[],
     expectedStderrMarker:
         'RUNTIME_LIFECYCLE_FATAL class=host-startup status=70',
+    expectedWorkerProcessCount: 0,
   ),
   const _LifecycleCase(
     name: 'usage-error',
@@ -551,6 +729,7 @@ List<_LifecycleCase> _lifecycleCases() => <_LifecycleCase>[
     expectedStderrMarker:
         'Argument error: unknown application option: '
         '--unsupported-lifecycle-option',
+    expectedWorkerProcessCount: 0,
   ),
 ];
 
@@ -598,12 +777,94 @@ Future<void> _runLifecycle(_Options options, _Invocation invocation) async {
         '${testCase.name} missing stderr marker: $errors',
       );
     }
+    _expectWorkerProcessContract(
+      result,
+      scenario: testCase.machineScenario ?? testCase.name,
+      expectedCount: testCase.expectedWorkerProcessCount,
+      requireInProcessReap: testCase.requireInProcessReap,
+    );
     stdout.writeln(
       'RUNTIME_LIFECYCLE_INTEGRATION_PASS mode=${options.mode.name} '
       'scenario=${testCase.name} status=${result.status} '
       'elapsed_ms=${result.elapsed.inMilliseconds}',
     );
   }
+}
+
+Future<void> _runTraffic(_Options options, _Invocation invocation) async {
+  final _ProcessObservation result = await _launch(
+    options,
+    invocation,
+    const <String>['--runtime-lifecycle-scenario=worker-traffic'],
+    environment: _lifecycleGate,
+  );
+  _expect(
+    result.status == 0,
+    'traffic application exited with status ${result.status}; '
+    'stdout=${result.stdoutText.trim()} stderr=${result.stderrText.trim()}',
+  );
+  _expect(
+    result.stderrText.trim().isEmpty,
+    'traffic application wrote stderr: ${result.stderrText.trim()}',
+  );
+  final RegExp summary = RegExp(
+    r'^RUNTIME_WORKER_TRAFFIC requests=256 responses=256 '
+    r'backpressured=([1-9][0-9]*) max_in_flight=64 '
+    r'close_timer_fired=1 elapsed_ms=([1-9][0-9]*)$',
+    multiLine: true,
+  );
+  final RegExpMatch? summaryMatch = summary.firstMatch(result.stdoutText);
+  _expect(summaryMatch != null, 'traffic summary is missing or malformed');
+  final int trafficElapsed = int.parse(summaryMatch!.group(2)!);
+  _expect(
+    trafficElapsed < 3000 && result.elapsed < const Duration(seconds: 5),
+    'traffic did not preserve bounded GUI close: '
+    'traffic=${trafficElapsed}ms app=${result.elapsed.inMilliseconds}ms',
+  );
+
+  final RegExp lifecycleLine = RegExp(
+    r'^RUNTIME_LIFECYCLE event=([a-z-]+) scenario=worker-traffic '
+    r'generation=([0-9]+)$',
+  );
+  final List<String> events = <String>[];
+  for (final String line in result.stdoutText.split('\n')) {
+    final RegExpMatch? match = lifecycleLine.firstMatch(line);
+    if (match != null) {
+      events.add(match.group(1)!);
+    }
+  }
+  int count(String event) =>
+      events.where((String value) => value == event).length;
+  for (final String singleton in <String>[
+    'root-start',
+    'worker-start',
+    'worker-ready',
+    'root-ready',
+    'worker-stop-request',
+    'worker-stop-ack',
+    'worker-exit',
+    'root-exit',
+  ]) {
+    _expect(count(singleton) == 1, 'traffic event $singleton is not singular');
+  }
+  _expect(
+    count('worker-request') == 256 &&
+        count('worker-response') == 256 &&
+        count('worker-backpressure') > 0,
+    'traffic lifecycle counts do not prove bounded admission: $events',
+  );
+  _expectWorkerProcessContract(
+    result,
+    scenario: 'worker-traffic',
+    expectedCount: 1,
+  );
+  stdout.writeln(
+    'RUNTIME_TRAFFIC_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'backpressured=${summaryMatch.group(1)} '
+    'traffic_elapsed_ms=$trafficElapsed '
+    'application_elapsed_ms=${result.elapsed.inMilliseconds}',
+  );
 }
 
 bool _sameStrings(List<String> left, List<String> right) {
@@ -630,11 +891,14 @@ Future<void> main(List<String> arguments) async {
 
   try {
     final _Invocation invocation = await _loadInvocation(options);
-    if (options.suite != _Suite.lifecycle) {
+    if (options.suite == _Suite.smoke || options.suite == _Suite.all) {
       await _runSmoke(options, invocation);
     }
-    if (options.suite != _Suite.smoke) {
+    if (options.suite == _Suite.lifecycle || options.suite == _Suite.all) {
       await _runLifecycle(options, invocation);
+    }
+    if (options.suite == _Suite.traffic || options.suite == _Suite.all) {
+      await _runTraffic(options, invocation);
     }
   } on Object catch (error) {
     stderr.writeln('RUNTIME_INTEGRATION_FAIL mode=${options.mode.name} $error');

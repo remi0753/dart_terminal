@@ -76,7 +76,7 @@ AppKit subclass、callback、fork 後の安全性、thread affinity、ABI 変更
 
 | 層 | 現在 | Ghostty クラスに必要な状態 | 主な差分 |
 | --- | --- | --- | --- |
-| Runtime | JIT Kernel、root isolate が AppKit main thread | AOT 配布、debug/release 分離、複数 worker isolate | AOT host、isolate lifecycle、crash handling |
+| Runtime | 未改変 AppKit root、Developer は公式 Dart process worker | AOT 配布、debug/release 分離、複数の独立 worker domain | stock AOT host、process lifecycle、crash handling |
 | Process | コマンドごとに `Process.start` | 1 pane = 1 persistent PTY session | controlling TTY、job control、resize、signals |
 | Terminal core | plain string の履歴 | byte streaming parser と完全な grid state | VT parser、modes、scrollback、reflow |
 | Renderer | AppKit が 18pt の plain text を再描画 | Metal、CoreText、glyph atlas、damage rendering | 専用 view と GPU pipeline |
@@ -504,10 +504,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] `dart_api.h` 公開境界だけで VM 全体を所有する `dart_appkit` host を M1/arm64 JIT/AOT で実証し採否を確定する
   - [x] 固定判定基準を一度だけ適用し、採用 topology と実装所有者を確定する
   - [x] 選定された `dart_appkit` host contract を実装して回帰試験を通す
-  - [ ] M1/arm64 Developer JIT 製品を選定 contract へ移行する
+  - [x] M1/arm64 Developer JIT 製品を選定 contract へ移行する
     - [x] versioned process protocol と process-owned lifecycle coordinator を実装し、公開 Dart 実行ファイルで unit contract を通す
     - [x] clean SDK を必須にした Developer worker Kernel・bundle・provenance/audit 経路へ移す
-    - [ ] M1 Developer GUI/lifecycle/failure/backpressure 統合試験を通し、移行記録を閉じる
+    - [x] M1 Developer GUI/lifecycle/failure/backpressure 統合試験を通し、移行記録を閉じる
   - [ ] M1/arm64 Release AOT 製品を同じ contract へ移行する
   - [ ] patch 本体、適用処理、hash・来歴・監査・fixture をすべて削除する
   - [ ] M1 の JIT/AOT 横断 lifecycle、性能、終了順序、clean SDK を検証して移行を閉じる
@@ -522,7 +522,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 終了条件:
 
-- AOT `.app` が起動し、root UI isolate と worker isolate が共存する。
+- AOT `.app` が起動し、root UI isolate と独立して回収可能な公式 Dart worker
+  process が共存する。
 - 1000 回の window/view create-destroy で native handle が増えない。
 - malformed event、late event、double dispose、worker crash で app 全体が hang しない。
 - debug と release が同じ integration suite を通る。

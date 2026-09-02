@@ -215,14 +215,28 @@ final class TerminalApplication {
 
       createdWindow.show();
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      final RuntimeLifecycleCoordinator createdLifecycle =
-          RuntimeLifecycleCoordinator(
-            scenario: scenario,
-            workerCommand: options.runtimeWorkerCommand,
-            observer: (RuntimeLifecycleObservation observation) {
-              stdout.writeln(observation.machineLine(scenario));
-            },
+      RuntimeLifecycleCoordinator createLifecycle({
+        RuntimeLifecycleScenario? workerScenario,
+        int initialGeneration = 0,
+      }) => RuntimeLifecycleCoordinator(
+        scenario: scenario,
+        workerScenario: workerScenario,
+        initialGeneration: initialGeneration,
+        workerCommand: options.runtimeWorkerCommand,
+        observer: (RuntimeLifecycleObservation observation) {
+          stdout.writeln(observation.machineLine(scenario));
+        },
+        processObserver: (RuntimeLifecycleProcessObservation observation) {
+          stdout.writeln(
+            observation.machineLine(scenario, parentProcessId: pid),
           );
+        },
+      );
+      final RuntimeLifecycleCoordinator createdLifecycle = createLifecycle(
+        workerScenario: scenario == RuntimeLifecycleScenario.workerReplacement
+            ? RuntimeLifecycleScenario.workerUnexpectedExit
+            : null,
+      );
       lifecycle = createdLifecycle;
       final RuntimeLifecycleStartStatus startStatus = await createdLifecycle
           .start();
@@ -320,6 +334,40 @@ final class TerminalApplication {
             'double shutdown did not finish gracefully',
           );
           lifecycleWasShutDown = true;
+        case RuntimeLifecycleScenario.workerReplacement:
+          final int failedProcessId = createdLifecycle.workerPid!;
+          final RuntimeLifecycleRequestResult failed = await createdLifecycle
+              .request(41);
+          _expectLifecycle(
+            failed.status == RuntimeLifecycleRequestStatus.unexpectedExit,
+            'replacement source did not exit unexpectedly',
+          );
+          lifecycleWasShutDown = true;
+          final RuntimeLifecycleCoordinator replacement = createLifecycle(
+            workerScenario: RuntimeLifecycleScenario.normal,
+            initialGeneration: createdLifecycle.generation,
+          );
+          lifecycle = replacement;
+          lifecycleWasShutDown = false;
+          _expectLifecycle(
+            await replacement.start() == RuntimeLifecycleStartStatus.ready,
+            'replacement worker did not become ready',
+          );
+          _expectLifecycle(
+            replacement.workerPid != failedProcessId,
+            'replacement worker reused the failed process',
+          );
+          await _expectResponse(replacement);
+          final RuntimeLifecycleShutdownResult replacementShutdown =
+              await replacement.shutdown();
+          _expectLifecycle(
+            replacementShutdown.termination ==
+                RuntimeLifecycleWorkerTermination.graceful,
+            'replacement worker did not stop gracefully',
+          );
+          lifecycleWasShutDown = true;
+        case RuntimeLifecycleScenario.workerTraffic:
+          await _exerciseWorkerTraffic(createdLifecycle, createdWindow);
         case RuntimeLifecycleScenario.rootStartupFailure:
           throw StateError('root startup failure reached application run');
         case RuntimeLifecycleScenario.rootUncaught:
@@ -387,6 +435,78 @@ final class TerminalApplication {
       result.status == RuntimeLifecycleRequestStatus.response &&
           result.value == 42,
       'worker request did not return its expected response',
+    );
+  }
+
+  static Future<void> _exerciseWorkerTraffic(
+    RuntimeLifecycleCoordinator lifecycle,
+    Window window,
+  ) async {
+    const int requestCount = 256;
+    final Completer<void> closeTimerFired = Completer<void>();
+    final Timer closeTimer = Timer(const Duration(milliseconds: 25), () {
+      if (!window.isClosed && !window.isDisposed) {
+        window.close();
+      }
+      closeTimerFired.complete();
+    });
+    final Stopwatch stopwatch = Stopwatch()..start();
+    var responses = 0;
+    List<int> pending = List<int>.generate(requestCount, (int index) => index);
+    try {
+      while (pending.isNotEmpty) {
+        final List<({int input, RuntimeLifecycleRequestResult result})>
+        results = await Future.wait(
+          pending.map((int input) async {
+            final RuntimeLifecycleRequestResult result = await lifecycle
+                .request(input);
+            return (input: input, result: result);
+          }),
+        );
+        final List<int> retry = <int>[];
+        for (final ({int input, RuntimeLifecycleRequestResult result}) item
+            in results) {
+          switch (item.result.status) {
+            case RuntimeLifecycleRequestStatus.response:
+              _expectLifecycle(
+                item.result.value == item.input + 1,
+                'traffic response did not match its request',
+              );
+              ++responses;
+            case RuntimeLifecycleRequestStatus.backpressured:
+              retry.add(item.input);
+            case RuntimeLifecycleRequestStatus.uncaughtError:
+            case RuntimeLifecycleRequestStatus.unexpectedExit:
+            case RuntimeLifecycleRequestStatus.cancelled:
+              throw StateError(
+                'runtime lifecycle traffic failed: ${item.result.status.name}',
+              );
+          }
+        }
+        _expectLifecycle(
+          retry.length < pending.length,
+          'traffic backpressure made no forward progress',
+        );
+        pending = retry;
+      }
+      await closeTimerFired.future.timeout(const Duration(seconds: 1));
+    } finally {
+      closeTimer.cancel();
+      stopwatch.stop();
+    }
+    _expectLifecycle(
+      responses == requestCount &&
+          lifecycle.maximumInFlightObserved ==
+              lifecycle.maximumInFlightRequests &&
+          lifecycle.backpressureRejectionCount > 0 &&
+          window.isClosed,
+      'bounded traffic did not exercise backpressure and scheduled close',
+    );
+    stdout.writeln(
+      'RUNTIME_WORKER_TRAFFIC requests=$requestCount responses=$responses '
+      'backpressured=${lifecycle.backpressureRejectionCount} '
+      'max_in_flight=${lifecycle.maximumInFlightObserved} '
+      'close_timer_fired=1 elapsed_ms=${stopwatch.elapsedMilliseconds}',
     );
   }
 

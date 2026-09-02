@@ -407,7 +407,7 @@ INTEL_EVIDENCE_OUTPUT ?=
 	process-worker-probe \
 	developer-jit-build developer-jit-run developer-jit-audit \
 	developer-jit-clean-sdk-test \
-	developer-jit-integration developer-jit-lifecycle \
+	developer-jit-integration developer-jit-lifecycle developer-jit-traffic \
 	release-aot-build release-aot-run release-aot-audit \
 	release-aot-integration release-aot-lifecycle runtime-source-check \
 	runtime-bundle-audit runtime-integration \
@@ -442,6 +442,7 @@ help:
 	@echo "  make developer-jit-run   Run one thin product developer-JIT app"
 	@echo "  make developer-jit-audit Audit one JIT-only thin bundle contract"
 	@echo "  make developer-jit-clean-sdk-test Verify stock-SDK worker provenance"
+	@echo "  make developer-jit-traffic Verify bounded worker traffic and GUI close"
 	@echo "  make release-aot-build   Build one thin release-AOT product app"
 	@echo "  make release-aot-run     Run one thin release-AOT product app"
 	@echo "  make release-aot-audit   Audit one AOT-only thin bundle contract"
@@ -957,14 +958,23 @@ developer-jit-clean-sdk-test: runtime-dart-tool-check
 		--focus=developer-clean-sdk
 
 developer-jit-integration: developer-jit-build
-	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_INTEGRATION_SOURCE) \
+	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+		$(RUNTIME_INTEGRATION_SOURCE) \
 		--mode=developer-jit \
 		--launch-architecture=$(RUNTIME_ARCH) \
 		$(DEVELOPER_JIT_BUNDLE)
 
 developer-jit-lifecycle: developer-jit-build
-	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_INTEGRATION_SOURCE) \
+	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+		$(RUNTIME_INTEGRATION_SOURCE) \
 		--mode=developer-jit --suite=lifecycle \
+		--launch-architecture=$(RUNTIME_ARCH) \
+		$(DEVELOPER_JIT_BUNDLE)
+
+developer-jit-traffic: developer-jit-build
+	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+		$(RUNTIME_INTEGRATION_SOURCE) \
+		--mode=developer-jit --suite=traffic \
 		--launch-architecture=$(RUNTIME_ARCH) \
 		$(DEVELOPER_JIT_BUNDLE)
 

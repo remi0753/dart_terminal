@@ -8,7 +8,10 @@ import 'package:dart_terminal/src/runtime_worker_protocol.dart';
 Future<void> runRuntimeLifecycleTests() async {
   await _protocolContract();
   _sourceBoundary();
+  _coordinatorBounds();
   await _normalLifecycle();
+  await _boundedBackpressure();
+  await _rootFaultUsesNormalWorker();
   await _startupFailure();
   await _uncaughtWorkerFailures();
   await _unexpectedWorkerExit();
@@ -94,6 +97,45 @@ void _sourceBoundary() {
   );
 }
 
+void _coordinatorBounds() {
+  RuntimeLifecycleCoordinator coordinator({
+    int maximumInFlightRequests = 64,
+    int initialGeneration = 0,
+  }) => RuntimeLifecycleCoordinator(
+    scenario: RuntimeLifecycleScenario.normal,
+    observer: (_) {},
+    maximumInFlightRequests: maximumInFlightRequests,
+    initialGeneration: initialGeneration,
+  );
+
+  for (final ({int capacity, int generation, String description}) invalid
+      in <({int capacity, int generation, String description})>[
+        (capacity: 0, generation: 0, description: 'zero request capacity'),
+        (capacity: 64, generation: -1, description: 'negative generation seed'),
+        (
+          capacity: 64,
+          generation: 0xffffffff,
+          description: 'exhausted generation seed',
+        ),
+      ]) {
+    var rejected = false;
+    try {
+      coordinator(
+        maximumInFlightRequests: invalid.capacity,
+        initialGeneration: invalid.generation,
+      );
+    } on ArgumentError {
+      rejected = true;
+    }
+    _expect(rejected, '${invalid.description} is rejected');
+  }
+
+  _expect(
+    coordinator(initialGeneration: 0xfffffffe).generation == 0xfffffffe,
+    'largest usable generation seed is accepted',
+  );
+}
+
 Future<void> _normalLifecycle() async {
   final _Harness harness = _Harness(RuntimeLifecycleScenario.normal);
   _expect(
@@ -114,6 +156,93 @@ Future<void> _normalLifecycle() async {
     shutdown.termination == RuntimeLifecycleWorkerTermination.graceful,
     'normal worker has a graceful termination classification',
   );
+  harness.expectEvents(<String>[
+    'worker-start',
+    'worker-ready',
+    'worker-request',
+    'worker-response',
+    'worker-stop-request',
+    'worker-stop-ack',
+    'worker-exit',
+  ]);
+}
+
+Future<void> _boundedBackpressure() async {
+  final _Harness harness = _Harness(
+    RuntimeLifecycleScenario.workerTraffic,
+    maximumInFlightRequests: 4,
+  );
+  _expect(
+    await harness.coordinator.start() == RuntimeLifecycleStartStatus.ready,
+    'traffic worker becomes ready',
+  );
+  var responses = 0;
+  List<int> pending = List<int>.generate(12, (int index) => index);
+  while (pending.isNotEmpty) {
+    final List<({int input, RuntimeLifecycleRequestResult result})> results =
+        await Future.wait(
+          pending.map((int input) async {
+            final RuntimeLifecycleRequestResult result = await harness
+                .coordinator
+                .request(input);
+            return (input: input, result: result);
+          }),
+        );
+    final List<int> retry = <int>[];
+    for (final ({int input, RuntimeLifecycleRequestResult result}) item
+        in results) {
+      if (item.result.status == RuntimeLifecycleRequestStatus.backpressured) {
+        retry.add(item.input);
+      } else {
+        _expect(
+          item.result.status == RuntimeLifecycleRequestStatus.response &&
+              item.result.value == item.input + 1,
+          'accepted traffic request returns its response',
+        );
+        ++responses;
+      }
+    }
+    _expect(retry.length < pending.length, 'backpressure makes progress');
+    pending = retry;
+  }
+  _expect(responses == 12, 'all backpressured work is retried');
+  _expect(
+    harness.coordinator.maximumInFlightObserved == 4 &&
+        harness.coordinator.backpressureRejectionCount == 12,
+    'request admission is bounded at four in-flight operations',
+  );
+  await harness.coordinator.shutdown();
+  harness.expectEvents(<String>[
+    'worker-start',
+    'worker-ready',
+    ...List<String>.filled(4, 'worker-request'),
+    'worker-backpressure',
+    ...List<String>.filled(4, 'worker-response'),
+    ...List<String>.filled(4, 'worker-request'),
+    'worker-backpressure',
+    ...List<String>.filled(4, 'worker-response'),
+    ...List<String>.filled(4, 'worker-request'),
+    ...List<String>.filled(4, 'worker-response'),
+    'worker-stop-request',
+    'worker-stop-ack',
+    'worker-exit',
+  ]);
+}
+
+Future<void> _rootFaultUsesNormalWorker() async {
+  final _Harness harness = _Harness(RuntimeLifecycleScenario.rootUncaught);
+  _expect(
+    await harness.coordinator.start() == RuntimeLifecycleStartStatus.ready,
+    'root-only fault keeps an ordinary worker ready',
+  );
+  final RuntimeLifecycleRequestResult request = await harness.coordinator
+      .request(5);
+  _expect(
+    request.status == RuntimeLifecycleRequestStatus.response &&
+        request.value == 6,
+    'root-only fault is not forwarded to the worker process',
+  );
+  await harness.coordinator.shutdown();
   harness.expectEvents(<String>[
     'worker-start',
     'worker-ready',
@@ -546,17 +675,24 @@ final class _Harness {
   _Harness(
     RuntimeLifecycleScenario scenario, {
     Duration shutdownTimeout = const Duration(milliseconds: 250),
+    int maximumInFlightRequests = 64,
   }) : coordinator = RuntimeLifecycleCoordinator(
          scenario: scenario,
          observer: (RuntimeLifecycleObservation observation) {
            observations.add(observation);
          },
+         processObserver: (RuntimeLifecycleProcessObservation observation) {
+           processObservations.add(observation);
+         },
          workerCommand: _workerCommand,
+         maximumInFlightRequests: maximumInFlightRequests,
          shutdownTimeout: shutdownTimeout,
        );
 
   static final List<RuntimeLifecycleObservation> observations =
       <RuntimeLifecycleObservation>[];
+  static final List<RuntimeLifecycleProcessObservation> processObservations =
+      <RuntimeLifecycleProcessObservation>[];
   static final RuntimeLifecycleWorkerCommand _workerCommand =
       RuntimeLifecycleWorkerCommand(
         executable: Platform.resolvedExecutable,
@@ -588,6 +724,22 @@ final class _Harness {
     _expect(
       RuntimeLifecycleCoordinator.outstandingProcessCount == 0,
       'event reconciliation leaves no child process outstanding',
+    );
+    final List<RuntimeLifecycleProcessObservation> processes = List.of(
+      processObservations,
+    );
+    processObservations.clear();
+    _expect(
+      processes.length == 2 &&
+          processes.first.event == RuntimeLifecycleProcessEvent.spawned &&
+          processes.last.event == RuntimeLifecycleProcessEvent.reaped &&
+          processes.first.processId == processes.last.processId &&
+          processes.first.processId != pid &&
+          processes.every(
+            (RuntimeLifecycleProcessObservation observation) =>
+                observation.generation == coordinator.generation,
+          ),
+      'process observations pair one distinct spawned and reaped child',
     );
   }
 }
