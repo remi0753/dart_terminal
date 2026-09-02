@@ -61,6 +61,22 @@ override UNMODIFIED_ENGINE_PROBE_AOT_HOST := \
 	$(UNMODIFIED_ENGINE_PROBE_BUILD_DIR)/multiple_root_aot_probe
 override UNMODIFIED_ENGINE_PROBE_JIT_HOST := \
 	$(UNMODIFIED_ENGINE_PROBE_BUILD_DIR)/multiple_root_jit_probe
+override PUBLIC_EMBEDDER_WORKER_PROBE_BUILD_DIR := \
+	$(PROJECT_ROOT)/build/runtime-probes/public-embedder-worker/$(HOST_ARCH)
+override PUBLIC_EMBEDDER_WORKER_PROBE_DART_SOURCE := \
+	$(PROJECT_ROOT)/tool/public_embedder_worker_probe.dart
+override PUBLIC_EMBEDDER_WORKER_PROBE_RUNNER_SOURCE := \
+	$(PROJECT_ROOT)/tool/public_embedder_worker_probe_runner.dart
+override PUBLIC_EMBEDDER_WORKER_PROBE_HOST_SOURCE := \
+	$(PROJECT_ROOT)/native/macos/runtime/PublicEmbedderWorkerProbe.cc
+override PUBLIC_EMBEDDER_WORKER_PROBE_AOT_SNAPSHOT := \
+	$(PUBLIC_EMBEDDER_WORKER_PROBE_BUILD_DIR)/public_worker.aot
+override PUBLIC_EMBEDDER_WORKER_PROBE_JIT_KERNEL := \
+	$(PUBLIC_EMBEDDER_WORKER_PROBE_BUILD_DIR)/public_worker.dill
+override PUBLIC_EMBEDDER_WORKER_PROBE_AOT_HOST := \
+	$(PUBLIC_EMBEDDER_WORKER_PROBE_BUILD_DIR)/public_worker_aot_probe
+override PUBLIC_EMBEDDER_WORKER_PROBE_JIT_HOST := \
+	$(PUBLIC_EMBEDDER_WORKER_PROBE_BUILD_DIR)/public_worker_jit_probe
 override DART_ENGINE_WORKER_PATCH := \
 	$(PROJECT_ROOT)/patches/dart-engine-worker-isolates.patch
 override DART_ENGINE_LIFECYCLE_PATCH := \
@@ -366,6 +382,7 @@ INTEL_EVIDENCE_OUTPUT ?=
 	unmodified-engine-sdk-clean unmodified-engine-probe-aot-engine \
 	unmodified-engine-probe-jit-engine \
 	unmodified-engine-multiple-root-probe \
+	public-embedder-worker-probe \
 	developer-jit-build developer-jit-run developer-jit-audit \
 	developer-jit-integration developer-jit-lifecycle \
 	release-aot-build release-aot-run release-aot-audit \
@@ -396,6 +413,7 @@ help:
 	@echo "Dart Terminal product runtime targets:"
 	@echo "  Thin targets require RUNTIME_ARCH=arm64 or RUNTIME_ARCH=x86_64"
 	@echo "  make unmodified-engine-multiple-root-probe"
+	@echo "  make public-embedder-worker-probe"
 	@echo "  make developer-jit-build Build one thin product developer-JIT app"
 	@echo "  make developer-jit-run   Run one thin product developer-JIT app"
 	@echo "  make developer-jit-audit Audit one JIT-only thin bundle contract"
@@ -576,6 +594,78 @@ unmodified-engine-multiple-root-probe: \
 		--engine-root=$(DART_ENGINE_ROOT) \
 		--host=$(UNMODIFIED_ENGINE_PROBE_JIT_HOST) \
 		--snapshot=$(UNMODIFIED_ENGINE_PROBE_JIT_KERNEL) \
+		--mode=jit
+
+$(PUBLIC_EMBEDDER_WORKER_PROBE_AOT_SNAPSHOT): \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_DART_SOURCE) | runtime-dart-tool-check
+	@mkdir -p $(PUBLIC_EMBEDDER_WORKER_PROBE_BUILD_DIR)
+	"$(RUNTIME_DART_EXECUTABLE)" compile aot-snapshot --verbosity=warning \
+		-o $@ $(PUBLIC_EMBEDDER_WORKER_PROBE_DART_SOURCE)
+
+$(PUBLIC_EMBEDDER_WORKER_PROBE_JIT_KERNEL): \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_DART_SOURCE) | \
+		unmodified-engine-probe-jit-engine
+	@mkdir -p $(PUBLIC_EMBEDDER_WORKER_PROBE_BUILD_DIR)
+	"$(DART_ENGINE_KERNEL_COMPILER)" \
+		--platform=$(DART_ENGINE_PLATFORM_KERNEL) \
+		--no-aot --link-platform --no-embed-sources \
+		--output=$@ \
+		-Dsdk_hash=$(DART_SDK_HASH) \
+		-Ddart.vm.product=false -Ddart.vm.asan=false \
+		-Ddart.vm.msan=false -Ddart.vm.tsan=false \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_DART_SOURCE)
+
+$(PUBLIC_EMBEDDER_WORKER_PROBE_AOT_HOST): \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_HOST_SOURCE) | \
+		unmodified-engine-probe-aot-engine
+	@mkdir -p $(PUBLIC_EMBEDDER_WORKER_PROBE_BUILD_DIR)
+	"$(CLANGXX)" -Wall -Wextra -Wpedantic -Werror \
+		-Wno-gnu-anonymous-struct -Wno-nested-anon-types -std=c++20 \
+		-isysroot "$(SDKROOT)" \
+		-mmacosx-version-min=$(MACOSX_DEPLOYMENT_TARGET) \
+		-arch $(HOST_ARCH) \
+		-I$(DART_ENGINE_ROOT)/runtime \
+		-I$(DART_ENGINE_ROOT)/runtime/engine \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_HOST_SOURCE) \
+		$(DART_ENGINE_AOT_LIBRARY) \
+		-Wl,-rpath,$(DART_ENGINE_OUT) -Wl,-export_dynamic -o $@
+
+$(PUBLIC_EMBEDDER_WORKER_PROBE_JIT_HOST): \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_HOST_SOURCE) | \
+		unmodified-engine-probe-jit-engine
+	@mkdir -p $(PUBLIC_EMBEDDER_WORKER_PROBE_BUILD_DIR)
+	"$(CLANGXX)" -Wall -Wextra -Wpedantic -Werror \
+		-Wno-gnu-anonymous-struct -Wno-nested-anon-types -std=c++20 \
+		-isysroot "$(SDKROOT)" \
+		-mmacosx-version-min=$(MACOSX_DEPLOYMENT_TARGET) \
+		-arch $(HOST_ARCH) \
+		-I$(DART_ENGINE_ROOT)/runtime \
+		-I$(DART_ENGINE_ROOT)/runtime/engine \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_HOST_SOURCE) \
+		$(DART_ENGINE_JIT_LIBRARY) \
+		-Wl,-rpath,$(DART_ENGINE_JIT_OUT) -Wl,-export_dynamic -o $@
+
+public-embedder-worker-probe: \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_AOT_HOST) \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_AOT_SNAPSHOT) \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_JIT_HOST) \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_JIT_KERNEL) \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_RUNNER_SOURCE)
+	"$(RUNTIME_DART_EXECUTABLE)" run \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_RUNNER_SOURCE) \
+		--engine-root=$(DART_ENGINE_ROOT) \
+		--host=$(PUBLIC_EMBEDDER_WORKER_PROBE_AOT_HOST) \
+		--snapshot=$(PUBLIC_EMBEDDER_WORKER_PROBE_AOT_SNAPSHOT) \
+		--dart-source=$(PUBLIC_EMBEDDER_WORKER_PROBE_DART_SOURCE) \
+		--native-source=$(PUBLIC_EMBEDDER_WORKER_PROBE_HOST_SOURCE) \
+		--mode=aot
+	"$(RUNTIME_DART_EXECUTABLE)" run \
+		$(PUBLIC_EMBEDDER_WORKER_PROBE_RUNNER_SOURCE) \
+		--engine-root=$(DART_ENGINE_ROOT) \
+		--host=$(PUBLIC_EMBEDDER_WORKER_PROBE_JIT_HOST) \
+		--snapshot=$(PUBLIC_EMBEDDER_WORKER_PROBE_JIT_KERNEL) \
+		--dart-source=$(PUBLIC_EMBEDDER_WORKER_PROBE_DART_SOURCE) \
+		--native-source=$(PUBLIC_EMBEDDER_WORKER_PROBE_HOST_SOURCE) \
 		--mode=jit
 
 runtime-fingerprint-force:

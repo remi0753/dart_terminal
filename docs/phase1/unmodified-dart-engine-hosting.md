@@ -1,6 +1,6 @@
 # Unmodified Dart Engine hosting migration
 
-- Status: in progress; policy and ordered decision gates fixed
+- Status: in progress; public-only child hosting rejected, option comparison next
 - Started: 2026-09-02
 - Scope: corrective Phase 1 task inserted immediately after the completed
   VM/isolate lifecycle contract
@@ -153,6 +153,11 @@ First determine whether a product-owned host can initialize core libraries,
 create the required isolate topology, schedule it, retire it, and call
 `Dart_Cleanup` using public headers alone. Reject a design that quietly reaches
 into `runtime/bin` or another private SDK component.
+
+Status: complete; rejected for the product contract at the pinned revision.
+The public low-level lifecycle is usable, but an Engine-owned VM cannot have
+its child core-library initialization completed by the product through a
+supported public hook.
 
 ### 4. Compare an Engine improvement with process isolation if needed
 
@@ -418,3 +423,118 @@ candidate for a general upstream `dart_engine` improvement.
   The final combined clean-Engine gate passed again at 3,392.17 MiB/s AOT and
   1,460.79 MiB/s JIT, with exact communication/error/replacement markers,
   bounded global shutdown, empty stderr, and a clean SDK before and after.
+
+### 2026-09-03 — public lightweight-isolate API discovery
+
+- The next option does not need to begin by replacing all of `dart_engine`.
+  The public low-level header exposes `Dart_CreateIsolateInGroup`,
+  `Dart_RunLoopAsync`, and `Dart_KillIsolate`. Together they allow a
+  product-owned native adapter to create a child in the already initialized
+  root group, invoke its Dart entry point, transfer its run-loop ownership to
+  the VM with error/exit ports, and request immediate termination.
+- This is not an inferred combination. The pinned SDK's
+  `dart_api_create_lightweight_isolate_test.dart` and
+  `ffi_test_functions_vmspecific.cc` use this exact public sequence through
+  FFI: temporarily exit the current parent, create the child, re-enter the
+  parent, then enter the child, invoke its entry point, call
+  `Dart_RunLoopAsync`, and re-enter the parent. The test also supplies native
+  shutdown/cleanup callbacks and Dart error/exit ports.
+- Because an Engine message handler already holds the parent Engine lock while
+  a Dart-to-native FFI call runs, that official temporary-exit pattern also
+  prevents a concurrent Engine entry into the parent. The child itself is not
+  inserted into Engine-private bookkeeping; the product adapter can retain its
+  public `Dart_Isolate` handle, call `Dart_KillIsolate`, and use cleanup plus
+  the Dart exit port as the teardown barrier before global Engine shutdown.
+- This hybrid is now the concrete public-API probe. It avoids the two known
+  full-embedder problems: the shared Engine library does not export the C++
+  `dart::embedder::InitOnce` helper, and per-isolate
+  `DartUtils::SetupCoreLibraries` remains a private `runtime/bin` API. No
+  private helper is needed when the lightweight child shares the Engine-
+  initialized root isolate group.
+
+### 2026-09-03 — public lightweight-isolate probe, first build attempt
+
+- Added a standalone dual-mode probe whose root remains owned by unmodified
+  `dart_engine` and whose four lightweight children are owned by a
+  repository-native adapter. The Dart side covers normal exit, fatal uncaught
+  error, forced kill, replacement, off-main-thread execution, and an
+  acknowledged 128 MiB `TransferableTypedData` path. The native side treats
+  the cleanup callback, not merely the Dart error or exit message, as the
+  permission to release each opaque handle.
+- The first native compilation stopped before linking because `DART_EXPORT`
+  already expands to C linkage in `dart_api.h`; the probe redundantly prefixed
+  each exported FFI function with `extern "C"`, and `-Werror` promoted the
+  duplicate declaration warning. This was a probe declaration error, not an
+  Engine limitation, and changed no SDK file. The redundant prefix was
+  removed before repeating the same gate.
+- The next build linked the native AOT host, then the Dart AOT compiler
+  rejected the source because it had only native-invoked entry points and no
+  conventional `main`. Added an empty compilation entry point while retaining
+  `vm:entry-point` annotations on the two functions invoked by name. This is an
+  AOT artifact requirement and does not alter the worker ownership design.
+- The first AOT execution created and started a lightweight child, but its
+  ready event reported the main thread. `Dart_Invoke` runs a Dart entry point
+  synchronously through its first suspension; the original async entry point
+  created its port and sent ready before its first `await`. No payload work ran
+  there. The probe next attempted to make the entry point schedule one
+  microtask and return, so even initialization would occur after
+  `Dart_RunLoopAsync` transferred the child to the VM-owned run loop.
+- The attempted microtask handoff then failed at `Dart_Invoke` with the exact
+  VM diagnostic `Unsupported operation: Microtasks are not supported`.
+  Source inspection explains the difference from the SDK's official
+  lightweight-isolate test: the ordinary Dart runner registers an
+  `initialize_isolate` callback and calls private
+  `DartUtils::SetupCoreLibraries` for each child, while unmodified
+  `dart_engine` sets that callback to null and calls the helper only for roots
+  created through `DartEngine_CreateIsolate`. The probe was narrowed to
+  demonstrate the otherwise valid public lifecycle with synchronous port
+  callbacks while retaining microtask unavailability as an explicit negative
+  result; that subset cannot satisfy the product's existing asynchronous-error
+  contract.
+- A synchronous callback then completed the normal 128 MiB path and cleanup,
+  but an intentional uncaught worker exception was replaced on the error port
+  by another `Microtasks are not supported` error. The stack shows
+  `_RootZone.handleUncaughtError` trying to schedule its priority error
+  callback. Thus the initialization gap affects both ordinary async code and
+  the accuracy of uncaught-error reporting; preserving only synchronous
+  message throughput would weaken two existing acceptance conditions.
+
+### 2026-09-03 — public lightweight-isolate option decision
+
+The combined clean-Engine gate passed as an expected negative capability test
+in release AOT and developer JIT. In both modes it created four children,
+completed normal exit, observed a fatal worker exit, forced a spinning worker,
+created a replacement, received all four native shutdown and cleanup
+callbacks, released all four handles, retained no outstanding child, and
+returned from Engine shutdown. All command callbacks and bulk work ran off the
+main thread; only the deliberately minimal `Dart_Invoke` bootstrap ran on the
+calling main thread.
+
+The 128 MiB path measured 2,191.29 MiB/s AOT and 1,637.56 MiB/s JIT in the
+combined run. Five direct repeats per mode all reproduced the same positive
+lifecycle markers and the same two negative markers. AOT ranged from
+3,091.86 to 3,179.41 MiB/s; JIT ranged from 1,528.07 to 1,695.21 MiB/s. Every
+repeat reported four shutdown callbacks, four cleanup callbacks, four released
+handles, zero outstanding children, microtasks unavailable, and loss of the
+original fault diagnostic.
+
+Decision: reject the public-only hybrid as the product path at this pinned
+revision. `Dart_CreateIsolateInGroup`, `Dart_RunLoopAsync`, and
+`Dart_KillIsolate` provide the desired ownership and teardown mechanics, so
+the underlying Dart VM model is not the problem. The gap is specifically
+`dart_engine` initialization: it owns `Dart_Initialize`, supplies no child
+initializer, and exposes no supported way to install one later. Reimplementing
+`DartUtils::SetupCoreLibraries`, reaching into private Dart fields, or limiting
+workers to synchronous callbacks would each violate the supported-hosting or
+existing lifecycle contract. The next ordered comparison must therefore judge
+a general Engine fix against an official Dart process boundary.
+
+### 2026-09-03 — public lightweight-isolate final validation
+
+- Dart formatting reported zero changes, SDK-style C++ formatting reported no
+  violations, `git diff --check` passed, repository `dart analyze` reported no
+  issues, and `dart run test/run_tests.dart` passed.
+- The final combined Make gate and all ten direct repeats required a clean SDK
+  before and after execution. The adjacent checkout remained empty under
+  `git status --porcelain` at the pinned revision; this subtask did not apply,
+  generate, or consume an Engine patch.
