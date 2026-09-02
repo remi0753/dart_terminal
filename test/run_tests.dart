@@ -70,10 +70,12 @@ void _testTranscriptLimitAndViewport() {
 }
 
 void _testOptions() {
-  final TerminalOptions options = TerminalOptions.parse(<String>[
-    '--working-directory=/tmp',
-    '--auto-close-after=3',
-  ]);
+  final TerminalOptions options = TerminalOptions.parse(
+    _workerOptions(<String>[
+      '--working-directory=/tmp',
+      '--auto-close-after=3',
+    ]),
+  );
   _expect(
     options.initialWorkingDirectory == '/tmp',
     'working directory option',
@@ -82,8 +84,16 @@ void _testOptions() {
     options.autoCloseAfter == const Duration(seconds: 3),
     'auto-close option',
   );
+  _expect(
+    options.runtimeWorkerCommand.executable == '/usr/bin/true' &&
+        options.runtimeWorkerCommand.arguments.single ==
+            '/tmp/runtime_worker.dill',
+    'native-injected runtime worker command',
+  );
   final TerminalOptions faultOptions = TerminalOptions.parse(
-    <String>['--runtime-lifecycle-scenario=worker-sync-uncaught'],
+    _workerOptions(<String>[
+      '--runtime-lifecycle-scenario=worker-sync-uncaught',
+    ]),
     environment: const <String, String>{'DT_RUNTIME_LIFECYCLE_TEST': '1'},
   );
   _expect(
@@ -92,16 +102,43 @@ void _testOptions() {
     'gated lifecycle scenario option',
   );
   _expectThrows(
-    () => TerminalOptions.parse(<String>[
-      '--runtime-lifecycle-scenario=worker-sync-uncaught',
-    ], environment: const <String, String>{}),
+    () => TerminalOptions.parse(
+      _workerOptions(<String>[
+        '--runtime-lifecycle-scenario=worker-sync-uncaught',
+      ]),
+      environment: const <String, String>{},
+    ),
     'lifecycle scenario gate',
   );
   _expectThrows(
-    () => TerminalOptions.parse(<String>['--unknown']),
+    () => TerminalOptions.parse(_workerOptions(<String>['--unknown'])),
     'unknown option',
   );
+  _expectThrows(
+    () => TerminalOptions.parse(const <String>[]),
+    'missing internal worker configuration',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(<String>[
+      ..._workerOptions(const <String>[]),
+      '--runtime-worker-executable=/usr/bin/false',
+    ]),
+    'application argument cannot replace the worker executable',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(<String>[
+      '--runtime-worker-executable=relative/dart',
+      '--runtime-worker-kernel=/tmp/runtime_worker.dill',
+    ]),
+    'worker executable must be absolute',
+  );
 }
+
+List<String> _workerOptions(List<String> applicationOptions) => <String>[
+  '--runtime-worker-executable=/usr/bin/true',
+  '--runtime-worker-kernel=/tmp/runtime_worker.dill',
+  ...applicationOptions,
+];
 
 Future<void> _testCommandSession() async {
   var changeCount = 0;

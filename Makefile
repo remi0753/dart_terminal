@@ -241,6 +241,8 @@ override RUNTIME_AUDIT_SOURCE := \
 	$(PROJECT_ROOT)/tool/runtime_bundle_audit.dart
 override RUNTIME_FINGERPRINT_SOURCE := \
 	$(PROJECT_ROOT)/tool/runtime_build_fingerprint.dart
+override RUNTIME_ENGINE_ATTESTATION_SOURCE := \
+	$(PROJECT_ROOT)/tool/runtime_engine_attestation.dart
 override RUNTIME_FRESHNESS_TEST_SOURCE := \
 	$(PROJECT_ROOT)/tool/runtime_build_freshness_test.dart
 override RUNTIME_MANIFEST_SOURCE := \
@@ -257,6 +259,8 @@ override RUNTIME_INTEGRATION_SOURCE := \
 	$(PROJECT_ROOT)/tool/runtime_integration_smoke.dart
 RUNTIME_ARGUMENTS ?=
 RUNTIME_EXTRA_BUILD_INPUT ?=
+override RUNTIME_WORKER_KERNEL_FLAGS := \
+	--link-platform --no-embed-sources --verbosity=warning
 override RUNTIME_EXTRA_BUILD_INPUT_ARGUMENT = $(if \
 	$(strip $(RUNTIME_EXTRA_BUILD_INPUT)),\
 	--extra-build-input=$(abspath $(RUNTIME_EXTRA_BUILD_INPUT)),)
@@ -300,6 +304,8 @@ override RUNTIME_ENGINE_KERNEL_COMPILER := \
 	$(RUNTIME_ENGINE_RELEASE_OUT)/bootstrap_gen_kernel.exe
 override RUNTIME_ENGINE_PLATFORM_KERNEL := \
 	$(RUNTIME_ENGINE_RELEASE_OUT)/$(RUNTIME_ENGINE_TOOLCHAIN)/vm_platform.dill
+override RUNTIME_ENGINE_JIT_ATTESTATION := \
+	$(RUNTIME_ENGINE_RELEASE_OUT)/.dart-terminal-official-engine.json
 override RUNTIME_ENGINE_AOT_KERNEL_COMPILER := \
 	$(RUNTIME_ENGINE_PRODUCT_OUT)/bootstrap_gen_kernel.exe
 override RUNTIME_ENGINE_AOT_PLATFORM_KERNEL := \
@@ -313,6 +319,10 @@ override DEVELOPER_JIT_RUNNER := \
 	$(DEVELOPER_JIT_BUILD_DIR)/dart_terminal_developer_jit
 override DEVELOPER_JIT_KERNEL := $(DEVELOPER_JIT_BUILD_DIR)/application.dill
 override DEVELOPER_JIT_KERNEL_DEPFILE := $(DEVELOPER_JIT_KERNEL).d
+override DEVELOPER_JIT_WORKER_KERNEL := \
+	$(DEVELOPER_JIT_BUILD_DIR)/runtime_worker.dill
+override DEVELOPER_JIT_WORKER_KERNEL_DEPFILE := \
+	$(DEVELOPER_JIT_WORKER_KERNEL).d
 override DEVELOPER_JIT_MANIFEST := \
 	$(DEVELOPER_JIT_BUILD_DIR)/runtime-build-manifest.json
 override DEVELOPER_JIT_FINGERPRINT := \
@@ -323,6 +333,8 @@ override DEVELOPER_JIT_EXECUTABLE := \
 	$(DEVELOPER_JIT_BUNDLE)/Contents/MacOS/dart_terminal_developer_jit
 override DEVELOPER_JIT_BUNDLED_KERNEL := \
 	$(DEVELOPER_JIT_BUNDLE)/Contents/Resources/application.dill
+override DEVELOPER_JIT_BUNDLED_WORKER_KERNEL := \
+	$(DEVELOPER_JIT_BUNDLE)/Contents/Resources/runtime_worker.dill
 override DEVELOPER_JIT_BUNDLE_STAMP := \
 	$(DEVELOPER_JIT_BUILD_DIR)/.developer-jit-built
 override DEVELOPER_JIT_INFO_PLIST := \
@@ -380,6 +392,7 @@ INTEL_HARDWARE_LABEL ?=
 INTEL_EVIDENCE_OUTPUT ?=
 
 -include $(DEVELOPER_JIT_KERNEL_DEPFILE)
+-include $(DEVELOPER_JIT_WORKER_KERNEL_DEPFILE)
 -include $(RELEASE_AOT_KERNEL_DEPFILE)
 
 .PHONY: help runtime-architecture-check runtime-dart-tool-check \
@@ -393,6 +406,7 @@ INTEL_EVIDENCE_OUTPUT ?=
 	public-embedder-worker-probe \
 	process-worker-probe \
 	developer-jit-build developer-jit-run developer-jit-audit \
+	developer-jit-clean-sdk-test \
 	developer-jit-integration developer-jit-lifecycle \
 	release-aot-build release-aot-run release-aot-audit \
 	release-aot-integration release-aot-lifecycle runtime-source-check \
@@ -427,6 +441,7 @@ help:
 	@echo "  make developer-jit-build Build one thin product developer-JIT app"
 	@echo "  make developer-jit-run   Run one thin product developer-JIT app"
 	@echo "  make developer-jit-audit Audit one JIT-only thin bundle contract"
+	@echo "  make developer-jit-clean-sdk-test Verify stock-SDK worker provenance"
 	@echo "  make release-aot-build   Build one thin release-AOT product app"
 	@echo "  make release-aot-run     Run one thin release-AOT product app"
 	@echo "  make release-aot-audit   Audit one AOT-only thin bundle contract"
@@ -706,15 +721,40 @@ process-worker-probe: unmodified-engine-sdk-clean \
 
 runtime-fingerprint-force:
 
-runtime-jit-engine: runtime-architecture-check runtime-dart-tool-check \
-		dart-engine-lifecycle-support
+runtime-jit-engine: runtime-architecture-check unmodified-engine-sdk-clean \
+		$(RUNTIME_ENGINE_ATTESTATION_SOURCE) $(RUNTIME_RELEASE_SUPPORT_SOURCE)
 	"$(RUNTIME_ENGINE_PYTHON)" "$(DART_ENGINE_GN)" --mode=release \
 		--arch=$(RUNTIME_DART_TARGET_ARCH)
+	@"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+		$(RUNTIME_ENGINE_ATTESTATION_SOURCE) --mode=validate \
+		--engine-root=$(DART_ENGINE_ROOT) \
+		--expected-revision=$(DART_SDK_REVISION) \
+		--engine-library=$(RUNTIME_ENGINE_JIT_LIBRARY) \
+		--kernel-compiler=$(RUNTIME_ENGINE_KERNEL_COMPILER) \
+		--platform-dill=$(RUNTIME_ENGINE_PLATFORM_KERNEL) \
+		--output=$(RUNTIME_ENGINE_JIT_ATTESTATION); \
+	attestation_exit=$$?; \
+	if [[ $$attestation_exit -eq 3 ]]; then \
+		"$(DART_ENGINE_NINJA)" -C $(RUNTIME_ENGINE_RELEASE_OUT) \
+			-t clean dart_engine_jit_shared bootstrap_gen_kernel.exe \
+			$(RUNTIME_ENGINE_TOOLCHAIN)/vm_platform.dill; \
+	elif [[ $$attestation_exit -ne 0 ]]; then \
+		exit $$attestation_exit; \
+	fi
 	"$(DART_ENGINE_NINJA)" -C $(RUNTIME_ENGINE_RELEASE_OUT) \
 		dart_engine_jit_shared bootstrap_gen_kernel.exe \
 		$(RUNTIME_ENGINE_TOOLCHAIN)/vm_platform.dill
 	@test -x $(RUNTIME_ENGINE_KERNEL_COMPILER)
 	@test -f $(RUNTIME_ENGINE_PLATFORM_KERNEL)
+	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+		$(RUNTIME_ENGINE_ATTESTATION_SOURCE) --mode=record \
+		--engine-root=$(DART_ENGINE_ROOT) \
+		--expected-revision=$(DART_SDK_REVISION) \
+		--engine-library=$(RUNTIME_ENGINE_JIT_LIBRARY) \
+		--kernel-compiler=$(RUNTIME_ENGINE_KERNEL_COMPILER) \
+		--platform-dill=$(RUNTIME_ENGINE_PLATFORM_KERNEL) \
+		--output=$(RUNTIME_ENGINE_JIT_ATTESTATION)
+	@$(MAKE) unmodified-engine-sdk-clean
 
 runtime-aot-engine: runtime-architecture-check runtime-dart-tool-check \
 		dart-engine-lifecycle-support
@@ -731,7 +771,8 @@ $(DEVELOPER_JIT_FINGERPRINT): runtime-fingerprint-force \
 		$(RUNTIME_PACKAGE_CONFIG) \
 		| runtime-jit-engine runtime-dart-tool-check
 	@mkdir -p $(DEVELOPER_JIT_BUILD_DIR)
-	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_FINGERPRINT_SOURCE) \
+	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+		$(RUNTIME_FINGERPRINT_SOURCE) \
 		--mode=developer-jit \
 		--architecture=$(RUNTIME_ARCH) \
 		--deployment-target=$(MACOSX_DEPLOYMENT_TARGET) \
@@ -747,8 +788,6 @@ $(DEVELOPER_JIT_FINGERPRINT): runtime-fingerprint-force \
 		--make-executable="$(MAKE)" \
 		--runtime-build-root=$(RUNTIME_BUILD_DIR) \
 		--package-config=$(RUNTIME_PACKAGE_CONFIG) \
-		--worker-patch=$(DART_ENGINE_WORKER_PATCH) \
-		--lifecycle-patch=$(DART_ENGINE_LIFECYCLE_PATCH) \
 		--engine-library=$(RUNTIME_ENGINE_JIT_LIBRARY) \
 		--kernel-compiler=$(RUNTIME_ENGINE_KERNEL_COMPILER) \
 		--platform-dill=$(RUNTIME_ENGINE_PLATFORM_KERNEL) \
@@ -757,6 +796,7 @@ $(DEVELOPER_JIT_FINGERPRINT): runtime-fingerprint-force \
 		--kernel-flags="--no-aot --link-platform --no-embed-sources \
 		-Dsdk_hash=$(DART_SDK_HASH) -Ddart.vm.product=false \
 		-Ddart.vm.asan=false -Ddart.vm.msan=false -Ddart.vm.tsan=false" \
+		--worker-kernel-flags="$(RUNTIME_WORKER_KERNEL_FLAGS)" \
 		--snapshot-flags=not-applicable \
 		$(RUNTIME_EXTRA_BUILD_INPUT_ARGUMENT) --output=$@
 
@@ -807,6 +847,7 @@ $(DEVELOPER_JIT_RUNNER): $(RUNTIME_BRIDGE_HEADERS) \
 		-isysroot "$(SDKROOT)" $(RUNTIME_NATIVE_FLAG_SUFFIX) \
 		-arch $(RUNTIME_ARCH) \
 		-DDA_DART_ENGINE_REVISION=\"$(shell /usr/bin/git -C $(DART_ENGINE_ROOT) rev-parse HEAD)\" \
+		-DDT_RUNTIME_WORKER_EXECUTABLE=\"$(RUNTIME_DART_EXECUTABLE)\" \
 		-I$(DART_APPKIT_ROOT)/native/bridge/include \
 		-I$(DART_APPKIT_ROOT)/native/bridge/src \
 		-I$(DART_APPKIT_ROOT)/native/runner \
@@ -833,19 +874,32 @@ $(DEVELOPER_JIT_KERNEL): $(RUNTIME_DART_SOURCES) $(RUNTIME_PACKAGE_CONFIG) \
 		-Ddart.vm.msan=false -Ddart.vm.tsan=false \
 		$(PROJECT_ROOT)/bin/main.dart
 
+$(DEVELOPER_JIT_WORKER_KERNEL): $(RUNTIME_DART_SOURCES) \
+		$(RUNTIME_PACKAGE_CONFIG) $(DEVELOPER_JIT_FINGERPRINT)
+	@mkdir -p $(DEVELOPER_JIT_BUILD_DIR)
+	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics compile kernel \
+		$(RUNTIME_WORKER_KERNEL_FLAGS) \
+		--packages=$(RUNTIME_PACKAGE_CONFIG) \
+		--depfile=$(DEVELOPER_JIT_WORKER_KERNEL_DEPFILE) \
+		--output=$@ $(PROJECT_ROOT)/bin/runtime_worker.dart
+
 $(DEVELOPER_JIT_MANIFEST): $(RUNTIME_MANIFEST_SOURCE) \
 		$(RUNTIME_RELEASE_SUPPORT_SOURCE) $(DEVELOPER_JIT_FINGERPRINT) \
-		$(DEVELOPER_JIT_RUNNER) $(DEVELOPER_JIT_KERNEL)
-	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_MANIFEST_SOURCE) \
+		$(DEVELOPER_JIT_RUNNER) $(DEVELOPER_JIT_KERNEL) \
+		$(DEVELOPER_JIT_WORKER_KERNEL)
+	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+		$(RUNTIME_MANIFEST_SOURCE) \
 		--mode=developer-jit \
 		--architecture=$(RUNTIME_ARCH) \
 		--fingerprint=$(DEVELOPER_JIT_FINGERPRINT) \
 		--launcher=$(DEVELOPER_JIT_RUNNER) \
 		--engine=$(RUNTIME_ENGINE_JIT_LIBRARY) \
-		--payload=$(DEVELOPER_JIT_KERNEL) --output=$@
+		--payload=$(DEVELOPER_JIT_KERNEL) \
+		--worker-payload=$(DEVELOPER_JIT_WORKER_KERNEL) --output=$@
 
 $(DEVELOPER_JIT_BUNDLE_STAMP): $(DEVELOPER_JIT_RUNNER) \
-		$(DEVELOPER_JIT_KERNEL) $(DEVELOPER_JIT_MANIFEST) \
+		$(DEVELOPER_JIT_KERNEL) $(DEVELOPER_JIT_WORKER_KERNEL) \
+		$(DEVELOPER_JIT_MANIFEST) \
 		$(DEVELOPER_JIT_INFO_PLIST) $(DART_ENGINE_ROOT)/LICENSE Makefile
 	@rm -rf $(DEVELOPER_JIT_BUNDLE)
 	@rm -f $(DEVELOPER_JIT_AUDIT_REPORT)
@@ -856,6 +910,8 @@ $(DEVELOPER_JIT_BUNDLE_STAMP): $(DEVELOPER_JIT_RUNNER) \
 	cp $(RUNTIME_ENGINE_JIT_LIBRARY) \
 		$(DEVELOPER_JIT_BUNDLE)/Contents/Frameworks/libdart_engine_jit_shared.dylib
 	cp $(DEVELOPER_JIT_KERNEL) $(DEVELOPER_JIT_BUNDLED_KERNEL)
+	cp $(DEVELOPER_JIT_WORKER_KERNEL) \
+		$(DEVELOPER_JIT_BUNDLED_WORKER_KERNEL)
 	cp $(DEVELOPER_JIT_MANIFEST) \
 		$(DEVELOPER_JIT_BUNDLE)/Contents/Resources/runtime-build-manifest.json
 	cp $(DART_ENGINE_ROOT)/LICENSE \
@@ -864,6 +920,7 @@ $(DEVELOPER_JIT_BUNDLE_STAMP): $(DEVELOPER_JIT_RUNNER) \
 		$(DEVELOPER_JIT_BUNDLE)/Contents/Info.plist
 	chmod 755 $(DEVELOPER_JIT_EXECUTABLE)
 	codesign --force --deep --sign - $(DEVELOPER_JIT_BUNDLE)
+	@$(MAKE) unmodified-engine-sdk-clean
 	touch $@
 
 developer-jit-build: runtime-architecture-check $(DEVELOPER_JIT_BUNDLE_STAMP)
@@ -876,20 +933,28 @@ developer-jit-run: developer-jit-build
 
 developer-jit-audit: developer-jit-build
 	@if [[ -f $(DEVELOPER_JIT_AUDIT_REPORT) ]]; then \
-		"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_AUDIT_SOURCE) \
+		"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+			$(RUNTIME_AUDIT_SOURCE) \
 			--mode=developer-jit \
 			--expected-architectures=$(RUNTIME_ARCH) \
 			--deployment-target=$(MACOSX_DEPLOYMENT_TARGET) \
 			--validate-report=$(DEVELOPER_JIT_AUDIT_REPORT) \
 			$(DEVELOPER_JIT_BUNDLE); \
 	else \
-		"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_AUDIT_SOURCE) \
+		"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+			$(RUNTIME_AUDIT_SOURCE) \
 			--mode=developer-jit \
 			--expected-architectures=$(RUNTIME_ARCH) \
 			--deployment-target=$(MACOSX_DEPLOYMENT_TARGET) \
 			--output-report=$(DEVELOPER_JIT_AUDIT_REPORT) \
 			$(DEVELOPER_JIT_BUNDLE); \
 	fi
+
+developer-jit-clean-sdk-test: runtime-dart-tool-check
+	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+		$(RUNTIME_FRESHNESS_TEST_SOURCE) \
+		--project-root=$(PROJECT_ROOT) --make=/usr/bin/make \
+		--focus=developer-clean-sdk
 
 developer-jit-integration: developer-jit-build
 	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_INTEGRATION_SOURCE) \

@@ -21,6 +21,7 @@ final class _Options {
     required this.launcher,
     required this.engine,
     required this.payload,
+    required this.workerPayload,
     required this.intermediate,
     required this.output,
   });
@@ -31,6 +32,7 @@ final class _Options {
   final String launcher;
   final String engine;
   final String payload;
+  final String? workerPayload;
   final String? intermediate;
   final String output;
 }
@@ -58,7 +60,7 @@ _Options _parseOptions(List<String> arguments) {
     'payload',
     'output',
   };
-  const Set<String> optional = <String>{'intermediate'};
+  const Set<String> optional = <String>{'worker-payload', 'intermediate'};
   final Set<String> unknown = values.keys.toSet().difference(<String>{
     ...required,
     ...optional,
@@ -82,6 +84,14 @@ _Options _parseOptions(List<String> arguments) {
   if (mode == RuntimeMode.releaseAot && values['intermediate'] == null) {
     throw const _ManifestException('release-aot requires --intermediate');
   }
+  if (mode == RuntimeMode.developerJit && values['worker-payload'] == null) {
+    throw const _ManifestException('developer-jit requires --worker-payload');
+  }
+  if (mode == RuntimeMode.releaseAot && values['worker-payload'] != null) {
+    throw const _ManifestException(
+      'release-aot must not contain a Developer worker Kernel',
+    );
+  }
   return _Options(
     mode: mode,
     architecture: architecture,
@@ -89,6 +99,7 @@ _Options _parseOptions(List<String> arguments) {
     launcher: values['launcher']!,
     engine: values['engine']!,
     payload: values['payload']!,
+    workerPayload: values['worker-payload'],
     intermediate: values['intermediate'],
     output: values['output']!,
   );
@@ -117,6 +128,7 @@ Future<Map<String, Object?>> _createManifest(_Options options) async {
     options.launcher,
     options.engine,
     options.payload,
+    if (options.workerPayload != null) options.workerPayload!,
     if (options.intermediate != null) options.intermediate!,
     options.output,
   ]) {
@@ -165,6 +177,9 @@ Future<Map<String, Object?>> _createManifest(_Options options) async {
     );
   } else {
     produced['kernel_payload'] = await runtimeSha256File(options.payload);
+    produced['worker_kernel_payload'] = await runtimeSha256File(
+      options.workerPayload!,
+    );
   }
   laneCopy['fingerprint_sha256'] = await runtimeSha256File(options.fingerprint);
   laneCopy['produced_sha256'] = produced;

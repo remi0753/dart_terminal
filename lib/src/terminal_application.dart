@@ -15,11 +15,16 @@ Application options:
   --auto-close-after=SECONDS Close automatically (for smoke testing).
 ''';
 
+const String _runtimeWorkerExecutablePrefix = '--runtime-worker-executable=';
+const String _runtimeWorkerKernelPrefix = '--runtime-worker-kernel=';
+
 final class TerminalOptions {
   const TerminalOptions({
     this.initialWorkingDirectory,
     this.autoCloseAfter,
     this.runtimeLifecycleScenario = RuntimeLifecycleScenario.normal,
+    this.runtimeWorkerCommand =
+        const RuntimeLifecycleWorkerCommand.unconfigured(),
   });
 
   factory TerminalOptions.parse(
@@ -29,10 +34,46 @@ final class TerminalOptions {
     String? initialWorkingDirectory;
     Duration? autoCloseAfter;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
+    String? runtimeWorkerExecutable;
+    String? runtimeWorkerKernel;
     for (final String argument in arguments) {
       const String workingDirectoryPrefix = '--working-directory=';
       const String autoClosePrefix = '--auto-close-after=';
       const String lifecyclePrefix = '--runtime-lifecycle-scenario=';
+      if (argument.startsWith(_runtimeWorkerExecutablePrefix)) {
+        if (runtimeWorkerExecutable != null) {
+          throw const FormatException(
+            'internal runtime worker executable may only be supplied once',
+          );
+        }
+        final String value = argument.substring(
+          _runtimeWorkerExecutablePrefix.length,
+        );
+        if (value.isEmpty || !File(value).isAbsolute) {
+          throw const FormatException(
+            'internal runtime worker executable must be an absolute path',
+          );
+        }
+        runtimeWorkerExecutable = value;
+        continue;
+      }
+      if (argument.startsWith(_runtimeWorkerKernelPrefix)) {
+        if (runtimeWorkerKernel != null) {
+          throw const FormatException(
+            'internal runtime worker Kernel may only be supplied once',
+          );
+        }
+        final String value = argument.substring(
+          _runtimeWorkerKernelPrefix.length,
+        );
+        if (value.isEmpty || !File(value).isAbsolute) {
+          throw const FormatException(
+            'internal runtime worker Kernel must be an absolute path',
+          );
+        }
+        runtimeWorkerKernel = value;
+        continue;
+      }
       if (argument.startsWith(workingDirectoryPrefix)) {
         if (initialWorkingDirectory != null) {
           throw const FormatException(
@@ -78,6 +119,11 @@ final class TerminalOptions {
       }
       throw FormatException('unknown application option: $argument');
     }
+    if (runtimeWorkerExecutable == null || runtimeWorkerKernel == null) {
+      throw const FormatException(
+        'internal runtime worker configuration is incomplete',
+      );
+    }
     final RuntimeLifecycleScenario selectedScenario =
         runtimeLifecycleScenario ?? RuntimeLifecycleScenario.normal;
     if (selectedScenario != RuntimeLifecycleScenario.normal &&
@@ -91,12 +137,17 @@ final class TerminalOptions {
       initialWorkingDirectory: initialWorkingDirectory,
       autoCloseAfter: autoCloseAfter,
       runtimeLifecycleScenario: selectedScenario,
+      runtimeWorkerCommand: RuntimeLifecycleWorkerCommand(
+        executable: runtimeWorkerExecutable,
+        arguments: <String>[runtimeWorkerKernel],
+      ),
     );
   }
 
   final String? initialWorkingDirectory;
   final Duration? autoCloseAfter;
   final RuntimeLifecycleScenario runtimeLifecycleScenario;
+  final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
 }
 
 final class TerminalApplication {
@@ -167,6 +218,7 @@ final class TerminalApplication {
       final RuntimeLifecycleCoordinator createdLifecycle =
           RuntimeLifecycleCoordinator(
             scenario: scenario,
+            workerCommand: options.runtimeWorkerCommand,
             observer: (RuntimeLifecycleObservation observation) {
               stdout.writeln(observation.machineLine(scenario));
             },

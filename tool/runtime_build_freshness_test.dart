@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dart_terminal/src/runtime_lifecycle.dart';
+
 import 'src/runtime_release_support.dart';
 
 final class _FreshnessException implements Exception {
@@ -52,7 +54,9 @@ _Options _parseOptions(List<String> arguments) {
     throw const _FreshnessException('paths must be absolute');
   }
   final String? focus = values['focus'];
-  if (focus != null && focus != 'engine-patch-composition') {
+  if (focus != null &&
+      focus != 'engine-patch-composition' &&
+      focus != 'developer-clean-sdk') {
     throw _FreshnessException('unknown focus: $focus');
   }
   return _Options(
@@ -600,6 +604,534 @@ Future<void> _verifyEnginePatchCompositionNegative(Directory temporary) async {
   stdout.writeln('RUNTIME_BUILD_FRESHNESS_PASS engine_mode_edit_rejected=1');
 }
 
+Future<String> _runDeveloperTarget(
+  _Options options,
+  String buildRoot,
+  String target, {
+  String? extraInput,
+}) async {
+  final ProcessResult result = await Process.run(
+    options.make,
+    <String>[
+      '-C',
+      options.projectRoot,
+      'RUNTIME_BUILD_DIR=$buildRoot',
+      'RUNTIME_ARCH=arm64',
+      if (extraInput != null) 'RUNTIME_EXTRA_BUILD_INPUT=$extraInput',
+      target,
+    ],
+    environment: const <String, String>{'DART_SUPPRESS_ANALYTICS': 'true'},
+    includeParentEnvironment: true,
+  );
+  final String output = '${result.stdout}${result.stderr}';
+  if (result.exitCode != 0) {
+    throw _FreshnessException(
+      'Developer target $target failed (${result.exitCode}): $output',
+    );
+  }
+  for (final String forbidden in <String>[
+    'dart-engine-worker-isolates.patch',
+    'dart-engine-lifecycle-shutdown.patch',
+    'dart-engine-worker-support',
+    'dart-engine-lifecycle-support',
+  ]) {
+    if (output.contains(forbidden)) {
+      throw _FreshnessException(
+        'Developer target $target reached legacy patch activity: $forbidden',
+      );
+    }
+  }
+  return output;
+}
+
+Future<String> _gitOutput(String root, List<String> arguments) async {
+  final ProcessResult result = await Process.run('/usr/bin/git', <String>[
+    '-C',
+    root,
+    ...arguments,
+  ]);
+  if (result.exitCode != 0) {
+    throw _FreshnessException(
+      'git ${arguments.join(' ')} failed in $root: '
+      '${result.stdout}${result.stderr}',
+    );
+  }
+  return (result.stdout as String).trim();
+}
+
+Future<void> _verifyCleanRepository(
+  String root,
+  String expectedRevision,
+) async {
+  final String revision = await _gitOutput(root, const <String>[
+    'rev-parse',
+    'HEAD',
+  ]);
+  final String status = await _gitOutput(root, const <String>[
+    'status',
+    '--porcelain=v1',
+    '--untracked-files=all',
+  ]);
+  if (revision != expectedRevision || status.isNotEmpty) {
+    throw _FreshnessException(
+      'repository is not the expected clean revision: root=$root '
+      'revision=$revision expected=$expectedRevision status=$status',
+    );
+  }
+}
+
+Map<String, Object?> _requiredMap(Map<String, Object?> parent, String key) =>
+    runtimeStringMap(parent[key], 'Developer manifest $key');
+
+Future<Map<String, Object?>> _readDeveloperManifest(String manifestPath) async {
+  final Object? decoded = jsonDecode(await File(manifestPath).readAsString());
+  if (decoded is! Map<String, Object?>) {
+    throw const _FreshnessException('Developer manifest is not an object');
+  }
+  if (decoded['format'] != runtimeBuildManifestFormat ||
+      decoded['version'] != runtimeBuildManifestVersion ||
+      decoded['runtime_mode'] != RuntimeMode.developerJit.name ||
+      decoded['architecture'] != 'arm64') {
+    throw const _FreshnessException(
+      'Developer manifest identity does not match the focused gate',
+    );
+  }
+  return decoded;
+}
+
+Future<String> _verifyDeveloperManifest(
+  String manifestPath,
+  String workerKernelPath,
+) async {
+  final Map<String, Object?> manifest = await _readDeveloperManifest(
+    manifestPath,
+  );
+  final Map<String, Object?> engine = _requiredMap(manifest, 'dart_engine');
+  final Map<String, Object?> engineRepository = runtimeStringMap(
+    engine['repository'],
+    'Developer manifest dart_engine.repository',
+  );
+  if (engine['source_policy'] != 'official-clean' ||
+      engine.containsKey('worker_patch_sha256') ||
+      engine.containsKey('lifecycle_patch_sha256') ||
+      engineRepository['dirty'] != false) {
+    throw const _FreshnessException(
+      'Developer manifest does not enforce a clean official Engine',
+    );
+  }
+
+  final Map<String, Object?> source = _requiredMap(manifest, 'source');
+  final Map<String, Object?> sourceHashes = runtimeStringMap(
+    source['input_sha256'],
+    'Developer manifest source.input_sha256',
+  );
+  if (sourceHashes.keys.any(
+    (String input) => input.startsWith('dart_terminal:patches/'),
+  )) {
+    throw const _FreshnessException(
+      'Developer manifest retains a patch provenance input',
+    );
+  }
+
+  final Map<String, Object?> effective = _requiredMap(
+    manifest,
+    'effective_configuration',
+  );
+  if (effective['worker_topology'] != 'official-dart-child-process' ||
+      effective['worker_protocol_version'] != 1 ||
+      effective['worker_payload_name'] != runtimeDeveloperWorkerPayloadName ||
+      effective['worker_kernel_flags'] !=
+          '--link-platform --no-embed-sources --verbosity=warning') {
+    throw const _FreshnessException(
+      'Developer worker configuration differs from the selected contract',
+    );
+  }
+
+  final Map<String, Object?> lane = _requiredMap(
+    manifest,
+    'architecture_inputs',
+  );
+  final Map<String, Object?> inputPaths = runtimeStringMap(
+    lane['resolved_input_paths'],
+    'Developer manifest architecture_inputs.resolved_input_paths',
+  );
+  final Map<String, Object?> inputHashes = runtimeStringMap(
+    lane['input_binary_sha256'],
+    'Developer manifest architecture_inputs.input_binary_sha256',
+  );
+  final Map<String, Object?> produced = runtimeStringMap(
+    lane['produced_sha256'],
+    'Developer manifest architecture_inputs.produced_sha256',
+  );
+  final Object? workerDartValue = inputPaths['runtime_worker_dart'];
+  if (workerDartValue is! String || !File(workerDartValue).isAbsolute) {
+    throw const _FreshnessException(
+      'Developer manifest lacks an absolute runtime worker executable',
+    );
+  }
+  final String workerDart = await File(workerDartValue).resolveSymbolicLinks();
+  if (inputHashes['runtime_worker_dart'] !=
+          await runtimeSha256File(workerDart) ||
+      produced['worker_kernel_payload'] !=
+          await runtimeSha256File(workerKernelPath)) {
+    throw const _FreshnessException(
+      'Developer worker executable or Kernel hash evidence differs',
+    );
+  }
+  return workerDart;
+}
+
+Future<void> _verifyEngineAttestation(Map<String, Object?> manifest) async {
+  final Map<String, Object?> lane = _requiredMap(
+    manifest,
+    'architecture_inputs',
+  );
+  final Map<String, Object?> environment = runtimeStringMap(
+    lane['build_environment'],
+    'Developer manifest architecture_inputs.build_environment',
+  );
+  final Map<String, Object?> environmentPaths = runtimeStringMap(
+    environment['resolved_paths'],
+    'Developer manifest build_environment.resolved_paths',
+  );
+  final String engineRoot = runtimeRequiredString(
+    environmentPaths,
+    'dart_engine_root',
+    'Developer manifest build_environment.resolved_paths',
+  );
+  final String revision = runtimeRequiredString(
+    _requiredMap(manifest, 'dart_engine'),
+    'revision',
+    'Developer manifest dart_engine',
+  );
+  await _verifyCleanRepository(engineRoot, revision);
+
+  final Map<String, Object?> inputPaths = runtimeStringMap(
+    lane['resolved_input_paths'],
+    'Developer manifest architecture_inputs.resolved_input_paths',
+  );
+  final Map<String, Object?> inputHashes = runtimeStringMap(
+    lane['input_binary_sha256'],
+    'Developer manifest architecture_inputs.input_binary_sha256',
+  );
+  final File attestation = File(
+    '${File(runtimeRequiredString(inputPaths, 'dart_engine', 'Developer lane')).parent.path}'
+    '/.dart-terminal-official-engine.json',
+  );
+  final Object? decoded = jsonDecode(await attestation.readAsString());
+  if (decoded is! Map<String, Object?> ||
+      decoded['format'] != 'dart-terminal-official-engine-attestation' ||
+      decoded['version'] != 1 ||
+      decoded['source_policy'] != 'official-clean' ||
+      decoded['revision'] != revision) {
+    throw const _FreshnessException('official Engine attestation is invalid');
+  }
+  final Map<String, Object?> artifacts = runtimeStringMap(
+    decoded['artifacts'],
+    'official Engine attestation artifacts',
+  );
+  for (final String role in <String>[
+    'dart_engine',
+    'kernel_compiler',
+    'platform_dill',
+  ]) {
+    final Map<String, Object?> artifact = runtimeStringMap(
+      artifacts[role],
+      'official Engine attestation $role',
+    );
+    if (artifact['path'] != inputPaths[role] ||
+        artifact['sha256'] != inputHashes[role] ||
+        artifact['sha256'] !=
+            await runtimeSha256File(inputPaths[role]! as String)) {
+      throw _FreshnessException(
+        'official Engine attestation differs for $role',
+      );
+    }
+  }
+}
+
+Future<void> _verifyBundledWorker(
+  String workerDart,
+  String workerKernel,
+) async {
+  final List<RuntimeLifecycleObservation> observations =
+      <RuntimeLifecycleObservation>[];
+  final RuntimeLifecycleCoordinator coordinator = RuntimeLifecycleCoordinator(
+    scenario: RuntimeLifecycleScenario.normal,
+    observer: observations.add,
+    workerCommand: RuntimeLifecycleWorkerCommand(
+      executable: workerDart,
+      arguments: <String>[workerKernel],
+    ),
+  );
+  final RuntimeLifecycleStartStatus start = await coordinator.start();
+  if (start != RuntimeLifecycleStartStatus.ready ||
+      coordinator.workerPid == null ||
+      coordinator.workerPid == pid) {
+    throw const _FreshnessException(
+      'bundled Developer worker did not become ready in a child process',
+    );
+  }
+  final RuntimeLifecycleRequestResult reply = await coordinator.request(41);
+  final RuntimeLifecycleShutdownResult shutdown = await coordinator.shutdown();
+  if (reply.status != RuntimeLifecycleRequestStatus.response ||
+      reply.value != 42 ||
+      shutdown.termination != RuntimeLifecycleWorkerTermination.graceful ||
+      RuntimeLifecycleCoordinator.outstandingProcessCount != 0 ||
+      !observations.any(
+        (RuntimeLifecycleObservation value) => value.event == 'worker-exit',
+      )) {
+    throw const _FreshnessException(
+      'bundled Developer worker lifecycle contract failed',
+    );
+  }
+}
+
+Future<void> _verifyHostOwnedWorkerArguments(
+  Map<String, Object?> manifest,
+  String bundlePath,
+) async {
+  final Map<String, Object?> bundle = _requiredMap(manifest, 'bundle');
+  final Map<String, Object?> sdk = _requiredMap(manifest, 'dart_sdk');
+  final String executable =
+      '$bundlePath/Contents/MacOS/${bundle['executable']}';
+  final ProcessResult result = await Process.run(executable, <String>[
+    '--kernel',
+    '$bundlePath/Contents/Resources/application.dill',
+    '--sdk-version',
+    sdk['version']! as String,
+    '--sdk-revision',
+    sdk['revision']! as String,
+    '--',
+    '--runtime-worker-executable=/usr/bin/false',
+  ]);
+  final String output = '${result.stdout}${result.stderr}';
+  if (result.exitCode != 66 ||
+      !output.contains('runtime worker configuration is host-owned')) {
+    throw _FreshnessException(
+      'Developer launcher accepted a user worker override: '
+      'status=${result.exitCode} $output',
+    );
+  }
+}
+
+Future<void> _verifyMissingWorkerRejected(
+  Directory temporary,
+  String bundlePath,
+) async {
+  final String copiedBundle = '${temporary.path}/missing-worker.app';
+  final ProcessResult copy = await Process.run('/usr/bin/ditto', <String>[
+    '--noqtn',
+    bundlePath,
+    copiedBundle,
+  ]);
+  if (copy.exitCode != 0) {
+    throw _FreshnessException(
+      'could not copy Developer negative fixture: '
+      '${copy.stdout}${copy.stderr}',
+    );
+  }
+  await File(
+    '$copiedBundle/Contents/Resources/$runtimeDeveloperWorkerPayloadName',
+  ).delete();
+  var rejected = false;
+  try {
+    await auditRuntimeBundle(
+      RuntimeBundleAuditOptions(
+        mode: RuntimeMode.developerJit,
+        expectedArchitectures: const <String>{'arm64'},
+        deploymentTarget: '14.0',
+        bundlePath: copiedBundle,
+      ),
+    );
+  } on RuntimeAuditException catch (error) {
+    rejected = error.message.contains(
+      'missing runtime file: Resources/$runtimeDeveloperWorkerPayloadName',
+    );
+  }
+  if (!rejected) {
+    throw const _FreshnessException(
+      'Developer audit accepted a missing worker Kernel',
+    );
+  }
+}
+
+Future<void> _verifyDeveloperDependencyBoundary(
+  _Options options,
+  String buildRoot,
+) async {
+  final ProcessResult database = await Process.run(options.make, <String>[
+    '-C',
+    options.projectRoot,
+    '-pn',
+    'RUNTIME_ARCH=arm64',
+    'RUNTIME_BUILD_DIR=$buildRoot',
+    'help',
+  ]);
+  if (database.exitCode != 0) {
+    throw _FreshnessException(
+      'could not inspect Developer dependency graph: '
+      '${database.stdout}${database.stderr}',
+    );
+  }
+  final List<String> lines = (database.stdout as String).split('\n');
+  final List<String> jitRules = lines
+      .where((String line) => line.startsWith('runtime-jit-engine:'))
+      .toList();
+  final List<String> fingerprintRules = lines
+      .where(
+        (String line) =>
+            line.contains('/developer-jit/.effective-build-inputs.json:'),
+      )
+      .toList();
+  if (jitRules.length != 1 ||
+      !jitRules.single.contains('unmodified-engine-sdk-clean') ||
+      jitRules.single.contains('dart-engine-lifecycle-support') ||
+      jitRules.single.contains('dart-engine-worker-support') ||
+      fingerprintRules.length != 1 ||
+      !fingerprintRules.single.contains('| runtime-jit-engine ')) {
+    throw _FreshnessException(
+      'Developer dependency graph does not terminate at the clean SDK gate: '
+      'jit=$jitRules fingerprint=$fingerprintRules',
+    );
+  }
+}
+
+Future<void> _verifyDeveloperCleanSdk(
+  _Options options,
+  Directory temporary,
+) async {
+  final String buildRoot = '${temporary.path}/developer-runtime';
+  final File extraInput = File('${temporary.path}/developer-input.txt');
+  await extraInput.writeAsString('developer-input-a\n', flush: true);
+  await _verifyDeveloperDependencyBoundary(options, buildRoot);
+
+  await _runDeveloperTarget(
+    options,
+    buildRoot,
+    'developer-jit-build',
+    extraInput: extraInput.path,
+  );
+  final String buildDirectory = '$buildRoot/arm64/developer-jit';
+  final String manifestPath = '$buildDirectory/runtime-build-manifest.json';
+  final String workerKernelPath = '$buildDirectory/runtime_worker.dill';
+  final String bundlePath = '$buildDirectory/DartTerminalDeveloper.app';
+  final String bundledWorker =
+      '$bundlePath/Contents/Resources/$runtimeDeveloperWorkerPayloadName';
+  Map<String, Object?> manifest = await _readDeveloperManifest(manifestPath);
+  final String workerDart = await _verifyDeveloperManifest(
+    manifestPath,
+    workerKernelPath,
+  );
+  await _verifyEngineAttestation(manifest);
+  await _runDeveloperTarget(
+    options,
+    buildRoot,
+    'developer-jit-audit',
+    extraInput: extraInput.path,
+  );
+  await _verifyBundledWorker(workerDart, bundledWorker);
+  await _verifyHostOwnedWorkerArguments(manifest, bundlePath);
+  await _verifyMissingWorkerRejected(temporary, bundlePath);
+
+  final List<String> derived = <String>[
+    '$buildDirectory/.effective-build-inputs.json',
+    '$buildDirectory/dart_terminal_developer_jit',
+    '$buildDirectory/application.dill',
+    workerKernelPath,
+    manifestPath,
+    '$bundlePath/Contents/MacOS/dart_terminal_developer_jit',
+    '$bundlePath/Contents/Resources/application.dill',
+    bundledWorker,
+    '$bundlePath/Contents/Resources/runtime-build-manifest.json',
+  ];
+  final Map<String, DateTime> first = await _modificationTimes(derived);
+  await _runDeveloperTarget(
+    options,
+    buildRoot,
+    'developer-jit-build',
+    extraInput: extraInput.path,
+  );
+  final Map<String, DateTime> second = await _modificationTimes(derived);
+  for (final String path in derived) {
+    if (second[path] != first[path]) {
+      throw _FreshnessException(
+        'unchanged Developer input rewrote derived artifact: $path',
+      );
+    }
+  }
+
+  await extraInput.writeAsString('developer-input-b\n', flush: true);
+  await _runDeveloperTarget(
+    options,
+    buildRoot,
+    'developer-jit-build',
+    extraInput: extraInput.path,
+  );
+  final Map<String, DateTime> third = await _modificationTimes(derived);
+  for (final String path in derived) {
+    if (!third[path]!.isAfter(second[path]!)) {
+      throw _FreshnessException(
+        'changed Developer input did not regenerate artifact: $path',
+      );
+    }
+  }
+  manifest = await _readDeveloperManifest(manifestPath);
+  await _verifyDeveloperManifest(manifestPath, workerKernelPath);
+  await _verifyEngineAttestation(manifest);
+  await _runDeveloperTarget(
+    options,
+    buildRoot,
+    'developer-jit-audit',
+    extraInput: extraInput.path,
+  );
+
+  final Map<String, Object?> environment = runtimeStringMap(
+    _requiredMap(manifest, 'architecture_inputs')['build_environment'],
+    'Developer manifest architecture_inputs.build_environment',
+  );
+  final Map<String, Object?> environmentPaths = runtimeStringMap(
+    environment['resolved_paths'],
+    'Developer manifest build_environment.resolved_paths',
+  );
+  final String appKitRoot = runtimeRequiredString(
+    environmentPaths,
+    'dart_appkit_root',
+    'Developer manifest build_environment.resolved_paths',
+  );
+  final String engineRoot = runtimeRequiredString(
+    environmentPaths,
+    'dart_engine_root',
+    'Developer manifest build_environment.resolved_paths',
+  );
+  final String appKitRevision = runtimeRequiredString(
+    runtimeStringMap(
+      _requiredMap(manifest, 'dart_appkit')['repository'],
+      'Developer manifest dart_appkit.repository',
+    ),
+    'revision',
+    'Developer manifest dart_appkit.repository',
+  );
+  final String engineRevision = runtimeRequiredString(
+    _requiredMap(manifest, 'dart_engine'),
+    'revision',
+    'Developer manifest dart_engine',
+  );
+  await _verifyCleanRepository(appKitRoot, appKitRevision);
+  await _verifyCleanRepository(engineRoot, engineRevision);
+  if (RuntimeLifecycleCoordinator.outstandingProcessCount != 0) {
+    throw const _FreshnessException(
+      'focused Developer gate leaked a worker process',
+    );
+  }
+  stdout.writeln(
+    'RUNTIME_BUILD_FRESHNESS_PASS '
+    'developer_clean_sdk=1 patch_activity=0 worker_kernel=1 '
+    'worker_smoke=1 missing_worker_rejected=1 host_override_rejected=1 '
+    'stable_noop=${derived.length} regenerated=${derived.length}',
+  );
+}
+
 Future<void> _runTest(_Options options) async {
   final Directory temporary = await Directory.systemTemp.createTemp(
     'dart-terminal-runtime-freshness-',
@@ -607,6 +1139,10 @@ Future<void> _runTest(_Options options) async {
   try {
     if (options.focus == 'engine-patch-composition') {
       await _verifyEnginePatchCompositionNegative(temporary);
+      return;
+    }
+    if (options.focus == 'developer-clean-sdk') {
+      await _verifyDeveloperCleanSdk(options, temporary);
       return;
     }
     final String buildRoot = '${temporary.path}/runtime';
@@ -753,6 +1289,7 @@ Future<void> _runTest(_Options options) async {
       'RUNTIME_MESSAGE_PUMP_SOURCE': hostileSource.path,
       'RUNTIME_AUDIT_SOURCE': hostileDart.path,
       'RUNTIME_FINGERPRINT_SOURCE': hostileDart.path,
+      'RUNTIME_ENGINE_ATTESTATION_SOURCE': hostileDart.path,
       'RUNTIME_FRESHNESS_TEST_SOURCE': hostileDart.path,
       'RUNTIME_MANIFEST_SOURCE': hostileDart.path,
       'RUNTIME_RELEASE_SUPPORT_SOURCE': hostileDart.path,
@@ -762,6 +1299,7 @@ Future<void> _runTest(_Options options) async {
       'RUNTIME_INTEGRATION_SOURCE': hostileDart.path,
       'RUNTIME_EXTRA_BUILD_INPUT_ARGUMENT':
           '--extra-build-input=${hostileFile.path}',
+      'RUNTIME_WORKER_KERNEL_FLAGS': '--hostile-worker-kernel-flag',
       'RUNTIME_BUNDLE_VERSION': '9.9.9-hostile',
       'RUNTIME_NATIVE_FLAG_PREFIX': '-DHOSTILE_PREFIX=1',
       'RUNTIME_NATIVE_FLAG_SUFFIX': '-DHOSTILE_SUFFIX=1',
@@ -775,6 +1313,7 @@ Future<void> _runTest(_Options options) async {
       'RUNTIME_ENGINE_JIT_LIBRARY': hostileExecutable.path,
       'RUNTIME_ENGINE_KERNEL_COMPILER': hostileExecutable.path,
       'RUNTIME_ENGINE_PLATFORM_KERNEL': hostileFile.path,
+      'RUNTIME_ENGINE_JIT_ATTESTATION': hostileFile.path,
       'RUNTIME_ENGINE_AOT_KERNEL_COMPILER': hostileExecutable.path,
       'RUNTIME_ENGINE_AOT_PLATFORM_KERNEL': hostileFile.path,
       'RUNTIME_ENGINE_AOT_SNAPSHOTTER': hostileExecutable.path,
@@ -782,11 +1321,14 @@ Future<void> _runTest(_Options options) async {
       'DEVELOPER_JIT_RUNNER': protectedSentinel.path,
       'DEVELOPER_JIT_KERNEL': protectedSentinel.path,
       'DEVELOPER_JIT_KERNEL_DEPFILE': protectedSentinel.path,
+      'DEVELOPER_JIT_WORKER_KERNEL': protectedSentinel.path,
+      'DEVELOPER_JIT_WORKER_KERNEL_DEPFILE': protectedSentinel.path,
       'DEVELOPER_JIT_MANIFEST': protectedSentinel.path,
       'DEVELOPER_JIT_FINGERPRINT': protectedSentinel.path,
       'DEVELOPER_JIT_BUNDLE': protectedBundle.path,
       'DEVELOPER_JIT_EXECUTABLE': protectedSentinel.path,
       'DEVELOPER_JIT_BUNDLED_KERNEL': protectedSentinel.path,
+      'DEVELOPER_JIT_BUNDLED_WORKER_KERNEL': protectedSentinel.path,
       'DEVELOPER_JIT_BUNDLE_STAMP': protectedSentinel.path,
       'DEVELOPER_JIT_INFO_PLIST': hostilePlist.path,
       'DEVELOPER_JIT_AUDIT_REPORT': protectedReceipt.path,

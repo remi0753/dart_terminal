@@ -3,25 +3,25 @@ import 'dart:convert';
 import 'dart:io';
 
 const String runtimeBundleAuditFormat = 'dart-terminal-runtime-bundle-audit';
-const int runtimeBundleAuditVersion = 3;
+const int runtimeBundleAuditVersion = 4;
 const String runtimeBuildFingerprintFormat =
     'dart-terminal-runtime-build-fingerprint';
-const int runtimeBuildFingerprintVersion = 4;
+const int runtimeBuildFingerprintVersion = 5;
 const String runtimeBuildManifestFormat =
     'dart-terminal-runtime-build-manifest';
-const int runtimeBuildManifestVersion = 6;
+const int runtimeBuildManifestVersion = 7;
 const String runtimeBuildManifestRelativePath =
     'Resources/runtime-build-manifest.json';
 const String runtimeMachOPolicy = 'dart-terminal-macos-runtime-v1';
+const String runtimeDeveloperWorkerPayloadName = 'runtime_worker.dill';
 
-const List<String> runtimeProjectProvenanceFiles = <String>[
+const List<String> runtimeCommonProjectProvenanceFiles = <String>[
   'Makefile',
   'pubspec.yaml',
   'pubspec.lock',
-  'patches/dart-engine-worker-isolates.patch',
-  'patches/dart-engine-lifecycle-shutdown.patch',
   'tool/runtime_build_fingerprint.dart',
   'tool/runtime_build_freshness_test.dart',
+  'tool/runtime_engine_attestation.dart',
   'tool/runtime_build_manifest.dart',
   'tool/runtime_bundle_audit.dart',
   'tool/runtime_native_handoff.dart',
@@ -29,6 +29,21 @@ const List<String> runtimeProjectProvenanceFiles = <String>[
   'tool/runtime_release_negative_tests.dart',
   'tool/runtime_integration_smoke.dart',
   'tool/src/runtime_release_support.dart',
+];
+
+const List<String> runtimeLegacyPatchProvenanceFiles = <String>[
+  'patches/dart-engine-worker-isolates.patch',
+  'patches/dart-engine-lifecycle-shutdown.patch',
+];
+
+const List<String> runtimeProjectProvenanceFiles = <String>[
+  ...runtimeCommonProjectProvenanceFiles,
+  ...runtimeLegacyPatchProvenanceFiles,
+];
+
+List<String> runtimeProjectProvenanceFilesForMode(RuntimeMode mode) => <String>[
+  ...runtimeCommonProjectProvenanceFiles,
+  if (mode == RuntimeMode.releaseAot) ...runtimeLegacyPatchProvenanceFiles,
 ];
 
 const List<String> runtimeAppKitProvenanceFiles = <String>[
@@ -787,13 +802,16 @@ Set<String> _laneInputRoles(RuntimeMode mode) => <String>{
   'dart_engine',
   'kernel_compiler',
   'platform_dill',
+  if (mode == RuntimeMode.developerJit) 'runtime_worker_dart',
   if (mode == RuntimeMode.releaseAot) 'snapshotter',
 };
 
 Set<String> _laneProducedRoles(RuntimeMode mode) => <String>{
   'launcher',
   'dart_engine',
-  if (mode == RuntimeMode.developerJit) 'kernel_payload' else 'aot_snapshot',
+  if (mode == RuntimeMode.developerJit) 'kernel_payload',
+  if (mode == RuntimeMode.developerJit) 'worker_kernel_payload',
+  if (mode == RuntimeMode.releaseAot) 'aot_snapshot',
 };
 
 List<String> _requiredStringList(Object? value, String description) {
@@ -1119,6 +1137,7 @@ void _validateArchitectureLane(
   final Set<String> expectedArchitectureRoles = <String>{
     'dart_engine',
     'kernel_compiler',
+    if (mode == RuntimeMode.developerJit) 'runtime_worker_dart',
     if (mode == RuntimeMode.releaseAot) 'snapshotter',
   };
   runtimeExpect(
@@ -1130,7 +1149,9 @@ void _validateArchitectureLane(
       entry.value,
       '$description ${entry.key} architectures',
     );
-    if (entry.key == 'dart_engine' || entry.key == 'snapshotter') {
+    if (entry.key == 'dart_engine' ||
+        entry.key == 'runtime_worker_dart' ||
+        entry.key == 'snapshotter') {
       runtimeExpect(
         sameStringSet(slices, <String>[architecture]),
         '$description ${entry.key} does not target $architecture',
@@ -1197,6 +1218,11 @@ void _validateArchitectureLane(
     'dart_engine_root',
     '$description.build_environment.resolved_paths',
   );
+  final String sdkRoot = runtimeRequiredString(
+    environmentPaths,
+    'dart_sdk_root',
+    '$description.build_environment.resolved_paths',
+  );
   final String outputName =
       '${mode == RuntimeMode.releaseAot ? 'Product' : 'Release'}'
       '${architecture == 'arm64' ? 'ARM64' : 'X64'}';
@@ -1216,6 +1242,8 @@ void _validateArchitectureLane(
     'platform_dill': runtimeNormalizedAbsolutePath(
       '$engineOutput/$engineToolchain/vm_platform.dill',
     ),
+    if (mode == RuntimeMode.developerJit)
+      'runtime_worker_dart': runtimeNormalizedAbsolutePath('$sdkRoot/bin/dart'),
     if (mode == RuntimeMode.releaseAot)
       'snapshotter': runtimeNormalizedAbsolutePath(
         '$engineOutput/gen_snapshot',
@@ -1428,11 +1456,16 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
     manifest['dart_engine'],
     'runtime build manifest dart_engine',
   );
+  final String expectedEngineSourcePolicy =
+      expectedMode == RuntimeMode.developerJit
+      ? 'official-clean'
+      : 'legacy-lifecycle-patches';
   runtimeExpect(
-    sameStringSet(engine.keys, const <String>{
+    sameStringSet(engine.keys, <String>{
       'revision',
-      'worker_patch_sha256',
-      'lifecycle_patch_sha256',
+      'source_policy',
+      if (expectedMode == RuntimeMode.releaseAot) 'worker_patch_sha256',
+      if (expectedMode == RuntimeMode.releaseAot) 'lifecycle_patch_sha256',
       'gn_arguments',
       'repository',
     }),
@@ -1447,14 +1480,20 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
     engineRevision == dartSdk['revision'],
     'runtime build manifest Dart SDK/Engine revisions differ',
   );
-  _validateSha256(
-    engine['worker_patch_sha256'],
-    'runtime build manifest dart_engine.worker_patch_sha256',
+  runtimeExpect(
+    engine['source_policy'] == expectedEngineSourcePolicy,
+    'runtime build manifest Dart Engine source policy mismatch',
   );
-  _validateSha256(
-    engine['lifecycle_patch_sha256'],
-    'runtime build manifest dart_engine.lifecycle_patch_sha256',
-  );
+  if (expectedMode == RuntimeMode.releaseAot) {
+    _validateSha256(
+      engine['worker_patch_sha256'],
+      'runtime build manifest dart_engine.worker_patch_sha256',
+    );
+    _validateSha256(
+      engine['lifecycle_patch_sha256'],
+      'runtime build manifest dart_engine.lifecycle_patch_sha256',
+    );
+  }
   final Map<String, Object?> engineGnArguments = runtimeStringMap(
     engine['gn_arguments'],
     'runtime build manifest dart_engine.gn_arguments',
@@ -1472,6 +1511,14 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
     'runtime build manifest Engine mode arguments are inconsistent',
   );
   _validateRepositoryIdentity(engine['repository'], 'dart_engine.repository');
+  final Map<String, Object?> engineRepository = runtimeStringMap(
+    engine['repository'],
+    'dart_engine.repository',
+  );
+  runtimeExpect(
+    engineRepository['dirty'] == (expectedMode == RuntimeMode.releaseAot),
+    'runtime build manifest Dart Engine cleanliness differs from policy',
+  );
 
   final Map<String, Object?> appkit = runtimeStringMap(
     manifest['dart_appkit'],
@@ -1616,7 +1663,9 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
   );
   _validateHashMap(sourceHashes, 'runtime build manifest source.input_sha256');
   for (final String requiredInput in <String>[
-    for (final String relative in runtimeProjectProvenanceFiles)
+    for (final String relative in runtimeProjectProvenanceFilesForMode(
+      expectedMode,
+    ))
       'dart_terminal:$relative',
     for (final String relative in runtimeAppKitProvenanceFiles)
       'dart_appkit:$relative',
@@ -1624,6 +1673,14 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
     runtimeExpect(
       sourceHashes.containsKey(requiredInput),
       'runtime build manifest source inventory misses $requiredInput',
+    );
+  }
+  if (expectedMode == RuntimeMode.developerJit) {
+    runtimeExpect(
+      sourceHashes.keys.every(
+        (String input) => !input.startsWith('dart_terminal:patches/'),
+      ),
+      'Developer build manifest includes a Dart Engine patch input',
     );
   }
   _validateSha256(
@@ -1640,13 +1697,17 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
     'runtime build manifest effective_configuration',
   );
   runtimeExpect(
-    sameStringSet(effective.keys, const <String>{
+    sameStringSet(effective.keys, <String>{
       'runtime_mode',
       'engine_configuration',
       'deployment_target',
       'bundle_version',
       'native_flags',
       'kernel_flags',
+      'worker_topology',
+      if (expectedMode == RuntimeMode.developerJit) 'worker_protocol_version',
+      if (expectedMode == RuntimeMode.developerJit) 'worker_payload_name',
+      if (expectedMode == RuntimeMode.developerJit) 'worker_kernel_flags',
       'snapshot_flags',
       'extra_build_input_sha256',
     }),
@@ -1662,6 +1723,7 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
   for (final String key in <String>[
     'native_flags',
     'kernel_flags',
+    'worker_topology',
     'snapshot_flags',
     'extra_build_input_sha256',
   ]) {
@@ -1669,6 +1731,22 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
       effective,
       key,
       'runtime build manifest effective_configuration',
+    );
+  }
+  if (expectedMode == RuntimeMode.developerJit) {
+    runtimeExpect(
+      effective['worker_topology'] == 'official-dart-child-process' &&
+          effective['worker_protocol_version'] == 1 &&
+          effective['worker_payload_name'] ==
+              runtimeDeveloperWorkerPayloadName &&
+          effective['worker_kernel_flags'] ==
+              '--link-platform --no-embed-sources --verbosity=warning',
+      'runtime build manifest Developer worker configuration mismatch',
+    );
+  } else {
+    runtimeExpect(
+      effective['worker_topology'] == 'legacy-engine-isolate',
+      'runtime build manifest Release worker topology mismatch',
     );
   }
   final Object? extraBuildInput = effective['extra_build_input_sha256'];
@@ -2086,11 +2164,16 @@ Future<Map<String, Object?>> auditRuntimeBundle(
       '${contents.path}/Frameworks/${options.mode.engineName}';
   final String payloadPath =
       '${contents.path}/Resources/${options.mode.payloadName}';
+  final String? workerPayloadPath = options.mode == RuntimeMode.developerJit
+      ? '${contents.path}/Resources/$runtimeDeveloperWorkerPayloadName'
+      : null;
   final List<String> files = await runtimeRelativeFiles(contents);
   for (final String requiredPath in <String>[
     'MacOS/$executableName',
     'Frameworks/${options.mode.engineName}',
     'Resources/${options.mode.payloadName}',
+    if (options.mode == RuntimeMode.developerJit)
+      'Resources/$runtimeDeveloperWorkerPayloadName',
     runtimeBuildManifestRelativePath,
   ]) {
     runtimeExpect(
@@ -2127,6 +2210,17 @@ Future<Map<String, Object?>> auditRuntimeBundle(
       aotPayloads.isEmpty,
       'developer JIT bundle contains AOT payloads: ${aotPayloads.join(',')}',
     );
+    final Set<String> developerKernels = files
+        .where((String path) => path.toLowerCase().endsWith('.dill'))
+        .toSet();
+    runtimeExpect(
+      sameStringSet(developerKernels, <String>{
+        'Resources/${options.mode.payloadName}',
+        'Resources/$runtimeDeveloperWorkerPayloadName',
+      }),
+      'developer JIT bundle Kernel roles differ: '
+      '${developerKernels.toList()..sort()}',
+    );
   } else {
     final List<String> forbiddenReleaseFiles = files.where((String path) {
       final String lower = path.toLowerCase();
@@ -2152,6 +2246,12 @@ Future<Map<String, Object?>> auditRuntimeBundle(
     (await File(payloadPath).stat()).size > 0,
     'runtime payload is empty: $payloadPath',
   );
+  if (workerPayloadPath != null) {
+    runtimeExpect(
+      (await File(workerPayloadPath).stat()).size > 0,
+      'runtime worker payload is empty: $workerPayloadPath',
+    );
+  }
   final Map<String, String> rolePaths = <String, String>{
     'launcher': executablePath,
     'dart_engine': enginePath,
@@ -2229,6 +2329,9 @@ Future<Map<String, Object?>> auditRuntimeBundle(
   }
   if (options.mode == RuntimeMode.developerJit) {
     producedHashes['kernel_payload'] = await runtimeSha256File(payloadPath);
+    producedHashes['worker_kernel_payload'] = await runtimeSha256File(
+      workerPayloadPath!,
+    );
   }
 
   final Map<String, Object?> manifest = await readRuntimeBuildManifest(
@@ -2288,6 +2391,8 @@ Future<Map<String, Object?>> auditRuntimeBundle(
     'executable': executableName,
     'engine': 'Frameworks/${options.mode.engineName}',
     'payload': 'Resources/${options.mode.payloadName}',
+    if (options.mode == RuntimeMode.developerJit)
+      'worker_payload': 'Resources/$runtimeDeveloperWorkerPayloadName',
     'deployment_target': deploymentTarget,
     'architectures': options.expectedArchitectures.toList()..sort(),
     'mach_o_policy': runtimeMachOPolicy,

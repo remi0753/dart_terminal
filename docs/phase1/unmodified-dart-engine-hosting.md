@@ -1528,3 +1528,148 @@ unit commands with Dart's documented top-level `--suppress-analytics` option
 returned status 0 for all three; the unit harness again printed
 `dart_terminal tests passed`. This was an execution-environment issue, not a
 source or test failure.
+
+### Developer clean-SDK build, bundle, and provenance unit: start
+
+Purpose: make the M1 Developer product supply the process coordinator with an
+exact official Dart executable and a separately compiled worker Kernel, without
+applying, requiring, or representing any Dart/Engine source modification.
+
+Background: the preceding unit deliberately left the production worker command
+unconfigured. The current Developer build still depends on the historical
+Engine lifecycle patch target and its provenance schema describes patch inputs.
+That path cannot be used for the selected stock-root plus official child-process
+topology, even temporarily.
+
+Scope:
+
+- compile `bin/runtime_worker.dart` to its own Kernel with the pinned official
+  Dart SDK and place it in the Developer app resources;
+- pass only trusted, build-owned worker executable and payload paths to the Dart
+  application, and reject absent or user-overridden internal configuration;
+- make the Developer Engine dependency validate a clean official SDK rather
+  than apply lifecycle patches;
+- make Developer manifest, fingerprint, freshness, and bundle audit evidence
+  truthfully describe the clean SDK and both Kernel roles;
+- add focused positive and fail-closed tests for those contracts.
+
+Out of scope: Release AOT migration, deletion of the still-needed legacy Release
+patch machinery, Developer GUI/fault/backpressure integration, x86_64,
+Universal assembly, and any edit to `../dart_appkit` or its nested Dart SDK.
+
+Dependencies: `dart_appkit` commit
+`77e355387a0ea50034632d9e3d4b35f629155c35`, official Dart revision
+`60a57cd42d64dc03e9f07aa60a2e250755c1ef28`, and the versioned process contract
+from main-repository commit `3fc1894`.
+
+Completion conditions: the Developer build begins and ends with a clean SDK,
+contains distinct UI and worker Kernel payloads, launches with a fingerprinted
+official Dart executable, contains no Developer dependency on a patch-applying
+target, and passes its source/provenance/bundle negative tests. Release behavior
+must remain unchanged and unexecuted.
+
+Validation plan: format and analyze Dart changes; run repository unit tests and
+focused provenance/freshness negative tests; inspect dependency graphs and
+source boundaries; build and audit the arm64 Developer bundle; exercise the
+bundled worker command directly; and prove the adjacent repositories remain
+clean at their pinned revisions before and after the build.
+
+The first real Developer build correctly classified the pre-existing JIT
+outputs as unattested and stopped before cleaning or rebuilding them because
+the Make recipe used `status`, a read-only zsh parameter, to capture the
+attestation exit code. The recipe now uses the task-specific
+`attestation_exit` name. No SDK source changed, and this failure occurred before
+the clean-rebuild branch executed.
+
+### Developer clean-SDK build, bundle, and provenance completed
+
+The Developer lane now implements the selected stock-root plus official
+child-process topology without using either Engine patch:
+
+- `runtime-jit-engine` depends on `unmodified-engine-sdk-clean`, runs the
+  official GN configuration, validates a revision-and-output-hash attestation,
+  and only accepts cached Engine/compiler/platform outputs that were previously
+  rebuilt and recorded from that clean checkout. A missing or mismatched
+  attestation causes a targeted Ninja clean before the ordinary official build;
+- the first accepted run found clean source but no attestation for the existing
+  outputs. It removed 1,199 selected generated outputs and rebuilt 1,193 Ninja
+  targets from the exact official revision before recording
+  `.dart-terminal-official-engine.json`. This prevents a binary produced while
+  the old patch was applied from being accepted merely because the source was
+  later restored;
+- `bin/runtime_worker.dart` is compiled separately with the official Dart
+  executable and `--link-platform --no-embed-sources --verbosity=warning` into
+  `runtime_worker.dill`. The Developer bundle now has exactly two Kernel roles:
+  `application.dill` for the stock AppKit root and `runtime_worker.dill` for the
+  child process;
+- `DeveloperJitRunner.mm` embeds the canonical, executable official Dart path,
+  derives the worker Kernel only from its own app bundle, and injects both as
+  host-owned internal arguments. Application arguments cannot replace either
+  path; an override or missing bundle payload fails before AppKit/Dart startup.
+  The Dart option parser independently rejects duplicate, relative, or
+  incomplete internal pairs if invoked by a test or alternate host;
+- the fingerprint and manifest identify the Developer Engine policy as
+  `official-clean`, omit every patch hash and patch source input, bind the
+  official worker executable path/hash/arm64 slice, protocol version, worker
+  compilation flags, and worker Kernel hash, and retain the legacy patch schema
+  only for the not-yet-migrated Release lane;
+- the bundle audit requires both named Kernel payloads, rejects any missing or
+  extra `.dill` role, and includes the worker payload in the signed bundle seal
+  and audit receipt.
+
+The initial standalone native syntax-only check lacked the normal AppKit bridge
+include paths and the required build-owned worker macro, so Clang stopped at a
+missing `BridgeInternal.h` before parsing the changed Runner. The actual product
+compile used the complete Make inputs with warnings-as-errors and succeeded;
+that successful link is the authoritative native verification. A later
+read-only status aggregation command also initially named a nonexistent
+working directory and did not start; it was immediately rerun from the actual
+repository and had no filesystem effect.
+
+The focused `developer-jit-clean-sdk-test` constructs only the arm64 Developer
+lane in an isolated temporary build root. It passed all of these checks in one
+run:
+
+- the Make database connects the Developer fingerprint to
+  `runtime-jit-engine`, and that target to `unmodified-engine-sdk-clean`, with no
+  patch-support prerequisite;
+- captured Developer build/audit output contains neither patch filename nor
+  legacy patch target;
+- manifest and Engine attestation paths and hashes match the actual official
+  files while the Engine repository is clean at
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`;
+- the bundled worker Kernel starts through the fingerprinted official Dart
+  executable as a distinct PID, returns `42` for request `41`, acknowledges
+  stop, exits normally, drains both streams, and leaves zero outstanding child
+  processes;
+- a user-supplied worker executable is rejected by the native launcher with
+  input status 66, and a copied bundle with `runtime_worker.dill` removed is
+  rejected by the bundle audit;
+- all nine selected derived artifacts retain their modification time for an
+  unchanged effective input, and all nine regenerate after that input changes.
+
+The final normal product build and audit then passed on the Apple Silicon host.
+The audit receipt at
+`build/runtime/arm64/developer-jit/thin-audit.json` records manifest SHA-256
+`aa6aacc68bfbff54242825a0fbb5da5b90cced0c26e2991ff1bb83f220e2089a`
+and bundle artifact digest
+`359e7f9f64127b787190e86879d1a40d9b2b0a29c0192f4172985352122f9078`.
+The build-tree and bundled worker Kernels both hash to
+`8ad577b903d32f5f267edf972b36ae01075584b591f607ff52dc44139858f37c`;
+the recorded official Dart executable hashes to
+`2db088d2747c1e61eeafbb6e4b8fedf37c98b0f465c326737f2ad4a0de844bfd`.
+
+Final unit gates passed Dart formatting, full `dart analyze`,
+`dart run test/run_tests.dart`, `git diff --check`, the focused clean-SDK gate,
+and `make RUNTIME_ARCH=arm64 developer-jit-audit`. The adjacent `dart_appkit`
+repository remains clean at
+`77e355387a0ea50034632d9e3d4b35f629155c35`, and its nested Dart SDK remains
+clean at the official revision above. Release AOT, both patch-applying targets,
+x86_64, Rosetta, and Universal targets were not executed. The next ordered
+unit is the M1 Developer GUI/lifecycle/failure/backpressure integration
+closeout.
+
+The first staging attempt was denied when the workspace sandbox prevented Git
+from creating `.git/index.lock`; it made no index or worktree change. The same
+explicit file set was staged through the repository-authorized Git path before
+the completion commit.
