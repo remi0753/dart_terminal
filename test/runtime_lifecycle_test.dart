@@ -1,8 +1,13 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dart_terminal/src/runtime_lifecycle.dart';
+import 'package:dart_terminal/src/runtime_worker_protocol.dart';
 
 Future<void> runRuntimeLifecycleTests() async {
+  await _protocolContract();
+  _sourceBoundary();
   await _normalLifecycle();
   await _startupFailure();
   await _uncaughtWorkerFailures();
@@ -12,7 +17,81 @@ Future<void> runRuntimeLifecycleTests() async {
   await _forcedShutdown();
   await _lateCompletion();
   await _doubleShutdown();
+  await _replacementAfterFailure();
+  await _processLaunchFailure();
   _terminationEvidenceOrdering();
+  _expect(
+    RuntimeLifecycleCoordinator.outstandingProcessCount == 0,
+    'all child processes are reaped after the suite',
+  );
+}
+
+Future<void> _protocolContract() async {
+  final RuntimeWorkerFrame frame = RuntimeWorkerFrame(
+    type: RuntimeWorkerMessageType.response,
+    generation: 7,
+    operation: 11,
+    payload: RuntimeWorkerFrameCodec.int64Payload(-42),
+  );
+  final Uint8List encoded = RuntimeWorkerFrameCodec.encode(frame);
+  final StreamController<List<int>> chunks = StreamController<List<int>>();
+  final RuntimeWorkerFrameDecoder decoder = RuntimeWorkerFrameDecoder(
+    chunks.stream,
+  );
+  final Future<List<RuntimeWorkerFrame>> decoded = decoder.frames.toList();
+  for (var index = 0; index < encoded.length; ++index) {
+    chunks.add(encoded.sublist(index, index + 1));
+  }
+  await chunks.close();
+  final List<RuntimeWorkerFrame> frames = await decoded;
+  _expect(frames.length == 1, 'split frame decodes exactly once');
+  _expect(
+    frames.single.type == RuntimeWorkerMessageType.response &&
+        frames.single.generation == 7 &&
+        frames.single.operation == 11 &&
+        RuntimeWorkerFrameCodec.readInt64Payload(frames.single) == -42,
+    'frame fields and signed payload survive chunking',
+  );
+
+  final Uint8List badMagic = Uint8List.fromList(encoded)..[0] = 0;
+  await _expectAsyncThrows<FormatException>(
+    RuntimeWorkerFrameDecoder(
+      Stream<List<int>>.fromIterable(<List<int>>[badMagic]),
+    ).frames.toList(),
+    'invalid protocol magic',
+  );
+  await _expectAsyncThrows<FormatException>(
+    RuntimeWorkerFrameDecoder(
+      Stream<List<int>>.fromIterable(<List<int>>[
+        encoded.sublist(0, runtimeWorkerHeaderLength - 1),
+      ]),
+    ).frames.toList(),
+    'partial final frame',
+  );
+  await _expectAsyncThrows<FormatException>(
+    Future<void>.sync(() {
+      RuntimeWorkerFrameCodec.encode(
+        RuntimeWorkerFrame(
+          type: RuntimeWorkerMessageType.request,
+          generation: 1,
+          operation: 1,
+          payload: Uint8List(runtimeWorkerMaximumPayloadLength + 1),
+        ),
+      );
+    }),
+    'oversized payload',
+  );
+}
+
+void _sourceBoundary() {
+  final String coordinator = File(
+    '${Directory.current.path}/lib/src/runtime_lifecycle.dart',
+  ).readAsStringSync();
+  _expect(
+    !coordinator.contains("import 'dart:isolate';") &&
+        !coordinator.contains('Isolate.spawn'),
+    'product lifecycle has no in-process isolate transport',
+  );
 }
 
 Future<void> _normalLifecycle() async {
@@ -55,6 +134,12 @@ Future<void> _startupFailure() async {
         RuntimeLifecycleStartStatus.startupFailure,
     'worker startup failure is contained',
   );
+  _expect(
+    harness.coordinator.workerDiagnostics.contains(
+      'requested lifecycle worker startup failure',
+    ),
+    'startup failure preserves child stderr',
+  );
   harness.expectEvents(<String>[
     'worker-start',
     'worker-error',
@@ -78,6 +163,11 @@ Future<void> _uncaughtWorkerFailures() async {
     _expect(
       request.status == RuntimeLifecycleRequestStatus.uncaughtError,
       '${scenario.name} is classified as an uncaught worker error',
+    );
+    _expect(
+      harness.coordinator.workerDiagnostics.contains('requested') &&
+          harness.coordinator.workerDiagnostics.contains('worker failure'),
+      '${scenario.name} preserves its child stderr diagnostic',
     );
     harness.expectEvents(<String>[
       'worker-start',
@@ -160,6 +250,14 @@ Future<void> _idleWorkerTermination() async {
       termination == fixture.$2,
       '${fixture.$1.name} reconciles while no request is pending',
     );
+    if (fixture.$1 == RuntimeLifecycleScenario.workerIdleUncaught) {
+      _expect(
+        harness.coordinator.workerDiagnostics.contains(
+          'requested idle worker failure',
+        ),
+        'idle uncaught failure preserves child stderr',
+      );
+    }
     harness.expectEvents(fixture.$3);
   }
 }
@@ -185,6 +283,12 @@ Future<void> _stopProcessingFailure() async {
   _expect(
     shutdown.termination == RuntimeLifecycleWorkerTermination.uncaughtError,
     'stop-processing crash retains its error classification',
+  );
+  _expect(
+    harness.coordinator.workerDiagnostics.contains(
+      'requested worker failure while stopping',
+    ),
+    'stop-processing failure preserves child stderr',
   );
   harness.expectEvents(<String>[
     'worker-start',
@@ -272,6 +376,79 @@ Future<void> _doubleShutdown() async {
   ]);
 }
 
+Future<void> _replacementAfterFailure() async {
+  final _Harness failed = _Harness(RuntimeLifecycleScenario.workerSyncUncaught);
+  _expect(
+    await failed.coordinator.start() == RuntimeLifecycleStartStatus.ready,
+    'replacement fixture starts failed generation',
+  );
+  final int failedPid = failed.coordinator.workerPid!;
+  await failed.coordinator.request(1);
+  failed.expectEvents(<String>[
+    'worker-start',
+    'worker-ready',
+    'worker-request',
+    'worker-error',
+    'worker-exit',
+  ]);
+
+  final _Harness replacement = _Harness(RuntimeLifecycleScenario.normal);
+  _expect(
+    await replacement.coordinator.start() == RuntimeLifecycleStartStatus.ready,
+    'replacement worker becomes ready',
+  );
+  _expect(
+    replacement.coordinator.workerPid != failedPid,
+    'replacement owns a distinct process',
+  );
+  final RuntimeLifecycleRequestResult response = await replacement.coordinator
+      .request(9);
+  _expect(
+    response.status == RuntimeLifecycleRequestStatus.response &&
+        response.value == 10,
+    'replacement responds without stale state',
+  );
+  await replacement.coordinator.shutdown();
+  replacement.expectEvents(<String>[
+    'worker-start',
+    'worker-ready',
+    'worker-request',
+    'worker-response',
+    'worker-stop-request',
+    'worker-stop-ack',
+    'worker-exit',
+  ]);
+}
+
+Future<void> _processLaunchFailure() async {
+  final List<RuntimeLifecycleObservation> observations =
+      <RuntimeLifecycleObservation>[];
+  final RuntimeLifecycleCoordinator coordinator = RuntimeLifecycleCoordinator(
+    scenario: RuntimeLifecycleScenario.normal,
+    observer: observations.add,
+    workerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/path/that/does/not/exist/dart',
+    ),
+  );
+  _expect(
+    await coordinator.start() == RuntimeLifecycleStartStatus.startupFailure,
+    'missing executable is a bounded startup failure',
+  );
+  _expect(
+    _sameStrings(
+      observations
+          .map((RuntimeLifecycleObservation observation) => observation.event)
+          .toList(),
+      <String>['worker-start', 'worker-startup-failure'],
+    ),
+    'process launch failure has deterministic events',
+  );
+  _expect(
+    RuntimeLifecycleCoordinator.outstandingProcessCount == 0,
+    'failed launch does not create outstanding process ownership',
+  );
+}
+
 void _terminationEvidenceOrdering() {
   for (final bool exitFirst in <bool>[false, true]) {
     final RuntimeLifecycleTerminationEvidence evidence =
@@ -287,12 +464,12 @@ void _terminationEvidenceOrdering() {
       evidence.recordError();
       evidence.recordExit();
     }
-    evidence.recordEventChannelDrained();
+    evidence.recordProtocolStreamDrained();
     _expect(
       !evidence.canReconcile,
       'one channel barrier cannot finalize termination',
     );
-    evidence.recordErrorChannelDrained();
+    evidence.recordDiagnosticsStreamDrained();
     _expect(evidence.canReconcile, 'both channel barriers permit reconcile');
     _expect(
       evidence.classify(
@@ -300,6 +477,7 @@ void _terminationEvidenceOrdering() {
             shutdownRequested: false,
             stopAcknowledged: false,
             forcedCleanup: false,
+            processExitedSuccessfully: false,
           ) ==
           RuntimeLifecycleWorkerTermination.uncaughtError,
       'error/exit order preserves uncaught classification',
@@ -309,14 +487,15 @@ void _terminationEvidenceOrdering() {
   final RuntimeLifecycleTerminationEvidence graceful =
       RuntimeLifecycleTerminationEvidence()
         ..recordExit()
-        ..recordEventChannelDrained()
-        ..recordErrorChannelDrained();
+        ..recordProtocolStreamDrained()
+        ..recordDiagnosticsStreamDrained();
   _expect(
     graceful.classify(
           workerWasReady: true,
           shutdownRequested: true,
           stopAcknowledged: true,
           forcedCleanup: false,
+          processExitedSuccessfully: true,
         ) ==
         RuntimeLifecycleWorkerTermination.graceful,
     'acknowledged stop is graceful',
@@ -327,6 +506,7 @@ void _terminationEvidenceOrdering() {
           shutdownRequested: false,
           stopAcknowledged: false,
           forcedCleanup: false,
+          processExitedSuccessfully: true,
         ) ==
         RuntimeLifecycleWorkerTermination.unexpectedExit,
     'idle exit is unexpected',
@@ -337,6 +517,7 @@ void _terminationEvidenceOrdering() {
           shutdownRequested: true,
           stopAcknowledged: false,
           forcedCleanup: true,
+          processExitedSuccessfully: false,
         ) ==
         RuntimeLifecycleWorkerTermination.forcedCleanup,
     'deadline expiry is forced cleanup',
@@ -346,14 +527,15 @@ void _terminationEvidenceOrdering() {
       RuntimeLifecycleTerminationEvidence()
         ..recordExit()
         ..recordError()
-        ..recordEventChannelDrained()
-        ..recordErrorChannelDrained();
+        ..recordProtocolStreamDrained()
+        ..recordDiagnosticsStreamDrained();
   _expect(
     stopCrash.classify(
           workerWasReady: true,
           shutdownRequested: true,
           stopAcknowledged: false,
           forcedCleanup: false,
+          processExitedSuccessfully: false,
         ) ==
         RuntimeLifecycleWorkerTermination.uncaughtError,
     'stop-processing crash is not a timeout',
@@ -369,11 +551,20 @@ final class _Harness {
          observer: (RuntimeLifecycleObservation observation) {
            observations.add(observation);
          },
+         workerCommand: _workerCommand,
          shutdownTimeout: shutdownTimeout,
        );
 
   static final List<RuntimeLifecycleObservation> observations =
       <RuntimeLifecycleObservation>[];
+  static final RuntimeLifecycleWorkerCommand _workerCommand =
+      RuntimeLifecycleWorkerCommand(
+        executable: Platform.resolvedExecutable,
+        arguments: <String>[
+          '${Directory.current.path}/bin/runtime_worker.dart',
+        ],
+        workingDirectory: Directory.current.path,
+      );
 
   final RuntimeLifecycleCoordinator coordinator;
 
@@ -394,6 +585,10 @@ final class _Harness {
       _sameStrings(events, expected),
       'events $events match expected $expected',
     );
+    _expect(
+      RuntimeLifecycleCoordinator.outstandingProcessCount == 0,
+      'event reconciliation leaves no child process outstanding',
+    );
   }
 }
 
@@ -413,4 +608,16 @@ void _expect(bool condition, String description) {
   if (!condition) {
     throw StateError('Lifecycle expectation failed: $description');
   }
+}
+
+Future<void> _expectAsyncThrows<T extends Object>(
+  Future<void> future,
+  String description,
+) async {
+  try {
+    await future;
+  } on T {
+    return;
+  }
+  throw StateError('Expected $T: $description');
 }

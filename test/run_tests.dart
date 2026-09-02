@@ -11,7 +11,7 @@ Future<void> main() async {
   _testHistoryNavigation();
   _testTranscriptLimitAndViewport();
   _testOptions();
-  await runRuntimeLifecycleTests().timeout(const Duration(seconds: 10));
+  await runRuntimeLifecycleTests().timeout(const Duration(seconds: 30));
   await _testCommandSession();
   stdout.writeln('dart_terminal tests passed');
 }

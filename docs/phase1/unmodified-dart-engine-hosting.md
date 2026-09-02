@@ -1444,3 +1444,87 @@ Decomposition validation passed `git diff --check`, full-repository
 `dart analyze`, and `dart run test/run_tests.dart`. The diff contains only the
 ordered ROADMAP children and this implementation contract; no runtime, build,
 SDK, or adjacent source changed.
+
+### Process coordinator implementation: first unit run
+
+The first process-backed unit run reached every case through
+`late-completion`, then failed its 250 ms shutdown bound. The request future and
+shutdown deliberately overlap in that scenario, so two frame sends called
+`IOSink.flush` concurrently. The initial writer preserved byte insertion order
+but did not serialize completion of asynchronous flushes; the stop send failed,
+the worker never received the stop frame, and the generic send-error branch
+waited for exit without first killing the still-live child. The outer test
+process exited 255 with a bounded `TimeoutException`; no repository or SDK
+input outside the new implementation changed.
+
+The correction is twofold: serialize all frame writes through one queued future
+so request/stop bytes and flush completion cannot overlap, and make any
+transport-send failure terminate and reap a still-live child before returning.
+The same late-completion test will be rerun rather than weakening its ordering
+or deadline.
+
+### Process protocol and coordinator completed
+
+The first Developer migration unit now replaces the application lifecycle's
+in-process Dart-port transport with an actual child-process contract:
+
+- `lib/src/runtime_worker_protocol.dart` defines a 20-byte big-endian header
+  containing magic, protocol version, message type, owner generation,
+  operation ID, and payload length. It accepts partial stream chunks, emits
+  complete frames only, rejects invalid magic/version/type, partial terminal
+  frames, out-of-range IDs, and payloads above 1 MiB, and serializes all writes
+  through one future queue;
+- `bin/runtime_worker.dart` is a UI-independent official-Dart entrypoint. Its
+  implementation uses only `dart:async`, `dart:convert`, `dart:io`, and typed
+  bytes. stdout carries frames only; unhandled diagnostics remain on stderr;
+- `RuntimeLifecycleCoordinator` now owns `Process`, PID, stdin writer, stdout
+  decoder, bounded 64 KiB stderr capture, exit status, deadlines, signal-based
+  forced stop, subscriptions, outstanding-process accounting, and one cached
+  shutdown future. It contains no `dart:isolate`, `Isolate.spawn`, Dart Engine,
+  or Embedder API reference;
+- ready frames prove the child-reported PID matches the PID returned by
+  `Process.start`; every later frame must match the current generation;
+- stdout completion, stderr completion, and `Process.exitCode` must all be
+  observed before classification. A zero exit plus stop acknowledgement is
+  graceful; stderr plus exit is uncaught error; exit without those facts is
+  unexpected; timeout-triggered `SIGKILL` is forced cleanup;
+- the existing public statuses and machine events remain unchanged, including
+  error-before-exit reconciliation, late-reply rejection, and idempotent
+  shutdown.
+
+The unit harness launches `bin/runtime_worker.dart` through
+`Platform.resolvedExecutable`, so all scenarios cross real OS pipes and a
+distinct official Dart process. It now also verifies split-frame decoding,
+malformed/partial/oversized rejection, preserved worker stderr, invalid
+executable startup failure, distinct-PID replacement after a crash, and zero
+outstanding processes after each reconciliation. Normal, startup failure,
+synchronous/asynchronous uncaught error, unexpected exit, idle error/exit,
+stop-time error, shutdown timeout, late completion, and double shutdown retain
+their prior observable event sequences.
+
+After the serialized-writer correction, the complete unit harness passed once
+and then passed five consecutive full repetitions. Final gates passed:
+
+- Dart format: 5 files checked, 0 changes;
+- full `dart analyze`: no issues;
+- `git diff --check`: passed;
+- source boundary search: no isolate, Engine, Embedder, or `dart_api` reference
+  in the worker protocol/coordinator/entrypoint;
+- adjacent `dart_appkit` and official SDK worktrees: clean; SDK revision still
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`.
+
+The coordinator deliberately defaults to an unconfigured worker command at
+this intermediate checkpoint. Unit callers inject the official command; the
+next ordered build/bundle unit must supply the exact trusted Dart executable
+and bundled worker Kernel before any Developer product integration is run.
+Release AOT and patch machinery remain untouched.
+
+The final sandboxed rerun initially reported successful formatting and analysis
+results but returned status 1 because Dart CLI attempted to update
+`~/.dart-tool/dart-flutter-telemetry-session.json`, which is outside the writable
+workspace. `DART_SUPPRESS_ANALYTICS=true` did not suppress that post-command
+write in Dart 3.13.2. Re-running the same format, full analysis, and complete
+unit commands with Dart's documented top-level `--suppress-analytics` option
+returned status 0 for all three; the unit harness again printed
+`dart_terminal tests passed`. This was an execution-environment issue, not a
+source or test failure.

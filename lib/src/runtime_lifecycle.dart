@@ -1,5 +1,9 @@
 import 'dart:async';
-import 'dart:isolate';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'runtime_worker_protocol.dart';
 
 enum RuntimeLifecycleScenario {
   normal('normal'),
@@ -81,24 +85,25 @@ enum RuntimeLifecycleWorkerTermination {
   forcedCleanup,
 }
 
-/// Accumulates termination evidence before one authoritative classification.
+/// Accumulates child-process termination evidence before classification.
 ///
-/// This type is public only so the repository test harness can exercise both
-/// listener arrival orders. It is not exported by `dart_terminal.dart`.
+/// This type is public only so the repository test harness can exercise exit,
+/// protocol-stream, and diagnostic-stream arrival orders. It is not exported
+/// by `dart_terminal.dart`.
 final class RuntimeLifecycleTerminationEvidence {
   bool _sawError = false;
   bool _sawExit = false;
-  bool _eventChannelDrained = false;
-  bool _errorChannelDrained = false;
+  bool _protocolStreamDrained = false;
+  bool _diagnosticsStreamDrained = false;
 
   bool get sawError => _sawError;
   bool get sawExit => _sawExit;
   bool get canReconcile =>
-      _sawExit && _eventChannelDrained && _errorChannelDrained;
+      _sawExit && _protocolStreamDrained && _diagnosticsStreamDrained;
 
   void recordError() {
-    if (_errorChannelDrained) {
-      throw StateError('worker error arrived after its channel barrier');
+    if (_diagnosticsStreamDrained) {
+      throw StateError('worker diagnostic arrived after its stream barrier');
     }
     _sawError = true;
   }
@@ -107,12 +112,12 @@ final class RuntimeLifecycleTerminationEvidence {
     _sawExit = true;
   }
 
-  void recordEventChannelDrained() {
-    _eventChannelDrained = true;
+  void recordProtocolStreamDrained() {
+    _protocolStreamDrained = true;
   }
 
-  void recordErrorChannelDrained() {
-    _errorChannelDrained = true;
+  void recordDiagnosticsStreamDrained() {
+    _diagnosticsStreamDrained = true;
   }
 
   RuntimeLifecycleWorkerTermination classify({
@@ -120,6 +125,7 @@ final class RuntimeLifecycleTerminationEvidence {
     required bool shutdownRequested,
     required bool stopAcknowledged,
     required bool forcedCleanup,
+    required bool processExitedSuccessfully,
   }) {
     if (!canReconcile) {
       throw StateError('worker termination evidence is not fully drained');
@@ -133,17 +139,40 @@ final class RuntimeLifecycleTerminationEvidence {
     if (_sawError) {
       return RuntimeLifecycleWorkerTermination.uncaughtError;
     }
-    if (shutdownRequested && stopAcknowledged) {
+    if (shutdownRequested && stopAcknowledged && processExitedSuccessfully) {
       return RuntimeLifecycleWorkerTermination.graceful;
     }
     return RuntimeLifecycleWorkerTermination.unexpectedExit;
   }
 }
 
-final class _ChannelDrainMarker {
-  const _ChannelDrainMarker(this.generation);
+final class RuntimeLifecycleWorkerCommand {
+  const RuntimeLifecycleWorkerCommand({
+    required this.executable,
+    this.arguments = const <String>[],
+    this.workingDirectory,
+    this.environment = const <String, String>{},
+  });
 
-  final int generation;
+  const RuntimeLifecycleWorkerCommand.unconfigured()
+    : executable = '',
+      arguments = const <String>[],
+      workingDirectory = null,
+      environment = const <String, String>{};
+
+  final String executable;
+  final List<String> arguments;
+  final String? workingDirectory;
+  final Map<String, String> environment;
+
+  List<String> invocationArguments(
+    RuntimeLifecycleScenario scenario,
+    int generation,
+  ) => <String>[
+    ...arguments,
+    '--scenario=${scenario.name}',
+    '--generation=$generation',
+  ];
 }
 
 enum _ShutdownSignal { stopAcknowledged, workerExited }
@@ -154,14 +183,19 @@ final class RuntimeLifecycleCoordinator {
   RuntimeLifecycleCoordinator({
     required this.scenario,
     required this.observer,
+    this.workerCommand = const RuntimeLifecycleWorkerCommand.unconfigured(),
     this.startupTimeout = const Duration(seconds: 1),
     this.requestTimeout = const Duration(seconds: 1),
     this.shutdownTimeout = const Duration(milliseconds: 250),
     this.forcedExitTimeout = const Duration(milliseconds: 250),
   });
 
+  static const int _maximumDiagnosticBytes = 64 * 1024;
+  static int _outstandingProcessCount = 0;
+
   final RuntimeLifecycleScenario scenario;
   final RuntimeLifecycleObserver observer;
+  final RuntimeLifecycleWorkerCommand workerCommand;
   final Duration startupTimeout;
   final Duration requestTimeout;
   final Duration shutdownTimeout;
@@ -177,27 +211,43 @@ final class RuntimeLifecycleCoordinator {
   bool _emittedWorkerError = false;
   bool _emittedExit = false;
   bool _emittedLateCompletion = false;
+  bool _diagnosticsTruncated = false;
+  bool _processReaped = false;
+  Object? _protocolFailure;
+  int? _processExitStatus;
+  int? _workerPid;
+  final BytesBuilder _diagnostics = BytesBuilder(copy: false);
   final RuntimeLifecycleTerminationEvidence _terminationEvidence =
       RuntimeLifecycleTerminationEvidence();
 
-  Isolate? _worker;
-  SendPort? _commands;
-  ReceivePort? _events;
-  ReceivePort? _errors;
-  ReceivePort? _exits;
-  StreamSubscription<Object?>? _eventSubscription;
-  StreamSubscription<Object?>? _errorSubscription;
-  StreamSubscription<Object?>? _exitSubscription;
+  Process? _worker;
+  RuntimeWorkerFrameDecoder? _decoder;
+  RuntimeWorkerFrameWriter? _writer;
+  StreamSubscription<RuntimeWorkerFrame>? _protocolSubscription;
+  StreamSubscription<List<int>>? _diagnosticSubscription;
   Completer<void>? _ready;
   Completer<void>? _exitSignal;
-  Completer<void>? _eventChannelDrained;
-  Completer<void>? _errorChannelDrained;
+  Completer<void>? _protocolStreamDrained;
+  Completer<void>? _diagnosticsStreamDrained;
   Completer<void>? _stopAcknowledged;
   Completer<RuntimeLifecycleWorkerTermination>? _termination;
   final Map<int, Completer<int>> _responses = <int, Completer<int>>{};
   Future<RuntimeLifecycleShutdownResult>? _shutdownFuture;
+  Future<void>? _reconcileFuture;
+
+  static int get outstandingProcessCount => _outstandingProcessCount;
 
   int get generation => _generation;
+  int? get workerPid => _workerPid;
+  Object? get protocolFailure => _protocolFailure;
+
+  String get workerDiagnostics {
+    final String text = utf8.decode(
+      _diagnostics.toBytes(),
+      allowMalformed: true,
+    );
+    return _diagnosticsTruncated ? '$text\n[diagnostics truncated]' : text;
+  }
 
   Future<RuntimeLifecycleStartStatus> start() async {
     if (_state != _CoordinatorState.idle) {
@@ -208,29 +258,51 @@ final class RuntimeLifecycleCoordinator {
     _emit('worker-start');
     _ready = Completer<void>();
     _exitSignal = Completer<void>();
-    _eventChannelDrained = Completer<void>();
-    _errorChannelDrained = Completer<void>();
+    _protocolStreamDrained = Completer<void>();
+    _diagnosticsStreamDrained = Completer<void>();
     _termination = Completer<RuntimeLifecycleWorkerTermination>();
-    _events = ReceivePort('dart-terminal-lifecycle-events');
-    _errors = ReceivePort('dart-terminal-lifecycle-errors');
-    _exits = ReceivePort('dart-terminal-lifecycle-exits');
-    _eventSubscription = _events!.listen(_handleWorkerEvent);
-    _errorSubscription = _errors!.listen(_handleWorkerError);
-    _exitSubscription = _exits!.listen(_handleWorkerExit);
+
+    if (workerCommand.executable.isEmpty) {
+      _state = _CoordinatorState.stopped;
+      _emit('worker-startup-failure');
+      _completeTermination(RuntimeLifecycleWorkerTermination.startupFailure);
+      return RuntimeLifecycleStartStatus.startupFailure;
+    }
 
     try {
-      _worker = await Isolate.spawn<List<Object?>>(
-        runtimeLifecycleWorkerMain,
-        <Object?>[_events!.sendPort, scenario.name, _generation],
-        onError: _errors!.sendPort,
-        onExit: _exits!.sendPort,
-        errorsAreFatal: true,
-        debugName: 'dart-terminal-lifecycle-worker',
+      final Process worker = await Process.start(
+        workerCommand.executable,
+        workerCommand.invocationArguments(scenario, _generation),
+        workingDirectory: workerCommand.workingDirectory,
+        environment: workerCommand.environment.isEmpty
+            ? null
+            : workerCommand.environment,
       );
+      _worker = worker;
+      _workerPid = worker.pid;
+      ++_outstandingProcessCount;
+      _writer = RuntimeWorkerFrameWriter(worker.stdin);
+      final RuntimeWorkerFrameDecoder decoder = RuntimeWorkerFrameDecoder(
+        worker.stdout,
+      );
+      _decoder = decoder;
+      _protocolSubscription = decoder.frames.listen(
+        _handleWorkerFrame,
+        onError: _handleProtocolError,
+        onDone: _handleProtocolDone,
+        cancelOnError: false,
+      );
+      _diagnosticSubscription = worker.stderr.listen(
+        _handleWorkerDiagnostics,
+        onError: _handleDiagnosticError,
+        onDone: _handleDiagnosticsDone,
+        cancelOnError: false,
+      );
+      unawaited(worker.exitCode.then(_handleWorkerExit));
     } on Object {
-      _emit('worker-startup-failure');
       _state = _CoordinatorState.stopped;
-      await _closePorts();
+      _emit('worker-startup-failure');
+      await _closeTransport();
       _completeTermination(RuntimeLifecycleWorkerTermination.startupFailure);
       return RuntimeLifecycleStartStatus.startupFailure;
     }
@@ -248,7 +320,7 @@ final class RuntimeLifecycleCoordinator {
         return RuntimeLifecycleStartStatus.ready;
       }
       if (!_exitSignal!.isCompleted) {
-        _worker?.kill(priority: Isolate.immediate);
+        _killWorker();
         await _exitSignal!.future.timeout(forcedExitTimeout);
       }
     }
@@ -268,17 +340,26 @@ final class RuntimeLifecycleCoordinator {
 
   Future<RuntimeLifecycleRequestResult> request(int value) async {
     if (_state != _CoordinatorState.running ||
-        _commands == null ||
+        _writer == null ||
         _terminationEvidence.sawExit) {
       throw StateError('runtime lifecycle worker is not ready');
     }
     final int operation = _nextOperation++;
+    if (operation > 0xffffffff) {
+      throw StateError('runtime lifecycle operation space is exhausted');
+    }
     final Completer<int> response = Completer<int>();
     _responses[operation] = response;
     _emit('worker-request');
-    _commands!.send(<Object?>['request', _generation, operation, value]);
-
     try {
+      await _writer!.send(
+        RuntimeWorkerFrame(
+          type: RuntimeWorkerMessageType.request,
+          generation: _generation,
+          operation: operation,
+          payload: RuntimeWorkerFrameCodec.int64Payload(value),
+        ),
+      );
       final ({bool exited, int? value}) result = await Future.any(
         <Future<({bool exited, int? value})>>[
           response.future.then((int reply) => (exited: false, value: reply)),
@@ -293,7 +374,12 @@ final class RuntimeLifecycleCoordinator {
       }
     } on TimeoutException {
       if (!_exitSignal!.isCompleted) {
-        _worker?.kill(priority: Isolate.immediate);
+        _killWorker();
+        await _exitSignal!.future.timeout(forcedExitTimeout);
+      }
+    } on Object {
+      if (!_exitSignal!.isCompleted) {
+        _killWorker();
         await _exitSignal!.future.timeout(forcedExitTimeout);
       }
     } finally {
@@ -328,7 +414,7 @@ final class RuntimeLifecycleCoordinator {
   Future<RuntimeLifecycleShutdownResult> _performShutdown() async {
     if (_state == _CoordinatorState.idle) {
       _state = _CoordinatorState.stopped;
-      await _closePorts();
+      await _closeTransport();
       return const RuntimeLifecycleShutdownResult(
         termination: RuntimeLifecycleWorkerTermination.graceful,
       );
@@ -356,9 +442,16 @@ final class RuntimeLifecycleCoordinator {
     _acceptResponses = false;
     _stopAcknowledged = Completer<void>();
     _emit('worker-stop-request');
-    _commands?.send(<Object?>['stop', _generation]);
     final Stopwatch deadline = Stopwatch()..start();
     try {
+      await _writer!.send(
+        RuntimeWorkerFrame(
+          type: RuntimeWorkerMessageType.stop,
+          generation: _generation,
+          operation: 0,
+          payload: Uint8List(0),
+        ),
+      );
       final _ShutdownSignal first = await _beforeDeadline(
         Future.any<_ShutdownSignal>(<Future<_ShutdownSignal>>[
           _stopAcknowledged!.future.then(
@@ -377,7 +470,14 @@ final class RuntimeLifecycleCoordinator {
         _forcedCleanup = true;
         _emit('worker-stop-timeout');
         _emit('worker-force-kill');
-        _worker?.kill(priority: Isolate.immediate);
+        _killWorker();
+        await _exitSignal!.future.timeout(forcedExitTimeout);
+      }
+    } on Object {
+      if (!_exitSignal!.isCompleted) {
+        _forcedCleanup = true;
+        _emit('worker-force-kill');
+        _killWorker();
         await _exitSignal!.future.timeout(forcedExitTimeout);
       }
     }
@@ -398,103 +498,145 @@ final class RuntimeLifecycleCoordinator {
     return future.timeout(remaining);
   }
 
-  void _handleWorkerEvent(Object? message) {
-    if (message is _ChannelDrainMarker && message.generation == _generation) {
-      _terminationEvidence.recordEventChannelDrained();
-      if (!(_eventChannelDrained?.isCompleted ?? true)) {
-        _eventChannelDrained!.complete();
+  void _handleWorkerFrame(RuntimeWorkerFrame frame) {
+    try {
+      if (frame.generation != _generation) {
+        throw FormatException(
+          'worker generation ${frame.generation} != $_generation',
+        );
       }
-      return;
-    }
-    if (message is! List<Object?> || message.isEmpty) {
-      return;
-    }
-    switch (message.first) {
-      case 'ready':
-        if (message.length != 3 ||
-            message[1] != _generation ||
-            message[2] is! SendPort ||
-            _state != _CoordinatorState.starting) {
-          return;
-        }
-        _commands = message[2]! as SendPort;
-        _workerWasReady = true;
-        _state = _CoordinatorState.running;
-        _acceptResponses = true;
-        _emit('worker-ready');
-        if (!_ready!.isCompleted) {
-          _ready!.complete();
-        }
-        return;
-      case 'response':
-        if (message.length != 4 ||
-            message[1] != _generation ||
-            message[2] is! int ||
-            message[3] is! int) {
-          return;
-        }
-        if (!_acceptResponses || _state != _CoordinatorState.running) {
-          if (!_emittedLateCompletion) {
-            _emittedLateCompletion = true;
-            _emit('late-completion-ignored');
+      switch (frame.type) {
+        case RuntimeWorkerMessageType.ready:
+          if (frame.operation != 0 ||
+              _state != _CoordinatorState.starting ||
+              RuntimeWorkerFrameCodec.readInt64Payload(frame) != _workerPid) {
+            throw const FormatException('invalid worker ready frame');
+          }
+          _workerWasReady = true;
+          _state = _CoordinatorState.running;
+          _acceptResponses = true;
+          _emit('worker-ready');
+          if (!_ready!.isCompleted) {
+            _ready!.complete();
           }
           return;
-        }
-        final Completer<int>? response = _responses[message[2]! as int];
-        if (response != null && !response.isCompleted) {
-          _emit('worker-response');
-          response.complete(message[3]! as int);
-        }
-        return;
-      case 'stop-ack':
-        if (message.length == 2 && message[1] == _generation) {
-          _emit('worker-stop-ack');
-          if (!(_stopAcknowledged?.isCompleted ?? true)) {
-            _stopAcknowledged!.complete();
+        case RuntimeWorkerMessageType.response:
+          if (frame.operation == 0) {
+            throw const FormatException('response operation must be nonzero');
           }
-        }
-        return;
+          final int value = RuntimeWorkerFrameCodec.readInt64Payload(frame);
+          if (!_acceptResponses || _state != _CoordinatorState.running) {
+            if (!_emittedLateCompletion) {
+              _emittedLateCompletion = true;
+              _emit('late-completion-ignored');
+            }
+            return;
+          }
+          final Completer<int>? response = _responses[frame.operation];
+          if (response != null && !response.isCompleted) {
+            _emit('worker-response');
+            response.complete(value);
+          }
+          return;
+        case RuntimeWorkerMessageType.stopAcknowledged:
+          if (frame.operation != 0 || frame.payload.isNotEmpty) {
+            throw const FormatException('invalid stop acknowledgement');
+          }
+          if (_state == _CoordinatorState.stopping) {
+            _emit('worker-stop-ack');
+            if (!(_stopAcknowledged?.isCompleted ?? true)) {
+              _stopAcknowledged!.complete();
+            }
+          }
+          return;
+        case RuntimeWorkerMessageType.request:
+        case RuntimeWorkerMessageType.stop:
+          throw FormatException(
+            'worker sent parent-only frame ${frame.type.name}',
+          );
+      }
+    } on Object catch (error, stackTrace) {
+      _handleProtocolError(error, stackTrace);
     }
   }
 
-  void _handleWorkerError(Object? message) {
-    if (message is _ChannelDrainMarker && message.generation == _generation) {
-      _terminationEvidence.recordErrorChannelDrained();
-      if (!(_errorChannelDrained?.isCompleted ?? true)) {
-        _errorChannelDrained!.complete();
-      }
+  void _handleProtocolError(Object error, StackTrace stackTrace) {
+    if (_protocolFailure != null) {
       return;
     }
-    _terminationEvidence.recordError();
+    _protocolFailure = error;
+    if (!(_exitSignal?.isCompleted ?? true)) {
+      _killWorker();
+    }
   }
 
-  void _handleWorkerExit(Object? message) {
-    if (_terminationEvidence.sawExit) {
+  void _handleProtocolDone() {
+    if (!_terminationEvidence.canReconcile) {
+      _terminationEvidence.recordProtocolStreamDrained();
+    }
+    if (!(_protocolStreamDrained?.isCompleted ?? true)) {
+      _protocolStreamDrained!.complete();
+    }
+  }
+
+  void _handleWorkerDiagnostics(List<int> bytes) {
+    if (bytes.isEmpty) {
       return;
     }
+    if (!_terminationEvidence.sawError) {
+      _terminationEvidence.recordError();
+    }
+    final int remaining = _maximumDiagnosticBytes - _diagnostics.length;
+    if (remaining <= 0) {
+      _diagnosticsTruncated = true;
+      return;
+    }
+    final int accepted = bytes.length < remaining ? bytes.length : remaining;
+    _diagnostics.add(bytes.sublist(0, accepted));
+    if (accepted != bytes.length) {
+      _diagnosticsTruncated = true;
+    }
+  }
+
+  void _handleDiagnosticError(Object error, StackTrace stackTrace) {
+    if (!_terminationEvidence.sawError) {
+      _terminationEvidence.recordError();
+    }
+    final List<int> encoded = utf8.encode('diagnostic stream error: $error\n');
+    _handleWorkerDiagnostics(encoded);
+  }
+
+  void _handleDiagnosticsDone() {
+    _terminationEvidence.recordDiagnosticsStreamDrained();
+    if (!(_diagnosticsStreamDrained?.isCompleted ?? true)) {
+      _diagnosticsStreamDrained!.complete();
+    }
+  }
+
+  void _handleWorkerExit(int status) {
+    if (_processReaped) {
+      return;
+    }
+    _processReaped = true;
+    _processExitStatus = status;
+    if (_outstandingProcessCount <= 0) {
+      throw StateError('worker process count underflow');
+    }
+    --_outstandingProcessCount;
     _terminationEvidence.recordExit();
     if (!(_exitSignal?.isCompleted ?? true)) {
       _exitSignal!.complete();
     }
-    unawaited(_reconcileWorkerTermination());
+    _reconcileFuture ??= _reconcileWorkerTermination();
   }
 
   Future<void> _reconcileWorkerTermination() async {
-    final ReceivePort? events = _events;
-    final ReceivePort? errors = _errors;
-    if (events == null || errors == null) {
-      throw StateError('worker termination ports closed before reconciliation');
-    }
-    events.sendPort.send(_ChannelDrainMarker(_generation));
-    errors.sendPort.send(_ChannelDrainMarker(_generation));
     await Future.wait<void>(<Future<void>>[
-      _eventChannelDrained!.future,
-      _errorChannelDrained!.future,
+      _protocolStreamDrained!.future,
+      _diagnosticsStreamDrained!.future,
     ]);
     if (!_terminationEvidence.canReconcile) {
-      throw StateError(
-        'worker termination channels did not reach their barrier',
-      );
+      throw StateError('worker streams did not reach their exit barriers');
     }
 
     final RuntimeLifecycleWorkerTermination termination = _terminationEvidence
@@ -503,6 +645,7 @@ final class RuntimeLifecycleCoordinator {
           shutdownRequested: _shutdownRequested,
           stopAcknowledged: _stopAcknowledged?.isCompleted ?? false,
           forcedCleanup: _forcedCleanup,
+          processExitedSuccessfully: _processExitStatus == 0,
         );
     if (_terminationEvidence.sawError && !_emittedWorkerError) {
       _emittedWorkerError = true;
@@ -523,8 +666,12 @@ final class RuntimeLifecycleCoordinator {
     _emitWorkerExit();
     _state = _CoordinatorState.stopped;
     _acceptResponses = false;
-    await _closePorts();
+    await _closeTransport();
     _completeTermination(termination);
+  }
+
+  void _killWorker() {
+    _worker?.kill(ProcessSignal.sigkill);
   }
 
   void _completeTermination(RuntimeLifecycleWorkerTermination termination) {
@@ -546,96 +693,156 @@ final class RuntimeLifecycleCoordinator {
     );
   }
 
-  Future<void> _closePorts() async {
+  Future<void> _closeTransport() async {
     _acceptResponses = false;
-    await _eventSubscription?.cancel();
-    await _errorSubscription?.cancel();
-    await _exitSubscription?.cancel();
-    _events?.close();
-    _errors?.close();
-    _exits?.close();
-    _eventSubscription = null;
-    _errorSubscription = null;
-    _exitSubscription = null;
-    _events = null;
-    _errors = null;
-    _exits = null;
-    _commands = null;
+    _responses.clear();
+    try {
+      await _writer?.close();
+    } on Object {
+      // Process exit commonly closes stdin before the parent does.
+    }
+    await _protocolSubscription?.cancel();
+    await _diagnosticSubscription?.cancel();
+    await _decoder?.cancel();
+    _protocolSubscription = null;
+    _diagnosticSubscription = null;
+    _decoder = null;
+    _writer = null;
     _worker = null;
   }
 }
 
-@pragma('vm:entry-point')
-void runtimeLifecycleWorkerMain(List<Object?> bootstrap) {
-  final SendPort events = bootstrap[0]! as SendPort;
-  final String scenario = bootstrap[1]! as String;
-  final int generation = bootstrap[2]! as int;
-  if (scenario == RuntimeLifecycleScenario.workerStartupFailure.name) {
+Future<void> runRuntimeLifecycleWorkerProcess(List<String> arguments) async {
+  RuntimeLifecycleScenario? scenario;
+  int? generation;
+  for (final String argument in arguments) {
+    if (argument.startsWith('--scenario=')) {
+      if (scenario != null) {
+        throw const FormatException('--scenario may be supplied only once');
+      }
+      scenario = RuntimeLifecycleScenario.byName(
+        argument.substring('--scenario='.length),
+      );
+      if (scenario == null) {
+        throw FormatException('unknown worker scenario: $argument');
+      }
+      continue;
+    }
+    if (argument.startsWith('--generation=')) {
+      if (generation != null) {
+        throw const FormatException('--generation may be supplied only once');
+      }
+      generation = int.tryParse(argument.substring('--generation='.length));
+      if (generation == null || generation <= 0 || generation > 0xffffffff) {
+        throw FormatException('invalid worker generation: $argument');
+      }
+      continue;
+    }
+    throw FormatException('unknown worker argument: $argument');
+  }
+  if (scenario == null || generation == null) {
+    throw const FormatException('worker scenario and generation are required');
+  }
+  if (scenario == RuntimeLifecycleScenario.rootStartupFailure ||
+      scenario == RuntimeLifecycleScenario.rootUncaught) {
+    throw FormatException('root-only scenario cannot run in worker: $scenario');
+  }
+  if (scenario == RuntimeLifecycleScenario.workerStartupFailure) {
     throw StateError('requested lifecycle worker startup failure');
   }
 
-  final ReceivePort commands = ReceivePort('dart-terminal-lifecycle-commands');
-  events.send(<Object?>['ready', generation, commands.sendPort]);
-  if (scenario == RuntimeLifecycleScenario.workerIdleUncaught.name) {
-    Timer(const Duration(milliseconds: 35), () {
-      throw StateError('requested idle worker failure');
-    });
-  } else if (scenario == RuntimeLifecycleScenario.workerIdleExit.name) {
-    Timer(const Duration(milliseconds: 35), Isolate.exit);
-  }
-  commands.listen((Object? message) {
-    if (message is! List<Object?> || message.isEmpty) {
-      return;
+  final RuntimeWorkerFrameDecoder decoder = RuntimeWorkerFrameDecoder(stdin);
+  final RuntimeWorkerFrameWriter writer = RuntimeWorkerFrameWriter(stdout);
+  Timer? idleAction;
+  Future<void>? lateResponse;
+  try {
+    await writer.send(
+      RuntimeWorkerFrame(
+        type: RuntimeWorkerMessageType.ready,
+        generation: generation,
+        operation: 0,
+        payload: RuntimeWorkerFrameCodec.int64Payload(pid),
+      ),
+    );
+    if (scenario == RuntimeLifecycleScenario.workerIdleUncaught) {
+      idleAction = Timer(const Duration(milliseconds: 35), () {
+        throw StateError('requested idle worker failure');
+      });
+    } else if (scenario == RuntimeLifecycleScenario.workerIdleExit) {
+      idleAction = Timer(const Duration(milliseconds: 35), () => exit(0));
     }
-    switch (message.first) {
-      case 'request':
-        final int requestGeneration = message[1]! as int;
-        final int operation = message[2]! as int;
-        final int value = message[3]! as int;
-        if (scenario == RuntimeLifecycleScenario.workerSyncUncaught.name) {
-          throw StateError('requested synchronous worker failure');
-        }
-        if (scenario == RuntimeLifecycleScenario.workerAsyncUncaught.name) {
-          Timer.run(() {
+
+    await for (final RuntimeWorkerFrame frame in decoder.frames) {
+      if (frame.generation != generation) {
+        throw FormatException(
+          'parent generation ${frame.generation} != $generation',
+        );
+      }
+      switch (frame.type) {
+        case RuntimeWorkerMessageType.request:
+          if (frame.operation == 0) {
+            throw const FormatException('request operation must be nonzero');
+          }
+          final int value = RuntimeWorkerFrameCodec.readInt64Payload(frame);
+          if (scenario == RuntimeLifecycleScenario.workerSyncUncaught) {
+            throw StateError('requested synchronous worker failure');
+          }
+          if (scenario == RuntimeLifecycleScenario.workerAsyncUncaught) {
+            await Future<void>.delayed(Duration.zero);
             throw StateError('requested asynchronous worker failure');
-          });
+          }
+          if (scenario == RuntimeLifecycleScenario.workerUnexpectedExit) {
+            exit(0);
+          }
+          final RuntimeWorkerFrame response = RuntimeWorkerFrame(
+            type: RuntimeWorkerMessageType.response,
+            generation: generation,
+            operation: frame.operation,
+            payload: RuntimeWorkerFrameCodec.int64Payload(value + 1),
+          );
+          if (scenario == RuntimeLifecycleScenario.lateCompletion) {
+            lateResponse = Future<void>.delayed(
+              const Duration(milliseconds: 35),
+              () => writer.send(response),
+            );
+          } else {
+            await writer.send(response);
+          }
+          break;
+        case RuntimeWorkerMessageType.stop:
+          if (frame.operation != 0 || frame.payload.isNotEmpty) {
+            throw const FormatException('invalid stop frame');
+          }
+          if (scenario == RuntimeLifecycleScenario.shutdownTimeout) {
+            await Completer<void>().future;
+          }
+          if (scenario == RuntimeLifecycleScenario.workerStopUncaught) {
+            throw StateError('requested worker failure while stopping');
+          }
+          await writer.send(
+            RuntimeWorkerFrame(
+              type: RuntimeWorkerMessageType.stopAcknowledged,
+              generation: generation,
+              operation: 0,
+              payload: Uint8List(0),
+            ),
+          );
+          if (scenario == RuntimeLifecycleScenario.lateCompletion) {
+            await Future<void>.delayed(const Duration(milliseconds: 70));
+            await lateResponse;
+          }
           return;
-        }
-        if (scenario == RuntimeLifecycleScenario.workerUnexpectedExit.name) {
-          Isolate.exit();
-        }
-        if (scenario == RuntimeLifecycleScenario.lateCompletion.name) {
-          Timer(const Duration(milliseconds: 35), () {
-            events.send(<Object?>[
-              'response',
-              requestGeneration,
-              operation,
-              value + 1,
-            ]);
-          });
-          return;
-        }
-        events.send(<Object?>[
-          'response',
-          requestGeneration,
-          operation,
-          value + 1,
-        ]);
-        return;
-      case 'stop':
-        if (scenario == RuntimeLifecycleScenario.shutdownTimeout.name) {
-          return;
-        }
-        if (scenario == RuntimeLifecycleScenario.workerStopUncaught.name) {
-          throw StateError('requested worker failure while stopping');
-        }
-        events.send(<Object?>['stop-ack', generation]);
-        if (scenario == RuntimeLifecycleScenario.lateCompletion.name) {
-          Timer(const Duration(milliseconds: 70), commands.close);
-        } else {
-          commands.close();
-        }
-        return;
+        case RuntimeWorkerMessageType.ready:
+        case RuntimeWorkerMessageType.response:
+        case RuntimeWorkerMessageType.stopAcknowledged:
+          throw FormatException(
+            'parent sent worker-only frame ${frame.type.name}',
+          );
+      }
     }
-  });
+  } finally {
+    idleAction?.cancel();
+    await decoder.cancel();
+    await stdout.flush();
+  }
 }
