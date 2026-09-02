@@ -361,6 +361,15 @@ override RELEASE_AOT_WORKER_EXECUTABLE := \
 override RELEASE_AOT_WORKER_DEPFILE := $(RELEASE_AOT_WORKER_EXECUTABLE).d
 override RELEASE_AOT_HOST := \
 	$(RELEASE_AOT_BUILD_DIR)/dart_terminal_release_aot
+override RELEASE_AOT_PACKAGED_DIR := $(RELEASE_AOT_BUILD_DIR)/packaged
+override RELEASE_AOT_PACKAGED_HOST := \
+	$(RELEASE_AOT_PACKAGED_DIR)/dart_terminal_release_aot
+override RELEASE_AOT_PACKAGED_ENGINE := \
+	$(RELEASE_AOT_PACKAGED_DIR)/libdart_engine_aot_shared.dylib
+override RELEASE_AOT_PACKAGED_SNAPSHOT := \
+	$(RELEASE_AOT_PACKAGED_DIR)/application.aot
+override RELEASE_AOT_PACKAGED_WORKER_EXECUTABLE := \
+	$(RELEASE_AOT_PACKAGED_DIR)/dart_terminal_runtime_worker
 override RELEASE_AOT_MANIFEST := \
 	$(RELEASE_AOT_BUILD_DIR)/runtime-build-manifest.json
 override RELEASE_AOT_FINGERPRINT := \
@@ -423,6 +432,7 @@ INTEL_EVIDENCE_OUTPUT ?=
 	developer-jit-clean-sdk-test \
 	developer-jit-integration developer-jit-lifecycle developer-jit-traffic \
 	release-aot-build release-aot-run release-aot-audit \
+	release-aot-clean-sdk-test \
 	release-aot-integration release-aot-lifecycle runtime-source-check \
 	runtime-bundle-audit runtime-integration \
 	runtime-lifecycle-integration runtime-verify \
@@ -460,6 +470,7 @@ help:
 	@echo "  make release-aot-build   Build one thin release-AOT product app"
 	@echo "  make release-aot-run     Run one thin release-AOT product app"
 	@echo "  make release-aot-audit   Audit one AOT-only thin bundle contract"
+	@echo "  make release-aot-clean-sdk-test Verify stock-SDK AOT worker provenance"
 	@echo "  make runtime-integration Run one common smoke suite in both modes"
 	@echo "  make runtime-lifecycle-integration Run shared lifecycle faults"
 	@echo "  make runtime-verify      Verify both modes for one explicit architecture"
@@ -1077,22 +1088,50 @@ $(RELEASE_AOT_HOST): $(RELEASE_AOT_HOST_SOURCE) \
 		-Wl,-rpath,@executable_path/../Frameworks \
 		-Wl,-export_dynamic -o $@
 
+$(RELEASE_AOT_PACKAGED_HOST): $(RELEASE_AOT_HOST) Makefile
+	@mkdir -p $(RELEASE_AOT_PACKAGED_DIR)
+	cp $(RELEASE_AOT_HOST) $@
+	chmod 755 $@
+	/usr/bin/codesign --force --sign - --timestamp=none $@
+
+$(RELEASE_AOT_PACKAGED_ENGINE): $(RELEASE_AOT_FINGERPRINT) Makefile \
+		| runtime-aot-engine
+	@mkdir -p $(RELEASE_AOT_PACKAGED_DIR)
+	cp $(RUNTIME_ENGINE_AOT_LIBRARY) $@
+	chmod 755 $@
+	/usr/bin/codesign --force --sign - --timestamp=none $@
+
+$(RELEASE_AOT_PACKAGED_SNAPSHOT): $(RELEASE_AOT_SNAPSHOT) Makefile
+	@mkdir -p $(RELEASE_AOT_PACKAGED_DIR)
+	cp $(RELEASE_AOT_SNAPSHOT) $@
+	chmod 755 $@
+	/usr/bin/codesign --force --sign - --timestamp=none $@
+
+$(RELEASE_AOT_PACKAGED_WORKER_EXECUTABLE): \
+		$(RELEASE_AOT_WORKER_EXECUTABLE) Makefile
+	@mkdir -p $(RELEASE_AOT_PACKAGED_DIR)
+	cp $(RELEASE_AOT_WORKER_EXECUTABLE) $@
+	chmod 755 $@
+	/usr/bin/codesign --force --sign - --timestamp=none $@
+
 $(RELEASE_AOT_MANIFEST): $(RUNTIME_MANIFEST_SOURCE) \
 		$(RUNTIME_RELEASE_SUPPORT_SOURCE) $(RELEASE_AOT_FINGERPRINT) \
-		$(RELEASE_AOT_HOST) $(RELEASE_AOT_KERNEL) $(RELEASE_AOT_SNAPSHOT) \
-		$(RELEASE_AOT_WORKER_EXECUTABLE)
+		$(RELEASE_AOT_PACKAGED_HOST) $(RELEASE_AOT_KERNEL) \
+		$(RELEASE_AOT_PACKAGED_ENGINE) $(RELEASE_AOT_PACKAGED_SNAPSHOT) \
+		$(RELEASE_AOT_PACKAGED_WORKER_EXECUTABLE)
 	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_MANIFEST_SOURCE) \
 		--mode=release-aot \
 		--architecture=$(RUNTIME_ARCH) \
 		--fingerprint=$(RELEASE_AOT_FINGERPRINT) \
-		--launcher=$(RELEASE_AOT_HOST) \
-		--engine=$(RUNTIME_ENGINE_AOT_LIBRARY) \
-		--payload=$(RELEASE_AOT_SNAPSHOT) \
-		--worker-executable=$(RELEASE_AOT_WORKER_EXECUTABLE) \
+		--launcher=$(RELEASE_AOT_PACKAGED_HOST) \
+		--engine=$(RELEASE_AOT_PACKAGED_ENGINE) \
+		--payload=$(RELEASE_AOT_PACKAGED_SNAPSHOT) \
+		--worker-executable=$(RELEASE_AOT_PACKAGED_WORKER_EXECUTABLE) \
 		--intermediate=$(RELEASE_AOT_KERNEL) --output=$@
 
-$(RELEASE_AOT_BUNDLE_STAMP): $(RELEASE_AOT_HOST) \
-		$(RELEASE_AOT_SNAPSHOT) $(RELEASE_AOT_WORKER_EXECUTABLE) \
+$(RELEASE_AOT_BUNDLE_STAMP): $(RELEASE_AOT_PACKAGED_HOST) \
+		$(RELEASE_AOT_PACKAGED_ENGINE) $(RELEASE_AOT_PACKAGED_SNAPSHOT) \
+		$(RELEASE_AOT_PACKAGED_WORKER_EXECUTABLE) \
 		$(RELEASE_AOT_MANIFEST) \
 		$(RELEASE_AOT_INFO_PLIST) $(DART_ENGINE_ROOT)/LICENSE Makefile
 	@rm -rf $(RELEASE_AOT_BUNDLE)
@@ -1101,12 +1140,12 @@ $(RELEASE_AOT_BUNDLE_STAMP): $(RELEASE_AOT_HOST) \
 	@mkdir -p $(RELEASE_AOT_BUNDLE)/Contents/Helpers
 	@mkdir -p $(RELEASE_AOT_BUNDLE)/Contents/Frameworks
 	@mkdir -p $(RELEASE_AOT_BUNDLE)/Contents/Resources
-	cp $(RELEASE_AOT_HOST) $(RELEASE_AOT_EXECUTABLE)
-	cp $(RUNTIME_ENGINE_AOT_LIBRARY) \
+	cp $(RELEASE_AOT_PACKAGED_HOST) $(RELEASE_AOT_EXECUTABLE)
+	cp $(RELEASE_AOT_PACKAGED_ENGINE) \
 		$(RELEASE_AOT_BUNDLE)/Contents/Frameworks/libdart_engine_aot_shared.dylib
-	cp $(RELEASE_AOT_SNAPSHOT) \
+	cp $(RELEASE_AOT_PACKAGED_SNAPSHOT) \
 		$(RELEASE_AOT_BUNDLE)/Contents/Resources/application.aot
-	cp $(RELEASE_AOT_WORKER_EXECUTABLE) \
+	cp $(RELEASE_AOT_PACKAGED_WORKER_EXECUTABLE) \
 		$(RELEASE_AOT_BUNDLED_WORKER_EXECUTABLE)
 	cp $(RELEASE_AOT_MANIFEST) \
 		$(RELEASE_AOT_BUNDLE)/Contents/Resources/runtime-build-manifest.json
@@ -1114,10 +1153,7 @@ $(RELEASE_AOT_BUNDLE_STAMP): $(RELEASE_AOT_HOST) \
 		$(RELEASE_AOT_BUNDLE)/Contents/Resources/DART_SDK_LICENSE.txt
 	cp $(RELEASE_AOT_INFO_PLIST) \
 		$(RELEASE_AOT_BUNDLE)/Contents/Info.plist
-	chmod 755 $(RELEASE_AOT_EXECUTABLE) \
-		$(RELEASE_AOT_BUNDLED_WORKER_EXECUTABLE)
-	codesign --force --sign - $(RELEASE_AOT_BUNDLED_WORKER_EXECUTABLE)
-	codesign --force --deep --sign - $(RELEASE_AOT_BUNDLE)
+	/usr/bin/codesign --force --sign - --timestamp=none $(RELEASE_AOT_BUNDLE)
 	touch $@
 
 release-aot-build: runtime-architecture-check $(RELEASE_AOT_BUNDLE_STAMP)
@@ -1141,6 +1177,12 @@ release-aot-audit: release-aot-build
 			--output-report=$(RELEASE_AOT_AUDIT_REPORT) \
 			$(RELEASE_AOT_BUNDLE); \
 	fi
+
+release-aot-clean-sdk-test: runtime-dart-tool-check
+	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+		$(RUNTIME_FRESHNESS_TEST_SOURCE) \
+		--project-root=$(PROJECT_ROOT) --make=/usr/bin/make \
+		--focus=release-clean-sdk
 
 release-aot-integration: release-aot-build
 	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_INTEGRATION_SOURCE) \

@@ -510,7 +510,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] M1 Developer GUI/lifecycle/failure/backpressure 統合試験を通し、移行記録を閉じる
   - [ ] M1/arm64 Release AOT 製品を同じ contract へ移行する
     - [x] clean Product Engine、公式 self-contained AOT worker、host-owned launch、bundle/sign 経路へ移す
-    - [ ] Release manifest/audit/freshness/negative gate を clean process-worker contract へ移す
+    - [x] Release manifest/audit/freshness/negative gate を clean process-worker contract へ移す
     - [ ] M1 Release GUI/lifecycle/failure/backpressure/PID 統合試験を通し、移行記録を閉じる
   - [ ] patch 本体、適用処理、hash・来歴・監査・fixture をすべて削除する
   - [ ] M1 の JIT/AOT 横断 lifecycle、性能、終了順序、clean SDK を検証して移行を閉じる

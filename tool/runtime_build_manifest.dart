@@ -144,6 +144,7 @@ Future<Map<String, Object?>> _createManifest(_Options options) async {
     options.engine,
     options.payload,
     if (options.workerPayload != null) options.workerPayload!,
+    if (options.workerExecutable != null) options.workerExecutable!,
     if (options.intermediate != null) options.intermediate!,
     options.output,
   ]) {
@@ -184,8 +185,10 @@ Future<Map<String, Object?>> _createManifest(_Options options) async {
   final SplayTreeMap<String, Object?> produced =
       SplayTreeMap<String, Object?>();
   produced['dart_engine'] = await runtimeSha256File(options.engine);
-  produced['launcher'] = await runtimeSha256File(options.launcher);
   if (options.mode == RuntimeMode.releaseAot) {
+    produced['launcher_content'] = await runtimeMachOContentSha256(
+      options.launcher,
+    );
     produced['aot_snapshot'] = await runtimeSha256File(options.payload);
     produced['worker_executable'] = await runtimeSha256File(
       options.workerExecutable!,
@@ -194,6 +197,7 @@ Future<Map<String, Object?>> _createManifest(_Options options) async {
       options.intermediate!,
     );
   } else {
+    produced['launcher'] = await runtimeSha256File(options.launcher);
     produced['kernel_payload'] = await runtimeSha256File(options.payload);
     produced['worker_kernel_payload'] = await runtimeSha256File(
       options.workerPayload!,

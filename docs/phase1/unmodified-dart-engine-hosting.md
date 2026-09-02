@@ -2013,3 +2013,151 @@ enforce the signed-helper provenance contract (including hash timing), update
 the exact Mach-O inventory and rpath policy, and add missing/tampered/override
 negative gates before Release audit acceptance. The legacy audit is not run or
 treated as authoritative in this intermediate state.
+
+### M1 Release AOT assurance contract: start
+
+Purpose: make the already-running official self-contained Release worker a
+fully fail-closed, reproducible, and auditable bundle component without
+changing its runtime behavior or any Dart/Engine source.
+
+Background: commit `2f6c1267b05c7f761805048472ca88afa264b716`
+removed Release build-time patch use and proved the signed arm64 process helper.
+The remaining audit schema still describes the obsolete Engine-isolate
+topology, omits the helper from exact layout and Mach-O checks, and would compare
+the helper's unsigned build hash with signed bundle bytes.
+
+Scope: define when the helper is signed and hashed; require its exact bundle
+path, file kind, executable mode, architecture, dependencies, rpaths, signature,
+and manifest digest; require official-clean Engine repository/source policy and
+process-worker topology; add an arm64-focused clean-SDK/freshness gate and
+negative cases for missing, tampered, and application-overridden helpers; keep
+Developer assurance passing.
+
+Out of scope: new lifecycle behavior; the complete Release lifecycle/traffic
+matrix, which is the next ordered unit; patch-file deletion; cross-mode
+closeout; x86_64, Rosetta, Universal, or Intel-native execution; changes to
+`dart_appkit`; and every Dart or Dart Engine modification.
+
+Dependencies: the frozen stock-runtime plan, the Developer assurance contract,
+the signed Release helper from `2f6c126`, clean `dart_appkit` commit
+`77e355387a0ea50034632d9e3d4b35f629155c35`, and official SDK revision
+`60a57cd42d64dc03e9f07aa60a2e250755c1ef28`.
+
+Completion conditions: a clean arm64 Release build passes the replacement
+manifest and bundle audit; unchanged inputs are a no-op and every material
+helper/build input regenerates the proper downstream artifact; missing,
+non-executable, tampered, unsigned, wrong-layout, or user-overridden workers
+fail; no patch field or dirty-Engine policy can qualify; Developer assurance
+still passes; SDK and AppKit repositories remain clean.
+
+Validation plan: first read and map every current audit/freshness/negative
+schema and observe the signed helper's actual load commands; implement the
+smallest arm64-compatible schema change; format/analyze/unit test; exercise the
+new focused clean-SDK and negative gates; run Release audit and Developer
+regressions; inspect repository boundaries and record all results before
+marking this subtask complete.
+
+Initial implementation note: a direct `dart format` invocation formatted the
+support file successfully but returned status 1 only because the sandbox denied
+updating Dart's home-directory telemetry session file. No source-format failure
+occurred. Subsequent tool invocations use the project's already-established
+`--suppress-analytics` form; this environmental telemetry failure is not treated
+as a passing validation run.
+
+The first replacement-audit run correctly failed on the new exact produced-hash
+check. Staged Engine, AOT snapshot, and worker bytes remained identical after
+outer signing, but macOS necessarily re-signs the app's main executable with
+the bundle identity/resource seal, so its full-file hash differs from the
+pre-bundle launcher. A manifest embedded in that same resource seal cannot
+contain the post-signature full hash without becoming self-referential. The
+contract therefore needs a signature-independent Mach-O content digest for the
+launcher, while continuing to require strict outer/nested signatures and exact
+full-file hashes for the other Release artifacts. The failed run is retained as
+design evidence and is not counted as audit acceptance.
+
+The same failed run exposed a more serious legacy Make collision. Making the
+product-owned signed Engine copy directly depend on the SDK dylib matched the
+old Phase 0 file rule for that dylib; that historical rule still depends on
+`dart-engine-lifecycle-support` and silently reapplied both patches to
+`runtime/engine/engine.cc`. The SDK was clean immediately before the run. The
+post-run check found exactly that one tracked file changed by the known combined
+35-line patch, and it was immediately restored from the pinned official HEAD;
+the SDK is again clean at `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`.
+This failed attempt is not acceptable migration evidence. The replacement rule
+must depend on the clean `runtime-aot-engine` gate as an order-only prerequisite
+and must not name the legacy file target as a normal Make prerequisite. A
+focused dependency-graph test will explicitly reject either patch-support
+target in the complete Release derivation before another product build runs.
+
+The dependency collision is now removed: the packaged Engine copy depends on
+the Release fingerprint and has `runtime-aot-engine` only as an order-only
+prerequisite. A complete dry run from an empty temporary product build root
+contained the clean-SDK gate and snapshotter attestation, and contained none of
+the two patch files, either patch-support target, or either historical support
+recipe. Because the earlier collision had produced Product outputs from a
+temporarily patched source, the official attestation rejected those outputs and
+forced a clean 2,209-action Product rebuild after the source was restored. The
+replacement arm64 Release audit then passed with exact signed Engine, AOT
+snapshot, and self-contained worker hashes plus the signature-independent
+launcher content digest. The SDK and AppKit repositories were checked
+immediately afterward and are clean at their pinned revisions. This proves the
+positive contract once; the remaining work in this unit is to encode the same
+dependency, freshness, provenance, and negative assertions in the focused
+repeatable gate.
+
+The new `release-aot-clean-sdk-test` now performs that repeatable arm64 gate
+from an isolated product build root. It inspects the complete Make derivation
+before building, rejects every legacy patch/support target, verifies the exact
+official compiler and four-artifact Product Engine attestation, audits the
+signed helper's fixed bundle layout and hashes, executes a request/graceful
+shutdown round trip in the self-contained child, and rejects an application
+attempt to override the host-owned worker path. Separate copied bundles prove
+fail-closed behavior for a missing helper, a helper in the wrong directory, a
+non-executable helper, a validly re-signed but hash-changed helper, and an
+unsigned helper. Its first run passed with `patch_activity=0`; all 19 tracked
+derived artifacts retained their modification time for unchanged inputs and
+all 19 regenerated after a material input change. Ten protected Release Make
+paths also ignored command-line overrides. The SDK and AppKit repositories
+remained clean after the test, and `git diff --check` passed for the product
+changes.
+
+The focused gate was rerun after adding launcher-side missing/wrong-layout/
+non-executable rejection checks and passed again. Each of those fixtures exits
+before AppKit startup with status 66 and the host-owned worker validation
+diagnostic; a caller therefore cannot turn an invalid bundled helper into an
+in-process fallback. The final validation set for this assurance unit is:
+
+- `make RUNTIME_ARCH=arm64 release-aot-clean-sdk-test`: pass; zero patch
+  activity, one self-contained worker request/shutdown round trip, five bundle
+  mutation classes rejected, three launcher invalid-helper cases rejected, one
+  application override rejected, ten protected Make overrides ignored, 19/19
+  stable no-op artifacts, and 19/19 regenerated artifacts;
+- `make RUNTIME_ARCH=arm64 developer-jit-clean-sdk-test`: pass; zero patch
+  activity, the official Dart plus worker-Kernel path retained, one lifecycle
+  round trip, both missing-worker and application-override rejection, 9/9
+  stable no-op artifacts, and 9/9 regenerated artifacts;
+- `make RUNTIME_ARCH=arm64 runtime-source-check`: pass; all 41 Dart files were
+  already formatted, C/C++ formatting and header syntax checks passed, both
+  plists passed, whole-project analysis reported no issues, and all existing
+  Dart tests passed;
+- `make RUNTIME_ARCH=arm64 release-aot-audit`: pass after regenerating the
+  product-root bundle from the final source inventory; Product Engine
+  attestation validation reported no rebuild work, all four nested Mach-O roles
+  were strict ad-hoc signed arm64 files with exact policy, the helper was at
+  `Contents/Helpers/dart_terminal_runtime_worker`, and the audit receipt status
+  was pass;
+- `make RUNTIME_ARCH=arm64 runtime-build-freshness-test`: pass; 108 protected
+  Make overrides were ignored, no hostile path/tool was consumed, formal tool
+  evidence was verified, 28 external-header attacks were rejected, no stale
+  artifact was reused, the legacy composition checks operated only on their
+  disposable Git fixture, and all existing input/package/no-op checks passed;
+- final `git diff --check`: pass. The Dart SDK/Engine repository is clean at
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`, and `dart_appkit` is clean at
+  `77e355387a0ea50034632d9e3d4b35f629155c35`.
+
+This completes only the Release manifest/audit/freshness/negative assurance
+unit. The next ordered unit remains the M1 Release GUI, lifecycle fault,
+backpressure, and PID closeout matrix. Patch files and historical patch targets
+remain deliberately untouched until the later explicit deletion unit, and
+x86_64/Rosetta/Universal behavior remains non-blocking and deferred until the
+M1 work is complete.

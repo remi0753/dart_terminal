@@ -3,16 +3,16 @@ import 'dart:convert';
 import 'dart:io';
 
 const String runtimeBundleAuditFormat = 'dart-terminal-runtime-bundle-audit';
-const int runtimeBundleAuditVersion = 4;
+const int runtimeBundleAuditVersion = 5;
 const String runtimeBuildFingerprintFormat =
     'dart-terminal-runtime-build-fingerprint';
-const int runtimeBuildFingerprintVersion = 5;
+const int runtimeBuildFingerprintVersion = 6;
 const String runtimeBuildManifestFormat =
     'dart-terminal-runtime-build-manifest';
-const int runtimeBuildManifestVersion = 7;
+const int runtimeBuildManifestVersion = 8;
 const String runtimeBuildManifestRelativePath =
     'Resources/runtime-build-manifest.json';
-const String runtimeMachOPolicy = 'dart-terminal-macos-runtime-v1';
+const String runtimeMachOPolicy = 'dart-terminal-macos-runtime-v2';
 const String runtimeDeveloperWorkerPayloadName = 'runtime_worker.dill';
 const String runtimeReleaseWorkerExecutableName =
     'dart_terminal_runtime_worker';
@@ -481,6 +481,23 @@ Future<String> runtimeSha256File(String path) async {
   return output.split(RegExp(r'\s+')).first;
 }
 
+Future<String> runtimeMachOContentSha256(String path) async {
+  final Directory temporary = await Directory.systemTemp.createTemp(
+    'dart-terminal-macho-content-',
+  );
+  try {
+    final File normalized = File('${temporary.path}/unsigned-macho');
+    await File(path).copy(normalized.path);
+    await runRuntimeCommand('/usr/bin/codesign', <String>[
+      '--remove-signature',
+      normalized.path,
+    ]);
+    return await runtimeSha256File(normalized.path);
+  } finally {
+    await temporary.delete(recursive: true);
+  }
+}
+
 Future<String> runtimeSha256Text(String value) async {
   final Directory temporary = await Directory.systemTemp.createTemp(
     'dart-terminal-sha256-',
@@ -803,15 +820,18 @@ Set<String> _laneInputRoles(RuntimeMode mode) => <String>{
   'kernel_compiler',
   'platform_dill',
   if (mode == RuntimeMode.developerJit) 'runtime_worker_dart',
+  if (mode == RuntimeMode.releaseAot) 'runtime_worker_compiler',
   if (mode == RuntimeMode.releaseAot) 'snapshotter',
 };
 
 Set<String> _laneProducedRoles(RuntimeMode mode) => <String>{
-  'launcher',
+  if (mode == RuntimeMode.developerJit) 'launcher',
+  if (mode == RuntimeMode.releaseAot) 'launcher_content',
   'dart_engine',
   if (mode == RuntimeMode.developerJit) 'kernel_payload',
   if (mode == RuntimeMode.developerJit) 'worker_kernel_payload',
   if (mode == RuntimeMode.releaseAot) 'aot_snapshot',
+  if (mode == RuntimeMode.releaseAot) 'worker_executable',
 };
 
 List<String> _requiredStringList(Object? value, String description) {
@@ -1138,6 +1158,7 @@ void _validateArchitectureLane(
     'dart_engine',
     'kernel_compiler',
     if (mode == RuntimeMode.developerJit) 'runtime_worker_dart',
+    if (mode == RuntimeMode.releaseAot) 'runtime_worker_compiler',
     if (mode == RuntimeMode.releaseAot) 'snapshotter',
   };
   runtimeExpect(
@@ -1245,6 +1266,10 @@ void _validateArchitectureLane(
     if (mode == RuntimeMode.developerJit)
       'runtime_worker_dart': runtimeNormalizedAbsolutePath('$sdkRoot/bin/dart'),
     if (mode == RuntimeMode.releaseAot)
+      'runtime_worker_compiler': runtimeNormalizedAbsolutePath(
+        '$sdkRoot/bin/dart',
+      ),
+    if (mode == RuntimeMode.releaseAot)
       'snapshotter': runtimeNormalizedAbsolutePath(
         '$engineOutput/gen_snapshot',
       ),
@@ -1333,10 +1358,12 @@ void _validateArchitectureLane(
     _laneProducedRoles(mode),
     '$description.produced_sha256',
   );
-  runtimeExpect(
-    produced['dart_engine'] == inputs['dart_engine'],
-    '$description produced Engine does not match its fingerprinted input',
-  );
+  if (mode == RuntimeMode.developerJit) {
+    runtimeExpect(
+      produced['dart_engine'] == inputs['dart_engine'],
+      '$description produced Engine does not match its fingerprinted input',
+    );
+  }
   if (mode == RuntimeMode.releaseAot) {
     _validateSha256(
       lane['intermediate_kernel_sha256'],
@@ -1456,16 +1483,10 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
     manifest['dart_engine'],
     'runtime build manifest dart_engine',
   );
-  final String expectedEngineSourcePolicy =
-      expectedMode == RuntimeMode.developerJit
-      ? 'official-clean'
-      : 'legacy-lifecycle-patches';
   runtimeExpect(
-    sameStringSet(engine.keys, <String>{
+    sameStringSet(engine.keys, const <String>{
       'revision',
       'source_policy',
-      if (expectedMode == RuntimeMode.releaseAot) 'worker_patch_sha256',
-      if (expectedMode == RuntimeMode.releaseAot) 'lifecycle_patch_sha256',
       'gn_arguments',
       'repository',
     }),
@@ -1481,19 +1502,9 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
     'runtime build manifest Dart SDK/Engine revisions differ',
   );
   runtimeExpect(
-    engine['source_policy'] == expectedEngineSourcePolicy,
+    engine['source_policy'] == 'official-clean',
     'runtime build manifest Dart Engine source policy mismatch',
   );
-  if (expectedMode == RuntimeMode.releaseAot) {
-    _validateSha256(
-      engine['worker_patch_sha256'],
-      'runtime build manifest dart_engine.worker_patch_sha256',
-    );
-    _validateSha256(
-      engine['lifecycle_patch_sha256'],
-      'runtime build manifest dart_engine.lifecycle_patch_sha256',
-    );
-  }
   final Map<String, Object?> engineGnArguments = runtimeStringMap(
     engine['gn_arguments'],
     'runtime build manifest dart_engine.gn_arguments',
@@ -1516,7 +1527,7 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
     'dart_engine.repository',
   );
   runtimeExpect(
-    engineRepository['dirty'] == (expectedMode == RuntimeMode.releaseAot),
+    engineRepository['dirty'] == false,
     'runtime build manifest Dart Engine cleanliness differs from policy',
   );
 
@@ -1675,14 +1686,12 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
       'runtime build manifest source inventory misses $requiredInput',
     );
   }
-  if (expectedMode == RuntimeMode.developerJit) {
-    runtimeExpect(
-      sourceHashes.keys.every(
-        (String input) => !input.startsWith('dart_terminal:patches/'),
-      ),
-      'Developer build manifest includes a Dart Engine patch input',
-    );
-  }
+  runtimeExpect(
+    sourceHashes.keys.every(
+      (String input) => !input.startsWith('dart_terminal:patches/'),
+    ),
+    'runtime build manifest includes a Dart Engine patch input',
+  );
   _validateSha256(
     source['inventory_sha256'],
     'runtime build manifest source.inventory_sha256',
@@ -1705,9 +1714,11 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
       'native_flags',
       'kernel_flags',
       'worker_topology',
-      if (expectedMode == RuntimeMode.developerJit) 'worker_protocol_version',
+      'worker_protocol_version',
       if (expectedMode == RuntimeMode.developerJit) 'worker_payload_name',
       if (expectedMode == RuntimeMode.developerJit) 'worker_kernel_flags',
+      if (expectedMode == RuntimeMode.releaseAot) 'worker_executable_name',
+      if (expectedMode == RuntimeMode.releaseAot) 'worker_executable_flags',
       'snapshot_flags',
       'extra_build_input_sha256',
     }),
@@ -1744,9 +1755,20 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
       'runtime build manifest Developer worker configuration mismatch',
     );
   } else {
+    final String? expectedWorkerFlags = isUniversal
+        ? null
+        : '--target-os=macos '
+              '--target-arch=${expectedArchitectures.single == 'arm64' ? 'arm64' : 'x64'} '
+              '--verbosity=warning';
     runtimeExpect(
-      effective['worker_topology'] == 'legacy-engine-isolate',
-      'runtime build manifest Release worker topology mismatch',
+      effective['worker_topology'] == 'official-dart-child-process' &&
+          effective['worker_protocol_version'] == 1 &&
+          effective['worker_executable_name'] ==
+              runtimeReleaseWorkerExecutableName &&
+          effective['worker_executable_flags'] is String &&
+          (expectedWorkerFlags == null ||
+              effective['worker_executable_flags'] == expectedWorkerFlags),
+      'runtime build manifest Release worker configuration mismatch',
     );
   }
   final Object? extraBuildInput = effective['extra_build_input_sha256'];
@@ -1766,13 +1788,23 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
     _laneProducedRoles(expectedMode),
     'runtime build manifest architecture_inputs.produced_sha256',
   );
+  final bool producedRolesMatch =
+      produced.length == actualProducedHashes.length &&
+      actualProducedHashes.entries.every(
+        (MapEntry<String, String> entry) => produced.containsKey(entry.key),
+      );
   runtimeExpect(
-    produced.length == actualProducedHashes.length &&
-        actualProducedHashes.entries.every(
-          (MapEntry<String, String> entry) => produced.containsKey(entry.key),
-        ),
+    producedRolesMatch,
     'runtime build manifest produced artifact roles do not match bundle',
   );
+  if (expectedMode == RuntimeMode.releaseAot && !isUniversal) {
+    runtimeExpect(
+      actualProducedHashes.entries.every(
+        (MapEntry<String, String> entry) => produced[entry.key] == entry.value,
+      ),
+      'runtime build manifest produced artifact hashes do not match bundle',
+    );
+  }
   if (isUniversal) {
     runtimeExpect(
       sameStringSet(lane.keys, const <String>{
@@ -1854,6 +1886,8 @@ Map<String, String> runtimeExpectedMachORoles(
   'dart_engine': 'Frameworks/${mode.engineName}',
   if (mode == RuntimeMode.releaseAot)
     'aot_snapshot': 'Resources/${mode.payloadName}',
+  if (mode == RuntimeMode.releaseAot)
+    'worker_executable': 'Helpers/$runtimeReleaseWorkerExecutableName',
 };
 
 Set<String> runtimeExpectedMachOPaths(
@@ -1913,6 +1947,16 @@ _MachOPolicy _machOPolicy(RuntimeMode mode, String role) {
         installNames: <String>{'application.aot'},
         dependencies: <String>{'/usr/lib/libSystem.B.dylib'},
         rpaths: <String>{},
+      );
+    case 'worker_executable':
+      return const _MachOPolicy(
+        installNames: <String>{},
+        dependencies: _engineSystemDependencies,
+        rpaths: <String>{
+          '@loader_path/.',
+          '@loader_path/../../..',
+          '@executable_path/Frameworks',
+        },
       );
   }
   throw RuntimeAuditException('unknown Mach-O role: $role');
@@ -2167,6 +2211,9 @@ Future<Map<String, Object?>> auditRuntimeBundle(
   final String? workerPayloadPath = options.mode == RuntimeMode.developerJit
       ? '${contents.path}/Resources/$runtimeDeveloperWorkerPayloadName'
       : null;
+  final String? workerExecutablePath = options.mode == RuntimeMode.releaseAot
+      ? '${contents.path}/Helpers/$runtimeReleaseWorkerExecutableName'
+      : null;
   final List<String> files = await runtimeRelativeFiles(contents);
   for (final String requiredPath in <String>[
     'MacOS/$executableName',
@@ -2174,6 +2221,8 @@ Future<Map<String, Object?>> auditRuntimeBundle(
     'Resources/${options.mode.payloadName}',
     if (options.mode == RuntimeMode.developerJit)
       'Resources/$runtimeDeveloperWorkerPayloadName',
+    if (options.mode == RuntimeMode.releaseAot)
+      'Helpers/$runtimeReleaseWorkerExecutableName',
     runtimeBuildManifestRelativePath,
   ]) {
     runtimeExpect(
@@ -2252,10 +2301,20 @@ Future<Map<String, Object?>> auditRuntimeBundle(
       'runtime worker payload is empty: $workerPayloadPath',
     );
   }
+  if (workerExecutablePath != null) {
+    final FileStat workerExecutableStat = await File(workerExecutablePath)
+        .stat();
+    runtimeExpect(
+      workerExecutableStat.size > 0 && workerExecutableStat.mode & 0x49 != 0,
+      'runtime worker executable is empty or not executable: '
+      '$workerExecutablePath',
+    );
+  }
   final Map<String, String> rolePaths = <String, String>{
     'launcher': executablePath,
     'dart_engine': enginePath,
     if (options.mode == RuntimeMode.releaseAot) 'aot_snapshot': payloadPath,
+    if (workerExecutablePath != null) 'worker_executable': workerExecutablePath,
   };
   final Set<String> actualMachOPaths = <String>{};
   for (final String path in files) {
@@ -2316,12 +2375,19 @@ Future<Map<String, Object?>> auditRuntimeBundle(
       ignoreResources: artifact.key == 'launcher',
     );
     entitlements[artifact.key] = roleEntitlements;
-    producedHashes[artifact.key] = await runtimeSha256File(artifact.value);
+    final String fileHash = await runtimeSha256File(artifact.value);
+    producedHashes[options.mode == RuntimeMode.releaseAot &&
+                artifact.key == 'launcher'
+            ? 'launcher_content'
+            : artifact.key] =
+        options.mode == RuntimeMode.releaseAot && artifact.key == 'launcher'
+        ? await runtimeMachOContentSha256(artifact.value)
+        : fileHash;
     machOFiles.add(<String, Object?>{
       'role': artifact.key,
       'path': artifact.value.substring(contents.path.length + 1),
       'architectures': architectures,
-      'sha256': producedHashes[artifact.key],
+      'sha256': fileHash,
       'load_commands': slices,
       'entitlements': roleEntitlements,
       'signature': 'adhoc-strict-individual',
@@ -2393,6 +2459,8 @@ Future<Map<String, Object?>> auditRuntimeBundle(
     'payload': 'Resources/${options.mode.payloadName}',
     if (options.mode == RuntimeMode.developerJit)
       'worker_payload': 'Resources/$runtimeDeveloperWorkerPayloadName',
+    if (options.mode == RuntimeMode.releaseAot)
+      'worker_executable': 'Helpers/$runtimeReleaseWorkerExecutableName',
     'deployment_target': deploymentTarget,
     'architectures': options.expectedArchitectures.toList()..sort(),
     'mach_o_policy': runtimeMachOPolicy,

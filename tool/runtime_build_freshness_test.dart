@@ -56,7 +56,8 @@ _Options _parseOptions(List<String> arguments) {
   final String? focus = values['focus'];
   if (focus != null &&
       focus != 'engine-patch-composition' &&
-      focus != 'developer-clean-sdk') {
+      focus != 'developer-clean-sdk' &&
+      focus != 'release-clean-sdk') {
     throw _FreshnessException('unknown focus: $focus');
   }
   return _Options(
@@ -1132,6 +1133,780 @@ Future<void> _verifyDeveloperCleanSdk(
   );
 }
 
+Future<String> _runReleaseTarget(
+  _Options options,
+  String buildRoot,
+  String target, {
+  String? extraInput,
+}) async {
+  final ProcessResult result = await Process.run(
+    options.make,
+    <String>[
+      '-C',
+      options.projectRoot,
+      'RUNTIME_BUILD_DIR=$buildRoot',
+      'RUNTIME_ARCH=arm64',
+      if (extraInput != null) 'RUNTIME_EXTRA_BUILD_INPUT=$extraInput',
+      target,
+    ],
+    environment: const <String, String>{'DART_SUPPRESS_ANALYTICS': 'true'},
+    includeParentEnvironment: true,
+  );
+  final String output = '${result.stdout}${result.stderr}';
+  if (result.exitCode != 0) {
+    throw _FreshnessException(
+      'Release target $target failed (${result.exitCode}): $output',
+    );
+  }
+  for (final String forbidden in <String>[
+    'dart-engine-worker-isolates.patch',
+    'dart-engine-lifecycle-shutdown.patch',
+    'dart-engine-worker-support',
+    'dart-engine-lifecycle-support',
+  ]) {
+    if (output.contains(forbidden)) {
+      throw _FreshnessException(
+        'Release target $target reached legacy patch activity: $forbidden',
+      );
+    }
+  }
+  return output;
+}
+
+Future<void> _verifyReleaseDependencyBoundary(
+  _Options options,
+  String buildRoot,
+) async {
+  final ProcessResult database = await Process.run(options.make, <String>[
+    '-C',
+    options.projectRoot,
+    '-pn',
+    'RUNTIME_ARCH=arm64',
+    'RUNTIME_BUILD_DIR=$buildRoot',
+    'help',
+  ]);
+  if (database.exitCode != 0) {
+    throw _FreshnessException(
+      'could not inspect Release dependency graph: '
+      '${database.stdout}${database.stderr}',
+    );
+  }
+  final String buildDirectory = '$buildRoot/arm64/release-aot';
+  final List<String> lines = (database.stdout as String).split('\n');
+  final List<String> aotRules = lines
+      .where((String line) => line.startsWith('runtime-aot-engine:'))
+      .toList();
+  final List<String> fingerprintRules = lines
+      .where(
+        (String line) =>
+            line.startsWith('$buildDirectory/.effective-build-inputs.json:'),
+      )
+      .toList();
+  final List<String> packagedEngineRules = lines
+      .where(
+        (String line) => line.startsWith(
+          '$buildDirectory/packaged/libdart_engine_aot_shared.dylib:',
+        ),
+      )
+      .toList();
+  final String graph = <String>[
+    ...aotRules,
+    ...fingerprintRules,
+    ...packagedEngineRules,
+  ].join('\n');
+  if (aotRules.length != 1 ||
+      !aotRules.single.contains('unmodified-engine-sdk-clean') ||
+      fingerprintRules.length != 1 ||
+      !fingerprintRules.single.contains('| runtime-aot-engine ') ||
+      packagedEngineRules.length != 1 ||
+      !packagedEngineRules.single.contains('| runtime-aot-engine') ||
+      packagedEngineRules.single.contains(
+        '/libdart_engine_aot_shared.dylib',
+        packagedEngineRules.single.indexOf(':') + 1,
+      ) ||
+      graph.contains('dart-engine-worker-support') ||
+      graph.contains('dart-engine-lifecycle-support')) {
+    throw _FreshnessException(
+      'Release dependency graph does not terminate at the clean SDK gate: '
+      'aot=$aotRules fingerprint=$fingerprintRules '
+      'packaged_engine=$packagedEngineRules',
+    );
+  }
+
+  final ProcessResult dryRun = await Process.run(options.make, <String>[
+    '-C',
+    options.projectRoot,
+    '-n',
+    'RUNTIME_ARCH=arm64',
+    'RUNTIME_BUILD_DIR=$buildRoot',
+    'release-aot-audit',
+  ]);
+  final String output = '${dryRun.stdout}${dryRun.stderr}';
+  if (dryRun.exitCode != 0) {
+    throw _FreshnessException(
+      'Release complete-derivation dry run failed (${dryRun.exitCode}): '
+      '$output',
+    );
+  }
+  for (final String forbidden in <String>[
+    'dart-engine-worker-isolates.patch',
+    'dart-engine-lifecycle-shutdown.patch',
+    'dart-engine-worker-support',
+    'dart-engine-lifecycle-support',
+    'phase0-engine-worker-support',
+  ]) {
+    if (output.contains(forbidden)) {
+      throw _FreshnessException(
+        'Release complete derivation reaches legacy patch activity: '
+        '$forbidden',
+      );
+    }
+  }
+  for (final String required in <String>[
+    'unmodified-engine-sdk-clean',
+    'runtime_engine_attestation.dart',
+    '--mode=validate',
+    '--snapshotter=',
+    'compile exe',
+  ]) {
+    if (!output.contains(required)) {
+      throw _FreshnessException(
+        'Release complete derivation misses clean build evidence: $required',
+      );
+    }
+  }
+}
+
+Future<Map<String, Object?>> _readReleaseManifest(String manifestPath) async {
+  final Object? decoded = jsonDecode(await File(manifestPath).readAsString());
+  if (decoded is! Map<String, Object?>) {
+    throw const _FreshnessException('Release manifest is not an object');
+  }
+  if (decoded['format'] != runtimeBuildManifestFormat ||
+      decoded['version'] != runtimeBuildManifestVersion ||
+      decoded['runtime_mode'] != RuntimeMode.releaseAot.name ||
+      decoded['architecture'] != 'arm64') {
+    throw const _FreshnessException(
+      'Release manifest identity does not match the focused gate',
+    );
+  }
+  return decoded;
+}
+
+Future<Map<String, Object?>> _verifyReleaseManifest(
+  String manifestPath,
+  String buildDirectory,
+  String bundlePath,
+  String extraInputPath,
+) async {
+  final Map<String, Object?> manifest = await _readReleaseManifest(
+    manifestPath,
+  );
+  final Map<String, Object?> engine = _requiredMap(manifest, 'dart_engine');
+  final Map<String, Object?> engineRepository = runtimeStringMap(
+    engine['repository'],
+    'Release manifest dart_engine.repository',
+  );
+  if (!sameStringSet(engine.keys, const <String>{
+        'revision',
+        'source_policy',
+        'gn_arguments',
+        'repository',
+      }) ||
+      engine['source_policy'] != 'official-clean' ||
+      engineRepository['dirty'] != false) {
+    throw const _FreshnessException(
+      'Release manifest does not enforce a clean official Engine',
+    );
+  }
+
+  final Map<String, Object?> source = _requiredMap(manifest, 'source');
+  final Map<String, Object?> sourceHashes = runtimeStringMap(
+    source['input_sha256'],
+    'Release manifest source.input_sha256',
+  );
+  if (sourceHashes.keys.any(
+    (String input) => input.startsWith('dart_terminal:patches/'),
+  )) {
+    throw const _FreshnessException(
+      'Release manifest retains a patch provenance input',
+    );
+  }
+
+  final Map<String, Object?> effective = _requiredMap(
+    manifest,
+    'effective_configuration',
+  );
+  if (effective['worker_topology'] != 'official-dart-child-process' ||
+      effective['worker_protocol_version'] != 1 ||
+      effective['worker_executable_name'] !=
+          runtimeReleaseWorkerExecutableName ||
+      effective['worker_executable_flags'] !=
+          '--target-os=macos --target-arch=arm64 --verbosity=warning' ||
+      effective['extra_build_input_sha256'] !=
+          await runtimeSha256File(extraInputPath)) {
+    throw const _FreshnessException(
+      'Release worker configuration differs from the selected contract',
+    );
+  }
+
+  final Map<String, Object?> lane = _requiredMap(
+    manifest,
+    'architecture_inputs',
+  );
+  final Map<String, Object?> inputPaths = runtimeStringMap(
+    lane['resolved_input_paths'],
+    'Release manifest architecture_inputs.resolved_input_paths',
+  );
+  final Map<String, Object?> inputHashes = runtimeStringMap(
+    lane['input_binary_sha256'],
+    'Release manifest architecture_inputs.input_binary_sha256',
+  );
+  final Map<String, Object?> environment = runtimeStringMap(
+    lane['build_environment'],
+    'Release manifest architecture_inputs.build_environment',
+  );
+  final Map<String, Object?> environmentPaths = runtimeStringMap(
+    environment['resolved_paths'],
+    'Release manifest build_environment.resolved_paths',
+  );
+  final String dartSdkRoot = runtimeRequiredString(
+    environmentPaths,
+    'dart_sdk_root',
+    'Release manifest build_environment.resolved_paths',
+  );
+  final String expectedCompiler = await File('$dartSdkRoot/bin/dart')
+      .resolveSymbolicLinks();
+  final Object? compilerValue = inputPaths['runtime_worker_compiler'];
+  if (compilerValue is! String || !File(compilerValue).isAbsolute) {
+    throw const _FreshnessException(
+      'Release manifest lacks an absolute runtime worker compiler',
+    );
+  }
+  final String compiler = await File(compilerValue).resolveSymbolicLinks();
+  if (compiler != expectedCompiler ||
+      inputHashes['runtime_worker_compiler'] !=
+          await runtimeSha256File(compiler)) {
+    throw const _FreshnessException(
+      'Release worker was not compiled by the selected official Dart SDK',
+    );
+  }
+
+  final Map<String, Object?> produced = runtimeStringMap(
+    lane['produced_sha256'],
+    'Release manifest architecture_inputs.produced_sha256',
+  );
+  if (!sameStringSet(produced.keys, const <String>{
+    'launcher_content',
+    'dart_engine',
+    'aot_snapshot',
+    'worker_executable',
+  })) {
+    throw const _FreshnessException(
+      'Release manifest produced-artifact roles differ',
+    );
+  }
+  final Map<String, String> fullHashPaths = <String, String>{
+    'dart_engine': '$buildDirectory/packaged/libdart_engine_aot_shared.dylib',
+    'aot_snapshot': '$buildDirectory/packaged/application.aot',
+    'worker_executable':
+        '$buildDirectory/packaged/$runtimeReleaseWorkerExecutableName',
+  };
+  final Map<String, String> bundledPaths = <String, String>{
+    'dart_engine':
+        '$bundlePath/Contents/Frameworks/libdart_engine_aot_shared.dylib',
+    'aot_snapshot': '$bundlePath/Contents/Resources/application.aot',
+    'worker_executable':
+        '$bundlePath/Contents/Helpers/$runtimeReleaseWorkerExecutableName',
+  };
+  for (final String role in fullHashPaths.keys) {
+    final String expected = produced[role]! as String;
+    if (await runtimeSha256File(fullHashPaths[role]!) != expected ||
+        await runtimeSha256File(bundledPaths[role]!) != expected) {
+      throw _FreshnessException(
+        'Release signed $role hash differs between manifest and bundle',
+      );
+    }
+  }
+  final String packagedLauncher =
+      '$buildDirectory/packaged/dart_terminal_release_aot';
+  final String bundledLauncher =
+      '$bundlePath/Contents/MacOS/dart_terminal_release_aot';
+  final String launcherContent = produced['launcher_content']! as String;
+  if (await runtimeMachOContentSha256(packagedLauncher) != launcherContent ||
+      await runtimeMachOContentSha256(bundledLauncher) != launcherContent) {
+    throw const _FreshnessException(
+      'Release launcher content digest differs after outer signing',
+    );
+  }
+  if (await runtimeMachOContentSha256(
+        '$buildDirectory/$runtimeReleaseWorkerExecutableName',
+      ) !=
+      await runtimeMachOContentSha256(fullHashPaths['worker_executable']!)) {
+    throw const _FreshnessException(
+      'Release worker packaging changed executable content',
+    );
+  }
+  return manifest;
+}
+
+Future<void> _verifyReleaseEngineAttestation(
+  Map<String, Object?> manifest,
+) async {
+  final Map<String, Object?> lane = _requiredMap(
+    manifest,
+    'architecture_inputs',
+  );
+  final Map<String, Object?> environment = runtimeStringMap(
+    lane['build_environment'],
+    'Release manifest architecture_inputs.build_environment',
+  );
+  final Map<String, Object?> environmentPaths = runtimeStringMap(
+    environment['resolved_paths'],
+    'Release manifest build_environment.resolved_paths',
+  );
+  final String engineRoot = runtimeRequiredString(
+    environmentPaths,
+    'dart_engine_root',
+    'Release manifest build_environment.resolved_paths',
+  );
+  final String revision = runtimeRequiredString(
+    _requiredMap(manifest, 'dart_engine'),
+    'revision',
+    'Release manifest dart_engine',
+  );
+  await _verifyCleanRepository(engineRoot, revision);
+
+  final Map<String, Object?> inputPaths = runtimeStringMap(
+    lane['resolved_input_paths'],
+    'Release manifest architecture_inputs.resolved_input_paths',
+  );
+  final Map<String, Object?> inputHashes = runtimeStringMap(
+    lane['input_binary_sha256'],
+    'Release manifest architecture_inputs.input_binary_sha256',
+  );
+  final File attestation = File(
+    '${File(runtimeRequiredString(inputPaths, 'dart_engine', 'Release lane')).parent.path}'
+    '/.dart-terminal-official-engine.json',
+  );
+  final Object? decoded = jsonDecode(await attestation.readAsString());
+  if (decoded is! Map<String, Object?> ||
+      decoded['format'] != 'dart-terminal-official-engine-attestation' ||
+      decoded['version'] != 1 ||
+      decoded['source_policy'] != 'official-clean' ||
+      decoded['revision'] != revision) {
+    throw const _FreshnessException('official Engine attestation is invalid');
+  }
+  final Map<String, Object?> artifacts = runtimeStringMap(
+    decoded['artifacts'],
+    'official Engine attestation artifacts',
+  );
+  const Set<String> expectedRoles = <String>{
+    'dart_engine',
+    'kernel_compiler',
+    'platform_dill',
+    'snapshotter',
+  };
+  if (!sameStringSet(artifacts.keys, expectedRoles)) {
+    throw const _FreshnessException(
+      'official Release Engine attestation roles differ',
+    );
+  }
+  for (final String role in expectedRoles) {
+    final Map<String, Object?> artifact = runtimeStringMap(
+      artifacts[role],
+      'official Engine attestation $role',
+    );
+    final Object? inputPath = inputPaths[role];
+    if (inputPath is! String ||
+        artifact['path'] != inputPath ||
+        artifact['sha256'] != inputHashes[role] ||
+        artifact['sha256'] != await runtimeSha256File(inputPath)) {
+      throw _FreshnessException(
+        'official Release Engine attestation differs for $role',
+      );
+    }
+  }
+}
+
+Future<void> _verifyReleaseBundledWorker(String workerExecutable) async {
+  final List<RuntimeLifecycleObservation> observations =
+      <RuntimeLifecycleObservation>[];
+  final RuntimeLifecycleCoordinator coordinator = RuntimeLifecycleCoordinator(
+    scenario: RuntimeLifecycleScenario.normal,
+    observer: observations.add,
+    workerCommand: RuntimeLifecycleWorkerCommand(
+      executable: workerExecutable,
+      arguments: const <String>[],
+    ),
+  );
+  final RuntimeLifecycleStartStatus start = await coordinator.start();
+  if (start != RuntimeLifecycleStartStatus.ready ||
+      coordinator.workerPid == null ||
+      coordinator.workerPid == pid) {
+    throw const _FreshnessException(
+      'bundled Release worker did not become ready in a child process',
+    );
+  }
+  final RuntimeLifecycleRequestResult reply = await coordinator.request(41);
+  final RuntimeLifecycleShutdownResult shutdown = await coordinator.shutdown();
+  if (reply.status != RuntimeLifecycleRequestStatus.response ||
+      reply.value != 42 ||
+      shutdown.termination != RuntimeLifecycleWorkerTermination.graceful ||
+      RuntimeLifecycleCoordinator.outstandingProcessCount != 0 ||
+      !observations.any(
+        (RuntimeLifecycleObservation value) => value.event == 'worker-exit',
+      )) {
+    throw const _FreshnessException(
+      'bundled Release worker lifecycle contract failed',
+    );
+  }
+}
+
+Future<void> _verifyReleaseHostOwnedWorkerArguments(String bundlePath) async {
+  final String executable =
+      '$bundlePath/Contents/MacOS/dart_terminal_release_aot';
+  final ProcessResult result = await Process.run(executable, const <String>[
+    '--runtime-worker-executable=/usr/bin/false',
+  ]);
+  final String output = '${result.stdout}${result.stderr}';
+  if (result.exitCode != 66 ||
+      !output.contains('runtime worker configuration is host-owned')) {
+    throw _FreshnessException(
+      'Release launcher accepted a user worker override: '
+      'status=${result.exitCode} $output',
+    );
+  }
+}
+
+Future<String> _copyReleaseBundle(
+  Directory temporary,
+  String source,
+  String name,
+) async {
+  final String destination = '${temporary.path}/$name.app';
+  final ProcessResult result = await Process.run('/usr/bin/ditto', <String>[
+    '--noqtn',
+    source,
+    destination,
+  ]);
+  if (result.exitCode != 0) {
+    throw _FreshnessException(
+      'could not copy Release negative fixture $name: '
+      '${result.stdout}${result.stderr}',
+    );
+  }
+  return destination;
+}
+
+Future<void> _expectReleaseAuditRejected(
+  String bundlePath,
+  String expectedMessage,
+  String description,
+) async {
+  var rejected = false;
+  try {
+    await auditRuntimeBundle(
+      RuntimeBundleAuditOptions(
+        mode: RuntimeMode.releaseAot,
+        expectedArchitectures: const <String>{'arm64'},
+        deploymentTarget: '14.0',
+        bundlePath: bundlePath,
+      ),
+    );
+  } on RuntimeAuditException catch (error) {
+    rejected = error.message.contains(expectedMessage);
+  }
+  if (!rejected) {
+    throw _FreshnessException(
+      'Release audit accepted $description or failed for the wrong reason',
+    );
+  }
+}
+
+Future<void> _expectReleaseLauncherRejected(
+  String bundlePath,
+  String description,
+) async {
+  final ProcessResult result = await Process.run(
+    '$bundlePath/Contents/MacOS/dart_terminal_release_aot',
+    const <String>[],
+  );
+  final String output = '${result.stdout}${result.stderr}';
+  if (result.exitCode != 66 ||
+      !output.contains('runtime worker executable is not executable')) {
+    throw _FreshnessException(
+      'Release launcher accepted $description: '
+      'status=${result.exitCode} $output',
+    );
+  }
+}
+
+Future<void> _verifyReleaseNegativeBundles(
+  Directory temporary,
+  String bundlePath,
+) async {
+  String fixture = await _copyReleaseBundle(
+    temporary,
+    bundlePath,
+    'release-missing-worker',
+  );
+  await File('$fixture/Contents/Helpers/$runtimeReleaseWorkerExecutableName')
+      .delete();
+  await _expectReleaseAuditRejected(
+    fixture,
+    'missing runtime file: Helpers/$runtimeReleaseWorkerExecutableName',
+    'a missing worker',
+  );
+  await _expectReleaseLauncherRejected(fixture, 'a missing worker');
+
+  fixture = await _copyReleaseBundle(
+    temporary,
+    bundlePath,
+    'release-wrong-worker-layout',
+  );
+  await File(
+    '$fixture/Contents/Helpers/$runtimeReleaseWorkerExecutableName',
+  ).rename('$fixture/Contents/Resources/$runtimeReleaseWorkerExecutableName');
+  await _expectReleaseAuditRejected(
+    fixture,
+    'missing runtime file: Helpers/$runtimeReleaseWorkerExecutableName',
+    'a wrong-layout worker',
+  );
+  await _expectReleaseLauncherRejected(fixture, 'a wrong-layout worker');
+
+  fixture = await _copyReleaseBundle(
+    temporary,
+    bundlePath,
+    'release-non-executable-worker',
+  );
+  String helper =
+      '$fixture/Contents/Helpers/$runtimeReleaseWorkerExecutableName';
+  ProcessResult command = await Process.run('/bin/chmod', <String>[
+    '644',
+    helper,
+  ]);
+  if (command.exitCode != 0) {
+    throw _FreshnessException(
+      'could not create non-executable Release worker fixture: '
+      '${command.stderr}',
+    );
+  }
+  await _expectReleaseAuditRejected(
+    fixture,
+    'runtime worker executable is empty or not executable',
+    'a non-executable worker',
+  );
+  await _expectReleaseLauncherRejected(fixture, 'a non-executable worker');
+
+  fixture = await _copyReleaseBundle(
+    temporary,
+    bundlePath,
+    'release-tampered-worker',
+  );
+  helper = '$fixture/Contents/Helpers/$runtimeReleaseWorkerExecutableName';
+  command = await Process.run('/usr/bin/codesign', <String>[
+    '--force',
+    '--sign',
+    '-',
+    '--timestamp=none',
+    '--identifier=dev.dart-terminal.tampered-worker',
+    helper,
+  ]);
+  if (command.exitCode != 0) {
+    throw _FreshnessException(
+      'could not create tampered Release worker fixture: '
+      '${command.stdout}${command.stderr}',
+    );
+  }
+  await _expectReleaseAuditRejected(
+    fixture,
+    'runtime build manifest produced artifact hashes do not match bundle',
+    'a re-signed tampered worker',
+  );
+
+  fixture = await _copyReleaseBundle(
+    temporary,
+    bundlePath,
+    'release-unsigned-worker',
+  );
+  helper = '$fixture/Contents/Helpers/$runtimeReleaseWorkerExecutableName';
+  command = await Process.run('/usr/bin/codesign', <String>[
+    '--remove-signature',
+    helper,
+  ]);
+  if (command.exitCode != 0) {
+    throw _FreshnessException(
+      'could not create unsigned Release worker fixture: '
+      '${command.stdout}${command.stderr}',
+    );
+  }
+  await _expectReleaseAuditRejected(
+    fixture,
+    'codesign failed',
+    'an unsigned worker',
+  );
+}
+
+Future<void> _verifyReleaseCleanSdk(
+  _Options options,
+  Directory temporary,
+) async {
+  final String buildRoot = '${temporary.path}/release-runtime';
+  final String buildDirectory = '$buildRoot/arm64/release-aot';
+  final File extraInput = File('${temporary.path}/release-input.txt');
+  await extraInput.writeAsString('release-input-a\n', flush: true);
+
+  await _verifyReleaseDependencyBoundary(options, buildRoot);
+  final String hostilePath = '${temporary.path}/hostile-worker';
+  await _verifyInternalOverrideDatabase(
+    options,
+    '${temporary.path}/release-database-runtime',
+    <String, String>{
+      'RUNTIME_ENGINE_AOT_ATTESTATION': hostilePath,
+      'RELEASE_AOT_WORKER_EXECUTABLE': hostilePath,
+      'RELEASE_AOT_WORKER_DEPFILE': hostilePath,
+      'RELEASE_AOT_PACKAGED_HOST': hostilePath,
+      'RELEASE_AOT_PACKAGED_ENGINE': hostilePath,
+      'RELEASE_AOT_PACKAGED_SNAPSHOT': hostilePath,
+      'RELEASE_AOT_PACKAGED_WORKER_EXECUTABLE': hostilePath,
+      'RELEASE_AOT_BUNDLED_WORKER_EXECUTABLE': hostilePath,
+      'RELEASE_AOT_MANIFEST': hostilePath,
+      'RELEASE_AOT_BUNDLE': hostilePath,
+    },
+  );
+
+  await _runReleaseTarget(
+    options,
+    buildRoot,
+    'release-aot-audit',
+    extraInput: extraInput.path,
+  );
+  final String manifestPath = '$buildDirectory/runtime-build-manifest.json';
+  final String bundlePath = '$buildDirectory/DartTerminal.app';
+  final String bundledWorker =
+      '$bundlePath/Contents/Helpers/$runtimeReleaseWorkerExecutableName';
+  Map<String, Object?> manifest = await _verifyReleaseManifest(
+    manifestPath,
+    buildDirectory,
+    bundlePath,
+    extraInput.path,
+  );
+  await _verifyReleaseEngineAttestation(manifest);
+  await _verifyReleaseBundledWorker(bundledWorker);
+  await _verifyReleaseHostOwnedWorkerArguments(bundlePath);
+  await _verifyReleaseNegativeBundles(temporary, bundlePath);
+
+  final List<String> derived = <String>[
+    '$buildDirectory/.effective-build-inputs.json',
+    '$buildDirectory/dart_terminal_release_aot',
+    '$buildDirectory/application.aot.dill',
+    '$buildDirectory/application.aot.dill.d',
+    '$buildDirectory/application.aot',
+    '$buildDirectory/$runtimeReleaseWorkerExecutableName',
+    '$buildDirectory/$runtimeReleaseWorkerExecutableName.d',
+    '$buildDirectory/packaged/dart_terminal_release_aot',
+    '$buildDirectory/packaged/libdart_engine_aot_shared.dylib',
+    '$buildDirectory/packaged/application.aot',
+    '$buildDirectory/packaged/$runtimeReleaseWorkerExecutableName',
+    manifestPath,
+    '$buildDirectory/.release-aot-built',
+    '$bundlePath/Contents/MacOS/dart_terminal_release_aot',
+    '$bundlePath/Contents/Frameworks/libdart_engine_aot_shared.dylib',
+    '$bundlePath/Contents/Resources/application.aot',
+    bundledWorker,
+    '$bundlePath/Contents/Resources/runtime-build-manifest.json',
+    '$buildDirectory/thin-audit.json',
+  ];
+  final Map<String, DateTime> first = await _modificationTimes(derived);
+  await _runReleaseTarget(
+    options,
+    buildRoot,
+    'release-aot-audit',
+    extraInput: extraInput.path,
+  );
+  final Map<String, DateTime> second = await _modificationTimes(derived);
+  for (final String path in derived) {
+    if (second[path] != first[path]) {
+      throw _FreshnessException(
+        'unchanged Release input rewrote derived artifact: $path',
+      );
+    }
+  }
+
+  await extraInput.writeAsString('release-input-b\n', flush: true);
+  await _runReleaseTarget(
+    options,
+    buildRoot,
+    'release-aot-audit',
+    extraInput: extraInput.path,
+  );
+  final Map<String, DateTime> third = await _modificationTimes(derived);
+  for (final String path in derived) {
+    if (!third[path]!.isAfter(second[path]!)) {
+      throw _FreshnessException(
+        'changed Release input did not regenerate artifact: $path',
+      );
+    }
+  }
+  manifest = await _verifyReleaseManifest(
+    manifestPath,
+    buildDirectory,
+    bundlePath,
+    extraInput.path,
+  );
+  await _verifyReleaseEngineAttestation(manifest);
+
+  final Map<String, Object?> environment = runtimeStringMap(
+    _requiredMap(manifest, 'architecture_inputs')['build_environment'],
+    'Release manifest architecture_inputs.build_environment',
+  );
+  final Map<String, Object?> environmentPaths = runtimeStringMap(
+    environment['resolved_paths'],
+    'Release manifest build_environment.resolved_paths',
+  );
+  final String appKitRoot = runtimeRequiredString(
+    environmentPaths,
+    'dart_appkit_root',
+    'Release manifest build_environment.resolved_paths',
+  );
+  final String engineRoot = runtimeRequiredString(
+    environmentPaths,
+    'dart_engine_root',
+    'Release manifest build_environment.resolved_paths',
+  );
+  final String appKitRevision = runtimeRequiredString(
+    runtimeStringMap(
+      _requiredMap(manifest, 'dart_appkit')['repository'],
+      'Release manifest dart_appkit.repository',
+    ),
+    'revision',
+    'Release manifest dart_appkit.repository',
+  );
+  final String engineRevision = runtimeRequiredString(
+    _requiredMap(manifest, 'dart_engine'),
+    'revision',
+    'Release manifest dart_engine',
+  );
+  await _verifyCleanRepository(appKitRoot, appKitRevision);
+  await _verifyCleanRepository(engineRoot, engineRevision);
+  if (RuntimeLifecycleCoordinator.outstandingProcessCount != 0) {
+    throw const _FreshnessException(
+      'focused Release gate leaked a worker process',
+    );
+  }
+  stdout.writeln(
+    'RUNTIME_BUILD_FRESHNESS_PASS '
+    'release_clean_sdk=1 patch_activity=0 self_contained_worker=1 '
+    'worker_smoke=1 missing_worker_rejected=1 '
+    'wrong_layout_rejected=1 non_executable_rejected=1 '
+    'tampered_worker_rejected=1 unsigned_worker_rejected=1 '
+    'launcher_worker_rejections=3 host_override_rejected=1 '
+    'make_overrides_ignored=10 '
+    'stable_noop=${derived.length} regenerated=${derived.length}',
+  );
+}
+
 Future<void> _runTest(_Options options) async {
   final Directory temporary = await Directory.systemTemp.createTemp(
     'dart-terminal-runtime-freshness-',
@@ -1143,6 +1918,10 @@ Future<void> _runTest(_Options options) async {
     }
     if (options.focus == 'developer-clean-sdk') {
       await _verifyDeveloperCleanSdk(options, temporary);
+      return;
+    }
+    if (options.focus == 'release-clean-sdk') {
+      await _verifyReleaseCleanSdk(options, temporary);
       return;
     }
     final String buildRoot = '${temporary.path}/runtime';
@@ -1300,6 +2079,7 @@ Future<void> _runTest(_Options options) async {
       'RUNTIME_EXTRA_BUILD_INPUT_ARGUMENT':
           '--extra-build-input=${hostileFile.path}',
       'RUNTIME_WORKER_KERNEL_FLAGS': '--hostile-worker-kernel-flag',
+      'RUNTIME_WORKER_EXECUTABLE_FLAGS': '--hostile-worker-executable-flag',
       'RUNTIME_BUNDLE_VERSION': '9.9.9-hostile',
       'RUNTIME_NATIVE_FLAG_PREFIX': '-DHOSTILE_PREFIX=1',
       'RUNTIME_NATIVE_FLAG_SUFFIX': '-DHOSTILE_SUFFIX=1',
@@ -1314,6 +2094,7 @@ Future<void> _runTest(_Options options) async {
       'RUNTIME_ENGINE_KERNEL_COMPILER': hostileExecutable.path,
       'RUNTIME_ENGINE_PLATFORM_KERNEL': hostileFile.path,
       'RUNTIME_ENGINE_JIT_ATTESTATION': hostileFile.path,
+      'RUNTIME_ENGINE_AOT_ATTESTATION': hostileFile.path,
       'RUNTIME_ENGINE_AOT_KERNEL_COMPILER': hostileExecutable.path,
       'RUNTIME_ENGINE_AOT_PLATFORM_KERNEL': hostileFile.path,
       'RUNTIME_ENGINE_AOT_SNAPSHOTTER': hostileExecutable.path,
@@ -1336,11 +2117,19 @@ Future<void> _runTest(_Options options) async {
       'RELEASE_AOT_KERNEL': protectedSentinel.path,
       'RELEASE_AOT_KERNEL_DEPFILE': protectedSentinel.path,
       'RELEASE_AOT_SNAPSHOT': protectedSentinel.path,
+      'RELEASE_AOT_WORKER_EXECUTABLE': protectedSentinel.path,
+      'RELEASE_AOT_WORKER_DEPFILE': protectedSentinel.path,
       'RELEASE_AOT_HOST': protectedSentinel.path,
+      'RELEASE_AOT_PACKAGED_DIR': protectedBundle.path,
+      'RELEASE_AOT_PACKAGED_HOST': protectedSentinel.path,
+      'RELEASE_AOT_PACKAGED_ENGINE': protectedSentinel.path,
+      'RELEASE_AOT_PACKAGED_SNAPSHOT': protectedSentinel.path,
+      'RELEASE_AOT_PACKAGED_WORKER_EXECUTABLE': protectedSentinel.path,
       'RELEASE_AOT_MANIFEST': protectedSentinel.path,
       'RELEASE_AOT_FINGERPRINT': protectedSentinel.path,
       'RELEASE_AOT_BUNDLE': protectedBundle.path,
       'RELEASE_AOT_EXECUTABLE': protectedSentinel.path,
+      'RELEASE_AOT_BUNDLED_WORKER_EXECUTABLE': protectedSentinel.path,
       'RELEASE_AOT_BUNDLE_STAMP': protectedSentinel.path,
       'RELEASE_AOT_HOST_SOURCE': hostileSource.path,
       'RELEASE_AOT_INFO_PLIST': hostilePlist.path,
