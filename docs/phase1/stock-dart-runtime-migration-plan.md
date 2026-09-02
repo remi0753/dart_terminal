@@ -1,6 +1,6 @@
 # Stock Dart Runtime Migration Plan
 
-- Status: frozen execution contract; official process-worker topology selected
+- Status: frozen execution contract; steps 1–6 complete, M1 closeout next
 - Primary environment: macOS on Apple Silicon (M1/arm64)
 - SDK baseline: Dart 3.13.2 revision
   `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`

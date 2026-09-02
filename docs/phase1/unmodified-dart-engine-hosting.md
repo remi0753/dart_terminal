@@ -1,6 +1,7 @@
 # Unmodified Dart Engine hosting migration
 
-- Status: in progress; stock `dart_appkit` host contract complete, Developer JIT migration next
+- Status: in progress; stock migration through legacy removal complete, M1
+  cross-mode closeout next
 - Normative execution contract:
   [`stock-dart-runtime-migration-plan.md`](stock-dart-runtime-migration-plan.md).
   Earlier entries that considered any Dart Engine modification are retained
@@ -39,8 +40,8 @@ That trade-off is no longer accepted. The governing rule for this task is:
 > Product needs do not authorize a product-only mutation of the Dart SDK. Use
 > a documented public API or an official executable/tool boundary where one
 > exists. Where `dart_engine` itself lacks a generally useful lifecycle
-> facility, design and validate that change as an upstream Engine improvement,
-> not as an undocumented permanent product patch.
+> facility, record it as an upstream capability gap. This project does not
+> implement that change in an SDK checkout, local commit, or fork.
 
 ## Scope
 
@@ -58,9 +59,9 @@ That trade-off is no longer accepted. The governing rule for this task is:
   compare a general-purpose `dart_engine` API/implementation improvement with
   an official Dart executable in a child process with explicit IPC.
 - Migrate developer JIT and release AOT to the first option that meets the full
-  contract through an already published official boundary. An Engine change
-  may be developed and proposed in parallel, but the product will consume it
-  as an upstream revision rather than silently carrying a private fork.
+  contract through an already published official boundary. A future upstream
+  release may be evaluated separately, but this repository does not develop or
+  carry an Engine source change.
 - Remove patch files, patch application targets, patch-specific manifests and
   fingerprints, and all documentation that presents a patched Engine as the
   product contract.
@@ -71,9 +72,9 @@ That trade-off is no longer accepted. The governing rule for this task is:
 ## Out of scope
 
 - The next Phase 1 native-event wire-format task and all later roadmap work.
-- Adding a new Dart language feature or maintaining a permanent downstream
-  Dart fork. A general `dart_engine` API/implementation change with upstream
-  quality, tests, and review material is explicitly in scope.
+- Adding a Dart language/Engine feature, modifying an SDK checkout, or
+  maintaining any downstream Dart fork. A general upstream API idea may be
+  documented, but implementing it is outside this product task.
 - Copying private Dart runtime implementation into this repository and calling
   it a public embedder.
 - Sending an upstream issue, pull request, or code review before the local
@@ -85,10 +86,9 @@ That trade-off is no longer accepted. The governing rule for this task is:
 
 - The adjacent SDK is pinned at revision
   `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`.
-- The SDK working tree began this investigation with the two product Engine
-  patch effects. It is now clean at the pinned revision; the repository patch
-  inputs and build rules that can reapply them remain to be removed after the
-  selected product migration.
+- The SDK working tree began this investigation with the former product Engine
+  modifications. It is now clean at the pinned revision, and the repository
+  payloads and build rules that could reapply them have been removed.
 - The existing JIT and AOT products share `bin/main.dart` and
   `lib/src/runtime_lifecycle.dart` but enter Dart through different native
   hosts.
@@ -2503,3 +2503,66 @@ Validation results on arm64:
 This completes the second ordered child. Current README/feature guidance and
 historical reproduction instructions are intentionally handled in the final
 documentation/source-inventory and M1 regression child.
+
+### Current documentation, source inventory, and M1 removal closeout: result
+
+Current product guidance now describes the M1/arm64 Developer JIT and Release
+AOT products as the stock AppKit-root plus official Dart process-worker
+implementation. It documents the active Release build, audit, run, smoke,
+lifecycle, and traffic targets. The feature matrix records both arm64 modes as
+migrated while keeping pane/render, x86_64, Rosetta, and Universal work in their
+existing later positions. ADR-002 now records the former Engine modification
+path as deleted.
+
+Phase 0 and early Phase 1 records that still contain old measurements or
+commands are retained only as decision history. Every such task document now
+has a prominent historical/superseded status and a warning that its retired
+Engine-modification or embedded-worker path is not a current reproduction
+instruction and must not be recreated. The normative migration plan remains
+frozen; no rejected architecture route was reopened.
+
+Static removal evidence:
+
+- `git ls-files patches` produced no path. Neither former payload is tracked.
+- A non-document source scan found no whole-word patch mechanism, former
+  manifest key or dirty-policy name, or SDK `git apply` operation. A focused
+  Makefile scan likewise found none of the deleted payload names, support
+  targets, schema keys, or application command.
+- Both generated arm64 Developer and Release build manifests contain no patch
+  field or path. Their Engine source policy remains `official-clean`.
+- The first ad-hoc non-document scan used unquoted zsh exclusion globs and was
+  rejected by the shell before scanning. Repeating the identical scan with
+  quoted globs completed correctly with no match; no acceptance result relies
+  on the failed invocation.
+
+Final Apple M1/arm64 regression evidence:
+
+- `make RUNTIME_ARCH=arm64 runtime-verify` completed with status 0. The source
+  gate, both bundle/fingerprint audits, both GUI smoke runs, and all sixteen
+  lifecycle/failure/shutdown/replacement scenarios in each mode passed. The
+  expected classified statuses remained 0 for contained outcomes, 75 for the
+  forced shutdown timeout, 70 for fatal root/host startup outcomes, and 64 for
+  usage rejection.
+- Developer traffic passed with 384 explicit backpressure retries, 1,037 ms
+  worker traffic time, and 1,355 ms application lifetime. Release traffic
+  passed with the same 384 retries, 972 ms worker traffic time, and 1,160 ms
+  application lifetime. Both retained the tested bounded admission contract.
+- The complete freshness and hostile-input suite passed after removal of the
+  old generated fixture. It protected 106 internal Make values, consumed zero
+  hostile dry-run values, rejected a self-authenticating SDK and two runner
+  replacements, verified six tool identities and nine artifacts with
+  space-containing toolchain paths, rejected all 28 external
+  header/response/forwarding cases with zero stale reuse, regenerated all nine
+  effective-input and package-config artifacts, preserved 9/9 stable no-op
+  outputs, and rejected a forged package root and missing required override.
+- `git diff --check` passed after the documentation and ROADMAP updates. After
+  all runtime tests, the Dart SDK/Engine worktree was clean at
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`, and `dart_appkit` was clean at
+  `77e355387a0ea50034632d9e3d4b35f629155c35`.
+
+The two payloads, every SDK mutation route, and every operational provenance,
+audit, and fixture allowance for a modified Engine are now gone. No Dart SDK,
+Dart Engine, generated SDK source, or `dart_appkit` source was changed by this
+removal. This closes the three-part removal task. The next and only authorized
+unit is the separately listed M1 cross-mode closeout; x86_64/Rosetta/Universal
+remains the lower-priority follow-up after it.

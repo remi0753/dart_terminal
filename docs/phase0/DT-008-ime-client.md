@@ -5,6 +5,10 @@
 - Scope: Phase 0 feasibility gate
 - Related decisions: ADR-001 and ADR-002
 
+> The recorded modified-Engine binary hash below identifies only the historical
+> run. The surviving root-only IME target now builds through the clean official
+> Engine gate and does not reproduce or accept that old Engine state.
+
 ## Question
 
 Can a release-AOT Dart/AppKit terminal view implement the macOS text-input

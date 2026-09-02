@@ -1,10 +1,16 @@
 # DT-012 — Debug, release, and Universal bundle CI design
 
-- Status: accepted design; arm64 local path verified; hardware completion
-  policy amended below
+- Status: accepted historical design; runtime provenance and aggregate targets
+  superseded on 2026-09-03
 - Date: 2026-09-01
 - Scope: Phase 0 build/release boundary and final integrated acceptance
 - Related: ROADMAP Phase 0, Phase 1 runtime substrate, and Phase 11 distribution
+
+> The tables and results below record the original Phase 0 release boundary.
+> Engine-modification inputs and the aggregate Phase 0 release/audit/verify
+> commands have been removed. Current Developer JIT and Release AOT builds must
+> follow `../phase1/stock-dart-runtime-migration-plan.md`; do not recreate the
+> retired path from this historical document.
 
 ## 2026-09-02 addendum — Apple M1 baseline completion policy
 

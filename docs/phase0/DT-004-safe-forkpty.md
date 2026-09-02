@@ -1,9 +1,15 @@
 # DT-004 — safe forkpty, exec, and job-control spike
 
-- Status: accepted
+- Status: accepted historical evidence; integrated embedded-worker target
+  retired on 2026-09-03
 - Date: 2026-08-31
 - Scope: Phase 0 feasibility gate
 - Related decisions: ADR-001 and ADR-002
+
+> The post-fork child audit remains runnable, but the integrated PTY build/run
+> commands below belonged to the retired in-process worker host. They are
+> preserved only as historical evidence and must not be recreated against a
+> modified Engine.
 
 ## Question
 

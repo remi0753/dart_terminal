@@ -1,9 +1,15 @@
 # DT-003 — worker isolate lifecycle and throughput spike
 
-- Status: accepted
+- Status: accepted historical evidence; embedded-worker reproduction target
+  retired on 2026-09-03
 - Date: 2026-08-31
 - Scope: Phase 0 feasibility gate
 - Related decision: `docs/adr/ADR-002-isolate-thread-ownership.md`
+
+> This spike depended on the former modified-Engine topology. Its measurements
+> remain evidence, but the build/run commands and modification instructions
+> below are no longer present and must not be recreated. The product replacement
+> is the official Dart child-process contract in the related ADR.
 
 ## Question
 

@@ -217,8 +217,10 @@ Every producer has count and byte watermarks:
 
 No producer may use an unbounded Dart list, native queue, pipe write, stderr
 capture, or one-Future-per-byte/cell structure as flow control. The Developer
-and Release migration tasks must measure AppKit heartbeat/fairness, worker RSS,
-startup, backpressure, and multiple-pane behavior before patch removal.
+and Release migration tasks measured AppKit heartbeat/fairness, startup,
+backpressure, and lifecycle behavior before removing the old Engine
+modification path. Worker RSS and multiple-pane budgets remain product-scale
+follow-up measurements.
 
 ## Ownership invariants
 
@@ -311,6 +313,6 @@ gate; it may not weaken process ownership or generation checks.
 - macOS x86_64 compilation requires an official x64 SDK/host rather than ARM64
   cross-compilation. That remains a lower-priority Rosetta/Universal follow-up
   after the M1 migration and cannot reopen this topology decision.
-- Product patch files remain temporarily only until both M1 Developer JIT and
-  Release AOT paths pass this contract; they are then deleted with all related
-  build/provenance machinery.
+- The former product Engine modification files and all related build,
+  provenance, audit, and fixture machinery were deleted after both M1
+  Developer JIT and Release AOT passed this contract.

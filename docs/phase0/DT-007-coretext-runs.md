@@ -1,9 +1,15 @@
 # DT-007 — CoreText glyph-run shaping spike
 
-- Status: accepted
+- Status: accepted historical evidence; embedded-worker build/run target
+  retired on 2026-09-03
 - Date: 2026-09-01
 - Scope: Phase 0 feasibility gate
 - Related decisions: ADR-001 and ADR-002
+
+> The shaping measurements remain feasibility evidence. The build/run commands
+> below used the retired in-process worker host and are not current
+> instructions; future shaping work must use the selected official
+> process-worker topology.
 
 ## Question
 

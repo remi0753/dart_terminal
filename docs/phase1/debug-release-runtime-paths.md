@@ -1,10 +1,17 @@
 # Developer JIT and release AOT runtime paths
 
-- Status: complete
+- Status: historical initial implementation; runtime topology and provenance
+  contract superseded on 2026-09-03
 - Date: 2026-09-01
 - Scope: first Phase 1 roadmap item only
 - Related: `ROADMAP.md` Phase 1, `FEATURE_MATRIX.md` RT-01 and DIST-01,
   `docs/phase0/DT-012-build-ci-design.md`, ADR-001, and ADR-002
+
+> Current product builds use the stock-Engine root plus official Dart child
+> process contract in `stock-dart-runtime-migration-plan.md`. References below
+> to an Engine modification or retired Phase 0 aggregate are preserved only as
+> evidence of the implementation that this task originally validated; they are
+> not current build instructions.
 
 ## Purpose
 

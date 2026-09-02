@@ -1,10 +1,17 @@
 # VM and isolate lifecycle contract
 
-- Status: complete; post-serialization regression and independent re-review passed
+- Status: historical lifecycle implementation; worker topology and Engine
+  modification contract superseded on 2026-09-03
 - Started: 2026-09-02
 - Scope: third Phase 1 roadmap item only
 - Related: `ROADMAP.md` Phase 1, `FEATURE_MATRIX.md` RT-01–RT-03 and
   REL-01, ADR-001, ADR-002, DT-002, and DT-003
+
+> The scenario names, exit classifications, and recorded failures below remain
+> historical evidence. Current Developer JIT and Release AOT implement those
+> observable outcomes with official Dart child processes under
+> `stock-dart-runtime-migration-plan.md`. Any instruction below to alter Engine
+> source or invoke a retired Phase 0 aggregate is no longer valid.
 
 ## Purpose
 

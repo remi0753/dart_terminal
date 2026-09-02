@@ -1,9 +1,15 @@
 # DT-006 — 100,000-instance Metal rendering spike
 
-- Status: accepted
+- Status: accepted historical evidence; embedded-worker build/run target
+  retired on 2026-09-03
 - Date: 2026-09-01
 - Scope: Phase 0 feasibility gate
 - Related decisions: ADR-001, ADR-002, and input evidence for ADR-004
+
+> The rendering measurements remain feasibility evidence. The build/run
+> commands below used the retired in-process worker host and are not current
+> instructions; any new renderer validation must use the selected official
+> process-worker topology.
 
 ## Question
 

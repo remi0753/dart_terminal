@@ -1,13 +1,20 @@
 # Architecture matrix and Universal release-AOT assembly
 
-- Status: complete — Apple M1/arm64 baseline gates passed; Intel-native
-  evidence is a post-goal follow-up
+- Status: historical matrix implementation complete; its former runtime
+  provenance is superseded, and stock-runtime compatibility revalidation is a
+  lower-priority follow-up
 - Started: 2026-09-01
 - Last validated: 2026-09-02
 - Scope: second Phase 1 roadmap item only
 - Related: `ROADMAP.md` Phase 1, `FEATURE_MATRIX.md` DIST-01,
   `docs/phase0/DT-012-build-ci-design.md`,
   `docs/phase1/debug-release-runtime-paths.md`, and ADR-001–004
+
+> Results below describe the repository state at the date of each entry. Any
+> Engine-modification or retired Phase 0 command is historical, not a current
+> reproduction path. Future x86_64/Rosetta/Universal work must start from the
+> clean official process-worker targets and criteria in
+> `stock-dart-runtime-migration-plan.md`.
 
 ## 2026-09-02 — runtime recipe/provenance variable audit reopening
 

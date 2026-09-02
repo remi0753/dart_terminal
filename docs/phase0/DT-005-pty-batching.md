@@ -1,10 +1,16 @@
 # DT-005 — PTY kqueue batching and backpressure spike
 
-- Status: accepted
+- Status: accepted historical evidence; integrated embedded-worker target
+  retired on 2026-09-03
 - Date: 2026-08-31
 - Scope: Phase 0 feasibility gate
 - Related decisions: ADR-001 and ADR-002
 - Uses process substrate: DT-004
+
+> The recorded batching semantics remain design input. The integrated
+> build/run commands below used the retired in-process worker host and are not a
+> current reproduction path; the product implementation must use the official
+> process-worker boundary.
 
 ## Question
 
