@@ -20,9 +20,11 @@ override DART_SDK_HASH := \
 ifeq ($(HOST_ARCH),arm64)
 override DART_ENGINE_RELEASE_ARCH := ARM64
 override DART_ENGINE_SHARED_TOOLCHAIN := clang_arm64_shared
+override DART_ENGINE_HOST_ARCH := arm64
 else ifeq ($(HOST_ARCH),x86_64)
 override DART_ENGINE_RELEASE_ARCH := X64
 override DART_ENGINE_SHARED_TOOLCHAIN := clang_x64_shared
+override DART_ENGINE_HOST_ARCH := x64
 else
 $(error Unsupported host architecture: $(HOST_ARCH))
 endif
@@ -42,6 +44,23 @@ override DART_ENGINE_KERNEL_COMPILER := \
 	$(DART_ENGINE_JIT_OUT)/bootstrap_gen_kernel.exe
 override DART_ENGINE_PLATFORM_KERNEL := \
 	$(DART_ENGINE_JIT_OUT)/$(DART_ENGINE_SHARED_TOOLCHAIN)/vm_platform.dill
+
+override UNMODIFIED_ENGINE_PROBE_BUILD_DIR := \
+	$(PROJECT_ROOT)/build/runtime-probes/unmodified-engine/$(HOST_ARCH)
+override UNMODIFIED_ENGINE_PROBE_DART_SOURCE := \
+	$(PROJECT_ROOT)/tool/unmodified_engine_multiple_root.dart
+override UNMODIFIED_ENGINE_PROBE_RUNNER_SOURCE := \
+	$(PROJECT_ROOT)/tool/unmodified_engine_probe_runner.dart
+override UNMODIFIED_ENGINE_PROBE_HOST_SOURCE := \
+	$(PROJECT_ROOT)/native/macos/runtime/UnmodifiedEngineMultipleRootProbe.cc
+override UNMODIFIED_ENGINE_PROBE_AOT_SNAPSHOT := \
+	$(UNMODIFIED_ENGINE_PROBE_BUILD_DIR)/multiple_root.aot
+override UNMODIFIED_ENGINE_PROBE_JIT_KERNEL := \
+	$(UNMODIFIED_ENGINE_PROBE_BUILD_DIR)/multiple_root.dill
+override UNMODIFIED_ENGINE_PROBE_AOT_HOST := \
+	$(UNMODIFIED_ENGINE_PROBE_BUILD_DIR)/multiple_root_aot_probe
+override UNMODIFIED_ENGINE_PROBE_JIT_HOST := \
+	$(UNMODIFIED_ENGINE_PROBE_BUILD_DIR)/multiple_root_jit_probe
 override DART_ENGINE_WORKER_PATCH := \
 	$(PROJECT_ROOT)/patches/dart-engine-worker-isolates.patch
 override DART_ENGINE_LIFECYCLE_PATCH := \
@@ -344,6 +363,9 @@ INTEL_EVIDENCE_OUTPUT ?=
 	runtime-jit-engine \
 	runtime-aot-engine dart-engine-worker-support \
 	dart-engine-lifecycle-support release-aot-engine \
+	unmodified-engine-sdk-clean unmodified-engine-probe-aot-engine \
+	unmodified-engine-probe-jit-engine \
+	unmodified-engine-multiple-root-probe \
 	developer-jit-build developer-jit-run developer-jit-audit \
 	developer-jit-integration developer-jit-lifecycle \
 	release-aot-build release-aot-run release-aot-audit \
@@ -373,6 +395,7 @@ INTEL_EVIDENCE_OUTPUT ?=
 help:
 	@echo "Dart Terminal product runtime targets:"
 	@echo "  Thin targets require RUNTIME_ARCH=arm64 or RUNTIME_ARCH=x86_64"
+	@echo "  make unmodified-engine-multiple-root-probe"
 	@echo "  make developer-jit-build Build one thin product developer-JIT app"
 	@echo "  make developer-jit-run   Run one thin product developer-JIT app"
 	@echo "  make developer-jit-audit Audit one JIT-only thin bundle contract"
@@ -448,6 +471,112 @@ runtime-dart-tool-check:
 		echo "trusted Dart version does not match selected SDK" >&2; \
 		exit 64; \
 	}
+
+unmodified-engine-sdk-clean: runtime-dart-tool-check
+	@actual_revision="$$('/usr/bin/git' -C "$(DART_ENGINE_ROOT)" rev-parse HEAD)"; \
+	expected_revision="$(DART_SDK_REVISION)"; \
+	[[ "$$actual_revision" == "$$expected_revision" ]] || { \
+		echo "Engine and selected Dart SDK revisions differ" >&2; \
+		exit 64; \
+	}; \
+	changes="$$('/usr/bin/git' -C "$(DART_ENGINE_ROOT)" status --porcelain)"; \
+	[[ -z "$$changes" ]] || { \
+		echo "unmodified Engine probe requires a clean SDK checkout" >&2; \
+		echo "$$changes" >&2; \
+		exit 64; \
+	}
+
+unmodified-engine-probe-aot-engine: unmodified-engine-sdk-clean
+	"$(RUNTIME_ENGINE_PYTHON)" "$(DART_ENGINE_GN)" --mode=product \
+		--arch=$(DART_ENGINE_HOST_ARCH)
+	"$(DART_ENGINE_NINJA)" -C $(DART_ENGINE_OUT) dart_engine_aot_shared
+	@changes="$$('/usr/bin/git' -C "$(DART_ENGINE_ROOT)" status --porcelain)"; \
+	[[ -z "$$changes" ]] || { \
+		echo "Engine build changed the SDK checkout" >&2; \
+		echo "$$changes" >&2; \
+		exit 70; \
+	}
+
+unmodified-engine-probe-jit-engine: unmodified-engine-sdk-clean
+	"$(RUNTIME_ENGINE_PYTHON)" "$(DART_ENGINE_GN)" --mode=release \
+		--arch=$(DART_ENGINE_HOST_ARCH)
+	"$(DART_ENGINE_NINJA)" -C $(DART_ENGINE_JIT_OUT) \
+		dart_engine_jit_shared bootstrap_gen_kernel.exe \
+		$(DART_ENGINE_SHARED_TOOLCHAIN)/vm_platform.dill
+	@changes="$$('/usr/bin/git' -C "$(DART_ENGINE_ROOT)" status --porcelain)"; \
+	[[ -z "$$changes" ]] || { \
+		echo "Engine build changed the SDK checkout" >&2; \
+		echo "$$changes" >&2; \
+		exit 70; \
+	}
+
+$(UNMODIFIED_ENGINE_PROBE_AOT_SNAPSHOT): \
+		$(UNMODIFIED_ENGINE_PROBE_DART_SOURCE) | runtime-dart-tool-check
+	@mkdir -p $(UNMODIFIED_ENGINE_PROBE_BUILD_DIR)
+	"$(RUNTIME_DART_EXECUTABLE)" compile aot-snapshot --verbosity=warning \
+		-o $@ $(UNMODIFIED_ENGINE_PROBE_DART_SOURCE)
+
+$(UNMODIFIED_ENGINE_PROBE_JIT_KERNEL): \
+		$(UNMODIFIED_ENGINE_PROBE_DART_SOURCE) | \
+		unmodified-engine-probe-jit-engine
+	@mkdir -p $(UNMODIFIED_ENGINE_PROBE_BUILD_DIR)
+	"$(DART_ENGINE_KERNEL_COMPILER)" \
+		--platform=$(DART_ENGINE_PLATFORM_KERNEL) \
+		--no-aot --link-platform --no-embed-sources \
+		--output=$@ \
+		-Dsdk_hash=$(DART_SDK_HASH) \
+		-Ddart.vm.product=false -Ddart.vm.asan=false \
+		-Ddart.vm.msan=false -Ddart.vm.tsan=false \
+		$(UNMODIFIED_ENGINE_PROBE_DART_SOURCE)
+
+$(UNMODIFIED_ENGINE_PROBE_AOT_HOST): \
+		$(UNMODIFIED_ENGINE_PROBE_HOST_SOURCE) | \
+		unmodified-engine-probe-aot-engine
+	@mkdir -p $(UNMODIFIED_ENGINE_PROBE_BUILD_DIR)
+	"$(CLANGXX)" -Wall -Wextra -Wpedantic -Werror \
+		-Wno-gnu-anonymous-struct -Wno-nested-anon-types -std=c++20 \
+		-isysroot "$(SDKROOT)" \
+		-mmacosx-version-min=$(MACOSX_DEPLOYMENT_TARGET) \
+		-arch $(HOST_ARCH) \
+		-I$(DART_ENGINE_ROOT)/runtime \
+		-I$(DART_ENGINE_ROOT)/runtime/engine \
+		$(UNMODIFIED_ENGINE_PROBE_HOST_SOURCE) \
+		$(DART_ENGINE_AOT_LIBRARY) \
+		-Wl,-rpath,$(DART_ENGINE_OUT) -o $@
+
+$(UNMODIFIED_ENGINE_PROBE_JIT_HOST): \
+		$(UNMODIFIED_ENGINE_PROBE_HOST_SOURCE) | \
+		unmodified-engine-probe-jit-engine
+	@mkdir -p $(UNMODIFIED_ENGINE_PROBE_BUILD_DIR)
+	"$(CLANGXX)" -Wall -Wextra -Wpedantic -Werror \
+		-Wno-gnu-anonymous-struct -Wno-nested-anon-types -std=c++20 \
+		-isysroot "$(SDKROOT)" \
+		-mmacosx-version-min=$(MACOSX_DEPLOYMENT_TARGET) \
+		-arch $(HOST_ARCH) \
+		-I$(DART_ENGINE_ROOT)/runtime \
+		-I$(DART_ENGINE_ROOT)/runtime/engine \
+		$(UNMODIFIED_ENGINE_PROBE_HOST_SOURCE) \
+		$(DART_ENGINE_JIT_LIBRARY) \
+		-Wl,-rpath,$(DART_ENGINE_JIT_OUT) -o $@
+
+unmodified-engine-multiple-root-probe: \
+		$(UNMODIFIED_ENGINE_PROBE_AOT_HOST) \
+		$(UNMODIFIED_ENGINE_PROBE_AOT_SNAPSHOT) \
+		$(UNMODIFIED_ENGINE_PROBE_JIT_HOST) \
+		$(UNMODIFIED_ENGINE_PROBE_JIT_KERNEL) \
+		$(UNMODIFIED_ENGINE_PROBE_RUNNER_SOURCE)
+	"$(RUNTIME_DART_EXECUTABLE)" run \
+		$(UNMODIFIED_ENGINE_PROBE_RUNNER_SOURCE) \
+		--engine-root=$(DART_ENGINE_ROOT) \
+		--host=$(UNMODIFIED_ENGINE_PROBE_AOT_HOST) \
+		--snapshot=$(UNMODIFIED_ENGINE_PROBE_AOT_SNAPSHOT) \
+		--mode=aot
+	"$(RUNTIME_DART_EXECUTABLE)" run \
+		$(UNMODIFIED_ENGINE_PROBE_RUNNER_SOURCE) \
+		--engine-root=$(DART_ENGINE_ROOT) \
+		--host=$(UNMODIFIED_ENGINE_PROBE_JIT_HOST) \
+		--snapshot=$(UNMODIFIED_ENGINE_PROBE_JIT_KERNEL) \
+		--mode=jit
 
 runtime-fingerprint-force:
 

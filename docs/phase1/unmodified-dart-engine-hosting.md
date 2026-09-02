@@ -144,6 +144,9 @@ runtime behavior. Record rejection as a valid completed result if any required
 operation needs a private API, leaked/stale Engine bookkeeping, process exit as
 cleanup, or an SDK edit.
 
+Status: complete; rejected as the product's dynamic worker lifecycle, while
+retained as a supported option for a fixed set of app-lifetime roots.
+
 ### 3. Probe a public-API product embedder if needed
 
 First determine whether a product-owned host can initialize core libraries,
@@ -247,6 +250,66 @@ proposal can be reviewed and submitted without private project context.
 - If no supported route satisfies pane-local recovery, correctness wins over
   the Phase 1 schedule: record a blocker and do not restore the patches.
 
+## Multiple-root comparison and decision
+
+The pinned, unmodified `dart_engine` genuinely supports multiple root isolate
+groups. This is not an accidental symbol or an invented use: its README says a
+caller may start one or several isolates, and the upstream
+`run_two_programs_aot` sample demonstrates that path. The product probe extends
+that evidence rather than disputing it.
+
+The approach passes these parts of the contract:
+
+- AOT and JIT can each create three independent roots from one snapshot.
+- Simple Dart messages and 256 KiB `TransferableTypedData` chunks cross isolate
+  groups correctly through public SendPort APIs.
+- A worker-root uncaught callback reaches
+  `DartEngine_SetHandleMessageErrorCallback` without killing the UI root; the
+  same worker root can process another request afterward.
+- A replacement root can be created and scheduled off the process main thread.
+- Global Engine shutdown is fast and completes under the outer timeout when
+  all created domains remain registered until that point.
+
+The performance probe transfers 128 MiB as 512 acknowledged 256 KiB chunks.
+Five direct repeats per mode produced:
+
+| Mode | Transfer MiB/s | First root us | Worker root us | Replacement us | Global shutdown us |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| release AOT | 3,361.70--3,737.44 | 527--3,770 | 277--513 | 303--322 | 41--79 |
+| developer JIT | 1,248.43--1,446.97 | 31,829--37,238 | 30,188--31,277 | 30,184--31,268 | 284--461 |
+
+Both transfer ranges exceed the 100 MiB/s gate. The earlier same-group Phase 0
+probe measured 1,056.65--2,702.08 MiB/s, but its AppKit pump, instrumentation,
+and workload differ, so this is only a no-bottleneck comparison and not a claim
+that separate groups are intrinsically faster.
+
+The approach fails the ownership part of the contract:
+
+1. Closing the worker root's application `ReceivePort` makes
+   `Dart_HasLivePorts` false, but does not release the root isolate.
+2. `dart_engine.h` offers creation and global shutdown, but no individual root
+   shutdown/unregister call and no authoritative individual-exit callback.
+3. `Engine::StartIsolate` retains every root plus two persistent handles in
+   private `isolates_`/`isolate_data_` structures. Only global `Shutdown`
+   iterates that list; no public operation removes an entry.
+4. Calling low-level `Dart_ShutdownIsolate` behind the Engine's back is not a
+   valid composition. The caller cannot remove the Engine's persistent handles
+   or stale vector/map entry, and the documented Engine acquire/release pair
+   cannot bracket a call that destroys the current isolate. A later global
+   shutdown would still try to enter the stale pointer.
+5. Therefore pane close/restart would accumulate retired isolate groups until
+   application exit, and a worker error supplies a diagnostic without the
+   authoritative termination/replacement boundary required by RT-02 and
+   REL-01. It would also invalidate the later 1,000 create/destroy leak gate.
+
+Decision: do not migrate the product to the current multiple-root API. This is
+a narrow lifecycle/ownership rejection, not a rejection of separate isolate
+groups or their performance. A fixed number of roots that all live until
+global shutdown is an intended use of the existing API; dynamic pane-owned
+workers are not safely expressible. Proceed to the public low-level Embedder
+API probe as ordered. The missing individual Engine lifecycle is also a strong
+candidate for a general upstream `dart_engine` improvement.
+
 ## Investigation log
 
 ### 2026-09-02 — corrective task initialization
@@ -288,3 +351,70 @@ proposal can be reviewed and submitted without private project context.
   work rules. `git diff --check` passed, and the worktree contains only the
   roadmap update and this new memo. Runtime sources and the adjacent SDK were
   not changed by this subtask.
+
+### 2026-09-02 — multiple-root probe, first build attempt
+
+- Reversed the lifecycle patch and then the worker-initialization patch only
+  after both exact reverse checks passed. The adjacent SDK now has empty
+  `git status --porcelain`, remains at the pinned revision, and its unmodified
+  `runtime/engine/engine.cc` SHA-256 is
+  `8834b16201a567040010545c90d209360bd88164cae477a85adafd126a38d370`.
+- Rebuilt the Product ARM64 Engine directly through the SDK's GN/Ninja targets,
+  bypassing the product Make targets that apply patches. The official
+  `run_two_programs_aot` example then started two roots, passed a value between
+  them through native code, printed the expected value, and completed global
+  shutdown with status zero.
+- Added a repository-owned probe for cross-group Dart ports, an intentionally
+  uncaught worker-root callback, logical retirement, replacement-root creation,
+  and global shutdown. Its first native compilation failed before linking
+  because `dart_engine.h` intentionally uses GNU anonymous structs while the
+  probe enables `-Wpedantic -Werror`. This is not an Engine defect and changed
+  no SDK source. The probe build now uses the same two narrow warning
+  suppressions as the existing product hosts and will be repeated.
+
+### 2026-09-02 — multiple-root functional result
+
+- The corrected probe passed against the unmodified Product ARM64 Engine. It
+  created three separate root isolate groups, exchanged a ping/pong over Dart
+  ports, delivered one intentional worker-root uncaught error to the Engine
+  callback, processed another request in that root after the error, closed its
+  application `ReceivePort`, created a replacement root, and exchanged a final
+  ping/pong before global shutdown.
+- All asynchronous Dart messages were handled on the probe's non-main scheduler
+  thread. Timings for this run were 4,920 us for the first root, 1,198 us for
+  the second, 713 us for the replacement, and 116 us for global shutdown.
+- After logical retirement, `Dart_HasLivePorts` was false. Nevertheless, the
+  public Engine header had no individual destroy/remove/shutdown operation and
+  the implementation had no corresponding removal from `isolates_`; the
+  retired root remained owned by the Engine until global shutdown. This is the
+  central lifecycle gap to judge after adding a directly comparable bulk-data
+  measurement.
+- The runner verified the SDK was clean both before and after the build/run and
+  enforced a 12-second outer timeout, zero exit status, empty stderr, and exact
+  semantic markers.
+
+### 2026-09-02 — dual-mode bulk result and option decision
+
+- Extended the payload to perform an acknowledged 128 MiB transfer with
+  per-chunk order, length, and edge-marker validation. The runner requires at
+  least 100 MiB/s and exact lifecycle markers.
+- Rebuilt both Product ARM64 AOT and Release ARM64 JIT Engine libraries from
+  the clean source. The combined Make target passed in both modes: AOT reported
+  3,311.34 MiB/s and JIT reported 1,425.61 MiB/s for that run. Five additional
+  direct runs per mode all passed; the ranges are recorded in the comparison
+  table above.
+- Rechecked C++ formatting with the SDK clang-format binary, Dart formatting,
+  source whitespace, the 12-second runner timeout, empty stderr, and Engine
+  cleanliness. The SDK remained byte-clean at the pinned revision.
+- Rejected the current multiple-root interface only because individual
+  ownership cannot be completed through its public contract. No unsafe direct
+  `Dart_ShutdownIsolate` experiment was used as product evidence: leaving
+  private persistent handles and a stale Engine pointer would already violate
+  the stated supported-hosting policy, regardless of whether one particular
+  process happened to survive it.
+- Final validation passed: Dart formatting reported zero changes, SDK
+  clang-format reported no violations, `git diff --check` passed, repository
+  `dart analyze` reported no issues, and `dart run test/run_tests.dart` passed.
+  The final combined clean-Engine gate passed again at 3,392.17 MiB/s AOT and
+  1,460.79 MiB/s JIT, with exact communication/error/replacement markers,
+  bounded global shutdown, empty stderr, and a clean SDK before and after.
