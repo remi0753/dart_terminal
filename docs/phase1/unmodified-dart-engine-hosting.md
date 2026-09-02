@@ -2392,3 +2392,52 @@ assertions in the freshness test; and stale active guidance in README and the
 feature matrix. The current Developer and Release product dependency graphs
 already terminate at `unmodified-engine-sdk-clean`; the hazardous residual
 path is confined to patch-era Phase 0 build entry points and generic tooling.
+
+### Patch payload and SDK mutation path removal: result
+
+Both Engine patch payloads are deleted. The Makefile no longer defines their
+paths, invokes `git apply`, exposes either patch-support target, aliases the
+Phase 0 worker-support target, or attaches the host-architecture Engine library
+file to that dependency chain. A repository search of the resulting Makefile
+found none of the removed filenames, variables, support targets, or application
+commands.
+
+The patch initialized child isolates inside the embedded Phase 0 host. The
+worker, PTY, Metal, and CoreText bundle build/run targets therefore could not be
+honestly redirected to a stock Engine while preserving their recorded
+semantics. Those executable entry points, their obsolete Make-only variables
+and recipes, and the aggregate Phase 0 release/run/bundle/verify targets are
+retired rather than silently weakened. The underlying Dart/native spike sources
+and past measurement documents remain as superseded historical evidence; they
+are not current build or acceptance paths. The standalone PTY child-symbol
+audit remains because it neither starts Dart nor depends on an Engine isolate.
+
+The root-only Phase 0 AOT and IME bundle targets remain available. Their hosts
+now terminate at `unmodified-engine-probe-aot-engine`, which verifies the exact
+SDK revision and an empty worktree before the ordinary official GN/Ninja build,
+then verifies the worktree again. Standalone grid, parser, benchmark, and debug
+targets do not embed the patched Engine and remain unchanged.
+
+Focused validation:
+
+- `make -n help` parsed successfully and advertises no retired target.
+- `make -n phase0-aot-engine` expanded only to the trusted Dart check, exact
+  SDK revision/cleanliness check, official product GN/Ninja build, and final
+  cleanliness check.
+- `make -n phase0-worker-build` failed with `No rule to make target`, proving
+  the former patch-dependent entry point is absent.
+- `make RUNTIME_ARCH=arm64 -n release-aot-audit` expanded the complete current
+  product derivation without any removed patch filename, support target, or
+  application operation.
+- `make phase0-aot-engine` passed on arm64; Ninja had no work to do and both
+  surrounding clean checks passed.
+- `make RUNTIME_ARCH=arm64 runtime-source-check` passed: 41 Dart files required
+  no formatting change, native formatting/header syntax and plists passed,
+  analysis found no issue, and all repository unit tests passed.
+- The Engine SDK remained clean at
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`, and `dart_appkit` remained clean
+  at `77e355387a0ea50034632d9e3d4b35f629155c35`.
+
+This completes only the first ordered deletion child. Patch-era provenance,
+composition-audit, and generated-fixture code intentionally remains for the
+next child and is not accepted as current product behavior in the interim.
