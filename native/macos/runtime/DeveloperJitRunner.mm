@@ -3,17 +3,17 @@
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <vector>
 
-#include <unistd.h>
-
 #include "AppDelegate.h"
 #include "RunnerArguments.h"
 #include "RunnerConfiguration.h"
 #include "RuntimeLifecycleBridge.h"
+#include "RuntimeWorkerConfiguration.h"
 
 #ifndef DT_RUNTIME_WORKER_EXECUTABLE
 #error "DT_RUNTIME_WORKER_EXECUTABLE must identify the trusted Dart executable"
@@ -21,10 +21,6 @@
 
 namespace {
 
-constexpr std::string_view kRuntimeWorkerExecutablePrefix =
-    "--runtime-worker-executable=";
-constexpr std::string_view kRuntimeWorkerKernelPrefix =
-    "--runtime-worker-kernel=";
 constexpr std::string_view kRuntimeWorkerKernelName = "runtime_worker.dill";
 
 bool ConfigureRuntimeWorker(const char* launcher_argument,
@@ -34,29 +30,7 @@ bool ConfigureRuntimeWorker(const char* launcher_argument,
       out_error == nullptr) {
     return false;
   }
-  for (const std::string& argument : configuration->application_arguments) {
-    if (argument.starts_with(kRuntimeWorkerExecutablePrefix) ||
-        argument.starts_with(kRuntimeWorkerKernelPrefix)) {
-      *out_error = "runtime worker configuration is host-owned";
-      return false;
-    }
-  }
-
-  const std::filesystem::path configured_executable(
-      DT_RUNTIME_WORKER_EXECUTABLE);
-  if (!configured_executable.is_absolute()) {
-    *out_error = "configured runtime worker executable is not absolute";
-    return false;
-  }
   std::error_code error;
-  const std::filesystem::path worker_executable =
-      std::filesystem::canonical(configured_executable, error);
-  if (error || !std::filesystem::is_regular_file(worker_executable, error) ||
-      error || access(worker_executable.c_str(), X_OK) != 0) {
-    *out_error = "configured runtime worker executable is not executable";
-    return false;
-  }
-
   const std::filesystem::path launcher =
       std::filesystem::canonical(launcher_argument, error);
   if (error) {
@@ -64,23 +38,11 @@ bool ConfigureRuntimeWorker(const char* launcher_argument,
     return false;
   }
   const std::filesystem::path worker_kernel =
-      std::filesystem::canonical(launcher.parent_path().parent_path() /
-                                     "Resources" / kRuntimeWorkerKernelName,
-                                 error);
-  if (error || !std::filesystem::is_regular_file(worker_kernel, error) ||
-      error) {
-    *out_error = "bundled runtime worker Kernel is missing";
-    return false;
-  }
-
-  const std::vector<std::string> internal_arguments = {
-      std::string(kRuntimeWorkerExecutablePrefix) + worker_executable.string(),
-      std::string(kRuntimeWorkerKernelPrefix) + worker_kernel.string(),
-  };
-  configuration->application_arguments.insert(
-      configuration->application_arguments.begin(), internal_arguments.begin(),
-      internal_arguments.end());
-  return true;
+      launcher.parent_path().parent_path() / "Resources" /
+      kRuntimeWorkerKernelName;
+  return dart_terminal::PrependRuntimeWorkerConfiguration(
+      DT_RUNTIME_WORKER_EXECUTABLE, worker_kernel,
+      &configuration->application_arguments, out_error);
 }
 
 }  // namespace

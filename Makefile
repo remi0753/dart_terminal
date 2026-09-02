@@ -219,6 +219,10 @@ override RUNTIME_LIFECYCLE_HEADER := \
 	$(PROJECT_ROOT)/native/macos/runtime/RuntimeLifecycleBridge.h
 override RUNTIME_LIFECYCLE_SOURCE := \
 	$(PROJECT_ROOT)/native/macos/runtime/RuntimeLifecycleBridge.mm
+override RUNTIME_WORKER_CONFIGURATION_HEADER := \
+	$(PROJECT_ROOT)/native/macos/runtime/RuntimeWorkerConfiguration.h
+override RUNTIME_WORKER_CONFIGURATION_SOURCE := \
+	$(PROJECT_ROOT)/native/macos/runtime/RuntimeWorkerConfiguration.cc
 override RUNTIME_JIT_MAIN_SOURCE := \
 	$(PROJECT_ROOT)/native/macos/runtime/DeveloperJitRunner.mm
 override RUNTIME_JIT_RUNNER_HEADERS := \
@@ -289,6 +293,9 @@ override RUNTIME_ENGINE_ARCH := INVALID
 override RUNTIME_ENGINE_TOOLCHAIN := invalid
 override RUNTIME_SNAPSHOTTER_RUNNER_ARGUMENTS := invalid
 endif
+override RUNTIME_WORKER_EXECUTABLE_FLAGS := \
+	--target-os=macos --target-arch=$(RUNTIME_DART_TARGET_ARCH) \
+	--verbosity=warning
 RUNTIME_SNAPSHOTTER_RUNNER_EXECUTABLE ?= /usr/bin/arch
 unexport RUNTIME_SNAPSHOTTER_RUNNER_EXECUTABLE
 
@@ -306,6 +313,8 @@ override RUNTIME_ENGINE_PLATFORM_KERNEL := \
 	$(RUNTIME_ENGINE_RELEASE_OUT)/$(RUNTIME_ENGINE_TOOLCHAIN)/vm_platform.dill
 override RUNTIME_ENGINE_JIT_ATTESTATION := \
 	$(RUNTIME_ENGINE_RELEASE_OUT)/.dart-terminal-official-engine.json
+override RUNTIME_ENGINE_AOT_ATTESTATION := \
+	$(RUNTIME_ENGINE_PRODUCT_OUT)/.dart-terminal-official-engine.json
 override RUNTIME_ENGINE_AOT_KERNEL_COMPILER := \
 	$(RUNTIME_ENGINE_PRODUCT_OUT)/bootstrap_gen_kernel.exe
 override RUNTIME_ENGINE_AOT_PLATFORM_KERNEL := \
@@ -347,6 +356,9 @@ override RELEASE_AOT_BUILD_DIR := \
 override RELEASE_AOT_KERNEL := $(RELEASE_AOT_BUILD_DIR)/application.aot.dill
 override RELEASE_AOT_KERNEL_DEPFILE := $(RELEASE_AOT_KERNEL).d
 override RELEASE_AOT_SNAPSHOT := $(RELEASE_AOT_BUILD_DIR)/application.aot
+override RELEASE_AOT_WORKER_EXECUTABLE := \
+	$(RELEASE_AOT_BUILD_DIR)/dart_terminal_runtime_worker
+override RELEASE_AOT_WORKER_DEPFILE := $(RELEASE_AOT_WORKER_EXECUTABLE).d
 override RELEASE_AOT_HOST := \
 	$(RELEASE_AOT_BUILD_DIR)/dart_terminal_release_aot
 override RELEASE_AOT_MANIFEST := \
@@ -356,6 +368,8 @@ override RELEASE_AOT_FINGERPRINT := \
 override RELEASE_AOT_BUNDLE := $(RELEASE_AOT_BUILD_DIR)/DartTerminal.app
 override RELEASE_AOT_EXECUTABLE := \
 	$(RELEASE_AOT_BUNDLE)/Contents/MacOS/dart_terminal_release_aot
+override RELEASE_AOT_BUNDLED_WORKER_EXECUTABLE := \
+	$(RELEASE_AOT_BUNDLE)/Contents/Helpers/dart_terminal_runtime_worker
 override RELEASE_AOT_BUNDLE_STAMP := \
 	$(RELEASE_AOT_BUILD_DIR)/.release-aot-built
 override RELEASE_AOT_HOST_SOURCE := \
@@ -757,16 +771,44 @@ runtime-jit-engine: runtime-architecture-check unmodified-engine-sdk-clean \
 		--output=$(RUNTIME_ENGINE_JIT_ATTESTATION)
 	@$(MAKE) unmodified-engine-sdk-clean
 
-runtime-aot-engine: runtime-architecture-check runtime-dart-tool-check \
-		dart-engine-lifecycle-support
+runtime-aot-engine: runtime-architecture-check unmodified-engine-sdk-clean \
+		$(RUNTIME_ENGINE_ATTESTATION_SOURCE) $(RUNTIME_RELEASE_SUPPORT_SOURCE)
 	"$(RUNTIME_ENGINE_PYTHON)" "$(DART_ENGINE_GN)" --mode=product \
 		--arch=$(RUNTIME_DART_TARGET_ARCH)
+	@"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+		$(RUNTIME_ENGINE_ATTESTATION_SOURCE) --mode=validate \
+		--engine-root=$(DART_ENGINE_ROOT) \
+		--expected-revision=$(DART_SDK_REVISION) \
+		--engine-library=$(RUNTIME_ENGINE_AOT_LIBRARY) \
+		--kernel-compiler=$(RUNTIME_ENGINE_AOT_KERNEL_COMPILER) \
+		--platform-dill=$(RUNTIME_ENGINE_AOT_PLATFORM_KERNEL) \
+		--snapshotter=$(RUNTIME_ENGINE_AOT_SNAPSHOTTER) \
+		--output=$(RUNTIME_ENGINE_AOT_ATTESTATION); \
+	attestation_exit=$$?; \
+	if [[ $$attestation_exit -eq 3 ]]; then \
+		"$(DART_ENGINE_NINJA)" -C $(RUNTIME_ENGINE_PRODUCT_OUT) \
+			-t clean dart_engine_aot_shared gen_snapshot \
+			bootstrap_gen_kernel.exe \
+			$(RUNTIME_ENGINE_TOOLCHAIN)/vm_platform.dill; \
+	elif [[ $$attestation_exit -ne 0 ]]; then \
+		exit $$attestation_exit; \
+	fi
 	"$(DART_ENGINE_NINJA)" -C $(RUNTIME_ENGINE_PRODUCT_OUT) \
 		dart_engine_aot_shared gen_snapshot bootstrap_gen_kernel.exe \
 		$(RUNTIME_ENGINE_TOOLCHAIN)/vm_platform.dill
 	@test -x $(RUNTIME_ENGINE_AOT_KERNEL_COMPILER)
 	@test -f $(RUNTIME_ENGINE_AOT_PLATFORM_KERNEL)
 	@test -x $(RUNTIME_ENGINE_AOT_SNAPSHOTTER)
+	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+		$(RUNTIME_ENGINE_ATTESTATION_SOURCE) --mode=record \
+		--engine-root=$(DART_ENGINE_ROOT) \
+		--expected-revision=$(DART_SDK_REVISION) \
+		--engine-library=$(RUNTIME_ENGINE_AOT_LIBRARY) \
+		--kernel-compiler=$(RUNTIME_ENGINE_AOT_KERNEL_COMPILER) \
+		--platform-dill=$(RUNTIME_ENGINE_AOT_PLATFORM_KERNEL) \
+		--snapshotter=$(RUNTIME_ENGINE_AOT_SNAPSHOTTER) \
+		--output=$(RUNTIME_ENGINE_AOT_ATTESTATION)
+	@$(MAKE) unmodified-engine-sdk-clean
 
 $(DEVELOPER_JIT_FINGERPRINT): runtime-fingerprint-force \
 		$(RUNTIME_PACKAGE_CONFIG) \
@@ -821,8 +863,6 @@ $(RELEASE_AOT_FINGERPRINT): runtime-fingerprint-force \
 		--make-executable="$(MAKE)" \
 		--runtime-build-root=$(RUNTIME_BUILD_DIR) \
 		--package-config=$(RUNTIME_PACKAGE_CONFIG) \
-		--worker-patch=$(DART_ENGINE_WORKER_PATCH) \
-		--lifecycle-patch=$(DART_ENGINE_LIFECYCLE_PATCH) \
 		--engine-library=$(RUNTIME_ENGINE_AOT_LIBRARY) \
 		--kernel-compiler=$(RUNTIME_ENGINE_AOT_KERNEL_COMPILER) \
 		--platform-dill=$(RUNTIME_ENGINE_AOT_PLATFORM_KERNEL) \
@@ -835,12 +875,14 @@ $(RELEASE_AOT_FINGERPRINT): runtime-fingerprint-force \
 		--target-os=macos --invocation-modes=compile --verbosity=error \
 		-Ddart.vm.product=true -Ddart.vm.asan=false \
 		-Ddart.vm.msan=false -Ddart.vm.tsan=false" \
+		--worker-executable-flags="$(RUNTIME_WORKER_EXECUTABLE_FLAGS)" \
 		--snapshot-flags="--snapshot-kind=app-aot-macho-dylib --macho" \
 		$(RUNTIME_EXTRA_BUILD_INPUT_ARGUMENT) --output=$@
 
 $(DEVELOPER_JIT_RUNNER): $(RUNTIME_BRIDGE_HEADERS) \
 		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_LIFECYCLE_HEADER) \
-		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_JIT_RUNNER_HEADERS) \
+		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_WORKER_CONFIGURATION_HEADER) \
+		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) $(RUNTIME_JIT_RUNNER_HEADERS) \
 		$(RUNTIME_JIT_RUNNER_SOURCES) $(DART_APPKIT_ROOT)/Makefile \
 		$(DEVELOPER_JIT_FINGERPRINT)
 	@mkdir -p $(DEVELOPER_JIT_BUILD_DIR)
@@ -856,6 +898,7 @@ $(DEVELOPER_JIT_RUNNER): $(RUNTIME_BRIDGE_HEADERS) \
 		-I$(DART_ENGINE_ROOT)/runtime \
 		-I$(DART_ENGINE_ROOT)/runtime/engine \
 		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_LIFECYCLE_SOURCE) \
+		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) \
 		$(RUNTIME_JIT_RUNNER_SOURCES) \
 		$(RUNTIME_ENGINE_JIT_LIBRARY) \
 		-framework AppKit -framework CoreFoundation \
@@ -999,9 +1042,20 @@ $(RELEASE_AOT_SNAPSHOT): $(RELEASE_AOT_KERNEL) $(RELEASE_AOT_FINGERPRINT)
 		--snapshot-kind=app-aot-macho-dylib --macho=$@ \
 		$(RELEASE_AOT_KERNEL)
 
+$(RELEASE_AOT_WORKER_EXECUTABLE): $(RUNTIME_DART_SOURCES) \
+		$(RUNTIME_PACKAGE_CONFIG) $(RELEASE_AOT_FINGERPRINT)
+	@mkdir -p $(RELEASE_AOT_BUILD_DIR)
+	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics compile exe \
+		$(RUNTIME_WORKER_EXECUTABLE_FLAGS) \
+		--packages=$(RUNTIME_PACKAGE_CONFIG) \
+		--depfile=$(RELEASE_AOT_WORKER_DEPFILE) \
+		--output=$@ $(PROJECT_ROOT)/bin/runtime_worker.dart
+
 $(RELEASE_AOT_HOST): $(RELEASE_AOT_HOST_SOURCE) \
 		$(RUNTIME_BRIDGE_HEADERS) $(RUNTIME_BRIDGE_SOURCES) \
 		$(RUNTIME_LIFECYCLE_HEADER) $(RUNTIME_LIFECYCLE_SOURCE) \
+		$(RUNTIME_WORKER_CONFIGURATION_HEADER) \
+		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) \
 		$(RUNTIME_MESSAGE_PUMP_HEADERS) $(RUNTIME_MESSAGE_PUMP_SOURCE) \
 		$(RELEASE_AOT_FINGERPRINT)
 	@mkdir -p $(RELEASE_AOT_BUILD_DIR)
@@ -1016,6 +1070,7 @@ $(RELEASE_AOT_HOST): $(RELEASE_AOT_HOST_SOURCE) \
 		-I$(DART_ENGINE_ROOT)/runtime \
 		-I$(DART_ENGINE_ROOT)/runtime/engine \
 		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_LIFECYCLE_SOURCE) \
+		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) \
 		$(RUNTIME_MESSAGE_PUMP_SOURCE) \
 		$(RELEASE_AOT_HOST_SOURCE) $(RUNTIME_ENGINE_AOT_LIBRARY) \
 		-framework AppKit -framework CoreFoundation \
@@ -1024,7 +1079,8 @@ $(RELEASE_AOT_HOST): $(RELEASE_AOT_HOST_SOURCE) \
 
 $(RELEASE_AOT_MANIFEST): $(RUNTIME_MANIFEST_SOURCE) \
 		$(RUNTIME_RELEASE_SUPPORT_SOURCE) $(RELEASE_AOT_FINGERPRINT) \
-		$(RELEASE_AOT_HOST) $(RELEASE_AOT_KERNEL) $(RELEASE_AOT_SNAPSHOT)
+		$(RELEASE_AOT_HOST) $(RELEASE_AOT_KERNEL) $(RELEASE_AOT_SNAPSHOT) \
+		$(RELEASE_AOT_WORKER_EXECUTABLE)
 	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_MANIFEST_SOURCE) \
 		--mode=release-aot \
 		--architecture=$(RUNTIME_ARCH) \
@@ -1032,14 +1088,17 @@ $(RELEASE_AOT_MANIFEST): $(RUNTIME_MANIFEST_SOURCE) \
 		--launcher=$(RELEASE_AOT_HOST) \
 		--engine=$(RUNTIME_ENGINE_AOT_LIBRARY) \
 		--payload=$(RELEASE_AOT_SNAPSHOT) \
+		--worker-executable=$(RELEASE_AOT_WORKER_EXECUTABLE) \
 		--intermediate=$(RELEASE_AOT_KERNEL) --output=$@
 
 $(RELEASE_AOT_BUNDLE_STAMP): $(RELEASE_AOT_HOST) \
-		$(RELEASE_AOT_SNAPSHOT) $(RELEASE_AOT_MANIFEST) \
+		$(RELEASE_AOT_SNAPSHOT) $(RELEASE_AOT_WORKER_EXECUTABLE) \
+		$(RELEASE_AOT_MANIFEST) \
 		$(RELEASE_AOT_INFO_PLIST) $(DART_ENGINE_ROOT)/LICENSE Makefile
 	@rm -rf $(RELEASE_AOT_BUNDLE)
 	@rm -f $(RELEASE_AOT_AUDIT_REPORT)
 	@mkdir -p $(RELEASE_AOT_BUNDLE)/Contents/MacOS
+	@mkdir -p $(RELEASE_AOT_BUNDLE)/Contents/Helpers
 	@mkdir -p $(RELEASE_AOT_BUNDLE)/Contents/Frameworks
 	@mkdir -p $(RELEASE_AOT_BUNDLE)/Contents/Resources
 	cp $(RELEASE_AOT_HOST) $(RELEASE_AOT_EXECUTABLE)
@@ -1047,13 +1106,17 @@ $(RELEASE_AOT_BUNDLE_STAMP): $(RELEASE_AOT_HOST) \
 		$(RELEASE_AOT_BUNDLE)/Contents/Frameworks/libdart_engine_aot_shared.dylib
 	cp $(RELEASE_AOT_SNAPSHOT) \
 		$(RELEASE_AOT_BUNDLE)/Contents/Resources/application.aot
+	cp $(RELEASE_AOT_WORKER_EXECUTABLE) \
+		$(RELEASE_AOT_BUNDLED_WORKER_EXECUTABLE)
 	cp $(RELEASE_AOT_MANIFEST) \
 		$(RELEASE_AOT_BUNDLE)/Contents/Resources/runtime-build-manifest.json
 	cp $(DART_ENGINE_ROOT)/LICENSE \
 		$(RELEASE_AOT_BUNDLE)/Contents/Resources/DART_SDK_LICENSE.txt
 	cp $(RELEASE_AOT_INFO_PLIST) \
 		$(RELEASE_AOT_BUNDLE)/Contents/Info.plist
-	chmod 755 $(RELEASE_AOT_EXECUTABLE)
+	chmod 755 $(RELEASE_AOT_EXECUTABLE) \
+		$(RELEASE_AOT_BUNDLED_WORKER_EXECUTABLE)
+	codesign --force --sign - $(RELEASE_AOT_BUNDLED_WORKER_EXECUTABLE)
 	codesign --force --deep --sign - $(RELEASE_AOT_BUNDLE)
 	touch $@
 
@@ -1097,7 +1160,8 @@ runtime-source-check: runtime-dart-tool-check
 		bin lib test tool benchmark
 	/usr/bin/xcrun clang-format --style=file:$(DART_APPKIT_ROOT)/.clang-format \
 		--dry-run --Werror $(RUNTIME_LIFECYCLE_HEADER) \
-		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_JIT_MAIN_SOURCE) \
+		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_WORKER_CONFIGURATION_HEADER) \
+		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) $(RUNTIME_JIT_MAIN_SOURCE) \
 		$(RELEASE_AOT_HOST_SOURCE)
 	/usr/bin/xcrun clang -x c -std=c11 -Wall -Wextra -Wpedantic -Werror \
 		-fsyntax-only $(RUNTIME_LIFECYCLE_HEADER)

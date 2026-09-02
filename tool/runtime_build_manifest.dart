@@ -22,6 +22,7 @@ final class _Options {
     required this.engine,
     required this.payload,
     required this.workerPayload,
+    required this.workerExecutable,
     required this.intermediate,
     required this.output,
   });
@@ -33,6 +34,7 @@ final class _Options {
   final String engine;
   final String payload;
   final String? workerPayload;
+  final String? workerExecutable;
   final String? intermediate;
   final String output;
 }
@@ -60,7 +62,11 @@ _Options _parseOptions(List<String> arguments) {
     'payload',
     'output',
   };
-  const Set<String> optional = <String>{'worker-payload', 'intermediate'};
+  const Set<String> optional = <String>{
+    'worker-payload',
+    'worker-executable',
+    'intermediate',
+  };
   final Set<String> unknown = values.keys.toSet().difference(<String>{
     ...required,
     ...optional,
@@ -92,6 +98,14 @@ _Options _parseOptions(List<String> arguments) {
       'release-aot must not contain a Developer worker Kernel',
     );
   }
+  if (mode == RuntimeMode.releaseAot && values['worker-executable'] == null) {
+    throw const _ManifestException('release-aot requires --worker-executable');
+  }
+  if (mode == RuntimeMode.developerJit && values['worker-executable'] != null) {
+    throw const _ManifestException(
+      'developer-jit must not contain a Release worker executable',
+    );
+  }
   return _Options(
     mode: mode,
     architecture: architecture,
@@ -100,6 +114,7 @@ _Options _parseOptions(List<String> arguments) {
     engine: values['engine']!,
     payload: values['payload']!,
     workerPayload: values['worker-payload'],
+    workerExecutable: values['worker-executable'],
     intermediate: values['intermediate'],
     output: values['output']!,
   );
@@ -172,6 +187,9 @@ Future<Map<String, Object?>> _createManifest(_Options options) async {
   produced['launcher'] = await runtimeSha256File(options.launcher);
   if (options.mode == RuntimeMode.releaseAot) {
     produced['aot_snapshot'] = await runtimeSha256File(options.payload);
+    produced['worker_executable'] = await runtimeSha256File(
+      options.workerExecutable!,
+    );
     laneCopy['intermediate_kernel_sha256'] = await runtimeSha256File(
       options.intermediate!,
     );

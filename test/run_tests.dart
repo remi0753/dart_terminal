@@ -90,6 +90,15 @@ void _testOptions() {
             '/tmp/runtime_worker.dill',
     'native-injected runtime worker command',
   );
+  final TerminalOptions selfContained = TerminalOptions.parse(const <String>[
+    '--runtime-worker-executable=/usr/bin/true',
+    '--runtime-worker-mode=self-contained',
+  ]);
+  _expect(
+    selfContained.runtimeWorkerCommand.executable == '/usr/bin/true' &&
+        selfContained.runtimeWorkerCommand.arguments.isEmpty,
+    'native-injected self-contained runtime worker command',
+  );
   final TerminalOptions faultOptions = TerminalOptions.parse(
     _workerOptions(<String>[
       '--runtime-lifecycle-scenario=worker-sync-uncaught',
@@ -126,8 +135,24 @@ void _testOptions() {
     'application argument cannot replace the worker executable',
   );
   _expectThrows(
+    () => TerminalOptions.parse(const <String>[
+      '--runtime-worker-executable=/usr/bin/true',
+      '--runtime-worker-mode=kernel',
+    ]),
+    'kernel worker requires a Kernel path',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(const <String>[
+      '--runtime-worker-executable=/usr/bin/true',
+      '--runtime-worker-mode=self-contained',
+      '--runtime-worker-kernel=/tmp/runtime_worker.dill',
+    ]),
+    'self-contained worker rejects a Kernel path',
+  );
+  _expectThrows(
     () => TerminalOptions.parse(<String>[
       '--runtime-worker-executable=relative/dart',
+      '--runtime-worker-mode=kernel',
       '--runtime-worker-kernel=/tmp/runtime_worker.dill',
     ]),
     'worker executable must be absolute',
@@ -136,6 +161,7 @@ void _testOptions() {
 
 List<String> _workerOptions(List<String> applicationOptions) => <String>[
   '--runtime-worker-executable=/usr/bin/true',
+  '--runtime-worker-mode=kernel',
   '--runtime-worker-kernel=/tmp/runtime_worker.dill',
   ...applicationOptions,
 ];

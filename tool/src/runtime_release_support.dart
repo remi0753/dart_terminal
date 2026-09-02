@@ -14,6 +14,8 @@ const String runtimeBuildManifestRelativePath =
     'Resources/runtime-build-manifest.json';
 const String runtimeMachOPolicy = 'dart-terminal-macos-runtime-v1';
 const String runtimeDeveloperWorkerPayloadName = 'runtime_worker.dill';
+const String runtimeReleaseWorkerExecutableName =
+    'dart_terminal_runtime_worker';
 
 const List<String> runtimeCommonProjectProvenanceFiles = <String>[
   'Makefile',
@@ -41,10 +43,8 @@ const List<String> runtimeProjectProvenanceFiles = <String>[
   ...runtimeLegacyPatchProvenanceFiles,
 ];
 
-List<String> runtimeProjectProvenanceFilesForMode(RuntimeMode mode) => <String>[
-  ...runtimeCommonProjectProvenanceFiles,
-  if (mode == RuntimeMode.releaseAot) ...runtimeLegacyPatchProvenanceFiles,
-];
+List<String> runtimeProjectProvenanceFilesForMode(RuntimeMode _) =>
+    runtimeCommonProjectProvenanceFiles;
 
 const List<String> runtimeAppKitProvenanceFiles = <String>[
   '.clang-format',

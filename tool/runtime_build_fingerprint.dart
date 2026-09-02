@@ -32,8 +32,6 @@ final class _Options {
     required this.makeExecutable,
     required this.runtimeBuildRoot,
     required this.packageConfig,
-    required this.workerPatch,
-    required this.lifecyclePatch,
     required this.engineLibrary,
     required this.kernelCompiler,
     required this.platformDill,
@@ -45,6 +43,7 @@ final class _Options {
     required this.nativeFlags,
     required this.kernelFlags,
     required this.workerKernelFlags,
+    required this.workerExecutableFlags,
     required this.snapshotFlags,
     required this.extraBuildInput,
     required this.output,
@@ -65,8 +64,6 @@ final class _Options {
   final String makeExecutable;
   final String runtimeBuildRoot;
   final String packageConfig;
-  final String? workerPatch;
-  final String? lifecyclePatch;
   final String engineLibrary;
   final String kernelCompiler;
   final String platformDill;
@@ -78,6 +75,7 @@ final class _Options {
   final String nativeFlags;
   final String kernelFlags;
   final String? workerKernelFlags;
+  final String? workerExecutableFlags;
   final String snapshotFlags;
   final String? extraBuildInput;
   final String output;
@@ -124,9 +122,8 @@ _Options _parseOptions(List<String> arguments) {
     'output',
   };
   const Set<String> optional = <String>{
-    'worker-patch',
-    'lifecycle-patch',
     'worker-kernel-flags',
+    'worker-executable-flags',
     'snapshotter',
     'snapshotter-runner-executable',
     'snapshotter-runner-arguments',
@@ -176,15 +173,8 @@ _Options _parseOptions(List<String> arguments) {
       'developer-jit must not configure a snapshotter runner',
     );
   }
-  final String? workerPatch = values['worker-patch'];
-  final String? lifecyclePatch = values['lifecycle-patch'];
   final String? workerKernelFlags = values['worker-kernel-flags'];
-  if (mode == RuntimeMode.developerJit &&
-      (workerPatch != null || lifecyclePatch != null)) {
-    throw const _FingerprintException(
-      'developer-jit must not configure Dart Engine patches',
-    );
-  }
+  final String? workerExecutableFlags = values['worker-executable-flags'];
   if (mode == RuntimeMode.developerJit &&
       (workerKernelFlags == null || workerKernelFlags.isEmpty)) {
     throw const _FingerprintException(
@@ -192,17 +182,19 @@ _Options _parseOptions(List<String> arguments) {
     );
   }
   if (mode == RuntimeMode.releaseAot &&
-      (workerPatch == null ||
-          workerPatch.isEmpty ||
-          lifecyclePatch == null ||
-          lifecyclePatch.isEmpty)) {
+      (workerExecutableFlags == null || workerExecutableFlags.isEmpty)) {
     throw const _FingerprintException(
-      'release-aot still requires both legacy patch identities',
+      'release-aot requires self-contained worker executable flags',
     );
   }
   if (mode == RuntimeMode.releaseAot && workerKernelFlags != null) {
     throw const _FingerprintException(
       'release-aot must not configure Developer worker Kernel flags',
+    );
+  }
+  if (mode == RuntimeMode.developerJit && workerExecutableFlags != null) {
+    throw const _FingerprintException(
+      'developer-jit must not configure Release worker executable flags',
     );
   }
   return _Options(
@@ -221,8 +213,6 @@ _Options _parseOptions(List<String> arguments) {
     makeExecutable: values['make-executable']!,
     runtimeBuildRoot: values['runtime-build-root']!,
     packageConfig: values['package-config']!,
-    workerPatch: workerPatch,
-    lifecyclePatch: lifecyclePatch,
     engineLibrary: values['engine-library']!,
     kernelCompiler: values['kernel-compiler']!,
     platformDill: values['platform-dill']!,
@@ -234,6 +224,7 @@ _Options _parseOptions(List<String> arguments) {
     nativeFlags: values['native-flags']!,
     kernelFlags: values['kernel-flags']!,
     workerKernelFlags: workerKernelFlags,
+    workerExecutableFlags: workerExecutableFlags,
     snapshotFlags: values['snapshot-flags']!,
     extraBuildInput: values['extra-build-input'],
     output: values['output']!,
@@ -958,6 +949,22 @@ String? _normalizedWorkerKernelFlags(_Options options) {
   return actual.join(' ');
 }
 
+String? _normalizedWorkerExecutableFlags(_Options options) {
+  if (options.mode == RuntimeMode.developerJit) {
+    return null;
+  }
+  final List<String> expected = <String>[
+    '--target-os=macos',
+    '--target-arch=${options.architecture == 'arm64' ? 'arm64' : 'x64'}',
+    '--verbosity=warning',
+  ];
+  final List<String> actual = _flagTokens(options.workerExecutableFlags!);
+  if (!_sameFlagTokens(actual, expected)) {
+    _unsupportedEffectiveFlags(options.workerExecutableFlags!, expected);
+  }
+  return actual.join(' ');
+}
+
 Future<Map<String, Object?>> _createFingerprint(_Options options) async {
   for (final String root in <String>[
     options.projectRoot,
@@ -972,8 +979,6 @@ Future<Map<String, Object?>> _createFingerprint(_Options options) async {
     }
   }
   for (final String file in <String>[
-    if (options.workerPatch != null) options.workerPatch!,
-    if (options.lifecyclePatch != null) options.lifecyclePatch!,
     options.engineLibrary,
     options.kernelCompiler,
     options.platformDill,
@@ -995,39 +1000,6 @@ Future<Map<String, Object?>> _createFingerprint(_Options options) async {
   if (!File(options.output).isAbsolute) {
     throw _FingerprintException('output must be absolute: ${options.output}');
   }
-  if (options.mode == RuntimeMode.releaseAot) {
-    for (final MapEntry<String, String> patch in <String, String>{
-      'worker': options.workerPatch!,
-      'lifecycle': options.lifecyclePatch!,
-    }.entries) {
-      final ProcessResult reversePatch = await Process.run(
-        '/usr/bin/git',
-        <String>[
-          '-C',
-          options.dartEngineRoot,
-          'apply',
-          '--reverse',
-          '--check',
-          patch.value,
-        ],
-      );
-      if (reversePatch.exitCode != 0) {
-        throw _FingerprintException(
-          '${patch.key} patch is not an exact applied Engine modification: '
-          '${reversePatch.stdout}${reversePatch.stderr}',
-        );
-      }
-    }
-    try {
-      await verifyRuntimeEnginePatchComposition(
-        engineRoot: options.dartEngineRoot,
-        engineFile: 'runtime/engine/engine.cc',
-        patches: <String>[options.workerPatch!, options.lifecyclePatch!],
-      );
-    } on RuntimeAuditException catch (error) {
-      throw _FingerprintException(error.message);
-    }
-  }
 
   final String sdkVersion = (await File(
     '${options.dartSdkRoot}/version',
@@ -1037,9 +1009,7 @@ Future<Map<String, Object?>> _createFingerprint(_Options options) async {
   ).readAsString()).trim();
   final Map<String, Object?> engineRepository = await _repositoryIdentity(
     options.dartEngineRoot,
-    policy: options.mode == RuntimeMode.developerJit
-        ? 'clean'
-        : 'engine-lifecycle-patches',
+    policy: 'clean',
   );
   if (sdkRevision != engineRepository['revision']) {
     throw _FingerprintException(
@@ -1070,6 +1040,8 @@ Future<Map<String, Object?>> _createFingerprint(_Options options) async {
     'platform_dill': options.platformDill,
     if (options.mode == RuntimeMode.developerJit)
       'runtime_worker_dart': options.dartExecutable,
+    if (options.mode == RuntimeMode.releaseAot)
+      'runtime_worker_compiler': options.dartExecutable,
     if (options.snapshotter != null) 'snapshotter': options.snapshotter!,
   };
   for (final MapEntry<String, String> entry in laneFiles.entries) {
@@ -1129,15 +1101,7 @@ Future<Map<String, Object?>> _createFingerprint(_Options options) async {
       },
       'dart_engine': <String, Object?>{
         'revision': engineRepository['revision'],
-        'source_policy': options.mode == RuntimeMode.developerJit
-            ? 'official-clean'
-            : 'legacy-lifecycle-patches',
-        if (options.mode == RuntimeMode.releaseAot)
-          'worker_patch_sha256': await runtimeSha256File(options.workerPatch!),
-        if (options.mode == RuntimeMode.releaseAot)
-          'lifecycle_patch_sha256': await runtimeSha256File(
-            options.lifecyclePatch!,
-          ),
+        'source_policy': 'official-clean',
         'gn_arguments': engineArguments['common'],
         'repository': engineRepository,
       },
@@ -1169,15 +1133,16 @@ Future<Map<String, Object?>> _createFingerprint(_Options options) async {
         'bundle_version': options.bundleVersion,
         'native_flags': _normalizedNativeFlags(options),
         'kernel_flags': _normalizedKernelFlags(options, sdkRevision),
-        'worker_topology': options.mode == RuntimeMode.developerJit
-            ? 'official-dart-child-process'
-            : 'legacy-engine-isolate',
-        if (options.mode == RuntimeMode.developerJit)
-          'worker_protocol_version': runtimeWorkerProtocolVersion,
+        'worker_topology': 'official-dart-child-process',
+        'worker_protocol_version': runtimeWorkerProtocolVersion,
         if (options.mode == RuntimeMode.developerJit)
           'worker_payload_name': runtimeDeveloperWorkerPayloadName,
         if (options.mode == RuntimeMode.developerJit)
           'worker_kernel_flags': _normalizedWorkerKernelFlags(options),
+        if (options.mode == RuntimeMode.releaseAot)
+          'worker_executable_name': runtimeReleaseWorkerExecutableName,
+        if (options.mode == RuntimeMode.releaseAot)
+          'worker_executable_flags': _normalizedWorkerExecutableFlags(options),
         'snapshot_flags': _normalizedSnapshotFlags(options),
         'extra_build_input_sha256': extraInputHash ?? 'none',
       },

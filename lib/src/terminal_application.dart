@@ -17,6 +17,9 @@ Application options:
 
 const String _runtimeWorkerExecutablePrefix = '--runtime-worker-executable=';
 const String _runtimeWorkerKernelPrefix = '--runtime-worker-kernel=';
+const String _runtimeWorkerModePrefix = '--runtime-worker-mode=';
+
+enum _RuntimeWorkerMode { kernel, selfContained }
 
 final class TerminalOptions {
   const TerminalOptions({
@@ -36,6 +39,7 @@ final class TerminalOptions {
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
     String? runtimeWorkerExecutable;
     String? runtimeWorkerKernel;
+    _RuntimeWorkerMode? runtimeWorkerMode;
     for (final String argument in arguments) {
       const String workingDirectoryPrefix = '--working-directory=';
       const String autoClosePrefix = '--auto-close-after=';
@@ -72,6 +76,23 @@ final class TerminalOptions {
           );
         }
         runtimeWorkerKernel = value;
+        continue;
+      }
+      if (argument.startsWith(_runtimeWorkerModePrefix)) {
+        if (runtimeWorkerMode != null) {
+          throw const FormatException(
+            'internal runtime worker mode may only be supplied once',
+          );
+        }
+        runtimeWorkerMode = switch (argument.substring(
+          _runtimeWorkerModePrefix.length,
+        )) {
+          'kernel' => _RuntimeWorkerMode.kernel,
+          'self-contained' => _RuntimeWorkerMode.selfContained,
+          _ => throw const FormatException(
+            'internal runtime worker mode must be kernel or self-contained',
+          ),
+        };
         continue;
       }
       if (argument.startsWith(workingDirectoryPrefix)) {
@@ -119,7 +140,12 @@ final class TerminalOptions {
       }
       throw FormatException('unknown application option: $argument');
     }
-    if (runtimeWorkerExecutable == null || runtimeWorkerKernel == null) {
+    if (runtimeWorkerExecutable == null ||
+        runtimeWorkerMode == null ||
+        (runtimeWorkerMode == _RuntimeWorkerMode.kernel &&
+            runtimeWorkerKernel == null) ||
+        (runtimeWorkerMode == _RuntimeWorkerMode.selfContained &&
+            runtimeWorkerKernel != null)) {
       throw const FormatException(
         'internal runtime worker configuration is incomplete',
       );
@@ -139,7 +165,9 @@ final class TerminalOptions {
       runtimeLifecycleScenario: selectedScenario,
       runtimeWorkerCommand: RuntimeLifecycleWorkerCommand(
         executable: runtimeWorkerExecutable,
-        arguments: <String>[runtimeWorkerKernel],
+        arguments: runtimeWorkerMode == _RuntimeWorkerMode.kernel
+            ? <String>[runtimeWorkerKernel!]
+            : const <String>[],
       ),
     );
   }

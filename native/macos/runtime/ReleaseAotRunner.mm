@@ -9,8 +9,10 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -18,6 +20,7 @@
 #include "DartMessagePump.h"
 #include "ObjectRegistry.h"
 #include "RuntimeLifecycleBridge.h"
+#include "RuntimeWorkerConfiguration.h"
 #include "include/dart_api.h"
 #include "include/dart_engine.h"
 #include "include/dart_native_api.h"
@@ -28,6 +31,30 @@
 
 namespace dart_terminal {
 namespace {
+
+constexpr std::string_view kRuntimeWorkerExecutableName =
+    "dart_terminal_runtime_worker";
+
+bool ConfigureRuntimeWorker(const char* launcher_argument,
+                            std::vector<std::string>* application_arguments,
+                            std::string* out_error) {
+  if (launcher_argument == nullptr || application_arguments == nullptr ||
+      out_error == nullptr) {
+    return false;
+  }
+  std::error_code error;
+  const std::filesystem::path launcher =
+      std::filesystem::canonical(launcher_argument, error);
+  if (error) {
+    *out_error = "could not resolve the Release launcher";
+    return false;
+  }
+  const std::filesystem::path worker_executable =
+      launcher.parent_path().parent_path() / "Helpers" /
+      kRuntimeWorkerExecutableName;
+  return PrependRuntimeWorkerConfiguration(worker_executable, std::nullopt,
+                                           application_arguments, out_error);
+}
 
 class EnteredIsolate final {
  public:
@@ -447,6 +474,13 @@ int main(int argc, const char* argv[]) {
     application_arguments.reserve(argc > 1 ? static_cast<size_t>(argc - 1) : 0);
     for (int index = 1; index < argc; ++index) {
       application_arguments.emplace_back(argv[index]);
+    }
+    std::string worker_error;
+    if (!dart_terminal::ConfigureRuntimeWorker(argv[0], &application_arguments,
+                                               &worker_error)) {
+      std::fprintf(stderr, "Runtime worker configuration error: %s\n",
+                   worker_error.c_str());
+      return dart_terminal::kRuntimeInputExitCode;
     }
 
     NSApplication* application = [NSApplication sharedApplication];

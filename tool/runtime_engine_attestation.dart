@@ -26,6 +26,7 @@ final class _Options {
     required this.engineLibrary,
     required this.kernelCompiler,
     required this.platformDill,
+    required this.snapshotter,
     required this.output,
   });
 
@@ -35,6 +36,7 @@ final class _Options {
   final String engineLibrary;
   final String kernelCompiler;
   final String platformDill;
+  final String? snapshotter;
   final String output;
 }
 
@@ -52,7 +54,7 @@ _Options _parseOptions(List<String> arguments) {
     }
     values[name] = value;
   }
-  const Set<String> expected = <String>{
+  const Set<String> required = <String>{
     'mode',
     'engine-root',
     'expected-revision',
@@ -61,9 +63,15 @@ _Options _parseOptions(List<String> arguments) {
     'platform-dill',
     'output',
   };
-  if (!sameStringSet(values.keys, expected)) {
+  const Set<String> optional = <String>{'snapshotter'};
+  final Set<String> unknown = values.keys.toSet().difference(<String>{
+    ...required,
+    ...optional,
+  });
+  final Set<String> missing = required.difference(values.keys.toSet());
+  if (unknown.isNotEmpty || missing.isNotEmpty) {
     throw _AttestationException(
-      'options ${values.keys.toList()..sort()} != ${expected.toList()..sort()}',
+      'unknown=${unknown.toList()..sort()} missing=${missing.toList()..sort()}',
     );
   }
   final _Mode? mode = _Mode.values
@@ -77,6 +85,7 @@ _Options _parseOptions(List<String> arguments) {
     values['engine-library']!,
     values['kernel-compiler']!,
     values['platform-dill']!,
+    if (values['snapshotter'] != null) values['snapshotter']!,
     values['output']!,
   ]) {
     if (!File(path).isAbsolute) {
@@ -90,6 +99,7 @@ _Options _parseOptions(List<String> arguments) {
     engineLibrary: values['engine-library']!,
     kernelCompiler: values['kernel-compiler']!,
     platformDill: values['platform-dill']!,
+    snapshotter: values['snapshotter'],
     output: values['output']!,
   );
 }
@@ -135,6 +145,8 @@ Future<Map<String, Object?>> _currentRecord(_Options options) async {
   if (File(options.kernelCompiler).parent.path != outputDirectory ||
       !runtimeNormalizedAbsolutePath(options.platformDill)
           .startsWith('${runtimeNormalizedAbsolutePath(outputDirectory)}/') ||
+      (options.snapshotter != null &&
+          File(options.snapshotter!).parent.path != outputDirectory) ||
       File(options.output).parent.path != outputDirectory ||
       File(options.output).uri.pathSegments.last !=
           '.dart-terminal-official-engine.json') {
@@ -146,6 +158,7 @@ Future<Map<String, Object?>> _currentRecord(_Options options) async {
     'dart_engine': options.engineLibrary,
     'kernel_compiler': options.kernelCompiler,
     'platform_dill': options.platformDill,
+    if (options.snapshotter != null) 'snapshotter': options.snapshotter!,
   };
   for (final String path in paths.values) {
     if (await FileSystemEntity.type(path, followLinks: false) !=
