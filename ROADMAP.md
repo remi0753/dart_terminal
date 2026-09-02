@@ -497,6 +497,16 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   Rosetta x86_64 compatibility、Universal audit。詳細は
   [`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)）
 - [x] VM/isolate の起動、error、uncaught exception、shutdown contract
+- [ ] Dart SDK source を改変しない runtime hosting へ移行する（以下を順に実施し、
+  [`docs/phase1/unmodified-dart-engine-hosting.md`](docs/phase1/unmodified-dart-engine-hosting.md)
+  を実施時に参照する）
+  - [x] 支持する API 境界、比較対象、受け入れ条件、移行順序を固定する
+  - [ ] 未改変 `dart_engine` の複数 root isolate 方式を実証して採否を決める
+  - [ ] 不採用時は公開 Dart Embedder API による製品所有 host を実証して採否を決める
+  - [ ] 公開 API が不足する場合は汎用的な `dart_engine` 改善案と process 分離を比較する
+  - [ ] 選定した公式または上流採用済みの方式へ JIT/AOT lifecycle を移行する
+  - [ ] patch、patch 適用処理、patch 来歴を撤去して clean Engine 前提の全 matrix を通す
+  - [ ] 必要な `dart_engine` 改善を再現・API・test 込みの上流向け提案としてまとめる
 - [ ] native event wire format の versioning と backward compatibility
 - [ ] handle registry に thread-domain と asynchronous destruction を追加
 - [ ] generic `View`、focus、visibility、occlusion、backing scale、screen event
