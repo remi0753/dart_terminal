@@ -1104,3 +1104,70 @@ Registration closeout passed `git diff --check`, full `dart analyze`, and
 `dart run test/run_tests.dart`. The adjacent `dart_appkit` worktree was clean
 at `a2149ff` after its commit. This repository unit changes only the roadmap
 route and this decision record; product runtime code remains unchanged.
+
+### 2026-09-03 — constraint correction: no Dart Engine modification
+
+The user clarified that Dart Engine itself must not be modified, including
+when `dart_appkit` owns the integration. This supersedes the candidate-commit
+adoption decision above. Storing the change as a normal SDK commit instead of
+applying a `.patch` does not satisfy the constraint because both alter Engine
+source and runtime behavior.
+
+The temporary candidate checkout in `../dart_appkit/.dart_tool/dart-engine/sdk`
+was never built or consumed there. It was returned immediately to the exact
+official Dart 3.13.2 revision
+`60a57cd42d64dc03e9f07aa60a2e250755c1ef28`; `git status --short --branch`
+then showed a detached official HEAD with no source changes. The candidate
+remains historical experimental evidence only and is not an allowed product or
+host dependency.
+
+The current ordered route is now constrained to changes in `dart_appkit` and
+Dart Terminal:
+
+1. Re-evaluate stock `dart_engine` multiple-root hosting and a native bridge
+   between isolate groups using only its published C interface.
+2. Re-evaluate a `dart_appkit`-owned host composed solely from public Dart
+   Embedder APIs, without copying any private SDK setup or cleanup helper.
+3. Probe an official Dart/AOT executable topology in which Dart performs its
+   normal VM/isolate initialization, the native bridge holds the process main
+   thread in AppKit, and standard Dart worker isolates own application work.
+4. If none of the same-process options has a complete supported lifecycle, expose
+   the already measured official Dart executable/AOT worker process through a
+   `dart_appkit` contract rather than modifying the VM or Engine.
+
+The first satisfactory route will be implemented and tested on M1/arm64 first.
+x86_64 and Universal remain lower-priority compatibility checks. No Engine
+source file, Engine commit, patch application, generated Engine diff, or
+private runtime helper is permitted in the resulting build.
+
+### 2026-09-03 — roadmap normalization after architecture drift
+
+The preceding log is retained as evidence, but its successive selection
+paragraphs are no longer the execution plan. The public-API subtask was marked
+complete after testing a lightweight child inside stock `dart_engine`; that did
+not actually implement the originally proposed full product-owned embedder
+that calls `Dart_Initialize` and owns initialization, scheduling, snapshots,
+and cleanup. Treating the hybrid result as closure of the full-host option was
+incorrect.
+
+The supplementary official-runner main-thread probe is now complete and
+closed. In both JIT and AOT, synchronous Dart startup, a microtask, and a timer
+reported that they were not on the macOS process main thread. A second bounded
+probe posted to the main dispatch queue; it timed out after one second in both
+modes (`main_dispatch=0`). The published Dart executable therefore cannot host
+the required AppKit main loop from Dart code in this architecture.
+
+[`stock-dart-runtime-migration-plan.md`](stock-dart-runtime-migration-plan.md)
+is now the normative, frozen plan. It restores the full public `dart_api.h`
+embedder as the one missing first-choice proof, treats multiple roots and the
+lightweight hybrid as already rejected evidence, prohibits every Engine
+modification, and names the previously validated official process worker as
+the sole fallback. No additional topology will be introduced during this
+migration.
+
+Normalization validation passed `git diff --check`, full-repository
+`dart analyze`, and `dart run test/run_tests.dart`. The adjacent `dart_appkit`
+package analysis, API tests, and launcher tests also passed, and its nested SDK
+remained clean at the official revision. This checkpoint changes planning and
+evidence documents only; the next and only active implementation item is the
+full public-host proof.

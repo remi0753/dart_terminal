@@ -497,24 +497,18 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   Rosetta x86_64 compatibility、Universal audit。詳細は
   [`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)）
 - [x] VM/isolate の起動、error、uncaught exception、shutdown contract
-- [ ] Dart SDK source を改変しない runtime hosting へ移行する（以下を順に実施し、
-  [`docs/phase1/unmodified-dart-engine-hosting.md`](docs/phase1/unmodified-dart-engine-hosting.md)
-  を実施時に参照する）
-  - [x] 支持する API 境界、比較対象、受け入れ条件、移行順序を固定する
-  - [x] 未改変 `dart_engine` の複数 root isolate 方式を実証して採否を決める
-  - [x] 不採用時は公開 Dart Embedder API による製品所有 host を実証して採否を決める
-  - [x] 公開 API が不足する場合は汎用的な `dart_engine` 改善案と process 分離を比較する
-    - [x] disposable SDK checkout で汎用 Engine 改善と上流回帰テストを実証する
-    - [x] 公式 Dart executable を使う process/IPC fallback を実証する
-    - [x] 所有権、性能、配布、上流採用待ちを比較して現在の製品経路を選定する
-  - [ ] 汎用 Engine 改善 commit と `dart_appkit` 所有の same-process contract へ JIT/AOT lifecycle を移行する
-    - [x] `../dart_appkit` に same-group worker lifecycle の task、責務境界、完了条件を登録する
-    - [ ] 汎用 Engine 改善を patch 適用ではない SDK commit として統合し `dart_appkit` の回帰試験を通す
-    - [ ] M1/arm64 Developer JIT 製品を改修済み `dart_appkit` contract へ移行する
-    - [ ] M1/arm64 Release AOT 製品を同じ `dart_appkit` contract へ移行する
-    - [ ] M1 の JIT/AOT 横断 lifecycle、性能、終了順序を検証して移行を閉じる
-  - [ ] patch、patch 適用処理、patch 来歴を撤去して clean Engine 前提の全 matrix を通す
-  - [ ] 必要な `dart_engine` 改善を再現・API・test 込みの上流向け提案としてまとめる
+- [ ] 公開・未改変の Dart だけを使う runtime hosting へ移行する（順序と
+  判定基準は [`docs/phase1/stock-dart-runtime-migration-plan.md`](docs/phase1/stock-dart-runtime-migration-plan.md)
+  を正本として固定する）
+  - [x] 不変条件、既存証拠、責務境界、受け入れ条件を正規化する
+  - [ ] `dart_api.h` 公開境界だけで VM 全体を所有する `dart_appkit` host を M1/arm64 JIT/AOT で実証し採否を確定する
+  - [ ] 固定判定基準を一度だけ適用し、採用 topology と実装所有者を確定する
+  - [ ] 選定された `dart_appkit` host contract を実装して回帰試験を通す
+  - [ ] M1/arm64 Developer JIT 製品を選定 contract へ移行する
+  - [ ] M1/arm64 Release AOT 製品を同じ contract へ移行する
+  - [ ] patch 本体、適用処理、hash・来歴・監査・fixture をすべて削除する
+  - [ ] M1 の JIT/AOT 横断 lifecycle、性能、終了順序、clean SDK を検証して移行を閉じる
+  - [ ] x86_64/Rosetta/Universal compatibility を M1 完了後に検証する（追記：x86_64の優先度は低いため、ブロッカーにはしない。M1 で全て問題なければ先へ進んで良い）
 - [ ] native event wire format の versioning と backward compatibility
 - [ ] handle registry に thread-domain と asynchronous destruction を追加
 - [ ] generic `View`、focus、visibility、occlusion、backing scale、screen event
