@@ -1,6 +1,6 @@
 # Stock Dart Runtime Migration Plan
 
-- Status: frozen execution contract
+- Status: frozen execution contract; official process-worker topology selected
 - Primary environment: macOS on Apple Silicon (M1/arm64)
 - SDK baseline: Dart 3.13.2 revision
   `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`
@@ -62,14 +62,38 @@ provenance, audit, and test path that treats a patched Engine as valid.
 4. On rejection, select the already validated official Dart/AOT process worker.
    No further architecture candidates are introduced.
 
+## Applied selection
+
+The full public host failed mandatory JIT and AOT gates, so the fixed rule was
+applied once on 2026-09-03. The selected topology is:
+
+- the macOS UI process keeps one process-lifetime root isolate in the stock,
+  unmodified `dart_appkit` Engine host;
+- every independently recoverable terminal worker domain runs in a distinct
+  official Dart child process;
+- Developer workers use the exact official Dart SDK executable, while Release
+  workers use a reusable self-contained AOT executable produced by that SDK;
+- Dart Terminal owns PID and stdio streams, versioned binary framing,
+  generation checks, buffering/backpressure, diagnostics, deadlines, signals,
+  process reaping, and replacement;
+- a protocol acknowledgement is not cleanup. Drained diagnostics plus observed
+  process exit is the authoritative worker-resource boundary;
+- after every worker is reaped, the UI host shuts down its one stock Engine
+  root and immediately exits the containing process. It neither claims
+  VM-wide `Dart_Cleanup` nor reinitializes Dart in that process.
+
+This selection is final for the migration. A future upstream Dart release may
+motivate a separately planned review, but it does not reopen a rejected route
+or allow a local Dart modification here.
+
 ## Ownership after selection
 
 | Responsibility | Owner |
 | --- | --- |
-| AppKit process-main-thread loop, native UI objects/events, VM host code when the public embedder passes | `dart_appkit` |
+| AppKit process-main-thread loop, native UI objects/events, one stock Engine root and process-lifetime shutdown contract | `dart_appkit` |
 | Generic public-host conformance and stock-SDK cleanliness checks | `dart_appkit` |
 | Terminal worker program, terminal request protocol, pane recovery policy, application packaging | Dart Terminal |
-| Process supervision/framing if fallback is selected | Dart Terminal, unless a genuinely product-independent primitive is first demonstrated in `dart_appkit` |
+| Worker process supervision, framing, backpressure, diagnostics, termination and reaping | Dart Terminal |
 | Dart VM, SDK, Engine, public headers and published artifacts | Upstream Dart, consumed without modification |
 
 ## Fixed implementation order

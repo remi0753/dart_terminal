@@ -228,12 +228,16 @@ Ordered app shutdown:
 
 1. stop accepting new windows, panes, paste, and native input posts;
 2. cancel IME composition and disable Secure Input;
-3. tell engine isolates to stop accepting PTY data and await bounded acknowledgements;
+3. tell terminal worker processes to stop accepting PTY data and request a
+   bounded drain; acknowledgements are progress, not cleanup;
 4. close PTY writes, send HUP/TERM, apply the grace deadline, KILL if required, and reap every child;
-5. stop render submission, wait for or abandon in-flight buffers using the documented device-loss
+5. observe each Dart worker's exit, escalating through TERM/KILL on timeout,
+   drain diagnostics, and reap every worker process;
+6. stop render submission, wait for or abandon in-flight buffers using the documented device-loss
    path, then release Metal/CoreText/view handles on their domains;
-6. close native ports and drop all late generation-tagged events;
-7. shut down worker isolates, root AOT isolate/VM, then return control to AppKit termination.
+7. close native ports and drop all late generation-tagged events;
+8. shut down the one stock Engine root and immediately return from the
+   application executable; OS process exit is the final VM-resource boundary.
 
 Timeout expiry is a recorded failure and proceeds to the subsystem's forced-cleanup path; it never
 leaves an unbounded wait on the main thread.
@@ -244,8 +248,8 @@ leaves an unbounded wait on the main thread.
 | --- | --- | --- |
 | AppKit main + Dart UI root | UI state coordination, short action routing, enqueue coarse work | PTY wait, parser loops, shaping/raster loops, GPU waits, large copies |
 | native PTY reactor | FD readiness, bounded queues, resize/signal/waitpid | AppKit, terminal semantics, Dart synchronous entry |
-| Dart engine isolate per pane | parse bytes, mutate grid/modes, emit replies/damage | AppKit calls, another pane's mutable state |
-| Dart render coordinator per window | coalesce damage, pack latest frame/resources | own terminal state, block on GPU |
+| official Dart worker process per pane | parse bytes, mutate grid/modes, emit framed replies/damage | AppKit calls, another pane's mutable state, parent lifecycle policy |
+| optional official Dart render-worker process per window | coalesce damage, pack latest frame/resources | own terminal state, block on GPU, call AppKit |
 | native render/font domain | CoreText/Metal resources, encode/present, completion | VT semantics, wait for Dart while holding resource locks |
 
 No design may intentionally occupy one AppKit/main-run-loop turn for 4 ms or more. The target is

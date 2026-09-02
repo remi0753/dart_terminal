@@ -502,7 +502,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を正本として固定する）
   - [x] 不変条件、既存証拠、責務境界、受け入れ条件を正規化する
   - [x] `dart_api.h` 公開境界だけで VM 全体を所有する `dart_appkit` host を M1/arm64 JIT/AOT で実証し採否を確定する
-  - [ ] 固定判定基準を一度だけ適用し、採用 topology と実装所有者を確定する
+  - [x] 固定判定基準を一度だけ適用し、採用 topology と実装所有者を確定する
   - [ ] 選定された `dart_appkit` host contract を実装して回帰試験を通す
   - [ ] M1/arm64 Developer JIT 製品を選定 contract へ移行する
   - [ ] M1/arm64 Release AOT 製品を同じ contract へ移行する

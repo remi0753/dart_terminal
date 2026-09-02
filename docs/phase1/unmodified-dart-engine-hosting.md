@@ -1,6 +1,6 @@
 # Unmodified Dart Engine hosting migration
 
-- Status: in progress; full public host rejected, fixed decision application next
+- Status: in progress; official process-worker topology locked, host-contract checkpoint next
 - Normative execution contract:
   [`stock-dart-runtime-migration-plan.md`](stock-dart-runtime-migration-plan.md).
   Earlier entries that considered any Dart Engine modification are retained
@@ -1247,3 +1247,75 @@ Public-host proof closeout passed `git diff --check`, full-repository
 `dart analyze`, and `dart run test/run_tests.dart`. The main-repository diff is
 limited to this evidence, the normalized evidence row, and the corresponding
 single ROADMAP checkbox; runtime and build sources remain unchanged.
+
+### 2026-09-03 — architecture lock started
+
+Purpose: apply the frozen decision rule exactly once now that the full public
+host has failed a mandatory gate. This checkpoint fixes the runtime topology,
+ownership, lifecycle authority, and migration boundary so later implementation
+cannot drift back to a rejected same-process or modified-Engine route.
+
+Scope is the normative migration plan, ADR-002, this evidence log, and one
+ROADMAP status. Product runtime/build changes, patch deletion, final IPC schema
+implementation, performance tuning, and Intel/Universal compatibility are out
+of scope until their ordered tasks. Dependencies are the completed public-host
+proof, the earlier process-worker JIT/AOT evidence, and adjacent `dart_appkit`
+commit `77e3553`.
+
+The topology to record is one unmodified stock-Engine UI root in the AppKit
+process plus one official Dart child process per independently recoverable
+worker domain. Terminal panes are the first such domains; a future render
+coordinator may use the same ownership pattern if retained. Developer workers
+run with the exact official Dart toolchain, while Release workers run a bundled
+self-contained AOT executable produced by that toolchain. Dart Terminal owns
+PID/stdio, framing, generation checks, backpressure, diagnostics, graceful and
+forced termination, reaping, and replacement. A stop acknowledgement is not a
+cleanup boundary; drained stderr plus observed process exit is authoritative.
+
+Completion requires one non-conditional selection in the normative plan, a
+current ADR that no longer prescribes `Isolate.spawn` or either Engine patch,
+an explicit root shutdown/process-exit contract, unchanged fixed ordering, and
+documentation-only regression validation. No rejected route may remain stated
+as an active alternative.
+
+### Architecture selection applied once
+
+Because the full public host failed mandatory JIT and AOT semantics, the frozen
+decision rule selects the already validated official Dart process boundary.
+This is no longer a fallback conditional: it is the only implementation route
+for the current migration.
+
+ADR-002 now defines one separate official Dart process per independently
+recoverable worker domain. A pane worker owns one pane generation and its
+terminal state. The AppKit process retains one stock `dart_engine` root for UI
+and asynchronous coordination only. Developer and Release use the same worker
+protocol and lifecycle semantics, but Developer starts the exact official Dart
+SDK runtime while Release starts a reusable self-contained AOT helper.
+
+The process boundary assigns all ambiguous lifecycle responsibility:
+
+- Dart Terminal owns child creation, PID, stdin/stdout/stderr, framing,
+  buffering, deadlines, signals, reaping, stale-generation rejection, and
+  replacement;
+- worker stdout is protocol-only, stdin is command/data-only, and stderr is
+  diagnostic-only;
+- ready/stop messages are protocol progress; only observed exit after stream
+  cleanup authoritatively releases a worker generation;
+- `dart_appkit` owns only the stock one-root AppKit host and clean-SDK gate;
+- final UI shutdown reaps all workers, releases product/native state, stops the
+  message pump, calls stock `DartEngine_Shutdown`, and immediately exits the
+  containing process. It does not claim `Dart_Cleanup` or VM restart support.
+
+The exact wire layout remains an implementation detail of the later migration,
+but ADR-002 freezes its required magic/version, kind, owner/generation,
+operation/sequence, length, stream roles, caps, and backpressure semantics.
+This is sufficient to prevent architecture drift without implementing a
+dormant second transport in this documentation checkpoint.
+
+Architecture-lock validation passed `git diff --check`, full-repository
+`dart analyze`, and `dart run test/run_tests.dart`. The adjacent `dart_appkit`
+worktree remained clean at `77e3553`; its nested SDK remained clean at exact
+official revision `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`. This checkpoint
+changes documentation and one ROADMAP status only. The next ordered item is the
+selected stock-root `dart_appkit` host contract; Developer product migration
+does not begin before that checkpoint is recorded.
