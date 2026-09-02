@@ -5,7 +5,7 @@
 Ghostty 調査基準: `ghostty-org/ghostty` main の
 `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`  
 ローカル基準: `dart_appkit` の
-`5613950f15cf9837e5a025a9943c5b8010be4218`
+`77e355387a0ea50034632d9e3d4b35f629155c35`
 
 主要な開発・実機受け入れ baseline は Apple M1/arm64 とする。x86_64 は M1 上の
 cross-build、Rosetta compatibility、Universal audit を主要 gate とし、
@@ -503,7 +503,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] 不変条件、既存証拠、責務境界、受け入れ条件を正規化する
   - [x] `dart_api.h` 公開境界だけで VM 全体を所有する `dart_appkit` host を M1/arm64 JIT/AOT で実証し採否を確定する
   - [x] 固定判定基準を一度だけ適用し、採用 topology と実装所有者を確定する
-  - [ ] 選定された `dart_appkit` host contract を実装して回帰試験を通す
+  - [x] 選定された `dart_appkit` host contract を実装して回帰試験を通す
   - [ ] M1/arm64 Developer JIT 製品を選定 contract へ移行する
   - [ ] M1/arm64 Release AOT 製品を同じ contract へ移行する
   - [ ] patch 本体、適用処理、hash・来歴・監査・fixture をすべて削除する

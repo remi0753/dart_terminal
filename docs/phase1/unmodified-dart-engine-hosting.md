@@ -1,6 +1,6 @@
 # Unmodified Dart Engine hosting migration
 
-- Status: in progress; official process-worker topology locked, host-contract checkpoint next
+- Status: in progress; stock `dart_appkit` host contract complete, Developer JIT migration next
 - Normative execution contract:
   [`stock-dart-runtime-migration-plan.md`](stock-dart-runtime-migration-plan.md).
   Earlier entries that considered any Dart Engine modification are retained
@@ -1319,3 +1319,72 @@ official revision `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`. This checkpoint
 changes documentation and one ROADMAP status only. The next ordered item is the
 selected stock-root `dart_appkit` host contract; Developer product migration
 does not begin before that checkpoint is recorded.
+
+### 2026-09-03 — selected `dart_appkit` contract checkpoint started
+
+Purpose: verify that the generic host owner has completed every responsibility
+assigned by the selected process topology before Dart Terminal changes its
+Developer runtime. Scope is the adjacent `dart_appkit` commit, its production
+root-host boundary, clean-SDK enforcement, public-host conformance evidence,
+and compatibility with the current Dart Terminal package graph. Terminal
+worker protocol/code, product JIT/AOT build changes, and patch deletion remain
+out of scope.
+
+The completion gate is intentionally narrow: `dart_appkit` must be clean at a
+committed revision, accept only the exact unmodified SDK, keep its production
+Runner root-only and AppKit-main-thread-bound, exclude the negative proof from
+production linkage, preserve its existing regression/GUI smoke, and not absorb
+terminal-specific supervision. Dart Terminal must still analyze and pass its
+unit harness against that adjacent package before recording the baseline.
+
+### Selected `dart_appkit` contract result
+
+The adjacent task is complete at full commit
+`77e355387a0ea50034632d9e3d4b35f629155c35` (`Enforce stock Dart root
+hosting`). Review of its staged/final source and build graph confirms:
+
+- production `DartHost` and `DartMessagePump` behavior is unchanged: the native
+  Runner owns one root isolate on the AppKit process main thread and retains
+  its 64-message/4 ms bounded scheduling contract;
+- `scripts/check_dart_engine.sh` now rejects tracked SDK changes as well as a
+  revision, architecture, library, symbol, install-name, Kernel-compiler, or
+  platform-Kernel mismatch;
+- the complete public `dart_api.h` host, Dart payload, and decision runner are
+  conformance-only files behind `make public-dart-api-host-probe`; none enters
+  `RUNTIME_JIT_RUNNER_SOURCES`, the AppKit example, or the production Runner;
+- no Dart/Engine source, patch, candidate commit, fork, private header, private
+  symbol, or copied `runtime/bin` helper is an input;
+- no process supervisor, terminal wire protocol, pane lifecycle, recovery, or
+  packaging policy was added to `dart_appkit`, preserving the responsibility
+  boundary selected in ADR-002.
+
+Its final M1 validation passed formatting, focused analysis, `make test`,
+`make engine-check`, `make example-smoke`, and
+`make public-dart-api-host-probe`. The stock GUI root remained on the main
+thread and completed Timer/close/handle-release/exit-zero behavior. The
+negative full-host result reproduced identically in JIT and AOT, and the SDK
+ended clean at the official revision.
+
+Dart Terminal now records that full commit as its local `dart_appkit` baseline.
+The current package dependency resolves to its adjacent
+`packages/dart_appkit` tree; repository/provenance logic already records the
+resolved AppKit root, commit identity, and clean state instead of silently
+vendoring it. No product build target is run in this checkpoint because the
+current product targets still apply the prohibited patches; they will be
+changed only in the ordered Developer and Release migrations.
+
+During the documentation edit, the known seven-character commit name was
+initially expanded without first reading the object ID. The pre-validation
+`git rev-parse HEAD` check caught the incorrect expansion; every occurrence was
+corrected to the actual full ID
+`77e355387a0ea50034632d9e3d4b35f629155c35` before staging. No source, build
+input, or repository history was affected.
+
+Host-contract closeout passed `git diff --check`, full-repository
+`dart analyze`, and `dart run test/run_tests.dart`. A fresh adjacent
+`make engine-check` accepted Dart 3.13.2 ARM64 at exact revision
+`60a57cd42d64dc03e9f07aa60a2e250755c1ef28`. Both the `dart_appkit` and nested
+SDK worktrees were clean, and `dart_appkit` resolved to the full baseline above.
+This completes the generic host dependency without executing a patch-applying
+product target. The next first unchecked ROADMAP item is the M1 Developer JIT
+product migration.

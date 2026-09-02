@@ -86,6 +86,12 @@ This selection is final for the migration. A future upstream Dart release may
 motivate a separately planned review, but it does not reopen a rejected route
 or allow a local Dart modification here.
 
+The selected generic host contract is fixed at adjacent `dart_appkit` commit
+`77e355387a0ea50034632d9e3d4b35f629155c35`. That commit keeps the production
+Runner on one stock Engine root, makes the SDK clean-tree check fail closed,
+adds the public-host JIT/AOT decision probe without linking it into production,
+and assigns all terminal worker supervision to Dart Terminal.
+
 ## Ownership after selection
 
 | Responsibility | Owner |
