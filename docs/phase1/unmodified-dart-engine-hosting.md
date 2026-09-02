@@ -1,6 +1,6 @@
 # Unmodified Dart Engine hosting migration
 
-- Status: in progress; public-only child hosting rejected, option comparison next
+- Status: in progress; official process workers selected, product migration next
 - Started: 2026-09-02
 - Scope: corrective Phase 1 task inserted immediately after the completed
   VM/isolate lifecycle contract
@@ -80,9 +80,10 @@ That trade-off is no longer accepted. The governing rule for this task is:
 
 - The adjacent SDK is pinned at revision
   `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`.
-- The SDK working tree currently contains exactly the two product Engine patch
-  effects; those changes are evidence under examination, not a permitted final
-  build input.
+- The SDK working tree began this investigation with the two product Engine
+  patch effects. It is now clean at the pinned revision; the repository patch
+  inputs and build rules that can reapply them remain to be removed after the
+  selected product migration.
 - The existing JIT and AOT products share `bin/main.dart` and
   `lib/src/runtime_lifecycle.dart` but enter Dart through different native
   hosts.
@@ -892,3 +893,132 @@ The first repository staging attempt was blocked before modifying the index
 because the workspace sandbox denied creation of `.git/index.lock`. The five
 task files remain only as worktree changes. Their narrowly scoped staging and
 commit will be retried with Git metadata write access.
+
+### 2026-09-03 — comparison and product-path selection plan
+
+Purpose: choose the presently shippable runtime-hosting path independently of
+the preferred long-term Engine design now that both candidates have executable
+evidence.
+
+Background and dependencies: the general Engine correction is isolated at SDK
+commit `28462f0fb37` but is not an accepted Dart revision; the official-process
+probe is repository commit `28496bb`. The product SDK remains clean at the
+pinned published revision. The current product still applies one patch for
+same-group worker initialization and one for VM-wide cleanup, so selection must
+explain how both leave the product build rather than considering only worker
+creation.
+
+Scope is a recorded comparison of ownership/fault containment, lifecycle
+fidelity, measured performance, arm64/x86_64/Universal packaging, and reliance
+on unmerged upstream work. It also fixes the migration constraints for the UI
+root: the unmodified Engine may continue to own the single AppKit-bound root,
+but its final VM resources must be bounded by immediate application-process
+exit after `DartEngine_Shutdown`; there may be no in-process reinitialization
+or claim that the unmodified helper performed `Dart_Cleanup`. Worker processes
+must expose ready, stderr, and exit status as authoritative boundaries.
+
+Out of scope are changes to the product runner, lifecycle coordinator, bundle,
+manifest, or patch graph; those are the next ordered migration and removal
+subtasks. Publishing the Engine proposal is also later. This selection is
+complete when the memo distinguishes current and long-term choices and records
+remaining migration risks. Validation uses the arm64 M1 path as the current
+gate and must leave both repository and product SDK sources unchanged. The
+x86_64 and Universal lanes remain required by the later migration/full-matrix
+work, but they do not block this selection decision.
+
+The first packaging experiment exposed a real toolchain constraint. Running
+the selected arm64 Dart 3.13.2 executable with `dart compile exe
+--target-os=macos --target-arch=x64` failed before producing an artifact with
+`Unsupported target platform macos_x64`; that executable listed only Linux
+cross-target combinations. The generic `--target-arch` help text therefore
+does not establish macOS cross-architecture support. Universal packaging for
+this option requires running an official x86_64 Dart SDK under Rosetta or on
+the Intel validation host, then combining separately built thin helpers. The
+next check will look for such an official SDK locally before considering any
+download; the failed command changed no source checkout.
+
+Local inspection found only the selected arm64 Homebrew SDK; its `dart` binary
+has one arm64 slice. The existing `xcodebuild/ReleaseX64` directory is a source
+build output rather than a published SDK and will not be substituted for the
+official-boundary test. Dart's [official SDK
+archive](https://dart.dev/get-dart/archive) documents per-version macOS x64
+downloads, and the stable 3.13.2 x64 archive responded successfully with
+content length 228,742,095 bytes.
+
+User direction then clarified the priority: macOS on M1/arm64 is the primary
+product environment and Intel x86_64 is lower priority. Accordingly, the x64
+archive was downloaded to the disposable directory but was not unpacked or
+executed. The macOS cross-compilation limitation remains a recorded packaging
+risk for the existing later x86_64/Universal matrix item; it will not delay
+the arm64 selection or migration.
+
+### 2026-09-03 — comparison result and selection
+
+The two choices solve different time horizons:
+
+| Criterion | General Engine correction | Official process worker | Selection impact |
+| --- | --- | --- | --- |
+| Supported today | Local upstream-quality implementation only; not reviewed, merged, or released | Uses published `dart run`, `dart compile exe`, `Process`, stdio, stderr, and exit status | Only the process path is a supported product input today |
+| Ownership | Root Dart isolate owns same-group children; Engine owns VM initialization and final cleanup | UI owns a child PID and three streams; OS process exit is the worker cleanup boundary | Process ownership is explicit and independently recoverable |
+| Fault containment | Dart isolate errors are containable, but a VM/native fatal fault shares the UI process | Worker exception or fatal process exit does not destroy the UI process; a hung worker accepts `SIGKILL` | Process path has the stronger pane-worker failure boundary |
+| Feature fidelity | Native ports and `TransferableTypedData`; current lifecycle coordinator maps directly | Requires a product IPC adapter and serializable frames | Engine is simpler; process migration has more product code |
+| Measured arm64 bulk | The candidate regression validates lifecycle, not bulk; existing same-group evidence was 1,056.65--2,702.08 MiB/s and is only indicative | 659.62--677.87 MiB/s JIT and 762.52--797.12 MiB/s AOT across five controlled repeats | Process path is slower but remains over six times the 100 MiB/s gate |
+| Measured arm64 startup | Candidate did not collect a comparable product startup metric | Mean ready time 148--152 ms JIT and 12--17 ms AOT | Acceptable for the proof; pane-scale latency/RSS remain migration measurements |
+| arm64 packaging | Would reuse the existing root Engine dylib after an upstream release | Self-contained AOT helper is 5,978,960 bytes and adds no Dart dylib; existing root AOT Engine remains 5,951,824 bytes | About 5.7 MiB of release helper payload plus per-process memory |
+| Developer JIT | No extra runtime payload after upstream adoption | The local selected SDK is the official JIT worker runtime; bundling the entire 624 MiB installed SDK is not accepted by this decision | Developer packaging needs a narrow build-time/runtime contract in migration |
+| Intel/Universal | Existing Engine build machinery already has thin lanes | macOS cross-architecture `compile exe` is unsupported; a separate official x64 SDK/host is needed, as the [official compile documentation](https://dart.dev/tools/dart-compile) limits cross-compilation to Linux targets | Recorded for the lower-priority later full matrix; does not block M1 |
+| Upstream wait | Unknown review/API/release time and outcome | None for the APIs used | Product cannot wait on or predict acceptance |
+
+Current product decision: migrate pane-owned workers to official Dart child
+processes, starting with M1/arm64. Keep the one AppKit-main-thread UI root in
+the clean, unmodified `dart_engine`. Release workers use a self-contained AOT
+helper; developer-JIT workers use the selected revision-matched official Dart
+toolchain while the migration determines the smallest non-distributable
+developer dependency contract. No build may silently fall back to the local
+Engine candidate or reapply either patch.
+
+The root cleanup contract is intentionally narrower than the proposed Engine
+fix. After every worker process has an observed exit, product shutdown releases
+the native bridge, stops the message pump, calls the unmodified documented
+`DartEngine_Shutdown`, and immediately returns from the application main
+process. OS process exit is the final VM-resource boundary. The product does
+not claim `Dart_Cleanup` occurred, may not reinitialize Dart in that process,
+and may not keep running after Engine shutdown. The clean-Engine multiple-root
+probe already established bounded Engine shutdown followed by process exit; the
+next migration must establish the same result in the actual one-root product.
+If that fails, migration is blocked rather than restoring the cleanup patch.
+
+Long-term decision: retain SDK commit `28462f0fb37` as the preferred upstream
+Engine direction because child core-library initialization and complete
+Engine-owned VM cleanup belong naturally at that helper boundary. Prepare it
+for maintainer review in the later upstream-proposal subtask. The product may
+reconsider same-group workers only after an accepted change appears in the
+pinned Dart revision; acceptance does not force an automatic topology change.
+
+The product migration must now verify these unresolved costs and constraints:
+
+1. Preserve every existing ready, request, graceful stop, sync/async uncaught
+   error, unexpected exit, startup failure, timeout/forced cleanup, late
+   completion, double shutdown, and root failure classification through a
+   process transport.
+2. Treat child `exitCode` plus drained stderr as authoritative; an IPC error or
+   acknowledgement alone is not cleanup. Bound graceful stop and escalate to
+   `SIGKILL`, then prove replacement has no stale generation or open stream.
+3. Package and sign one reusable arm64 AOT helper, record it in manifests and
+   freshness inputs, and measure worker RSS, pane-scale startup, and queue
+   backpressure. No unmeasured memory claim is made by this selection.
+4. Keep JIT and AOT semantic results equal while allowing their startup and
+   packaging mechanics to differ. Do not package the full development SDK as
+   an accidental production dependency.
+5. Run M1 lifecycle, integration, audit, and performance gates first. Preserve
+   the already planned x86_64 and Universal verification as lower-priority
+   later matrix work rather than allowing it to delay arm64 migration.
+
+This selection changes no product source or build graph. The main repository
+contains only this updated decision record, and the product SDK checkout is
+still clean at the pinned revision.
+
+Selection closeout passed `git diff --check`, full-repository `dart analyze`,
+and `dart run test/run_tests.dart`. A final SDK check again reported the exact
+pinned revision and an empty worktree. The only repository changes for this
+subtask are this memo and the two comparison checkboxes in `ROADMAP.md`.
