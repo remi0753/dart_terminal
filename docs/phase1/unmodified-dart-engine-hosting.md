@@ -168,6 +168,27 @@ level, prototype the minimum child-process control and data channel using an
 official Dart-produced executable. Record the preferred long-term Engine API
 and select a presently usable product path without conflating those decisions.
 
+This comparison is split before implementation because it has two independent
+artifacts and a separate selection decision:
+
+1. In a disposable SDK checkout, implement the smallest product-independent
+   Engine correction, add an upstream-style regression to the existing
+   embedder sample suite, and validate AOT/JIT without changing the pinned
+   product checkout.
+2. Build a repository-owned IPC probe around the official revision-matched
+   Dart executable or a Dart-produced executable. It must exercise the same
+   normal, error, forced-stop, replacement, and bulk-transfer boundaries.
+3. Compare ownership, feature fidelity, performance, packaging, and dependency
+   on unmerged upstream work. Select the presently shippable product path
+   separately from the preferred long-term Engine design.
+
+The first item is complete only when its implementation can explain every
+changed Engine responsibility, passes the upstream embedder test route in AOT
+and JIT, and leaves the product SDK checkout clean. The second is complete only
+when no private SDK library or source is linked into the product side. The
+third is complete only when the choice does not make an unaccepted Engine diff
+a hidden build input.
+
 ### 5. Migrate the product lifecycle
 
 Move developer JIT and release AOT to the selected topology. Preserve the
@@ -538,3 +559,216 @@ a general Engine fix against an official Dart process boundary.
   before and after execution. The adjacent checkout remained empty under
   `git status --porcelain` at the pinned revision; this subtask did not apply,
   generate, or consume an Engine patch.
+
+### 2026-09-03 — Engine scope and history before improvement design
+
+- `dart_engine` is a recent optional embedding helper, introduced on
+  2025-01-28 by Dart SDK commit
+  [`6e33c95463bd3bc71da5a35e571d6e8c596c4edd`](https://dart.googlesource.com/sdk.git/+/6e33c95463bd3bc71da5a35e571d6e8c596c4edd).
+  Its initial regression route was `tests/standalone/embedder_samples_test.dart`.
+  The samples cover root async work and multiple root snapshots, but no
+  same-group child creation, so the missing child initializer had no test.
+- The Engine README explicitly says the helper is not a full-featured API and
+  describes starting one or several isolates *from snapshots*. That explains
+  why `Isolate.spawnUri` and arbitrary group creation are outside its current
+  scope. The same README also lists full VM/core-library initialization as an
+  Engine responsibility. A same-group child created by `Isolate.spawn` or the
+  public `Dart_CreateIsolateInGroup` inherits code from an Engine-created root;
+  initializing its per-isolate core-library hooks is therefore a completion of
+  that stated responsibility, not a new Dart language semantic.
+- The public VM contract already models this operation through
+  `Dart_InitializeParams.initialize_isolate`; the ordinary Dart runner has long
+  installed that callback. The Engine passes null. The smallest general fix is
+  to install an Engine-owned callback that invokes the same existing
+  `DartUtils::SetupCoreLibraries` routine the Engine already uses for roots.
+  No new public C API is required for child creation or termination.
+- Shutdown is a second independent correctness issue. The Engine header says
+  shutdown stops all isolates and frees all resources, while the implementation
+  stops only roots it created, frees snapshot storage, and omits both public
+  `Dart_Cleanup` and its paired embedder cleanup. Once children are supported,
+  snapshot storage must remain alive until VM-wide cleanup has terminated any
+  surviving child. Repeated shutdown must also avoid revisiting freed state.
+- The upstream prototype will therefore test two behaviors together:
+  microtask/async work inside a same-group child, and Engine shutdown while a
+  second child still owns a live port. It will pair `Dart_Cleanup` with
+  `dart::embedder::Cleanup`, clear owned containers, and make shutdown
+  idempotent. It will not add `Isolate.spawnUri`, expose Engine-private child
+  handles, or change Dart language/library semantics.
+
+### 2026-09-03 — upstream prototype design before source changes
+
+The prototype is intentionally limited to completing contracts that already
+exist in the SDK:
+
+- `CreateInitializeParams` will register an Engine-owned
+  `initialize_isolate` callback. The callback will enter a Dart scope and call
+  the existing `DartUtils::SetupCoreLibraries` helper with the same settings
+  class used for Engine roots. It will not duplicate private Dart-library
+  setup or add a new public API.
+- Each Engine-created root group will use its Engine-owned `script_uri` as the
+  VM's opaque isolate-group data. The child callback can then give
+  `Platform.script` the same value as its parent. The pointer remains valid
+  until after VM-wide cleanup because the Engine already owns and frees the
+  snapshot record. This uses the public group-data lifetime contract instead
+  of adding a second map or exposing the pointer to product code.
+- Root setup will also pass `script_uri` to `DartIoSettings`; the current empty
+  settings leave `Platform.script` incomplete even in the root.
+- Shutdown will first prevent new message scheduling, then stop Engine-owned
+  roots and delete their persistent handles. If the VM was initialized, it
+  will call `Dart_Cleanup` while all snapshot code and group data are still
+  valid; only then will it call the matching `dart::embedder::Cleanup`, unload
+  AOT libraries, free snapshot buffers and URIs, and clear all containers.
+- A one-way shutdown state will make repeated shutdown a no-op and make later
+  initialization fail with an owned error string. Reinitializing the Dart VM
+  in the same process remains outside the existing Engine contract.
+
+The regression is added to the existing `run_futures` sample so the official
+`embedder_samples_test.dart` route exercises it in kernel/JIT and AOT, with
+both shared and static Engine linkage on supported host architectures. Dart
+will (1) run a `Future.microtask` inside `Isolate.run` and return an exact
+integer to native code, and (2) start a child with a permanently live
+`ReceivePort`. Native code will require the exact result, shut the Engine down
+while that second child is live, and call shutdown a second time. The expected
+baseline failure is the current child-core initialization error; after the
+Engine change all four sample variants must exit zero without a timeout.
+
+The callback failure path follows the SDK runner's actual convention: it
+returns a malloc-owned diagnostic after leaving its scope, and the VM's
+lightweight-spawn path shuts the just-created isolate down. Although one
+paragraph in `dart_api.h` says the callback owns that shutdown, the same API
+implementation immediately performs it and both official runner callbacks
+return false without doing so. Calling it inside the Engine callback would
+therefore risk a double shutdown and is deliberately avoided.
+
+The first formatting command used the conventional
+`xcodebuild/ReleaseARM64/dart-sdk/bin/dart` path inside the disposable clone,
+but that particular copied output directory does not yet contain a built SDK
+executable. C++ formatting completed; Dart formatting did not run. This is an
+environment-path mistake rather than a source failure. The source will be
+formatted with the pinned adjacent SDK executable before the disposable output
+is regenerated.
+
+The replacement Dart formatter found the file already formatted, then exited
+nonzero only because the workspace sandbox prevented it from updating Dart's
+user-level telemetry-session timestamp. No source formatting failed. The
+formatter check will be repeated with the already approved host access used by
+the repository's other Dart validation commands.
+
+### 2026-09-03 — regression-first baseline
+
+- Added the regression only in the disposable SDK checkout and built the
+  official Release ARM64 `run_futures_kernel` shared and static targets against
+  the unchanged Engine implementation. The checkout copy required a full
+  1,197-action rebuild because generated dependency timestamps no longer
+  matched; the build itself completed successfully.
+- Both executables completed all pre-existing future/stream checks, then exited
+  with status 1 at the new exact assertion:
+  `runInChildIsolate returned -1 instead of 512`. Dart deliberately maps the
+  caught child-spawn initialization failure to `-1`, so this is a bounded,
+  deterministic reproduction rather than a timeout or crash.
+- The identical failure under shared and static Engine linkage establishes
+  that the new upstream test fails before the proposed Engine source change.
+  AOT will be built after the fix so the final four-variant matrix also checks
+  tree shaking and precompiled child startup.
+
+### 2026-09-03 — first Engine prototype run
+
+The first Engine implementation compiled in both JIT linkage modes, but the
+shared sample did not complete the new `Isolate.run` future within 40 seconds
+and was interrupted. All five pre-existing checks still passed, and no child
+initialization error was printed, so installing `initialize_isolate` removed
+the original immediate failure but did not yet provide a complete scheduling
+path. This run is not accepted. The next investigation will distinguish child
+entry execution, child microtask completion, and delivery of the result back
+to the Engine-owned root before changing the design.
+
+Debugger inspection then localized the stall after the Engine child
+initializer had completed successfully. The spawn worker was inside the
+sample's `ScheduleDartMessage`, destroying the temporary `std::future`
+returned by `std::async`; libc++ waits in that destructor. Its async task had
+entered the root and was waiting for a group safepoint that included the
+blocked spawn worker, producing a cycle. This is a sample scheduler defect
+exposed by the new child path, not another child-initialization failure. The
+existing timer messages happened after the root was released and therefore did
+not expose it. The regression sample will use a queue-backed scheduler thread,
+matching the API requirement that the callback schedule work without
+synchronously waiting for it.
+
+Final lifecycle review found one related pre-existing lock leak in
+`Engine::NotifyMessage`: if `TryLock` succeeded after `is_running_` became
+false, the combined condition returned without releasing `engine_lifecycle_`.
+The prototype separates those checks and explicitly unlocks the successful
+late-notification case. This matters once shutdown is idempotent and later API
+calls are expected to fail cleanly rather than block.
+
+### 2026-09-03 — general Engine improvement result
+
+The isolated prototype now satisfies the proposed Engine contract without
+adding a Dart language feature or a product-only API:
+
+- Engine registers the existing VM `initialize_isolate` callback and applies
+  the same `DartUtils::SetupCoreLibraries` routine to same-group children.
+  Engine-owned group handles map to the parent snapshot URI, while groups
+  created independently through `dart_api.h` safely receive default settings
+  rather than having their opaque group data reinterpreted.
+- Root and child `Platform.script` values are initialized consistently. The
+  regression checks this inside an actual `Isolate.run` child after both a
+  zero-delay future and a child microtask.
+- Engine shutdown is one-way and idempotent. It shuts tracked roots, invokes
+  `Dart_Cleanup` to terminate a still-live same-group child, then performs the
+  paired embedder cleanup, unloads AOT snapshot libraries, frees buffers/URIs,
+  and clears all retained containers. A late message-notification lock leak is
+  also fixed. Reinitialization after shutdown returns a malloc-owned error.
+- The `run_futures` sample now has a genuinely asynchronous queue-backed
+  scheduler. This removes the `std::async` temporary-future wait cycle found by
+  the debugger and is required for the spawn regression to be valid.
+
+Validation in the disposable checkout at SDK base
+`60a57cd42d64dc03e9f07aa60a2e250755c1ef28`:
+
+- Release ARM64 JIT shared and static samples: exit 0, exact child result 512,
+  matching `Platform.script`, live-child shutdown, second shutdown, and
+  post-shutdown initialization rejection.
+- Release ARM64 AOT shared and static samples: the same checks passed.
+- Product ARM64 AOT shared and static samples: the same checks passed.
+- Five consecutive executions of each of those six binary configurations
+  completed successfully before the final lock-review adjustment; the full
+  official route and both Product variants passed again after that adjustment.
+- `xcodebuild/ReleaseARM64/dartvm
+  tests/standalone/embedder_samples_test.dart` passed, covering every existing
+  Engine sample plus the new kernel/AOT, shared/static regression variants.
+- Dart format, SDK-style clang-format, and `git diff --check` passed. The final
+  six-file candidate diff SHA-256 before its isolated commit is
+  `8d98a31a2042df252f0da55536150a20a46ddc75407fd35ef98acd0751286e00`.
+
+This proves that a coherent upstream Engine correction is technically viable.
+It does **not** authorize the product to ship this unaccepted source delta: the
+fixed product SDK checkout remains untouched. The ordered comparison must
+still prove the official Dart executable/process fallback and account for the
+time until any Engine change is reviewed and released.
+
+The candidate was committed only inside the disposable SDK checkout as
+`28462f0fb37` (`Complete Dart Engine isolate lifecycle`). Its parent is the
+pinned clean SDK revision, its post-commit worktree is clean, and the commit's
+diff SHA-256 matches the value above. This preserves an auditable upstream
+candidate without altering or patching the product SDK.
+
+Repository closeout for this comparison subtask also passed `git diff
+--check`, `dart analyze` with no issues, and `dart run test/run_tests.dart`.
+The only repository changes are this decision record and the ordered roadmap
+state; no runtime source, build rule, product SDK file, or patch artifact was
+changed.
+
+The first repository commit attempt was blocked before staging because the
+workspace sandbox denied creation of `.git/index.lock`. No index or worktree
+content was changed by that attempt. The same narrowly scoped add/commit will
+be repeated with Git metadata write access.
+
+The first direct invocation of the newly built `xcodebuild/ReleaseARM64/dart`
+to run `embedder_samples_test.dart` exited 255 with `Unable to locate the Dart
+VM executable`. The `dart` target is the dartdev launcher and expects the VM in
+an SDK layout; it is not itself the standalone VM executable required by this
+test. The sample targets and source change remain valid. The official route
+will be retried using the output's standalone `dart_precompiled_runtime`/VM
+target or a generated SDK layout, after inspecting the build targets rather
+than assuming the launcher path.
