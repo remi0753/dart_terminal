@@ -1,6 +1,7 @@
 # Stock Dart Runtime Migration Plan
 
-- Status: frozen execution contract; steps 1–6 complete, M1 closeout next
+- Status: frozen execution contract; M1 migration complete, compatibility
+  follow-up deferred
 - Primary environment: macOS on Apple Silicon (M1/arm64)
 - SDK baseline: Dart 3.13.2 revision
   `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`
@@ -121,8 +122,9 @@ and assigns all terminal worker supervision to Dart Terminal.
    fields, freshness fixtures, and documentation that prescribes patches.
 7. **M1 closeout.** Run cross-mode lifecycle, failure, shutdown, performance,
    source-diff, package, and clean-SDK gates. Record exact results.
-8. **Compatibility follow-up.** Run x86_64/Rosetta/Universal work after the M1
-   path is complete; retain any unavailable lane as an explicit later item.
+8. **Compatibility follow-up (non-blocking).** Track x86_64, Rosetta,
+   Universal, and Intel-native work in the later low-priority roadmap item.
+   It does not keep the M1 migration open or block subsequent Phase 1 work.
 
 ## Completion condition
 
@@ -130,4 +132,6 @@ The immediate migration is complete only when both M1 modes use the selected
 unmodified-Dart topology, the two patch files and all operational patch
 machinery are gone, the SDK checkout is pristine, and all affected tests and
 audits pass. Historical documents may retain past evidence, but must be marked
-as superseded where they previously prescribed a patched Engine.
+as superseded where they previously prescribed a patched Engine. The later
+architecture compatibility follow-up is not part of this immediate completion
+condition.

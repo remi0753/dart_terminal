@@ -386,7 +386,7 @@ INTEL_EVIDENCE_OUTPUT ?=
 	release-aot-integration release-aot-lifecycle release-aot-traffic \
 	runtime-source-check \
 	runtime-bundle-audit runtime-integration \
-	runtime-lifecycle-integration runtime-verify \
+	runtime-lifecycle-integration runtime-traffic-integration runtime-verify \
 	runtime-matrix-build runtime-matrix-audit runtime-matrix-integration \
 	runtime-matrix-verify runtime-build-freshness-test \
 	universal-release-aot-build universal-release-aot-assemble \
@@ -418,8 +418,9 @@ help:
 	@echo "  make release-aot-audit   Audit one AOT-only thin bundle contract"
 	@echo "  make release-aot-clean-sdk-test Verify stock-SDK AOT worker provenance"
 	@echo "  make release-aot-traffic Verify bounded worker traffic and GUI close"
-	@echo "  make runtime-integration Run one common smoke suite in both modes"
+	@echo "  make runtime-integration Run shared smoke, lifecycle, and traffic suites"
 	@echo "  make runtime-lifecycle-integration Run shared lifecycle faults"
+	@echo "  make runtime-traffic-integration Run bounded traffic in both modes"
 	@echo "  make runtime-verify      Verify both modes for one explicit architecture"
 	@echo "  make runtime-matrix-build Build arm64 and x86_64 thin products"
 	@echo "  make runtime-matrix-audit Audit the complete thin-product matrix"
@@ -1161,10 +1162,15 @@ runtime-integration: developer-jit-build release-aot-build
 	@$(MAKE) developer-jit-integration
 	@$(MAKE) release-aot-integration
 	@$(MAKE) runtime-lifecycle-integration
+	@$(MAKE) runtime-traffic-integration
 
 runtime-lifecycle-integration: developer-jit-build release-aot-build
 	@$(MAKE) developer-jit-lifecycle
 	@$(MAKE) release-aot-lifecycle
+
+runtime-traffic-integration: developer-jit-build release-aot-build
+	@$(MAKE) developer-jit-traffic
+	@$(MAKE) release-aot-traffic
 
 runtime-verify:
 	@$(MAKE) runtime-source-check

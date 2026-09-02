@@ -7,9 +7,9 @@ Ghostty 調査基準: `ghostty-org/ghostty` main の
 ローカル基準: `dart_appkit` の
 `77e355387a0ea50034632d9e3d4b35f629155c35`
 
-主要な開発・実機受け入れ baseline は Apple M1/arm64 とする。x86_64 は M1 上の
-cross-build、Rosetta compatibility、Universal audit を主要 gate とし、
-Intel-native 実機証跡は主要ゴール後の低優先 follow-up とする。
+主要な開発・実機受け入れ baseline は Apple M1/arm64 とする。x86_64 cross-build、
+Rosetta compatibility、Universal audit、Intel-native 実機証跡は主要ゴール後の
+低優先 follow-up とし、M1 の通常ロードマップを阻害しない。
 
 ## 1. 目標
 
@@ -497,7 +497,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   Rosetta x86_64 compatibility、Universal audit。詳細は
   [`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)）
 - [x] VM/isolate の起動、error、uncaught exception、shutdown contract
-- [ ] 公開・未改変の Dart だけを使う runtime hosting へ移行する（順序と
+- [x] 公開・未改変の Dart だけを使う runtime hosting へ移行する（順序と
   判定基準は [`docs/phase1/stock-dart-runtime-migration-plan.md`](docs/phase1/stock-dart-runtime-migration-plan.md)
   を正本として固定する）
   - [x] 不変条件、既存証拠、責務境界、受け入れ条件を正規化する
@@ -516,8 +516,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] patch payload と SDK 変更 Make 経路を削除し、patch 前提の Phase 0 isolate 実行入口を廃止する
     - [x] patch 専用の hash・来歴・status allowance・composition 監査・fixture を clean official contract へ整理する
     - [x] 現行文書と source inventory を更新し、M1 回帰・clean SDK を確認して patch 削除を閉じる
-  - [ ] M1 の JIT/AOT 横断 lifecycle、性能、終了順序、clean SDK を検証して移行を閉じる
-  - [ ] x86_64/Rosetta/Universal compatibility を M1 完了後に検証する（追記：x86_64の優先度は低いため、ブロッカーにはしない。M1 で全て問題なければ先へ進んで良い）
+  - [x] M1 の JIT/AOT 横断 lifecycle、性能、終了順序、clean SDK を検証して移行を閉じる
 - [ ] native event wire format の versioning と backward compatibility
 - [ ] handle registry に thread-domain と asynchronous destruction を追加
 - [ ] generic `View`、focus、visibility、occlusion、backing scale、screen event
@@ -746,8 +745,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 主要ゴール後の低優先 follow-up
 
-- [ ] Intel-native no-rebuild runtime handoff と追加互換性証跡（主要ゴール達成後に
-  実施し、
+- [ ] 公開・未改変 runtime の x86_64 cross-build、Rosetta、Universal compatibility
+  再検証、Intel-native no-rebuild runtime handoff と追加互換性証跡（主要ゴール達成後に実施し、
   [`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)
   を実施時に参照する）
 
@@ -827,9 +826,9 @@ Phase 0 で baseline machine、Ghostty build、corpus、測定方法を固定し
 ## 11. 完了定義
 
 Ghostty クラス到達を宣言できるのは、次をすべて満たしたときだけとする。
-主要実機 baseline は Apple M1/arm64 とし、x86_64 は cross-build、Rosetta、
-Universal audit で主要互換性を受け入れる。Intel-native の追加証跡は上記の
-主要ゴール後 follow-up であり、この完了定義の必須条件には含めない。
+主要実機 baseline は Apple M1/arm64 とする。x86_64 cross-build、Rosetta、Universal
+audit、Intel-native の追加証跡は上記の主要ゴール後 follow-up であり、この完了定義の
+必須条件には含めない。
 
 - pinned feature matrix の P0/P1 に未説明の欠落がない。
 - compatibility suite と daily-use program matrix が release AOT で通る。

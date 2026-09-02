@@ -1,7 +1,7 @@
 # Unmodified Dart Engine hosting migration
 
-- Status: in progress; stock migration through legacy removal complete, M1
-  cross-mode closeout next
+- Status: M1/arm64 migration complete; architecture compatibility deferred to
+  the lower-priority follow-up
 - Normative execution contract:
   [`stock-dart-runtime-migration-plan.md`](stock-dart-runtime-migration-plan.md).
   Earlier entries that considered any Dart Engine modification are retained
@@ -2566,3 +2566,174 @@ Dart Engine, generated SDK source, or `dart_appkit` source was changed by this
 removal. This closes the three-part removal task. The next and only authorized
 unit is the separately listed M1 cross-mode closeout; x86_64/Rosetta/Universal
 remains the lower-priority follow-up after it.
+
+### M1 cross-mode migration closeout: start
+
+Purpose: close the primary Apple M1/arm64 migration only after Developer JIT
+and Release AOT have passed one shared lifecycle, performance, termination,
+package, source-freshness, and clean-SDK contract on the post-removal tree.
+
+Background: the two product modes are already implemented and individually
+accepted, and the Engine-modification path is absent as of `2a0ebb4`. The
+shared integration harness applies one sixteen-case lifecycle inventory and
+the same process ownership checks to both modes. Its traffic suite is also a
+real product-app test: it requires 256/256 ordered responses, explicit
+backpressure, exactly 64 maximum in-flight operations, a live AppKit close
+timer, traffic under 3 seconds, application exit under 5 seconds, a matched
+spawn/reap pair, and post-exit PID absence. The standard `runtime-verify`
+aggregate currently runs source, bundle, smoke, and lifecycle gates but omits
+those already implemented traffic gates.
+
+Scope:
+
+- add the missing cross-mode traffic aggregate to the standard arm64 runtime
+  verification graph, without changing the traffic scenario or its limits;
+- run the official-process 128 MiB transport probe as topology-level
+  throughput/startup evidence, and run both actual product traffic suites as
+  the product-level boundedness and AppKit-fairness evidence;
+- rerun both clean-SDK build/provenance tests, complete freshness and hostile
+  input tests, source checks, thin bundle audits, smoke, all lifecycle cases,
+  traffic, signing/package checks, exact event order, child reaping, and final
+  repository boundary checks;
+- compare the two modes against the one shared expected event/status contract
+  and record exact observed timing and throughput values.
+
+Out of scope: changing Dart, Dart Engine, generated SDK source, `dart_appkit`,
+the selected topology, worker protocol, lifecycle semantics, or product
+features; claiming final parser, PTY, renderer, pane-count, idle CPU, or worker
+RSS performance; and x86_64, Rosetta, Universal, or Intel-native work. Those
+product-scale budgets remain at their ordered feature/performance phases, and
+the architecture compatibility work remains the next lower-priority item.
+
+Dependencies: the frozen migration plan; patch-removal closeout `2a0ebb4`;
+clean AppKit host `77e355387a0ea50034632d9e3d4b35f629155c35`;
+official SDK revision `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`;
+and the existing mode-independent integration harness and audited bundles.
+
+Completion conditions: the standard arm64 verification includes and passes
+both traffic suites; Developer and Release produce the same expected lifecycle
+event sequences and status classes; every contained worker has authoritative
+exit/drained-stream/reap evidence, and every worker PID including an
+application-fatal case is absent after its app exits; the transport and product
+traffic measurements remain within their established phase-appropriate gates;
+both package/provenance schemas identify only stock official inputs; freshness
+rejects all hostile cases; SDK and AppKit remain clean at the pinned commits;
+source/staged diffs contain no Dart or Engine change; exact results are
+recorded before updating ROADMAP.
+
+Validation plan: add only the aggregate dependency and help text needed to
+make traffic part of `runtime-verify`; inspect its dry-run graph; run source
+checks and the complete freshness suite; run both focused clean-SDK tests; run
+the process-worker probe and final `runtime-verify` outside the workspace
+sandbox so AppKit can register with WindowServer; recheck manifests, signing,
+process absence, repository statuses, and staged scope. A failure remains a
+failure or recorded blocker; no fallback to modified Dart is permitted.
+
+### M1 cross-mode migration closeout: result
+
+The only implementation correction was in the product Make graph. A new
+`runtime-traffic-integration` aggregate invokes the unchanged Developer and
+Release traffic targets, and `runtime-integration` now invokes that aggregate
+after its common smoke and lifecycle suites. Consequently `runtime-verify`
+cannot pass while omitting the existing product traffic/performance contract.
+Help and current README text describe that complete gate. No Dart, native host,
+protocol, Engine, SDK, or AppKit implementation changed.
+
+The first complete dry-run capture yielded after its 10-second output window
+while recursive Make was still expanding the graph, so it was not treated as a
+pass or failure. Direct Makefile inspection showed both traffic dependencies,
+`make help` exposed the aggregate, and the real final `runtime-verify` executed
+both traffic suites and returned 0. The dry-run made no filesystem change.
+
+One combined documentation update was rejected before application because a
+plan-file context crossed a different line break. It made no partial change;
+the same edits were reapplied against exact per-file contexts and then passed
+the normal diff checks.
+
+The final host was Apple M1/arm64 running macOS 26.6.2 (25G83). A sandboxed
+CPU-brand query was initially denied; repeating that read-only query with host
+permission returned `Apple M1`. GUI gates likewise ran outside the workspace
+sandbox so `NSApplication` could use WindowServer, while preserving every
+process, stream, timing, and exit assertion.
+
+Topology-level process results:
+
+- The official JIT worker moved 128 MiB in 225,551 us (567.50 MiB/s) and became
+  ready in 163,673 us.
+- The official self-contained AOT worker moved 128 MiB in 165,021 us
+  (775.66 MiB/s) and became ready in 12,525 us.
+- Both exceed the 100 MiB/s provisional transport target. Normal exit was 0,
+  intentional Dart failure was 255, forced termination was signal 9, two
+  replacements completed, and final outstanding process count was zero in
+  both modes.
+
+The final product `runtime-verify` passed source formatting for all 41 Dart
+files, native formatting/header syntax, both plists, whole-project analysis and
+unit tests, both signed arm64 bundle audits, both smoke launches, 32 lifecycle
+launches, and both newly aggregated traffic suites. Smoke elapsed time was
+2,204 ms for Developer and 1,671 ms for Release.
+
+| Lifecycle scenario | Status | Developer ms | Release ms |
+| --- | ---: | ---: | ---: |
+| normal | 0 | 1,376 | 1,246 |
+| worker-sync-uncaught | 0 | 310 | 199 |
+| worker-async-uncaught | 0 | 313 | 195 |
+| worker-unexpected-exit | 0 | 304 | 194 |
+| worker-startup-failure | 0 | 292 | 194 |
+| worker-idle-uncaught | 0 | 348 | 234 |
+| worker-idle-exit | 0 | 342 | 229 |
+| worker-stop-uncaught | 0 | 310 | 195 |
+| shutdown-timeout | 75 | 590 | 466 |
+| late-completion | 0 | 400 | 278 |
+| double-shutdown | 0 | 312 | 195 |
+| worker-replacement | 0 | 366 | 208 |
+| root-startup-failure | 70 | 164 | 96 |
+| root-uncaught | 70 | 296 | 187 |
+| host-startup-failure | 70 | 18 | 17 |
+| usage-error | 64 | 137 | 94 |
+
+Each row passed the same mode-independent ordered-event expectation. Contained
+cases emitted matching child spawn/reap ownership, replacement used two unique
+generations/PIDs, and every observed child PID was absent after its application
+exited. The application-fatal root case intentionally cannot claim an
+in-process reap event; its outer process exit and verified child absence are
+the authoritative boundary.
+
+The actual Developer product traffic completed 256/256 responses with 384
+explicit backpressure retries, exactly 64 maximum in flight, a fired AppKit
+close timer, 1,056 ms traffic time, and 1,392 ms application lifetime. Release
+reported the same counts and bound with 981 ms traffic and 1,183 ms application
+lifetime. Both are below the fixed 3-second traffic and 5-second application
+limits, with clean stderr and one matched child spawn/reap pair.
+
+Assurance and repository results:
+
+- The focused Developer clean-SDK gate passed the official-Engine,
+  source-inventory, worker Kernel/smoke and negative cases with 9/9 stable
+  no-op and regenerated artifacts.
+- The focused Release gate passed the self-contained worker, three
+  launcher-side helper rejections, all missing/layout/executable/tamper/signing
+  negatives, ten protected Make values, and 19/19 no-op and regenerated
+  artifacts.
+- The complete post-Make-change freshness suite protected 106 internal values,
+  rejected the self-authenticating SDK and two runner replacements, verified
+  six tool identities and nine space-path artifacts, rejected all 28 external
+  input cases with zero stale reuse, regenerated and preserved all nine
+  relevant artifacts, and rejected the forged package root and missing
+  override.
+- Both manifests identify arm64, protocol version 1,
+  `official-dart-child-process`, and `official-clean`; neither contains a patch
+  field. Both bundle audits verified strict individual nested signing and deep
+  outer-app signing. The Release helper is a signed self-contained 5,880,480
+  byte executable with no deployed SDK dependency.
+- After all tests, the SDK/Engine worktree remained clean at
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`, and AppKit remained clean at
+  `77e355387a0ea50034632d9e3d4b35f629155c35`. The product diff contains only
+  this Make aggregation and its README/task records; `git diff --check` passed.
+
+The primary M1/arm64 migration is complete. This result makes no final
+pane-scale RSS, parser, PTY, renderer, idle CPU, or multi-pane performance
+claim; those remain in their existing product phases. In accordance with the
+declared platform priority, stock-runtime x86_64/Rosetta/Universal revalidation
+and Intel-native handoff are consolidated in the major-goal-complete
+low-priority follow-up and do not block the next normal Phase 1 item.

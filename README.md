@@ -134,14 +134,12 @@ make RUNTIME_ARCH=arm64 developer-jit-clean-sdk-test
 make RUNTIME_ARCH=arm64 release-aot-clean-sdk-test
 make RUNTIME_ARCH=arm64 runtime-bundle-audit
 make RUNTIME_ARCH=arm64 runtime-integration
-make RUNTIME_ARCH=arm64 developer-jit-traffic
-make RUNTIME_ARCH=arm64 release-aot-traffic
 ```
 
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
-smoke と lifecycle suite をまとめて実行します。`runtime-matrix-verify` は x86_64、
-Rosetta、Universal、Intel-native の低優先 follow-up が完了するまで主要 M1 gate には
-使用しません。
+smoke、lifecycle、bounded traffic suite をまとめて実行します。
+`runtime-matrix-verify` は x86_64、Rosetta、Universal、Intel-native の低優先 follow-up が
+完了するまで主要 M1 gate には使用しません。
 
 Phase 0 の debug/JIT、release-AOT、worker-isolate、benchmark、bundle 監査は
 歴史的な feasibility evidence としてのみ参照します。Engine 内 child isolate を前提に
