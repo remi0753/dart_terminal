@@ -242,6 +242,8 @@ final class TerminalApplication {
               if (!closed.isCompleted) {
                 closed.complete();
               }
+            case WindowCloseRequestedEvent():
+              break;
             case WindowResizedEvent(:final height):
               createdSession.viewportRows = _rowsForHeight(height);
               createdSession.refresh();
