@@ -101,12 +101,15 @@ integration で検証する終了状態は、正常または worker-contained fa
 forced cleanup が `75` です。fault scenario の選択は integration-test gate がない通常
 起動では拒否されます。
 
-Developer の通常 smoke、lifecycle fault suite、bounded traffic を個別に実行する場合:
+Developer の通常 smoke、lifecycle fault suite、bounded traffic、1,000 組の
+Window/View resource stress、shutdown fault injection を個別に実行する場合:
 
 ```shell
 make RUNTIME_ARCH=arm64 developer-jit-integration
 make RUNTIME_ARCH=arm64 developer-jit-lifecycle
 make RUNTIME_ARCH=arm64 developer-jit-traffic
+make RUNTIME_ARCH=arm64 developer-jit-resource
+make RUNTIME_ARCH=arm64 developer-jit-shutdown-fault
 ```
 
 ## Runtime diagnostics
@@ -155,13 +158,15 @@ make RUNTIME_ARCH=arm64 release-aot-run
 Release bundle は AppKit main thread 上の単一 stock Engine root、AOT snapshot、同じ公式
 SDK が生成した自己完結 worker executable を含みます。worker は
 `Contents/Helpers/dart_terminal_runtime_worker` から別 PID で起動され、配布先の Dart SDK
-には依存しません。通常 smoke、failure/replacement/shutdown、bounded traffic を個別に
-再検証する場合:
+には依存しません。通常 smoke、failure/replacement/shutdown、bounded traffic、resource
+stress、shutdown fault injection を個別に再検証する場合:
 
 ```shell
 make RUNTIME_ARCH=arm64 release-aot-integration
 make RUNTIME_ARCH=arm64 release-aot-lifecycle
 make RUNTIME_ARCH=arm64 release-aot-traffic
+make RUNTIME_ARCH=arm64 release-aot-resource
+make RUNTIME_ARCH=arm64 release-aot-shutdown-fault
 ```
 
 ### 低優先の Intel-native handoff
@@ -182,7 +187,12 @@ make RUNTIME_ARCH=arm64 runtime-integration
 ```
 
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
-smoke、lifecycle、bounded traffic suite をまとめて実行します。
+smoke、lifecycle、bounded traffic、resource stress、shutdown fault suite をまとめて
+実行します。resource stress は実アプリの Dart API から 1,000 組の Window/View を生成・
+破棄し、毎回 native handle が基準値へ戻ることを確認します。shutdown fault suite は
+malformed/late event、double dispose、worker crash を封じ込め、最終 native handle が 0、
+記録した worker PID が消滅することを確認します。いずれも専用の integration-test gate が
+ない通常起動では選択できません。
 `runtime-matrix-verify` は x86_64、Rosetta、Universal、Intel-native の低優先 follow-up が
 完了するまで主要 M1 gate には使用しません。
 

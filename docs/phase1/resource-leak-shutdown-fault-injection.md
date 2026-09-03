@@ -1,6 +1,6 @@
 # Native/Dart resource-leak and shutdown fault injection
 
-- Status: in progress
+- Status: completed
 - Started: 2026-09-04
 - Scope: first unchecked Phase 1 roadmap item only
 - Related: `ROADMAP.md` Phase 1 exit conditions, ADR-001, ADR-002,
@@ -238,6 +238,11 @@ M1 matrix is an acceptance checkpoint that depends on both.
 - The immediate permission-matched rerun of `make terminal-metal-view-test`
   passed. The earlier status-7 result is therefore recorded as a constrained
   Metal execution-environment failure, not a persistent product regression.
+- The first adjacent `dart_appkit` `make dart-test` run reported an
+  `unnecessary_import` because the new testing library was imported without a
+  prefix in its own API fixture. Importing it as `testing` made the test-only
+  surface explicit; the corrected run and the subsequent full dependency
+  suite passed without changing runtime behavior.
 
 ## Implementation log
 
@@ -336,3 +341,41 @@ M1 matrix is an acceptance checkpoint that depends on both.
   produced valid owner-only `root-stopped` completion metadata.
 - The bounded shutdown fault-injection subtask is complete. M1/arm64 acceptance
   and Phase 1 closeout is now the first unchecked subtask.
+
+### M1/arm64 final acceptance
+
+- `make RUNTIME_ARCH=arm64 runtime-verify` passed the source checks, both bundle
+  audits, normal smoke, all 16 lifecycle scenarios per mode, bounded traffic,
+  the resource suite, and the shutdown-fault suite.
+- Normal smoke completed in 2,229 ms for Developer JIT and 1,675 ms for Release
+  AOT. Both modes passed all expected nonzero lifecycle outcomes as well as
+  normal, contained worker-fault, replacement, late-completion, and
+  double-shutdown outcomes.
+- Bounded traffic passed in both modes with 384 explicitly backpressured
+  requests. Developer JIT completed the traffic section in 1,052 ms and the
+  application in 1,405 ms; Release AOT completed them in 972 ms and 1,179 ms.
+- The repeated resource gate again passed 1,000 pairs with `baseline=12`,
+  `peak=14`, and no drift. Developer JIT recorded 5,570 ms stress / 9,942 ms
+  application time; Release AOT recorded 5,461 ms / 9,676 ms. Both reported
+  zero handles after full product cleanup.
+- The shutdown-fault gate again observed exactly one malformed error, no late
+  owner delivery, successful continued event delivery and duplicate disposal,
+  unchanged `baseline=12`, contained/reaped worker crash, and zero handles
+  after cleanup. Developer JIT exited in 353 ms and Release AOT in 209 ms.
+- `make RUNTIME_ARCH=arm64 developer-jit-clean-sdk-test` and
+  `make RUNTIME_ARCH=arm64 release-aot-clean-sdk-test` passed from clean
+  official SDK inputs. Developer JIT proved official-engine and
+  source-inventory provenance, worker execution, rejection gates, 9 stable
+  no-op cases, and 9 required regenerations. Release AOT additionally proved
+  its self-contained signed worker and launcher rejection cases, with 19
+  stable no-op cases and 19 required regenerations.
+- Every product invocation stayed within its suite deadline, emitted no
+  unexpected stderr, produced valid owner-only local completion metadata, and
+  left every observed worker PID absent. The adjacent `dart_appkit` repository
+  and official Dart SDK checkout remained clean after validation.
+- README and feature-matrix status now describe the resource/fault gates. All
+  three ordered subtasks and their parent roadmap item are complete; no new
+  roadmap work was discovered, and Phase 2 has not been started.
+- Final `git diff --check` passed. The root worktree review found only the four
+  intended closeout documents pending this final commit; the adjacent
+  dependency and official SDK worktrees were clean.
