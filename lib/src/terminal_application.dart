@@ -28,6 +28,7 @@ final class TerminalOptions {
   const TerminalOptions({
     this.initialWorkingDirectory,
     this.autoCloseAfter,
+    this.runtimeResourceStress = false,
     this.runtimeLifecycleScenario = RuntimeLifecycleScenario.normal,
     this.runtimeWorkerCommand =
         const RuntimeLifecycleWorkerCommand.unconfigured(),
@@ -39,6 +40,7 @@ final class TerminalOptions {
   }) {
     String? initialWorkingDirectory;
     Duration? autoCloseAfter;
+    var runtimeResourceStress = false;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
     String? runtimeWorkerExecutable;
     String? runtimeWorkerKernel;
@@ -47,6 +49,15 @@ final class TerminalOptions {
       const String workingDirectoryPrefix = '--working-directory=';
       const String autoClosePrefix = '--auto-close-after=';
       const String lifecyclePrefix = '--runtime-lifecycle-scenario=';
+      if (argument == '--runtime-resource-stress') {
+        if (runtimeResourceStress) {
+          throw const FormatException(
+            '--runtime-resource-stress may only be supplied once',
+          );
+        }
+        runtimeResourceStress = true;
+        continue;
+      }
       if (argument.startsWith(_runtimeWorkerExecutablePrefix)) {
         if (runtimeWorkerExecutable != null) {
           throw const FormatException(
@@ -162,9 +173,23 @@ final class TerminalOptions {
         'runtime lifecycle fault scenarios require the integration-test gate',
       );
     }
+    if (runtimeResourceStress &&
+        (environment ?? Platform.environment)['DT_RUNTIME_RESOURCE_TEST'] !=
+            '1') {
+      throw const FormatException(
+        'runtime resource stress requires the integration-test gate',
+      );
+    }
+    if (runtimeResourceStress &&
+        selectedScenario != RuntimeLifecycleScenario.normal) {
+      throw const FormatException(
+        'runtime resource stress cannot be combined with a lifecycle fault',
+      );
+    }
     return TerminalOptions(
       initialWorkingDirectory: initialWorkingDirectory,
       autoCloseAfter: autoCloseAfter,
+      runtimeResourceStress: runtimeResourceStress,
       runtimeLifecycleScenario: selectedScenario,
       runtimeWorkerCommand: RuntimeLifecycleWorkerCommand(
         executable: runtimeWorkerExecutable,
@@ -177,6 +202,7 @@ final class TerminalOptions {
 
   final String? initialWorkingDirectory;
   final Duration? autoCloseAfter;
+  final bool runtimeResourceStress;
   final RuntimeLifecycleScenario runtimeLifecycleScenario;
   final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
 }
@@ -554,6 +580,9 @@ final class TerminalApplication {
       switch (scenario) {
         case RuntimeLifecycleScenario.normal:
           await _expectResponse(createdLifecycle);
+          if (options.runtimeResourceStress) {
+            _exerciseResourceStress(application);
+          }
         case RuntimeLifecycleScenario.workerSyncUncaught:
         case RuntimeLifecycleScenario.workerAsyncUncaught:
           final RuntimeLifecycleRequestResult result = await createdLifecycle
@@ -742,7 +771,22 @@ final class TerminalApplication {
       }
       _writeLifecycleEvent(scenario, 'root-exit', lifecycle?.generation ?? 0);
       RuntimeDiagnosticsHost.recordPhase(RuntimeDiagnosticPhase.rootStopped);
-      await application.terminate();
+      final int? finalLiveHandleCount = options.runtimeResourceStress
+          ? application.debugLiveObjectCount
+          : null;
+      if (finalLiveHandleCount != null) {
+        stdout.writeln('NATIVE_RESOURCE_FINAL handles=$finalLiveHandleCount');
+      }
+      try {
+        if (finalLiveHandleCount != null) {
+          _expectLifecycle(
+            finalLiveHandleCount == 0,
+            'product cleanup left $finalLiveHandleCount native handles',
+          );
+        }
+      } finally {
+        await application.terminate();
+      }
     }
     stdout.writeln('Dart Terminal shut down cleanly.');
   }
@@ -755,6 +799,50 @@ final class TerminalApplication {
       result.status == RuntimeLifecycleRequestStatus.response &&
           result.value == 42,
       'worker request did not return its expected response',
+    );
+  }
+
+  static void _exerciseResourceStress(AppKitApplication application) {
+    const int iterationCount = 1000;
+    final int baseline = application.debugLiveObjectCount;
+    final Stopwatch stopwatch = Stopwatch()..start();
+    var peak = baseline;
+    for (var iteration = 0; iteration < iterationCount; ++iteration) {
+      View? temporaryView;
+      Window? temporaryWindow;
+      try {
+        temporaryView = View();
+        temporaryWindow = Window(
+          frame: const Rect.fromLTWH(0, 0, 64, 32),
+          title: 'Dart Terminal resource probe',
+        )..contentView = temporaryView;
+        final int activeCount = application.debugLiveObjectCount;
+        peak = activeCount > peak ? activeCount : peak;
+        _expectLifecycle(
+          activeCount == baseline + 2,
+          'resource iteration $iteration registered '
+          '${activeCount - baseline} handles instead of 2',
+        );
+      } finally {
+        if (temporaryWindow != null && !temporaryWindow.isDisposed) {
+          temporaryWindow.dispose();
+        }
+        if (temporaryView != null && !temporaryView.isDisposed) {
+          temporaryView.dispose();
+        }
+      }
+      final int currentCount = application.debugLiveObjectCount;
+      _expectLifecycle(
+        currentCount == baseline,
+        'resource iteration $iteration changed native baseline '
+        '$baseline to $currentCount',
+      );
+    }
+    stopwatch.stop();
+    final int finalCount = application.debugLiveObjectCount;
+    stdout.writeln(
+      'NATIVE_RESOURCE_STRESS iterations=$iterationCount baseline=$baseline '
+      'peak=$peak final=$finalCount elapsed_ms=${stopwatch.elapsedMilliseconds}',
     );
   }
 

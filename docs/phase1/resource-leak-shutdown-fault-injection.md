@@ -94,7 +94,7 @@ runtime modes.
    - Add the shared integration runner/Make targets for both runtime modes.
    - Complete when each run observes an unchanged native baseline, final
      product cleanup reports zero handles, all workers are reaped, and focused
-     source/unit/integration checks pass.
+     source/unit/integration checks pass within a dedicated bounded deadline.
 2. **Bounded shutdown fault injection**
    - Add the smallest reusable raw-event injection seam needed for malformed
      and late-event product tests, with unit coverage and a normal-launch gate.
@@ -133,8 +133,8 @@ M1 matrix is an acceptance checkpoint that depends on both.
    prevent native/Dart cleanup or application exit.
 8. Fault options are rejected without the explicit integration-test gate.
 9. Developer JIT and Release AOT execute the same stress/fault scenario list,
-   use the same acceptance assertions, and finish inside the bounded launcher
-   deadline with valid completion diagnostics.
+   use the same acceptance assertions, and finish inside a bounded launcher
+   deadline appropriate to each workload with valid completion diagnostics.
 10. All affected format, analysis, unit/native tests, builds, audits, clean-SDK
     gates, and final worktree/diff checks pass on M1/arm64.
 
@@ -157,8 +157,10 @@ M1 matrix is an acceptance checkpoint that depends on both.
 - AppKit may retain a content view through its window after the view registry
   lease is released. The stress loop must destroy the window owner first and
   assert at the registry boundary, rather than infer Objective-C retain counts.
-- A tight loop must stay within the app-launch deadline and periodically yield
-  if the main-run-loop scheduler requires it, without admitting unbounded work.
+- A tight loop must stay within a declared app-launch deadline and periodically
+  yield if the main-run-loop scheduler requires it, without admitting
+  unbounded work. The general 12-second smoke deadline is not assumed to fit
+  1,000 real `NSWindow` constructions.
 - A malformed-event test must observe the error deliberately; routing it to an
   unhandled stream error would test process failure rather than containment.
 - A late event can be syntactically valid while its Dart owner is gone. The
@@ -189,3 +191,70 @@ M1 matrix is an acceptance checkpoint that depends on both.
   this task because it would mix future Metal resource policy into an AppKit
   handle-lifetime acceptance test; custom-view attachment remains covered by
   the normal smoke suite.
+
+## Failed attempts and corrections
+
+- The first focused `dart format` invocation formatted its one changed file but
+  then failed while Dart tried to update a telemetry session timestamp outside
+  the permitted workspace. No product operation or dependency state changed.
+  Subsequent Dart commands use the repository's `--suppress-analytics` form.
+- The first Developer resource integration run proved all 1,000 handle pairs
+  returned from `baseline=12` through `peak=14` to `final=12`, and final product
+  cleanup reported zero. It nevertheless exceeded the general 12-second smoke
+  deadline before the one-second auto-close could complete. The launcher then
+  sent termination signals, which explains the observed forced worker cleanup;
+  this was test-harness interruption rather than a leaked resource. The stress
+  suite now records its inner duration and uses a dedicated 60-second hard
+  deadline while all ordinary smoke/fault launches retain 12 seconds.
+- The source-check rerun after both resource applications passed formatting,
+  compilation, analysis, Dart tests, and diagnostics tests, but its final
+  TerminalMetalView fixture could not create the registered Metal view and
+  returned status 7. The same fixture had passed before the product stress run;
+  this is being retried with the GUI/Metal execution permission used for app
+  integration before it is classified as a product regression.
+- The immediate permission-matched rerun of `make terminal-metal-view-test`
+  passed. The earlier status-7 result is therefore recorded as a constrained
+  Metal execution-environment failure, not a persistent product regression.
+
+## Implementation log
+
+### 2026-09-04 — product resource stress path
+
+- Added an integration-gated application option which cannot be combined with
+  a lifecycle fault and is rejected on ordinary launches.
+- The product root creates 1,000 invisible generic `View`/`Window` pairs,
+  attaches each view, asserts exactly two temporary registry handles, destroys
+  the window before the view, and asserts the exact native baseline after every
+  iteration.
+- Added machine-readable iteration, baseline, peak, final, and duration output.
+  After all normal menus, session, main window, and content view are cleaned up,
+  the gated run also asserts and reports zero live native handles before
+  requesting host termination.
+- Added one shared integration implementation plus Developer JIT, Release AOT,
+  and both-mode Make targets. The launcher continues to validate worker PID
+  reaping and private completion metadata for the stress invocation.
+
+## Validation record
+
+### Focused source checks
+
+- `make runtime-source-check` passed Dart formatting, native formatting,
+  lifecycle/diagnostics header compilation, plist lint, analysis, all Dart
+  unit/lifecycle tests, runtime diagnostics native tests, and TerminalMetalView
+  native tests.
+
+### Product resource integration
+
+- `make RUNTIME_ARCH=arm64 runtime-resource-integration` rebuilt both products
+  from the clean pinned inputs and passed the same 1,000-pair suite in both
+  modes after the deadline correction.
+- Developer JIT observed `baseline=12`, `peak=14`, `final=12`, zero final
+  product handles, 5,450 ms stress time, and 13,191 ms total application time.
+- Release AOT observed `baseline=12`, `peak=14`, `final=12`, zero final product
+  handles, 5,447 ms stress time, and 10,012 ms total application time.
+- Both invocations spawned one official Dart worker with a distinct PID,
+  observed its in-process reap, verified that PID was absent after app exit,
+  emitted no stderr, completed within the dedicated 60-second deadline, and
+  produced valid owner-only `root-stopped` local diagnostics metadata.
+- The product resource-leak stress subtask is complete. The bounded shutdown
+  fault-injection subtask remains next; no Phase 2 work has started.

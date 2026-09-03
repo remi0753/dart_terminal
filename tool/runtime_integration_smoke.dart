@@ -21,7 +21,7 @@ enum _RuntimeMode {
   final String payloadName;
 }
 
-enum _Suite { smoke, lifecycle, traffic, all }
+enum _Suite { smoke, lifecycle, traffic, resource, all }
 
 final class _Options {
   const _Options({
@@ -136,7 +136,7 @@ _Options _parseOptions(List<String> arguments) {
           .firstOrNull;
       if (selected == null) {
         throw const _SmokeException(
-          '--suite must be smoke, lifecycle, traffic, or all',
+          '--suite must be smoke, lifecycle, traffic, resource, or all',
         );
       }
       suite = selected;
@@ -280,6 +280,7 @@ Future<_ProcessObservation> _launch(
   List<String> applicationArguments, {
   Map<String, String> environment = const <String, String>{},
   String expectedDiagnosticPhase = 'root-stopped',
+  Duration timeout = const Duration(seconds: 12),
 }) async {
   final String processExecutable = options.launchArchitecture == null
       ? invocation.executable
@@ -317,7 +318,7 @@ Future<_ProcessObservation> _launch(
         .join();
     late final int status;
     try {
-      status = await process.exitCode.timeout(const Duration(seconds: 12));
+      status = await process.exitCode.timeout(timeout);
     } on TimeoutException {
       process.kill(ProcessSignal.sigterm);
       try {
@@ -327,7 +328,8 @@ Future<_ProcessObservation> _launch(
         await process.exitCode;
       }
       throw _SmokeException(
-        '${options.mode.name} application did not exit within 12 seconds; '
+        '${options.mode.name} application did not exit within '
+        '${timeout.inSeconds} seconds; '
         'stdout=${(await stdoutText).trim()} '
         'stderr=${(await stderrText).trim()}',
       );
@@ -1128,6 +1130,57 @@ Future<void> _runTraffic(_Options options, _Invocation invocation) async {
   );
 }
 
+Future<void> _runResource(_Options options, _Invocation invocation) async {
+  final _ProcessObservation result = await _launch(
+    options,
+    invocation,
+    const <String>['--runtime-resource-stress', '--auto-close-after=1'],
+    environment: const <String, String>{'DT_RUNTIME_RESOURCE_TEST': '1'},
+    timeout: const Duration(seconds: 60),
+  );
+  _expect(
+    result.status == 0,
+    'resource application exited with status ${result.status}; '
+    'stdout=${result.stdoutText.trim()} stderr=${result.stderrText.trim()}',
+  );
+  _expect(
+    result.stderrText.trim().isEmpty,
+    'resource application wrote stderr: ${result.stderrText.trim()}',
+  );
+  final RegExp summary = RegExp(
+    r'^NATIVE_RESOURCE_STRESS iterations=1000 baseline=([0-9]+) '
+    r'peak=([0-9]+) final=([0-9]+) elapsed_ms=([1-9][0-9]*)$',
+    multiLine: true,
+  );
+  final RegExpMatch? summaryMatch = summary.firstMatch(result.stdoutText);
+  _expect(summaryMatch != null, 'resource stress summary is missing');
+  final int baseline = int.parse(summaryMatch!.group(1)!);
+  final int peak = int.parse(summaryMatch.group(2)!);
+  final int finalCount = int.parse(summaryMatch.group(3)!);
+  final int stressElapsed = int.parse(summaryMatch.group(4)!);
+  _expect(
+    peak == baseline + 2 && finalCount == baseline,
+    'resource counts do not prove a stable two-handle pair: '
+    'baseline=$baseline peak=$peak final=$finalCount',
+  );
+  _expect(
+    RegExp(
+          r'^NATIVE_RESOURCE_FINAL handles=0$',
+          multiLine: true,
+        ).allMatches(result.stdoutText).length ==
+        1,
+    'product cleanup did not report exactly one zero-handle result',
+  );
+  _expectWorkerProcessContract(result, scenario: 'normal', expectedCount: 1);
+  stdout.writeln(
+    'RUNTIME_RESOURCE_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'iterations=1000 baseline=$baseline peak=$peak '
+    'stress_elapsed_ms=$stressElapsed '
+    'elapsed_ms=${result.elapsed.inMilliseconds}',
+  );
+}
+
 bool _sameStrings(List<String> left, List<String> right) {
   if (left.length != right.length) {
     return false;
@@ -1160,6 +1213,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.traffic || options.suite == _Suite.all) {
       await _runTraffic(options, invocation);
+    }
+    if (options.suite == _Suite.resource || options.suite == _Suite.all) {
+      await _runResource(options, invocation);
     }
   } on Object catch (error) {
     stderr.writeln('RUNTIME_INTEGRATION_FAIL mode=${options.mode.name} $error');

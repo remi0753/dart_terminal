@@ -405,13 +405,16 @@ INTEL_EVIDENCE_OUTPUT ?=
 	developer-jit-build developer-jit-run developer-jit-audit \
 	developer-jit-clean-sdk-test \
 	developer-jit-integration developer-jit-lifecycle developer-jit-traffic \
+	developer-jit-resource \
 	release-aot-build release-aot-run release-aot-audit \
 	release-aot-clean-sdk-test \
 	release-aot-integration release-aot-lifecycle release-aot-traffic \
+	release-aot-resource \
 	runtime-source-check \
 	runtime-diagnostics-test terminal-metal-view-test \
 	runtime-bundle-audit runtime-integration \
-	runtime-lifecycle-integration runtime-traffic-integration runtime-verify \
+	runtime-lifecycle-integration runtime-traffic-integration \
+	runtime-resource-integration runtime-verify \
 	runtime-matrix-build runtime-matrix-audit runtime-matrix-integration \
 	runtime-matrix-verify runtime-build-freshness-test \
 	universal-release-aot-build universal-release-aot-assemble \
@@ -446,6 +449,7 @@ help:
 	@echo "  make runtime-integration Run shared smoke, lifecycle, and traffic suites"
 	@echo "  make runtime-lifecycle-integration Run shared lifecycle faults"
 	@echo "  make runtime-traffic-integration Run bounded traffic in both modes"
+	@echo "  make runtime-resource-integration Run 1,000-pair leak stress"
 	@echo "  make terminal-metal-view-test Verify native custom-view attachment"
 	@echo "  make runtime-verify      Verify both modes for one explicit architecture"
 	@echo "  make runtime-matrix-build Build arm64 and x86_64 thin products"
@@ -998,6 +1002,13 @@ developer-jit-traffic: developer-jit-build
 		--launch-architecture=$(RUNTIME_ARCH) \
 		$(DEVELOPER_JIT_BUNDLE)
 
+developer-jit-resource: developer-jit-build
+	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics run \
+		$(RUNTIME_INTEGRATION_SOURCE) \
+		--mode=developer-jit --suite=resource \
+		--launch-architecture=$(RUNTIME_ARCH) \
+		$(DEVELOPER_JIT_BUNDLE)
+
 $(RELEASE_AOT_KERNEL): $(RUNTIME_DART_SOURCES) $(RUNTIME_PACKAGE_CONFIG) \
 		$(RELEASE_AOT_FINGERPRINT)
 	@mkdir -p $(RELEASE_AOT_BUILD_DIR)
@@ -1176,6 +1187,12 @@ release-aot-traffic: release-aot-build
 		--launch-architecture=$(RUNTIME_ARCH) \
 		$(RELEASE_AOT_BUNDLE)
 
+release-aot-resource: release-aot-build
+	"$(RUNTIME_DART_EXECUTABLE)" run $(RUNTIME_INTEGRATION_SOURCE) \
+		--mode=release-aot --suite=resource \
+		--launch-architecture=$(RUNTIME_ARCH) \
+		$(RELEASE_AOT_BUNDLE)
+
 runtime-source-check: runtime-dart-tool-check
 	"$(RUNTIME_DART_EXECUTABLE)" --suppress-analytics format --output=none \
 		--set-exit-if-changed \
@@ -1242,6 +1259,7 @@ runtime-integration: developer-jit-build release-aot-build
 	@$(MAKE) release-aot-integration
 	@$(MAKE) runtime-lifecycle-integration
 	@$(MAKE) runtime-traffic-integration
+	@$(MAKE) runtime-resource-integration
 
 runtime-lifecycle-integration: developer-jit-build release-aot-build
 	@$(MAKE) developer-jit-lifecycle
@@ -1250,6 +1268,10 @@ runtime-lifecycle-integration: developer-jit-build release-aot-build
 runtime-traffic-integration: developer-jit-build release-aot-build
 	@$(MAKE) developer-jit-traffic
 	@$(MAKE) release-aot-traffic
+
+runtime-resource-integration: developer-jit-build release-aot-build
+	@$(MAKE) developer-jit-resource
+	@$(MAKE) release-aot-resource
 
 runtime-verify:
 	@$(MAKE) runtime-source-check

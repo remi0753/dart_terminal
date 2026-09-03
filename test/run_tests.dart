@@ -84,6 +84,7 @@ void _testOptions() {
     options.autoCloseAfter == const Duration(seconds: 3),
     'auto-close option',
   );
+  _expect(!options.runtimeResourceStress, 'resource stress defaults off');
   _expect(
     options.runtimeWorkerCommand.executable == '/usr/bin/true' &&
         options.runtimeWorkerCommand.arguments.single ==
@@ -109,6 +110,41 @@ void _testOptions() {
     faultOptions.runtimeLifecycleScenario ==
         RuntimeLifecycleScenario.workerSyncUncaught,
     'gated lifecycle scenario option',
+  );
+  final TerminalOptions resourceOptions = TerminalOptions.parse(
+    _workerOptions(<String>['--runtime-resource-stress']),
+    environment: const <String, String>{'DT_RUNTIME_RESOURCE_TEST': '1'},
+  );
+  _expect(resourceOptions.runtimeResourceStress, 'gated resource stress');
+  _expectThrows(
+    () => TerminalOptions.parse(
+      _workerOptions(<String>['--runtime-resource-stress']),
+      environment: const <String, String>{},
+    ),
+    'resource stress gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      _workerOptions(<String>[
+        '--runtime-resource-stress',
+        '--runtime-resource-stress',
+      ]),
+      environment: const <String, String>{'DT_RUNTIME_RESOURCE_TEST': '1'},
+    ),
+    'duplicate resource stress option',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      _workerOptions(<String>[
+        '--runtime-resource-stress',
+        '--runtime-lifecycle-scenario=worker-sync-uncaught',
+      ]),
+      environment: const <String, String>{
+        'DT_RUNTIME_RESOURCE_TEST': '1',
+        'DT_RUNTIME_LIFECYCLE_TEST': '1',
+      },
+    ),
+    'resource stress and lifecycle fault are mutually exclusive',
   );
   _expectThrows(
     () => TerminalOptions.parse(
