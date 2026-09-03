@@ -2,6 +2,8 @@
 
 #include "RuntimeLifecycleBridge.h"
 
+#include "RuntimeDiagnostics.h"
+
 #include <pthread.h>
 
 #include <atomic>
@@ -57,6 +59,7 @@ int RuntimeLifecycleEffectiveExitCode(int delegate_exit_code) {
 
 void RuntimeLifecycleCompleteApplicationTermination(int delegate_exit_code) {
   const int exit_code = RuntimeLifecycleEffectiveExitCode(delegate_exit_code);
+  RuntimeDiagnosticsFinishActiveSession(exit_code);
   if (exit_code != 0) {
     std::fflush(nullptr);
     std::_Exit(exit_code);

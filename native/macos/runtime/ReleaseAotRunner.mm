@@ -19,6 +19,7 @@
 #include "DartEventEncoder.h"
 #include "DartMessagePump.h"
 #include "ObjectRegistry.h"
+#include "RuntimeDiagnostics.h"
 #include "RuntimeLifecycleBridge.h"
 #include "RuntimeWorkerConfiguration.h"
 #include "TerminalMetalView.h"
@@ -421,17 +422,36 @@ std::atomic<ReleaseAotHost*> ReleaseAotHost::active_host_{nullptr};
 
 int main(int argc, const char* argv[]) {
   @autoreleasepool {
+    dart_terminal::RuntimeDiagnosticsOptions diagnostics_options;
+    std::string diagnostics_error;
+    if (!dart_terminal::RuntimeDiagnosticsOptionsForCurrentProcess(
+            "release-aot", &diagnostics_options, &diagnostics_error)) {
+      std::fprintf(stderr, "Runtime diagnostics startup failed: %s\n",
+                   diagnostics_error.c_str());
+      return dart_terminal::kRuntimeSoftwareExitCode;
+    }
+    dart_terminal::RuntimeDiagnosticsSession diagnostics;
+    if (!diagnostics.Start(diagnostics_options, &diagnostics_error)) {
+      std::fprintf(stderr, "Runtime diagnostics startup failed: %s\n",
+                   diagnostics_error.c_str());
+      return dart_terminal::kRuntimeSoftwareExitCode;
+    }
+    const auto finish = [&diagnostics](int exit_code) {
+      diagnostics.Finish(exit_code);
+      return exit_code;
+    };
+
     if (dart_terminal::RuntimeLifecycleShouldFailHostStartup()) {
       std::fprintf(stderr,
                    "RUNTIME_LIFECYCLE_FATAL class=host-startup status=70\n");
-      return dart_terminal::kRuntimeSoftwareExitCode;
+      return finish(dart_terminal::kRuntimeSoftwareExitCode);
     }
     NSString* snapshot = [[NSBundle mainBundle] pathForResource:@"application"
                                                          ofType:@"aot"];
     if (snapshot == nil ||
         !std::filesystem::is_regular_file(snapshot.fileSystemRepresentation)) {
       std::fprintf(stderr, "Release AOT snapshot not found in app bundle\n");
-      return dart_terminal::kRuntimeInputExitCode;
+      return finish(dart_terminal::kRuntimeInputExitCode);
     }
 
     std::vector<std::string> application_arguments;
@@ -444,7 +464,7 @@ int main(int argc, const char* argv[]) {
                                                &worker_error)) {
       std::fprintf(stderr, "Runtime worker configuration error: %s\n",
                    worker_error.c_str());
-      return dart_terminal::kRuntimeInputExitCode;
+      return finish(dart_terminal::kRuntimeInputExitCode);
     }
 
     NSApplication* application = [NSApplication sharedApplication];
@@ -453,7 +473,7 @@ int main(int argc, const char* argv[]) {
     if (!dart_terminal::RegisterTerminalMetalView(&registration_error)) {
       std::fprintf(stderr, "TerminalMetalView registration failed: %s\n",
                    registration_error.c_str());
-      return dart_terminal::kRuntimeSoftwareExitCode;
+      return finish(dart_terminal::kRuntimeSoftwareExitCode);
     }
     DartTerminalReleaseAotDelegate* delegate =
         [[DartTerminalReleaseAotDelegate alloc]
@@ -461,6 +481,7 @@ int main(int argc, const char* argv[]) {
             applicationArguments:application_arguments];
     application.delegate = delegate;
     [application run];
-    return dart_terminal::RuntimeLifecycleEffectiveExitCode(delegate.exitCode);
+    return finish(
+        dart_terminal::RuntimeLifecycleEffectiveExitCode(delegate.exitCode));
   }
 }

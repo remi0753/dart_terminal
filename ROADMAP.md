@@ -546,7 +546,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase1/macos-unified-logging-crash-metadata.md`](docs/phase1/macos-unified-logging-crash-metadata.md)
   を参照して実施する）
   - [x] native unified logger と bounded local-run metadata contract
-  - [ ] Dart lifecycle phase と Developer JIT / Release AOT host integration
+  - [x] Dart lifecycle phase と Developer JIT / Release AOT host integration
   - [ ] M1 product acceptance と privacy/operations documentation
 - [ ] native/Dart の resource leak test と shutdown fault injection
 

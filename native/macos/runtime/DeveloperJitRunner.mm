@@ -12,6 +12,7 @@
 #include "AppDelegate.h"
 #include "RunnerArguments.h"
 #include "RunnerConfiguration.h"
+#include "RuntimeDiagnostics.h"
 #include "RuntimeLifecycleBridge.h"
 #include "RuntimeWorkerConfiguration.h"
 #include "TerminalMetalView.h"
@@ -62,27 +63,43 @@ bool ConfigureRuntimeWorker(const char* launcher_argument,
 
 int main(int argc, const char* argv[]) {
   @autoreleasepool {
-    dart_appkit::RunnerConfiguration configuration;
+    dart_terminal::RuntimeDiagnosticsOptions diagnostics_options;
     std::string error;
+    if (!dart_terminal::RuntimeDiagnosticsOptionsForCurrentProcess(
+            "developer-jit", &diagnostics_options, &error)) {
+      std::cerr << "Runtime diagnostics startup failed: " << error << '\n';
+      return dart_terminal::kRuntimeSoftwareExitCode;
+    }
+    dart_terminal::RuntimeDiagnosticsSession diagnostics;
+    if (!diagnostics.Start(diagnostics_options, &error)) {
+      std::cerr << "Runtime diagnostics startup failed: " << error << '\n';
+      return dart_terminal::kRuntimeSoftwareExitCode;
+    }
+    const auto finish = [&diagnostics](int exit_code) {
+      diagnostics.Finish(exit_code);
+      return exit_code;
+    };
+
+    dart_appkit::RunnerConfiguration configuration;
     if (!dart_appkit::ParseRunnerArguments(argc, argv, &configuration,
                                            &error)) {
       std::cerr << "Runner argument error: " << error << '\n';
       std::cerr << dart_appkit::RunnerUsage(argv[0]);
-      return dart_appkit::kRunnerUsageExitCode;
+      return finish(dart_appkit::kRunnerUsageExitCode);
     }
     if (!std::filesystem::is_regular_file(configuration.kernel_path)) {
       std::cerr << "Kernel file does not exist: " << configuration.kernel_path
                 << '\n';
-      return dart_appkit::kRunnerInputExitCode;
+      return finish(dart_appkit::kRunnerInputExitCode);
     }
     if (!ConfigureRuntimeWorker(argv[0], &configuration, &error)) {
       std::cerr << "Runtime worker configuration error: " << error << '\n';
-      return dart_appkit::kRunnerInputExitCode;
+      return finish(dart_appkit::kRunnerInputExitCode);
     }
     if (dart_terminal::RuntimeLifecycleShouldFailHostStartup()) {
       std::fprintf(stderr,
                    "RUNTIME_LIFECYCLE_FATAL class=host-startup status=70\n");
-      return dart_terminal::kRuntimeSoftwareExitCode;
+      return finish(dart_terminal::kRuntimeSoftwareExitCode);
     }
 
     NSApplication* application = [NSApplication sharedApplication];
@@ -91,13 +108,14 @@ int main(int argc, const char* argv[]) {
     if (!dart_terminal::RegisterTerminalMetalView(&registration_error)) {
       std::cerr << "TerminalMetalView registration failed: "
                 << registration_error << '\n';
-      return dart_terminal::kRuntimeSoftwareExitCode;
+      return finish(dart_terminal::kRuntimeSoftwareExitCode);
     }
     DartTerminalDeveloperJitDelegate* delegate =
         [[DartTerminalDeveloperJitDelegate alloc]
             initWithConfiguration:configuration];
     application.delegate = delegate;
     [application run];
-    return dart_terminal::RuntimeLifecycleEffectiveExitCode(delegate.exitCode);
+    return finish(
+        dart_terminal::RuntimeLifecycleEffectiveExitCode(delegate.exitCode));
   }
 }

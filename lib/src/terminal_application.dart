@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dart_appkit/dart_appkit.dart';
 
+import 'runtime_diagnostics_host.dart';
 import 'runtime_lifecycle.dart';
 import 'runtime_lifecycle_host.dart';
 import 'terminal_session.dart';
@@ -548,6 +549,7 @@ final class TerminalApplication {
         );
       }
       _writeLifecycleEvent(scenario, 'root-ready', createdLifecycle.generation);
+      RuntimeDiagnosticsHost.recordPhase(RuntimeDiagnosticPhase.rootReady);
 
       switch (scenario) {
         case RuntimeLifecycleScenario.normal:
@@ -707,6 +709,9 @@ final class TerminalApplication {
       }
       await closed.future;
     } finally {
+      RuntimeDiagnosticsHost.recordPhase(
+        RuntimeDiagnosticPhase.shutdownStarted,
+      );
       autoCloseTimer?.cancel();
       if (!lifecycleWasShutDown) {
         await lifecycle?.shutdown();
@@ -736,6 +741,7 @@ final class TerminalApplication {
         contentView.dispose();
       }
       _writeLifecycleEvent(scenario, 'root-exit', lifecycle?.generation ?? 0);
+      RuntimeDiagnosticsHost.recordPhase(RuntimeDiagnosticPhase.rootStopped);
       await application.terminate();
     }
     stdout.writeln('Dart Terminal shut down cleanly.');

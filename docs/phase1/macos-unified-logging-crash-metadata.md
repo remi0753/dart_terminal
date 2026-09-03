@@ -274,3 +274,50 @@ real Developer JIT and Release AOT evidence.
 - Reviewed the subtask diff and confirmed the native source is not yet linked
   into either product host. That dependency remains ordered under subtask 2;
   no later roadmap functionality has been started.
+
+### 2026-09-04 — Subtask 2 integration start
+
+- Added a Dart binding that can report only the four numeric root lifecycle
+  phases, recorded root start before option parsing, root readiness after
+  worker readiness, and shutdown start/root stop around ordered cleanup.
+- Installed the native session before argument parsing and host-failure gates
+  in both product mains. Early return paths now finalize their classified
+  status, while the shared application-termination boundary finalizes before
+  its existing nonzero `_Exit`; normal return remains idempotent.
+- Added the native source/header to both host dependency and compile lists.
+  The first combined formatting command formatted all three Dart files but
+  then the standalone Dart tool attempted to update its user-level analytics
+  session timestamp outside the workspace sandbox and returned an error.
+  This was a tool-side post-format write, not a source failure; subsequent Dart
+  commands use the project's existing suppressed-analytics path or an approved
+  workspace check.
+- Updated `runtime-source-check` so its format, analyze, and test invocations
+  all suppress Dart tool analytics. This makes the local gate deterministic in
+  restricted environments and avoids an unrelated user-level telemetry state
+  write during a privacy-sensitive diagnostics task.
+- The rerun passed Dart formatting, analysis, Dart tests, plist validation,
+  lifecycle and diagnostics header checks, and the diagnostics native contract.
+  The pre-existing `TerminalMetalView` contract could not acquire a Metal
+  device inside the restricted command sandbox (`DA_STATUS_PROVIDER_ERROR`),
+  then passed unchanged when rerun in the normal macOS execution environment.
+  This was an environment-access failure rather than a diagnostics regression.
+
+### 2026-09-04 — Subtask 2 validation
+
+- Built the arm64 Developer JIT and Release AOT application bundles against
+  the pinned official Engine SDK. Both hosts compiled and linked the shared
+  diagnostics implementation without warnings or errors.
+- Inspected both final bundle launchers and confirmed they export
+  `dt_runtime_diagnostics_abi_version` and
+  `dt_runtime_diagnostics_record_phase`, so `DynamicLibrary.process()` can
+  resolve the same fixed C ABI in both runtime modes.
+- Re-ran the complete `runtime-source-check` gate in the normal macOS
+  environment; formatting, analysis, Dart tests, both C/C++ header modes,
+  plist validation, diagnostics native tests, and `TerminalMetalView` native
+  tests all passed together.
+- Reviewed every host return and application-termination path. Failures before
+  Dart startup finish directly; Dart-initiated normal and fatal shutdowns pass
+  through the shared termination boundary before a possible `_Exit`; the
+  post-run finish remains intentionally idempotent.
+- Subtask 2 is complete. Product-level metadata assertions, the full real-GUI
+  acceptance matrix, and operator/privacy documentation remain in subtask 3.
