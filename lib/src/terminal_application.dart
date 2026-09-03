@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dart_appkit/dart_appkit.dart';
+import 'package:dart_appkit/testing.dart' as appkit_testing;
 
 import 'runtime_diagnostics_host.dart';
 import 'runtime_lifecycle.dart';
@@ -29,6 +30,7 @@ final class TerminalOptions {
     this.initialWorkingDirectory,
     this.autoCloseAfter,
     this.runtimeResourceStress = false,
+    this.runtimeShutdownFaultInjection = false,
     this.runtimeLifecycleScenario = RuntimeLifecycleScenario.normal,
     this.runtimeWorkerCommand =
         const RuntimeLifecycleWorkerCommand.unconfigured(),
@@ -41,6 +43,7 @@ final class TerminalOptions {
     String? initialWorkingDirectory;
     Duration? autoCloseAfter;
     var runtimeResourceStress = false;
+    var runtimeShutdownFaultInjection = false;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
     String? runtimeWorkerExecutable;
     String? runtimeWorkerKernel;
@@ -56,6 +59,15 @@ final class TerminalOptions {
           );
         }
         runtimeResourceStress = true;
+        continue;
+      }
+      if (argument == '--runtime-shutdown-faults') {
+        if (runtimeShutdownFaultInjection) {
+          throw const FormatException(
+            '--runtime-shutdown-faults may only be supplied once',
+          );
+        }
+        runtimeShutdownFaultInjection = true;
         continue;
       }
       if (argument.startsWith(_runtimeWorkerExecutablePrefix)) {
@@ -186,10 +198,25 @@ final class TerminalOptions {
         'runtime resource stress cannot be combined with a lifecycle fault',
       );
     }
+    if (runtimeShutdownFaultInjection &&
+        (environment ??
+                Platform.environment)['DT_RUNTIME_SHUTDOWN_FAULT_TEST'] !=
+            '1') {
+      throw const FormatException(
+        'runtime shutdown faults require the integration-test gate',
+      );
+    }
+    if (runtimeShutdownFaultInjection &&
+        selectedScenario != RuntimeLifecycleScenario.workerUnexpectedExit) {
+      throw const FormatException(
+        'runtime shutdown faults require the worker-unexpected-exit scenario',
+      );
+    }
     return TerminalOptions(
       initialWorkingDirectory: initialWorkingDirectory,
       autoCloseAfter: autoCloseAfter,
       runtimeResourceStress: runtimeResourceStress,
+      runtimeShutdownFaultInjection: runtimeShutdownFaultInjection,
       runtimeLifecycleScenario: selectedScenario,
       runtimeWorkerCommand: RuntimeLifecycleWorkerCommand(
         executable: runtimeWorkerExecutable,
@@ -203,6 +230,7 @@ final class TerminalOptions {
   final String? initialWorkingDirectory;
   final Duration? autoCloseAfter;
   final bool runtimeResourceStress;
+  final bool runtimeShutdownFaultInjection;
   final RuntimeLifecycleScenario runtimeLifecycleScenario;
   final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
 }
@@ -416,6 +444,10 @@ final class TerminalApplication {
           }
         },
         onError: (Object error, StackTrace stackTrace) {
+          if (options.runtimeShutdownFaultInjection &&
+              error is FormatException) {
+            return;
+          }
           if (!closed.isCompleted) {
             closed.completeError(error, stackTrace);
           }
@@ -576,6 +608,10 @@ final class TerminalApplication {
       }
       _writeLifecycleEvent(scenario, 'root-ready', createdLifecycle.generation);
       RuntimeDiagnosticsHost.recordPhase(RuntimeDiagnosticPhase.rootReady);
+
+      if (options.runtimeShutdownFaultInjection) {
+        await _exerciseShutdownFaultInjection(application);
+      }
 
       switch (scenario) {
         case RuntimeLifecycleScenario.normal:
@@ -771,11 +807,18 @@ final class TerminalApplication {
       }
       _writeLifecycleEvent(scenario, 'root-exit', lifecycle?.generation ?? 0);
       RuntimeDiagnosticsHost.recordPhase(RuntimeDiagnosticPhase.rootStopped);
-      final int? finalLiveHandleCount = options.runtimeResourceStress
+      final bool auditFinalNativeHandles =
+          options.runtimeResourceStress ||
+          options.runtimeShutdownFaultInjection;
+      final int? finalLiveHandleCount = auditFinalNativeHandles
           ? application.debugLiveObjectCount
           : null;
       if (finalLiveHandleCount != null) {
-        stdout.writeln('NATIVE_RESOURCE_FINAL handles=$finalLiveHandleCount');
+        stdout.writeln(
+          options.runtimeShutdownFaultInjection
+              ? 'NATIVE_SHUTDOWN_FAULT_FINAL handles=$finalLiveHandleCount'
+              : 'NATIVE_RESOURCE_FINAL handles=$finalLiveHandleCount',
+        );
       }
       try {
         if (finalLiveHandleCount != null) {
@@ -844,6 +887,94 @@ final class TerminalApplication {
       'NATIVE_RESOURCE_STRESS iterations=$iterationCount baseline=$baseline '
       'peak=$peak final=$finalCount elapsed_ms=${stopwatch.elapsedMilliseconds}',
     );
+  }
+
+  static Future<void> _exerciseShutdownFaultInjection(
+    AppKitApplication application,
+  ) async {
+    final int baseline = application.debugLiveObjectCount;
+    var malformedErrors = 0;
+    var lateOwnerEvents = 0;
+    var continuedEvents = 0;
+    final StreamSubscription<AppKitEvent> applicationEvents = application.events
+        .listen(
+          (AppKitEvent event) {
+            if (event case ApplicationActiveChangedEvent(
+              monotonicNanoseconds: 2000,
+            )) {
+              ++continuedEvents;
+            }
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            if (error is FormatException) {
+              ++malformedErrors;
+              return;
+            }
+            Error.throwWithStackTrace(error, stackTrace);
+          },
+        );
+    final View view = View();
+    final Window window = Window(
+      frame: const Rect.fromLTWH(0, 0, 64, 32),
+      title: 'Dart Terminal shutdown fault probe',
+    )..contentView = view;
+    final StreamSubscription<WindowEvent> windowEvents = window.events.listen((
+      _,
+    ) {
+      ++lateOwnerEvents;
+    });
+    final int windowHandle = appkit_testing.nativeWindowHandleForTesting(
+      window,
+    );
+    try {
+      window.dispose();
+      window.dispose();
+      view.dispose();
+      view.dispose();
+      appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+        4,
+        1,
+        windowHandle,
+        windowHandle >> 32,
+        1000,
+        0,
+      ]);
+      appkit_testing.injectRawAppKitEventForTesting(application, 'malformed');
+      appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+        4,
+        30,
+        0,
+        0,
+        2000,
+        0,
+        application.isActive,
+      ]);
+      final int finalCount = application.debugLiveObjectCount;
+      _expectLifecycle(
+        malformedErrors == 1 &&
+            lateOwnerEvents == 0 &&
+            continuedEvents == 1 &&
+            finalCount == baseline,
+        'shutdown fault observations were malformed: '
+        'errors=$malformedErrors late=$lateOwnerEvents '
+        'continued=$continuedEvents baseline=$baseline final=$finalCount',
+      );
+      stdout.writeln(
+        'NATIVE_SHUTDOWN_FAULT malformed_errors=$malformedErrors '
+        'late_owner_events=$lateOwnerEvents double_dispose=true '
+        'continued_events=$continuedEvents baseline=$baseline '
+        'final=$finalCount',
+      );
+    } finally {
+      if (!window.isDisposed) {
+        window.dispose();
+      }
+      if (!view.isDisposed) {
+        view.dispose();
+      }
+      await windowEvents.cancel();
+      await applicationEvents.cancel();
+    }
   }
 
   static Future<void> _exerciseWorkerTraffic(

@@ -86,6 +86,10 @@ void _testOptions() {
   );
   _expect(!options.runtimeResourceStress, 'resource stress defaults off');
   _expect(
+    !options.runtimeShutdownFaultInjection,
+    'shutdown fault injection defaults off',
+  );
+  _expect(
     options.runtimeWorkerCommand.executable == '/usr/bin/true' &&
         options.runtimeWorkerCommand.arguments.single ==
             '/tmp/runtime_worker.dill',
@@ -145,6 +149,53 @@ void _testOptions() {
       },
     ),
     'resource stress and lifecycle fault are mutually exclusive',
+  );
+  final TerminalOptions shutdownFaultOptions = TerminalOptions.parse(
+    _workerOptions(<String>[
+      '--runtime-shutdown-faults',
+      '--runtime-lifecycle-scenario=worker-unexpected-exit',
+    ]),
+    environment: const <String, String>{
+      'DT_RUNTIME_SHUTDOWN_FAULT_TEST': '1',
+      'DT_RUNTIME_LIFECYCLE_TEST': '1',
+    },
+  );
+  _expect(
+    shutdownFaultOptions.runtimeShutdownFaultInjection,
+    'gated shutdown fault injection',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      _workerOptions(<String>[
+        '--runtime-shutdown-faults',
+        '--runtime-lifecycle-scenario=worker-unexpected-exit',
+      ]),
+      environment: const <String, String>{'DT_RUNTIME_LIFECYCLE_TEST': '1'},
+    ),
+    'shutdown fault gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      _workerOptions(<String>['--runtime-shutdown-faults']),
+      environment: const <String, String>{
+        'DT_RUNTIME_SHUTDOWN_FAULT_TEST': '1',
+      },
+    ),
+    'shutdown faults require the worker crash scenario',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      _workerOptions(<String>[
+        '--runtime-shutdown-faults',
+        '--runtime-shutdown-faults',
+        '--runtime-lifecycle-scenario=worker-unexpected-exit',
+      ]),
+      environment: const <String, String>{
+        'DT_RUNTIME_SHUTDOWN_FAULT_TEST': '1',
+        'DT_RUNTIME_LIFECYCLE_TEST': '1',
+      },
+    ),
+    'duplicate shutdown fault option',
   );
   _expectThrows(
     () => TerminalOptions.parse(

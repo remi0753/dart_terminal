@@ -21,7 +21,7 @@ enum _RuntimeMode {
   final String payloadName;
 }
 
-enum _Suite { smoke, lifecycle, traffic, resource, all }
+enum _Suite { smoke, lifecycle, traffic, resource, fault, all }
 
 final class _Options {
   const _Options({
@@ -136,7 +136,7 @@ _Options _parseOptions(List<String> arguments) {
           .firstOrNull;
       if (selected == null) {
         throw const _SmokeException(
-          '--suite must be smoke, lifecycle, traffic, resource, or all',
+          '--suite must be smoke, lifecycle, traffic, resource, fault, or all',
         );
       }
       suite = selected;
@@ -1181,6 +1181,89 @@ Future<void> _runResource(_Options options, _Invocation invocation) async {
   );
 }
 
+Future<void> _runShutdownFaults(
+  _Options options,
+  _Invocation invocation,
+) async {
+  final _ProcessObservation result = await _launch(
+    options,
+    invocation,
+    const <String>[
+      '--runtime-shutdown-faults',
+      '--runtime-lifecycle-scenario=worker-unexpected-exit',
+    ],
+    environment: const <String, String>{
+      'DT_RUNTIME_SHUTDOWN_FAULT_TEST': '1',
+      'DT_RUNTIME_LIFECYCLE_TEST': '1',
+    },
+  );
+  _expect(
+    result.status == 0,
+    'shutdown fault application exited with status ${result.status}; '
+    'stdout=${result.stdoutText.trim()} stderr=${result.stderrText.trim()}',
+  );
+  _expect(
+    result.stderrText.trim().isEmpty,
+    'shutdown fault application wrote stderr: ${result.stderrText.trim()}',
+  );
+  final RegExp summary = RegExp(
+    r'^NATIVE_SHUTDOWN_FAULT malformed_errors=1 late_owner_events=0 '
+    r'double_dispose=true continued_events=1 baseline=([0-9]+) '
+    r'final=([0-9]+)$',
+    multiLine: true,
+  );
+  final RegExpMatch? summaryMatch = summary.firstMatch(result.stdoutText);
+  _expect(summaryMatch != null, 'shutdown fault summary is missing');
+  _expect(
+    summaryMatch!.group(1) == summaryMatch.group(2),
+    'shutdown faults changed the native handle baseline',
+  );
+  _expect(
+    RegExp(
+          r'^NATIVE_SHUTDOWN_FAULT_FINAL handles=0$',
+          multiLine: true,
+        ).allMatches(result.stdoutText).length ==
+        1,
+    'shutdown fault cleanup did not report exactly one zero-handle result',
+  );
+  const List<String> expectedLifecycle = <String>[
+    'root-start:0',
+    'worker-start:1',
+    'worker-ready:1',
+    'root-ready:1',
+    'worker-request:1',
+    'worker-unexpected-exit:1',
+    'worker-exit:1',
+    'root-exit:1',
+  ];
+  final RegExp lifecycleLine = RegExp(
+    r'^RUNTIME_LIFECYCLE event=([a-z-]+) '
+    r'scenario=worker-unexpected-exit generation=([0-9]+)$',
+  );
+  final List<String> lifecycle = <String>[];
+  for (final String line in result.stdoutText.split('\n')) {
+    final RegExpMatch? match = lifecycleLine.firstMatch(line);
+    if (match != null) {
+      lifecycle.add('${match.group(1)}:${match.group(2)}');
+    }
+  }
+  _expect(
+    _sameStrings(lifecycle, expectedLifecycle),
+    'shutdown fault lifecycle $lifecycle != $expectedLifecycle',
+  );
+  _expectWorkerProcessContract(
+    result,
+    scenario: 'worker-unexpected-exit',
+    expectedCount: 1,
+  );
+  stdout.writeln(
+    'RUNTIME_SHUTDOWN_FAULT_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'baseline=${summaryMatch.group(1)} '
+    'elapsed_ms=${result.elapsed.inMilliseconds}',
+  );
+}
+
 bool _sameStrings(List<String> left, List<String> right) {
   if (left.length != right.length) {
     return false;
@@ -1216,6 +1299,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.resource || options.suite == _Suite.all) {
       await _runResource(options, invocation);
+    }
+    if (options.suite == _Suite.fault || options.suite == _Suite.all) {
+      await _runShutdownFaults(options, invocation);
     }
   } on Object catch (error) {
     stderr.writeln('RUNTIME_INTEGRATION_FAIL mode=${options.mode.name} $error');

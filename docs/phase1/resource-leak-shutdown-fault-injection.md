@@ -192,6 +192,29 @@ M1 matrix is an acceptance checkpoint that depends on both.
   handle-lifetime acceptance test; custom-view attachment remains covered by
   the normal smoke suite.
 
+### 2026-09-04 — event fault-injection seam decision
+
+- The native Runner deliberately installs a typed `NativeEvent` poster whose
+  encoder rejects invalid records before `Dart_PostCObject`. Making that
+  production encoder emit malformed records would weaken its contract and add
+  a second untyped native callback solely for tests.
+- The Dart application already centralizes every delivered port message in
+  `AppKitApplication._handleRawEvent`; unit fixtures inject into that exact
+  method through a provided event stream. The smallest reusable integration
+  seam is therefore a separate `package:dart_appkit/testing.dart` library which
+  forwards a raw object to the same decoder/routing method and can reveal a
+  window handle only to test code.
+- Adding the seam to the main `dart_appkit.dart` export was rejected because
+  raw events and handles are not production application concepts. Keeping it
+  in an explicitly imported testing library avoids broadening the ordinary API
+  while still compiling the exercised path into both product modes.
+- A product fault run will create a temporary window, subscribe to its stream,
+  save its generation-checked handle through test support, dispose it twice,
+  inject a valid window-closed envelope for that disposed handle, then inject a
+  non-list malformed record. It will observe one application stream error, no
+  per-window late delivery, an unchanged native baseline, and successful
+  worker-crash containment before closing normally.
+
 ## Failed attempts and corrections
 
 - The first focused `dart format` invocation formatted its one changed file but
@@ -234,6 +257,31 @@ M1 matrix is an acceptance checkpoint that depends on both.
   and both-mode Make targets. The launcher continues to validate worker PID
   reaping and private completion metadata for the stress invocation.
 
+### 2026-09-04 — bounded shutdown fault injection
+
+- Added `package:dart_appkit/testing.dart`, a deliberately separate test-only
+  export with raw-event delivery and generation-checked window-handle access.
+  The ordinary `dart_appkit.dart` surface and native ABI are unchanged.
+- The reusable seam rejects detached/terminated applications and forwards into
+  the exact decoder, application broadcast, weak owner lookup, cached-state,
+  and owner-routing path used after native port delivery.
+- Added dependency tests which dispose a window twice, inject its valid late
+  close event, inject malformed non-list data, and then inject a valid
+  application event. They prove no late owner delivery, one surfaced format
+  error, and continued stream/state handling.
+- Added an integration-gated terminal option tied to the existing
+  `worker-unexpected-exit` scenario. The live product repeats the same late,
+  malformed, continued-event, and double-dispose checks, asserts that its
+  native handle baseline is unchanged, then crashes and reaps the official
+  worker before ordinary application teardown.
+- The main application event handler contains `FormatException` only while the
+  explicit shutdown-fault gate is active. Other event errors and all ordinary
+  launches retain the existing fail-closed behavior.
+- Added one shared fault-suite implementation and Developer, Release, and
+  both-mode Make targets. Each run requires the exact lifecycle sequence, zero
+  final native handles, no stderr, bounded exit, worker PID absence, and valid
+  completion diagnostics.
+
 ## Validation record
 
 ### Focused source checks
@@ -258,3 +306,33 @@ M1 matrix is an acceptance checkpoint that depends on both.
   produced valid owner-only `root-stopped` local diagnostics metadata.
 - The product resource-leak stress subtask is complete. The bounded shutdown
   fault-injection subtask remains next; no Phase 2 work has started.
+
+### Reusable event seam
+
+- `make dart-test` passed analysis, raw-event/late-owner coverage, every other
+  Dart API fixture, and launcher tests before the dependency checkpoint.
+- The reusable seam was committed in the adjacent `dart_appkit` repository as
+  `52ddd2c` (`Add raw event testing hooks`).
+- `make test` passed scaffold/header validation, all native bridge tests,
+  Runner argument/shell/message-pump/event-encoder tests, Dart analysis/API and
+  launcher tests, example analysis/Kernel compilation, real FFI smoke, and
+  legacy event fallback after that commit.
+
+### Product shutdown fault integration
+
+- `make runtime-source-check` passed after the product changes: all formatting,
+  C/C++ header checks, plist lint, Dart analysis/unit/lifecycle tests, runtime
+  diagnostics native tests, and TerminalMetalView native tests.
+- `make RUNTIME_ARCH=arm64 runtime-shutdown-fault-integration` rebuilt both
+  products with dependency revision `52ddd2c` and passed the identical fault
+  suite in both modes.
+- Each run observed exactly one malformed error, zero disposed-owner late
+  deliveries, one valid event after the malformed record, an idempotent double
+  dispose, `baseline=12` and unchanged fault-local handle count, then zero
+  handles after full product cleanup.
+- Developer JIT contained/reaped the distinct-PID crashed worker and exited in
+  1,211 ms. Release AOT did the same in 659 ms. Both emitted no stderr, stayed
+  inside the 12-second deadline, left every recorded worker PID absent, and
+  produced valid owner-only `root-stopped` completion metadata.
+- The bounded shutdown fault-injection subtask is complete. M1/arm64 acceptance
+  and Phase 1 closeout is now the first unchecked subtask.

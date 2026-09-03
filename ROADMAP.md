@@ -553,7 +553,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase1/resource-leak-shutdown-fault-injection.md`](docs/phase1/resource-leak-shutdown-fault-injection.md)
   を参照して実施する）
   - [x] product resource-leak stress gate
-  - [ ] bounded shutdown fault injection
+  - [x] bounded shutdown fault injection
   - [ ] M1/arm64 acceptance と Phase 1 closeout
 
 終了条件:
