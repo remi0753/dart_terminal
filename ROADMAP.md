@@ -532,7 +532,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して実施する）
   - [x] event protocol v4 と opt-in application/window lifecycle request/reply
   - [x] general pasteboard plain-text snapshot/write/clear API
-  - [ ] menu/menu-item ownership/action API と main-menu attachment
+  - [x] menu/menu-item ownership/action API と main-menu attachment
   - [ ] Dart Terminal の M1 Developer JIT / Release AOT 統合受け入れ
 - [ ] TerminalMetalView を attach できる generic custom-view boundary
 - [ ] macOS unified logging と local crash metadata

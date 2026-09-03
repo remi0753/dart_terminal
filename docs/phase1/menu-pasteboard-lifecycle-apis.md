@@ -102,8 +102,8 @@ in their scheduled phases.
   action record in the first subtask even though menu object creation follows
   later.
 - `NSPasteboard` exposes an atomic text lookup plus `changeCount`; native tests
-  must use an isolated test-only named pasteboard rather than overwrite the
-  user's general clipboard.
+  must use an in-process double rather than connect to or overwrite the user's
+  general clipboard.
 - Existing legacy bridge fixtures omit additive symbols. Every new Dart FFI
   lookup must remain optional and report stable unsupported-version status
   only when the new operation is used.
@@ -157,7 +157,7 @@ is allowed.
 
 - Add UTF-8 snapshot/read, replace/write, clear, and change-count C/Dart APIs
   with strict outputs and optional legacy symbol resolution.
-- Test native conversion against an isolated named pasteboard and Dart behavior
+- Test native conversion against an in-process pasteboard double and Dart behavior
   through the fake backend; do not read or overwrite the user's clipboard in
   automated reusable tests.
 - Completion: empty versus absent text, Unicode, embedded NUL, change counts,
@@ -228,7 +228,7 @@ reusable revisions for all three API families.
   analysis checks after each reusable subtask, followed by full `make test`.
 - Use deterministic poster/fake-stream fixtures for every v4 payload, source
   domain, request/reply transition, suppression path, and malformed record.
-- Use an isolated test-only `NSPasteboard` inside native tests and fake bindings for
+- Use an in-process pasteboard double inside native tests and fake bindings for
   Dart tests. Reserve general-pasteboard access for the real product adapter.
 - Run the real reusable hello smoke after lifecycle and menu milestones.
 - Run Dart Terminal `runtime-source-check`, both arm64 builds and bundle audits,
@@ -276,7 +276,7 @@ reusable revisions for all three API families.
   `windowShouldClose:` because they violate the existing run-loop boundary and
   can deadlock AppKit. Selected operation-ID request/reply over the native port.
 - Rejected using the user's general pasteboard in automated native tests.
-  Internal helpers accept an isolated test-only named pasteboard while public C calls
+  Internal helpers accept an in-process pasteboard double while public C calls
   select the general pasteboard.
 - Split the item before implementation because versioned lifecycle semantics,
   pasteboard data transfer, menu ownership/actions, and two-mode product
@@ -351,11 +351,12 @@ reusable revisions for all three API families.
   immutable `PasteboardTextSnapshot` values, rejects use after application
   termination, and keeps all four new symbol lookups optional so the legacy
   native fixture continues to load and reports unsupported only on use.
-- Native tests use a private named pasteboard, never the general pasteboard.
-  The first ten-run audit found that globally retained one-off unique
-  pasteboards exhaust the service and eventually return `nil`; the fixture now
-  reuses one test name and calls `releaseGlobally`. The rebuilt suite then
-  passed ten consecutive executions.
+- Native tests use an in-process pasteboard double, never the general
+  pasteboard. The first ten-run audit found that globally retained one-off
+  unique pasteboards exhaust the service and eventually return `nil`. Reusing
+  and releasing one private name passed that immediate repeat, but a later
+  post-GUI audit reproduced service exhaustion; removing the unit suite's
+  external pasteboard-server dependency is the durable isolation boundary.
 - Final verification passed the complete `dart_appkit make test` suite, C/C++
   header checks, warning-as-error native formatting, Dart analysis and API
   tests, real-dylib FFI and legacy-fixture smokes, 28-symbol export audit,
@@ -366,3 +367,73 @@ reusable revisions for all three API families.
   as `f46d89853348702c3fc00e1c0c91d20ca51000bc` (`Add plain-text pasteboard
   snapshots`). Menu ownership/action work may now begin from that clean
   prerequisite.
+
+### 2026-09-04 — menu implementation decision
+
+- The C surface will create menus, actionable items, and separators; add items;
+  attach or clear submenus; toggle item enablement; attach or clear the
+  application's main menu; and explicitly perform an item action for
+  deterministic integration testing. Strings are copied UTF-8 and shortcut
+  modifiers accept only the seven already published stable bits.
+- A registry menu handle owns an `NSMenu`. A menu-item handle owns a small
+  native target plus its `NSMenuItem`; the target posts the already-defined v4
+  action record using that item handle. Releasing an item first clears target,
+  action, handle, and enabled state, so an `NSMenu` retaining the item cannot
+  emit a late event through a stale identity.
+- AppKit attachment relationships remain borrowed at the registry boundary.
+  Dart `Menu` retains added `MenuItem` wrappers, `MenuItem` retains its submenu,
+  and `AppKitApplication` retains its main menu. Cross-application attachments
+  are rejected before FFI. Releasing the current main-menu handle detaches it
+  from `NSApplication`; releasing a submenu handle leaves any native borrowed
+  attachment alive but invalidates its public registry lease.
+- The Dart application will maintain a generation-safe weak menu-item routing
+  table alongside its window table. Every valid action remains visible on the
+  application event stream, while a live matching wrapper also receives it on
+  its item-local broadcast stream. Legacy symbol absence fails only when a menu
+  operation is attempted.
+- The first focused run passed all native menu tests, then Dart analysis found
+  that promotion of the decoded base event did not survive into the later
+  item-dispatch branch. Rechecking `event is MenuItemInvokedEvent` at that exact
+  call site preserves the runtime invariant and gives the dispatch method its
+  precise type; no native or public API behavior changed.
+- The first post-GUI ten-process audit also showed that `mainMenu = nil` may
+  cause AppKit to install a replacement empty menu and that its pasteboard
+  service can refuse private names under rapid process churn. The assertions
+  now prove detachment from the released menu rather than a `nil` implementation
+  detail, and pasteboard conversion uses its in-process double. Both changes
+  retain the public ownership and privacy conditions.
+
+### 2026-09-04 — menu ownership and actions complete
+
+- Added independent menu/menu-item registry kinds and eight additive C/Dart
+  operations covering menu, actionable-item and separator creation; item and
+  submenu attachment; enabled state; application main-menu attachment; and
+  deterministic action performance. UTF-8 is copied, only stable modifier bits
+  are accepted, and every new FFI symbol remains optional for legacy loading.
+- Native action targets post the reserved v4 record with the menu-item handle,
+  matching generation, monotonic timestamp, and zero operation ID. A v1-v3
+  sink suppresses it. Dart publishes each decoded action on the application
+  stream and routes it through a weak handle map to the matching live item's
+  stream; mismatched generations and disposed-item routing are covered.
+- Attachment never consumes a registry lease. Dart retains added item,
+  submenu, and main-menu wrappers and rejects cross-application graphs.
+  Item release disables and disconnects the native target before invalidation;
+  current-main-menu release detaches the object. Wrapper ownership state now
+  changes only after native release succeeds, with injected failures proving
+  that attachment and event routing remain intact on an unsuccessful release.
+- Native tests cover titles, Unicode, shortcuts, separators, enabled state,
+  wrong/stale/type-mismatched handles, old-protocol suppression, late actions,
+  detachment, all off-main guards, and zeroed creation outputs. Dart tests add
+  local/application routing, generations, immutable ownership views, native
+  failures, legacy protocol rejection, and cross-application guards.
+- Final verification passed the complete reusable suite, ten consecutive
+  native executions, native/Dart format audits, a 36-symbol export audit,
+  `git diff --check`, `make engine-check`, and downstream Dart Terminal
+  `make runtime-source-check`. The real Engine-backed GUI performed the Quit
+  menu action, delivered it to Dart, completed close operation 1, released all
+  handles, and exited 0. The official SDK remained clean at
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`.
+- The reusable implementation and evidence were committed in `dart_appkit` as
+  `fc05f1b24f6f6e26f3cc8f0e1d4c512aab617dac` (`Add native menu ownership and
+  actions`). Dart Terminal product integration may now begin from all three
+  clean reusable prerequisites.
