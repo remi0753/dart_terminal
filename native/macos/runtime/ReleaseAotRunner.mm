@@ -21,6 +21,7 @@
 #include "ObjectRegistry.h"
 #include "RuntimeLifecycleBridge.h"
 #include "RuntimeWorkerConfiguration.h"
+#include "TerminalMetalView.h"
 #include "include/dart_api.h"
 #include "include/dart_engine.h"
 #include "include/dart_native_api.h"
@@ -448,6 +449,12 @@ int main(int argc, const char* argv[]) {
 
     NSApplication* application = [NSApplication sharedApplication];
     application.activationPolicy = NSApplicationActivationPolicyRegular;
+    std::string registration_error;
+    if (!dart_terminal::RegisterTerminalMetalView(&registration_error)) {
+      std::fprintf(stderr, "TerminalMetalView registration failed: %s\n",
+                   registration_error.c_str());
+      return dart_terminal::kRuntimeSoftwareExitCode;
+    }
     DartTerminalReleaseAotDelegate* delegate =
         [[DartTerminalReleaseAotDelegate alloc]
             initWithSnapshotPath:std::string(snapshot.fileSystemRepresentation)

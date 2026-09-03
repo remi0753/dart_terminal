@@ -158,11 +158,14 @@ override RUNTIME_DART_SOURCES := \
 	$(wildcard $(DART_APPKIT_ROOT)/packages/dart_appkit/lib/src/native/*.dart)
 override RUNTIME_BRIDGE_HEADERS := \
 	$(DART_APPKIT_ROOT)/native/bridge/include/dart_appkit.h \
+	$(DART_APPKIT_ROOT)/native/bridge/include/dart_appkit_custom_view.h \
 	$(DART_APPKIT_ROOT)/native/bridge/src/AppKitObjects.h \
 	$(DART_APPKIT_ROOT)/native/bridge/src/BridgeInternal.h \
+	$(DART_APPKIT_ROOT)/native/bridge/src/CustomViewRegistry.h \
 	$(DART_APPKIT_ROOT)/native/bridge/src/ObjectRegistry.h
 override RUNTIME_BRIDGE_SOURCES := \
 	$(DART_APPKIT_ROOT)/native/bridge/src/AppKitBridge.mm \
+	$(DART_APPKIT_ROOT)/native/bridge/src/CustomViewRegistry.mm \
 	$(DART_APPKIT_ROOT)/native/bridge/src/EventSink.mm \
 	$(DART_APPKIT_ROOT)/native/bridge/src/ObjectRegistry.mm \
 	$(DART_APPKIT_ROOT)/native/bridge/src/TextView.mm
@@ -170,6 +173,14 @@ override RUNTIME_LIFECYCLE_HEADER := \
 	$(PROJECT_ROOT)/native/macos/runtime/RuntimeLifecycleBridge.h
 override RUNTIME_LIFECYCLE_SOURCE := \
 	$(PROJECT_ROOT)/native/macos/runtime/RuntimeLifecycleBridge.mm
+override RUNTIME_TERMINAL_VIEW_HEADER := \
+	$(PROJECT_ROOT)/native/macos/renderer/TerminalMetalView.h
+override RUNTIME_TERMINAL_VIEW_SOURCE := \
+	$(PROJECT_ROOT)/native/macos/renderer/TerminalMetalView.mm
+override RUNTIME_TERMINAL_VIEW_TEST_SOURCE := \
+	$(PROJECT_ROOT)/native/macos/renderer/test/TerminalMetalViewTests.mm
+override RUNTIME_TERMINAL_VIEW_TEST_BINARY := \
+	$(PROJECT_ROOT)/build/native/terminal_metal_view_tests
 override RUNTIME_WORKER_CONFIGURATION_HEADER := \
 	$(PROJECT_ROOT)/native/macos/runtime/RuntimeWorkerConfiguration.h
 override RUNTIME_WORKER_CONFIGURATION_SOURCE := \
@@ -390,6 +401,7 @@ INTEL_EVIDENCE_OUTPUT ?=
 	release-aot-clean-sdk-test \
 	release-aot-integration release-aot-lifecycle release-aot-traffic \
 	runtime-source-check \
+	terminal-metal-view-test \
 	runtime-bundle-audit runtime-integration \
 	runtime-lifecycle-integration runtime-traffic-integration runtime-verify \
 	runtime-matrix-build runtime-matrix-audit runtime-matrix-integration \
@@ -426,6 +438,7 @@ help:
 	@echo "  make runtime-integration Run shared smoke, lifecycle, and traffic suites"
 	@echo "  make runtime-lifecycle-integration Run shared lifecycle faults"
 	@echo "  make runtime-traffic-integration Run bounded traffic in both modes"
+	@echo "  make terminal-metal-view-test Verify native custom-view attachment"
 	@echo "  make runtime-verify      Verify both modes for one explicit architecture"
 	@echo "  make runtime-matrix-build Build arm64 and x86_64 thin products"
 	@echo "  make runtime-matrix-audit Audit the complete thin-product matrix"
@@ -831,7 +844,8 @@ $(RELEASE_AOT_FINGERPRINT): runtime-fingerprint-force \
 
 $(DEVELOPER_JIT_RUNNER): $(RUNTIME_BRIDGE_HEADERS) \
 		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_LIFECYCLE_HEADER) \
-		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_WORKER_CONFIGURATION_HEADER) \
+		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_TERMINAL_VIEW_HEADER) \
+		$(RUNTIME_TERMINAL_VIEW_SOURCE) $(RUNTIME_WORKER_CONFIGURATION_HEADER) \
 		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) $(RUNTIME_JIT_RUNNER_HEADERS) \
 		$(RUNTIME_JIT_RUNNER_SOURCES) $(DART_APPKIT_ROOT)/Makefile \
 		$(DEVELOPER_JIT_FINGERPRINT)
@@ -845,13 +859,16 @@ $(DEVELOPER_JIT_RUNNER): $(RUNTIME_BRIDGE_HEADERS) \
 		-I$(DART_APPKIT_ROOT)/native/bridge/src \
 		-I$(DART_APPKIT_ROOT)/native/runner \
 		-I$(PROJECT_ROOT)/native/macos/runtime \
+		-I$(PROJECT_ROOT)/native/macos/renderer \
 		-I$(DART_ENGINE_ROOT)/runtime \
 		-I$(DART_ENGINE_ROOT)/runtime/engine \
 		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_LIFECYCLE_SOURCE) \
+		$(RUNTIME_TERMINAL_VIEW_SOURCE) \
 		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) \
 		$(RUNTIME_JIT_RUNNER_SOURCES) \
 		$(RUNTIME_ENGINE_JIT_LIBRARY) \
-		-framework AppKit -framework CoreFoundation \
+		-framework AppKit -framework CoreFoundation -framework Metal \
+		-framework MetalKit \
 		-Wl,-rpath,@executable_path/../Frameworks \
 		-Wl,-export_dynamic -o $@
 
@@ -1004,6 +1021,7 @@ $(RELEASE_AOT_WORKER_EXECUTABLE): $(RUNTIME_DART_SOURCES) \
 $(RELEASE_AOT_HOST): $(RELEASE_AOT_HOST_SOURCE) \
 		$(RUNTIME_BRIDGE_HEADERS) $(RUNTIME_BRIDGE_SOURCES) \
 		$(RUNTIME_LIFECYCLE_HEADER) $(RUNTIME_LIFECYCLE_SOURCE) \
+		$(RUNTIME_TERMINAL_VIEW_HEADER) $(RUNTIME_TERMINAL_VIEW_SOURCE) \
 		$(RUNTIME_WORKER_CONFIGURATION_HEADER) \
 		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) \
 		$(RUNTIME_MESSAGE_PUMP_HEADERS) $(RUNTIME_MESSAGE_PUMP_SOURCE) \
@@ -1018,14 +1036,17 @@ $(RELEASE_AOT_HOST): $(RELEASE_AOT_HOST_SOURCE) \
 		-I$(DART_APPKIT_ROOT)/native/bridge/src \
 		-I$(DART_APPKIT_ROOT)/native/runner \
 		-I$(PROJECT_ROOT)/native/macos/runtime \
+		-I$(PROJECT_ROOT)/native/macos/renderer \
 		-I$(DART_ENGINE_ROOT)/runtime \
 		-I$(DART_ENGINE_ROOT)/runtime/engine \
 		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_LIFECYCLE_SOURCE) \
+		$(RUNTIME_TERMINAL_VIEW_SOURCE) \
 		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) \
 		$(RUNTIME_MESSAGE_PUMP_SOURCE) \
 		$(RUNTIME_EVENT_ENCODER_SOURCE) \
 		$(RELEASE_AOT_HOST_SOURCE) $(RUNTIME_ENGINE_AOT_LIBRARY) \
-		-framework AppKit -framework CoreFoundation \
+		-framework AppKit -framework CoreFoundation -framework Metal \
+		-framework MetalKit \
 		-Wl,-rpath,@executable_path/../Frameworks \
 		-Wl,-export_dynamic -o $@
 
@@ -1149,7 +1170,9 @@ runtime-source-check: runtime-dart-tool-check
 		bin lib test tool benchmark
 	/usr/bin/xcrun clang-format --style=file:$(DART_APPKIT_ROOT)/.clang-format \
 		--dry-run --Werror $(RUNTIME_LIFECYCLE_HEADER) \
-		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_WORKER_CONFIGURATION_HEADER) \
+		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_TERMINAL_VIEW_HEADER) \
+		$(RUNTIME_TERMINAL_VIEW_SOURCE) $(RUNTIME_TERMINAL_VIEW_TEST_SOURCE) \
+		$(RUNTIME_WORKER_CONFIGURATION_HEADER) \
 		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) $(RUNTIME_JIT_MAIN_SOURCE) \
 		$(RUNTIME_EVENT_ENCODER_SOURCE) $(RELEASE_AOT_HOST_SOURCE)
 	/usr/bin/xcrun clang -x c -std=c11 -Wall -Wextra -Wpedantic -Werror \
@@ -1160,6 +1183,24 @@ runtime-source-check: runtime-dart-tool-check
 		$(DEVELOPER_JIT_INFO_PLIST) $(RELEASE_AOT_INFO_PLIST)
 	"$(RUNTIME_DART_EXECUTABLE)" analyze
 	"$(RUNTIME_DART_EXECUTABLE)" run test/run_tests.dart
+	@$(MAKE) terminal-metal-view-test
+
+$(RUNTIME_TERMINAL_VIEW_TEST_BINARY): $(RUNTIME_BRIDGE_HEADERS) \
+		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_TERMINAL_VIEW_HEADER) \
+		$(RUNTIME_TERMINAL_VIEW_SOURCE) $(RUNTIME_TERMINAL_VIEW_TEST_SOURCE)
+	@mkdir -p $(dir $@)
+	"$(CLANGXX)" $(NATIVE_FLAGS) -fblocks -fvisibility=hidden \
+		-arch $(HOST_ARCH) \
+		-I$(DART_APPKIT_ROOT)/native/bridge/include \
+		-I$(DART_APPKIT_ROOT)/native/bridge/src \
+		-I$(PROJECT_ROOT)/native/macos/renderer \
+		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_TERMINAL_VIEW_SOURCE) \
+		$(RUNTIME_TERMINAL_VIEW_TEST_SOURCE) \
+		-framework AppKit -framework CoreFoundation -framework Metal \
+		-framework MetalKit -o $@
+
+terminal-metal-view-test: $(RUNTIME_TERMINAL_VIEW_TEST_BINARY)
+	$(RUNTIME_TERMINAL_VIEW_TEST_BINARY)
 
 runtime-bundle-audit: developer-jit-build release-aot-build
 	@$(MAKE) developer-jit-audit

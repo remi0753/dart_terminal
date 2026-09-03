@@ -539,7 +539,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase1/terminal-metal-view-boundary.md`](docs/phase1/terminal-metal-view-boundary.md)
   を参照して実施する）
   - [x] `dart_appkit` の registered custom-view provider と Dart `View` factory
-  - [ ] terminal-owned `TerminalMetalView` shell と native attachment contract
+  - [x] terminal-owned `TerminalMetalView` shell と native attachment contract
   - [ ] Dart Terminal の M1 Developer JIT / Release AOT 統合受け入れ
 - [ ] macOS unified logging と local crash metadata
 - [ ] native/Dart の resource leak test と shutdown fault injection

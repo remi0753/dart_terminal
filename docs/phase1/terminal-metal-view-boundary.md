@@ -261,3 +261,38 @@ accepted before the terminal native contract is committed.
   (`Add registered custom view providers`). Its worktree was clean immediately
   after commit; the terminal implementation will consume this committed
   boundary rather than an untracked dependency state.
+
+### 2026-09-04 — Subtask 2: TerminalMetalView shell
+
+- Added `native/macos/renderer/TerminalMetalView.{h,mm}` as a Dart
+  Terminal-owned `MTKView` subclass. Construction requires the system Metal
+  device, uses flipped coordinates and width/height autoresizing, and remains
+  paused with explicit invalidation enabled. It has no delegate, command queue,
+  pipeline, shader, buffers, display callback, or renderer submission API.
+- Both Developer JIT and Release AOT hosts explicitly register the provider on
+  the process main thread after creating `NSApplication` and before Dart
+  startup. A registration error is a host-startup software failure rather than
+  a latent Dart-side failure.
+- Updated the shared bridge source list for `CustomViewRegistry`, added the
+  terminal view source/header to both host dependency graphs and link lines,
+  and linked AppKit, Metal, and MetalKit identically in both modes.
+- Added `native/macos/renderer` to the canonical runtime provenance directory
+  list. The source fingerprint therefore covers the view, registration hook,
+  and native contract test rather than permitting a stale product host.
+- Added `terminal-metal-view-test` and made it part of
+  `runtime-source-check`. The native test registers the provider twice,
+  creates it through `da_view_create_custom`, verifies its exact subclass and
+  shell state, attaches it as the window content/first-responder view, then
+  proves stale/double-handle rejection, the independent AppKit retain edge,
+  and a final live-handle count of zero.
+- The first standalone native contract run passed on Apple M1/arm64 with a
+  non-null system Metal device. The first full source-check attempt failed only
+  its format audit because an earlier formatter invocation had not selected
+  the adjacent `dart_appkit` style file and had reformatted the touched native
+  files with a different pointer style. Re-running the formatter with the
+  explicit project style restored the established formatting; no semantic
+  workaround was needed.
+- The corrected `runtime-source-check` passed Dart formatting, clang-format,
+  C11/C++20 lifecycle-header compilation, plist validation, analysis, Dart
+  tests, and the rebuilt native contract. Product binary builds and real GUI
+  creation remain intentionally assigned to subtask 3.

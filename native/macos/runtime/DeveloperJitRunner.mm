@@ -14,6 +14,7 @@
 #include "RunnerConfiguration.h"
 #include "RuntimeLifecycleBridge.h"
 #include "RuntimeWorkerConfiguration.h"
+#include "TerminalMetalView.h"
 
 #ifndef DT_RUNTIME_WORKER_EXECUTABLE
 #error "DT_RUNTIME_WORKER_EXECUTABLE must identify the trusted Dart executable"
@@ -86,6 +87,12 @@ int main(int argc, const char* argv[]) {
 
     NSApplication* application = [NSApplication sharedApplication];
     [application setActivationPolicy:NSApplicationActivationPolicyRegular];
+    std::string registration_error;
+    if (!dart_terminal::RegisterTerminalMetalView(&registration_error)) {
+      std::cerr << "TerminalMetalView registration failed: "
+                << registration_error << '\n';
+      return dart_terminal::kRuntimeSoftwareExitCode;
+    }
     DartTerminalDeveloperJitDelegate* delegate =
         [[DartTerminalDeveloperJitDelegate alloc]
             initWithConfiguration:configuration];

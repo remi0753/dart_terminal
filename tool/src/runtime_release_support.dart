@@ -38,6 +38,7 @@ const List<String> runtimeProjectProvenanceFiles = <String>[
 const List<String> runtimeProjectProvenanceDirectories = <String>[
   'bin',
   'lib',
+  'native/macos/renderer',
   'native/macos/runtime',
 ];
 
