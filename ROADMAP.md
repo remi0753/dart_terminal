@@ -5,7 +5,7 @@
 Ghostty 調査基準: `ghostty-org/ghostty` main の
 `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`  
 ローカル基準: `dart_appkit` の
-`9815e77e8a3a1e9f6c2958e03424eb1c78a62571`
+`62d0537a09f75320318542b2d3438134183ac215`
 
 主要な開発・実機受け入れ baseline は Apple M1/arm64 とする。x86_64 cross-build、
 Rosetta compatibility、Universal audit、Intel-native 実機証跡は主要ゴール後の
@@ -520,6 +520,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [x] native event wire format の versioning と backward compatibility
 - [x] handle registry に thread-domain と asynchronous destruction を追加
 - [ ] generic `View`、focus、visibility、occlusion、backing scale、screen event
+  （分割と完了条件は
+  [`docs/phase1/generic-view-window-state-events.md`](docs/phase1/generic-view-window-state-events.md)
+  を参照して実施する）
+  - [x] generic `View` の型・所有権・create/attach ABI と Dart facade
+  - [ ] event protocol v3 と focus/visibility/occlusion/backing-scale/screen event
+  - [ ] Dart Terminal の M1 Developer JIT / Release AOT 統合受け入れ
 - [ ] menu、pasteboard、application/window lifecycle API
 - [ ] TerminalMetalView を attach できる generic custom-view boundary
 - [ ] macOS unified logging と local crash metadata
