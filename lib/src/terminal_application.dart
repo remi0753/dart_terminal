@@ -18,6 +18,8 @@ Application options:
 const String _runtimeWorkerExecutablePrefix = '--runtime-worker-executable=';
 const String _runtimeWorkerKernelPrefix = '--runtime-worker-kernel=';
 const String _runtimeWorkerModePrefix = '--runtime-worker-mode=';
+const String _terminalMetalViewProviderIdentifier =
+    'dart_terminal.TerminalMetalView';
 
 enum _RuntimeWorkerMode { kernel, selfContained }
 
@@ -187,7 +189,7 @@ final class TerminalApplication {
     final RuntimeLifecycleScenario scenario = options.runtimeLifecycleScenario;
     _writeLifecycleEvent(scenario, 'root-start', 0);
     final AppKitApplication application = await AppKitApplication.attach();
-    TextView? textView;
+    View? contentView;
     Window? window;
     TerminalSession? session;
     StreamSubscription<WindowEvent>? eventSubscription;
@@ -202,32 +204,46 @@ final class TerminalApplication {
     final Completer<void> closed = Completer<void>();
     final bool emitNativeEventWireObservation =
         Platform.environment['DT_RUNTIME_EVENT_WIRE_TEST'] == '1';
+    final bool useTerminalMetalView =
+        Platform.environment['DT_RUNTIME_CUSTOM_VIEW_TEST'] == '1';
 
     try {
-      final TextView createdTextView = TextView();
-      textView = createdTextView;
+      final TextView? createdTextView = useTerminalMetalView
+          ? null
+          : TextView();
+      final View createdContentView =
+          createdTextView ?? View.custom(_terminalMetalViewProviderIdentifier);
+      contentView = createdContentView;
       final Window createdWindow =
           Window(
               frame: const Rect.fromLTWH(100, 90, 920, 580),
               title: 'Dart Terminal',
             )
-            ..contentView = createdTextView
+            ..contentView = createdContentView
             ..defersCloseRequests = true;
       window = createdWindow;
       application.defersTerminationRequests = true;
+      if (useTerminalMetalView) {
+        stdout.writeln(
+          'NATIVE_CUSTOM_VIEW '
+          'provider=$_terminalMetalViewProviderIdentifier attached=true',
+        );
+      }
 
       late final TerminalSession createdSession;
       createdSession = TerminalSession(
         initialWorkingDirectory: options.initialWorkingDirectory,
         onChanged: () {
-          if (!createdTextView.isDisposed) {
+          if (createdTextView != null && !createdTextView.isDisposed) {
             createdTextView.text = createdSession.render();
           }
         },
         onExitRequested: createdWindow.requestClose,
       );
       session = createdSession;
-      createdTextView.text = createdSession.render();
+      if (createdTextView != null) {
+        createdTextView.text = createdSession.render();
+      }
 
       Menu ownMenu(Menu menu) {
         menus.add(menu);
@@ -716,8 +732,8 @@ final class TerminalApplication {
       if (window != null && !window.isDisposed) {
         window.dispose();
       }
-      if (textView != null && !textView.isDisposed) {
-        textView.dispose();
+      if (contentView != null && !contentView.isDisposed) {
+        contentView.dispose();
       }
       _writeLifecycleEvent(scenario, 'root-exit', lifecycle?.generation ?? 0);
       await application.terminate();

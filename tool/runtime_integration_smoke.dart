@@ -407,7 +407,10 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     options,
     invocation,
     const <String>['--auto-close-after=1'],
-    environment: const <String, String>{'DT_RUNTIME_EVENT_WIRE_TEST': '1'},
+    environment: const <String, String>{
+      'DT_RUNTIME_EVENT_WIRE_TEST': '1',
+      'DT_RUNTIME_CUSTOM_VIEW_TEST': '1',
+    },
   );
   _expect(
     observation.status == 0,
@@ -419,6 +422,8 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
   );
   for (final String expected in <String>[
     'Dart Terminal is attached to the AppKit main thread.',
+    'NATIVE_CUSTOM_VIEW '
+        'provider=dart_terminal.TerminalMetalView attached=true',
     'Automated close scheduled after 1 seconds.',
     'Dart Terminal shut down cleanly.',
   ]) {

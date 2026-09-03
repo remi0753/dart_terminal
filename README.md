@@ -34,6 +34,8 @@ parser corpus、性能 baseline は、独立した Dart/native spike で実機�
   ID、focus/visibility/occlusion/backing scale/screen state、application/window
   lifecycle、menu action）と、旧 v1/v2/v3 endpoint との compatibility negotiation
 - generic `View` / `TextView` 境界と、型を保った content-view attachment
+- 登録名から terminal-owned `TerminalMetalView : MTKView` を生成・attach できる
+  custom-view 境界（renderer、shader、frame submission は Phase 4）
 - generation／AppKit-main domain付きnative handle registryと、off-domain
   releaseを即時無効化してmain queueで完了するasynchronous destruction
 - 最小の Application/File/Edit menu、明示的な Paste 時だけ行う plain-text
@@ -167,6 +169,7 @@ bin/main.dart                         エントリーポイント
 lib/src/terminal_application.dart    AppKit ウィンドウとキーイベント
 lib/src/runtime_lifecycle.dart       root/worker lifecycle coordinator
 native/macos/runtime/                JIT/AOT lifecycle host integration
+native/macos/renderer/               TerminalMetalView shell と native contract
 lib/src/terminal_session.dart        コマンド実行バックエンド
 lib/src/terminal_buffer.dart         入力、履歴、スクロールバック
 test/run_tests.dart                  UI 非依存部分の最小テスト
@@ -175,14 +178,15 @@ test/run_tests.dart                  UI 非依存部分の最小テスト
 ## 製品実装へ進む際の境界
 
 通常エントリーポイントは一つのコマンドごとに `zsh -lc` を起動する
-「コマンドコンソール」です。現時点の `dart_appkit` 公開 API は
-単一 `TextView` へのプレーンテキスト描画までなので、対話型 TUI を含む
+「コマンドコンソール」で、表示には引き続き `TextView` を使います。一方、
+`dart_appkit` の登録済み custom-view provider と terminal-owned
+`TerminalMetalView` の生成・attach 境界は用意済みです。対話型 TUI を含む
 本格的なターミナルエミュレーターには、次の実装が必要です。
 
 1. `forkpty(3)` / `openpty(3)` を扱う macOS FFI ブリッジ
 2. 継続するシェルセッションとウィンドウサイズ通知 (`TIOCSWINSZ`)
 3. ANSI / VT シーケンスのパーサーと画面バッファ
-4. 色・属性・カーソル・選択・スクロールを描画する AppKit ビュー
+4. 色・属性・カーソル・選択・スクロールを描画する CoreText/Metal renderer
 5. IME、クリップボード、キーバインドの仕上げ
 
 `TerminalSession` が将来の PTY バックエンドとの交換点、`TerminalBuffer` が

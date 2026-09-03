@@ -1,6 +1,6 @@
 # TerminalMetalView custom-view boundary
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-04
 - Scope: first unchecked Phase 1 roadmap item only
 - Related: `ROADMAP.md` Phase 1, ADR-001, ADR-002, ADR-004,
@@ -296,3 +296,63 @@ accepted before the terminal native contract is committed.
   C11/C++20 lifecycle-header compilation, plist validation, analysis, Dart
   tests, and the rebuilt native contract. Product binary builds and real GUI
   creation remain intentionally assigned to subtask 3.
+
+### 2026-09-04 — Subtask 3: initial product build and audit finding
+
+- Added a private `DT_RUNTIME_CUSTOM_VIEW_TEST=1` launch gate to the Dart
+  application. The gated path creates the registered terminal provider through
+  `View.custom`, assigns it through the ordinary `Window.contentView` API, and
+  emits a machine-readable attachment marker. The default path still creates
+  the command-console `TextView`, so this acceptance seam does not prematurely
+  replace the usable Phase 1 UI.
+- Updated the shared real-GUI smoke to enable the gate and require the provider
+  identifier plus successful-attachment marker. Both runtime modes therefore
+  exercise the same public Dart/native creation and attachment contract.
+- `runtime-source-check` passed after the Dart integration changes. Fresh
+  arm64 Developer JIT and Release AOT product builds also completed, including
+  compilation of the custom-view registry and `TerminalMetalView` and linkage
+  of Metal and MetalKit in both launchers.
+- The first Developer JIT audit failed deterministically because the exact
+  launcher dependency policy still described the pre-Metal view host. The
+  observed dependency set added only the directly linked system Metal and
+  MetalKit frameworks; all existing system libraries and the mode-specific
+  Dart engine dependency remained unchanged. Updated the shared exact
+  allowlist for both modes instead of weakening dependency equality or audit
+  status checks. The failed receipt is intentionally not accepted as evidence;
+  both audits must be rerun and pass after rebuilding the fingerprinted input.
+
+### 2026-09-04 — Subtask 3: acceptance and completion
+
+- Added Metal and MetalKit to the launcher's exact system-dependency policy.
+  The correction remains fail-closed: the audit still compares the complete
+  dependency set, install names, rpaths, Mach-O layout, file inventory, and
+  signatures rather than accepting arbitrary frameworks.
+- Re-ran `runtime-source-check`; Dart formatting, native formatting, public
+  lifecycle-header C11/C++20 compilation, plist validation, static analysis,
+  Dart tests, and the `TerminalMetalView` native contract all passed.
+- Rebuilt and audited both M1/arm64 products. Developer JIT and Release AOT
+  audits each reported `RUNTIME_BUNDLE_AUDIT_PASS` with the new native source,
+  framework links, bundle inventory, and ad-hoc signing policy represented in
+  their evidence.
+- Launched both real GUI products through the shared smoke. Developer JIT
+  reported `RUNTIME_INTEGRATION_PASS` in 2300 ms and Release AOT in 1731 ms.
+  Each launch required the custom provider/attachment marker, the normal
+  lifecycle observations, clean shutdown, and zero leaked native handles.
+- The complete build-freshness suite passed, including 106 protected make
+  override checks, tool evidence, alias/replacement rules, and paths containing
+  spaces. The focused Developer JIT clean-SDK suite passed all 9 stable/rebuild
+  cases; the Release AOT suite passed all 19, including worker tamper,
+  executable, signing, and launcher rejection cases.
+- `unmodified-engine-sdk-clean` passed. The official Engine SDK remained clean
+  at `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`, and adjacent `dart_appkit`
+  remained clean at `c19071e1e90109626688ffda5212bb6bb143d2e6`.
+- The final status check found four uniquely named `.runtime-freshness-*`
+  fixture paths left by an earlier interrupted freshness run. Their contents
+  and generating test block were inspected, and only those temporary files and
+  directory were removed before staging; no source or user-owned file was
+  deleted.
+- Reviewed the task diff and `git diff --check`; no unrelated files, generated
+  artifacts, temporary debug changes, secrets, or whitespace errors were
+  present. The Metal renderer, drawable lifecycle, frame resources, shaders,
+  and terminal input integration remain explicitly assigned to later roadmap
+  phases. No new roadmap item was required.

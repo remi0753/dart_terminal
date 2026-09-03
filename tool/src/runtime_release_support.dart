@@ -1839,6 +1839,8 @@ const Set<String> _launcherSystemDependencies = <String>{
   '/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit',
   '/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation',
   '/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation',
+  '/System/Library/Frameworks/Metal.framework/Versions/A/Metal',
+  '/System/Library/Frameworks/MetalKit.framework/Versions/A/MetalKit',
   '/usr/lib/libobjc.A.dylib',
   '/usr/lib/libc++.1.dylib',
   '/usr/lib/libSystem.B.dylib',

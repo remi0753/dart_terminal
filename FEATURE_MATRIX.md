@@ -46,9 +46,11 @@ font、input、config、macOS UI、release workflow の実装とテストを確�
 優先する。
 
 現在の Dart Terminal は、M1/arm64 Developer JIT / Release AOT の未改変 AppKit
-main-thread root、独立した公式 Dart 子プロセス worker、generic `View` 境界を持つ単一
-`TextView`、v3 window-state event、コマンドごとの `zsh -lc` までである。旧 Engine
-改変経路と関連する来歴・監査・test code は削除済みである。
+main-thread root、独立した公式 Dart 子プロセス worker、generic `View` / `TextView`、
+登録済み custom-view provider と terminal-owned `TerminalMetalView` shell、v4 native
+event、コマンドごとの `zsh -lc` までである。通常表示はまだ `TextView` であり、Metal
+renderer は Phase 4 まで明示的に defer する。旧 Engine 改変経路と関連する来歴・監査・
+test code は削除済みである。
 下表の「現在」が `未実装` でも欠落ではなく、指定 Phase まで明示的に defer した
 backlog である。
 
@@ -62,7 +64,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | --- | --- | --- | --- | --- | --- |
 | RT-01 | release AOT root isolate が AppKit main thread に attach し、main run loop を所有しない | P0 | 1 | `G:macos/Sources/App/main.swift`, native macOS app lifecycle | M1 Developer/Release stock root 完了 |
 | RT-02 | pane ごとの長寿命 runtime worker と window ごとの render coordinator を起動、停止、異常回収できる | P0 | 1 | `G:src/termio/Thread.zig`, `G:src/renderer/Thread.zig` | M1 Developer/Release process worker の lifecycle/再生成/bounded traffic 完了、pane/render は後続 |
-| RT-03 | UI、PTY I/O、terminal state、render resource の thread/owner が一意 | P0 | 1 | `G:src/termio/mailbox.zig`, `G:src/renderer/message.zig` | M1 両 mode の root/process owner、v1–v4 event generation、generic View、window/application state、menu action、AppKit handle domain/async destruction 完了。PTY/render は後続 |
+| RT-03 | UI、PTY I/O、terminal state、render resource の thread/owner が一意 | P0 | 1 | `G:src/termio/mailbox.zig`, `G:src/renderer/message.zig` | M1 両 mode の root/process owner、v1–v4 event generation、generic/custom View、TerminalMetalView shell、window/application state、menu action、AppKit handle domain/async destruction 完了。PTY/render は後続 |
 | PTY-01 | 1 pane = 1 persistent PTY。slave が controlling terminal になり、新 session/process group を持つ | P0 | 2 | `G:src/pty.zig`, `G:src/pty.c`, `G:src/termio/Exec.zig` | Phase 0 gate |
 | PTY-02 | shell/command を `argv`、`envp`、cwd で起動し、shell interpolation を行わない | P0 | 2 | `G:src/Command.zig`, `G:src/termio/Exec.zig` | 未実装 |
 | PTY-03 | macOS login shell、`TERM`、`COLORTERM`、locale、initial cwd が zero-config で妥当 | P0 | 2 | `G:src/termio/Exec.zig`, `G:src/os/shell.zig` | 未実装 |
@@ -133,7 +135,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| REN-01 | `MTKView`/Metal lifecycle、drawable resize/backing scale、device/shader/drawable failure path | P0 | 4 | `G:src/renderer/Metal.zig`, `G:macos/Sources/Helpers/MetalView.swift` | Phase 0 gate |
+| REN-01 | `MTKView`/Metal lifecycle、drawable resize/backing scale、device/shader/drawable failure path | P0 | 4 | `G:src/renderer/Metal.zig`, `G:macos/Sources/Helpers/MetalView.swift` | Phase 0 gate に加え、Phase 1 で system device を持つ paused/on-demand TerminalMetalView shell の生成・attach 境界を完了。renderer lifecycle/failure path は Phase 4 |
 | REN-02 | background、cell background、glyph、decoration、cursor、selection を packed instance で描画 | P0 | 4 | `G:src/renderer/shaders/shaders.metal`, `G:src/renderer/cell.zig` | Phase 0 gate |
 | REN-03 | grayscale/color atlas、growth/eviction/generation validation | P0 | 4 | `G:src/font/Atlas.zig`, `G:src/renderer/generic.zig` | Phase 0 gate |
 | REN-04 | damage coalescing、stale generation discard、full snapshot は recovery/resize のみ | P0 | 4 | `G:src/renderer/row.zig`, `G:src/renderer/State.zig`, `G:src/renderer/message.zig` | ADR gate |
