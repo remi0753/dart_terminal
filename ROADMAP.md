@@ -1,6 +1,6 @@
 # Dart Terminal — Ghostty クラス品質への詳細ロードマップ
 
-最終更新: 2026-09-02<br>
+最終更新: 2026-09-04<br>
 対象: macOS 14 以降、Flutter 不使用  
 Ghostty 調査基準: `ghostty-org/ghostty` main の
 `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`  
@@ -519,13 +519,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] M1 の JIT/AOT 横断 lifecycle、性能、終了順序、clean SDK を検証して移行を閉じる
 - [x] native event wire format の versioning と backward compatibility
 - [x] handle registry に thread-domain と asynchronous destruction を追加
-- [ ] generic `View`、focus、visibility、occlusion、backing scale、screen event
+- [x] generic `View`、focus、visibility、occlusion、backing scale、screen event
   （分割と完了条件は
   [`docs/phase1/generic-view-window-state-events.md`](docs/phase1/generic-view-window-state-events.md)
   を参照して実施する）
   - [x] generic `View` の型・所有権・create/attach ABI と Dart facade
   - [x] event protocol v3 と focus/visibility/occlusion/backing-scale/screen event
-  - [ ] Dart Terminal の M1 Developer JIT / Release AOT 統合受け入れ
+  - [x] Dart Terminal の M1 Developer JIT / Release AOT 統合受け入れ
 - [ ] menu、pasteboard、application/window lifecycle API
 - [ ] TerminalMetalView を attach できる generic custom-view boundary
 - [ ] macOS unified logging と local crash metadata

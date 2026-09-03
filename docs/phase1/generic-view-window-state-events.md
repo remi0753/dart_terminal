@@ -1,6 +1,6 @@
 # Generic View and window-state events
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-04
 - Scope: first unchecked Phase 1 roadmap item only
 - Related: `ROADMAP.md` Phase 1, ADR-001, ADR-002, `dart_appkit`
@@ -323,3 +323,67 @@ Validation:
   `be09f1a8e8f9d867cdf8d255fd40586fc9df5cc2`
   (`Add versioned window state events`). Its worktree was clean immediately
   afterward.
+
+### 2026-09-04 — Subtask 3: product integration started
+
+- Confirmed Dart Terminal and `dart_appkit` were clean at the reusable v3
+  boundary before product edits. The only remaining ordered work is the M1
+  Developer JIT / Release AOT integration subtask.
+- The runtime manifest already derives `native_event_protocol_version` from
+  the package constant, so no new provenance field is required. Two freshness
+  fixtures and the real smoke assertion still expected the literal v2 value.
+- Selected one test-gated machine-readable line per new state family. The
+  product keeps normal output unchanged, exhaustively handles every sealed
+  event subtype, and the common integration harness will require a visible
+  window, positive scale, present positive-ID screen, and generation-safe v3
+  metadata before accepting either product mode.
+- The first direct format command formatted the integration file but then
+  failed while the Dart tool tried to update its user-level telemetry session
+  timestamp outside the workspace sandbox. Setting the commonly documented
+  analytics suppression variable did not change that tool behavior. Repeating
+  the same formatter with the required filesystem permission completed with
+  zero further changes; no product workaround or repository-local home was
+  introduced.
+
+### 2026-09-04 — Subtask 3: product integration and final acceptance
+
+- Updated Dart Terminal's exhaustive `WindowEvent` switch to consume every v3
+  state subtype. Normal product behavior remains policy-neutral; the existing
+  integration-only observation gate emits generation, protocol, operation,
+  timestamp, and normalized value fields for acceptance.
+- Strengthened the common runtime smoke so both modes require real focus,
+  visible, occlusion, positive backing-scale, present positive-display-ID
+  screen, and close records at protocol v3. Screen acceptance also requires
+  positive full and visible dimensions.
+- The runtime manifest already sourced the current protocol from
+  `dart_appkit`; both rebuilt manifests advertise value 3. Updated the two
+  literal freshness-fixture expectations from v2 to v3 without changing the
+  manifest schema or build topology.
+- Updated README and feature status for the generic view substrate and v3
+  state delivery. Fullscreen, display migration policy, rendering, menu,
+  pasteboard, and later lifecycle expansion remain explicitly outside this
+  completed item.
+
+Validation:
+
+- `make runtime-source-check` passed formatting, C11/C++20 headers, plist
+  lint, static analysis, and unit tests.
+- Both `developer-jit-build` and `release-aot-build` succeeded for arm64. The
+  aggregate bundle audit passed both modes, confirmed the clean reusable
+  revision `be09f1a8e8f9d867cdf8d255fd40586fc9df5cc2`, and recorded native event
+  protocol 3 in both version-9 build manifests.
+- The aggregate runtime integration passed normal smoke in Developer JIT and
+  Release AOT, including all five real state families and close. All 16
+  lifecycle scenarios passed in each mode with their expected exit classes.
+  Bounded traffic also passed in both modes with 384 explicit backpressure
+  rejections and complete forward progress.
+- Developer clean-SDK freshness passed official Engine/source-inventory,
+  worker Kernel/smoke, missing-worker and host-override rejection, plus 9
+  stable no-op and 9 regeneration cases. Release clean-SDK freshness passed
+  official Engine/source-inventory, self-contained worker/smoke, layout,
+  executable, tamper, signature, launcher/override rejection, plus 19 stable
+  no-op and 19 regeneration cases.
+- Final whitespace review passed. `dart_appkit` and the official SDK/Engine
+  checkout were clean at revisions `be09f1a8e8f9d867cdf8d255fd40586fc9df5cc2`
+  and `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`, respectively. No later roadmap
+  item was started and no additional roadmap item was discovered.

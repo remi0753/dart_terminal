@@ -578,7 +578,7 @@ Future<String> _verifyDeveloperManifest(
   );
   if (effective['worker_topology'] != 'official-dart-child-process' ||
       effective['worker_protocol_version'] != 1 ||
-      effective['native_event_protocol_version'] != 2 ||
+      effective['native_event_protocol_version'] != 3 ||
       effective['worker_payload_name'] != runtimeDeveloperWorkerPayloadName ||
       effective['worker_kernel_flags'] !=
           '--link-platform --no-embed-sources --verbosity=warning') {
@@ -1131,7 +1131,7 @@ Future<Map<String, Object?>> _verifyReleaseManifest(
   );
   if (effective['worker_topology'] != 'official-dart-child-process' ||
       effective['worker_protocol_version'] != 1 ||
-      effective['native_event_protocol_version'] != 2 ||
+      effective['native_event_protocol_version'] != 3 ||
       effective['worker_executable_name'] !=
           runtimeReleaseWorkerExecutableName ||
       effective['worker_executable_flags'] !=

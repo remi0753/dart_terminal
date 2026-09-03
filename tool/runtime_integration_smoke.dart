@@ -433,7 +433,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     );
   }
   final RegExp eventWire = RegExp(
-    r'^NATIVE_EVENT_WIRE negotiated=2 event=window-closed protocol=2 '
+    r'^NATIVE_EVENT_WIRE negotiated=3 event=window-closed protocol=3 '
     r'source_generation=[1-9][0-9]* operation_id=0 '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -442,6 +442,35 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     eventWire.hasMatch(observation.stdoutText),
     'missing current native event wire observation',
   );
+  final String statePrefix = r'^NATIVE_WINDOW_STATE negotiated=3 event=';
+  final String stateMetadata =
+      r' protocol=3 source_generation=[1-9][0-9]* operation_id=0 '
+      r'timestamp_ns=[1-9][0-9]* ';
+  RegExp stateEvent(String name, String payload) =>
+      RegExp('$statePrefix$name$stateMetadata$payload', multiLine: true);
+  final Map<String, RegExp> stateEvents = <String, RegExp>{
+    'focus': stateEvent('focus', r'value=(true|false)$'),
+    'visibility': stateEvent('visibility', r'value=true$'),
+    'occlusion': stateEvent('occlusion', r'value=(true|false)$'),
+    'backing-scale': stateEvent(
+      'backing-scale',
+      r'value=[1-9][0-9]*(\.[0-9]+)?$',
+    ),
+    'screen': stateEvent(
+      'screen',
+      r'present=true display_id=[1-9][0-9]* '
+          r'frame_width=[1-9][0-9]*(\.[0-9]+)? '
+          r'frame_height=[1-9][0-9]*(\.[0-9]+)? '
+          r'visible_width=[1-9][0-9]*(\.[0-9]+)? '
+          r'visible_height=[1-9][0-9]*(\.[0-9]+)?$',
+    ),
+  };
+  for (final MapEntry<String, RegExp> stateEvent in stateEvents.entries) {
+    _expect(
+      stateEvent.value.hasMatch(observation.stdoutText),
+      'missing native ${stateEvent.key} state observation',
+    );
+  }
   _expectWorkerProcessContract(
     observation,
     scenario: 'normal',

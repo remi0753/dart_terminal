@@ -30,8 +30,10 @@ parser corpus、性能 baseline は、独立した Dart/native spike で実機�
 - ウィンドウサイズに合わせた簡易表示行数の調整
 - AppKit main-thread root と公式 Dart 子プロセス worker の bounded lifecycle
   （M1/arm64 Developer JIT / Release AOT）
-- native event protocol v2（source generation、nanosecond timestamp、operation
-  ID）と、旧 v1 endpoint との双方向 compatibility negotiation
+- native event protocol v3（source generation、nanosecond timestamp、operation
+  ID、focus/visibility/occlusion/backing scale/screen state）と、旧 v1/v2
+  endpoint との compatibility negotiation
+- generic `View` / `TextView` 境界と、型を保った content-view attachment
 - generation／AppKit-main domain付きnative handle registryと、off-domain
   releaseを即時無効化してmain queueで完了するasynchronous destruction
 

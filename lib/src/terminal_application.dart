@@ -245,6 +245,63 @@ final class TerminalApplication {
             case WindowResizedEvent(:final height):
               createdSession.viewportRows = _rowsForHeight(height);
               createdSession.refresh();
+            case WindowFocusChangedEvent(:final isFocused):
+              if (emitNativeEventWireObservation) {
+                _writeWindowStateEvent(
+                  application,
+                  event,
+                  'focus',
+                  'value=$isFocused',
+                );
+              }
+            case WindowVisibilityChangedEvent(:final isVisible):
+              if (emitNativeEventWireObservation) {
+                _writeWindowStateEvent(
+                  application,
+                  event,
+                  'visibility',
+                  'value=$isVisible',
+                );
+              }
+            case WindowOcclusionChangedEvent(:final isOccluded):
+              if (emitNativeEventWireObservation) {
+                _writeWindowStateEvent(
+                  application,
+                  event,
+                  'occlusion',
+                  'value=$isOccluded',
+                );
+              }
+            case WindowBackingScaleChangedEvent(:final backingScaleFactor):
+              if (emitNativeEventWireObservation) {
+                _writeWindowStateEvent(
+                  application,
+                  event,
+                  'backing-scale',
+                  'value=$backingScaleFactor',
+                );
+              }
+            case WindowScreenChangedEvent(:final screen):
+              if (emitNativeEventWireObservation) {
+                _writeWindowStateEvent(
+                  application,
+                  event,
+                  'screen',
+                  switch (screen) {
+                    null => 'present=false display_id=0',
+                    AppKitScreen(
+                      :final displayId,
+                      :final frame,
+                      :final visibleFrame,
+                    ) =>
+                      'present=true display_id=$displayId '
+                          'frame_width=${frame.width} '
+                          'frame_height=${frame.height} '
+                          'visible_width=${visibleFrame.width} '
+                          'visible_height=${visibleFrame.height}',
+                  },
+                );
+              }
             case AppKitKeyEvent() when event.kind == AppKitKeyEventKind.down:
               _handleKeyDown(event, createdSession);
             case AppKitKeyEvent():
@@ -571,6 +628,21 @@ final class TerminalApplication {
         event: event,
         generation: generation,
       ).machineLine(scenario),
+    );
+  }
+
+  static void _writeWindowStateEvent(
+    AppKitApplication application,
+    WindowEvent event,
+    String eventName,
+    String value,
+  ) {
+    stdout.writeln(
+      'NATIVE_WINDOW_STATE negotiated=${application.eventProtocolVersion} '
+      'event=$eventName protocol=${event.protocolVersion} '
+      'source_generation=${event.sourceGeneration} '
+      'operation_id=${event.operationId} '
+      'timestamp_ns=${event.monotonicNanoseconds} $value',
     );
   }
 
