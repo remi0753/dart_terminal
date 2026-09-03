@@ -32,6 +32,8 @@ parser corpus、性能 baseline は、独立した Dart/native spike で実機�
   （M1/arm64 Developer JIT / Release AOT）
 - native event protocol v2（source generation、nanosecond timestamp、operation
   ID）と、旧 v1 endpoint との双方向 compatibility negotiation
+- generation／AppKit-main domain付きnative handle registryと、off-domain
+  releaseを即時無効化してmain queueで完了するasynchronous destruction
 
 ## 起動
 
