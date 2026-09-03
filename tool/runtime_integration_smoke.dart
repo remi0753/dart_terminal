@@ -96,7 +96,6 @@ final class _LifecycleCase {
     this.environment = const <String, String>{},
     this.expectedStderrMarker,
     this.expectedWorkerProcessCount = 1,
-    this.requireInProcessReap = true,
   });
 
   final String name;
@@ -107,7 +106,6 @@ final class _LifecycleCase {
   final List<String> expectedObservations;
   final String? expectedStderrMarker;
   final int expectedWorkerProcessCount;
-  final bool requireInProcessReap;
 }
 
 _Options _parseOptions(List<String> arguments) {
@@ -357,7 +355,6 @@ void _expectWorkerProcessContract(
   _ProcessObservation observation, {
   required String scenario,
   required int expectedCount,
-  bool requireInProcessReap = true,
 }) {
   final List<_WorkerProcessObservation> spawned = observation.workerProcesses
       .where((_WorkerProcessObservation value) => value.event == 'spawned')
@@ -396,12 +393,10 @@ void _expectWorkerProcessContract(
     ),
     '$scenario emitted a reaped process without matching ownership',
   );
-  if (requireInProcessReap) {
-    _expect(
-      reapedIds.length == reaped.length && _sameIntSets(spawnedIds, reapedIds),
-      '$scenario did not observe every child exit in-process',
-    );
-  }
+  _expect(
+    reapedIds.length == reaped.length && _sameIntSets(spawnedIds, reapedIds),
+    '$scenario did not observe every child exit in-process',
+  );
 }
 
 bool _sameIntSets(Set<int> left, Set<int> right) =>
@@ -433,7 +428,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     );
   }
   final RegExp eventWire = RegExp(
-    r'^NATIVE_EVENT_WIRE negotiated=3 event=window-closed protocol=3 '
+    r'^NATIVE_EVENT_WIRE negotiated=4 event=window-closed protocol=4 '
     r'source_generation=[1-9][0-9]* operation_id=0 '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -442,9 +437,9 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     eventWire.hasMatch(observation.stdoutText),
     'missing current native event wire observation',
   );
-  final String statePrefix = r'^NATIVE_WINDOW_STATE negotiated=3 event=';
+  final String statePrefix = r'^NATIVE_WINDOW_STATE negotiated=4 event=';
   final String stateMetadata =
-      r' protocol=3 source_generation=[1-9][0-9]* operation_id=0 '
+      r' protocol=4 source_generation=[1-9][0-9]* operation_id=0 '
       r'timestamp_ns=[1-9][0-9]* ';
   RegExp stateEvent(String name, String payload) =>
       RegExp('$statePrefix$name$stateMetadata$payload', multiLine: true);
@@ -471,6 +466,45 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
       'missing native ${stateEvent.key} state observation',
     );
   }
+  final RegExp applicationState = RegExp(
+    r'^NATIVE_APPLICATION_STATE negotiated=4 active=(true|false)$',
+    multiLine: true,
+  );
+  _expect(
+    applicationState.hasMatch(observation.stdoutText),
+    'missing application active-state observation',
+  );
+  RegExp menuAction(String action) => RegExp(
+    '^NATIVE_MENU_ACTION negotiated=4 action=$action protocol=4 '
+    r'source_generation=[1-9][0-9]* operation_id=0 '
+    r'timestamp_ns=[1-9][0-9]*$',
+    multiLine: true,
+  );
+  for (final String action in <String>['paste', 'close', 'quit']) {
+    _expect(
+      menuAction(action).allMatches(observation.stdoutText).length == 1,
+      'missing or duplicate $action menu-action observation',
+    );
+  }
+  final RegExp pasteboardSnapshot = RegExp(
+    r'^NATIVE_PASTEBOARD_SNAPSHOT change_count=[0-9]+ '
+    r'has_text=(true|false)$',
+    multiLine: true,
+  );
+  _expect(
+    pasteboardSnapshot.allMatches(observation.stdoutText).length == 1,
+    'missing or duplicate pasteboard snapshot observation',
+  );
+  final RegExp closeRequest = RegExp(
+    r'^NATIVE_WINDOW_CLOSE_REQUEST negotiated=4 protocol=4 '
+    r'source_generation=[1-9][0-9]* operation_id=[1-9][0-9]* '
+    r'timestamp_ns=[1-9][0-9]*$',
+    multiLine: true,
+  );
+  _expect(
+    closeRequest.allMatches(observation.stdoutText).length == 1,
+    'missing or duplicate deferred close-request observation',
+  );
   _expectWorkerProcessContract(
     observation,
     scenario: 'normal',
@@ -746,10 +780,13 @@ List<_LifecycleCase> _lifecycleCases() => <_LifecycleCase>[
       'worker-request',
       'worker-response',
       'root-uncaught',
+      'worker-stop-request',
+      'worker-stop-ack',
+      'worker-exit',
+      'root-exit',
     ]),
     expectedStderrMarker:
         'RUNTIME_LIFECYCLE_FATAL class=root-uncaught status=70',
-    requireInProcessReap: false,
   ),
   const _LifecycleCase(
     name: 'host-startup-failure',
@@ -821,7 +858,6 @@ Future<void> _runLifecycle(_Options options, _Invocation invocation) async {
       result,
       scenario: testCase.machineScenario ?? testCase.name,
       expectedCount: testCase.expectedWorkerProcessCount,
-      requireInProcessReap: testCase.requireInProcessReap,
     );
     stdout.writeln(
       'RUNTIME_LIFECYCLE_INTEGRATION_PASS mode=${options.mode.name} '

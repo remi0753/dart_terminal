@@ -526,14 +526,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] generic `View` の型・所有権・create/attach ABI と Dart facade
   - [x] event protocol v3 と focus/visibility/occlusion/backing-scale/screen event
   - [x] Dart Terminal の M1 Developer JIT / Release AOT 統合受け入れ
-- [ ] menu、pasteboard、application/window lifecycle API
+- [x] menu、pasteboard、application/window lifecycle API
   （分割と完了条件は
   [`docs/phase1/menu-pasteboard-lifecycle-apis.md`](docs/phase1/menu-pasteboard-lifecycle-apis.md)
   を参照して実施する）
   - [x] event protocol v4 と opt-in application/window lifecycle request/reply
   - [x] general pasteboard plain-text snapshot/write/clear API
   - [x] menu/menu-item ownership/action API と main-menu attachment
-  - [ ] Dart Terminal の M1 Developer JIT / Release AOT 統合受け入れ
+  - [x] Dart Terminal の M1 Developer JIT / Release AOT 統合受け入れ
 - [ ] TerminalMetalView を attach できる generic custom-view boundary
 - [ ] macOS unified logging と local crash metadata
 - [ ] native/Dart の resource leak test と shutdown fault injection

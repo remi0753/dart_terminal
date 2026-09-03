@@ -1,6 +1,6 @@
 # Menu, pasteboard, and lifecycle APIs
 
-- Status: in progress; lifecycle subtask complete
+- Status: complete
 - Started: 2026-09-04
 - Scope: first unchecked Phase 1 roadmap item only
 - Related: `ROADMAP.md` Phase 1, ADR-001, ADR-002, `dart_appkit`
@@ -437,3 +437,101 @@ reusable revisions for all three API families.
   `fc05f1b24f6f6e26f3cc8f0e1d4c512aab617dac` (`Add native menu ownership and
   actions`). Dart Terminal product integration may now begin from all three
   clean reusable prerequisites.
+
+### 2026-09-04 — product integration implementation and initial acceptance
+
+- Dart Terminal now opts its application and single window into deferred
+  lifecycle requests. Session exit, Close, and Quit all enter the same
+  generation-checked window close request, accept it asynchronously, and then
+  reuse the existing orderly worker/session/view/window/application teardown.
+  Application terminate requests are rejected while the window close path is
+  initiated, so AppKit never waits on an abandoned termination operation.
+- Installed a minimal Application/File/Edit hierarchy. Quit (`Command-Q`) and
+  Close (`Command-W`) request close; Paste (`Command-V`) reads
+  `generalPasteboard` only when its menu action arrives and inserts present
+  text through the existing `TextView` input path. No clipboard contents are
+  logged, retained by the integration observer, or polled in the background.
+- All menu and application subscriptions plus menu/item handles are retained
+  for their explicit lifetimes, then canceled or released in dependency-safe
+  reverse order before application termination.
+- The test-only normal smoke invokes Paste, Close, and Quit actions. Its
+  observer requires one metadata record for each action, one pasteboard
+  snapshot record, an application active-state snapshot, one coalesced close
+  request with a positive operation ID, protocol v4, and the existing worker
+  shutdown/handle-cleanup contract. Ordinary product logs remain unchanged
+  because the additional records are gated by `DT_RUNTIME_EVENT_WIRE_TEST=1`.
+- The first source check passed formatting, C11/C++20 public-header checks,
+  native formatting, Dart analysis, and all repository unit tests. Its earlier
+  direct formatting audit had changed zero files but could not update Dart's
+  analytics timestamp inside the managed sandbox; the repository source-check
+  repeat with the required permission passed without source changes.
+- Incremental arm64 Developer JIT and Release AOT builds passed against the
+  clean official Engine revision. Their first updated GUI smokes both passed:
+  Developer JIT in 2257 ms and Release AOT in 1778 ms, including the new v4
+  menu/pasteboard/lifecycle assertions and the pre-existing worker process
+  contract. Full lifecycle, traffic, bundle, and clean-SDK gates remain to be
+  run before completion.
+- The first full integration run passed both ordinary smokes and the first
+  thirteen Developer lifecycle cases, then exposed an intentional contract
+  improvement in `root-uncaught`: native fatal termination is now deferred by
+  Dart long enough to request and acknowledge worker shutdown, reap the child,
+  publish `root-exit`, and finally terminate with the unchanged software-error
+  status 70. The old harness expected observation to stop at `root-uncaught`
+  and allowed pipe-closure-only reap evidence. It now requires the four orderly
+  shutdown observations and an in-process reap, making the stronger ownership
+  guarantee explicit rather than weakening the implementation to historical
+  fatal-exit timing.
+- With that stronger expectation, all sixteen Developer cases passed, but the
+  Release `root-uncaught` case retained its old abrupt sequence. Inspection
+  found that the standalone Release AOT delegate did not forward activation,
+  reopen, or termination callbacks to the reusable bridge, while the Developer
+  delegate inherited all three from `DartAppKitAppDelegate`. This was a real
+  mode-parity gap: ordinary Release smoke could still pass from the v4
+  registration snapshot and window-owned close path. The Release delegate now
+  forwards the same application callbacks and uses the same termination
+  decision mapping; pre-attach startup failures remain permissive because the
+  reusable bridge returns `kTerminateNow` when no deferred request is active.
+- The first source check after that fix passed formatting, header, and plist
+  checks but analysis rejected the now-unused per-case
+  `requireInProcessReap` escape hatch. Removing the option entirely makes
+  in-process spawn/reap pairing mandatory for every case with a worker and
+  resolves the warning without suppressing analysis.
+- Both bundle audits passed and recorded
+  `native_event_protocol_version: 4`; bounded traffic passed with 256/256
+  responses and 384 explicit retries in each mode. The first focused
+  Developer clean-SDK run then stopped before its rebuild because the
+  freshness verifier still required manifest protocol 3. The generated
+  manifest and current bridge correctly advertised 4, so both Developer and
+  Release focused contract assertions were updated to 4; no freshness or
+  provenance rule was relaxed.
+
+### 2026-09-04 — product integration acceptance complete
+
+- The corrected Release delegate passed all sixteen arm64 lifecycle cases.
+  Both modes now preserve status 70 and fatal diagnostics for
+  `root-uncaught` while also requiring an acknowledged worker stop,
+  in-process reap, `worker-exit`, and `root-exit`. Startup failures before a
+  Dart event endpoint exists still terminate immediately.
+- Focused clean-SDK gates passed against the official unmodified Engine at
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`. Developer verified its official
+  worker Kernel and all 9 freshness transitions; Release verified its signed
+  self-contained worker, negative layout/executable/signature cases, ignored
+  host overrides, and all 19 freshness transitions.
+- Final `make RUNTIME_ARCH=arm64 runtime-verify` passed as one ordered gate:
+  Dart and native format audits, C11/C++20 header checks, plist validation,
+  Dart analysis and unit tests; both builds and provenance/seal/signature
+  bundle audits; both protocol-v4 GUI smokes; all 32 lifecycle launches; and
+  both bounded-traffic suites. The final common smokes completed in 2238 ms
+  (Developer) and 1701 ms (Release). Traffic completed 256/256 responses with
+  384 explicit backpressure retries in 1402 ms and 1189 ms respectively.
+- `git diff --check` passed. Review found only the seven intended product,
+  runner, verifier, public-description, and task-record files before the final
+  roadmap state update. The adjacent `dart_appkit` repository is clean at
+  `fc05f1b24f6f6e26f3cc8f0e1d4c512aab617dac`; its official SDK/Engine remains
+  clean at the pinned revision above.
+- The complete Phase 1 item now supplies reusable v4 lifecycle, plain-text
+  pasteboard, and menu primitives plus minimal M1 Developer/Release product
+  integration. Bracketed/newline-safe paste, active-process confirmation,
+  the full standard menu/action registry, shortcut arbitration, multi-window
+  policy, and non-arm64 acceptance remain in their existing later roadmap
+  positions; no new roadmap item or blocker was discovered.

@@ -62,7 +62,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | --- | --- | --- | --- | --- | --- |
 | RT-01 | release AOT root isolate が AppKit main thread に attach し、main run loop を所有しない | P0 | 1 | `G:macos/Sources/App/main.swift`, native macOS app lifecycle | M1 Developer/Release stock root 完了 |
 | RT-02 | pane ごとの長寿命 runtime worker と window ごとの render coordinator を起動、停止、異常回収できる | P0 | 1 | `G:src/termio/Thread.zig`, `G:src/renderer/Thread.zig` | M1 Developer/Release process worker の lifecycle/再生成/bounded traffic 完了、pane/render は後続 |
-| RT-03 | UI、PTY I/O、terminal state、render resource の thread/owner が一意 | P0 | 1 | `G:src/termio/mailbox.zig`, `G:src/renderer/message.zig` | M1 両 mode の root/process owner、v1/v2/v3 event generation、generic View、window state、AppKit handle domain/async destruction 完了。PTY/render は後続 |
+| RT-03 | UI、PTY I/O、terminal state、render resource の thread/owner が一意 | P0 | 1 | `G:src/termio/mailbox.zig`, `G:src/renderer/message.zig` | M1 両 mode の root/process owner、v1–v4 event generation、generic View、window/application state、menu action、AppKit handle domain/async destruction 完了。PTY/render は後続 |
 | PTY-01 | 1 pane = 1 persistent PTY。slave が controlling terminal になり、新 session/process group を持つ | P0 | 2 | `G:src/pty.zig`, `G:src/pty.c`, `G:src/termio/Exec.zig` | Phase 0 gate |
 | PTY-02 | shell/command を `argv`、`envp`、cwd で起動し、shell interpolation を行わない | P0 | 2 | `G:src/Command.zig`, `G:src/termio/Exec.zig` | 未実装 |
 | PTY-03 | macOS login shell、`TERM`、`COLORTERM`、locale、initial cwd が zero-config で妥当 | P0 | 2 | `G:src/termio/Exec.zig`, `G:src/os/shell.zig` | 未実装 |
@@ -153,7 +153,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | IN-04 | 日本語 IME、emoji picker、Unicode Hex Input、key repeat の automated/manual matrix | P0 | 5 | same AppKit surface implementation and macOS tests | Phase 0 gate |
 | IN-05 | char/word/line multi-click selection、drag、autoscroll | P0 | 5 | `G:src/terminal/Selection.zig`, `SelectionGesture.zig`, SurfaceView | 未実装 |
 | IN-06 | precision/momentum scroll と terminal mouse report/local selection arbitration | P0 | 5 | `G:src/input/mouse.zig`, `G:src/input/mouse_encode.zig` | 未実装 |
-| IN-07 | standard clipboard、bracketed paste、newline normalization | P0 | 5 | `G:src/input/paste.zig`, `G:src/terminal/paste.zig`, NSPasteboard helpers | 未実装 |
+| IN-07 | standard clipboard、bracketed paste、newline normalization | P0 | 5 | `G:src/input/paste.zig`, `G:src/terminal/paste.zig`, NSPasteboard helpers | plain-text general pasteboard と明示的 Paste action の基盤のみ完了。bracketed paste/newline policy は Phase 5 |
 | IN-08 | multiline/control paste confirmation と large-paste bounded throttle | P0 | 5 | `G:macos/Sources/Features/ClipboardConfirmation/`, `G:src/termio/mailbox.zig` | 未実装 |
 | IN-09 | keybind/action registry、conflict、unbound/passthrough、menu shortcut arbitration | P0 | 5/8 | `G:src/input/Binding.zig`, `G:src/input/config.zig`, MenuShortcutManager | 未実装 |
 | IN-10 | Option-click cursor、semantic prompt selection、drag/drop、Services、Quick Look | P1/P2 | 5/10 | macOS Surface View, `G:macos/Sources/Features/Services/` | 未実装 |
@@ -165,8 +165,8 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | UI-01 | multiple windows、native tabs、split tree、focus traversal | P0 | 7 | `G:macos/Sources/Features/Terminal/`, `Splits/SplitTree.swift` | 単一 window のみ |
 | UI-02 | split resize/equalize/zoom/min cell、pane/tab title/color、cwd inheritance | P0 | 7 | `G:macos/Sources/Features/Splits/`, `Terminal/` | 未実装 |
 | UI-03 | fullscreen、geometry、display/scale migration、reopen/restoration | P0 | 7 | `G:macos/Sources/Helpers/Fullscreen.swift`, `TerminalRestorable.swift` | v3 display/scale event substrate のみ完了。migration policy 等は未実装 |
-| UI-04 | close/quit confirmation と active process detection。pane resource を完全 teardown | P0 | 7 | `G:macos/Sources/Features/Terminal/`, Ghostty surface process metadata | 未実装 |
-| UI-05 | standard menu と Edit/Window/Shell/View action。terminal input と競合しない | P0 | 7 | `G:macos/Sources/App/MainMenu.xib`, action registry | 未実装 |
+| UI-04 | close/quit confirmation と active process detection。pane resource を完全 teardown | P0 | 7 | `G:macos/Sources/Features/Terminal/`, Ghostty surface process metadata | opt-in deferred Close/Quit request/reply と orderly teardown 基盤は完了。active-process confirmation は Phase 7 |
+| UI-05 | standard menu と Edit/Window/Shell/View action。terminal input と競合しない | P0 | 7 | `G:macos/Sources/App/MainMenu.xib`, action registry | 最小 Application/File/Edit menu と action routing 基盤は完了。完全な action registry/競合解決は Phase 7/8 |
 | UI-06 | Quick Terminal、global shortcut、screen selection/animation | P1 | 10 | `G:macos/Sources/Features/QuickTerminal/`, `Global Keybinds/` | 未実装 |
 | UI-07 | proxy icon、Quick Look、Secure Keyboard Entry indication | P1 | 10 | macOS Terminal/Surface, `G:macos/Sources/Features/Secure Input/` | 未実装 |
 | UI-08 | AppleScript application→windows→tabs→terminals と App Intents | P1 | 10 | `G:macos/Sources/Features/AppleScript/`, `App Intents/` | 未実装 |

@@ -354,6 +354,35 @@ std::atomic<ReleaseAotHost*> ReleaseAotHost::active_host_{nullptr};
   return NO;
 }
 
+- (void)applicationDidBecomeActive:(NSNotification*)notification {
+  (void)notification;
+  dart_appkit::PostApplicationActiveChanged(true);
+}
+
+- (void)applicationDidResignActive:(NSNotification*)notification {
+  (void)notification;
+  dart_appkit::PostApplicationActiveChanged(false);
+}
+
+- (BOOL)applicationShouldHandleReopen:(NSApplication*)sender
+                    hasVisibleWindows:(BOOL)hasVisibleWindows {
+  (void)sender;
+  dart_appkit::PostApplicationReopenRequested(hasVisibleWindows);
+  return YES;
+}
+
+- (NSApplicationTerminateReply)applicationShouldTerminate:
+    (NSApplication*)sender {
+  (void)sender;
+  switch (dart_appkit::HandleApplicationShouldTerminate()) {
+    case dart_appkit::ApplicationTerminationDecision::kTerminateNow:
+      return NSTerminateNow;
+    case dart_appkit::ApplicationTerminationDecision::kTerminateLater:
+      return NSTerminateLater;
+  }
+  return NSTerminateNow;
+}
+
 - (void)applicationWillTerminate:(NSNotification*)notification {
   (void)notification;
   if (did_shutdown_) {

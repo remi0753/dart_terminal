@@ -191,6 +191,11 @@ final class TerminalApplication {
     Window? window;
     TerminalSession? session;
     StreamSubscription<WindowEvent>? eventSubscription;
+    StreamSubscription<AppKitEvent>? applicationEventSubscription;
+    final List<StreamSubscription<MenuItemInvokedEvent>> menuSubscriptions =
+        <StreamSubscription<MenuItemInvokedEvent>>[];
+    final List<MenuItem> menuItems = <MenuItem>[];
+    final List<Menu> menus = <Menu>[];
     Timer? autoCloseTimer;
     RuntimeLifecycleCoordinator? lifecycle;
     var lifecycleWasShutDown = false;
@@ -201,11 +206,15 @@ final class TerminalApplication {
     try {
       final TextView createdTextView = TextView();
       textView = createdTextView;
-      final Window createdWindow = Window(
-        frame: const Rect.fromLTWH(100, 90, 920, 580),
-        title: 'Dart Terminal',
-      )..contentView = createdTextView;
+      final Window createdWindow =
+          Window(
+              frame: const Rect.fromLTWH(100, 90, 920, 580),
+              title: 'Dart Terminal',
+            )
+            ..contentView = createdTextView
+            ..defersCloseRequests = true;
       window = createdWindow;
+      application.defersTerminationRequests = true;
 
       late final TerminalSession createdSession;
       createdSession = TerminalSession(
@@ -215,10 +224,160 @@ final class TerminalApplication {
             createdTextView.text = createdSession.render();
           }
         },
-        onExitRequested: createdWindow.close,
+        onExitRequested: createdWindow.requestClose,
       );
       session = createdSession;
       createdTextView.text = createdSession.render();
+
+      Menu ownMenu(Menu menu) {
+        menus.add(menu);
+        return menu;
+      }
+
+      MenuItem ownMenuItem(MenuItem item) {
+        menuItems.add(item);
+        return item;
+      }
+
+      final Menu mainMenu = ownMenu(Menu());
+      final Menu applicationMenu = ownMenu(Menu(title: 'Dart Terminal'));
+      final Menu fileMenu = ownMenu(Menu(title: 'File'));
+      final Menu editMenu = ownMenu(Menu(title: 'Edit'));
+      final MenuItem applicationMenuItem = ownMenuItem(
+        MenuItem(title: 'Dart Terminal')..submenu = applicationMenu,
+      );
+      final MenuItem fileMenuItem = ownMenuItem(
+        MenuItem(title: 'File')..submenu = fileMenu,
+      );
+      final MenuItem editMenuItem = ownMenuItem(
+        MenuItem(title: 'Edit')..submenu = editMenu,
+      );
+      final MenuItem quitItem = ownMenuItem(
+        MenuItem(
+          title: 'Quit Dart Terminal',
+          keyEquivalent: 'q',
+          modifiers: const ModifierKeys(ModifierKeys.commandBit),
+        ),
+      );
+      final MenuItem closeItem = ownMenuItem(
+        MenuItem(
+          title: 'Close',
+          keyEquivalent: 'w',
+          modifiers: const ModifierKeys(ModifierKeys.commandBit),
+        ),
+      );
+      final MenuItem pasteItem = ownMenuItem(
+        MenuItem(
+          title: 'Paste',
+          keyEquivalent: 'v',
+          modifiers: const ModifierKeys(ModifierKeys.commandBit),
+        ),
+      );
+      mainMenu
+        ..addItem(applicationMenuItem)
+        ..addItem(fileMenuItem)
+        ..addItem(editMenuItem);
+      applicationMenu.addItem(quitItem);
+      fileMenu.addItem(closeItem);
+      editMenu.addItem(pasteItem);
+      application.mainMenu = mainMenu;
+
+      void observeMenuAction(String action, MenuItemInvokedEvent event) {
+        if (!emitNativeEventWireObservation) {
+          return;
+        }
+        stdout.writeln(
+          'NATIVE_MENU_ACTION negotiated=${application.eventProtocolVersion} '
+          'action=$action protocol=${event.protocolVersion} '
+          'source_generation=${event.sourceGeneration} '
+          'operation_id=${event.operationId} '
+          'timestamp_ns=${event.monotonicNanoseconds}',
+        );
+      }
+
+      menuSubscriptions
+        ..add(
+          pasteItem.onInvoked.listen((MenuItemInvokedEvent event) {
+            observeMenuAction('paste', event);
+            final PasteboardTextSnapshot snapshot = application
+                .generalPasteboard
+                .readText();
+            if (emitNativeEventWireObservation) {
+              stdout.writeln(
+                'NATIVE_PASTEBOARD_SNAPSHOT '
+                'change_count=${snapshot.changeCount} '
+                'has_text=${snapshot.text != null}',
+              );
+            }
+            final String? text = snapshot.text;
+            if (text != null) {
+              createdSession.insertText(text);
+            }
+          }),
+        )
+        ..add(
+          closeItem.onInvoked.listen((MenuItemInvokedEvent event) {
+            observeMenuAction('close', event);
+            if (!createdWindow.isClosed && !createdWindow.isDisposed) {
+              createdWindow.requestClose();
+            }
+          }),
+        )
+        ..add(
+          quitItem.onInvoked.listen((MenuItemInvokedEvent event) {
+            observeMenuAction('quit', event);
+            if (!createdWindow.isClosed && !createdWindow.isDisposed) {
+              createdWindow.requestClose();
+            }
+          }),
+        );
+
+      applicationEventSubscription = application.events.listen(
+        (AppKitEvent event) {
+          switch (event) {
+            case ApplicationActiveChangedEvent(:final isActive):
+              if (emitNativeEventWireObservation) {
+                stdout.writeln(
+                  'NATIVE_APPLICATION_ACTIVE '
+                  'negotiated=${application.eventProtocolVersion} '
+                  'protocol=${event.protocolVersion} '
+                  'source_generation=${event.sourceGeneration} '
+                  'operation_id=${event.operationId} '
+                  'timestamp_ns=${event.monotonicNanoseconds} '
+                  'value=$isActive',
+                );
+              }
+            case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
+              if (!hasVisibleWindows &&
+                  !createdWindow.isClosed &&
+                  !createdWindow.isDisposed) {
+                createdWindow.show();
+              }
+            case ApplicationTerminateRequestedEvent():
+              if (emitNativeEventWireObservation) {
+                stdout.writeln(
+                  'NATIVE_APPLICATION_TERMINATE_REQUEST '
+                  'negotiated=${application.eventProtocolVersion} '
+                  'protocol=${event.protocolVersion} '
+                  'source_generation=${event.sourceGeneration} '
+                  'operation_id=${event.operationId} '
+                  'timestamp_ns=${event.monotonicNanoseconds}',
+                );
+              }
+              application.replyToTerminationRequest(event, allow: false);
+              if (!createdWindow.isClosed && !createdWindow.isDisposed) {
+                createdWindow.requestClose();
+              }
+            case WindowEvent() || MenuItemInvokedEvent():
+              break;
+          }
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          if (!closed.isCompleted) {
+            closed.completeError(error, stackTrace);
+          }
+        },
+      );
 
       eventSubscription = createdWindow.events.listen(
         (WindowEvent event) {
@@ -243,7 +402,17 @@ final class TerminalApplication {
                 closed.complete();
               }
             case WindowCloseRequestedEvent():
-              break;
+              if (emitNativeEventWireObservation) {
+                stdout.writeln(
+                  'NATIVE_WINDOW_CLOSE_REQUEST '
+                  'negotiated=${application.eventProtocolVersion} '
+                  'protocol=${event.protocolVersion} '
+                  'source_generation=${event.sourceGeneration} '
+                  'operation_id=${event.operationId} '
+                  'timestamp_ns=${event.monotonicNanoseconds}',
+                );
+              }
+              createdWindow.replyToCloseRequest(event, allow: true);
             case WindowResizedEvent(:final height):
               createdSession.viewportRows = _rowsForHeight(height);
               createdSession.refresh();
@@ -319,6 +488,13 @@ final class TerminalApplication {
 
       createdWindow.show();
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
+      if (emitNativeEventWireObservation) {
+        stdout.writeln(
+          'NATIVE_APPLICATION_STATE '
+          'negotiated=${application.eventProtocolVersion} '
+          'active=${application.isActive}',
+        );
+      }
       RuntimeLifecycleCoordinator createLifecycle({
         RuntimeLifecycleScenario? workerScenario,
         int initialGeneration = 0,
@@ -507,7 +683,9 @@ final class TerminalApplication {
         );
         autoCloseTimer = Timer(autoCloseAfter, () {
           if (!createdWindow.isClosed && !createdWindow.isDisposed) {
-            createdWindow.close();
+            pasteItem.performAction();
+            closeItem.performAction();
+            quitItem.performAction();
           }
         });
       }
@@ -518,6 +696,22 @@ final class TerminalApplication {
         await lifecycle?.shutdown();
       }
       await eventSubscription?.cancel();
+      await applicationEventSubscription?.cancel();
+      for (final StreamSubscription<MenuItemInvokedEvent> subscription
+          in menuSubscriptions) {
+        await subscription.cancel();
+      }
+      application.mainMenu = null;
+      for (final MenuItem item in menuItems.reversed) {
+        if (!item.isDisposed) {
+          item.dispose();
+        }
+      }
+      for (final Menu menu in menus.reversed) {
+        if (!menu.isDisposed) {
+          menu.dispose();
+        }
+      }
       await session?.dispose();
       if (window != null && !window.isDisposed) {
         window.dispose();
