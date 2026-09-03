@@ -5,7 +5,7 @@
 Ghostty 調査基準: `ghostty-org/ghostty` main の
 `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`  
 ローカル基準: `dart_appkit` の
-`77e355387a0ea50034632d9e3d4b35f629155c35`
+`a70e5e400c9321471f133dff1356a7cc29114fa4`
 
 主要な開発・実機受け入れ baseline は Apple M1/arm64 とする。x86_64 cross-build、
 Rosetta compatibility、Universal audit、Intel-native 実機証跡は主要ゴール後の
@@ -517,7 +517,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] patch 専用の hash・来歴・status allowance・composition 監査・fixture を clean official contract へ整理する
     - [x] 現行文書と source inventory を更新し、M1 回帰・clean SDK を確認して patch 削除を閉じる
   - [x] M1 の JIT/AOT 横断 lifecycle、性能、終了順序、clean SDK を検証して移行を閉じる
-- [ ] native event wire format の versioning と backward compatibility
+- [x] native event wire format の versioning と backward compatibility
 - [ ] handle registry に thread-domain と asynchronous destruction を追加
 - [ ] generic `View`、focus、visibility、occlusion、backing scale、screen event
 - [ ] menu、pasteboard、application/window lifecycle API

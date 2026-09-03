@@ -2,14 +2,16 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dart_appkit/dart_appkit.dart';
+
 const String runtimeBundleAuditFormat = 'dart-terminal-runtime-bundle-audit';
 const int runtimeBundleAuditVersion = 5;
 const String runtimeBuildFingerprintFormat =
     'dart-terminal-runtime-build-fingerprint';
-const int runtimeBuildFingerprintVersion = 6;
+const int runtimeBuildFingerprintVersion = 7;
 const String runtimeBuildManifestFormat =
     'dart-terminal-runtime-build-manifest';
-const int runtimeBuildManifestVersion = 8;
+const int runtimeBuildManifestVersion = 9;
 const String runtimeBuildManifestRelativePath =
     'Resources/runtime-build-manifest.json';
 const String runtimeMachOPolicy = 'dart-terminal-macos-runtime-v2';
@@ -1634,6 +1636,7 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
       'kernel_flags',
       'worker_topology',
       'worker_protocol_version',
+      'native_event_protocol_version',
       if (expectedMode == RuntimeMode.developerJit) 'worker_payload_name',
       if (expectedMode == RuntimeMode.developerJit) 'worker_kernel_flags',
       if (expectedMode == RuntimeMode.releaseAot) 'worker_executable_name',
@@ -1663,6 +1666,11 @@ Future<Map<String, Object?>> readRuntimeBuildManifest(
       'runtime build manifest effective_configuration',
     );
   }
+  runtimeExpect(
+    effective['native_event_protocol_version'] ==
+        dartAppKitCurrentEventProtocolVersion,
+    'runtime build manifest native event protocol version mismatch',
+  );
   if (expectedMode == RuntimeMode.developerJit) {
     runtimeExpect(
       effective['worker_topology'] == 'official-dart-child-process' &&

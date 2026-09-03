@@ -195,6 +195,8 @@ final class TerminalApplication {
     RuntimeLifecycleCoordinator? lifecycle;
     var lifecycleWasShutDown = false;
     final Completer<void> closed = Completer<void>();
+    final bool emitNativeEventWireObservation =
+        Platform.environment['DT_RUNTIME_EVENT_WIRE_TEST'] == '1';
 
     try {
       final TextView createdTextView = TextView();
@@ -221,7 +223,22 @@ final class TerminalApplication {
       eventSubscription = createdWindow.events.listen(
         (WindowEvent event) {
           switch (event) {
-            case WindowClosedEvent():
+            case WindowClosedEvent(
+              :final protocolVersion,
+              :final sourceGeneration,
+              :final monotonicNanoseconds,
+              :final operationId,
+            ):
+              if (emitNativeEventWireObservation) {
+                stdout.writeln(
+                  'NATIVE_EVENT_WIRE negotiated='
+                  '${application.eventProtocolVersion} event=window-closed '
+                  'protocol=$protocolVersion '
+                  'source_generation=$sourceGeneration '
+                  'operation_id=$operationId '
+                  'timestamp_ns=$monotonicNanoseconds',
+                );
+              }
               if (!closed.isCompleted) {
                 closed.complete();
               }

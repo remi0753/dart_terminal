@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_terminal/src/runtime_worker_protocol.dart';
 
 import 'src/runtime_release_support.dart';
@@ -1120,6 +1121,7 @@ Future<Map<String, Object?>> _createFingerprint(_Options options) async {
         'kernel_flags': _normalizedKernelFlags(options, sdkRevision),
         'worker_topology': 'official-dart-child-process',
         'worker_protocol_version': runtimeWorkerProtocolVersion,
+        'native_event_protocol_version': dartAppKitCurrentEventProtocolVersion,
         if (options.mode == RuntimeMode.developerJit)
           'worker_payload_name': runtimeDeveloperWorkerPayloadName,
         if (options.mode == RuntimeMode.developerJit)

@@ -178,6 +178,7 @@ override RUNTIME_JIT_MAIN_SOURCE := \
 	$(PROJECT_ROOT)/native/macos/runtime/DeveloperJitRunner.mm
 override RUNTIME_JIT_RUNNER_HEADERS := \
 	$(DART_APPKIT_ROOT)/native/runner/AppDelegate.h \
+	$(DART_APPKIT_ROOT)/native/runner/DartEventEncoder.h \
 	$(DART_APPKIT_ROOT)/native/runner/DartHost.h \
 	$(DART_APPKIT_ROOT)/native/runner/DartMessagePump.h \
 	$(DART_APPKIT_ROOT)/native/runner/RunnerArguments.h \
@@ -185,13 +186,17 @@ override RUNTIME_JIT_RUNNER_HEADERS := \
 override RUNTIME_JIT_RUNNER_SOURCES := \
 	$(RUNTIME_JIT_MAIN_SOURCE) \
 	$(DART_APPKIT_ROOT)/native/runner/AppDelegate.mm \
+	$(DART_APPKIT_ROOT)/native/runner/DartEventEncoder.cc \
 	$(DART_APPKIT_ROOT)/native/runner/DartHost.mm \
 	$(DART_APPKIT_ROOT)/native/runner/DartMessagePump.mm \
 	$(DART_APPKIT_ROOT)/native/runner/RunnerArguments.cc
 override RUNTIME_MESSAGE_PUMP_HEADERS := \
+	$(DART_APPKIT_ROOT)/native/runner/DartEventEncoder.h \
 	$(DART_APPKIT_ROOT)/native/runner/DartMessagePump.h
 override RUNTIME_MESSAGE_PUMP_SOURCE := \
 	$(DART_APPKIT_ROOT)/native/runner/DartMessagePump.mm
+override RUNTIME_EVENT_ENCODER_SOURCE := \
+	$(DART_APPKIT_ROOT)/native/runner/DartEventEncoder.cc
 override RUNTIME_AUDIT_SOURCE := \
 	$(PROJECT_ROOT)/tool/runtime_bundle_audit.dart
 override RUNTIME_FINGERPRINT_SOURCE := \
@@ -1002,6 +1007,7 @@ $(RELEASE_AOT_HOST): $(RELEASE_AOT_HOST_SOURCE) \
 		$(RUNTIME_WORKER_CONFIGURATION_HEADER) \
 		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) \
 		$(RUNTIME_MESSAGE_PUMP_HEADERS) $(RUNTIME_MESSAGE_PUMP_SOURCE) \
+		$(RUNTIME_EVENT_ENCODER_SOURCE) \
 		$(RELEASE_AOT_FINGERPRINT)
 	@mkdir -p $(RELEASE_AOT_BUILD_DIR)
 	"$(CLANGXX)" $(RUNTIME_NATIVE_FLAG_PREFIX) \
@@ -1017,6 +1023,7 @@ $(RELEASE_AOT_HOST): $(RELEASE_AOT_HOST_SOURCE) \
 		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_LIFECYCLE_SOURCE) \
 		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) \
 		$(RUNTIME_MESSAGE_PUMP_SOURCE) \
+		$(RUNTIME_EVENT_ENCODER_SOURCE) \
 		$(RELEASE_AOT_HOST_SOURCE) $(RUNTIME_ENGINE_AOT_LIBRARY) \
 		-framework AppKit -framework CoreFoundation \
 		-Wl,-rpath,@executable_path/../Frameworks \
@@ -1144,7 +1151,7 @@ runtime-source-check: runtime-dart-tool-check
 		--dry-run --Werror $(RUNTIME_LIFECYCLE_HEADER) \
 		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_WORKER_CONFIGURATION_HEADER) \
 		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) $(RUNTIME_JIT_MAIN_SOURCE) \
-		$(RELEASE_AOT_HOST_SOURCE)
+		$(RUNTIME_EVENT_ENCODER_SOURCE) $(RELEASE_AOT_HOST_SOURCE)
 	/usr/bin/xcrun clang -x c -std=c11 -Wall -Wextra -Wpedantic -Werror \
 		-fsyntax-only $(RUNTIME_LIFECYCLE_HEADER)
 	/usr/bin/xcrun clang++ -x c++ -std=c++20 -Wall -Wextra -Wpedantic \

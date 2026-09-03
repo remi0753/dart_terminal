@@ -412,6 +412,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     options,
     invocation,
     const <String>['--auto-close-after=1'],
+    environment: const <String, String>{'DT_RUNTIME_EVENT_WIRE_TEST': '1'},
   );
   _expect(
     observation.status == 0,
@@ -431,6 +432,16 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
       'missing smoke observation: $expected',
     );
   }
+  final RegExp eventWire = RegExp(
+    r'^NATIVE_EVENT_WIRE negotiated=2 event=window-closed protocol=2 '
+    r'source_generation=[1-9][0-9]* operation_id=0 '
+    r'timestamp_ns=[1-9][0-9]*$',
+    multiLine: true,
+  );
+  _expect(
+    eventWire.hasMatch(observation.stdoutText),
+    'missing current native event wire observation',
+  );
   _expectWorkerProcessContract(
     observation,
     scenario: 'normal',
