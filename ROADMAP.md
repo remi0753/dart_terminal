@@ -542,6 +542,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] terminal-owned `TerminalMetalView` shell と native attachment contract
   - [x] Dart Terminal の M1 Developer JIT / Release AOT 統合受け入れ
 - [ ] macOS unified logging と local crash metadata
+  （分割と完了条件は
+  [`docs/phase1/macos-unified-logging-crash-metadata.md`](docs/phase1/macos-unified-logging-crash-metadata.md)
+  を参照して実施する）
+  - [ ] native unified logger と bounded local-run metadata contract
+  - [ ] Dart lifecycle phase と Developer JIT / Release AOT host integration
+  - [ ] M1 product acceptance と privacy/operations documentation
 - [ ] native/Dart の resource leak test と shutdown fault injection
 
 終了条件:
