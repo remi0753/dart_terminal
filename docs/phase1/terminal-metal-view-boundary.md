@@ -231,3 +231,33 @@ accepted before the terminal native contract is committed.
   it preserves opaque capability issuance, avoids synchronous native-to-Dart
   construction callbacks, and keeps terminal class knowledge outside
   `dart_appkit`.
+
+### 2026-09-04 — Subtask 1: reusable provider implementation
+
+- Added the separate Objective-C++ `dart_appkit_custom_view.h` surface and a
+  process-lifetime provider map. Registration is AppKit-main-only, copies the
+  identifier, validates `NSView` inheritance, is idempotent for the same pair,
+  and rejects a conflicting class.
+- Added `da_view_create_custom` and `View.custom`. The public C call validates
+  and copies UTF-8, constructs through the registered native class, and inserts
+  the result as the existing generic-view kind. The Dart FFI lookup is optional
+  for legacy libraries and exposes no pointer or arbitrary-handle constructor.
+- Generalized only the resolved native type used by content attachment from
+  `DaView*` to `NSView*`. Registry kind, generation, domain, attachment borrow,
+  finalizer, release, and shutdown behavior did not change.
+- Added native coverage for invalid/missing/duplicate registrations, class
+  identity, text-only rejection, window attachment, off-main registration and
+  creation, stale/double release, and the independent AppKit retain edge. Added
+  Dart fake/API coverage plus real and legacy FFI checks.
+- Focused header/native/Dart tests passed first. The final adjacent `make test`
+  passed the complete scaffold, native bridge, Runner, message-pump, event
+  encoder, Dart API/launcher, example compile, real FFI, and legacy FFI suite.
+  Dart and native format audits plus `git diff --check` also passed.
+- The built dylib exposes 37 public `da_*` symbols including
+  `da_view_create_custom` and the native provider registration symbol. The
+  official Dart SDK is clean at
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`.
+- The reusable subtask is fixed at adjacent `dart_appkit` commit `c19071e`
+  (`Add registered custom view providers`). Its worktree was clean immediately
+  after commit; the terminal implementation will consume this committed
+  boundary rather than an untracked dependency state.
