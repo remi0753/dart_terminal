@@ -233,3 +233,44 @@ real Developer JIT and Release AOT evidence.
 - Confirmed Application Support is the appropriate production home for
   app-managed support data. Tests will use a gated absolute temporary override
   so acceptance leaves user state untouched.
+
+### 2026-09-04 — Subtask 1 implementation start
+
+- Added a C11/C++20 diagnostics header and terminal-owned Objective-C++ session
+  with fixed `dev.dart-terminal` runtime/crash categories, phase-only C ABI,
+  allowlisted metadata, owner-only storage, atomic replace, one prior-unclean
+  record, and no destructor-based clean-exit claim.
+- Added a native contract covering validation, main-thread affinity, phase
+  monotonicity/idempotence, strict versus best-effort storage, record schema,
+  permissions, previous-unclean detection, corruption handling, retention, and
+  fixed log-event routing.
+- The first native compile found only an Objective-C generic qualifier mismatch:
+  `NSFileManager` accepts a nullable mutable-qualified dictionary pointer, while
+  the local attributes variable had been declared as a pointer to `const`
+  `NSDictionary`. Removed that incorrect pointee qualifier; no behavioral or
+  acceptance change was needed.
+
+### 2026-09-04 — Subtask 1 validation
+
+- The corrected native contract passed on Apple M1/arm64. It proved exact
+  schema keys and values, UUID/timestamp shape, current versus previous-unclean
+  launch identity, `running`/`clean`/`failure` outcomes, numeric status,
+  `0700` directory and `0600` record modes, two-record retention, and absence
+  of temporary files after completed atomic writes.
+- The same contract proved invalid mode/path rejection, off-main start/phase
+  rejection, invalid and regressing phase rejection, duplicate phase and
+  finish idempotence, strict storage failure, best-effort production storage
+  failure, malformed prior JSON rejection, and preservation of earlier valid
+  unclean evidence.
+- A test-only observer verified that the real logging call path emits fixed
+  start, phase, prior-unclean, invalid-prior, persistence-error, and finish
+  event classes with the intended info/error/fault levels. Production still
+  invokes `os_log`; the observer adds no alternate product behavior or dynamic
+  message input.
+- `runtime-source-check` passed after adding the contract: Dart format and
+  analysis, clang-format, both lifecycle and diagnostics headers as C11/C++20,
+  plist validation, all Dart tests, the new diagnostics contract, and the
+  existing `TerminalMetalView` contract succeeded.
+- Reviewed the subtask diff and confirmed the native source is not yet linked
+  into either product host. That dependency remains ordered under subtask 2;
+  no later roadmap functionality has been started.

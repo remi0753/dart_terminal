@@ -173,6 +173,14 @@ override RUNTIME_LIFECYCLE_HEADER := \
 	$(PROJECT_ROOT)/native/macos/runtime/RuntimeLifecycleBridge.h
 override RUNTIME_LIFECYCLE_SOURCE := \
 	$(PROJECT_ROOT)/native/macos/runtime/RuntimeLifecycleBridge.mm
+override RUNTIME_DIAGNOSTICS_HEADER := \
+	$(PROJECT_ROOT)/native/macos/runtime/RuntimeDiagnostics.h
+override RUNTIME_DIAGNOSTICS_SOURCE := \
+	$(PROJECT_ROOT)/native/macos/runtime/RuntimeDiagnostics.mm
+override RUNTIME_DIAGNOSTICS_TEST_SOURCE := \
+	$(PROJECT_ROOT)/native/macos/runtime/test/RuntimeDiagnosticsTests.mm
+override RUNTIME_DIAGNOSTICS_TEST_BINARY := \
+	$(PROJECT_ROOT)/build/native/runtime_diagnostics_tests
 override RUNTIME_TERMINAL_VIEW_HEADER := \
 	$(PROJECT_ROOT)/native/macos/renderer/TerminalMetalView.h
 override RUNTIME_TERMINAL_VIEW_SOURCE := \
@@ -401,7 +409,7 @@ INTEL_EVIDENCE_OUTPUT ?=
 	release-aot-clean-sdk-test \
 	release-aot-integration release-aot-lifecycle release-aot-traffic \
 	runtime-source-check \
-	terminal-metal-view-test \
+	runtime-diagnostics-test terminal-metal-view-test \
 	runtime-bundle-audit runtime-integration \
 	runtime-lifecycle-integration runtime-traffic-integration runtime-verify \
 	runtime-matrix-build runtime-matrix-audit runtime-matrix-integration \
@@ -1170,7 +1178,9 @@ runtime-source-check: runtime-dart-tool-check
 		bin lib test tool benchmark
 	/usr/bin/xcrun clang-format --style=file:$(DART_APPKIT_ROOT)/.clang-format \
 		--dry-run --Werror $(RUNTIME_LIFECYCLE_HEADER) \
-		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_TERMINAL_VIEW_HEADER) \
+		$(RUNTIME_LIFECYCLE_SOURCE) $(RUNTIME_DIAGNOSTICS_HEADER) \
+		$(RUNTIME_DIAGNOSTICS_SOURCE) $(RUNTIME_DIAGNOSTICS_TEST_SOURCE) \
+		$(RUNTIME_TERMINAL_VIEW_HEADER) \
 		$(RUNTIME_TERMINAL_VIEW_SOURCE) $(RUNTIME_TERMINAL_VIEW_TEST_SOURCE) \
 		$(RUNTIME_WORKER_CONFIGURATION_HEADER) \
 		$(RUNTIME_WORKER_CONFIGURATION_SOURCE) $(RUNTIME_JIT_MAIN_SOURCE) \
@@ -1179,11 +1189,28 @@ runtime-source-check: runtime-dart-tool-check
 		-fsyntax-only $(RUNTIME_LIFECYCLE_HEADER)
 	/usr/bin/xcrun clang++ -x c++ -std=c++20 -Wall -Wextra -Wpedantic \
 		-Werror -fsyntax-only $(RUNTIME_LIFECYCLE_HEADER)
+	/usr/bin/xcrun clang -x c -std=c11 -Wall -Wextra -Wpedantic -Werror \
+		-fsyntax-only $(RUNTIME_DIAGNOSTICS_HEADER)
+	/usr/bin/xcrun clang++ -x c++ -std=c++20 -Wall -Wextra -Wpedantic \
+		-Werror -fsyntax-only $(RUNTIME_DIAGNOSTICS_HEADER)
 	/usr/bin/plutil -lint \
 		$(DEVELOPER_JIT_INFO_PLIST) $(RELEASE_AOT_INFO_PLIST)
 	"$(RUNTIME_DART_EXECUTABLE)" analyze
 	"$(RUNTIME_DART_EXECUTABLE)" run test/run_tests.dart
+	@$(MAKE) runtime-diagnostics-test
 	@$(MAKE) terminal-metal-view-test
+
+$(RUNTIME_DIAGNOSTICS_TEST_BINARY): $(RUNTIME_DIAGNOSTICS_HEADER) \
+		$(RUNTIME_DIAGNOSTICS_SOURCE) $(RUNTIME_DIAGNOSTICS_TEST_SOURCE)
+	@mkdir -p $(dir $@)
+	"$(CLANGXX)" $(NATIVE_FLAGS) -fblocks -fvisibility=hidden \
+		-arch $(HOST_ARCH) \
+		-I$(PROJECT_ROOT)/native/macos/runtime \
+		$(RUNTIME_DIAGNOSTICS_SOURCE) $(RUNTIME_DIAGNOSTICS_TEST_SOURCE) \
+		-framework Foundation -o $@
+
+runtime-diagnostics-test: $(RUNTIME_DIAGNOSTICS_TEST_BINARY)
+	$(RUNTIME_DIAGNOSTICS_TEST_BINARY)
 
 $(RUNTIME_TERMINAL_VIEW_TEST_BINARY): $(RUNTIME_BRIDGE_HEADERS) \
 		$(RUNTIME_BRIDGE_SOURCES) $(RUNTIME_TERMINAL_VIEW_HEADER) \
