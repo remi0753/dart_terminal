@@ -279,3 +279,47 @@ Validation:
   `62d0537a09f75320318542b2d3438134183ac215`
   (`Introduce generic AppKit views`). Its worktree was clean immediately
   afterward.
+
+### 2026-09-04 — Subtask 2: versioned window-state events
+
+- Raised the independently negotiated current event protocol to v3 while
+  preserving the v1 four-field and v2 six-field prefixes and every existing
+  close/resize/input payload. The sink and encoder reject v3-only state events
+  for older selected protocols before calling the Dart poster.
+- Added immutable native focus, visibility, occlusion, backing-scale, and
+  screen records. `DaWindowOwner` emits a complete snapshot after show,
+  translates the corresponding `NSWindowDelegate` callbacks, and deduplicates
+  each state only after a successful post.
+- Screen records explicitly distinguish no screen from a present display and
+  carry the positive `NSScreenNumber` identifier plus finite full and visible
+  frames. Invalid scale and screen values fail closed in both the shared
+  encoder and Dart decoder.
+- Added public Dart state event classes, `AppKitScreen`, per-window typed
+  streams, and cached state. A window applies each state before either the
+  application-level or window-level synchronous observer receives it.
+- Updated the reusable README, architecture, C ABI, verification matrix,
+  worklog, and hello example. The C ABI remains version 1 and the dylib still
+  exports exactly 19 `da_*` symbols.
+
+Validation:
+
+- Focused native bridge, exact encoder, and Dart API tests passed. Coverage
+  includes snapshot completeness, per-state deduplication, explicit no-screen,
+  v1/v2 suppression, exact v1/v2 legacy payloads, v3 serialization, malformed
+  payloads, and state-before-observer ordering.
+- The first native build found an Objective-C nullability completeness warning;
+  the inconsistent internal annotation was removed. The first encoder run had
+  retained v3 as the unsupported-version probe; it was corrected to v4. The
+  first complete suite found C/C++ header assertions still fixed at v2; both
+  were updated to v3. These failed attempts and causes are also recorded in
+  `../../../dart_appkit/docs/WORKLOG.md`.
+- The corrected full `dart_appkit` `make test` passed all native, Runner,
+  encoder, Dart, launcher, Kernel, FFI, and legacy-bridge checks. The native
+  bridge suite then passed ten consecutive runs.
+- The real hello-window smoke negotiated v3, observed all five AppKit state
+  families, auto-closed, released native handles, and exited successfully.
+  Final formatting and whitespace checks passed.
+- The reusable implementation was committed as
+  `be09f1a8e8f9d867cdf8d255fd40586fc9df5cc2`
+  (`Add versioned window state events`). Its worktree was clean immediately
+  afterward.
