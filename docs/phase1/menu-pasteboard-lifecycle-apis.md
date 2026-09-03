@@ -102,8 +102,8 @@ in their scheduled phases.
   action record in the first subtask even though menu object creation follows
   later.
 - `NSPasteboard` exposes an atomic text lookup plus `changeCount`; native tests
-  must use a unique named pasteboard helper rather than overwrite the user's
-  general clipboard.
+  must use an isolated test-only named pasteboard rather than overwrite the
+  user's general clipboard.
 - Existing legacy bridge fixtures omit additive symbols. Every new Dart FFI
   lookup must remain optional and report stable unsupported-version status
   only when the new operation is used.
@@ -157,7 +157,7 @@ is allowed.
 
 - Add UTF-8 snapshot/read, replace/write, clear, and change-count C/Dart APIs
   with strict outputs and optional legacy symbol resolution.
-- Test native conversion against a unique named pasteboard and Dart behavior
+- Test native conversion against an isolated named pasteboard and Dart behavior
   through the fake backend; do not read or overwrite the user's clipboard in
   automated reusable tests.
 - Completion: empty versus absent text, Unicode, embedded NUL, change counts,
@@ -228,7 +228,7 @@ reusable revisions for all three API families.
   analysis checks after each reusable subtask, followed by full `make test`.
 - Use deterministic poster/fake-stream fixtures for every v4 payload, source
   domain, request/reply transition, suppression path, and malformed record.
-- Use a unique `NSPasteboard` only inside native tests and fake bindings for
+- Use an isolated test-only `NSPasteboard` inside native tests and fake bindings for
   Dart tests. Reserve general-pasteboard access for the real product adapter.
 - Run the real reusable hello smoke after lifecycle and menu milestones.
 - Run Dart Terminal `runtime-source-check`, both arm64 builds and bundle audits,
@@ -276,7 +276,7 @@ reusable revisions for all three API families.
   `windowShouldClose:` because they violate the existing run-loop boundary and
   can deadlock AppKit. Selected operation-ID request/reply over the native port.
 - Rejected using the user's general pasteboard in automated native tests.
-  Internal helpers will accept a unique named pasteboard while public C calls
+  Internal helpers accept an isolated test-only named pasteboard while public C calls
   select the general pasteboard.
 - Split the item before implementation because versioned lifecycle semantics,
   pasteboard data transfer, menu ownership/actions, and two-mode product
@@ -338,3 +338,31 @@ reusable revisions for all three API families.
   under the managed filesystem sandbox. Repeating the same explicit three-file
   stage with repository metadata permission succeeded; no broader path or
   unrelated change was included.
+
+### 2026-09-04 — plain-text pasteboard API complete
+
+- Added four main-thread-only C operations for a same-call general-pasteboard
+  text snapshot, UTF-8 replacement, clear, and change-count observation. The
+  snapshot's explicit presence flag and byte length distinguish missing text,
+  present-empty text, Unicode, and embedded NUL without relying on C-string
+  termination. Outputs are zeroed before validation and borrowed native bytes
+  are copied immediately by FFI.
+- The application owns one stable Dart `Pasteboard` facade. It exposes
+  immutable `PasteboardTextSnapshot` values, rejects use after application
+  termination, and keeps all four new symbol lookups optional so the legacy
+  native fixture continues to load and reports unsupported only on use.
+- Native tests use a private named pasteboard, never the general pasteboard.
+  The first ten-run audit found that globally retained one-off unique
+  pasteboards exhaust the service and eventually return `nil`; the fixture now
+  reuses one test name and calls `releaseGlobally`. The rebuilt suite then
+  passed ten consecutive executions.
+- Final verification passed the complete `dart_appkit make test` suite, C/C++
+  header checks, warning-as-error native formatting, Dart analysis and API
+  tests, real-dylib FFI and legacy-fixture smokes, 28-symbol export audit,
+  `git diff --check`, and Dart Terminal `make runtime-source-check`. The SDK
+  worktree remained clean at
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28`.
+- The reusable implementation and its evidence were committed in `dart_appkit`
+  as `f46d89853348702c3fc00e1c0c91d20ca51000bc` (`Add plain-text pasteboard
+  snapshots`). Menu ownership/action work may now begin from that clean
+  prerequisite.
