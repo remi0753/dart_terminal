@@ -549,6 +549,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] Dart lifecycle phase と Developer JIT / Release AOT host integration
   - [x] M1 product acceptance と privacy/operations documentation
 - [ ] native/Dart の resource leak test と shutdown fault injection
+  （分割と完了条件は
+  [`docs/phase1/resource-leak-shutdown-fault-injection.md`](docs/phase1/resource-leak-shutdown-fault-injection.md)
+  を参照して実施する）
+  - [ ] product resource-leak stress gate
+  - [ ] bounded shutdown fault injection
+  - [ ] M1/arm64 acceptance と Phase 1 closeout
 
 終了条件:
 
