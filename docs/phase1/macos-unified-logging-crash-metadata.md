@@ -1,6 +1,6 @@
 # macOS unified logging and local crash metadata
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-04
 - Scope: first unchecked Phase 1 roadmap item only
 - Related: `ROADMAP.md` Phase 1, `FEATURE_MATRIX.md` RT-01/RT-03/REL-01/DIST-04,
@@ -321,3 +321,61 @@ real Developer JIT and Release AOT evidence.
   post-run finish remains intentionally idempotent.
 - Subtask 2 is complete. Product-level metadata assertions, the full real-GUI
   acceptance matrix, and operator/privacy documentation remain in subtask 3.
+
+### 2026-09-04 — Subtask 3 acceptance implementation
+
+- Extended the existing product integration launcher rather than adding a
+  diagnostics-only fake host. Every real GUI process now receives a unique
+  absolute temporary diagnostics directory through the test-only gate.
+- Each launch validates the exact metadata allowlist and format, UUID and UTC
+  timestamps, bundle/version/mode/architecture/SDK/process identity, bounded
+  file size, `0700`/`0600` permissions, final lifecycle phase, outcome and exit
+  status. The isolated directory must contain only `current-run.json`, and is
+  removed in a `finally` block on success or failure.
+- Normal smoke and traffic launches expect `root-stopped`; lifecycle failures
+  distinguish host-only `host-starting`, synchronous Dart `root-starting`, and
+  orderly cleanup through `root-stopped`. Nonzero runs must persist `failure`
+  with the exact process status. Tests never inspect or change the production
+  Application Support directory.
+- The focused arm64 smoke runs passed in Developer JIT and Release AOT. The
+  complete lifecycle inventory then passed all 16 cases in each mode,
+  including statuses 64, 70, and 75, followed by both 256-request bounded
+  traffic runs. Every one of these 36 GUI launches also passed the metadata
+  assertions and removed its temporary diagnostics directory.
+- Both strict bundle audits passed. The focused Developer and Release
+  clean-SDK/freshness gates passed with official Engine and `dart_appkit`
+  repositories clean, stable no-op outputs, regenerated outputs after changed
+  input, and the existing worker provenance/failure checks intact.
+- A first `log show` attempt was rejected by the command sandbox before reading
+  the macOS log store. The same read-only query in the approved host context
+  confirmed real Developer and Release processes under subsystem
+  `dev.dart-terminal`, including complete clean phase sequences, error-level
+  statuses 64/70/75, and the crash-category invalid/previous-unclean events
+  exercised by the native contract. No terminal or exception content appeared
+  in the fixed event payloads.
+
+## Completion and validation
+
+- `make runtime-source-check`: passed after the final integration-harness
+  changes. Dart formatting/analysis/tests, C11/C++20 headers, plist checks,
+  diagnostics native contract, and `TerminalMetalView` native contract all
+  passed together.
+- `make RUNTIME_ARCH=arm64 developer-jit-build release-aot-build`: passed.
+  Both bundle launchers exported the fixed diagnostics C ABI.
+- Both arm64 smoke suites, all 16 lifecycle cases per runtime mode, and both
+  bounded traffic suites passed with metadata assertions on every launch.
+- `make RUNTIME_ARCH=arm64 runtime-bundle-audit`: both strict bundle audits
+  passed.
+- `make RUNTIME_ARCH=arm64 developer-jit-clean-sdk-test
+  release-aot-clean-sdk-test`: both focused freshness/clean-SDK gates passed.
+- `make unmodified-engine-sdk-clean`: passed. Final status checks found no
+  changes in adjacent `dart_appkit` or the pinned official Engine SDK.
+- The final source diff contains only the acceptance harness and product/
+  privacy documentation for subtask 3; generated bundles and temporary
+  diagnostics directories are not tracked. `git diff --check` passed.
+
+The roadmap item is complete with planning commit `ac99e5d`, native-contract
+commit `ae3c04c`, and host-integration commit `bc71be8`. No blocker or deferred
+work remains inside this item. Full crash/hang capture and symbolication remain
+at their existing Phase 11 position; the next roadmap item is the separate
+native/Dart resource-leak and shutdown fault-injection task and was not started.

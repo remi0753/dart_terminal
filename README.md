@@ -36,6 +36,8 @@ parser corpus、性能 baseline は、独立した Dart/native spike で実機�
 - generic `View` / `TextView` 境界と、型を保った content-view attachment
 - 登録名から terminal-owned `TerminalMetalView : MTKView` を生成・attach できる
   custom-view 境界（renderer、shader、frame submission は Phase 4）
+- `dev.dart-terminal` の macOS Unified Logging と、終了状態を判定できる
+  privacy-safe なローカル実行メタデータ（M1/arm64 Developer JIT / Release AOT）
 - generation／AppKit-main domain付きnative handle registryと、off-domain
   releaseを即時無効化してmain queueで完了するasynchronous destruction
 - 最小の Application/File/Edit menu、明示的な Paste 時だけ行う plain-text
@@ -107,6 +109,39 @@ make RUNTIME_ARCH=arm64 developer-jit-lifecycle
 make RUNTIME_ARCH=arm64 developer-jit-traffic
 ```
 
+## Runtime diagnostics
+
+Developer JIT と Release AOT は、起動直後から終了までの固定イベントを macOS Unified
+Logging の subsystem `dev.dart-terminal`、category `runtime` / `crash` に記録します。
+イベント名、実行形態、CPU architecture、launch ID、lifecycle phase、終了種別と終了コード
+だけが対象です。terminal の表示内容、入力、コマンド、引数、環境変数、cwd、ファイルパス、
+worker stderr、例外詳細はログへ渡しません。直近1時間のイベントは次のように確認できます。
+
+```shell
+log show --style compact \
+  --predicate 'subsystem == "dev.dart-terminal"' --last 1h
+```
+
+同時に、各実行形態の最新状態を次のローカルファイルへ atomic に保存します。
+
+```text
+~/Library/Application Support/Dart Terminal/Diagnostics/developer-jit/current-run.json
+~/Library/Application Support/Dart Terminal/Diagnostics/release-aot/current-run.json
+```
+
+JSON は format/version、launch ID、bundle/version、実行形態、architecture、Dart SDK
+revision、PID、開始/更新時刻、最後の lifecycle phase、outcome、exit code だけを持ち、
+16 KiB 以下です。ディレクトリは所有者だけが参照できる `0700`、ファイルは `0600` です。
+正常終了は `outcome=clean`、既知の非ゼロ終了は `outcome=failure` になります。
+
+次回起動時に前回の `current-run.json` が `outcome=running` のままなら、同じ実行形態の
+`previous-unclean-run.json` として1件だけ保存します。これは終了記録まで到達しなかった
+ことを示すだけで、crash の断定ではありません。強制終了、電源断、ストレージ障害などでも
+同じ状態になり得ます。記録は端末内だけに留まり、自動送信、minidump、stack memory、
+symbolication は行いません。アプリ終了中であれば `Diagnostics` フォルダを削除でき、次回
+起動時に空の状態から再作成されます。crash/hang report、dSYM、利用者同意を含む完全な診断
+workflow は Phase 11 の範囲です。
+
 ## Release AOT
 
 M1/arm64 Release bundle の build、監査、起動は次のとおりです。
@@ -159,7 +194,9 @@ Phase 0 の debug/JIT、release-AOT、worker-isolate、benchmark、bundle 監査
 
 個別の再現方法と測定結果は [`docs/phase0`](docs/phase0)、設計判断は
 [`docs/adr`](docs/adr)、runtime matrix と Universal assembly の契約は
-[`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)
+[`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)、
+診断データの設計・検証記録は
+[`docs/phase1/macos-unified-logging-crash-metadata.md`](docs/phase1/macos-unified-logging-crash-metadata.md)
 にあります。
 
 ## 構成
@@ -168,7 +205,7 @@ Phase 0 の debug/JIT、release-AOT、worker-isolate、benchmark、bundle 監査
 bin/main.dart                         エントリーポイント
 lib/src/terminal_application.dart    AppKit ウィンドウとキーイベント
 lib/src/runtime_lifecycle.dart       root/worker lifecycle coordinator
-native/macos/runtime/                JIT/AOT lifecycle host integration
+native/macos/runtime/                JIT/AOT lifecycle と diagnostics host
 native/macos/renderer/               TerminalMetalView shell と native contract
 lib/src/terminal_session.dart        コマンド実行バックエンド
 lib/src/terminal_buffer.dart         入力、履歴、スクロールバック

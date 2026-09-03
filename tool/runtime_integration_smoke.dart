@@ -41,10 +41,18 @@ final class _Invocation {
   const _Invocation({
     required this.executable,
     required this.applicationArgumentPrefix,
+    required this.architecture,
+    required this.bundleIdentifier,
+    required this.applicationVersion,
+    required this.dartSdkRevision,
   });
 
   final String executable;
   final List<String> applicationArgumentPrefix;
+  final String architecture;
+  final String bundleIdentifier;
+  final String applicationVersion;
+  final String dartSdkRevision;
 
   List<String> arguments(List<String> applicationArguments) => <String>[
     ...applicationArgumentPrefix,
@@ -96,6 +104,7 @@ final class _LifecycleCase {
     this.environment = const <String, String>{},
     this.expectedStderrMarker,
     this.expectedWorkerProcessCount = 1,
+    this.expectedDiagnosticPhase = 'root-stopped',
   });
 
   final String name;
@@ -106,6 +115,7 @@ final class _LifecycleCase {
   final List<String> expectedObservations;
   final String? expectedStderrMarker;
   final int expectedWorkerProcessCount;
+  final String expectedDiagnosticPhase;
 }
 
 _Options _parseOptions(List<String> arguments) {
@@ -206,11 +216,29 @@ Future<_Invocation> _loadInvocation(_Options options) async {
       '$contentsPath/Resources/${options.mode.payloadName}';
   _expect(await File(executablePath).exists(), 'missing executable');
   _expect(await File(payloadPath).exists(), 'missing runtime payload');
+  final String bundleIdentifier = await _plistValue(
+    plistPath,
+    'CFBundleIdentifier',
+  );
+  final String applicationVersion = await _plistValue(
+    plistPath,
+    'CFBundleShortVersionString',
+  );
+  final String dartSdkRevision = await _plistValue(
+    plistPath,
+    'DTDartSDKRevision',
+  );
+  final String architecture =
+      options.launchArchitecture ?? await _hostArchitecture();
 
   if (options.mode == _RuntimeMode.releaseAot) {
     return _Invocation(
       executable: executablePath,
       applicationArgumentPrefix: const <String>[],
+      architecture: architecture,
+      bundleIdentifier: bundleIdentifier,
+      applicationVersion: applicationVersion,
+      dartSdkRevision: dartSdkRevision,
     );
   }
   final String sdkVersion = await _plistValue(plistPath, 'DTDartSDKVersion');
@@ -226,7 +254,24 @@ Future<_Invocation> _loadInvocation(_Options options) async {
       sdkRevision,
       '--',
     ],
+    architecture: architecture,
+    bundleIdentifier: bundleIdentifier,
+    applicationVersion: applicationVersion,
+    dartSdkRevision: dartSdkRevision,
   );
+}
+
+Future<String> _hostArchitecture() async {
+  final ProcessResult result = await Process.run('/usr/bin/uname', <String>[
+    '-m',
+  ]);
+  final String architecture = (result.stdout as String).trim();
+  _expect(
+    result.exitCode == 0 &&
+        (architecture == 'arm64' || architecture == 'x86_64'),
+    'could not determine supported host architecture',
+  );
+  return architecture;
 }
 
 Future<_ProcessObservation> _launch(
@@ -234,6 +279,7 @@ Future<_ProcessObservation> _launch(
   _Invocation invocation,
   List<String> applicationArguments, {
   Map<String, String> environment = const <String, String>{},
+  String expectedDiagnosticPhase = 'root-stopped',
 }) async {
   final String processExecutable = options.launchArchitecture == null
       ? invocation.executable
@@ -248,63 +294,193 @@ Future<_ProcessObservation> _launch(
           invocation.executable,
           ...invocationArguments,
         ];
-  final Stopwatch stopwatch = Stopwatch()..start();
-  final Process process = await Process.start(
-    processExecutable,
-    processArguments,
-    workingDirectory: Directory.current.path,
-    environment: environment.isEmpty ? null : environment,
+  final Directory diagnosticsDirectory = await Directory.systemTemp.createTemp(
+    'dart-terminal-runtime-diagnostics-',
   );
-  final Future<String> stdoutText = process.stdout
-      .transform(utf8.decoder)
-      .join();
-  final Future<String> stderrText = process.stderr
-      .transform(utf8.decoder)
-      .join();
-  late final int status;
   try {
-    status = await process.exitCode.timeout(const Duration(seconds: 12));
-  } on TimeoutException {
-    process.kill(ProcessSignal.sigterm);
+    final Stopwatch stopwatch = Stopwatch()..start();
+    final Process process = await Process.start(
+      processExecutable,
+      processArguments,
+      workingDirectory: Directory.current.path,
+      environment: <String, String>{
+        ...environment,
+        'DT_RUNTIME_DIAGNOSTICS_TEST': '1',
+        'DT_RUNTIME_DIAGNOSTICS_DIRECTORY': diagnosticsDirectory.path,
+      },
+    );
+    final Future<String> stdoutText = process.stdout
+        .transform(utf8.decoder)
+        .join();
+    final Future<String> stderrText = process.stderr
+        .transform(utf8.decoder)
+        .join();
+    late final int status;
     try {
-      await process.exitCode.timeout(const Duration(seconds: 1));
+      status = await process.exitCode.timeout(const Duration(seconds: 12));
     } on TimeoutException {
-      process.kill(ProcessSignal.sigkill);
-      await process.exitCode;
+      process.kill(ProcessSignal.sigterm);
+      try {
+        await process.exitCode.timeout(const Duration(seconds: 1));
+      } on TimeoutException {
+        process.kill(ProcessSignal.sigkill);
+        await process.exitCode;
+      }
+      throw _SmokeException(
+        '${options.mode.name} application did not exit within 12 seconds; '
+        'stdout=${(await stdoutText).trim()} '
+        'stderr=${(await stderrText).trim()}',
+      );
+    } finally {
+      stopwatch.stop();
     }
-    throw _SmokeException(
-      '${options.mode.name} application did not exit within 12 seconds; '
-      'stdout=${(await stdoutText).trim()} '
-      'stderr=${(await stderrText).trim()}',
+    final String completedStdout = await stdoutText;
+    final String completedStderr = await stderrText;
+    final List<_WorkerProcessObservation> workerProcesses =
+        _parseWorkerProcesses(completedStdout);
+    for (final int workerProcessId
+        in workerProcesses
+            .where(
+              (_WorkerProcessObservation observation) =>
+                  observation.event == 'spawned',
+            )
+            .map(
+              (_WorkerProcessObservation observation) =>
+                  observation.workerProcessId,
+            )) {
+      await _expectProcessAbsent(workerProcessId);
+    }
+    await _expectRuntimeDiagnostics(
+      options,
+      invocation,
+      diagnosticsDirectory,
+      processId: process.pid,
+      status: status,
+      expectedPhase: expectedDiagnosticPhase,
+    );
+    return _ProcessObservation(
+      processId: process.pid,
+      status: status,
+      stdoutText: completedStdout,
+      stderrText: completedStderr,
+      elapsed: stopwatch.elapsed,
+      workerProcesses: workerProcesses,
     );
   } finally {
-    stopwatch.stop();
+    if (await diagnosticsDirectory.exists()) {
+      await diagnosticsDirectory.delete(recursive: true);
+    }
   }
-  final String completedStdout = await stdoutText;
-  final String completedStderr = await stderrText;
-  final List<_WorkerProcessObservation> workerProcesses = _parseWorkerProcesses(
-    completedStdout,
+}
+
+Future<void> _expectRuntimeDiagnostics(
+  _Options options,
+  _Invocation invocation,
+  Directory directory, {
+  required int processId,
+  required int status,
+  required String expectedPhase,
+}) async {
+  final FileStat directoryStat = await directory.stat();
+  _expect(
+    directoryStat.type == FileSystemEntityType.directory &&
+        directoryStat.mode & 0x1ff == 0x1c0,
+    'diagnostics directory is not owner-only',
   );
-  for (final int workerProcessId
-      in workerProcesses
-          .where(
-            (_WorkerProcessObservation observation) =>
-                observation.event == 'spawned',
-          )
-          .map(
-            (_WorkerProcessObservation observation) =>
-                observation.workerProcessId,
-          )) {
-    await _expectProcessAbsent(workerProcessId);
+  final List<String> entries =
+      await directory
+            .list(followLinks: false)
+            .map((FileSystemEntity entry) => entry.uri.pathSegments.last)
+            .toList()
+        ..sort();
+  _expect(
+    _sameStrings(entries, const <String>['current-run.json']),
+    'diagnostics retention was not isolated to current-run.json: $entries',
+  );
+
+  final File recordFile = File('${directory.path}/current-run.json');
+  final FileStat recordStat = await recordFile.stat();
+  _expect(
+    recordStat.type == FileSystemEntityType.file &&
+        recordStat.size > 0 &&
+        recordStat.size <= 16 * 1024 &&
+        recordStat.mode & 0x1ff == 0x180,
+    'diagnostics record type, size, or owner-only mode is invalid',
+  );
+  final Object? decoded = jsonDecode(await recordFile.readAsString());
+  _expect(decoded is Map<String, dynamic>, 'diagnostics record is not JSON');
+  final Map<String, dynamic> record = decoded! as Map<String, dynamic>;
+  const Set<String> expectedKeys = <String>{
+    'format',
+    'version',
+    'launch_id',
+    'bundle_identifier',
+    'application_version',
+    'runtime_mode',
+    'architecture',
+    'dart_sdk_revision',
+    'process_id',
+    'started_at',
+    'updated_at',
+    'phase',
+    'outcome',
+    'exit_code',
+  };
+  _expect(
+    record.keys.toSet().length == expectedKeys.length &&
+        record.keys.toSet().containsAll(expectedKeys),
+    'diagnostics record does not use the exact privacy allowlist',
+  );
+  _expect(
+    record['format'] == 'dart-terminal-local-run-metadata' &&
+        record['version'] == 1,
+    'diagnostics format or version is invalid',
+  );
+  _expect(
+    record['launch_id'] is String &&
+        RegExp(
+          r'^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-'
+          r'[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$',
+        ).hasMatch(record['launch_id'] as String),
+    'diagnostics launch ID is invalid',
+  );
+  _expect(
+    record['bundle_identifier'] == invocation.bundleIdentifier &&
+        record['application_version'] == invocation.applicationVersion &&
+        record['runtime_mode'] == options.mode.name &&
+        record['architecture'] == invocation.architecture &&
+        record['dart_sdk_revision'] == invocation.dartSdkRevision &&
+        record['process_id'] == processId,
+    'diagnostics build or process identity does not match the launch',
+  );
+  final DateTime startedAt = _parseUtcTimestamp(
+    record['started_at'],
+    'started_at',
+  );
+  final DateTime updatedAt = _parseUtcTimestamp(
+    record['updated_at'],
+    'updated_at',
+  );
+  _expect(
+    !updatedAt.isBefore(startedAt),
+    'diagnostics update precedes launch start',
+  );
+  _expect(
+    record['phase'] == expectedPhase &&
+        record['outcome'] == (status == 0 ? 'clean' : 'failure') &&
+        record['exit_code'] == status,
+    'diagnostics completion does not match phase/status '
+    '$expectedPhase/$status: $record',
+  );
+}
+
+DateTime _parseUtcTimestamp(Object? value, String field) {
+  DateTime? parsed;
+  if (value is String) {
+    parsed = DateTime.tryParse(value);
   }
-  return _ProcessObservation(
-    processId: process.pid,
-    status: status,
-    stdoutText: completedStdout,
-    stderrText: completedStderr,
-    elapsed: stopwatch.elapsed,
-    workerProcesses: workerProcesses,
-  );
+  _expect(parsed != null && parsed.isUtc, 'diagnostics $field is not UTC');
+  return parsed!;
 }
 
 List<_WorkerProcessObservation> _parseWorkerProcesses(String output) {
@@ -768,6 +944,7 @@ List<_LifecycleCase> _lifecycleCases() => <_LifecycleCase>[
     expectedStderrMarker:
         'RUNTIME_LIFECYCLE_FATAL class=root-startup status=70',
     expectedWorkerProcessCount: 0,
+    expectedDiagnosticPhase: 'root-starting',
   ),
   _LifecycleCase(
     name: 'root-uncaught',
@@ -802,6 +979,7 @@ List<_LifecycleCase> _lifecycleCases() => <_LifecycleCase>[
     expectedStderrMarker:
         'RUNTIME_LIFECYCLE_FATAL class=host-startup status=70',
     expectedWorkerProcessCount: 0,
+    expectedDiagnosticPhase: 'host-starting',
   ),
   const _LifecycleCase(
     name: 'usage-error',
@@ -812,6 +990,7 @@ List<_LifecycleCase> _lifecycleCases() => <_LifecycleCase>[
         'Argument error: unknown application option: '
         '--unsupported-lifecycle-option',
     expectedWorkerProcessCount: 0,
+    expectedDiagnosticPhase: 'root-starting',
   ),
 ];
 
@@ -825,6 +1004,7 @@ Future<void> _runLifecycle(_Options options, _Invocation invocation) async {
       invocation,
       testCase.applicationArguments,
       environment: testCase.environment,
+      expectedDiagnosticPhase: testCase.expectedDiagnosticPhase,
     );
     _expect(
       result.status == testCase.expectedStatus,

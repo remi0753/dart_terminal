@@ -48,9 +48,9 @@ font、input、config、macOS UI、release workflow の実装とテストを確�
 現在の Dart Terminal は、M1/arm64 Developer JIT / Release AOT の未改変 AppKit
 main-thread root、独立した公式 Dart 子プロセス worker、generic `View` / `TextView`、
 登録済み custom-view provider と terminal-owned `TerminalMetalView` shell、v4 native
-event、コマンドごとの `zsh -lc` までである。通常表示はまだ `TextView` であり、Metal
-renderer は Phase 4 まで明示的に defer する。旧 Engine 改変経路と関連する来歴・監査・
-test code は削除済みである。
+event、privacy-safe な local-run metadata と Unified Logging、コマンドごとの `zsh -lc`
+までである。通常表示はまだ `TextView` であり、Metal renderer は Phase 4 まで明示的に
+defer する。旧 Engine 改変経路と関連する来歴・監査・test code は削除済みである。
 下表の「現在」が `未実装` でも欠落ではなく、指定 Phase まで明示的に defer した
 backlog である。
 
@@ -64,7 +64,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | --- | --- | --- | --- | --- | --- |
 | RT-01 | release AOT root isolate が AppKit main thread に attach し、main run loop を所有しない | P0 | 1 | `G:macos/Sources/App/main.swift`, native macOS app lifecycle | M1 Developer/Release stock root 完了 |
 | RT-02 | pane ごとの長寿命 runtime worker と window ごとの render coordinator を起動、停止、異常回収できる | P0 | 1 | `G:src/termio/Thread.zig`, `G:src/renderer/Thread.zig` | M1 Developer/Release process worker の lifecycle/再生成/bounded traffic 完了、pane/render は後続 |
-| RT-03 | UI、PTY I/O、terminal state、render resource の thread/owner が一意 | P0 | 1 | `G:src/termio/mailbox.zig`, `G:src/renderer/message.zig` | M1 両 mode の root/process owner、v1–v4 event generation、generic/custom View、TerminalMetalView shell、window/application state、menu action、AppKit handle domain/async destruction 完了。PTY/render は後続 |
+| RT-03 | UI、PTY I/O、terminal state、render resource の thread/owner が一意 | P0 | 1 | `G:src/termio/mailbox.zig`, `G:src/renderer/message.zig` | M1 両 mode の root/process owner、v1–v4 event generation、generic/custom View、TerminalMetalView shell、window/application state、menu action、AppKit handle domain/async destruction、main-thread diagnostics phase 完了。PTY/render は後続 |
 | PTY-01 | 1 pane = 1 persistent PTY。slave が controlling terminal になり、新 session/process group を持つ | P0 | 2 | `G:src/pty.zig`, `G:src/pty.c`, `G:src/termio/Exec.zig` | Phase 0 gate |
 | PTY-02 | shell/command を `argv`、`envp`、cwd で起動し、shell interpolation を行わない | P0 | 2 | `G:src/Command.zig`, `G:src/termio/Exec.zig` | 未実装 |
 | PTY-03 | macOS login shell、`TERM`、`COLORTERM`、locale、initial cwd が zero-config で妥当 | P0 | 2 | `G:src/termio/Exec.zig`, `G:src/os/shell.zig` | 未実装 |
@@ -197,7 +197,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | SEC-02 | URL scheme allowlist/sanitization、OSC 52 policy、paste confirmation、notification rate limit | P0/P1 | 5/9 | `G:macos/Sources/Helpers/UntrustedURL.swift`, clipboard confirmation | 未実装 |
 | SEC-03 | fork child は async-signal-safe setup と `execve` だけ。Dart runtime/ObjC allocation を呼ばない | P0 | 2 | `G:src/pty.zig`, `G:src/Command.zig` | Phase 0 gate |
 | SEC-04 | Secure Input を abnormal teardown 後も必ず解除 | P1 | 10 | `G:macos/Sources/Features/Secure Input/SecureInput.swift` | 未実装 |
-| SEC-05 | crash/update/clipboard/shell integration の data flow と opt-in/out を privacy 文書化 | P0 | 10/11 | pinned crash/update/config behaviorを比較対象にする | 未実装 |
+| SEC-05 | crash/update/clipboard/shell integration の data flow と opt-in/out を privacy 文書化 | P0 | 10/11 | pinned crash/update/config behaviorを比較対象にする | Phase 1 local-run metadata の local-only/no-content policy を文書化。crash/update/clipboard/shell 全体は Phase 10/11 |
 
 ## Compatibility、performance、distribution
 
@@ -207,11 +207,11 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | QA-02 | xterm/Ghostty/Kitty black-box differential と real-app matrix。bug を最小 byte regression に還元 | P1 | 6 | `G:src/terminal/` tests and VT C examples | 未実装 |
 | PERF-01 | parser AOT ≥100 MiB/s、AppKit event p95 <1 ms、key→PTY p95 <2 ms | P0 | 0–11 | `G:src/benchmark/`, `G:macos/Tests/BenchmarkTests.swift` | Phase 0 harness |
 | PERF-02 | 100 MiB burst で UI hang 0、bounded memory/queue。1 pane flood が他 pane latency を2倍にしない | P0/P1 | 2/7/11 | Ghostty termio/renderer threaded design | Phase 0 harness starts |
-| REL-01 | child/GPU/runtime-worker fault、late event/double dispose、sleep/wake/display change、24/72h soak | P0/P1 | 1–11 | pinned tests, crash and renderer recovery paths | M1 両 mode の process fault/late/double lifecycle 完了、GPU/sleep/soak は後続 |
+| REL-01 | child/GPU/runtime-worker fault、late event/double dispose、sleep/wake/display change、24/72h soak | P0/P1 | 1–11 | pinned tests, crash and renderer recovery paths | M1 両 mode の process fault/late/double lifecycle と early/nonzero diagnostic metadata 完了。resource leak/fault injection、GPU/sleep/soak は後続 |
 | DIST-01 | release AOT `.app`、arm64/x86_64、Universal Binary | P0 | 1/11 | native Ghostty app and universal release workflow | stock-runtime M1 arm64 Release 完了。x86_64/Universal は低優先 follow-up |
 | DIST-02 | Developer ID、hardened runtime、notarization、minimal entitlements | P0/P1 | 11 | `G:.github/workflows/release-tag.yml`, `G:macos/Ghostty.entitlements` | 未実装 |
 | DIST-03 | signed update feed、rollback/failure path、release notes | P2 | 11 | `G:macos/Sources/Features/Update/`, `G:dist/macos/` | 未実装 |
-| DIST-04 | local crash/hang metadata と privacy-safe diagnostics | P1 | 11 | `G:src/crash/`, release dSYM workflow | 未実装 |
+| DIST-04 | local crash/hang metadata と privacy-safe diagnostics | P1 | 11 | `G:src/crash/`, release dSYM workflow | Phase 1 で local-run metadata、previous-unclean marker、Unified Logging、retention/privacy contract を完了。crash/hang report、dSYM、consent は Phase 11 |
 
 ## 明示的な非目標
 
