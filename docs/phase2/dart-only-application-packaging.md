@@ -1,6 +1,6 @@
 # Dart-only macOS application packaging migration
 
-- Status: PTY capability complete; Dart Terminal migration in progress
+- Status: complete
 - Started: 2026-09-04
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Related: `ROADMAP.md` Phase 2, `docs/adr/ADR-001-dart-native-boundary.md`,
@@ -326,3 +326,54 @@ pass against the replacement.
   while waiting for its first event. The facade now keeps the callback isolate
   alive exactly while sessions exist and disables that retention after the last
   terminal event, preventing both premature shutdown and process-exit leaks.
+
+### 2026-09-05 — Dart-only product migration completion
+
+- Extended the reusable runtime at adjacent `dart_appkit` commit `05042a5` so
+  an application manifest can declare Dart helper executables, native assets,
+  and native AppKit capabilities. Helpers are built through the official,
+  hook-aware Dart CLI build path and staged under `Contents/Helpers`; application
+  code resolves them and dependency-owned dylibs through public runtime APIs.
+- Replaced Dart Terminal's product-specific host build with the public
+  `dart_macos_runtime:build` entry point and `macos_application.json`. The
+  application now imports only the public `dart_appkit`, `dart_macos_runtime`,
+  `dart_pty_macos`, and `dart_terminal_renderer_macos` packages. Its Dart entry
+  point initializes the renderer capability, opens the manifest-staged PTY
+  backend, and starts the lifecycle worker by its bundle helper name.
+- Removed all checked-in Objective-C, Objective-C++, C, C++, native header, and
+  Metal source from Dart Terminal, together with the former product runtime,
+  diagnostics, renderer, release-build, provenance, and adjacent-internal-source
+  tooling. `dart_only_source_audit.dart` enforces this source boundary and also
+  rejects application-layer `dart:ffi` and `DynamicLibrary` use.
+- `TerminalSession` now depends on the public `PtyBackend`, propagates window
+  rows and columns, routes foreground interrupts through the PTY, decodes split
+  UTF-8 output incrementally, and supports deterministic fake-backend tests.
+  It deliberately remains a per-command PTY adapter so the existing command
+  console behavior is preserved. Pane-owned persistent shell state and close
+  confirmation remain the next pre-existing Phase 2 roadmap item.
+- A first real build exposed three integration assumptions. A `void main` helper
+  required the generated wrapper to accept both synchronous and asynchronous
+  entry points; helper compilation had to use `dart build cli` because native
+  dependency hooks participate in the package graph; and Release termination
+  diagnostics had to be completed from the AppKit termination delegate. These
+  fixes are generic runtime behavior and are covered in the adjacent package.
+- `dart analyze` and the Dart test runner pass, including the real PTY command
+  session. The adjacent package's complete `make test` passes, including native
+  warning-as-error contracts, Dart analysis/tests, build-hook products, ABI and
+  symbol audits, PTY integration, and source inventory. The official SDK tree
+  remains unchanged.
+- Fresh arm64 Developer JIT and Release AOT bundles pass source and deep bundle
+  audits, normal GUI smoke, complete lifecycle/failure/replacement suites,
+  bounded traffic (384 backpressured requests with a maximum of 64 in flight),
+  1,000 Window/View resource cycles (baseline 12, peak 14, final 12), and
+  shutdown-fault containment (final native handles 0). Both modes stage the
+  helper, PTY image, and renderer capability declared by the same manifest and
+  contain no build-machine dylib references.
+- The final `make RUNTIME_ARCH=arm64 runtime-verify` run completed with exit 0.
+  Developer JIT / Release AOT normal GUI smoke completed in 2,107 / 1,648 ms,
+  traffic in 989 / 983 ms, resource stress in 5,790 / 5,689 ms, and shutdown
+  fault containment in 422 / 273 ms. `git diff --check` also passed.
+
+All seven ordered migration tasks and all acceptance criteria in this note are
+complete. This closes the application-packaging boundary; it does not complete
+the separate persistent-pane or terminal-emulation feature work.

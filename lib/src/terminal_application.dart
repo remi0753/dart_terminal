@@ -3,10 +3,11 @@ import 'dart:io';
 
 import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_appkit/testing.dart' as appkit_testing;
+import 'package:dart_macos_runtime/dart_macos_runtime.dart';
+import 'package:dart_pty_macos/dart_pty_macos.dart';
+import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
-import 'runtime_diagnostics_host.dart';
 import 'runtime_lifecycle.dart';
-import 'runtime_lifecycle_host.dart';
 import 'terminal_session.dart';
 
 const String terminalUsage = '''
@@ -17,13 +18,8 @@ Application options:
   --auto-close-after=SECONDS Close automatically (for smoke testing).
 ''';
 
-const String _runtimeWorkerExecutablePrefix = '--runtime-worker-executable=';
-const String _runtimeWorkerKernelPrefix = '--runtime-worker-kernel=';
-const String _runtimeWorkerModePrefix = '--runtime-worker-mode=';
-const String _terminalMetalViewProviderIdentifier =
-    'dart_terminal.TerminalMetalView';
-
-enum _RuntimeWorkerMode { kernel, selfContained }
+const String _runtimeWorkerName = 'dart_terminal_runtime_worker';
+const int _runtimeTemporaryFailureExitCode = 75;
 
 final class TerminalOptions {
   const TerminalOptions({
@@ -39,15 +35,13 @@ final class TerminalOptions {
   factory TerminalOptions.parse(
     List<String> arguments, {
     Map<String, String>? environment,
+    RuntimeLifecycleWorkerCommand? runtimeWorkerCommand,
   }) {
     String? initialWorkingDirectory;
     Duration? autoCloseAfter;
     var runtimeResourceStress = false;
     var runtimeShutdownFaultInjection = false;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
-    String? runtimeWorkerExecutable;
-    String? runtimeWorkerKernel;
-    _RuntimeWorkerMode? runtimeWorkerMode;
     for (final String argument in arguments) {
       const String workingDirectoryPrefix = '--working-directory=';
       const String autoClosePrefix = '--auto-close-after=';
@@ -68,57 +62,6 @@ final class TerminalOptions {
           );
         }
         runtimeShutdownFaultInjection = true;
-        continue;
-      }
-      if (argument.startsWith(_runtimeWorkerExecutablePrefix)) {
-        if (runtimeWorkerExecutable != null) {
-          throw const FormatException(
-            'internal runtime worker executable may only be supplied once',
-          );
-        }
-        final String value = argument.substring(
-          _runtimeWorkerExecutablePrefix.length,
-        );
-        if (value.isEmpty || !File(value).isAbsolute) {
-          throw const FormatException(
-            'internal runtime worker executable must be an absolute path',
-          );
-        }
-        runtimeWorkerExecutable = value;
-        continue;
-      }
-      if (argument.startsWith(_runtimeWorkerKernelPrefix)) {
-        if (runtimeWorkerKernel != null) {
-          throw const FormatException(
-            'internal runtime worker Kernel may only be supplied once',
-          );
-        }
-        final String value = argument.substring(
-          _runtimeWorkerKernelPrefix.length,
-        );
-        if (value.isEmpty || !File(value).isAbsolute) {
-          throw const FormatException(
-            'internal runtime worker Kernel must be an absolute path',
-          );
-        }
-        runtimeWorkerKernel = value;
-        continue;
-      }
-      if (argument.startsWith(_runtimeWorkerModePrefix)) {
-        if (runtimeWorkerMode != null) {
-          throw const FormatException(
-            'internal runtime worker mode may only be supplied once',
-          );
-        }
-        runtimeWorkerMode = switch (argument.substring(
-          _runtimeWorkerModePrefix.length,
-        )) {
-          'kernel' => _RuntimeWorkerMode.kernel,
-          'self-contained' => _RuntimeWorkerMode.selfContained,
-          _ => throw const FormatException(
-            'internal runtime worker mode must be kernel or self-contained',
-          ),
-        };
         continue;
       }
       if (argument.startsWith(workingDirectoryPrefix)) {
@@ -166,16 +109,6 @@ final class TerminalOptions {
       }
       throw FormatException('unknown application option: $argument');
     }
-    if (runtimeWorkerExecutable == null ||
-        runtimeWorkerMode == null ||
-        (runtimeWorkerMode == _RuntimeWorkerMode.kernel &&
-            runtimeWorkerKernel == null) ||
-        (runtimeWorkerMode == _RuntimeWorkerMode.selfContained &&
-            runtimeWorkerKernel != null)) {
-      throw const FormatException(
-        'internal runtime worker configuration is incomplete',
-      );
-    }
     final RuntimeLifecycleScenario selectedScenario =
         runtimeLifecycleScenario ?? RuntimeLifecycleScenario.normal;
     if (selectedScenario != RuntimeLifecycleScenario.normal &&
@@ -218,12 +151,11 @@ final class TerminalOptions {
       runtimeResourceStress: runtimeResourceStress,
       runtimeShutdownFaultInjection: runtimeShutdownFaultInjection,
       runtimeLifecycleScenario: selectedScenario,
-      runtimeWorkerCommand: RuntimeLifecycleWorkerCommand(
-        executable: runtimeWorkerExecutable,
-        arguments: runtimeWorkerMode == _RuntimeWorkerMode.kernel
-            ? <String>[runtimeWorkerKernel!]
-            : const <String>[],
-      ),
+      runtimeWorkerCommand:
+          runtimeWorkerCommand ??
+          RuntimeLifecycleWorkerCommand(
+            executable: MacosRuntime.bundleHelperPath(_runtimeWorkerName),
+          ),
     );
   }
 
@@ -243,6 +175,10 @@ final class TerminalApplication {
   Future<void> run() async {
     final RuntimeLifecycleScenario scenario = options.runtimeLifecycleScenario;
     _writeLifecycleEvent(scenario, 'root-start', 0);
+    TerminalRendererMacos.initialize();
+    final MacosPtyBackend ptyBackend = MacosPtyBackend.open(
+      MacosRuntime.bundleFrameworkPath(dartPtyMacosLibraryName),
+    );
     final AppKitApplication application = await AppKitApplication.attach();
     View? contentView;
     Window? window;
@@ -267,7 +203,7 @@ final class TerminalApplication {
           ? null
           : TextView();
       final View createdContentView =
-          createdTextView ?? View.custom(_terminalMetalViewProviderIdentifier);
+          createdTextView ?? TerminalRendererMacos.createView();
       contentView = createdContentView;
       final Window createdWindow =
           Window(
@@ -281,12 +217,13 @@ final class TerminalApplication {
       if (useTerminalMetalView) {
         stdout.writeln(
           'NATIVE_CUSTOM_VIEW '
-          'provider=$_terminalMetalViewProviderIdentifier attached=true',
+          'provider=$terminalMetalViewProviderIdentifier attached=true',
         );
       }
 
       late final TerminalSession createdSession;
       createdSession = TerminalSession(
+        ptyBackend: ptyBackend,
         initialWorkingDirectory: options.initialWorkingDirectory,
         onChanged: () {
           if (createdTextView != null && !createdTextView.isDisposed) {
@@ -488,9 +425,11 @@ final class TerminalApplication {
                 );
               }
               createdWindow.replyToCloseRequest(event, allow: true);
-            case WindowResizedEvent(:final height):
-              createdSession.viewportRows = _rowsForHeight(height);
-              createdSession.refresh();
+            case WindowResizedEvent(:final width, :final height):
+              createdSession.resize(
+                rows: _rowsForHeight(height),
+                columns: _columnsForWidth(width),
+              );
             case WindowFocusChangedEvent(:final isFocused):
               if (emitNativeEventWireObservation) {
                 _writeWindowStateEvent(
@@ -607,7 +546,7 @@ final class TerminalApplication {
         );
       }
       _writeLifecycleEvent(scenario, 'root-ready', createdLifecycle.generation);
-      RuntimeDiagnosticsHost.recordPhase(RuntimeDiagnosticPhase.rootReady);
+      MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootReady);
 
       if (options.runtimeShutdownFaultInjection) {
         await _exerciseShutdownFaultInjection(application);
@@ -669,7 +608,7 @@ final class TerminalApplication {
               .shutdown();
           lifecycleWasShutDown = true;
           _expectLifecycle(result.forced, 'shutdown deadline did not force');
-          RuntimeLifecycleHost.setExitCode(runtimeTemporaryFailureExitCode);
+          MacosRuntime.setExitCode(_runtimeTemporaryFailureExitCode);
         case RuntimeLifecycleScenario.lateCompletion:
           final Future<RuntimeLifecycleRequestResult> request = createdLifecycle
               .request(41);
@@ -774,7 +713,7 @@ final class TerminalApplication {
       }
       await closed.future;
     } finally {
-      RuntimeDiagnosticsHost.recordPhase(
+      MacosRuntime.recordDiagnosticPhase(
         RuntimeDiagnosticPhase.shutdownStarted,
       );
       autoCloseTimer?.cancel();
@@ -806,7 +745,7 @@ final class TerminalApplication {
         contentView.dispose();
       }
       _writeLifecycleEvent(scenario, 'root-exit', lifecycle?.generation ?? 0);
-      RuntimeDiagnosticsHost.recordPhase(RuntimeDiagnosticPhase.rootStopped);
+      MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
       final bool auditFinalNativeHandles =
           options.runtimeResourceStress ||
           options.runtimeShutdownFaultInjection;
@@ -1092,6 +1031,17 @@ final class TerminalApplication {
       return 200;
     }
     return rows;
+  }
+
+  static int _columnsForWidth(double width) {
+    final int columns = ((width - 24) / 9).floor();
+    if (columns < 20) {
+      return 20;
+    }
+    if (columns > 65535) {
+      return 65535;
+    }
+    return columns;
   }
 
   static void _handleKeyDown(AppKitKeyEvent event, TerminalSession session) {

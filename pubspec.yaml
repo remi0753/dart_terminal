@@ -8,3 +8,9 @@ environment:
 dependencies:
   dart_appkit:
     path: ../dart_appkit/packages/dart_appkit
+  dart_macos_runtime:
+    path: ../dart_appkit/packages/dart_macos_runtime
+  dart_pty_macos:
+    path: ../dart_appkit/packages/dart_pty_macos
+  dart_terminal_renderer_macos:
+    path: ../dart_appkit/packages/dart_terminal_renderer_macos

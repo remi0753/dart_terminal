@@ -202,7 +202,14 @@ Future<_Invocation> _loadInvocation(_Options options) async {
   final String contentsPath = '${bundle.path}/Contents';
   final String plistPath = '$contentsPath/Info.plist';
   _expect(await File(plistPath).exists(), 'missing Info.plist: $plistPath');
-  final String declaredMode = await _plistValue(plistPath, 'DTRuntimeMode');
+  final File buildManifestFile = File(
+    '$contentsPath/Resources/runtime-build-manifest.json',
+  );
+  _expect(await buildManifestFile.exists(), 'missing runtime build manifest');
+  final Map<String, Object?> buildManifest = jsonDecode(
+    await buildManifestFile.readAsString(),
+  ) as Map<String, Object?>;
+  final String declaredMode = buildManifest['runtimeMode']! as String;
   _expect(
     declaredMode == options.mode.name,
     'declared runtime mode $declaredMode != ${options.mode.name}',
@@ -224,10 +231,7 @@ Future<_Invocation> _loadInvocation(_Options options) async {
     plistPath,
     'CFBundleShortVersionString',
   );
-  final String dartSdkRevision = await _plistValue(
-    plistPath,
-    'DTDartSDKRevision',
-  );
+  final String dartSdkRevision = buildManifest['dartSdkRevision']! as String;
   final String architecture =
       options.launchArchitecture ?? await _hostArchitecture();
 
@@ -241,8 +245,8 @@ Future<_Invocation> _loadInvocation(_Options options) async {
       dartSdkRevision: dartSdkRevision,
     );
   }
-  final String sdkVersion = await _plistValue(plistPath, 'DTDartSDKVersion');
-  final String sdkRevision = await _plistValue(plistPath, 'DTDartSDKRevision');
+  final String sdkVersion = buildManifest['dartSdkVersion']! as String;
+  final String sdkRevision = buildManifest['dartSdkRevision']! as String;
   return _Invocation(
     executable: executablePath,
     applicationArgumentPrefix: <String>[
@@ -306,8 +310,8 @@ Future<_ProcessObservation> _launch(
       workingDirectory: Directory.current.path,
       environment: <String, String>{
         ...environment,
-        'DT_RUNTIME_DIAGNOSTICS_TEST': '1',
-        'DT_RUNTIME_DIAGNOSTICS_DIRECTORY': diagnosticsDirectory.path,
+        'DMR_RUNTIME_DIAGNOSTICS_TEST': '1',
+        'DMR_RUNTIME_DIAGNOSTICS_DIRECTORY': diagnosticsDirectory.path,
       },
     );
     final Future<String> stdoutText = process.stdout
@@ -434,7 +438,7 @@ Future<void> _expectRuntimeDiagnostics(
     'diagnostics record does not use the exact privacy allowlist',
   );
   _expect(
-    record['format'] == 'dart-terminal-local-run-metadata' &&
+    record['format'] == 'dart-macos-runtime-local-run-metadata' &&
         record['version'] == 1,
     'diagnostics format or version is invalid',
   );
@@ -975,7 +979,7 @@ List<_LifecycleCase> _lifecycleCases() => <_LifecycleCase>[
   const _LifecycleCase(
     name: 'host-startup-failure',
     applicationArguments: <String>[],
-    environment: <String, String>{'DT_RUNTIME_TEST_HOST_STARTUP_FAILURE': '1'},
+    environment: <String, String>{'DMR_RUNTIME_TEST_HOST_STARTUP_FAILURE': '1'},
     expectedStatus: 70,
     expectedObservations: <String>[],
     expectedStderrMarker:

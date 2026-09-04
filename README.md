@@ -8,11 +8,10 @@ Ghostty や `libghostty` を製品へ組み込みません。
 Rosetta、Universal、Intel-native 実機確認は、M1 の製品 contract が完了した後の
 低優先 follow-up であり、M1 の完了を阻害しません。
 
-現在の通常エントリーポイントはまだ command console ですが、Phase 0 の
-feasibility gate と仕様凍結は完了しています。release AOT、worker isolate、
-安全な PTY child、64 KiB batching、Metal、CoreText、日本語 IME、packed grid、
-parser corpus、性能 baseline は、独立した Dart/native spike で実機検証済みです。
-これは過去の成立性証拠であり、現在の製品 runtime topology ではありません。
+現在の通常エントリーポイントは、再利用可能な `dart_pty_macos` を使う
+PTY-backed command session です。Phase 0 の native spike source は移行時に削除し、
+成立性と測定結果は `docs/phase0` に保存しています。VT parser、screen model、
+CoreText/Metal renderer、IME の製品実装は後続 Phase です。
 
 現在選定している製品 contract は、未改変の公式 Dart だけを使う AppKit root と、
 独立して回収・再生成できる公式 Dart 子プロセス worker です。M1/arm64 Developer JIT
@@ -24,7 +23,7 @@ parser corpus、性能 baseline は、独立した Dart/native spike で実機�
 - AppKit のネイティブウィンドウを Dart から表示
 - キー入力、Backspace/Delete、左右移動、Home/End
 - 上下キーによるコマンド履歴
-- `/bin/zsh -lc` によるコマンド実行と標準出力・標準エラーの表示
+- `dart_pty_macos` 上の `/bin/zsh -lc` による TTY 付きコマンド実行
 - `help`、`clear`、`cd PATH`、`exit` の組み込みコマンド
 - Control-C による実行中プロセスへの割り込み
 - ウィンドウサイズに合わせた簡易表示行数の調整
@@ -34,8 +33,9 @@ parser corpus、性能 baseline は、独立した Dart/native spike で実機�
   ID、focus/visibility/occlusion/backing scale/screen state、application/window
   lifecycle、menu action）と、旧 v1/v2/v3 endpoint との compatibility negotiation
 - generic `View` / `TextView` 境界と、型を保った content-view attachment
-- 登録名から terminal-owned `TerminalMetalView : MTKView` を生成・attach できる
-  custom-view 境界（renderer、shader、frame submission は Phase 4）
+- `dart_terminal_renderer_macos` の公開 facade から dependency-owned
+  `TerminalMetalView : MTKView` を生成・attach できる custom-view 境界
+  （renderer、shader、frame submission は Phase 4）
 - `dev.dart-terminal` の macOS Unified Logging と、終了状態を判定できる
   privacy-safe なローカル実行メタデータ（M1/arm64 Developer JIT / Release AOT）
 - generation／AppKit-main domain付きnative handle registryと、off-domain
@@ -45,7 +45,7 @@ parser corpus、性能 baseline は、独立した Dart/native spike で実機�
 
 ## 起動
 
-先に隣接する `dart_appkit` リポジトリで、公開APIだけを使う未改変 Engine host を
+先に隣接する `dart_appkit` リポジトリで、汎用 runtime が使う未改変 Engine を
 準備します。
 
 ```shell
@@ -53,10 +53,8 @@ cd ../dart_appkit
 make engine
 ```
 
-その後、このディレクトリで依存関係を解決し、製品の developer JIT
-bundle を起動します。thin runtime target は architecture の省略や推測を
-許可しないため、`RUNTIME_ARCH=arm64` または `RUNTIME_ARCH=x86_64` を必ず
-指定します。
+その後、このディレクトリで公開 Dart package を解決し、同じ宣言ファイルから
+Developer JIT bundle を起動します。`RUNTIME_ARCH` は現在の Mac を既定値とします。
 
 ```shell
 dart pub get
@@ -76,16 +74,15 @@ make RUNTIME_ARCH=arm64 developer-jit-run \
 make RUNTIME_ARCH=arm64 developer-jit-integration
 ```
 
-developer JIT は、application Kernel、独立した worker Kernel、および未改変の
-JIT Engine を含む開発専用 bundle です。worker は build provenance に固定された
-公式 SDK の Dart 実行ファイルで起動します。成果物は
-`build/runtime/<architecture>/developer-jit/DartTerminalDeveloper.app` に
-作られ、配布物には使用しません。
+Developer JIT は application Kernel、自己完結 worker helper、および未改変の
+JIT Engine を含む開発専用 bundle です。成果物は
+`build/runtime/<architecture>/developer-jit/DartTerminal.app` に作られ、
+配布物には使用しません。
 
 ## Runtime lifecycle
 
-M1/arm64 Developer 起動では、root isolate が AppKit へ attach した後に、公式 SDK の
-Dart 実行ファイルを別プロセスとして起動します。親は PID、stdin/stdout/stderr、
+M1/arm64 Developer 起動では、root isolate が AppKit へ attach した後に、manifest
+から生成した自己完結 Dart helper を別プロセスとして起動します。親は PID、stdin/stdout/stderr、
 versioned frame、世代番号を所有し、同時受付を64件に制限して過負荷を明示的に
 呼び出し元へ返します。終了は stop acknowledgement だけで完了扱いにせず、OS が
 通知する process exit と stdout/stderr の drain を回収します。期限超過時だけ
@@ -180,8 +177,7 @@ M1/arm64 の主要受け入れ手順には含めません。この follow-up の
 
 ```shell
 make runtime-source-check
-make RUNTIME_ARCH=arm64 developer-jit-clean-sdk-test
-make RUNTIME_ARCH=arm64 release-aot-clean-sdk-test
+make test
 make RUNTIME_ARCH=arm64 runtime-bundle-audit
 make RUNTIME_ARCH=arm64 runtime-integration
 ```
@@ -193,14 +189,13 @@ smoke、lifecycle、bounded traffic、resource stress、shutdown fault suite を
 malformed/late event、double dispose、worker crash を封じ込め、最終 native handle が 0、
 記録した worker PID が消滅することを確認します。いずれも専用の integration-test gate が
 ない通常起動では選択できません。
-`runtime-matrix-verify` は x86_64、Rosetta、Universal、Intel-native の低優先 follow-up が
-完了するまで主要 M1 gate には使用しません。
+汎用 builder は現在、実行ホストと同じ architecture を構築します。x86_64、Rosetta、
+Universal、Intel-native の再受け入れは、ROADMAP 上の低優先 follow-up です。
 
-Phase 0 の debug/JIT、release-AOT、worker-isolate、benchmark、bundle 監査は
-歴史的な feasibility evidence としてのみ参照します。Engine 内 child isolate を前提に
-していた worker、PTY、Metal、CoreText の build/run と旧 aggregate target は廃止済みです。
-残した root-only、IME、standalone benchmark/debug target は clean な公式 Engine/SDK
-だけを使用します。
+Phase 0 の debug/JIT、release-AOT、worker-isolate、PTY、Metal、CoreText の native
+実装は歴史的な feasibility evidence として `docs/phase0` から参照します。製品
+repository には native source とその旧 build target を残していません。
+parser/benchmark などの Dart-only harness は後続実装の比較資料として残しています。
 
 個別の再現方法と測定結果は [`docs/phase0`](docs/phase0)、設計判断は
 [`docs/adr`](docs/adr)、runtime matrix と Universal assembly の契約は
@@ -213,31 +208,30 @@ Phase 0 の debug/JIT、release-AOT、worker-isolate、benchmark、bundle 監査
 
 ```text
 bin/main.dart                         エントリーポイント
+macos_application.json               product identity、helper、native package 宣言
 lib/src/terminal_application.dart    AppKit ウィンドウとキーイベント
 lib/src/runtime_lifecycle.dart       root/worker lifecycle coordinator
-native/macos/runtime/                JIT/AOT lifecycle と diagnostics host
-native/macos/renderer/               TerminalMetalView shell と native contract
-lib/src/terminal_session.dart        コマンド実行バックエンド
+lib/src/terminal_session.dart        dart_pty_macos を使う command session
 lib/src/terminal_buffer.dart         入力、履歴、スクロールバック
 test/run_tests.dart                  UI 非依存部分の最小テスト
+../dart_appkit/packages/              AppKit、runtime、PTY、renderer の公開 package
 ```
 
 ## 製品実装へ進む際の境界
 
-通常エントリーポイントは一つのコマンドごとに `zsh -lc` を起動する
-「コマンドコンソール」で、表示には引き続き `TextView` を使います。一方、
-`dart_appkit` の登録済み custom-view provider と terminal-owned
-`TerminalMetalView` の生成・attach 境界は用意済みです。対話型 TUI を含む
+通常エントリーポイントは一つのコマンドごとに PTY 上で `zsh -lc` を起動する
+移行用 command session で、表示には引き続き `TextView` を使います。一方、
+renderer package の custom-view provider と `TerminalMetalView` の生成・attach
+境界は用意済みです。1 pane = 1 persistent shell と対話型 TUI を含む
 本格的なターミナルエミュレーターには、次の実装が必要です。
 
-1. `forkpty(3)` / `openpty(3)` を扱う macOS FFI ブリッジ
-2. 継続するシェルセッションとウィンドウサイズ通知 (`TIOCSWINSZ`)
-3. ANSI / VT シーケンスのパーサーと画面バッファ
-4. 色・属性・カーソル・選択・スクロールを描画する CoreText/Metal renderer
-5. IME、クリップボード、キーバインドの仕上げ
+1. command ごとの PTY を pane ごとの persistent shell へ切り替える session policy
+2. ANSI / VT シーケンスのパーサーと画面バッファ
+3. 色・属性・カーソル・選択・スクロールを描画する CoreText/Metal renderer
+4. IME、クリップボード、キーバインドの仕上げ
 
-`TerminalSession` が将来の PTY バックエンドとの交換点、`TerminalBuffer` が
-ANSI 画面モデルへ発展させる場所になるよう分離しています。
+`TerminalSession` は公開 `PtyBackend` を受け取り、実 backend と deterministic fake を
+交換できます。`TerminalBuffer` が ANSI 画面モデルへ発展する場所です。
 
 Ghostty クラスの品質へ進めるために必要な機能、目標アーキテクチャ、段階別の
 完了条件、性能予算、テスト戦略、リスクは [`ROADMAP.md`](ROADMAP.md) に

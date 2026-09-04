@@ -1,0 +1,113 @@
+import 'dart:convert';
+import 'dart:io';
+
+final class _AuditException implements Exception {
+  const _AuditException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+Future<void> main() async {
+  try {
+    final ProcessResult trackedResult = await Process.run('git', const <String>[
+      'ls-files',
+    ]);
+    _expect(trackedResult.exitCode == 0, 'could not enumerate tracked files');
+    final List<String> tracked = const LineSplitter()
+        .convert(trackedResult.stdout as String)
+        .where((String path) => path.isNotEmpty)
+        .toList();
+    const Set<String> nativeExtensions = <String>{
+      '.c',
+      '.cc',
+      '.cpp',
+      '.h',
+      '.hpp',
+      '.m',
+      '.mm',
+      '.metal',
+    };
+    final List<String> nativeSources = tracked
+        .where(
+          (String path) =>
+              File(path).existsSync() &&
+              nativeExtensions.any(path.toLowerCase().endsWith),
+        )
+        .toList();
+    _expect(
+      nativeSources.isEmpty,
+      'product repository contains native source: ${nativeSources.join(', ')}',
+    );
+
+    final String makefile = await File('Makefile').readAsString();
+    for (final String forbidden in <String>[
+      '/native/bridge',
+      '/native/runner',
+      '/native/macos',
+      'clang++',
+      'xcrun',
+      'TerminalMetalView.mm',
+      'DeveloperJitRunner.mm',
+      'ReleaseAotRunner.mm',
+    ]) {
+      _expect(
+        !makefile.contains(forbidden),
+        'application build references an internal native path: $forbidden',
+      );
+    }
+
+    for (final String path in tracked.where(
+      (String path) =>
+          (path.startsWith('bin/') || path.startsWith('lib/')) &&
+          path.endsWith('.dart') &&
+          File(path).existsSync(),
+    )) {
+      final String source = await File(path).readAsString();
+      _expect(
+        !source.contains("import 'dart:ffi';"),
+        'application source owns a direct FFI boundary: $path',
+      );
+      _expect(
+        !source.contains('DynamicLibrary.'),
+        'application source loads a native image directly: $path',
+      );
+    }
+
+    final Map<String, Object?> manifest = jsonDecode(
+      await File('macos_application.json').readAsString(),
+    ) as Map<String, Object?>;
+    final List<Object?> assets = manifest['nativeAssets']! as List<Object?>;
+    final List<Object?> capabilities =
+        manifest['nativeCapabilities']! as List<Object?>;
+    final List<Object?> helpers = manifest['dartHelpers']! as List<Object?>;
+    _expect(
+      (assets.single! as Map<String, Object?>)['package'] == 'dart_pty_macos',
+      'PTY package is not declared as a native asset',
+    );
+    _expect(
+      (capabilities.single! as Map<String, Object?>)['package'] ==
+          'dart_terminal_renderer_macos',
+      'renderer package is not declared as a native capability',
+    );
+    _expect(
+      (helpers.single! as Map<String, Object?>)['entrypoint'] ==
+          'bin/runtime_worker.dart',
+      'runtime worker is not a declared Dart helper',
+    );
+    stdout.writeln(
+      'DART_ONLY_SOURCE_AUDIT_PASS tracked=${tracked.length} native_sources=0',
+    );
+  } on Object catch (error) {
+    stderr.writeln('DART_ONLY_SOURCE_AUDIT_FAIL $error');
+    exitCode = 1;
+  }
+}
+
+void _expect(bool condition, String message) {
+  if (!condition) {
+    throw _AuditException(message);
+  }
+}

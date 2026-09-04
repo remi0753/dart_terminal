@@ -46,11 +46,11 @@ font、input、config、macOS UI、release workflow の実装とテストを確�
 優先する。
 
 現在の Dart Terminal は、M1/arm64 Developer JIT / Release AOT の未改変 AppKit
-main-thread root、独立した公式 Dart 子プロセス worker、generic `View` / `TextView`、
-登録済み custom-view provider と terminal-owned `TerminalMetalView` shell、v4 native
-event、privacy-safe な local-run metadata と Unified Logging、コマンドごとの `zsh -lc`
-までである。通常表示はまだ `TextView` であり、Metal renderer は Phase 4 まで明示的に
-defer する。旧 Engine 改変経路と関連する来歴・監査・test code は削除済みである。
+main-thread root、manifest-declared Dart worker helper、generic `View` / `TextView`、
+dependency-owned renderer capability、v4 native event、privacy-safe な local-run metadata、
+および `dart_pty_macos` 上のコマンドごとの `zsh -lc` までである。製品 repository の
+native source は削除済みである。通常表示はまだ `TextView` であり、persistent pane、
+VT core、Metal renderer は後続 Phase へ defer する。
 下表の「現在」が `未実装` でも欠落ではなく、指定 Phase まで明示的に defer した
 backlog である。
 
@@ -64,14 +64,14 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | --- | --- | --- | --- | --- | --- |
 | RT-01 | release AOT root isolate が AppKit main thread に attach し、main run loop を所有しない | P0 | 1 | `G:macos/Sources/App/main.swift`, native macOS app lifecycle | M1 Developer/Release stock root 完了 |
 | RT-02 | pane ごとの長寿命 runtime worker と window ごとの render coordinator を起動、停止、異常回収できる | P0 | 1 | `G:src/termio/Thread.zig`, `G:src/renderer/Thread.zig` | M1 Developer/Release process worker の lifecycle/再生成/bounded traffic 完了、pane/render は後続 |
-| RT-03 | UI、PTY I/O、terminal state、render resource の thread/owner が一意 | P0 | 1 | `G:src/termio/mailbox.zig`, `G:src/renderer/message.zig` | M1 両 mode の root/process owner、v1–v4 event generation、generic/custom View、TerminalMetalView shell、window/application state、menu action、AppKit handle domain/async destruction、1,000 Window/View handle churn、main-thread diagnostics phase 完了。PTY/render は後続 |
-| PTY-01 | 1 pane = 1 persistent PTY。slave が controlling terminal になり、新 session/process group を持つ | P0 | 2 | `G:src/pty.zig`, `G:src/pty.c`, `G:src/termio/Exec.zig` | Phase 0 gate |
-| PTY-02 | shell/command を `argv`、`envp`、cwd で起動し、shell interpolation を行わない | P0 | 2 | `G:src/Command.zig`, `G:src/termio/Exec.zig` | 未実装 |
-| PTY-03 | macOS login shell、`TERM`、`COLORTERM`、locale、initial cwd が zero-config で妥当 | P0 | 2 | `G:src/termio/Exec.zig`, `G:src/os/shell.zig` | 未実装 |
-| PTY-04 | master FD は nonblocking。partial read/write、`EINTR`、`EAGAIN`、順序、bounded backpressure を処理 | P0 | 2 | `G:src/termio/Thread.zig`, `G:src/termio/stream_handler.zig`, `G:src/termio/mailbox.zig` | Phase 0 gate |
-| PTY-05 | cell/pixel winsize、`TIOCSWINSZ`、`SIGWINCH` が resize に追従 | P0 | 2 | `G:src/pty.zig`, `G:src/termio/Exec.zig` | Phase 0 gate |
-| PTY-06 | Ctrl-C/Z/\\、EOF、foreground/background job、`fg`/`bg`、`stty`、`tty` が PTY semantics で動く | P0 | 2 | `G:src/pty.zig`, `G:src/termio/Exec.zig` | Phase 0 gate |
-| PTY-07 | EOF、child exit、HUP/TERM/KILL、grace period、`waitpid`、zombie 回収が deterministic | P0 | 2 | `G:src/Command.zig`, `G:src/termio/Exec.zig` | Phase 0 gate |
+| RT-03 | UI、PTY I/O、terminal state、render resource の thread/owner が一意 | P0 | 1 | `G:src/termio/mailbox.zig`, `G:src/renderer/message.zig` | M1 両 mode の root/process owner、v1–v4 event generation、generic/custom View、dependency-owned TerminalMetalView shell、window/application state、menu action、AppKit handle domain/async destruction、1,000 Window/View handle churn、main-thread diagnostics phase、PTY capability owner 完了。persistent pane/render state は後続 |
+| PTY-01 | 1 pane = 1 persistent PTY。slave が controlling terminal になり、新 session/process group を持つ | P0 | 2 | `G:src/pty.zig`, `G:src/pty.c`, `G:src/termio/Exec.zig` | capability は完了、製品の persistent pane 化は未完了 |
+| PTY-02 | shell/command を `argv`、`envp`、cwd で起動し、shell interpolation を行わない | P0 | 2 | `G:src/Command.zig`, `G:src/termio/Exec.zig` | `dart_pty_macos` 完了 |
+| PTY-03 | macOS login shell、`TERM`、`COLORTERM`、locale、initial cwd が zero-config で妥当 | P0 | 2 | `G:src/termio/Exec.zig`, `G:src/os/shell.zig` | login zsh/cwd/env/TTY contract 完了 |
+| PTY-04 | master FD は nonblocking。partial read/write、`EINTR`、`EAGAIN`、順序、bounded backpressure を処理 | P0 | 2 | `G:src/termio/Thread.zig`, `G:src/termio/stream_handler.zig`, `G:src/termio/mailbox.zig` | kqueue/ACK credit/bounded write 完了 |
+| PTY-05 | cell/pixel winsize、`TIOCSWINSZ`、`SIGWINCH` が resize に追従 | P0 | 2 | `G:src/pty.zig`, `G:src/termio/Exec.zig` | capability と application resize 接続完了 |
+| PTY-06 | Ctrl-C/Z/\\、EOF、foreground/background job、`fg`/`bg`、`stty`、`tty` が PTY semantics で動く | P0 | 2 | `G:src/pty.zig`, `G:src/termio/Exec.zig` | foreground signal/interactive zsh contract 完了、persistent UI は未完了 |
+| PTY-07 | EOF、child exit、HUP/TERM/KILL、grace period、`waitpid`、zombie 回収が deterministic | P0 | 2 | `G:src/Command.zig`, `G:src/termio/Exec.zig` | graceful/forced close・reap 完了 |
 | PTY-08 | current cwd と foreground process を検出し、title/close confirmation/cwd inheritance に使う | P1 | 7 | `G:src/termio/Exec.zig`, `G:macos/Sources/Ghostty/Ghostty.Surface.swift` | 未実装 |
 | PTY-09 | reconnectable session | P2 | 対象外 | pinned target との差は許容。独立 project とする | v1 対象外 |
 
@@ -195,7 +195,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | AX-03 | IME preedit と accessibility selection/range/candidate rect が同じ text model を使う | P0 | 5 | `G:macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` | Phase 0 gate |
 | SEC-01 | parser payload/count/value、scrollback、hyperlink、image、queue に hard cap | P0 | 3/5/9 | `G:src/terminal/Parser.zig`, kitty graphics storage, termio mailbox | ADR/harness gate |
 | SEC-02 | URL scheme allowlist/sanitization、OSC 52 policy、paste confirmation、notification rate limit | P0/P1 | 5/9 | `G:macos/Sources/Helpers/UntrustedURL.swift`, clipboard confirmation | 未実装 |
-| SEC-03 | fork child は async-signal-safe setup と `execve` だけ。Dart runtime/ObjC allocation を呼ばない | P0 | 2 | `G:src/pty.zig`, `G:src/Command.zig` | Phase 0 gate |
+| SEC-03 | fork child は async-signal-safe setup と `execve` だけ。Dart runtime/ObjC allocation を呼ばない | P0 | 2 | `G:src/pty.zig`, `G:src/Command.zig` | `dart_pty_macos` child symbol audit 完了 |
 | SEC-04 | Secure Input を abnormal teardown 後も必ず解除 | P1 | 10 | `G:macos/Sources/Features/Secure Input/SecureInput.swift` | 未実装 |
 | SEC-05 | crash/update/clipboard/shell integration の data flow と opt-in/out を privacy 文書化 | P0 | 10/11 | pinned crash/update/config behaviorを比較対象にする | Phase 1 local-run metadata の local-only/no-content policy を文書化。crash/update/clipboard/shell 全体は Phase 10/11 |
 

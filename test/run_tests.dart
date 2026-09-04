@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:dart_pty_macos/testing.dart';
 import 'package:dart_terminal/dart_terminal.dart';
+import 'package:dart_terminal/src/runtime_lifecycle.dart';
 import 'package:dart_terminal/src/terminal_session.dart';
 
 import 'runtime_lifecycle_test.dart';
@@ -13,6 +15,7 @@ Future<void> main() async {
   _testOptions();
   await runRuntimeLifecycleTests().timeout(const Duration(seconds: 30));
   await _testCommandSession();
+  await _testRealPtyCommandSession();
   stdout.writeln('dart_terminal tests passed');
 }
 
@@ -70,12 +73,10 @@ void _testTranscriptLimitAndViewport() {
 }
 
 void _testOptions() {
-  final TerminalOptions options = TerminalOptions.parse(
-    _workerOptions(<String>[
-      '--working-directory=/tmp',
-      '--auto-close-after=3',
-    ]),
-  );
+  final TerminalOptions options = _parseOptions(<String>[
+    '--working-directory=/tmp',
+    '--auto-close-after=3',
+  ]);
   _expect(
     options.initialWorkingDirectory == '/tmp',
     'working directory option',
@@ -91,23 +92,11 @@ void _testOptions() {
   );
   _expect(
     options.runtimeWorkerCommand.executable == '/usr/bin/true' &&
-        options.runtimeWorkerCommand.arguments.single ==
-            '/tmp/runtime_worker.dill',
-    'native-injected runtime worker command',
+        options.runtimeWorkerCommand.arguments.isEmpty,
+    'declarative bundled worker command',
   );
-  final TerminalOptions selfContained = TerminalOptions.parse(const <String>[
-    '--runtime-worker-executable=/usr/bin/true',
-    '--runtime-worker-mode=self-contained',
-  ]);
-  _expect(
-    selfContained.runtimeWorkerCommand.executable == '/usr/bin/true' &&
-        selfContained.runtimeWorkerCommand.arguments.isEmpty,
-    'native-injected self-contained runtime worker command',
-  );
-  final TerminalOptions faultOptions = TerminalOptions.parse(
-    _workerOptions(<String>[
-      '--runtime-lifecycle-scenario=worker-sync-uncaught',
-    ]),
+  final TerminalOptions faultOptions = _parseOptions(
+    const <String>['--runtime-lifecycle-scenario=worker-sync-uncaught'],
     environment: const <String, String>{'DT_RUNTIME_LIFECYCLE_TEST': '1'},
   );
   _expect(
@@ -115,34 +104,30 @@ void _testOptions() {
         RuntimeLifecycleScenario.workerSyncUncaught,
     'gated lifecycle scenario option',
   );
-  final TerminalOptions resourceOptions = TerminalOptions.parse(
-    _workerOptions(<String>['--runtime-resource-stress']),
+  final TerminalOptions resourceOptions = _parseOptions(
+    const <String>['--runtime-resource-stress'],
     environment: const <String, String>{'DT_RUNTIME_RESOURCE_TEST': '1'},
   );
   _expect(resourceOptions.runtimeResourceStress, 'gated resource stress');
   _expectThrows(
-    () => TerminalOptions.parse(
-      _workerOptions(<String>['--runtime-resource-stress']),
-      environment: const <String, String>{},
-    ),
+    () => _parseOptions(const <String>[
+      '--runtime-resource-stress',
+    ], environment: const <String, String>{}),
     'resource stress gate',
   );
   _expectThrows(
-    () => TerminalOptions.parse(
-      _workerOptions(<String>[
-        '--runtime-resource-stress',
-        '--runtime-resource-stress',
-      ]),
+    () => _parseOptions(
+      const <String>['--runtime-resource-stress', '--runtime-resource-stress'],
       environment: const <String, String>{'DT_RUNTIME_RESOURCE_TEST': '1'},
     ),
     'duplicate resource stress option',
   );
   _expectThrows(
-    () => TerminalOptions.parse(
-      _workerOptions(<String>[
+    () => _parseOptions(
+      const <String>[
         '--runtime-resource-stress',
         '--runtime-lifecycle-scenario=worker-sync-uncaught',
-      ]),
+      ],
       environment: const <String, String>{
         'DT_RUNTIME_RESOURCE_TEST': '1',
         'DT_RUNTIME_LIFECYCLE_TEST': '1',
@@ -150,11 +135,11 @@ void _testOptions() {
     ),
     'resource stress and lifecycle fault are mutually exclusive',
   );
-  final TerminalOptions shutdownFaultOptions = TerminalOptions.parse(
-    _workerOptions(<String>[
+  final TerminalOptions shutdownFaultOptions = _parseOptions(
+    const <String>[
       '--runtime-shutdown-faults',
       '--runtime-lifecycle-scenario=worker-unexpected-exit',
-    ]),
+    ],
     environment: const <String, String>{
       'DT_RUNTIME_SHUTDOWN_FAULT_TEST': '1',
       'DT_RUNTIME_LIFECYCLE_TEST': '1',
@@ -165,18 +150,18 @@ void _testOptions() {
     'gated shutdown fault injection',
   );
   _expectThrows(
-    () => TerminalOptions.parse(
-      _workerOptions(<String>[
+    () => _parseOptions(
+      const <String>[
         '--runtime-shutdown-faults',
         '--runtime-lifecycle-scenario=worker-unexpected-exit',
-      ]),
+      ],
       environment: const <String, String>{'DT_RUNTIME_LIFECYCLE_TEST': '1'},
     ),
     'shutdown fault gate',
   );
   _expectThrows(
-    () => TerminalOptions.parse(
-      _workerOptions(<String>['--runtime-shutdown-faults']),
+    () => _parseOptions(
+      const <String>['--runtime-shutdown-faults'],
       environment: const <String, String>{
         'DT_RUNTIME_SHUTDOWN_FAULT_TEST': '1',
       },
@@ -184,12 +169,12 @@ void _testOptions() {
     'shutdown faults require the worker crash scenario',
   );
   _expectThrows(
-    () => TerminalOptions.parse(
-      _workerOptions(<String>[
+    () => _parseOptions(
+      const <String>[
         '--runtime-shutdown-faults',
         '--runtime-shutdown-faults',
         '--runtime-lifecycle-scenario=worker-unexpected-exit',
-      ]),
+      ],
       environment: const <String, String>{
         'DT_RUNTIME_SHUTDOWN_FAULT_TEST': '1',
         'DT_RUNTIME_LIFECYCLE_TEST': '1',
@@ -198,65 +183,40 @@ void _testOptions() {
     'duplicate shutdown fault option',
   );
   _expectThrows(
-    () => TerminalOptions.parse(
-      _workerOptions(<String>[
-        '--runtime-lifecycle-scenario=worker-sync-uncaught',
-      ]),
-      environment: const <String, String>{},
-    ),
+    () => _parseOptions(const <String>[
+      '--runtime-lifecycle-scenario=worker-sync-uncaught',
+    ], environment: const <String, String>{}),
     'lifecycle scenario gate',
   );
   _expectThrows(
-    () => TerminalOptions.parse(_workerOptions(<String>['--unknown'])),
+    () => _parseOptions(const <String>['--unknown']),
     'unknown option',
   );
   _expectThrows(
-    () => TerminalOptions.parse(const <String>[]),
-    'missing internal worker configuration',
-  );
-  _expectThrows(
-    () => TerminalOptions.parse(<String>[
-      ..._workerOptions(const <String>[]),
-      '--runtime-worker-executable=/usr/bin/false',
-    ]),
-    'application argument cannot replace the worker executable',
-  );
-  _expectThrows(
-    () => TerminalOptions.parse(const <String>[
-      '--runtime-worker-executable=/usr/bin/true',
-      '--runtime-worker-mode=kernel',
-    ]),
-    'kernel worker requires a Kernel path',
-  );
-  _expectThrows(
-    () => TerminalOptions.parse(const <String>[
-      '--runtime-worker-executable=/usr/bin/true',
-      '--runtime-worker-mode=self-contained',
-      '--runtime-worker-kernel=/tmp/runtime_worker.dill',
-    ]),
-    'self-contained worker rejects a Kernel path',
-  );
-  _expectThrows(
-    () => TerminalOptions.parse(<String>[
+    () => _parseOptions(const <String>[
       '--runtime-worker-executable=relative/dart',
-      '--runtime-worker-mode=kernel',
-      '--runtime-worker-kernel=/tmp/runtime_worker.dill',
     ]),
-    'worker executable must be absolute',
+    'internal worker configuration is not an application option',
   );
 }
 
-List<String> _workerOptions(List<String> applicationOptions) => <String>[
-  '--runtime-worker-executable=/usr/bin/true',
-  '--runtime-worker-mode=kernel',
-  '--runtime-worker-kernel=/tmp/runtime_worker.dill',
-  ...applicationOptions,
-];
+TerminalOptions _parseOptions(
+  List<String> arguments, {
+  Map<String, String>? environment,
+}) => TerminalOptions.parse(
+  arguments,
+  environment: environment,
+  runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+    executable: '/usr/bin/true',
+  ),
+);
 
 Future<void> _testCommandSession() async {
   var changeCount = 0;
   var exitRequested = false;
+  final FakePtyBackend ptyBackend = FakePtyBackend(autoExitOnClose: false);
   final TerminalSession session = TerminalSession(
+    ptyBackend: ptyBackend,
     initialWorkingDirectory: Directory.systemTemp.path,
     onChanged: () {
       ++changeCount;
@@ -266,10 +226,28 @@ Future<void> _testCommandSession() async {
     },
   );
   session.insertText("printf 'shell-ok\\n'");
-  await session.submit();
+  final Future<void> submitted = session.submit();
+  while (ptyBackend.processes.isEmpty) {
+    await Future<void>.delayed(Duration.zero);
+  }
+  await Future<void>.delayed(Duration.zero);
+  final FakePtyProcess process = ptyBackend.processes.single;
+  session.resize(rows: 40, columns: 120);
+  process.emitOutput('shell-ok\r\n'.codeUnits);
+  process.finish(exitCode: 0);
+  await submitted;
   _expect(
     session.buffer.transcript.contains('shell-ok'),
     'zsh output reaches the terminal buffer',
+  );
+  _expect(
+    ptyBackend.commands.single.executable == '/bin/zsh' &&
+        ptyBackend.commands.single.arguments.first == '-lc',
+    'external command uses the PTY capability',
+  );
+  _expect(
+    process.sizes.last.rows == 40 && process.sizes.last.columns == 120,
+    'active PTY tracks terminal size',
   );
   session.insertText('help');
   await session.submit();
@@ -281,6 +259,22 @@ Future<void> _testCommandSession() async {
   await session.submit();
   _expect(exitRequested, 'exit callback');
   _expect(changeCount > 0, 'session emits view updates');
+  await session.dispose();
+}
+
+Future<void> _testRealPtyCommandSession() async {
+  final TerminalSession session = TerminalSession(
+    initialWorkingDirectory: Directory.systemTemp.path,
+    environment: const <String, String>{'PATH': '/usr/bin:/bin'},
+    onChanged: () {},
+    onExitRequested: () {},
+  );
+  session.insertText("printf '__DART_TERMINAL_PTY__\\n'");
+  await session.submit().timeout(const Duration(seconds: 5));
+  _expect(
+    session.buffer.transcript.contains('__DART_TERMINAL_PTY__'),
+    'real PTY output reaches the application session adapter',
+  );
   await session.dispose();
 }
 

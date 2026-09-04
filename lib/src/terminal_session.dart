@@ -2,20 +2,24 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dart_pty_macos/dart_pty_macos.dart';
+
 import 'terminal_buffer.dart';
 
 typedef TerminalChanged = void Function();
 typedef TerminalExitRequested = void Function();
 
-/// A small command-console backend that can later be replaced by a PTY backend.
+/// A command-session adapter backed by the reusable macOS PTY capability.
 final class TerminalSession {
   TerminalSession({
     required TerminalChanged onChanged,
     required TerminalExitRequested onExitRequested,
+    PtyBackend? ptyBackend,
     String? initialWorkingDirectory,
     Map<String, String>? environment,
   }) : _onChanged = onChanged,
        _onExitRequested = onExitRequested,
+       _ptyBackend = ptyBackend ?? MacosPtyBackend.shared,
        _environment = Map<String, String>.unmodifiable(
          environment ?? Platform.environment,
        ),
@@ -33,11 +37,12 @@ final class TerminalSession {
 
   final TerminalChanged _onChanged;
   final TerminalExitRequested _onExitRequested;
+  final PtyBackend _ptyBackend;
   final Map<String, String> _environment;
 
   final TerminalBuffer buffer = TerminalBuffer();
   String _workingDirectory;
-  Process? _process;
+  PtyProcess? _process;
   Future<void>? _runningCommand;
   bool _busy = false;
   bool _disposed = false;
@@ -161,7 +166,7 @@ final class TerminalSession {
     }
     _interrupted = true;
     buffer.appendLine('^C');
-    _process?.kill(ProcessSignal.sigint);
+    _process?.sendSignal(PtySignal.interrupt);
     _notifyChanged();
   }
 
@@ -173,13 +178,22 @@ final class TerminalSession {
 
   void refresh() => _notifyChanged();
 
+  void resize({required int rows, required int columns}) {
+    viewportRows = rows;
+    final PtyProcess? process = _process;
+    if (process != null) {
+      process.resize(PtySize(rows: rows, columns: columns));
+    }
+    _notifyChanged();
+  }
+
   Future<void> dispose() async {
     if (_disposed) {
       return;
     }
     _disposed = true;
-    final Process? process = _process;
-    process?.kill(ProcessSignal.sigterm);
+    final PtyProcess? process = _process;
+    process?.close();
     final Future<void>? runningCommand = _runningCommand;
     if (runningCommand == null) {
       return;
@@ -188,11 +202,13 @@ final class TerminalSession {
       await runningCommand.timeout(
         const Duration(seconds: 2),
         onTimeout: () {
-          process?.kill(ProcessSignal.sigkill);
+          process?.sendSignal(PtySignal.kill);
         },
       );
     } on Object {
-      process?.kill(ProcessSignal.sigkill);
+      process?.sendSignal(PtySignal.kill);
+    } finally {
+      await process?.dispose();
     }
   }
 
@@ -250,37 +266,40 @@ final class TerminalSession {
   }
 
   Future<void> _runExternalCommand(String command) async {
+    PtyProcess? process;
     try {
-      final Process process = await Process.start(
-        '/bin/zsh',
-        <String>['-lc', command],
-        workingDirectory: _workingDirectory,
-        environment: <String, String>{..._environment, 'TERM': 'dumb'},
-        includeParentEnvironment: false,
+      process = await _ptyBackend.start(
+        PtyCommand(
+          executable: '/bin/zsh',
+          arguments: <String>['-lc', command],
+          workingDirectory: _workingDirectory,
+          environment: <String, String>{..._environment, 'TERM': 'dumb'},
+          includeParentEnvironment: false,
+        ),
+        initialSize: PtySize(rows: viewportRows, columns: 100),
       );
       _process = process;
       if (_disposed) {
-        process.kill(ProcessSignal.sigterm);
+        process.close(gracePeriod: Duration.zero);
       } else if (_interrupted) {
-        process.kill(ProcessSignal.sigint);
+        process.sendSignal(PtySignal.interrupt);
       }
-      await process.stdin.close();
 
       const Utf8Decoder decoder = Utf8Decoder(allowMalformed: true);
-      final Future<void> stdoutDone = process.stdout
+      final Future<void> outputDone = process.output
+          .cast<List<int>>()
           .transform(decoder)
           .transform(const LineSplitter())
           .forEach(_appendProcessLine);
-      final Future<void> stderrDone = process.stderr
-          .transform(decoder)
-          .transform(const LineSplitter())
-          .forEach(_appendProcessLine);
-      final int status = await process.exitCode;
-      await Future.wait<void>(<Future<void>>[stdoutDone, stderrDone]);
-      if (status != 0 && !_interrupted && !_disposed) {
+      final PtyExit result = await process.exit;
+      await outputDone;
+      if (result.exitCode != 0 && !_interrupted && !_disposed) {
+        final String status = result.signal == null
+            ? '${result.exitCode}'
+            : 'signal ${result.signal}';
         buffer.appendLine('[process exited with status $status]');
       }
-    } on ProcessException catch (error) {
+    } on PtyException catch (error) {
       if (!_disposed) {
         buffer.appendLine('Could not start zsh: ${error.message}');
       }
@@ -288,6 +307,8 @@ final class TerminalSession {
       if (!_disposed) {
         buffer.appendLine('File system error: ${error.message}');
       }
+    } finally {
+      await process?.dispose();
     }
   }
 

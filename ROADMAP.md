@@ -579,15 +579,15 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [x] versioned native asset/plugin 登録を hello-window で実証する
 - [x] `TerminalMetalView` を terminal renderer capability package へ移す
 - [x] Phase 2 PTYを `dart_pty_macos` capability package として実装する
-- [ ] `dart_terminal` から product native 実装と隣接 repository の内部 source 参照を
+- [x] `dart_terminal` から product native 実装と隣接 repository の内部 source 参照を
   除去し、Dart application sourceだけで両runtime modeを構築・検証する
-- [ ] stable `dt_pty_*` C ABI と Dart facade
-- [ ] argv/env/cwd/login shell の安全な spawn
-- [ ] kqueue/GCD reactor、read batching、write queue、backpressure
-- [ ] `winsize`、SIGWINCH、process group、waitpid、exit event
-- [ ] Ctrl-C/Z/\、EOF、HUP、graceful/forced close
+- [x] stable `dpty_*` C ABI と Dart facade
+- [x] argv/env/cwd/login shell の安全な spawn
+- [x] kqueue reactor、read batching、write queue、backpressure
+- [x] `winsize`、SIGWINCH、process group、waitpid、exit event
+- [x] Ctrl-C/Z/\、EOF、HUP、graceful/forced close
 - [ ] session ID と pane ownership、close confirmation state
-- [ ] fake PTY backend と deterministic integration harness
+- [x] fake PTY backend と deterministic integration harness
 
 終了条件:
 

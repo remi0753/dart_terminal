@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "application": {
+    "name": "DartTerminal",
+    "executableName": "dart_terminal",
+    "bundleIdentifier": "dev.dart-terminal",
+    "version": "0.1.0",
+    "minimumSystemVersion": "14.0"
+  },
+  "dart": {"entrypoint": "bin/main.dart"},
+  "dartHelpers": [
+    {
+      "name": "dart_terminal_runtime_worker",
+      "entrypoint": "bin/runtime_worker.dart"
+    }
+  ],
+  "resources": [],
+  "nativeAssets": [
+    {
+      "id": "dart_pty_macos",
+      "package": "dart_pty_macos",
+      "library": "libdart_pty_macos.dylib",
+      "abiVersion": 1,
+      "abiVersionSymbol": "dpty_abi_version"
+    }
+  ],
+  "nativeCapabilities": [
+    {
+      "id": "dart_terminal_renderer_macos",
+      "package": "dart_terminal_renderer_macos",
+      "library": "libdart_terminal_renderer_macos.dylib",
+      "abiVersion": 1,
+      "abiVersionSymbol": "dtr_abi_version",
+      "initializerSymbol": "dtr_initialize"
+    }
+  ],
+  "diagnostics": {
+    "enabled": true,
+    "applicationSupportName": "Dart Terminal"
+  }
+}

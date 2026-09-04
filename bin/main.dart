@@ -1,14 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:dart_macos_runtime/dart_macos_runtime.dart';
 import 'package:dart_terminal/dart_terminal.dart';
-import 'package:dart_terminal/src/runtime_diagnostics_host.dart';
 import 'package:dart_terminal/src/runtime_lifecycle.dart';
-import 'package:dart_terminal/src/runtime_lifecycle_host.dart';
+
+const int _runtimeUsageExitCode = 64;
 
 @pragma('vm:entry-point')
 void main(List<String> arguments) {
-  RuntimeDiagnosticsHost.recordPhase(RuntimeDiagnosticPhase.rootStarting);
+  MacosRuntime.validateHost();
+  MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStarting);
   try {
     final TerminalOptions options = TerminalOptions.parse(arguments);
     if (options.runtimeLifecycleScenario ==
@@ -27,6 +29,6 @@ void main(List<String> arguments) {
     stderr.writeln('Argument error: ${error.message}');
     stderr.writeln(terminalUsage);
     exitCode = 64;
-    RuntimeLifecycleHost.requestTermination(runtimeUsageExitCode);
+    MacosRuntime.requestTermination(exitCode: _runtimeUsageExitCode);
   }
 }
