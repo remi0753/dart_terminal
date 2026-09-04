@@ -1,6 +1,6 @@
 # Dart-only macOS application packaging migration
 
-- Status: plan and acceptance contract complete; architecture ADR is next
+- Status: plan and architecture ADR complete; runtime extraction is next
 - Started: 2026-09-04
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Related: `ROADMAP.md` Phase 2, `docs/adr/ADR-001-dart-native-boundary.md`,
@@ -174,3 +174,23 @@ pass against the replacement.
 - `git diff --check` passed for the roadmap and task-record changes. No source,
   build, or runtime behavior changed, so product tests were not required for
   this planning-only completion.
+
+### 2026-09-04 — architecture ownership decision
+
+- Accepted `docs/adr/ADR-005-dart-only-macos-application-packaging.md` and
+  superseded only ADR-001's package-placement decision. Its C ABI, scheduling,
+  semantics, ownership, fork-safety, and shutdown rules remain unchanged.
+- Selected a separate logical `dart_macos_runtime` package for the generic
+  AppKit-main Dart host and builder, while keeping it in the adjacent
+  `dart_appkit` repository initially for atomic host/bridge verification.
+- Kept reusable AppKit primitives in `dart_appkit`, assigned PTY and terminal
+  rendering to independent native capability packages, and retained all
+  terminal/application/worker policy in Dart Terminal.
+- Fixed a versioned native-extension service table and explicit Dart facade
+  initialization instead of raw Objective-C pointers, arbitrary handle
+  adoption, or product-specific runner subclasses.
+- Fixed the builder's responsibility for hook execution, native-asset mapping,
+  helper/resource declaration, bundle staging, architecture/rpath audit, and
+  inside-out signing inputs.
+- This task changes documentation and progress state only. Source behavior and
+  the accepted Phase 1 runtime artifacts are unchanged.

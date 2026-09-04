@@ -572,7 +572,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   固定する（以後の7項目は
   [`docs/phase2/dart-only-application-packaging.md`](docs/phase2/dart-only-application-packaging.md)
   を参照して順に実施する）
-- [ ] ADRで generic macOS runtime、AppKit、native capability、Dart application の
+- [x] ADRで generic macOS runtime、AppKit、native capability、Dart application の
   所有境界を確定する
 - [ ] `dart_macos_runtime` へ共通 Developer JIT / Release AOT host、lifecycle、
   diagnostics、bundle assembly を抽出する
