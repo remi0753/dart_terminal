@@ -568,6 +568,19 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 目的: command console を本物の terminal session へ置き換える。
 
+- [x] Dart-only application packaging boundary の目標、成果物、依存順、受け入れ条件を
+  固定する（以後の7項目は
+  [`docs/phase2/dart-only-application-packaging.md`](docs/phase2/dart-only-application-packaging.md)
+  を参照して順に実施する）
+- [ ] ADRで generic macOS runtime、AppKit、native capability、Dart application の
+  所有境界を確定する
+- [ ] `dart_macos_runtime` へ共通 Developer JIT / Release AOT host、lifecycle、
+  diagnostics、bundle assembly を抽出する
+- [ ] versioned native asset/plugin 登録を hello-window で実証する
+- [ ] `TerminalMetalView` を terminal renderer capability package へ移す
+- [ ] Phase 2 PTYを `dart_pty_macos` capability package として実装する
+- [ ] `dart_terminal` から product native 実装と隣接 repository の内部 source 参照を
+  除去し、Dart application sourceだけで両runtime modeを構築・検証する
 - [ ] stable `dt_pty_*` C ABI と Dart facade
 - [ ] argv/env/cwd/login shell の安全な spawn
 - [ ] kqueue/GCD reactor、read batching、write queue、backpressure
