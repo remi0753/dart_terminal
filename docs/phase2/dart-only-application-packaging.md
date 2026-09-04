@@ -1,6 +1,6 @@
 # Dart-only macOS application packaging migration
 
-- Status: native plugin proof complete; renderer extraction is next
+- Status: renderer extraction complete; PTY capability implementation is next
 - Started: 2026-09-04
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Related: `ROADMAP.md` Phase 2, `docs/adr/ADR-001-dart-native-boundary.md`,
@@ -250,3 +250,30 @@ pass against the replacement.
   release, exit 0, and deep signature validation. The first hook integration
   exposed toolchain-injected linker flags during compilation; only the matching
   unused-command-line diagnostic is suppressed while source warnings stay fatal.
+
+### 2026-09-04 — terminal renderer capability extraction
+
+- Added `dart_terminal_renderer_macos` in the adjacent reusable platform
+  repository at commit `733b371`. It owns the former `TerminalMetalView` shell,
+  a Dart 3.13 native build hook, an independent versioned `dtr_*` ABI, and the
+  public `TerminalRendererMacos.initialize/createView` facade.
+- Preserved provider identifier `dart_terminal.TerminalMetalView`, so the final
+  product migration can switch from direct native registration to capability
+  initialization without changing the AppKit custom-view name.
+- The capability registers a retained Objective-C factory only through
+  `da_native_extension_services_v1`. The Dart API receives an ordinary
+  generation-checked `View`; it cannot observe an Objective-C pointer or adopt
+  a native registry handle.
+- Native coverage verifies ABI mismatch, wrong-thread and idempotent
+  initialization, Metal device/view invariants, window attachment, independent
+  handle release, stale handles, bounded AppKit teardown, zero remaining view
+  instances, and loaded-image lifetime. `MTKView` cleanup is deferred until a
+  bounded main-run-loop turn, which is now an explicit test condition rather
+  than an invalid synchronous-deallocation assumption.
+- C11/C++20 headers, warning-as-error native compilation, Dart analysis, actual
+  build-hook code-asset generation, source inventory, exported symbols,
+  `git diff --check`, and the complete adjacent `make test` regression pass.
+  The official SDK remains clean.
+- The compatibility copy under this repository's `native/macos/renderer`
+  remains temporarily because task 7 performs the atomic product build switch
+  and native-source removal after the PTY capability is available.
