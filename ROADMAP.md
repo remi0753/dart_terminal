@@ -574,7 +574,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
 - [x] ADRで generic macOS runtime、AppKit、native capability、Dart application の
   所有境界を確定する
-- [ ] `dart_macos_runtime` へ共通 Developer JIT / Release AOT host、lifecycle、
+- [x] `dart_macos_runtime` へ共通 Developer JIT / Release AOT host、lifecycle、
   diagnostics、bundle assembly を抽出する
 - [ ] versioned native asset/plugin 登録を hello-window で実証する
 - [ ] `TerminalMetalView` を terminal renderer capability package へ移す

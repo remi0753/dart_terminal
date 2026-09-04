@@ -1,6 +1,6 @@
 # Dart-only macOS application packaging migration
 
-- Status: plan and architecture ADR complete; runtime extraction is next
+- Status: generic runtime extraction complete; native plugin proof is next
 - Started: 2026-09-04
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Related: `ROADMAP.md` Phase 2, `docs/adr/ADR-001-dart-native-boundary.md`,
@@ -194,3 +194,31 @@ pass against the replacement.
   inside-out signing inputs.
 - This task changes documentation and progress state only. Source behavior and
   the accepted Phase 1 runtime artifacts are unchanged.
+
+### 2026-09-04 — reusable JIT/AOT runtime extraction
+
+- Added and committed the separate logical `dart_macos_runtime` package in the
+  adjacent `dart_appkit` repository at `649a4ac`. It owns strict application
+  manifest validation, stock-Engine toolchain selection, generic host builds,
+  Kernel/AOT compilation, fixed bundle assembly, declared resources, build
+  metadata, ad-hoc signing, inherited stdio, and application argument/exit
+  forwarding.
+- Added generic Objective-C++ Developer JIT and Release AOT hosts plus
+  independent `dmr_*` lifecycle and diagnostic C ABIs. No Dart Terminal
+  symbol, worker argument, renderer registration, PTY operation, or product
+  runner subclass appears in the new host sources.
+- Diagnostics are optional manifest policy with generic metadata identity,
+  owner-only atomic persistence, monotonic main-thread phases, and bounded
+  previous-unclean retention. The Dart API validates ABI versions and exposes
+  lifecycle, phase, and normalized bundle-resource operations.
+- The first real Release AOT smoke found that an application `main` invoked by
+  native name was tree-shaken. The builder now generates a private annotated
+  Dart wrapper that imports and calls the ordinary application
+  `main(List<String>)`. This preserves Dart-only application source and gives
+  JIT/AOT one entrypoint contract.
+- C11/C++20 public-header checks, lifecycle and diagnostics native tests,
+  runtime package formatting/analysis/unit tests, both warning-as-error generic
+  host builds, and the complete existing `dart_appkit` regression suite pass.
+  The manifest-driven hello-window passes real GUI smokes in Developer JIT and
+  Release AOT with Timer, menu action, deferred close, handle release, and exit
+  0. The official SDK checkout remains clean at the pinned revision.
