@@ -1,6 +1,6 @@
 # Dart-only macOS application packaging migration
 
-- Status: generic runtime extraction complete; native plugin proof is next
+- Status: native plugin proof complete; renderer extraction is next
 - Started: 2026-09-04
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Related: `ROADMAP.md` Phase 2, `docs/adr/ADR-001-dart-native-boundary.md`,
@@ -222,3 +222,31 @@ pass against the replacement.
   The manifest-driven hello-window passes real GUI smokes in Developer JIT and
   Release AOT with Timer, menu action, deferred close, handle release, and exit
   0. The official SDK checkout remains clean at the pinned revision.
+
+### 2026-09-04 — versioned native asset and plugin proof
+
+- Added and committed the versioned AppKit extension service plus generic
+  capability loader at adjacent `dart_appkit` commit `10f5425`.
+- `da_native_extension_services_v1` exposes a size/version-prefixed plain-C
+  factory registration call. The bridge validates main-thread use, UTF-8,
+  duplicate/conflicting registration, factory failure, and `NSView` identity,
+  while all created instances use the existing generation/domain handle and
+  asynchronous shutdown rules.
+- A separate `dart_appkit_example_view` dependency owns the example Objective-C
+  view and Dart facade. Its Dart 3.13 build hook produces the dylib; the generic
+  runtime builder stages only manifest-declared images and records their
+  package/library/ABI/symbol identity. Neither generic host nor hello application
+  compiles the view implementation.
+- `MacosNativeCapability.load` rejects undeclared, missing, symbol-missing, and
+  ABI-mismatched images, initializes once on the UI isolate, and retains the
+  image for process life so provider callbacks cannot outlive their code.
+- Native tests cover ABI mismatch, off-main and duplicate initialization,
+  conflict, failed factory, view release, bridge shutdown, and image retention.
+  Dart tests cover declaration validation, build-hook invocation and staging,
+  missing images, one-time load, and generated metadata. The complete existing
+  suite and legacy JIT hello remain compatible.
+- Real capability-enabled hello bundles pass in Developer JIT and Release AOT,
+  including dependency view initialization, Timer, menu/close events, handle
+  release, exit 0, and deep signature validation. The first hook integration
+  exposed toolchain-injected linker flags during compilation; only the matching
+  unused-command-line diagnostic is suppressed while source warnings stay fatal.
