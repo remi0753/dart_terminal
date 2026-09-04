@@ -578,7 +578,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   diagnostics、bundle assembly を抽出する
 - [x] versioned native asset/plugin 登録を hello-window で実証する
 - [x] `TerminalMetalView` を terminal renderer capability package へ移す
-- [ ] Phase 2 PTYを `dart_pty_macos` capability package として実装する
+- [x] Phase 2 PTYを `dart_pty_macos` capability package として実装する
 - [ ] `dart_terminal` から product native 実装と隣接 repository の内部 source 参照を
   除去し、Dart application sourceだけで両runtime modeを構築・検証する
 - [ ] stable `dt_pty_*` C ABI と Dart facade

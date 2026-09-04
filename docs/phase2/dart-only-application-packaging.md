@@ -1,6 +1,6 @@
 # Dart-only macOS application packaging migration
 
-- Status: renderer extraction complete; PTY capability implementation is next
+- Status: PTY capability complete; Dart Terminal migration in progress
 - Started: 2026-09-04
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Related: `ROADMAP.md` Phase 2, `docs/adr/ADR-001-dart-native-boundary.md`,
@@ -277,3 +277,52 @@ pass against the replacement.
 - The compatibility copy under this repository's `native/macos/renderer`
   remains temporarily because task 7 performs the atomic product build switch
   and native-source removal after the PTY capability is available.
+
+### 2026-09-04 — PTY capability task start
+
+- Re-reviewed the Phase 0 PTY sources and acceptance records before modifying
+  reusable code. The spike already proves a prebuilt argv/environment,
+  `forkpty` followed by a separately audited immediate `execve` child path,
+  nonblocking kqueue drain, 64 KiB read batches, 1 MiB/512 KiB ACK-credit
+  watermarks, interactive zsh, resize, terminal-generated SIGINT, 10 MiB burst,
+  explicit exit 37, and `waitpid` reaping.
+- The spike is not reusable: it hard-codes its shell and validation scenario,
+  owns a singleton, posts a Phase 0-specific Dart message shape, has no bounded
+  application write queue, and has no public session lifecycle or fake backend.
+- The package implementation will retain the proven child object and reactor
+  mechanics while replacing the scenario with a versioned multi-session API.
+  AppKit is excluded; only the platform-neutral runtime asset staging needed to
+  locate a hook-produced dylib may be added to `dart_macos_runtime`.
+
+### 2026-09-04 — reusable PTY capability completion
+
+- Added and committed `dart_pty_macos` in the adjacent reusable platform
+  repository at `0fbc310`. The package owns a versioned `dpty_*` C ABI,
+  generation-checked sessions, a one-thread-per-session kqueue reactor, a Dart
+  facade, a fake backend, and its Dart 3.13 native build hook. It has no AppKit
+  dependency and no terminal-emulation semantics.
+- The spawn boundary copies argv, environment, and working directory before
+  `forkpty`. The child path is separately compiled and audited; its only
+  undefined functions are `__error`, `_chdir`, `_close`, `_execve`, `_write`,
+  and `__exit`. Process groups receive foreground signals, resize uses
+  `TIOCSWINSZ`, close escalates from hangup through a bounded grace period to
+  kill, and every child is reaped exactly once.
+- Output admission uses explicit ACK credit with 1 MiB/512 KiB high/low water
+  marks. Writes admit only whole requests into a bounded queue. Stats expose
+  pause, resume, rejected-write, and buffered-byte state without making the UI
+  isolate wait for PTY I/O.
+- Native contract tests pass for interactive login zsh, cwd/environment/TTY,
+  resize, foreground SIGINT, split UTF-8 bytes, a 10 MiB burst, output
+  pause/resume, write backpressure, explicit and failed-exec exits, graceful
+  and forced close, stale handles, reaping, and zero live sessions. Dart tests
+  pass for validation, fake lifecycle and flow control, and real callback-driven
+  process execution. The complete adjacent `make test` suite also passes.
+- Generalized the reusable runtime manifest and builder with plain native
+  assets. This stages non-AppKit dylibs without calling the AppKit extension
+  initializer and exposes their bundle framework path to Dart. The produced PTY
+  image links only libc++, libSystem, and itself; its exported surface is only
+  the declared `dpty_*` ABI.
+- A permanently non-keeping native callback allowed the isolate to terminate
+  while waiting for its first event. The facade now keeps the callback isolate
+  alive exactly while sessions exist and disables that retention after the last
+  terminal event, preventing both premature shutdown and process-exit leaks.
