@@ -39,15 +39,16 @@ final class TerminalScreenSet {
   }
 
   TerminalScreenSet._({
-    required this.primary,
-    required this.alternate,
+    required TerminalScreen primary,
+    required TerminalScreen alternate,
     required this.styleTable,
     required this.palette,
     required this.graphemeTable,
-  });
+  }) : _primary = primary,
+       _alternate = alternate;
 
-  final TerminalScreen primary;
-  final TerminalScreen alternate;
+  TerminalScreen _primary;
+  TerminalScreen _alternate;
   final TerminalStyleTable styleTable;
   final TerminalPalette palette;
   final TerminalGraphemeTable graphemeTable;
@@ -56,6 +57,8 @@ final class TerminalScreenSet {
   bool _mode1049Active = false;
   int _transitionGeneration = 1;
 
+  TerminalScreen get primary => _primary;
+  TerminalScreen get alternate => _alternate;
   TerminalScreenKind get activeKind => _activeKind;
   TerminalScreen get activeScreen => switch (_activeKind) {
     TerminalScreenKind.primary => primary,
@@ -64,6 +67,27 @@ final class TerminalScreenSet {
   bool get usingAlternate => _activeKind == TerminalScreenKind.alternate;
   bool get mode1049Active => _mode1049Active;
   int get transitionGeneration => _transitionGeneration;
+
+  /// Atomically replaces both fixed-size grids after visible-line reflow.
+  void resize({required int rows, required int columns}) {
+    if (rows == primary.rows &&
+        columns == primary.columns &&
+        rows == alternate.rows &&
+        columns == alternate.columns) {
+      return;
+    }
+    final TerminalScreen nextPrimary = primary.resized(
+      rows: rows,
+      columns: columns,
+    );
+    final TerminalScreen nextAlternate = alternate.resized(
+      rows: rows,
+      columns: columns,
+    );
+    _primary = nextPrimary;
+    _alternate = nextAlternate;
+    _transitionGeneration++;
+  }
 
   /// DEC private mode 47: switch buffers without clearing either buffer.
   void setAlternateMode47(bool enabled) {

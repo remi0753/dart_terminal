@@ -649,12 +649,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （[`docs/phase3/sgr-palette-primary-alternate-screen.md`](docs/phase3/sgr-palette-primary-alternate-screen.md) を参照して実施）
   - [x] primary/alternate screen owner と DEC 47/1047/1048/1049
     （[`docs/phase3/sgr-palette-primary-alternate-screen.md`](docs/phase3/sgr-palette-primary-alternate-screen.md) を参照して実施）
-- [ ] wide/grapheme cells と resize/reflow
+- [x] wide/grapheme cells と resize/reflow
   - [x] Unicode 17 properties、grapheme breaker、bounded intern table
     （[`docs/phase3/wide-grapheme-resize-reflow.md`](docs/phase3/wide-grapheme-resize-reflow.md) を参照して実施）
   - [x] wide/continuation/grapheme mutation invariant
     （[`docs/phase3/wide-grapheme-resize-reflow.md`](docs/phase3/wide-grapheme-resize-reflow.md) を参照して実施）
-  - [ ] primary/alternate resize と visible logical-line reflow
+  - [x] primary/alternate resize と visible logical-line reflow
     （[`docs/phase3/wide-grapheme-resize-reflow.md`](docs/phase3/wide-grapheme-resize-reflow.md) を参照して実施）
 - [ ] paged scrollback、viewport、selection/search primitives
 - [ ] query/reply encoder と PTY write connection

@@ -4,6 +4,7 @@ import 'terminal_style.dart';
 import 'terminal_unicode.dart';
 
 part 'terminal_palette.dart';
+part 'terminal_reflow.dart';
 
 /// Version-one width and cell flag values from the packed-grid contract.
 abstract final class TerminalCellFlags {
@@ -1240,6 +1241,10 @@ final class TerminalScreen {
     _fullSnapshotRequired = true;
     _incrementGeneration();
   }
+
+  /// Returns a fixed-resource replacement reflowed from retained visible rows.
+  TerminalScreen resized({required int rows, required int columns}) =>
+      _resizeTerminalScreen(this, rows: rows, columns: columns);
 
   bool isTabStop(int column) {
     _checkColumn(column);

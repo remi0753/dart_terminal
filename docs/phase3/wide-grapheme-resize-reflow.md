@@ -1,6 +1,6 @@
 # Phase 3 — Wide/grapheme cells and resize/reflow
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-05
 - Scope: the first incomplete Phase 3 roadmap item after SGR/palette/screens
 - Related: `ROADMAP.md` sections 5.3, 5.6, 6, 8, and Phase 3;
@@ -161,6 +161,9 @@ completion commit. The parent remains incomplete until all three pass.
   `f9232b6`. The roadmap was reread from a clean worktree; wide/grapheme screen
   mutation is now the first unchecked subtask, while resize/reflow remains
   blocked on canonical cell topology.
+- Wide/continuation/grapheme mutation completed in `c2dc78a`. A second clean-
+  worktree roadmap review makes atomic primary/alternate resize and visible
+  logical-line reflow the current and final child of this parent.
 - Re-reading `ROADMAP.md` confirms this Unicode/resize item is the first
   unchecked task. Scrollback must not be implemented before this parent closes.
 - The package currently has no Unicode segmentation dependency. `dart:core`
@@ -232,6 +235,20 @@ completion commit. The parent remains incomplete until all three pass.
   streaming grapheme boundary. This prevents controls, malformed sequences, or
   a return to a previously active buffer from extending a stale cell; grapheme
   components inherit the presentation fields of their existing lead.
+- Reflow will construct replacement fixed-length grids and publish them only
+  after both primary and alternate builds succeed. Logical lines are consecutive
+  rows linked by both soft-wrap metadata and logical-line ID; canonical unused
+  trailing blanks are omitted, while cursor positions force enough blank units
+  to remain addressable.
+- When the new visible height cannot retain every reflowed row, choose a window
+  containing the active cursor and otherwise anchor it toward the newest bottom
+  rows. The active cursor has priority; a saved cursor outside that window is
+  clamped because scrollback is not yet available to retain its row.
+- Resize resets vertical/horizontal margins and origin/horizontal-margin modes
+  to full-screen-safe defaults, while preserving rendition, cursor presentation,
+  insert/auto-wrap/reverse-video modes, compatible tab stops, and shared resource
+  identity. Every replacement starts with full-row damage and a required full
+  snapshot.
 
 ## Verification results
 
@@ -282,6 +299,36 @@ now consume these properties and resources before resize/reflow begins.
 
 This completes ordered subtask 2. The parent stays open until atomic primary/
 alternate resize and visible logical-line reflow pass.
+
+### Primary/alternate resize and visible-line reflow
+
+- Focused JIT tests passed narrower/wider logical-line reflow, retained styled
+  blanks, wide and grapheme cells, logical-line and semantic row metadata,
+  active/saved cursor mapping, one-column wide-cell containment, margin reset,
+  mode/rendition/cursor/tab preservation, and full-snapshot damage.
+- A 7-by-12 resize matrix exercised 84 valid target dimensions, including
+  shorter/taller and one-column grids. Every replacement preserved shared
+  resources, passed full-grid topology validation, kept both cursor positions
+  off continuation cells, dirtied every row, and left its source unchanged.
+- Screen-set tests passed independent primary/alternate content reflow, active
+  alternate ownership, DEC 1049 restore after resize, palette observation by
+  both replacements, and lookup through a parser sink created before resize.
+  Invalid row, column, and total-cell bounds left both published screen
+  references, contents, and the transition generation unchanged; same-size
+  resize was a no-op.
+- The focused suite compiled to and passed as a Release AOT executable.
+  `make test` passed dependency resolution, VT table freshness, formatting of
+  56 files, full analysis, and the combined test runner.
+- `git diff --cached --check` passed. The staged-source Dart-only audit passed
+  with 111 tracked files and zero native source files, including both new
+  resize/reflow files. Its first sandboxed invocation stopped before the audit
+  when Dart could not update its home-directory telemetry timestamp; rerunning
+  with the required filesystem permission completed successfully and did not
+  reveal a product failure.
+
+This completes ordered subtask 3 and the parent wide/grapheme resize/reflow
+roadmap item. Scrollback remains intentionally absent from visible-only reflow
+and is the next ordered task.
 
 ## Risks and handoff
 
