@@ -4,12 +4,14 @@ import 'dart:typed_data';
 
 import 'package:dart_terminal/dart_terminal.dart';
 
+import '../tool/capture_product_application_stream.dart';
 import '../tool/product_parser_corpus.dart';
 
 void main() => runProductParserCorpusTests();
 
 void runProductParserCorpusTests() {
   _testReviewedProductCorpus();
+  _testTopRecordingSanitizer();
   _testPrintModeDoesNotRewriteSnapshots();
   _testManifestEnvelopeValidation();
   _testCaseHexPathDimensionAndLimitValidation();
@@ -18,18 +20,79 @@ void runProductParserCorpusTests() {
 
 void _testReviewedProductCorpus() {
   final ProductParserCorpusResult result = runProductParserCorpus();
-  _expect(result.caseCount == 4, 'reviewed corpus case count');
-  _expect(result.inputBytes == 156, 'reviewed corpus input byte count');
-  _expect(result.splitRuns == 164, 'reviewed corpus exhaustive split count');
+  _expect(result.caseCount == 8, 'reviewed corpus case count');
+  _expect(result.inputBytes == 1421, 'reviewed corpus input byte count');
+  _expect(result.splitRuns == 1437, 'reviewed corpus exhaustive split count');
   _expect(
-    result.snapshotHash == 1242323160,
+    result.snapshotHash == 169861547,
     'reviewed corpus aggregate snapshot hash',
   );
   _expect(
     result.machineLine() ==
-        'PRODUCT_PARSER_CORPUS_PASS cases=4 input_bytes=156 '
-            'split_runs=164 snapshot_hash=1242323160',
+        'PRODUCT_PARSER_CORPUS_PASS cases=8 input_bytes=1421 '
+            'split_runs=1437 snapshot_hash=169861547',
     'corpus result has stable machine-readable output',
+  );
+}
+
+void _testTopRecordingSanitizer() {
+  const String raw =
+      'Processes: 600 total\r\n'
+      '2026/09/05 12:34:56\r\n'
+      'Load Avg: 1.0\r\n'
+      'CPU usage: 2.0% user\r\n'
+      'SharedLibs: 1M resident\r\n'
+      'MemRegions: 2 total\r\n'
+      'PhysMem: 3G used\r\n'
+      'VM: 4G vsize\r\n'
+      'Networks: packets: 5\r\n'
+      'Disks: 6 read\r\n'
+      '\r\n';
+  final String sanitized = ascii.decode(
+    sanitizeTopRecording(Uint8List.fromList(ascii.encode(raw))),
+  );
+  _expect(
+    sanitized ==
+        'Processes: sanitized\r\n'
+            'Clock: sanitized\r\n'
+            'Load Avg: sanitized\r\n'
+            'CPU usage: sanitized\r\n'
+            'SharedLibs: sanitized\r\n'
+            'MemRegions: sanitized\r\n'
+            'PhysMem: sanitized\r\n'
+            'VM: sanitized\r\n'
+            'Networks: sanitized\r\n'
+            'Disks: sanitized\r\n'
+            '\r\n',
+    'top dynamic status has a stable reviewed replacement',
+  );
+  _expectTopSanitizerFailure(
+    '$raw'
+        'unexpected\r\n',
+    'unknown line',
+  );
+  _expectTopSanitizerFailure(
+    raw.replaceFirst('Disks: 6 read\r\n', ''),
+    'missing Disks',
+  );
+  _expectTopSanitizerFailure(
+    raw.replaceFirst('Load Avg:', '\u001bLoad Avg:'),
+    'unexpected control bytes',
+  );
+}
+
+void _expectTopSanitizerFailure(String raw, String expectedMessage) {
+  try {
+    sanitizeTopRecording(Uint8List.fromList(ascii.encode(raw)));
+  } on StateError catch (error) {
+    _expect(
+      error.message.toString().contains(expectedMessage),
+      'top sanitizer failure contains $expectedMessage',
+    );
+    return;
+  }
+  throw StateError(
+    'Expected top sanitizer failure containing $expectedMessage',
   );
 }
 
@@ -44,12 +107,12 @@ void _testPrintModeDoesNotRewriteSnapshots() {
     output: output,
   );
   _expect(
-    result.caseCount == 4 && result.splitRuns == 0,
+    result.caseCount == 8 && result.splitRuns == 0,
     'print mode performs one review run per case',
   );
   _expect(
     output.toString().contains('SNAPSHOT screen-semantics ') &&
-        output.toString().contains('END_SNAPSHOT bounded-recovery'),
+        output.toString().contains('END_SNAPSHOT recorded-vim'),
     'print mode exposes bounded reviewed sections',
   );
   _expect(

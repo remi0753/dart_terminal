@@ -81,6 +81,86 @@
         "max_bytes": 65536,
         "page_rows": 2
       }
+    },
+    {
+      "id": "recorded-shell",
+      "description": "Recorded zsh 5.9 prompt, line editing echo, command output, and clean exit",
+      "input_hex": "20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 0d 0d 0d 1b 5b 30 6d 1b 5b 32 37 6d 1b 5b 32 34 6d 1b 5b 4a 63 6f 72 70 75 73 1b 5b 4b 1b 5b 3f 32 30 30 34 68 70 08 70 72 69 6e 74 20 2d 72 20 2d 2d 20 73 68 65 6c 6c 2d 72 65 61 64 79 1b 5b 3f 32 30 30 34 6c 0d 0d 0a 73 68 65 6c 6c 2d 72 65 61 64 79 0d 0a 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 0d 0d 0d 1b 5b 30 6d 1b 5b 32 37 6d 1b 5b 32 34 6d 1b 5b 4a 63 6f 72 70 75 73 1b 5b 4b 1b 5b 3f 32 30 30 34 68 65 08 65 78 69 74 1b 5b 3f 32 30 30 34 6c 0d 0d 0a",
+      "snapshot": "snapshots/recorded-shell.snapshot",
+      "rows": 8,
+      "columns": 40,
+      "parser_limits": {
+        "max_sequence_bytes": 8192,
+        "max_string_bytes": 4096,
+        "max_parameters": 32,
+        "max_intermediates": 8,
+        "max_numeric_value": 1000000
+      },
+      "scrollback": {
+        "max_lines": 32,
+        "max_bytes": 131072,
+        "page_rows": 8
+      }
+    },
+    {
+      "id": "recorded-less",
+      "description": "Recorded less 668 alternate-screen paging and clean terminal restoration",
+      "input_hex": "1b 5b 3f 31 30 34 39 68 1b 5b 38 3b 31 48 1b 5b 3f 31 68 1b 3d 0d 6c 65 73 73 20 6c 69 6e 65 20 30 31 1b 5b 6d 0d 0a 6c 65 73 73 20 6c 69 6e 65 20 30 32 1b 5b 6d 0d 0a 6c 65 73 73 20 6c 69 6e 65 20 30 33 1b 5b 6d 0d 0a 6c 65 73 73 20 6c 69 6e 65 20 30 34 1b 5b 6d 0d 0a 6c 65 73 73 20 6c 69 6e 65 20 30 35 1b 5b 6d 0d 0a 6c 65 73 73 20 6c 69 6e 65 20 30 36 1b 5b 6d 0d 0a 6c 65 73 73 20 6c 69 6e 65 20 30 37 1b 5b 6d 0d 0a 3a 1b 5b 4b 0d 1b 5b 4b 1b 5b 3f 31 6c 1b 3e 1b 5b 3f 31 30 34 39 6c",
+      "snapshot": "snapshots/recorded-less.snapshot",
+      "rows": 8,
+      "columns": 40,
+      "parser_limits": {
+        "max_sequence_bytes": 8192,
+        "max_string_bytes": 4096,
+        "max_parameters": 32,
+        "max_intermediates": 8,
+        "max_numeric_value": 1000000
+      },
+      "scrollback": {
+        "max_lines": 32,
+        "max_bytes": 131072,
+        "page_rows": 8
+      }
+    },
+    {
+      "id": "recorded-top",
+      "description": "Recorded macOS top one-shot zero-process headers with reviewed dynamic-field sanitization",
+      "input_hex": "50 72 6f 63 65 73 73 65 73 3a 20 73 61 6e 69 74 69 7a 65 64 0d 0a 43 6c 6f 63 6b 3a 20 73 61 6e 69 74 69 7a 65 64 0d 0a 4c 6f 61 64 20 41 76 67 3a 20 73 61 6e 69 74 69 7a 65 64 0d 0a 43 50 55 20 75 73 61 67 65 3a 20 73 61 6e 69 74 69 7a 65 64 0d 0a 53 68 61 72 65 64 4c 69 62 73 3a 20 73 61 6e 69 74 69 7a 65 64 0d 0a 4d 65 6d 52 65 67 69 6f 6e 73 3a 20 73 61 6e 69 74 69 7a 65 64 0d 0a 50 68 79 73 4d 65 6d 3a 20 73 61 6e 69 74 69 7a 65 64 0d 0a 56 4d 3a 20 73 61 6e 69 74 69 7a 65 64 0d 0a 4e 65 74 77 6f 72 6b 73 3a 20 73 61 6e 69 74 69 7a 65 64 0d 0a 44 69 73 6b 73 3a 20 73 61 6e 69 74 69 7a 65 64 0d 0a 0d 0a 0d 0a",
+      "snapshot": "snapshots/recorded-top.snapshot",
+      "rows": 8,
+      "columns": 40,
+      "parser_limits": {
+        "max_sequence_bytes": 8192,
+        "max_string_bytes": 4096,
+        "max_parameters": 32,
+        "max_intermediates": 8,
+        "max_numeric_value": 1000000
+      },
+      "scrollback": {
+        "max_lines": 32,
+        "max_bytes": 131072,
+        "page_rows": 8
+      }
+    },
+    {
+      "id": "recorded-vim",
+      "description": "Recorded Vim 9.1 alternate-screen startup, edit, command, and terminal restoration",
+      "input_hex": "1b 5b 3f 31 30 34 39 68 1b 5b 3e 34 3b 32 6d 1b 5b 3f 31 68 1b 3d 1b 5b 3f 32 30 30 34 68 1b 5b 3f 31 30 30 34 68 1b 5b 31 3b 38 72 1b 5b 3f 31 32 68 1b 5b 3f 31 32 6c 1b 5b 32 32 3b 32 74 1b 5b 32 32 3b 31 74 1b 5b 32 37 6d 1b 5b 32 33 6d 1b 5b 32 39 6d 1b 5b 6d 1b 5b 48 1b 5b 32 4a 1b 5b 32 3b 31 48 bd 1b 5b 36 6e 1b 5b 32 3b 31 48 20 20 1b 5b 33 3b 31 48 1b 50 7a 7a 1b 5c 1b 5b 30 25 6d 1b 5b 36 6e 1b 5b 33 3b 31 48 20 20 20 20 20 20 20 20 20 20 20 1b 5b 31 3b 31 48 1b 5b 3e 63 1b 5b 3f 32 35 6c 1b 5b 32 3b 31 48 1b 5b 39 34 6d 7e 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 1b 5b 33 3b 31 48 7e 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 1b 5b 34 3b 31 48 7e 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 1b 5b 35 3b 31 48 7e 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 1b 5b 36 3b 31 48 7e 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 1b 5b 37 3b 31 48 7e 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 1b 5b 31 3b 31 48 1b 5b 3f 32 35 68 1b 5b 3f 34 6d 1b 5b 32 3b 38 48 1b 5b 3f 32 35 6c 1b 5b 6d 1b 5b 31 3b 31 48 56 69 6d 20 63 6f 72 70 75 73 0d 0a 6c 69 6e 65 20 74 77 6f 1b 5b 32 3b 39 48 1b 5b 4b 1b 5b 32 3b 39 48 1b 5b 38 3b 33 30 48 5e 5b 1b 5b 32 3b 38 48 1b 5b 3f 32 35 68 1b 5b 3f 32 35 6c 1b 5b 38 3b 33 30 48 20 20 1b 5b 32 3b 39 48 08 1b 5b 3f 32 35 68 1b 5b 3f 32 35 6c 1b 5b 38 3b 31 48 3a 71 21 0d 1b 5b 3f 32 30 30 34 6c 1b 5b 3e 34 3b 6d 1b 5b 32 33 3b 32 74 1b 5b 32 33 3b 31 74 1b 5b 38 3b 31 48 1b 5b 4b 1b 5b 38 3b 31 48 1b 5b 3f 31 30 30 34 6c 1b 5b 3f 32 30 30 34 6c 1b 5b 3f 31 6c 1b 3e 1b 5b 3f 31 30 34 39 6c 1b 5b 3f 32 35 68 1b 5b 3e 34 3b 6d",
+      "snapshot": "snapshots/recorded-vim.snapshot",
+      "rows": 8,
+      "columns": 40,
+      "parser_limits": {
+        "max_sequence_bytes": 8192,
+        "max_string_bytes": 4096,
+        "max_parameters": 32,
+        "max_intermediates": 8,
+        "max_numeric_value": 1000000
+      },
+      "scrollback": {
+        "max_lines": 32,
+        "max_bytes": 131072,
+        "page_rows": 8
+      }
     }
   ]
 }

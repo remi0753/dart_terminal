@@ -1,0 +1,133 @@
+dart-terminal-state-snapshot version=1 kind=screen-set
+set active=primary mode1049=false viewport_offset=0 primary_viewport_offset=0
+resources styles=0 graphemes=0 palette=256
+palette defaults foreground=#e5e5e5 background=#000000
+palette range=000-015 colors=#000000,#cd0000,#00cd00,#cdcd00,#0000ee,#cd00cd,#00cdcd,#e5e5e5,#7f7f7f,#ff0000,#00ff00,#ffff00,#5c5cff,#ff00ff,#00ffff,#ffffff
+palette range=016-031 colors=#000000,#00005f,#000087,#0000af,#0000d7,#0000ff,#005f00,#005f5f,#005f87,#005faf,#005fd7,#005fff,#008700,#00875f,#008787,#0087af
+palette range=032-047 colors=#0087d7,#0087ff,#00af00,#00af5f,#00af87,#00afaf,#00afd7,#00afff,#00d700,#00d75f,#00d787,#00d7af,#00d7d7,#00d7ff,#00ff00,#00ff5f
+palette range=048-063 colors=#00ff87,#00ffaf,#00ffd7,#00ffff,#5f0000,#5f005f,#5f0087,#5f00af,#5f00d7,#5f00ff,#5f5f00,#5f5f5f,#5f5f87,#5f5faf,#5f5fd7,#5f5fff
+palette range=064-079 colors=#5f8700,#5f875f,#5f8787,#5f87af,#5f87d7,#5f87ff,#5faf00,#5faf5f,#5faf87,#5fafaf,#5fafd7,#5fafff,#5fd700,#5fd75f,#5fd787,#5fd7af
+palette range=080-095 colors=#5fd7d7,#5fd7ff,#5fff00,#5fff5f,#5fff87,#5fffaf,#5fffd7,#5fffff,#870000,#87005f,#870087,#8700af,#8700d7,#8700ff,#875f00,#875f5f
+palette range=096-111 colors=#875f87,#875faf,#875fd7,#875fff,#878700,#87875f,#878787,#8787af,#8787d7,#8787ff,#87af00,#87af5f,#87af87,#87afaf,#87afd7,#87afff
+palette range=112-127 colors=#87d700,#87d75f,#87d787,#87d7af,#87d7d7,#87d7ff,#87ff00,#87ff5f,#87ff87,#87ffaf,#87ffd7,#87ffff,#af0000,#af005f,#af0087,#af00af
+palette range=128-143 colors=#af00d7,#af00ff,#af5f00,#af5f5f,#af5f87,#af5faf,#af5fd7,#af5fff,#af8700,#af875f,#af8787,#af87af,#af87d7,#af87ff,#afaf00,#afaf5f
+palette range=144-159 colors=#afaf87,#afafaf,#afafd7,#afafff,#afd700,#afd75f,#afd787,#afd7af,#afd7d7,#afd7ff,#afff00,#afff5f,#afff87,#afffaf,#afffd7,#afffff
+palette range=160-175 colors=#d70000,#d7005f,#d70087,#d700af,#d700d7,#d700ff,#d75f00,#d75f5f,#d75f87,#d75faf,#d75fd7,#d75fff,#d78700,#d7875f,#d78787,#d787af
+palette range=176-191 colors=#d787d7,#d787ff,#d7af00,#d7af5f,#d7af87,#d7afaf,#d7afd7,#d7afff,#d7d700,#d7d75f,#d7d787,#d7d7af,#d7d7d7,#d7d7ff,#d7ff00,#d7ff5f
+palette range=192-207 colors=#d7ff87,#d7ffaf,#d7ffd7,#d7ffff,#ff0000,#ff005f,#ff0087,#ff00af,#ff00d7,#ff00ff,#ff5f00,#ff5f5f,#ff5f87,#ff5faf,#ff5fd7,#ff5fff
+palette range=208-223 colors=#ff8700,#ff875f,#ff8787,#ff87af,#ff87d7,#ff87ff,#ffaf00,#ffaf5f,#ffaf87,#ffafaf,#ffafd7,#ffafff,#ffd700,#ffd75f,#ffd787,#ffd7af
+palette range=224-239 colors=#ffd7d7,#ffd7ff,#ffff00,#ffff5f,#ffff87,#ffffaf,#ffffd7,#ffffff,#080808,#121212,#1c1c1c,#262626,#303030,#3a3a3a,#444444,#4e4e4e
+palette range=240-255 colors=#585858,#626262,#6c6c6c,#767676,#808080,#8a8a8a,#949494,#9e9e9e,#a8a8a8,#b2b2b2,#bcbcbc,#c6c6c6,#d0d0d0,#dadada,#e4e4e4,#eeeeee
+history rows=0 max_lines=32 max_bytes=131072 page_rows=8
+screen name=primary rows=8 columns=40
+primary cursor=0,0 saved=0,0 current=default/default/0 saved_rendition=default/default/0
+primary margins=0,7,0,39 modes=origin:false,insert:false,autoWrap:true,reverseVideo:false,horizontalMargins:false
+primary cursor_style=block visible=true blinking=true wrap_pending=false
+primary tabs=8,16,24,32
+primary row=0 flags=- logical=1:1+0 text="                                        "
+primary row=1 flags=- logical=1:2+0 text="                                        "
+primary row=2 flags=- logical=1:3+0 text="                                        "
+primary row=3 flags=- logical=1:4+0 text="                                        "
+primary row=4 flags=- logical=1:5+0 text="                                        "
+primary row=5 flags=- logical=1:6+0 text="                                        "
+primary row=6 flags=- logical=1:7+0 text="                                        "
+primary row=7 flags=- logical=1:8+0 text="                                        "
+screen name=alternate rows=8 columns=40
+alternate cursor=7,0 saved=0,0 current=default/default/0 saved_rendition=default/default/0
+alternate margins=0,7,0,39 modes=origin:false,insert:false,autoWrap:true,reverseVideo:false,horizontalMargins:false
+alternate cursor_style=block visible=true blinking=true wrap_pending=false
+alternate tabs=8,16,24,32
+alternate row=0 flags=hard-break logical=2:8+0 text="less line 01                            "
+alternate cell=0,0 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=0,1 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=0,2 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=0,3 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=0,4 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=0,5 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=0,6 content=U+0069 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=0,7 content=U+006E flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=0,8 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=0,9 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=0,10 content=U+0030 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=0,11 content=U+0031 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate row=1 flags=hard-break logical=2:9+0 text="less line 02                            "
+alternate cell=1,0 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=1,1 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=1,2 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=1,3 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=1,4 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=1,5 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=1,6 content=U+0069 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=1,7 content=U+006E flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=1,8 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=1,9 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=1,10 content=U+0030 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=1,11 content=U+0032 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate row=2 flags=hard-break logical=2:10+0 text="less line 03                            "
+alternate cell=2,0 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=2,1 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=2,2 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=2,3 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=2,4 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=2,5 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=2,6 content=U+0069 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=2,7 content=U+006E flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=2,8 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=2,9 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=2,10 content=U+0030 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=2,11 content=U+0033 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate row=3 flags=hard-break logical=2:11+0 text="less line 04                            "
+alternate cell=3,0 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=3,1 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=3,2 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=3,3 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=3,4 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=3,5 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=3,6 content=U+0069 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=3,7 content=U+006E flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=3,8 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=3,9 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=3,10 content=U+0030 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=3,11 content=U+0034 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate row=4 flags=hard-break logical=2:12+0 text="less line 05                            "
+alternate cell=4,0 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=4,1 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=4,2 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=4,3 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=4,4 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=4,5 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=4,6 content=U+0069 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=4,7 content=U+006E flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=4,8 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=4,9 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=4,10 content=U+0030 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=4,11 content=U+0035 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate row=5 flags=hard-break logical=2:13+0 text="less line 06                            "
+alternate cell=5,0 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=5,1 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=5,2 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=5,3 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=5,4 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=5,5 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=5,6 content=U+0069 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=5,7 content=U+006E flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=5,8 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=5,9 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=5,10 content=U+0030 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=5,11 content=U+0036 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate row=6 flags=hard-break logical=2:14+0 text="less line 07                            "
+alternate cell=6,0 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=6,1 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=6,2 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=6,3 content=U+0073 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=6,4 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=6,5 content=U+006C flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=6,6 content=U+0069 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=6,7 content=U+006E flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=6,8 content=U+0065 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=6,9 content=U+0020 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=6,10 content=U+0030 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate cell=6,11 content=U+0037 flags=narrow foreground=default background=default style=0 hyperlink=0
+alternate row=7 flags=- logical=2:15+0 text="                                        "
+parser unsupported_controls=0 unsupported_sequences=4 cancel=0 limit=0 malformed=0 incomplete=0 replies_accepted=0 replies_rejected=0
+end

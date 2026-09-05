@@ -116,6 +116,24 @@ A small explicitly seeded integer generator will be used instead of ambient
 randomness; every failure must report its seed, case index, and bounded snapshot
 diagnostic, and the minimized byte input becomes a permanent fuzz seed.
 
+### Live application capture contract
+
+The four recordings are captured from the existing `dart_pty_macos` backend at
+a fixed 8-by-40 cell size with a parent-independent `TERM=xterm-256color`, C
+locale, and fixed `PATH`, shell/prompt, and pager settings. Capture has a 16 KiB
+hard output cap, bounded quiet waits, bounded exit waits, and explicit input
+scripts. Shell, less, and vim bytes are retained exactly. Their scripts avoid
+filenames, version screens, user configuration, and parent environment values.
+
+macOS `top` necessarily renders live clock, process, CPU, memory, network, and
+disk status. It is captured in one-shot zero-process mode so no process names,
+PIDs, commands, or user values enter the stream. The capture tool then requires
+the known C-locale header categories and replaces every complete dynamic header
+line with a fixed same-category review line while preserving the captured line
+terminators. Missing, duplicate, unknown nonempty lines or control bytes make
+capture fail. This intentionally narrow sanitizer prevents an application or
+OS format change from being mistaken for reviewed fixture data.
+
 ## Ordered subtasks
 
 1. **Bounded product corpus manifest and replay harness**
@@ -192,6 +210,17 @@ diagnostic, and the minimized byte input becomes a permanent fuzz seed.
   only an alphabetic directive-order info in `test/run_tests.dart`; the new
   corpus-test import was moved before the runtime test import. No product or
   fixture behavior changed.
+- 2026-09-05: inspected the native PTY API before application capture. It accepts
+  an absolute executable, explicit argument/environment vectors, fixed initial
+  size, bounded read/write queues, output stream, tracked exit, and force-close
+  cleanup. The application recordings can therefore use the production native
+  transport without adding a shell-command/file capture dependency to tests.
+- 2026-09-05: shell, less, and vim were captured twice; their respective byte
+  counts/hashes were stable at `220/255135843`, `164/772262715`, and
+  `673/1876375118`. Sanitized top was stable at `207/1717483541`. Piping the
+  verbose hexadecimal review output into `head` produced an expected broken-pipe
+  exception after the summary line; subsequent review consumes the complete
+  output and does not use early-closing pipes.
 
 ## Verification results
 
@@ -236,6 +265,41 @@ diagnostic, and the minimized byte input becomes a permanent fuzz seed.
 
 This completes ordered subtask 1. Recorded shell, less, top, and vim streams are
 now the first unchecked child.
+
+### Recorded shell, less, top, and vim streams
+
+- Added a bounded review-only PTY capture tool using the production
+  `dart_pty_macos` backend. It fixes the terminal at 8 rows by 40 columns,
+  excludes the parent environment, supplies only C locale/TERM/PATH and
+  application-specific stable settings, caps output at 16 KiB, bounds every
+  start/quiet/exit/dispose step, and fails on write backpressure or abnormal
+  exit. Capture is never invoked by corpus replay or the normal test suite.
+- Recorded zsh 5.9, less 668, macOS top, and Vim 9.1 (patches 1–1752). Shell,
+  less, and vim recordings reproduced exactly across two captures. Top uses
+  one-shot `-l 1 -n 0`; its strict ASCII sanitizer requires one ordered line
+  for each known header category, rejects unknown/duplicate/control-bearing or
+  incomplete output, and replaces all live values with category-labelled
+  `sanitized` text. Sanitizer success and rejection paths have unit coverage.
+- Reviewed manifest inputs contain 220 shell bytes, 164 less bytes, 207
+  sanitized top bytes, and 673 vim bytes. Searches found no username, home path,
+  hostname, date, PID/process row, application version banner, or live CPU,
+  memory, network, disk, and load value in the committed inputs or snapshots.
+- The expanded corpus passed with 8 cases, 1,421 input bytes, 1,437 exhaustive
+  all-single-split/bytewise runs, and snapshot hash `169861547`. Focused tests
+  and static analysis passed. The focused executable compiled and passed in
+  Release AOT at `/private/tmp/dart-terminal-application-corpus-test`.
+  `make product-parser-corpus` passed, and `make test` passed generated-table
+  freshness, formatting of 72 files with zero changes, full analysis, every
+  unit/integration test, and the real PTY suite.
+- The first standalone runtime-source audit attempt was prevented before the
+  audit by sandbox denial of Dart's telemetry session-file timestamp update.
+  Retrying with the required narrow execution permission passed; this was an
+  execution-environment issue, not a source or test failure.
+- Final staged-diff whitespace validation passed. The staged-source Dart-only
+  audit passed with 140 tracked files and zero native source files.
+
+This completes ordered subtask 2. Deterministic property tests and the fuzz seed
+corpus are now the first unchecked child.
 
 ## Risks and handoff
 
