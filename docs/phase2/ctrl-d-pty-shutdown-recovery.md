@@ -226,3 +226,52 @@ open until all five are complete.
   persistent PTY, and 24 Control-D generations passing. Fresh arm64 Developer
   JIT and Release AOT builds then passed their GUI integration smoke in 2,180
   ms and 1,773 ms respectively, including the new exact lifecycle assertions.
+
+### 2026-09-05 — force-close capability design
+
+- The existing generic signal operation cannot implement escalation: native
+  `SendSignal` intentionally rejects all signals after `Close` changes the
+  session to closing. The recovery must therefore be a distinct lifecycle
+  operation rather than an exception to interactive signal admission.
+- The selected `forceClose` operation is nonblocking, accepts running sessions
+  both before and after graceful close, treats an already-finished session as
+  success, and may be repeated. The reactor, not the Dart/UI caller, sends
+  `SIGKILL` to the existing foreground and child process-group targets and
+  retains ownership through `waitpid` and output drain.
+- Adding a required exported symbol while retaining ABI version 1 would allow
+  an older dylib to pass version validation and then fail during Dart symbol
+  resolution. The capability ABI therefore advances to version 2 while its
+  existing size-prefixed V1 structures retain their layouts. The product
+  native-asset manifest must require the same version.
+- Focused acceptance will cover C and C++ header consumers, dynamic symbol
+  loading, close-then-force ordering, repeated force requests, prompt SIGKILL
+  of a HUP/TERM-resistant real process group, the Dart native-asset and dynamic
+  facade paths, and the deterministic fake backend.
+
+### 2026-09-05 — force-close capability implementation and validation
+
+- Added `dpty_session_force_close` and `PtyProcess.forceClose()` to the reusable
+  package. The public call only sets a locked reactor request and wakes kqueue;
+  it does not signal, join, read, or call `waitpid` on the caller/UI thread.
+- Native force close is accepted for a running session whether or not graceful
+  close has started, accepted repeatedly, and successful for an already
+  finished session. The reactor suppresses a not-yet-started graceful HUP,
+  sends SIGKILL to the established foreground/child process-group targets, and
+  continues through its existing reap, output-drain, exit, and destroy path.
+- Advanced `DPTY_ABI_VERSION` and the Dart facade expectation to 2, kept the V1
+  struct layouts intact, and changed the Dart Terminal bundle manifest to
+  require version 2. Both static native-asset and explicit dynamic-library
+  facade constructors now bind the force-close symbol.
+- Extended `FakePtyBackend` with independently configurable force-exit behavior
+  so later missing-callback deadline tests can accept a force request without
+  manufacturing an exit. Its focused contract verifies repeated force while a
+  graceful close is pending and a no-op after completion.
+- `make dpty-native-test dpty-dart-test` passed in 12.0 seconds, including C11
+  and C++20 headers, the post-fork child symbol audit, native dynamic symbol
+  lookup, the Dart native asset, fake behavior, and a real HUP/TERM-resistant
+  child forced within two seconds despite a 60-second graceful deadline. After
+  adding the direct pre-close native case, `make dpty-native-test` passed again
+  in 7.1 seconds with all sessions destroyed.
+- Dart Terminal `make test` passed in 8.0 seconds, including all 24 Control-D
+  generations. Fresh arm64 Developer JIT and Release AOT bundles accepted PTY
+  ABI v2 and passed GUI integration in 2,408 ms and 1,802 ms respectively.

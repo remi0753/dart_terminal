@@ -20,7 +20,7 @@
       "id": "dart_pty_macos",
       "package": "dart_pty_macos",
       "library": "libdart_pty_macos.dylib",
-      "abiVersion": 1,
+      "abiVersion": 2,
       "abiVersionSymbol": "dpty_abi_version"
     }
   ],
