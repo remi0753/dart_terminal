@@ -16,6 +16,7 @@ import 'terminal_palette_test.dart';
 import 'terminal_reflow_test.dart';
 import 'terminal_screen_set_test.dart';
 import 'terminal_screen_test.dart';
+import 'terminal_scrollback_test.dart';
 import 'terminal_style_test.dart';
 import 'terminal_unicode_test.dart';
 import 'terminal_wide_grapheme_test.dart';
@@ -31,6 +32,7 @@ Future<void> main() async {
   runTerminalCoreTests();
   runTerminalPaletteTests();
   runTerminalReflowTests();
+  runTerminalScrollbackTests();
   runTerminalScreenTests();
   runTerminalScreenSetTests();
   runTerminalStyleTests();

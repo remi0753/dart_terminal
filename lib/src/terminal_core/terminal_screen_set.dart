@@ -12,18 +12,24 @@ final class TerminalScreenSet {
     TerminalStyleTable? styleTable,
     TerminalPalette? palette,
     TerminalGraphemeTable? graphemeTable,
+    TerminalScrollback? scrollback,
   }) {
     final TerminalStyleTable sharedStyles = styleTable ?? TerminalStyleTable();
     final TerminalPalette sharedPalette = palette ?? TerminalPalette();
     final TerminalGraphemeTable sharedGraphemes =
         graphemeTable ?? TerminalGraphemeTable();
+    final TerminalScrollback sharedScrollback =
+        scrollback ?? TerminalScrollback();
+    final TerminalScrollbackAttachment scrollbackAttachment =
+        TerminalScrollbackAttachment(sharedScrollback);
     return TerminalScreenSet._(
-      primary: TerminalScreen(
+      primary: createTerminalScreenWithScrollback(
         rows: rows,
         columns: columns,
         styleTable: sharedStyles,
         palette: sharedPalette,
         graphemeTable: sharedGraphemes,
+        scrollbackAttachment: scrollbackAttachment,
       ),
       alternate: TerminalScreen(
         rows: rows,
@@ -35,6 +41,8 @@ final class TerminalScreenSet {
       styleTable: sharedStyles,
       palette: sharedPalette,
       graphemeTable: sharedGraphemes,
+      scrollback: sharedScrollback,
+      scrollbackAttachment: scrollbackAttachment,
     );
   }
 
@@ -44,14 +52,19 @@ final class TerminalScreenSet {
     required this.styleTable,
     required this.palette,
     required this.graphemeTable,
+    required this.scrollback,
+    required TerminalScrollbackAttachment scrollbackAttachment,
   }) : _primary = primary,
-       _alternate = alternate;
+       _alternate = alternate,
+       _scrollbackAttachment = scrollbackAttachment;
 
   TerminalScreen _primary;
   TerminalScreen _alternate;
   final TerminalStyleTable styleTable;
   final TerminalPalette palette;
   final TerminalGraphemeTable graphemeTable;
+  final TerminalScrollback scrollback;
+  final TerminalScrollbackAttachment _scrollbackAttachment;
 
   TerminalScreenKind _activeKind = TerminalScreenKind.primary;
   bool _mode1049Active = false;
@@ -84,6 +97,7 @@ final class TerminalScreenSet {
       rows: rows,
       columns: columns,
     );
+    _scrollbackAttachment.activate(nextPrimary);
     _primary = nextPrimary;
     _alternate = nextAlternate;
     _transitionGeneration++;

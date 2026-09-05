@@ -91,7 +91,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | SCR-05 | bold/faint/italic/underline variants/blink/inverse/conceal/strike と 16/256/truecolor | P0 | 3 | `G:src/terminal/sgr.zig`, `G:src/terminal/style.zig`, `G:src/terminal/color.zig` | bounded immutable style ID、current/saved rendition、全P0属性、ANSI/extended/default色SGR、typed xterm-256 palette/default色mutationを完了 |
 | SCR-06 | wide/continuation cell、combining sequence、zero-width grapheme の invariant を維持 | P0 | 3 | `G:src/terminal/page.zig`, `G:src/terminal/Screen.zig`, `G:src/unicode/grapheme.zig` | packed format gate |
 | SCR-07 | primary/alternate resize と reflow。cursor、selection、wrapped-line identity を保つ | P0 | 3 | `G:src/terminal/PageList.zig`, `G:src/terminal/Screen.zig` | 未実装 |
-| SCR-08 | paged bounded scrollback、viewport offset、先頭 eviction が O(page) 以下 | P0 | 3 | `G:src/terminal/PageList.zig`, `G:src/terminal/page.zig`, `G:src/terminal/compress/` | packed format gate |
+| SCR-08 | paged bounded scrollback、viewport offset、先頭 eviction が O(page) 以下 | P0 | 3 | `G:src/terminal/PageList.zig`, `G:src/terminal/page.zig`, `G:src/terminal/compress/` | fixed-page SoA履歴、独立line/byte cap、O(1) page eviction、primary captureを完了。viewport/reflowは後続 |
 | SCR-09 | row/range damage と monotonic generation。全画面転送を通常 path にしない | P0 | 3/4 | `G:src/terminal/render.zig`, `G:src/renderer/row.zig` | clean→dirty時だけ進むrow version、coalesced半開区間、monotonic screen generation基盤を完了。wire/rendererは後続 |
 | SCR-10 | underline color、overline、protected/selective erase | P1 | 6 | `G:src/terminal/style.zig`, `G:src/terminal/Terminal.zig` | 未実装 |
 | SCR-11 | hyperlink、semantic prompt、search、selection anchor/word/line semantics | P1 | 3/6 | `G:src/terminal/hyperlink.zig`, `G:src/terminal/search/`, `G:src/terminal/Selection.zig` | 未実装 |

@@ -106,12 +106,13 @@ TerminalScreen _resizeTerminalScreen(
     active?.row,
   );
   final int retainedCount = (reflowed.length - windowStart).clamp(0, rows);
-  final TerminalScreen target = TerminalScreen(
+  final TerminalScreen target = TerminalScreen._(
     rows: rows,
     columns: columns,
     styleTable: source.styleTable,
     palette: source.palette,
     graphemeTable: source.graphemeTable,
+    scrollbackAttachment: source._scrollbackAttachment,
   );
 
   int nextLogicalLineId = source._nextLogicalLineId;

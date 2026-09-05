@@ -19,7 +19,8 @@ export 'src/terminal_core/terminal_screen.dart'
         TerminalPalette,
         TerminalRowFlags,
         TerminalScreen,
-        TerminalScreenMode;
+        TerminalScreenMode,
+        TerminalScrollback;
 export 'src/terminal_core/terminal_screen_parser_sink.dart'
     show TerminalScreenParserSink;
 export 'src/terminal_core/terminal_screen_set.dart'

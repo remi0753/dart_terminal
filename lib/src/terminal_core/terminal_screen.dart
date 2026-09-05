@@ -5,6 +5,7 @@ import 'terminal_unicode.dart';
 
 part 'terminal_palette.dart';
 part 'terminal_reflow.dart';
+part 'terminal_scrollback.dart';
 
 /// Version-one width and cell flag values from the packed-grid contract.
 abstract final class TerminalCellFlags {
@@ -37,6 +38,28 @@ enum TerminalScreenMode {
 
 enum TerminalCursorShape { block, underline, bar }
 
+/// Internal package construction path for the screen-set-owned primary grid.
+TerminalScreen createTerminalScreenWithScrollback({
+  required int rows,
+  required int columns,
+  required TerminalStyleTable styleTable,
+  required TerminalPalette palette,
+  required TerminalGraphemeTable graphemeTable,
+  required TerminalScrollbackAttachment scrollbackAttachment,
+}) {
+  TerminalScreen._validateDimensions(rows, columns);
+  final TerminalScreen screen = TerminalScreen._(
+    rows: rows,
+    columns: columns,
+    styleTable: styleTable,
+    palette: palette,
+    graphemeTable: graphemeTable,
+    scrollbackAttachment: scrollbackAttachment,
+  );
+  scrollbackAttachment.activate(screen);
+  return screen;
+}
+
 /// Bounded Dart-owned terminal screen using Struct-of-Arrays cell storage.
 ///
 /// The screen is a single-writer object. Authoritative typed arrays remain
@@ -58,6 +81,7 @@ final class TerminalScreen {
       styleTable: styleTable ?? TerminalStyleTable(),
       palette: palette ?? TerminalPalette(),
       graphemeTable: graphemeTable ?? TerminalGraphemeTable(),
+      scrollbackAttachment: null,
     );
   }
 
@@ -67,7 +91,9 @@ final class TerminalScreen {
     required this.styleTable,
     required this.palette,
     required this.graphemeTable,
+    required TerminalScrollbackAttachment? scrollbackAttachment,
   }) : cellCount = rows * columns,
+       _scrollbackAttachment = scrollbackAttachment,
        _content = Uint32List(rows * columns),
        _foreground = Uint32List(rows * columns),
        _background = Uint32List(rows * columns),
@@ -104,6 +130,7 @@ final class TerminalScreen {
   final TerminalStyleTable styleTable;
   final TerminalPalette palette;
   final TerminalGraphemeTable graphemeTable;
+  final TerminalScrollbackAttachment? _scrollbackAttachment;
 
   final Uint32List _content;
   final Uint32List _foreground;
@@ -1208,6 +1235,7 @@ final class TerminalScreen {
       activeLeftMargin,
       activeRightMargin,
       count,
+      captureScrollback: true,
     );
   }
 
@@ -1909,10 +1937,20 @@ final class TerminalScreen {
     }
   }
 
-  void _scrollUpRegion(int top, int bottom, int left, int right, int count) {
+  void _scrollUpRegion(
+    int top,
+    int bottom,
+    int left,
+    int right,
+    int count, {
+    bool captureScrollback = false,
+  }) {
     _wrapPending = false;
     final int amount = count.clamp(1, bottom - top + 1);
     if (top == 0 && bottom == rows - 1 && left == 0 && right == columns - 1) {
+      if (captureScrollback) {
+        _scrollbackAttachment?.captureRows(this, 0, amount);
+      }
       _firstPhysicalRow = (_firstPhysicalRow + amount) % rows;
       for (int row = rows - amount; row < rows; row++) {
         final int physical = _physicalRow(row);
