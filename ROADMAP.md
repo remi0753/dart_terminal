@@ -636,6 +636,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [x] streaming UTF-8 decoder と parser table generator
 - [x] C0/ESC/CSI/OSC/DCS/APC parser
 - [ ] typed-array grid、cursor、margins、tabstops、modes
+  - [x] typed-array cell/row storage、cursor/save、tabstop、damage基盤
+    （[`docs/phase3/typed-array-grid-screen-state.md`](docs/phase3/typed-array-grid-screen-state.md) を参照して実施）
+  - [ ] margins、screen modes、reset/clamp invariant
+    （[`docs/phase3/typed-array-grid-screen-state.md`](docs/phase3/typed-array-grid-screen-state.md) を参照して実施）
+  - [ ] cursor/edit/scroll operations と parser action sink
+    （[`docs/phase3/typed-array-grid-screen-state.md`](docs/phase3/typed-array-grid-screen-state.md) を参照して実施）
 - [ ] SGR、palette、primary/alternate screen
 - [ ] wide/grapheme cells と resize/reflow
 - [ ] paged scrollback、viewport、selection/search primitives

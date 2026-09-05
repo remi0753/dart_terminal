@@ -55,6 +55,8 @@ pane-owned persistent login shell です。Phase 0 の native spike source は�
   UTF-8 decoderと、宣言的specから再生成・freshness検査できるtable-driven VT parser
 - C0/C1、ESC、CSI、OSC、DCS、SOS/PM/APCのtyped action、CAN/SUB/ESC recovery、
   parameter/subparameter保持、固定bufferとsequence/payload/count/value上限
+- ADR-003準拠の非公開SoA cell/row storage、cursor save/restore、default/custom
+  tab stop、coalesced row damage/versionとmonotonic screen generation基盤
 
 ## 起動
 
@@ -244,7 +246,7 @@ parser/benchmark などの Dart-only harness は後続実装の比較資料と�
 bin/main.dart                         エントリーポイント
 macos_application.json               product identity、helper、native package 宣言
 lib/src/terminal_application.dart    AppKit ウィンドウとキーイベント
-lib/src/terminal_core/               UTF-8 decoder、生成VT table、typed parser
+lib/src/terminal_core/               decoder、生成VT table、parser、SoA screen
 lib/src/runtime_lifecycle.dart       root/worker lifecycle coordinator
 lib/src/terminal_pane.dart           pane/session ID、owner、close状態
 lib/src/terminal_session.dart        persistent login shellとPTY入出力
