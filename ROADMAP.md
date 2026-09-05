@@ -713,6 +713,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] Dart-owned dual atlas pages、growth/LRU eviction、generation validation、text goldens
     （[`docs/phase4/glyph-raster-atlas.md`](docs/phase4/glyph-raster-atlas.md) を参照して実施）
 - [ ] Metal cell/glyph/decoration/cursor/selection pipelines
+  - [x] packed native pipeline、precompiled shader、atlas texture capability
+    （[`docs/phase4/metal-pipelines.md`](docs/phase4/metal-pipelines.md) を参照して実施）
+  - [ ] view-bound triple-buffer submission、GPU completion ownership、presentation
+    （[`docs/phase4/metal-pipelines.md`](docs/phase4/metal-pipelines.md) を参照して実施）
+  - [ ] Dart encoder/facade、atlas bridge、CPU/GPU 1x/2x goldens
+    （[`docs/phase4/metal-pipelines.md`](docs/phase4/metal-pipelines.md) を参照して実施）
 - [ ] damage coalescing、frame generation、stale-frame discard
 - [ ] resize/scale/font change の full rebuild
 - [ ] cursor blink、visual bell、occlusion pause
