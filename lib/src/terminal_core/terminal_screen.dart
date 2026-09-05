@@ -171,6 +171,7 @@ final class TerminalScreen {
   int _firstLogicalCellOffset = 0;
   int _generation = 1;
   bool _fullSnapshotRequired = true;
+  int _fullSnapshotRequestEpoch = 1;
 
   int _topMargin = 0;
   late int _bottomMargin = rows - 1;
@@ -207,6 +208,7 @@ final class TerminalScreen {
   int get defaultBackgroundColor => palette.defaultBackground;
   int get generation => _generation;
   bool get fullSnapshotRequired => _fullSnapshotRequired;
+  int get fullSnapshotRequestEpoch => _fullSnapshotRequestEpoch;
   int get topMargin => _topMargin;
   int get bottomMargin => _bottomMargin;
   int get leftMargin => _leftMargin;
@@ -1402,6 +1404,7 @@ final class TerminalScreen {
     }
     _nextLogicalLineId = rows + 1;
     _markEveryRowDirty();
+    _advanceFullSnapshotRequestEpoch();
     _fullSnapshotRequired = true;
     _incrementGeneration();
   }
@@ -1477,19 +1480,22 @@ final class TerminalScreen {
   }
 
   /// Records that a renderer has accepted a complete snapshot of this screen.
-  void acknowledgeFullSnapshot() {
+  ///
+  /// When [requestEpoch] is supplied, a newer full-rebuild request cannot be
+  /// cleared by an acknowledgement for an older packet.
+  bool acknowledgeFullSnapshot({int? requestEpoch}) {
+    if (requestEpoch != null && requestEpoch != _fullSnapshotRequestEpoch) {
+      return false;
+    }
     _fullSnapshotRequired = false;
+    return true;
   }
 
   void requestFullSnapshot() {
-    bool changed = _markEveryRowDirty();
-    if (!_fullSnapshotRequired) {
-      _fullSnapshotRequired = true;
-      changed = true;
-    }
-    if (changed) {
-      _incrementGeneration();
-    }
+    _markEveryRowDirty();
+    _advanceFullSnapshotRequestEpoch();
+    _fullSnapshotRequired = true;
+    _incrementGeneration();
   }
 
   void markAllDirty() {
@@ -2205,6 +2211,7 @@ final class TerminalScreen {
       }
       _nextLogicalLineId = rows + 1;
       _markEveryRowDirty();
+      _advanceFullSnapshotRequestEpoch();
       _fullSnapshotRequired = true;
     }
     return _nextLogicalLineId++;
@@ -2215,6 +2222,13 @@ final class TerminalScreen {
       throw StateError('logical-line epoch capacity exhausted');
     }
     _logicalLineEpoch++;
+  }
+
+  void _advanceFullSnapshotRequestEpoch() {
+    if (_fullSnapshotRequestEpoch == 0x7fffffffffffffff) {
+      throw StateError('full-snapshot request epoch capacity exhausted');
+    }
+    _fullSnapshotRequestEpoch++;
   }
 
   bool _markDirtyPhysical(int physical, int start, int end) {
@@ -2258,6 +2272,7 @@ final class TerminalScreen {
       _dirtyStarts[row] = 0;
       _dirtyEnds[row] = columns;
     }
+    _advanceFullSnapshotRequestEpoch();
     _fullSnapshotRequired = true;
     return true;
   }

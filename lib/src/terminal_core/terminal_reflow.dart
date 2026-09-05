@@ -362,7 +362,6 @@ TerminalScreen _buildReflowedScreen(
   target._horizontalMarginsMode = false;
   target.breakGraphemeSequence();
   target._generation = source._generation + 1;
-  target._fullSnapshotRequired = true;
   target._markEveryRowDirty();
   target.validateCellTopology();
   return target;

@@ -305,7 +305,7 @@ final class TerminalDamageOutbox {
   }
 
   TerminalSessionId _sessionId;
-  final TerminalScreen _screen;
+  TerminalScreen _screen;
   final TerminalDamageLimits limits;
   _OutstandingDamage? _outstanding;
   int _nextDamageGeneration;
@@ -324,6 +324,8 @@ final class TerminalDamageOutbox {
   int get publishedPacketCount => _publishedPacketCount;
   int get acknowledgedPacketCount => _acknowledgedPacketCount;
   TerminalDamageOutboxCloseReason? get lastCloseReason => _lastCloseReason;
+
+  bool isBoundToScreen(TerminalScreen screen) => identical(_screen, screen);
 
   bool get hasPendingDamage {
     if (_screen.fullSnapshotRequired) return true;
@@ -366,6 +368,10 @@ final class TerminalDamageOutbox {
       damageGeneration: packet.damageGeneration,
       byteLength: packet.byteLength,
       isFullSnapshot: packet.isFullSnapshot,
+      capturedScreen: _screen,
+      fullSnapshotRequestEpoch: packet.isFullSnapshot
+          ? _screen.fullSnapshotRequestEpoch
+          : 0,
     );
     _outstanding = outstanding;
     if (_nextDamageGeneration == 0x7fffffffffffffff) {
@@ -443,9 +449,23 @@ final class TerminalDamageOutbox {
     _lastAcknowledgedGeneration = acknowledgement.damageGeneration;
     _acknowledgedPacketCount++;
     if (outstanding.isFullSnapshot) {
-      _screen.acknowledgeFullSnapshot();
+      outstanding.capturedScreen.acknowledgeFullSnapshot(
+        requestEpoch: outstanding.fullSnapshotRequestEpoch,
+      );
     }
     return _ackResult(TerminalDamageAckDisposition.accepted);
+  }
+
+  /// Publishes a rebuilt screen only after its matching resources are ready.
+  ///
+  /// An older in-flight packet retains its captured screen and exact snapshot
+  /// epoch until ACK; later transfers use [replacement].
+  void rebindScreenForFullRebuild(TerminalScreen replacement) {
+    if (!_isOpen) {
+      throw StateError('damage relationship is closed');
+    }
+    _screen = replacement;
+    replacement.requestFullSnapshot();
   }
 
   /// Ignores stale timer callbacks and closes only the exact in-flight packet.
@@ -516,11 +536,15 @@ final class _OutstandingDamage {
     required this.damageGeneration,
     required this.byteLength,
     required this.isFullSnapshot,
+    required this.capturedScreen,
+    required this.fullSnapshotRequestEpoch,
   });
 
   final int damageGeneration;
   final int byteLength;
   final bool isFullSnapshot;
+  final TerminalScreen capturedScreen;
+  final int fullSnapshotRequestEpoch;
 }
 
 List<Object?> _messageFields(
