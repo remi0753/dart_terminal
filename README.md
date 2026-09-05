@@ -106,7 +106,8 @@ model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後�
 - renderer ABI v9のtyped device/shader/command failure state、bounded drawable
   unavailable観測、READY frameを保持する明示的on-demand presentation retry、
   最大3回のrenderer再生成、旧submission pinの一括解放、全atlas再公開とfull redraw、
-  native GPU completion時間と受理済みatlas upload count/bytes
+  native GPU completion時間と受理済みatlas upload count/bytes、Dart frame
+  build/submit時間、atlas hit rate、世代整合済みのimmutable aggregate metrics
 
 ## 起動
 

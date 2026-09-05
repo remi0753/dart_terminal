@@ -186,6 +186,25 @@ final class TerminalGlyphAtlasSnapshot {
   final List<TerminalGlyphAtlasPageDescriptor> pages;
 }
 
+/// Immutable cumulative lookup metrics for one Dart-owned atlas lifetime.
+final class TerminalGlyphAtlasMetrics {
+  const TerminalGlyphAtlasMetrics({
+    required this.hitCount,
+    required this.missCount,
+  });
+
+  final int hitCount;
+  final int missCount;
+
+  int get lookupCount => _saturatingAtlasAdd(hitCount, missCount);
+  double get hitRate {
+    if (hitCount == 0) return 0.0;
+    if (missCount == 0) return 1.0;
+    final double hits = hitCount.toDouble();
+    return hits / (hits + missCount.toDouble());
+  }
+}
+
 final class TerminalGlyphAtlasUpload {
   TerminalGlyphAtlasUpload._({
     required this.resourceGeneration,
@@ -281,15 +300,17 @@ final class TerminalGlyphAtlas {
   int get missCount => _missCount;
   int get livePinCount => _pins.length;
   int get pendingUploadPageCount => _dirtyPageRects.length;
+  TerminalGlyphAtlasMetrics get metrics =>
+      TerminalGlyphAtlasMetrics(hitCount: _hitCount, missCount: _missCount);
 
   TerminalGlyphAtlasEntry? lookup(TerminalGlyphAtlasKey key) {
     _validateKeyDomain(key);
     final TerminalGlyphAtlasEntry? entry = _entries[key];
     if (entry == null) {
-      _missCount++;
+      _missCount = _saturatingAtlasIncrement(_missCount);
       return null;
     }
-    _hitCount++;
+    _hitCount = _saturatingAtlasIncrement(_hitCount);
     _touch(entry);
     return entry;
   }
@@ -827,6 +848,14 @@ final class TerminalGlyphAtlas {
     _resourceGeneration++;
   }
 }
+
+const int _maximumAtlasMetric = 0x7fffffffffffffff;
+
+int _saturatingAtlasIncrement(int value) =>
+    value == _maximumAtlasMetric ? value : value + 1;
+
+int _saturatingAtlasAdd(int left, int right) =>
+    left >= _maximumAtlasMetric - right ? _maximumAtlasMetric : left + right;
 
 final class _AtlasPlacement {
   const _AtlasPlacement(this.page, this.rect);

@@ -175,6 +175,23 @@ void _testGrowthIsolationAndUploads() {
         atlas.missCount == 1,
     'atlas lookup tracks hit/miss and promotes an entry',
   );
+  final TerminalGlyphAtlasMetrics metrics = atlas.metrics;
+  _expect(
+    metrics.hitCount == 1 &&
+        metrics.missCount == 1 &&
+        metrics.lookupCount == 2 &&
+        metrics.hitRate == 0.5,
+    'atlas metrics snapshot exposes an exact lookup hit rate',
+  );
+  atlas.lookup(missingKey);
+  final TerminalGlyphAtlasMetrics laterMetrics = atlas.metrics;
+  _expect(
+    metrics.missCount == 1 &&
+        laterMetrics.missCount == 2 &&
+        laterMetrics.lookupCount == 3 &&
+        TerminalGlyphAtlas(catalogGeneration: 1).metrics.hitRate == 0.0,
+    'atlas metrics snapshots are immutable and zero-lookups are defined',
+  );
   _expectThrows<StateError>(
     () => atlas.ingest(
       _batch(<_RasterSpec>[

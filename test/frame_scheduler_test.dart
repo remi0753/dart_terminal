@@ -3,6 +3,7 @@ import 'package:dart_terminal/dart_terminal.dart';
 void main() => runFrameSchedulerTests();
 
 void runFrameSchedulerTests() {
+  _testExactFrameTimingMetrics();
   _testAppliedDamageCoalescesToNewestModel();
   _testBackpressureRetainsOneMarkerAndRebuilds();
   _testPreparedWorkSupersededDuringBuild();
@@ -12,6 +13,161 @@ void runFrameSchedulerTests() {
   _testOcclusionDuringBuildSupersedesBeforeSubmit();
   _testPresentationRevisionExhaustionDoesNotWrap();
   _testFrameGenerationExhaustionDoesNotWrap();
+}
+
+void _testExactFrameTimingMetrics() {
+  final _DamageSequence sequence = _DamageSequence(rows: 1, columns: 1);
+  final _FakeTimingClock timingClock = _FakeTimingClock(<int>[
+    10,
+    13,
+    20,
+    25,
+    30,
+    37,
+    40,
+    51,
+    60,
+    62,
+    70,
+    83,
+  ]);
+  var submissions = 0;
+  final TerminalNewestFrameScheduler<_FakeFrame> scheduler =
+      TerminalNewestFrameScheduler<_FakeFrame>(
+        model: TerminalDamageRenderModel(),
+        timingClock: timingClock.read,
+        buildFrame: (
+          TerminalDamageRenderModel model, {
+          required int modelRevision,
+          required int frameGeneration,
+          required TerminalFramePresentation presentation,
+        }) => _FakeFrame(modelRevision, frameGeneration, 0, presentation),
+        submitFrame:
+            (
+              _FakeFrame frame, {
+              required int modelRevision,
+              required int frameGeneration,
+            }) {
+              submissions++;
+              return switch (submissions) {
+                1 => TerminalFrameSubmissionOutcome.backpressured,
+                2 => TerminalFrameSubmissionOutcome.stale(
+                  nativeLastAcceptedFrameGeneration: 5,
+                ),
+                _ => TerminalFrameSubmissionOutcome.accepted(
+                  frameGeneration: frameGeneration,
+                  submissionToken: 9,
+                ),
+              };
+            },
+      );
+  scheduler.applyDamage(
+    sequence.captureFull(),
+    availableResourceGeneration: 1,
+    monotonicMicros: 0,
+  );
+  _expect(
+    scheduler.submitNewest().disposition ==
+            TerminalFrameAttemptDisposition.backpressured &&
+        scheduler.submitNewest().disposition ==
+            TerminalFrameAttemptDisposition.stale &&
+        scheduler.submitNewest().isAccepted,
+    'timing fixture exercises all synchronous native outcomes',
+  );
+  final TerminalFrameSchedulerMetrics metrics = scheduler.metrics;
+  _expect(
+    metrics.buildCount == 3 &&
+        metrics.buildTotalMicroseconds == 12 &&
+        metrics.buildMaximumMicroseconds == 7 &&
+        metrics.averageBuildMicroseconds == 4.0 &&
+        metrics.submissionCount == 3 &&
+        metrics.submissionTotalMicroseconds == 29 &&
+        metrics.submissionMaximumMicroseconds == 13 &&
+        metrics.acceptedCount == 1 &&
+        metrics.staleCount == 1 &&
+        metrics.backpressureCount == 1 &&
+        metrics.supersededCount == 0 &&
+        timingClock.readCount == 12,
+    'fake monotonic time yields exact bounded count/total/maximum metrics',
+  );
+  _expect(
+    scheduler.submitNewest().disposition ==
+            TerminalFrameAttemptDisposition.idle &&
+        timingClock.readCount == 12,
+    'idle scheduler polling creates no timing sample',
+  );
+
+  final _DamageSequence buildFailureSequence = _DamageSequence(
+    rows: 1,
+    columns: 1,
+  );
+  final TerminalNewestFrameScheduler<_FakeFrame> buildFailure =
+      TerminalNewestFrameScheduler<_FakeFrame>(
+        model: TerminalDamageRenderModel(),
+        timingClock: _FakeTimingClock(<int>[100, 104]).read,
+        buildFrame: (
+          TerminalDamageRenderModel model, {
+          required int modelRevision,
+          required int frameGeneration,
+          required TerminalFramePresentation presentation,
+        }) => throw StateError('injected build failure'),
+        submitFrame: (
+          _FakeFrame frame, {
+          required int modelRevision,
+          required int frameGeneration,
+        }) => throw StateError('unexpected submit'),
+      );
+  buildFailure.applyDamage(
+    buildFailureSequence.captureFull(),
+    availableResourceGeneration: 1,
+    monotonicMicros: 0,
+  );
+  _expectState(buildFailure.submitNewest, 'injected build failure is surfaced');
+  _expect(
+    buildFailure.metrics.buildCount == 1 &&
+        buildFailure.metrics.buildTotalMicroseconds == 4 &&
+        buildFailure.metrics.submissionCount == 0 &&
+        buildFailure.pendingFrameCount == 1,
+    'failed build time is counted while newest work remains pending',
+  );
+
+  final _DamageSequence submitFailureSequence = _DamageSequence(
+    rows: 1,
+    columns: 1,
+  );
+  final TerminalNewestFrameScheduler<_FakeFrame> submitFailure =
+      TerminalNewestFrameScheduler<_FakeFrame>(
+        model: TerminalDamageRenderModel(),
+        timingClock: _FakeTimingClock(<int>[200, 202, 210, 216]).read,
+        buildFrame: (
+          TerminalDamageRenderModel model, {
+          required int modelRevision,
+          required int frameGeneration,
+          required TerminalFramePresentation presentation,
+        }) => _FakeFrame(modelRevision, frameGeneration, 0),
+        submitFrame: (
+          _FakeFrame frame, {
+          required int modelRevision,
+          required int frameGeneration,
+        }) => throw StateError('injected submit failure'),
+      );
+  submitFailure.applyDamage(
+    submitFailureSequence.captureFull(),
+    availableResourceGeneration: 1,
+    monotonicMicros: 0,
+  );
+  _expectState(
+    submitFailure.submitNewest,
+    'injected submission failure is surfaced',
+  );
+  _expect(
+    submitFailure.metrics.buildCount == 1 &&
+        submitFailure.metrics.buildTotalMicroseconds == 2 &&
+        submitFailure.metrics.submissionCount == 1 &&
+        submitFailure.metrics.submissionTotalMicroseconds == 6 &&
+        submitFailure.pendingFrameCount == 1,
+    'failed submit time is counted while newest work remains pending',
+  );
 }
 
 void _testBoundedCursorAndBellClock() {
@@ -824,6 +980,20 @@ final class _FakeFrame {
   final int frameGeneration;
   final int sample;
   final TerminalFramePresentation? presentation;
+}
+
+final class _FakeTimingClock {
+  _FakeTimingClock(this._values);
+
+  final List<int> _values;
+  int readCount = 0;
+
+  int read() {
+    if (readCount >= _values.length) {
+      throw StateError('frame timing clock was read too often');
+    }
+    return _values[readCount++];
+  }
 }
 
 void _expectArgument(void Function() action, String description) {

@@ -115,6 +115,7 @@ export 'src/terminal_renderer/reference_renderer.dart'
         TerminalReferenceSolid;
 export 'src/terminal_renderer/render_rebuild_coordinator.dart';
 export 'src/terminal_renderer/render_resource_rebuilder.dart';
+export 'src/terminal_renderer/renderer_metrics.dart';
 export 'src/terminal_renderer/terminal_damage.dart';
 export 'src/terminal_renderer/terminal_damage_transfer.dart';
 export 'src/terminal_session.dart'

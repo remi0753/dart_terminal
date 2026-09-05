@@ -18,6 +18,8 @@ typedef TerminalFrameSubmitter<Frame> = TerminalFrameSubmissionOutcome Function(
   required int frameGeneration,
 });
 
+typedef TerminalFrameTimingClock = int Function();
+
 enum TerminalFrameSubmissionDisposition { accepted, stale, backpressured }
 
 final class TerminalFrameSubmissionOutcome {
@@ -358,6 +360,39 @@ final class TerminalFrameAttemptResult {
       disposition == TerminalFrameAttemptDisposition.accepted;
 }
 
+/// Immutable constant-space timings and outcomes for one scheduler lifetime.
+final class TerminalFrameSchedulerMetrics {
+  const TerminalFrameSchedulerMetrics({
+    required this.buildCount,
+    required this.buildTotalMicroseconds,
+    required this.buildMaximumMicroseconds,
+    required this.submissionCount,
+    required this.submissionTotalMicroseconds,
+    required this.submissionMaximumMicroseconds,
+    required this.acceptedCount,
+    required this.staleCount,
+    required this.backpressureCount,
+    required this.supersededCount,
+  });
+
+  final int buildCount;
+  final int buildTotalMicroseconds;
+  final int buildMaximumMicroseconds;
+  final int submissionCount;
+  final int submissionTotalMicroseconds;
+  final int submissionMaximumMicroseconds;
+  final int acceptedCount;
+  final int staleCount;
+  final int backpressureCount;
+  final int supersededCount;
+
+  double get averageBuildMicroseconds =>
+      buildCount == 0 ? 0.0 : buildTotalMicroseconds / buildCount;
+  double get averageSubmissionMicroseconds => submissionCount == 0
+      ? 0.0
+      : submissionTotalMicroseconds / submissionCount;
+}
+
 /// Applies every damage delta but prepares only the newest useful frame.
 ///
 /// A built frame is submitted or discarded in the same synchronous turn. On
@@ -369,9 +404,11 @@ final class TerminalNewestFrameScheduler<Frame> {
     required TerminalFrameBuilder<Frame> buildFrame,
     required TerminalFrameSubmitter<Frame> submitFrame,
     TerminalPresentationClock? presentationClock,
+    TerminalFrameTimingClock? timingClock,
     int initialFrameGeneration = 0,
   }) : _buildFrame = buildFrame,
        _submitFrame = submitFrame,
+       _timingClock = timingClock ?? _readDefaultFrameTimingClock,
        presentationClock = presentationClock ?? TerminalPresentationClock(),
        _nextFrameGeneration = initialFrameGeneration + 1 {
     RangeError.checkValueInInterval(
@@ -386,6 +423,7 @@ final class TerminalNewestFrameScheduler<Frame> {
   final TerminalPresentationClock presentationClock;
   final TerminalFrameBuilder<Frame> _buildFrame;
   final TerminalFrameSubmitter<Frame> _submitFrame;
+  final TerminalFrameTimingClock _timingClock;
   int _nextFrameGeneration;
   bool _frameGenerationExhausted = false;
   int _newestModelRevision = 0;
@@ -398,10 +436,17 @@ final class TerminalNewestFrameScheduler<Frame> {
   bool _pending = false;
   bool _attempting = false;
   int _buildCount = 0;
+  int _buildTotalMicroseconds = 0;
+  int _buildMaximumMicroseconds = 0;
+  int _submissionCount = 0;
+  int _submissionTotalMicroseconds = 0;
+  int _submissionMaximumMicroseconds = 0;
   int _acceptedCount = 0;
   int _staleCount = 0;
   int _backpressureCount = 0;
   int _supersededCount = 0;
+  int _lastTimingMicroseconds = 0;
+  bool _hasTimingObservation = false;
 
   int get newestModelRevision => _newestModelRevision;
   int get lastAcceptedModelRevision => _lastAcceptedModelRevision;
@@ -420,6 +465,18 @@ final class TerminalNewestFrameScheduler<Frame> {
   int get staleCount => _staleCount;
   int get backpressureCount => _backpressureCount;
   int get supersededCount => _supersededCount;
+  TerminalFrameSchedulerMetrics get metrics => TerminalFrameSchedulerMetrics(
+    buildCount: _buildCount,
+    buildTotalMicroseconds: _buildTotalMicroseconds,
+    buildMaximumMicroseconds: _buildMaximumMicroseconds,
+    submissionCount: _submissionCount,
+    submissionTotalMicroseconds: _submissionTotalMicroseconds,
+    submissionMaximumMicroseconds: _submissionMaximumMicroseconds,
+    acceptedCount: _acceptedCount,
+    staleCount: _staleCount,
+    backpressureCount: _backpressureCount,
+    supersededCount: _supersededCount,
+  );
 
   TerminalDamageApplyResult applyDamage(
     TerminalDecodedDamage damage, {
@@ -536,18 +593,23 @@ final class TerminalNewestFrameScheduler<Frame> {
     final int frameGeneration = _allocateFrameGeneration();
     _pending = false;
     try {
-      final Frame frame = _buildFrame(
-        model,
-        modelRevision: targetRevision,
-        frameGeneration: frameGeneration,
-        presentation: presentation,
-      );
-      _buildCount++;
+      final int buildStart = _readTimingMicroseconds();
+      late final Frame frame;
+      try {
+        frame = _buildFrame(
+          model,
+          modelRevision: targetRevision,
+          frameGeneration: frameGeneration,
+          presentation: presentation,
+        );
+      } finally {
+        _recordBuildDuration(_readTimingMicroseconds() - buildStart);
+      }
       if (_newestModelRevision != targetRevision ||
           presentationClock.revision != targetPresentationRevision ||
           !isPresentationActive) {
         _pending = true;
-        _supersededCount++;
+        _supersededCount = _saturatingFrameIncrement(_supersededCount);
         return TerminalFrameAttemptResult(
           disposition: TerminalFrameAttemptDisposition.superseded,
           modelRevision: targetRevision,
@@ -557,11 +619,17 @@ final class TerminalNewestFrameScheduler<Frame> {
           requiresFullRedraw: presentation.requiresFullRedraw,
         );
       }
-      final TerminalFrameSubmissionOutcome outcome = _submitFrame(
-        frame,
-        modelRevision: targetRevision,
-        frameGeneration: frameGeneration,
-      );
+      final int submissionStart = _readTimingMicroseconds();
+      late final TerminalFrameSubmissionOutcome outcome;
+      try {
+        outcome = _submitFrame(
+          frame,
+          modelRevision: targetRevision,
+          frameGeneration: frameGeneration,
+        );
+      } finally {
+        _recordSubmissionDuration(_readTimingMicroseconds() - submissionStart);
+      }
       switch (outcome.disposition) {
         case TerminalFrameSubmissionDisposition.accepted:
           if (outcome.acceptedFrameGeneration != frameGeneration ||
@@ -574,7 +642,7 @@ final class TerminalNewestFrameScheduler<Frame> {
           if (identical(_fullRedrawMarker, targetFullRedrawMarker)) {
             _fullRedrawMarker = null;
           }
-          _acceptedCount++;
+          _acceptedCount = _saturatingFrameIncrement(_acceptedCount);
           if (_newestModelRevision != targetRevision ||
               presentationClock.revision != targetPresentationRevision ||
               !isPresentationActive) {
@@ -594,7 +662,7 @@ final class TerminalNewestFrameScheduler<Frame> {
           }
           _advancePastNativeFrame(outcome.nativeLastAcceptedFrameGeneration);
           _pending = true;
-          _staleCount++;
+          _staleCount = _saturatingFrameIncrement(_staleCount);
           return TerminalFrameAttemptResult(
             disposition: TerminalFrameAttemptDisposition.stale,
             modelRevision: targetRevision,
@@ -605,7 +673,7 @@ final class TerminalNewestFrameScheduler<Frame> {
           );
         case TerminalFrameSubmissionDisposition.backpressured:
           _pending = true;
-          _backpressureCount++;
+          _backpressureCount = _saturatingFrameIncrement(_backpressureCount);
           return TerminalFrameAttemptResult(
             disposition: TerminalFrameAttemptDisposition.backpressured,
             modelRevision: targetRevision,
@@ -643,9 +711,59 @@ final class TerminalNewestFrameScheduler<Frame> {
       _nextFrameGeneration = nativeGeneration + 1;
     }
   }
+
+  int _readTimingMicroseconds() {
+    final int value = _timingClock();
+    RangeError.checkValueInInterval(
+      value,
+      0,
+      _maximumSignedGeneration,
+      'timingClock result',
+    );
+    if (_hasTimingObservation && value < _lastTimingMicroseconds) {
+      throw StateError('frame metric clock regressed');
+    }
+    _lastTimingMicroseconds = value;
+    _hasTimingObservation = true;
+    return value;
+  }
+
+  void _recordBuildDuration(int duration) {
+    _buildCount = _saturatingFrameIncrement(_buildCount);
+    _buildTotalMicroseconds = _saturatingFrameAdd(
+      _buildTotalMicroseconds,
+      duration,
+    );
+    if (duration > _buildMaximumMicroseconds) {
+      _buildMaximumMicroseconds = duration;
+    }
+  }
+
+  void _recordSubmissionDuration(int duration) {
+    _submissionCount = _saturatingFrameIncrement(_submissionCount);
+    _submissionTotalMicroseconds = _saturatingFrameAdd(
+      _submissionTotalMicroseconds,
+      duration,
+    );
+    if (duration > _submissionMaximumMicroseconds) {
+      _submissionMaximumMicroseconds = duration;
+    }
+  }
 }
 
 const int _maximumSignedGeneration = 0x7fffffffffffffff;
+final Stopwatch _defaultFrameTimingClock = Stopwatch()..start();
+
+int _readDefaultFrameTimingClock() =>
+    _defaultFrameTimingClock.elapsedMicroseconds;
+
+int _saturatingFrameIncrement(int value) =>
+    value == _maximumSignedGeneration ? value : value + 1;
+
+int _saturatingFrameAdd(int left, int right) =>
+    left >= _maximumSignedGeneration - right
+    ? _maximumSignedGeneration
+    : left + right;
 
 final class TerminalScheduledMetalFrame {
   TerminalScheduledMetalFrame({

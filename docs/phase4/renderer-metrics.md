@@ -1,6 +1,6 @@
 # Phase 4 — Renderer metrics
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-06
 - Scope: final Phase 4 roadmap item
 - Related: ADR-002, ADR-003, ADR-004, REN-03, REN-04, REN-05, REN-06, REN-09
@@ -152,3 +152,71 @@ must be committed before the parent metrics item and Phase 4 can complete.
 - Adjacent and product full tests, source/bundle audits, and both product runtime
   modes pass. This first child is complete; Dart timing/hit-rate aggregation is
   next.
+
+## Product aggregation design
+
+- `TerminalNewestFrameScheduler` will accept an optional synchronous metric
+  clock. The default is one process-monotonic `Stopwatch`; exact tests inject a
+  sequence. Only actual build and submit callback boundaries read it. Idle,
+  paused, coalesced damage, and pre-submit supersession cannot manufacture
+  timing samples.
+- Build and submit callback attempts each contribute one duration even when the
+  callback throws, because the owner did spend that synchronous time. Existing
+  outcome counts remain separate. Counts/totals saturate, maxima never regress,
+  and an immutable scheduler snapshot retains no frame or sample list.
+- Atlas hit rate remains strictly lookup-based: ingesting a new or duplicate
+  raster is not relabeled as a lookup. An immutable atlas metrics snapshot
+  carries hit/miss counts and computes `0.0` for no lookups.
+- The aggregate snapshot copies scheduler, atlas, bridge, and native state once
+  and rejects an abandoned/unsynchronized bridge or mismatched renderer/atlas
+  generation. It exposes current native GPU and accepted upload totals without
+  adding a new FFI call or mutating retirement/pin state.
+
+## Product implementation findings
+
+- `TerminalNewestFrameScheduler` now measures each actual synchronous build and
+  submission callback attempt. The snapshot contains saturating count/total/max
+  values and existing accepted/stale/backpressure/superseded outcomes; idle and
+  paused polling do not read the metric clock or create a sample.
+- Both build and submission timing are recorded in `finally`, so a callback
+  failure remains observable while the newest pending marker is preserved.
+  A regressing, negative, or signed-64-bit-overflowing injected clock is rejected
+  instead of publishing an invalid duration.
+- `TerminalGlyphAtlasMetrics` copies saturating lookup hit/miss counts. Its
+  derived lookup total saturates, while hit rate divides normalized `double`
+  operands so two saturated counters still produce `0.5` rather than overflowing
+  an integer sum. No-lookups and no-hits both produce `0.0`.
+- `TerminalRendererMetricsSnapshot.capture` accepts only a live, synchronized
+  atlas bridge with no pending Dart or bridge uploads and matching native
+  renderer/atlas generations. It then copies scheduler, atlas, bridge ownership,
+  and the versioned native state into one immutable observation.
+- The real AppKit/Metal exercise deliberately performs one atlas hit and miss,
+  then validates four build/submission samples, three accepted and one stale
+  frame, the recovered renderer generation, one 4,096-byte full atlas upload,
+  and zero pending uploads.
+- The first format attempt exposed that the timing-clock typedef had been placed
+  inside a factory declaration. Moving it to library scope fixed the parse
+  failure; formatting and analysis then completed without changes or findings.
+
+## Final verification results
+
+- Focused `frame_scheduler_test.dart`, `glyph_atlas_test.dart`,
+  `renderer_metrics_test.dart`, and `metal_pipeline_test.dart` all pass. Exact
+  fake-clock cases cover accepted, stale, backpressured, build-failure, and
+  submit-failure attempts plus idle no-sample behavior; aggregate tests cover
+  immutable copies and abandoned-bridge rejection.
+- Product `make test` passes: 100 Dart files format cleanly, analysis reports no
+  issues, and the complete test runner succeeds.
+- `make runtime-source-check` passes with `tracked=182 native_sources=0`.
+  Developer JIT and Release AOT bundle audits each report one helper, one native
+  asset set, and one capability.
+- Developer JIT and Release AOT real AppKit/Metal integration both report the
+  expected aggregate metrics and pass in 2,211 ms and 1,774 ms respectively.
+- `git diff --check` passes. The adjacent `dart_appkit` and official SDK trees
+  remain clean after their already committed native metrics work.
+- Every Phase 4 roadmap deliverable is now implemented. The existing golden,
+  fixed-slot/newest-only, rebuild, animation pause, recovery, and metrics tests
+  collectively preserve the Phase exit contracts: deterministic 1x/2x output,
+  refresh-rate-independent state, bounded pending work, stale-frame rejection,
+  resize recovery, and no idle/occluded frame creation. Multi-pane fairness and
+  quantitative vsync benchmarking remain explicitly assigned to a later phase.

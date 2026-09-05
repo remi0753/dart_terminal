@@ -622,7 +622,9 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
         'accepted_frame=11 submission_token_nonzero=true occluded=true '
         'resume_full=true resume_frame=12 recovered=true '
         'renderer_generation_advanced=true atlas_republished=true '
-        'abandoned_pins=3 recovery_full=true recovery_frame=13 pending=0',
+        'abandoned_pins=3 recovery_full=true recovery_frame=13 metrics=true '
+        'frame_build_samples=4 frame_submit_samples=4 atlas_hit_rate=0.500 '
+        'atlas_uploads=1 uploaded_bytes=4096 pending=0',
     'Automated close scheduled after 1 seconds.',
     'Dart Terminal shut down cleanly.',
   ]) {

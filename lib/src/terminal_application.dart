@@ -16,6 +16,7 @@ import 'terminal_renderer/frame_scheduler.dart';
 import 'terminal_renderer/glyph_atlas.dart';
 import 'terminal_renderer/metal_atlas_bridge.dart';
 import 'terminal_renderer/metal_failure_recovery.dart';
+import 'terminal_renderer/renderer_metrics.dart';
 import 'terminal_renderer/terminal_damage.dart';
 import 'terminal_session.dart';
 
@@ -1465,6 +1466,15 @@ _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer, View view) {
     glyphEntry = atlas
         .ingest(catalog.rasterizeShaped(shaped, scale: atlas.scale))
         .single;
+    atlas.lookup(glyphEntry.key);
+    atlas.lookup(
+      TerminalGlyphAtlasKey(
+        catalogGeneration: glyphEntry.key.catalogGeneration,
+        faceId: glyphEntry.key.faceId,
+        glyphId: (glyphEntry.key.glyphId + 1) & 0xffff,
+        scale16_16: glyphEntry.key.scale16_16,
+      ),
+    );
   } finally {
     shapingCache.dispose();
     catalog.dispose();
@@ -1686,6 +1696,30 @@ _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer, View view) {
   if (!recoveryFrameObserved) {
     throw StateError('replacement renderer rejected its full recovery frame');
   }
+  final TerminalRendererMetricsSnapshot metrics =
+      TerminalRendererMetricsSnapshot.capture<TerminalScheduledMetalFrame>(
+        scheduler: scheduler,
+        bridge: replacement.bridge,
+      );
+  final bool metricsObserved =
+      metrics.rendererGeneration == replacement.renderer.generation &&
+      metrics.atlasResourceGeneration == resourceGeneration &&
+      metrics.pendingAtlasUploadCount == 0 &&
+      metrics.pinnedSubmissionCount == 1 &&
+      metrics.frames.buildCount == 4 &&
+      metrics.frames.submissionCount == 4 &&
+      metrics.frames.acceptedCount == 3 &&
+      metrics.frames.staleCount == 1 &&
+      metrics.frames.backpressureCount == 0 &&
+      metrics.frames.supersededCount == 0 &&
+      metrics.atlas.hitCount == 1 &&
+      metrics.atlas.missCount == 1 &&
+      metrics.atlas.hitRate == 0.5 &&
+      metrics.native.acceptedAtlasUploadCount == 1 &&
+      metrics.native.acceptedAtlasUploadBytes == 64 * 64;
+  if (!metricsObserved) {
+    throw StateError('renderer metrics snapshot is inconsistent');
+  }
   return (
     recovery: recovery,
     scheduler: scheduler,
@@ -1703,6 +1737,12 @@ _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer, View view) {
         'abandoned_pins=${recovered.abandonedPinCount} '
         'recovery_full=$recoveryFrameObserved '
         'recovery_frame=${recoveryFrame.frameGeneration} '
+        'metrics=$metricsObserved '
+        'frame_build_samples=${metrics.frames.buildCount} '
+        'frame_submit_samples=${metrics.frames.submissionCount} '
+        'atlas_hit_rate=${metrics.atlas.hitRate.toStringAsFixed(3)} '
+        'atlas_uploads=${metrics.native.acceptedAtlasUploadCount} '
+        'uploaded_bytes=${metrics.native.acceptedAtlasUploadBytes} '
         'pending=${scheduler.pendingFrameCount}',
   );
 }
