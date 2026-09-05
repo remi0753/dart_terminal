@@ -95,6 +95,9 @@ model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後�
 - build時にコンパイルしたMetal shader、全terminal layer用packed draw list、
   bounded texture array、3つのnative frame slot、即時backpressure、GPU完了retire、
   Dart encoder/facade、stable atlas slice bridge、CPU oracleとの1x/2x readback比較
+- ADR-003準拠のstrict damage codec、atomic retained render model、1-paneにつき1件の
+  TransferableTypedData/ACK、newest-modelだけを保持するframe scheduler、native
+  stale/backpressure追従と世代番号の非折り返し
 
 ## 起動
 

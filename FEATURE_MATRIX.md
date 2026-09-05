@@ -1,6 +1,6 @@
 # Dart Terminal feature matrix
 
-最終更新: 2026-09-05<br>
+最終更新: 2026-09-06<br>
 比較基準: [`ghostty-org/ghostty@d4d8f62262cb1a974a7d2470d5f79f811fab15e4`](https://github.com/ghostty-org/ghostty/tree/d4d8f62262cb1a974a7d2470d5f79f811fab15e4)  
 対象: macOS 14 以降、Flutter 不使用<br>
 主要実機 baseline: Apple M1/arm64
@@ -92,7 +92,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | SCR-06 | wide/continuation cell、combining sequence、zero-width grapheme の invariant を維持 | P0 | 3 | `G:src/terminal/page.zig`, `G:src/terminal/Screen.zig`, `G:src/unicode/grapheme.zig` | Unicode 17 width/grapheme、bounded intern、wide/continuation atomic mutationと1-column containmentを完了 |
 | SCR-07 | primary/alternate resize と reflow。cursor、selection、wrapped-line identity を保つ | P0 | 3 | `G:src/terminal/PageList.zig`, `G:src/terminal/Screen.zig` | primary historyを含むatomic reflow、cursor/viewport、reuse epoch付きstable anchorとend-exclusive selectionを完了 |
 | SCR-08 | paged bounded scrollback、viewport offset、先頭 eviction が O(page) 以下 | P0 | 3 | `G:src/terminal/PageList.zig`, `G:src/terminal/page.zig`, `G:src/terminal/compress/` | fixed-page SoA履歴、独立line/byte cap、O(1) page eviction、primary capture、bounded viewport、target幅へのhistory repaginationを完了 |
-| SCR-09 | row/range damage と monotonic generation。全画面転送を通常 path にしない | P0 | 3/4 | `G:src/terminal/render.zig`, `G:src/renderer/row.zig` | clean→dirty時だけ進むrow version、coalesced半開区間、monotonic screen generation基盤を完了。wire/rendererは後続 |
+| SCR-09 | row/range damage と monotonic generation。全画面転送を通常 path にしない | P0 | 3/4 | `G:src/terminal/render.zig`, `G:src/renderer/row.zig` | coalesced半開区間、strict columnar damage wire、atomic retained model、one-in-flight TTD/ACK、100,000-cell Release AOT gateを完了 |
 | SCR-10 | underline color、overline、protected/selective erase | P1 | 6 | `G:src/terminal/style.zig`, `G:src/terminal/Terminal.zig` | 未実装 |
 | SCR-11 | hyperlink、semantic prompt、search、selection anchor/word/line semantics | P1 | 3/6 | `G:src/terminal/hyperlink.zig`, `G:src/terminal/search/`, `G:src/terminal/Selection.zig` | cell/word/logical-line selection、semantic row hint、bounded exact forward/backward searchを完了。hyperlink tableと詳細semantic rangeは後続 |
 | SCR-12 | versioned snapshot/restore と readable formatter を test/debug oracle にする | P1 | 3 | `G:src/terminal/snapshot/`, `G:src/terminal/formatter.zig` | bounded version 1 terminal-state formatterとfirst-difference diagnosticsを完了。restoreは後続 |
@@ -138,12 +138,12 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | REN-01 | `MTKView`/Metal lifecycle、drawable resize/backing scale、device/shader/drawable failure path | P0 | 4 | `G:src/renderer/Metal.zig`, `G:macos/Sources/Helpers/MetalView.swift` | paused/on-demand TerminalMetalView、generation-owned renderer bind/detach、drawable presentation、GPU completion ownershipまで完了。resize/failure recoveryは後続Phase 4項目 |
 | REN-02 | background、cell background、glyph、decoration、cursor、selection を packed instance で描画 | P0 | 4 | `G:src/renderer/shaders/shaders.metal`, `G:src/renderer/cell.zig` | build-time metallib、strict little-endian packed encoder、全6 visual kindのordered pipeline/readback完了 |
 | REN-03 | grayscale/color atlas、growth/eviction/generation validation | P0 | 4 | `G:src/font/Atlas.zig`, `G:src/renderer/generic.zig` | bounded batch raster、Dart-owned alpha/color page、deterministic growth、page/byte/entry cap、unpinned LRU、submission pin、resource/page generation、矩形差分upload、stable native slice bridgeを完了 |
-| REN-04 | damage coalescing、stale generation discard、full snapshot は recovery/resize のみ | P0 | 4 | `G:src/renderer/row.zig`, `G:src/renderer/State.zig`, `G:src/renderer/message.zig` | ADR gate |
+| REN-04 | damage coalescing、stale generation discard、full snapshot は recovery/resize のみ | P0 | 4 | `G:src/renderer/row.zig`, `G:src/renderer/State.zig`, `G:src/renderer/message.zig` | one-in-flight damage ownership、strict generation/ACK、newest-model frame marker、native stale/backpressure追従を完了。resize/recovery full snapshotは後続項目 |
 | REN-05 | double/triple buffering と submit token/fence。GPU 完了前に buffer を再利用しない | P0 | 4 | `G:src/renderer/metal/Frame.zig`, `G:src/renderer/metal/buffer.zig` | 3つの固定native slot、copied submit、即時backpressure、newest-ready選択、GPU完了retire watermarkとDart atlas unpin接続を完了 |
 | REN-06 | vsync/frame pacing、cursor blink、occlusion pause、resume full redraw | P0 | 4 | `G:src/renderer/generic.zig`, `G:src/renderer/Thread.zig` | benchmark gate |
 | REN-07 | deterministic screenshot と CPU/reference renderer を golden oracle にする | P0 | 4 | `G:src/terminal/render.zig`, renderer test paths | bounded Dart-only RGBA compositor、versioned checksum付きgolden format、primitive/実CoreText atlas fixture、Metal offscreen readbackとの1x/2x pixel比較を完了 |
 | REN-08 | image/search/hyperlink/inspector overlay、P3/sRGB blending | P1 | 4/9 | `G:src/renderer/image.zig`, `Overlay.zig`, `link.zig` | 未実装 |
-| REN-09 | 60/120 Hz、複数 window/pane の fair scheduling。遅延時は中間 frame を捨てる | P1 | 4/7 | `G:src/renderer/Thread.zig`, `G:src/renderer/generic.zig` | benchmark gate |
+| REN-09 | 60/120 Hz、複数 window/pane の fair scheduling。遅延時は中間 frame を捨てる | P1 | 4/7 | `G:src/renderer/Thread.zig`, `G:src/renderer/generic.zig` | 1 paneのnewest-only frame discardとconstant-size backpressure stateを完了。vsync/fair multi-pane benchmarkは後続 |
 
 ## Keyboard、IME、mouse、selection、clipboard
 

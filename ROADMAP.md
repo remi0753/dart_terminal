@@ -719,14 +719,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （[`docs/phase4/metal-pipelines.md`](docs/phase4/metal-pipelines.md) を参照して実施）
   - [x] Dart encoder/facade、atlas bridge、CPU/GPU 1x/2x goldens
     （[`docs/phase4/metal-pipelines.md`](docs/phase4/metal-pipelines.md) を参照して実施）
-- [ ] damage coalescing、frame generation、stale-frame discard
+- [x] damage coalescing、frame generation、stale-frame discard
   - [x] strict damage codec と retained render model
     （[`docs/phase4/damage-frame-coordinator.md`](docs/phase4/damage-frame-coordinator.md) を参照して実施）
   - [x] 100,000-cell product damage capture/transfer の Release AOT gate
     （[`docs/phase4/damage-capture-performance.md`](docs/phase4/damage-capture-performance.md) を参照して実施）
   - [x] one-in-flight TransferableTypedData outbox と exact ACK
     （[`docs/phase4/damage-frame-coordinator.md`](docs/phase4/damage-frame-coordinator.md) を参照して実施）
-  - [ ] newest-model frame scheduler と native outcome connection
+  - [x] newest-model frame scheduler と native outcome connection
     （[`docs/phase4/damage-frame-coordinator.md`](docs/phase4/damage-frame-coordinator.md) を参照して実施）
 - [ ] resize/scale/font change の full rebuild
 - [ ] cursor blink、visual bell、occlusion pause

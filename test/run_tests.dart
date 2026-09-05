@@ -11,6 +11,7 @@ import 'package:dart_terminal/src/runtime_lifecycle.dart';
 import 'package:dart_terminal/src/terminal_session.dart';
 
 import 'font_shaping_test.dart';
+import 'frame_scheduler_test.dart';
 import 'glyph_atlas_test.dart';
 import 'golden_image_test.dart';
 import 'metal_pipeline_test.dart';
@@ -47,6 +48,7 @@ external int _livePtySessionCount();
 
 Future<void> main() async {
   runTerminalCoreTests();
+  runFrameSchedulerTests();
   runTerminalDamageTests();
   runTerminalDamageCopyTests();
   await runTerminalDamageTransferTests();

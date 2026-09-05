@@ -1,6 +1,6 @@
 # Phase 4 — Damage and newest-frame coordinator
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-06
 - Scope: fifth Phase 4 roadmap item
 - Related: ADR-001, ADR-002, ADR-003, ADR-004, ADR-005, SCR-09, REN-04,
@@ -175,6 +175,14 @@ validated and committed. The resize/full-rebuild task must not begin earlier.
   [`damage-capture-performance.md`](damage-capture-performance.md) at commit
   `068c3bc`: full capture plus TTD construction is now 650 us p95 and direct
   isolate transfer plus strict decode/ACK is 1,832 us p95.
+- 2026-09-06: the first real-renderer scheduler probe opened the renderer
+  without a view and received native status 3 (`not found`) when seeding the
+  stale-frame floor. Source inspection confirmed that frame admission requires
+  both an admitting renderer and its bound custom view. This is an ownership
+  boundary, not a scheduler failure: the pure scheduler cases remain in the
+  focused test, while the typed adapter's real stale/accepted outcomes are now
+  exercised by the existing test-gated AppKit smoke path after
+  `bindToView` and window content attachment.
 
 ## Verification results
 
@@ -227,4 +235,32 @@ validated and committed. The resize/full-rebuild task must not begin earlier.
   to the combined runner.
 - `make runtime-source-check` passes after staging with
   `tracked=170 native_sources=0`; the adjacent `dart_appkit` and bundled Dart
+  SDK worktrees remain clean.
+
+### Newest-model frame scheduler and native outcome connection
+
+- Applied damage revisions are retained in the render model in strict order,
+  but frame work is represented by one boolean newest-model marker. A submit
+  attempt builds one ephemeral value; a newer revision arriving during that
+  build supersedes it before the native boundary. Backpressure and stale
+  results retain the marker and rebuild later with a fresh frame generation.
+- Native stale results carry the renderer's accepted-generation floor back to
+  the scheduler. The next attempt advances above that floor without reusing or
+  wrapping a signed generation. Accepted results validate both the exact frame
+  generation and a nonzero submission token before advancing scheduler
+  watermarks.
+- Focused JIT and Release AOT executions of `test/frame_scheduler_test.dart`
+  pass. They cover ordered missing-delta recovery, five-revision coalescing,
+  two rounds of backpressure with rebuild, build-time supersession, 1,025
+  applied revisions with one pending marker, idle polling, and terminal signed
+  frame-generation exhaustion without wrap.
+- `make test` passes with 92 formatted files, no analysis issues, and
+  `dart_terminal tests passed`. The new suite is part of the combined product
+  runner.
+- M1/arm64 Developer JIT and Release AOT bundle builds, Dart-only bundle
+  audits, and AppKit smoke integrations pass. The test-gated custom-view path
+  seeds native frame 10, observes scheduler frame 1 as stale, then rebuilds and
+  accepts frame 11 with a nonzero native submission token in both modes.
+- `make runtime-source-check` passes after staging with
+  `tracked=172 native_sources=0`; the adjacent `dart_appkit` and bundled Dart
   SDK worktrees remain clean.

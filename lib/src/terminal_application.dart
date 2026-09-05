@@ -9,7 +9,12 @@ import 'package:dart_pty_macos/dart_pty_macos.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'runtime_lifecycle.dart';
+import 'terminal_core/terminal_screen.dart';
 import 'terminal_pane.dart';
+import 'terminal_renderer/frame_scheduler.dart';
+import 'terminal_renderer/glyph_atlas.dart';
+import 'terminal_renderer/metal_atlas_bridge.dart';
+import 'terminal_renderer/terminal_damage.dart';
 import 'terminal_session.dart';
 
 const String terminalUsage = '''
@@ -341,11 +346,14 @@ final class TerminalApplication {
       stdout.writeln('NATIVE_KEY_EVENT_ROUTING mode=dart-only');
       application.defersTerminationRequests = true;
       if (useTerminalMetalView) {
+        final String frameSchedulerObservation =
+            _exerciseBoundMetalFrameScheduler(metalRenderer!);
         stdout.writeln(
           'NATIVE_CUSTOM_VIEW '
           'provider=$terminalMetalViewProviderIdentifier attached=true '
           'renderer_bound=true',
         );
+        stdout.writeln(frameSchedulerObservation);
       }
 
       final TerminalPaneOwner createdPaneOwner = TerminalPaneOwner();
@@ -1383,6 +1391,88 @@ final class TerminalApplication {
     }
     return columns;
   }
+}
+
+String _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
+  final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
+    catalogGeneration: 1,
+    limits: const TerminalGlyphAtlasLimits(
+      pageWidth: 64,
+      pageHeight: 64,
+      maximumAlphaPages: 1,
+      maximumColorPages: 1,
+      maximumEntries: 1,
+      maximumRetainedBytes: 64 * 64 * 4,
+      gutter: 0,
+    ),
+  );
+  final TerminalGlyphAtlasMetalBridge bridge = TerminalGlyphAtlasMetalBridge(
+    atlas: atlas,
+    renderer: renderer,
+  );
+  TerminalMetalFrame encode(int frameGeneration) =>
+      TerminalMetalFrameEncoder.encode(
+        renderer: renderer,
+        frameGeneration: frameGeneration,
+        atlasGeneration: bridge.nativeAtlasGeneration,
+        viewportWidth: 1,
+        viewportHeight: 1,
+        scale16_16: 1 << 16,
+        backgroundRgba: 0,
+        instances: const <TerminalMetalInstance>[],
+      );
+
+  final TerminalMetalSubmissionResult seed = renderer.submit(encode(10));
+  if (!seed.isAccepted) {
+    throw StateError('bound Metal renderer rejected stale-floor seed');
+  }
+  final TerminalMetalFrameSubmissionAdapter adapter =
+      TerminalMetalFrameSubmissionAdapter(bridge);
+  final TerminalNewestFrameScheduler<TerminalScheduledMetalFrame> scheduler =
+      TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>(
+        model: TerminalDamageRenderModel(),
+        buildFrame: (
+          TerminalDamageRenderModel model, {
+          required int modelRevision,
+          required int frameGeneration,
+        }) => TerminalScheduledMetalFrame(frame: encode(frameGeneration)),
+        submitFrame: adapter.submit,
+      );
+  final TerminalScreen screen = TerminalScreen(rows: 1, columns: 1);
+  final TerminalDamagePacket? packet = TerminalDamageCodec.capture(
+    screen,
+    damageGeneration: 1,
+    requiredResourceGeneration: 1,
+  );
+  if (packet == null) {
+    throw StateError('initial screen did not produce a full snapshot');
+  }
+  final TerminalDamageApplyResult applied = scheduler.applyDamage(
+    TerminalDamageCodec.decode(packet.copyBytes()),
+    availableResourceGeneration: 1,
+  );
+  if (!applied.isApplied) {
+    throw StateError('frame scheduler rejected its initial full snapshot');
+  }
+
+  final TerminalFrameAttemptResult stale = scheduler.submitNewest();
+  final TerminalFrameAttemptResult accepted = scheduler.submitNewest();
+  final bool staleObserved =
+      stale.disposition == TerminalFrameAttemptDisposition.stale &&
+      stale.frameGeneration == 1;
+  final bool acceptedObserved =
+      accepted.isAccepted &&
+      accepted.frameGeneration == 11 &&
+      accepted.submissionToken > 0 &&
+      renderer.state().lastAcceptedFrameGeneration == 11;
+  if (!staleObserved || !acceptedObserved || scheduler.pendingFrameCount != 0) {
+    throw StateError('bound native frame scheduler outcome mismatch');
+  }
+  return 'NATIVE_FRAME_SCHEDULER stale=$staleObserved '
+      'accepted=$acceptedObserved first_frame=${stale.frameGeneration} '
+      'accepted_frame=${accepted.frameGeneration} '
+      'submission_token_nonzero=${accepted.submissionToken > 0} '
+      'pending=${scheduler.pendingFrameCount}';
 }
 
 /// Maps one AppKit key-down event to the active terminal pane.
