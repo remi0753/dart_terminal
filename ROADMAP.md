@@ -586,14 +586,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [x] kqueue reactor、read batching、write queue、backpressure
 - [x] `winsize`、SIGWINCH、process group、waitpid、exit event
 - [x] Ctrl-C/Z/\、EOF、HUP、graceful/forced close
-- [ ] session ID と pane ownership、close confirmation state
+- [x] session ID と pane ownership、close confirmation state
   （分割と完了条件は
   [`docs/phase2/persistent-pane-lifecycle.md`](docs/phase2/persistent-pane-lifecycle.md)
   を参照して順に実施する）
   - [x] persistent pane lifecycle の範囲、状態遷移、受け入れ条件を固定する
   - [x] pane/session identity、単一owner、close policyをDart modelとして実装する
   - [x] commandごとのPTYをpane-owned persistent login shellへ置き換える
-  - [ ] AppKit close確認、実PTY、Developer JIT / Release AOT受け入れを閉じる
+  - [x] AppKit close確認、実PTY、Developer JIT / Release AOT受け入れを閉じる
 - [x] fake PTY backend と deterministic integration harness
 
 終了条件:

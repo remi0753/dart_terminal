@@ -1,6 +1,6 @@
 # Persistent pane lifecycle
 
-- Status: persistent pane/session implemented; AppKit close acceptance next
+- Status: complete
 - Started: 2026-09-05
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 2 `session ID と pane ownership、close confirmation state`
@@ -245,3 +245,52 @@ so that close does not require confirmation.
   source audit reports `tracked=77`, `native_sources=0`. A fresh arm64 Developer
   JIT application build also succeeds with the manifest-staged PTY and renderer
   assets.
+
+### 2026-09-05 — close integration trial
+
+- Connected protocol-v4 `WindowCloseRequestedEvent` to the pane close policy.
+  The normal Developer JIT smoke passed with two deferred requests for the same
+  `pane=1 session=1:1`: the first was rejected as `confirmation-required` and
+  the second was accepted in `closing` state.
+- The first complete `runtime-verify` attempt then exposed a fatal-cleanup edge
+  case. In the `root-uncaught` scenario the generic host requested a window
+  close after the root error, but the pane classified it as an ordinary user
+  close and denied it, so the process reached the 12-second integration
+  timeout. Fatal root cleanup now marks the close as forced before raising the
+  error. It bypasses confirmation while normal Window/File/Quit paths retain
+  the two-step policy. The complete suite must be rerun before closeout.
+
+### 2026-09-05 — AppKit integration and Phase 2 closeout
+
+- Normal protocol-v4 window close requests now call `TerminalPane.requestClose`.
+  The first request for a live shell is replied to with `allow: false`, records
+  `confirmation-required`, and renders the repeat-to-close notice. The next
+  consecutive request is replied to with `allow: true` in `closing` state.
+  Text, editing/control keys, or pasted text cancel a pending confirmation.
+- Automated smoke schedules the second close after the first reply rather than
+  issuing overlapping native operations. Its assertions require two deferred
+  close events and exact ordered decisions for the same typed pane/session.
+  Root-fatal cleanup explicitly forces the pane close, preserving the ordered
+  PTY shutdown without allowing confirmation policy to trap a failed root.
+- Strengthened the real PTY product test: one login zsh disables echo, proves
+  `/dev/tty*` and resized `stty size` (`37 111`), runs multiple commands, starts
+  a background `sleep`, observes it through `jobs`, returns it with `fg`, sends
+  Ctrl-C to the foreground process group, then runs another command and exits
+  cleanly. The test completes through callback-driven exit and native reap.
+- The final `make RUNTIME_ARCH=arm64 runtime-verify` completed with exit 0.
+  It passed format, analysis, all Dart/fake/real-PTY tests, Dart-only source
+  audit (`tracked=77`, `native_sources=0`), fresh Developer JIT and Release AOT
+  builds, deep bundle/architecture/dependency/signature audits, and normal GUI
+  smoke in 2,194 / 1,814 ms.
+- Both modes passed all lifecycle/failure/replacement/usage scenarios with the
+  expected 0/64/70/75 statuses. Bounded traffic rejected 384 requests at the
+  64-request in-flight ceiling and completed in 984 / 993 ms. The 1,000-cycle
+  Window/View stress returned from baseline 12 and peak 14 to final 12 in
+  5,787 / 5,629 ms. Shutdown-fault containment completed in 445 / 284 ms with
+  final native handles at zero. `git diff --check` passed.
+
+All subtasks and acceptance criteria in this note are complete. Phase 2 now
+has one pane-owned persistent PTY with deterministic identity, lifecycle,
+job-control input, resize, close confirmation, and teardown. Phase 3 may begin
+with the first unchecked streaming UTF-8 decoder/parser task; the current
+plain-text output projection is intentionally not treated as a VT core.

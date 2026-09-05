@@ -689,8 +689,37 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     multiLine: true,
   );
   _expect(
-    closeRequest.allMatches(observation.stdoutText).length == 1,
-    'missing or duplicate deferred close-request observation',
+    closeRequest.allMatches(observation.stdoutText).length == 2,
+    'close confirmation did not produce two deferred close requests',
+  );
+  final RegExp paneStarted = RegExp(
+    r'^TERMINAL_PANE event=started pane=([1-9][0-9]*) '
+    r'session=([1-9][0-9]*):([1-9][0-9]*)$',
+    multiLine: true,
+  );
+  final RegExpMatch? paneMatch = paneStarted.firstMatch(observation.stdoutText);
+  _expect(
+    paneMatch != null &&
+        paneMatch.group(1) == paneMatch.group(2) &&
+        paneMatch.group(3) == '1',
+    'application did not publish one pane-owned session identity',
+  );
+  final String pane = paneMatch!.group(1)!;
+  final String session = '${paneMatch.group(2)}:${paneMatch.group(3)}';
+  final List<String> closeDecisions = observation.stdoutText
+      .split('\n')
+      .where((String line) => line.startsWith('TERMINAL_PANE_CLOSE '))
+      .toList();
+  _expect(
+    closeDecisions.length == 2 &&
+        closeDecisions[0] ==
+            'TERMINAL_PANE_CLOSE pane=$pane session=$session '
+                'decision=confirmation-required state=confirmationPending' &&
+        closeDecisions[1] ==
+            'TERMINAL_PANE_CLOSE pane=$pane session=$session '
+                'decision=allow state=closing',
+    'application close decisions did not preserve pane/session ownership: '
+    '$closeDecisions',
   );
   _expectWorkerProcessContract(
     observation,

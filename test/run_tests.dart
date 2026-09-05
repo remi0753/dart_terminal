@@ -479,6 +479,7 @@ Future<void> _testRealPersistentPtySession() async {
       'PATH': '/usr/bin:/bin',
       'HOME': Directory.systemTemp.path,
       'TERM': 'dumb',
+      'LC_ALL': 'C',
     },
     shellArguments: const <String>['-f'],
     onChanged: () {},
@@ -489,16 +490,45 @@ Future<void> _testRealPersistentPtySession() async {
   session.resize(rows: 37, columns: 111);
   await session.start().timeout(const Duration(seconds: 5));
   final int processId = session.processId!;
+  session.insertText("stty -echo; printf '__SHELL_READY__\\n'");
+  await session.submit();
+  await _waitForTerminalOutput(
+    session,
+    (String output) => _occurrences(output, '__SHELL_READY__') >= 2,
+    'interactive shell startup',
+  );
   session.insertText(
     "printf '__DART_TERMINAL_PTY__\\n'; tty; stty size; "
-    "printf '__SECOND_COMMAND__\\n'; exit",
+    "printf '__FIRST_COMMAND_DONE__\\n'",
   );
+  await session.submit();
+  await _waitForTerminalOutput(
+    session,
+    (String output) => output.contains('__FIRST_COMMAND_DONE__'),
+    'first persistent-shell command',
+  );
+  session.insertText("sleep 5 & jobs; printf '__JOB_READY__\\n'");
+  await session.submit();
+  await _waitForTerminalOutput(
+    session,
+    (String output) => output.contains('__JOB_READY__'),
+    'background job listing',
+  );
+  session.insertText('fg');
+  await session.submit();
+  await Future<void>.delayed(const Duration(milliseconds: 150));
+  session.interrupt();
+  await Future<void>.delayed(const Duration(milliseconds: 100));
+  session.insertText("printf '__AFTER_INTERRUPT__\\n'; exit");
   await session.submit();
   await session.waitForTermination().timeout(const Duration(seconds: 8));
   final String output = session.buffer.outputText;
   _expect(
     output.contains('__DART_TERMINAL_PTY__') &&
-        output.contains('__SECOND_COMMAND__'),
+        output.contains('__FIRST_COMMAND_DONE__') &&
+        output.contains('__JOB_READY__') &&
+        output.toLowerCase().contains('running') &&
+        output.contains('__AFTER_INTERRUPT__'),
     'multiple real commands use the persistent session',
   );
   _expect(
@@ -511,6 +541,26 @@ Future<void> _testRealPersistentPtySession() async {
   );
   await session.dispose();
 }
+
+Future<void> _waitForTerminalOutput(
+  TerminalSession session,
+  bool Function(String output) predicate,
+  String description,
+) async {
+  final Stopwatch timeout = Stopwatch()..start();
+  while (timeout.elapsed < const Duration(seconds: 3)) {
+    if (predicate(session.buffer.outputText)) {
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  throw StateError(
+    'Timed out waiting for $description: ${session.buffer.outputText}',
+  );
+}
+
+int _occurrences(String value, String pattern) =>
+    RegExp(RegExp.escape(pattern)).allMatches(value).length;
 
 void _expect(bool condition, String description) {
   if (!condition) {

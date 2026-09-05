@@ -9,7 +9,7 @@ Rosetta、Universal、Intel-native 実機確認は、M1 の製品 contract が�
 低優先 follow-up であり、M1 の完了を阻害しません。
 
 現在の通常エントリーポイントは、再利用可能な `dart_pty_macos` を使う
-PTY-backed command session です。Phase 0 の native spike source は移行時に削除し、
+pane-owned persistent login shell です。Phase 0 の native spike source は移行時に削除し、
 成立性と測定結果は `docs/phase0` に保存しています。VT parser、screen model、
 CoreText/Metal renderer、IME の製品実装は後続 Phase です。
 
@@ -22,11 +22,12 @@ CoreText/Metal renderer、IME の製品実装は後続 Phase です。
 
 - AppKit のネイティブウィンドウを Dart から表示
 - キー入力、Backspace/Delete、左右移動、Home/End
-- 上下キーによるコマンド履歴
-- `dart_pty_macos` 上の `/bin/zsh -lc` による TTY 付きコマンド実行
-- `help`、`clear`、`cd PATH`、`exit` の組み込みコマンド
-- Control-C による実行中プロセスへの割り込み
-- ウィンドウサイズに合わせた簡易表示行数の調整
+- zsh自身の行編集と上下キーによるコマンド履歴
+- 1 paneにつき1つのTTY付きinteractive login zsh
+- 同じshell内での`cd`、環境変数、background job、`jobs`、`fg`/`bg`
+- Control-C/Z/\\、Control-Dによるsignal/EOF入力
+- ウィンドウサイズに追従する`TIOCSWINSZ`/`SIGWINCH`
+- typed pane/session ID、単一owner、live shellの再操作close確認
 - AppKit main-thread root と公式 Dart 子プロセス worker の bounded lifecycle
   （M1/arm64 Developer JIT / Release AOT）
 - native event protocol v4（source generation、nanosecond timestamp、operation
@@ -169,7 +170,7 @@ make RUNTIME_ARCH=arm64 release-aot-shutdown-fault
 ### 低優先の Intel-native handoff
 
 x86_64 cross-build、Rosetta、Universal、Intel-native handoff は、M1 の製品 contract
-完了後に再検証する後続項目です。その target は残していますが、再検証が終わるまで
+完了後に再検証する後続項目です。ROADMAPには残していますが、再検証が終わるまで
 M1/arm64 の主要受け入れ手順には含めません。この follow-up の未実施は M1 baseline の
 完了を阻害しません。
 
@@ -211,27 +212,28 @@ bin/main.dart                         エントリーポイント
 macos_application.json               product identity、helper、native package 宣言
 lib/src/terminal_application.dart    AppKit ウィンドウとキーイベント
 lib/src/runtime_lifecycle.dart       root/worker lifecycle coordinator
-lib/src/terminal_session.dart        dart_pty_macos を使う command session
-lib/src/terminal_buffer.dart         入力、履歴、スクロールバック
+lib/src/terminal_pane.dart           pane/session ID、owner、close状態
+lib/src/terminal_session.dart        persistent login shellとPTY入出力
+lib/src/terminal_buffer.dart         Phase 3までのbounded plain-text投影
 test/run_tests.dart                  UI 非依存部分の最小テスト
 ../dart_appkit/packages/              AppKit、runtime、PTY、renderer の公開 package
 ```
 
 ## 製品実装へ進む際の境界
 
-通常エントリーポイントは一つのコマンドごとに PTY 上で `zsh -lc` を起動する
-移行用 command session で、表示には引き続き `TextView` を使います。一方、
-renderer package の custom-view provider と `TerminalMetalView` の生成・attach
-境界は用意済みです。1 pane = 1 persistent shell と対話型 TUI を含む
-本格的なターミナルエミュレーターには、次の実装が必要です。
+通常エントリーポイントは1 paneが1つのpersistent login shellを所有します。
+現在の表示はCR/LF/Backspaceだけを扱うbounded plain-text投影で、引き続き
+`TextView`を使います。一方、renderer packageのcustom-view providerと
+`TerminalMetalView`の生成・attach境界は用意済みです。本格的なterminal
+emulator表示には、次の実装が必要です。
 
-1. command ごとの PTY を pane ごとの persistent shell へ切り替える session policy
-2. ANSI / VT シーケンスのパーサーと画面バッファ
-3. 色・属性・カーソル・選択・スクロールを描画する CoreText/Metal renderer
-4. IME、クリップボード、キーバインドの仕上げ
+1. ANSI / VT シーケンスのパーサーと画面バッファ
+2. 色・属性・カーソル・選択・スクロールを描画する CoreText/Metal renderer
+3. IME、クリップボード、キーバインドの仕上げ
 
-`TerminalSession` は公開 `PtyBackend` を受け取り、実 backend と deterministic fake を
-交換できます。`TerminalBuffer` が ANSI 画面モデルへ発展する場所です。
+`TerminalPaneOwner`がpaneを、`TerminalPane`がsession generationを、
+`TerminalSession`が公開`PtyProcess`を所有します。実backendとdeterministic fakeは
+同じ境界で交換できます。`TerminalBuffer`はPhase 3でANSI画面モデルへ置き換えます。
 
 Ghostty クラスの品質へ進めるために必要な機能、目標アーキテクチャ、段階別の
 完了条件、性能予算、テスト戦略、リスクは [`ROADMAP.md`](ROADMAP.md) に

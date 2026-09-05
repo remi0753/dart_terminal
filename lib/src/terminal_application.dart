@@ -191,8 +191,10 @@ final class TerminalApplication {
     final List<MenuItem> menuItems = <MenuItem>[];
     final List<Menu> menus = <Menu>[];
     Timer? autoCloseTimer;
+    Timer? autoCloseConfirmationTimer;
     RuntimeLifecycleCoordinator? lifecycle;
     var lifecycleWasShutDown = false;
+    var forcePaneClose = false;
     final Completer<void> closed = Completer<void>();
     final bool emitNativeEventWireObservation =
         Platform.environment['DT_RUNTIME_EVENT_WIRE_TEST'] == '1';
@@ -436,7 +438,16 @@ final class TerminalApplication {
                   'timestamp_ns=${event.monotonicNanoseconds}',
                 );
               }
-              createdWindow.replyToCloseRequest(event, allow: true);
+              final TerminalPaneCloseDecision decision = createdPane
+                  .requestClose(force: forcePaneClose);
+              final bool allow = decision == TerminalPaneCloseDecision.allow;
+              stdout.writeln(
+                'TERMINAL_PANE_CLOSE pane=${createdPane.id} '
+                'session=${createdPane.sessionId} '
+                'decision=${allow ? 'allow' : 'confirmation-required'} '
+                'state=${createdPane.state.name}',
+              );
+              createdWindow.replyToCloseRequest(event, allow: allow);
             case WindowResizedEvent(:final width, :final height):
               createdPane.resize(
                 rows: _rowsForHeight(height),
@@ -696,6 +707,7 @@ final class TerminalApplication {
         case RuntimeLifecycleScenario.rootUncaught:
           await _expectResponse(createdLifecycle);
           Timer.run(() {
+            forcePaneClose = true;
             _writeLifecycleEvent(
               scenario,
               'root-uncaught',
@@ -728,7 +740,14 @@ final class TerminalApplication {
           if (!createdWindow.isClosed && !createdWindow.isDisposed) {
             pasteItem.performAction();
             closeItem.performAction();
-            quitItem.performAction();
+            autoCloseConfirmationTimer = Timer(
+              const Duration(milliseconds: 100),
+              () {
+                if (!createdWindow.isClosed && !createdWindow.isDisposed) {
+                  quitItem.performAction();
+                }
+              },
+            );
           }
         });
       }
@@ -738,6 +757,7 @@ final class TerminalApplication {
         RuntimeDiagnosticPhase.shutdownStarted,
       );
       autoCloseTimer?.cancel();
+      autoCloseConfirmationTimer?.cancel();
       if (!lifecycleWasShutDown) {
         await lifecycle?.shutdown();
       }

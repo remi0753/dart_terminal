@@ -377,3 +377,7 @@ pass against the replacement.
 All seven ordered migration tasks and all acceptance criteria in this note are
 complete. This closes the application-packaging boundary; it does not complete
 the separate persistent-pane or terminal-emulation feature work.
+
+The separate persistent-pane work was subsequently completed in
+`docs/phase2/persistent-pane-lifecycle.md`; the final sentence above describes
+the scope boundary at the time this packaging task closed.
