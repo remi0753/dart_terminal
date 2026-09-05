@@ -671,6 +671,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] raw parser feed と bounded PTY reply connection
     （[`docs/phase3/query-reply-pty-write.md`](docs/phase3/query-reply-pty-write.md) を参照して実施）
 - [ ] snapshot formatter と readable test diagnostics
+  - [x] bounded versioned terminal-state formatter
+    （[`docs/phase3/snapshot-formatter-test-diagnostics.md`](docs/phase3/snapshot-formatter-test-diagnostics.md) を参照して実施）
+  - [ ] bounded comparison diagnostics と shared test oracle
+    （[`docs/phase3/snapshot-formatter-test-diagnostics.md`](docs/phase3/snapshot-formatter-test-diagnostics.md) を参照して実施）
 - [ ] parser corpus、property tests、fuzz seeds
 
 終了条件:

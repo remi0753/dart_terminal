@@ -127,6 +127,12 @@ final class TerminalViewport {
     return _screens.usingAlternate ? 0 : _primaryOffset;
   }
 
+  /// Returns the retained primary offset even while alternate is active.
+  int get primaryOffset {
+    _sync();
+    return _primaryOffset;
+  }
+
   int get maximumOffset {
     _sync();
     return _screens.usingAlternate ? 0 : _screens.scrollback.length;
