@@ -198,6 +198,50 @@ and committed. The following damage/frame task must not begin earlier.
   previously committed renderer source and tests. Applying it would rewrite
   unrelated historical code, so the task retained the established local style
   and used compiler warnings-as-errors plus `git diff --check` instead.
+- 2026-09-06: after product commit `7a48f64`, reread the Phase 4 roadmap and
+  ADR-004. The view-bound triple-buffer child is now the first unchecked item;
+  both repositories are clean. Its non-negotiable boundary is an immediate
+  validated copy into three fixed native slots, with drawable/GPU work only in
+  the native view callback and slot retirement only after drop or command
+  completion.
+- 2026-09-06: reviewed ways to bind the independent renderer handle to the
+  registered terminal view. A public Dart/AppKit handle accessor and a global
+  pending-view singleton were rejected as forgeable or order-dependent. The
+  selected minimal generic extension is a provider-owned opaque custom-view
+  operation: `dart_appkit` validates the view handle/provider on the AppKit main
+  thread and invokes the registered native callback with the `NSView` pointer
+  entirely inside native code. The renderer binding payload carries only a
+  versioned renderer handle/generation and will later be hidden by the Dart
+  facade.
+- 2026-09-06: submission tokens will be monotonic per renderer. A bounded state
+  snapshot reports the greatest token below every still-ready/in-flight token,
+  allowing Dart to retire atlas pins without an unbounded completion queue.
+  Every atlas upload is backpressured while any slot references the texture;
+  this conservative first implementation prevents CPU replacement from racing
+  a GPU read even when a same-generation dirty rectangle is logically disjoint.
+  Dart atlas allocation and pin policy still determine entry lifetime.
+- 2026-09-06: the first object-lifetime assertion exposed that a command
+  completion block strongly capturing its renderer could keep the renderer,
+  command queue, and completed command alive beyond explicit detach. The
+  completion now promotes a weak renderer reference only while updating live
+  state. Metal itself retains the encoded pipeline, textures, drawable, and
+  slot buffer for command lifetime, so worker release can invalidate/detach the
+  renderer without either a retain cycle or premature GPU resource reuse.
+- 2026-09-06: splitting the detach and live-object assertions showed that the
+  view detached correctly while transient Objective-C references survived in
+  the caller's outer autorelease pool. Converting the registry lookup from an
+  object-returning C function to an explicit ARC strong out-parameter removed
+  one possible implicit autorelease but did not alone clear the assertion.
+  Temporary retain-count/deallocation diagnostics showed that synthesized
+  reads of the view's strong `terminalRenderer` property and normal Metal/
+  Objective-C autorelease scopes may keep the detached object alive until the
+  surrounding pool drains, even though its handle is already invalid and its
+  view is detached. Runtime identity checks now read a scalar generation and
+  registry lookup uses an ARC strong out-parameter, eliminating avoidable
+  implicit object returns. The public debug count deliberately remains the
+  live registry-handle count; temporary diagnostics confirmed detached objects
+  deallocate when their legitimate command/autorelease ownership drains, and
+  were then removed.
 
 ## Blocker and resumption
 
@@ -218,7 +262,7 @@ coalescing roadmap item.
 
 ## Verification results
 
-- Ordered subtask 1 is complete. Subtasks 2 and 3 remain pending.
+- Ordered subtasks 1 and 2 are complete. Subtask 3 remains pending.
 - Both `xcrun --find metal` and `xcrun -sdk macosx metal -help` succeed after
   Xcode component repair. The checked-in MSL compiles to an 11,736-byte
   `MetalLib executable (MacOS), version 1.2.7`; the built renderer has an exact
@@ -239,3 +283,25 @@ coalescing roadmap item.
   test, Developer JIT and Release AOT manifest assembly tests, launcher/example
   compilation, and both FFI smoke paths. `git diff --check` passes.
 - Adjacent dependency commit: `3966419 Add bounded precompiled Metal renderer`.
+- Ordered subtask 2 is complete. Native ABI 6 adds exactly three preallocated
+  frame slots, monotonic submission tokens, immediate stale/backpressure
+  results, newest-ready selection, and a bounded retirement snapshot. The
+  synchronous submit path validates and copies only; drawable acquisition,
+  command encoding, presentation, and slot retirement remain in the native
+  view callback/GPU completion path. An idle callback returns before acquiring
+  a drawable.
+- A provider-owned custom-view operation binds one renderer generation to one
+  validated terminal view without exposing an Objective-C object or AppKit
+  registry handle to Dart. Main-thread and provider identity checks, malformed
+  payloads, stale handles, rebinding after detach, main/worker release, and
+  exact view delegate detachment are covered by native tests.
+- The real Metal view test fills all three slots, observes immediate fourth
+  submission backpressure, presents only the newest generation through an
+  `NSWindow` drawable, waits for GPU completion, verifies two stale-ready
+  drops and all token retirement, and proves atlas uploads remain blocked until
+  no slot owns the texture. `make terminal-renderer-native-test` passes after
+  the final idle-draw guard; the preceding full adjacent `make test` also
+  passes with the same submission implementation. Source audit finds no debug
+  logging or runtime shader compiler path, and `git diff --check` passes.
+- Adjacent dependency commit: `6a7a23d Bind renderer views to triple-buffer
+  submission`.

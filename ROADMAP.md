@@ -715,7 +715,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] Metal cell/glyph/decoration/cursor/selection pipelines
   - [x] packed native pipeline、precompiled shader、atlas texture capability
     （[`docs/phase4/metal-pipelines.md`](docs/phase4/metal-pipelines.md) を参照して実施）
-  - [ ] view-bound triple-buffer submission、GPU completion ownership、presentation
+  - [x] view-bound triple-buffer submission、GPU completion ownership、presentation
     （[`docs/phase4/metal-pipelines.md`](docs/phase4/metal-pipelines.md) を参照して実施）
   - [ ] Dart encoder/facade、atlas bridge、CPU/GPU 1x/2x goldens
     （[`docs/phase4/metal-pipelines.md`](docs/phase4/metal-pipelines.md) を参照して実施）
