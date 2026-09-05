@@ -724,7 +724,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （[`docs/phase4/damage-frame-coordinator.md`](docs/phase4/damage-frame-coordinator.md) を参照して実施）
   - [x] 100,000-cell product damage capture/transfer の Release AOT gate
     （[`docs/phase4/damage-capture-performance.md`](docs/phase4/damage-capture-performance.md) を参照して実施）
-  - [ ] one-in-flight TransferableTypedData outbox と exact ACK
+  - [x] one-in-flight TransferableTypedData outbox と exact ACK
     （[`docs/phase4/damage-frame-coordinator.md`](docs/phase4/damage-frame-coordinator.md) を参照して実施）
   - [ ] newest-model frame scheduler と native outcome connection
     （[`docs/phase4/damage-frame-coordinator.md`](docs/phase4/damage-frame-coordinator.md) を参照して実施）

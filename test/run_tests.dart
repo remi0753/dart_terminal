@@ -21,6 +21,7 @@ import 'runtime_lifecycle_test.dart';
 import 'terminal_core_test.dart';
 import 'terminal_damage_copy_test.dart';
 import 'terminal_damage_test.dart';
+import 'terminal_damage_transfer_test.dart';
 import 'terminal_history_reflow_test.dart';
 import 'terminal_palette_test.dart';
 import 'terminal_property_fuzz_test.dart';
@@ -48,6 +49,7 @@ Future<void> main() async {
   runTerminalCoreTests();
   runTerminalDamageTests();
   runTerminalDamageCopyTests();
+  await runTerminalDamageTransferTests();
   runProductParserBenchmarkTests();
   runProductParserCorpusTests();
   runGoldenImageTests();

@@ -112,6 +112,7 @@ export 'src/terminal_renderer/reference_renderer.dart'
         TerminalReferenceRenderer,
         TerminalReferenceSolid;
 export 'src/terminal_renderer/terminal_damage.dart';
+export 'src/terminal_renderer/terminal_damage_transfer.dart';
 export 'src/terminal_session.dart'
     show
         TerminalSessionNativeObservation,

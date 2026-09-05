@@ -162,6 +162,19 @@ validated and committed. The resize/full-rebuild task must not begin earlier.
   snapshot while incremental application still requires exactly the retained
   row version plus one. Logical-line IDs remain strictly nonzero as ADR-003
   requires.
+- 2026-09-06: the first transfer-generation exhaustion test exposed signed
+  native-integer wrap from `0x7fffffffffffffff` to the minimum value when the
+  counter was incremented. The outbox now records an explicit exhausted bit
+  after publishing the last valid generation and closes before another capture
+  instead of relying on an already-overflowed comparison. Replacement with a
+  newer pane generation resets this bit together with the damage sequence.
+- 2026-09-06: while validating subtask 2, the first 100,000-cell product
+  measurement found the preceding capture implementation above ADR-003's 4 ms
+  gate even though TTD transfer plus strict decode already passed. The newly
+  inserted prerequisite is completed independently in
+  [`damage-capture-performance.md`](damage-capture-performance.md) at commit
+  `068c3bc`: full capture plus TTD construction is now 650 us p95 and direct
+  isolate transfer plus strict decode/ACK is 1,832 us p95.
 
 ## Verification results
 
@@ -181,3 +194,37 @@ validated and committed. The resize/full-rebuild task must not begin earlier.
   staging the new source and test.
 - The adjacent `dart_appkit` worktree and its bundled Dart SDK worktree remain
   clean; this subtask changes only the product repository.
+
+### One-in-flight transferable outbox and exact ACKs
+
+- The transfer envelope is a one-shot primitive list with fixed magic/version,
+  exact pane/damage/resource generations, byte length, full flag, and one
+  `TransferableTypedData`. The receiver validates all envelope scalars before
+  materialization, materializes once, and cross-checks every duplicated scalar
+  against the strict ADR-003 payload header.
+- The outbox retains only three in-flight scalars and never the transferred
+  payload. While one packet awaits ACK, 1,000 test mutations remain in one
+  screen-owned dirty interval and every attempted publication returns no new
+  transfer. Exact acceptance releases the packet; full-snapshot state clears
+  only then, leaving changes made during the wait ready for the next delta.
+- ACK decoding validates fixed count, magic/version, pane identity/generation,
+  damage generation, byte count, and status/byte consistency. Malformed,
+  wrong-pane, stale/future-pane, duplicate, stale/future-damage, and wrong-byte
+  ACKs have distinct deterministic outcomes and cannot release the active
+  packet. An exact renderer rejection closes the relationship and requests a
+  full resync.
+- Pane replacement releases old bookkeeping, restarts damage generation at one,
+  and requires a full snapshot. Late ACK/port/deadline events from the retired
+  pane are ignored. Port close, the exact active deadline token, and generation
+  exhaustion close without blocking and force the next relationship to resync.
+- Focused JIT and Release AOT executions of
+  `test/terminal_damage_transfer_test.dart` pass, including a real direct
+  `SendPort`/`ReceivePort` isolate round trip, delayed mutation, exact two-step
+  full/delta application, all scalar corruptions, close/deadline/replacement,
+  renderer rejection, and signed-generation exhaustion.
+- `make test` passes with 90 formatted files, no analysis issues, and
+  `dart_terminal tests passed` after the asynchronous transfer suite is added
+  to the combined runner.
+- `make runtime-source-check` passes after staging with
+  `tracked=170 native_sources=0`; the adjacent `dart_appkit` and bundled Dart
+  SDK worktrees remain clean.
