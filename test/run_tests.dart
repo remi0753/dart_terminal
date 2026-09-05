@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 
+import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_pty_macos/dart_pty_macos.dart';
 import 'package:dart_pty_macos/testing.dart';
 import 'package:dart_terminal/dart_terminal.dart';
@@ -22,13 +24,83 @@ Future<void> main() async {
   _testHistoryNavigation();
   _testTranscriptLimitAndViewport();
   _testOptions();
+  _testNativeObservationFormatting();
   await _testPaneIdentityOwnershipAndClosePolicy();
+  await _testControlDAppKitKeyRoute();
   await runRuntimeLifecycleTests().timeout(const Duration(seconds: 30));
   await _testPersistentCommandSession();
   await _testBoundedSessionShutdown();
   await _testRealPersistentPtySession();
+  await _testControlDSemanticsMatrix().timeout(const Duration(seconds: 30));
   await _testRepeatedControlDNaturalExit().timeout(const Duration(seconds: 45));
   stdout.writeln('dart_terminal tests passed');
+}
+
+void _testNativeObservationFormatting() {
+  const TerminalSessionNativeObservation observation =
+      TerminalSessionNativeObservation(
+        sessionId: TerminalSessionId(paneId: PaneId(9), generation: 2),
+        processId: 4100,
+        event: PtyDiagnosticEvent(
+          stage: PtyDiagnosticStage.writeCompleted,
+          requestId: 7,
+          byteCount: 1,
+          queuedBytes: 0,
+        ),
+      );
+  final String line = observation.machineLine();
+  _expect(
+    line.startsWith(
+          'TERMINAL_PTY_NATIVE pane=9 session=9:2 process_id=4100 '
+          'stage=writeCompleted request_id=7 byte_count=1 queued_bytes=0 ',
+        ) &&
+        !line.contains('input') &&
+        !line.contains('output') &&
+        !line.contains('command') &&
+        !line.contains('cwd'),
+    'native PTY observation uses the content-free scalar allowlist',
+  );
+}
+
+Future<void> _testControlDAppKitKeyRoute() async {
+  final TerminalPaneOwner owner = TerminalPaneOwner();
+  late final _FakePaneSession session;
+  final TerminalPane pane = owner.createPane(
+    sessionFactory:
+        (
+          TerminalSessionId id, {
+          required void Function() onChanged,
+          required void Function() onTerminated,
+        }) {
+          session = _FakePaneSession(
+            id: id,
+            onChanged: onChanged,
+            onTerminated: onTerminated,
+          );
+          return session;
+        },
+    onChanged: () {},
+    onExitRequested: () {},
+  );
+  await pane.start();
+  TerminalKeyEventRouter.handleKeyDown(
+    const AppKitKeyEvent(
+      windowHandle: 1,
+      monotonicMicros: 1,
+      kind: AppKitKeyEventKind.down,
+      keyCode: 2,
+      modifiers: ModifierKeys(ModifierKeys.controlBit),
+      isRepeat: false,
+      characters: '\u0004',
+      charactersIgnoringModifiers: 'd',
+    ),
+    pane,
+  );
+  _expect(
+    session.endOfFileCount == 1,
+    'decoded AppKit Control-D routes exactly once to terminal EOF input',
+  );
+  await owner.shutdown();
 }
 
 Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
@@ -810,6 +882,8 @@ Future<void> _testRepeatedControlDNaturalExit() async {
     var terminationCount = 0;
     final List<TerminalSessionLifecycleObservation> lifecycle =
         <TerminalSessionLifecycleObservation>[];
+    final List<TerminalSessionNativeObservation> native =
+        <TerminalSessionNativeObservation>[];
     final TerminalSession session = TerminalSession(
       id: TerminalSessionId(paneId: PaneId(1000 + iteration), generation: 1),
       initialWorkingDirectory: Directory.systemTemp.path,
@@ -827,8 +901,10 @@ Future<void> _testRepeatedControlDNaturalExit() async {
         ++terminationCount;
       },
       lifecycleObserver: lifecycle.add,
+      nativeObserver: native.add,
     );
     await session.start().timeout(const Duration(seconds: 3));
+    final int processId = session.processId!;
     session.insertText(
       "stty -echo; unsetopt ignoreeof; printf '__CTRL_D_READY_${iteration}__\\n'",
     );
@@ -863,11 +939,297 @@ Future<void> _testRepeatedControlDNaturalExit() async {
       TerminalSessionLifecycleStage.shutdownResultPublished,
       TerminalSessionLifecycleStage.disposeCompleted,
     ], 'Control-D lifecycle iteration $iteration');
+    final int? requestId = lifecycle
+        .where(
+          (TerminalSessionLifecycleObservation observation) =>
+              observation.stage ==
+              TerminalSessionLifecycleStage.eofWriteAccepted,
+        )
+        .single
+        .writeRequestId;
+    _expect(requestId != null, 'Control-D iteration $iteration request ID');
+    for (final PtyDiagnosticStage stage in <PtyDiagnosticStage>[
+      PtyDiagnosticStage.writeEnqueued,
+      PtyDiagnosticStage.writeDequeued,
+      PtyDiagnosticStage.writeCompleted,
+      PtyDiagnosticStage.stateSnapshot,
+      PtyDiagnosticStage.termiosSnapshot,
+      PtyDiagnosticStage.processExitReady,
+      PtyDiagnosticStage.waitpidResult,
+      PtyDiagnosticStage.exitPublished,
+    ]) {
+      _expect(
+        native.any(
+          (TerminalSessionNativeObservation observation) =>
+              observation.event.stage == stage &&
+              (observation.event.requestId == null ||
+                  observation.event.requestId == requestId),
+        ),
+        'Control-D iteration $iteration native ${stage.name}',
+      );
+    }
+    _expect(
+      native.any(
+        (TerminalSessionNativeObservation observation) =>
+            observation.event.stage == PtyDiagnosticStage.writeCompleted &&
+            observation.event.requestId == requestId &&
+            observation.event.byteCount == 1 &&
+            observation.event.queuedBytes == 0,
+      ),
+      'Control-D iteration $iteration is flushed exactly once',
+    );
+    _expect(
+      native.any(
+        (TerminalSessionNativeObservation observation) =>
+            observation.event.stage == PtyDiagnosticStage.waitpidResult &&
+            observation.event.waitpidResult == processId,
+      ),
+      'Control-D iteration $iteration child is reaped before exit publication',
+    );
     _expect(
       _livePtySessionCount() == 0,
       'Control-D iteration $iteration reaps and destroys its native session',
     );
   }
+}
+
+Future<void> _testControlDSemanticsMatrix() async {
+  _expect(_livePtySessionCount() == 0, 'Control-D matrix starts without PTYs');
+
+  final _ControlDProbe ignoreEof = await _startControlDProbe(
+    2101,
+    'setopt ignoreeof',
+  );
+  try {
+    await _sendAndObserveControlD(ignoreEof, 'IGNORE_EOF');
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    _expect(
+      ignoreEof.session.isLive,
+      'IGNORE_EOF intentionally keeps zsh live',
+    );
+    ignoreEof.session.insertText('unsetopt ignoreeof; exit');
+    await ignoreEof.session.submit();
+  } finally {
+    await _finishControlDProbe(ignoreEof);
+  }
+
+  final _ControlDProbe nonempty = await _startControlDProbe(
+    2102,
+    'unsetopt ignoreeof',
+  );
+  try {
+    nonempty.session.insertText('not-submitted');
+    await _sendAndObserveControlD(nonempty, 'nonempty edit buffer');
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    _expect(
+      nonempty.session.isLive,
+      'Control-D on a nonempty zsh edit buffer is not shell EOF',
+    );
+    nonempty.session.interrupt();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    nonempty.session.insertText('exit');
+    await nonempty.session.submit();
+  } finally {
+    await _finishControlDProbe(nonempty);
+  }
+
+  final _ControlDProbe foregroundReader = await _startControlDProbe(
+    2103,
+    'unsetopt ignoreeof; precmd() { print -r -- __CD_PROMPT_2103__; }',
+  );
+  try {
+    final int promptCount = _occurrences(
+      foregroundReader.session.buffer.outputText,
+      '__CD_PROMPT_2103__',
+    );
+    foregroundReader.session.insertText('cat');
+    await foregroundReader.session.submit();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await _sendAndObserveControlD(foregroundReader, 'foreground reader');
+    await _waitForTerminalOutput(
+      foregroundReader.session,
+      (String output) =>
+          _occurrences(output, '__CD_PROMPT_2103__') > promptCount,
+      'foreground reader returning to zsh after Control-D',
+    );
+    _expect(
+      foregroundReader.session.isLive,
+      'foreground reader consumes EOF without exiting its owning shell',
+    );
+    foregroundReader.session.insertText('exit');
+    await foregroundReader.session.submit();
+  } finally {
+    await _finishControlDProbe(foregroundReader);
+  }
+
+  final _ControlDProbe rawMode = await _startControlDProbe(
+    2104,
+    'unsetopt ignoreeof',
+  );
+  try {
+    rawMode.session.insertText(
+      'saved=\$(stty -g); print -r -- __CD_RAW_READY__; '
+      'stty raw -echo; dd bs=1 count=1 of=/dev/null 2>/dev/null; '
+      'stty "\$saved"; print -r -- __CD_RAW_DONE__',
+    );
+    await rawMode.session.submit();
+    await _waitForTerminalOutput(
+      rawMode.session,
+      (String output) => output.contains('__CD_RAW_READY__'),
+      'raw-mode reader readiness',
+    );
+    await _sendAndObserveControlD(rawMode, 'raw terminal mode');
+    await _waitForTerminalOutput(
+      rawMode.session,
+      (String output) => output.contains('__CD_RAW_DONE__'),
+      'raw-mode reader consuming Control-D as data',
+    );
+    _expect(
+      rawMode.session.isLive,
+      'raw-mode Control-D is data and does not exit zsh',
+    );
+    rawMode.session.insertText('exit');
+    await rawMode.session.submit();
+  } finally {
+    await _finishControlDProbe(rawMode);
+  }
+
+  final _ControlDProbe suspendedJob = await _startControlDProbe(
+    2105,
+    'unsetopt ignoreeof; precmd() { print -r -- __CD_PROMPT_2105__; }',
+  );
+  try {
+    final int promptCount = _occurrences(
+      suspendedJob.session.buffer.outputText,
+      '__CD_PROMPT_2105__',
+    );
+    suspendedJob.session.insertText('cat');
+    await suspendedJob.session.submit();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    suspendedJob.session.suspend();
+    await _waitForTerminalOutput(
+      suspendedJob.session,
+      (String output) =>
+          _occurrences(output, '__CD_PROMPT_2105__') > promptCount,
+      'suspended foreground job returning to zsh',
+    );
+    await _sendAndObserveControlD(suspendedJob, 'suspended job');
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    _expect(
+      suspendedJob.session.isLive,
+      'zsh refuses the first EOF while a stopped job exists',
+    );
+    suspendedJob.session.insertText(
+      'kill %1 2>/dev/null; wait %1 2>/dev/null; exit',
+    );
+    await suspendedJob.session.submit();
+  } finally {
+    await _finishControlDProbe(suspendedJob);
+  }
+
+  _expect(_livePtySessionCount() == 0, 'Control-D matrix reaps every PTY');
+}
+
+Future<_ControlDProbe> _startControlDProbe(int paneId, String setup) async {
+  final List<TerminalSessionLifecycleObservation> lifecycle =
+      <TerminalSessionLifecycleObservation>[];
+  final List<TerminalSessionNativeObservation> native =
+      <TerminalSessionNativeObservation>[];
+  final TerminalSession session = TerminalSession(
+    id: TerminalSessionId(paneId: PaneId(paneId), generation: 1),
+    initialWorkingDirectory: Directory.systemTemp.path,
+    environment: <String, String>{
+      'PATH': '/usr/bin:/bin',
+      'HOME': Directory.systemTemp.path,
+      'TERM': 'dumb',
+      'LC_ALL': 'C',
+      'PS1': '',
+      'RPS1': '',
+    },
+    shellArguments: const <String>['-f'],
+    gracefulShutdownTimeout: const Duration(milliseconds: 500),
+    finalShutdownTimeout: const Duration(milliseconds: 500),
+    cleanupStepTimeout: const Duration(milliseconds: 500),
+    onChanged: () {},
+    onTerminated: () {},
+    lifecycleObserver: lifecycle.add,
+    nativeObserver: native.add,
+  );
+  await session.start().timeout(const Duration(seconds: 3));
+  final String marker = '__CD_READY_${paneId}__';
+  session.insertText("stty -echo; $setup; print -r -- $marker");
+  await session.submit();
+  await _waitForTerminalOutput(
+    session,
+    (String output) => _occurrences(output, marker) >= 2,
+    'Control-D semantics setup $paneId',
+  );
+  return _ControlDProbe(session, lifecycle, native);
+}
+
+Future<void> _sendAndObserveControlD(
+  _ControlDProbe probe,
+  String description,
+) async {
+  probe.session.sendEndOfFile();
+  final int requestId = probe.lifecycle
+      .lastWhere(
+        (TerminalSessionLifecycleObservation observation) =>
+            observation.stage == TerminalSessionLifecycleStage.eofWriteAccepted,
+      )
+      .writeRequestId!;
+  final Stopwatch timeout = Stopwatch()..start();
+  while (timeout.elapsed < const Duration(seconds: 3)) {
+    if (probe.native.any(
+      (TerminalSessionNativeObservation observation) =>
+          observation.event.stage == PtyDiagnosticStage.writeCompleted &&
+          observation.event.requestId == requestId,
+    )) {
+      break;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  _expect(
+    probe.native.any(
+      (TerminalSessionNativeObservation observation) =>
+          observation.event.stage == PtyDiagnosticStage.writeCompleted &&
+          observation.event.requestId == requestId &&
+          observation.event.byteCount == 1,
+    ),
+    '$description Control-D reaches native write completion',
+  );
+  _expect(
+    probe.native.any(
+      (TerminalSessionNativeObservation observation) =>
+          observation.event.stage == PtyDiagnosticStage.stateSnapshot &&
+          observation.event.requestId == requestId &&
+          observation.event.foregroundProcessGroup != null,
+    ),
+    '$description captures foreground process group state',
+  );
+  _expect(
+    probe.native.any(
+      (TerminalSessionNativeObservation observation) =>
+          observation.event.stage == PtyDiagnosticStage.termiosSnapshot &&
+          observation.event.requestId == requestId &&
+          observation.event.terminalLocalFlags != null &&
+          observation.event.terminalEofCharacter != null,
+    ),
+    '$description captures termios flags and VEOF identity',
+  );
+}
+
+Future<void> _finishControlDProbe(_ControlDProbe probe) async {
+  if (probe.session.isLive) {
+    try {
+      await probe.session.waitForTermination().timeout(
+        const Duration(seconds: 3),
+      );
+    } on TimeoutException {
+      await probe.session.shutdown();
+    }
+  }
+  await probe.session.dispose();
 }
 
 void _expectOrderedSessionStages(
@@ -933,6 +1295,14 @@ void _expectThrows(
   throw StateError('Expected $expectedType: $description');
 }
 
+final class _ControlDProbe {
+  const _ControlDProbe(this.session, this.lifecycle, this.native);
+
+  final TerminalSession session;
+  final List<TerminalSessionLifecycleObservation> lifecycle;
+  final List<TerminalSessionNativeObservation> native;
+}
+
 final class _FakePaneSession implements TerminalPaneSession {
   _FakePaneSession({
     required this.id,
@@ -950,6 +1320,7 @@ final class _FakePaneSession implements TerminalPaneSession {
   var startCount = 0;
   var disposeCount = 0;
   var confirmationCount = 0;
+  var endOfFileCount = 0;
   var failStart = false;
   var failShutdown = false;
   var _live = false;
@@ -1017,7 +1388,9 @@ final class _FakePaneSession implements TerminalPaneSession {
   void quitForegroundProcess() {}
 
   @override
-  void sendEndOfFile() {}
+  void sendEndOfFile() {
+    ++endOfFileCount;
+  }
 
   @override
   void resize({required int rows, required int columns}) {}

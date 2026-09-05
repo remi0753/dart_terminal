@@ -299,6 +299,9 @@ final class TerminalApplication {
                   (TerminalSessionLifecycleObservation observation) {
                     stdout.writeln(observation.machineLine());
                   },
+              nativeObserver: (TerminalSessionNativeObservation observation) {
+                stdout.writeln(observation.machineLine());
+              },
             ),
         onChanged: () {
           if (createdTextView != null && !createdTextView.isDisposed) {
@@ -579,7 +582,7 @@ final class TerminalApplication {
                 );
               }
             case AppKitKeyEvent() when event.kind == AppKitKeyEventKind.down:
-              _handleKeyDown(event, createdPane);
+              TerminalKeyEventRouter.handleKeyDown(event, createdPane);
             case AppKitKeyEvent():
             case AppKitMouseEvent():
           }
@@ -1186,8 +1189,16 @@ final class TerminalApplication {
     }
     return columns;
   }
+}
 
-  static void _handleKeyDown(AppKitKeyEvent event, TerminalPane pane) {
+/// Maps one AppKit key-down event to the active terminal pane.
+///
+/// This small seam is also used by the GUI-key-path regression so Control-D is
+/// exercised from the same decoded AppKit event shape as the live window.
+final class TerminalKeyEventRouter {
+  const TerminalKeyEventRouter._();
+
+  static void handleKeyDown(AppKitKeyEvent event, TerminalPane pane) {
     if (event.modifiers.control && event.keyCode == 8) {
       pane.interrupt();
       return;
@@ -1262,6 +1273,7 @@ final class _ExitNotificationSuppressingPtyBackend implements PtyBackend {
     int readHighWaterBytes = 1024 * 1024,
     int readLowWaterBytes = 512 * 1024,
     int writeCapacityBytes = 1024 * 1024,
+    bool enableDiagnostics = false,
   }) async => _ExitNotificationSuppressingPtyProcess(
     await _delegate.start(
       command,
@@ -1269,6 +1281,7 @@ final class _ExitNotificationSuppressingPtyBackend implements PtyBackend {
       readHighWaterBytes: readHighWaterBytes,
       readLowWaterBytes: readLowWaterBytes,
       writeCapacityBytes: writeCapacityBytes,
+      enableDiagnostics: enableDiagnostics,
     ),
   );
 }
@@ -1288,6 +1301,9 @@ final class _ExitNotificationSuppressingPtyProcess implements PtyProcess {
   Stream<Uint8List> get output => _delegate.output;
 
   @override
+  Stream<PtyDiagnosticEvent> get diagnostics => _delegate.diagnostics;
+
+  @override
   Future<PtyExit> get exit => _suppressedExit.future;
 
   @override
@@ -1295,6 +1311,10 @@ final class _ExitNotificationSuppressingPtyProcess implements PtyProcess {
 
   @override
   PtyWriteResult write(Uint8List bytes) => _delegate.write(bytes);
+
+  @override
+  PtyWriteReceipt writeTracked(Uint8List bytes) =>
+      _delegate.writeTracked(bytes);
 
   @override
   void resize(PtySize size) => _delegate.resize(size);

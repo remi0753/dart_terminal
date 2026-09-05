@@ -783,6 +783,23 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     ]),
     'PTY lifecycle diagnostics are incomplete or out of order: $ptyStages',
   );
+  final List<String> nativePtyStages = _nativePtyStages(
+    observation.stdoutText,
+    pane: pane,
+    session: session,
+  );
+  _expect(
+    _containsOrderedValues(nativePtyStages, const <String>[
+      'stateSnapshot',
+      'termiosSnapshot',
+      'signalDelivery',
+      'processExitReady',
+      'waitpidResult',
+      'exitPublished',
+    ]),
+    'native PTY close boundaries are incomplete or out of order: '
+    '$nativePtyStages',
+  );
   _expect(
     RegExp(
           '^TERMINAL_SESSION_SHUTDOWN pane=$pane session=$session '
@@ -1456,6 +1473,27 @@ Future<void> _runPtyExitDeadlineFault(
     ]),
     'PTY deadline lifecycle is incomplete or out of order: $stages',
   );
+  final List<String> nativePtyStages = _nativePtyStages(
+    result.stdoutText,
+    pane: pane,
+    session: session,
+  );
+  _expect(
+    _containsOrderedValues(nativePtyStages, const <String>[
+      'stateSnapshot',
+      'termiosSnapshot',
+      'signalDelivery',
+      'processExitReady',
+      'waitpidResult',
+      'exitPublished',
+    ]),
+    'suppressed Dart exit still lacks native signal/reap/publication evidence: '
+    '$nativePtyStages',
+  );
+  _expect(
+    !stages.contains('nativeExitObserved'),
+    'fault injection unexpectedly delivered the suppressed Dart exit',
+  );
   _expect(
     RegExp(
           '^TERMINAL_PANE_LIFECYCLE pane=$pane session=$session state=closed\$',
@@ -1502,6 +1540,23 @@ Future<void> _runPtyExitDeadlineFault(
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'status=${result.status} elapsed_ms=${result.elapsed.inMilliseconds}',
   );
+}
+
+List<String> _nativePtyStages(
+  String output, {
+  required String pane,
+  required String session,
+}) {
+  final RegExp line = RegExp(
+    '^TERMINAL_PTY_NATIVE pane=$pane session=$session '
+    r'process_id=[0-9]+ stage=([A-Za-z]+) ',
+  );
+  return output
+      .split('\n')
+      .map(line.firstMatch)
+      .whereType<RegExpMatch>()
+      .map((RegExpMatch match) => match.group(1)!)
+      .toList();
 }
 
 bool _sameStrings(List<String> left, List<String> right) {

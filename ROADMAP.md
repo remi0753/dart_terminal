@@ -610,7 +610,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] `dart_appkit`に選択可能なkey event routing capabilityを追加する
   - [x] `dart_terminal`をDart専有入力へ切り替え、GUI回帰を検証する
-- [ ] Ctrl-D write受理後のPTY停止原因を分離する
+- [x] Ctrl-D write受理後のPTY停止原因を分離する
   （実施時に
   [`docs/phase2/ctrl-d-accepted-no-exit-investigation.md`](docs/phase2/ctrl-d-accepted-no-exit-investigation.md)
   を参照する）

@@ -30,6 +30,8 @@ CoreText/Metal renderer、IME の製品実装は後続 Phase です。
 - ウィンドウサイズに追従する`TIOCSWINSZ`/`SIGWINCH`
 - typed pane/session ID、単一owner、live shellの再操作close確認
 - terminal内容を含めないpane state / PTY shutdown stage診断
+- Control-Dのqueue受理、native write、foreground/termios、signal、waitpid、
+  exit公開をrequest IDで追えるcontent-free診断
 - graceful/force/final deadlineを持つbounded PTY session teardownと型付き結果
 - PTY通知欠落時もpane ownerを閉じ、status 75でhost終了するclassified recovery
 - AppKit main-thread root と公式 Dart 子プロセス worker の bounded lifecycle
@@ -152,6 +154,11 @@ lifecycle stageだけを持つ`TERMINAL_PANE_LIFECYCLE`と
 `TERMINAL_PTY_LIFECYCLE`も記録します。Control-Dの受付、native exit、output drain、
 close request、exit wait、stream cancel、process disposeのどこまで完了したかを判定でき、
 terminal表示内容、入力文字列、command、environment、cwd、例外詳細は含みません。
+Control-Dとshutdownの詳細は`TERMINAL_PTY_NATIVE`に記録され、opaque request ID、
+byte/queue count、foreground process group、termios flagと`VEOF`番号、signal target/result、
+`waitpid` result、exit公開境界だけを含みます。Control-Dがnative writeまで完了しても、
+zshの`IGNORE_EOF`、未確定の編集行、foreground reader、raw mode、停止jobの状態によって
+shellが終了しないことは正常なPTY semanticsです。
 終了時の`TERMINAL_SESSION_SHUTDOWN`と`TERMINAL_PANE_OWNER_SHUTDOWN`は、同じ
 typed ID、固定されたdisposition、termination/cleanupの真偽だけで最終結果を示します。
 最終期限を超えた場合もpaneとhostの終了処理を続け、正常終了を名乗らずstatus 75と

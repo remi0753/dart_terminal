@@ -160,3 +160,9 @@ normal responder path after Dart event routing.
   accepted-no-exit Control-D observation remains separately tracked in
   `docs/phase2/ctrl-d-accepted-no-exit-investigation.md` and is intentionally
   not hidden by completing the beep/routing task.
+
+### 2026-09-05 — manual audible acceptance
+
+- The user confirmed after running the product that the per-key system beep is
+  gone. This closes the manual audible follow-up; the accepted-but-no-exit
+  Control-D behavior remains the separate investigation task linked above.

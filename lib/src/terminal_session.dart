@@ -73,20 +73,56 @@ final class TerminalSessionLifecycleObservation {
     required this.sessionId,
     required this.stage,
     required this.processId,
+    this.writeRequestId,
   });
 
   final TerminalSessionId sessionId;
   final TerminalSessionLifecycleStage stage;
   final int? processId;
+  final int? writeRequestId;
 
   String machineLine() =>
       'TERMINAL_PTY_LIFECYCLE pane=${sessionId.paneId} '
       'session=$sessionId process_id=${processId ?? 0} '
-      'stage=${stage.name}';
+      'stage=${stage.name}'
+      '${writeRequestId == null ? '' : ' request_id=$writeRequestId'}';
 }
 
 typedef TerminalSessionLifecycleObserver = void Function(
   TerminalSessionLifecycleObservation observation,
+);
+
+final class TerminalSessionNativeObservation {
+  const TerminalSessionNativeObservation({
+    required this.sessionId,
+    required this.processId,
+    required this.event,
+  });
+
+  final TerminalSessionId sessionId;
+  final int? processId;
+  final PtyDiagnosticEvent event;
+
+  String machineLine() =>
+      'TERMINAL_PTY_NATIVE pane=${sessionId.paneId} session=$sessionId '
+      'process_id=${processId ?? 0} stage=${event.stage.name} '
+      'request_id=${event.requestId ?? 0} byte_count=${event.byteCount ?? 0} '
+      'queued_bytes=${event.queuedBytes ?? 0} '
+      'foreground_pgid=${event.foregroundProcessGroup ?? 0} '
+      'state_flags=${event.sessionStateFlags ?? 0} '
+      'terminal_lflag=${event.terminalLocalFlags ?? 0} '
+      'terminal_veof=${event.terminalEofCharacter ?? 0} '
+      'signal=${event.signal ?? 0} signal_target=${event.signalTarget ?? 0} '
+      'operation_result=${event.operationResult ?? 0} '
+      'waitpid_result=${event.waitpidResult ?? 0} '
+      'child_status=${event.childStatus ?? 0} '
+      'child_process_id=${event.childProcessId ?? 0} '
+      'exit_code=${event.exitCode ?? 0} exit_signal=${event.exitSignal ?? 0} '
+      'errno=${event.systemError}';
+}
+
+typedef TerminalSessionNativeObserver = void Function(
+  TerminalSessionNativeObservation observation,
 );
 
 /// One persistent interactive shell generation owned by a terminal pane.
@@ -105,9 +141,11 @@ final class TerminalSession implements TerminalPaneSession {
     this.finalShutdownTimeout = const Duration(seconds: 1),
     this.cleanupStepTimeout = const Duration(seconds: 1),
     TerminalSessionLifecycleObserver? lifecycleObserver,
+    TerminalSessionNativeObserver? nativeObserver,
   }) : _onChanged = onChanged,
        _onTerminated = onTerminated,
        _lifecycleObserver = lifecycleObserver,
+       _nativeObserver = nativeObserver,
        _ptyBackend = ptyBackend ?? MacosPtyBackend.shared,
        shellArguments = List<String>.unmodifiable(shellArguments),
        _environment = Map<String, String>.unmodifiable(
@@ -143,6 +181,7 @@ final class TerminalSession implements TerminalPaneSession {
   final void Function() _onChanged;
   final void Function() _onTerminated;
   final TerminalSessionLifecycleObserver? _lifecycleObserver;
+  final TerminalSessionNativeObserver? _nativeObserver;
   final PtyBackend _ptyBackend;
   final Map<String, String> _environment;
   final String shellExecutable;
@@ -159,6 +198,8 @@ final class TerminalSession implements TerminalPaneSession {
   PtyProcess? _process;
   // ignore: cancel_subscriptions - bounded cancellation is centralized below.
   StreamSubscription<String>? _outputSubscription;
+  // ignore: cancel_subscriptions - bounded cancellation is centralized below.
+  StreamSubscription<PtyDiagnosticEvent>? _diagnosticSubscription;
   Completer<void>? _outputDone;
   Future<void>? _startFuture;
   Future<void>? _terminationFuture;
@@ -209,6 +250,7 @@ final class TerminalSession implements TerminalPaneSession {
         ),
         initialSize: PtySize(rows: _rows, columns: _columns),
         writeCapacityBytes: writeCapacityBytes,
+        enableDiagnostics: true,
       );
       if (_disposed) {
         process.close(gracePeriod: Duration.zero);
@@ -218,6 +260,10 @@ final class TerminalSession implements TerminalPaneSession {
       _process = process;
       _live = true;
       _observeLifecycle(TerminalSessionLifecycleStage.processStarted);
+      _diagnosticSubscription = process.diagnostics.listen(
+        _observeNativeDiagnostic,
+        onError: (Object _, StackTrace _) {},
+      );
       final Completer<void> outputDone = Completer<void>();
       _outputDone = outputDone;
       const Utf8Decoder decoder = Utf8Decoder(allowMalformed: true);
@@ -348,13 +394,13 @@ final class TerminalSession implements TerminalPaneSession {
   @override
   void sendEndOfFile() {
     _observeLifecycle(TerminalSessionLifecycleStage.eofRequested);
-    final PtyWriteResult? result = _write(const <int>[0x04]);
-    _observeLifecycle(switch (result) {
+    final PtyWriteReceipt? receipt = _writeTracked(const <int>[0x04]);
+    _observeLifecycle(switch (receipt?.result) {
       PtyWriteResult.accepted => TerminalSessionLifecycleStage.eofWriteAccepted,
       PtyWriteResult.backpressured =>
         TerminalSessionLifecycleStage.eofWriteBackpressured,
       null => TerminalSessionLifecycleStage.eofWriteIgnored,
-    });
+    }, writeRequestId: receipt?.requestId);
   }
 
   @override
@@ -467,6 +513,7 @@ final class TerminalSession implements TerminalPaneSession {
     }
 
     final bool outputCancelled = await _cancelOutputSubscription();
+    final bool diagnosticsCancelled = await _cancelDiagnosticSubscription();
     var processDisposed = false;
     if (terminationObserved) {
       _observeLifecycle(TerminalSessionLifecycleStage.processDisposeStarted);
@@ -492,7 +539,10 @@ final class TerminalSession implements TerminalPaneSession {
     final TerminalSessionShutdownResult result = _publishShutdownResult(
       disposition: deadlineExceeded
           ? TerminalSessionShutdownDisposition.deadlineExceeded
-          : shutdownFailed || _failure != null || !outputCancelled
+          : shutdownFailed ||
+                _failure != null ||
+                !outputCancelled ||
+                !diagnosticsCancelled
           ? TerminalSessionShutdownDisposition.failed
           : forced
           ? TerminalSessionShutdownDisposition.forced
@@ -500,7 +550,10 @@ final class TerminalSession implements TerminalPaneSession {
       processId: processId,
       terminationObserved: terminationObserved,
       cleanupCompleted:
-          outputCancelled && terminationObserved && processDisposed,
+          outputCancelled &&
+          diagnosticsCancelled &&
+          terminationObserved &&
+          processDisposed,
     );
     _observeLifecycle(TerminalSessionLifecycleStage.disposeCompleted);
     return result;
@@ -536,6 +589,22 @@ final class TerminalSession implements TerminalPaneSession {
     } on Object catch (error) {
       _failure ??= error;
       _observeLifecycle(TerminalSessionLifecycleStage.outputCancellationFailed);
+      return false;
+    }
+  }
+
+  Future<bool> _cancelDiagnosticSubscription() async {
+    final StreamSubscription<PtyDiagnosticEvent>? subscription =
+        _diagnosticSubscription;
+    _diagnosticSubscription = null;
+    if (subscription == null) {
+      return true;
+    }
+    try {
+      await subscription.cancel().timeout(cleanupStepTimeout);
+      return true;
+    } on Object catch (error) {
+      _failure ??= error;
       return false;
     }
   }
@@ -583,6 +652,48 @@ final class TerminalSession implements TerminalPaneSession {
     return result;
   }
 
+  PtyWriteReceipt? _writeTracked(List<int> bytes) {
+    final PtyProcess? process = _process;
+    if (!_live || _disposed || process == null) {
+      return null;
+    }
+    late final PtyWriteReceipt receipt;
+    try {
+      receipt = process.writeTracked(Uint8List.fromList(bytes));
+    } on StateError {
+      return null;
+    }
+    if (receipt.result == PtyWriteResult.backpressured) {
+      ++_writeBackpressureCount;
+      if (!_writeBackpressured) {
+        _writeBackpressured = true;
+        buffer.appendStatusLine('[terminal input is backpressured]');
+        _notifyChanged();
+      }
+      return receipt;
+    }
+    _writeBackpressured = false;
+    return receipt;
+  }
+
+  void _observeNativeDiagnostic(PtyDiagnosticEvent event) {
+    final TerminalSessionNativeObserver? observer = _nativeObserver;
+    if (observer == null) {
+      return;
+    }
+    try {
+      observer(
+        TerminalSessionNativeObservation(
+          sessionId: id,
+          processId: processId,
+          event: event,
+        ),
+      );
+    } on Object {
+      // Diagnostics cannot change PTY ownership or shutdown behavior.
+    }
+  }
+
   void _sendSignal(PtySignal signal) {
     final PtyProcess? process = _process;
     if (!_live || _disposed || process == null) {
@@ -619,7 +730,10 @@ final class TerminalSession implements TerminalPaneSession {
     }
   }
 
-  void _observeLifecycle(TerminalSessionLifecycleStage stage) {
+  void _observeLifecycle(
+    TerminalSessionLifecycleStage stage, {
+    int? writeRequestId,
+  }) {
     final TerminalSessionLifecycleObserver? observer = _lifecycleObserver;
     if (observer == null) {
       return;
@@ -630,6 +744,7 @@ final class TerminalSession implements TerminalPaneSession {
           sessionId: id,
           stage: stage,
           processId: processId,
+          writeRequestId: writeRequestId,
         ),
       );
     } on Object {
