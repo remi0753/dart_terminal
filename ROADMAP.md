@@ -734,6 +734,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] CoreText/atlas/Metal resource rebuild integration
     （[`docs/phase4/resize-scale-font-rebuild.md`](docs/phase4/resize-scale-font-rebuild.md) を参照して実施）
 - [ ] cursor blink、visual bell、occlusion pause
+  - [x] cursor/BEL presentation metadata を strict damage protocol へ追加
+    （[`docs/phase4/cursor-bell-occlusion.md`](docs/phase4/cursor-bell-occlusion.md) を参照して実施）
+  - [ ] bounded animation clock と visibility/occlusion frame scheduling
+    （[`docs/phase4/cursor-bell-occlusion.md`](docs/phase4/cursor-bell-occlusion.md) を参照して実施）
 - [ ] device/shader/drawable failure recovery
 - [ ] frame timing、atlas hit rate、uploaded byte count の metrics
 

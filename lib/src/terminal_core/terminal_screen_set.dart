@@ -190,10 +190,15 @@ final class TerminalScreenSet {
 
   /// Resets both grids and returns presentation ownership to primary.
   void reset() {
+    final int visualBellGeneration =
+        primary.visualBellGeneration >= alternate.visualBellGeneration
+        ? primary.visualBellGeneration
+        : alternate.visualBellGeneration;
     primary.resetScreen();
     alternate.resetScreen();
     _activeKind = TerminalScreenKind.primary;
     _mode1049Active = false;
+    primary.synchronizeVisualBellGeneration(visualBellGeneration);
     primary.requestFullSnapshot();
     _transitionGeneration++;
   }
@@ -204,7 +209,9 @@ final class TerminalScreenSet {
     if (_activeKind == kind) {
       return false;
     }
+    final int visualBellGeneration = activeScreen.visualBellGeneration;
     _activeKind = kind;
+    activeScreen.synchronizeVisualBellGeneration(visualBellGeneration);
     activeScreen.requestFullSnapshot();
     return true;
   }

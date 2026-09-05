@@ -62,6 +62,12 @@ final class TerminalDamagePacket {
     required this.damagedRowCount,
     required this.damagedCellCount,
     required this.isFullSnapshot,
+    required this.cursorRow,
+    required this.cursorColumn,
+    required this.cursorShape,
+    required this.cursorVisible,
+    required this.cursorBlinking,
+    required this.visualBellGeneration,
     required Uint8List bytes,
   }) : _bytes = bytes;
 
@@ -72,6 +78,12 @@ final class TerminalDamagePacket {
   final int damagedRowCount;
   final int damagedCellCount;
   final bool isFullSnapshot;
+  final int cursorRow;
+  final int cursorColumn;
+  final TerminalCursorShape cursorShape;
+  final bool cursorVisible;
+  final bool cursorBlinking;
+  final int visualBellGeneration;
   final Uint8List _bytes;
 
   int get byteLength => _bytes.length;
@@ -105,6 +117,12 @@ final class TerminalDecodedDamage {
     required this.columns,
     required this.rows,
     required this.isFullSnapshot,
+    required this.cursorRow,
+    required this.cursorColumn,
+    required this.cursorShape,
+    required this.cursorVisible,
+    required this.cursorBlinking,
+    required this.visualBellGeneration,
     required this.rowRecordsOffset,
     required this.contentOffset,
     required this.foregroundOffset,
@@ -134,6 +152,12 @@ final class TerminalDecodedDamage {
   final int columns;
   final int rows;
   final bool isFullSnapshot;
+  final int cursorRow;
+  final int cursorColumn;
+  final TerminalCursorShape cursorShape;
+  final bool cursorVisible;
+  final bool cursorBlinking;
+  final int visualBellGeneration;
   final int rowRecordsOffset;
   final int contentOffset;
   final int foregroundOffset;
@@ -165,9 +189,14 @@ final class TerminalDecodedDamage {
 
 abstract final class TerminalDamageCodec {
   static const int magic = 0x44475444;
-  static const int version = 1;
-  static const int headerBytes = 80;
+  static const int version = 2;
+  static const int headerBytes = 104;
   static const int rowRecordBytes = 24;
+  static const int cursorShapeMask = 0x3;
+  static const int cursorVisibleFlag = 1 << 8;
+  static const int cursorBlinkingFlag = 1 << 9;
+  static const int cursorKnownMask =
+      cursorShapeMask | cursorVisibleFlag | cursorBlinkingFlag;
 
   /// Copies the current full/dirty screen state and then clears only the
   /// captured dirty intervals. A full-snapshot requirement remains set until a
@@ -195,7 +224,7 @@ abstract final class TerminalDamageCodec {
       rows.add(_CaptureRow(row, start, end));
       cellCount += end - start;
     }
-    if (rows.isEmpty) return null;
+    if (rows.isEmpty && !screen.presentationDamageRequired) return null;
     final _DamageLayout layout = _DamageLayout.compute(rows.length, cellCount);
     if (layout.totalBytes > limits.maximumPacketBytes) {
       throw StateError('damage packet byte limit exceeded');
@@ -220,6 +249,16 @@ abstract final class TerminalDamageCodec {
     data.setUint32(64, layout.widthFlagsOffset, Endian.little);
     data.setUint32(68, layout.totalBytes, Endian.little);
     data.setUint32(72, full ? 1 : 0, Endian.little);
+    data.setUint32(76, screen.cursorRow, Endian.little);
+    data.setUint32(80, screen.cursorColumn, Endian.little);
+    data.setUint32(
+      84,
+      screen.cursorShape.index |
+          (screen.cursorVisible ? cursorVisibleFlag : 0) |
+          (screen.cursorBlinking ? cursorBlinkingFlag : 0),
+      Endian.little,
+    );
+    data.setUint64(88, screen.visualBellGeneration, Endian.little);
     final Uint32List content = Uint32List.view(
       bytes.buffer,
       bytes.offsetInBytes + layout.contentOffset,
@@ -295,6 +334,12 @@ abstract final class TerminalDamageCodec {
       damagedRowCount: rows.length,
       damagedCellCount: cellCount,
       isFullSnapshot: full,
+      cursorRow: screen.cursorRow,
+      cursorColumn: screen.cursorColumn,
+      cursorShape: screen.cursorShape,
+      cursorVisible: screen.cursorVisible,
+      cursorBlinking: screen.cursorBlinking,
+      visualBellGeneration: screen.visualBellGeneration,
       bytes: bytes,
     );
     screen.clearDamage();
@@ -330,6 +375,11 @@ abstract final class TerminalDamageCodec {
     final int widthFlagsOffset = data.getUint32(64, Endian.little);
     final int totalBytes = data.getUint32(68, Endian.little);
     final int flags = data.getUint32(72, Endian.little);
+    final int cursorRow = data.getUint32(76, Endian.little);
+    final int cursorColumn = data.getUint32(80, Endian.little);
+    final int cursorFlags = data.getUint32(84, Endian.little);
+    final int cursorShape = cursorFlags & cursorShapeMask;
+    final int visualBellGeneration = data.getUint64(88, Endian.little);
     if (data.getUint32(0, Endian.little) != magic ||
         data.getUint16(4, Endian.little) != version ||
         data.getUint16(6, Endian.little) != headerBytes ||
@@ -340,16 +390,23 @@ abstract final class TerminalDamageCodec {
         (expectedResourceGeneration != null &&
             resourceGeneration != expectedResourceGeneration) ||
         flags & ~1 != 0 ||
-        data.getUint32(76, Endian.little) != 0 ||
+        cursorFlags & ~cursorKnownMask != 0 ||
+        cursorShape >= TerminalCursorShape.values.length ||
+        visualBellGeneration < 0 ||
+        visualBellGeneration > TerminalScreen.maxVisualBellGeneration ||
+        data.getUint64(96, Endian.little) != 0 ||
         totalBytes != bytes.length) {
       throw const TerminalDamageFormatException('invalid damage header');
     }
     _validateDimensionsForDecode(columns, rows, limits);
-    if (rowCount > rows || cellCount > limits.maximumCells) {
+    if (cursorRow >= rows ||
+        cursorColumn >= columns ||
+        rowCount > rows ||
+        cellCount > limits.maximumCells) {
       throw const TerminalDamageFormatException('damage counts exceed limits');
     }
     final bool full = flags == 1;
-    if ((!full && (rowCount == 0 || cellCount == 0)) ||
+    if ((!full && ((rowCount == 0) != (cellCount == 0))) ||
         (full && (rowCount != rows || cellCount != rows * columns))) {
       throw const TerminalDamageFormatException(
         'damage counts do not match snapshot kind',
@@ -475,6 +532,12 @@ abstract final class TerminalDamageCodec {
       columns: columns,
       rows: rows,
       isFullSnapshot: full,
+      cursorRow: cursorRow,
+      cursorColumn: cursorColumn,
+      cursorShape: TerminalCursorShape.values[cursorShape],
+      cursorVisible: cursorFlags & cursorVisibleFlag != 0,
+      cursorBlinking: cursorFlags & cursorBlinkingFlag != 0,
+      visualBellGeneration: visualBellGeneration,
       rowRecordsOffset: rowOffset,
       contentOffset: contentOffset,
       foregroundOffset: foregroundOffset,
@@ -579,12 +642,24 @@ final class TerminalDamageRenderModel {
   int _rows = 0;
   int _lastDamageGeneration = 0;
   int _requiredResourceGeneration = 0;
+  int _cursorRow = 0;
+  int _cursorColumn = 0;
+  TerminalCursorShape _cursorShape = TerminalCursorShape.block;
+  bool _cursorVisible = true;
+  bool _cursorBlinking = true;
+  int _visualBellGeneration = 0;
 
   bool get isInitialized => _content != null;
   int get columns => _columns;
   int get rows => _rows;
   int get lastDamageGeneration => _lastDamageGeneration;
   int get requiredResourceGeneration => _requiredResourceGeneration;
+  int get cursorRow => _cursorRow;
+  int get cursorColumn => _cursorColumn;
+  TerminalCursorShape get cursorShape => _cursorShape;
+  bool get cursorVisible => _cursorVisible;
+  bool get cursorBlinking => _cursorBlinking;
+  int get visualBellGeneration => _visualBellGeneration;
 
   int contentAt(int row, int column) => _content![_index(row, column)];
   int foregroundAt(int row, int column) => _foreground![_index(row, column)];
@@ -627,6 +702,9 @@ final class TerminalDamageRenderModel {
     if (_requiredResourceGeneration > damage.requiredResourceGeneration) {
       return _result(TerminalDamageApplyDisposition.needsFullSnapshot, damage);
     }
+    if (isInitialized && damage.visualBellGeneration < _visualBellGeneration) {
+      return _result(TerminalDamageApplyDisposition.needsFullSnapshot, damage);
+    }
     if (damage.isFullSnapshot) {
       return _applyFull(damage);
     }
@@ -655,6 +733,7 @@ final class TerminalDamageRenderModel {
     for (final _StagedDamageRow row in staged) {
       _publishRow(row);
     }
+    _publishPresentation(damage);
     _lastDamageGeneration = damage.damageGeneration;
     _requiredResourceGeneration = damage.requiredResourceGeneration;
     return _result(TerminalDamageApplyDisposition.applied, damage);
@@ -730,6 +809,7 @@ final class TerminalDamageRenderModel {
     _rowVersions = rowVersions;
     _rowFlags = rowFlags;
     _logicalLineIds = logicalLineIds;
+    _publishPresentation(damage);
     _lastDamageGeneration = damage.damageGeneration;
     _requiredResourceGeneration = damage.requiredResourceGeneration;
     return _result(TerminalDamageApplyDisposition.applied, damage);
@@ -818,6 +898,15 @@ final class TerminalDamageRenderModel {
     _rowVersions![row.row] = row.rowVersion;
     _rowFlags![row.row] = row.rowFlags;
     _logicalLineIds![row.row] = row.logicalLineId;
+  }
+
+  void _publishPresentation(TerminalDecodedDamage damage) {
+    _cursorRow = damage.cursorRow;
+    _cursorColumn = damage.cursorColumn;
+    _cursorShape = damage.cursorShape;
+    _cursorVisible = damage.cursorVisible;
+    _cursorBlinking = damage.cursorBlinking;
+    _visualBellGeneration = damage.visualBellGeneration;
   }
 
   TerminalDamageApplyResult _result(

@@ -330,7 +330,9 @@ final class TerminalDamageOutbox {
   bool isBoundToScreen(TerminalScreen screen) => identical(_screen, screen);
 
   bool get hasPendingDamage {
-    if (_screen.fullSnapshotRequired) return true;
+    if (_screen.fullSnapshotRequired || _screen.presentationDamageRequired) {
+      return true;
+    }
     for (int row = 0; row < _screen.rows; row++) {
       if (_screen.isRowDirty(row)) return true;
     }

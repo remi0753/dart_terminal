@@ -6,9 +6,127 @@ void main() => runTerminalDamageTests();
 
 void runTerminalDamageTests() {
   _testFullSparseAndRingDamage();
+  _testPresentationMetadataAndBell();
   _testAtomicApplicationAndGenerationOrdering();
   _testMalformedPackets();
   _testConfiguredLimits();
+}
+
+void _testPresentationMetadataAndBell() {
+  final TerminalScreen screen = TerminalScreen(rows: 3, columns: 6);
+  final TerminalDamageRenderModel model = TerminalDamageRenderModel();
+  final TerminalDamagePacket full = _capture(
+    screen,
+    damageGeneration: 1,
+    requiredResourceGeneration: 1,
+  );
+  _expect(
+    model
+        .apply(
+          TerminalDamageCodec.decode(full.copyBytes()),
+          availableResourceGeneration: 1,
+        )
+        .isApplied,
+    'presentation baseline applies',
+  );
+  screen.acknowledgeFullSnapshot();
+
+  screen.setCursorPosition(2, 4);
+  screen.setCursorPresentation(
+    shape: TerminalCursorShape.bar,
+    visible: false,
+    blinking: false,
+  );
+  final TerminalScreenParserSink sink = TerminalScreenParserSink(screen);
+  sink.execute(0x07);
+  sink.execute(0x07);
+  _expect(
+    sink.unsupportedControlCount == 0 && screen.visualBellGeneration == 2,
+    'BEL advances one bounded generation and is a supported control',
+  );
+
+  final TerminalDamagePacket presentation = _capture(
+    screen,
+    damageGeneration: 2,
+    requiredResourceGeneration: 1,
+  );
+  final TerminalDecodedDamage decoded = TerminalDamageCodec.decode(
+    presentation.copyBytes(),
+  );
+  _expect(
+    !presentation.isFullSnapshot &&
+        presentation.damagedRowCount == 0 &&
+        presentation.damagedCellCount == 0 &&
+        presentation.byteLength == TerminalDamageCodec.headerBytes,
+    'cursor and bell state use one canonical metadata-only packet',
+  );
+  _expect(
+    decoded.cursorRow == 2 &&
+        decoded.cursorColumn == 4 &&
+        decoded.cursorShape == TerminalCursorShape.bar &&
+        !decoded.cursorVisible &&
+        !decoded.cursorBlinking &&
+        decoded.visualBellGeneration == 2 &&
+        presentation.cursorRow == decoded.cursorRow &&
+        presentation.visualBellGeneration == decoded.visualBellGeneration,
+    'packet and decoded metadata retain exact cursor and bell state',
+  );
+  _expect(
+    model.apply(decoded, availableResourceGeneration: 1).isApplied &&
+        model.cursorRow == 2 &&
+        model.cursorColumn == 4 &&
+        model.cursorShape == TerminalCursorShape.bar &&
+        !model.cursorVisible &&
+        !model.cursorBlinking &&
+        model.visualBellGeneration == 2,
+    'metadata-only damage publishes renderer presentation atomically',
+  );
+  _expect(
+    TerminalDamageCodec.capture(
+          screen,
+          damageGeneration: 3,
+          requiredResourceGeneration: 1,
+        ) ==
+        null,
+    'captured presentation state does not emit duplicate packets',
+  );
+
+  final TerminalScreen regressed = TerminalScreen(rows: 3, columns: 6);
+  final TerminalDamagePacket regression = _capture(
+    regressed,
+    damageGeneration: 3,
+    requiredResourceGeneration: 1,
+  );
+  _expect(
+    model
+            .apply(
+              TerminalDamageCodec.decode(regression.copyBytes()),
+              availableResourceGeneration: 1,
+            )
+            .disposition ==
+        TerminalDamageApplyDisposition.needsFullSnapshot,
+    'a newer full packet cannot regress the retained bell generation',
+  );
+  _expect(
+    model.lastDamageGeneration == 2 && model.visualBellGeneration == 2,
+    'bell-generation rejection leaves the retained model unchanged',
+  );
+
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 2, columns: 4);
+  screens.primary.ringVisualBell();
+  screens.setAlternateMode47(true);
+  _expect(
+    screens.alternate.visualBellGeneration == 1,
+    'alternate-screen activation inherits the session bell sequence',
+  );
+  screens.alternate.ringVisualBell();
+  screens.setAlternateMode47(false);
+  final TerminalScreen resized = screens.primary.resized(rows: 3, columns: 5);
+  _expect(
+    screens.primary.visualBellGeneration == 2 &&
+        resized.visualBellGeneration == 2,
+    'buffer switches and reflow preserve monotonic bell generation',
+  );
 }
 
 void _testFullSparseAndRingDamage() {
@@ -363,11 +481,15 @@ void _testMalformedPackets() {
   );
 
   _expectFormat(
-    () => TerminalDamageCodec.decode(Uint8List(79)),
+    () => TerminalDamageCodec.decode(
+      Uint8List(TerminalDamageCodec.headerBytes - 1),
+    ),
     'truncated header',
   );
   _expectFormat(
-    () => TerminalDamageCodec.decode(packet.copyBytes().sublist(0, 100)),
+    () => TerminalDamageCodec.decode(
+      packet.copyBytes().sublist(0, packet.byteLength - 1),
+    ),
     'truncated payload',
   );
   final Uint8List trailing = Uint8List(packet.byteLength + 1);
@@ -385,7 +507,7 @@ void _testMalformedPackets() {
     _Corruption('magic', (ByteData data, Uint8List _) => data.setUint32(0, 0)),
     _Corruption(
       'version',
-      (ByteData data, Uint8List _) => data.setUint16(4, 2, Endian.little),
+      (ByteData data, Uint8List _) => data.setUint16(4, 1, Endian.little),
     ),
     _Corruption(
       'header length',
@@ -417,7 +539,7 @@ void _testMalformedPackets() {
     ),
     _Corruption(
       'row offset',
-      (ByteData data, Uint8List _) => data.setUint32(40, 88, Endian.little),
+      (ByteData data, Uint8List _) => data.setUint32(40, 112, Endian.little),
     ),
     _Corruption(
       'content offset',
@@ -453,33 +575,68 @@ void _testMalformedPackets() {
       (ByteData data, Uint8List _) => data.setUint32(72, 2, Endian.little),
     ),
     _Corruption(
+      'cursor row',
+      (ByteData data, Uint8List _) => data.setUint32(76, 3, Endian.little),
+    ),
+    _Corruption(
+      'cursor column',
+      (ByteData data, Uint8List _) => data.setUint32(80, 6, Endian.little),
+    ),
+    _Corruption(
+      'cursor shape',
+      (ByteData data, Uint8List _) => data.setUint32(84, 3, Endian.little),
+    ),
+    _Corruption(
+      'unknown cursor flag',
+      (ByteData data, Uint8List _) => data.setUint32(84, 1 << 10),
+    ),
+    _Corruption(
+      'bell generation',
+      (ByteData data, Uint8List _) =>
+          data.setUint64(88, 0xffffffffffffffff, Endian.little),
+    ),
+    _Corruption(
       'header reserved',
-      (ByteData data, Uint8List _) => data.setUint32(76, 1, Endian.little),
+      (ByteData data, Uint8List _) => data.setUint64(96, 1, Endian.little),
     ),
     _Corruption(
       'duplicate row',
-      (ByteData data, Uint8List _) => data.setUint32(80 + 24, 0, Endian.little),
+      (ByteData data, Uint8List _) => data.setUint32(
+        TerminalDamageCodec.headerBytes + 24,
+        0,
+        Endian.little,
+      ),
     ),
     _Corruption(
       'zero logical line',
-      (ByteData data, Uint8List _) => data.setUint32(80 + 8, 0, Endian.little),
+      (ByteData data, Uint8List _) =>
+          data.setUint32(TerminalDamageCodec.headerBytes + 8, 0, Endian.little),
     ),
     _Corruption(
       'noncontiguous cells',
-      (ByteData data, Uint8List _) =>
-          data.setUint32(80 + 24 + 12, 7, Endian.little),
+      (ByteData data, Uint8List _) => data.setUint32(
+        TerminalDamageCodec.headerBytes + 24 + 12,
+        7,
+        Endian.little,
+      ),
     ),
     _Corruption(
       'out-of-range span',
-      (ByteData data, Uint8List _) => data.setUint16(80 + 16, 6, Endian.little),
+      (ByteData data, Uint8List _) => data.setUint16(
+        TerminalDamageCodec.headerBytes + 16,
+        6,
+        Endian.little,
+      ),
     ),
     _Corruption(
       'unknown row flag',
-      (ByteData data, Uint8List _) => data.setUint8(80 + 20, 0x80),
+      (ByteData data, Uint8List _) =>
+          data.setUint8(TerminalDamageCodec.headerBytes + 20, 0x80),
     ),
     _Corruption(
       'row reserved',
-      (ByteData data, Uint8List _) => data.setUint8(80 + 21, 1),
+      (ByteData data, Uint8List _) =>
+          data.setUint8(TerminalDamageCodec.headerBytes + 21, 1),
     ),
     _Corruption(
       'style reserved ID',
@@ -587,7 +744,7 @@ void _testConfiguredLimits() {
       packetTooLarge,
       damageGeneration: 1,
       requiredResourceGeneration: 1,
-      limits: const TerminalDamageLimits(maximumPacketBytes: 100),
+      limits: const TerminalDamageLimits(maximumPacketBytes: 160),
     ),
     'capture enforces packet byte limit before publication',
   );
@@ -626,7 +783,7 @@ void _testConfiguredLimits() {
   _expectFormat(
     () => TerminalDamageCodec.decode(
       packet.copyBytes(),
-      limits: const TerminalDamageLimits(maximumPacketBytes: 100),
+      limits: const TerminalDamageLimits(maximumPacketBytes: 160),
     ),
     'decode enforces configured packet byte limit',
   );

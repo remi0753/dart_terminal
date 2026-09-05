@@ -5,6 +5,15 @@
 - Scope: prerequisite discovered during the damage-transfer subtask
 - Related: ADR-003, ADR-004, SCR-09, REN-04
 
+## Superseded format note
+
+The measurements below are the accepted version-1 wire evidence from this
+completed prerequisite. The later cursor/BEL presentation task deliberately
+introduced version 2 with a 104-byte header and a 1,704,904-byte full fixture;
+its replacement measurements are recorded in
+[`cursor-bell-occlusion.md`](cursor-bell-occlusion.md). The cell payload,
+ownership boundary, and 4-millisecond gates remain unchanged.
+
 ## Purpose
 
 Make the newly integrated product damage path satisfy the accepted Release AOT

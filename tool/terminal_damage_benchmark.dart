@@ -11,7 +11,7 @@ const int _cells = _rows * _columns;
 const int _warmupIterations = 8;
 const int _timedIterations = 64;
 const int _maximumP95Micros = 4000;
-const int _expectedPacketBytes = 1704880;
+const int _expectedPacketBytes = 1704904;
 const bool _releaseAot = bool.fromEnvironment('dart.vm.product');
 
 @pragma('vm:entry-point')

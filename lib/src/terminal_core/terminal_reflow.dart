@@ -351,6 +351,7 @@ TerminalScreen _buildReflowedScreen(
   target._cursorVisible = source._cursorVisible;
   target._cursorBlinking = source._cursorBlinking;
   target._cursorShape = source._cursorShape;
+  target._visualBellGeneration = source._visualBellGeneration;
 
   final int sharedColumns = source.columns < columns ? source.columns : columns;
   target._tabStops.setRange(0, sharedColumns, source._tabStops);

@@ -78,6 +78,8 @@ final class TerminalScreenParserSink
   void execute(int controlByte) {
     screen.breakGraphemeSequence();
     switch (controlByte) {
+      case 0x07:
+        screen.ringVisualBell();
       case 0x08:
         screen.backspace();
       case 0x09:

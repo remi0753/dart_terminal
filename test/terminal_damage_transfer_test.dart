@@ -200,6 +200,41 @@ void _testOneInFlightAndBoundedCoalescing() {
     outbox.inFlightCount == 0 && !outbox.hasPendingDamage,
     'coalesced transfer drains without a sender queue',
   );
+
+  screen.setCursorPosition(1, 9);
+  screen.ringVisualBell();
+  _expect(outbox.hasPendingDamage, 'presentation-only state is pending damage');
+  final TerminalDamageTransferEnvelope presentation = _transfer(
+    outbox,
+    resourceGeneration: 1,
+  );
+  final TerminalDecodedDamage presentationDamage =
+      TerminalDamageTransferEnvelope.decodeMessage(presentation.takeMessage())
+          .materializeDamage(expectedSessionId: session);
+  _expect(
+    presentationDamage.damagedRowCount == 0 &&
+        presentationDamage.damagedCellCount == 0 &&
+        presentationDamage.cursorRow == 1 &&
+        presentationDamage.cursorColumn == 9 &&
+        presentationDamage.visualBellGeneration == 1,
+    'outbox transfers metadata-only damage through the strict envelope',
+  );
+  _expect(
+    outbox
+        .acknowledge(
+          TerminalDamageAcknowledgement.applied(
+            sessionId: session,
+            damageGeneration: presentation.damageGeneration,
+            acceptedBytes: presentation.byteLength,
+          ),
+        )
+        .isAccepted,
+    'metadata-only transfer uses the normal exact ACK contract',
+  );
+  _expect(
+    outbox.inFlightCount == 0 && !outbox.hasPendingDamage,
+    'presentation ACK drains without a second sender queue',
+  );
 }
 
 void _testAcknowledgementValidation() {

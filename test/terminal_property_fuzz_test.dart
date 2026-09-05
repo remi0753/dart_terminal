@@ -77,8 +77,8 @@ TerminalPropertyFuzzResult runTerminalPropertyFuzzTests({
     result.machineLine() ==
         'TERMINAL_PROPERTY_FUZZ_PASS seed=0x4d595df4 generated=96 seeds=7 '
             'mutations=112 executions=837 parsed_bytes=66675 '
-            'state_hash=1724998591',
-    'property/fuzz result is deterministic',
+            'state_hash=1504754176',
+    'property/fuzz result is deterministic: ${result.machineLine()}',
   );
   return result;
 }

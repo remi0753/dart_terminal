@@ -129,6 +129,7 @@ final class TerminalScreen {
   static const int maxResourceId = 65534;
   static const int maxLogicalLineId = 0xffffffff;
   static const int maxRowVersion = 0xffffffff;
+  static const int maxVisualBellGeneration = 0x7fffffffffffffff;
 
   final int rows;
   final int columns;
@@ -172,6 +173,8 @@ final class TerminalScreen {
   int _generation = 1;
   bool _fullSnapshotRequired = true;
   int _fullSnapshotRequestEpoch = 1;
+  bool _presentationDamageRequired = true;
+  int _visualBellGeneration = 0;
 
   int _topMargin = 0;
   late int _bottomMargin = rows - 1;
@@ -209,6 +212,8 @@ final class TerminalScreen {
   int get generation => _generation;
   bool get fullSnapshotRequired => _fullSnapshotRequired;
   int get fullSnapshotRequestEpoch => _fullSnapshotRequestEpoch;
+  bool get presentationDamageRequired => _presentationDamageRequired;
+  int get visualBellGeneration => _visualBellGeneration;
   int get topMargin => _topMargin;
   int get bottomMargin => _bottomMargin;
   int get leftMargin => _leftMargin;
@@ -795,6 +800,17 @@ final class TerminalScreen {
     _cursorShape = nextShape;
     _cursorVisible = nextVisible;
     _cursorBlinking = nextBlinking;
+    _presentationDamageRequired = true;
+    _incrementGeneration();
+  }
+
+  /// Records one visual bell without queueing individual animation pulses.
+  void ringVisualBell() {
+    if (_visualBellGeneration == maxVisualBellGeneration) {
+      throw StateError('visual bell generation capacity exhausted');
+    }
+    _visualBellGeneration++;
+    _presentationDamageRequired = true;
     _incrementGeneration();
   }
 
@@ -876,6 +892,12 @@ final class TerminalScreen {
   void resetTerminalState() {
     breakGraphemeSequence();
     final bool reverseChanged = _reverseVideoMode;
+    final bool cursorPresentationChanged =
+        !_cursorVisible ||
+        !_cursorBlinking ||
+        _cursorShape != TerminalCursorShape.block ||
+        _cursorRow != 0 ||
+        _cursorColumn != 0;
     bool changed =
         _topMargin != 0 ||
         _bottomMargin != rows - 1 ||
@@ -926,6 +948,9 @@ final class TerminalScreen {
     _savedBackground = 0;
     _savedStyleId = 0;
     _writeDefaultTabStops();
+    if (cursorPresentationChanged) {
+      _presentationDamageRequired = true;
+    }
     if (reverseChanged) {
       _markEveryRowDirty();
     }
@@ -1477,6 +1502,7 @@ final class TerminalScreen {
   void clearDamage() {
     _dirtyStarts.fillRange(0, rows, columns);
     _dirtyEnds.fillRange(0, rows, 0);
+    _presentationDamageRequired = false;
   }
 
   /// Records that a renderer has accepted a complete snapshot of this screen.
@@ -1874,9 +1900,7 @@ final class TerminalScreen {
       }
       final int physical = _physicalRow(row);
       _clearCellRange(physical, column, column + 1);
-      _cursorRow = row;
-      _cursorColumn = column;
-      _wrapPending = false;
+      _setCursorUnchecked(row, column);
       _wrapToNextLine();
       row = _cursorRow;
       column = _cursorColumn;
@@ -2295,12 +2319,33 @@ final class TerminalScreen {
   }
 
   bool _setCursorUnchecked(int row, int column) {
-    final bool changed =
-        _cursorRow != row || _cursorColumn != column || _wrapPending;
+    final bool presentationChanged =
+        _cursorRow != row || _cursorColumn != column;
+    final bool changed = presentationChanged || _wrapPending;
     _cursorRow = row;
     _cursorColumn = column;
     _wrapPending = false;
+    if (presentationChanged) {
+      _presentationDamageRequired = true;
+    }
     return changed;
+  }
+
+  /// Advances this fixed-grid replacement to a known session bell sequence.
+  ///
+  /// The value may only move forward; callers use this when presentation
+  /// ownership moves between primary, alternate, or rebuilt screens.
+  void synchronizeVisualBellGeneration(int generation) {
+    RangeError.checkValueInInterval(
+      generation,
+      0,
+      maxVisualBellGeneration,
+      'generation',
+    );
+    if (generation <= _visualBellGeneration) return;
+    _visualBellGeneration = generation;
+    _presentationDamageRequired = true;
+    _incrementGeneration();
   }
 
   bool _clearWrapPending() {
