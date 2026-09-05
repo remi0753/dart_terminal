@@ -5,3 +5,13 @@ export 'src/runtime_lifecycle.dart' show RuntimeLifecycleScenario;
 export 'src/terminal_application.dart'
     show TerminalApplication, TerminalOptions, terminalUsage;
 export 'src/terminal_buffer.dart' show TerminalBuffer;
+export 'src/terminal_pane.dart'
+    show
+        PaneId,
+        TerminalPane,
+        TerminalPaneCloseDecision,
+        TerminalPaneOwner,
+        TerminalPaneSession,
+        TerminalPaneSessionFactory,
+        TerminalPaneState,
+        TerminalSessionId;

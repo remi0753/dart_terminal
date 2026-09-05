@@ -13,10 +13,140 @@ Future<void> main() async {
   _testHistoryNavigation();
   _testTranscriptLimitAndViewport();
   _testOptions();
+  await _testPaneIdentityOwnershipAndClosePolicy();
   await runRuntimeLifecycleTests().timeout(const Duration(seconds: 30));
   await _testCommandSession();
   await _testRealPtyCommandSession();
   stdout.writeln('dart_terminal tests passed');
+}
+
+Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
+  final TerminalPaneOwner owner = TerminalPaneOwner(initialPaneId: 40);
+  final List<_FakePaneSession> sessions = <_FakePaneSession>[];
+  var changed = 0;
+  var exitRequests = 0;
+  TerminalPane createPane() => owner.createPane(
+    sessionFactory:
+        (
+          TerminalSessionId id, {
+          required void Function() onChanged,
+          required void Function() onTerminated,
+        }) {
+          final _FakePaneSession session = _FakePaneSession(
+            id: id,
+            onChanged: onChanged,
+            onTerminated: onTerminated,
+          );
+          sessions.add(session);
+          return session;
+        },
+    onChanged: () {
+      ++changed;
+    },
+    onExitRequested: () {
+      ++exitRequests;
+    },
+  );
+
+  final TerminalPane first = createPane();
+  final TerminalPane second = createPane();
+  _expect(first.id == const PaneId(41), 'first monotonic pane ID');
+  _expect(second.id == const PaneId(42), 'second monotonic pane ID');
+  _expect(first.id != second.id, 'pane IDs are unique');
+  _expect(
+    first.sessionId ==
+        const TerminalSessionId(paneId: PaneId(41), generation: 1),
+    'session identity binds pane and generation',
+  );
+  _expect(owner.livePaneCount == 2, 'owner retains created panes');
+
+  final Future<void> firstStart = first.start();
+  _expect(identical(firstStart, first.start()), 'pane start is idempotent');
+  await firstStart;
+  _expect(first.state == TerminalPaneState.running, 'pane reaches running');
+  _expect(
+    sessions.first.startCount == 1,
+    'owner starts one session generation',
+  );
+
+  _expect(
+    first.requestClose() == TerminalPaneCloseDecision.confirmationRequired &&
+        first.state == TerminalPaneState.confirmationPending &&
+        sessions.first.confirmationCount == 1,
+    'first live close requires confirmation',
+  );
+  first.insertText('x');
+  _expect(
+    first.state == TerminalPaneState.running &&
+        sessions.first.insertedText.single == 'x',
+    'terminal interaction cancels close confirmation',
+  );
+  _expect(
+    first.requestClose() == TerminalPaneCloseDecision.confirmationRequired,
+    'close after interaction requires confirmation again',
+  );
+  _expect(
+    first.requestClose() == TerminalPaneCloseDecision.allow &&
+        first.state == TerminalPaneState.closing,
+    'second consecutive close is allowed',
+  );
+  await owner.disposePane(first);
+  await owner
+      .disposePane(first)
+      .then<void>(
+        (_) => throw StateError('removed pane disposal unexpectedly succeeded'),
+        onError: (Object error) {
+          _expect(error is StateError, 'removed pane is rejected by owner');
+        },
+      );
+  _expect(
+    sessions.first.disposeCount == 1 &&
+        first.state == TerminalPaneState.closed &&
+        owner.livePaneCount == 1,
+    'pane disposal is owned and idempotent',
+  );
+
+  await second.start();
+  sessions[1].finish();
+  _expect(
+    second.state == TerminalPaneState.exited && exitRequests == 1,
+    'natural session exit updates pane before requesting window close',
+  );
+  _expect(
+    second.requestClose() == TerminalPaneCloseDecision.allow,
+    'exited pane closes without confirmation',
+  );
+
+  final TerminalPane failed = createPane();
+  sessions[2].failStart = true;
+  try {
+    await failed.start();
+    throw StateError('failing pane session unexpectedly started');
+  } on StateError catch (error) {
+    _expect(
+      error.message == 'requested fake start failure',
+      'start failure remains observable',
+    );
+  }
+  _expect(
+    failed.state == TerminalPaneState.failed &&
+        failed.requestClose() == TerminalPaneCloseDecision.allow,
+    'failed pane closes without confirmation',
+  );
+  await owner.dispose();
+  await owner.dispose();
+  _expect(
+    owner.livePaneCount == 0 &&
+        sessions[1].disposeCount == 1 &&
+        sessions[2].disposeCount == 1,
+    'owner teardown reaches zero panes exactly once',
+  );
+  _expect(changed > 0, 'pane lifecycle emits view changes');
+  _expectThrows(
+    createPane,
+    'disposed owner refuses new pane publication',
+    expectedType: StateError,
+  );
 }
 
 void _testEditing() {
@@ -284,11 +414,121 @@ void _expect(bool condition, String description) {
   }
 }
 
-void _expectThrows(void Function() callback, String description) {
+void _expectThrows(
+  void Function() callback,
+  String description, {
+  Type expectedType = FormatException,
+}) {
   try {
     callback();
-  } on FormatException {
-    return;
+  } on Object catch (error) {
+    if (error.runtimeType == expectedType) {
+      return;
+    }
+    throw StateError(
+      'Expected $expectedType for $description, got ${error.runtimeType}',
+    );
   }
-  throw StateError('Expected FormatException: $description');
+  throw StateError('Expected $expectedType: $description');
+}
+
+final class _FakePaneSession implements TerminalPaneSession {
+  _FakePaneSession({
+    required this.id,
+    required void Function() onChanged,
+    required void Function() onTerminated,
+  }) : _onChanged = onChanged,
+       _onTerminated = onTerminated;
+
+  @override
+  final TerminalSessionId id;
+  final void Function() _onChanged;
+  final void Function() _onTerminated;
+  final List<String> insertedText = <String>[];
+
+  var startCount = 0;
+  var disposeCount = 0;
+  var confirmationCount = 0;
+  var failStart = false;
+  var _live = false;
+
+  @override
+  bool get isLive => _live;
+
+  @override
+  Future<void> start() async {
+    ++startCount;
+    if (failStart) {
+      throw StateError('requested fake start failure');
+    }
+    _live = true;
+  }
+
+  void finish() {
+    _live = false;
+    _onTerminated();
+  }
+
+  @override
+  String render() => '';
+
+  @override
+  void insertText(String value) {
+    insertedText.add(value);
+    _onChanged();
+  }
+
+  @override
+  void deleteBackward() {}
+
+  @override
+  void deleteForward() {}
+
+  @override
+  void moveLeft() {}
+
+  @override
+  void moveRight() {}
+
+  @override
+  void moveToStart() {}
+
+  @override
+  void moveToEnd() {}
+
+  @override
+  void previousHistory() {}
+
+  @override
+  void nextHistory() {}
+
+  @override
+  Future<void> submit() async {}
+
+  @override
+  void interrupt() {}
+
+  @override
+  void suspend() {}
+
+  @override
+  void quitForegroundProcess() {}
+
+  @override
+  void sendEndOfFile() {}
+
+  @override
+  void resize({required int rows, required int columns}) {}
+
+  @override
+  void showCloseConfirmation() {
+    ++confirmationCount;
+    _onChanged();
+  }
+
+  @override
+  Future<void> dispose() async {
+    ++disposeCount;
+    _live = false;
+  }
 }

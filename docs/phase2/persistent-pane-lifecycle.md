@@ -1,6 +1,6 @@
 # Persistent pane lifecycle
 
-- Status: contract frozen; identity and ownership model not yet implemented
+- Status: identity and ownership model complete; persistent PTY integration next
 - Started: 2026-09-05
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 2 `session ID と pane ownership、close confirmation state`
@@ -193,3 +193,24 @@ so that close does not require confirmation.
 - Chose repeat-to-confirm in the terminal view because protocol v4 already
   supplies deferred close replies and no native alert is necessary. This keeps
   the application Dart-only and gives deterministic behavior to tests.
+
+### 2026-09-05 — identity, ownership, and close-policy model
+
+- Added typed `PaneId` and `TerminalSessionId` values. The application-owned
+  `TerminalPaneOwner` allocates monotonically increasing pane IDs, assigns one
+  initial session generation, retains each pane, rejects foreign removal, and
+  disposes every owned pane exactly once.
+- Added `TerminalPaneSession` as the narrow product-session contract and made
+  `TerminalPane` the only component that retains one implementation. App/UI
+  operations are forwarded through the pane, leaving no reason for later
+  AppKit code to retain a `PtyProcess` or mutable session independently.
+- Implemented idempotent start/dispose, explicit
+  `created/starting/running/confirmationPending/exited/failed/closing/closed`
+  state, natural-termination handling, and the repeat-to-confirm policy. Any
+  terminal interaction cancels a pending close before it is forwarded.
+- Deterministic tests prove monotonic unique IDs, pane/session binding, one
+  start, first-close rejection, interaction cancellation, second-close allow,
+  natural exit, start failure, foreign-pane rejection, and zero owned panes
+  after repeated teardown. `dart analyze`, the complete Dart test runner,
+  Dart-only source audit (`tracked=76`, `native_sources=0`), formatting, and
+  `git diff --check` pass.
