@@ -7,9 +7,43 @@ void runTerminalHistoryReflowTests() {
   _testWideGraphemeAndOneColumnAnchorStability();
   _testReflowRepaginationCapAndEvictedAnchor();
   _testSoftLinePrefixEvictionInvalidatesAnchor();
+  _testCursorPaddingSurvivesHistoryReflow();
   _testLogicalLineEpochPreventsResetAliasing();
   _testAlternateOwnershipAndInvalidResizeAtomicity();
   _testAnchorValidation();
+}
+
+void _testCursorPaddingSurvivesHistoryReflow() {
+  final TerminalScreenSet screens = TerminalScreenSet(
+    rows: 8,
+    columns: 13,
+    scrollback: TerminalScrollback(maxLines: 8, maxBytes: 32768, pageRows: 4),
+  );
+  final TerminalScreen screen = screens.primary;
+  screen.setCursorPosition(1, 4);
+  for (final int scalar in 'jq(Dd'.runes) {
+    screen.printScalar(scalar);
+  }
+
+  screens.resize(rows: 3, columns: 4);
+  _expect(
+    screens.scrollback.length == 3 &&
+        screens.scrollback.logicalCellOffsetAt(1) == 0 &&
+        screens.scrollback.logicalCellOffsetAt(2) == 4,
+    'cursor-significant canonical padding retains its logical extent',
+  );
+  screens.scrollback.validateCellTopology();
+  screens.primary.validateCellTopology();
+
+  screens.resize(rows: 3, columns: 21);
+  _expect(
+    screens.primary.contentAt(0, 4) == 0x6a &&
+        screens.primary.contentAt(0, 8) == 0x64,
+    'wider reflow restores content after retained cursor padding: '
+    '${_screenText(screens.primary).codeUnits}',
+  );
+  screens.scrollback.validateCellTopology();
+  screens.primary.validateCellTopology();
 }
 
 void _testCrossPageLogicalLineRoundTripAndAnchors() {

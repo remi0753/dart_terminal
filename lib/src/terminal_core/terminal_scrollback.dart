@@ -71,6 +71,21 @@ final class TerminalScrollback {
     return location.page.logicalCellOffsets[location.row];
   }
 
+  int _reflowRowExtentAt(int row) {
+    final _ScrollbackLocation location = _locate(row);
+    final int visibleExtent = location.page.rowExtent(location.row);
+    final int visibleLogicalCells = location.page.visibleLogicalCellCount(
+      location.row,
+    );
+    final int retainedLogicalCells = location.page.logicalCellCount(
+      location.row,
+    );
+    return (visibleExtent + retainedLogicalCells - visibleLogicalCells).clamp(
+      0,
+      location.page.columns,
+    );
+  }
+
   int contentAt(int row, int column) =>
       _cellValue(row, column, (_ScrollbackPage page) => page.content);
 
@@ -125,6 +140,11 @@ final class TerminalScrollback {
           throw StateError('invalid scrollback row metadata');
         }
         _validatePageRowTopology(page, row);
+        final int logicalCellCount = page.logicalCellCount(row);
+        if (logicalCellCount < page.visibleLogicalCellCount(row) ||
+            logicalCellCount > page.columns) {
+          throw StateError('invalid scrollback logical cell count');
+        }
         final int logicalLineId = page.logicalLineIds[row];
         final int logicalLineEpoch = page.logicalLineEpochs[row];
         final int logicalOffset = page.logicalCellOffsets[row];
@@ -224,7 +244,7 @@ final class TerminalScrollback {
 
     _ScrollbackPage? page = _tail;
     if (page == null || page.columns != source.columns || page.isFull) {
-      final int bytesPerRow = source.columns * 17 + 21;
+      final int bytesPerRow = source.columns * 17 + 23;
       final int capacity = _minimum3(
         pageRows,
         maxLines,
@@ -249,7 +269,12 @@ final class TerminalScrollback {
       page = allocated;
     }
 
-    page.appendScreenRow(source, row, logicalOffset);
+    page.appendScreenRow(
+      source,
+      row,
+      logicalOffset,
+      _reflowLogicalCellCount(_ReflowSource(source), row),
+    );
     _length++;
     _totalRowsAppended++;
     return true;
@@ -262,7 +287,7 @@ final class TerminalScrollback {
 
     _ScrollbackPage? page = _tail;
     if (page == null || page.columns != columns || page.isFull) {
-      final int bytesPerRow = columns * 17 + 21;
+      final int bytesPerRow = columns * 17 + 23;
       final int capacity = _minimum3(
         pageRows,
         maxLines,
@@ -448,7 +473,8 @@ final class _ScrollbackPage {
       rowFlags = Uint8List(capacity),
       logicalLineIds = Uint32List(capacity),
       logicalLineEpochs = Uint64List(capacity),
-      logicalCellOffsets = Uint64List(capacity) {
+      logicalCellOffsets = Uint64List(capacity),
+      logicalCellCounts = Uint16List(capacity) {
     widthFlags.fillRange(0, widthFlags.length, TerminalCellFlags.narrow);
   }
 
@@ -464,14 +490,20 @@ final class _ScrollbackPage {
   final Uint32List logicalLineIds;
   final Uint64List logicalLineEpochs;
   final Uint64List logicalCellOffsets;
+  final Uint16List logicalCellCounts;
   _ScrollbackPage? previous;
   _ScrollbackPage? next;
   int usedRows = 0;
 
   bool get isFull => usedRows == capacity;
-  int get allocatedBytes => capacity * (columns * 17 + 21);
+  int get allocatedBytes => capacity * (columns * 17 + 23);
 
-  void appendScreenRow(TerminalScreen source, int row, int logicalOffset) {
+  void appendScreenRow(
+    TerminalScreen source,
+    int row,
+    int logicalOffset,
+    int logicalCellCount,
+  ) {
     if (isFull || source.columns != columns) {
       throw StateError('incompatible scrollback page append');
     }
@@ -518,6 +550,7 @@ final class _ScrollbackPage {
     logicalLineIds[usedRows] = source._logicalLineIds[sourcePhysical];
     logicalLineEpochs[usedRows] = source._logicalLineEpochs[sourcePhysical];
     logicalCellOffsets[usedRows] = logicalOffset;
+    logicalCellCounts[usedRows] = logicalCellCount;
     usedRows++;
   }
 
@@ -557,6 +590,7 @@ final class _ScrollbackPage {
     logicalLineIds[usedRows] = row.logicalLineId;
     logicalLineEpochs[usedRows] = row.logicalLineEpoch;
     logicalCellOffsets[usedRows] = row.logicalOffset;
+    logicalCellCounts[usedRows] = row.cells.length;
     usedRows++;
   }
 
@@ -577,7 +611,9 @@ final class _ScrollbackPage {
     return extent;
   }
 
-  int logicalCellCount(int row) {
+  int logicalCellCount(int row) => logicalCellCounts[row];
+
+  int visibleLogicalCellCount(int row) {
     final int start = row * columns;
     final int extent = rowExtent(row);
     int count = 0;

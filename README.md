@@ -78,8 +78,9 @@ pane-owned persistent login shell です。Phase 0 の native spike source は�
 - historyとprimary/alternate grid、Unicode resource、mode/cursor/parser countを
   網羅し、行・cell・resource・出力上限を持つversion 1 terminal-state snapshotと、
   最初の相違位置・escaped contextを返すbounded comparison diagnostics
-- 厳密検証するbyte-exact product parser corpus manifestと、review済みsnapshotを
-  whole・全single split・bytewiseで再生する非書換えharness
+- 厳密検証するbyte-exact product parser corpus manifest、shell/less/top/vimの
+  review済み記録snapshotをwhole・全single split・bytewiseで再生する非書換えharness、
+  固定seedのproperty testと境界別fuzz seed/mutation corpus
 
 ## 起動
 

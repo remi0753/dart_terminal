@@ -432,6 +432,9 @@ List<_ReflowLine> _extractReflowLines(_ReflowSource source) {
 }
 
 int _reflowRowExtent(_ReflowSource screen, int row) {
+  if (screen._isHistoryRow(row)) {
+    return screen.history!._reflowRowExtentAt(row);
+  }
   int extent = 0;
   for (int column = 0; column < screen.columnsAt(row); column++) {
     if (!_isCanonicalBlank(screen, row, column)) {

@@ -134,6 +134,30 @@ terminators. Missing, duplicate, unknown nonempty lines or control bytes make
 capture fail. This intentionally narrow sanitizer prevents an application or
 OS format change from being mistaken for reviewed fixture data.
 
+### Property and fuzz execution contract
+
+The property runner uses a locally implemented 32-bit xorshift generator with
+a named fixed seed; it does not depend on `Random` implementation details. It
+generates 96 bounded mixed byte streams from printable, C0, arbitrary, UTF-8,
+and structured VT fragments. Each case is run whole, bytewise, with a generated
+chunk plan, and by repeating that plan. Zero to two resize events are applied at
+exact byte offsets independently of chunk boundaries. Exact terminal snapshots,
+reply count/hash/maximum size, and topology/cap assertions form the result.
+
+A separate strict versioned manifest holds seven reviewed fuzz seeds spanning
+parser limits/recovery, malformed and valid UTF-8, palette/resource queries,
+alternate-screen/string cancellation, wide/grapheme resize-reflow, and bounded
+scrollback/editing. Each is replayed through the same plans and 16 same-length
+deterministic mutations. Seed files are limited to 32 cases, 4 KiB per case,
+16 KiB aggregate input, eight ordered resize events, and a bounded grid.
+
+Every arbitrary generated case also receives CAN, RIS, and a printable recovery
+sentinel in a fresh bounded screen, proving return to printable ground state
+without allowing the reset to hide topology/cap behavior in the original run.
+Failure messages contain the fixed seed, case index or reviewed seed ID, plan,
+and the existing bounded first-difference diagnostic; they do not dump arbitrary
+input or complete snapshots.
+
 ## Ordered subtasks
 
 1. **Bounded product corpus manifest and replay harness**
@@ -221,6 +245,26 @@ OS format change from being mistaken for reviewed fixture data.
   verbose hexadecimal review output into `head` produced an expected broken-pipe
   exception after the summary line; subsequent review consumes the complete
   output and does not use early-closing pipes.
+- 2026-09-05: the first generated property run reached a product invariant
+  failure while resizing after arbitrary input:
+  `TerminalScrollback.validateCellTopology` reported an invalid logical cell
+  offset from `resizeTerminalScreenWithHistory`. The harness initially lacked
+  the promised seed/case context for execution exceptions; that diagnostic is
+  being added before minimizing and fixing the reproducible product defect.
+- 2026-09-05: the failure reproduced as generated seed `0xe0d632c8`, case 7,
+  at byte offset 20 while narrowing an 8-by-13 screen to 3-by-4. Reduction
+  showed that cursor-addressed canonical blanks preceding five printable cells
+  were retained by reflow but became indistinguishable from unused blanks after
+  entering scrollback. The following soft-wrapped row therefore expected an
+  offset of zero instead of four. A two-byte per-row logical-cell-count field is
+  selected over converting blanks to spaces because it preserves terminal text
+  semantics while keeping page allocation and eviction accounting explicit.
+- 2026-09-05: the fix stores the retained logical-cell count in a bounded
+  `Uint16List` per scrollback page, includes its two bytes per row in allocation
+  and eviction accounting, validates it against visible topology and page
+  width, and uses it when later reflow extracts cursor-significant canonical
+  padding. The minimized 11-byte cursor-addressing case is now the seventh
+  reviewed fuzz seed and has a direct narrow/widen history regression test.
 
 ## Verification results
 
@@ -300,6 +344,47 @@ now the first unchecked child.
 
 This completes ordered subtask 2. Deterministic property tests and the fuzz seed
 corpus are now the first unchecked child.
+
+### Deterministic property tests and fuzz seed corpus
+
+- Added a dependency-free xorshift32 property runner with fixed root seed
+  `0x4d595df4`. Its 96 generated cases mix printable/C0/arbitrary bytes, valid
+  and malformed UTF-8, and structured CSI/OSC/DCS/alternate-screen/query
+  fragments. Whole, bytewise, generated chunks including empty chunks, and a
+  repeated generated plan produce exact matching snapshots and reply digests;
+  zero to two resize events are applied at byte-exact boundaries.
+- Every generated input is separately followed by CAN, RIS, and `RECOVER` on a
+  fresh 4-by-20 bounded terminal. The sentinel is verified in primary row zero
+  after bytewise feed. Every run finishes in parser ground, validates primary,
+  alternate, and scrollback topology, and checks the 8-line/32-KiB history,
+  256-style, 64-grapheme/512-scalar, 64-byte reply, 4,096-cell, and 512-KiB
+  snapshot caps.
+- Added a strict `dart-terminal-product-fuzz-seeds` version 1 manifest. It
+  rejects unknown schema, duplicate/invalid IDs, malformed/empty/over-4-KiB
+  hex, over-16-KiB aggregate input, more than 32 seeds or eight resizes, and
+  unordered/out-of-range/oversized resize grids. Seven reviewed seeds cover
+  parser limits, UTF-8, resources/replies, strings/alternate ownership,
+  wide/grapheme reflow, history/editing/eviction, and the minimized
+  cursor-padding defect. Sixteen same-length deterministic mutations per seed
+  retain resize offsets and exercise the same whole/generated/bytewise oracle.
+- The initial property run found a real history-reflow defect at generated seed
+  `0xe0d632c8`, case 7, byte 20. Scrollback now retains each row's logical cell
+  count in a two-byte typed field, validates it, includes it in byte-cap/page
+  allocation, and uses it to recover cursor-significant canonical padding on
+  later reflow. Existing allocation expectations were updated, and the minimal
+  11-byte narrow/widen test proves both valid offsets and restored padding.
+- The stable result is 96 generated cases, 7 reviewed seeds, 112 mutations,
+  837 parser executions, 66,675 parsed bytes, and state hash `1724998591`.
+  Static analysis passed and two consecutive dedicated Make target runs emitted
+  the identical machine line. The focused suite compiled and passed in Release
+  AOT at `/private/tmp/dart-terminal-property-fuzz-test`. `make test` passed
+  table freshness, formatting of 73 files with zero changes, full analysis,
+  all unit/integration tests, and the real PTY suite.
+- Final staged-diff whitespace validation passed. The staged-source Dart-only
+  audit passed with 142 tracked files and zero native source files.
+
+This completes ordered subtask 3. The product parser Release AOT throughput and
+Phase 3 exit audit are now the first unchecked child.
 
 ## Risks and handoff
 

@@ -203,7 +203,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| QA-01 | byte corpus、all chunk splits、property/fuzz、snapshot diagnostics | P0 | 3/6 | parser tests, `G:src/terminal/snapshot/`, `G:test/fuzz-libghostty/` | product parser全family・UTF-8 precedence、version 1 final-state/diagnostics、4件のreview済みsemantic corpusをall-split/bytewise検証。app recording/property/fuzzは後続 |
+| QA-01 | byte corpus、all chunk splits、property/fuzz、snapshot diagnostics | P0 | 3/6 | parser tests, `G:src/terminal/snapshot/`, `G:test/fuzz-libghostty/` | product parser全family・UTF-8 precedence、version 1 final-state/diagnostics、4件のsemantic corpusとshell/less/top/vim記録をall-split/bytewise検証。固定seed property、7件の境界別fuzz seed、112 mutationを完了。black-box differentialはPhase 6 |
 | QA-02 | xterm/Ghostty/Kitty black-box differential と real-app matrix。bug を最小 byte regression に還元 | P1 | 6 | `G:src/terminal/` tests and VT C examples | 未実装 |
 | PERF-01 | parser AOT ≥100 MiB/s、AppKit event p95 <1 ms、key→PTY p95 <2 ms | P0 | 0–11 | `G:src/benchmark/`, `G:macos/Tests/BenchmarkTests.swift` | Phase 0 harness |
 | PERF-02 | 100 MiB burst で UI hang 0、bounded memory/queue。1 pane flood が他 pane latency を2倍にしない | P0/P1 | 2/7/11 | Ghostty termio/renderer threaded design | PTY reactorの連続output下force-close fairness完了。100 MiB/UI/複数paneは後続 |

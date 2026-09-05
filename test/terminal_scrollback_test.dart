@@ -88,7 +88,7 @@ void _testPageStorageFidelityAndLineEviction() {
     'row metadata is copied exactly',
   );
   _expect(
-    history.allocatedBytes == 2 * (4 * 17 + 21),
+    history.allocatedBytes == 2 * (4 * 17 + 23),
     'allocated bytes count full typed page capacity',
   );
   final int graphemeId = screens.graphemeTable.intern(const <int>[
@@ -147,7 +147,7 @@ void _testPageStorageFidelityAndLineEviction() {
 }
 
 void _testByteCapAndUnrepresentableRows() {
-  const int threeColumnPageBytes = 2 * (3 * 17 + 21);
+  const int threeColumnPageBytes = 2 * (3 * 17 + 23);
   final TerminalScrollback bounded = TerminalScrollback(
     maxLines: 10,
     maxBytes: threeColumnPageBytes * 2,
@@ -185,7 +185,7 @@ void _testByteCapAndUnrepresentableRows() {
   changing.primary.setNarrowCell(0, 0, 0x58);
   changing.primary.scrollUp(1);
   _expect(
-    tiny.length == 1 && tiny.pageCount == 1 && tiny.allocatedBytes == 55,
+    tiny.length == 1 && tiny.pageCount == 1 && tiny.allocatedBytes == 57,
     'byte cap reduces page capacity for a representable row',
   );
   final int generation = tiny.generation;
@@ -225,7 +225,7 @@ void _testRepeatedPageEvictionStaysBounded() {
         history.pageCount == 4 &&
         history.logicalLineIdAt(0) == 4081 &&
         history.logicalLineIdAt(15) == 4096 &&
-        history.allocatedBytes == 4 * 4 * (2 * 17 + 21),
+        history.allocatedBytes == 4 * 4 * (2 * 17 + 23),
     'repeated page eviction remains bounded and ordered',
   );
   history.validateCellTopology();

@@ -680,7 +680,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （[`docs/phase3/parser-corpus-property-fuzz.md`](docs/phase3/parser-corpus-property-fuzz.md) を参照して実施）
   - [x] recorded shell、less、top、vim streams
     （[`docs/phase3/parser-corpus-property-fuzz.md`](docs/phase3/parser-corpus-property-fuzz.md) を参照して実施）
-  - [ ] deterministic property tests と fuzz seed corpus
+  - [x] deterministic property tests と fuzz seed corpus
     （[`docs/phase3/parser-corpus-property-fuzz.md`](docs/phase3/parser-corpus-property-fuzz.md) を参照して実施）
   - [ ] product parser Release AOT throughput と Phase 3 exit audit
     （[`docs/phase3/parser-corpus-property-fuzz.md`](docs/phase3/parser-corpus-property-fuzz.md) を参照して実施）
