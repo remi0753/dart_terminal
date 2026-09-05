@@ -95,7 +95,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | SCR-09 | row/range damage と monotonic generation。全画面転送を通常 path にしない | P0 | 3/4 | `G:src/terminal/render.zig`, `G:src/renderer/row.zig` | clean→dirty時だけ進むrow version、coalesced半開区間、monotonic screen generation基盤を完了。wire/rendererは後続 |
 | SCR-10 | underline color、overline、protected/selective erase | P1 | 6 | `G:src/terminal/style.zig`, `G:src/terminal/Terminal.zig` | 未実装 |
 | SCR-11 | hyperlink、semantic prompt、search、selection anchor/word/line semantics | P1 | 3/6 | `G:src/terminal/hyperlink.zig`, `G:src/terminal/search/`, `G:src/terminal/Selection.zig` | cell/word/logical-line selection、semantic row hint、bounded exact forward/backward searchを完了。hyperlink tableと詳細semantic rangeは後続 |
-| SCR-12 | versioned snapshot/restore と readable formatter を test/debug oracle にする | P1 | 3 | `G:src/terminal/snapshot/`, `G:src/terminal/formatter.zig` | bounded version 1 terminal-state formatterを完了。comparison diagnosticsとrestoreは後続 |
+| SCR-12 | versioned snapshot/restore と readable formatter を test/debug oracle にする | P1 | 3 | `G:src/terminal/snapshot/`, `G:src/terminal/formatter.zig` | bounded version 1 terminal-state formatterとfirst-difference diagnosticsを完了。restoreは後続 |
 
 ## Queries、modes、modern terminal protocols
 
@@ -203,7 +203,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| QA-01 | byte corpus、all chunk splits、property/fuzz、snapshot diagnostics | P0 | 3/6 | parser tests, `G:src/terminal/snapshot/`, `G:test/fuzz-libghostty/` | product parserの全family・UTF-8 precedenceに加え、bounded version 1 final-state formatterをall-split/bytewise検証。comparison/corpus/property/fuzzは後続 |
+| QA-01 | byte corpus、all chunk splits、property/fuzz、snapshot diagnostics | P0 | 3/6 | parser tests, `G:src/terminal/snapshot/`, `G:test/fuzz-libghostty/` | product parser全family・UTF-8 precedence、bounded version 1 final-state formatter、first-difference diagnosticsをall-split/bytewise検証。corpus/property/fuzzは後続 |
 | QA-02 | xterm/Ghostty/Kitty black-box differential と real-app matrix。bug を最小 byte regression に還元 | P1 | 6 | `G:src/terminal/` tests and VT C examples | 未実装 |
 | PERF-01 | parser AOT ≥100 MiB/s、AppKit event p95 <1 ms、key→PTY p95 <2 ms | P0 | 0–11 | `G:src/benchmark/`, `G:macos/Tests/BenchmarkTests.swift` | Phase 0 harness |
 | PERF-02 | 100 MiB burst で UI hang 0、bounded memory/queue。1 pane flood が他 pane latency を2倍にしない | P0/P1 | 2/7/11 | Ghostty termio/renderer threaded design | PTY reactorの連続output下force-close fairness完了。100 MiB/UI/複数paneは後続 |

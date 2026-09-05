@@ -76,7 +76,8 @@ pane-owned persistent login shell です。Phase 0 の native spike source は�
 - session-owned screen set/parserへのraw PTY byte feed、従来text projectionとの
   single-subscription共存、generated replyのnative bounded write queue接続
 - historyとprimary/alternate grid、Unicode resource、mode/cursor/parser countを
-  網羅し、行・cell・resource・出力上限を持つversion 1 terminal-state snapshot
+  網羅し、行・cell・resource・出力上限を持つversion 1 terminal-state snapshotと、
+  最初の相違位置・escaped contextを返すbounded comparison diagnostics
 
 ## 起動
 

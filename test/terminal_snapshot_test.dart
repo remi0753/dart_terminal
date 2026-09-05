@@ -12,6 +12,9 @@ void runTerminalSnapshotTests() {
   _testFormattingDoesNotMutateTerminalState();
   _testSnapshotLimitsRejectIncompleteOracles();
   _testParserChunkPlansProduceIdenticalSnapshots();
+  _testSnapshotComparisonExactMatchAndMismatch();
+  _testSnapshotComparisonEndAndControlDiagnostics();
+  _testSnapshotComparisonLimitsAndTypedFailure();
 }
 
 void _testStandaloneSnapshotIsExactAndReadable() {
@@ -313,6 +316,122 @@ void _testParserChunkPlansProduceIdenticalSnapshots() {
   _expect(
     _parseSnapshot(input, List<int>.filled(input.length, 1)) == expected,
     'snapshot is identical for bytewise parser chunks',
+  );
+}
+
+void _testSnapshotComparisonExactMatchAndMismatch() {
+  const TerminalSnapshotComparator comparator = TerminalSnapshotComparator();
+  const String expected = 'header\nrow text="a b"\nmode=true\nend\n';
+  final TerminalSnapshotComparison match = comparator.compare(
+    expected,
+    expected,
+  );
+  _expect(
+    match.matches &&
+        match.firstDifferenceOffset == null &&
+        match.firstDifferenceLine == null &&
+        match.firstDifferenceColumn == null &&
+        match.diagnostic.isEmpty,
+    'exact comparison has an allocation-small success result',
+  );
+  match.requireMatch('matching snapshot');
+
+  const String actual = 'header\nrow text="a\tb"\nmode=true\nend\n';
+  final TerminalSnapshotComparison mismatch = comparator.compare(
+    expected,
+    actual,
+  );
+  _expect(!mismatch.matches, 'different whitespace does not compare equal');
+  _expect(
+    mismatch.firstDifferenceOffset == expected.indexOf(' b') &&
+        mismatch.firstDifferenceLine == 2 &&
+        mismatch.firstDifferenceColumn == 12,
+    'first difference exposes exact offset, line, and UTF-16 column',
+  );
+  _expect(
+    mismatch.diagnostic.contains(
+          'terminal snapshot mismatch at line 2, column 12 '
+          '(UTF-16 code units)',
+        ) &&
+        mismatch.diagnostic.contains('expected next: 0x0020 " "') &&
+        mismatch.diagnostic.contains(r'actual next:   0x0009 "\t"') &&
+        mismatch.diagnostic.contains(r'> 2 | "row text=\"a b\""') &&
+        mismatch.diagnostic.contains(r'> 2 | "row text=\"a\tb\""'),
+    'diagnostic makes whitespace visible in both bounded contexts',
+  );
+}
+
+void _testSnapshotComparisonEndAndControlDiagnostics() {
+  const TerminalSnapshotComparator comparator = TerminalSnapshotComparator();
+  final TerminalSnapshotComparison missingNewline = comparator.compare(
+    'same\n',
+    'same',
+  );
+  _expect(
+    missingNewline.firstDifferenceLine == 1 &&
+        missingNewline.firstDifferenceColumn == 5 &&
+        missingNewline.diagnostic.contains(r'expected next: 0x000a "\n"') &&
+        missingNewline.diagnostic.contains('actual next:   <end-of-snapshot>'),
+    'trailing newline versus end-of-snapshot is explicit',
+  );
+
+  final TerminalSnapshotComparison missingLine = comparator.compare(
+    'first\nsecond\n',
+    'first\n',
+  );
+  _expect(
+    missingLine.firstDifferenceLine == 2 &&
+        missingLine.firstDifferenceColumn == 1 &&
+        missingLine.diagnostic.contains('actual next:   <end-of-snapshot>') &&
+        missingLine.diagnostic.contains('> 2 | ""'),
+    'missing whole line receives an end marker at its expected line',
+  );
+}
+
+void _testSnapshotComparisonLimitsAndTypedFailure() {
+  const TerminalSnapshotComparator bounded = TerminalSnapshotComparator(
+    limits: TerminalSnapshotComparisonLimits(
+      maxSnapshotCharacters: 128,
+      maxDiagnosticCharacters: 160,
+      contextLines: 1,
+      maxContextLineCharacters: 12,
+    ),
+  );
+  final String expected = '${'a'.padRight(80, 'a')}X\nnext\n';
+  final String actual = '${'a'.padRight(80, 'a')}Y\nnext\n';
+  final TerminalSnapshotComparison mismatch = bounded.compare(expected, actual);
+  _expect(
+    mismatch.diagnostic.length <= 160 &&
+        mismatch.diagnostic.endsWith('… diagnostic truncated\n'),
+    'diagnostic truncation is explicit and within its hard cap',
+  );
+  var mismatchThrown = false;
+  try {
+    mismatch.requireMatch('bounded state oracle');
+  } on TerminalSnapshotMismatchException catch (error) {
+    mismatchThrown = true;
+    _expect(
+      error.description == 'bounded state oracle' &&
+          error.line == 1 &&
+          error.column == 81 &&
+          error.diagnostic == mismatch.diagnostic &&
+          !error.diagnostic.contains(expected),
+      'typed mismatch carries only bounded context and location',
+    );
+  }
+  _expect(mismatchThrown, 'requireMatch throws a typed mismatch');
+
+  _expectLimit(
+    () => bounded.compare('b'.padRight(129, 'b'), ''),
+    'expected snapshot characters',
+    129,
+    128,
+  );
+  _expectLimit(
+    () => bounded.compare('', 'b'.padRight(129, 'b')),
+    'actual snapshot characters',
+    129,
+    128,
   );
 }
 

@@ -464,44 +464,41 @@ void _testParserScreenIntegrationAcrossChunks() {
     0x5b,
     ...ascii.encode('0m'),
   ]);
-  const List<String> expected = <String>[
-    'ABCDEF',
-    'Q.Z.x.',
-    '12....',
-    'cursor=1,3 saved=1,3',
-    'margins=1,2,0,5',
-    'modes=true,false,true,false,false',
-    'cursorStyle=false,true,block wrap=false',
-    'tabs=3',
-    'counts=0,1,1,0,1,0',
-  ];
-
-  _expectList(
-    _parseScreen(input).snapshot,
-    expected,
-    'whole parser-to-screen snapshot',
-  );
-  for (int split = 0; split <= input.length; split++) {
-    _expectList(
-      _parseScreen(input, <int>[split, input.length - split]).snapshot,
-      expected,
-      'parser-to-screen split $split',
+  final String expected = _parseScreen(input);
+  for (final String expectedLine in const <String>[
+    'screen row=0 flags=soft-wrapped logical=1:1+0 text="ABCDEF"',
+    'screen row=1 flags=hard-break logical=1:1+6 text="Q Z x "',
+    'screen row=2 flags=- logical=1:3+0 text="12    "',
+    'screen cursor=1,3 saved=1,3',
+    'screen margins=1,2,0,5 '
+        'modes=origin:true,insert:false,autoWrap:true,'
+        'reverseVideo:false,horizontalMargins:false',
+    'screen cursor_style=block visible=false blinking=true '
+        'wrap_pending=false',
+    'screen tabs=3',
+    'parser unsupported_controls=0 unsupported_sequences=1 '
+        'cancel=1 limit=0 malformed=1 incomplete=0 '
+        'replies_accepted=0 replies_rejected=0',
+  ]) {
+    _expect(
+      expected.contains(expectedLine),
+      'whole parser-to-screen snapshot contains $expectedLine',
     );
   }
-  _expectList(
-    _parseScreen(input, List<int>.filled(input.length, 1)).snapshot,
-    expected,
-    'parser-to-screen bytewise chunks',
-  );
+  for (int split = 0; split <= input.length; split++) {
+    const TerminalSnapshotComparator()
+        .compare(
+          expected,
+          _parseScreen(input, <int>[split, input.length - split]),
+        )
+        .requireMatch('parser-to-screen split $split');
+  }
+  const TerminalSnapshotComparator()
+      .compare(expected, _parseScreen(input, List<int>.filled(input.length, 1)))
+      .requireMatch('parser-to-screen bytewise chunks');
 }
 
-final class _ScreenResult {
-  const _ScreenResult(this.snapshot);
-
-  final List<String> snapshot;
-}
-
-_ScreenResult _parseScreen(Uint8List input, [List<int>? chunks]) {
+String _parseScreen(Uint8List input, [List<int>? chunks]) {
   final TerminalScreen screen = TerminalScreen(rows: 3, columns: 6);
   final TerminalScreenParserSink sink = TerminalScreenParserSink(screen);
   final VtParser parser = VtParser(sink: sink);
@@ -512,7 +509,10 @@ _ScreenResult _parseScreen(Uint8List input, [List<int>? chunks]) {
   }
   _expect(offset == input.length, 'screen chunk plan consumes all input');
   parser.finish();
-  return _ScreenResult(_screenSnapshot(screen, sink));
+  return const TerminalSnapshotFormatter().formatScreen(
+    screen,
+    parserSink: sink,
+  );
 }
 
 TerminalScreenParserSink _parseInto(TerminalScreen screen, Uint8List input) {
@@ -523,33 +523,8 @@ TerminalScreenParserSink _parseInto(TerminalScreen screen, Uint8List input) {
   return sink;
 }
 
-List<String> _screenSnapshot(
-  TerminalScreen screen,
-  TerminalScreenParserSink sink,
-) => <String>[
-  for (int row = 0; row < screen.rows; row++) _rowText(screen, row),
-  'cursor=${screen.cursorRow},${screen.cursorColumn} '
-      'saved=${screen.savedCursorRow},${screen.savedCursorColumn}',
-  'margins=${screen.topMargin},${screen.bottomMargin},'
-      '${screen.leftMargin},${screen.rightMargin}',
-  'modes=${screen.modeEnabled(TerminalScreenMode.origin)},'
-      '${screen.modeEnabled(TerminalScreenMode.insert)},'
-      '${screen.modeEnabled(TerminalScreenMode.autoWrap)},'
-      '${screen.modeEnabled(TerminalScreenMode.reverseVideo)},'
-      '${screen.modeEnabled(TerminalScreenMode.horizontalMargins)}',
-  'cursorStyle=${screen.cursorVisible},${screen.cursorBlinking},'
-      '${screen.cursorShape.name} wrap=${screen.wrapPending}',
-  'tabs=${screen.isTabStop(3) ? 3 : '-'}',
-  'counts=${sink.unsupportedControlCount},${sink.unsupportedSequenceCount},'
-      '${sink.cancelCount},${sink.limitCount},${sink.malformedCount},'
-      '${sink.incompleteCount}',
-];
-
 String _screenKey(TerminalScreen screen, TerminalScreenParserSink? sink) =>
-    _screenSnapshot(
-      screen,
-      sink ?? TerminalScreenParserSink(screen),
-    ).join('\n');
+    const TerminalSnapshotFormatter().formatScreen(screen, parserSink: sink);
 
 String _rowText(TerminalScreen screen, int row) {
   final StringBuffer result = StringBuffer();
@@ -1018,22 +993,5 @@ void _expectThrowsStateError(void Function() action, String message) {
 void _expect(bool condition, String message) {
   if (!condition) {
     throw StateError('test failed: $message');
-  }
-}
-
-void _expectList(List<String> actual, List<String> expected, String message) {
-  if (actual.length != expected.length) {
-    throw StateError(
-      'test failed: $message; length ${actual.length} != ${expected.length}; '
-      'actual=$actual expected=$expected',
-    );
-  }
-  for (int index = 0; index < actual.length; index++) {
-    if (actual[index] != expected[index]) {
-      throw StateError(
-        'test failed: $message; index $index; '
-        'actual=$actual expected=$expected',
-      );
-    }
   }
 }

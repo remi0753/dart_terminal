@@ -43,6 +43,12 @@ export 'src/terminal_core/terminal_snapshot.dart'
         TerminalSnapshotFormatLimits,
         TerminalSnapshotFormatter,
         TerminalSnapshotLimitException;
+export 'src/terminal_core/terminal_snapshot_comparison.dart'
+    show
+        TerminalSnapshotComparator,
+        TerminalSnapshotComparison,
+        TerminalSnapshotComparisonLimits,
+        TerminalSnapshotMismatchException;
 export 'src/terminal_core/terminal_style.dart'
     show TerminalStyleAttributes, TerminalStyleTable, TerminalUnderlineStyle;
 export 'src/terminal_core/terminal_unicode.dart'

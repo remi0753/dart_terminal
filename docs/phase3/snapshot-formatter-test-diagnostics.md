@@ -1,6 +1,6 @@
 # Phase 3 — Snapshot formatter and readable test diagnostics
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-05
 - Scope: the first incomplete Phase 3 roadmap item after query/reply encoding
   and PTY write integration
@@ -177,6 +177,15 @@ later parser-corpus roadmap item must not begin until both are complete.
   correctly renders every blank as a space and records protection in the exact
   cell line; the test expectation was corrected to preserve this two-layer
   contract.
+- 2026-09-05: migration of the legacy parser-to-screen test initially copied
+  its old scalar-row assumptions into new semantic row expectations. The shared
+  formatter exposed the real soft-wrap/hard-break relationship and the second
+  row's retained logical-line offset. The reviewed expectations now assert
+  those stronger values; temporary full-snapshot failure output was removed.
+- 2026-09-05: formatter subtask completed in `69bb2d3`. The clean-worktree
+  ROADMAP, README, feature matrix, task memo, formatter, and legacy screen test
+  reread confirmed bounded comparison diagnostics and shared oracle migration
+  as the next unchecked child.
 
 ## Verification results
 
@@ -222,6 +231,43 @@ later parser-corpus roadmap item must not begin until both are complete.
 This completes ordered subtask 1. Bounded comparison diagnostics and migration
 of the shared product-state test oracle are now the first unchecked child.
 
+### Bounded comparison diagnostics and shared test oracle
+
+- Added a public `TerminalSnapshotComparator` that performs exact UTF-16 string
+  comparison under a default 16 Mi-character input cap. A match has an empty
+  diagnostic; a mismatch records the zero-based offset and one-based line and
+  UTF-16 column of the first differing code unit.
+- The diagnostic identifies the expected/actual next code unit, JSON-escapes
+  nearby lines so spaces, tabs, quotes, and newlines are reviewable, and bounds
+  context depth, per-line capture, and total output. Diagnostic truncation is
+  explicitly marked and never changes the equality result.
+- `TerminalSnapshotComparison.requireMatch` raises a typed
+  `TerminalSnapshotMismatchException` containing only the caller description,
+  first location, and bounded diagnostic—not either complete snapshot. This is
+  independent of an external test framework and can be reused by the next
+  corpus harness.
+- Focused comparison tests cover exact equality, a tab-versus-space mismatch,
+  trailing-newline and end-of-snapshot differences, one-based location, escaped
+  expected/actual context, total diagnostic truncation, comparison input caps,
+  and the typed assertion path.
+- The existing parser-to-screen integration no longer constructs its private
+  nine-line state approximation. It uses the shared version 1 formatter,
+  verifies reviewed semantic lines, then uses the comparator for every single
+  byte split and bytewise input. The migration strengthened coverage by
+  preserving soft-wrap, hard-break, and logical cell offset state that the old
+  scalar-row projection omitted.
+- Focused formatter/comparator and migrated screen suites passed. `dart analyze`
+  passed with no issues. `make test` passed dependency resolution, VT table
+  freshness, formatting of 69 files with zero changes, full analysis, all unit
+  and integration tests, and the real PTY suite. The focused diagnostic test
+  compiled and passed as a Release AOT executable at
+  `/private/tmp/dart-terminal-snapshot-diagnostics-test`.
+- `git diff --cached --check` passed. The final staged-source Dart-only audit
+  passed with 127 tracked files and zero native source files.
+
+This completes ordered subtask 2 and its parent. Parser corpus, property tests,
+and fuzz seeds are now the first unchecked roadmap item.
+
 ## Risks and handoff
 
 - Snapshot format changes are oracle changes. Once parser corpus fixtures adopt
@@ -229,3 +275,6 @@ of the shared product-state test oracle are now the first unchecked child.
   explicit fixture review.
 - Exact restore remains unimplemented; formatter output must not be described as
   a persistence or renderer wire format.
+- Comparison diagnostics intentionally use UTF-16 columns because Dart string
+  offsets use UTF-16 code units. The escaped context remains the preferred way
+  to inspect differences adjacent to supplementary-plane scalars.
