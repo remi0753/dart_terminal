@@ -89,6 +89,10 @@ void runFontShapingTests() {
       );
       for (final Object? scaleValue in scales) {
         final int scale = scaleValue! as int;
+        final TerminalGlyphRasterBatch rasters = catalog.rasterizeShaped(
+          shaped,
+          scale: scale.toDouble(),
+        );
         final int surfaceWidth = (catalog.metrics.cellWidth * cells * scale)
             .ceil();
         final int surfaceHeight = (catalog.metrics.cellHeight * 2 * scale)
@@ -99,7 +103,16 @@ void runFontShapingTests() {
               surfaceHeight > 0 &&
               baseline > 0 &&
               baseline < surfaceHeight &&
-              surfaceWidth * surfaceHeight <= 4 * 1024 * 1024,
+              surfaceWidth * surfaceHeight <= 4 * 1024 * 1024 &&
+              rasters.catalogGeneration == catalog.generation &&
+              rasters.scale16_16 == scale << 16 &&
+              rasters.glyphs.isNotEmpty &&
+              rasters.pixelByteLength <=
+                  TerminalRasterBufferV1.maximumOutputBytes &&
+              rasters.glyphs.any(
+                    (TerminalRasterizedGlyph glyph) => glyph.isColor,
+                  ) ==
+                  testCase['color'],
           '$identifier has bounded ${scale}x reference-surface geometry',
         );
         for (final TerminalShapedGlyph glyph in shaped.glyphs) {

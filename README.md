@@ -87,7 +87,8 @@ model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後�
   Dart-only reference rendererと、checksum付きversion 1 golden image oracle
 - generation-owned CoreText font catalog、actual/synthetic 4-style policy、
   CJK/color emoji fallback、bounded text resolveとcell/decorations metrics、
-  versioned whole-run shaping、UTF-16 cluster mapping、Dart-owned byte/entry LRU
+  versioned whole-run shaping、UTF-16 cluster mapping、Dart-owned byte/entry LRU、
+  batched 1x/2x CoreText alpha8/straight-RGBA8 glyph raster boundary
 
 ## 起動
 

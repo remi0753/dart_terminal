@@ -137,7 +137,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | --- | --- | --- | --- | --- | --- |
 | REN-01 | `MTKView`/Metal lifecycle、drawable resize/backing scale、device/shader/drawable failure path | P0 | 4 | `G:src/renderer/Metal.zig`, `G:macos/Sources/Helpers/MetalView.swift` | Phase 0 gate に加え、Phase 1 で system device を持つ paused/on-demand TerminalMetalView shell の生成・attach 境界を完了。renderer lifecycle/failure path は Phase 4 |
 | REN-02 | background、cell background、glyph、decoration、cursor、selection を packed instance で描画 | P0 | 4 | `G:src/renderer/shaders/shaders.metal`, `G:src/renderer/cell.zig` | Phase 0 gate |
-| REN-03 | grayscale/color atlas、growth/eviction/generation validation | P0 | 4 | `G:src/font/Atlas.zig`, `G:src/renderer/generic.zig` | Phase 0 gate |
+| REN-03 | grayscale/color atlas、growth/eviction/generation validation | P0 | 4 | `G:src/font/Atlas.zig`, `G:src/renderer/generic.zig` | ABI-v4 bounded batch alpha8/straight-RGBA8 CoreText rasterを完了。atlas retention/growth/evictionは同roadmap項目の次subtask |
 | REN-04 | damage coalescing、stale generation discard、full snapshot は recovery/resize のみ | P0 | 4 | `G:src/renderer/row.zig`, `G:src/renderer/State.zig`, `G:src/renderer/message.zig` | ADR gate |
 | REN-05 | double/triple buffering と submit token/fence。GPU 完了前に buffer を再利用しない | P0 | 4 | `G:src/renderer/metal/Frame.zig`, `G:src/renderer/metal/buffer.zig` | ADR gate |
 | REN-06 | vsync/frame pacing、cursor blink、occlusion pause、resume full redraw | P0 | 4 | `G:src/renderer/generic.zig`, `G:src/renderer/Thread.zig` | benchmark gate |
