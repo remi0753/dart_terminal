@@ -473,7 +473,7 @@ void _testParserScreenIntegrationAcrossChunks() {
     'modes=true,false,true,false,false',
     'cursorStyle=false,true,block wrap=false',
     'tabs=3',
-    'counts=0,2,1,0,1,0',
+    'counts=0,1,1,0,1,0',
   ];
 
   _expectList(

@@ -1,4 +1,5 @@
 import 'terminal_screen.dart';
+import 'terminal_style.dart';
 import 'vt_parser.dart';
 import 'vt_parser_table.dart';
 
@@ -85,6 +86,12 @@ final class TerminalScreenParserSink implements VtParserSink {
 
   @override
   void dispatchCsi(VtSequenceHeader sequence) {
+    if (sequence.privateMarker == null &&
+        sequence.intermediateCount == 0 &&
+        sequence.finalByte == 0x6d) {
+      _applySgr(sequence);
+      return;
+    }
     if (_hasSubparameters(sequence)) {
       _unsupportedSequenceCount++;
       return;
@@ -224,6 +231,261 @@ final class TerminalScreenParserSink implements VtParserSink {
       }
     }
   }
+
+  void _applySgr(VtSequenceHeader sequence) {
+    int attributes = screen.currentStyleAttributes;
+    int foreground = screen.currentForeground;
+    int background = screen.currentBackground;
+    if (sequence.parameters.length == 0) {
+      screen.resetCurrentRendition();
+      return;
+    }
+
+    int index = 0;
+    while (index < sequence.parameters.length) {
+      if (sequence.parameters.isSubparameter(index)) {
+        _unsupportedSequenceCount++;
+        index++;
+        continue;
+      }
+      final int parameter = sequence.parameters.valueAt(index) ?? 0;
+      switch (parameter) {
+        case 0:
+          attributes = 0;
+          foreground = 0;
+          background = 0;
+        case 1:
+          attributes |= TerminalStyleAttributes.bold;
+        case 2:
+          attributes |= TerminalStyleAttributes.faint;
+        case 3:
+          attributes |= TerminalStyleAttributes.italic;
+        case 4:
+          final _SgrUnderlineResult result = _parseSgrUnderline(
+            sequence,
+            index,
+          );
+          if (result.valid) {
+            attributes = TerminalStyleAttributes.withUnderline(
+              attributes,
+              result.underline,
+            );
+          } else {
+            _unsupportedSequenceCount++;
+          }
+          index = result.nextIndex;
+          continue;
+        case 5:
+        case 6:
+          attributes |= TerminalStyleAttributes.blink;
+        case 7:
+          attributes |= TerminalStyleAttributes.inverse;
+        case 8:
+          attributes |= TerminalStyleAttributes.conceal;
+        case 9:
+          attributes |= TerminalStyleAttributes.strike;
+        case 21:
+          attributes = TerminalStyleAttributes.withUnderline(
+            attributes,
+            TerminalUnderlineStyle.double,
+          );
+        case 22:
+          attributes &=
+              ~(TerminalStyleAttributes.bold | TerminalStyleAttributes.faint);
+        case 23:
+          attributes &= ~TerminalStyleAttributes.italic;
+        case 24:
+          attributes = TerminalStyleAttributes.withUnderline(
+            attributes,
+            TerminalUnderlineStyle.none,
+          );
+        case 25:
+          attributes &= ~TerminalStyleAttributes.blink;
+        case 27:
+          attributes &= ~TerminalStyleAttributes.inverse;
+        case 28:
+          attributes &= ~TerminalStyleAttributes.conceal;
+        case 29:
+          attributes &= ~TerminalStyleAttributes.strike;
+        case >= 30 && <= 37:
+          foreground = parameter - 30 + 1;
+        case 38:
+        case 48:
+          final _SgrColorResult result = _parseSgrColor(sequence, index);
+          if (result.valid) {
+            if (parameter == 38) {
+              foreground = result.color;
+            } else {
+              background = result.color;
+            }
+          } else {
+            _unsupportedSequenceCount++;
+          }
+          index = result.nextIndex;
+          continue;
+        case 39:
+          foreground = 0;
+        case >= 40 && <= 47:
+          background = parameter - 40 + 1;
+        case 49:
+          background = 0;
+        case >= 90 && <= 97:
+          foreground = parameter - 90 + 9;
+        case >= 100 && <= 107:
+          background = parameter - 100 + 9;
+        default:
+          _unsupportedSequenceCount++;
+      }
+      index++;
+    }
+    try {
+      screen.setCurrentRendition(
+        foreground: foreground,
+        background: background,
+        styleAttributes: attributes,
+      );
+    } on StateError {
+      _unsupportedSequenceCount++;
+    }
+  }
+
+  _SgrUnderlineResult _parseSgrUnderline(
+    VtSequenceHeader sequence,
+    int introducer,
+  ) {
+    final int first = introducer + 1;
+    if (first >= sequence.parameters.length ||
+        !sequence.parameters.isSubparameter(first)) {
+      return _SgrUnderlineResult(
+        valid: true,
+        underline: TerminalUnderlineStyle.single,
+        nextIndex: introducer + 1,
+      );
+    }
+    int end = first;
+    while (end < sequence.parameters.length &&
+        sequence.parameters.isSubparameter(end)) {
+      end++;
+    }
+    if (end != first + 1) {
+      return _SgrUnderlineResult(
+        valid: false,
+        underline: TerminalUnderlineStyle.none,
+        nextIndex: end,
+      );
+    }
+    final int variant = sequence.parameters.valueAt(first) ?? 1;
+    if (variant < 0 || variant >= TerminalUnderlineStyle.values.length) {
+      return _SgrUnderlineResult(
+        valid: false,
+        underline: TerminalUnderlineStyle.none,
+        nextIndex: end,
+      );
+    }
+    return _SgrUnderlineResult(
+      valid: true,
+      underline: TerminalUnderlineStyle.values[variant],
+      nextIndex: end,
+    );
+  }
+
+  _SgrColorResult _parseSgrColor(VtSequenceHeader sequence, int introducer) {
+    final int modeIndex = introducer + 1;
+    if (modeIndex >= sequence.parameters.length) {
+      return _SgrColorResult.invalid(sequence.parameters.length);
+    }
+    if (sequence.parameters.isSubparameter(modeIndex)) {
+      return _parseColonSgrColor(sequence, modeIndex);
+    }
+    final int? mode = sequence.parameters.valueAt(modeIndex);
+    if (mode == 5) {
+      final int valueIndex = modeIndex + 1;
+      final int next = (valueIndex + 1).clamp(0, sequence.parameters.length);
+      if (valueIndex < sequence.parameters.length &&
+          !sequence.parameters.isSubparameter(valueIndex)) {
+        final int? value = sequence.parameters.valueAt(valueIndex);
+        if (_isColorComponent(value)) {
+          return _SgrColorResult(
+            valid: true,
+            color: value! + 1,
+            nextIndex: next,
+          );
+        }
+      }
+      return _SgrColorResult.invalid(next);
+    }
+    if (mode == 2) {
+      final int next = (modeIndex + 4).clamp(0, sequence.parameters.length);
+      if (modeIndex + 3 < sequence.parameters.length) {
+        final int? red = sequence.parameters.valueAt(modeIndex + 1);
+        final int? green = sequence.parameters.valueAt(modeIndex + 2);
+        final int? blue = sequence.parameters.valueAt(modeIndex + 3);
+        if (!sequence.parameters.isSubparameter(modeIndex + 1) &&
+            !sequence.parameters.isSubparameter(modeIndex + 2) &&
+            !sequence.parameters.isSubparameter(modeIndex + 3) &&
+            _isColorComponent(red) &&
+            _isColorComponent(green) &&
+            _isColorComponent(blue)) {
+          return _SgrColorResult(
+            valid: true,
+            color: _directColor(red!, green!, blue!),
+            nextIndex: next,
+          );
+        }
+      }
+      return _SgrColorResult.invalid(next);
+    }
+    return _SgrColorResult.invalid(modeIndex + 1);
+  }
+
+  _SgrColorResult _parseColonSgrColor(
+    VtSequenceHeader sequence,
+    int modeIndex,
+  ) {
+    int end = modeIndex;
+    while (end < sequence.parameters.length &&
+        sequence.parameters.isSubparameter(end)) {
+      end++;
+    }
+    final int? mode = sequence.parameters.valueAt(modeIndex);
+    if (mode == 5 && end == modeIndex + 2) {
+      final int? value = sequence.parameters.valueAt(modeIndex + 1);
+      if (_isColorComponent(value)) {
+        return _SgrColorResult(valid: true, color: value! + 1, nextIndex: end);
+      }
+    }
+    if (mode == 2) {
+      int componentStart = modeIndex + 1;
+      if (end == modeIndex + 5) {
+        final int? colorSpace = sequence.parameters.valueAt(componentStart);
+        if (colorSpace != null && colorSpace != 0) {
+          return _SgrColorResult.invalid(end);
+        }
+        componentStart++;
+      }
+      if (end == componentStart + 3) {
+        final int? red = sequence.parameters.valueAt(componentStart);
+        final int? green = sequence.parameters.valueAt(componentStart + 1);
+        final int? blue = sequence.parameters.valueAt(componentStart + 2);
+        if (_isColorComponent(red) &&
+            _isColorComponent(green) &&
+            _isColorComponent(blue)) {
+          return _SgrColorResult(
+            valid: true,
+            color: _directColor(red!, green!, blue!),
+            nextIndex: end,
+          );
+        }
+      }
+    }
+    return _SgrColorResult.invalid(end);
+  }
+
+  static bool _isColorComponent(int? value) =>
+      value != null && value >= 0 && value <= 255;
+
+  static int _directColor(int red, int green, int blue) =>
+      0x80000000 | (red << 16) | (green << 8) | blue;
 
   void _setPrivateModes(VtSequenceHeader sequence, bool enabled) {
     if (sequence.parameters.length == 0) {
@@ -385,4 +647,31 @@ final class TerminalScreenParserSink implements VtParserSink {
     }
     return value;
   }
+}
+
+final class _SgrColorResult {
+  const _SgrColorResult({
+    required this.valid,
+    required this.color,
+    required this.nextIndex,
+  });
+
+  factory _SgrColorResult.invalid(int nextIndex) =>
+      _SgrColorResult(valid: false, color: 0, nextIndex: nextIndex);
+
+  final bool valid;
+  final int color;
+  final int nextIndex;
+}
+
+final class _SgrUnderlineResult {
+  const _SgrUnderlineResult({
+    required this.valid,
+    required this.underline,
+    required this.nextIndex,
+  });
+
+  final bool valid;
+  final TerminalUnderlineStyle underline;
+  final int nextIndex;
 }

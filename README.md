@@ -59,6 +59,8 @@ pane-owned persistent login shell です。Phase 0 の native spike source は�
   tab stop、coalesced row damage/versionとmonotonic screen generation基盤
 - top/bottom・optional left/right margin、origin/insert/autowrap/reverse-video、
   wrap-pending、cursor shape/blink/visibilityのtyped stateとatomic reset/clamp
+- bounded style ID table、current/saved rendition、P0 text attributes、ANSI
+  16/256色・truecolor・default colorのsemicolon/colon SGR適用
 
 ## 起動
 

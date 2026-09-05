@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'terminal_style.dart';
+
 /// Version-one width and cell flag values from the packed-grid contract.
 abstract final class TerminalCellFlags {
   static const int widthMask = 0x03;
@@ -38,25 +40,36 @@ enum TerminalCursorShape { block, underline, bar }
 /// tracking. This phase accepts only blank or width-one Unicode scalars;
 /// wide/grapheme mutation is introduced with the later Unicode/reflow task.
 final class TerminalScreen {
-  factory TerminalScreen({required int rows, required int columns}) {
+  factory TerminalScreen({
+    required int rows,
+    required int columns,
+    TerminalStyleTable? styleTable,
+  }) {
     _validateDimensions(rows, columns);
-    return TerminalScreen._(rows: rows, columns: columns);
+    return TerminalScreen._(
+      rows: rows,
+      columns: columns,
+      styleTable: styleTable ?? TerminalStyleTable(),
+    );
   }
 
-  TerminalScreen._({required this.rows, required this.columns})
-    : cellCount = rows * columns,
-      _content = Uint32List(rows * columns),
-      _foreground = Uint32List(rows * columns),
-      _background = Uint32List(rows * columns),
-      _styles = Uint16List(rows * columns),
-      _hyperlinks = Uint16List(rows * columns),
-      _widthFlags = Uint8List(rows * columns),
-      _rowVersions = Uint32List(rows),
-      _dirtyStarts = Uint16List(rows),
-      _dirtyEnds = Uint16List(rows),
-      _rowFlags = Uint8List(rows),
-      _logicalLineIds = Uint32List(rows),
-      _tabStops = Uint8List(columns) {
+  TerminalScreen._({
+    required this.rows,
+    required this.columns,
+    required this.styleTable,
+  }) : cellCount = rows * columns,
+       _content = Uint32List(rows * columns),
+       _foreground = Uint32List(rows * columns),
+       _background = Uint32List(rows * columns),
+       _styles = Uint16List(rows * columns),
+       _hyperlinks = Uint16List(rows * columns),
+       _widthFlags = Uint8List(rows * columns),
+       _rowVersions = Uint32List(rows),
+       _dirtyStarts = Uint16List(rows),
+       _dirtyEnds = Uint16List(rows),
+       _rowFlags = Uint8List(rows),
+       _logicalLineIds = Uint32List(rows),
+       _tabStops = Uint8List(columns) {
     _widthFlags.fillRange(0, cellCount, TerminalCellFlags.narrow);
     _dirtyStarts.fillRange(0, rows, columns);
     for (int row = 0; row < rows; row++) {
@@ -76,6 +89,7 @@ final class TerminalScreen {
   final int rows;
   final int columns;
   final int cellCount;
+  final TerminalStyleTable styleTable;
 
   final Uint32List _content;
   final Uint32List _foreground;
@@ -96,6 +110,12 @@ final class TerminalScreen {
   int _cursorColumn = 0;
   int _savedCursorRow = 0;
   int _savedCursorColumn = 0;
+  int _currentForeground = 0;
+  int _currentBackground = 0;
+  int _currentStyleId = 0;
+  int _savedForeground = 0;
+  int _savedBackground = 0;
+  int _savedStyleId = 0;
   late int _nextLogicalLineId;
   int _generation = 1;
   bool _fullSnapshotRequired = true;
@@ -118,6 +138,13 @@ final class TerminalScreen {
   int get cursorColumn => _cursorColumn;
   int get savedCursorRow => _savedCursorRow;
   int get savedCursorColumn => _savedCursorColumn;
+  int get currentForeground => _currentForeground;
+  int get currentBackground => _currentBackground;
+  int get currentStyleId => _currentStyleId;
+  int get currentStyleAttributes => styleTable.attributesAt(_currentStyleId);
+  int get savedForeground => _savedForeground;
+  int get savedBackground => _savedBackground;
+  int get savedStyleId => _savedStyleId;
   int get generation => _generation;
   bool get fullSnapshotRequired => _fullSnapshotRequired;
   int get topMargin => _topMargin;
@@ -241,18 +268,70 @@ final class TerminalScreen {
   }
 
   void saveCursor() {
-    if (_savedCursorRow == _cursorRow && _savedCursorColumn == _cursorColumn) {
+    if (_savedCursorRow == _cursorRow &&
+        _savedCursorColumn == _cursorColumn &&
+        _savedForeground == _currentForeground &&
+        _savedBackground == _currentBackground &&
+        _savedStyleId == _currentStyleId) {
       return;
     }
     _savedCursorRow = _cursorRow;
     _savedCursorColumn = _cursorColumn;
+    _savedForeground = _currentForeground;
+    _savedBackground = _currentBackground;
+    _savedStyleId = _currentStyleId;
     _incrementGeneration();
   }
 
   void restoreCursor() {
-    if (_setCursorUnchecked(_savedCursorRow, _savedCursorColumn)) {
+    bool changed = _setCursorUnchecked(_savedCursorRow, _savedCursorColumn);
+    if (_currentForeground != _savedForeground ||
+        _currentBackground != _savedBackground ||
+        _currentStyleId != _savedStyleId) {
+      _currentForeground = _savedForeground;
+      _currentBackground = _savedBackground;
+      _currentStyleId = _savedStyleId;
+      changed = true;
+    }
+    if (changed) {
       _incrementGeneration();
     }
+  }
+
+  /// Atomically updates the current SGR rendition.
+  void setCurrentRendition({
+    int? foreground,
+    int? background,
+    int? styleAttributes,
+  }) {
+    final int nextForeground = foreground ?? _currentForeground;
+    final int nextBackground = background ?? _currentBackground;
+    _validateColor(nextForeground, 'foreground');
+    _validateColor(nextBackground, 'background');
+    final int nextStyleId = styleAttributes == null
+        ? _currentStyleId
+        : styleTable.intern(styleAttributes);
+    if (_currentForeground == nextForeground &&
+        _currentBackground == nextBackground &&
+        _currentStyleId == nextStyleId) {
+      return;
+    }
+    _currentForeground = nextForeground;
+    _currentBackground = nextBackground;
+    _currentStyleId = nextStyleId;
+    _incrementGeneration();
+  }
+
+  void resetCurrentRendition() {
+    if (_currentForeground == 0 &&
+        _currentBackground == 0 &&
+        _currentStyleId == 0) {
+      return;
+    }
+    _currentForeground = 0;
+    _currentBackground = 0;
+    _currentStyleId = 0;
+    _incrementGeneration();
   }
 
   void homeCursor() {
@@ -462,6 +541,12 @@ final class TerminalScreen {
         _cursorColumn != 0 ||
         _savedCursorRow != 0 ||
         _savedCursorColumn != 0 ||
+        _currentForeground != 0 ||
+        _currentBackground != 0 ||
+        _currentStyleId != 0 ||
+        _savedForeground != 0 ||
+        _savedBackground != 0 ||
+        _savedStyleId != 0 ||
         !_tabStopsAreDefault();
 
     _topMargin = 0;
@@ -481,6 +566,12 @@ final class TerminalScreen {
     _cursorColumn = 0;
     _savedCursorRow = 0;
     _savedCursorColumn = 0;
+    _currentForeground = 0;
+    _currentBackground = 0;
+    _currentStyleId = 0;
+    _savedForeground = 0;
+    _savedBackground = 0;
+    _savedStyleId = 0;
     _writeDefaultTabStops();
     if (reverseChanged) {
       _markEveryRowDirty();
@@ -503,7 +594,14 @@ final class TerminalScreen {
     if (_insertMode) {
       insertCharacters(1);
     }
-    setNarrowCell(_cursorRow, _cursorColumn, scalar);
+    setNarrowCell(
+      _cursorRow,
+      _cursorColumn,
+      scalar,
+      foreground: _currentForeground,
+      background: _currentBackground,
+      style: _currentStyleId,
+    );
     if (_cursorColumn >= right) {
       if (_autoWrapMode && !_wrapPending) {
         _wrapPending = true;
@@ -1173,7 +1271,7 @@ final class TerminalScreen {
     for (int index = start; index < end; index++) {
       if (_content[index] != 0 ||
           _foreground[index] != 0 ||
-          _background[index] != 0 ||
+          _background[index] != _currentBackground ||
           _styles[index] != 0 ||
           _hyperlinks[index] != 0 ||
           _widthFlags[index] != TerminalCellFlags.narrow) {
@@ -1186,7 +1284,7 @@ final class TerminalScreen {
     }
     _content.fillRange(start, end, 0);
     _foreground.fillRange(start, end, 0);
-    _background.fillRange(start, end, 0);
+    _background.fillRange(start, end, _currentBackground);
     _styles.fillRange(start, end, 0);
     _hyperlinks.fillRange(start, end, 0);
     _widthFlags.fillRange(start, end, TerminalCellFlags.narrow);
