@@ -815,14 +815,14 @@ void _testNarrowCellStorageAndAtomicValidation() {
   screen.setNarrowCell(
     1,
     2,
-    0x1f600,
+    0x10400,
     foreground: 0x80112233,
     background: 256,
     style: 65534,
     hyperlink: 42,
     isProtected: true,
   );
-  _expect(screen.contentAt(1, 2) == 0x1f600, 'stored scalar');
+  _expect(screen.contentAt(1, 2) == 0x10400, 'stored scalar');
   _expect(screen.foregroundAt(1, 2) == 0x80112233, 'stored direct color');
   _expect(screen.backgroundAt(1, 2) == 256, 'stored palette color');
   _expect(screen.styleAt(1, 2) == 65534, 'stored maximum style ID');
@@ -836,7 +836,7 @@ void _testNarrowCellStorageAndAtomicValidation() {
   screen.setNarrowCell(
     1,
     2,
-    0x1f600,
+    0x10400,
     foreground: 0x80112233,
     background: 256,
     style: 65534,
@@ -848,13 +848,14 @@ void _testNarrowCellStorageAndAtomicValidation() {
   for (final void Function() mutate in <void Function()>[
     () => screen.setNarrowCell(1, 2, 0xd800),
     () => screen.setNarrowCell(1, 2, 0x110000),
+    () => screen.setNarrowCell(1, 2, 0x1f600),
     () => screen.setNarrowCell(1, 2, 0x41, foreground: 257),
     () => screen.setNarrowCell(1, 2, 0x41, background: 0x81000000),
     () => screen.setNarrowCell(1, 2, 0x41, style: 65535),
     () => screen.setNarrowCell(1, 2, 0x41, hyperlink: -1),
   ]) {
     _expectThrowsArgumentError(mutate, 'invalid cell field rejected');
-    _expect(screen.contentAt(1, 2) == 0x1f600, 'invalid write is atomic');
+    _expect(screen.contentAt(1, 2) == 0x10400, 'invalid write is atomic');
     _expect(screen.generation == generation, 'invalid write has no generation');
   }
 }

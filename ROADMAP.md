@@ -652,7 +652,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] wide/grapheme cells と resize/reflow
   - [x] Unicode 17 properties、grapheme breaker、bounded intern table
     （[`docs/phase3/wide-grapheme-resize-reflow.md`](docs/phase3/wide-grapheme-resize-reflow.md) を参照して実施）
-  - [ ] wide/continuation/grapheme mutation invariant
+  - [x] wide/continuation/grapheme mutation invariant
     （[`docs/phase3/wide-grapheme-resize-reflow.md`](docs/phase3/wide-grapheme-resize-reflow.md) を参照して実施）
   - [ ] primary/alternate resize と visible logical-line reflow
     （[`docs/phase3/wide-grapheme-resize-reflow.md`](docs/phase3/wide-grapheme-resize-reflow.md) を参照して実施）

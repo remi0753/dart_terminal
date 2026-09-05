@@ -157,6 +157,10 @@ completion commit. The parent remains incomplete until all three pass.
 
 - The SGR/palette/primary-alternate parent completed at `0e4a716`; the worktree
   was clean when this task started.
+- Unicode properties, breaker, and the bounded grapheme table completed in
+  `f9232b6`. The roadmap was reread from a clean worktree; wide/grapheme screen
+  mutation is now the first unchecked subtask, while resize/reflow remains
+  blocked on canonical cell topology.
 - Re-reading `ROADMAP.md` confirms this Unicode/resize item is the first
   unchecked task. Scrollback must not be implemented before this parent closes.
 - The package currently has no Unicode segmentation dependency. `dart:core`
@@ -185,6 +189,14 @@ completion commit. The parent remains incomplete until all three pass.
   failed because the local assertion incorrectly expected 770 cases. The
   upstream footer confirms 766; the assertion was corrected without changing
   the breaker.
+- Screen mutation currently exposes only caller-classified narrow writes. Raw
+  character insertion/deletion and partial rectangular row copies operate cell
+  by cell, so each can bisect a future wide pair unless mutation ranges are
+  expanded or repaired at their boundaries.
+- The first legacy screen test used emoji U+1F600 as a caller-classified narrow
+  cell. Enforcing the new width contract correctly rejected it; the storage
+  fixture now uses narrow supplementary U+10400 and separately asserts that a
+  wide emoji cannot enter through the narrow API.
 
 ## Decisions and alternatives
 
@@ -206,6 +218,20 @@ completion commit. The parent remains incomplete until all three pass.
   scalar count, and per-cluster length are separate hard limits; exact existing
   definitions remain available after exhaustion, while new definitions return
   `null` through the non-throwing path.
+- Print a base scalar immediately, then replace its lead content with an
+  immutable grapheme ID as later scalars extend it. A fixed pending buffer holds
+  zero-width prefixes; exhaustion drops only the unrepresentable extension and
+  closes the streaming cluster without throwing from the parser sink.
+- Expand erase ranges across any touched wide pair, and run a row-level repair
+  after shifting or partial row copies. This keeps cell moves simple while
+  ensuring clipping at either horizontal-margin edge cannot publish an orphan.
+- A two-column glyph that cannot fit at the current edge wraps before writing.
+  If the active region itself has only one column, or auto-wrap is disabled at
+  the edge, store narrow U+FFFD as an explicit containment policy.
+- Treat every non-print parser callback and every screen-buffer transition as a
+  streaming grapheme boundary. This prevents controls, malformed sequences, or
+  a return to a previously active buffer from extending a stale cell; grapheme
+  components inherit the presentation fields of their existing lead.
 
 ## Verification results
 
@@ -233,6 +259,29 @@ completion commit. The parent remains incomplete until all three pass.
 
 This completes ordered subtask 1. The parent remains open; screen mutation must
 now consume these properties and resources before resize/reflow begins.
+
+### Wide/continuation/grapheme screen mutation
+
+- Focused JIT tests passed direct atomic scalar/grapheme writes, presentation
+  field propagation, half-pair overwrite and erase, insert/delete character,
+  insert/delete line, full and partial-width scrolling, reset, screen switching,
+  one-column/no-wrap containment, and VS16 width growth at the last column.
+- Parser integration formed the expected combining, CJK, emoji ZWJ, regional-
+  indicator, Hangul, and Indic cells. The final state was identical for a whole
+  UTF-8 batch, every byte split position, and one-byte chunks.
+- Grapheme table exhaustion, an overlong combining stream, malformed UTF-8, and
+  control-separated components completed without an exception or invalid
+  topology. A deterministic 768-operation mutation sweep validated the entire
+  grid after every operation.
+- The dedicated suite compiled to and passed as a Release AOT executable.
+  `make test` also passed dependency resolution, VT table freshness, formatting
+  of 54 files, full analysis, and the combined test runner.
+- `git diff --cached --check` passed. The staged-source Dart-only audit passed
+  with 109 tracked files and zero native source files, including the new focused
+  test and every changed product path.
+
+This completes ordered subtask 2. The parent stays open until atomic primary/
+alternate resize and visible logical-line reflow pass.
 
 ## Risks and handoff
 

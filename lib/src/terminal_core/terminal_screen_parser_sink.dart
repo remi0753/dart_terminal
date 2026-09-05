@@ -47,11 +47,12 @@ final class TerminalScreenParserSink implements VtParserSink {
 
   @override
   void print(int scalar) {
-    screen.printNarrowScalar(scalar);
+    screen.printScalar(scalar);
   }
 
   @override
   void execute(int controlByte) {
+    screen.breakGraphemeSequence();
     switch (controlByte) {
       case 0x08:
         screen.backspace();
@@ -78,6 +79,7 @@ final class TerminalScreenParserSink implements VtParserSink {
 
   @override
   void dispatchEscape(VtEscapeSequence sequence) {
+    screen.breakGraphemeSequence();
     if (sequence.intermediateCount != 0) {
       _unsupportedSequenceCount++;
       return;
@@ -109,6 +111,7 @@ final class TerminalScreenParserSink implements VtParserSink {
 
   @override
   void dispatchCsi(VtSequenceHeader sequence) {
+    screen.breakGraphemeSequence();
     if (sequence.privateMarker == null &&
         sequence.intermediateCount == 0 &&
         sequence.finalByte == 0x6d) {
@@ -207,6 +210,7 @@ final class TerminalScreenParserSink implements VtParserSink {
 
   @override
   void dispatchOsc(VtStringSequence sequence) {
+    screen.breakGraphemeSequence();
     final int commandEnd = _findPayloadByte(sequence, 0, 0x3b);
     final int command = _parsePayloadDecimal(sequence, 0, commandEnd, 999);
     final bool hasPayload = commandEnd < sequence.payloadLength;
@@ -243,31 +247,37 @@ final class TerminalScreenParserSink implements VtParserSink {
 
   @override
   void dispatchDcs(VtDcsSequence sequence) {
+    screen.breakGraphemeSequence();
     _unsupportedSequenceCount++;
   }
 
   @override
   void dispatchString(VtStringSequence sequence) {
+    screen.breakGraphemeSequence();
     _unsupportedSequenceCount++;
   }
 
   @override
   void cancel(VtParserState state, int controlByte) {
+    screen.breakGraphemeSequence();
     _cancelCount++;
   }
 
   @override
   void limit(VtParserState state, VtParserLimitKind kind) {
+    screen.breakGraphemeSequence();
     _limitCount++;
   }
 
   @override
   void malformed(VtParserState state, int byte) {
+    screen.breakGraphemeSequence();
     _malformedCount++;
   }
 
   @override
   void incomplete(VtParserState state) {
+    screen.breakGraphemeSequence();
     _incompleteCount++;
   }
 

@@ -1,5 +1,6 @@
 import 'terminal_screen.dart';
 import 'terminal_style.dart';
+import 'terminal_unicode.dart';
 
 enum TerminalScreenKind { primary, alternate }
 
@@ -10,24 +11,30 @@ final class TerminalScreenSet {
     required int columns,
     TerminalStyleTable? styleTable,
     TerminalPalette? palette,
+    TerminalGraphemeTable? graphemeTable,
   }) {
     final TerminalStyleTable sharedStyles = styleTable ?? TerminalStyleTable();
     final TerminalPalette sharedPalette = palette ?? TerminalPalette();
+    final TerminalGraphemeTable sharedGraphemes =
+        graphemeTable ?? TerminalGraphemeTable();
     return TerminalScreenSet._(
       primary: TerminalScreen(
         rows: rows,
         columns: columns,
         styleTable: sharedStyles,
         palette: sharedPalette,
+        graphemeTable: sharedGraphemes,
       ),
       alternate: TerminalScreen(
         rows: rows,
         columns: columns,
         styleTable: sharedStyles,
         palette: sharedPalette,
+        graphemeTable: sharedGraphemes,
       ),
       styleTable: sharedStyles,
       palette: sharedPalette,
+      graphemeTable: sharedGraphemes,
     );
   }
 
@@ -36,12 +43,14 @@ final class TerminalScreenSet {
     required this.alternate,
     required this.styleTable,
     required this.palette,
+    required this.graphemeTable,
   });
 
   final TerminalScreen primary;
   final TerminalScreen alternate;
   final TerminalStyleTable styleTable;
   final TerminalPalette palette;
+  final TerminalGraphemeTable graphemeTable;
 
   TerminalScreenKind _activeKind = TerminalScreenKind.primary;
   bool _mode1049Active = false;
@@ -131,6 +140,8 @@ final class TerminalScreenSet {
   }
 
   bool _activate(TerminalScreenKind kind) {
+    primary.breakGraphemeSequence();
+    alternate.breakGraphemeSequence();
     if (_activeKind == kind) {
       return false;
     }

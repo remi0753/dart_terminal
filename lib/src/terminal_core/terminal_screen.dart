@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'terminal_style.dart';
+import 'terminal_unicode.dart';
 
 part 'terminal_palette.dart';
 
@@ -39,14 +40,15 @@ enum TerminalCursorShape { block, underline, bar }
 ///
 /// The screen is a single-writer object. Authoritative typed arrays remain
 /// private so every mutation participates in row damage and generation
-/// tracking. This phase accepts only blank or width-one Unicode scalars;
-/// wide/grapheme mutation is introduced with the later Unicode/reflow task.
+/// tracking. Wide cells and immutable grapheme definitions are mutated as
+/// atomic cell groups so no public operation can expose a split pair.
 final class TerminalScreen {
   factory TerminalScreen({
     required int rows,
     required int columns,
     TerminalStyleTable? styleTable,
     TerminalPalette? palette,
+    TerminalGraphemeTable? graphemeTable,
   }) {
     _validateDimensions(rows, columns);
     return TerminalScreen._(
@@ -54,6 +56,7 @@ final class TerminalScreen {
       columns: columns,
       styleTable: styleTable ?? TerminalStyleTable(),
       palette: palette ?? TerminalPalette(),
+      graphemeTable: graphemeTable ?? TerminalGraphemeTable(),
     );
   }
 
@@ -62,6 +65,7 @@ final class TerminalScreen {
     required this.columns,
     required this.styleTable,
     required this.palette,
+    required this.graphemeTable,
   }) : cellCount = rows * columns,
        _content = Uint32List(rows * columns),
        _foreground = Uint32List(rows * columns),
@@ -74,7 +78,8 @@ final class TerminalScreen {
        _dirtyEnds = Uint16List(rows),
        _rowFlags = Uint8List(rows),
        _logicalLineIds = Uint32List(rows),
-       _tabStops = Uint8List(columns) {
+       _tabStops = Uint8List(columns),
+       _pendingScalars = Uint32List(graphemeTable.maximumClusterLength) {
     _widthFlags.fillRange(0, cellCount, TerminalCellFlags.narrow);
     _dirtyStarts.fillRange(0, rows, columns);
     for (int row = 0; row < rows; row++) {
@@ -97,6 +102,7 @@ final class TerminalScreen {
   final int cellCount;
   final TerminalStyleTable styleTable;
   final TerminalPalette palette;
+  final TerminalGraphemeTable graphemeTable;
 
   final Uint32List _content;
   final Uint32List _foreground;
@@ -111,6 +117,8 @@ final class TerminalScreen {
   final Uint8List _rowFlags;
   final Uint32List _logicalLineIds;
   final Uint8List _tabStops;
+  final TerminalGraphemeBreaker _graphemeBreaker = TerminalGraphemeBreaker();
+  final Uint32List _pendingScalars;
 
   int _firstPhysicalRow = 0;
   int _cursorRow = 0;
@@ -140,6 +148,10 @@ final class TerminalScreen {
   bool _cursorVisible = true;
   bool _cursorBlinking = true;
   TerminalCursorShape _cursorShape = TerminalCursorShape.block;
+  int _pendingScalarCount = 0;
+  int _lastPrintRow = -1;
+  int _lastPrintColumn = -1;
+  int _lastPrintGeneration = 0;
 
   int get cursorRow => _cursorRow;
   int get cursorColumn => _cursorColumn;
@@ -153,6 +165,7 @@ final class TerminalScreen {
   int get savedBackground => _savedBackground;
   int get savedStyleId => _savedStyleId;
   int get paletteGeneration => palette.generation;
+  int get graphemeGeneration => graphemeTable.generation;
   int get defaultForegroundColor => palette.defaultForeground;
   int get defaultBackgroundColor => palette.defaultBackground;
   int get generation => _generation;
@@ -204,6 +217,59 @@ final class TerminalScreen {
 
   int logicalLineIdAt(int row) => _logicalLineIds[_physicalRowFor(row)];
 
+  /// Throws when any row violates the packed wide/continuation contract.
+  void validateCellTopology() {
+    for (int row = 0; row < rows; row++) {
+      final int physical = _physicalRow(row);
+      for (int column = 0; column < columns; column++) {
+        final int index = physical * columns + column;
+        final int flags = _widthFlags[index];
+        if ((flags & ~TerminalCellFlags.knownMask) != 0 ||
+            (flags & TerminalCellFlags.widthMask) ==
+                TerminalCellFlags.widthMask) {
+          throw StateError('invalid cell flags at $row,$column');
+        }
+        final int width = flags & TerminalCellFlags.widthMask;
+        final bool grapheme = flags & TerminalCellFlags.grapheme != 0;
+        if (width == TerminalCellFlags.continuation) {
+          if (_content[index] != 0 || grapheme || column == 0) {
+            throw StateError('orphan continuation at $row,$column');
+          }
+          final int lead = index - 1;
+          if ((_widthFlags[lead] & TerminalCellFlags.widthMask) !=
+                  TerminalCellFlags.wide ||
+              _foreground[index] != _foreground[lead] ||
+              _background[index] != _background[lead] ||
+              _styles[index] != _styles[lead] ||
+              _hyperlinks[index] != _hyperlinks[lead] ||
+              (_widthFlags[index] & TerminalCellFlags.protected) !=
+                  (_widthFlags[lead] & TerminalCellFlags.protected)) {
+            throw StateError('mismatched continuation at $row,$column');
+          }
+          continue;
+        }
+        if (width == TerminalCellFlags.wide) {
+          if (_content[index] == 0 || column + 1 >= columns) {
+            throw StateError('invalid wide lead at $row,$column');
+          }
+          final int continuation = index + 1;
+          if ((_widthFlags[continuation] & TerminalCellFlags.widthMask) !=
+              TerminalCellFlags.continuation) {
+            throw StateError('wide lead lacks continuation at $row,$column');
+          }
+          _validateCellContentWidth(index, 2, row, column);
+          continue;
+        }
+        if (grapheme && _content[index] == 0) {
+          throw StateError('blank cell has grapheme flag at $row,$column');
+        }
+        if (_content[index] != 0) {
+          _validateCellContentWidth(index, 1, row, column);
+        }
+      }
+    }
+  }
+
   /// Writes one canonical blank or width-one scalar cell.
   void setNarrowCell(
     int row,
@@ -215,32 +281,104 @@ final class TerminalScreen {
     int hyperlink = 0,
     bool isProtected = false,
   }) {
-    final int index = _cellIndex(row, column);
     _validateContent(content);
+    if (content != 0 && TerminalUnicode.scalarWidth(content) != 1) {
+      throw ArgumentError.value(
+        content,
+        'content',
+        'must have terminal width one',
+      );
+    }
     _validateColor(foreground, 'foreground');
     _validateColor(background, 'background');
     _validateResourceId(style, 'style');
     _validateResourceId(hyperlink, 'hyperlink');
-    final int flags =
-        TerminalCellFlags.narrow |
-        (isProtected ? TerminalCellFlags.protected : 0);
-    if (_content[index] == content &&
-        _foreground[index] == foreground &&
-        _background[index] == background &&
-        _styles[index] == style &&
-        _hyperlinks[index] == hyperlink &&
-        _widthFlags[index] == flags) {
-      return;
-    }
+    _setCellGroup(
+      row,
+      column,
+      content,
+      width: 1,
+      isGrapheme: false,
+      foreground: foreground,
+      background: background,
+      style: style,
+      hyperlink: hyperlink,
+      isProtected: isProtected,
+    );
+  }
 
-    _content[index] = content;
-    _foreground[index] = foreground;
-    _background[index] = background;
-    _styles[index] = style;
-    _hyperlinks[index] = hyperlink;
-    _widthFlags[index] = flags;
-    _markDirtyPhysical(index ~/ columns, column, column + 1);
-    _incrementGeneration();
+  /// Writes one width-two scalar and its continuation atomically.
+  void setWideCell(
+    int row,
+    int column,
+    int content, {
+    int foreground = 0,
+    int background = 0,
+    int style = 0,
+    int hyperlink = 0,
+    bool isProtected = false,
+  }) {
+    _validateContent(content);
+    if (content == 0 || TerminalUnicode.scalarWidth(content) != 2) {
+      throw ArgumentError.value(
+        content,
+        'content',
+        'must have terminal width two',
+      );
+    }
+    _validateColor(foreground, 'foreground');
+    _validateColor(background, 'background');
+    _validateResourceId(style, 'style');
+    _validateResourceId(hyperlink, 'hyperlink');
+    _setCellGroup(
+      row,
+      column,
+      content,
+      width: 2,
+      isGrapheme: false,
+      foreground: foreground,
+      background: background,
+      style: style,
+      hyperlink: hyperlink,
+      isProtected: isProtected,
+    );
+  }
+
+  /// Writes one previously interned width-one or width-two grapheme.
+  void setGraphemeCell(
+    int row,
+    int column,
+    int graphemeId, {
+    int foreground = 0,
+    int background = 0,
+    int style = 0,
+    int hyperlink = 0,
+    bool isProtected = false,
+  }) {
+    final int width = graphemeTable.widthAt(graphemeId);
+    if (width == 0) {
+      throw ArgumentError.value(
+        graphemeId,
+        'graphemeId',
+        'zero-width graphemes do not occupy a cell',
+      );
+    }
+    _validateColor(foreground, 'foreground');
+    _validateColor(background, 'background');
+    _validateResourceId(style, 'style');
+    _validateResourceId(hyperlink, 'hyperlink');
+    _setCellGroup(
+      row,
+      column,
+      graphemeId,
+      width: width,
+      isGrapheme: true,
+      foreground: foreground,
+      background: background,
+      style: style,
+      hyperlink: hyperlink,
+      isProtected: isProtected,
+    );
   }
 
   void setRowFlags(int row, int flags) {
@@ -573,6 +711,7 @@ final class TerminalScreen {
 
   /// Restores non-cell terminal state without erasing cell or row metadata.
   void resetTerminalState() {
+    breakGraphemeSequence();
     final bool reverseChanged = _reverseVideoMode;
     bool changed =
         _topMargin != 0 ||
@@ -632,37 +771,84 @@ final class TerminalScreen {
     }
   }
 
-  /// Prints a caller-classified width-one scalar at the cursor.
-  void printNarrowScalar(int scalar) {
-    _validateContent(scalar);
+  /// Ends the current streaming grapheme without changing visible state.
+  void breakGraphemeSequence() {
+    _graphemeBreaker.reset();
+    _pendingScalarCount = 0;
+    _lastPrintRow = -1;
+    _lastPrintColumn = -1;
+    _lastPrintGeneration = 0;
+  }
+
+  /// Classifies and prints one scalar, extending the preceding grapheme when
+  /// Unicode's streaming boundary rules require it.
+  void printScalar(int scalar) {
+    TerminalUnicode.validateScalar(scalar);
     if (scalar == 0) {
       throw ArgumentError.value(scalar, 'scalar', 'NUL is not printable');
     }
-    if (_wrapPending) {
-      _wrapToNextLine();
+    final bool boundary = _graphemeBreaker.addScalar(scalar);
+    if (boundary) {
+      _pendingScalarCount = 0;
+      _lastPrintRow = -1;
+      _lastPrintColumn = -1;
+      _lastPrintGeneration = 0;
+    } else if (_canExtendLastPrint()) {
+      if (_extendLastPrint(scalar)) {
+        return;
+      }
+      breakGraphemeSequence();
+      return;
     }
-    final int right = _horizontalRightForCursor();
-    if (_insertMode) {
-      insertCharacters(1);
-    }
-    setNarrowCell(
-      _cursorRow,
-      _cursorColumn,
-      scalar,
-      foreground: _currentForeground,
-      background: _currentBackground,
-      style: _currentStyleId,
-    );
-    if (_cursorColumn >= right) {
-      if (_autoWrapMode && !_wrapPending) {
-        _wrapPending = true;
-        _incrementGeneration();
+
+    final int width = TerminalUnicode.scalarWidth(scalar);
+    if (width == 0) {
+      if (_pendingScalarCount < _pendingScalars.length) {
+        _pendingScalars[_pendingScalarCount++] = scalar;
+      } else {
+        breakGraphemeSequence();
       }
       return;
     }
-    if (_setCursorUnchecked(_cursorRow, _cursorColumn + 1)) {
-      _incrementGeneration();
+
+    if (!boundary && _pendingScalarCount != 0) {
+      final List<int> combined = List<int>.generate(
+        _pendingScalarCount + 1,
+        (int index) =>
+            index < _pendingScalarCount ? _pendingScalars[index] : scalar,
+        growable: false,
+      );
+      final int? graphemeId = graphemeTable.tryIntern(combined);
+      _pendingScalarCount = 0;
+      if (graphemeId != null && graphemeTable.widthAt(graphemeId) != 0) {
+        _printNewCellGroup(
+          graphemeId,
+          graphemeTable.widthAt(graphemeId),
+          isGrapheme: true,
+        );
+        return;
+      }
+      breakGraphemeSequence();
     }
+    _printNewCellGroup(scalar, width, isGrapheme: false);
+  }
+
+  /// Prints a caller-classified width-one scalar at the cursor.
+  ///
+  /// This compatibility entry point deliberately starts and ends a grapheme;
+  /// streaming parser output should use [printScalar].
+  void printNarrowScalar(int scalar) {
+    _validateContent(scalar);
+    if (scalar == 0 || TerminalUnicode.scalarWidth(scalar) != 1) {
+      throw ArgumentError.value(
+        scalar,
+        'scalar',
+        'must be a nonzero terminal-width-one scalar',
+      );
+    }
+    breakGraphemeSequence();
+    _printNewCellGroup(scalar, 1, isGrapheme: false);
+    breakGraphemeSequence();
   }
 
   void moveCursorUp(int count) {
@@ -894,6 +1080,7 @@ final class TerminalScreen {
       _copyCell(physical, column - amount, physical, column);
     }
     _clearCellRange(physical, _cursorColumn, _cursorColumn + amount);
+    _repairRowTopology(physical);
     _markDirtyPhysical(physical, _cursorColumn, right + 1);
     _incrementGeneration();
   }
@@ -908,6 +1095,7 @@ final class TerminalScreen {
       _copyCell(physical, column + amount, physical, column);
     }
     _clearCellRange(physical, right - amount + 1, right + 1);
+    _repairRowTopology(physical);
     _markDirtyPhysical(physical, _cursorColumn, right + 1);
     _incrementGeneration();
   }
@@ -1034,6 +1222,7 @@ final class TerminalScreen {
   }
 
   void resetScreen() {
+    breakGraphemeSequence();
     resetTerminalState();
     _firstPhysicalRow = 0;
     _content.fillRange(0, cellCount, 0);
@@ -1273,6 +1462,261 @@ final class TerminalScreen {
     setLogicalLineId(_cursorRow, logicalLineId);
   }
 
+  void _setCellGroup(
+    int row,
+    int column,
+    int content, {
+    required int width,
+    required bool isGrapheme,
+    required int foreground,
+    required int background,
+    required int style,
+    required int hyperlink,
+    required bool isProtected,
+  }) {
+    final int index = _cellIndex(row, column);
+    if (width != 1 && width != 2) {
+      throw ArgumentError.value(width, 'width', 'must be one or two');
+    }
+    if (width == 2 && column + 1 >= columns) {
+      throw RangeError.value(
+        column,
+        'column',
+        'wide cell requires a following column',
+      );
+    }
+    final int leadFlags =
+        (width == 2 ? TerminalCellFlags.wide : TerminalCellFlags.narrow) |
+        (isGrapheme ? TerminalCellFlags.grapheme : 0) |
+        (isProtected ? TerminalCellFlags.protected : 0);
+    final int continuationFlags =
+        TerminalCellFlags.continuation |
+        (isProtected ? TerminalCellFlags.protected : 0);
+    if (_cellGroupMatches(
+      index,
+      width,
+      content,
+      leadFlags,
+      continuationFlags,
+      foreground,
+      background,
+      style,
+      hyperlink,
+    )) {
+      return;
+    }
+
+    final int physical = index ~/ columns;
+    _clearCellTopologyAt(physical, column);
+    if (width == 2) {
+      _clearCellTopologyAt(physical, column + 1);
+    }
+    _content[index] = content;
+    _foreground[index] = foreground;
+    _background[index] = background;
+    _styles[index] = style;
+    _hyperlinks[index] = hyperlink;
+    _widthFlags[index] = leadFlags;
+    if (width == 2) {
+      final int continuation = index + 1;
+      _content[continuation] = 0;
+      _foreground[continuation] = foreground;
+      _background[continuation] = background;
+      _styles[continuation] = style;
+      _hyperlinks[continuation] = hyperlink;
+      _widthFlags[continuation] = continuationFlags;
+    }
+    _markDirtyPhysical(physical, column, column + width);
+    _incrementGeneration();
+  }
+
+  bool _cellGroupMatches(
+    int index,
+    int width,
+    int content,
+    int leadFlags,
+    int continuationFlags,
+    int foreground,
+    int background,
+    int style,
+    int hyperlink,
+  ) {
+    if (_content[index] != content ||
+        _foreground[index] != foreground ||
+        _background[index] != background ||
+        _styles[index] != style ||
+        _hyperlinks[index] != hyperlink ||
+        _widthFlags[index] != leadFlags) {
+      return false;
+    }
+    if (width == 1) {
+      return true;
+    }
+    final int continuation = index + 1;
+    return _content[continuation] == 0 &&
+        _foreground[continuation] == foreground &&
+        _background[continuation] == background &&
+        _styles[continuation] == style &&
+        _hyperlinks[continuation] == hyperlink &&
+        _widthFlags[continuation] == continuationFlags;
+  }
+
+  void _printNewCellGroup(int content, int width, {required bool isGrapheme}) {
+    if (_wrapPending) {
+      _wrapToNextLine();
+    }
+    int right = _horizontalRightForCursor();
+    final int left = _horizontalLeftForCursor();
+    var storedContent = content;
+    var storedWidth = width;
+    var storedAsGrapheme = isGrapheme;
+    var representsInput = true;
+    if (storedWidth == 2 && _cursorColumn >= right) {
+      if (_autoWrapMode && right > left) {
+        _wrapToNextLine();
+        right = _horizontalRightForCursor();
+      } else {
+        storedContent = 0xfffd;
+        storedWidth = 1;
+        storedAsGrapheme = false;
+        representsInput = false;
+      }
+    }
+    if (_insertMode) {
+      insertCharacters(storedWidth);
+    }
+    final int row = _cursorRow;
+    final int column = _cursorColumn;
+    _setCellGroup(
+      row,
+      column,
+      storedContent,
+      width: storedWidth,
+      isGrapheme: storedAsGrapheme,
+      foreground: _currentForeground,
+      background: _currentBackground,
+      style: _currentStyleId,
+      hyperlink: 0,
+      isProtected: false,
+    );
+    _positionCursorAfterCell(row, column, storedWidth, right);
+    if (!representsInput) {
+      breakGraphemeSequence();
+      return;
+    }
+    _lastPrintRow = row;
+    _lastPrintColumn = column;
+    _lastPrintGeneration = _generation;
+  }
+
+  void _positionCursorAfterCell(int row, int column, int width, int right) {
+    final int finalColumn = column + width - 1;
+    if (finalColumn >= right) {
+      bool changed = _setCursorUnchecked(row, right);
+      if (_autoWrapMode && !_wrapPending) {
+        _wrapPending = true;
+        changed = true;
+      }
+      if (changed) {
+        _incrementGeneration();
+      }
+      return;
+    }
+    if (_setCursorUnchecked(row, column + width)) {
+      _incrementGeneration();
+    }
+  }
+
+  bool _canExtendLastPrint() {
+    if (_lastPrintGeneration != _generation ||
+        _lastPrintRow < 0 ||
+        _lastPrintColumn < 0) {
+      return false;
+    }
+    final int index = _cellIndex(_lastPrintRow, _lastPrintColumn);
+    final int width = _widthFlags[index] & TerminalCellFlags.widthMask;
+    return _content[index] != 0 &&
+        (width == TerminalCellFlags.narrow || width == TerminalCellFlags.wide);
+  }
+
+  bool _extendLastPrint(int scalar) {
+    final int index = _cellIndex(_lastPrintRow, _lastPrintColumn);
+    final int flags = _widthFlags[index];
+    final List<int> existing = flags & TerminalCellFlags.grapheme != 0
+        ? graphemeTable.scalarsAt(_content[index])
+        : <int>[_content[index]];
+    if (existing.length >= graphemeTable.maximumClusterLength) {
+      return false;
+    }
+    final List<int> combined = List<int>.of(existing)..add(scalar);
+    final int? graphemeId = graphemeTable.tryIntern(combined);
+    if (graphemeId == null) {
+      return false;
+    }
+    final int oldWidth =
+        (flags & TerminalCellFlags.widthMask) == TerminalCellFlags.wide ? 2 : 1;
+    final int newWidth = graphemeTable.widthAt(graphemeId);
+    if (newWidth == 0) {
+      return false;
+    }
+    if (newWidth == oldWidth) {
+      _content[index] = graphemeId;
+      _widthFlags[index] = flags | TerminalCellFlags.grapheme;
+      _markDirtyPhysical(
+        index ~/ columns,
+        _lastPrintColumn,
+        _lastPrintColumn + 1,
+      );
+      _incrementGeneration();
+      _lastPrintGeneration = _generation;
+      return true;
+    }
+    if (oldWidth != 1 || newWidth != 2) {
+      return false;
+    }
+
+    final int foreground = _foreground[index];
+    final int background = _background[index];
+    final int style = _styles[index];
+    final int hyperlink = _hyperlinks[index];
+    final bool isProtected = flags & TerminalCellFlags.protected != 0;
+    int row = _lastPrintRow;
+    int column = _lastPrintColumn;
+    int right = _horizontalRightForCursor();
+    final int left = _horizontalLeftForCursor();
+    if (column >= right) {
+      if (!_autoWrapMode || right <= left) {
+        return false;
+      }
+      final int physical = _physicalRow(row);
+      _clearCellRange(physical, column, column + 1);
+      _cursorRow = row;
+      _cursorColumn = column;
+      _wrapPending = false;
+      _wrapToNextLine();
+      row = _cursorRow;
+      column = _cursorColumn;
+      right = _horizontalRightForCursor();
+    }
+    _setCellGroup(
+      row,
+      column,
+      graphemeId,
+      width: 2,
+      isGrapheme: true,
+      foreground: foreground,
+      background: background,
+      style: style,
+      hyperlink: hyperlink,
+      isProtected: isProtected,
+    );
+    _positionCursorAfterCell(row, column, 2, right);
+    _lastPrintRow = row;
+    _lastPrintColumn = column;
+    _lastPrintGeneration = _generation;
+    return true;
+  }
+
   void _copyCell(
     int sourcePhysical,
     int sourceColumn,
@@ -1295,6 +1739,7 @@ final class TerminalScreen {
     int startColumn,
     int endColumn,
   ) {
+    _clearCellRange(destinationPhysical, startColumn, endColumn);
     final int source = sourcePhysical * columns + startColumn;
     final int destination = destinationPhysical * columns + startColumn;
     final int length = endColumn - startColumn;
@@ -1324,11 +1769,28 @@ final class TerminalScreen {
       _widthFlags,
       source,
     );
+    _repairRowTopology(destinationPhysical);
   }
 
   bool _clearCellRange(int physical, int startColumn, int endColumn) {
-    final int start = physical * columns + startColumn;
-    final int end = physical * columns + endColumn;
+    int expandedStart = startColumn;
+    int expandedEnd = endColumn;
+    if (expandedStart < expandedEnd &&
+        (_widthFlags[physical * columns + expandedStart] &
+                TerminalCellFlags.widthMask) ==
+            TerminalCellFlags.continuation &&
+        expandedStart > 0) {
+      expandedStart--;
+    }
+    if (expandedStart < expandedEnd &&
+        (_widthFlags[physical * columns + expandedEnd - 1] &
+                TerminalCellFlags.widthMask) ==
+            TerminalCellFlags.wide &&
+        expandedEnd < columns) {
+      expandedEnd++;
+    }
+    final int start = physical * columns + expandedStart;
+    final int end = physical * columns + expandedEnd;
     bool changed = false;
     for (int index = start; index < end; index++) {
       if (_content[index] != 0 ||
@@ -1350,7 +1812,96 @@ final class TerminalScreen {
     _styles.fillRange(start, end, 0);
     _hyperlinks.fillRange(start, end, 0);
     _widthFlags.fillRange(start, end, TerminalCellFlags.narrow);
+    _markDirtyPhysical(physical, expandedStart, expandedEnd);
     return true;
+  }
+
+  void _clearCellTopologyAt(int physical, int column) {
+    final int index = physical * columns + column;
+    final int width = _widthFlags[index] & TerminalCellFlags.widthMask;
+    if (width == TerminalCellFlags.continuation && column > 0) {
+      _clearCellRange(physical, column - 1, column + 1);
+    } else if (width == TerminalCellFlags.wide) {
+      _clearCellRange(physical, column, (column + 2).clamp(0, columns));
+    }
+  }
+
+  void _repairRowTopology(int physical) {
+    for (int column = 0; column < columns; column++) {
+      final int index = physical * columns + column;
+      final int flags = _widthFlags[index];
+      final int width = flags & TerminalCellFlags.widthMask;
+      if ((flags & ~TerminalCellFlags.knownMask) != 0 ||
+          width == TerminalCellFlags.widthMask) {
+        _writeCanonicalBlank(index);
+        _markDirtyPhysical(physical, column, column + 1);
+        continue;
+      }
+      if (width == TerminalCellFlags.continuation) {
+        if (column == 0 ||
+            (_widthFlags[index - 1] & TerminalCellFlags.widthMask) !=
+                TerminalCellFlags.wide) {
+          _writeCanonicalBlank(index);
+          _markDirtyPhysical(physical, column, column + 1);
+        }
+        continue;
+      }
+      if (width != TerminalCellFlags.wide) {
+        continue;
+      }
+      if (column + 1 >= columns ||
+          (_widthFlags[index + 1] & TerminalCellFlags.widthMask) !=
+              TerminalCellFlags.continuation) {
+        _writeCanonicalBlank(index);
+        _markDirtyPhysical(physical, column, column + 1);
+        continue;
+      }
+      final int continuation = index + 1;
+      final int continuationFlags =
+          TerminalCellFlags.continuation |
+          (flags & TerminalCellFlags.protected);
+      if (_content[continuation] != 0 ||
+          _foreground[continuation] != _foreground[index] ||
+          _background[continuation] != _background[index] ||
+          _styles[continuation] != _styles[index] ||
+          _hyperlinks[continuation] != _hyperlinks[index] ||
+          _widthFlags[continuation] != continuationFlags) {
+        _content[continuation] = 0;
+        _foreground[continuation] = _foreground[index];
+        _background[continuation] = _background[index];
+        _styles[continuation] = _styles[index];
+        _hyperlinks[continuation] = _hyperlinks[index];
+        _widthFlags[continuation] = continuationFlags;
+        _markDirtyPhysical(physical, column + 1, column + 2);
+      }
+      column++;
+    }
+  }
+
+  void _writeCanonicalBlank(int index) {
+    _content[index] = 0;
+    _foreground[index] = 0;
+    _background[index] = _currentBackground;
+    _styles[index] = 0;
+    _hyperlinks[index] = 0;
+    _widthFlags[index] = TerminalCellFlags.narrow;
+  }
+
+  void _validateCellContentWidth(int index, int width, int row, int column) {
+    final int flags = _widthFlags[index];
+    final int content = _content[index];
+    try {
+      final int actual = flags & TerminalCellFlags.grapheme != 0
+          ? graphemeTable.widthAt(content)
+          : TerminalUnicode.scalarWidth(content);
+      if (actual != width) {
+        throw StateError(
+          'cell width $actual disagrees with flags at $row,$column',
+        );
+      }
+    } on ArgumentError catch (error) {
+      throw StateError('invalid cell content at $row,$column: $error');
+    }
   }
 
   void _scrollUpRegion(int top, int bottom, int left, int right, int count) {
