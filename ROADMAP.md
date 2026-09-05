@@ -614,6 +614,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase2/ctrl-d-accepted-no-exit-investigation.md`](docs/phase2/ctrl-d-accepted-no-exit-investigation.md)
   を参照する）
+- [ ] Dart `Process.start` workerとnative PTY childのreap ownership競合を解消する
+  （実施時に
+  [`docs/phase2/pty-child-reap-ownership-conflict.md`](docs/phase2/pty-child-reap-ownership-conflict.md)
+  を参照する）
 
 終了条件:
 

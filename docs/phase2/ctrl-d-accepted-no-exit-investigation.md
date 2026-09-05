@@ -232,3 +232,16 @@ byte as a request to exit.
   shell semantics remain distinct from a transport/reactor defect.
 - Developer JIT and Release AOT fault and normal integrations retain their
   classified shutdown and zero-orphan guarantees.
+
+## Post-closure correction — concurrent Dart process reaper
+
+A subsequent real application log proved an additional exit-ownership race
+which the original test matrix did not exercise. The PTY received and wrote
+Control-D, kqueue reported `NOTE_EXIT`, and the following `waitpid` returned
+`ECHILD`. The long-lived worker started through Dart `Process.start` was active
+at the same time. The stock Dart macOS exit handler uses process-wide `wait()`
+and can therefore reap the native `forkpty` child before `dart_pty_macos` does;
+because that PID is absent from Dart's private `ProcessInfoList`, its status is
+discarded. Details and remediation acceptance are recorded in
+`pty-child-reap-ownership-conflict.md`. The earlier reactor-starvation finding
+and fix remain valid, but do not cover this distinct failure.
