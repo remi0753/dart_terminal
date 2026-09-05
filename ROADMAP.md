@@ -698,6 +698,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 目的: correctness reference を持つ高速 renderer を実装する。
 
 - [ ] headless/reference renderer と golden image format
+  - [x] bounded headless RGBA surface と reference layer compositor
+    （[`docs/phase4/reference-renderer-golden-format.md`](docs/phase4/reference-renderer-golden-format.md) を参照して実施）
+  - [ ] versioned golden image codec、fixture、bounded comparison diagnostics
+    （[`docs/phase4/reference-renderer-golden-format.md`](docs/phase4/reference-renderer-golden-format.md) を参照して実施）
 - [ ] CoreText font catalog、fallback、metrics、shaping cache
 - [ ] monochrome/color glyph atlas
 - [ ] Metal cell/glyph/decoration/cursor/selection pipelines

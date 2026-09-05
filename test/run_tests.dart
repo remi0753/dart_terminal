@@ -12,6 +12,7 @@ import 'package:dart_terminal/src/terminal_session.dart';
 
 import 'product_parser_benchmark_test.dart';
 import 'product_parser_corpus_test.dart';
+import 'reference_renderer_test.dart';
 import 'runtime_lifecycle_test.dart';
 import 'terminal_core_test.dart';
 import 'terminal_history_reflow_test.dart';
@@ -41,6 +42,7 @@ Future<void> main() async {
   runTerminalCoreTests();
   runProductParserBenchmarkTests();
   runProductParserCorpusTests();
+  runReferenceRendererTests();
   runTerminalHistoryReflowTests();
   runTerminalPaletteTests();
   runTerminalPropertyFuzzTests();
