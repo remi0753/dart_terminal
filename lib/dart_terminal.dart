@@ -10,6 +10,8 @@ export 'src/terminal_pane.dart'
         PaneId,
         TerminalPane,
         TerminalPaneCloseDecision,
+        TerminalPaneLifecycleObservation,
+        TerminalPaneLifecycleObserver,
         TerminalPaneOwner,
         TerminalPaneSession,
         TerminalPaneSessionFactory,

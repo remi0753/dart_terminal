@@ -33,6 +33,8 @@ Future<void> main() async {
 Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
   final TerminalPaneOwner owner = TerminalPaneOwner(initialPaneId: 40);
   final List<_FakePaneSession> sessions = <_FakePaneSession>[];
+  final List<TerminalPaneLifecycleObservation> paneLifecycle =
+      <TerminalPaneLifecycleObservation>[];
   var changed = 0;
   var exitRequests = 0;
   TerminalPane createPane() => owner.createPane(
@@ -56,6 +58,7 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
     onExitRequested: () {
       ++exitRequests;
     },
+    lifecycleObserver: paneLifecycle.add,
   );
 
   final TerminalPane first = createPane();
@@ -152,6 +155,34 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
     'owner teardown reaches zero panes exactly once',
   );
   _expect(changed > 0, 'pane lifecycle emits view changes');
+  _expect(
+    paneLifecycle
+            .where(
+              (TerminalPaneLifecycleObservation observation) =>
+                  observation.paneId == first.id,
+            )
+            .map(
+              (TerminalPaneLifecycleObservation observation) =>
+                  observation.state,
+            )
+            .join(',') ==
+        <TerminalPaneState>[
+          TerminalPaneState.created,
+          TerminalPaneState.starting,
+          TerminalPaneState.running,
+          TerminalPaneState.confirmationPending,
+          TerminalPaneState.running,
+          TerminalPaneState.confirmationPending,
+          TerminalPaneState.closing,
+          TerminalPaneState.closed,
+        ].join(','),
+    'pane diagnostics preserve the complete first-pane state order',
+  );
+  _expect(
+    paneLifecycle.first.machineLine() ==
+        'TERMINAL_PANE_LIFECYCLE pane=41 session=41:1 state=created',
+    'pane diagnostic machine line contains only stable lifecycle metadata',
+  );
   _expectThrows(
     createPane,
     'disposed owner refuses new pane publication',
@@ -367,6 +398,8 @@ TerminalOptions _parseOptions(
 Future<void> _testPersistentCommandSession() async {
   var changeCount = 0;
   var terminationCount = 0;
+  final List<TerminalSessionLifecycleObservation> lifecycle =
+      <TerminalSessionLifecycleObservation>[];
   final FakePtyBackend ptyBackend = FakePtyBackend(autoExitOnClose: false);
   final TerminalSession session = TerminalSession(
     id: const TerminalSessionId(paneId: PaneId(7), generation: 3),
@@ -378,6 +411,7 @@ Future<void> _testPersistentCommandSession() async {
     onTerminated: () {
       ++terminationCount;
     },
+    lifecycleObserver: lifecycle.add,
   );
   final Future<void> start = session.start();
   _expect(identical(start, session.start()), 'session start is idempotent');
@@ -448,6 +482,31 @@ Future<void> _testPersistentCommandSession() async {
   _expect(changeCount > 0, 'session emits view updates');
   await session.dispose();
   await session.dispose();
+  _expectOrderedSessionStages(lifecycle, <TerminalSessionLifecycleStage>[
+    TerminalSessionLifecycleStage.startRequested,
+    TerminalSessionLifecycleStage.processStarted,
+    TerminalSessionLifecycleStage.eofRequested,
+    TerminalSessionLifecycleStage.eofWriteAccepted,
+    TerminalSessionLifecycleStage.nativeExitObserved,
+    TerminalSessionLifecycleStage.outputDrainStarted,
+    TerminalSessionLifecycleStage.outputDrained,
+    TerminalSessionLifecycleStage.terminationCompleted,
+    TerminalSessionLifecycleStage.ownerTerminationNotified,
+    TerminalSessionLifecycleStage.disposeStarted,
+    TerminalSessionLifecycleStage.gracefulCloseRequested,
+    TerminalSessionLifecycleStage.terminationWaitCompleted,
+    TerminalSessionLifecycleStage.outputCancellationStarted,
+    TerminalSessionLifecycleStage.outputCancellationCompleted,
+    TerminalSessionLifecycleStage.processDisposeStarted,
+    TerminalSessionLifecycleStage.processDisposeCompleted,
+    TerminalSessionLifecycleStage.disposeCompleted,
+  ], 'session lifecycle diagnostics');
+  _expect(
+    lifecycle.first.machineLine() ==
+        'TERMINAL_PTY_LIFECYCLE pane=7 session=7:3 process_id=0 '
+            'stage=startRequested',
+    'PTY diagnostic machine line contains only stable lifecycle metadata',
+  );
 
   final FakePtyBackend boundedBackend = FakePtyBackend();
   final TerminalSession bounded = TerminalSession(
@@ -555,6 +614,8 @@ Future<void> _testRepeatedControlDNaturalExit() async {
   _expect(_livePtySessionCount() == 0, 'Control-D test starts without PTYs');
   for (var iteration = 0; iteration < repetitions; ++iteration) {
     var terminationCount = 0;
+    final List<TerminalSessionLifecycleObservation> lifecycle =
+        <TerminalSessionLifecycleObservation>[];
     final TerminalSession session = TerminalSession(
       id: TerminalSessionId(paneId: PaneId(1000 + iteration), generation: 1),
       initialWorkingDirectory: Directory.systemTemp.path,
@@ -571,6 +632,7 @@ Future<void> _testRepeatedControlDNaturalExit() async {
       onTerminated: () {
         ++terminationCount;
       },
+      lifecycleObserver: lifecycle.add,
     );
     await session.start().timeout(const Duration(seconds: 3));
     session.insertText(
@@ -592,11 +654,44 @@ Future<void> _testRepeatedControlDNaturalExit() async {
       'Control-D iteration $iteration exits and notifies exactly once',
     );
     await session.dispose().timeout(const Duration(seconds: 1));
+    _expectOrderedSessionStages(lifecycle, <TerminalSessionLifecycleStage>[
+      TerminalSessionLifecycleStage.processStarted,
+      TerminalSessionLifecycleStage.eofRequested,
+      TerminalSessionLifecycleStage.eofWriteAccepted,
+      TerminalSessionLifecycleStage.nativeExitObserved,
+      TerminalSessionLifecycleStage.outputDrained,
+      TerminalSessionLifecycleStage.terminationCompleted,
+      TerminalSessionLifecycleStage.ownerTerminationNotified,
+      TerminalSessionLifecycleStage.disposeStarted,
+      TerminalSessionLifecycleStage.terminationWaitCompleted,
+      TerminalSessionLifecycleStage.processDisposeStarted,
+      TerminalSessionLifecycleStage.processDisposeCompleted,
+      TerminalSessionLifecycleStage.disposeCompleted,
+    ], 'Control-D lifecycle iteration $iteration');
     _expect(
       _livePtySessionCount() == 0,
       'Control-D iteration $iteration reaps and destroys its native session',
     );
   }
+}
+
+void _expectOrderedSessionStages(
+  List<TerminalSessionLifecycleObservation> observations,
+  List<TerminalSessionLifecycleStage> expected,
+  String description,
+) {
+  var expectedIndex = 0;
+  for (final TerminalSessionLifecycleObservation observation in observations) {
+    if (expectedIndex < expected.length &&
+        observation.stage == expected[expectedIndex]) {
+      ++expectedIndex;
+    }
+  }
+  _expect(
+    expectedIndex == expected.length,
+    '$description missing ${expected.skip(expectedIndex).map((stage) => stage.name).join(', ')}; '
+    'observed ${observations.map((observation) => observation.stage.name).join(', ')}',
+  );
 }
 
 Future<void> _waitForTerminalOutput(

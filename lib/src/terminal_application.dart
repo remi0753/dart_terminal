@@ -239,6 +239,10 @@ final class TerminalApplication {
               initialWorkingDirectory: options.initialWorkingDirectory,
               onChanged: onChanged,
               onTerminated: onTerminated,
+              lifecycleObserver:
+                  (TerminalSessionLifecycleObservation observation) {
+                    stdout.writeln(observation.machineLine());
+                  },
             ),
         onChanged: () {
           if (createdTextView != null && !createdTextView.isDisposed) {
@@ -246,6 +250,9 @@ final class TerminalApplication {
           }
         },
         onExitRequested: createdWindow.requestClose,
+        lifecycleObserver: (TerminalPaneLifecycleObservation observation) {
+          stdout.writeln(observation.machineLine());
+        },
       );
       if (createdTextView != null) {
         createdTextView.text = createdPane.render();

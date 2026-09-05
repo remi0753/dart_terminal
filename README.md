@@ -28,6 +28,7 @@ CoreText/Metal renderer、IME の製品実装は後続 Phase です。
 - Control-C/Z/\\、Control-Dによるsignal/EOF入力
 - ウィンドウサイズに追従する`TIOCSWINSZ`/`SIGWINCH`
 - typed pane/session ID、単一owner、live shellの再操作close確認
+- terminal内容を含めないpane state / PTY shutdown stage診断
 - AppKit main-thread root と公式 Dart 子プロセス worker の bounded lifecycle
   （M1/arm64 Developer JIT / Release AOT）
 - native event protocol v4（source generation、nanosecond timestamp、operation
@@ -142,6 +143,12 @@ revision、PID、開始/更新時刻、最後の lifecycle phase、outcome、exi
 symbolication は行いません。アプリ終了中であれば `Diagnostics` フォルダを削除でき、次回
 起動時に空の状態から再作成されます。crash/hang report、dSYM、利用者同意を含む完全な診断
 workflow は Phase 11 の範囲です。
+
+通常実行の標準出力には、typed pane/session ID、PTY process ID、および固定された
+lifecycle stageだけを持つ`TERMINAL_PANE_LIFECYCLE`と
+`TERMINAL_PTY_LIFECYCLE`も記録します。Control-Dの受付、native exit、output drain、
+close request、exit wait、stream cancel、process disposeのどこまで完了したかを判定でき、
+terminal表示内容、入力文字列、command、environment、cwd、例外詳細は含みません。
 
 ## Release AOT
 

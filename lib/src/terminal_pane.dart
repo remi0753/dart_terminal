@@ -48,6 +48,26 @@ enum TerminalPaneState {
 
 enum TerminalPaneCloseDecision { confirmationRequired, allow }
 
+final class TerminalPaneLifecycleObservation {
+  const TerminalPaneLifecycleObservation({
+    required this.paneId,
+    required this.sessionId,
+    required this.state,
+  });
+
+  final PaneId paneId;
+  final TerminalSessionId sessionId;
+  final TerminalPaneState state;
+
+  String machineLine() =>
+      'TERMINAL_PANE_LIFECYCLE pane=$paneId session=$sessionId '
+      'state=${state.name}';
+}
+
+typedef TerminalPaneLifecycleObserver = void Function(
+  TerminalPaneLifecycleObservation observation,
+);
+
 /// The product-facing session surface owned by exactly one [TerminalPane].
 abstract interface class TerminalPaneSession {
   TerminalSessionId get id;
@@ -103,6 +123,7 @@ final class TerminalPaneOwner {
     required TerminalPaneSessionFactory sessionFactory,
     required void Function() onChanged,
     required void Function() onExitRequested,
+    TerminalPaneLifecycleObserver? lifecycleObserver,
   }) {
     if (_disposed) {
       throw StateError('terminal pane owner is disposed');
@@ -148,15 +169,17 @@ final class TerminalPaneOwner {
       session: session,
       onChanged: onChanged,
       onExitRequested: onExitRequested,
+      lifecycleObserver: lifecycleObserver,
     );
     pane = createdPane;
+    _panes[paneId] = createdPane;
+    createdPane._observeLifecycle();
     if (pendingChange) {
       createdPane._handleSessionChanged();
     }
     if (pendingTermination) {
       createdPane._handleSessionTerminated();
     }
-    _panes[paneId] = createdPane;
     return createdPane;
   }
 
@@ -190,15 +213,18 @@ final class TerminalPane {
     required TerminalPaneSession session,
     required void Function() onChanged,
     required void Function() onExitRequested,
+    required TerminalPaneLifecycleObserver? lifecycleObserver,
   }) : _session = session,
        _onChanged = onChanged,
-       _onExitRequested = onExitRequested;
+       _onExitRequested = onExitRequested,
+       _lifecycleObserver = lifecycleObserver;
 
   final PaneId id;
   final TerminalSessionId sessionId;
   final TerminalPaneSession _session;
   final void Function() _onChanged;
   final void Function() _onExitRequested;
+  final TerminalPaneLifecycleObserver? _lifecycleObserver;
 
   TerminalPaneState _state = TerminalPaneState.created;
   Future<void>? _startFuture;
@@ -377,6 +403,25 @@ final class TerminalPane {
       return;
     }
     _state = value;
+    _observeLifecycle();
     _onChanged();
+  }
+
+  void _observeLifecycle() {
+    final TerminalPaneLifecycleObserver? observer = _lifecycleObserver;
+    if (observer == null) {
+      return;
+    }
+    try {
+      observer(
+        TerminalPaneLifecycleObservation(
+          paneId: id,
+          sessionId: sessionId,
+          state: _state,
+        ),
+      );
+    } on Object {
+      // Diagnostics cannot change pane ownership or close behavior.
+    }
   }
 }

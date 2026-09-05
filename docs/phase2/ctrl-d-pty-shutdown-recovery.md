@@ -200,3 +200,29 @@ open until all five are complete.
   is useful negative evidence: later subtasks must retain deterministic
   missing/delayed-exit fault coverage rather than relying on random repetition
   to exercise the recovery path.
+
+### 2026-09-05 — pane and PTY lifecycle diagnostics
+
+- Added typed, optional lifecycle observers for pane state and terminal-session
+  shutdown stages. Observer failures are contained and cannot change pane
+  ownership, PTY state, or close decisions.
+- Product output now records `TERMINAL_PANE_LIFECYCLE` with pane/session identity
+  and state, plus `TERMINAL_PTY_LIFECYCLE` with pane/session identity, process
+  ID, and a fixed stage name. No terminal bytes, input text, command,
+  environment, cwd, or exception description is included.
+- PTY observations distinguish start request/process start, EOF request and
+  accepted/backpressured/ignored write, native exit, output drain,
+  owner-notification, dispose start, graceful close, termination wait outcome,
+  output cancellation, process disposal, and completed disposal. A future hang
+  therefore leaves a precise last-completed boundary; the reported incident
+  would distinguish an unreceived native exit from an uncompleted process
+  dispose.
+- Pane tests assert the complete first-pane state order and exact privacy-safe
+  machine line. Session tests assert ordered stages across fake natural exit and
+  every real Control-D generation. The GUI smoke now requires the pane and PTY
+  diagnostic subsequences through `closed` / `disposeCompleted` for the same
+  typed identity.
+- `make test` completed in 11.9 seconds with format, analysis, fake tests, real
+  persistent PTY, and 24 Control-D generations passing. Fresh arm64 Developer
+  JIT and Release AOT builds then passed their GUI integration smoke in 2,180
+  ms and 1,773 ms respectively, including the new exact lifecycle assertions.

@@ -584,6 +584,16 @@ void _expectWorkerProcessContract(
 bool _sameIntSets(Set<int> left, Set<int> right) =>
     left.length == right.length && left.containsAll(right);
 
+bool _containsOrderedValues(List<String> actual, List<String> expected) {
+  var expectedIndex = 0;
+  for (final String value in actual) {
+    if (expectedIndex < expected.length && value == expected[expectedIndex]) {
+      ++expectedIndex;
+    }
+  }
+  return expectedIndex == expected.length;
+}
+
 Future<void> _runSmoke(_Options options, _Invocation invocation) async {
   final _ProcessObservation observation = await _launch(
     options,
@@ -720,6 +730,56 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
                 'decision=allow state=closing',
     'application close decisions did not preserve pane/session ownership: '
     '$closeDecisions',
+  );
+  final RegExp paneLifecycle = RegExp(
+    '^TERMINAL_PANE_LIFECYCLE pane=$pane session=$session '
+    r'state=([A-Za-z]+)$',
+  );
+  final List<String> paneStates = observation.stdoutText
+      .split('\n')
+      .map(paneLifecycle.firstMatch)
+      .whereType<RegExpMatch>()
+      .map((RegExpMatch match) => match.group(1)!)
+      .toList();
+  _expect(
+    _containsOrderedValues(paneStates, const <String>[
+      'created',
+      'starting',
+      'running',
+      'confirmationPending',
+      'closing',
+      'closed',
+    ]),
+    'pane lifecycle diagnostics are incomplete or out of order: $paneStates',
+  );
+  final RegExp ptyLifecycle = RegExp(
+    '^TERMINAL_PTY_LIFECYCLE pane=$pane session=$session '
+    r'process_id=[0-9]+ stage=([A-Za-z]+)$',
+  );
+  final List<String> ptyStages = observation.stdoutText
+      .split('\n')
+      .map(ptyLifecycle.firstMatch)
+      .whereType<RegExpMatch>()
+      .map((RegExpMatch match) => match.group(1)!)
+      .toList();
+  _expect(
+    _containsOrderedValues(ptyStages, const <String>[
+      'startRequested',
+      'processStarted',
+      'disposeStarted',
+      'gracefulCloseRequested',
+      'nativeExitObserved',
+      'outputDrainStarted',
+      'outputDrained',
+      'terminationCompleted',
+      'terminationWaitCompleted',
+      'outputCancellationStarted',
+      'outputCancellationCompleted',
+      'processDisposeStarted',
+      'processDisposeCompleted',
+      'disposeCompleted',
+    ]),
+    'PTY lifecycle diagnostics are incomplete or out of order: $ptyStages',
   );
   _expectWorkerProcessContract(
     observation,
