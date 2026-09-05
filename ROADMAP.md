@@ -634,7 +634,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 目的: 描画とは独立した、deterministic で fuzz 可能な terminal state machine を作る。
 
 - [x] streaming UTF-8 decoder と parser table generator
-- [ ] C0/ESC/CSI/OSC/DCS/APC parser
+- [x] C0/ESC/CSI/OSC/DCS/APC parser
 - [ ] typed-array grid、cursor、margins、tabstops、modes
 - [ ] SGR、palette、primary/alternate screen
 - [ ] wide/grapheme cells と resize/reflow

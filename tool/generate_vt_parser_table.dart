@@ -15,13 +15,13 @@ final class _Rule {
     this.bytes, {
     this.nextState,
     this.action = 'none',
-    this.reenter = false,
+    this.startsSequence,
   });
 
   final List<_ByteRange> bytes;
   final String? nextState;
   final String action;
-  final bool reenter;
+  final bool? startsSequence;
 }
 
 final class _StateSpec {
@@ -61,6 +61,7 @@ const List<String> _actions = <String>[
   'stringEnd',
   'cancel',
   'utf8',
+  'malformed',
 ];
 
 const List<_ByteRange> _c0 = <_ByteRange>[
@@ -73,6 +74,19 @@ const List<_ByteRange> _c1Execute = <_ByteRange>[
   _ByteRange(0x80, 0x8f),
   _ByteRange(0x91, 0x97),
   _ByteRange(0x99, 0x9a),
+];
+
+const List<_ByteRange> _cancelBytes = <_ByteRange>[
+  _ByteRange(0x18),
+  _ByteRange(0x1a),
+];
+
+const List<_ByteRange> _sequenceIntroducers = <_ByteRange>[
+  _ByteRange(0x1b),
+  _ByteRange(0x90),
+  _ByteRange(0x98),
+  _ByteRange(0x9b),
+  _ByteRange(0x9d, 0x9f),
 ];
 
 const List<_StateSpec> _states = <_StateSpec>[
@@ -166,7 +180,11 @@ const List<_StateSpec> _states = <_StateSpec>[
         action: 'collect',
       ),
       _Rule(<_ByteRange>[_ByteRange(0x30, 0x3b)], action: 'parameter'),
-      _Rule(<_ByteRange>[_ByteRange(0x3c, 0x3f)], nextState: 'csiIgnore'),
+      _Rule(
+        <_ByteRange>[_ByteRange(0x3c, 0x3f)],
+        nextState: 'csiIgnore',
+        action: 'malformed',
+      ),
       _Rule(
         <_ByteRange>[_ByteRange(0x40, 0x7e)],
         nextState: 'ground',
@@ -180,7 +198,11 @@ const List<_StateSpec> _states = <_StateSpec>[
     rules: <_Rule>[
       _Rule(_c0, action: 'execute'),
       _Rule(<_ByteRange>[_ByteRange(0x20, 0x2f)], action: 'collect'),
-      _Rule(<_ByteRange>[_ByteRange(0x30, 0x3f)], nextState: 'csiIgnore'),
+      _Rule(
+        <_ByteRange>[_ByteRange(0x30, 0x3f)],
+        nextState: 'csiIgnore',
+        action: 'malformed',
+      ),
       _Rule(
         <_ByteRange>[_ByteRange(0x40, 0x7e)],
         nextState: 'ground',
@@ -240,7 +262,11 @@ const List<_StateSpec> _states = <_StateSpec>[
         action: 'collect',
       ),
       _Rule(<_ByteRange>[_ByteRange(0x30, 0x3b)], action: 'parameter'),
-      _Rule(<_ByteRange>[_ByteRange(0x3c, 0x3f)], nextState: 'dcsIgnore'),
+      _Rule(
+        <_ByteRange>[_ByteRange(0x3c, 0x3f)],
+        nextState: 'dcsIgnore',
+        action: 'malformed',
+      ),
       _Rule(<_ByteRange>[_ByteRange(0x40, 0x7e)], nextState: 'dcsPassthrough'),
       _Rule(<_ByteRange>[_ByteRange(0x7f)]),
     ],
@@ -250,7 +276,11 @@ const List<_StateSpec> _states = <_StateSpec>[
     rules: <_Rule>[
       _Rule(_c0, action: 'execute'),
       _Rule(<_ByteRange>[_ByteRange(0x20, 0x2f)], action: 'collect'),
-      _Rule(<_ByteRange>[_ByteRange(0x30, 0x3f)], nextState: 'dcsIgnore'),
+      _Rule(
+        <_ByteRange>[_ByteRange(0x30, 0x3f)],
+        nextState: 'dcsIgnore',
+        action: 'malformed',
+      ),
       _Rule(<_ByteRange>[_ByteRange(0x40, 0x7e)], nextState: 'dcsPassthrough'),
       _Rule(<_ByteRange>[_ByteRange(0x7f)]),
     ],
@@ -281,27 +311,53 @@ const List<_StateSpec> _states = <_StateSpec>[
 ];
 
 const List<_Rule> _anywhereRules = <_Rule>[
+  _Rule(_cancelBytes, nextState: 'ground', action: 'cancel'),
   _Rule(
-    <_ByteRange>[_ByteRange(0x18), _ByteRange(0x1a)],
-    nextState: 'ground',
-    action: 'cancel',
+    <_ByteRange>[_ByteRange(0x1b)],
+    nextState: 'escape',
+    startsSequence: true,
   ),
-  _Rule(<_ByteRange>[_ByteRange(0x1b)], nextState: 'escape', reenter: true),
-  _Rule(<_ByteRange>[_ByteRange(0x90)], nextState: 'dcsEntry', reenter: true),
+  _Rule(
+    <_ByteRange>[_ByteRange(0x90)],
+    nextState: 'dcsEntry',
+    startsSequence: true,
+  ),
   _Rule(
     <_ByteRange>[_ByteRange(0x98)],
     nextState: 'sosPmApcString',
-    reenter: true,
+    startsSequence: true,
   ),
-  _Rule(<_ByteRange>[_ByteRange(0x9b)], nextState: 'csiEntry', reenter: true),
+  _Rule(
+    <_ByteRange>[_ByteRange(0x9b)],
+    nextState: 'csiEntry',
+    startsSequence: true,
+  ),
   _Rule(<_ByteRange>[_ByteRange(0x9c)], nextState: 'ground'),
-  _Rule(<_ByteRange>[_ByteRange(0x9d)], nextState: 'oscString', reenter: true),
+  _Rule(
+    <_ByteRange>[_ByteRange(0x9d)],
+    nextState: 'oscString',
+    startsSequence: true,
+  ),
   _Rule(
     <_ByteRange>[_ByteRange(0x9e, 0x9f)],
     nextState: 'sosPmApcString',
-    reenter: true,
+    startsSequence: true,
   ),
 ];
+
+const Map<String, List<_Rule>> _stateOverrides = <String, List<_Rule>>{
+  'ground': <_Rule>[_Rule(_cancelBytes, action: 'execute')],
+  'escape': <_Rule>[_Rule(_sequenceIntroducers, action: 'cancel')],
+  'escapeIntermediate': <_Rule>[_Rule(_sequenceIntroducers, action: 'cancel')],
+  'csiEntry': <_Rule>[_Rule(_sequenceIntroducers, action: 'cancel')],
+  'csiParameter': <_Rule>[_Rule(_sequenceIntroducers, action: 'cancel')],
+  'csiIntermediate': <_Rule>[_Rule(_sequenceIntroducers, action: 'cancel')],
+  'csiIgnore': <_Rule>[_Rule(_sequenceIntroducers, action: 'cancel')],
+  'dcsEntry': <_Rule>[_Rule(_sequenceIntroducers, action: 'cancel')],
+  'dcsParameter': <_Rule>[_Rule(_sequenceIntroducers, action: 'cancel')],
+  'dcsIntermediate': <_Rule>[_Rule(_sequenceIntroducers, action: 'cancel')],
+  'dcsIgnore': <_Rule>[_Rule(_sequenceIntroducers, action: 'cancel')],
+};
 
 /// Produces the complete checked-in Dart source for the VT transition table.
 String generateVtParserTableSource() {
@@ -311,12 +367,24 @@ String generateVtParserTableSource() {
   );
   final Map<String, int> actionIds = _indexedNames(_actions, 'action');
   _validateRules(_anywhereRules, stateIds, actionIds, 'anywhere');
+  for (final MapEntry<String, List<_Rule>> override
+      in _stateOverrides.entries) {
+    if (!stateIds.containsKey(override.key)) {
+      throw StateError('override references unknown state: ${override.key}');
+    }
+    _validateRules(
+      override.value,
+      stateIds,
+      actionIds,
+      'override/${override.key}',
+    );
+  }
 
   final List<int> entryActions = <int>[];
   final List<int> exitActions = <int>[];
   final List<int> nextStates = <int>[];
   final List<int> transitionActions = <int>[];
-  final List<int> transitionReentryFlags = <int>[];
+  final List<int> transitionSequenceStartFlags = <int>[];
   for (int stateId = 0; stateId < _states.length; stateId++) {
     final _StateSpec state = _states[stateId];
     final int entryAction = _requiredId(
@@ -339,32 +407,43 @@ String generateVtParserTableSource() {
 
     final List<int> stateNext = List<int>.filled(256, stateId);
     final List<int> stateActions = List<int>.filled(256, defaultAction);
-    final List<int> stateReentry = List<int>.filled(256, 0);
+    final List<int> stateSequenceStarts = List<int>.filled(256, 0);
     _applyRules(
       state.rules,
       stateNext,
       stateActions,
-      stateReentry,
+      stateSequenceStarts,
       stateIds,
       actionIds,
       state.name,
-      currentStateId: stateId,
       rejectOverlap: true,
     );
     _applyRules(
       _anywhereRules,
       stateNext,
       stateActions,
-      stateReentry,
+      stateSequenceStarts,
       stateIds,
       actionIds,
       'anywhere/${state.name}',
-      currentStateId: stateId,
       rejectOverlap: false,
     );
+    final List<_Rule>? overrides = _stateOverrides[state.name];
+    if (overrides != null) {
+      _applyRules(
+        overrides,
+        stateNext,
+        stateActions,
+        stateSequenceStarts,
+        stateIds,
+        actionIds,
+        'override/${state.name}',
+        rejectOverlap: true,
+      );
+    }
     nextStates.addAll(stateNext);
     transitionActions.addAll(stateActions);
-    transitionReentryFlags.addAll(stateReentry);
+    transitionSequenceStartFlags.addAll(stateSequenceStarts);
   }
 
   final StringBuffer output = StringBuffer()
@@ -395,7 +474,12 @@ String generateVtParserTableSource() {
     ..writeln()
     ..write(_formatUint8List('_transitionActionIds', transitionActions))
     ..writeln()
-    ..write(_formatUint8List('_transitionReentryFlags', transitionReentryFlags))
+    ..write(
+      _formatUint8List(
+        '_transitionSequenceStartFlags',
+        transitionSequenceStartFlags,
+      ),
+    )
     ..writeln('  // dart format on')
     ..writeln()
     ..writeln("  @pragma('vm:prefer-inline')")
@@ -410,9 +494,12 @@ String generateVtParserTableSource() {
     ..writeln()
     ..writeln("  @pragma('vm:prefer-inline')")
     ..writeln(
-      '  static bool transitionReentersUnchecked(int stateId, int byte) =>',
+      '  static bool transitionStartsSequenceUnchecked('
+      'int stateId, int byte) =>',
     )
-    ..writeln('      _transitionReentryFlags[(stateId << 8) | byte] != 0;')
+    ..writeln(
+      '      _transitionSequenceStartFlags[(stateId << 8) | byte] != 0;',
+    )
     ..writeln()
     ..writeln("  @pragma('vm:prefer-inline')")
     ..writeln(
@@ -447,10 +534,13 @@ String generateVtParserTableSource() {
     ..writeln('  }')
     ..writeln()
     ..writeln(
-      '  static bool transitionReenters(VtParserState state, int byte) {',
+      '  static bool transitionStartsSequence('
+      'VtParserState state, int byte) {',
     )
     ..writeln('    _checkByte(byte);')
-    ..writeln('    return transitionReentersUnchecked(state.index, byte);')
+    ..writeln(
+      '    return transitionStartsSequenceUnchecked(state.index, byte);',
+    )
     ..writeln('  }')
     ..writeln()
     ..writeln('  static VtParserAction entryAction(VtParserState state) =>')
@@ -497,16 +587,15 @@ void _validateRules(
 ) {
   final List<int> placeholderStates = List<int>.filled(256, 0);
   final List<int> placeholderActions = List<int>.filled(256, 0);
-  final List<int> placeholderReentry = List<int>.filled(256, 0);
+  final List<int> placeholderSequenceStarts = List<int>.filled(256, 0);
   _applyRules(
     rules,
     placeholderStates,
     placeholderActions,
-    placeholderReentry,
+    placeholderSequenceStarts,
     stateIds,
     actionIds,
     owner,
-    currentStateId: 0,
     rejectOverlap: true,
   );
 }
@@ -515,11 +604,10 @@ void _applyRules(
   List<_Rule> rules,
   List<int> nextStates,
   List<int> actions,
-  List<int> reentryFlags,
+  List<int> sequenceStartFlags,
   Map<String, int> stateIds,
   Map<String, int> actionIds,
   String owner, {
-  required int currentStateId,
   required bool rejectOverlap,
 }) {
   final List<bool> assigned = List<bool>.filled(256, false);
@@ -550,9 +638,10 @@ void _applyRules(
           nextStates[byte] = nextState;
         }
         actions[byte] = action;
-        reentryFlags[byte] = rule.reenter && nextStates[byte] == currentStateId
-            ? 1
-            : 0;
+        final bool? startsSequence = rule.startsSequence;
+        if (startsSequence != null) {
+          sequenceStartFlags[byte] = startsSequence ? 1 : 0;
+        }
       }
     }
   }

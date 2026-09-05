@@ -80,10 +80,10 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
 | PAR-01 | UTF-8 を chunk 境界に依存せず decode。不正 byte の置換と recovery が deterministic | P0 | 3 | `G:src/terminal/UTF8Decoder.zig`, `G:src/terminal/stream.zig` | Dart-only product decoderとvalid/malformed/all-split回帰を完了 |
-| PAR-02 | C0/C1、ESC、CSI、OSC、DCS、APC を incremental table-driven state machine で解析 | P0 | 3 | `G:src/terminal/Parser.zig`, `G:src/terminal/parse_table.zig` | 14-state/20-actionの生成tableとfreshness/全byte検査を完了。action実行は次項目 |
-| PAR-03 | CAN/SUB/ESC cancel、unknown sequence、malformed sequence の後に printable text へ復帰 | P0 | 3 | `G:src/terminal/Parser.zig`, parser tests in same file | harness のみ Phase 0 |
-| PAR-04 | private marker、intermediate、parameter、subparameter、colon SGR を保持して dispatch | P0 | 3 | `G:src/terminal/csi.zig`, `G:src/terminal/sgr.zig` | 未実装 |
-| PAR-05 | payload/parameter count/numeric value に hard limit。hot path に per-byte allocation、regex、例外なし | P0 | 3 | `G:src/terminal/Parser.zig`, `G:src/terminal/osc.zig`, `G:src/terminal/dcs.zig` | benchmark gate |
+| PAR-02 | C0/C1、ESC、CSI、OSC、DCS、APC を incremental table-driven state machine で解析 | P0 | 3 | `G:src/terminal/Parser.zig`, `G:src/terminal/parse_table.zig` | 14-state/21-actionの生成tableを使うDart-only product parserと全family/all-split回帰を完了 |
+| PAR-03 | CAN/SUB/ESC cancel、unknown sequence、malformed sequence の後に printable text へ復帰 | P0 | 3 | `G:src/terminal/Parser.zig`, parser tests in same file | product parserのcancel/malformed/limit/EOF後recovery回帰を完了 |
+| PAR-04 | private marker、intermediate、parameter、subparameter、colon SGR を保持して dispatch | P0 | 3 | `G:src/terminal/csi.zig`, `G:src/terminal/sgr.zig` | retain可能なtyped CSI/DCS headerとして保持・dispatchを完了。SGR適用は後続 |
+| PAR-05 | payload/parameter count/numeric value に hard limit。hot path に per-byte allocation、regex、例外なし | P0 | 3 | `G:src/terminal/Parser.zig`, `G:src/terminal/osc.zig`, `G:src/terminal/dcs.zig` | 固定typed bufferとsequence/payload/count/value上限をproduct parserへ実装。throughput gateはPhase 3終了時に実施 |
 | SCR-01 | primary/alternate screen、save/restore cursor、cursor shape/blink/visibility | P0 | 3 | `G:src/terminal/Screen.zig`, `G:src/terminal/ScreenSet.zig`, `G:src/terminal/cursor.zig` | 未実装 |
 | SCR-02 | wrap-pending、origin/insert/replace/autowrap/reverse-video mode | P0 | 3 | `G:src/terminal/Terminal.zig`, `G:src/terminal/modes.zig` | 未実装 |
 | SCR-03 | top/bottom、left/right margin と scroll region | P0 | 3 | `G:src/terminal/Screen.zig`, `G:src/terminal/Terminal.zig` | 未実装 |
@@ -193,7 +193,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | AX-01 | visible text、selection、cursor、focus を VoiceOver に公開し change notification を送る | P0 | 5/10 | `G:macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` | 未実装 |
 | AX-02 | Full Keyboard Access、Reduce Motion、Increase Contrast、Differentiate Without Color | P0 | 5/10 | macOS Surface/Splits/QuickTerminal accessibility code | 未実装 |
 | AX-03 | IME preedit と accessibility selection/range/candidate rect が同じ text model を使う | P0 | 5 | `G:macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` | Phase 0 gate |
-| SEC-01 | parser payload/count/value、scrollback、hyperlink、image、queue に hard cap | P0 | 3/5/9 | `G:src/terminal/Parser.zig`, kitty graphics storage, termio mailbox | ADR/harness gate |
+| SEC-01 | parser payload/count/value、scrollback、hyperlink、image、queue に hard cap | P0 | 3/5/9 | `G:src/terminal/Parser.zig`, kitty graphics storage, termio mailbox | product parserのsequence/payload/parameter/intermediate/numeric hard capを完了。後続storage/protocol capは未実装 |
 | SEC-02 | URL scheme allowlist/sanitization、OSC 52 policy、paste confirmation、notification rate limit | P0/P1 | 5/9 | `G:macos/Sources/Helpers/UntrustedURL.swift`, clipboard confirmation | 未実装 |
 | SEC-03 | fork child は async-signal-safe setup と `execve` だけ。Dart runtime/ObjC allocation を呼ばない | P0 | 2 | `G:src/pty.zig`, `G:src/Command.zig` | `dart_pty_macos` child symbol audit 完了 |
 | SEC-04 | Secure Input を abnormal teardown 後も必ず解除 | P1 | 10 | `G:macos/Sources/Features/Secure Input/SecureInput.swift` | 未実装 |
@@ -203,7 +203,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| QA-01 | byte corpus、all chunk splits、property/fuzz、snapshot diagnostics | P0 | 3/6 | parser tests, `G:src/terminal/snapshot/`, `G:test/fuzz-libghostty/` | Phase 0 harness |
+| QA-01 | byte corpus、all chunk splits、property/fuzz、snapshot diagnostics | P0 | 3/6 | parser tests, `G:src/terminal/snapshot/`, `G:test/fuzz-libghostty/` | product parserの全family・UTF-8 precedenceをall-split/bytewise snapshot化。corpus/property/fuzzは後続 |
 | QA-02 | xterm/Ghostty/Kitty black-box differential と real-app matrix。bug を最小 byte regression に還元 | P1 | 6 | `G:src/terminal/` tests and VT C examples | 未実装 |
 | PERF-01 | parser AOT ≥100 MiB/s、AppKit event p95 <1 ms、key→PTY p95 <2 ms | P0 | 0–11 | `G:src/benchmark/`, `G:macos/Tests/BenchmarkTests.swift` | Phase 0 harness |
 | PERF-02 | 100 MiB burst で UI hang 0、bounded memory/queue。1 pane flood が他 pane latency を2倍にしない | P0/P1 | 2/7/11 | Ghostty termio/renderer threaded design | PTY reactorの連続output下force-close fairness完了。100 MiB/UI/複数paneは後続 |

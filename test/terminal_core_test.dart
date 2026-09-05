@@ -191,7 +191,7 @@ void _testParserTableCoverage() {
         VtParserTable.actionCount == VtParserAction.values.length,
     'generated state and action counts match enums',
   );
-  int reentryCount = 0;
+  int sequenceStartCount = 0;
   for (int state = 0; state < VtParserTable.stateCount; state++) {
     _expect(
       VtParserTable.entryActionIdUnchecked(state) >= 0 &&
@@ -205,12 +205,10 @@ void _testParserTableCoverage() {
     for (int byte = 0; byte < VtParserTable.byteCount; byte++) {
       final int nextState = VtParserTable.nextStateIdUnchecked(state, byte);
       final int action = VtParserTable.transitionActionIdUnchecked(state, byte);
-      final bool reenters = VtParserTable.transitionReentersUnchecked(
-        state,
-        byte,
-      );
-      if (reenters) {
-        reentryCount++;
+      final bool startsSequence =
+          VtParserTable.transitionStartsSequenceUnchecked(state, byte);
+      if (startsSequence) {
+        sequenceStartCount++;
       }
       _expect(
         nextState >= 0 &&
@@ -222,9 +220,9 @@ void _testParserTableCoverage() {
     }
   }
   _expect(
-    reentryCount > 0 &&
-        reentryCount < VtParserTable.stateCount * VtParserTable.byteCount,
-    'generated table distinguishes explicit re-entry from ordinary loops',
+    sequenceStartCount > 0 &&
+        sequenceStartCount < VtParserTable.stateCount * VtParserTable.byteCount,
+    'generated table identifies introducers separately from ordinary loops',
   );
   _expectThrowsRangeError(
     () => VtParserTable.nextState(VtParserState.ground, -1),
@@ -260,7 +258,7 @@ void _testParserTableTransitions() {
     'escape entry clears sequence state',
   );
   _expect(
-    VtParserTable.transitionReenters(VtParserState.escape, 0x1b),
+    VtParserTable.transitionStartsSequence(VtParserState.escape, 0x1b),
     'ESC explicitly re-enters escape so sequence state is cleared',
   );
   _expectTransition(
@@ -313,7 +311,7 @@ void _testParserTableTransitions() {
     VtParserAction.oscPut,
   );
   _expect(
-    VtParserTable.transitionReenters(VtParserState.oscString, 0x9d),
+    VtParserTable.transitionStartsSequence(VtParserState.oscString, 0x9d),
     'C1 OSC explicitly ends and restarts an OSC string',
   );
   _expectTransition(

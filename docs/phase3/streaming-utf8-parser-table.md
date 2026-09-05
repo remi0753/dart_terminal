@@ -88,10 +88,12 @@ task promotes only the reusable UTF-8 and generated-table foundations into
   repository-local form of the Dart-only core boundary. The implementation
   imports only `dart:typed_data`; application/platform dependencies do not flow
   into it.
-- The declarative specification resolves to 14 states and 20 actions. The
+- The declarative specification initially resolved to 14 states and 20 actions.
+  The following parser task added one explicit malformed-header action, for 21
+  actions without changing the state count. The
   generated form contains 3,584 next-state IDs, transition-action IDs, and
-  explicit re-entry flags, plus one entry/exit action pair per state. Values
-  fit in `Uint8List`, and every byte is assigned through a state default plus
+  explicit sequence-start flags, plus one entry/exit action pair per state.
+  Values fit in `Uint8List`, and every byte is assigned through a state default plus
   validated non-overlapping local rules and validated global
   cancel/restart/C1 rules.
 - The focused tests cover Unicode scalar boundaries from ASCII through
@@ -112,9 +114,9 @@ task promotes only the reusable UTF-8 and generated-table foundations into
   rule walk or per-byte allocation. The declarative generator remains the only
   hand-edited source of state/range behavior.
 - Entry/exit actions represent OSC, DCS, and APC lifecycle without packing
-  multiple effects into one transition ID. An explicit re-entry bit separates
-  an introducer that restarts the current state from an ordinary self-loop. A
-  parser will apply the transition action first, then exit/entry actions on a
+  multiple effects into one transition ID. Explicit sequence-start metadata
+  separates an introducer that restarts the current state from an ordinary
+  self-loop. A parser applies the transition action first, then exit/entry actions on a
   state change or explicit re-entry; cancellation can therefore mark a pending
   string discarded before its exit action finalizes lifecycle.
 - Included 8-bit C1 introducer transitions in the table. A pending UTF-8
@@ -162,5 +164,5 @@ task promotes only the reusable UTF-8 and generated-table foundations into
   must be rich enough for the next roadmap task without silently implementing
   that task now.
 - The next roadmap task must consume the transition action before exit/entry
-  lifecycle actions, honor explicit re-entry, and route bytes to a pending UTF-8
-  decoder before consulting C1 table entries.
+  lifecycle actions, honor explicit sequence restarts, and route bytes to a
+  pending UTF-8 decoder before consulting C1 table entries.

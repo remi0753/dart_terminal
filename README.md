@@ -10,8 +10,8 @@ Rosetta、Universal、Intel-native 実機確認は、M1 の製品 contract が�
 
 現在の通常エントリーポイントは、再利用可能な `dart_pty_macos` を使う
 pane-owned persistent login shell です。Phase 0 の native spike source は移行時に削除し、
-成立性と測定結果は `docs/phase0` に保存しています。VT parser、screen model、
-CoreText/Metal renderer、IME の製品実装は後続 Phase です。
+成立性と測定結果は `docs/phase0` に保存しています。Dart-only VT parser は製品実装へ
+移行済みで、screen model、CoreText/Metal renderer、IME は後続 Phase です。
 
 現在選定している製品 contract は、未改変の公式 Dart だけを使う AppKit root と、
 独立して回収・再生成できる公式 Dart 子プロセス worker です。M1/arm64 Developer JIT
@@ -52,8 +52,9 @@ CoreText/Metal renderer、IME の製品実装は後続 Phase です。
 - 最小の Application/File/Edit menu、明示的な Paste 時だけ行う plain-text
   pasteboard read、非同期 reply 付き Close/Quit request
 - chunk境界に依存せず不正byteからdeterministicに復帰するDart-only streaming
-  UTF-8 decoderと、宣言的specから再生成・freshness検査できるVT parser table基盤
-  （sequence actionの実行はPhase 3の次項目）
+  UTF-8 decoderと、宣言的specから再生成・freshness検査できるtable-driven VT parser
+- C0/C1、ESC、CSI、OSC、DCS、SOS/PM/APCのtyped action、CAN/SUB/ESC recovery、
+  parameter/subparameter保持、固定bufferとsequence/payload/count/value上限
 
 ## 起動
 
@@ -243,7 +244,7 @@ parser/benchmark などの Dart-only harness は後続実装の比較資料と�
 bin/main.dart                         エントリーポイント
 macos_application.json               product identity、helper、native package 宣言
 lib/src/terminal_application.dart    AppKit ウィンドウとキーイベント
-lib/src/terminal_core/               UTF-8 decoderと生成VT parser table基盤
+lib/src/terminal_core/               UTF-8 decoder、生成VT table、typed parser
 lib/src/runtime_lifecycle.dart       root/worker lifecycle coordinator
 lib/src/terminal_pane.dart           pane/session ID、owner、close状態
 lib/src/terminal_session.dart        persistent login shellとPTY入出力
@@ -258,9 +259,9 @@ test/run_tests.dart                  UI 非依存部分の最小テスト
 現在の表示はCR/LF/Backspaceだけを扱うbounded plain-text投影で、引き続き
 `TextView`を使います。一方、renderer packageのcustom-view providerと
 `TerminalMetalView`の生成・attach境界は用意済みです。本格的なterminal
-emulator表示には、次の実装が必要です。
+emulator表示には、実装済みparserのactionを消費する次の機能が必要です。
 
-1. ANSI / VT シーケンスのパーサーと画面バッファ
+1. typed-array画面バッファ、cursor、margins、tabstops、modes
 2. 色・属性・カーソル・選択・スクロールを描画する CoreText/Metal renderer
 3. IME、クリップボード、キーバインドの仕上げ
 
