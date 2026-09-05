@@ -16,6 +16,7 @@ export 'src/terminal_core/terminal_screen.dart'
     show
         TerminalCellFlags,
         TerminalCursorShape,
+        TerminalPalette,
         TerminalRowFlags,
         TerminalScreen,
         TerminalScreenMode;

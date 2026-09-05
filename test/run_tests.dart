@@ -12,6 +12,7 @@ import 'package:dart_terminal/src/terminal_session.dart';
 
 import 'runtime_lifecycle_test.dart';
 import 'terminal_core_test.dart';
+import 'terminal_palette_test.dart';
 import 'terminal_screen_test.dart';
 import 'terminal_style_test.dart';
 import 'vt_parser_test.dart';
@@ -24,6 +25,7 @@ external int _livePtySessionCount();
 
 Future<void> main() async {
   runTerminalCoreTests();
+  runTerminalPaletteTests();
   runTerminalScreenTests();
   runTerminalStyleTests();
   runVtParserTests();

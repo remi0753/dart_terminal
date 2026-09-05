@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'terminal_screen.dart';
 import 'terminal_style.dart';
 import 'vt_parser.dart';
@@ -19,6 +21,12 @@ final class TerminalScreenParserSink implements VtParserSink {
   int _limitCount = 0;
   int _malformedCount = 0;
   int _incompleteCount = 0;
+  final Uint16List _oscPaletteIndices = Uint16List(
+    TerminalPalette.maxBatchEntries,
+  );
+  final Uint32List _oscPaletteColors = Uint32List(
+    TerminalPalette.maxBatchEntries,
+  );
 
   int get unsupportedControlCount => _unsupportedControlCount;
   int get unsupportedSequenceCount => _unsupportedSequenceCount;
@@ -184,7 +192,38 @@ final class TerminalScreenParserSink implements VtParserSink {
 
   @override
   void dispatchOsc(VtStringSequence sequence) {
-    _unsupportedSequenceCount++;
+    final int commandEnd = _findPayloadByte(sequence, 0, 0x3b);
+    final int command = _parsePayloadDecimal(sequence, 0, commandEnd, 999);
+    final bool hasPayload = commandEnd < sequence.payloadLength;
+    final int payloadStart = hasPayload ? commandEnd + 1 : commandEnd;
+    bool supported = false;
+    switch (command) {
+      case 4:
+        supported = hasPayload && _applyOscPalette(sequence, payloadStart);
+      case 10:
+        supported =
+            hasPayload &&
+            _applyOscDefaultColor(sequence, payloadStart, foreground: true);
+      case 11:
+        supported =
+            hasPayload &&
+            _applyOscDefaultColor(sequence, payloadStart, foreground: false);
+      case 104:
+        supported = _applyOscPaletteReset(sequence, payloadStart, hasPayload);
+      case 110:
+        supported = _payloadIsEmpty(sequence, payloadStart, hasPayload);
+        if (supported) {
+          screen.resetDefaultForegroundColor();
+        }
+      case 111:
+        supported = _payloadIsEmpty(sequence, payloadStart, hasPayload);
+        if (supported) {
+          screen.resetDefaultBackgroundColor();
+        }
+    }
+    if (!supported) {
+      _unsupportedSequenceCount++;
+    }
   }
 
   @override
@@ -230,6 +269,242 @@ final class TerminalScreenParserSink implements VtParserSink {
         _unsupportedSequenceCount++;
       }
     }
+  }
+
+  bool _applyOscPalette(VtStringSequence sequence, int start) {
+    int offset = start;
+    int count = 0;
+    while (offset < sequence.payloadLength) {
+      if (count >= TerminalPalette.maxBatchEntries) {
+        return false;
+      }
+      final int indexEnd = _findPayloadByte(sequence, offset, 0x3b);
+      if (indexEnd >= sequence.payloadLength) {
+        return false;
+      }
+      final int index = _parsePayloadDecimal(
+        sequence,
+        offset,
+        indexEnd,
+        TerminalPalette.colorCount - 1,
+      );
+      final int colorStart = indexEnd + 1;
+      final int colorEnd = _findPayloadByte(sequence, colorStart, 0x3b);
+      final int color = _parseOscColor(sequence, colorStart, colorEnd);
+      if (index < 0 || color < 0) {
+        return false;
+      }
+      _oscPaletteIndices[count] = index;
+      _oscPaletteColors[count] = color;
+      count++;
+      offset = colorEnd < sequence.payloadLength
+          ? colorEnd + 1
+          : sequence.payloadLength;
+    }
+    if (count == 0) {
+      return false;
+    }
+    screen.setPaletteColors(_oscPaletteIndices, _oscPaletteColors, count);
+    return true;
+  }
+
+  bool _applyOscPaletteReset(
+    VtStringSequence sequence,
+    int start,
+    bool hasPayload,
+  ) {
+    if (!hasPayload || start == sequence.payloadLength) {
+      screen.resetPalette();
+      return true;
+    }
+    int offset = start;
+    int count = 0;
+    while (offset < sequence.payloadLength) {
+      if (count >= TerminalPalette.maxBatchEntries) {
+        return false;
+      }
+      final int end = _findPayloadByte(sequence, offset, 0x3b);
+      final int index = _parsePayloadDecimal(
+        sequence,
+        offset,
+        end,
+        TerminalPalette.colorCount - 1,
+      );
+      if (index < 0) {
+        return false;
+      }
+      _oscPaletteIndices[count++] = index;
+      offset = end < sequence.payloadLength ? end + 1 : sequence.payloadLength;
+    }
+    screen.resetPaletteColors(_oscPaletteIndices, count);
+    return true;
+  }
+
+  bool _applyOscDefaultColor(
+    VtStringSequence sequence,
+    int start, {
+    required bool foreground,
+  }) {
+    if (start >= sequence.payloadLength ||
+        _findPayloadByte(sequence, start, 0x3b) != sequence.payloadLength) {
+      return false;
+    }
+    final int color = _parseOscColor(sequence, start, sequence.payloadLength);
+    if (color < 0) {
+      return false;
+    }
+    if (foreground) {
+      screen.setDefaultForegroundColor(color);
+    } else {
+      screen.setDefaultBackgroundColor(color);
+    }
+    return true;
+  }
+
+  static bool _payloadIsEmpty(
+    VtStringSequence sequence,
+    int start,
+    bool hasPayload,
+  ) => !hasPayload || start == sequence.payloadLength;
+
+  static int _parseOscColor(VtStringSequence sequence, int start, int end) {
+    if (end <= start) {
+      return -1;
+    }
+    if (end - start == 1 && sequence.payloadByteAt(start) == 0x3f) {
+      return -1;
+    }
+    if (sequence.payloadByteAt(start) == 0x23) {
+      final int digits = end - start - 1;
+      if (digits < 3 || digits > 12 || digits % 3 != 0) {
+        return -1;
+      }
+      final int width = digits ~/ 3;
+      final int red = _parseHexComponent(sequence, start + 1, width);
+      final int green = _parseHexComponent(sequence, start + 1 + width, width);
+      final int blue = _parseHexComponent(
+        sequence,
+        start + 1 + width * 2,
+        width,
+      );
+      if (red < 0 || green < 0 || blue < 0) {
+        return -1;
+      }
+      return _directColor(
+        _scaleHexComponent(red, width),
+        _scaleHexComponent(green, width),
+        _scaleHexComponent(blue, width),
+      );
+    }
+    if (end - start < 9 ||
+        sequence.payloadByteAt(start) != 0x72 ||
+        sequence.payloadByteAt(start + 1) != 0x67 ||
+        sequence.payloadByteAt(start + 2) != 0x62 ||
+        sequence.payloadByteAt(start + 3) != 0x3a) {
+      return -1;
+    }
+    final int firstSlash = _findPayloadByte(sequence, start + 4, 0x2f, end);
+    if (firstSlash >= end) {
+      return -1;
+    }
+    final int secondSlash = _findPayloadByte(
+      sequence,
+      firstSlash + 1,
+      0x2f,
+      end,
+    );
+    if (secondSlash >= end ||
+        _findPayloadByte(sequence, secondSlash + 1, 0x2f, end) < end) {
+      return -1;
+    }
+    final int redWidth = firstSlash - (start + 4);
+    final int greenWidth = secondSlash - (firstSlash + 1);
+    final int blueWidth = end - (secondSlash + 1);
+    if (redWidth < 1 ||
+        redWidth > 4 ||
+        greenWidth < 1 ||
+        greenWidth > 4 ||
+        blueWidth < 1 ||
+        blueWidth > 4) {
+      return -1;
+    }
+    final int red = _parseHexComponent(sequence, start + 4, redWidth);
+    final int green = _parseHexComponent(sequence, firstSlash + 1, greenWidth);
+    final int blue = _parseHexComponent(sequence, secondSlash + 1, blueWidth);
+    if (red < 0 || green < 0 || blue < 0) {
+      return -1;
+    }
+    return _directColor(
+      _scaleHexComponent(red, redWidth),
+      _scaleHexComponent(green, greenWidth),
+      _scaleHexComponent(blue, blueWidth),
+    );
+  }
+
+  static int _parseHexComponent(
+    VtStringSequence sequence,
+    int start,
+    int width,
+  ) {
+    int result = 0;
+    for (int index = start; index < start + width; index++) {
+      final int byte = sequence.payloadByteAt(index);
+      final int digit;
+      if (byte >= 0x30 && byte <= 0x39) {
+        digit = byte - 0x30;
+      } else if (byte >= 0x41 && byte <= 0x46) {
+        digit = byte - 0x41 + 10;
+      } else if (byte >= 0x61 && byte <= 0x66) {
+        digit = byte - 0x61 + 10;
+      } else {
+        return -1;
+      }
+      result = (result << 4) | digit;
+    }
+    return result;
+  }
+
+  static int _scaleHexComponent(int value, int width) {
+    final int maximum = (1 << (width * 4)) - 1;
+    return (value * 255 + maximum ~/ 2) ~/ maximum;
+  }
+
+  static int _findPayloadByte(
+    VtStringSequence sequence,
+    int start,
+    int byte, [
+    int? limit,
+  ]) {
+    final int end = limit ?? sequence.payloadLength;
+    for (int index = start; index < end; index++) {
+      if (sequence.payloadByteAt(index) == byte) {
+        return index;
+      }
+    }
+    return end;
+  }
+
+  static int _parsePayloadDecimal(
+    VtStringSequence sequence,
+    int start,
+    int end,
+    int maximum,
+  ) {
+    if (end <= start) {
+      return -1;
+    }
+    int value = 0;
+    for (int index = start; index < end; index++) {
+      final int byte = sequence.payloadByteAt(index);
+      if (byte < 0x30 || byte > 0x39) {
+        return -1;
+      }
+      value = value * 10 + byte - 0x30;
+      if (value > maximum) {
+        return -1;
+      }
+    }
+    return value;
   }
 
   void _applySgr(VtSequenceHeader sequence) {

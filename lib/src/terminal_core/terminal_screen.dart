@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'terminal_style.dart';
 
+part 'terminal_palette.dart';
+
 /// Version-one width and cell flag values from the packed-grid contract.
 abstract final class TerminalCellFlags {
   static const int widthMask = 0x03;
@@ -44,12 +46,14 @@ final class TerminalScreen {
     required int rows,
     required int columns,
     TerminalStyleTable? styleTable,
+    TerminalPalette? palette,
   }) {
     _validateDimensions(rows, columns);
     return TerminalScreen._(
       rows: rows,
       columns: columns,
       styleTable: styleTable ?? TerminalStyleTable(),
+      palette: palette ?? TerminalPalette(),
     );
   }
 
@@ -57,6 +61,7 @@ final class TerminalScreen {
     required this.rows,
     required this.columns,
     required this.styleTable,
+    required this.palette,
   }) : cellCount = rows * columns,
        _content = Uint32List(rows * columns),
        _foreground = Uint32List(rows * columns),
@@ -90,6 +95,7 @@ final class TerminalScreen {
   final int columns;
   final int cellCount;
   final TerminalStyleTable styleTable;
+  final TerminalPalette palette;
 
   final Uint32List _content;
   final Uint32List _foreground;
@@ -145,6 +151,9 @@ final class TerminalScreen {
   int get savedForeground => _savedForeground;
   int get savedBackground => _savedBackground;
   int get savedStyleId => _savedStyleId;
+  int get paletteGeneration => palette.generation;
+  int get defaultForegroundColor => palette.defaultForeground;
+  int get defaultBackgroundColor => palette.defaultBackground;
   int get generation => _generation;
   bool get fullSnapshotRequired => _fullSnapshotRequired;
   int get topMargin => _topMargin;
@@ -164,6 +173,11 @@ final class TerminalScreen {
   int get tabStopStorageBytes => columns;
   int get typedStorageBytes =>
       cellStorageBytes + rowStorageBytes + tabStopStorageBytes;
+
+  int paletteColorAt(int index) => palette.colorAt(index);
+
+  int resolveColorToken(int token, {required bool foreground}) =>
+      palette.resolveToken(token, foreground: foreground);
 
   int contentAt(int row, int column) => _content[_cellIndex(row, column)];
 
@@ -332,6 +346,56 @@ final class TerminalScreen {
     _currentBackground = 0;
     _currentStyleId = 0;
     _incrementGeneration();
+  }
+
+  void setPaletteColor(int index, int color) {
+    setPaletteColors(<int>[index], <int>[color], 1);
+  }
+
+  void setPaletteColors(List<int> indices, List<int> colors, [int? count]) {
+    if (palette._setColors(indices, colors, count ?? indices.length)) {
+      _palettePresentationChanged();
+    }
+  }
+
+  void resetPaletteColor(int index) {
+    resetPaletteColors(<int>[index], 1);
+  }
+
+  void resetPaletteColors(List<int> indices, [int? count]) {
+    if (palette._resetColors(indices, count ?? indices.length)) {
+      _palettePresentationChanged();
+    }
+  }
+
+  void resetPalette() {
+    if (palette._resetAllColors()) {
+      _palettePresentationChanged();
+    }
+  }
+
+  void setDefaultForegroundColor(int color) {
+    if (palette._setDefaultForeground(color)) {
+      _palettePresentationChanged();
+    }
+  }
+
+  void setDefaultBackgroundColor(int color) {
+    if (palette._setDefaultBackground(color)) {
+      _palettePresentationChanged();
+    }
+  }
+
+  void resetDefaultForegroundColor() {
+    if (palette._resetDefaultForeground()) {
+      _palettePresentationChanged();
+    }
+  }
+
+  void resetDefaultBackgroundColor() {
+    if (palette._resetDefaultBackground()) {
+      _palettePresentationChanged();
+    }
   }
 
   void homeCursor() {
@@ -1462,6 +1526,11 @@ final class TerminalScreen {
     }
     _wrapPending = false;
     return true;
+  }
+
+  void _palettePresentationChanged() {
+    _markEveryRowDirty();
+    _incrementGeneration();
   }
 
   void _incrementGeneration() {

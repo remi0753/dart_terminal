@@ -645,7 +645,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] SGR、palette、primary/alternate screen
   - [x] style table、rendition state、SGR application
     （[`docs/phase3/sgr-palette-primary-alternate-screen.md`](docs/phase3/sgr-palette-primary-alternate-screen.md) を参照して実施）
-  - [ ] xterm-256 palette、default color、OSC color mutation
+  - [x] xterm-256 palette、default color、OSC color mutation
     （[`docs/phase3/sgr-palette-primary-alternate-screen.md`](docs/phase3/sgr-palette-primary-alternate-screen.md) を参照して実施）
   - [ ] primary/alternate screen owner と DEC 47/1047/1048/1049
     （[`docs/phase3/sgr-palette-primary-alternate-screen.md`](docs/phase3/sgr-palette-primary-alternate-screen.md) を参照して実施）

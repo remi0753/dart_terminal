@@ -88,7 +88,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | SCR-02 | wrap-pending、origin/insert/replace/autowrap/reverse-video mode | P0 | 3 | `G:src/terminal/Terminal.zig`, `G:src/terminal/modes.zig` | typed mode state、home/clamp、atomic resetとnarrow print/editへの適用を完了 |
 | SCR-03 | top/bottom、left/right margin と scroll region | P0 | 3 | `G:src/terminal/Screen.zig`, `G:src/terminal/Terminal.zig` | validated vertical/horizontal margin、origin境界、ring/rectangle scroll適用を完了 |
 | SCR-04 | cursor movement、erase、ICH/DCH、IL/DL、SU/SD、tab、BS、CR/LF/IND/RI/NEL | P0 | 3 | `G:src/terminal/Terminal.zig`, `G:src/terminal/Tabstops.zig` | allocation-free SoA編集操作、C0/C1/ESC/CSI action sink、chunk-independent統合回帰を完了 |
-| SCR-05 | bold/faint/italic/underline variants/blink/inverse/conceal/strike と 16/256/truecolor | P0 | 3 | `G:src/terminal/sgr.zig`, `G:src/terminal/style.zig`, `G:src/terminal/color.zig` | bounded immutable style ID、current/saved rendition、全P0属性とANSI/extended/default色のsemicolon/colon SGR適用を完了。palette/default値のmutationは次subtask |
+| SCR-05 | bold/faint/italic/underline variants/blink/inverse/conceal/strike と 16/256/truecolor | P0 | 3 | `G:src/terminal/sgr.zig`, `G:src/terminal/style.zig`, `G:src/terminal/color.zig` | bounded immutable style ID、current/saved rendition、全P0属性、ANSI/extended/default色SGR、typed xterm-256 palette/default色mutationを完了 |
 | SCR-06 | wide/continuation cell、combining sequence、zero-width grapheme の invariant を維持 | P0 | 3 | `G:src/terminal/page.zig`, `G:src/terminal/Screen.zig`, `G:src/unicode/grapheme.zig` | packed format gate |
 | SCR-07 | primary/alternate resize と reflow。cursor、selection、wrapped-line identity を保つ | P0 | 3 | `G:src/terminal/PageList.zig`, `G:src/terminal/Screen.zig` | 未実装 |
 | SCR-08 | paged bounded scrollback、viewport offset、先頭 eviction が O(page) 以下 | P0 | 3 | `G:src/terminal/PageList.zig`, `G:src/terminal/page.zig`, `G:src/terminal/compress/` | packed format gate |
@@ -105,7 +105,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | CAP-02 | application cursor/keypad、bracketed paste、focus report | P0 | 3/5 | `G:src/input/key_encode.zig`, `G:src/terminal/paste.zig`, `G:src/terminal/focus.zig` | 未実装 |
 | CAP-03 | mouse X10、UTF-8、URXVT、SGR mode/encoding | P0 | 3/5 | `G:src/terminal/mouse.zig`, `G:src/input/mouse_encode.zig` | 未実装 |
 | CAP-04 | xterm-256color 互換 terminfo と SSH fallback | P0/P1 | 6/8 | `G:src/terminfo/`, `G:src/cli/ssh.zig` | 未実装 |
-| CAP-05 | window/tab title、OSC 7 cwd、OSC 8 hyperlink、palette/default color query/change | P0 | 3/6 | `G:src/terminal/osc/parsers/` | 未実装 |
+| CAP-05 | window/tab title、OSC 7 cwd、OSC 8 hyperlink、palette/default color query/change | P0 | 3/6 | `G:src/terminal/osc/parsers/` | bounded OSC 4/10/11/104/110/111 palette/default色change/resetを完了。query reply、title/cwd/hyperlinkは後続 |
 | CAP-06 | OSC 52 は read/write policy、confirmation、size limit 付き | P0/P1 | 6/9 | `G:src/terminal/clipboard.zig`, `G:src/terminal/osc/parsers/clipboard_operation.zig` | 未実装 |
 | CAP-07 | XTGETTCAP、DECRQSS、window/size report | P1 | 6 | `G:src/terminal/dcs.zig`, `G:src/terminal/size_report.zig` | 未実装 |
 | CAP-08 | Kitty keyboard と progressive enhancement。legacy encoding を regression させない | P1 | 9 | `G:src/input/kitty.zig`, `G:src/terminal/kitty/key.zig` | 未実装 |

@@ -162,6 +162,14 @@ ownership as independently reviewable state boundaries.
   state space has at most 768 combinations, below the default 4,096-entry hard
   cap; a deliberately smaller injected table is still contained safely by the
   stream sink if exhausted.
+- The palette subtask stores both immutable reset values and mutable values in
+  256-entry `Uint32List`s. Indexes 0–15 use the xterm base colors, 16–231 use
+  the 6×6×6 levels `0,95,135,175,215,255`, and 232–255 use the `8+10n`
+  grayscale ramp. Product defaults are deterministic light foreground
+  `#e5e5e5` on black; a caller may inject validated configured defaults.
+- OSC color parsing operates directly on bounded payload bytes. It accepts
+  equal-width `#RGB` through `#RRRRGGGGBBBB` and `rgb:R/G/B` components of one
+  through four hex digits, scaling each component to logical 8-bit sRGB.
 
 ## Decisions and alternatives
 
@@ -183,6 +191,14 @@ ownership as independently reviewable state boundaries.
   once. Invalid extended-color or underline groups leave that group unchanged;
   other recognized parameters in the same sequence still apply and every
   rejected group is counted.
+- Keep palette mutation behind `TerminalScreen` even though `TerminalPalette`
+  is injectable and readable. This prevents callers from changing logical
+  color resolution without advancing screen/resource generations and damage.
+  Rare palette/default changes deliberately dirty every visible row; cell
+  tokens remain unchanged and normal output continues to use range damage.
+- Preserve configured palette resources across RIS. Screen content and
+  rendition reset there, while OSC 104/110/111 are the explicit palette and
+  default-color reset operations.
 
 ## Verification results
 
@@ -211,6 +227,36 @@ ownership as independently reviewable state boundaries.
   Release AOT executable.
 - `make runtime-source-check` passed after staging the new product/test files
   with `tracked=97` and `native_sources=0`.
+
+The first subtask was committed as
+`15f77af Apply SGR renditions to terminal cells`.
+
+### Palette and default-color mutation
+
+- Exact tests passed for all 16 xterm base colors, all 216 color-cube entries,
+  all 24 grayscale entries, deterministic default foreground/background,
+  palette-token endpoints, direct-token passthrough, and invalid token/index/
+  configured-palette rejection.
+- Direct mutation tests passed for atomic single/batch changes, duplicate-index
+  final-value idempotence, the 256-entry hard limit, configured reset values,
+  individual/all reset, resource and screen generations, full-row damage, and
+  preservation of logical cell tokens.
+- OSC 4/10/11/104/110/111 tests passed with BEL and ST terminators, multiple
+  palette entries, selected/all resets, configured default resets, short and
+  long hexadecimal component scaling, and both hash/rgb syntax.
+- Query payloads, malformed syntax, invalid indexes, unrelated OSC commands,
+  and a 257-entry mutation are counted and leave palette/default state,
+  generations, and cells unchanged. A malformed later pair cannot partially
+  apply an earlier pair from the same OSC 4 action.
+- A representative mixed mutation/reset stream produced identical palette,
+  defaults, generations, damage, and counters as one chunk, at every split
+  including empty edges, and bytewise.
+- Final `make test` passed for 47 formatted Dart files, generated-parser-table
+  freshness, analysis with no issues, and all repository tests.
+- The focused palette/default/OSC suite compiled and exited successfully as a
+  Release AOT executable.
+- `make runtime-source-check` passed after staging the palette part and focused
+  tests with `tracked=99` and `native_sources=0`.
 
 ## Risks and handoff
 
