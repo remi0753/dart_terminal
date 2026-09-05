@@ -1410,6 +1410,10 @@ String _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
     atlas: atlas,
     renderer: renderer,
   );
+  if (bridge.synchronize() != TerminalGlyphAtlasSyncDisposition.synchronized ||
+      bridge.nativeAtlasGeneration != atlas.resourceGeneration) {
+    throw StateError('bound Metal renderer rejected its initial atlas reset');
+  }
   TerminalMetalFrame encode(int frameGeneration) =>
       TerminalMetalFrameEncoder.encode(
         renderer: renderer,

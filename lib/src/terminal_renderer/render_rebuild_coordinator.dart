@@ -179,6 +179,7 @@ final class TerminalRenderRebuildCoordinator {
     if (_requestGenerationExhausted) {
       throw StateError('render rebuild generation capacity exhausted');
     }
+    damageOutbox.pauseForFullRebuild();
     _requestGeneration = _allocateRequestGeneration();
     _requestedTarget = target;
     _reasons = TerminalRenderRebuildReasons._(_reasons.bits | reasonBits);

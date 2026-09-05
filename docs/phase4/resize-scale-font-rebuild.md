@@ -1,6 +1,6 @@
 # Phase 4 — Resize, scale, and font full rebuild
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-06
 - Scope: sixth Phase 4 roadmap item
 - Related: ADR-001, ADR-003, ADR-004, SCR-07, SCR-09, TXT-05, REN-01,
@@ -155,6 +155,52 @@ cursor/occlusion roadmap item must not begin until both children are committed.
   preserve catalog and atlas generations; scale requires a newer atlas; font
   requires both a newer catalog and atlas. Every path rejects regression, and
   signed rebuild generations use an explicit exhausted state before wrap.
+- 2026-09-06: integration exposed an empty-grid boundary: the existing native
+  Metal API could advance atlas generation only by uploading a nonempty glyph
+  rectangle. A blank terminal therefore could not publish a scale/font reset
+  without inventing a glyph. The adjacent renderer now exposes ABI-v7
+  `resetAtlas`, which atomically advances a strictly newer complete generation,
+  zeros every alpha/color slice and page generation, retains no pointer, and
+  returns immediate backpressure while any frame slot is active.
+- 2026-09-06: adjacent C/C++ header checks, native capability tests, typed Dart
+  facade tests, and the full `dart_appkit` suite pass for the empty-atlas reset.
+  Tests cover version/reserved/generation validation, prior-page invalidation,
+  empty publication, and READY/IN_FLIGHT backpressure. Product manifest and
+  bridge consumption remain part of the current integration child.
+- 2026-09-06: committed the adjacent ABI-v7 capability as
+  `455e112 Add generation-safe Metal atlas reset`, then reread the product
+  roadmap before resuming this child. Both adjacent focused checks and its full
+  suite passed before that commit.
+- 2026-09-06: a rebuild request now pauses only new outbox capture. Any one
+  older in-flight transfer keeps its exact screen/epoch ownership and may ACK
+  while resource work proceeds. Publication requests a full snapshot on the
+  selected screen and releases the pause only after the coordinator accepts
+  matching resources.
+- 2026-09-06: the atlas bridge now treats native generation zero, a catalog or
+  scale-domain change, an explicit Dart-atlas reset epoch, and a same-domain
+  generation with no surviving dirty upload as complete-reset paths. A
+  successful reset rebuilds slice mappings, snapshots every live page,
+  consumes aliased dirty rectangles once, and also publishes a legitimate
+  empty generation without a synthetic glyph.
+- 2026-09-06: selected one synchronous `TerminalRenderResourceRebuilder` for
+  the font/render owner domain. It owns the active catalog and shaping cache,
+  waits for all atlas pins to retire, retains prepared work across immediate
+  native backpressure, replaces catalog/cache only for font changes, and calls
+  the coordinator only after native atlas synchronization. Its frame encoder
+  rejects pending rebuilds or any target/catalog/scale/atlas mismatch.
+- 2026-09-06: two initial verification invocations used a nonexistent
+  product-local SDK `bin/dart`; the configured SDK source root contains the
+  executable at `sdk/bin/dart`, while the installed Dart 3.13.2 command is the
+  normal product test driver. The first direct Dart analysis also hit the
+  filesystem sandbox while updating its telemetry session; rerunning the same
+  checks in the approved normal environment succeeded without code changes.
+- 2026-09-06: standalone AOT Metal executions returned native internal status
+  only inside the filesystem/process sandbox. The same freshly compiled AOT
+  tests with the already-tested adjacent renderer dylib passed outside that
+  sandbox, matching the established Metal verification procedure. Developer
+  JIT and Release AOT application bundles independently passed real GPU/view
+  initialization, so this was an execution-environment restriction rather
+  than an accepted product failure.
 
 ## Verification results
 
@@ -173,3 +219,33 @@ cursor/occlusion roadmap item must not begin until both children are committed.
 - `make runtime-source-check` passes after staging with
   `tracked=175 native_sources=0`; the adjacent `dart_appkit` and bundled Dart
   SDK worktrees remain clean.
+
+### CoreText/atlas/Metal resource rebuild integration
+
+- Focused JIT tests pass for the coordinator, Metal pipeline, and real resource
+  rebuilder. The integration opens two real Menlo/CoreText configurations,
+  preserves catalog/cache/atlas identity for resize alone, advances the atlas
+  for 1x→2x, replaces and disposes catalog/cache for a point-size change,
+  rejects retired shaped text and atlas entries, and checks matching Metal
+  renderer/viewport/scale/atlas frame fields.
+- Damage and frame publication remain blocked from request through completion.
+  Each successful resize, scale, and font publication emits one full damage
+  snapshot with the target rows/columns and exact atlas generation. A live
+  submission pin returns bounded backpressure twice without generation churn;
+  releasing it publishes that same plan on the next attempt.
+- Empty first attachment and empty same-domain reset tests publish native atlas
+  generations through ABI v7 without fake glyph pixels. The bound application
+  smoke now performs this reset before seeding the native frame scheduler.
+- `make test` passes dependency resolution, generated-parser freshness, 96
+  formatted Dart files, analysis, build hooks, the complete CoreText/Metal
+  suite, terminal core, real isolate/PTY, and application regressions.
+- The focused resource rebuild and existing Metal pipeline tests compile as
+  Release AOT executables and pass with the tested adjacent renderer dylib
+  preloaded in the normal execution environment.
+- Fresh arm64 Developer JIT and Release AOT products pass ABI-v7 Dart-only
+  bundle audits and final GUI integrations in 2158 ms and 1998 ms
+  respectively.
+- `make runtime-source-check` passes after staging all task files with
+  `tracked=177 native_sources=0`. Staged and unstaged whitespace checks pass;
+  the adjacent repository and bundled official SDK checkout are clean.
+- Adjacent dependency commit: `455e112 Add generation-safe Metal atlas reset`.

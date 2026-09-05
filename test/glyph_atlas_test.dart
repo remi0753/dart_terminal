@@ -387,6 +387,7 @@ void _testResetAndValidation() {
   ]);
   final TerminalGlyphAtlasEntry oldEntry = atlas.ingest(oldBatch).single;
   final int acceptedGeneration = atlas.resourceGeneration;
+  final int acceptedResetEpoch = atlas.resetEpoch;
   atlas.validateEntry(oldEntry, expectedResourceGeneration: acceptedGeneration);
   atlas.pinForSubmission(1, <TerminalGlyphAtlasEntry>[oldEntry]);
   _expectThrows<StateError>(
@@ -396,11 +397,13 @@ void _testResetAndValidation() {
   atlas.completeSubmission(1);
   atlas.reset(catalogGeneration: 2, scale: 2);
   _expect(
-    atlas.catalogGeneration == 2 &&
+    acceptedResetEpoch == 0 &&
+        atlas.catalogGeneration == 2 &&
         atlas.scale16_16 == 2 << 16 &&
         atlas.entryCount == 0 &&
         atlas.pageCount == 0 &&
         atlas.retainedBytes == 0 &&
+        atlas.resetEpoch == acceptedResetEpoch + 1 &&
         atlas.resourceGeneration > acceptedGeneration,
     'reset clears resources and advances the generation/domain',
   );

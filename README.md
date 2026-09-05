@@ -98,6 +98,8 @@ model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後�
 - ADR-003準拠のstrict damage codec、atomic retained render model、1-paneにつき1件の
   TransferableTypedData/ACK、newest-modelだけを保持するframe scheduler、native
   stale/backpressure追従と世代番号の非折り返し
+- resize/backing scale/font変更を最新1件へ集約し、CoreText catalog/cache、1x/2x
+  glyph atlas、native Metal atlas、full damageを同じ公開世代で切り替えるatomic rebuild
 
 ## 起動
 

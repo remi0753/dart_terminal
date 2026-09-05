@@ -312,12 +312,14 @@ final class TerminalDamageOutbox {
   bool _damageGenerationExhausted = false;
   int _lastAcknowledgedGeneration;
   bool _isOpen = true;
+  bool _rebuildPaused = false;
   TerminalDamageOutboxCloseReason? _lastCloseReason;
   int _publishedPacketCount = 0;
   int _acknowledgedPacketCount = 0;
 
   TerminalSessionId get sessionId => _sessionId;
   bool get isOpen => _isOpen;
+  bool get isPausedForFullRebuild => _rebuildPaused;
   int get inFlightCount => _outstanding == null ? 0 : 1;
   int? get inFlightDamageGeneration => _outstanding?.damageGeneration;
   int get lastAcknowledgedGeneration => _lastAcknowledgedGeneration;
@@ -345,6 +347,7 @@ final class TerminalDamageOutbox {
       requiredResourceGeneration,
       'requiredResourceGeneration',
     );
+    if (_rebuildPaused) return null;
     if (_outstanding != null) return null;
     if (_damageGenerationExhausted) {
       _terminate(TerminalDamageOutboxCloseReason.generationExhausted);
@@ -456,6 +459,16 @@ final class TerminalDamageOutbox {
     return _ackResult(TerminalDamageAckDisposition.accepted);
   }
 
+  /// Prevents new damage publication while render resources are rebuilding.
+  ///
+  /// An already published packet remains owned until its exact ACK arrives.
+  void pauseForFullRebuild() {
+    if (!_isOpen) {
+      throw StateError('damage relationship is closed');
+    }
+    _rebuildPaused = true;
+  }
+
   /// Publishes a rebuilt screen only after its matching resources are ready.
   ///
   /// An older in-flight packet retains its captured screen and exact snapshot
@@ -464,8 +477,9 @@ final class TerminalDamageOutbox {
     if (!_isOpen) {
       throw StateError('damage relationship is closed');
     }
-    _screen = replacement;
     replacement.requestFullSnapshot();
+    _screen = replacement;
+    _rebuildPaused = false;
   }
 
   /// Ignores stale timer callbacks and closes only the exact in-flight packet.
@@ -513,12 +527,14 @@ final class TerminalDamageOutbox {
     _damageGenerationExhausted = false;
     _lastAcknowledgedGeneration = 0;
     _isOpen = true;
+    _rebuildPaused = false;
     _lastCloseReason = null;
   }
 
   void _terminate(TerminalDamageOutboxCloseReason reason) {
     _outstanding = null;
     _isOpen = false;
+    _rebuildPaused = false;
     _lastCloseReason = reason;
     _screen.requestFullSnapshot();
   }

@@ -173,12 +173,14 @@ final class TerminalGlyphAtlasPageDescriptor {
 final class TerminalGlyphAtlasSnapshot {
   TerminalGlyphAtlasSnapshot({
     required this.resourceGeneration,
+    required this.resetEpoch,
     required this.catalogGeneration,
     required this.scale16_16,
     required List<TerminalGlyphAtlasPageDescriptor> pages,
   }) : pages = List<TerminalGlyphAtlasPageDescriptor>.unmodifiable(pages);
 
   final int resourceGeneration;
+  final int resetEpoch;
   final int catalogGeneration;
   final int scale16_16;
   final List<TerminalGlyphAtlasPageDescriptor> pages;
@@ -245,6 +247,7 @@ final class TerminalGlyphAtlas {
   int _catalogGeneration;
   int _scale16_16;
   int _resourceGeneration = 1;
+  int _resetEpoch = 0;
   int _nextEntryId = 1;
   int _nextPageId = 1;
   int _nextPageGeneration = 1;
@@ -258,6 +261,7 @@ final class TerminalGlyphAtlas {
   int get scale16_16 => _scale16_16;
   double get scale => _scale16_16 / 65536.0;
   int get resourceGeneration => _resourceGeneration;
+  int get resetEpoch => _resetEpoch;
   int get entryCount => _entries.length;
   int get pageCount => _pages.length;
   int get alphaPageCount => _pages
@@ -378,6 +382,7 @@ final class TerminalGlyphAtlas {
           ..sort((a, b) => a.pageId.compareTo(b.pageId));
     return TerminalGlyphAtlasSnapshot(
       resourceGeneration: _resourceGeneration,
+      resetEpoch: _resetEpoch,
       catalogGeneration: _catalogGeneration,
       scale16_16: _scale16_16,
       pages: pages,
@@ -518,13 +523,15 @@ final class TerminalGlyphAtlas {
         'must be positive',
       );
     }
+    final int scale16_16 = TerminalRasterBufferV1.scaleToFixed(scale);
+    _incrementResourceGeneration();
     _catalogGeneration = catalogGeneration;
-    _scale16_16 = TerminalRasterBufferV1.scaleToFixed(scale);
+    _scale16_16 = scale16_16;
     _entries.clear();
     _pages.clear();
     _dirtyPageRects.clear();
     _retainedBytes = 0;
-    _incrementResourceGeneration();
+    _resetEpoch++;
   }
 
   TerminalGlyphAtlasEntry _insert(

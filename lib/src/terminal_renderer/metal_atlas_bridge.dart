@@ -34,20 +34,43 @@ final class TerminalGlyphAtlasMetalBridge {
       Queue<TerminalGlyphAtlasUpload>();
   final SplayTreeSet<int> _pinnedSubmissionTokens = SplayTreeSet<int>();
   int _nativeAtlasGeneration = 0;
+  int _nativeResetEpoch = -1;
+  int _nativeCatalogGeneration = 0;
+  int _nativeScale16_16 = 0;
 
-  int get nativeAtlasGeneration => _nativeAtlasGeneration == 0
-      ? atlas.resourceGeneration
-      : _nativeAtlasGeneration;
+  int get nativeAtlasGeneration => _nativeAtlasGeneration;
   int get pendingUploadCount => _pendingUploads.length;
   int get pinnedSubmissionCount => _pinnedSubmissionTokens.length;
+  bool get isSynchronized =>
+      _nativeAtlasGeneration == atlas.resourceGeneration &&
+      _nativeResetEpoch == atlas.resetEpoch &&
+      _nativeCatalogGeneration == atlas.catalogGeneration &&
+      _nativeScale16_16 == atlas.scale16_16 &&
+      _pendingUploads.isEmpty &&
+      atlas.pendingUploadPageCount == 0;
 
   TerminalGlyphAtlasSyncDisposition synchronize() {
     TerminalGlyphAtlasSnapshot snapshot = atlas.snapshot();
+    if (_nativeAtlasGeneration == 0 ||
+        _nativeResetEpoch != snapshot.resetEpoch ||
+        _nativeCatalogGeneration != snapshot.catalogGeneration ||
+        _nativeScale16_16 != snapshot.scale16_16) {
+      final TerminalGlyphAtlasSyncDisposition? reset = _resetNative(snapshot);
+      if (reset != null) return reset;
+    }
     _reconcile(snapshot);
     while (true) {
       if (_pendingUploads.isEmpty) {
         _pendingUploads.addAll(atlas.takePendingUploads());
         if (_pendingUploads.isEmpty) {
+          snapshot = atlas.snapshot();
+          if (_nativeAtlasGeneration != snapshot.resourceGeneration) {
+            final TerminalGlyphAtlasSyncDisposition? reset = _resetNative(
+              snapshot,
+            );
+            if (reset != null) return reset;
+            continue;
+          }
           return TerminalGlyphAtlasSyncDisposition.synchronized;
         }
         snapshot = atlas.snapshot();
@@ -160,6 +183,33 @@ final class TerminalGlyphAtlasMetalBridge {
       atlas.completeSubmission(token);
     }
     return snapshot;
+  }
+
+  TerminalGlyphAtlasSyncDisposition? _resetNative(
+    TerminalGlyphAtlasSnapshot snapshot,
+  ) {
+    final TerminalMetalUploadDisposition disposition = renderer.resetAtlas(
+      atlasGeneration: snapshot.resourceGeneration,
+    );
+    switch (disposition) {
+      case TerminalMetalUploadDisposition.uploaded:
+        _nativeAtlasGeneration = snapshot.resourceGeneration;
+        _nativeResetEpoch = snapshot.resetEpoch;
+        _nativeCatalogGeneration = snapshot.catalogGeneration;
+        _nativeScale16_16 = snapshot.scale16_16;
+        _alphaSlots.clear();
+        _colorSlots.clear();
+        _pendingUploads.clear();
+        _reconcile(snapshot);
+        _pendingUploads.addAll(atlas.snapshotUploads());
+        // Full page copies above include every outstanding dirty rectangle.
+        atlas.takePendingUploads();
+        return null;
+      case TerminalMetalUploadDisposition.backpressured:
+        return TerminalGlyphAtlasSyncDisposition.backpressured;
+      case TerminalMetalUploadDisposition.stale:
+        throw StateError('native atlas generation is ahead of its bridge');
+    }
   }
 
   void _reconcile(TerminalGlyphAtlasSnapshot snapshot) {

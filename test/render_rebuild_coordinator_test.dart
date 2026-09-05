@@ -113,6 +113,12 @@ void _testNewestRequestCoalescingAndSupersededCompletion() {
       'request burst retains one newest target at index $index',
     );
   }
+  original.setNarrowCell(0, 0, 0x42);
+  _expect(
+    outbox.isPausedForFullRebuild &&
+        outbox.tryCreateTransfer(requiredResourceGeneration: 20) == null,
+    'pending rebuild pauses even newly dirtied damage publication',
+  );
   final TerminalRenderRebuildPlan oldPlan = coordinator.beginNewest()!;
   _expect(
     oldPlan.requestGeneration == 1000 &&
@@ -144,6 +150,7 @@ void _testNewestRequestCoalescingAndSupersededCompletion() {
     superseded.disposition ==
             TerminalRenderRebuildCompletionDisposition.superseded &&
         !outbox.isBoundToScreen(resized) &&
+        outbox.isPausedForFullRebuild &&
         coordinator.pendingPlanCount == 1 &&
         coordinator.supersededCount == 1,
     'older resource completion cannot publish after a newer request',
@@ -184,6 +191,7 @@ void _testNewestRequestCoalescingAndSupersededCompletion() {
         coordinator.publishedTarget.scale16_16 == 2 << 16 &&
         coordinator.publishedResources.catalogGeneration == 11 &&
         coordinator.publishedResources.atlasGeneration == 21 &&
+        !outbox.isPausedForFullRebuild &&
         coordinator.pendingReasons.isEmpty &&
         coordinator.requestCount == 1001 &&
         coordinator.publishedCount == 1,

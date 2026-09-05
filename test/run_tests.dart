@@ -19,6 +19,7 @@ import 'product_parser_benchmark_test.dart';
 import 'product_parser_corpus_test.dart';
 import 'reference_renderer_test.dart';
 import 'render_rebuild_coordinator_test.dart';
+import 'render_resource_rebuilder_test.dart';
 import 'runtime_lifecycle_test.dart';
 import 'terminal_core_test.dart';
 import 'terminal_damage_copy_test.dart';
@@ -61,6 +62,7 @@ Future<void> main() async {
   runMetalPipelineTests();
   runReferenceRendererTests();
   runRenderRebuildCoordinatorTests();
+  runRenderResourceRebuilderTests();
   runTerminalHistoryReflowTests();
   runTerminalPaletteTests();
   runTerminalPropertyFuzzTests();

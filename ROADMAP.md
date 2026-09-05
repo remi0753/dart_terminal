@@ -728,10 +728,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （[`docs/phase4/damage-frame-coordinator.md`](docs/phase4/damage-frame-coordinator.md) を参照して実施）
   - [x] newest-model frame scheduler と native outcome connection
     （[`docs/phase4/damage-frame-coordinator.md`](docs/phase4/damage-frame-coordinator.md) を参照して実施）
-- [ ] resize/scale/font change の full rebuild
+- [x] resize/scale/font change の full rebuild
   - [x] coalesced rebuild state と full-snapshot epoch ownership
     （[`docs/phase4/resize-scale-font-rebuild.md`](docs/phase4/resize-scale-font-rebuild.md) を参照して実施）
-  - [ ] CoreText/atlas/Metal resource rebuild integration
+  - [x] CoreText/atlas/Metal resource rebuild integration
     （[`docs/phase4/resize-scale-font-rebuild.md`](docs/phase4/resize-scale-font-rebuild.md) を参照して実施）
 - [ ] cursor blink、visual bell、occlusion pause
 - [ ] device/shader/drawable failure recovery

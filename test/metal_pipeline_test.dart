@@ -10,7 +10,54 @@ void runMetalPipelineTests() {
   for (final int scale in <int>[1, 2]) {
     _testGpuAgainstReferenceGolden(scale);
   }
+  _testEmptySameDomainResetSynchronization();
   _testBridgeLimitValidation();
+}
+
+void _testEmptySameDomainResetSynchronization() {
+  final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
+    catalogGeneration: 1,
+    limits: const TerminalGlyphAtlasLimits(
+      pageWidth: 8,
+      pageHeight: 8,
+      maximumAlphaPages: 1,
+      maximumColorPages: 1,
+      maximumEntries: 1,
+      maximumRetainedBytes: 8 * 8 * 4,
+      gutter: 0,
+    ),
+  );
+  final TerminalMetalRenderer renderer = TerminalMetalRenderer.open(
+    config: const TerminalMetalRendererConfig(
+      maximumViewportWidth: 1,
+      maximumViewportHeight: 1,
+      maximumInstances: 1,
+      atlasWidth: 8,
+      atlasHeight: 8,
+      maximumAlphaPages: 1,
+      maximumColorPages: 1,
+    ),
+  );
+  try {
+    final TerminalGlyphAtlasMetalBridge bridge = TerminalGlyphAtlasMetalBridge(
+      atlas: atlas,
+      renderer: renderer,
+    );
+    _expect(
+      bridge.synchronize() == TerminalGlyphAtlasSyncDisposition.synchronized &&
+          bridge.nativeAtlasGeneration == 1,
+      'empty first attachment publishes a native atlas generation',
+    );
+    atlas.reset(catalogGeneration: 1, scale: 1);
+    _expect(
+      bridge.synchronize() == TerminalGlyphAtlasSyncDisposition.synchronized &&
+          bridge.isSynchronized &&
+          bridge.nativeAtlasGeneration == atlas.resourceGeneration,
+      'empty same-domain reset advances native atlas without a fake glyph',
+    );
+  } finally {
+    renderer.dispose();
+  }
 }
 
 void _testGpuAgainstReferenceGolden(int scale) {
