@@ -62,6 +62,7 @@ final class TerminalScreen {
     for (int row = 0; row < rows; row++) {
       _logicalLineIds[row] = row + 1;
     }
+    _nextLogicalLineId = rows + 1;
     _writeDefaultTabStops();
   }
 
@@ -95,6 +96,7 @@ final class TerminalScreen {
   int _cursorColumn = 0;
   int _savedCursorRow = 0;
   int _savedCursorColumn = 0;
+  late int _nextLogicalLineId;
   int _generation = 1;
   bool _fullSnapshotRequired = true;
 
@@ -488,6 +490,419 @@ final class TerminalScreen {
     }
   }
 
+  /// Prints a caller-classified width-one scalar at the cursor.
+  void printNarrowScalar(int scalar) {
+    _validateContent(scalar);
+    if (scalar == 0) {
+      throw ArgumentError.value(scalar, 'scalar', 'NUL is not printable');
+    }
+    if (_wrapPending) {
+      _wrapToNextLine();
+    }
+    final int right = _horizontalRightForCursor();
+    if (_insertMode) {
+      insertCharacters(1);
+    }
+    setNarrowCell(_cursorRow, _cursorColumn, scalar);
+    if (_cursorColumn >= right) {
+      if (_autoWrapMode && !_wrapPending) {
+        _wrapPending = true;
+        _incrementGeneration();
+      }
+      return;
+    }
+    if (_setCursorUnchecked(_cursorRow, _cursorColumn + 1)) {
+      _incrementGeneration();
+    }
+  }
+
+  void moveCursorUp(int count) {
+    _validateCount(count);
+    final int first = _verticalFirstForCursor();
+    final int last = _verticalLastForCursor();
+    _moveCursorClamped(
+      _cursorRow - count,
+      _cursorColumn,
+      first,
+      last,
+      0,
+      columns - 1,
+    );
+  }
+
+  void moveCursorDown(int count) {
+    _validateCount(count);
+    final int first = _verticalFirstForCursor();
+    final int last = _verticalLastForCursor();
+    _moveCursorClamped(
+      _cursorRow + count,
+      _cursorColumn,
+      first,
+      last,
+      0,
+      columns - 1,
+    );
+  }
+
+  void moveCursorForward(int count) {
+    _validateCount(count);
+    final int left = _horizontalLeftForCursor();
+    final int right = _horizontalRightForCursor();
+    _moveCursorClamped(
+      _cursorRow,
+      _cursorColumn + count,
+      0,
+      rows - 1,
+      left,
+      right,
+    );
+  }
+
+  void moveCursorBackward(int count) {
+    _validateCount(count);
+    final int left = _horizontalLeftForCursor();
+    final int right = _horizontalRightForCursor();
+    _moveCursorClamped(
+      _cursorRow,
+      _cursorColumn - count,
+      0,
+      rows - 1,
+      left,
+      right,
+    );
+  }
+
+  void moveCursorNextLine(int count) {
+    _validateCount(count);
+    final int first = _verticalFirstForCursor();
+    final int last = _verticalLastForCursor();
+    final int left = _horizontalLeftForCursor();
+    final int right = _horizontalRightForCursor();
+    _moveCursorClamped(_cursorRow + count, left, first, last, left, right);
+  }
+
+  void moveCursorPreviousLine(int count) {
+    _validateCount(count);
+    final int first = _verticalFirstForCursor();
+    final int last = _verticalLastForCursor();
+    final int left = _horizontalLeftForCursor();
+    final int right = _horizontalRightForCursor();
+    _moveCursorClamped(_cursorRow - count, left, first, last, left, right);
+  }
+
+  /// Uses zero-based row/column parameters, relative to margins in origin mode.
+  void setCursorAddress(int row, int column) {
+    if (row < 0 || column < 0) {
+      throw RangeError('cursor address must be nonnegative');
+    }
+    final int targetRow;
+    final int targetColumn;
+    final int firstRow;
+    final int lastRow;
+    final int firstColumn;
+    final int lastColumn;
+    if (_originMode) {
+      firstRow = _topMargin;
+      lastRow = _bottomMargin;
+      firstColumn = activeLeftMargin;
+      lastColumn = activeRightMargin;
+      targetRow = firstRow + row;
+      targetColumn = firstColumn + column;
+    } else {
+      firstRow = 0;
+      lastRow = rows - 1;
+      firstColumn = 0;
+      lastColumn = columns - 1;
+      targetRow = row;
+      targetColumn = column;
+    }
+    _moveCursorClamped(
+      targetRow,
+      targetColumn,
+      firstRow,
+      lastRow,
+      firstColumn,
+      lastColumn,
+    );
+  }
+
+  void setCursorColumn(int column) {
+    if (column < 0) {
+      throw RangeError.value(column, 'column', 'must be nonnegative');
+    }
+    final int left = _originMode ? activeLeftMargin : 0;
+    final int right = _originMode ? activeRightMargin : columns - 1;
+    final int target = left + column;
+    _moveCursorClamped(_cursorRow, target, 0, rows - 1, left, right);
+  }
+
+  void setCursorRow(int row) {
+    if (row < 0) {
+      throw RangeError.value(row, 'row', 'must be nonnegative');
+    }
+    final int first = _originMode ? _topMargin : 0;
+    final int last = _originMode ? _bottomMargin : rows - 1;
+    _moveCursorClamped(first + row, _cursorColumn, first, last, 0, columns - 1);
+  }
+
+  void backspace() {
+    final int left = _horizontalLeftForCursor();
+    final int right = _horizontalRightForCursor();
+    _moveCursorClamped(_cursorRow, _cursorColumn - 1, 0, rows - 1, left, right);
+  }
+
+  void carriageReturn() {
+    final int left = _horizontalLeftForCursor();
+    final int right = _horizontalRightForCursor();
+    _moveCursorClamped(_cursorRow, left, 0, rows - 1, left, right);
+  }
+
+  void horizontalTab([int count = 1]) {
+    _validateCount(count);
+    final int left = _horizontalLeftForCursor();
+    final int right = _horizontalRightForCursor();
+    int column = _cursorColumn;
+    final int steps = count.clamp(1, columns);
+    for (int step = 0; step < steps; step++) {
+      int next = right;
+      for (int candidate = column + 1; candidate <= right; candidate++) {
+        if (_tabStops[candidate] != 0) {
+          next = candidate;
+          break;
+        }
+      }
+      column = next;
+    }
+    _moveCursorClamped(_cursorRow, column, 0, rows - 1, left, right);
+  }
+
+  void backwardTab([int count = 1]) {
+    _validateCount(count);
+    final int left = _horizontalLeftForCursor();
+    final int right = _horizontalRightForCursor();
+    int column = _cursorColumn;
+    final int steps = count.clamp(1, columns);
+    for (int step = 0; step < steps; step++) {
+      int previous = left;
+      for (int candidate = column - 1; candidate >= left; candidate--) {
+        if (_tabStops[candidate] != 0) {
+          previous = candidate;
+          break;
+        }
+      }
+      column = previous;
+    }
+    _moveCursorClamped(_cursorRow, column, 0, rows - 1, left, right);
+  }
+
+  void lineFeed() {
+    final int flags = rowFlagsAt(_cursorRow);
+    setRowFlags(
+      _cursorRow,
+      (flags & ~TerminalRowFlags.softWrapped) | TerminalRowFlags.hardBreak,
+    );
+    index();
+  }
+
+  void index() {
+    final int column = _cursorColumn;
+    if (_cursorRow >= _topMargin && _cursorRow <= _bottomMargin) {
+      if (_cursorRow == _bottomMargin) {
+        scrollUp(1);
+      } else {
+        _moveCursorClamped(_cursorRow + 1, column, 0, rows - 1, 0, columns - 1);
+      }
+      return;
+    }
+    _moveCursorClamped(_cursorRow + 1, column, 0, rows - 1, 0, columns - 1);
+  }
+
+  void reverseIndex() {
+    final int column = _cursorColumn;
+    if (_cursorRow >= _topMargin && _cursorRow <= _bottomMargin) {
+      if (_cursorRow == _topMargin) {
+        scrollDown(1);
+      } else {
+        _moveCursorClamped(_cursorRow - 1, column, 0, rows - 1, 0, columns - 1);
+      }
+      return;
+    }
+    _moveCursorClamped(_cursorRow - 1, column, 0, rows - 1, 0, columns - 1);
+  }
+
+  void nextLine() {
+    lineFeed();
+    carriageReturn();
+  }
+
+  void insertCharacters(int count) {
+    _validateCount(count);
+    _wrapPending = false;
+    final int right = _horizontalRightForCursor();
+    final int amount = count.clamp(1, right - _cursorColumn + 1);
+    final int physical = _physicalRow(_cursorRow);
+    for (int column = right; column >= _cursorColumn + amount; column--) {
+      _copyCell(physical, column - amount, physical, column);
+    }
+    _clearCellRange(physical, _cursorColumn, _cursorColumn + amount);
+    _markDirtyPhysical(physical, _cursorColumn, right + 1);
+    _incrementGeneration();
+  }
+
+  void deleteCharacters(int count) {
+    _validateCount(count);
+    _wrapPending = false;
+    final int right = _horizontalRightForCursor();
+    final int amount = count.clamp(1, right - _cursorColumn + 1);
+    final int physical = _physicalRow(_cursorRow);
+    for (int column = _cursorColumn; column + amount <= right; column++) {
+      _copyCell(physical, column + amount, physical, column);
+    }
+    _clearCellRange(physical, right - amount + 1, right + 1);
+    _markDirtyPhysical(physical, _cursorColumn, right + 1);
+    _incrementGeneration();
+  }
+
+  void eraseCharacters(int count) {
+    _validateCount(count);
+    bool changed = _clearWrapPending();
+    final int right = _horizontalRightForCursor();
+    final int end = (_cursorColumn + count).clamp(_cursorColumn + 1, right + 1);
+    final int physical = _physicalRow(_cursorRow);
+    if (_clearCellRange(physical, _cursorColumn, end)) {
+      _markDirtyPhysical(physical, _cursorColumn, end);
+      changed = true;
+    }
+    if (changed) {
+      _incrementGeneration();
+    }
+  }
+
+  void eraseInLine(int mode) {
+    final int left = _horizontalLeftForCursor();
+    final int right = _horizontalRightForCursor();
+    final int start;
+    final int end;
+    switch (mode) {
+      case 0:
+        start = _cursorColumn;
+        end = right + 1;
+      case 1:
+        start = left;
+        end = _cursorColumn + 1;
+      case 2:
+        start = left;
+        end = right + 1;
+      default:
+        throw ArgumentError.value(mode, 'mode', 'must be 0, 1, or 2');
+    }
+    bool changed = _clearWrapPending();
+    final int physical = _physicalRow(_cursorRow);
+    if (_clearCellRange(physical, start, end)) {
+      _markDirtyPhysical(physical, start, end);
+      changed = true;
+    }
+    if (changed) {
+      _incrementGeneration();
+    }
+  }
+
+  void eraseInDisplay(int mode) {
+    if (mode < 0 || mode > 2) {
+      throw ArgumentError.value(mode, 'mode', 'must be 0, 1, or 2');
+    }
+    bool changed = _clearWrapPending();
+    for (int row = 0; row < rows; row++) {
+      final int start;
+      final int end;
+      if (mode == 0) {
+        if (row < _cursorRow) {
+          continue;
+        }
+        start = row == _cursorRow ? _cursorColumn : 0;
+        end = columns;
+      } else if (mode == 1) {
+        if (row > _cursorRow) {
+          continue;
+        }
+        start = 0;
+        end = row == _cursorRow ? _cursorColumn + 1 : columns;
+      } else {
+        start = 0;
+        end = columns;
+      }
+      final int physical = _physicalRow(row);
+      if (_clearCellRange(physical, start, end)) {
+        _markDirtyPhysical(physical, start, end);
+        changed = true;
+      }
+    }
+    if (changed) {
+      _incrementGeneration();
+    }
+  }
+
+  void insertLines(int count) {
+    _validateCount(count);
+    if (_cursorRow < _topMargin || _cursorRow > _bottomMargin) {
+      return;
+    }
+    final int left = _horizontalLeftForCursor();
+    final int right = _horizontalRightForCursor();
+    _scrollDownRegion(_cursorRow, _bottomMargin, left, right, count);
+  }
+
+  void deleteLines(int count) {
+    _validateCount(count);
+    if (_cursorRow < _topMargin || _cursorRow > _bottomMargin) {
+      return;
+    }
+    final int left = _horizontalLeftForCursor();
+    final int right = _horizontalRightForCursor();
+    _scrollUpRegion(_cursorRow, _bottomMargin, left, right, count);
+  }
+
+  void scrollUp(int count) {
+    _validateCount(count);
+    _scrollUpRegion(
+      _topMargin,
+      _bottomMargin,
+      activeLeftMargin,
+      activeRightMargin,
+      count,
+    );
+  }
+
+  void scrollDown(int count) {
+    _validateCount(count);
+    _scrollDownRegion(
+      _topMargin,
+      _bottomMargin,
+      activeLeftMargin,
+      activeRightMargin,
+      count,
+    );
+  }
+
+  void resetScreen() {
+    resetTerminalState();
+    _firstPhysicalRow = 0;
+    _content.fillRange(0, cellCount, 0);
+    _foreground.fillRange(0, cellCount, 0);
+    _background.fillRange(0, cellCount, 0);
+    _styles.fillRange(0, cellCount, 0);
+    _hyperlinks.fillRange(0, cellCount, 0);
+    _widthFlags.fillRange(0, cellCount, TerminalCellFlags.narrow);
+    _rowFlags.fillRange(0, rows, 0);
+    for (int row = 0; row < rows; row++) {
+      _logicalLineIds[row] = row + 1;
+    }
+    _nextLogicalLineId = rows + 1;
+    _markEveryRowDirty();
+    _fullSnapshotRequired = true;
+    _incrementGeneration();
+  }
+
   bool isTabStop(int column) {
     _checkColumn(column);
     return _tabStops[column] != 0;
@@ -643,6 +1058,235 @@ final class TerminalScreen {
     RangeError.checkValueInInterval(column, 0, columns - 1, 'column');
   }
 
+  static void _validateCount(int count) {
+    if (count <= 0) {
+      throw RangeError.value(count, 'count', 'must be positive');
+    }
+  }
+
+  bool get _cursorUsesVerticalMargins =>
+      _cursorRow >= _topMargin && _cursorRow <= _bottomMargin;
+
+  int _verticalFirstForCursor() => _cursorUsesVerticalMargins ? _topMargin : 0;
+
+  int _verticalLastForCursor() =>
+      _cursorUsesVerticalMargins ? _bottomMargin : rows - 1;
+
+  bool get _cursorUsesHorizontalMargins =>
+      _horizontalMarginsMode &&
+      _cursorColumn >= _leftMargin &&
+      _cursorColumn <= _rightMargin;
+
+  int _horizontalLeftForCursor() =>
+      _cursorUsesHorizontalMargins ? _leftMargin : 0;
+
+  int _horizontalRightForCursor() =>
+      _cursorUsesHorizontalMargins ? _rightMargin : columns - 1;
+
+  void _moveCursorClamped(
+    int row,
+    int column,
+    int firstRow,
+    int lastRow,
+    int firstColumn,
+    int lastColumn,
+  ) {
+    final int nextRow = row.clamp(firstRow, lastRow);
+    final int nextColumn = column.clamp(firstColumn, lastColumn);
+    if (_setCursorUnchecked(nextRow, nextColumn)) {
+      _incrementGeneration();
+    }
+  }
+
+  void _wrapToNextLine() {
+    final int previousRow = _cursorRow;
+    final int logicalLineId = logicalLineIdAt(previousRow);
+    final int flags = rowFlagsAt(previousRow);
+    setRowFlags(
+      previousRow,
+      (flags & ~TerminalRowFlags.hardBreak) | TerminalRowFlags.softWrapped,
+    );
+    final int left = _horizontalLeftForCursor();
+    final int right = _horizontalRightForCursor();
+    _moveCursorClamped(previousRow, left, 0, rows - 1, left, right);
+    index();
+    setLogicalLineId(_cursorRow, logicalLineId);
+  }
+
+  void _copyCell(
+    int sourcePhysical,
+    int sourceColumn,
+    int destinationPhysical,
+    int destinationColumn,
+  ) {
+    final int source = sourcePhysical * columns + sourceColumn;
+    final int destination = destinationPhysical * columns + destinationColumn;
+    _content[destination] = _content[source];
+    _foreground[destination] = _foreground[source];
+    _background[destination] = _background[source];
+    _styles[destination] = _styles[source];
+    _hyperlinks[destination] = _hyperlinks[source];
+    _widthFlags[destination] = _widthFlags[source];
+  }
+
+  void _copyCellRange(
+    int sourcePhysical,
+    int destinationPhysical,
+    int startColumn,
+    int endColumn,
+  ) {
+    final int source = sourcePhysical * columns + startColumn;
+    final int destination = destinationPhysical * columns + startColumn;
+    final int length = endColumn - startColumn;
+    _content.setRange(destination, destination + length, _content, source);
+    _foreground.setRange(
+      destination,
+      destination + length,
+      _foreground,
+      source,
+    );
+    _background.setRange(
+      destination,
+      destination + length,
+      _background,
+      source,
+    );
+    _styles.setRange(destination, destination + length, _styles, source);
+    _hyperlinks.setRange(
+      destination,
+      destination + length,
+      _hyperlinks,
+      source,
+    );
+    _widthFlags.setRange(
+      destination,
+      destination + length,
+      _widthFlags,
+      source,
+    );
+  }
+
+  bool _clearCellRange(int physical, int startColumn, int endColumn) {
+    final int start = physical * columns + startColumn;
+    final int end = physical * columns + endColumn;
+    bool changed = false;
+    for (int index = start; index < end; index++) {
+      if (_content[index] != 0 ||
+          _foreground[index] != 0 ||
+          _background[index] != 0 ||
+          _styles[index] != 0 ||
+          _hyperlinks[index] != 0 ||
+          _widthFlags[index] != TerminalCellFlags.narrow) {
+        changed = true;
+        break;
+      }
+    }
+    if (!changed) {
+      return false;
+    }
+    _content.fillRange(start, end, 0);
+    _foreground.fillRange(start, end, 0);
+    _background.fillRange(start, end, 0);
+    _styles.fillRange(start, end, 0);
+    _hyperlinks.fillRange(start, end, 0);
+    _widthFlags.fillRange(start, end, TerminalCellFlags.narrow);
+    return true;
+  }
+
+  void _scrollUpRegion(int top, int bottom, int left, int right, int count) {
+    _wrapPending = false;
+    final int amount = count.clamp(1, bottom - top + 1);
+    if (top == 0 && bottom == rows - 1 && left == 0 && right == columns - 1) {
+      _firstPhysicalRow = (_firstPhysicalRow + amount) % rows;
+      for (int row = rows - amount; row < rows; row++) {
+        final int physical = _physicalRow(row);
+        _clearCellRange(physical, 0, columns);
+        _rowFlags[physical] = 0;
+        _logicalLineIds[physical] = _allocateLogicalLineId();
+      }
+      _markEveryRowDirty();
+      _incrementGeneration();
+      return;
+    }
+
+    final bool fullWidth = left == 0 && right == columns - 1;
+    for (int row = top; row <= bottom - amount; row++) {
+      final int destination = _physicalRow(row);
+      final int source = _physicalRow(row + amount);
+      _copyCellRange(source, destination, left, right + 1);
+      if (fullWidth) {
+        _rowFlags[destination] = _rowFlags[source];
+        _logicalLineIds[destination] = _logicalLineIds[source];
+      }
+    }
+    for (int row = bottom - amount + 1; row <= bottom; row++) {
+      final int physical = _physicalRow(row);
+      _clearCellRange(physical, left, right + 1);
+      if (fullWidth) {
+        _rowFlags[physical] = 0;
+        _logicalLineIds[physical] = _allocateLogicalLineId();
+      }
+    }
+    _markRegionDirty(top, bottom, left, right + 1);
+    _incrementGeneration();
+  }
+
+  void _scrollDownRegion(int top, int bottom, int left, int right, int count) {
+    _wrapPending = false;
+    final int amount = count.clamp(1, bottom - top + 1);
+    if (top == 0 && bottom == rows - 1 && left == 0 && right == columns - 1) {
+      _firstPhysicalRow = (_firstPhysicalRow - amount) % rows;
+      for (int row = 0; row < amount; row++) {
+        final int physical = _physicalRow(row);
+        _clearCellRange(physical, 0, columns);
+        _rowFlags[physical] = 0;
+        _logicalLineIds[physical] = _allocateLogicalLineId();
+      }
+      _markEveryRowDirty();
+      _incrementGeneration();
+      return;
+    }
+
+    final bool fullWidth = left == 0 && right == columns - 1;
+    for (int row = bottom; row >= top + amount; row--) {
+      final int destination = _physicalRow(row);
+      final int source = _physicalRow(row - amount);
+      _copyCellRange(source, destination, left, right + 1);
+      if (fullWidth) {
+        _rowFlags[destination] = _rowFlags[source];
+        _logicalLineIds[destination] = _logicalLineIds[source];
+      }
+    }
+    for (int row = top; row < top + amount; row++) {
+      final int physical = _physicalRow(row);
+      _clearCellRange(physical, left, right + 1);
+      if (fullWidth) {
+        _rowFlags[physical] = 0;
+        _logicalLineIds[physical] = _allocateLogicalLineId();
+      }
+    }
+    _markRegionDirty(top, bottom, left, right + 1);
+    _incrementGeneration();
+  }
+
+  void _markRegionDirty(int top, int bottom, int start, int end) {
+    for (int row = top; row <= bottom; row++) {
+      _markDirtyPhysical(_physicalRow(row), start, end);
+    }
+  }
+
+  int _allocateLogicalLineId() {
+    if (_nextLogicalLineId > maxLogicalLineId) {
+      for (int row = 0; row < rows; row++) {
+        _logicalLineIds[_physicalRow(row)] = row + 1;
+      }
+      _nextLogicalLineId = rows + 1;
+      _markEveryRowDirty();
+      _fullSnapshotRequired = true;
+    }
+    return _nextLogicalLineId++;
+  }
+
   bool _markDirtyPhysical(int physical, int start, int end) {
     final int previousStart = _dirtyStarts[physical];
     final int previousEnd = _dirtyEnds[physical];
@@ -712,6 +1356,14 @@ final class TerminalScreen {
     _cursorColumn = column;
     _wrapPending = false;
     return changed;
+  }
+
+  bool _clearWrapPending() {
+    if (!_wrapPending) {
+      return false;
+    }
+    _wrapPending = false;
+    return true;
   }
 
   void _incrementGeneration() {

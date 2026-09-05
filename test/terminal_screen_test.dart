@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dart_terminal/dart_terminal.dart';
 
 void main() => runTerminalScreenTests();
@@ -10,6 +13,561 @@ void runTerminalScreenTests() {
   _testTabStops();
   _testMarginAndOriginInvariants();
   _testModesCursorPresentationAndReset();
+  _testPrintingWrappingAndCharacterEditing();
+  _testEraseLineAndDisplay();
+  _testLineEditingAndMarginScrolling();
+  _testParserEditingDispatch();
+  _testParserCursorTabAndStyleDispatch();
+  _testParserScreenIntegrationAcrossChunks();
+}
+
+void _testPrintingWrappingAndCharacterEditing() {
+  final TerminalScreen wrapped = TerminalScreen(rows: 2, columns: 4);
+  for (final int scalar in 'ABCDEFGHI'.codeUnits) {
+    wrapped.printNarrowScalar(scalar);
+  }
+  _expect(_rowText(wrapped, 0) == 'EFGH', 'bottom wrap scrolls ring upward');
+  _expect(_rowText(wrapped, 1) == 'I...', 'wrapped scalar enters new row');
+  _expect(
+    wrapped.rowFlagsAt(0) & TerminalRowFlags.softWrapped != 0,
+    'wrapped row retains soft-wrap metadata',
+  );
+  _expect(
+    wrapped.logicalLineIdAt(0) == wrapped.logicalLineIdAt(1),
+    'soft-wrapped rows share logical line identity',
+  );
+  _expect(
+    wrapped.cursorRow == 1 && wrapped.cursorColumn == 1,
+    'cursor advances after wrapped print',
+  );
+
+  final TerminalScreen edited = TerminalScreen(rows: 1, columns: 5);
+  _writeRow(edited, 0, 'ABCD');
+  edited.setCursorPosition(0, 1);
+  edited.setMode(TerminalScreenMode.insert, true);
+  edited.printNarrowScalar(0x58);
+  _expect(_rowText(edited, 0) == 'AXBCD', 'insert-mode print shifts cells');
+  edited.deleteCharacters(2);
+  _expect(_rowText(edited, 0) == 'AXD..', 'delete characters shifts left');
+  edited.eraseCharacters(1);
+  _expect(_rowText(edited, 0) == 'AX...', 'erase characters writes blanks');
+
+  edited.setCursorPosition(0, 4);
+  edited.backspace();
+  _expect(edited.cursorColumn == 3, 'backspace moves left');
+  edited.carriageReturn();
+  _expect(edited.cursorColumn == 0, 'carriage return reaches left bound');
+  edited.setCursorPosition(0, 0);
+  edited.horizontalTab();
+  _expect(edited.cursorColumn == 4, 'tab clamps when row has no stop');
+  edited.backwardTab();
+  _expect(edited.cursorColumn == 0, 'backward tab clamps at left bound');
+
+  final String state = _screenKey(edited, null);
+  final int generation = edited.generation;
+  for (final void Function() invalid in <void Function()>[
+    () => edited.printNarrowScalar(0),
+    () => edited.moveCursorUp(0),
+    () => edited.insertCharacters(-1),
+    () => edited.eraseCharacters(0),
+    () => edited.setCursorAddress(-1, 0),
+  ]) {
+    _expectThrowsArgumentError(invalid, 'invalid editing argument rejected');
+    _expect(_screenKey(edited, null) == state, 'invalid editing is atomic');
+    _expect(
+      edited.generation == generation,
+      'invalid editing leaves generation unchanged',
+    );
+  }
+}
+
+void _testEraseLineAndDisplay() {
+  final TerminalScreen line = TerminalScreen(rows: 2, columns: 5);
+  _writeRow(line, 0, 'ABCDE');
+  line.setCursorPosition(0, 2);
+  line.eraseInLine(0);
+  _expect(_rowText(line, 0) == 'AB...', 'EL 0 erases through line end');
+  _writeRow(line, 0, 'ABCDE');
+  line.eraseInLine(1);
+  _expect(_rowText(line, 0) == '...DE', 'EL 1 erases through cursor');
+  _writeRow(line, 0, 'ABCDE');
+  line.eraseInLine(2);
+  _expect(_rowText(line, 0) == '.....', 'EL 2 erases whole line');
+
+  final TerminalScreen display = TerminalScreen(rows: 3, columns: 4);
+  _writeRow(display, 0, 'ABCD');
+  _writeRow(display, 1, 'EFGH');
+  _writeRow(display, 2, 'IJKL');
+  display.setCursorPosition(1, 1);
+  display.eraseInDisplay(0);
+  _expect(_rowText(display, 0) == 'ABCD', 'ED 0 preserves earlier rows');
+  _expect(_rowText(display, 1) == 'E...', 'ED 0 erases cursor onward');
+  _expect(_rowText(display, 2) == '....', 'ED 0 erases later rows');
+
+  _writeRow(display, 0, 'ABCD');
+  _writeRow(display, 1, 'EFGH');
+  _writeRow(display, 2, 'IJKL');
+  display.eraseInDisplay(1);
+  _expect(_rowText(display, 0) == '....', 'ED 1 erases earlier rows');
+  _expect(_rowText(display, 1) == '..GH', 'ED 1 erases through cursor');
+  _expect(_rowText(display, 2) == 'IJKL', 'ED 1 preserves later rows');
+  display.eraseInDisplay(2);
+  _expect(
+    _rowText(display, 0) == '....' &&
+        _rowText(display, 1) == '....' &&
+        _rowText(display, 2) == '....',
+    'ED 2 erases all rows',
+  );
+  _expectThrowsArgumentError(
+    () => display.eraseInDisplay(3),
+    'invalid ED mode rejected',
+  );
+}
+
+void _testLineEditingAndMarginScrolling() {
+  final TerminalScreen ring = TerminalScreen(rows: 3, columns: 2);
+  ring.setNarrowCell(
+    1,
+    0,
+    0x58,
+    foreground: 0x80010203,
+    background: 0x80050607,
+    style: 17,
+    hyperlink: 23,
+    isProtected: true,
+  );
+  ring.setRowFlags(1, TerminalRowFlags.output);
+  final int logicalLineId = ring.logicalLineIdAt(1);
+  ring.scrollUp(1);
+  _expect(ring.contentAt(0, 0) == 0x58, 'ring scroll preserves content');
+  _expect(
+    ring.foregroundAt(0, 0) == 0x80010203 &&
+        ring.backgroundAt(0, 0) == 0x80050607 &&
+        ring.styleAt(0, 0) == 17 &&
+        ring.hyperlinkAt(0, 0) == 23 &&
+        ring.widthFlagsAt(0, 0) ==
+            (TerminalCellFlags.narrow | TerminalCellFlags.protected),
+    'ring scroll preserves every packed cell field',
+  );
+  _expect(
+    ring.rowFlagsAt(0) == TerminalRowFlags.output &&
+        ring.logicalLineIdAt(0) == logicalLineId,
+    'ring scroll preserves row metadata',
+  );
+  _expect(
+    _rowText(ring, 2) == '..' && ring.rowFlagsAt(2) == 0,
+    'ring scroll initializes the exposed row',
+  );
+
+  final TerminalScreen vertical = TerminalScreen(rows: 3, columns: 4);
+  _writeRow(vertical, 0, 'AAAA');
+  _writeRow(vertical, 1, 'BBBB');
+  _writeRow(vertical, 2, 'CCCC');
+  vertical.setVerticalMargins(1, 2);
+  vertical.setCursorPosition(2, 0);
+  vertical.lineFeed();
+  _expect(_rowText(vertical, 0) == 'AAAA', 'scroll preserves row above margin');
+  _expect(_rowText(vertical, 1) == 'CCCC', 'LF scrolls bottom margin upward');
+  _expect(_rowText(vertical, 2) == '....', 'LF exposes blank bottom row');
+  vertical.setCursorPosition(1, 0);
+  vertical.reverseIndex();
+  _expect(_rowText(vertical, 1) == '....', 'RI exposes blank top margin row');
+  _expect(_rowText(vertical, 2) == 'CCCC', 'RI scrolls margin downward');
+
+  final TerminalScreen lines = TerminalScreen(rows: 4, columns: 4);
+  _writeRow(lines, 0, 'AAAA');
+  _writeRow(lines, 1, 'BBBB');
+  _writeRow(lines, 2, 'CCCC');
+  _writeRow(lines, 3, 'DDDD');
+  lines.setCursorPosition(1, 0);
+  lines.insertLines(1);
+  _expect(
+    _rowsText(lines) == 'AAAA\n....\nBBBB\nCCCC',
+    'insert line scrolls cursor-to-bottom down',
+  );
+  lines.deleteLines(1);
+  _expect(
+    _rowsText(lines) == 'AAAA\nBBBB\nCCCC\n....',
+    'delete line scrolls cursor-to-bottom up',
+  );
+
+  final TerminalScreen rectangle = TerminalScreen(rows: 3, columns: 6);
+  _writeRow(rectangle, 0, 'aaaaaa');
+  _writeRow(rectangle, 1, 'bbbbbb');
+  _writeRow(rectangle, 2, 'cccccc');
+  rectangle.setHorizontalMargins(1, 4);
+  rectangle.setMode(TerminalScreenMode.horizontalMargins, true);
+  rectangle.scrollUp(1);
+  _expect(
+    _rowsText(rectangle) == 'abbbba\nbccccb\nc....c',
+    'rectangular scroll preserves cells outside horizontal margins',
+  );
+}
+
+void _testParserCursorTabAndStyleDispatch() {
+  final TerminalScreen screen = TerminalScreen(rows: 5, columns: 20);
+  final TerminalScreenParserSink sink = _parseInto(
+    screen,
+    Uint8List.fromList(<int>[
+      0x1b,
+      0x5b,
+      ...ascii.encode('3;5H'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('2A'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('3B'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('2C'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('1D'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('2E'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('2F'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('7G'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('4d'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('2;3f'),
+      0x1b,
+      0x48,
+      0x1b,
+      0x5b,
+      ...ascii.encode('2I'),
+      0x1b,
+      0x5b,
+      0x5a,
+      0x1b,
+      0x5b,
+      0x67,
+      0x1b,
+      0x5b,
+      ...ascii.encode('3g'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('4 q'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('?12h'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('?25l'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('?69h'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('3;10s'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('?6h'),
+    ]),
+  );
+  _expect(
+    screen.cursorRow == 0 && screen.cursorColumn == 2,
+    'origin mode homes within horizontal margins',
+  );
+  _expect(
+    screen.leftMargin == 2 && screen.rightMargin == 9,
+    'DECSLRM parser dispatch',
+  );
+  _expect(
+    screen.cursorShape == TerminalCursorShape.underline &&
+        screen.cursorBlinking &&
+        !screen.cursorVisible,
+    'DECSCUSR and cursor private modes dispatch',
+  );
+  for (int column = 0; column < screen.columns; column++) {
+    _expect(!screen.isTabStop(column), 'TBC 3 clears tab column $column');
+  }
+  _expect(
+    sink.unsupportedControlCount == 0 && sink.unsupportedSequenceCount == 0,
+    'supported cursor/tab/style stream has no unsupported actions',
+  );
+}
+
+void _testParserEditingDispatch() {
+  final TerminalScreen controls = TerminalScreen(rows: 3, columns: 10);
+  controls.setCursorPosition(1, 1);
+  final TerminalScreenParserSink controlSink = _parseInto(
+    controls,
+    Uint8List.fromList(<int>[0x08, 0x09, 0x0d, 0x85, 0x8d, 0x84, 0x88]),
+  );
+  _expect(
+    controls.cursorRow == 2 &&
+        controls.cursorColumn == 0 &&
+        controls.isTabStop(0),
+    'C0 and C1 editing controls dispatch',
+  );
+  _expect(
+    controlSink.unsupportedControlCount == 0,
+    'supported C0 and C1 controls are not counted as unknown',
+  );
+
+  final TerminalScreen characters = TerminalScreen(rows: 2, columns: 5);
+  _writeRow(characters, 0, 'ABCDE');
+  _parseInto(
+    characters,
+    Uint8List.fromList(<int>[
+      0x1b,
+      0x5b,
+      ...ascii.encode('1;2H'),
+      0x1b,
+      0x5b,
+      ...ascii.encode('2@'),
+      0x1b,
+      0x5b,
+      0x50,
+      0x1b,
+      0x5b,
+      ...ascii.encode('2X'),
+    ]),
+  );
+  _expect(
+    _rowText(characters, 0) == 'A..C.',
+    'CSI ICH, DCH, and ECH dispatch in order',
+  );
+
+  final TerminalScreen lines = TerminalScreen(rows: 4, columns: 4);
+  _writeRow(lines, 0, 'AAAA');
+  _writeRow(lines, 1, 'BBBB');
+  _writeRow(lines, 2, 'CCCC');
+  _writeRow(lines, 3, 'DDDD');
+  _parseInto(
+    lines,
+    Uint8List.fromList(<int>[
+      0x1b,
+      0x5b,
+      ...ascii.encode('2;1H'),
+      0x1b,
+      0x5b,
+      0x4c,
+      0x1b,
+      0x5b,
+      0x4d,
+    ]),
+  );
+  _expect(
+    _rowsText(lines) == 'AAAA\nBBBB\nCCCC\n....',
+    'CSI IL and DL dispatch in order',
+  );
+
+  final TerminalScreen scrolling = TerminalScreen(rows: 3, columns: 3);
+  _writeRow(scrolling, 0, 'AAA');
+  _writeRow(scrolling, 1, 'BBB');
+  _writeRow(scrolling, 2, 'CCC');
+  _parseInto(
+    scrolling,
+    Uint8List.fromList(<int>[0x1b, 0x5b, 0x53, 0x1b, 0x5b, 0x54]),
+  );
+  _expect(
+    _rowsText(scrolling) == '...\nBBB\nCCC',
+    'CSI SU and SD dispatch in order',
+  );
+
+  final TerminalScreen erasing = TerminalScreen(rows: 2, columns: 4);
+  _writeRow(erasing, 0, 'ABCD');
+  _writeRow(erasing, 1, 'EFGH');
+  _parseInto(
+    erasing,
+    Uint8List.fromList(<int>[
+      0x1b,
+      0x5b,
+      ...ascii.encode('1;3H'),
+      0x1b,
+      0x5b,
+      0x4b,
+      0x1b,
+      0x5b,
+      ...ascii.encode('2J'),
+    ]),
+  );
+  _expect(_rowsText(erasing) == '....\n....', 'CSI EL and ED dispatch');
+
+  final TerminalScreen reset = TerminalScreen(rows: 2, columns: 4);
+  reset.setNarrowCell(1, 2, 0x58);
+  reset.setMode(TerminalScreenMode.insert, true);
+  reset.setCursorPosition(1, 2);
+  _parseInto(reset, Uint8List.fromList(<int>[0x1b, 0x63]));
+  _expect(
+    _rowsText(reset) == '....\n....' &&
+        reset.cursorRow == 0 &&
+        reset.cursorColumn == 0 &&
+        !reset.modeEnabled(TerminalScreenMode.insert),
+    'ESC RIS resets screen cells and terminal state',
+  );
+}
+
+void _testParserScreenIntegrationAcrossChunks() {
+  final Uint8List input = Uint8List.fromList(<int>[
+    ...ascii.encode('ABCDEFG'),
+    0x0d,
+    0x0a,
+    ...ascii.encode('12'),
+    0x1b,
+    0x5b,
+    ...ascii.encode('2;4Hxy'),
+    0x1b,
+    0x5b,
+    ...ascii.encode('1D'),
+    0x1b,
+    0x5b,
+    0x50,
+    0x1b,
+    0x5b,
+    ...ascii.encode('2;3r'),
+    0x1b,
+    0x5b,
+    ...ascii.encode('?6hQ'),
+    0x1b,
+    0x5b,
+    ...ascii.encode('?25l'),
+    0x1b,
+    0x5b,
+    ...ascii.encode('4h'),
+    0x1b,
+    0x5b,
+    ...ascii.encode('1;3HZ'),
+    0x1b,
+    0x5b,
+    ...ascii.encode('4l'),
+    0x1b,
+    0x37,
+    0x1b,
+    0x5b,
+    ...ascii.encode('2B'),
+    0x1b,
+    0x38,
+    0x1b,
+    0x48,
+    0x1b,
+    0x5d,
+    ...ascii.encode('0;title'),
+    0x07,
+    0x1b,
+    0x5b,
+    ...ascii.encode('1?2m'),
+    0x1b,
+    0x5b,
+    ...ascii.encode('31'),
+    0x1b,
+    0x5b,
+    ...ascii.encode('0m'),
+  ]);
+  const List<String> expected = <String>[
+    'ABCDEF',
+    'Q.Z.x.',
+    '12....',
+    'cursor=1,3 saved=1,3',
+    'margins=1,2,0,5',
+    'modes=true,false,true,false,false',
+    'cursorStyle=false,true,block wrap=false',
+    'tabs=3',
+    'counts=0,2,1,0,1,0',
+  ];
+
+  _expectList(
+    _parseScreen(input).snapshot,
+    expected,
+    'whole parser-to-screen snapshot',
+  );
+  for (int split = 0; split <= input.length; split++) {
+    _expectList(
+      _parseScreen(input, <int>[split, input.length - split]).snapshot,
+      expected,
+      'parser-to-screen split $split',
+    );
+  }
+  _expectList(
+    _parseScreen(input, List<int>.filled(input.length, 1)).snapshot,
+    expected,
+    'parser-to-screen bytewise chunks',
+  );
+}
+
+final class _ScreenResult {
+  const _ScreenResult(this.snapshot);
+
+  final List<String> snapshot;
+}
+
+_ScreenResult _parseScreen(Uint8List input, [List<int>? chunks]) {
+  final TerminalScreen screen = TerminalScreen(rows: 3, columns: 6);
+  final TerminalScreenParserSink sink = TerminalScreenParserSink(screen);
+  final VtParser parser = VtParser(sink: sink);
+  int offset = 0;
+  for (final int length in chunks ?? <int>[input.length]) {
+    parser.parse(input, offset, offset + length);
+    offset += length;
+  }
+  _expect(offset == input.length, 'screen chunk plan consumes all input');
+  parser.finish();
+  return _ScreenResult(_screenSnapshot(screen, sink));
+}
+
+TerminalScreenParserSink _parseInto(TerminalScreen screen, Uint8List input) {
+  final TerminalScreenParserSink sink = TerminalScreenParserSink(screen);
+  final VtParser parser = VtParser(sink: sink);
+  parser.parse(input);
+  parser.finish();
+  return sink;
+}
+
+List<String> _screenSnapshot(
+  TerminalScreen screen,
+  TerminalScreenParserSink sink,
+) => <String>[
+  for (int row = 0; row < screen.rows; row++) _rowText(screen, row),
+  'cursor=${screen.cursorRow},${screen.cursorColumn} '
+      'saved=${screen.savedCursorRow},${screen.savedCursorColumn}',
+  'margins=${screen.topMargin},${screen.bottomMargin},'
+      '${screen.leftMargin},${screen.rightMargin}',
+  'modes=${screen.modeEnabled(TerminalScreenMode.origin)},'
+      '${screen.modeEnabled(TerminalScreenMode.insert)},'
+      '${screen.modeEnabled(TerminalScreenMode.autoWrap)},'
+      '${screen.modeEnabled(TerminalScreenMode.reverseVideo)},'
+      '${screen.modeEnabled(TerminalScreenMode.horizontalMargins)}',
+  'cursorStyle=${screen.cursorVisible},${screen.cursorBlinking},'
+      '${screen.cursorShape.name} wrap=${screen.wrapPending}',
+  'tabs=${screen.isTabStop(3) ? 3 : '-'}',
+  'counts=${sink.unsupportedControlCount},${sink.unsupportedSequenceCount},'
+      '${sink.cancelCount},${sink.limitCount},${sink.malformedCount},'
+      '${sink.incompleteCount}',
+];
+
+String _screenKey(TerminalScreen screen, TerminalScreenParserSink? sink) =>
+    _screenSnapshot(
+      screen,
+      sink ?? TerminalScreenParserSink(screen),
+    ).join('\n');
+
+String _rowText(TerminalScreen screen, int row) {
+  final StringBuffer result = StringBuffer();
+  for (int column = 0; column < screen.columns; column++) {
+    final int content = screen.contentAt(row, column);
+    result.writeCharCode(content == 0 ? 0x2e : content);
+  }
+  return result.toString();
+}
+
+String _rowsText(TerminalScreen screen) =>
+    <String>[for (int row = 0; row < screen.rows; row++) _rowText(screen, row)]
+        .join('\n');
+
+void _writeRow(TerminalScreen screen, int row, String text) {
+  for (int column = 0; column < text.length; column++) {
+    screen.setNarrowCell(row, column, text.codeUnitAt(column));
+  }
 }
 
 void _testMarginAndOriginInvariants() {
@@ -459,5 +1017,22 @@ void _expectThrowsStateError(void Function() action, String message) {
 void _expect(bool condition, String message) {
   if (!condition) {
     throw StateError('test failed: $message');
+  }
+}
+
+void _expectList(List<String> actual, List<String> expected, String message) {
+  if (actual.length != expected.length) {
+    throw StateError(
+      'test failed: $message; length ${actual.length} != ${expected.length}; '
+      'actual=$actual expected=$expected',
+    );
+  }
+  for (int index = 0; index < actual.length; index++) {
+    if (actual[index] != expected[index]) {
+      throw StateError(
+        'test failed: $message; index $index; '
+        'actual=$actual expected=$expected',
+      );
+    }
   }
 }

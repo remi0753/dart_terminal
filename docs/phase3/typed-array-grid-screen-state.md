@@ -176,6 +176,15 @@ in dependency order avoids an unreviewable single change.
 - Reverse-video changes presentation of every existing cell, so it marks every
   row dirty without rewriting color tokens. Cursor presentation affects only
   overlay state and advances the screen generation without cell damage.
+- The first parser-to-screen integration run failed at the reviewed expected
+  snapshot only: the stream contains `CSI ? 25 l`, so the implementation
+  correctly reported cursor visibility `false` while the handwritten expected
+  line said `true`. Correct the expected visibility and rerun whole/split/
+  bytewise cases; no product source change is justified by this mismatch.
+- The first all-field ring-scroll assertion used untagged RGB integers and was
+  correctly rejected by the existing color-token validator. Direct colors in
+  the packed contract require the `0x80rrggbb` tag; change only the test
+  fixtures to valid tagged values before rerunning it.
 
 ## Decisions and alternatives
 
@@ -208,6 +217,16 @@ in dependency order avoids an unreviewable single change.
   saved cursor, margins, tab stops, wrap-pending, presentation, and screen modes
   in one generation step; the later editing subtask composes this with screen
   clearing for the RIS parser action.
+- Implement screen editing as allocation-free mutations over the private SoA
+  arrays. Full-width/full-height scroll rotates the physical-row ring; partial
+  vertical or horizontal-margin scroll copies only the affected rectangle.
+  Scrollback capture remains out of scope.
+- Keep parser-to-screen policy in a dedicated `VtParserSink`. The sink maps the
+  supported C0/C1, ESC, and CSI families, counts unsupported/rejected input,
+  and leaves OSC/DCS/string/query semantics to their later roadmap tasks.
+- Compute active edit bounds as scalar integers rather than returning records.
+  This keeps the ordinary printable-scalar path free of per-character helper
+  objects while retaining the same margin policy for cold cursor/edit actions.
 
 ## Verification results
 
@@ -252,7 +271,31 @@ in dependency order avoids an unreviewable single change.
 - `make runtime-source-check` passed with `tracked=93` and
   `native_sources=0`.
 - Final whitespace, staged-scope, and diff review passed; only the second
-  subtask completion commit remains.
+  subtask was committed as `8df821f Model terminal margins and screen modes`.
+
+### Editing operations and parser action sink
+
+- Focused JIT tests passed for width-one printing, delayed wrap and logical-line
+  identity, insert/replace, cursor movement, tab boundaries, line/display erase,
+  character/line insert-delete, full-screen ring scrolling, partial-margin
+  rectangular scrolling, and RIS reset. Full-screen scroll preserves all six
+  cell fields plus row flags and logical-line identity.
+- C0/C1, ESC, and CSI sink tests passed for cursor/margin/mode/presentation/tab
+  dispatch and the ICH/DCH/ECH, IL/DL, SU/SD, EL/ED editing families. Supported
+  actions do not increment unknown counters; unsupported or rejected actions
+  are counted without retaining input or mutating unrelated screen state.
+- A representative parser-to-screen stream produced the same cell, cursor,
+  saved cursor, margin, mode, tab-stop, and rejection-counter snapshot as one
+  chunk, at every two-way split including empty edge chunks, and bytewise.
+- The ordinary print path computes edit bounds as scalar values and mutates the
+  private typed arrays without `String`, `RegExp`, exception-driven dispatch,
+  per-cell objects, or helper-record allocation.
+- Final `make test` passed for 43 formatted Dart files, generated-parser-table
+  freshness, analysis with no issues, and all repository tests.
+- The final focused screen/parser suite compiled and exited successfully as a
+  Release AOT executable.
+- `make runtime-source-check` passed after staging the new sink with
+  `tracked=94` and `native_sources=0`.
 
 ## Risks and handoff
 

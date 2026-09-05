@@ -248,7 +248,7 @@ parser/benchmark などの Dart-only harness は後続実装の比較資料と�
 bin/main.dart                         エントリーポイント
 macos_application.json               product identity、helper、native package 宣言
 lib/src/terminal_application.dart    AppKit ウィンドウとキーイベント
-lib/src/terminal_core/               decoder、生成VT table、parser、SoA screen
+lib/src/terminal_core/               decoder、生成VT table、parser、SoA screen/action sink
 lib/src/runtime_lifecycle.dart       root/worker lifecycle coordinator
 lib/src/terminal_pane.dart           pane/session ID、owner、close状態
 lib/src/terminal_session.dart        persistent login shellとPTY入出力
@@ -262,10 +262,11 @@ test/run_tests.dart                  UI 非依存部分の最小テスト
 通常エントリーポイントは1 paneが1つのpersistent login shellを所有します。
 現在の表示はCR/LF/Backspaceだけを扱うbounded plain-text投影で、引き続き
 `TextView`を使います。一方、renderer packageのcustom-view providerと
-`TerminalMetalView`の生成・attach境界は用意済みです。本格的なterminal
-emulator表示には、実装済みparserのactionを消費する次の機能が必要です。
+`TerminalMetalView`の生成・attach境界に加え、incremental parserのactionを
+typed-array画面へ適用する`TerminalScreenParserSink`まで用意済みです。本格的な
+terminal emulator表示には次の機能が必要です。
 
-1. typed-array画面バッファ、cursor、margins、tabstops、modes
+1. SGR/palette、primary/alternate screen、wide/grapheme、reflow/scrollback
 2. 色・属性・カーソル・選択・スクロールを描画する CoreText/Metal renderer
 3. IME、クリップボード、キーバインドの仕上げ
 

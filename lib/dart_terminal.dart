@@ -19,6 +19,8 @@ export 'src/terminal_core/terminal_screen.dart'
         TerminalRowFlags,
         TerminalScreen,
         TerminalScreenMode;
+export 'src/terminal_core/terminal_screen_parser_sink.dart'
+    show TerminalScreenParserSink;
 export 'src/terminal_core/vt_parser.dart'
     show
         VtDcsSequence,
