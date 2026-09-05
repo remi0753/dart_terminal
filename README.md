@@ -65,6 +65,12 @@ pane-owned persistent login shell です。Phase 0 の native spike source は�
   OSC 4/10/11/104/110/111 color mutationとpalette-aware damage
 - shared style/palette資源と独立したgrid/stateを持つprimary/alternate screen、
   DEC private mode 47/1047/1048/1049、切替時full-snapshot contract
+- Unicode 17 grapheme境界・幅判定、bounded grapheme intern、wide/continuation
+  invariantとprimary historyを含むatomic resize/reflow
+- fixed-page SoA scrollback、独立line/byte cap、O(1) page eviction、primary
+  history/active gridを投影するbounded viewportとstable logical anchor
+- end-exclusive cell/word/logical-line selection、soft/hard wrap準拠のbounded
+  text extraction、cell-aligned exact scalarのforward/backward bounded search
 
 ## 起動
 

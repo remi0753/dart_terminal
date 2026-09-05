@@ -1,6 +1,6 @@
 # Phase 3 — Paged scrollback, viewport, selection, and search primitives
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-05
 - Scope: the first incomplete Phase 3 roadmap item after Unicode resize/reflow
 - Related: `ROADMAP.md` sections 5.3, 5.12, 6, and Phase 3;
@@ -202,6 +202,31 @@ subtasks pass.
   An anchor containing only that ID and an offset could therefore alias new
   content after screen reset or ID rollover. A 64-bit reuse epoch is retained
   with each screen/history row and included in every public anchor.
+- Stable-anchor reflow completed in `85029fd`. The clean-worktree roadmap
+  review made selection extraction, word/logical-line semantics, and bounded
+  search the final current child of this parent.
+- No product selection or search implementation exists yet. The viewport
+  already has package-private access to the complete active primary
+  history-plus-screen document (or isolated alternate grid), row extents,
+  logical identities, cell ordinals, grapheme resources, and join rules, so
+  the new primitives can remain in the same single-writer library without
+  duplicating authoritative cell state.
+- A stable anchor names a cell boundary only within one logical-line identity;
+  document ordering between different lines must be resolved against the
+  retained combined-row order. Consequently range creation and later text
+  extraction must return unavailable when an endpoint has been evicted rather
+  than guessing from numeric IDs or offsets.
+- The first selection eviction test exposed that clearing every retained page
+  made a still-visible continuation row recompute its logical offset from zero.
+  That allowed an anchor in the removed prefix to alias the visible suffix.
+  The visible screen therefore also needs to retain its first row's logical
+  base offset independently of whether the corresponding history page still
+  exists.
+- Review of the bounded-search path found that repeated public row access
+  started every scrollback lookup at the head page. Even with linear KMP this
+  would make a full scan across many pages quadratic in page count. A mutable
+  read-position cache can reuse the linked page's next/previous pointers while
+  remaining inside the same single-writer owner.
 
 ## Decisions and alternatives
 
@@ -242,6 +267,12 @@ subtasks pass.
   logical line. If page eviction removes only the prefix of a soft-wrapped
   line, its first retained row keeps a non-zero offset; an anchor in the
   removed prefix then fails resolution instead of aliasing the suffix.
+- Persist the first visible row's logical-cell offset and update it before a
+  full-width top-row rotation. One-row wrapping passes the outgoing logical
+  end explicitly to the replacement row, including when the byte cap cannot
+  retain even one history row. Reflow copies the first selected row's offset
+  into the replacement grid, while reset, a new logical line, scroll-down, and
+  ID-epoch rollover deliberately rebase it to zero.
 - Build the complete replacement history and both replacement screens before
   publishing any state. Only after all validation/allocation succeeds does the
   screen set transfer replacement pages, activate primary ownership, publish
@@ -250,6 +281,34 @@ subtasks pass.
   active viewport. An intact off-screen anchor remains stable and resolves
   after navigation brings its physical row into view; an evicted or wrong-
   screen anchor returns no position.
+- Model selection ranges as normalized, end-exclusive stable anchors while
+  retaining whether the supplied base/extent direction was reversed. Provide
+  an explicit after-cell anchor helper so the final visible cell is selectable
+  without inventing an out-of-range grid column.
+- For word expansion, use a deterministic locale-independent terminal policy:
+  Unicode White_Space cells form whitespace runs, ASCII letters/digits and
+  underscore plus all non-ASCII non-whitespace cells form word runs, and each
+  remaining ASCII separator is a single-cell unit. Grapheme clusters and wide
+  cells remain indivisible logical cells.
+- Logical-line expansion uses the retained extent of the touched logical
+  identity. If page eviction removed a prefix, selection starts at the first
+  retained offset rather than recreating missing text. Aggregate existing
+  prompt/command/output row flags as classification hints on the range.
+- Extract one space for a selected stored blank, expand an interned grapheme to
+  its scalar sequence, omit newlines at valid soft-wrap joins, and insert one
+  newline between distinct logical rows. Never split a grapheme when the
+  extraction scalar cap would be exceeded; return an explicit truncation bit.
+- Implement exact case-sensitive forward/backward scalar search as a streaming
+  KMP scan over cell-aligned logical content. Reset matching at hard/logical
+  line boundaries, never match inside only part of a grapheme cell, and bound
+  query scalars, scanned scalars, retained match results, and the existing
+  globally capped row space. Search matches reuse end-exclusive selection
+  ranges and semantic classification flags.
+- Cache the most recently resolved scrollback page and its logical start row.
+  Sequential forward/backward readers then cross each page link once; head
+  eviction adjusts or invalidates the cached start, while clear/reflow
+  replacement discards the cache. The cache does not affect history generation
+  or authoritative content.
 
 ## Verification results
 
@@ -356,6 +415,50 @@ resize/reflow and stable logical anchors are now the first unchecked child.
 This completes ordered subtask 3. The parent remains open; selection
 extraction, word/logical-line semantics, and bounded search are now the first
 unchecked child.
+
+### Selection and bounded search primitives
+
+- Focused tests passed normalized reversed and end-exclusive cell ranges,
+  explicit after-cell anchors, collapsed ranges, soft-wrap joining, hard-break
+  newlines, retained styled blanks, wide-continuation normalization, complete
+  grapheme extraction, and scalar-cap truncation without splitting a
+  grapheme. The same stable range extracted identical text after resize.
+- Deterministic word tests passed ASCII alphanumeric/underscore, Unicode
+  whitespace, single ASCII separator, non-ASCII wide-cell, soft-wrap, and
+  explicit scan-boundary cases. Logical-line selection crossed the
+  history/screen boundary and aggregated prompt/command/output row hints.
+- History clear and an intentionally unretainable one-row prefix proved that
+  the visible logical-cell base prevents an evicted anchor from aliasing its
+  retained suffix. Strict resolution also rejected out-of-content and
+  wrong-screen boundaries.
+- Exact forward/backward search passed soft-wrap matches, hard-boundary
+  rejection, stable resume anchors, deterministic order, overlapping matches,
+  result and scalar work caps, complete grapheme alignment, wide cells, and
+  primary/alternate isolation. A maximum 256-scalar repeated-prefix KMP case
+  scanned a 512-scalar row in both directions without pathological fallback.
+- A no-match scan traversed 512 one-row linked history pages in both
+  directions, retained identical scan counts, did not mutate the history
+  generation, and passed page topology validation. The scrollback read cache
+  keeps this sequential traversal linear in page links while existing repeated
+  eviction tests cover cache invalidation and logical-start adjustment.
+- The first eviction-focused test failed because the visible suffix was
+  incorrectly rebased after all corresponding history pages were cleared.
+  Persisting and rotating the first visible row's logical offset fixed the
+  alias. An initial backward maximum-query assertion expected scanning to stop
+  at the first match; it was corrected because the result contract enumerates
+  every bounded match and therefore scans the remaining retained content.
+  Two attempted related-test commands used nonexistent split wide/grapheme
+  filenames; the actual combined and Unicode suites were then run and passed.
+- `dart analyze` and all focused selection/search, history reflow, reflow,
+  scrollback, viewport, screen, screen-set, wide/grapheme, and Unicode suites
+  passed. `make test` passed VT table freshness, formatting of 63 files, full
+  static analysis with no issues, and the complete test runner. The focused
+  suite compiled to a Release AOT executable and completed successfully.
+- `git diff --cached --check` passed. The staged-source Dart-only audit passed
+  with 119 tracked files and zero native source files.
+
+This completes ordered subtask 4 and its parent. Query/reply encoding and the
+PTY write connection are now the first unchecked roadmap task.
 
 ## Risks and handoff
 

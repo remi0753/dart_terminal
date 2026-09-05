@@ -1,7 +1,10 @@
+import 'dart:typed_data';
+
 import 'terminal_screen.dart';
 import 'terminal_style.dart';
 import 'terminal_unicode.dart';
 
+part 'terminal_selection.dart';
 part 'terminal_viewport.dart';
 
 enum TerminalScreenKind { primary, alternate }

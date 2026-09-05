@@ -143,20 +143,9 @@ final class _ReflowSource {
   }
 
   int logicalCellOffsetAt(int row) {
-    int start = row;
-    final int logicalLineId = logicalLineIdAt(row);
-    final int logicalLineEpoch = logicalLineEpochAt(row);
-    while (start > 0 &&
-        rowFlagsAt(start - 1) & TerminalRowFlags.softWrapped != 0 &&
-        logicalLineIdAt(start - 1) == logicalLineId &&
-        logicalLineEpochAt(start - 1) == logicalLineEpoch) {
-      start--;
-    }
-    int offset = _isHistoryRow(start) ? history!.logicalCellOffsetAt(start) : 0;
-    for (int current = start; current < row; current++) {
-      offset += _reflowLogicalCellCount(this, current);
-    }
-    return offset;
+    return _isHistoryRow(row)
+        ? history!.logicalCellOffsetAt(row)
+        : screen.logicalCellOffsetAt(_screenRow(row));
   }
 
   bool _isHistoryRow(int row) => row < (history?.length ?? 0);
@@ -293,6 +282,9 @@ TerminalScreen _buildReflowedScreen(
     scrollbackAttachment: source._scrollbackAttachment,
   );
   target._logicalLineEpoch = source._logicalLineEpoch;
+  target._firstLogicalCellOffset = retainedCount == 0
+      ? 0
+      : reflowed[windowStart].logicalOffset;
 
   int nextLogicalLineId = source._nextLogicalLineId;
   var needsLogicalLineRenumber = false;
@@ -611,6 +603,7 @@ int _normalizeCursorColumn(TerminalScreen screen, int row, int column) {
 
 int _renumberLogicalLines(TerminalScreen screen) {
   screen._advanceLogicalLineEpoch();
+  screen._firstLogicalCellOffset = 0;
   var next = 1;
   for (int row = 0; row < screen.rows; row++) {
     if (row == 0 ||

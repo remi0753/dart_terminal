@@ -168,6 +168,7 @@ final class TerminalScreen {
   int _savedStyleId = 0;
   late int _nextLogicalLineId;
   int _logicalLineEpoch = 1;
+  int _firstLogicalCellOffset = 0;
   int _generation = 1;
   bool _fullSnapshotRequired = true;
 
@@ -254,6 +255,25 @@ final class TerminalScreen {
   int logicalLineIdAt(int row) => _logicalLineIds[_physicalRowFor(row)];
 
   int logicalLineEpochAt(int row) => _logicalLineEpochs[_physicalRowFor(row)];
+
+  /// Returns the lead-cell offset from the retained logical-line beginning.
+  int logicalCellOffsetAt(int row) {
+    _checkRow(row);
+    int start = row;
+    final int logicalLineId = logicalLineIdAt(row);
+    final int logicalLineEpoch = logicalLineEpochAt(row);
+    while (start > 0 &&
+        rowFlagsAt(start - 1) & TerminalRowFlags.softWrapped != 0 &&
+        logicalLineIdAt(start - 1) == logicalLineId &&
+        logicalLineEpochAt(start - 1) == logicalLineEpoch) {
+      start--;
+    }
+    int offset = start == 0 ? _firstLogicalCellOffset : 0;
+    for (int current = start; current < row; current++) {
+      offset += _reflowLogicalCellCount(_ReflowSource(this), current);
+    }
+    return offset;
+  }
 
   /// Throws when any row violates the packed wide/continuation contract.
   void validateCellTopology() {
@@ -451,18 +471,32 @@ final class TerminalScreen {
       return;
     }
     _logicalLineIds[physical] = logicalLineId;
+    if (row == 0) {
+      _firstLogicalCellOffset = 0;
+    }
     _markDirtyPhysical(physical, 0, columns);
     _incrementGeneration();
   }
 
-  void _setLogicalLineIdentity(int row, int logicalLineId, int epoch) {
+  void _setLogicalLineIdentity(
+    int row,
+    int logicalLineId,
+    int epoch, {
+    int? logicalCellOffset,
+  }) {
     final int physical = _physicalRowFor(row);
     if (_logicalLineIds[physical] == logicalLineId &&
-        _logicalLineEpochs[physical] == epoch) {
+        _logicalLineEpochs[physical] == epoch &&
+        (row != 0 ||
+            logicalCellOffset == null ||
+            _firstLogicalCellOffset == logicalCellOffset)) {
       return;
     }
     _logicalLineIds[physical] = logicalLineId;
     _logicalLineEpochs[physical] = epoch;
+    if (row == 0) {
+      _firstLogicalCellOffset = logicalCellOffset ?? 0;
+    }
     _markDirtyPhysical(physical, 0, columns);
     _incrementGeneration();
   }
@@ -1289,6 +1323,7 @@ final class TerminalScreen {
     _widthFlags.fillRange(0, cellCount, TerminalCellFlags.narrow);
     _rowFlags.fillRange(0, rows, 0);
     _advanceLogicalLineEpoch();
+    _firstLogicalCellOffset = 0;
     for (int row = 0; row < rows; row++) {
       _logicalLineIds[row] = row + 1;
       _logicalLineEpochs[row] = _logicalLineEpoch;
@@ -1513,6 +1548,9 @@ final class TerminalScreen {
     final int previousRow = _cursorRow;
     final int logicalLineId = logicalLineIdAt(previousRow);
     final int logicalLineEpoch = logicalLineEpochAt(previousRow);
+    final int logicalCellOffset =
+        logicalCellOffsetAt(previousRow) +
+        _reflowLogicalCellCount(_ReflowSource(this), previousRow);
     final int flags = rowFlagsAt(previousRow);
     setRowFlags(
       previousRow,
@@ -1522,7 +1560,12 @@ final class TerminalScreen {
     final int right = _horizontalRightForCursor();
     _moveCursorClamped(previousRow, left, 0, rows - 1, left, right);
     index();
-    _setLogicalLineIdentity(_cursorRow, logicalLineId, logicalLineEpoch);
+    _setLogicalLineIdentity(
+      _cursorRow,
+      logicalLineId,
+      logicalLineEpoch,
+      logicalCellOffset: logicalCellOffset,
+    );
   }
 
   void _setCellGroup(
@@ -1978,10 +2021,14 @@ final class TerminalScreen {
     _wrapPending = false;
     final int amount = count.clamp(1, bottom - top + 1);
     if (top == 0 && bottom == rows - 1 && left == 0 && right == columns - 1) {
+      final int nextFirstLogicalOffset = amount < rows
+          ? logicalCellOffsetAt(amount)
+          : 0;
       if (captureScrollback) {
         _scrollbackAttachment?.captureRows(this, 0, amount);
       }
       _firstPhysicalRow = (_firstPhysicalRow + amount) % rows;
+      _firstLogicalCellOffset = nextFirstLogicalOffset;
       for (int row = rows - amount; row < rows; row++) {
         final int physical = _physicalRow(row);
         _clearCellRange(physical, 0, columns);
@@ -1995,6 +2042,9 @@ final class TerminalScreen {
     }
 
     final bool fullWidth = left == 0 && right == columns - 1;
+    final int? nextFirstLogicalOffset = top == 0 && fullWidth
+        ? (amount <= bottom ? logicalCellOffsetAt(amount) : 0)
+        : null;
     for (int row = top; row <= bottom - amount; row++) {
       final int destination = _physicalRow(row);
       final int source = _physicalRow(row + amount);
@@ -2014,6 +2064,9 @@ final class TerminalScreen {
         _logicalLineEpochs[physical] = _logicalLineEpoch;
       }
     }
+    if (nextFirstLogicalOffset != null) {
+      _firstLogicalCellOffset = nextFirstLogicalOffset;
+    }
     _markRegionDirty(top, bottom, left, right + 1);
     _incrementGeneration();
   }
@@ -2023,6 +2076,7 @@ final class TerminalScreen {
     final int amount = count.clamp(1, bottom - top + 1);
     if (top == 0 && bottom == rows - 1 && left == 0 && right == columns - 1) {
       _firstPhysicalRow = (_firstPhysicalRow - amount) % rows;
+      _firstLogicalCellOffset = 0;
       for (int row = 0; row < amount; row++) {
         final int physical = _physicalRow(row);
         _clearCellRange(physical, 0, columns);
@@ -2055,6 +2109,9 @@ final class TerminalScreen {
         _logicalLineEpochs[physical] = _logicalLineEpoch;
       }
     }
+    if (top == 0 && fullWidth) {
+      _firstLogicalCellOffset = 0;
+    }
     _markRegionDirty(top, bottom, left, right + 1);
     _incrementGeneration();
   }
@@ -2068,6 +2125,7 @@ final class TerminalScreen {
   int _allocateLogicalLineId() {
     if (_nextLogicalLineId > maxLogicalLineId) {
       _advanceLogicalLineEpoch();
+      _firstLogicalCellOffset = 0;
       for (int row = 0; row < rows; row++) {
         final int physical = _physicalRow(row);
         _logicalLineIds[physical] = row + 1;

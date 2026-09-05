@@ -112,6 +112,7 @@ Each physical row has parallel metadata:
 | dirty start/end | two `Uint16List`s | half-open changed interval; clean is `(columns, 0)` |
 | flags | `Uint8List` | wrapping and semantic row classification |
 | logical-line ID | `Uint32List` | groups physical rows for reflow/selection |
+| logical-line reuse epoch | `Uint64List` | disambiguates IDs reused after reset/rollover for stable anchors |
 
 Row flag bits are: bit 0 soft-wraps to the next row, bit 1 prompt, bit 2
 command, bit 3 output, and bit 4 hard break. Bits 5–7 are reserved and zero.
@@ -126,11 +127,18 @@ Wrap, logical-line, or row-flag changes also dirty the affected row.
 Visible rows are a logical-to-physical ring. Scrolling rotates the first-row
 slot and clears only newly exposed rows. Scrollback is a deque of fixed-size
 SoA pages (initially 256 rows per page); page eviction is O(1) and never shifts
-all retained lines. Scrollback line/byte caps are configured independently.
+all retained lines. Scrollback pages retain the row flags, logical-line ID and
+reuse epoch, plus a `Uint64` lead-cell offset from the logical-line beginning.
+The visible grid retains the same base offset for its first logical row so an
+evicted history prefix cannot make an old anchor alias the visible suffix.
+Scrollback line/byte caps are configured independently and count these arrays.
 
 Row version and logical-line ID rollover force a generation reset and full
-snapshot. They are cache aids, not globally unique identities; the 64-bit pane
-and damage generations remain authoritative.
+snapshot. IDs remain cache aids rather than globally unique identities; reset
+or ID rollover advances the independent reuse epoch. Stable terminal-core
+anchors use `(screen kind, reuse epoch, logical-line ID, lead-cell offset)`.
+The 64-bit pane and damage generations remain authoritative for published
+renderer state.
 
 ## Damage wire format version 1
 
@@ -186,6 +194,11 @@ nonzero reserved data, zero/out-of-range dimensions, duplicate/reordered rows,
 out-of-range spans, noncontiguous cell offsets, unknown row flags, and resource
 generation mismatch before using the arrays. Cell semantic flags are checked
 while the renderer consumes the arrays.
+
+The reuse epoch and logical-cell offset are terminal-core selection/reflow
+metadata and are deliberately absent from version-1 damage rows. A renderer
+does not resolve stable text anchors; adding either field to a future wire
+consumer requires a versioned format change rather than using reserved bytes.
 
 ## Resource and generation ordering
 

@@ -656,14 +656,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （[`docs/phase3/wide-grapheme-resize-reflow.md`](docs/phase3/wide-grapheme-resize-reflow.md) を参照して実施）
   - [x] primary/alternate resize と visible logical-line reflow
     （[`docs/phase3/wide-grapheme-resize-reflow.md`](docs/phase3/wide-grapheme-resize-reflow.md) を参照して実施）
-- [ ] paged scrollback、viewport、selection/search primitives
+- [x] paged scrollback、viewport、selection/search primitives
   - [x] fixed-page bounded scrollback storage と primary full-screen capture
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）
   - [x] history/screen viewport offset と alternate-screen isolation
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）
   - [x] scrollback-aware resize/reflow と stable logical anchors
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）
-  - [ ] selection extraction、word/line semantics、bounded search
+  - [x] selection extraction、word/line semantics、bounded search
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）
 - [ ] query/reply encoder と PTY write connection
 - [ ] snapshot formatter と readable test diagnostics

@@ -38,6 +38,8 @@ final class TerminalScrollback {
   int _totalRowsAppended = 0;
   int _continuityGeneration = 1;
   TerminalScrollbackAttachment? _attachment;
+  _ScrollbackPage? _lookupPage;
+  int _lookupPageStart = 0;
 
   int get length => _length;
   int get pageCount => _pageCount;
@@ -187,23 +189,35 @@ final class TerminalScrollback {
     if (row < 0 || row >= _length) {
       throw RangeError.range(row, 0, _length - 1, 'row');
     }
-    int remaining = row;
-    _ScrollbackPage? page = _head;
-    while (page != null) {
-      if (remaining < page.usedRows) {
-        return _ScrollbackLocation(page, remaining);
+    _ScrollbackPage? page = _lookupPage;
+    int start = _lookupPageStart;
+    if (page == null) {
+      page = _head;
+      start = 0;
+    } else if (row < start) {
+      while (page != null && row < start) {
+        final _ScrollbackPage? previous = page.previous;
+        if (previous == null) {
+          break;
+        }
+        page = previous;
+        start -= page.usedRows;
       }
-      remaining -= page.usedRows;
+    }
+    while (page != null && row >= start + page.usedRows) {
+      start += page.usedRows;
       page = page.next;
+    }
+    if (page != null && row >= start && row < start + page.usedRows) {
+      _lookupPage = page;
+      _lookupPageStart = start;
+      return _ScrollbackLocation(page, row - start);
     }
     throw StateError('scrollback row index was not found');
   }
 
   bool _appendScreenRow(TerminalScreen source, int row) {
-    final int logicalOffset = _nextLogicalCellOffset(
-      source.logicalLineIdAt(row),
-      source.logicalLineEpochAt(row),
-    );
+    final int logicalOffset = source.logicalCellOffsetAt(row);
     while (_length >= maxLines) {
       _evictHead();
     }
@@ -286,21 +300,6 @@ final class TerminalScrollback {
     _allocatedBytes += page.allocatedBytes;
   }
 
-  int _nextLogicalCellOffset(int logicalLineId, int logicalLineEpoch) {
-    final _ScrollbackPage? tail = _tail;
-    if (tail == null || tail.usedRows == 0) {
-      return 0;
-    }
-    final int previousRow = tail.usedRows - 1;
-    if (tail.rowFlags[previousRow] & TerminalRowFlags.softWrapped == 0 ||
-        tail.logicalLineIds[previousRow] != logicalLineId ||
-        tail.logicalLineEpochs[previousRow] != logicalLineEpoch) {
-      return 0;
-    }
-    return tail.logicalCellOffsets[previousRow] +
-        tail.logicalCellCount(previousRow);
-  }
-
   void _evictHead() {
     final _ScrollbackPage? page = _head;
     if (page == null) {
@@ -316,6 +315,12 @@ final class TerminalScrollback {
     }
     page.next = null;
     page.previous = null;
+    if (identical(_lookupPage, page)) {
+      _lookupPage = null;
+      _lookupPageStart = 0;
+    } else if (_lookupPage != null) {
+      _lookupPageStart -= page.usedRows;
+    }
     _length -= page.usedRows;
     _pageCount--;
     _allocatedBytes -= page.allocatedBytes;
@@ -327,6 +332,8 @@ final class TerminalScrollback {
     _length = 0;
     _pageCount = 0;
     _allocatedBytes = 0;
+    _lookupPage = null;
+    _lookupPageStart = 0;
   }
 
   void _replacePagesFrom(TerminalScrollback replacement) {
@@ -341,11 +348,15 @@ final class TerminalScrollback {
     _length = replacement._length;
     _pageCount = replacement._pageCount;
     _allocatedBytes = replacement._allocatedBytes;
+    _lookupPage = null;
+    _lookupPageStart = 0;
     replacement._head = null;
     replacement._tail = null;
     replacement._length = 0;
     replacement._pageCount = 0;
     replacement._allocatedBytes = 0;
+    replacement._lookupPage = null;
+    replacement._lookupPageStart = 0;
     _generation++;
   }
 

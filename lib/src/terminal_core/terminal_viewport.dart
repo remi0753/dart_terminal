@@ -1,6 +1,6 @@
 part of 'terminal_screen_set.dart';
 
-/// A display-cell position within one logical terminal line.
+/// A stable lead-cell boundary within one logical terminal line.
 final class TerminalLogicalAnchor {
   static const int maxCellOffset = 0x7fffffffffffffff;
   static const int maxLogicalLineEpoch = 0x7fffffffffffffff;
@@ -259,6 +259,7 @@ final class TerminalViewport {
         : _screens.activeScreen.widthFlagsAt(location.row, column);
   }
 
+  /// Returns the stable boundary at a projected cell's canonical lead.
   TerminalLogicalAnchor anchorAt(int viewportRow, int column) {
     final _ViewportLocation location = _locate(viewportRow);
     final TerminalScreenKind kind = _screens.activeKind;
@@ -269,6 +270,59 @@ final class TerminalViewport {
         : location.row;
     return _anchorAtCombined(kind, combinedRow, column);
   }
+
+  /// Returns the stable boundary immediately after one projected cell.
+  TerminalLogicalAnchor anchorAfter(int viewportRow, int column) {
+    final _ViewportLocation location = _locate(viewportRow);
+    final TerminalScreenKind kind = _screens.activeKind;
+    final int combinedRow = kind == TerminalScreenKind.primary
+        ? (location.history
+              ? location.row
+              : _screens.scrollback.length + location.row)
+        : location.row;
+    return _anchorAtCombined(kind, combinedRow, column, after: true);
+  }
+
+  /// Orders and optionally expands retained boundaries for selection.
+  ///
+  /// Returns null when either boundary is evicted or belongs to another
+  /// active screen. Cell ranges are end-exclusive.
+  TerminalSelectionRange? selectionRange(
+    TerminalLogicalAnchor base,
+    TerminalLogicalAnchor extent, {
+    TerminalSelectionUnit unit = TerminalSelectionUnit.cell,
+    int maxWordScanCells = TerminalSelectionRange.defaultMaxWordScanCells,
+  }) => _createSelectionRange(
+    this,
+    base,
+    extent,
+    unit: unit,
+    maxWordScanCells: maxWordScanCells,
+  );
+
+  /// Extracts retained text or returns null when either boundary was evicted.
+  TerminalSelectionText? extractSelection(
+    TerminalSelectionRange range, {
+    int maxScalars = TerminalSelectionText.defaultMaxScalars,
+  }) => _extractSelection(this, range, maxScalars: maxScalars);
+
+  /// Searches active retained logical lines without crossing hard boundaries.
+  ///
+  /// Returns null only when an explicit [start] boundary is unavailable.
+  TerminalSearchResult? search(
+    String query, {
+    TerminalSearchDirection direction = TerminalSearchDirection.forward,
+    TerminalLogicalAnchor? start,
+    int maxScalars = TerminalSearchResult.defaultMaxScalars,
+    int maxMatches = TerminalSearchResult.defaultMaxMatches,
+  }) => _searchTerminalDocument(
+    this,
+    query,
+    direction: direction,
+    start: start,
+    maxScalars: maxScalars,
+    maxMatches: maxMatches,
+  );
 
   TerminalViewportPosition? positionOf(TerminalLogicalAnchor anchor) {
     _sync();
@@ -350,8 +404,9 @@ final class TerminalViewport {
   TerminalLogicalAnchor _anchorAtCombined(
     TerminalScreenKind kind,
     int row,
-    int column,
-  ) {
+    int column, {
+    bool after = false,
+  }) {
     final int columns = _combinedColumnsAt(kind, row);
     if (column < 0 || column >= columns) {
       throw RangeError.range(column, 0, columns - 1, 'column');
@@ -363,13 +418,19 @@ final class TerminalViewport {
                 TerminalCellFlags.continuation
         ? column - 1
         : column;
+    final int extent = _combinedRowExtent(kind, row);
+    final int cellCount = _combinedLogicalCellCount(kind, row);
+    int cellOffset = normalized < extent
+        ? _combinedLogicalCellIndex(kind, row, normalized)
+        : cellCount;
+    if (after && normalized < extent) {
+      cellOffset++;
+    }
     return TerminalLogicalAnchor(
       screenKind: kind,
       logicalLineId: _combinedLogicalLineIdAt(kind, row),
       logicalLineEpoch: _combinedLogicalLineEpochAt(kind, row),
-      cellOffset:
-          _combinedLogicalOffsetAt(kind, row) +
-          _combinedLogicalCellIndex(kind, row, normalized),
+      cellOffset: _combinedLogicalOffsetAt(kind, row) + cellOffset,
     );
   }
 
@@ -391,7 +452,14 @@ final class TerminalViewport {
         row,
       );
       final bool joinsNext = _combinedJoinsNext(anchor.screenKind, row);
-      if (anchor.cellOffset >= base + logicalCellCount && joinsNext) {
+      final int end = base + logicalCellCount;
+      if (anchor.cellOffset > end) {
+        if (joinsNext) {
+          continue;
+        }
+        return null;
+      }
+      if (anchor.cellOffset == end && joinsNext) {
         continue;
       }
       final int logicalCell = (anchor.cellOffset - base).clamp(
@@ -473,24 +541,9 @@ final class TerminalViewport {
         row < _screens.scrollback.length) {
       return _screens.scrollback.logicalCellOffsetAt(row);
     }
-    int start = row;
-    while (start > 0 &&
-        _combinedRowFlagsAt(kind, start - 1) & TerminalRowFlags.softWrapped !=
-            0 &&
-        _combinedLogicalLineIdAt(kind, start - 1) ==
-            _combinedLogicalLineIdAt(kind, row) &&
-        _combinedLogicalLineEpochAt(kind, start - 1) ==
-            _combinedLogicalLineEpochAt(kind, row)) {
-      start--;
-    }
-    int offset =
-        kind == TerminalScreenKind.primary && start < _screens.scrollback.length
-        ? _screens.scrollback.logicalCellOffsetAt(start)
-        : 0;
-    for (int current = start; current < row; current++) {
-      offset += _combinedLogicalCellCount(kind, current);
-    }
-    return offset;
+    return kind == TerminalScreenKind.primary
+        ? _screens.primary.logicalCellOffsetAt(row - _screens.scrollback.length)
+        : _screens.alternate.logicalCellOffsetAt(row);
   }
 
   int _combinedRowExtent(TerminalScreenKind kind, int row) {

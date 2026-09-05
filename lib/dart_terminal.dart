@@ -26,8 +26,14 @@ export 'src/terminal_core/terminal_screen_parser_sink.dart'
 export 'src/terminal_core/terminal_screen_set.dart'
     show
         TerminalLogicalAnchor,
+        TerminalSearchDirection,
+        TerminalSearchMatch,
+        TerminalSearchResult,
         TerminalScreenKind,
         TerminalScreenSet,
+        TerminalSelectionRange,
+        TerminalSelectionText,
+        TerminalSelectionUnit,
         TerminalViewport,
         TerminalViewportPosition;
 export 'src/terminal_core/terminal_style.dart'

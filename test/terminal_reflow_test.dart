@@ -459,6 +459,8 @@ String _screenState(TerminalScreen screen) {
       ..write('/')
       ..write(screen.logicalLineEpochAt(row))
       ..write('/')
+      ..write(screen.logicalCellOffsetAt(row))
+      ..write('/')
       ..write(screen.rowFlagsAt(row))
       ..write(':');
     for (int column = 0; column < screen.columns; column++) {
