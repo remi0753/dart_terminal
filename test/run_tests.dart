@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:dart_pty_macos/dart_pty_macos.dart';
@@ -8,6 +9,12 @@ import 'package:dart_terminal/src/runtime_lifecycle.dart';
 import 'package:dart_terminal/src/terminal_session.dart';
 
 import 'runtime_lifecycle_test.dart';
+
+@Native<Uint64 Function()>(
+  symbol: 'dpty_debug_live_session_count',
+  assetId: 'package:dart_pty_macos/dart_pty_macos.dart',
+)
+external int _livePtySessionCount();
 
 Future<void> main() async {
   _testEditing();
@@ -19,6 +26,7 @@ Future<void> main() async {
   await runRuntimeLifecycleTests().timeout(const Duration(seconds: 30));
   await _testPersistentCommandSession();
   await _testRealPersistentPtySession();
+  await _testRepeatedControlDNaturalExit().timeout(const Duration(seconds: 45));
   stdout.writeln('dart_terminal tests passed');
 }
 
@@ -540,6 +548,55 @@ Future<void> _testRealPersistentPtySession() async {
     'real login shell exits and is reaped once',
   );
   await session.dispose();
+}
+
+Future<void> _testRepeatedControlDNaturalExit() async {
+  const int repetitions = 24;
+  _expect(_livePtySessionCount() == 0, 'Control-D test starts without PTYs');
+  for (var iteration = 0; iteration < repetitions; ++iteration) {
+    var terminationCount = 0;
+    final TerminalSession session = TerminalSession(
+      id: TerminalSessionId(paneId: PaneId(1000 + iteration), generation: 1),
+      initialWorkingDirectory: Directory.systemTemp.path,
+      environment: <String, String>{
+        'PATH': '/usr/bin:/bin',
+        'HOME': Directory.systemTemp.path,
+        'TERM': 'dumb',
+        'LC_ALL': 'C',
+        'PS1': '__CTRL_D_PROMPT_${iteration}__ ',
+        'RPS1': '',
+      },
+      shellArguments: const <String>['-f'],
+      onChanged: () {},
+      onTerminated: () {
+        ++terminationCount;
+      },
+    );
+    await session.start().timeout(const Duration(seconds: 3));
+    session.insertText(
+      "stty -echo; unsetopt ignoreeof; printf '__CTRL_D_READY_${iteration}__\\n'",
+    );
+    await session.submit();
+    await _waitForTerminalOutput(
+      session,
+      (String output) =>
+          _occurrences(output, '__CTRL_D_READY_${iteration}__') >= 2,
+      'Control-D ready marker for iteration $iteration',
+    );
+    session.sendEndOfFile();
+    await session.waitForTermination().timeout(const Duration(seconds: 3));
+    _expect(
+      session.exit?.exitCode == 0 &&
+          session.exit?.signal == null &&
+          terminationCount == 1,
+      'Control-D iteration $iteration exits and notifies exactly once',
+    );
+    await session.dispose().timeout(const Duration(seconds: 1));
+    _expect(
+      _livePtySessionCount() == 0,
+      'Control-D iteration $iteration reaps and destroys its native session',
+    );
+  }
 }
 
 Future<void> _waitForTerminalOutput(

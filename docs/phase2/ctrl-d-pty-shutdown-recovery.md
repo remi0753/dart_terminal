@@ -167,3 +167,36 @@ open until all five are complete.
   reaping. The user-requested order is retained as five explicit subtasks.
 - No product or dependency implementation was changed during this planning
   step.
+
+### 2026-09-05 — repeated Control-D regression test
+
+- Added a product-level real-PTY regression that creates 24 sequential
+  interactive `zsh -f` generations. Each uses a controlled environment, turns
+  terminal echo off, explicitly clears `ignoreeof`, waits for a unique executed
+  ready marker, sends exactly one `0x04`, and places independent deadlines on
+  start, termination, and post-exit disposal.
+- Every generation requires exit code zero, exactly one owner termination
+  notification, and `dpty_debug_live_session_count() == 0` before the next
+  generation. This covers the public native-asset mapping and the same
+  `TerminalSession.sendEndOfFile` path used by the GUI.
+- The first `make test` attempt did not reach project validation because the
+  sandbox denied Dart's attempt to update its user-level analytics session
+  timestamp. This is an environment write restriction rather than a product or
+  test failure; rerun validation with analytics suppressed in the environment.
+- The first analytics-suppressed analysis found that a marker string used
+  `$iteration__`, which Dart correctly parsed as the nonexistent identifier
+  `iteration__`. Delimiting the interpolation as `${iteration}` fixes the test
+  source without changing its behavior.
+- A second sandboxed run still attempted the same user-level analytics
+  timestamp update even with analytics-suppression and CI environment flags.
+  The repository format step itself passed. The focused suite therefore needs
+  to run with the already-installed Dart toolchain outside that filesystem
+  restriction; no network access or dependency change is required.
+- The unrestricted `make test` rerun completed in 9.7 seconds: dependency
+  resolution, formatting of 33 Dart files, static analysis, existing fake and
+  real PTY coverage, and all 24 Control-D generations passed. Each generation
+  reached clean exit and zero live native sessions inside its deadline.
+- The normal repeated EOF path did not reproduce the intermittent stall. That
+  is useful negative evidence: later subtasks must retain deterministic
+  missing/delayed-exit fault coverage rather than relying on random repetition
+  to exercise the recovery path.

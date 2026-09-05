@@ -599,7 +599,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （分割と完了条件は
   [`docs/phase2/ctrl-d-pty-shutdown-recovery.md`](docs/phase2/ctrl-d-pty-shutdown-recovery.md)
   を参照して順に実施する）
-  - [ ] Ctrl-D natural exit を繰り返す実PTY回帰試験
+  - [x] Ctrl-D natural exit を繰り返す実PTY回帰試験
   - [ ] pane / PTY shutdown stage のprivacy-safe診断
   - [ ] closing中も有効なidempotent force-close capability
   - [ ] missing exit / reap callbackに対するfinal deadline
