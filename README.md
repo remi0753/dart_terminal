@@ -83,6 +83,8 @@ model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後�
   固定seedのproperty testと境界別fuzz seed/mutation corpus
 - Phase 0 mixed workloadを使うcapture-disabled product parserのRelease AOT
   100 MiB/s regression gate（同一seedのexact counter/integrity検証付き）
+- 1x/2xの決定論的integer alpha合成、固定layer順、solid/mask/color bitmapを扱う
+  Dart-only reference rendererと、checksum付きversion 1 golden image oracle
 
 ## 起動
 

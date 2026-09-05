@@ -89,6 +89,15 @@ export 'src/terminal_pane.dart'
         TerminalPaneState,
         TerminalSessionShutdownDisposition,
         TerminalSessionId;
+export 'src/terminal_renderer/golden_image.dart'
+    show
+        TerminalGoldenImageCodec,
+        TerminalGoldenImageComparator,
+        TerminalGoldenImageComparison,
+        TerminalGoldenImageComparisonLimits,
+        TerminalGoldenImageFormatException,
+        TerminalGoldenImageLimits,
+        TerminalGoldenImageMismatchException;
 export 'src/terminal_renderer/reference_renderer.dart'
     show
         TerminalReferenceBitmap,

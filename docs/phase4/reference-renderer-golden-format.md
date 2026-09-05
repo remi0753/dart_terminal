@@ -1,6 +1,6 @@
 # Phase 4 — headless/reference renderer and golden image format
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-05
 - Scope: first Phase 4 roadmap item
 - Related: ADR-003, ADR-004, REN-02, REN-07, TXT-01, TXT-06
@@ -82,6 +82,31 @@ native spike source was intentionally retired and is historical evidence only.
 The second subtask depends on the stable image and compositor contract from the
 first. The CoreText roadmap item must not begin until both are committed.
 
+## Golden image format version 1
+
+Artifacts use the `.dtgi` extension and exactly ten newline-terminated ASCII
+lines in this order:
+
+```text
+dart-terminal-golden-image
+version=1
+width=<device pixels>
+height=<device pixels>
+scale=<integer backing scale>
+pixel-format=rgba8-srgb-straight
+row-stride=<width times four>
+payload-length=<stride times height>
+checksum=fnv1a32:<eight lowercase hexadecimal digits>
+pixels=<canonical Base64>
+```
+
+The checksum starts with the FNV-1a-32 offset basis and covers the canonical
+NUL-separated format name, version, dimensions, scale, pixel format, stride,
+and payload length followed by the exact RGBA bytes. Every multiplication,
+decoded allocation, and ASCII envelope is bounded independently. Version 1
+allows no reordered/unknown fields, alternate number spelling, omitted final
+newline, Base64 whitespace, noncanonical padding, or trailing bytes.
+
 ## Acceptance criteria
 
 - The same scene produces byte-identical RGBA pixels at repeated 1x and 2x
@@ -130,6 +155,11 @@ first. The CoreText roadmap item must not begin until both are committed.
   unbounded input. Admission now stops on the first excess item and checks
   cumulative source bytes while enumerating. A generator regression test
   confirms the renderer does not request further values.
+- 2026-09-05: the first checksum prototype used a nominal 64-bit FNV value.
+  Fixture generation exposed a negative hexadecimal result because the current
+  Dart VM represents that bit pattern as a signed machine integer. The final
+  format uses an explicitly masked 32-bit FNV-1a value, avoiding signed/backend
+  formatting differences while still covering metadata and pixels.
 
 ## Verification results
 
@@ -161,3 +191,44 @@ first. The CoreText roadmap item must not begin until both are committed.
 
 This completes ordered subtask 1. The versioned golden codec, checked-in
 fixture, and comparison diagnostics are now the first unchecked child.
+
+### Versioned golden codec, fixture, and bounded comparison diagnostics
+
+- Added a strict `.dtgi` version 1 codec with fixed ASCII field order,
+  canonical unsigned decimals/Base64, exact RGBA stride and payload length, and
+  metadata-plus-pixel FNV-1a-32 checksum. Encode checks the final envelope size
+  before copying or Base64-encoding pixels; decode rejects non-ASCII,
+  malformed/reordered fields, unsupported format/version/checksum, corrupt
+  length/checksum, noncanonical payload, missing final newline, and trailing
+  data.
+- Codec limits independently bound encoded bytes and reuse the renderer's
+  logical dimension, scale, and pixel caps before payload decoding. Both the
+  encoded input and decoded image own their storage.
+- Added exact geometry/scale/pixel comparison. A mismatch reports only the
+  first coordinate and expected/actual `0xRRGGBBAA` under a hard diagnostic
+  cap; the typed assertion exception never embeds either full image and also
+  bounds its caller-provided description.
+- Checked in reviewed fixed-scene 1x and 2x artifacts under
+  `test/goldens/reference/`. Tests regenerate bytes only in memory, compare
+  them exactly to the source-controlled artifacts, decode them, and compare
+  pixels; no test rewrite path exists.
+
+- Focused tests cover byte-exact repeat encoding and ownership-preserving round
+  trip; corrupt format/version/order/numeric spelling/pixel format/stride/
+  length/checksum/Base64/trailing data; non-ASCII and out-of-byte input; encode,
+  decode, pixel, and scale limits; equal, geometry-mismatch, pixel-mismatch,
+  bounded diagnostic, typed assertion, and bounded description paths; and
+  exact 1x/2x checked-in fixtures.
+- `dart analyze` passed with no issues. `make test` passed dependency
+  resolution, VT table freshness, formatting of 79 Dart files with zero
+  changes, full analysis, all unit/integration tests, and the real PTY suite.
+  `make runtime-source-check` passed with 147 tracked files and zero native
+  source files. The focused codec/fixture test compiled and passed as a Release
+  AOT executable at `/private/tmp/dart-terminal-golden-image-test`.
+- `git diff --check` passed. README and feature matrix now expose the completed
+  reference/golden oracle; no CoreText, Metal, FFI, runtime package, or adjacent
+  repository source changed in this roadmap item.
+
+This completes ordered subtask 2 and the parent reference renderer/golden
+image task. The CoreText font catalog, fallback, metrics, and shaping cache is
+the next Phase 4 roadmap item.
