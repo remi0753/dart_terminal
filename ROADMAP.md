@@ -595,6 +595,15 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] commandごとのPTYをpane-owned persistent login shellへ置き換える
   - [x] AppKit close確認、実PTY、Developer JIT / Release AOT受け入れを閉じる
 - [x] fake PTY backend と deterministic integration harness
+- [ ] Ctrl-D / PTY shutdown hang の bounded recovery
+  （分割と完了条件は
+  [`docs/phase2/ctrl-d-pty-shutdown-recovery.md`](docs/phase2/ctrl-d-pty-shutdown-recovery.md)
+  を参照して順に実施する）
+  - [ ] Ctrl-D natural exit を繰り返す実PTY回帰試験
+  - [ ] pane / PTY shutdown stage のprivacy-safe診断
+  - [ ] closing中も有効なidempotent force-close capability
+  - [ ] missing exit / reap callbackに対するfinal deadline
+  - [ ] deadline超過後も完了するclassified application termination
 
 終了条件:
 
