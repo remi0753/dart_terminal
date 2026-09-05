@@ -707,10 +707,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （[`docs/phase4/coretext-font-shaping.md`](docs/phase4/coretext-font-shaping.md) を参照して実施）
   - [x] bounded CoreText run shaping と Dart-owned LRU shaping cache
     （[`docs/phase4/coretext-font-shaping.md`](docs/phase4/coretext-font-shaping.md) を参照して実施）
-- [ ] monochrome/color glyph atlas
+- [x] monochrome/color glyph atlas
   - [x] bounded batched CoreText monochrome/color glyph raster ABI
     （[`docs/phase4/glyph-raster-atlas.md`](docs/phase4/glyph-raster-atlas.md) を参照して実施）
-  - [ ] Dart-owned dual atlas pages、growth/LRU eviction、generation validation、text goldens
+  - [x] Dart-owned dual atlas pages、growth/LRU eviction、generation validation、text goldens
     （[`docs/phase4/glyph-raster-atlas.md`](docs/phase4/glyph-raster-atlas.md) を参照して実施）
 - [ ] Metal cell/glyph/decoration/cursor/selection pipelines
 - [ ] damage coalescing、frame generation、stale-frame discard

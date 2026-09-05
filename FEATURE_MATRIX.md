@@ -120,12 +120,12 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| TXT-01 | extended grapheme、emoji ZWJ/VS/RI、combining sequence | P0 | 3/4 | `G:src/unicode/grapheme.zig`, `G:src/terminal/page.zig` | Unicode 17 terminal ownershipに加え、CoreText whole-runのZWJ/modifier/RI/combining UTF-16 cluster mappingを完了。raster goldenはatlas項目 |
+| TXT-01 | extended grapheme、emoji ZWJ/VS/RI、combining sequence | P0 | 3/4 | `G:src/unicode/grapheme.zig`, `G:src/terminal/page.zig` | Unicode 17 terminal ownership、CoreText whole-runのZWJ/modifier/RI/combining UTF-16 cluster mapping、実glyphの1x/2x raster goldenを完了 |
 | TXT-02 | East Asian width と ambiguous-width policy。terminal mode と app cursor width が同期 | P0 | 3 | `G:src/unicode/props.zig`, `G:src/terminal/size_report.zig` | 未実装 |
 | TXT-03 | CoreText discovery、ordered fallback、Apple Color Emoji、symbol font | P0 | 4 | `G:src/font/discovery.zig`, `G:src/font/DeferredFace.zig`, `G:src/font/face/coretext.zig` | generation-owned catalog、CJK/color emoji fallback、全run face identity/copyを完了 |
 | TXT-04 | regular/bold/italic/bold-italic、synthetic style policy | P0 | 4 | `G:src/font/Collection.zig`, `G:src/font/face/coretext.zig` | actual/syntheticを区別する4-style policyとstable face identityを完了 |
 | TXT-05 | cell metrics、baseline、underline/strike、1x/2x/scale/zoom の pixel alignment | P0 | 4 | `G:src/font/Metrics.zig`, `G:src/renderer/generic.zig` | cell advance/height、baseline、underline/strike metricsを完了。scale/pixel alignmentはresize/rebuild項目で接続 |
-| TXT-06 | Latin/CJK/emoji/Powerline/box/Nerd Font golden corpus | P0 | 4 | `G:src/font/res/`, `G:src/font/sprite/`, font tests | Latin/CJK/wide/emoji/combining/Arabic/Hebrew/ligatureのversion 1 text corpusと1x/2x geometryを準備。raster・Powerline・box・Nerd Fontはatlas項目 |
+| TXT-06 | Latin/CJK/emoji/Powerline/box/Nerd Font golden corpus | P0 | 4 | `G:src/font/res/`, `G:src/font/sprite/`, font tests | Latin/CJK/wide/emoji/combining/Arabic/Hebrew/ligatureを実CoreText/atlas経由のversion 1 pixel goldenとして1x/2xで完了。Powerline/box/Nerd Fontは将来のsynthetic glyph対応時に追加 |
 | TXT-07 | ligature/OpenType feature toggle と cursor 下の shaping break | P1 | 4/8 | `G:src/font/shaper/coretext.zig`, `G:src/font/shaper/feature.zig` | ligature on/offのglyph count・multi-unit clusterとfeature-separated cacheを完了。cursor下breakはPhase 8 |
 | TXT-08 | variable axes、codepoint override、fallback diagnostics | P1 | 4/8 | `G:src/font/opentype/`, `G:src/font/CodepointMap.zig` | 未実装 |
 | TXT-09 | grapheme 内 Arabic/Hebrew shaping。terminal layout 自体は LTR | P1 | 4 | `G:src/font/shaper/testdata/arabic.txt`, `G:src/font/shaper/coretext.zig` | Arabic ligatureとHebrew combiningをRTL CoreText runとして完了。terminal cell layout ownershipはDart側に維持 |
@@ -137,11 +137,11 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | --- | --- | --- | --- | --- | --- |
 | REN-01 | `MTKView`/Metal lifecycle、drawable resize/backing scale、device/shader/drawable failure path | P0 | 4 | `G:src/renderer/Metal.zig`, `G:macos/Sources/Helpers/MetalView.swift` | Phase 0 gate に加え、Phase 1 で system device を持つ paused/on-demand TerminalMetalView shell の生成・attach 境界を完了。renderer lifecycle/failure path は Phase 4 |
 | REN-02 | background、cell background、glyph、decoration、cursor、selection を packed instance で描画 | P0 | 4 | `G:src/renderer/shaders/shaders.metal`, `G:src/renderer/cell.zig` | Phase 0 gate |
-| REN-03 | grayscale/color atlas、growth/eviction/generation validation | P0 | 4 | `G:src/font/Atlas.zig`, `G:src/renderer/generic.zig` | ABI-v4 bounded batch alpha8/straight-RGBA8 CoreText rasterを完了。atlas retention/growth/evictionは同roadmap項目の次subtask |
+| REN-03 | grayscale/color atlas、growth/eviction/generation validation | P0 | 4 | `G:src/font/Atlas.zig`, `G:src/renderer/generic.zig` | ABI-v4 bounded batch raster、Dart-owned alpha/color page、deterministic growth、page/byte/entry cap、unpinned LRU、submission pin、resource generation、矩形差分uploadを完了 |
 | REN-04 | damage coalescing、stale generation discard、full snapshot は recovery/resize のみ | P0 | 4 | `G:src/renderer/row.zig`, `G:src/renderer/State.zig`, `G:src/renderer/message.zig` | ADR gate |
 | REN-05 | double/triple buffering と submit token/fence。GPU 完了前に buffer を再利用しない | P0 | 4 | `G:src/renderer/metal/Frame.zig`, `G:src/renderer/metal/buffer.zig` | ADR gate |
 | REN-06 | vsync/frame pacing、cursor blink、occlusion pause、resume full redraw | P0 | 4 | `G:src/renderer/generic.zig`, `G:src/renderer/Thread.zig` | benchmark gate |
-| REN-07 | deterministic screenshot と CPU/reference renderer を golden oracle にする | P0 | 4 | `G:src/terminal/render.zig`, renderer test paths | bounded Dart-only RGBA compositor、versioned checksum付きgolden format、1x/2x fixture、first-pixel診断を完了。Metal screenshot接続は後続 |
+| REN-07 | deterministic screenshot と CPU/reference renderer を golden oracle にする | P0 | 4 | `G:src/terminal/render.zig`, renderer test paths | bounded Dart-only RGBA compositor、versioned checksum付きgolden format、primitive fixture、実CoreText/atlas文字fixtureの1x/2x、first-pixel診断を完了。Metal screenshot接続は後続 |
 | REN-08 | image/search/hyperlink/inspector overlay、P3/sRGB blending | P1 | 4/9 | `G:src/renderer/image.zig`, `Overlay.zig`, `link.zig` | 未実装 |
 | REN-09 | 60/120 Hz、複数 window/pane の fair scheduling。遅延時は中間 frame を捨てる | P1 | 4/7 | `G:src/renderer/Thread.zig`, `G:src/renderer/generic.zig` | benchmark gate |
 

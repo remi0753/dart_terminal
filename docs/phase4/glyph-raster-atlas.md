@@ -1,6 +1,6 @@
 # Phase 4 — Monochrome/color glyph raster and atlas
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-06
 - Scope: third Phase 4 roadmap item
 - Related: ADR-001, ADR-004, TXT-01, TXT-03, TXT-05–07, REN-03, REN-07
@@ -40,7 +40,7 @@ bounds without leaking Core Graphics or CoreText objects.
 - Decode immutable raster results in Dart and reject corrupt metadata, padding,
   overlap/gaps, generation/scale/key mismatches, and invalid pixels.
 - Build separate bounded alpha/color atlas page sets with stable entry IDs,
-  resource generations, deterministic shelf placement, bounded growth, LRU
+  resource generations, deterministic guillotine placement, bounded growth, LRU
   eviction, pin/unpin submission tokens, reset, and stale-key rejection.
 - Render the version-one text corpus through atlas entries into the reference
   renderer and check in exact 1x/2x golden images.
@@ -163,6 +163,36 @@ Metal pipelines must not begin until both children are committed.
   and all output is assembled in aligned temporary storage before one final
   copy. This avoids unaligned caller dereference and prevents partial output on
   insufficient buffers or late internal failures.
+- 2026-09-06: initial atlas analysis found one public-export ordering info:
+  `glyph_atlas.dart` sorts before `golden_image.dart`. The exports are reordered
+  without suppressing the lint.
+- 2026-09-06: the first atlas source/test analysis attempt completed formatting
+  but stopped before analysis because the sandbox denied Dart's telemetry
+  session timestamp update under `~/.dart-tool`. This is an environment write,
+  not a source diagnostic; rerun the same analysis with the existing SDK and
+  explicit filesystem approval rather than changing analyzer settings.
+- 2026-09-06: the Dart-owned atlas keeps alpha8 and straight-RGBA8 pages
+  disjoint, applies a deterministic best-area/top-left guillotine allocator,
+  clears gutters on eviction, and coalesces adjacent free rectangles. Empty
+  glyphs consume only the independently capped entry table.
+- 2026-09-06: entry-cap and global-byte pressure prefer same-format unpinned LRU
+  entries, then fall back to the global oldest entry; format-page pressure is
+  restricted to the format that can actually free space. Submission tokens retain
+  a deduplicated entry set until exact-once completion; page/entry/resource
+  identities reject cross-atlas, stale, reset, catalog, and scale use.
+- 2026-09-06: focused analysis passed after the export ordering correction.
+  The explicit golden writer produced version-one `atlas-1x.dtgi` and
+  `atlas-2x.dtgi`; the normal read-only run immediately reproduced both exactly.
+- 2026-09-06: final review found that the first upload representation copied a
+  whole dirty page after every insertion even though this task promises upload
+  deltas. Page creation now publishes one full initialization rectangle; later
+  writes and clears publish one deterministic bounding rectangle per dirty page
+  with tightly packed copied rows. Focused and full tests were rerun afterward.
+- 2026-09-06: capacity-path review found that a full same-format page set could
+  otherwise fall back to evicting another format even though that cannot free a
+  usable page. Format-page pressure now considers only that format; global byte
+  pressure may still fall back across formats. A pinned full color page test
+  proves an unrelated alpha entry survives the rejected insertion.
 
 ## Verification results
 
@@ -192,3 +222,25 @@ Metal pipelines must not begin until both children are committed.
   rasterization`.
 - The raster child is complete. Dart-owned atlas retention, generation,
   eviction/pinning, and checked-in text image goldens remain the next child.
+
+### Dart-owned atlas and text-golden subtask
+
+- Focused atlas tests passed deterministic alpha/color page growth and
+  placement, full-page initialization plus tightly packed incremental upload
+  rectangles, immutable pixel copies, page/byte/entry caps, same-format then
+  global LRU eviction, live submission pins, exact token completion, and stale
+  entry/catalog/scale/resource-generation rejection.
+- The seven-case version-one text corpus passed through live CoreText shaping,
+  batched rasterization, atlas insertion/pinning, and the reference compositor.
+  Checked-in `atlas-1x.dtgi` and `atlas-2x.dtgi` reproduced byte-exactly in the
+  ordinary non-writing test path.
+- Focused analysis and the final complete `make test` passed with no issues.
+  `make runtime-source-check` passed after staging all new Dart files with
+  `tracked=159` and `native_sources=0`.
+- The focused test compiled as a Release AOT executable and passed with the
+  tested renderer dylib preloaded, exercising the product public API through
+  CoreText ABI 4. The product, adjacent dependency, and official SDK worktrees
+  contained no unrelated changes; both staged and unstaged whitespace checks
+  passed.
+- The atlas child and its roadmap parent are complete. Metal packed pipelines
+  are the next ordered Phase 4 task.

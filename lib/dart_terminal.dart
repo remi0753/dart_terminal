@@ -89,6 +89,7 @@ export 'src/terminal_pane.dart'
         TerminalPaneState,
         TerminalSessionShutdownDisposition,
         TerminalSessionId;
+export 'src/terminal_renderer/glyph_atlas.dart';
 export 'src/terminal_renderer/golden_image.dart'
     show
         TerminalGoldenImageCodec,
