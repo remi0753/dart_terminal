@@ -278,6 +278,7 @@ final class TerminalApplication {
         : nativePtyBackend;
     final AppKitApplication application = await AppKitApplication.attach();
     View? contentView;
+    TerminalMetalRenderer? metalRenderer;
     Window? window;
     TerminalPaneOwner? paneOwner;
     StreamSubscription<WindowEvent>? eventSubscription;
@@ -312,6 +313,22 @@ final class TerminalApplication {
       final View createdContentView =
           createdTextView ?? TerminalRendererMacos.createView();
       contentView = createdContentView;
+      if (useTerminalMetalView) {
+        final TerminalMetalRenderer createdRenderer =
+            TerminalMetalRenderer.open(
+              config: const TerminalMetalRendererConfig(
+                maximumViewportWidth: 1024,
+                maximumViewportHeight: 1024,
+                maximumInstances: 1024,
+                atlasWidth: 64,
+                atlasHeight: 64,
+                maximumAlphaPages: 1,
+                maximumColorPages: 1,
+              ),
+            );
+        metalRenderer = createdRenderer;
+        createdRenderer.bindToView(createdContentView);
+      }
       final Window createdWindow =
           Window(
               frame: const Rect.fromLTWH(100, 90, 920, 580),
@@ -326,7 +343,8 @@ final class TerminalApplication {
       if (useTerminalMetalView) {
         stdout.writeln(
           'NATIVE_CUSTOM_VIEW '
-          'provider=$terminalMetalViewProviderIdentifier attached=true',
+          'provider=$terminalMetalViewProviderIdentifier attached=true '
+          'renderer_bound=true',
         );
       }
 
@@ -957,6 +975,9 @@ final class TerminalApplication {
         }
         if (window != null && !window.isDisposed) {
           window.dispose();
+        }
+        if (metalRenderer != null && !metalRenderer.isDisposed) {
+          metalRenderer.dispose();
         }
         if (contentView != null && !contentView.isDisposed) {
           contentView.dispose();

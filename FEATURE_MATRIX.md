@@ -135,13 +135,13 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| REN-01 | `MTKView`/Metal lifecycle、drawable resize/backing scale、device/shader/drawable failure path | P0 | 4 | `G:src/renderer/Metal.zig`, `G:macos/Sources/Helpers/MetalView.swift` | Phase 0 gate に加え、Phase 1 で system device を持つ paused/on-demand TerminalMetalView shell の生成・attach 境界を完了。renderer lifecycle/failure path は Phase 4 |
-| REN-02 | background、cell background、glyph、decoration、cursor、selection を packed instance で描画 | P0 | 4 | `G:src/renderer/shaders/shaders.metal`, `G:src/renderer/cell.zig` | Phase 0 gate |
-| REN-03 | grayscale/color atlas、growth/eviction/generation validation | P0 | 4 | `G:src/font/Atlas.zig`, `G:src/renderer/generic.zig` | ABI-v4 bounded batch raster、Dart-owned alpha/color page、deterministic growth、page/byte/entry cap、unpinned LRU、submission pin、resource generation、矩形差分uploadを完了 |
+| REN-01 | `MTKView`/Metal lifecycle、drawable resize/backing scale、device/shader/drawable failure path | P0 | 4 | `G:src/renderer/Metal.zig`, `G:macos/Sources/Helpers/MetalView.swift` | paused/on-demand TerminalMetalView、generation-owned renderer bind/detach、drawable presentation、GPU completion ownershipまで完了。resize/failure recoveryは後続Phase 4項目 |
+| REN-02 | background、cell background、glyph、decoration、cursor、selection を packed instance で描画 | P0 | 4 | `G:src/renderer/shaders/shaders.metal`, `G:src/renderer/cell.zig` | build-time metallib、strict little-endian packed encoder、全6 visual kindのordered pipeline/readback完了 |
+| REN-03 | grayscale/color atlas、growth/eviction/generation validation | P0 | 4 | `G:src/font/Atlas.zig`, `G:src/renderer/generic.zig` | bounded batch raster、Dart-owned alpha/color page、deterministic growth、page/byte/entry cap、unpinned LRU、submission pin、resource/page generation、矩形差分upload、stable native slice bridgeを完了 |
 | REN-04 | damage coalescing、stale generation discard、full snapshot は recovery/resize のみ | P0 | 4 | `G:src/renderer/row.zig`, `G:src/renderer/State.zig`, `G:src/renderer/message.zig` | ADR gate |
-| REN-05 | double/triple buffering と submit token/fence。GPU 完了前に buffer を再利用しない | P0 | 4 | `G:src/renderer/metal/Frame.zig`, `G:src/renderer/metal/buffer.zig` | ADR gate |
+| REN-05 | double/triple buffering と submit token/fence。GPU 完了前に buffer を再利用しない | P0 | 4 | `G:src/renderer/metal/Frame.zig`, `G:src/renderer/metal/buffer.zig` | 3つの固定native slot、copied submit、即時backpressure、newest-ready選択、GPU完了retire watermarkとDart atlas unpin接続を完了 |
 | REN-06 | vsync/frame pacing、cursor blink、occlusion pause、resume full redraw | P0 | 4 | `G:src/renderer/generic.zig`, `G:src/renderer/Thread.zig` | benchmark gate |
-| REN-07 | deterministic screenshot と CPU/reference renderer を golden oracle にする | P0 | 4 | `G:src/terminal/render.zig`, renderer test paths | bounded Dart-only RGBA compositor、versioned checksum付きgolden format、primitive fixture、実CoreText/atlas文字fixtureの1x/2x、first-pixel診断を完了。Metal screenshot接続は後続 |
+| REN-07 | deterministic screenshot と CPU/reference renderer を golden oracle にする | P0 | 4 | `G:src/terminal/render.zig`, renderer test paths | bounded Dart-only RGBA compositor、versioned checksum付きgolden format、primitive/実CoreText atlas fixture、Metal offscreen readbackとの1x/2x pixel比較を完了 |
 | REN-08 | image/search/hyperlink/inspector overlay、P3/sRGB blending | P1 | 4/9 | `G:src/renderer/image.zig`, `Overlay.zig`, `link.zig` | 未実装 |
 | REN-09 | 60/120 Hz、複数 window/pane の fair scheduling。遅延時は中間 frame を捨てる | P1 | 4/7 | `G:src/renderer/Thread.zig`, `G:src/renderer/generic.zig` | benchmark gate |
 

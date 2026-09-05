@@ -1,6 +1,6 @@
 # Phase 4 — Metal terminal pipelines
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-06
 - Scope: fourth Phase 4 roadmap item
 - Related: ADR-001, ADR-002, ADR-004, ADR-005, REN-01, REN-02, REN-03,
@@ -242,6 +242,34 @@ and committed. The following damage/frame task must not begin earlier.
   live registry-handle count; temporary diagnostics confirmed detached objects
   deallocate when their legitimate command/autorelease ownership drains, and
   were then removed.
+- 2026-09-06: after product commit `e06848b`, reread `README.md`,
+  `FEATURE_MATRIX.md`, the Phase 4 roadmap, this task memo, the native ABI, the
+  existing Dart CoreText facade, `TerminalGlyphAtlas`, reference/golden tests,
+  manifest, and both build systems. Both repositories are clean and the Dart
+  encoder/facade/atlas-bridge child is now the first unchecked item.
+- 2026-09-06: the native atlas uses format-local zero-based texture slices,
+  while the Dart atlas deliberately exposes monotonic global page IDs. The
+  product bridge therefore needs stable per-format page-ID-to-slice maps; page
+  IDs must never be passed as native slice indexes or compacted when another
+  page is removed. Monotonic page generations make safe slot reuse possible.
+- 2026-09-06: `TerminalGlyphAtlas.takePendingUploads()` clears its dirty set,
+  so a bridge must retain copied uploads across native backpressure. Advancing
+  the atlas resource generation for an ordinary dirty rectangle must preserve
+  unchanged native slices; clearing every texture on each resource-generation
+  advance would erase valid pages that have no new dirty rectangle. Native
+  generation handling will therefore advance the whole-snapshot identity while
+  only a newer page generation clears its own reused slice.
+- 2026-09-06: selected a strict immutable little-endian Dart encoder in the
+  renderer package, typed create/upload/submit/state/readback outcomes, and a
+  generic `View` custom-operation method that exposes copied bytes but neither
+  an Objective-C object nor a native handle. The product-owned atlas bridge
+  will validate atlas ownership/generation, hold backpressured uploads, map
+  stable slices, and pin accepted glyph entries until the native retirement
+  watermark passes their submission tokens.
+- 2026-09-06: the first Dart facade test run caught a test-only offset error:
+  the packed instance color begins at byte 32 of the 48-byte record (absolute
+  frame offset 112), not byte 36. The encoder itself matched the native ABI;
+  the exact-layout assertion was corrected to the documented field offset.
 
 ## Blocker and resumption
 
@@ -249,20 +277,20 @@ Resolved on 2026-09-06. The required Apple Metal Toolchain is installed and
 invocable. The original failure and its safe resumption checks remain recorded
 above for reproducibility.
 
-Resume this task only after both commands succeed:
+The historical resumption gate was both commands succeeding:
 
 ```sh
 xcrun --find metal
 xcrun -sdk macosx metal -help
 ```
 
-The second command prints compiler help rather than the missing-component
-error. Implement subtask 1 from this memo; do not advance to the damage
-coalescing roadmap item.
+The second command now prints compiler help rather than the missing-component
+error. All three ordered subtasks are complete; this gate remains documented so
+the precompiled shader build can be diagnosed reproducibly.
 
 ## Verification results
 
-- Ordered subtasks 1 and 2 are complete. Subtask 3 remains pending.
+- All three ordered subtasks and the Metal pipeline parent are complete.
 - Both `xcrun --find metal` and `xcrun -sdk macosx metal -help` succeed after
   Xcode component repair. The checked-in MSL compiles to an 11,736-byte
   `MetalLib executable (MacOS), version 1.2.7`; the built renderer has an exact
@@ -305,3 +333,30 @@ coalescing roadmap item.
   logging or runtime shader compiler path, and `git diff --check` passes.
 - Adjacent dependency commit: `6a7a23d Bind renderer views to triple-buffer
   submission`.
+- Ordered subtask 3 adds a typed `TerminalMetalRenderer` lifecycle with strict
+  bounded configuration, renderer-aware immutable little-endian frame encoding,
+  copied atlas uploads, accepted/stale/backpressured outcomes, locked state
+  snapshots, synchronous RGBA oracle readback, and opaque public view binding.
+  Dart checks all fixed FFI layouts and validates native summaries/results
+  before publishing them.
+- The product-owned `TerminalGlyphAtlasMetalBridge` maps monotonic global atlas
+  page IDs to stable format-local native slices, retains copied dirty uploads
+  across backpressure, rejects unsynchronized frame construction, and connects
+  accepted submission tokens to atlas pins and the native retirement watermark.
+  Full page snapshot copies provide a bounded first-attachment/recovery path
+  without consuming incremental dirty state.
+- The 1x/2x product GPU test incrementally publishes alpha then color pages,
+  proving that a newer complete atlas generation preserves unchanged slices.
+  It renders all six visual kinds and compares every RGBA channel to the
+  existing checked-in CPU reference goldens with a maximum one-code-value
+  tolerance for Metal blend rounding. Focused atlas and GPU tests pass.
+- The renderer package analyzer/Dart tests and complete adjacent `make test`
+  pass. Product `make test` passes all 84 formatted files, analysis, native
+  build hooks, GPU goldens, and the existing full suite. The focused public
+  facade test compiles and passes as a Release AOT executable with the tested
+  renderer dylib preloaded.
+- `make runtime-source-check` passes with `tracked=162` and
+  `native_sources=0`. Developer JIT and Release AOT arm64 bundle audits pass
+  with renderer ABI 6. Their real custom-view smokes bind a renderer generation
+  through the public Dart facade and exit cleanly in 2241 ms and 1822 ms.
+- Adjacent dependency commit: `465ff2d Expose typed Metal renderer facade`.

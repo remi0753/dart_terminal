@@ -616,7 +616,8 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     'Dart Terminal is attached to the AppKit main thread.',
     'NATIVE_KEY_EVENT_ROUTING mode=dart-only',
     'NATIVE_CUSTOM_VIEW '
-        'provider=dart_terminal.TerminalMetalView attached=true',
+        'provider=dart_terminal.TerminalMetalView attached=true '
+        'renderer_bound=true',
     'Automated close scheduled after 1 seconds.',
     'Dart Terminal shut down cleanly.',
   ]) {

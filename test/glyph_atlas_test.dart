@@ -121,6 +121,20 @@ void _testGrowthIsolationAndUploads() {
         snapshot.pages[1].pageId < snapshot.pages[2].pageId,
     'atlas snapshot exposes ordered stable page identities',
   );
+  final List<TerminalGlyphAtlasUpload> snapshotUploads = atlas
+      .snapshotUploads();
+  _expect(
+    snapshotUploads.length == 3 &&
+        snapshotUploads.every(
+          (TerminalGlyphAtlasUpload upload) =>
+              upload.x == 0 &&
+              upload.y == 0 &&
+              upload.width == 8 &&
+              upload.height == 8,
+        ) &&
+        atlas.pendingUploadPageCount == 3,
+    'full snapshot copies do not consume incremental dirty state',
+  );
   final List<TerminalGlyphAtlasUpload> uploads = atlas.takePendingUploads();
   _expect(
     uploads.length == 3 &&

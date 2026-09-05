@@ -384,6 +384,33 @@ final class TerminalGlyphAtlas {
     );
   }
 
+  /// Copies every live page as a full upload without consuming dirty state.
+  ///
+  /// This is the recovery/first-attachment path. Incremental consumers should
+  /// use [takePendingUploads] after establishing their initial snapshot.
+  List<TerminalGlyphAtlasUpload> snapshotUploads() {
+    final List<_AtlasPage> pages = List<_AtlasPage>.of(_pages)
+      ..sort((_AtlasPage a, _AtlasPage b) => a.pageId.compareTo(b.pageId));
+    return List<TerminalGlyphAtlasUpload>.unmodifiable(
+      pages.map(
+        (_AtlasPage page) => TerminalGlyphAtlasUpload._(
+          resourceGeneration: _resourceGeneration,
+          pageId: page.pageId,
+          pageGeneration: page.pageGeneration,
+          format: page.format,
+          pageWidth: page.width,
+          pageHeight: page.height,
+          x: 0,
+          y: 0,
+          width: page.width,
+          height: page.height,
+          rowStride: page.rowStride,
+          bytes: Uint8List.fromList(page.pixels),
+        ),
+      ),
+    );
+  }
+
   List<TerminalGlyphAtlasUpload> takePendingUploads() {
     final List<_AtlasPage> dirty =
         _pages

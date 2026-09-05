@@ -99,6 +99,7 @@ export 'src/terminal_renderer/golden_image.dart'
         TerminalGoldenImageFormatException,
         TerminalGoldenImageLimits,
         TerminalGoldenImageMismatchException;
+export 'src/terminal_renderer/metal_atlas_bridge.dart';
 export 'src/terminal_renderer/reference_renderer.dart'
     show
         TerminalReferenceBitmap,

@@ -92,6 +92,9 @@ model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後�
 - alpha8/straight-RGBA8を分離したbounded glyph atlas、決定論的配置、page/byte/
   entry上限、unpinned LRU、submission token pin、resource generation検証、
   矩形差分uploadと実CoreText文字コーパスの1x/2x pixel golden
+- build時にコンパイルしたMetal shader、全terminal layer用packed draw list、
+  bounded texture array、3つのnative frame slot、即時backpressure、GPU完了retire、
+  Dart encoder/facade、stable atlas slice bridge、CPU oracleとの1x/2x readback比較
 
 ## 起動
 
