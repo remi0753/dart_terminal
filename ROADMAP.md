@@ -604,6 +604,16 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] closing中も有効なidempotent force-close capability
   - [x] missing exit / reap callbackに対するfinal deadline
   - [x] deadline超過後も完了するclassified application termination
+- [x] AppKit key event routing policy とterminal専有入力
+  （分割と完了条件は
+  [`docs/phase2/exclusive-key-event-routing.md`](docs/phase2/exclusive-key-event-routing.md)
+  を参照して順に実施する）
+  - [x] `dart_appkit`に選択可能なkey event routing capabilityを追加する
+  - [x] `dart_terminal`をDart専有入力へ切り替え、GUI回帰を検証する
+- [ ] Ctrl-D write受理後のPTY停止原因を分離する
+  （実施時に
+  [`docs/phase2/ctrl-d-accepted-no-exit-investigation.md`](docs/phase2/ctrl-d-accepted-no-exit-investigation.md)
+  を参照する）
 
 終了条件:
 

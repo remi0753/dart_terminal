@@ -149,7 +149,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| IN-01 | physical key、produced text、modifiers、repeat を別 field として保持 | P0 | 5 | `G:src/input/key.zig`, `G:macos/Sources/Ghostty/Ghostty.Input.swift` | 一部 key event のみ |
+| IN-01 | physical key、produced text、modifiers、repeat を別 field として保持 | P0 | 5 | `G:src/input/key.zig`, `G:macos/Sources/Ghostty/Ghostty.Input.swift` | field分離済みの一部key eventと、AppKit responderへ二重配送しないwindow単位のDart専有routing基盤まで完了 |
 | IN-02 | US/JIS/layout switch/dead key/function/navigation/keypad と terminal mode-aware encoding | P0 | 5 | `G:src/input/KeymapDarwin.zig`, `G:src/input/key_encode.zig`, keyboard tests | 未実装 |
 | IN-03 | `NSTextInputClient` marked/commit/cancel/replacement/candidate rect。raw key と IME を二重送信しない | P0 | 5 | `G:macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` | Phase 0 gate |
 | IN-04 | 日本語 IME、emoji picker、Unicode Hex Input、key repeat の automated/manual matrix | P0 | 5 | same AppKit surface implementation and macOS tests | Phase 0 gate |

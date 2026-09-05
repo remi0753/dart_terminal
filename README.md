@@ -21,6 +21,7 @@ CoreText/Metal renderer、IME の製品実装は後続 Phase です。
 ## 現在できること
 
 - AppKit のネイティブウィンドウを Dart から表示
+- window単位で選択できるAppKit/Dart key routingと、terminalのDart専有入力
 - キー入力、Backspace/Delete、左右移動、Home/End
 - zsh自身の行編集と上下キーによるコマンド履歴
 - 1 paneにつき1つのTTY付きinteractive login zsh

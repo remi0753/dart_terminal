@@ -259,8 +259,10 @@ final class TerminalApplication {
               title: 'Dart Terminal',
             )
             ..contentView = createdContentView
+            ..keyEventRouting = KeyEventRouting.dartOnly
             ..defersCloseRequests = true;
       window = createdWindow;
+      stdout.writeln('NATIVE_KEY_EVENT_ROUTING mode=dart-only');
       application.defersTerminationRequests = true;
       if (useTerminalMetalView) {
         stdout.writeln(
