@@ -85,6 +85,8 @@ model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後�
   100 MiB/s regression gate（同一seedのexact counter/integrity検証付き）
 - 1x/2xの決定論的integer alpha合成、固定layer順、solid/mask/color bitmapを扱う
   Dart-only reference rendererと、checksum付きversion 1 golden image oracle
+- generation-owned CoreText font catalog、actual/synthetic 4-style policy、
+  CJK/color emoji fallback、bounded text resolveとcell/decorations metrics
 
 ## 起動
 

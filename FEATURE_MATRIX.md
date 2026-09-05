@@ -122,9 +122,9 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | --- | --- | --- | --- | --- | --- |
 | TXT-01 | extended grapheme、emoji ZWJ/VS/RI、combining sequence | P0 | 3/4 | `G:src/unicode/grapheme.zig`, `G:src/terminal/page.zig` | CoreText/format gate |
 | TXT-02 | East Asian width と ambiguous-width policy。terminal mode と app cursor width が同期 | P0 | 3 | `G:src/unicode/props.zig`, `G:src/terminal/size_report.zig` | 未実装 |
-| TXT-03 | CoreText discovery、ordered fallback、Apple Color Emoji、symbol font | P0 | 4 | `G:src/font/discovery.zig`, `G:src/font/DeferredFace.zig`, `G:src/font/face/coretext.zig` | Phase 0 gate |
-| TXT-04 | regular/bold/italic/bold-italic、synthetic style policy | P0 | 4 | `G:src/font/Collection.zig`, `G:src/font/face/coretext.zig` | Phase 0 gate |
-| TXT-05 | cell metrics、baseline、underline/strike、1x/2x/scale/zoom の pixel alignment | P0 | 4 | `G:src/font/Metrics.zig`, `G:src/renderer/generic.zig` | Phase 0 gate |
+| TXT-03 | CoreText discovery、ordered fallback、Apple Color Emoji、symbol font | P0 | 4 | `G:src/font/discovery.zig`, `G:src/font/DeferredFace.zig`, `G:src/font/face/coretext.zig` | generation-owned catalogとCJK/color emoji fallback resolveを完了。全run shapingは同roadmap項目の次subtask |
+| TXT-04 | regular/bold/italic/bold-italic、synthetic style policy | P0 | 4 | `G:src/font/Collection.zig`, `G:src/font/face/coretext.zig` | actual/syntheticを区別する4-style policyとstable face identityを完了 |
+| TXT-05 | cell metrics、baseline、underline/strike、1x/2x/scale/zoom の pixel alignment | P0 | 4 | `G:src/font/Metrics.zig`, `G:src/renderer/generic.zig` | cell advance/height、baseline、underline/strike metricsを完了。scale/pixel alignmentはresize/rebuild項目で接続 |
 | TXT-06 | Latin/CJK/emoji/Powerline/box/Nerd Font golden corpus | P0 | 4 | `G:src/font/res/`, `G:src/font/sprite/`, font tests | corpus Phase 0 |
 | TXT-07 | ligature/OpenType feature toggle と cursor 下の shaping break | P1 | 4/8 | `G:src/font/shaper/coretext.zig`, `G:src/font/shaper/feature.zig` | Phase 0 gate |
 | TXT-08 | variable axes、codepoint override、fallback diagnostics | P1 | 4/8 | `G:src/font/opentype/`, `G:src/font/CodepointMap.zig` | 未実装 |

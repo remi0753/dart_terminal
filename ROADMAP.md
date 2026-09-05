@@ -703,6 +703,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] versioned golden image codec、fixture、bounded comparison diagnostics
     （[`docs/phase4/reference-renderer-golden-format.md`](docs/phase4/reference-renderer-golden-format.md) を参照して実施）
 - [ ] CoreText font catalog、fallback、metrics、shaping cache
+  - [x] versioned font catalog、style/fallback resolution、cell metrics
+    （[`docs/phase4/coretext-font-shaping.md`](docs/phase4/coretext-font-shaping.md) を参照して実施）
+  - [ ] bounded CoreText run shaping と Dart-owned LRU shaping cache
+    （[`docs/phase4/coretext-font-shaping.md`](docs/phase4/coretext-font-shaping.md) を参照して実施）
 - [ ] monochrome/color glyph atlas
 - [ ] Metal cell/glyph/decoration/cursor/selection pipelines
 - [ ] damage coalescing、frame generation、stale-frame discard
