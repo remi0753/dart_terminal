@@ -1,6 +1,6 @@
 # Phase 4 — Cursor blink, visual bell, and occlusion pause
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-06
 - Scope: seventh Phase 4 roadmap item
 - Related: ADR-002, ADR-003, ADR-004, SCR-03, REN-01, REN-04, REN-06,
@@ -121,8 +121,43 @@ committed.
 - Review staged/unstaged diffs and product, adjacent package, and official SDK
   worktrees before each completion commit.
 
+## Animation and occlusion design
+
+- `TerminalPresentationClock` accepts an explicit nondecreasing signed
+  microsecond observation at every model, animation, and window-state boundary.
+  Cursor on/off and bell duration are positive and capped at one minute;
+  deadlines saturate at signed 64-bit maximum rather than wrapping.
+- The clock owns at most one cursor deadline and one bell deadline. A late
+  cursor observation toggles once and schedules from that observation rather
+  than replaying missed intervals. A newer BEL generation restarts one pulse,
+  and expiry creates one presentation revision. Model revisions remain the
+  ordering source for cursor/BEL metadata; presentation revisions order only
+  clock and pause/resume changes.
+- `TerminalNewestFrameScheduler` snapshots the retained model, presentation
+  revision, and an identity-based full-redraw marker for each build. A model,
+  presentation, or visibility change during a build discards that work before
+  native submission. Backpressure, stale outcomes, exceptions, and a change
+  observed during native submission retain one newest marker without retaining
+  packed frames.
+- Visibility and occlusion jointly determine whether presentation is active.
+  While inactive, submission returns `paused` before allocating a frame
+  generation or invoking the builder. Pause drops deadlines and active bell
+  state. Resume begins a deterministic cursor-visible epoch, does not replay a
+  bell received while hidden, and installs one full-redraw marker for the
+  newest initialized model.
+- The test-gated native Metal view retains its scheduler and feeds immutable
+  AppKit visibility/occlusion timestamps into this policy. A transition back
+  to active immediately attempts the retained resume frame. Creating a
+  display-link driver and multi-window fairness remain outside this child;
+  the clock exposes one next deadline for the later presentation driver.
+
 ## Investigation log
 
+- 2026-09-06: committed the first child as `0857ef9` (`Carry cursor and bell
+  through damage`), reread `ROADMAP.md`, and confirmed the bounded animation
+  clock plus visibility/occlusion scheduling child is now the first unchecked
+  item. The parent remains incomplete and failure recovery remains out of
+  scope until this child is committed.
 - 2026-09-06: after product commit `4a1b93d`, reread the Phase 4 roadmap and
   confirmed this is the first unchecked item. Product, adjacent `dart_appkit`,
   and the bundled official SDK worktrees were clean.
@@ -163,6 +198,32 @@ committed.
   size invariant. Version 2 grows the canonical header by 24 bytes, so the
   reviewed full-packet expectation is `1,704,904` bytes rather than
   `1,704,880`; no cell payload or performance threshold changed.
+- 2026-09-06: the first animation-scheduler static pass found two local API
+  issues before tests: the cursor-shape owner was not imported into the
+  scheduler library, and `Duration` has no relational operator. The scheduler
+  now imports the terminal cursor type explicitly and validates bounded
+  durations through integer microseconds.
+- 2026-09-06: the first AppKit smoke static pass found that the product
+  application imports screen and renderer implementation libraries directly,
+  so its new parser-driven BEL probe could not rely on the package barrel. The
+  parser sink import was added explicitly; no dependency or native API change
+  was needed.
+- 2026-09-06: duration validation initially used `RangeError.value`, whose
+  value parameter is constrained to `num`; `Duration` is not numeric. It now
+  reports the bounded configuration error through `ArgumentError.value`.
+- 2026-09-06: final contract review removed the implicit zero timestamp from
+  damage application. All callers now supply their observation explicitly, so
+  an already advanced clock cannot accidentally receive a regressing default.
+  The same review moved revision exhaustion checks before time publication and
+  added signed-maximum deadline saturation coverage.
+- 2026-09-06: an in-sandbox static-analysis attempt could format sources but
+  could not update Dart's home-directory telemetry session timestamp. The
+  unchanged analysis and focused test were rerun with the required filesystem
+  permission and passed; this was an execution-environment restriction rather
+  than a product failure.
+- 2026-09-06: the first staging attempt could not create `.git/index.lock`
+  under the managed workspace sandbox. No index or source change was made by
+  that failed attempt; staging was retried with repository-write permission.
 
 ## Verification results
 
@@ -190,3 +251,27 @@ committed.
 
 The cursor/BEL damage child is complete. The parent remains in progress until
 the ordered animation/occlusion child is implemented and committed.
+
+### Animation/occlusion child
+
+- Focused JIT `test/frame_scheduler_test.dart` passes. It covers cursor
+  on/off boundaries, missed-interval coalescing, disabled cursor blink, parser
+  BEL start/restart/expiry, one-deadline limits, signed-maximum saturation,
+  visibility plus occlusion state, hidden damage, no hidden build/frame
+  allocation, deterministic resume, no hidden bell replay, build-time
+  occlusion supersession, and presentation-generation exhaustion.
+- The final `make test` passes with 96 formatted files, no analysis issues,
+  fresh generated VT table output, and `dart_terminal tests passed`.
+- The focused scheduler suite compiles and runs as Release AOT from
+  `/private/tmp/dart-terminal-presentation-scheduler-aot`.
+- `make runtime-source-check` passes with `tracked=178 native_sources=0`.
+- Developer JIT and Release AOT bundle audits both pass with one helper, one
+  native-asset set, and one declared capability. Their real AppKit/Metal
+  integrations pass in 2,164 ms and 1,794 ms respectively, including an
+  occluded hidden BEL, zero hidden build/frame allocation, and one native
+  resume full redraw at frame generation 12.
+- `git diff --check` passes. The adjacent `dart_appkit` and bundled official
+  Dart SDK worktrees are clean.
+
+Both ordered children meet their completion criteria. Device/shader/drawable
+failure recovery remains the next roadmap task and was not implemented here.

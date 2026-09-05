@@ -101,6 +101,8 @@ model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後�
   stale/backpressure追従と世代番号の非折り返し
 - resize/backing scale/font変更を最新1件へ集約し、CoreText catalog/cache、1x/2x
   glyph atlas、native Metal atlas、full damageを同じ公開世代で切り替えるatomic rebuild
+- signed monotonic時刻でcursor blinkとvisual BELを各1 deadlineに制限するpresentation
+  clock、visibility/occlusion中のbuild/submit停止、hidden tickを再生しないresume full redraw
 
 ## 起動
 

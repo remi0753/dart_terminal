@@ -619,7 +619,8 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
         'provider=dart_terminal.TerminalMetalView attached=true '
         'renderer_bound=true',
     'NATIVE_FRAME_SCHEDULER stale=true accepted=true first_frame=1 '
-        'accepted_frame=11 submission_token_nonzero=true pending=0',
+        'accepted_frame=11 submission_token_nonzero=true occluded=true '
+        'resume_full=true resume_frame=12 pending=0',
     'Automated close scheduled after 1 seconds.',
     'Dart Terminal shut down cleanly.',
   ]) {

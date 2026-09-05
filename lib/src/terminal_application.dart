@@ -10,6 +10,7 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'runtime_lifecycle.dart';
 import 'terminal_core/terminal_screen.dart';
+import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_pane.dart';
 import 'terminal_renderer/frame_scheduler.dart';
 import 'terminal_renderer/glyph_atlas.dart';
@@ -284,6 +285,8 @@ final class TerminalApplication {
     final AppKitApplication application = await AppKitApplication.attach();
     View? contentView;
     TerminalMetalRenderer? metalRenderer;
+    TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>?
+    metalFrameScheduler;
     Window? window;
     TerminalPaneOwner? paneOwner;
     StreamSubscription<WindowEvent>? eventSubscription;
@@ -346,14 +349,18 @@ final class TerminalApplication {
       stdout.writeln('NATIVE_KEY_EVENT_ROUTING mode=dart-only');
       application.defersTerminationRequests = true;
       if (useTerminalMetalView) {
-        final String frameSchedulerObservation =
-            _exerciseBoundMetalFrameScheduler(metalRenderer!);
+        final ({
+          String observation,
+          TerminalNewestFrameScheduler<TerminalScheduledMetalFrame> scheduler,
+        })
+        frameSchedulerProbe = _exerciseBoundMetalFrameScheduler(metalRenderer!);
+        metalFrameScheduler = frameSchedulerProbe.scheduler;
         stdout.writeln(
           'NATIVE_CUSTOM_VIEW '
           'provider=$terminalMetalViewProviderIdentifier attached=true '
           'renderer_bound=true',
         );
-        stdout.writeln(frameSchedulerObservation);
+        stdout.writeln(frameSchedulerProbe.observation);
       }
 
       final TerminalPaneOwner createdPaneOwner = TerminalPaneOwner();
@@ -641,6 +648,17 @@ final class TerminalApplication {
                 );
               }
             case WindowVisibilityChangedEvent(:final isVisible):
+              final TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>?
+              scheduler = metalFrameScheduler;
+              if (scheduler != null) {
+                final bool changed = scheduler.updateWindowState(
+                  isVisible: isVisible,
+                  monotonicMicros: event.monotonicMicros,
+                );
+                if (changed && scheduler.isPresentationActive) {
+                  scheduler.submitNewest();
+                }
+              }
               if (emitNativeEventWireObservation) {
                 _writeWindowStateEvent(
                   application,
@@ -650,6 +668,17 @@ final class TerminalApplication {
                 );
               }
             case WindowOcclusionChangedEvent(:final isOccluded):
+              final TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>?
+              scheduler = metalFrameScheduler;
+              if (scheduler != null) {
+                final bool changed = scheduler.updateWindowState(
+                  isOccluded: isOccluded,
+                  monotonicMicros: event.monotonicMicros,
+                );
+                if (changed && scheduler.isPresentationActive) {
+                  scheduler.submitNewest();
+                }
+              }
               if (emitNativeEventWireObservation) {
                 _writeWindowStateEvent(
                   application,
@@ -1393,7 +1422,11 @@ final class TerminalApplication {
   }
 }
 
-String _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
+({
+  String observation,
+  TerminalNewestFrameScheduler<TerminalScheduledMetalFrame> scheduler,
+})
+_exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
   final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
     catalogGeneration: 1,
     limits: const TerminalGlyphAtlasLimits(
@@ -1432,14 +1465,22 @@ String _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
   }
   final TerminalMetalFrameSubmissionAdapter adapter =
       TerminalMetalFrameSubmissionAdapter(bridge);
+  TerminalFramePresentation? lastBuiltPresentation;
   final TerminalNewestFrameScheduler<TerminalScheduledMetalFrame> scheduler =
       TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>(
         model: TerminalDamageRenderModel(),
-        buildFrame: (
-          TerminalDamageRenderModel model, {
-          required int modelRevision,
-          required int frameGeneration,
-        }) => TerminalScheduledMetalFrame(frame: encode(frameGeneration)),
+        buildFrame:
+            (
+              TerminalDamageRenderModel model, {
+              required int modelRevision,
+              required int frameGeneration,
+              required TerminalFramePresentation presentation,
+            }) {
+              lastBuiltPresentation = presentation;
+              return TerminalScheduledMetalFrame(
+                frame: encode(frameGeneration),
+              );
+            },
         submitFrame: adapter.submit,
       );
   final TerminalScreen screen = TerminalScreen(rows: 1, columns: 1);
@@ -1454,6 +1495,7 @@ String _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
   final TerminalDamageApplyResult applied = scheduler.applyDamage(
     TerminalDamageCodec.decode(packet.copyBytes()),
     availableResourceGeneration: 1,
+    monotonicMicros: 0,
   );
   if (!applied.isApplied) {
     throw StateError('frame scheduler rejected its initial full snapshot');
@@ -1472,11 +1514,55 @@ String _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
   if (!staleObserved || !acceptedObserved || scheduler.pendingFrameCount != 0) {
     throw StateError('bound native frame scheduler outcome mismatch');
   }
-  return 'NATIVE_FRAME_SCHEDULER stale=$staleObserved '
-      'accepted=$acceptedObserved first_frame=${stale.frameGeneration} '
-      'accepted_frame=${accepted.frameGeneration} '
-      'submission_token_nonzero=${accepted.submissionToken > 0} '
-      'pending=${scheduler.pendingFrameCount}';
+  screen.acknowledgeFullSnapshot();
+  final int visibleBuildCount = scheduler.buildCount;
+  scheduler.updateWindowState(isOccluded: true, monotonicMicros: 1);
+  TerminalScreenParserSink(screen).execute(0x07);
+  final TerminalDamagePacket? bellPacket = TerminalDamageCodec.capture(
+    screen,
+    damageGeneration: 2,
+    requiredResourceGeneration: 1,
+  );
+  if (bellPacket == null ||
+      !scheduler
+          .applyDamage(
+            TerminalDamageCodec.decode(bellPacket.copyBytes()),
+            availableResourceGeneration: 1,
+            monotonicMicros: 2,
+          )
+          .isApplied) {
+    throw StateError('bound scheduler rejected hidden BEL damage');
+  }
+  final TerminalFrameAttemptResult paused = scheduler.submitNewest();
+  final bool occludedObserved =
+      paused.disposition == TerminalFrameAttemptDisposition.paused &&
+      paused.frameGeneration == 0 &&
+      scheduler.buildCount == visibleBuildCount;
+  scheduler.updateWindowState(isOccluded: false, monotonicMicros: 3);
+  final TerminalFrameAttemptResult resumed = scheduler.submitNewest();
+  final bool resumeObserved =
+      resumed.isAccepted &&
+      resumed.frameGeneration == 12 &&
+      resumed.requiresFullRedraw &&
+      lastBuiltPresentation!.requiresFullRedraw &&
+      lastBuiltPresentation!.cursorDrawn &&
+      !lastBuiltPresentation!.visualBellActive;
+  if (!occludedObserved ||
+      !resumeObserved ||
+      scheduler.pendingFrameCount != 0) {
+    throw StateError('bound native occlusion scheduler outcome mismatch');
+  }
+  return (
+    scheduler: scheduler,
+    observation:
+        'NATIVE_FRAME_SCHEDULER stale=$staleObserved '
+        'accepted=$acceptedObserved first_frame=${stale.frameGeneration} '
+        'accepted_frame=${accepted.frameGeneration} '
+        'submission_token_nonzero=${accepted.submissionToken > 0} '
+        'occluded=$occludedObserved resume_full=$resumeObserved '
+        'resume_frame=${resumed.frameGeneration} '
+        'pending=${scheduler.pendingFrameCount}',
+  );
 }
 
 /// Maps one AppKit key-down event to the active terminal pane.
