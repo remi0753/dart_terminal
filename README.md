@@ -10,8 +10,8 @@ Rosetta、Universal、Intel-native 実機確認は、M1 の製品 contract が�
 
 現在の通常エントリーポイントは、再利用可能な `dart_pty_macos` を使う
 pane-owned persistent login shell です。Phase 0 の native spike source は移行時に削除し、
-成立性と測定結果は `docs/phase0` に保存しています。Dart-only VT parser は製品実装へ
-移行済みで、screen model、CoreText/Metal renderer、IME は後続 Phase です。
+成立性と測定結果は `docs/phase0` に保存しています。Dart-only VT parser と screen
+model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後続 Phase です。
 
 現在選定している製品 contract は、未改変の公式 Dart だけを使う AppKit root と、
 独立して回収・再生成できる公式 Dart 子プロセス worker です。M1/arm64 Developer JIT
@@ -81,6 +81,8 @@ pane-owned persistent login shell です。Phase 0 の native spike source は�
 - 厳密検証するbyte-exact product parser corpus manifest、shell/less/top/vimの
   review済み記録snapshotをwhole・全single split・bytewiseで再生する非書換えharness、
   固定seedのproperty testと境界別fuzz seed/mutation corpus
+- Phase 0 mixed workloadを使うcapture-disabled product parserのRelease AOT
+  100 MiB/s regression gate（同一seedのexact counter/integrity検証付き）
 
 ## 起動
 
@@ -237,6 +239,8 @@ M1/arm64 の主要受け入れ手順には含めません。この follow-up の
 
 ```shell
 make product-parser-corpus
+make product-parser-properties
+make product-parser-benchmark
 make runtime-source-check
 make test
 make RUNTIME_ARCH=arm64 runtime-bundle-audit

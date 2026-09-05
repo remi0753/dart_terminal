@@ -7,6 +7,8 @@ void main() => runVtParserTests();
 
 void runVtParserTests() {
   _testTypedSequenceFamiliesAcrossChunks();
+  _testUncapturedSequenceMetadataPath();
+  _testUncapturedSequenceLimitBoundary();
   _testUtf8RecoveryAndC1PrecedenceAcrossChunks();
   _testCancellationMalformedAndGroundControls();
   _testParserLimitsAndRecovery();
@@ -14,6 +16,62 @@ void runVtParserTests() {
   _testFinishResetAndSlices();
   _testRetainedSequenceCopies();
   _testLimitValidation();
+}
+
+void _testUncapturedSequenceLimitBoundary() {
+  final _UncapturedRecorder recorder = _UncapturedRecorder();
+  final VtParser parser = VtParser(
+    sink: recorder,
+    limits: const VtParserLimits(maxSequenceBytes: 8, maxStringBytes: 2),
+  );
+  parser.parse(
+    Uint8List.fromList(<int>[0x1b, 0x5d, ...ascii.encode('abc'), 0x07, 0x5a]),
+  );
+  parser.finish();
+  _expect(
+    parser.isGround &&
+        recorder.limits == 1 &&
+        recorder.sequences.isEmpty &&
+        recorder.textScalars == 1,
+    'uncaptured string limit rejects the sequence and recovers to printable',
+  );
+}
+
+void _testUncapturedSequenceMetadataPath() {
+  final Uint8List input = Uint8List.fromList(<int>[
+    0x41,
+    0x1b,
+    0x37,
+    0x1b,
+    0x5b,
+    ...ascii.encode('?1;2h'),
+    0x1b,
+    0x5d,
+    ...ascii.encode('abc'),
+    0x07,
+    0x1b,
+    0x50,
+    ...ascii.encode('1;2\u0024qxy'),
+    0x1b,
+    0x5c,
+    0x1b,
+    0x5f,
+    0x7a,
+    0x1b,
+    0x5c,
+  ]);
+  final _UncapturedRecorder recorder = _UncapturedRecorder();
+  final VtParser parser = VtParser(sink: recorder);
+  parser.parse(input);
+  parser.finish();
+  _expect(parser.isGround && recorder.textScalars == 1, 'uncaptured ground');
+  _expectList(recorder.sequences, const <String>[
+    'escape/0/0/0/55/0/0',
+    'controlSequence/63/2/0/104/0/0',
+    'operatingSystemCommand/0/0/0/0/3/0',
+    'deviceControlString/0/2/1/113/2/1',
+    'controlString/0/0/0/0/1/1',
+  ], 'uncaptured primitive sequence metadata');
 }
 
 void _testParserLimitBoundaries() {
@@ -542,6 +600,72 @@ final class _Recorder implements VtParserSink {
     _actions.add('TEXT ${jsonEncode(_text.toString())}');
     _text.clear();
   }
+}
+
+final class _UncapturedRecorder
+    implements VtParserSink, VtParserAsciiSink, VtParserUncapturedSequenceSink {
+  final List<String> sequences = <String>[];
+  int textScalars = 0;
+  int limits = 0;
+
+  @override
+  void print(int scalar) => textScalars++;
+
+  @override
+  void printAscii(Uint8List bytes, int start, int end) {
+    textScalars += end - start;
+  }
+
+  @override
+  void execute(int controlByte) {}
+
+  @override
+  void dispatchEscape(VtEscapeSequence sequence) =>
+      throw StateError('retained ESC must be skipped');
+
+  @override
+  void dispatchCsi(VtSequenceHeader sequence) =>
+      throw StateError('retained CSI must be skipped');
+
+  @override
+  void dispatchOsc(VtStringSequence sequence) =>
+      throw StateError('retained OSC must be skipped');
+
+  @override
+  void dispatchDcs(VtDcsSequence sequence) =>
+      throw StateError('retained DCS must be skipped');
+
+  @override
+  void dispatchString(VtStringSequence sequence) =>
+      throw StateError('retained string must be skipped');
+
+  @override
+  void dispatchUncapturedSequence(
+    VtUncapturedSequenceKind kind,
+    int privateMarker,
+    int parameterCount,
+    int intermediateCount,
+    int finalByte,
+    int payloadLength,
+    int terminator,
+  ) {
+    sequences.add(
+      '${kind.name}/$privateMarker/$parameterCount/$intermediateCount/'
+      '$finalByte/$payloadLength/$terminator',
+    );
+  }
+
+  @override
+  void cancel(VtParserState state, int controlByte) {}
+
+  @override
+  void limit(VtParserState state, VtParserLimitKind kind) => limits++;
+
+  @override
+  void malformed(VtParserState state, int byte) {}
+
+  @override
+  void incomplete(VtParserState state) {}
 }
 
 String _formatHeader(VtSequenceHeader header) =>

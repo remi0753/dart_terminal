@@ -24,6 +24,14 @@ enum VtStringKind {
 
 enum VtStringTerminator { bell, stringTerminator }
 
+enum VtUncapturedSequenceKind {
+  escape,
+  controlSequence,
+  operatingSystemCommand,
+  deviceControlString,
+  controlString,
+}
+
 final class VtParserLimits {
   const VtParserLimits({
     this.maxSequenceBytes = 8192,
@@ -219,6 +227,35 @@ abstract interface class VtParserSink {
   void incomplete(VtParserState state);
 }
 
+/// Opt-in synchronous callback for a contiguous printable ASCII run.
+///
+/// [bytes] is borrowed only for the duration of the callback and must not be
+/// retained. Each byte from [start] (inclusive) to [end] (exclusive) has the
+/// same meaning and ordering as an individual [VtParserSink.print] callback.
+abstract interface class VtParserAsciiSink {
+  void printAscii(Uint8List bytes, int start, int end);
+}
+
+/// Opt-in non-retaining sequence callback for benchmark and metrics sinks.
+///
+/// When a [VtParserSink] also implements this interface, successful ESC, CSI,
+/// OSC, DCS, and SOS/PM/APC dispatches skip retainable action objects and copied
+/// typed arrays. Only primitive metadata valid for the callback is exposed.
+/// Text, controls, cancellation, limit, malformed, and incomplete callbacks
+/// continue through [VtParserSink]. Semantic consumers must not implement this
+/// interface because parameters, intermediates, and payload bytes are omitted.
+abstract interface class VtParserUncapturedSequenceSink {
+  void dispatchUncapturedSequence(
+    VtUncapturedSequenceKind kind,
+    int privateMarker,
+    int parameterCount,
+    int intermediateCount,
+    int finalByte,
+    int payloadLength,
+    int terminator,
+  );
+}
+
 /// Incremental table-driven parser for UTF-8 and VT sequence families.
 final class VtParser {
   factory VtParser({
@@ -230,7 +267,11 @@ final class VtParser {
   }
 
   VtParser._({required this.sink, required this.limits})
-    : _intermediates = Uint8List(limits.maxIntermediates),
+    : _asciiSink = sink is VtParserAsciiSink ? sink as VtParserAsciiSink : null,
+      _uncapturedSequenceSink = sink is VtParserUncapturedSequenceSink
+          ? sink as VtParserUncapturedSequenceSink
+          : null,
+      _intermediates = Uint8List(limits.maxIntermediates),
       _parameterValues = Uint32List(limits.maxParameters),
       _parameterMetadata = Uint8List(limits.maxParameters),
       _stringPayload = Uint8List(limits.maxStringBytes),
@@ -239,6 +280,8 @@ final class VtParser {
 
   final VtParserSink sink;
   final VtParserLimits limits;
+  final VtParserAsciiSink? _asciiSink;
+  final VtParserUncapturedSequenceSink? _uncapturedSequenceSink;
   final StreamingUtf8Decoder _utf8Decoder;
   final Uint8List _utf8Byte;
   final Uint8List _intermediates;
@@ -262,6 +305,10 @@ final class VtParser {
   VtStringKind _stringKind = VtStringKind.operatingSystemCommand;
   VtParserState _stringSourceState = VtParserState.oscString;
   VtSequenceHeader? _dcsHeader;
+  int _dcsPrivateMarker = 0;
+  int _dcsParameterCount = 0;
+  int _dcsIntermediateCount = 0;
+  int _dcsFinalByte = 0;
   bool _stringEscapePending = false;
 
   VtParserState get state => _state;
@@ -274,8 +321,55 @@ final class VtParser {
   void parse(Uint8List bytes, [int start = 0, int? end]) {
     final int limit = end ?? bytes.length;
     RangeError.checkValidRange(start, limit, bytes.length);
-    for (int index = start; index < limit; index++) {
-      final int byte = bytes[index];
+    int index = start;
+    while (index < limit) {
+      if (_state == VtParserState.ground && _utf8Decoder.isAccepting) {
+        int byte = bytes[index];
+        if (byte >= 0x20 && byte <= 0x7e) {
+          final int runStart = index;
+          do {
+            index++;
+            if (index >= limit) {
+              break;
+            }
+            byte = bytes[index];
+          } while (byte >= 0x20 && byte <= 0x7e);
+          final VtParserAsciiSink? asciiSink = _asciiSink;
+          if (asciiSink != null) {
+            asciiSink.printAscii(bytes, runStart, index);
+          } else {
+            for (var asciiIndex = runStart; asciiIndex < index; asciiIndex++) {
+              sink.print(bytes[asciiIndex]);
+            }
+          }
+          continue;
+        }
+      }
+      if (_uncapturedSequenceSink != null &&
+          _stringActive &&
+          !_stringRejected &&
+          (_state == VtParserState.oscString ||
+              _state == VtParserState.dcsPassthrough ||
+              _state == VtParserState.sosPmApcString)) {
+        var stringEnd = index;
+        while (stringEnd < limit) {
+          final int byte = bytes[stringEnd];
+          if (byte < 0x20 || byte > 0x7e) {
+            break;
+          }
+          stringEnd++;
+        }
+        final int runLength = stringEnd - index;
+        if (runLength != 0 &&
+            _sequenceBytes + runLength <= limits.maxSequenceBytes &&
+            _stringLength + runLength <= limits.maxStringBytes) {
+          _sequenceBytes += runLength;
+          _stringLength += runLength;
+          index = stringEnd;
+          continue;
+        }
+      }
+      final int byte = bytes[index++];
       if (!_utf8Decoder.isAccepting) {
         if (byte >= 0x80 && byte <= 0xbf) {
           _feedUtf8Byte(byte);
@@ -585,6 +679,19 @@ final class VtParser {
     if (_headerRejected) {
       return;
     }
+    final VtParserUncapturedSequenceSink? uncaptured = _uncapturedSequenceSink;
+    if (uncaptured != null) {
+      uncaptured.dispatchUncapturedSequence(
+        VtUncapturedSequenceKind.escape,
+        0,
+        0,
+        _intermediateCount,
+        finalByte,
+        0,
+        0,
+      );
+      return;
+    }
     sink.dispatchEscape(
       VtEscapeSequence._(
         intermediates: _copyIntermediates(),
@@ -597,11 +704,33 @@ final class VtParser {
     if (_headerRejected) {
       return;
     }
-    sink.dispatchCsi(_snapshotHeader(finalByte));
+    final VtParserUncapturedSequenceSink? uncaptured = _uncapturedSequenceSink;
+    if (uncaptured != null) {
+      uncaptured.dispatchUncapturedSequence(
+        VtUncapturedSequenceKind.controlSequence,
+        _privateMarker ?? 0,
+        _parameterCount,
+        _intermediateCount,
+        finalByte,
+        0,
+        0,
+      );
+    } else {
+      sink.dispatchCsi(_snapshotHeader(finalByte));
+    }
   }
 
   void _startDcsString(VtParserState state, int finalByte) {
-    _dcsHeader = _headerRejected ? null : _snapshotHeader(finalByte);
+    if (_headerRejected) {
+      _dcsHeader = null;
+    } else if (_uncapturedSequenceSink == null) {
+      _dcsHeader = _snapshotHeader(finalByte);
+    } else {
+      _dcsPrivateMarker = _privateMarker ?? 0;
+      _dcsParameterCount = _parameterCount;
+      _dcsIntermediateCount = _intermediateCount;
+      _dcsFinalByte = finalByte;
+    }
     _startString(VtStringKind.deviceControlString, state);
   }
 
@@ -623,7 +752,10 @@ final class VtParser {
       _markLimit(sourceState, VtParserLimitKind.stringBytes);
       return;
     }
-    _stringPayload[_stringLength++] = byte;
+    if (_uncapturedSequenceSink == null) {
+      _stringPayload[_stringLength] = byte;
+    }
+    _stringLength++;
   }
 
   void _leaveString(
@@ -668,25 +800,44 @@ final class VtParser {
 
   void _finalizeString(VtStringTerminator terminator) {
     if (!_stringRejected && !_stringCancelled) {
-      final Uint8List payload = _copyStringPayload();
-      if (_stringKind == VtStringKind.deviceControlString) {
-        sink.dispatchDcs(
-          VtDcsSequence._(
-            header: _dcsHeader!,
-            payload: payload,
-            terminator: terminator,
-          ),
+      final VtParserUncapturedSequenceSink? uncaptured =
+          _uncapturedSequenceSink;
+      if (uncaptured != null) {
+        final bool dcs = _stringKind == VtStringKind.deviceControlString;
+        uncaptured.dispatchUncapturedSequence(
+          dcs
+              ? VtUncapturedSequenceKind.deviceControlString
+              : _stringKind == VtStringKind.operatingSystemCommand
+              ? VtUncapturedSequenceKind.operatingSystemCommand
+              : VtUncapturedSequenceKind.controlString,
+          dcs ? _dcsPrivateMarker : 0,
+          dcs ? _dcsParameterCount : 0,
+          dcs ? _dcsIntermediateCount : 0,
+          dcs ? _dcsFinalByte : 0,
+          _stringLength,
+          terminator.index,
         );
       } else {
-        final VtStringSequence sequence = VtStringSequence._(
-          kind: _stringKind,
-          payload: payload,
-          terminator: terminator,
-        );
-        if (_stringKind == VtStringKind.operatingSystemCommand) {
-          sink.dispatchOsc(sequence);
+        final Uint8List payload = _copyStringPayload();
+        if (_stringKind == VtStringKind.deviceControlString) {
+          sink.dispatchDcs(
+            VtDcsSequence._(
+              header: _dcsHeader!,
+              payload: payload,
+              terminator: terminator,
+            ),
+          );
         } else {
-          sink.dispatchString(sequence);
+          final VtStringSequence sequence = VtStringSequence._(
+            kind: _stringKind,
+            payload: payload,
+            terminator: terminator,
+          );
+          if (_stringKind == VtStringKind.operatingSystemCommand) {
+            sink.dispatchOsc(sequence);
+          } else {
+            sink.dispatchString(sequence);
+          }
         }
       }
     }
@@ -699,6 +850,10 @@ final class VtParser {
     _stringCancelled = false;
     _stringLength = 0;
     _dcsHeader = null;
+    _dcsPrivateMarker = 0;
+    _dcsParameterCount = 0;
+    _dcsIntermediateCount = 0;
+    _dcsFinalByte = 0;
     _stringEscapePending = false;
   }
 

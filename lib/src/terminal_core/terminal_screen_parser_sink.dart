@@ -12,7 +12,8 @@ import 'vt_parser_table.dart';
 /// Unsupported protocol strings are counted without throwing or corrupting the
 /// visible screen. Supported query replies are emitted synchronously through a
 /// bounded callback and never recursively enter the parser.
-final class TerminalScreenParserSink implements VtParserSink {
+final class TerminalScreenParserSink
+    implements VtParserSink, VtParserAsciiSink {
   TerminalScreenParserSink(
     TerminalScreen screen, {
     TerminalReplyHandler? onReply,
@@ -63,6 +64,14 @@ final class TerminalScreenParserSink implements VtParserSink {
   @override
   void print(int scalar) {
     screen.printScalar(scalar);
+  }
+
+  @override
+  void printAscii(Uint8List bytes, int start, int end) {
+    final TerminalScreen target = screen;
+    for (var index = start; index < end; index++) {
+      target.printScalar(bytes[index]);
+    }
   }
 
   @override

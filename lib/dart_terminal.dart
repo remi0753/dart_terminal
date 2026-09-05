@@ -59,13 +59,16 @@ export 'src/terminal_core/vt_parser.dart'
         VtEscapeSequence,
         VtParameters,
         VtParser,
+        VtParserAsciiSink,
         VtParserLimitKind,
         VtParserLimits,
         VtParserSink,
+        VtParserUncapturedSequenceSink,
         VtSequenceHeader,
         VtStringKind,
         VtStringSequence,
-        VtStringTerminator;
+        VtStringTerminator,
+        VtUncapturedSequenceKind;
 export 'src/terminal_core/vt_parser_table.dart' show VtParserState;
 export 'src/terminal_pane.dart'
     show
