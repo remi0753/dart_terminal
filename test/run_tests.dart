@@ -11,6 +11,7 @@ import 'package:dart_terminal/src/runtime_lifecycle.dart';
 import 'package:dart_terminal/src/terminal_session.dart';
 
 import 'runtime_lifecycle_test.dart';
+import 'terminal_core_test.dart';
 
 @Native<Uint64 Function()>(
   symbol: 'dpty_debug_live_session_count',
@@ -19,6 +20,7 @@ import 'runtime_lifecycle_test.dart';
 external int _livePtySessionCount();
 
 Future<void> main() async {
+  runTerminalCoreTests();
   _testEditing();
   _testUnicodeEditing();
   _testHistoryNavigation();

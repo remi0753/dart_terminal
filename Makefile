@@ -21,7 +21,8 @@ override RUNTIME_BUILDER := $(DART) run dart_macos_runtime:build \
 override INTEGRATION_TOOL := $(DART) run tool/runtime_integration_smoke.dart
 override BUNDLE_AUDIT_TOOL := $(DART) run tool/dart_only_bundle_audit.dart
 
-.PHONY: help dependencies test runtime-source-check runtime-architecture-check \
+.PHONY: help dependencies test vt-parser-table vt-parser-table-check \
+	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
 	developer-jit-integration developer-jit-lifecycle developer-jit-traffic \
 	developer-jit-resource developer-jit-shutdown-fault \
@@ -35,6 +36,8 @@ override BUNDLE_AUDIT_TOOL := $(DART) run tool/dart_only_bundle_audit.dart
 help:
 	@echo "Dart-only macOS application targets:"
 	@echo "  make test                         Format, analyze, and unit-test Dart source"
+	@echo "  make vt-parser-table              Regenerate the Dart VT transition table"
+	@echo "  make vt-parser-table-check        Reject a stale generated parser table"
 	@echo "  make developer-jit-build          Build the generic-host JIT application"
 	@echo "  make developer-jit-run            Build and run the JIT application"
 	@echo "  make release-aot-build             Build the generic-host AOT application"
@@ -53,7 +56,13 @@ runtime-architecture-check:
 		exit 69; \
 	fi
 
-test: dependencies
+vt-parser-table:
+	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_vt_parser_table.dart
+
+vt-parser-table-check:
+	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_vt_parser_table.dart --check
+
+test: dependencies vt-parser-table-check
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart

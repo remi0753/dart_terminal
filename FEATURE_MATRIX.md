@@ -79,8 +79,8 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| PAR-01 | UTF-8 を chunk 境界に依存せず decode。不正 byte の置換と recovery が deterministic | P0 | 3 | `G:src/terminal/UTF8Decoder.zig`, `G:src/terminal/stream.zig` | harness のみ Phase 0 |
-| PAR-02 | C0/C1、ESC、CSI、OSC、DCS、APC を incremental table-driven state machine で解析 | P0 | 3 | `G:src/terminal/Parser.zig`, `G:src/terminal/parse_table.zig` | harness のみ Phase 0 |
+| PAR-01 | UTF-8 を chunk 境界に依存せず decode。不正 byte の置換と recovery が deterministic | P0 | 3 | `G:src/terminal/UTF8Decoder.zig`, `G:src/terminal/stream.zig` | Dart-only product decoderとvalid/malformed/all-split回帰を完了 |
+| PAR-02 | C0/C1、ESC、CSI、OSC、DCS、APC を incremental table-driven state machine で解析 | P0 | 3 | `G:src/terminal/Parser.zig`, `G:src/terminal/parse_table.zig` | 14-state/20-actionの生成tableとfreshness/全byte検査を完了。action実行は次項目 |
 | PAR-03 | CAN/SUB/ESC cancel、unknown sequence、malformed sequence の後に printable text へ復帰 | P0 | 3 | `G:src/terminal/Parser.zig`, parser tests in same file | harness のみ Phase 0 |
 | PAR-04 | private marker、intermediate、parameter、subparameter、colon SGR を保持して dispatch | P0 | 3 | `G:src/terminal/csi.zig`, `G:src/terminal/sgr.zig` | 未実装 |
 | PAR-05 | payload/parameter count/numeric value に hard limit。hot path に per-byte allocation、regex、例外なし | P0 | 3 | `G:src/terminal/Parser.zig`, `G:src/terminal/osc.zig`, `G:src/terminal/dcs.zig` | benchmark gate |

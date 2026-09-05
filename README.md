@@ -51,6 +51,9 @@ CoreText/Metal renderer、IME の製品実装は後続 Phase です。
   releaseを即時無効化してmain queueで完了するasynchronous destruction
 - 最小の Application/File/Edit menu、明示的な Paste 時だけ行う plain-text
   pasteboard read、非同期 reply 付き Close/Quit request
+- chunk境界に依存せず不正byteからdeterministicに復帰するDart-only streaming
+  UTF-8 decoderと、宣言的specから再生成・freshness検査できるVT parser table基盤
+  （sequence actionの実行はPhase 3の次項目）
 
 ## 起動
 
@@ -240,6 +243,7 @@ parser/benchmark などの Dart-only harness は後続実装の比較資料と�
 bin/main.dart                         エントリーポイント
 macos_application.json               product identity、helper、native package 宣言
 lib/src/terminal_application.dart    AppKit ウィンドウとキーイベント
+lib/src/terminal_core/               UTF-8 decoderと生成VT parser table基盤
 lib/src/runtime_lifecycle.dart       root/worker lifecycle coordinator
 lib/src/terminal_pane.dart           pane/session ID、owner、close状態
 lib/src/terminal_session.dart        persistent login shellとPTY入出力
