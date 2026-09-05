@@ -14,15 +14,21 @@ final class TerminalBuffer {
 
   final List<String> _transcript = <String>[];
   final List<String> _history = <String>[];
+  final List<int> _outputLineRunes = <int>[];
   List<int> _inputRunes = <int>[];
   List<int> _historyDraft = <int>[];
   int _cursor = 0;
   int? _historyPosition;
+  bool _pendingCarriageReturn = false;
 
   String get input => String.fromCharCodes(_inputRunes);
   int get cursor => _cursor;
   List<String> get transcript => List<String>.unmodifiable(_transcript);
   List<String> get history => List<String>.unmodifiable(_history);
+  String get outputText => <String>[
+    ..._transcript,
+    if (_outputLineRunes.isNotEmpty) String.fromCharCodes(_outputLineRunes),
+  ].join('\n');
 
   void appendLine(String value) {
     final String normalized = value
@@ -36,6 +42,44 @@ final class TerminalBuffer {
     for (final String value in values) {
       appendLine(value);
     }
+  }
+
+  /// Projects a raw PTY text chunk without attempting VT interpretation.
+  void appendOutput(String value) {
+    for (final int rune in value.runes) {
+      if (_pendingCarriageReturn) {
+        _pendingCarriageReturn = false;
+        if (rune == 0x0a) {
+          _commitOutputLine();
+          continue;
+        }
+        _outputLineRunes.clear();
+      }
+      switch (rune) {
+        case 0x0d:
+          _pendingCarriageReturn = true;
+        case 0x0a:
+          _commitOutputLine();
+        case 0x08:
+          if (_outputLineRunes.isNotEmpty) {
+            _outputLineRunes.removeLast();
+          }
+        case 0x00:
+          break;
+        default:
+          _outputLineRunes.add(rune);
+      }
+    }
+  }
+
+  void appendStatusLine(String value) {
+    _commitOutputLineIfPresent();
+    appendLine(value);
+  }
+
+  void finishOutput() {
+    _pendingCarriageReturn = false;
+    _commitOutputLineIfPresent();
   }
 
   void clearTranscript() => _transcript.clear();
@@ -149,6 +193,18 @@ final class TerminalBuffer {
     return visible.skip(firstVisible).join('\n');
   }
 
+  String renderOutput({required int rows}) {
+    if (rows <= 0) {
+      throw ArgumentError.value(rows, 'rows', 'must be positive');
+    }
+    final List<String> visible = <String>[
+      ..._transcript,
+      if (_outputLineRunes.isNotEmpty) String.fromCharCodes(_outputLineRunes),
+    ];
+    final int firstVisible = visible.length > rows ? visible.length - rows : 0;
+    return visible.skip(firstVisible).join('\n');
+  }
+
   void _replaceInput(String value) {
     _inputRunes = value.runes.toList(growable: true);
     _cursor = _inputRunes.length;
@@ -164,5 +220,18 @@ final class TerminalBuffer {
     if (overflow > 0) {
       _transcript.removeRange(0, overflow);
     }
+  }
+
+  void _commitOutputLineIfPresent() {
+    if (_outputLineRunes.isEmpty) {
+      return;
+    }
+    _commitOutputLine();
+  }
+
+  void _commitOutputLine() {
+    _transcript.add(String.fromCharCodes(_outputLineRunes));
+    _outputLineRunes.clear();
+    _trimTranscript();
   }
 }

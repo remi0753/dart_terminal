@@ -8,6 +8,7 @@ import 'package:dart_pty_macos/dart_pty_macos.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'runtime_lifecycle.dart';
+import 'terminal_pane.dart';
 import 'terminal_session.dart';
 
 const String terminalUsage = '''
@@ -182,7 +183,7 @@ final class TerminalApplication {
     final AppKitApplication application = await AppKitApplication.attach();
     View? contentView;
     Window? window;
-    TerminalSession? session;
+    TerminalPaneOwner? paneOwner;
     StreamSubscription<WindowEvent>? eventSubscription;
     StreamSubscription<AppKitEvent>? applicationEventSubscription;
     final List<StreamSubscription<MenuItemInvokedEvent>> menuSubscriptions =
@@ -221,20 +222,31 @@ final class TerminalApplication {
         );
       }
 
-      late final TerminalSession createdSession;
-      createdSession = TerminalSession(
-        ptyBackend: ptyBackend,
-        initialWorkingDirectory: options.initialWorkingDirectory,
+      final TerminalPaneOwner createdPaneOwner = TerminalPaneOwner();
+      paneOwner = createdPaneOwner;
+      late final TerminalPane createdPane;
+      createdPane = createdPaneOwner.createPane(
+        sessionFactory:
+            (
+              TerminalSessionId id, {
+              required void Function() onChanged,
+              required void Function() onTerminated,
+            }) => TerminalSession(
+              id: id,
+              ptyBackend: ptyBackend,
+              initialWorkingDirectory: options.initialWorkingDirectory,
+              onChanged: onChanged,
+              onTerminated: onTerminated,
+            ),
         onChanged: () {
           if (createdTextView != null && !createdTextView.isDisposed) {
-            createdTextView.text = createdSession.render();
+            createdTextView.text = createdPane.render();
           }
         },
         onExitRequested: createdWindow.requestClose,
       );
-      session = createdSession;
       if (createdTextView != null) {
-        createdTextView.text = createdSession.render();
+        createdTextView.text = createdPane.render();
       }
 
       Menu ownMenu(Menu menu) {
@@ -319,7 +331,7 @@ final class TerminalApplication {
             }
             final String? text = snapshot.text;
             if (text != null) {
-              createdSession.insertText(text);
+              createdPane.insertText(text);
             }
           }),
         )
@@ -426,7 +438,7 @@ final class TerminalApplication {
               }
               createdWindow.replyToCloseRequest(event, allow: true);
             case WindowResizedEvent(:final width, :final height):
-              createdSession.resize(
+              createdPane.resize(
                 rows: _rowsForHeight(height),
                 columns: _columnsForWidth(width),
               );
@@ -488,7 +500,7 @@ final class TerminalApplication {
                 );
               }
             case AppKitKeyEvent() when event.kind == AppKitKeyEventKind.down:
-              _handleKeyDown(event, createdSession);
+              _handleKeyDown(event, createdPane);
             case AppKitKeyEvent():
             case AppKitMouseEvent():
           }
@@ -500,6 +512,15 @@ final class TerminalApplication {
         },
       );
 
+      createdPane.resize(
+        rows: _rowsForHeight(createdWindow.frame.height),
+        columns: _columnsForWidth(createdWindow.frame.width),
+      );
+      await createdPane.start();
+      stdout.writeln(
+        'TERMINAL_PANE event=started pane=${createdPane.id} '
+        'session=${createdPane.sessionId}',
+      );
       createdWindow.show();
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
       if (emitNativeEventWireObservation) {
@@ -737,7 +758,7 @@ final class TerminalApplication {
           menu.dispose();
         }
       }
-      await session?.dispose();
+      await paneOwner?.dispose();
       if (window != null && !window.isDisposed) {
         window.dispose();
       }
@@ -1044,47 +1065,55 @@ final class TerminalApplication {
     return columns;
   }
 
-  static void _handleKeyDown(AppKitKeyEvent event, TerminalSession session) {
+  static void _handleKeyDown(AppKitKeyEvent event, TerminalPane pane) {
     if (event.modifiers.control && event.keyCode == 8) {
-      session.interrupt();
+      pane.interrupt();
       return;
     }
     if (event.modifiers.control && event.keyCode == 2) {
-      session.requestExitIfIdle();
+      pane.sendEndOfFile();
       return;
     }
-    if (session.isBusy || event.modifiers.command) {
+    if (event.modifiers.control && event.keyCode == 6) {
+      pane.suspend();
+      return;
+    }
+    if (event.modifiers.control && event.keyCode == 42) {
+      pane.quitForegroundProcess();
+      return;
+    }
+    if (event.modifiers.command) {
       return;
     }
 
     switch (event.keyCode) {
       case 36:
       case 76:
-        unawaited(session.submit());
+        unawaited(pane.submit());
         return;
       case 51:
-        session.deleteBackward();
+        pane.deleteBackward();
         return;
       case 117:
-        session.deleteForward();
+        pane.deleteForward();
         return;
       case 123:
-        session.moveLeft();
+        pane.moveLeft();
         return;
       case 124:
-        session.moveRight();
+        pane.moveRight();
         return;
       case 125:
-        session.nextHistory();
+        pane.nextHistory();
         return;
       case 126:
-        session.previousHistory();
+        pane.previousHistory();
         return;
       case 115:
-        session.moveToStart();
+        pane.moveToStart();
         return;
       case 119:
-        session.moveToEnd();
+        pane.moveToEnd();
         return;
     }
 
@@ -1095,6 +1124,6 @@ final class TerminalApplication {
       (int rune) =>
           rune >= 0x20 && rune != 0x7f && (rune < 0xf700 || rune > 0xf8ff),
     );
-    session.insertText(String.fromCharCodes(printableRunes));
+    pane.insertText(String.fromCharCodes(printableRunes));
   }
 }

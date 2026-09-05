@@ -1,6 +1,6 @@
 # Persistent pane lifecycle
 
-- Status: identity and ownership model complete; persistent PTY integration next
+- Status: persistent pane/session implemented; AppKit close acceptance next
 - Started: 2026-09-05
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 2 `session ID と pane ownership、close confirmation state`
@@ -214,3 +214,34 @@ so that close does not require confirmation.
   after repeated teardown. `dart analyze`, the complete Dart test runner,
   Dart-only source audit (`tracked=76`, `native_sources=0`), formatting, and
   `git diff --check` pass.
+
+### 2026-09-05 — pane-owned persistent login shell
+
+- Replaced the per-command `zsh -lc` adapter with one `TerminalSession` that
+  implements `TerminalPaneSession` and owns one interactive login-shell
+  `PtyProcess` for its full generation. `TerminalApplication` now creates the
+  session only through `TerminalPaneOwner`, forwards all view/input/resize
+  operations through the pane, and disposes the owner rather than retaining a
+  session or PTY independently.
+- The session starts `/bin/zsh` with login-shell `argv[0]`, preserves the
+  inherited environment, supplies `TERM=xterm-256color` and
+  `COLORTERM=truecolor` only when absent, and starts at the current pane size.
+  Text and Enter now write bytes to the live shell. Backspace/Delete, arrows,
+  Home/End, history keys, EOF, Ctrl-C, Ctrl-Z, Ctrl-\\, and later resizes route
+  to the same process and foreground process group.
+- Added a bounded pre-VT text projection that preserves UTF-8 across native
+  chunks and handles only CR/LF/Backspace. It intentionally does not interpret
+  escape sequences or terminal modes. Input rejected by the native write cap
+  is surfaced once and is not retained in an unbounded retry queue.
+- Session start, output/exit observation, close escalation, and disposal are
+  idempotent. The output subscription is drained before natural termination is
+  published, and owner callbacks from a closing pane cannot republish it.
+- Fake tests prove one process across multiple submitted commands, exact input
+  bytes and control sequences, all foreground signals, resize, split UTF-8,
+  bounded write rejection/recovery, natural exit, and one close path. A real
+  `zsh -f` test proves two commands, `/dev/tty*`, `stty size` = `37 111`, clean
+  exit, and reap through the public native asset.
+- `make test`, `make runtime-source-check`, and `git diff --check` pass; the
+  source audit reports `tracked=77`, `native_sources=0`. A fresh arm64 Developer
+  JIT application build also succeeds with the manifest-staged PTY and renderer
+  assets.

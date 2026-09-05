@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:dart_pty_macos/dart_pty_macos.dart';
 import 'package:dart_pty_macos/testing.dart';
 import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal/src/runtime_lifecycle.dart';
@@ -15,8 +17,8 @@ Future<void> main() async {
   _testOptions();
   await _testPaneIdentityOwnershipAndClosePolicy();
   await runRuntimeLifecycleTests().timeout(const Duration(seconds: 30));
-  await _testCommandSession();
-  await _testRealPtyCommandSession();
+  await _testPersistentCommandSession();
+  await _testRealPersistentPtySession();
   stdout.writeln('dart_terminal tests passed');
 }
 
@@ -200,6 +202,19 @@ void _testTranscriptLimitAndViewport() {
   buffer.insert('echo hi');
   final String rendered = buffer.render(prompt: '% ', rows: 2, isBusy: false);
   _expect(rendered == 'four\n% echo hi▌', 'viewport keeps newest rows');
+
+  final TerminalBuffer output = TerminalBuffer(maxTranscriptLines: 3);
+  output.appendOutput('one\r\ntw');
+  output.appendOutput('o\b');
+  output.appendOutput('o\rreplace\npartial');
+  _expect(
+    output.outputText == 'one\nreplace\npartial',
+    'PTY projection preserves split lines and applies CR/backspace',
+  );
+  _expect(
+    output.renderOutput(rows: 2) == 'replace\npartial',
+    'PTY projection keeps the newest visible rows',
+  );
 }
 
 void _testOptions() {
@@ -341,69 +356,158 @@ TerminalOptions _parseOptions(
   ),
 );
 
-Future<void> _testCommandSession() async {
+Future<void> _testPersistentCommandSession() async {
   var changeCount = 0;
-  var exitRequested = false;
+  var terminationCount = 0;
   final FakePtyBackend ptyBackend = FakePtyBackend(autoExitOnClose: false);
   final TerminalSession session = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(7), generation: 3),
     ptyBackend: ptyBackend,
     initialWorkingDirectory: Directory.systemTemp.path,
     onChanged: () {
       ++changeCount;
     },
-    onExitRequested: () {
-      exitRequested = true;
+    onTerminated: () {
+      ++terminationCount;
     },
   );
-  session.insertText("printf 'shell-ok\\n'");
-  final Future<void> submitted = session.submit();
-  while (ptyBackend.processes.isEmpty) {
-    await Future<void>.delayed(Duration.zero);
-  }
-  await Future<void>.delayed(Duration.zero);
-  final FakePtyProcess process = ptyBackend.processes.single;
-  session.resize(rows: 40, columns: 120);
-  process.emitOutput('shell-ok\r\n'.codeUnits);
-  process.finish(exitCode: 0);
-  await submitted;
+  final Future<void> start = session.start();
+  _expect(identical(start, session.start()), 'session start is idempotent');
+  await start;
+  _expect(session.isLive, 'persistent shell is live after start');
   _expect(
-    session.buffer.transcript.contains('shell-ok'),
-    'zsh output reaches the terminal buffer',
+    ptyBackend.commands.length == 1 &&
+        ptyBackend.commands.single.executable == '/bin/zsh' &&
+        ptyBackend.commands.single.arguments.isEmpty &&
+        ptyBackend.commands.single.loginShell,
+    'one login shell is created for the session generation',
+  );
+  final FakePtyProcess process = ptyBackend.processes.single;
+  final int processId = session.processId!;
+
+  session.insertText("printf 'shell-ok\\n'");
+  await session.submit();
+  session.insertText("printf 'second-command\\n'");
+  await session.submit();
+  session.resize(rows: 40, columns: 120);
+  session.deleteBackward();
+  session.deleteForward();
+  session.moveLeft();
+  session.moveRight();
+  session.previousHistory();
+  session.nextHistory();
+  session.moveToStart();
+  session.moveToEnd();
+  session.sendEndOfFile();
+  session.interrupt();
+  session.suspend();
+  session.quitForegroundProcess();
+  process.emitOutput(<int>[0xe2]);
+  process.emitOutput(<int>[0x82, 0xac, 0x0d, 0x0a]);
+  session.showCloseConfirmation();
+  _expect(
+    ptyBackend.processes.length == 1 && session.processId == processId,
+    'multiple commands retain the same PTY process',
   );
   _expect(
-    ptyBackend.commands.single.executable == '/bin/zsh' &&
-        ptyBackend.commands.single.arguments.first == '-lc',
-    'external command uses the PTY capability',
+    utf8.decode(process.writes[0]) == "printf 'shell-ok\\n'" &&
+        process.writes[1].single == 0x0d &&
+        utf8.decode(process.writes[2]) == "printf 'second-command\\n'" &&
+        process.writes[3].single == 0x0d,
+    'commands are written to the persistent shell instead of spawning',
   );
   _expect(
     process.sizes.last.rows == 40 && process.sizes.last.columns == 120,
     'active PTY tracks terminal size',
   );
-  session.insertText('help');
-  await session.submit();
   _expect(
-    session.buffer.transcript.contains('Starter commands:'),
-    'built-in help command',
+    process.signals.join(',') ==
+        <PtySignal>[
+          PtySignal.interrupt,
+          PtySignal.suspend,
+          PtySignal.quit,
+        ].join(','),
+    'foreground control signals use the PTY process group',
   );
-  session.insertText('exit');
-  await session.submit();
-  _expect(exitRequested, 'exit callback');
+  _expect(
+    session.buffer.outputText.contains('€') &&
+        session.buffer.outputText.contains('repeat Close or Quit'),
+    'split UTF-8 output and close notice reach the projection',
+  );
+  process.finish(exitCode: 0);
+  await session.waitForTermination();
+  _expect(!session.isLive && terminationCount == 1, 'shell exit is observed');
   _expect(changeCount > 0, 'session emits view updates');
   await session.dispose();
+  await session.dispose();
+
+  final FakePtyBackend boundedBackend = FakePtyBackend();
+  final TerminalSession bounded = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(9), generation: 1),
+    ptyBackend: boundedBackend,
+    writeCapacityBytes: 2,
+    onChanged: () {},
+    onTerminated: () {},
+  );
+  await bounded.start();
+  bounded.insertText('three bytes');
+  _expect(
+    bounded.writeBackpressureCount == 1 &&
+        bounded.buffer.outputText.contains('input is backpressured') &&
+        boundedBackend.processes.single.writes.isEmpty,
+    'rejected input is surfaced without an unbounded retry queue',
+  );
+  bounded.insertText('x');
+  _expect(
+    utf8.decode(boundedBackend.processes.single.writes.single) == 'x',
+    'session accepts later input after a bounded rejection',
+  );
+  await bounded.dispose();
+  await bounded.dispose();
+  _expect(
+    boundedBackend.processes.single.closeGracePeriods.length == 1,
+    'active persistent process is closed exactly once',
+  );
 }
 
-Future<void> _testRealPtyCommandSession() async {
+Future<void> _testRealPersistentPtySession() async {
+  var terminated = false;
   final TerminalSession session = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(8), generation: 1),
     initialWorkingDirectory: Directory.systemTemp.path,
-    environment: const <String, String>{'PATH': '/usr/bin:/bin'},
+    environment: <String, String>{
+      'PATH': '/usr/bin:/bin',
+      'HOME': Directory.systemTemp.path,
+      'TERM': 'dumb',
+    },
+    shellArguments: const <String>['-f'],
     onChanged: () {},
-    onExitRequested: () {},
+    onTerminated: () {
+      terminated = true;
+    },
   );
-  session.insertText("printf '__DART_TERMINAL_PTY__\\n'");
-  await session.submit().timeout(const Duration(seconds: 5));
+  session.resize(rows: 37, columns: 111);
+  await session.start().timeout(const Duration(seconds: 5));
+  final int processId = session.processId!;
+  session.insertText(
+    "printf '__DART_TERMINAL_PTY__\\n'; tty; stty size; "
+    "printf '__SECOND_COMMAND__\\n'; exit",
+  );
+  await session.submit();
+  await session.waitForTermination().timeout(const Duration(seconds: 8));
+  final String output = session.buffer.outputText;
   _expect(
-    session.buffer.transcript.contains('__DART_TERMINAL_PTY__'),
-    'real PTY output reaches the application session adapter',
+    output.contains('__DART_TERMINAL_PTY__') &&
+        output.contains('__SECOND_COMMAND__'),
+    'multiple real commands use the persistent session',
+  );
+  _expect(
+    output.contains('/dev/tty') && output.contains('37 111'),
+    'real shell has a PTY and observes the initial window size',
+  );
+  _expect(
+    session.processId == processId && session.exit?.exitCode == 0 && terminated,
+    'real login shell exits and is reaped once',
   );
   await session.dispose();
 }

@@ -592,7 +592,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] persistent pane lifecycle の範囲、状態遷移、受け入れ条件を固定する
   - [x] pane/session identity、単一owner、close policyをDart modelとして実装する
-  - [ ] commandごとのPTYをpane-owned persistent login shellへ置き換える
+  - [x] commandごとのPTYをpane-owned persistent login shellへ置き換える
   - [ ] AppKit close確認、実PTY、Developer JIT / Release AOT受け入れを閉じる
 - [x] fake PTY backend と deterministic integration harness
 
