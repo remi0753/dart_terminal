@@ -676,6 +676,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] bounded comparison diagnostics と shared test oracle
     （[`docs/phase3/snapshot-formatter-test-diagnostics.md`](docs/phase3/snapshot-formatter-test-diagnostics.md) を参照して実施）
 - [ ] parser corpus、property tests、fuzz seeds
+  - [x] bounded product corpus manifest と replay harness
+    （[`docs/phase3/parser-corpus-property-fuzz.md`](docs/phase3/parser-corpus-property-fuzz.md) を参照して実施）
+  - [ ] recorded shell、less、top、vim streams
+    （[`docs/phase3/parser-corpus-property-fuzz.md`](docs/phase3/parser-corpus-property-fuzz.md) を参照して実施）
+  - [ ] deterministic property tests と fuzz seed corpus
+    （[`docs/phase3/parser-corpus-property-fuzz.md`](docs/phase3/parser-corpus-property-fuzz.md) を参照して実施）
+  - [ ] product parser Release AOT throughput と Phase 3 exit audit
+    （[`docs/phase3/parser-corpus-property-fuzz.md`](docs/phase3/parser-corpus-property-fuzz.md) を参照して実施）
 
 終了条件:
 

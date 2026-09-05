@@ -1,0 +1,86 @@
+{
+  "format": "dart-terminal-product-parser-corpus",
+  "version": 1,
+  "cases": [
+    {
+      "id": "screen-semantics",
+      "description": "Unicode width, combining grapheme, SGR, line movement, and cursor addressing",
+      "input_hex": "41 e6 97 a5 65 cc 81 1b 5b 31 3b 33 34 6d 5a 0d 0a 6e 65 78 74 1b 5b 32 3b 33 48 58",
+      "snapshot": "snapshots/screen-semantics.snapshot",
+      "rows": 3,
+      "columns": 10,
+      "parser_limits": {
+        "max_sequence_bytes": 8192,
+        "max_string_bytes": 4096,
+        "max_parameters": 32,
+        "max_intermediates": 8,
+        "max_numeric_value": 1000000
+      },
+      "scrollback": {
+        "max_lines": 16,
+        "max_bytes": 65536,
+        "page_rows": 4
+      }
+    },
+    {
+      "id": "history-and-edit",
+      "description": "Full-width lines enter bounded history before insert and delete editing",
+      "input_hex": "66 69 72 73 74 21 0d 0a 73 65 63 6f 6e 64 0d 0a 74 68 69 72 64 21 1b 5b 31 3b 33 48 1b 5b 32 40 58 59 1b 5b 31 50",
+      "snapshot": "snapshots/history-and-edit.snapshot",
+      "rows": 2,
+      "columns": 6,
+      "parser_limits": {
+        "max_sequence_bytes": 8192,
+        "max_string_bytes": 4096,
+        "max_parameters": 32,
+        "max_intermediates": 8,
+        "max_numeric_value": 1000000
+      },
+      "scrollback": {
+        "max_lines": 8,
+        "max_bytes": 65536,
+        "page_rows": 2
+      }
+    },
+    {
+      "id": "alternate-palette-query",
+      "description": "Palette mutation, alternate-screen ownership, cursor report, and color query replies",
+      "input_hex": "1b 5d 34 3b 31 3b 23 31 31 32 32 33 33 07 1b 5d 31 30 3b 23 61 62 63 64 65 66 07 70 72 69 1b 5b 3f 31 30 34 39 68 61 6c 74 1b 5b 36 6e 1b 5d 34 3b 31 3b 3f 07",
+      "snapshot": "snapshots/alternate-palette-query.snapshot",
+      "rows": 2,
+      "columns": 8,
+      "parser_limits": {
+        "max_sequence_bytes": 8192,
+        "max_string_bytes": 4096,
+        "max_parameters": 32,
+        "max_intermediates": 8,
+        "max_numeric_value": 1000000
+      },
+      "scrollback": {
+        "max_lines": 8,
+        "max_bytes": 65536,
+        "page_rows": 2
+      }
+    },
+    {
+      "id": "bounded-recovery",
+      "description": "Parameter, string, malformed CSI, UTF-8, and incomplete-sequence recovery stay bounded",
+      "input_hex": "1b 5b 31 3b 32 3b 33 3b 34 6d 4f 4b 1b 5d 31 32 33 34 35 36 37 38 39 07 5a 1b 5b 31 3f 32 6d 52 e2 82 1b 5b 31",
+      "snapshot": "snapshots/bounded-recovery.snapshot",
+      "rows": 2,
+      "columns": 8,
+      "parser_limits": {
+        "max_sequence_bytes": 32,
+        "max_string_bytes": 8,
+        "max_parameters": 3,
+        "max_intermediates": 1,
+        "max_numeric_value": 99
+      },
+      "scrollback": {
+        "max_lines": 8,
+        "max_bytes": 65536,
+        "page_rows": 2
+      }
+    }
+  ]
+}
