@@ -744,6 +744,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] renderer recreation、atlas republish、full-redraw coordination
     （[`docs/phase4/metal-failure-recovery.md`](docs/phase4/metal-failure-recovery.md) を参照して実施）
 - [ ] frame timing、atlas hit rate、uploaded byte count の metrics
+  （[`docs/phase4/renderer-metrics.md`](docs/phase4/renderer-metrics.md) を参照して実施）
+  - [x] native GPU completion timing と accepted atlas upload counters
+    （[`docs/phase4/renderer-metrics.md`](docs/phase4/renderer-metrics.md) を参照して実施）
+  - [ ] Dart frame timing、atlas hit rate、aggregate metrics snapshot
+    （[`docs/phase4/renderer-metrics.md`](docs/phase4/renderer-metrics.md) を参照して実施）
 
 終了条件:
 
