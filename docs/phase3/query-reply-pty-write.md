@@ -1,6 +1,6 @@
 # Phase 3 — Query/reply encoding and PTY write connection
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-05
 - Scope: the first incomplete Phase 3 roadmap item after paged scrollback,
   viewport, selection, and search primitives
@@ -158,6 +158,16 @@ commit. The parent remains unchecked until both children pass.
   on primary after it had switched to alternate. The report correctly read the
   active alternate screen's independent defaults; the expectation was updated
   to enforce active-screen ownership rather than cross-buffer leakage.
+- Core query dispatch completed in `e2276cd`. The clean-worktree roadmap,
+  README, feature-matrix, and task-memo reread made raw parser feed and the
+  bounded PTY reply connection the current child.
+- The first integration analysis found one unused direct PTY API import in the
+  focused fake-backend test. The testing library already exposes the required
+  fake types, so the redundant import was removed; product code was unaffected.
+- The first real-PTY DSR assertion assumed one space between `od` bytes, while
+  macOS `od` emitted two. The child had received the exact four reply bytes;
+  the smoke command now removes formatting whitespace and compares the compact
+  hex value instead of depending on presentation spacing.
 
 ## Decisions and alternatives
 
@@ -181,6 +191,22 @@ commit. The parent remains unchecked until both children pass.
   This preserves existing malformed-sequence atomicity. Valid mutations apply
   as one batch, then query replies observe the final palette state and retain
   the query order and terminator.
+- Tap the one PTY output subscription before its existing incremental UTF-8
+  transformer: each original `Uint8List` first enters the terminal parser and
+  the same object then continues to the legacy text projection. This avoids a
+  second subscription, byte reconstruction, and regressions while renderer
+  migration remains pending.
+- Let each `TerminalSession` own one screen set, parser sink, and parser for its
+  full process generation. Pre-start and live resizes update that screen set;
+  the terminal-core dimension/cell limits now validate before PTY resize state
+  is changed.
+- Submit replies directly to `PtyProcess.write`, whose native FIFO already
+  provides the project-wide ordering and byte cap. Rejection is not retried
+  without a writable notification; it increments a separate saturating count
+  and state flag, while the core sink records the rejected reply.
+- Finish the parser from the PTY output stream's `onDone` callback before
+  publishing output drain completion. This turns a trailing partial sequence
+  into the existing typed incomplete observation exactly once.
 
 ## Verification results
 
@@ -216,6 +242,43 @@ commit. The parent remains unchecked until both children pass.
 
 This completes ordered subtask 1. The parent remains open; raw parser feed and
 the bounded PTY reply connection are now the first unchecked child.
+
+### Raw parser feed and bounded PTY reply connection
+
+- Fake-PTY integration passed an original UTF-8 scalar split across two output
+  chunks together with terminal status and cursor-position queries. The same
+  bytes updated canonical screen cells and the legacy text projection, while
+  replies reflecting the updated cursor state were accepted in exact order
+  between surrounding user writes.
+- Each session now owns one screen set, parser sink, and parser for its process
+  generation. Pre-start dimensions initialized the PTY and core consistently;
+  live resize updated the PTY plus both primary/alternate grids. Invalid zero
+  and over-limit dimensions changed neither screen identity nor PTY size.
+- Closing PTY output with a partial CSI finished parser state and emitted one
+  incomplete observation before output-drain completion. Existing termination,
+  shutdown, and legacy buffer behavior remained intact.
+- A four-byte fake native queue saturated by user input rejected one four-byte
+  automatic status reply, incremented only the separate saturating reply
+  pressure count and core rejection count, and retained no Dart retry payload.
+  After fake native capacity drained, a later query succeeded and cleared the
+  pressure flag. Queries before process start and after dispose were rejected
+  without being mislabeled as queue pressure or touching native state.
+- The real persistent-zsh smoke temporarily entered raw/no-echo mode, emitted
+  DSR, read four bytes from the PTY, and observed compact hex `1b5b306e` for
+  `CSI 0 n`. It then restored terminal settings and passed the existing TTY,
+  size, multiple-command, background-job, foreground interrupt, exit, and reap
+  assertions.
+- Focused core-reply and session-reply suites and full static analysis passed.
+  `make test` passed dependency resolution, VT table freshness, formatting of
+  66 files with zero changes, full analysis with no issues, the fake
+  integrations, real PTY round trip, and the complete test runner. The focused
+  session integration compiled to a Release AOT executable and completed
+  successfully.
+- `git diff --cached --check` passed. The staged-source Dart-only audit passed
+  with 123 tracked files and zero native source files.
+
+This completes ordered subtask 2 and its parent. Snapshot formatting and
+readable test diagnostics are now the first unchecked roadmap task.
 
 ## Risks and handoff
 

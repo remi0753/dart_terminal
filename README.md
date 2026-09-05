@@ -73,6 +73,8 @@ pane-owned persistent login shell です。Phase 0 の native spike source は�
   text extraction、cell-aligned exact scalarのforward/backward bounded search
 - 最大64 byteのreply encoderと、DA/DA2、DSR/CPR、DECRQM、OSC palette/default
   color queryのterminal-core dispatch
+- session-owned screen set/parserへのraw PTY byte feed、従来text projectionとの
+  single-subscription共存、generated replyのnative bounded write queue接続
 
 ## 起動
 

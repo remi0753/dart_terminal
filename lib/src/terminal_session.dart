@@ -6,6 +6,10 @@ import 'dart:typed_data';
 import 'package:dart_pty_macos/dart_pty_macos.dart';
 
 import 'terminal_buffer.dart';
+import 'terminal_core/terminal_reply.dart';
+import 'terminal_core/terminal_screen_parser_sink.dart';
+import 'terminal_core/terminal_screen_set.dart';
+import 'terminal_core/vt_parser.dart';
 import 'terminal_pane.dart';
 
 enum TerminalSessionLifecycleStage {
@@ -175,6 +179,12 @@ final class TerminalSession implements TerminalPaneSession {
         );
       }
     }
+    terminalScreenSet = TerminalScreenSet(rows: _rows, columns: _columns);
+    terminalParserSink = TerminalScreenParserSink.forScreenSet(
+      terminalScreenSet,
+      onReply: _writeTerminalReply,
+    );
+    _terminalParser = VtParser(sink: terminalParserSink);
   }
 
   @override
@@ -193,6 +203,9 @@ final class TerminalSession implements TerminalPaneSession {
   final Duration cleanupStepTimeout;
 
   final TerminalBuffer buffer = TerminalBuffer();
+  late final TerminalScreenSet terminalScreenSet;
+  late final TerminalScreenParserSink terminalParserSink;
+  late final VtParser _terminalParser;
   final Completer<void> _terminated = Completer<void>();
   final String _workingDirectory;
 
@@ -214,9 +227,11 @@ final class TerminalSession implements TerminalPaneSession {
   var _outputDrainAbandoned = false;
   var _terminationNotified = false;
   var _writeBackpressured = false;
+  var _replyWriteBackpressured = false;
   var _rows = 23;
   var _columns = 100;
   var _writeBackpressureCount = 0;
+  var _replyWriteBackpressureCount = 0;
 
   @override
   bool get isLive => _live;
@@ -241,6 +256,8 @@ final class TerminalSession implements TerminalPaneSession {
   PtyExit? get exit => _exit;
   Object? get failure => _failure;
   int get writeBackpressureCount => _writeBackpressureCount;
+  int get replyWriteBackpressureCount => _replyWriteBackpressureCount;
+  bool get replyWriteBackpressured => _replyWriteBackpressured;
   TerminalSessionShutdownResult? get shutdownResult => _shutdownResult;
 
   Future<void> waitForTermination() => _terminated.future;
@@ -286,7 +303,12 @@ final class TerminalSession implements TerminalPaneSession {
       _outputDone = outputDone;
       const Utf8Decoder decoder = Utf8Decoder(allowMalformed: true);
       _outputSubscription = process.output
-          .cast<List<int>>()
+          .map<List<int>>((Uint8List bytes) {
+            if (!_disposed && identical(_process, process)) {
+              _terminalParser.parse(bytes);
+            }
+            return bytes;
+          })
           .transform(decoder)
           .listen(
             _appendOutput,
@@ -296,6 +318,7 @@ final class TerminalSession implements TerminalPaneSession {
               }
             },
             onDone: () {
+              _terminalParser.finish();
               if (!outputDone.isCompleted) {
                 outputDone.complete();
               }
@@ -423,9 +446,7 @@ final class TerminalSession implements TerminalPaneSession {
 
   @override
   void resize({required int rows, required int columns}) {
-    if (rows <= 0 || rows > 65535 || columns <= 0 || columns > 65535) {
-      throw ArgumentError('terminal dimensions must be between 1 and 65535');
-    }
+    terminalScreenSet.resize(rows: rows, columns: columns);
     _rows = rows;
     _columns = columns;
     if (_live) {
@@ -692,6 +713,32 @@ final class TerminalSession implements TerminalPaneSession {
     }
     _writeBackpressured = false;
     return receipt;
+  }
+
+  bool _writeTerminalReply(Uint8List bytes) {
+    if (bytes.isEmpty ||
+        bytes.length > TerminalReplyEncoder.maximumReplyBytes) {
+      return false;
+    }
+    final PtyProcess? process = _process;
+    if (!_live || _disposed || process == null) {
+      return false;
+    }
+    late final PtyWriteResult result;
+    try {
+      result = process.write(bytes);
+    } on StateError {
+      return false;
+    }
+    if (result == PtyWriteResult.backpressured) {
+      if (_replyWriteBackpressureCount < 0x7fffffff) {
+        _replyWriteBackpressureCount++;
+      }
+      _replyWriteBackpressured = true;
+      return false;
+    }
+    _replyWriteBackpressured = false;
+    return true;
   }
 
   void _observeNativeDiagnostic(PtyDiagnosticEvent event) {

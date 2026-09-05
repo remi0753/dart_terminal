@@ -101,7 +101,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| CAP-01 | DA/DA2、DSR/CPR、DEC private mode、DECRQM の request/reply | P0 | 3/6 | `G:src/terminal/device_attributes.zig`, `G:src/terminal/device_status.zig`, `G:src/terminal/modes.zig` | bounded 7-bit encoderとterminal-core dispatchを完了。product PTY connectionは現在タスク |
+| CAP-01 | DA/DA2、DSR/CPR、DEC private mode、DECRQM の request/reply | P0 | 3/6 | `G:src/terminal/device_attributes.zig`, `G:src/terminal/device_status.zig`, `G:src/terminal/modes.zig` | bounded 7-bit encoder、terminal-core dispatch、raw PTY parse、native write queue connectionを完了 |
 | CAP-02 | application cursor/keypad、bracketed paste、focus report | P0 | 3/5 | `G:src/input/key_encode.zig`, `G:src/terminal/paste.zig`, `G:src/terminal/focus.zig` | 未実装 |
 | CAP-03 | mouse X10、UTF-8、URXVT、SGR mode/encoding | P0 | 3/5 | `G:src/terminal/mouse.zig`, `G:src/input/mouse_encode.zig` | 未実装 |
 | CAP-04 | xterm-256color 互換 terminfo と SSH fallback | P0/P1 | 6/8 | `G:src/terminfo/`, `G:src/cli/ssh.zig` | 未実装 |
@@ -193,7 +193,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | AX-01 | visible text、selection、cursor、focus を VoiceOver に公開し change notification を送る | P0 | 5/10 | `G:macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` | 未実装 |
 | AX-02 | Full Keyboard Access、Reduce Motion、Increase Contrast、Differentiate Without Color | P0 | 5/10 | macOS Surface/Splits/QuickTerminal accessibility code | 未実装 |
 | AX-03 | IME preedit と accessibility selection/range/candidate rect が同じ text model を使う | P0 | 5 | `G:macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` | Phase 0 gate |
-| SEC-01 | parser payload/count/value、scrollback、hyperlink、image、queue に hard cap | P0 | 3/5/9 | `G:src/terminal/Parser.zig`, kitty graphics storage, termio mailbox | parser、scrollback、selection extraction、word scan、search query/work/result capを完了。後続hyperlink/image/queue capは未実装 |
+| SEC-01 | parser payload/count/value、scrollback、hyperlink、image、queue に hard cap | P0 | 3/5/9 | `G:src/terminal/Parser.zig`, kitty graphics storage, termio mailbox | parser、64-byte reply、scrollback、selection extraction、word scan、search query/work/result capを完了。後続hyperlink/image/queue capは未実装 |
 | SEC-02 | URL scheme allowlist/sanitization、OSC 52 policy、paste confirmation、notification rate limit | P0/P1 | 5/9 | `G:macos/Sources/Helpers/UntrustedURL.swift`, clipboard confirmation | 未実装 |
 | SEC-03 | fork child は async-signal-safe setup と `execve` だけ。Dart runtime/ObjC allocation を呼ばない | P0 | 2 | `G:src/pty.zig`, `G:src/Command.zig` | `dart_pty_macos` child symbol audit 完了 |
 | SEC-04 | Secure Input を abnormal teardown 後も必ず解除 | P1 | 10 | `G:macos/Sources/Features/Secure Input/SecureInput.swift` | 未実装 |

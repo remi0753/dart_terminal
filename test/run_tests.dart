@@ -20,6 +20,7 @@ import 'terminal_screen_set_test.dart';
 import 'terminal_screen_test.dart';
 import 'terminal_scrollback_test.dart';
 import 'terminal_selection_search_test.dart';
+import 'terminal_session_reply_test.dart';
 import 'terminal_style_test.dart';
 import 'terminal_unicode_test.dart';
 import 'terminal_viewport_test.dart';
@@ -56,6 +57,7 @@ Future<void> main() async {
   await _testPaneIdentityOwnershipAndClosePolicy();
   await _testControlDAppKitKeyRoute();
   await runRuntimeLifecycleTests().timeout(const Duration(seconds: 30));
+  await runTerminalSessionReplyTests();
   await _testPersistentCommandSession();
   await _testBoundedSessionShutdown();
   await _testRealPersistentPtySession();
@@ -926,6 +928,17 @@ Future<void> _testRealPersistentPtySession() async {
     'interactive shell startup',
   );
   session.insertText(
+    "stty raw -echo; printf '\\033[5n'; "
+    "dd bs=1 count=4 2>/dev/null | od -An -tx1 | tr -d ' \\n'; "
+    "stty sane -echo; printf '__QUERY_REPLY_DONE__\\n'",
+  );
+  await session.submit();
+  await _waitForTerminalOutput(
+    session,
+    (String output) => output.contains('__QUERY_REPLY_DONE__'),
+    'terminal query reply round trip',
+  );
+  session.insertText(
     "printf '__DART_TERMINAL_PTY__\\n'; tty; stty size; "
     "printf '__FIRST_COMMAND_DONE__\\n'",
   );
@@ -951,6 +964,10 @@ Future<void> _testRealPersistentPtySession() async {
   await session.submit();
   await session.waitForTermination().timeout(const Duration(seconds: 8));
   final String output = session.buffer.outputText;
+  _expect(
+    output.contains('1b5b306e'),
+    'real PTY child reads the exact terminal status reply',
+  );
   _expect(
     output.contains('__DART_TERMINAL_PTY__') &&
         output.contains('__FIRST_COMMAND_DONE__') &&

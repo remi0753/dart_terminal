@@ -665,10 +665,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）
   - [x] selection extraction、word/line semantics、bounded search
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）
-- [ ] query/reply encoder と PTY write connection
+- [x] query/reply encoder と PTY write connection
   - [x] bounded reply encoder と terminal-core query dispatch
     （[`docs/phase3/query-reply-pty-write.md`](docs/phase3/query-reply-pty-write.md) を参照して実施）
-  - [ ] raw parser feed と bounded PTY reply connection
+  - [x] raw parser feed と bounded PTY reply connection
     （[`docs/phase3/query-reply-pty-write.md`](docs/phase3/query-reply-pty-write.md) を参照して実施）
 - [ ] snapshot formatter と readable test diagnostics
 - [ ] parser corpus、property tests、fuzz seeds
