@@ -135,7 +135,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| REN-01 | `MTKView`/Metal lifecycle、drawable resize/backing scale、device/shader/drawable failure path | P0 | 4 | `G:src/renderer/Metal.zig`, `G:macos/Sources/Helpers/MetalView.swift` | view bind/detach、drawable presentation、GPU completion、resize/backing-scale full rebuildを完了。device/shader/drawable failure recoveryは後続項目 |
+| REN-01 | `MTKView`/Metal lifecycle、drawable resize/backing scale、device/shader/drawable failure path | P0 | 4 | `G:src/renderer/Metal.zig`, `G:macos/Sources/Helpers/MetalView.swift` | view bind/detach、drawable presentation、GPU completion、resize/backing-scale full rebuild、typed device/shader/command faultとdrawable retry contractを完了。renderer recreationは現行項目で継続 |
 | REN-02 | background、cell background、glyph、decoration、cursor、selection を packed instance で描画 | P0 | 4 | `G:src/renderer/shaders/shaders.metal`, `G:src/renderer/cell.zig` | build-time metallib、strict little-endian packed encoder、全6 visual kindのordered pipeline/readback完了 |
 | REN-03 | grayscale/color atlas、growth/eviction/generation validation | P0 | 4 | `G:src/font/Atlas.zig`, `G:src/renderer/generic.zig` | bounded Dart atlas、LRU/pin/generation、矩形差分upload、stable sliceに加え、空を含むgeneration-safe native full resetとscale/font rebuildを完了 |
 | REN-04 | damage coalescing、stale generation discard、full snapshot は recovery/resize のみ | P0 | 4 | `G:src/renderer/row.zig`, `G:src/renderer/State.zig`, `G:src/renderer/message.zig` | one-in-flight exact ACK、newest frame、native outcome、resize/scale/font中のpublication pauseとmatching-resource full snapshotを完了。failure recoveryは後続項目 |

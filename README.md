@@ -103,6 +103,8 @@ model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後�
   glyph atlas、native Metal atlas、full damageを同じ公開世代で切り替えるatomic rebuild
 - signed monotonic時刻でcursor blinkとvisual BELを各1 deadlineに制限するpresentation
   clock、visibility/occlusion中のbuild/submit停止、hidden tickを再生しないresume full redraw
+- renderer ABI v8のtyped device/shader/command failure state、bounded drawable
+  unavailable観測、READY frameを保持する明示的on-demand presentation retry
 
 ## 起動
 

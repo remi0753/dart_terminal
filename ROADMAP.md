@@ -739,6 +739,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] bounded animation clock と visibility/occlusion frame scheduling
     （[`docs/phase4/cursor-bell-occlusion.md`](docs/phase4/cursor-bell-occlusion.md) を参照して実施）
 - [ ] device/shader/drawable failure recovery
+  - [x] typed native Metal failure state と drawable retry contract
+    （[`docs/phase4/metal-failure-recovery.md`](docs/phase4/metal-failure-recovery.md) を参照して実施）
+  - [ ] renderer recreation、atlas republish、full-redraw coordination
+    （[`docs/phase4/metal-failure-recovery.md`](docs/phase4/metal-failure-recovery.md) を参照して実施）
 - [ ] frame timing、atlas hit rate、uploaded byte count の metrics
 
 終了条件:
