@@ -27,11 +27,13 @@ CoreText/Metal renderer、IME の製品実装は後続 Phase です。
 - 1 paneにつき1つのTTY付きinteractive login zsh
 - 同じshell内での`cd`、環境変数、background job、`jobs`、`fg`/`bg`
 - Control-C/Z/\\、Control-Dによるsignal/EOF入力
+- Control-Dは常にPTY入力として扱い、shellの正常終了時はpane/windowを自動で閉じ、
+  非0・signal・終了監視失敗時は理由を表示した非live paneを保持する終了policy
 - ウィンドウサイズに追従する`TIOCSWINSZ`/`SIGWINCH`
 - typed pane/session ID、単一owner、live shellの再操作close確認
 - terminal内容を含めないpane state / PTY shutdown stage診断
 - Control-Dのqueue受理、native write、foreground/termios、signal、waitpid、
-  exit公開をrequest IDで追えるcontent-free診断
+  kernel exit status、PTY内/外のreap、exit公開をrequest IDで追えるcontent-free診断
 - graceful/force/final deadlineを持つbounded PTY session teardownと型付き結果
 - PTY通知欠落時もpane ownerを閉じ、status 75でhost終了するclassified recovery
 - AppKit main-thread root と公式 Dart 子プロセス worker の bounded lifecycle
@@ -159,6 +161,12 @@ byte/queue count、foreground process group、termios flagと`VEOF`番号、sign
 `waitpid` result、exit公開境界だけを含みます。Control-Dがnative writeまで完了しても、
 zshの`IGNORE_EOF`、未確定の編集行、foreground reader、raw mode、停止jobの状態によって
 shellが終了しないことは正常なPTY semanticsです。
+`child_status_valid=true`を伴うkernel exit通知後にDart runtimeが先にchildを回収した場合は、
+`externalReapObserved`を記録して保持済みstatusから終了を一度だけ公開します。
+`TERMINAL_PANE_EXIT`はshell終了を`clean`、`nonZero`、`signaled`、`failed`に分類し、
+正常終了の`action=close`と、それ以外の`action=retain`を内容非依存のfieldで示します。
+現在の1-pane applicationでは正常なzsh終了がwindow/applicationの終了になり、保持された
+異常終了paneはstatus lineを確認した後、一度のCloseで終了できます。
 終了時の`TERMINAL_SESSION_SHUTDOWN`と`TERMINAL_PANE_OWNER_SHUTDOWN`は、同じ
 typed ID、固定されたdisposition、termination/cleanupの真偽だけで最終結果を示します。
 最終期限を超えた場合もpaneとhostの終了処理を続け、正常終了を名乗らずstatus 75と

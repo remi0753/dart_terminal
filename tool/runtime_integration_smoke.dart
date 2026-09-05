@@ -823,10 +823,154 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     scenario: 'normal',
     expectedCount: 1,
   );
+  await _runShellExitPolicySmoke(options, invocation, cleanControlD: true);
+  await _runShellExitPolicySmoke(options, invocation, cleanControlD: false);
   stdout.writeln(
     'RUNTIME_INTEGRATION_PASS mode=${options.mode.name} '
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'elapsed_ms=${observation.elapsed.inMilliseconds}',
+  );
+}
+
+Future<void> _runShellExitPolicySmoke(
+  _Options options,
+  _Invocation invocation, {
+  required bool cleanControlD,
+}) async {
+  final String scenario = cleanControlD ? 'clean-control-d' : 'nonzero';
+  final String disposition = cleanControlD ? 'clean' : 'nonZero';
+  final String action = cleanControlD ? 'close' : 'retain';
+  final int expectedShellExit = cleanControlD ? 0 : 23;
+  final int expectedKernelStatus = expectedShellExit << 8;
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    <String>['--runtime-shell-exit-test=$scenario'],
+    environment: const <String, String>{'DT_RUNTIME_SHELL_EXIT_TEST': '1'},
+    timeout: const Duration(seconds: 15),
+  );
+  _expect(
+    observation.status == 0,
+    '$scenario app exited with status ${observation.status}; '
+    'stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    '$scenario app wrote unexpected stderr: ${observation.stderrText.trim()}',
+  );
+  final RegExp paneStarted = RegExp(
+    r'^TERMINAL_PANE event=started pane=([1-9][0-9]*) '
+    r'session=([1-9][0-9]*):([1-9][0-9]*)$',
+    multiLine: true,
+  );
+  final RegExpMatch? paneMatch = paneStarted.firstMatch(observation.stdoutText);
+  _expect(
+    paneMatch != null &&
+        paneMatch.group(1) == paneMatch.group(2) &&
+        paneMatch.group(3) == '1',
+    '$scenario did not publish one pane-owned session identity',
+  );
+  final String pane = paneMatch!.group(1)!;
+  final String session = '${paneMatch.group(2)}:${paneMatch.group(3)}';
+  final List<String> nativeStages = _nativePtyStages(
+    observation.stdoutText,
+    pane: pane,
+    session: session,
+  );
+  _expect(
+    _containsOrderedValues(nativeStages, const <String>[
+      'processExitReady',
+      'waitpidResult',
+      'exitPublished',
+    ]),
+    '$scenario did not publish the kernel-to-Dart PTY exit boundary: '
+    '$nativeStages',
+  );
+  final bool externallyReaped = nativeStages.contains('externalReapObserved');
+  final bool ptyOwnedReap = RegExp(
+    '^TERMINAL_PTY_NATIVE pane=$pane session=$session '
+    r'process_id=[0-9]+ stage=waitpidResult .*'
+    r'waitpid_result=[1-9][0-9]* .*errno=0$',
+    multiLine: true,
+  ).hasMatch(observation.stdoutText);
+  _expect(
+    externallyReaped || ptyOwnedReap,
+    '$scenario observed exit readiness without a classified reap owner',
+  );
+  _expect(
+    RegExp(
+      '^TERMINAL_PTY_NATIVE pane=$pane session=$session '
+      r'process_id=[0-9]+ stage=processExitReady .*'
+      'child_status=$expectedKernelStatus child_status_valid=true .*errno=0\$',
+      multiLine: true,
+    ).hasMatch(observation.stdoutText),
+    '$scenario did not preserve the valid kernel exit status; '
+    'native=${observation.stdoutText.split('\n').where((String line) => line.contains('stage=processExitReady')).join(' | ')}',
+  );
+  _expect(
+    RegExp(
+      '^TERMINAL_PTY_NATIVE pane=$pane session=$session '
+      r'process_id=[0-9]+ stage=exitPublished .*'
+      'exit_code=$expectedShellExit exit_signal=0 errno=0\$',
+      multiLine: true,
+    ).hasMatch(observation.stdoutText),
+    '$scenario did not publish the decoded shell exit status',
+  );
+  final String policyLine =
+      'TERMINAL_PANE_EXIT pane=$pane session=$session '
+      'disposition=$disposition action=$action';
+  _expect(
+    observation.stdoutText
+            .split('\n')
+            .where((String line) => line == policyLine)
+            .length ==
+        1,
+    '$scenario did not publish exactly one $action pane policy decision',
+  );
+  _expect(
+    RegExp(
+      '^TERMINAL_SHELL_EXIT_TEST scenario=$scenario '
+      'shell_exit=$expectedShellExit action=$action worker_pid=[1-9][0-9]*\$',
+      multiLine: true,
+    ).hasMatch(observation.stdoutText),
+    '$scenario did not complete while the runtime worker was active',
+  );
+  final List<String> closeDecisions = observation.stdoutText
+      .split('\n')
+      .where((String line) => line.startsWith('TERMINAL_PANE_CLOSE '))
+      .toList();
+  _expect(
+    closeDecisions.length == 1 &&
+        closeDecisions.single ==
+            'TERMINAL_PANE_CLOSE pane=$pane session=$session '
+                'decision=allow state=closing',
+    '$scenario shell exit did not close its non-live pane in one step: '
+    '$closeDecisions',
+  );
+  final int workerReady = observation.stdoutText.indexOf(
+    'RUNTIME_LIFECYCLE event=root-ready',
+  );
+  final int exitPublished = observation.stdoutText.indexOf(
+    'stage=exitPublished',
+  );
+  final int workerStop = observation.stdoutText.indexOf(
+    'RUNTIME_LIFECYCLE event=worker-stop-request',
+  );
+  _expect(
+    workerReady >= 0 &&
+        exitPublished > workerReady &&
+        workerStop > exitPublished,
+    '$scenario did not exit zsh while the runtime worker remained active',
+  );
+  _expect(
+    observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+    '$scenario did not complete product cleanup cleanly',
+  );
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
   );
 }
 

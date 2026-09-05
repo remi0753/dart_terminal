@@ -54,6 +54,7 @@ void _testNativeObservationFormatting() {
           'TERMINAL_PTY_NATIVE pane=9 session=9:2 process_id=4100 '
           'stage=writeCompleted request_id=7 byte_count=1 queued_bytes=0 ',
         ) &&
+        line.contains('child_status=0 child_status_valid=false') &&
         !line.contains('input') &&
         !line.contains('output') &&
         !line.contains('command') &&
@@ -108,6 +109,8 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
   final List<_FakePaneSession> sessions = <_FakePaneSession>[];
   final List<TerminalPaneLifecycleObservation> paneLifecycle =
       <TerminalPaneLifecycleObservation>[];
+  final List<TerminalPaneExitObservation> paneExits =
+      <TerminalPaneExitObservation>[];
   var changed = 0;
   var exitRequests = 0;
   TerminalPane createPane() => owner.createPane(
@@ -132,6 +135,7 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
       ++exitRequests;
     },
     lifecycleObserver: paneLifecycle.add,
+    exitObserver: paneExits.add,
   );
 
   final TerminalPane first = createPane();
@@ -203,8 +207,20 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
     'exited pane closes without confirmation',
   );
 
+  final TerminalPane abnormal = createPane();
+  await abnormal.start();
+  sessions[2].finish(disposition: TerminalPaneSessionExitDisposition.nonZero);
+  _expect(
+    abnormal.state == TerminalPaneState.exited && exitRequests == 1,
+    'nonzero shell exit retains its pane without requesting window close',
+  );
+  _expect(
+    abnormal.requestClose() == TerminalPaneCloseDecision.allow,
+    'retained non-live pane closes without confirmation',
+  );
+
   final TerminalPane failed = createPane();
-  sessions[2].failStart = true;
+  sessions[3].failStart = true;
   try {
     await failed.start();
     throw StateError('failing pane session unexpectedly started');
@@ -219,7 +235,7 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
         failed.requestClose() == TerminalPaneCloseDecision.allow,
     'failed pane closes without confirmation',
   );
-  sessions[2].failShutdown = true;
+  sessions[3].failShutdown = true;
   final Future<TerminalPaneOwnerShutdownResult> ownerShutdown = owner
       .shutdown();
   _expect(
@@ -231,12 +247,13 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
   _expect(
     owner.livePaneCount == 0 &&
         sessions[1].disposeCount == 1 &&
-        sessions[2].disposeCount == 1,
+        sessions[2].disposeCount == 1 &&
+        sessions[3].disposeCount == 1,
     'owner teardown reaches zero panes exactly once',
   );
   _expect(
     ownerResult.disposition == TerminalSessionShutdownDisposition.failed &&
-        ownerResult.sessions.length == 2 &&
+        ownerResult.sessions.length == 3 &&
         failed.state == TerminalPaneState.closed &&
         identical(owner.shutdownResult, ownerResult),
     'owner contains a session shutdown failure and publishes its aggregate',
@@ -250,11 +267,11 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
     !failedResult.terminationObserved &&
         !failedResult.cleanupCompleted &&
         failedResult.machineLine() ==
-            'TERMINAL_SESSION_SHUTDOWN pane=43 session=43:1 process_id=0 '
+            'TERMINAL_SESSION_SHUTDOWN pane=44 session=44:1 process_id=0 '
                 'disposition=failed termination_observed=false '
                 'cleanup_completed=false' &&
         ownerResult.machineLine() ==
-            'TERMINAL_PANE_OWNER_SHUTDOWN pane_count=2 disposition=failed',
+            'TERMINAL_PANE_OWNER_SHUTDOWN pane_count=3 disposition=failed',
     'shutdown summaries use exact privacy-safe typed fields',
   );
   _expect(changed > 0, 'pane lifecycle emits view changes');
@@ -285,6 +302,16 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
     paneLifecycle.first.machineLine() ==
         'TERMINAL_PANE_LIFECYCLE pane=41 session=41:1 state=created',
     'pane diagnostic machine line contains only stable lifecycle metadata',
+  );
+  _expect(
+    paneExits.length == 2 &&
+        paneExits[0].machineLine() ==
+            'TERMINAL_PANE_EXIT pane=42 session=42:1 '
+                'disposition=clean action=close' &&
+        paneExits[1].machineLine() ==
+            'TERMINAL_PANE_EXIT pane=43 session=43:1 '
+                'disposition=nonZero action=retain',
+    'shell exit policy publishes exact content-free close/retain decisions',
   );
   _expectThrows(
     createPane,
@@ -382,6 +409,10 @@ void _testOptions() {
     'PTY exit fault injection defaults off',
   );
   _expect(
+    options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none,
+    'shell exit policy test defaults off',
+  );
+  _expect(
     options.runtimeWorkerCommand.executable == '/usr/bin/true' &&
         options.runtimeWorkerCommand.arguments.isEmpty,
     'declarative bundled worker command',
@@ -477,6 +508,41 @@ void _testOptions() {
       },
     ),
     'PTY exit fault and lifecycle fault are mutually exclusive',
+  );
+  final TerminalOptions shellExitTestOptions = _parseOptions(
+    const <String>['--runtime-shell-exit-test=clean-control-d'],
+    environment: const <String, String>{'DT_RUNTIME_SHELL_EXIT_TEST': '1'},
+  );
+  _expect(
+    shellExitTestOptions.runtimeShellExitTestScenario ==
+        RuntimeShellExitTestScenario.cleanControlD,
+    'gated clean Control-D shell exit test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>[
+      '--runtime-shell-exit-test=nonzero',
+    ], environment: const <String, String>{}),
+    'shell exit policy test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-shell-exit-test=clean-control-d',
+        '--runtime-shell-exit-test=nonzero',
+      ],
+      environment: const <String, String>{'DT_RUNTIME_SHELL_EXIT_TEST': '1'},
+    ),
+    'duplicate shell exit policy test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-shell-exit-test=clean-control-d',
+        '--auto-close-after=1',
+      ],
+      environment: const <String, String>{'DT_RUNTIME_SHELL_EXIT_TEST': '1'},
+    ),
+    'shell exit policy test and automatic close are mutually exclusive',
   );
   _expectThrows(
     () => _parseOptions(
@@ -711,7 +777,8 @@ Future<void> _testBoundedSessionShutdown() async {
         forcedResult.disposition == TerminalSessionShutdownDisposition.forced &&
         forcedResult.terminationObserved &&
         forcedResult.cleanupCompleted &&
-        forcedResult.exit?.signal == 9,
+        forcedResult.exit?.signal == 9 &&
+        forced.exitDisposition == TerminalPaneSessionExitDisposition.signaled,
     'forced shutdown publishes an observed and completely cleaned result',
   );
   _expect(
@@ -869,7 +936,10 @@ Future<void> _testRealPersistentPtySession() async {
     'real shell has a PTY and observes the initial window size',
   );
   _expect(
-    session.processId == processId && session.exit?.exitCode == 0 && terminated,
+    session.processId == processId &&
+        session.exit?.exitCode == 0 &&
+        session.exitDisposition == TerminalPaneSessionExitDisposition.clean &&
+        terminated,
     'real login shell exits and is reaped once',
   );
   await session.dispose();
@@ -878,118 +948,141 @@ Future<void> _testRealPersistentPtySession() async {
 Future<void> _testRepeatedControlDNaturalExit() async {
   const int repetitions = 24;
   _expect(_livePtySessionCount() == 0, 'Control-D test starts without PTYs');
-  for (var iteration = 0; iteration < repetitions; ++iteration) {
-    var terminationCount = 0;
-    final List<TerminalSessionLifecycleObservation> lifecycle =
-        <TerminalSessionLifecycleObservation>[];
-    final List<TerminalSessionNativeObservation> native =
-        <TerminalSessionNativeObservation>[];
-    final TerminalSession session = TerminalSession(
-      id: TerminalSessionId(paneId: PaneId(1000 + iteration), generation: 1),
-      initialWorkingDirectory: Directory.systemTemp.path,
-      environment: <String, String>{
-        'PATH': '/usr/bin:/bin',
-        'HOME': Directory.systemTemp.path,
-        'TERM': 'dumb',
-        'LC_ALL': 'C',
-        'PS1': '__CTRL_D_PROMPT_${iteration}__ ',
-        'RPS1': '',
-      },
-      shellArguments: const <String>['-f'],
-      onChanged: () {},
-      onTerminated: () {
-        ++terminationCount;
-      },
-      lifecycleObserver: lifecycle.add,
-      nativeObserver: native.add,
-    );
-    await session.start().timeout(const Duration(seconds: 3));
-    final int processId = session.processId!;
-    session.insertText(
-      "stty -echo; unsetopt ignoreeof; printf '__CTRL_D_READY_${iteration}__\\n'",
-    );
-    await session.submit();
-    await _waitForTerminalOutput(
-      session,
-      (String output) =>
-          _occurrences(output, '__CTRL_D_READY_${iteration}__') >= 2,
-      'Control-D ready marker for iteration $iteration',
-    );
-    session.sendEndOfFile();
-    await session.waitForTermination().timeout(const Duration(seconds: 3));
-    _expect(
-      session.exit?.exitCode == 0 &&
-          session.exit?.signal == null &&
-          terminationCount == 1,
-      'Control-D iteration $iteration exits and notifies exactly once',
-    );
-    await session.dispose().timeout(const Duration(seconds: 1));
-    _expectOrderedSessionStages(lifecycle, <TerminalSessionLifecycleStage>[
-      TerminalSessionLifecycleStage.processStarted,
-      TerminalSessionLifecycleStage.eofRequested,
-      TerminalSessionLifecycleStage.eofWriteAccepted,
-      TerminalSessionLifecycleStage.nativeExitObserved,
-      TerminalSessionLifecycleStage.outputDrained,
-      TerminalSessionLifecycleStage.terminationCompleted,
-      TerminalSessionLifecycleStage.ownerTerminationNotified,
-      TerminalSessionLifecycleStage.disposeStarted,
-      TerminalSessionLifecycleStage.terminationWaitCompleted,
-      TerminalSessionLifecycleStage.processDisposeStarted,
-      TerminalSessionLifecycleStage.processDisposeCompleted,
-      TerminalSessionLifecycleStage.shutdownResultPublished,
-      TerminalSessionLifecycleStage.disposeCompleted,
-    ], 'Control-D lifecycle iteration $iteration');
-    final int? requestId = lifecycle
-        .where(
-          (TerminalSessionLifecycleObservation observation) =>
-              observation.stage ==
-              TerminalSessionLifecycleStage.eofWriteAccepted,
-        )
-        .single
-        .writeRequestId;
-    _expect(requestId != null, 'Control-D iteration $iteration request ID');
-    for (final PtyDiagnosticStage stage in <PtyDiagnosticStage>[
-      PtyDiagnosticStage.writeEnqueued,
-      PtyDiagnosticStage.writeDequeued,
-      PtyDiagnosticStage.writeCompleted,
-      PtyDiagnosticStage.stateSnapshot,
-      PtyDiagnosticStage.termiosSnapshot,
-      PtyDiagnosticStage.processExitReady,
-      PtyDiagnosticStage.waitpidResult,
-      PtyDiagnosticStage.exitPublished,
-    ]) {
+  final Process competingDartChild = await Process.start(
+    '/bin/sleep',
+    const <String>['60'],
+  );
+  try {
+    for (var iteration = 0; iteration < repetitions; ++iteration) {
+      var terminationCount = 0;
+      final List<TerminalSessionLifecycleObservation> lifecycle =
+          <TerminalSessionLifecycleObservation>[];
+      final List<TerminalSessionNativeObservation> native =
+          <TerminalSessionNativeObservation>[];
+      final TerminalSession session = TerminalSession(
+        id: TerminalSessionId(paneId: PaneId(1000 + iteration), generation: 1),
+        initialWorkingDirectory: Directory.systemTemp.path,
+        environment: <String, String>{
+          'PATH': '/usr/bin:/bin',
+          'HOME': Directory.systemTemp.path,
+          'TERM': 'dumb',
+          'LC_ALL': 'C',
+          'PS1': '__CTRL_D_PROMPT_${iteration}__ ',
+          'RPS1': '',
+        },
+        shellArguments: const <String>['-f'],
+        onChanged: () {},
+        onTerminated: () {
+          ++terminationCount;
+        },
+        lifecycleObserver: lifecycle.add,
+        nativeObserver: native.add,
+      );
+      await session.start().timeout(const Duration(seconds: 3));
+      final int processId = session.processId!;
+      session.insertText(
+        "stty -echo; unsetopt ignoreeof; printf '__CTRL_D_READY_${iteration}__\\n'",
+      );
+      await session.submit();
+      await _waitForTerminalOutput(
+        session,
+        (String output) =>
+            _occurrences(output, '__CTRL_D_READY_${iteration}__') >= 2,
+        'Control-D ready marker for iteration $iteration',
+      );
+      session.sendEndOfFile();
+      await session.waitForTermination().timeout(const Duration(seconds: 3));
+      _expect(
+        session.exit?.exitCode == 0 &&
+            session.exit?.signal == null &&
+            terminationCount == 1,
+        'Control-D iteration $iteration exits and notifies exactly once',
+      );
+      await session.dispose().timeout(const Duration(seconds: 1));
+      _expectOrderedSessionStages(lifecycle, <TerminalSessionLifecycleStage>[
+        TerminalSessionLifecycleStage.processStarted,
+        TerminalSessionLifecycleStage.eofRequested,
+        TerminalSessionLifecycleStage.eofWriteAccepted,
+        TerminalSessionLifecycleStage.nativeExitObserved,
+        TerminalSessionLifecycleStage.outputDrained,
+        TerminalSessionLifecycleStage.terminationCompleted,
+        TerminalSessionLifecycleStage.ownerTerminationNotified,
+        TerminalSessionLifecycleStage.disposeStarted,
+        TerminalSessionLifecycleStage.terminationWaitCompleted,
+        TerminalSessionLifecycleStage.processDisposeStarted,
+        TerminalSessionLifecycleStage.processDisposeCompleted,
+        TerminalSessionLifecycleStage.shutdownResultPublished,
+        TerminalSessionLifecycleStage.disposeCompleted,
+      ], 'Control-D lifecycle iteration $iteration');
+      final int? requestId = lifecycle
+          .where(
+            (TerminalSessionLifecycleObservation observation) =>
+                observation.stage ==
+                TerminalSessionLifecycleStage.eofWriteAccepted,
+          )
+          .single
+          .writeRequestId;
+      _expect(requestId != null, 'Control-D iteration $iteration request ID');
+      for (final PtyDiagnosticStage stage in <PtyDiagnosticStage>[
+        PtyDiagnosticStage.writeEnqueued,
+        PtyDiagnosticStage.writeDequeued,
+        PtyDiagnosticStage.writeCompleted,
+        PtyDiagnosticStage.stateSnapshot,
+        PtyDiagnosticStage.termiosSnapshot,
+        PtyDiagnosticStage.processExitReady,
+        PtyDiagnosticStage.waitpidResult,
+        PtyDiagnosticStage.exitPublished,
+      ]) {
+        _expect(
+          native.any(
+            (TerminalSessionNativeObservation observation) =>
+                observation.event.stage == stage &&
+                (observation.event.requestId == null ||
+                    observation.event.requestId == requestId),
+          ),
+          'Control-D iteration $iteration native ${stage.name}',
+        );
+      }
       _expect(
         native.any(
           (TerminalSessionNativeObservation observation) =>
-              observation.event.stage == stage &&
-              (observation.event.requestId == null ||
-                  observation.event.requestId == requestId),
+              observation.event.stage == PtyDiagnosticStage.writeCompleted &&
+              observation.event.requestId == requestId &&
+              observation.event.byteCount == 1 &&
+              observation.event.queuedBytes == 0,
         ),
-        'Control-D iteration $iteration native ${stage.name}',
+        'Control-D iteration $iteration is flushed exactly once',
       );
-    }
-    _expect(
-      native.any(
-        (TerminalSessionNativeObservation observation) =>
-            observation.event.stage == PtyDiagnosticStage.writeCompleted &&
-            observation.event.requestId == requestId &&
-            observation.event.byteCount == 1 &&
-            observation.event.queuedBytes == 0,
-      ),
-      'Control-D iteration $iteration is flushed exactly once',
-    );
-    _expect(
-      native.any(
+      final bool ptyOwnedReap = native.any(
         (TerminalSessionNativeObservation observation) =>
             observation.event.stage == PtyDiagnosticStage.waitpidResult &&
             observation.event.waitpidResult == processId,
-      ),
-      'Control-D iteration $iteration child is reaped before exit publication',
-    );
-    _expect(
-      _livePtySessionCount() == 0,
-      'Control-D iteration $iteration reaps and destroys its native session',
-    );
+      );
+      final bool externalReap = native.any(
+        (TerminalSessionNativeObservation observation) =>
+            observation.event.stage ==
+                PtyDiagnosticStage.externalReapObserved &&
+            observation.event.childProcessId == processId &&
+            observation.event.childStatus == 0,
+      );
+      _expect(
+        ptyOwnedReap || externalReap,
+        'Control-D iteration $iteration classifies the child reap owner before '
+        'exit publication',
+      );
+      _expect(
+        _livePtySessionCount() == 0,
+        'Control-D iteration $iteration reaps and destroys its native session',
+      );
+    }
+  } finally {
+    competingDartChild.kill(ProcessSignal.sigterm);
+    try {
+      await competingDartChild.exitCode.timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      competingDartChild.kill(ProcessSignal.sigkill);
+      await competingDartChild.exitCode;
+    }
   }
 }
 
@@ -1324,9 +1417,13 @@ final class _FakePaneSession implements TerminalPaneSession {
   var failStart = false;
   var failShutdown = false;
   var _live = false;
+  TerminalPaneSessionExitDisposition? _exitDisposition;
 
   @override
   bool get isLive => _live;
+
+  @override
+  TerminalPaneSessionExitDisposition? get exitDisposition => _exitDisposition;
 
   @override
   Future<void> start() async {
@@ -1337,8 +1434,12 @@ final class _FakePaneSession implements TerminalPaneSession {
     _live = true;
   }
 
-  void finish() {
+  void finish({
+    TerminalPaneSessionExitDisposition disposition =
+        TerminalPaneSessionExitDisposition.clean,
+  }) {
     _live = false;
+    _exitDisposition = disposition;
     _onTerminated();
   }
 

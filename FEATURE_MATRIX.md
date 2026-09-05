@@ -1,6 +1,6 @@
 # Dart Terminal feature matrix
 
-最終更新: 2026-09-04<br>
+最終更新: 2026-09-05<br>
 比較基準: [`ghostty-org/ghostty@d4d8f62262cb1a974a7d2470d5f79f811fab15e4`](https://github.com/ghostty-org/ghostty/tree/d4d8f62262cb1a974a7d2470d5f79f811fab15e4)  
 対象: macOS 14 以降、Flutter 不使用<br>
 主要実機 baseline: Apple M1/arm64
@@ -70,8 +70,8 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | PTY-03 | macOS login shell、`TERM`、`COLORTERM`、locale、initial cwd が zero-config で妥当 | P0 | 2 | `G:src/termio/Exec.zig`, `G:src/os/shell.zig` | login zsh/cwd/env/TTY contract 完了 |
 | PTY-04 | master FD は nonblocking。partial read/write、`EINTR`、`EAGAIN`、順序、bounded backpressure を処理 | P0 | 2 | `G:src/termio/Thread.zig`, `G:src/termio/stream_handler.zig`, `G:src/termio/mailbox.zig` | kqueue/ACK credit/bounded writeに加え、連続read中もcontrolを処理するreactor turn budget完了 |
 | PTY-05 | cell/pixel winsize、`TIOCSWINSZ`、`SIGWINCH` が resize に追従 | P0 | 2 | `G:src/pty.zig`, `G:src/termio/Exec.zig` | capability と application resize 接続完了 |
-| PTY-06 | Ctrl-C/Z/\\、EOF、foreground/background job、`fg`/`bg`、`stty`、`tty` が PTY semantics で動く | P0 | 2 | `G:src/pty.zig`, `G:src/termio/Exec.zig` | persistent session、AppKit Control-D route、clean/IGNORE_EOF/nonempty/foreground reader/raw/stopped-job実PTY matrix完了 |
-| PTY-07 | EOF、child exit、HUP/TERM/KILL、grace period、`waitpid`、zombie 回収が deterministic | P0 | 2 | `G:src/Command.zig`, `G:src/termio/Exec.zig` | tracked writeからsignal/reap/exit公開までの診断、closing中force、最終期限、classified host終了まで完了。Dart workerとのreap ownership競合は追跡中 |
+| PTY-06 | Ctrl-C/Z/\\、EOF、foreground/background job、`fg`/`bg`、`stty`、`tty` が PTY semantics で動く | P0 | 2 | `G:src/pty.zig`, `G:src/termio/Exec.zig` | persistent session、AppKit Control-D route、clean/IGNORE_EOF/nonempty/foreground reader/raw/stopped-job実PTY matrixに加え、clean shell exitは自動close、abnormal exitはstatus付きretainまで完了 |
+| PTY-07 | EOF、child exit、HUP/TERM/KILL、grace period、`waitpid`、zombie 回収が deterministic | P0 | 2 | `G:src/Command.zig`, `G:src/termio/Exec.zig` | tracked writeからsignal/reap/exit公開までの診断、closing中force、最終期限、classified host終了、kernel statusを使う外部reap回復、runtime worker同時生存回帰まで完了 |
 | PTY-08 | current cwd と foreground process を検出し、title/close confirmation/cwd inheritance に使う | P1 | 7 | `G:src/termio/Exec.zig`, `G:macos/Sources/Ghostty/Ghostty.Surface.swift` | live-shell再操作confirmationは完了、process/cwd検出は未実装 |
 | PTY-09 | reconnectable session | P2 | 対象外 | pinned target との差は許容。独立 project とする | v1 対象外 |
 
@@ -167,7 +167,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | UI-01 | multiple windows、native tabs、split tree、focus traversal | P0 | 7 | `G:macos/Sources/Features/Terminal/`, `Splits/SplitTree.swift` | 単一 window のみ |
 | UI-02 | split resize/equalize/zoom/min cell、pane/tab title/color、cwd inheritance | P0 | 7 | `G:macos/Sources/Features/Splits/`, `Terminal/` | 未実装 |
 | UI-03 | fullscreen、geometry、display/scale migration、reopen/restoration | P0 | 7 | `G:macos/Sources/Helpers/Fullscreen.swift`, `TerminalRestorable.swift` | v3 display/scale event substrate のみ完了。migration policy 等は未実装 |
-| UI-04 | close/quit confirmation と active process detection。pane resource を完全 teardown | P0 | 7 | `G:macos/Sources/Features/Terminal/`, Ghostty surface process metadata | live-shell再操作confirmationとpane teardown完了。active-process検出はPhase 7 |
+| UI-04 | close/quit confirmation と active process detection。pane resource を完全 teardown | P0 | 7 | `G:macos/Sources/Features/Terminal/`, Ghostty surface process metadata | live-shell再操作confirmation、clean shell auto-close、abnormal shell retain後のone-step close、pane teardown完了。active-process検出はPhase 7 |
 | UI-05 | standard menu と Edit/Window/Shell/View action。terminal input と競合しない | P0 | 7 | `G:macos/Sources/App/MainMenu.xib`, action registry | 最小 Application/File/Edit menu と action routing 基盤は完了。完全な action registry/競合解決は Phase 7/8 |
 | UI-06 | Quick Terminal、global shortcut、screen selection/animation | P1 | 10 | `G:macos/Sources/Features/QuickTerminal/`, `Global Keybinds/` | 未実装 |
 | UI-07 | proxy icon、Quick Look、Secure Keyboard Entry indication | P1 | 10 | macOS Terminal/Surface, `G:macos/Sources/Features/Secure Input/` | 未実装 |

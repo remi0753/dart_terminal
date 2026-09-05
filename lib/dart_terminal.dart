@@ -7,6 +7,7 @@ export 'src/terminal_application.dart'
         TerminalApplication,
         TerminalKeyEventRouter,
         TerminalOptions,
+        RuntimeShellExitTestScenario,
         terminalUsage;
 export 'src/terminal_buffer.dart' show TerminalBuffer;
 export 'src/terminal_pane.dart'
@@ -14,11 +15,15 @@ export 'src/terminal_pane.dart'
         PaneId,
         TerminalPane,
         TerminalPaneCloseDecision,
+        TerminalPaneExitAction,
+        TerminalPaneExitObservation,
+        TerminalPaneExitObserver,
         TerminalPaneLifecycleObservation,
         TerminalPaneLifecycleObserver,
         TerminalPaneOwner,
         TerminalPaneOwnerShutdownResult,
         TerminalPaneSession,
+        TerminalPaneSessionExitDisposition,
         TerminalPaneSessionFactory,
         TerminalPaneSessionShutdownResult,
         TerminalPaneState,

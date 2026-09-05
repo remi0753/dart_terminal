@@ -48,6 +48,12 @@ enum TerminalPaneState {
 
 enum TerminalPaneCloseDecision { confirmationRequired, allow }
 
+/// Product classification of the owning shell's observed termination.
+enum TerminalPaneSessionExitDisposition { clean, nonZero, signaled, failed }
+
+/// Product action selected after the owning shell has terminated.
+enum TerminalPaneExitAction { close, retain }
+
 enum TerminalSessionShutdownDisposition {
   clean,
   forced,
@@ -131,10 +137,33 @@ typedef TerminalPaneLifecycleObserver = void Function(
   TerminalPaneLifecycleObservation observation,
 );
 
+final class TerminalPaneExitObservation {
+  const TerminalPaneExitObservation({
+    required this.paneId,
+    required this.sessionId,
+    required this.disposition,
+    required this.action,
+  });
+
+  final PaneId paneId;
+  final TerminalSessionId sessionId;
+  final TerminalPaneSessionExitDisposition disposition;
+  final TerminalPaneExitAction action;
+
+  String machineLine() =>
+      'TERMINAL_PANE_EXIT pane=$paneId session=$sessionId '
+      'disposition=${disposition.name} action=${action.name}';
+}
+
+typedef TerminalPaneExitObserver = void Function(
+  TerminalPaneExitObservation observation,
+);
+
 /// The product-facing session surface owned by exactly one [TerminalPane].
 abstract interface class TerminalPaneSession {
   TerminalSessionId get id;
   bool get isLive;
+  TerminalPaneSessionExitDisposition? get exitDisposition;
 
   Future<void> start();
   String render();
@@ -191,6 +220,7 @@ final class TerminalPaneOwner {
     required void Function() onChanged,
     required void Function() onExitRequested,
     TerminalPaneLifecycleObserver? lifecycleObserver,
+    TerminalPaneExitObserver? exitObserver,
   }) {
     if (_disposed) {
       throw StateError('terminal pane owner is disposed');
@@ -237,6 +267,7 @@ final class TerminalPaneOwner {
       onChanged: onChanged,
       onExitRequested: onExitRequested,
       lifecycleObserver: lifecycleObserver,
+      exitObserver: exitObserver,
     );
     pane = createdPane;
     _panes[paneId] = createdPane;
@@ -293,10 +324,12 @@ final class TerminalPane {
     required void Function() onChanged,
     required void Function() onExitRequested,
     required TerminalPaneLifecycleObserver? lifecycleObserver,
+    required TerminalPaneExitObserver? exitObserver,
   }) : _session = session,
        _onChanged = onChanged,
        _onExitRequested = onExitRequested,
-       _lifecycleObserver = lifecycleObserver;
+       _lifecycleObserver = lifecycleObserver,
+       _exitObserver = exitObserver;
 
   final PaneId id;
   final TerminalSessionId sessionId;
@@ -304,6 +337,7 @@ final class TerminalPane {
   final void Function() _onChanged;
   final void Function() _onExitRequested;
   final TerminalPaneLifecycleObserver? _lifecycleObserver;
+  final TerminalPaneExitObserver? _exitObserver;
 
   TerminalPaneState _state = TerminalPaneState.created;
   Future<void>? _startFuture;
@@ -491,8 +525,21 @@ final class TerminalPane {
         _state == TerminalPaneState.closing) {
       return;
     }
-    _setState(TerminalPaneState.exited);
-    _onExitRequested();
+    final TerminalPaneSessionExitDisposition disposition =
+        _session.exitDisposition ?? TerminalPaneSessionExitDisposition.failed;
+    final TerminalPaneExitAction action =
+        disposition == TerminalPaneSessionExitDisposition.clean
+        ? TerminalPaneExitAction.close
+        : TerminalPaneExitAction.retain;
+    _setState(
+      disposition == TerminalPaneSessionExitDisposition.failed
+          ? TerminalPaneState.failed
+          : TerminalPaneState.exited,
+    );
+    _observeExit(disposition, action);
+    if (action == TerminalPaneExitAction.close) {
+      _onExitRequested();
+    }
   }
 
   void _setState(TerminalPaneState value) {
@@ -519,6 +566,28 @@ final class TerminalPane {
       );
     } on Object {
       // Diagnostics cannot change pane ownership or close behavior.
+    }
+  }
+
+  void _observeExit(
+    TerminalPaneSessionExitDisposition disposition,
+    TerminalPaneExitAction action,
+  ) {
+    final TerminalPaneExitObserver? observer = _exitObserver;
+    if (observer == null) {
+      return;
+    }
+    try {
+      observer(
+        TerminalPaneExitObservation(
+          paneId: id,
+          sessionId: sessionId,
+          disposition: disposition,
+          action: action,
+        ),
+      );
+    } on Object {
+      // Diagnostics cannot change pane ownership or shell-exit behavior.
     }
   }
 }

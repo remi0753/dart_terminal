@@ -1,6 +1,6 @@
 # PTY child reap ownership conflict
 
-- Status: remediation in progress
+- Status: complete
 - Started: 2026-09-05
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 2 `Dart Process.start workerとnative PTY childのreap ownership競合を解消する`
@@ -8,9 +8,9 @@
 
 ## Purpose
 
-Explain the deterministic Control-D freeze observed while a Dart-owned runtime
-worker and a native `forkpty` child are alive in the same application process,
-then define the boundary and regression needed for a safe remediation.
+Explain and remediate the deterministic Control-D freeze observed while a
+Dart-owned runtime worker and a native `forkpty` child are alive in the same
+application process, then define and verify the product shell-exit policy.
 
 ## Background
 
@@ -33,7 +33,9 @@ The worker was ready and remained active when Control-D was sent to zsh.
 - Inspect the native PTY reaping path and the pinned stock Dart macOS process
   implementation used by the application.
 - Identify why existing tests did not reproduce the ownership conflict.
-- Record a bounded remediation and its acceptance conditions.
+- Implement the bounded native remediation and product pane/window policy.
+- Add unit, real-PTY, Developer JIT, and Release AOT regressions for the
+  original simultaneous-child condition.
 
 ## Out of scope
 
@@ -197,15 +199,93 @@ the first subtask:
   retained their actual status, and every native session was destroyed.
 
 This establishes the kernel-to-Dart completion boundary without changing the
-stock Dart runtime or depending on a private runtime symbol. The remaining
-work is the product pane/window policy and bundled Developer JIT / Release AOT
-regression.
+stock Dart runtime or depending on a private runtime symbol. At this subtask
+boundary, the remaining work was the product pane/window policy and bundled
+Developer JIT / Release AOT regression described below.
+
+## Application remediation result
+
+The Dart Terminal application now exposes the shell termination classification
+through its pane/session boundary instead of treating every termination as an
+unconditional close request:
+
+- `TerminalSession` maps the observed `PtyExit` to `clean`, `nonZero`, or
+  `signaled`, and maps stream/termination observation failure to `failed`.
+- `TerminalPane` selects `close` only for `clean`. It retains `nonZero`,
+  `signaled`, and `failed` as non-live panes. A retained pane still accepts the
+  next user Close without confirmation because its shell is no longer live.
+- The existing session projection writes `[shell exited with status N]`,
+  `[shell exited with status signal N]`, or `[shell stream failed: ...]` before
+  the pane is retained. Clean exit does not add a transient line because the
+  pane/window closes immediately.
+- `TERMINAL_PANE_EXIT` records the typed disposition and selected action without
+  terminal content. `TERMINAL_PTY_NATIVE` now records
+  `child_status_valid=true|false`, so raw status zero cannot be confused with a
+  missing status.
+- Control-D remains byte `0x04` sent to the PTY. Pane policy is evaluated only
+  after an actual shell exit is observed; none of the documented cases where
+  zsh or a foreground process consumes Control-D become window commands.
+
+The test-only, environment-gated shell-exit scenarios use `zsh -f` and a fixed
+prompt solely to make bundle integration deterministic. They are rejected in
+ordinary application launches without `DT_RUNTIME_SHELL_EXIT_TEST=1` and
+cannot be combined with auto-close or fault scenarios.
+
+## Regression coverage and findings
+
+- The 24-iteration real-Control-D test now keeps a Dart-owned `/bin/sleep`
+  child alive for the whole loop. Every iteration observes the tracked byte
+  write, valid kernel exit readiness, a PTY-owned or explicitly external reap,
+  exactly one decoded clean exit, output drain, disposal, and zero native PTY
+  sessions.
+- Developer JIT and Release AOT smoke each launch two additional real app
+  cases while the bundled runtime worker remains alive. The clean case sends
+  Control-D at an empty `zsh -f` prompt and requires automatic one-step window
+  close. The abnormal case executes `exit 23`, verifies the status line while
+  the window remains present, and requires one subsequent Close without live
+  process confirmation.
+- The Developer JIT clean case exercised the original race directly:
+  `processExitReady child_status_valid=true`, `waitpid=-1 errno=10`,
+  `externalReapObserved`, `exitPublished`, `nativeExitObserved`, and
+  `TERMINAL_PANE_EXIT disposition=clean action=close` occurred in order while
+  the runtime worker was active.
+- The first Developer JIT trial incorrectly required the pane still to be in
+  `exited` after awaiting session termination. A correct clean policy can
+  already have delivered the deferred AppKit close request and moved to
+  `closing`; the regression now accepts `exited` or `closing` only for this
+  clean asynchronous boundary. Abnormal exit must remain exactly `exited`.
+- The second trial incorrectly expected the decoded exit code in the
+  `processExitReady` diagnostic. That event deliberately carries raw wait
+  status (`23 << 8 == 5888`); `exitPublished` carries decoded `exit_code=23`.
+  The regression now checks both fields at their owning boundaries.
+
+Verification completed:
+
+- `dart analyze`: no issues.
+- `dart run test/run_tests.dart`: passed, including the competing-child
+  24-iteration Control-D regression and pane policy tests.
+- `make RUNTIME_ARCH=arm64 developer-jit-integration`: passed all ordinary,
+  clean-Control-D, and nonzero shell-exit launches.
+- `make RUNTIME_ARCH=arm64 release-aot-integration`: passed the same three
+  launches.
+- `make test`: format check reported 33 files unchanged, static analysis found
+  no issues, and all Dart/fake/real-PTY tests passed.
+- `make RUNTIME_ARCH=arm64 runtime-verify`: passed the source audit (81 tracked
+  files and zero product native sources), Developer JIT and Release AOT bundle
+  audits, both three-launch smoke suites, every lifecycle/failure/replacement
+  case, bounded traffic, 1,000-iteration resource stress in both modes,
+  shutdown-fault containment, and PTY final-deadline classified recovery.
+- Resource stress stayed at native baseline 12 with peak 14 in both modes;
+  bounded traffic explicitly rejected 384 excess requests in both modes.
+- Every integration launch verified the recorded worker PID was absent after
+  application exit. No orphan worker or native PTY session remained.
 
 ## Completion conditions
 
 - A deterministic test keeps a Dart `Process.start` child alive while a real
   clean `zsh -f` prompt receives Control-D.
-- At least 24 repetitions observe write completion, kernel exit readiness,
+- With that Dart child alive, at least 24 repetitions observe write completion,
+  kernel exit readiness,
   either PTY-owned reap or explicitly classified external reap, exactly one
   exit publication, output drain, and zero live native sessions.
 - Separate normal-exit and signal-exit cases preserve their actual status.
@@ -239,5 +319,6 @@ regression.
   child exit status with `NOTE_EXIT`; the permanent concurrent native and Dart
   regressions now validate this behavior.
 
-No executable code changed during this diagnosis, so implementation tests were
-not rerun. Documentation syntax and repository diffs are checked before commit.
+The original diagnosis-only commit changed no executable code. The later
+remediation and all verification above are included in the completion commit;
+documentation syntax and repository diffs are checked immediately before it.

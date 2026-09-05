@@ -116,6 +116,7 @@ final class TerminalSessionNativeObservation {
       'operation_result=${event.operationResult ?? 0} '
       'waitpid_result=${event.waitpidResult ?? 0} '
       'child_status=${event.childStatus ?? 0} '
+      'child_status_valid=${event.childStatus != null} '
       'child_process_id=${event.childProcessId ?? 0} '
       'exit_code=${event.exitCode ?? 0} exit_signal=${event.exitSignal ?? 0} '
       'errno=${event.systemError}';
@@ -219,6 +220,23 @@ final class TerminalSession implements TerminalPaneSession {
 
   @override
   bool get isLive => _live;
+  @override
+  TerminalPaneSessionExitDisposition? get exitDisposition {
+    if (_failure != null) {
+      return TerminalPaneSessionExitDisposition.failed;
+    }
+    final PtyExit? observedExit = _exit;
+    if (observedExit == null) {
+      return null;
+    }
+    if (observedExit.signal != null) {
+      return TerminalPaneSessionExitDisposition.signaled;
+    }
+    return observedExit.exitCode == 0
+        ? TerminalPaneSessionExitDisposition.clean
+        : TerminalPaneSessionExitDisposition.nonZero;
+  }
+
   int? get processId => _process?.pid;
   PtyExit? get exit => _exit;
   Object? get failure => _failure;

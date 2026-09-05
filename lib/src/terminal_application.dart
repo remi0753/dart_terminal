@@ -28,6 +28,25 @@ const Duration _runtimePtyFaultFinalTimeout = Duration(milliseconds: 200);
 const Duration _runtimePtyFaultCleanupTimeout = Duration(milliseconds: 200);
 const Duration _hostTerminationTimeout = Duration(seconds: 1);
 
+enum RuntimeShellExitTestScenario {
+  none,
+  cleanControlD,
+  nonZero;
+
+  static RuntimeShellExitTestScenario? byOptionName(String name) =>
+      switch (name) {
+        'clean-control-d' => RuntimeShellExitTestScenario.cleanControlD,
+        'nonzero' => RuntimeShellExitTestScenario.nonZero,
+        _ => null,
+      };
+
+  String get optionName => switch (this) {
+    RuntimeShellExitTestScenario.none => 'none',
+    RuntimeShellExitTestScenario.cleanControlD => 'clean-control-d',
+    RuntimeShellExitTestScenario.nonZero => 'nonzero',
+  };
+}
+
 final class TerminalOptions {
   const TerminalOptions({
     this.initialWorkingDirectory,
@@ -35,6 +54,7 @@ final class TerminalOptions {
     this.runtimeResourceStress = false,
     this.runtimeShutdownFaultInjection = false,
     this.runtimePtyExitFaultInjection = false,
+    this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
     this.runtimeLifecycleScenario = RuntimeLifecycleScenario.normal,
     this.runtimeWorkerCommand =
         const RuntimeLifecycleWorkerCommand.unconfigured(),
@@ -50,11 +70,13 @@ final class TerminalOptions {
     var runtimeResourceStress = false;
     var runtimeShutdownFaultInjection = false;
     var runtimePtyExitFaultInjection = false;
+    RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
     for (final String argument in arguments) {
       const String workingDirectoryPrefix = '--working-directory=';
       const String autoClosePrefix = '--auto-close-after=';
       const String lifecyclePrefix = '--runtime-lifecycle-scenario=';
+      const String shellExitTestPrefix = '--runtime-shell-exit-test=';
       if (argument == '--runtime-resource-stress') {
         if (runtimeResourceStress) {
           throw const FormatException(
@@ -125,6 +147,20 @@ final class TerminalOptions {
         }
         continue;
       }
+      if (argument.startsWith(shellExitTestPrefix)) {
+        if (runtimeShellExitTestScenario != null) {
+          throw const FormatException(
+            '--runtime-shell-exit-test may only be supplied once',
+          );
+        }
+        final String value = argument.substring(shellExitTestPrefix.length);
+        runtimeShellExitTestScenario =
+            RuntimeShellExitTestScenario.byOptionName(value);
+        if (runtimeShellExitTestScenario == null) {
+          throw FormatException('unknown shell exit test scenario: $value');
+        }
+        continue;
+      }
       throw FormatException('unknown application option: $argument');
     }
     final RuntimeLifecycleScenario selectedScenario =
@@ -179,12 +215,33 @@ final class TerminalOptions {
         'PTY exit fault cannot be combined with another runtime fault',
       );
     }
+    final RuntimeShellExitTestScenario selectedShellExitTest =
+        runtimeShellExitTestScenario ?? RuntimeShellExitTestScenario.none;
+    if (selectedShellExitTest != RuntimeShellExitTestScenario.none &&
+        (environment ?? Platform.environment)['DT_RUNTIME_SHELL_EXIT_TEST'] !=
+            '1') {
+      throw const FormatException(
+        'shell exit test requires the integration-test gate',
+      );
+    }
+    if (selectedShellExitTest != RuntimeShellExitTestScenario.none &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection)) {
+      throw const FormatException(
+        'shell exit test cannot be combined with automatic close or a '
+        'runtime fault',
+      );
+    }
     return TerminalOptions(
       initialWorkingDirectory: initialWorkingDirectory,
       autoCloseAfter: autoCloseAfter,
       runtimeResourceStress: runtimeResourceStress,
       runtimeShutdownFaultInjection: runtimeShutdownFaultInjection,
       runtimePtyExitFaultInjection: runtimePtyExitFaultInjection,
+      runtimeShellExitTestScenario: selectedShellExitTest,
       runtimeLifecycleScenario: selectedScenario,
       runtimeWorkerCommand:
           runtimeWorkerCommand ??
@@ -199,6 +256,7 @@ final class TerminalOptions {
   final bool runtimeResourceStress;
   final bool runtimeShutdownFaultInjection;
   final bool runtimePtyExitFaultInjection;
+  final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
   final RuntimeLifecycleScenario runtimeLifecycleScenario;
   final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
 }
@@ -231,6 +289,7 @@ final class TerminalApplication {
     Timer? autoCloseTimer;
     Timer? autoCloseConfirmationTimer;
     RuntimeLifecycleCoordinator? lifecycle;
+    TerminalSession? terminalSession;
     var lifecycleWasShutDown = false;
     var forcePaneClose = false;
     var shutdownWasClean = true;
@@ -280,29 +339,48 @@ final class TerminalApplication {
               TerminalSessionId id, {
               required void Function() onChanged,
               required void Function() onTerminated,
-            }) => TerminalSession(
-              id: id,
-              ptyBackend: ptyBackend,
-              initialWorkingDirectory: options.initialWorkingDirectory,
-              gracefulShutdownTimeout: options.runtimePtyExitFaultInjection
-                  ? _runtimePtyFaultGracefulTimeout
-                  : const Duration(seconds: 3),
-              finalShutdownTimeout: options.runtimePtyExitFaultInjection
-                  ? _runtimePtyFaultFinalTimeout
-                  : const Duration(seconds: 1),
-              cleanupStepTimeout: options.runtimePtyExitFaultInjection
-                  ? _runtimePtyFaultCleanupTimeout
-                  : const Duration(seconds: 1),
-              onChanged: onChanged,
-              onTerminated: onTerminated,
-              lifecycleObserver:
-                  (TerminalSessionLifecycleObservation observation) {
-                    stdout.writeln(observation.machineLine());
-                  },
-              nativeObserver: (TerminalSessionNativeObservation observation) {
-                stdout.writeln(observation.machineLine());
-              },
-            ),
+            }) {
+              final bool isShellExitTest =
+                  options.runtimeShellExitTestScenario !=
+                  RuntimeShellExitTestScenario.none;
+              final TerminalSession createdSession = TerminalSession(
+                id: id,
+                ptyBackend: ptyBackend,
+                initialWorkingDirectory: options.initialWorkingDirectory,
+                environment: isShellExitTest
+                    ? <String, String>{
+                        ...Platform.environment,
+                        'TERM': 'dumb',
+                        'LC_ALL': 'C',
+                        'PS1': '__RUNTIME_SHELL_EXIT_READY__ ',
+                        'RPS1': '',
+                      }
+                    : null,
+                shellArguments: isShellExitTest
+                    ? const <String>['-f']
+                    : const <String>[],
+                gracefulShutdownTimeout: options.runtimePtyExitFaultInjection
+                    ? _runtimePtyFaultGracefulTimeout
+                    : const Duration(seconds: 3),
+                finalShutdownTimeout: options.runtimePtyExitFaultInjection
+                    ? _runtimePtyFaultFinalTimeout
+                    : const Duration(seconds: 1),
+                cleanupStepTimeout: options.runtimePtyExitFaultInjection
+                    ? _runtimePtyFaultCleanupTimeout
+                    : const Duration(seconds: 1),
+                onChanged: onChanged,
+                onTerminated: onTerminated,
+                lifecycleObserver:
+                    (TerminalSessionLifecycleObservation observation) {
+                      stdout.writeln(observation.machineLine());
+                    },
+                nativeObserver: (TerminalSessionNativeObservation observation) {
+                  stdout.writeln(observation.machineLine());
+                },
+              );
+              terminalSession = createdSession;
+              return createdSession;
+            },
         onChanged: () {
           if (createdTextView != null && !createdTextView.isDisposed) {
             createdTextView.text = createdPane.render();
@@ -310,6 +388,9 @@ final class TerminalApplication {
         },
         onExitRequested: createdWindow.requestClose,
         lifecycleObserver: (TerminalPaneLifecycleObservation observation) {
+          stdout.writeln(observation.machineLine());
+        },
+        exitObserver: (TerminalPaneExitObservation observation) {
           stdout.writeln(observation.machineLine());
         },
       );
@@ -661,6 +742,17 @@ final class TerminalApplication {
           if (options.runtimeResourceStress) {
             _exerciseResourceStress(application);
           }
+          final RuntimeShellExitTestScenario shellExitTest =
+              options.runtimeShellExitTestScenario;
+          if (shellExitTest != RuntimeShellExitTestScenario.none) {
+            await _exerciseShellExitPolicy(
+              shellExitTest,
+              createdLifecycle,
+              terminalSession!,
+              createdPane,
+              createdWindow,
+            );
+          }
         case RuntimeLifecycleScenario.workerSyncUncaught:
         case RuntimeLifecycleScenario.workerAsyncUncaught:
           final RuntimeLifecycleRequestResult result = await createdLifecycle
@@ -917,6 +1009,87 @@ final class TerminalApplication {
           ? 'Dart Terminal shut down cleanly.'
           : 'Dart Terminal shut down with classified recovery.',
     );
+  }
+
+  static Future<void> _exerciseShellExitPolicy(
+    RuntimeShellExitTestScenario scenario,
+    RuntimeLifecycleCoordinator lifecycle,
+    TerminalSession session,
+    TerminalPane pane,
+    Window window,
+  ) async {
+    final int? workerProcessId = lifecycle.workerPid;
+    _expectLifecycle(
+      workerProcessId != null,
+      'shell exit policy test requires a live runtime worker',
+    );
+    await _waitForShellExitTestPrompt(session);
+    switch (scenario) {
+      case RuntimeShellExitTestScenario.none:
+        throw StateError('shell exit policy test requires a scenario');
+      case RuntimeShellExitTestScenario.cleanControlD:
+        pane.sendEndOfFile();
+      case RuntimeShellExitTestScenario.nonZero:
+        pane.insertText('exit 23');
+        await pane.submit();
+    }
+    await session.waitForTermination().timeout(const Duration(seconds: 5));
+    await Future<void>.delayed(Duration.zero);
+    final TerminalPaneSessionExitDisposition expectedDisposition =
+        scenario == RuntimeShellExitTestScenario.cleanControlD
+        ? TerminalPaneSessionExitDisposition.clean
+        : TerminalPaneSessionExitDisposition.nonZero;
+    final bool expectedPaneState =
+        scenario == RuntimeShellExitTestScenario.cleanControlD
+        ? pane.state == TerminalPaneState.exited ||
+              pane.state == TerminalPaneState.closing
+        : pane.state == TerminalPaneState.exited;
+    _expectLifecycle(
+      session.exitDisposition == expectedDisposition && expectedPaneState,
+      '${scenario.optionName} did not publish its expected pane exit',
+    );
+    if (scenario == RuntimeShellExitTestScenario.cleanControlD) {
+      _expectLifecycle(
+        session.exit?.exitCode == 0 && session.exit?.signal == null,
+        'Control-D did not preserve the clean zsh exit status',
+      );
+    } else {
+      _expectLifecycle(
+        session.exit?.exitCode == 23 &&
+            session.exit?.signal == null &&
+            pane.render().contains('[shell exited with status 23]') &&
+            !window.isClosed &&
+            !window.isDisposed,
+        'nonzero zsh exit was not retained with a visible status',
+      );
+    }
+    stdout.writeln(
+      'TERMINAL_SHELL_EXIT_TEST scenario=${scenario.optionName} '
+      'shell_exit=${session.exit?.exitCode ?? -1} '
+      'action=${scenario == RuntimeShellExitTestScenario.cleanControlD ? 'close' : 'retain'} '
+      'worker_pid=$workerProcessId',
+    );
+    if (scenario == RuntimeShellExitTestScenario.nonZero) {
+      window.requestClose();
+    }
+  }
+
+  static Future<void> _waitForShellExitTestPrompt(
+    TerminalSession session,
+  ) async {
+    const String marker = '__RUNTIME_SHELL_EXIT_READY__';
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 5)) {
+      if (session.buffer.outputText.contains(marker)) {
+        return;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'test zsh exited before its first prompt',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw TimeoutException('test zsh did not publish its prompt');
   }
 
   static Future<void> _expectResponse(
