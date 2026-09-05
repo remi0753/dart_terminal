@@ -638,7 +638,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] typed-array grid、cursor、margins、tabstops、modes
   - [x] typed-array cell/row storage、cursor/save、tabstop、damage基盤
     （[`docs/phase3/typed-array-grid-screen-state.md`](docs/phase3/typed-array-grid-screen-state.md) を参照して実施）
-  - [ ] margins、screen modes、reset/clamp invariant
+  - [x] margins、screen modes、reset/clamp invariant
     （[`docs/phase3/typed-array-grid-screen-state.md`](docs/phase3/typed-array-grid-screen-state.md) を参照して実施）
   - [ ] cursor/edit/scroll operations と parser action sink
     （[`docs/phase3/typed-array-grid-screen-state.md`](docs/phase3/typed-array-grid-screen-state.md) を参照して実施）

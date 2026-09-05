@@ -8,7 +8,196 @@ void runTerminalScreenTests() {
   _testDamageCoalescingAndRowMetadata();
   _testCursorSaveRestore();
   _testTabStops();
+  _testMarginAndOriginInvariants();
+  _testModesCursorPresentationAndReset();
 }
+
+void _testMarginAndOriginInvariants() {
+  final TerminalScreen screen = TerminalScreen(rows: 5, columns: 8);
+  _expect(
+    screen.topMargin == 0 && screen.bottomMargin == 4,
+    'default vertical margins',
+  );
+  _expect(
+    screen.leftMargin == 0 && screen.rightMargin == 7,
+    'default horizontal margins',
+  );
+  _expect(
+    screen.activeLeftMargin == 0 && screen.activeRightMargin == 7,
+    'horizontal margins initially inactive',
+  );
+
+  screen.setCursorPosition(4, 7);
+  screen.setVerticalMargins(1, 3);
+  _expect(
+    screen.cursorRow == 0 && screen.cursorColumn == 0,
+    'margin set homes',
+  );
+  screen.setHorizontalMargins(2, 5);
+  _expect(
+    screen.activeLeftMargin == 0 && screen.activeRightMargin == 7,
+    'stored horizontal margins remain inactive',
+  );
+  screen.setMode(TerminalScreenMode.horizontalMargins, true);
+  screen.setMode(TerminalScreenMode.origin, true);
+  _expect(
+    screen.activeLeftMargin == 2 && screen.activeRightMargin == 5,
+    'horizontal margins become active',
+  );
+  _expect(screen.cursorRow == 1 && screen.cursorColumn == 2, 'origin home');
+
+  screen.setCursorPosition(0, 7);
+  screen.clampCursorToMargins();
+  _expect(screen.cursorRow == 1 && screen.cursorColumn == 5, 'margin clamp');
+  screen.setMode(TerminalScreenMode.origin, false);
+  _expect(
+    screen.cursorRow == 0 && screen.cursorColumn == 0,
+    'origin reset homes',
+  );
+
+  final String beforeInvalid = _stateKey(screen);
+  final int generation = screen.generation;
+  for (final void Function() mutation in <void Function()>[
+    () => screen.setVerticalMargins(-1, 2),
+    () => screen.setVerticalMargins(2, 2),
+    () => screen.setVerticalMargins(1, 5),
+    () => screen.setHorizontalMargins(-1, 4),
+    () => screen.setHorizontalMargins(4, 3),
+    () => screen.setHorizontalMargins(1, 8),
+  ]) {
+    _expectThrowsArgumentError(mutation, 'invalid margins rejected');
+    _expect(_stateKey(screen) == beforeInvalid, 'invalid margin is atomic');
+    _expect(
+      screen.generation == generation,
+      'invalid margin generation stable',
+    );
+  }
+
+  screen.setMode(TerminalScreenMode.horizontalMargins, false);
+  _expect(
+    screen.leftMargin == 0 &&
+        screen.rightMargin == 7 &&
+        screen.activeLeftMargin == 0 &&
+        screen.activeRightMargin == 7,
+    'disabling horizontal margins restores full width',
+  );
+  screen.resetVerticalMargins();
+  _expect(
+    screen.topMargin == 0 && screen.bottomMargin == 4,
+    'vertical margins reset',
+  );
+}
+
+void _testModesCursorPresentationAndReset() {
+  final TerminalScreen screen = TerminalScreen(rows: 3, columns: 12);
+  _expect(!screen.modeEnabled(TerminalScreenMode.origin), 'origin default');
+  _expect(!screen.modeEnabled(TerminalScreenMode.insert), 'insert default');
+  _expect(screen.replaceMode, 'replace default');
+  _expect(screen.modeEnabled(TerminalScreenMode.autoWrap), 'autowrap default');
+  _expect(
+    !screen.modeEnabled(TerminalScreenMode.reverseVideo),
+    'reverse video default',
+  );
+  _expect(
+    !screen.modeEnabled(TerminalScreenMode.horizontalMargins),
+    'horizontal margin mode default',
+  );
+  _expect(
+    screen.cursorVisible &&
+        screen.cursorBlinking &&
+        screen.cursorShape == TerminalCursorShape.block,
+    'cursor presentation defaults',
+  );
+
+  screen.setMode(TerminalScreenMode.insert, true);
+  _expect(!screen.replaceMode, 'insert disables replace behavior');
+  screen.setWrapPending(true);
+  _expect(screen.wrapPending, 'autowrap permits wrap pending');
+  screen.setMode(TerminalScreenMode.autoWrap, false);
+  _expect(!screen.wrapPending, 'disabling autowrap clears pending wrap');
+  _expectThrowsStateError(
+    () => screen.setWrapPending(true),
+    'wrap pending rejected without autowrap',
+  );
+
+  screen.clearDamage();
+  screen.setMode(TerminalScreenMode.reverseVideo, true);
+  for (int row = 0; row < screen.rows; row++) {
+    _expect(screen.dirtyStartAt(row) == 0, 'reverse video damages row start');
+    _expect(screen.dirtyEndAt(row) == 12, 'reverse video damages row end');
+  }
+  screen.setCursorPresentation(
+    shape: TerminalCursorShape.bar,
+    visible: false,
+    blinking: false,
+  );
+  _expect(
+    !screen.cursorVisible &&
+        !screen.cursorBlinking &&
+        screen.cursorShape == TerminalCursorShape.bar,
+    'cursor presentation update',
+  );
+
+  screen.setVerticalMargins(1, 2);
+  screen.setHorizontalMargins(2, 9);
+  screen.setMode(TerminalScreenMode.horizontalMargins, true);
+  screen.setMode(TerminalScreenMode.origin, true);
+  screen.setCursorPosition(2, 8);
+  screen.saveCursor();
+  screen.clearAllTabStops();
+  screen.setNarrowCell(2, 8, 0x58);
+  final int content = screen.contentAt(2, 8);
+  screen.resetTerminalState();
+  _expect(
+    _stateKey(screen) == _defaultStateKey(screen),
+    'state reset defaults',
+  );
+  _expect(screen.isTabStop(8), 'state reset restores default tabs');
+  _expect(screen.contentAt(2, 8) == content, 'state reset preserves cells');
+  final int generation = screen.generation;
+  screen.resetTerminalState();
+  _expect(screen.generation == generation, 'default state reset is a no-op');
+}
+
+String _stateKey(TerminalScreen screen) => <Object>[
+  screen.cursorRow,
+  screen.cursorColumn,
+  screen.savedCursorRow,
+  screen.savedCursorColumn,
+  screen.topMargin,
+  screen.bottomMargin,
+  screen.leftMargin,
+  screen.rightMargin,
+  screen.modeEnabled(TerminalScreenMode.origin),
+  screen.modeEnabled(TerminalScreenMode.insert),
+  screen.modeEnabled(TerminalScreenMode.autoWrap),
+  screen.modeEnabled(TerminalScreenMode.reverseVideo),
+  screen.modeEnabled(TerminalScreenMode.horizontalMargins),
+  screen.wrapPending,
+  screen.cursorVisible,
+  screen.cursorBlinking,
+  screen.cursorShape,
+].join('|');
+
+String _defaultStateKey(TerminalScreen screen) => <Object>[
+  0,
+  0,
+  0,
+  0,
+  0,
+  screen.rows - 1,
+  0,
+  screen.columns - 1,
+  false,
+  false,
+  true,
+  false,
+  false,
+  false,
+  true,
+  true,
+  TerminalCursorShape.block,
+].join('|');
 
 void _testStorageDefaultsAndBounds() {
   final TerminalScreen screen = TerminalScreen(rows: 2, columns: 10);
@@ -253,6 +442,15 @@ void _expectThrowsRangeError(void Function() action, String message) {
   try {
     action();
   } on RangeError {
+    return;
+  }
+  throw StateError('test failed: $message');
+}
+
+void _expectThrowsStateError(void Function() action, String message) {
+  try {
+    action();
+  } on StateError {
     return;
   }
   throw StateError('test failed: $message');

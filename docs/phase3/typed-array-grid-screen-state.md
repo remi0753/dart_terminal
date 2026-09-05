@@ -165,6 +165,17 @@ in dependency order avoids an unreviewable single change.
   renderer acknowledgement is explicit and does not mutate terminal content.
   Row-version rollover marks every row fully dirty and restores nonzero
   versions so later renderer work can resynchronize without ambiguous wrap.
+- The second subtask adds typed mode/presentation fields without interpreting
+  parser bytes. Vertical margins remain the always-defined scroll region;
+  horizontal margins have stored values but their active bounds expand to the
+  full row unless the dedicated mode is enabled.
+- Origin-mode and successful margin changes home the cursor through one
+  internal mutation path that also clears wrap-pending. Disabling horizontal
+  margins restores the full-width stored range, and disabling autowrap clears
+  an otherwise impossible pending wrap.
+- Reverse-video changes presentation of every existing cell, so it marks every
+  row dirty without rewriting color tokens. Cursor presentation affects only
+  overlay state and advances the screen generation without cell damage.
 
 ## Decisions and alternatives
 
@@ -185,6 +196,18 @@ in dependency order avoids an unreviewable single change.
 - Track a monotonic screen mutation generation separately from row versions.
   A row version advances only when a clean row first becomes dirty, while
   repeated pre-publication edits only widen its half-open dirty interval.
+- Represent screen modes with a typed enum and keep cursor presentation as a
+  typed shape plus visibility/blink booleans. A single `insert` boolean defines
+  insert versus default replace behavior; no separate contradictory replace
+  flag is stored.
+- Store vertical and horizontal margin pairs independently. Vertical margins
+  are always the scroll region; horizontal margins become active only while
+  the horizontal-margin mode is enabled. Successful margin/origin-mode changes
+  home the cursor, while invalid ranges are validated before any state change.
+- Make state reset explicitly non-destructive to cells. It restores cursor,
+  saved cursor, margins, tab stops, wrap-pending, presentation, and screen modes
+  in one generation step; the later editing subtask composes this with screen
+  clearing for the RIS parser action.
 
 ## Verification results
 
@@ -207,8 +230,29 @@ in dependency order avoids an unreviewable single change.
 - The focused screen suite compiled to Release AOT and exited successfully.
 - `make runtime-source-check` passed with `tracked=93` and
   `native_sources=0` after staging the new product source.
-- Final whitespace, staged-scope, and diff review remain before the first
-  subtask commit.
+- Final whitespace/staged-scope/diff review passed, and the first subtask was
+  committed as `a76b9a8 Add typed-array terminal screen storage`.
+
+### Margins and screen modes
+
+- Focused JIT tests passed for default and custom top/bottom and left/right
+  margins, inactive versus active horizontal bounds, origin homes, explicit
+  margin clamp, full-range reset, and atomic rejection of every invalid range.
+- Typed origin/insert/replace/autowrap/reverse-video/horizontal-margin mode
+  defaults and transitions passed. Disabling autowrap clears pending wrap,
+  setting pending wrap while disabled is rejected, and reverse-video dirties
+  all rows without modifying cell values.
+- Cursor block/underline/bar shape, visibility, and blink state passed. The
+  non-cell reset restores cursor/saved cursor, margins, modes, presentation,
+  wrap state, and default tab stops while preserving existing cell content;
+  resetting an already-default state is generation-idempotent.
+- Final `make test` passed for 42 formatted Dart files, parser table freshness,
+  analysis with no issues, and all repository tests.
+- The updated focused screen suite compiled and passed in Release AOT.
+- `make runtime-source-check` passed with `tracked=93` and
+  `native_sources=0`.
+- Final whitespace, staged-scope, and diff review passed; only the second
+  subtask completion commit remains.
 
 ## Risks and handoff
 

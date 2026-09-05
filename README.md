@@ -57,6 +57,8 @@ pane-owned persistent login shell です。Phase 0 の native spike source は�
   parameter/subparameter保持、固定bufferとsequence/payload/count/value上限
 - ADR-003準拠の非公開SoA cell/row storage、cursor save/restore、default/custom
   tab stop、coalesced row damage/versionとmonotonic screen generation基盤
+- top/bottom・optional left/right margin、origin/insert/autowrap/reverse-video、
+  wrap-pending、cursor shape/blink/visibilityのtyped stateとatomic reset/clamp
 
 ## 起動
 

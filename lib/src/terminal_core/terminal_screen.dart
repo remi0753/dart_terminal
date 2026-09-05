@@ -21,6 +21,16 @@ abstract final class TerminalRowFlags {
   static const int knownMask = (1 << 5) - 1;
 }
 
+enum TerminalScreenMode {
+  origin,
+  insert,
+  autoWrap,
+  reverseVideo,
+  horizontalMargins,
+}
+
+enum TerminalCursorShape { block, underline, bar }
+
 /// Bounded Dart-owned terminal screen using Struct-of-Arrays cell storage.
 ///
 /// The screen is a single-writer object. Authoritative typed arrays remain
@@ -88,12 +98,37 @@ final class TerminalScreen {
   int _generation = 1;
   bool _fullSnapshotRequired = true;
 
+  int _topMargin = 0;
+  late int _bottomMargin = rows - 1;
+  int _leftMargin = 0;
+  late int _rightMargin = columns - 1;
+  bool _originMode = false;
+  bool _insertMode = false;
+  bool _autoWrapMode = true;
+  bool _reverseVideoMode = false;
+  bool _horizontalMarginsMode = false;
+  bool _wrapPending = false;
+  bool _cursorVisible = true;
+  bool _cursorBlinking = true;
+  TerminalCursorShape _cursorShape = TerminalCursorShape.block;
+
   int get cursorRow => _cursorRow;
   int get cursorColumn => _cursorColumn;
   int get savedCursorRow => _savedCursorRow;
   int get savedCursorColumn => _savedCursorColumn;
   int get generation => _generation;
   bool get fullSnapshotRequired => _fullSnapshotRequired;
+  int get topMargin => _topMargin;
+  int get bottomMargin => _bottomMargin;
+  int get leftMargin => _leftMargin;
+  int get rightMargin => _rightMargin;
+  int get activeLeftMargin => _horizontalMarginsMode ? _leftMargin : 0;
+  int get activeRightMargin =>
+      _horizontalMarginsMode ? _rightMargin : columns - 1;
+  bool get wrapPending => _wrapPending;
+  bool get cursorVisible => _cursorVisible;
+  bool get cursorBlinking => _cursorBlinking;
+  TerminalCursorShape get cursorShape => _cursorShape;
 
   int get cellStorageBytes => cellCount * 17;
   int get rowStorageBytes => rows * 13;
@@ -198,12 +233,9 @@ final class TerminalScreen {
   void setCursorPosition(int row, int column) {
     _checkRow(row);
     _checkColumn(column);
-    if (_cursorRow == row && _cursorColumn == column) {
-      return;
+    if (_setCursorUnchecked(row, column)) {
+      _incrementGeneration();
     }
-    _cursorRow = row;
-    _cursorColumn = column;
-    _incrementGeneration();
   }
 
   void saveCursor() {
@@ -216,12 +248,244 @@ final class TerminalScreen {
   }
 
   void restoreCursor() {
-    if (_cursorRow == _savedCursorRow && _cursorColumn == _savedCursorColumn) {
+    if (_setCursorUnchecked(_savedCursorRow, _savedCursorColumn)) {
+      _incrementGeneration();
+    }
+  }
+
+  void homeCursor() {
+    final int row = _originMode ? _topMargin : 0;
+    final int column = _originMode ? activeLeftMargin : 0;
+    if (_setCursorUnchecked(row, column)) {
+      _incrementGeneration();
+    }
+  }
+
+  void clampCursorToMargins() {
+    final int row = _cursorRow.clamp(_topMargin, _bottomMargin);
+    final int column = _cursorColumn.clamp(activeLeftMargin, activeRightMargin);
+    if (_setCursorUnchecked(row, column)) {
+      _incrementGeneration();
+    }
+  }
+
+  void setWrapPending(bool value) {
+    if (value && !_autoWrapMode) {
+      throw StateError('wrap pending requires auto-wrap mode');
+    }
+    if (_wrapPending == value) {
       return;
     }
-    _cursorRow = _savedCursorRow;
-    _cursorColumn = _savedCursorColumn;
+    _wrapPending = value;
     _incrementGeneration();
+  }
+
+  bool modeEnabled(TerminalScreenMode mode) => switch (mode) {
+    TerminalScreenMode.origin => _originMode,
+    TerminalScreenMode.insert => _insertMode,
+    TerminalScreenMode.autoWrap => _autoWrapMode,
+    TerminalScreenMode.reverseVideo => _reverseVideoMode,
+    TerminalScreenMode.horizontalMargins => _horizontalMarginsMode,
+  };
+
+  bool get replaceMode => !_insertMode;
+
+  void setMode(TerminalScreenMode mode, bool enabled) {
+    bool changed = false;
+    switch (mode) {
+      case TerminalScreenMode.origin:
+        if (_originMode != enabled) {
+          _originMode = enabled;
+          changed = true;
+        }
+        changed =
+            _setCursorUnchecked(
+              enabled ? _topMargin : 0,
+              enabled ? activeLeftMargin : 0,
+            ) ||
+            changed;
+      case TerminalScreenMode.insert:
+        if (_insertMode != enabled) {
+          _insertMode = enabled;
+          changed = true;
+        }
+      case TerminalScreenMode.autoWrap:
+        if (_autoWrapMode != enabled) {
+          _autoWrapMode = enabled;
+          changed = true;
+        }
+        if (!enabled && _wrapPending) {
+          _wrapPending = false;
+          changed = true;
+        }
+      case TerminalScreenMode.reverseVideo:
+        if (_reverseVideoMode != enabled) {
+          _reverseVideoMode = enabled;
+          _markEveryRowDirty();
+          changed = true;
+        }
+      case TerminalScreenMode.horizontalMargins:
+        if (_horizontalMarginsMode != enabled) {
+          _horizontalMarginsMode = enabled;
+          changed = true;
+        }
+        if (!enabled && (_leftMargin != 0 || _rightMargin != columns - 1)) {
+          _leftMargin = 0;
+          _rightMargin = columns - 1;
+          changed = true;
+        }
+        changed =
+            _setCursorUnchecked(
+              _originMode ? _topMargin : 0,
+              _originMode ? activeLeftMargin : 0,
+            ) ||
+            changed;
+    }
+    if (changed) {
+      _incrementGeneration();
+    }
+  }
+
+  void setCursorPresentation({
+    TerminalCursorShape? shape,
+    bool? visible,
+    bool? blinking,
+  }) {
+    final TerminalCursorShape nextShape = shape ?? _cursorShape;
+    final bool nextVisible = visible ?? _cursorVisible;
+    final bool nextBlinking = blinking ?? _cursorBlinking;
+    if (_cursorShape == nextShape &&
+        _cursorVisible == nextVisible &&
+        _cursorBlinking == nextBlinking) {
+      return;
+    }
+    _cursorShape = nextShape;
+    _cursorVisible = nextVisible;
+    _cursorBlinking = nextBlinking;
+    _incrementGeneration();
+  }
+
+  void setVerticalMargins(int top, int bottom) {
+    _validateMargins(top, bottom, rows, 'vertical');
+    bool changed = false;
+    if (_topMargin != top || _bottomMargin != bottom) {
+      _topMargin = top;
+      _bottomMargin = bottom;
+      changed = true;
+    }
+    changed =
+        _setCursorUnchecked(
+          _originMode ? _topMargin : 0,
+          _originMode ? activeLeftMargin : 0,
+        ) ||
+        changed;
+    if (changed) {
+      _incrementGeneration();
+    }
+  }
+
+  void resetVerticalMargins() {
+    bool changed = false;
+    if (_topMargin != 0 || _bottomMargin != rows - 1) {
+      _topMargin = 0;
+      _bottomMargin = rows - 1;
+      changed = true;
+    }
+    changed =
+        _setCursorUnchecked(
+          _originMode ? _topMargin : 0,
+          _originMode ? activeLeftMargin : 0,
+        ) ||
+        changed;
+    if (changed) {
+      _incrementGeneration();
+    }
+  }
+
+  void setHorizontalMargins(int left, int right) {
+    _validateMargins(left, right, columns, 'horizontal');
+    bool changed = false;
+    if (_leftMargin != left || _rightMargin != right) {
+      _leftMargin = left;
+      _rightMargin = right;
+      changed = true;
+    }
+    changed =
+        _setCursorUnchecked(
+          _originMode ? _topMargin : 0,
+          _originMode ? activeLeftMargin : 0,
+        ) ||
+        changed;
+    if (changed) {
+      _incrementGeneration();
+    }
+  }
+
+  void resetHorizontalMargins() {
+    bool changed = false;
+    if (_leftMargin != 0 || _rightMargin != columns - 1) {
+      _leftMargin = 0;
+      _rightMargin = columns - 1;
+      changed = true;
+    }
+    changed =
+        _setCursorUnchecked(
+          _originMode ? _topMargin : 0,
+          _originMode ? activeLeftMargin : 0,
+        ) ||
+        changed;
+    if (changed) {
+      _incrementGeneration();
+    }
+  }
+
+  /// Restores non-cell terminal state without erasing cell or row metadata.
+  void resetTerminalState() {
+    final bool reverseChanged = _reverseVideoMode;
+    bool changed =
+        _topMargin != 0 ||
+        _bottomMargin != rows - 1 ||
+        _leftMargin != 0 ||
+        _rightMargin != columns - 1 ||
+        _originMode ||
+        _insertMode ||
+        !_autoWrapMode ||
+        _reverseVideoMode ||
+        _horizontalMarginsMode ||
+        _wrapPending ||
+        !_cursorVisible ||
+        !_cursorBlinking ||
+        _cursorShape != TerminalCursorShape.block ||
+        _cursorRow != 0 ||
+        _cursorColumn != 0 ||
+        _savedCursorRow != 0 ||
+        _savedCursorColumn != 0 ||
+        !_tabStopsAreDefault();
+
+    _topMargin = 0;
+    _bottomMargin = rows - 1;
+    _leftMargin = 0;
+    _rightMargin = columns - 1;
+    _originMode = false;
+    _insertMode = false;
+    _autoWrapMode = true;
+    _reverseVideoMode = false;
+    _horizontalMarginsMode = false;
+    _wrapPending = false;
+    _cursorVisible = true;
+    _cursorBlinking = true;
+    _cursorShape = TerminalCursorShape.block;
+    _cursorRow = 0;
+    _cursorColumn = 0;
+    _savedCursorRow = 0;
+    _savedCursorColumn = 0;
+    _writeDefaultTabStops();
+    if (reverseChanged) {
+      _markEveryRowDirty();
+    }
+    if (changed) {
+      _incrementGeneration();
+    }
   }
 
   bool isTabStop(int column) {
@@ -348,6 +612,16 @@ final class TerminalScreen {
     }
   }
 
+  static void _validateMargins(int first, int last, int extent, String name) {
+    if (first < 0 || last >= extent || first >= last) {
+      throw ArgumentError.value(
+        <int>[first, last],
+        name,
+        'must be an ordered range within 0..${extent - 1}',
+      );
+    }
+  }
+
   int _cellIndex(int row, int column) {
     _checkRow(row);
     _checkColumn(column);
@@ -391,6 +665,14 @@ final class TerminalScreen {
     return true;
   }
 
+  bool _markEveryRowDirty() {
+    bool changed = false;
+    for (int physical = 0; physical < rows; physical++) {
+      changed = _markDirtyPhysical(physical, 0, columns) || changed;
+    }
+    return changed;
+  }
+
   bool _advanceRowVersion(int physical) {
     final int version = _rowVersions[physical];
     if (version < maxRowVersion) {
@@ -411,6 +693,25 @@ final class TerminalScreen {
     for (int column = 8; column < columns; column += 8) {
       _tabStops[column] = 1;
     }
+  }
+
+  bool _tabStopsAreDefault() {
+    for (int column = 0; column < columns; column++) {
+      final int expected = column != 0 && column % 8 == 0 ? 1 : 0;
+      if (_tabStops[column] != expected) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _setCursorUnchecked(int row, int column) {
+    final bool changed =
+        _cursorRow != row || _cursorColumn != column || _wrapPending;
+    _cursorRow = row;
+    _cursorColumn = column;
+    _wrapPending = false;
+    return changed;
   }
 
   void _incrementGeneration() {

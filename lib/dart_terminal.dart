@@ -13,7 +13,12 @@ export 'src/terminal_buffer.dart' show TerminalBuffer;
 export 'src/terminal_core/streaming_utf8_decoder.dart'
     show StreamingUtf8Decoder, Utf8ScalarSink;
 export 'src/terminal_core/terminal_screen.dart'
-    show TerminalCellFlags, TerminalRowFlags, TerminalScreen;
+    show
+        TerminalCellFlags,
+        TerminalCursorShape,
+        TerminalRowFlags,
+        TerminalScreen,
+        TerminalScreenMode;
 export 'src/terminal_core/vt_parser.dart'
     show
         VtDcsSequence,
