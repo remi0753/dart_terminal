@@ -30,6 +30,7 @@ CoreText/Metal renderer、IME の製品実装は後続 Phase です。
 - typed pane/session ID、単一owner、live shellの再操作close確認
 - terminal内容を含めないpane state / PTY shutdown stage診断
 - graceful/force/final deadlineを持つbounded PTY session teardownと型付き結果
+- PTY通知欠落時もpane ownerを閉じ、status 75でhost終了するclassified recovery
 - AppKit main-thread root と公式 Dart 子プロセス worker の bounded lifecycle
   （M1/arm64 Developer JIT / Release AOT）
 - native event protocol v4（source generation、nanosecond timestamp、operation
@@ -150,6 +151,10 @@ lifecycle stageだけを持つ`TERMINAL_PANE_LIFECYCLE`と
 `TERMINAL_PTY_LIFECYCLE`も記録します。Control-Dの受付、native exit、output drain、
 close request、exit wait、stream cancel、process disposeのどこまで完了したかを判定でき、
 terminal表示内容、入力文字列、command、environment、cwd、例外詳細は含みません。
+終了時の`TERMINAL_SESSION_SHUTDOWN`と`TERMINAL_PANE_OWNER_SHUTDOWN`は、同じ
+typed ID、固定されたdisposition、termination/cleanupの真偽だけで最終結果を示します。
+最終期限を超えた場合もpaneとhostの終了処理を続け、正常終了を名乗らずstatus 75と
+`outcome=failure`を記録します。
 
 ## Release AOT
 

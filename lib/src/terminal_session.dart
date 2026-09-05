@@ -48,31 +48,24 @@ enum TerminalSessionLifecycleStage {
   disposeCompleted,
 }
 
-enum TerminalSessionShutdownDisposition {
-  clean,
-  forced,
-  failed,
-  deadlineExceeded,
-}
-
-final class TerminalSessionShutdownResult {
+final class TerminalSessionShutdownResult
+    extends TerminalPaneSessionShutdownResult {
   const TerminalSessionShutdownResult({
-    required this.sessionId,
-    required this.processId,
-    required this.disposition,
-    required this.terminationObserved,
-    required this.cleanupCompleted,
+    required TerminalSessionId sessionId,
+    required int? processId,
+    required TerminalSessionShutdownDisposition disposition,
+    required bool terminationObserved,
+    required bool cleanupCompleted,
     required this.exit,
-  });
+  }) : super(
+         sessionId: sessionId,
+         processId: processId,
+         disposition: disposition,
+         terminationObserved: terminationObserved,
+         cleanupCompleted: cleanupCompleted,
+       );
 
-  final TerminalSessionId sessionId;
-  final int? processId;
-  final TerminalSessionShutdownDisposition disposition;
-  final bool terminationObserved;
-  final bool cleanupCompleted;
   final PtyExit? exit;
-
-  bool get isClean => disposition == TerminalSessionShutdownDisposition.clean;
 }
 
 final class TerminalSessionLifecycleObservation {
@@ -392,10 +385,10 @@ final class TerminalSession implements TerminalPaneSession {
     _notifyChanged();
   }
 
+  @override
   Future<TerminalSessionShutdownResult> shutdown() =>
       _shutdownFuture ??= _shutdown();
 
-  @override
   Future<void> dispose() => _disposeFuture ??= _disposeAndDiscardResult();
 
   Future<void> _disposeAndDiscardResult() async {

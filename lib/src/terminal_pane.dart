@@ -48,6 +48,69 @@ enum TerminalPaneState {
 
 enum TerminalPaneCloseDecision { confirmationRequired, allow }
 
+enum TerminalSessionShutdownDisposition {
+  clean,
+  forced,
+  failed,
+  deadlineExceeded,
+}
+
+class TerminalPaneSessionShutdownResult {
+  const TerminalPaneSessionShutdownResult({
+    required this.sessionId,
+    required this.processId,
+    required this.disposition,
+    required this.terminationObserved,
+    required this.cleanupCompleted,
+  });
+
+  final TerminalSessionId sessionId;
+  final int? processId;
+  final TerminalSessionShutdownDisposition disposition;
+  final bool terminationObserved;
+  final bool cleanupCompleted;
+
+  bool get isClean => disposition == TerminalSessionShutdownDisposition.clean;
+
+  String machineLine() =>
+      'TERMINAL_SESSION_SHUTDOWN pane=${sessionId.paneId} '
+      'session=$sessionId process_id=${processId ?? 0} '
+      'disposition=${disposition.name} '
+      'termination_observed=$terminationObserved '
+      'cleanup_completed=$cleanupCompleted';
+}
+
+final class TerminalPaneOwnerShutdownResult {
+  TerminalPaneOwnerShutdownResult(
+    Iterable<TerminalPaneSessionShutdownResult> sessions,
+  ) : sessions = List<TerminalPaneSessionShutdownResult>.unmodifiable(sessions);
+
+  final List<TerminalPaneSessionShutdownResult> sessions;
+
+  TerminalSessionShutdownDisposition get disposition {
+    for (final TerminalSessionShutdownDisposition candidate
+        in const <TerminalSessionShutdownDisposition>[
+          TerminalSessionShutdownDisposition.deadlineExceeded,
+          TerminalSessionShutdownDisposition.failed,
+          TerminalSessionShutdownDisposition.forced,
+        ]) {
+      if (sessions.any(
+        (TerminalPaneSessionShutdownResult result) =>
+            result.disposition == candidate,
+      )) {
+        return candidate;
+      }
+    }
+    return TerminalSessionShutdownDisposition.clean;
+  }
+
+  bool get isClean => disposition == TerminalSessionShutdownDisposition.clean;
+
+  String machineLine() =>
+      'TERMINAL_PANE_OWNER_SHUTDOWN pane_count=${sessions.length} '
+      'disposition=${disposition.name}';
+}
+
 final class TerminalPaneLifecycleObservation {
   const TerminalPaneLifecycleObservation({
     required this.paneId,
@@ -91,7 +154,7 @@ abstract interface class TerminalPaneSession {
   void sendEndOfFile();
   void resize({required int rows, required int columns});
   void showCloseConfirmation();
-  Future<void> dispose();
+  Future<TerminalPaneSessionShutdownResult> shutdown();
 }
 
 typedef TerminalPaneSessionFactory = TerminalPaneSession Function(
@@ -114,10 +177,14 @@ final class TerminalPaneOwner {
 
   int _nextPaneId;
   final Map<PaneId, TerminalPane> _panes = <PaneId, TerminalPane>{};
+  Future<TerminalPaneOwnerShutdownResult>? _shutdownFuture;
+  Future<void>? _disposeFuture;
+  TerminalPaneOwnerShutdownResult? _shutdownResult;
   bool _disposed = false;
 
   int get livePaneCount => _panes.length;
   Iterable<PaneId> get paneIds => List<PaneId>.unmodifiable(_panes.keys);
+  TerminalPaneOwnerShutdownResult? get shutdownResult => _shutdownResult;
 
   TerminalPane createPane({
     required TerminalPaneSessionFactory sessionFactory,
@@ -188,20 +255,32 @@ final class TerminalPaneOwner {
     if (!identical(owned, pane)) {
       throw StateError('pane ${pane.id} is not owned by this owner');
     }
-    await pane.dispose();
+    await pane.shutdown();
     _panes.remove(pane.id);
   }
 
-  Future<void> dispose() async {
-    if (_disposed) {
-      return;
-    }
+  Future<TerminalPaneOwnerShutdownResult> shutdown() =>
+      _shutdownFuture ??= _shutdown();
+
+  Future<void> dispose() => _disposeFuture ??= _disposeAndDiscardResult();
+
+  Future<void> _disposeAndDiscardResult() async {
+    await shutdown();
+  }
+
+  Future<TerminalPaneOwnerShutdownResult> _shutdown() async {
     _disposed = true;
     final List<TerminalPane> panes = _panes.values.toList(growable: false);
+    final List<TerminalPaneSessionShutdownResult> results =
+        <TerminalPaneSessionShutdownResult>[];
     for (final TerminalPane pane in panes.reversed) {
-      await pane.dispose();
+      results.add(await pane.shutdown());
     }
     _panes.clear();
+    final TerminalPaneOwnerShutdownResult result =
+        TerminalPaneOwnerShutdownResult(results);
+    _shutdownResult = result;
+    return result;
   }
 }
 
@@ -229,11 +308,14 @@ final class TerminalPane {
   TerminalPaneState _state = TerminalPaneState.created;
   Future<void>? _startFuture;
   Future<void>? _disposeFuture;
+  Future<TerminalPaneSessionShutdownResult>? _shutdownFuture;
+  TerminalPaneSessionShutdownResult? _shutdownResult;
 
   TerminalPaneState get state => _state;
   bool get isLive => _session.isLive;
   bool get closeConfirmationPending =>
       _state == TerminalPaneState.confirmationPending;
+  TerminalPaneSessionShutdownResult? get shutdownResult => _shutdownResult;
 
   Future<void> start() => _startFuture ??= _start();
 
@@ -363,20 +445,35 @@ final class TerminalPane {
     );
   }
 
-  Future<void> dispose() => _disposeFuture ??= _dispose();
+  Future<TerminalPaneSessionShutdownResult> shutdown() =>
+      _shutdownFuture ??= _shutdown();
 
-  Future<void> _dispose() async {
-    if (_state == TerminalPaneState.closed) {
-      return;
-    }
+  Future<void> dispose() => _disposeFuture ??= _disposeAndDiscardResult();
+
+  Future<void> _disposeAndDiscardResult() async {
+    await shutdown();
+  }
+
+  Future<TerminalPaneSessionShutdownResult> _shutdown() async {
     if (_state != TerminalPaneState.closing) {
       _setState(TerminalPaneState.closing);
     }
+    late final TerminalPaneSessionShutdownResult result;
     try {
-      await _session.dispose();
+      result = await _session.shutdown();
+    } on Object {
+      result = TerminalPaneSessionShutdownResult(
+        sessionId: sessionId,
+        processId: null,
+        disposition: TerminalSessionShutdownDisposition.failed,
+        terminationObserved: false,
+        cleanupCompleted: false,
+      );
     } finally {
       _setState(TerminalPaneState.closed);
     }
+    _shutdownResult = result;
+    return result;
   }
 
   void _recordInteraction() {

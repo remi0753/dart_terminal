@@ -782,6 +782,24 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     ]),
     'PTY lifecycle diagnostics are incomplete or out of order: $ptyStages',
   );
+  _expect(
+    RegExp(
+          '^TERMINAL_SESSION_SHUTDOWN pane=$pane session=$session '
+          r'process_id=[1-9][0-9]* disposition=clean '
+          r'termination_observed=true cleanup_completed=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'normal PTY shutdown did not publish exactly one clean session result',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=1 disposition=clean$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'normal PTY shutdown did not publish one clean owner result',
+  );
   _expectWorkerProcessContract(
     observation,
     scenario: 'normal',
@@ -1358,6 +1376,133 @@ Future<void> _runShutdownFaults(
   );
 }
 
+Future<void> _runPtyExitDeadlineFault(
+  _Options options,
+  _Invocation invocation,
+) async {
+  final _ProcessObservation result = await _launch(
+    options,
+    invocation,
+    const <String>['--runtime-pty-exit-fault', '--auto-close-after=1'],
+    environment: const <String, String>{
+      'DT_RUNTIME_PTY_SHUTDOWN_FAULT_TEST': '1',
+    },
+  );
+  _expect(
+    result.status == 75,
+    'PTY exit deadline application status ${result.status} != 75; '
+    'stdout=${result.stdoutText.trim()} stderr=${result.stderrText.trim()}',
+  );
+  _expect(
+    result.stderrText.trim().isEmpty,
+    'PTY exit deadline application wrote stderr: ${result.stderrText.trim()}',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_PTY_FAULT exit_notification=suppressed gate=true$',
+          multiLine: true,
+        ).allMatches(result.stdoutText).length ==
+        1,
+    'PTY exit notification fault was not selected exactly once',
+  );
+  final RegExp sessionSummary = RegExp(
+    r'^TERMINAL_SESSION_SHUTDOWN pane=([0-9]+) '
+    r'session=([0-9]+:[0-9]+) process_id=([1-9][0-9]*) '
+    r'disposition=deadlineExceeded termination_observed=false '
+    r'cleanup_completed=false$',
+    multiLine: true,
+  );
+  final RegExpMatch? summary = sessionSummary.firstMatch(result.stdoutText);
+  _expect(summary != null, 'deadline-exceeded PTY summary is missing');
+  final String pane = summary!.group(1)!;
+  final String session = summary.group(2)!;
+  _expect(
+    session.startsWith('$pane:'),
+    'PTY shutdown summary mixed pane/session identity: $pane/$session',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=1 '
+          r'disposition=deadlineExceeded$',
+          multiLine: true,
+        ).allMatches(result.stdoutText).length ==
+        1,
+    'pane owner did not aggregate the PTY deadline exactly once',
+  );
+  final RegExp lifecycleLine = RegExp(
+    '^TERMINAL_PTY_LIFECYCLE pane=$pane session=$session '
+    r'process_id=[0-9]+ stage=([A-Za-z]+)$',
+  );
+  final List<String> stages = result.stdoutText
+      .split('\n')
+      .map(lifecycleLine.firstMatch)
+      .whereType<RegExpMatch>()
+      .map((RegExpMatch match) => match.group(1)!)
+      .toList();
+  _expect(
+    _containsOrderedValues(stages, const <String>[
+      'disposeStarted',
+      'gracefulCloseRequested',
+      'terminationWaitTimedOut',
+      'forceCloseRequested',
+      'finalDeadlineExceeded',
+      'outputCancellationStarted',
+      'outputCancellationCompleted',
+      'processDisposeSkipped',
+      'terminationCompleted',
+      'shutdownResultPublished',
+      'disposeCompleted',
+    ]),
+    'PTY deadline lifecycle is incomplete or out of order: $stages',
+  );
+  _expect(
+    RegExp(
+          '^TERMINAL_PANE_LIFECYCLE pane=$pane session=$session state=closed\$',
+          multiLine: true,
+        ).allMatches(result.stdoutText).length ==
+        1,
+    'PTY deadline pane did not reach closed exactly once',
+  );
+  final RegExp rootLifecycle = RegExp(
+    r'^RUNTIME_LIFECYCLE event=([a-z-]+) scenario=normal '
+    r'generation=([0-9]+)$',
+  );
+  final List<String> lifecycle = result.stdoutText
+      .split('\n')
+      .map(rootLifecycle.firstMatch)
+      .whereType<RegExpMatch>()
+      .map((RegExpMatch match) => '${match.group(1)}:${match.group(2)}')
+      .toList();
+  _expect(
+    _sameStrings(
+      lifecycle,
+      _expected(const <String>[
+        'root-start',
+        'worker-start',
+        'worker-ready',
+        'root-ready',
+        'worker-request',
+        'worker-response',
+        'worker-stop-request',
+        'worker-stop-ack',
+        'worker-exit',
+        'root-exit',
+      ]),
+    ),
+    'PTY deadline root lifecycle is incomplete: $lifecycle',
+  );
+  _expectWorkerProcessContract(result, scenario: 'normal', expectedCount: 1);
+  _expect(
+    result.elapsed < const Duration(seconds: 8),
+    'PTY deadline recovery exceeded 8 seconds: ${result.elapsed}',
+  );
+  stdout.writeln(
+    'RUNTIME_PTY_DEADLINE_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'status=${result.status} elapsed_ms=${result.elapsed.inMilliseconds}',
+  );
+}
+
 bool _sameStrings(List<String> left, List<String> right) {
   if (left.length != right.length) {
     return false;
@@ -1396,6 +1541,7 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.fault || options.suite == _Suite.all) {
       await _runShutdownFaults(options, invocation);
+      await _runPtyExitDeadlineFault(options, invocation);
     }
   } on Object catch (error) {
     stderr.writeln('RUNTIME_INTEGRATION_FAIL mode=${options.mode.name} $error');

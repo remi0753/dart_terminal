@@ -13,9 +13,11 @@ export 'src/terminal_pane.dart'
         TerminalPaneLifecycleObservation,
         TerminalPaneLifecycleObserver,
         TerminalPaneOwner,
+        TerminalPaneOwnerShutdownResult,
         TerminalPaneSession,
         TerminalPaneSessionFactory,
+        TerminalPaneSessionShutdownResult,
         TerminalPaneState,
+        TerminalSessionShutdownDisposition,
         TerminalSessionId;
-export 'src/terminal_session.dart'
-    show TerminalSessionShutdownDisposition, TerminalSessionShutdownResult;
+export 'src/terminal_session.dart' show TerminalSessionShutdownResult;

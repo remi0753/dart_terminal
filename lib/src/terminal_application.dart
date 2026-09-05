@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_appkit/testing.dart' as appkit_testing;
@@ -20,7 +21,12 @@ Application options:
 ''';
 
 const String _runtimeWorkerName = 'dart_terminal_runtime_worker';
+const int _runtimeSoftwareFailureExitCode = 70;
 const int _runtimeTemporaryFailureExitCode = 75;
+const Duration _runtimePtyFaultGracefulTimeout = Duration(milliseconds: 200);
+const Duration _runtimePtyFaultFinalTimeout = Duration(milliseconds: 200);
+const Duration _runtimePtyFaultCleanupTimeout = Duration(milliseconds: 200);
+const Duration _hostTerminationTimeout = Duration(seconds: 1);
 
 final class TerminalOptions {
   const TerminalOptions({
@@ -28,6 +34,7 @@ final class TerminalOptions {
     this.autoCloseAfter,
     this.runtimeResourceStress = false,
     this.runtimeShutdownFaultInjection = false,
+    this.runtimePtyExitFaultInjection = false,
     this.runtimeLifecycleScenario = RuntimeLifecycleScenario.normal,
     this.runtimeWorkerCommand =
         const RuntimeLifecycleWorkerCommand.unconfigured(),
@@ -42,6 +49,7 @@ final class TerminalOptions {
     Duration? autoCloseAfter;
     var runtimeResourceStress = false;
     var runtimeShutdownFaultInjection = false;
+    var runtimePtyExitFaultInjection = false;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
     for (final String argument in arguments) {
       const String workingDirectoryPrefix = '--working-directory=';
@@ -63,6 +71,15 @@ final class TerminalOptions {
           );
         }
         runtimeShutdownFaultInjection = true;
+        continue;
+      }
+      if (argument == '--runtime-pty-exit-fault') {
+        if (runtimePtyExitFaultInjection) {
+          throw const FormatException(
+            '--runtime-pty-exit-fault may only be supplied once',
+          );
+        }
+        runtimePtyExitFaultInjection = true;
         continue;
       }
       if (argument.startsWith(workingDirectoryPrefix)) {
@@ -146,11 +163,28 @@ final class TerminalOptions {
         'runtime shutdown faults require the worker-unexpected-exit scenario',
       );
     }
+    if (runtimePtyExitFaultInjection &&
+        (environment ??
+                Platform.environment)['DT_RUNTIME_PTY_SHUTDOWN_FAULT_TEST'] !=
+            '1') {
+      throw const FormatException(
+        'PTY exit fault requires the integration-test gate',
+      );
+    }
+    if (runtimePtyExitFaultInjection &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection)) {
+      throw const FormatException(
+        'PTY exit fault cannot be combined with another runtime fault',
+      );
+    }
     return TerminalOptions(
       initialWorkingDirectory: initialWorkingDirectory,
       autoCloseAfter: autoCloseAfter,
       runtimeResourceStress: runtimeResourceStress,
       runtimeShutdownFaultInjection: runtimeShutdownFaultInjection,
+      runtimePtyExitFaultInjection: runtimePtyExitFaultInjection,
       runtimeLifecycleScenario: selectedScenario,
       runtimeWorkerCommand:
           runtimeWorkerCommand ??
@@ -164,6 +198,7 @@ final class TerminalOptions {
   final Duration? autoCloseAfter;
   final bool runtimeResourceStress;
   final bool runtimeShutdownFaultInjection;
+  final bool runtimePtyExitFaultInjection;
   final RuntimeLifecycleScenario runtimeLifecycleScenario;
   final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
 }
@@ -177,9 +212,12 @@ final class TerminalApplication {
     final RuntimeLifecycleScenario scenario = options.runtimeLifecycleScenario;
     _writeLifecycleEvent(scenario, 'root-start', 0);
     TerminalRendererMacos.initialize();
-    final MacosPtyBackend ptyBackend = MacosPtyBackend.open(
+    final MacosPtyBackend nativePtyBackend = MacosPtyBackend.open(
       MacosRuntime.bundleFrameworkPath(dartPtyMacosLibraryName),
     );
+    final PtyBackend ptyBackend = options.runtimePtyExitFaultInjection
+        ? _ExitNotificationSuppressingPtyBackend(nativePtyBackend)
+        : nativePtyBackend;
     final AppKitApplication application = await AppKitApplication.attach();
     View? contentView;
     Window? window;
@@ -195,6 +233,13 @@ final class TerminalApplication {
     RuntimeLifecycleCoordinator? lifecycle;
     var lifecycleWasShutDown = false;
     var forcePaneClose = false;
+    var shutdownWasClean = true;
+    var requestedExitCode = 0;
+    void recordExitCode(int value) {
+      MacosRuntime.setExitCode(value);
+      requestedExitCode = value;
+    }
+
     final Completer<void> closed = Completer<void>();
     final bool emitNativeEventWireObservation =
         Platform.environment['DT_RUNTIME_EVENT_WIRE_TEST'] == '1';
@@ -237,6 +282,15 @@ final class TerminalApplication {
               id: id,
               ptyBackend: ptyBackend,
               initialWorkingDirectory: options.initialWorkingDirectory,
+              gracefulShutdownTimeout: options.runtimePtyExitFaultInjection
+                  ? _runtimePtyFaultGracefulTimeout
+                  : const Duration(seconds: 3),
+              finalShutdownTimeout: options.runtimePtyExitFaultInjection
+                  ? _runtimePtyFaultFinalTimeout
+                  : const Duration(seconds: 1),
+              cleanupStepTimeout: options.runtimePtyExitFaultInjection
+                  ? _runtimePtyFaultCleanupTimeout
+                  : const Duration(seconds: 1),
               onChanged: onChanged,
               onTerminated: onTerminated,
               lifecycleObserver:
@@ -256,6 +310,11 @@ final class TerminalApplication {
       );
       if (createdTextView != null) {
         createdTextView.text = createdPane.render();
+      }
+      if (options.runtimePtyExitFaultInjection) {
+        stdout.writeln(
+          'TERMINAL_PTY_FAULT exit_notification=suppressed gate=true',
+        );
       }
 
       Menu ownMenu(Menu menu) {
@@ -647,7 +706,7 @@ final class TerminalApplication {
               .shutdown();
           lifecycleWasShutDown = true;
           _expectLifecycle(result.forced, 'shutdown deadline did not force');
-          MacosRuntime.setExitCode(_runtimeTemporaryFailureExitCode);
+          recordExitCode(_runtimeTemporaryFailureExitCode);
         case RuntimeLifecycleScenario.lateCompletion:
           final Future<RuntimeLifecycleRequestResult> request = createdLifecycle
               .request(41);
@@ -760,65 +819,99 @@ final class TerminalApplication {
       }
       await closed.future;
     } finally {
-      MacosRuntime.recordDiagnosticPhase(
-        RuntimeDiagnosticPhase.shutdownStarted,
-      );
-      autoCloseTimer?.cancel();
-      autoCloseConfirmationTimer?.cancel();
-      if (!lifecycleWasShutDown) {
-        await lifecycle?.shutdown();
-      }
-      await eventSubscription?.cancel();
-      await applicationEventSubscription?.cancel();
-      for (final StreamSubscription<MenuItemInvokedEvent> subscription
-          in menuSubscriptions) {
-        await subscription.cancel();
-      }
-      application.mainMenu = null;
-      for (final MenuItem item in menuItems.reversed) {
-        if (!item.isDisposed) {
-          item.dispose();
-        }
-      }
-      for (final Menu menu in menus.reversed) {
-        if (!menu.isDisposed) {
-          menu.dispose();
-        }
-      }
-      await paneOwner?.dispose();
-      if (window != null && !window.isDisposed) {
-        window.dispose();
-      }
-      if (contentView != null && !contentView.isDisposed) {
-        contentView.dispose();
-      }
-      _writeLifecycleEvent(scenario, 'root-exit', lifecycle?.generation ?? 0);
-      MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
-      final bool auditFinalNativeHandles =
-          options.runtimeResourceStress ||
-          options.runtimeShutdownFaultInjection;
-      final int? finalLiveHandleCount = auditFinalNativeHandles
-          ? application.debugLiveObjectCount
-          : null;
-      if (finalLiveHandleCount != null) {
-        stdout.writeln(
-          options.runtimeShutdownFaultInjection
-              ? 'NATIVE_SHUTDOWN_FAULT_FINAL handles=$finalLiveHandleCount'
-              : 'NATIVE_RESOURCE_FINAL handles=$finalLiveHandleCount',
-        );
-      }
       try {
+        MacosRuntime.recordDiagnosticPhase(
+          RuntimeDiagnosticPhase.shutdownStarted,
+        );
+        autoCloseTimer?.cancel();
+        autoCloseConfirmationTimer?.cancel();
+        if (!lifecycleWasShutDown) {
+          await lifecycle?.shutdown();
+        }
+        await eventSubscription?.cancel();
+        await applicationEventSubscription?.cancel();
+        for (final StreamSubscription<MenuItemInvokedEvent> subscription
+            in menuSubscriptions) {
+          await subscription.cancel();
+        }
+        application.mainMenu = null;
+        for (final MenuItem item in menuItems.reversed) {
+          if (!item.isDisposed) {
+            item.dispose();
+          }
+        }
+        for (final Menu menu in menus.reversed) {
+          if (!menu.isDisposed) {
+            menu.dispose();
+          }
+        }
+        final TerminalPaneOwner? owner = paneOwner;
+        if (owner != null) {
+          final TerminalPaneOwnerShutdownResult result = await owner.shutdown();
+          for (final TerminalPaneSessionShutdownResult session
+              in result.sessions) {
+            stdout.writeln(session.machineLine());
+          }
+          stdout.writeln(result.machineLine());
+          if (!result.isClean) {
+            shutdownWasClean = false;
+            recordExitCode(_runtimeTemporaryFailureExitCode);
+          }
+        }
+        if (window != null && !window.isDisposed) {
+          window.dispose();
+        }
+        if (contentView != null && !contentView.isDisposed) {
+          contentView.dispose();
+        }
+        _writeLifecycleEvent(scenario, 'root-exit', lifecycle?.generation ?? 0);
+        MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
+        final bool auditFinalNativeHandles =
+            options.runtimeResourceStress ||
+            options.runtimeShutdownFaultInjection;
+        final int? finalLiveHandleCount = auditFinalNativeHandles
+            ? application.debugLiveObjectCount
+            : null;
+        if (finalLiveHandleCount != null) {
+          stdout.writeln(
+            options.runtimeShutdownFaultInjection
+                ? 'NATIVE_SHUTDOWN_FAULT_FINAL handles=$finalLiveHandleCount'
+                : 'NATIVE_RESOURCE_FINAL handles=$finalLiveHandleCount',
+          );
+        }
         if (finalLiveHandleCount != null) {
           _expectLifecycle(
             finalLiveHandleCount == 0,
             'product cleanup left $finalLiveHandleCount native handles',
           );
         }
+      } on Object {
+        shutdownWasClean = false;
+        if (requestedExitCode == 0) {
+          recordExitCode(_runtimeSoftwareFailureExitCode);
+        }
+        rethrow;
       } finally {
-        await application.terminate();
+        try {
+          await application.terminate().timeout(_hostTerminationTimeout);
+        } on Object {
+          shutdownWasClean = false;
+          if (requestedExitCode == 0) {
+            recordExitCode(_runtimeSoftwareFailureExitCode);
+          }
+          stdout.writeln(
+            'TERMINAL_HOST_TERMINATION fallback=true '
+            'exit_code=$requestedExitCode',
+          );
+          MacosRuntime.requestTermination(exitCode: requestedExitCode);
+        }
       }
     }
-    stdout.writeln('Dart Terminal shut down cleanly.');
+    stdout.writeln(
+      shutdownWasClean && requestedExitCode == 0
+          ? 'Dart Terminal shut down cleanly.'
+          : 'Dart Terminal shut down with classified recovery.',
+    );
   }
 
   static Future<void> _expectResponse(
@@ -1153,4 +1246,67 @@ final class TerminalApplication {
     );
     pane.insertText(String.fromCharCodes(printableRunes));
   }
+}
+
+final class _ExitNotificationSuppressingPtyBackend implements PtyBackend {
+  const _ExitNotificationSuppressingPtyBackend(this._delegate);
+
+  final PtyBackend _delegate;
+
+  @override
+  Future<PtyProcess> start(
+    PtyCommand command, {
+    PtySize initialSize = const PtySize(rows: 24, columns: 80),
+    int readHighWaterBytes = 1024 * 1024,
+    int readLowWaterBytes = 512 * 1024,
+    int writeCapacityBytes = 1024 * 1024,
+  }) async => _ExitNotificationSuppressingPtyProcess(
+    await _delegate.start(
+      command,
+      initialSize: initialSize,
+      readHighWaterBytes: readHighWaterBytes,
+      readLowWaterBytes: readLowWaterBytes,
+      writeCapacityBytes: writeCapacityBytes,
+    ),
+  );
+}
+
+final class _ExitNotificationSuppressingPtyProcess implements PtyProcess {
+  _ExitNotificationSuppressingPtyProcess(this._delegate) {
+    _delegate.exit.ignore();
+  }
+
+  final PtyProcess _delegate;
+  final Completer<PtyExit> _suppressedExit = Completer<PtyExit>();
+
+  @override
+  int get pid => _delegate.pid;
+
+  @override
+  Stream<Uint8List> get output => _delegate.output;
+
+  @override
+  Future<PtyExit> get exit => _suppressedExit.future;
+
+  @override
+  PtyStats? get finalStats => _delegate.finalStats;
+
+  @override
+  PtyWriteResult write(Uint8List bytes) => _delegate.write(bytes);
+
+  @override
+  void resize(PtySize size) => _delegate.resize(size);
+
+  @override
+  void sendSignal(PtySignal signal) => _delegate.sendSignal(signal);
+
+  @override
+  void close({Duration gracePeriod = const Duration(seconds: 2)}) =>
+      _delegate.close(gracePeriod: gracePeriod);
+
+  @override
+  void forceClose() => _delegate.forceClose();
+
+  @override
+  Future<void> dispose() => _delegate.dispose();
 }

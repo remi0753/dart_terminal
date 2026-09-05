@@ -1,6 +1,6 @@
 # Ctrl-D and bounded PTY shutdown recovery
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-05
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 2 `Ctrl-D / PTY shutdown hang の bounded recovery`
@@ -331,3 +331,83 @@ open until all five are complete.
   real persistent PTY behavior, and all 24 Control-D generations. Fresh arm64
   Developer JIT and Release AOT GUI integrations stayed on the clean path and
   passed in 2,225 ms and 1,764 ms respectively.
+
+### 2026-09-05 — application termination recovery design
+
+- Pane policy needs the shutdown classification without depending on the PTY
+  implementation. A platform-neutral pane-session result base will therefore
+  carry only typed identity, disposition, termination-observed, and
+  cleanup-completed fields. `TerminalSessionShutdownResult` adds the PTY exit
+  detail, while panes and their owner aggregate the neutral base results.
+- `TerminalPane` will contain unexpected session-shutdown exceptions as a
+  typed `failed` result and still transition to `closed`. `TerminalPaneOwner`
+  will return one aggregate result after attempting every owned pane, enabling
+  application cleanup and future multi-pane behavior without concrete-session
+  downcasts or captured implementation variables.
+- On any non-clean pane result, the application records a privacy-safe summary
+  and requests runtime exit status 75 before reaching `root-exit` and AppKit
+  termination. AppKit termination remains in an outer cleanup `finally`, so an
+  unrelated teardown exception cannot skip the host termination request.
+- The deterministic integration fault wraps a real `MacosPtyBackend`: all
+  output, close, force-close, and native reap behavior remains real, but the
+  wrapper withholds only the Dart-facing exit future. It is admitted solely by
+  an internal option plus environment gate and uses short test-only session
+  deadlines. This exercises the exact missing-notification boundary without
+  leaving a real child process alive or adding native code to the application.
+- Both runtime modes must exit with status 75 inside the harness deadline,
+  report `deadlineExceeded`, complete pane closure and `root-exit`, persist
+  `root-stopped`/failure metadata, and show matching worker spawn/reap records.
+
+### 2026-09-05 — application termination recovery implementation
+
+- Added a platform-neutral `TerminalPaneSessionShutdownResult` boundary and a
+  worst-disposition `TerminalPaneOwnerShutdownResult`. Each pane caches one
+  shutdown future/result, converts an unexpected session exception to `failed`,
+  and still reaches `closed`; the owner attempts all panes and returns immutable
+  per-session results. The PTY-specific result subclasses the neutral contract
+  only to add `PtyExit`.
+- Product cleanup prints one allowlisted `TERMINAL_SESSION_SHUTDOWN` line per
+  pane and one `TERMINAL_PANE_OWNER_SHUTDOWN` aggregate. Any `forced`, `failed`,
+  or `deadlineExceeded` aggregate sets runtime status 75 before `root-exit` and
+  `root-stopped`; only a fully clean aggregate prints the clean completion
+  message.
+- Moved AppKit termination into the outermost cleanup `finally`. Its Dart-side
+  cleanup has a one-second bound; if it throws or exceeds that bound, the
+  application records status 70 unless a prior classified status exists and
+  invokes the runtime's direct termination request with that status. Thus pane
+  or ancillary cleanup failure cannot bypass the host request.
+- Added the doubly gated `--runtime-pty-exit-fault` integration option. Its
+  wrapper delegates to a real package-owned PTY and consumes the delegate exit
+  solely to keep errors contained, while exposing a never-completing exit
+  future to `TerminalSession`. Native close/reap/destroy therefore stays real,
+  but the product deterministically observes a missing notification. Test-only
+  200 ms graceful/final/cleanup limits keep the fault suite fast; production
+  limits remain 3 s / 1 s / 1 s.
+- Unit tests validate the gate, duplicate/conflicting option rejection,
+  idempotent pane/owner shutdown, exception containment, worst-disposition
+  aggregation, immutable typed results, and exact privacy-safe machine lines.
+  `make test` passed in 6.1 seconds.
+- Focused real-bundle fault integration passed first in Developer JIT and
+  Release AOT: the two processes exited with status 75 in 1,846 ms and 1,728 ms,
+  respectively. Each asserted the full PTY deadline stage order, pane `closed`,
+  one deadline aggregate, worker spawn/reap pairing, `root-exit`, final
+  `root-stopped` metadata, and no stderr failure.
+
+### 2026-09-05 — final regression
+
+- `make RUNTIME_ARCH=arm64 runtime-verify` passed in about 58 seconds. It
+  included format/static analysis, fake and real PTY tests, 24 repeated
+  Control-D generations, the 78-file Dart-only source audit with zero native
+  application sources, and Developer JIT/Release AOT bundle audits.
+- Both normal GUI smokes passed with exactly one clean session/owner shutdown
+  result. All lifecycle scenarios retained their expected 0/64/70/75 statuses;
+  bounded traffic retained 384 deterministic backpressure observations per
+  mode; and 1,000-iteration resource suites retained their 12-handle baseline
+  with a peak of 14.
+- The complete fault suite retained the existing shutdown-fault contracts and
+  reran the missing PTY exit case. Developer JIT and Release AOT again exited
+  with classified status 75 in 1,847 ms and 1,727 ms, with runtime diagnostics
+  and worker reaping verified by the external harness.
+- Both repository worktrees were reviewed after validation. No native source
+  was added to Dart Terminal, the adjacent reusable library had no uncommitted
+  changes, and no requested recovery work remains untracked.

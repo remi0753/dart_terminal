@@ -147,13 +147,43 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
         failed.requestClose() == TerminalPaneCloseDecision.allow,
     'failed pane closes without confirmation',
   );
-  await owner.dispose();
+  sessions[2].failShutdown = true;
+  final Future<TerminalPaneOwnerShutdownResult> ownerShutdown = owner
+      .shutdown();
+  _expect(
+    identical(ownerShutdown, owner.shutdown()),
+    'pane owner shutdown returns one cached future',
+  );
+  final TerminalPaneOwnerShutdownResult ownerResult = await ownerShutdown;
   await owner.dispose();
   _expect(
     owner.livePaneCount == 0 &&
         sessions[1].disposeCount == 1 &&
         sessions[2].disposeCount == 1,
     'owner teardown reaches zero panes exactly once',
+  );
+  _expect(
+    ownerResult.disposition == TerminalSessionShutdownDisposition.failed &&
+        ownerResult.sessions.length == 2 &&
+        failed.state == TerminalPaneState.closed &&
+        identical(owner.shutdownResult, ownerResult),
+    'owner contains a session shutdown failure and publishes its aggregate',
+  );
+  final TerminalPaneSessionShutdownResult failedResult = ownerResult.sessions
+      .singleWhere(
+        (TerminalPaneSessionShutdownResult result) =>
+            result.sessionId == failed.sessionId,
+      );
+  _expect(
+    !failedResult.terminationObserved &&
+        !failedResult.cleanupCompleted &&
+        failedResult.machineLine() ==
+            'TERMINAL_SESSION_SHUTDOWN pane=43 session=43:1 process_id=0 '
+                'disposition=failed termination_observed=false '
+                'cleanup_completed=false' &&
+        ownerResult.machineLine() ==
+            'TERMINAL_PANE_OWNER_SHUTDOWN pane_count=2 disposition=failed',
+    'shutdown summaries use exact privacy-safe typed fields',
   );
   _expect(changed > 0, 'pane lifecycle emits view changes');
   _expect(
@@ -276,6 +306,10 @@ void _testOptions() {
     'shutdown fault injection defaults off',
   );
   _expect(
+    !options.runtimePtyExitFaultInjection,
+    'PTY exit fault injection defaults off',
+  );
+  _expect(
     options.runtimeWorkerCommand.executable == '/usr/bin/true' &&
         options.runtimeWorkerCommand.arguments.isEmpty,
     'declarative bundled worker command',
@@ -333,6 +367,44 @@ void _testOptions() {
   _expect(
     shutdownFaultOptions.runtimeShutdownFaultInjection,
     'gated shutdown fault injection',
+  );
+  final TerminalOptions ptyExitFaultOptions = _parseOptions(
+    const <String>['--runtime-pty-exit-fault', '--auto-close-after=1'],
+    environment: const <String, String>{
+      'DT_RUNTIME_PTY_SHUTDOWN_FAULT_TEST': '1',
+    },
+  );
+  _expect(
+    ptyExitFaultOptions.runtimePtyExitFaultInjection,
+    'gated PTY exit fault injection',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>[
+      '--runtime-pty-exit-fault',
+    ], environment: const <String, String>{}),
+    'PTY exit fault gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-pty-exit-fault', '--runtime-pty-exit-fault'],
+      environment: const <String, String>{
+        'DT_RUNTIME_PTY_SHUTDOWN_FAULT_TEST': '1',
+      },
+    ),
+    'duplicate PTY exit fault option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-pty-exit-fault',
+        '--runtime-lifecycle-scenario=worker-unexpected-exit',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_PTY_SHUTDOWN_FAULT_TEST': '1',
+        'DT_RUNTIME_LIFECYCLE_TEST': '1',
+      },
+    ),
+    'PTY exit fault and lifecycle fault are mutually exclusive',
   );
   _expectThrows(
     () => _parseOptions(
@@ -879,6 +951,7 @@ final class _FakePaneSession implements TerminalPaneSession {
   var disposeCount = 0;
   var confirmationCount = 0;
   var failStart = false;
+  var failShutdown = false;
   var _live = false;
 
   @override
@@ -956,8 +1029,18 @@ final class _FakePaneSession implements TerminalPaneSession {
   }
 
   @override
-  Future<void> dispose() async {
+  Future<TerminalPaneSessionShutdownResult> shutdown() async {
     ++disposeCount;
     _live = false;
+    if (failShutdown) {
+      throw StateError('requested fake shutdown failure');
+    }
+    return TerminalPaneSessionShutdownResult(
+      sessionId: id,
+      processId: null,
+      disposition: TerminalSessionShutdownDisposition.clean,
+      terminationObserved: true,
+      cleanupCompleted: true,
+    );
   }
 }
