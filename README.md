@@ -29,6 +29,7 @@ CoreText/Metal renderer、IME の製品実装は後続 Phase です。
 - ウィンドウサイズに追従する`TIOCSWINSZ`/`SIGWINCH`
 - typed pane/session ID、単一owner、live shellの再操作close確認
 - terminal内容を含めないpane state / PTY shutdown stage診断
+- graceful/force/final deadlineを持つbounded PTY session teardownと型付き結果
 - AppKit main-thread root と公式 Dart 子プロセス worker の bounded lifecycle
   （M1/arm64 Developer JIT / Release AOT）
 - native event protocol v4（source generation、nanosecond timestamp、operation

@@ -25,14 +25,54 @@ enum TerminalSessionLifecycleStage {
   disposeStarted,
   gracefulCloseRequested,
   gracefulCloseSkipped,
+  gracefulCloseFailed,
   terminationWaitCompleted,
   terminationWaitTimedOut,
   terminationWaitFailed,
+  forceCloseRequested,
+  forceCloseFailed,
+  finalTerminationWaitCompleted,
+  finalTerminationWaitFailed,
+  finalDeadlineExceeded,
   outputCancellationStarted,
   outputCancellationCompleted,
+  outputCancellationTimedOut,
+  outputCancellationFailed,
+  outputDrainAbandoned,
   processDisposeStarted,
   processDisposeCompleted,
+  processDisposeSkipped,
+  processDisposeTimedOut,
+  processDisposeFailed,
+  shutdownResultPublished,
   disposeCompleted,
+}
+
+enum TerminalSessionShutdownDisposition {
+  clean,
+  forced,
+  failed,
+  deadlineExceeded,
+}
+
+final class TerminalSessionShutdownResult {
+  const TerminalSessionShutdownResult({
+    required this.sessionId,
+    required this.processId,
+    required this.disposition,
+    required this.terminationObserved,
+    required this.cleanupCompleted,
+    required this.exit,
+  });
+
+  final TerminalSessionId sessionId;
+  final int? processId;
+  final TerminalSessionShutdownDisposition disposition;
+  final bool terminationObserved;
+  final bool cleanupCompleted;
+  final PtyExit? exit;
+
+  bool get isClean => disposition == TerminalSessionShutdownDisposition.clean;
 }
 
 final class TerminalSessionLifecycleObservation {
@@ -68,6 +108,9 @@ final class TerminalSession implements TerminalPaneSession {
     this.shellExecutable = '/bin/zsh',
     List<String> shellArguments = const <String>[],
     this.writeCapacityBytes = 1024 * 1024,
+    this.gracefulShutdownTimeout = const Duration(seconds: 3),
+    this.finalShutdownTimeout = const Duration(seconds: 1),
+    this.cleanupStepTimeout = const Duration(seconds: 1),
     TerminalSessionLifecycleObserver? lifecycleObserver,
   }) : _onChanged = onChanged,
        _onTerminated = onTerminated,
@@ -87,6 +130,19 @@ final class TerminalSession implements TerminalPaneSession {
         'must be positive',
       );
     }
+    for (final MapEntry<String, Duration> timeout in <String, Duration>{
+      'gracefulShutdownTimeout': gracefulShutdownTimeout,
+      'finalShutdownTimeout': finalShutdownTimeout,
+      'cleanupStepTimeout': cleanupStepTimeout,
+    }.entries) {
+      if (timeout.value <= Duration.zero) {
+        throw ArgumentError.value(
+          timeout.value,
+          timeout.key,
+          'must be positive',
+        );
+      }
+    }
   }
 
   @override
@@ -99,20 +155,28 @@ final class TerminalSession implements TerminalPaneSession {
   final String shellExecutable;
   final List<String> shellArguments;
   final int writeCapacityBytes;
+  final Duration gracefulShutdownTimeout;
+  final Duration finalShutdownTimeout;
+  final Duration cleanupStepTimeout;
 
   final TerminalBuffer buffer = TerminalBuffer();
   final Completer<void> _terminated = Completer<void>();
   final String _workingDirectory;
 
   PtyProcess? _process;
+  // ignore: cancel_subscriptions - bounded cancellation is centralized below.
   StreamSubscription<String>? _outputSubscription;
+  Completer<void>? _outputDone;
   Future<void>? _startFuture;
   Future<void>? _terminationFuture;
   Future<void>? _disposeFuture;
+  Future<TerminalSessionShutdownResult>? _shutdownFuture;
   PtyExit? _exit;
   Object? _failure;
+  TerminalSessionShutdownResult? _shutdownResult;
   var _live = false;
   var _disposed = false;
+  var _outputDrainAbandoned = false;
   var _terminationNotified = false;
   var _writeBackpressured = false;
   var _rows = 23;
@@ -125,6 +189,7 @@ final class TerminalSession implements TerminalPaneSession {
   PtyExit? get exit => _exit;
   Object? get failure => _failure;
   int get writeBackpressureCount => _writeBackpressureCount;
+  TerminalSessionShutdownResult? get shutdownResult => _shutdownResult;
 
   Future<void> waitForTermination() => _terminated.future;
 
@@ -161,6 +226,7 @@ final class TerminalSession implements TerminalPaneSession {
       _live = true;
       _observeLifecycle(TerminalSessionLifecycleStage.processStarted);
       final Completer<void> outputDone = Completer<void>();
+      _outputDone = outputDone;
       const Utf8Decoder decoder = Utf8Decoder(allowMalformed: true);
       _outputSubscription = process.output
           .cast<List<int>>()
@@ -172,7 +238,11 @@ final class TerminalSession implements TerminalPaneSession {
                 outputDone.completeError(error, stackTrace);
               }
             },
-            onDone: outputDone.complete,
+            onDone: () {
+              if (!outputDone.isCompleted) {
+                outputDone.complete();
+              }
+            },
             cancelOnError: false,
           );
       _terminationFuture = _observeTermination(process, outputDone.future);
@@ -197,7 +267,11 @@ final class TerminalSession implements TerminalPaneSession {
       _observeLifecycle(TerminalSessionLifecycleStage.nativeExitObserved);
       _observeLifecycle(TerminalSessionLifecycleStage.outputDrainStarted);
       await outputDone;
-      _observeLifecycle(TerminalSessionLifecycleStage.outputDrained);
+      _observeLifecycle(
+        _outputDrainAbandoned
+            ? TerminalSessionLifecycleStage.outputDrainAbandoned
+            : TerminalSessionLifecycleStage.outputDrained,
+      );
       if (!identical(_process, process)) {
         return;
       }
@@ -318,65 +392,178 @@ final class TerminalSession implements TerminalPaneSession {
     _notifyChanged();
   }
 
-  @override
-  Future<void> dispose() => _disposeFuture ??= _dispose();
+  Future<TerminalSessionShutdownResult> shutdown() =>
+      _shutdownFuture ??= _shutdown();
 
-  Future<void> _dispose() async {
-    if (_disposed) {
-      return;
-    }
+  @override
+  Future<void> dispose() => _disposeFuture ??= _disposeAndDiscardResult();
+
+  Future<void> _disposeAndDiscardResult() async {
+    await shutdown();
+  }
+
+  Future<TerminalSessionShutdownResult> _shutdown() async {
     _disposed = true;
     _observeLifecycle(TerminalSessionLifecycleStage.disposeStarted);
     final PtyProcess? process = _process;
     if (process == null) {
       _completeTermination(notifyOwner: false);
+      final TerminalSessionShutdownResult result = _publishShutdownResult(
+        disposition: _failure == null
+            ? TerminalSessionShutdownDisposition.clean
+            : TerminalSessionShutdownDisposition.failed,
+        processId: null,
+        terminationObserved: true,
+        cleanupCompleted: true,
+      );
       _observeLifecycle(TerminalSessionLifecycleStage.disposeCompleted);
-      return;
+      return result;
     }
+    final int processId = process.pid;
+    var shutdownFailed = false;
     try {
       process.close();
       _observeLifecycle(TerminalSessionLifecycleStage.gracefulCloseRequested);
     } on StateError {
       _observeLifecycle(TerminalSessionLifecycleStage.gracefulCloseSkipped);
       // The process exited between the live-state check and close.
+    } on Object catch (error) {
+      _failure ??= error;
+      shutdownFailed = true;
+      _observeLifecycle(TerminalSessionLifecycleStage.gracefulCloseFailed);
     }
-    var terminationWaitTimedOut = false;
+    final Future<void> termination = _terminationFuture ?? process.exit;
+    var terminationObserved = false;
+    var forced = false;
+    var deadlineExceeded = false;
     try {
-      await (_terminationFuture ?? process.exit).timeout(
-        const Duration(seconds: 3),
-        onTimeout: () {
-          terminationWaitTimedOut = true;
-          _observeLifecycle(
-            TerminalSessionLifecycleStage.terminationWaitTimedOut,
-          );
-          _trySendSignal(process, PtySignal.kill);
-        },
-      );
-      if (!terminationWaitTimedOut) {
+      await termination.timeout(gracefulShutdownTimeout);
+      terminationObserved = true;
+      _observeLifecycle(TerminalSessionLifecycleStage.terminationWaitCompleted);
+    } on TimeoutException {
+      _observeLifecycle(TerminalSessionLifecycleStage.terminationWaitTimedOut);
+      try {
+        process.forceClose();
+        forced = true;
+        _observeLifecycle(TerminalSessionLifecycleStage.forceCloseRequested);
+      } on Object catch (error) {
+        _failure ??= error;
+        shutdownFailed = true;
+        _observeLifecycle(TerminalSessionLifecycleStage.forceCloseFailed);
+      }
+      try {
+        await termination.timeout(finalShutdownTimeout);
+        terminationObserved = true;
         _observeLifecycle(
-          TerminalSessionLifecycleStage.terminationWaitCompleted,
+          TerminalSessionLifecycleStage.finalTerminationWaitCompleted,
+        );
+      } on TimeoutException {
+        deadlineExceeded = true;
+        _observeLifecycle(TerminalSessionLifecycleStage.finalDeadlineExceeded);
+      } on Object catch (error) {
+        _failure ??= error;
+        shutdownFailed = true;
+        _observeLifecycle(
+          TerminalSessionLifecycleStage.finalTerminationWaitFailed,
         );
       }
-    } on Object {
+    } on Object catch (error) {
+      _failure ??= error;
+      shutdownFailed = true;
       _observeLifecycle(TerminalSessionLifecycleStage.terminationWaitFailed);
-      if (_live) {
-        _trySendSignal(process, PtySignal.kill);
+    }
+
+    final bool outputCancelled = await _cancelOutputSubscription();
+    var processDisposed = false;
+    if (terminationObserved) {
+      _observeLifecycle(TerminalSessionLifecycleStage.processDisposeStarted);
+      try {
+        await process.dispose().timeout(cleanupStepTimeout);
+        processDisposed = true;
+        _observeLifecycle(
+          TerminalSessionLifecycleStage.processDisposeCompleted,
+        );
+      } on TimeoutException {
+        shutdownFailed = true;
+        _observeLifecycle(TerminalSessionLifecycleStage.processDisposeTimedOut);
+      } on Object catch (error) {
+        _failure ??= error;
+        shutdownFailed = true;
+        _observeLifecycle(TerminalSessionLifecycleStage.processDisposeFailed);
       }
-    } finally {
-      _observeLifecycle(
-        TerminalSessionLifecycleStage.outputCancellationStarted,
-      );
-      await _outputSubscription?.cancel();
+    } else {
+      _observeLifecycle(TerminalSessionLifecycleStage.processDisposeSkipped);
+    }
+    _live = false;
+    _completeTermination(notifyOwner: false);
+    final TerminalSessionShutdownResult result = _publishShutdownResult(
+      disposition: deadlineExceeded
+          ? TerminalSessionShutdownDisposition.deadlineExceeded
+          : shutdownFailed || _failure != null || !outputCancelled
+          ? TerminalSessionShutdownDisposition.failed
+          : forced
+          ? TerminalSessionShutdownDisposition.forced
+          : TerminalSessionShutdownDisposition.clean,
+      processId: processId,
+      terminationObserved: terminationObserved,
+      cleanupCompleted:
+          outputCancelled && terminationObserved && processDisposed,
+    );
+    _observeLifecycle(TerminalSessionLifecycleStage.disposeCompleted);
+    return result;
+  }
+
+  Future<bool> _cancelOutputSubscription() async {
+    _observeLifecycle(TerminalSessionLifecycleStage.outputCancellationStarted);
+    final StreamSubscription<String>? subscription = _outputSubscription;
+    _outputSubscription = null;
+    if (subscription == null) {
       _observeLifecycle(
         TerminalSessionLifecycleStage.outputCancellationCompleted,
       );
-      _observeLifecycle(TerminalSessionLifecycleStage.processDisposeStarted);
-      await process.dispose();
-      _observeLifecycle(TerminalSessionLifecycleStage.processDisposeCompleted);
-      _live = false;
-      _completeTermination(notifyOwner: false);
-      _observeLifecycle(TerminalSessionLifecycleStage.disposeCompleted);
+      return true;
     }
+    try {
+      final Future<void> cancellation = subscription.cancel();
+      final Completer<void>? outputDone = _outputDone;
+      if (outputDone != null && !outputDone.isCompleted) {
+        _outputDrainAbandoned = true;
+        outputDone.complete();
+      }
+      await cancellation.timeout(cleanupStepTimeout);
+      _observeLifecycle(
+        TerminalSessionLifecycleStage.outputCancellationCompleted,
+      );
+      return true;
+    } on TimeoutException {
+      _observeLifecycle(
+        TerminalSessionLifecycleStage.outputCancellationTimedOut,
+      );
+      return false;
+    } on Object catch (error) {
+      _failure ??= error;
+      _observeLifecycle(TerminalSessionLifecycleStage.outputCancellationFailed);
+      return false;
+    }
+  }
+
+  TerminalSessionShutdownResult _publishShutdownResult({
+    required TerminalSessionShutdownDisposition disposition,
+    required int? processId,
+    required bool terminationObserved,
+    required bool cleanupCompleted,
+  }) {
+    final TerminalSessionShutdownResult result = TerminalSessionShutdownResult(
+      sessionId: id,
+      processId: processId,
+      disposition: disposition,
+      terminationObserved: terminationObserved,
+      cleanupCompleted: cleanupCompleted,
+      exit: _exit,
+    );
+    _shutdownResult = result;
+    _observeLifecycle(TerminalSessionLifecycleStage.shutdownResultPublished);
+    return result;
   }
 
   PtyWriteResult? _write(List<int> bytes) {

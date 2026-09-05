@@ -602,7 +602,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] Ctrl-D natural exit を繰り返す実PTY回帰試験
   - [x] pane / PTY shutdown stage のprivacy-safe診断
   - [x] closing中も有効なidempotent force-close capability
-  - [ ] missing exit / reap callbackに対するfinal deadline
+  - [x] missing exit / reap callbackに対するfinal deadline
   - [ ] deadline超過後も完了するclassified application termination
 
 終了条件:

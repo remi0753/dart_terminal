@@ -17,3 +17,5 @@ export 'src/terminal_pane.dart'
         TerminalPaneSessionFactory,
         TerminalPaneState,
         TerminalSessionId;
+export 'src/terminal_session.dart'
+    show TerminalSessionShutdownDisposition, TerminalSessionShutdownResult;

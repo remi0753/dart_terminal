@@ -25,6 +25,7 @@ Future<void> main() async {
   await _testPaneIdentityOwnershipAndClosePolicy();
   await runRuntimeLifecycleTests().timeout(const Duration(seconds: 30));
   await _testPersistentCommandSession();
+  await _testBoundedSessionShutdown();
   await _testRealPersistentPtySession();
   await _testRepeatedControlDNaturalExit().timeout(const Duration(seconds: 45));
   stdout.writeln('dart_terminal tests passed');
@@ -499,6 +500,7 @@ Future<void> _testPersistentCommandSession() async {
     TerminalSessionLifecycleStage.outputCancellationCompleted,
     TerminalSessionLifecycleStage.processDisposeStarted,
     TerminalSessionLifecycleStage.processDisposeCompleted,
+    TerminalSessionLifecycleStage.shutdownResultPublished,
     TerminalSessionLifecycleStage.disposeCompleted,
   ], 'session lifecycle diagnostics');
   _expect(
@@ -534,6 +536,126 @@ Future<void> _testPersistentCommandSession() async {
   _expect(
     boundedBackend.processes.single.closeGracePeriods.length == 1,
     'active persistent process is closed exactly once',
+  );
+}
+
+Future<void> _testBoundedSessionShutdown() async {
+  final List<TerminalSessionLifecycleObservation> forcedLifecycle =
+      <TerminalSessionLifecycleObservation>[];
+  final FakePtyBackend forcedBackend = FakePtyBackend(autoExitOnClose: false);
+  final TerminalSession forced = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(10), generation: 1),
+    ptyBackend: forcedBackend,
+    gracefulShutdownTimeout: const Duration(milliseconds: 10),
+    finalShutdownTimeout: const Duration(milliseconds: 200),
+    cleanupStepTimeout: const Duration(milliseconds: 200),
+    onChanged: () {},
+    onTerminated: () {},
+    lifecycleObserver: forcedLifecycle.add,
+  );
+  await forced.start();
+  final Future<TerminalSessionShutdownResult> forcedShutdown = forced
+      .shutdown();
+  _expect(
+    identical(forcedShutdown, forced.shutdown()),
+    'session shutdown returns one cached future',
+  );
+  final TerminalSessionShutdownResult forcedResult = await forcedShutdown
+      .timeout(const Duration(seconds: 1));
+  _expect(
+    identical(forced.shutdownResult, forcedResult) &&
+        forcedResult.disposition == TerminalSessionShutdownDisposition.forced &&
+        forcedResult.terminationObserved &&
+        forcedResult.cleanupCompleted &&
+        forcedResult.exit?.signal == 9,
+    'forced shutdown publishes an observed and completely cleaned result',
+  );
+  _expect(
+    forcedBackend.processes.single.closeGracePeriods.length == 1 &&
+        forcedBackend.processes.single.forceCloseRequests == 1,
+    'graceful timeout escalates exactly once through force close',
+  );
+  _expectOrderedSessionStages(forcedLifecycle, <TerminalSessionLifecycleStage>[
+    TerminalSessionLifecycleStage.disposeStarted,
+    TerminalSessionLifecycleStage.gracefulCloseRequested,
+    TerminalSessionLifecycleStage.terminationWaitTimedOut,
+    TerminalSessionLifecycleStage.forceCloseRequested,
+    TerminalSessionLifecycleStage.nativeExitObserved,
+    TerminalSessionLifecycleStage.outputDrained,
+    TerminalSessionLifecycleStage.finalTerminationWaitCompleted,
+    TerminalSessionLifecycleStage.processDisposeCompleted,
+    TerminalSessionLifecycleStage.shutdownResultPublished,
+    TerminalSessionLifecycleStage.disposeCompleted,
+  ], 'forced session shutdown');
+  await forced.dispose().timeout(const Duration(milliseconds: 100));
+
+  final List<TerminalSessionLifecycleObservation> missingLifecycle =
+      <TerminalSessionLifecycleObservation>[];
+  final FakePtyBackend missingBackend = FakePtyBackend(
+    autoExitOnClose: false,
+    autoExitOnForceClose: false,
+  );
+  final TerminalSession missing = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(11), generation: 1),
+    ptyBackend: missingBackend,
+    gracefulShutdownTimeout: const Duration(milliseconds: 10),
+    finalShutdownTimeout: const Duration(milliseconds: 10),
+    cleanupStepTimeout: const Duration(milliseconds: 100),
+    onChanged: () {},
+    onTerminated: () {},
+    lifecycleObserver: missingLifecycle.add,
+  );
+  await missing.start();
+  final Stopwatch missingElapsed = Stopwatch()..start();
+  final TerminalSessionShutdownResult missingResult = await missing
+      .shutdown()
+      .timeout(const Duration(seconds: 1));
+  missingElapsed.stop();
+  final FakePtyProcess missingProcess = missingBackend.processes.single;
+  _expect(
+    missingResult.disposition ==
+            TerminalSessionShutdownDisposition.deadlineExceeded &&
+        !missingResult.terminationObserved &&
+        !missingResult.cleanupCompleted &&
+        missingResult.exit == null &&
+        identical(missing.shutdownResult, missingResult),
+    'missing exit remains explicitly unreaped after the final deadline',
+  );
+  _expect(
+    missingElapsed.elapsed < const Duration(milliseconds: 500),
+    'missing exit cannot retain session teardown indefinitely',
+  );
+  _expect(
+    missingProcess.closeGracePeriods.length == 1 &&
+        missingProcess.forceCloseRequests == 1 &&
+        missingProcess.finalStats == null,
+    'deadline path requests force close and skips exit-waiting process dispose',
+  );
+  await missing.waitForTermination().timeout(const Duration(milliseconds: 100));
+  await missing.dispose().timeout(const Duration(milliseconds: 100));
+  _expectOrderedSessionStages(missingLifecycle, <TerminalSessionLifecycleStage>[
+    TerminalSessionLifecycleStage.disposeStarted,
+    TerminalSessionLifecycleStage.gracefulCloseRequested,
+    TerminalSessionLifecycleStage.terminationWaitTimedOut,
+    TerminalSessionLifecycleStage.forceCloseRequested,
+    TerminalSessionLifecycleStage.finalDeadlineExceeded,
+    TerminalSessionLifecycleStage.outputCancellationStarted,
+    TerminalSessionLifecycleStage.outputCancellationCompleted,
+    TerminalSessionLifecycleStage.processDisposeSkipped,
+    TerminalSessionLifecycleStage.terminationCompleted,
+    TerminalSessionLifecycleStage.shutdownResultPublished,
+    TerminalSessionLifecycleStage.disposeCompleted,
+  ], 'missing-exit session shutdown');
+
+  _expectThrows(
+    () => TerminalSession(
+      id: const TerminalSessionId(paneId: PaneId(12), generation: 1),
+      gracefulShutdownTimeout: Duration.zero,
+      onChanged: () {},
+      onTerminated: () {},
+    ),
+    'non-positive session shutdown timeout',
+    expectedType: ArgumentError,
   );
 }
 
@@ -666,6 +788,7 @@ Future<void> _testRepeatedControlDNaturalExit() async {
       TerminalSessionLifecycleStage.terminationWaitCompleted,
       TerminalSessionLifecycleStage.processDisposeStarted,
       TerminalSessionLifecycleStage.processDisposeCompleted,
+      TerminalSessionLifecycleStage.shutdownResultPublished,
       TerminalSessionLifecycleStage.disposeCompleted,
     ], 'Control-D lifecycle iteration $iteration');
     _expect(

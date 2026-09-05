@@ -275,3 +275,59 @@ open until all five are complete.
 - Dart Terminal `make test` passed in 8.0 seconds, including all 24 Control-D
   generations. Fresh arm64 Developer JIT and Release AOT bundles accepted PTY
   ABI v2 and passed GUI integration in 2,408 ms and 1,802 ms respectively.
+
+### 2026-09-05 — final session deadline design
+
+- Session teardown will use two explicit waits: the existing graceful window,
+  followed by `PtyProcess.forceClose()` and a shorter final exit/reap window.
+  The final window is separately configurable for deterministic tests but has
+  a fixed production default.
+- Results are classified as `clean`, `forced`, `failed`, or
+  `deadlineExceeded`. `clean` and `forced` require the session termination
+  observer to finish; `deadlineExceeded` never claims that the OS child was
+  reaped. A termination-stream error or bounded cleanup failure is `failed`.
+- When the final exit/reap deadline expires, Dart cancels its output consumer
+  under a bounded cleanup wait and deliberately does not call the existing
+  `PtyProcess.dispose()`, because that method waits for the missing exit. The
+  unfinished native session remains owned by the process until the host-level
+  termination implemented by the next ordered subtask; destroying a live
+  reactor/callback would be unsafe.
+- Even after observed exit, output cancellation and process disposal receive
+  bounded cleanup waits so every future directly awaited by pane-owned session
+  teardown has an upper bound. Lifecycle stages distinguish force request,
+  final wait completion/deadline, cancellation timeout, disposal skip/timeout,
+  typed-result publication, and overall disposal completion.
+
+### 2026-09-05 — final session deadline implementation and validation
+
+- Added positive, fixed-default `gracefulShutdownTimeout`,
+  `finalShutdownTimeout`, and `cleanupStepTimeout` policy to
+  `TerminalSession`. Shutdown is idempotent and exposes one cached
+  `Future<TerminalSessionShutdownResult>` plus its final stored result.
+- After the graceful wait expires, the session calls the new force-close
+  capability and waits once more for the termination observer. Expiration of
+  that final wait records `finalDeadlineExceeded`, cancels the Dart output
+  subscription under its own limit, skips exit-waiting process disposal, marks
+  the session non-live, completes the pane-facing termination future, publishes
+  `deadlineExceeded`, and returns.
+- An output consumer cancelled before native completion explicitly completes
+  its local drain gate as abandoned. This avoids leaving the termination task
+  stuck if a late native exit arrives, while diagnostics distinguish abandoned
+  delivery from a naturally drained stream. No live native handle is destroyed
+  speculatively.
+- Observed termination proceeds through bounded output cancellation and bounded
+  `PtyProcess.dispose`. Successful escalation is `forced`; observer or cleanup
+  errors are `failed`; only unforced, fully observed and cleaned teardown is
+  `clean`. Result identity, process ID, exit value, termination observation,
+  and cleanup completion remain typed.
+- Deterministic tests cover a force-close that completes and a PTY that accepts
+  both close requests but never publishes exit. The missing-exit case returns
+  within the 500 ms assertion (with 10 ms + 10 ms test waits), reports
+  `deadlineExceeded`, completes the pane-facing wait, issues force exactly
+  once, retains null exit/stats, and proves the potentially blocking process
+  dispose was not entered. Timeout argument validation and exact lifecycle
+  subsequences are also covered.
+- `make test` passed in 6.4 seconds with static analysis, fake deadline cases,
+  real persistent PTY behavior, and all 24 Control-D generations. Fresh arm64
+  Developer JIT and Release AOT GUI integrations stayed on the clean path and
+  passed in 2,225 ms and 1,764 ms respectively.

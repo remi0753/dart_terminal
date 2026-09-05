@@ -777,6 +777,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
       'outputCancellationCompleted',
       'processDisposeStarted',
       'processDisposeCompleted',
+      'shutdownResultPublished',
       'disposeCompleted',
     ]),
     'PTY lifecycle diagnostics are incomplete or out of order: $ptyStages',
