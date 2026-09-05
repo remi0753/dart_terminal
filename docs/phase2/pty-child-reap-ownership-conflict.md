@@ -1,6 +1,6 @@
 # PTY child reap ownership conflict
 
-- Status: diagnosis complete; remediation pending
+- Status: remediation in progress
 - Started: 2026-09-05
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 2 `Dart Process.start workerとnative PTY childのreap ownership競合を解消する`
@@ -37,7 +37,6 @@ The worker was ready and remained active when Control-D was sent to zsh.
 
 ## Out of scope
 
-- This diagnosis does not implement or claim the reap-ownership fix.
 - It does not modify the stock Dart Engine or depend on its private symbols.
 - The unrelated InputMethodKit wake warning and terminal rendering work remain
   outside this task.
@@ -140,6 +139,68 @@ replace the currently working Dart worker lifecycle. Modifying the Dart Engine
 or binding to its private `ProcessInfoList` is not an acceptable library
 boundary. The kqueue fallback is therefore the first design to validate.
 
+## Product shell-exit policy
+
+Control-D remains terminal input, not an unconditional window command. Its
+effect is determined by zsh/ZLE, the current line discipline, and the
+foreground process. The application reacts only after the owning shell has
+actually exited:
+
+- A clean shell exit (`exit 0`), whether caused by Control-D or an explicit
+  `exit`, automatically closes the pane. In the current one-pane application,
+  that closes the window and then shuts down the application with status 0.
+- A nonzero exit, signal exit, or termination-observation failure keeps the
+  pane and window visible in a non-live state and appends a readable status
+  line. A later Close is accepted immediately because no live shell remains.
+- Control-D consumed by a nonempty ZLE buffer, `IGNORE_EOF`, a foreground
+  reader, raw mode, or stopped-job protection does not close anything because
+  the shell remains live.
+- A user-initiated Close while the shell is live retains the existing
+  confirmation-before-termination behavior.
+
+This clean-close/abnormal-retain default avoids presenting a successfully
+closed shell as a frozen terminal while preserving failure output for
+diagnosis. A configurable preference may be added with the future typed config
+work; it is not required for this Phase 2 correctness task.
+
+## Implementation split
+
+1. `dart_pty_macos` captures a valid kernel exit status and publishes exactly
+   one completion after either its own reap or a verified external reap. Its
+   native and Dart package tests include the competing-reaper condition.
+2. Dart Terminal applies the shell-exit policy above and adds a real
+   Developer JIT / Release AOT regression where the runtime worker remains
+   alive while clean and abnormal PTY sessions exit.
+
+The first subtask is independently verified and committed in `dart_appkit`
+before the application-policy subtask is implemented and committed here.
+
+## Native remediation result
+
+`dart_appkit` commit `811ef5e` (`Recover PTY exits reaped by Dart`) completed
+the first subtask:
+
+- PTY ABI v4 registers `NOTE_EXIT | NOTE_EXITSTATUS` and preserves the valid
+  kernel status associated with the matching child PID.
+- PTY-owned `waitpid(child_pid, ...)` remains the preferred path. A subsequent
+  `ECHILD` becomes `externalReapObserved` only when the matching kernel exit
+  notification supplied a valid status; a bare `ECHILD` remains an error.
+- Child completion, PTY-owned reap, and external reap are distinct internal
+  states. Writes, resize, and signal delivery are rejected after completion,
+  and exit is published exactly once after output drain.
+- Deterministic native tests cover a competing blocking waiter for both
+  `exit 37` and `SIGTERM`. A real Dart FFI regression keeps a
+  `Process.start('/bin/sleep', ['30'])` worker alive while a `zsh -f` PTY
+  receives Control-D and then exits with status 37.
+- Focused native and Dart package tests passed, followed by the complete
+  `dart_appkit make test` suite. Both successful normal exit and signal exit
+  retained their actual status, and every native session was destroyed.
+
+This establishes the kernel-to-Dart completion boundary without changing the
+stock Dart runtime or depending on a private runtime symbol. The remaining
+work is the product pane/window policy and bundled Developer JIT / Release AOT
+regression.
+
 ## Completion conditions
 
 - A deterministic test keeps a Dart `Process.start` child alive while a real
@@ -154,6 +215,8 @@ boundary. The kqueue fallback is therefore the first design to validate.
   zero-orphan regressions remain green.
 - No stock Dart Engine modification or private-runtime symbol dependency is
   introduced.
+- Clean shell exit closes the current one-pane window without confirmation;
+  abnormal exit keeps it visible with a status line and accepts one-step Close.
 
 ## Verification performed for this diagnosis
 
@@ -173,8 +236,8 @@ boundary. The kqueue fallback is therefore the first design to validate.
   `exitPublished` arrived within one second. The probe was removed after the
   run and left no product source or generated artifact in the task diff.
 - Confirmed the macOS SDK exposes `NOTE_EXITSTATUS` specifically for returning
-  child exit status with `NOTE_EXIT`; remediation suitability still requires a
-  permanent concurrent regression satisfying the conditions above.
+  child exit status with `NOTE_EXIT`; the permanent concurrent native and Dart
+  regressions now validate this behavior.
 
 No executable code changed during this diagnosis, so implementation tests were
 not rerun. Documentation syntax and repository diffs are checked before commit.
