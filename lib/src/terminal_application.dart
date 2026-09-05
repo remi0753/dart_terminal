@@ -15,6 +15,7 @@ import 'terminal_pane.dart';
 import 'terminal_renderer/frame_scheduler.dart';
 import 'terminal_renderer/glyph_atlas.dart';
 import 'terminal_renderer/metal_atlas_bridge.dart';
+import 'terminal_renderer/metal_failure_recovery.dart';
 import 'terminal_renderer/terminal_damage.dart';
 import 'terminal_session.dart';
 
@@ -287,6 +288,10 @@ final class TerminalApplication {
     TerminalMetalRenderer? metalRenderer;
     TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>?
     metalFrameScheduler;
+    TerminalMetalFailureRecoveryCoordinator<
+      TerminalMetalRendererRecoveryDomain
+    >?
+    metalRecovery;
     Window? window;
     TerminalPaneOwner? paneOwner;
     StreamSubscription<WindowEvent>? eventSubscription;
@@ -351,10 +356,19 @@ final class TerminalApplication {
       if (useTerminalMetalView) {
         final ({
           String observation,
+          TerminalMetalFailureRecoveryCoordinator<
+            TerminalMetalRendererRecoveryDomain
+          >
+          recovery,
           TerminalNewestFrameScheduler<TerminalScheduledMetalFrame> scheduler,
         })
-        frameSchedulerProbe = _exerciseBoundMetalFrameScheduler(metalRenderer!);
+        frameSchedulerProbe = _exerciseBoundMetalFrameScheduler(
+          metalRenderer!,
+          createdContentView,
+        );
         metalFrameScheduler = frameSchedulerProbe.scheduler;
+        metalRecovery = frameSchedulerProbe.recovery;
+        metalRenderer = frameSchedulerProbe.recovery.currentDomain.renderer;
         stdout.writeln(
           'NATIVE_CUSTOM_VIEW '
           'provider=$terminalMetalViewProviderIdentifier attached=true '
@@ -1013,7 +1027,9 @@ final class TerminalApplication {
         if (window != null && !window.isDisposed) {
           window.dispose();
         }
-        if (metalRenderer != null && !metalRenderer.isDisposed) {
+        if (metalRecovery != null && !metalRecovery.isDisposed) {
+          metalRecovery.dispose();
+        } else if (metalRenderer != null && !metalRenderer.isDisposed) {
           metalRenderer.dispose();
         }
         if (contentView != null && !contentView.isDisposed) {
@@ -1424,11 +1440,15 @@ final class TerminalApplication {
 
 ({
   String observation,
+  TerminalMetalFailureRecoveryCoordinator<TerminalMetalRendererRecoveryDomain>
+  recovery,
   TerminalNewestFrameScheduler<TerminalScheduledMetalFrame> scheduler,
 })
-_exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
+_exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer, View view) {
+  final TerminalFontCatalog catalog = TerminalFontCatalog.open();
+  final TerminalShapingCache shapingCache = TerminalShapingCache(catalog);
   final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
-    catalogGeneration: 1,
+    catalogGeneration: catalog.generation,
     limits: const TerminalGlyphAtlasLimits(
       pageWidth: 64,
       pageHeight: 64,
@@ -1439,6 +1459,16 @@ _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
       gutter: 0,
     ),
   );
+  late final TerminalGlyphAtlasEntry glyphEntry;
+  try {
+    final TerminalShapedText shaped = shapingCache.shape('A');
+    glyphEntry = atlas
+        .ingest(catalog.rasterizeShaped(shaped, scale: atlas.scale))
+        .single;
+  } finally {
+    shapingCache.dispose();
+    catalog.dispose();
+  }
   final TerminalGlyphAtlasMetalBridge bridge = TerminalGlyphAtlasMetalBridge(
     atlas: atlas,
     renderer: renderer,
@@ -1447,24 +1477,40 @@ _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
       bridge.nativeAtlasGeneration != atlas.resourceGeneration) {
     throw StateError('bound Metal renderer rejected its initial atlas reset');
   }
-  TerminalMetalFrame encode(int frameGeneration) =>
-      TerminalMetalFrameEncoder.encode(
+  final TerminalMetalRendererRecoveryDomain initialDomain =
+      TerminalMetalRendererRecoveryDomain.active(
         renderer: renderer,
-        frameGeneration: frameGeneration,
-        atlasGeneration: bridge.nativeAtlasGeneration,
-        viewportWidth: 1,
-        viewportHeight: 1,
-        scale16_16: 1 << 16,
-        backgroundRgba: 0,
-        instances: const <TerminalMetalInstance>[],
+        bridge: bridge,
+        view: view,
       );
+  TerminalMetalFrame encode(
+    TerminalMetalRendererRecoveryDomain domain,
+    int frameGeneration,
+  ) => TerminalMetalFrameEncoder.encode(
+    renderer: domain.renderer,
+    frameGeneration: frameGeneration,
+    atlasGeneration: domain.bridge.nativeAtlasGeneration,
+    viewportWidth: 64,
+    viewportHeight: 64,
+    scale16_16: 1 << 16,
+    backgroundRgba: 0,
+    instances: <TerminalMetalInstance>[
+      domain.bridge.glyphInstance(glyphEntry, x: 0, y: 0)!,
+    ],
+  );
 
-  final TerminalMetalSubmissionResult seed = renderer.submit(encode(10));
+  final TerminalMetalSubmissionResult seed = bridge.submit(
+    encode(initialDomain, 10),
+    glyphEntries: <TerminalGlyphAtlasEntry>[glyphEntry],
+  );
   if (!seed.isAccepted) {
     throw StateError('bound Metal renderer rejected stale-floor seed');
   }
-  final TerminalMetalFrameSubmissionAdapter adapter =
-      TerminalMetalFrameSubmissionAdapter(bridge);
+  final TerminalScreen screen = TerminalScreen(rows: 1, columns: 1);
+  late final TerminalMetalFailureRecoveryCoordinator<
+    TerminalMetalRendererRecoveryDomain
+  >
+  recovery;
   TerminalFramePresentation? lastBuiltPresentation;
   final TerminalNewestFrameScheduler<TerminalScheduledMetalFrame> scheduler =
       TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>(
@@ -1478,23 +1524,59 @@ _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
             }) {
               lastBuiltPresentation = presentation;
               return TerminalScheduledMetalFrame(
-                frame: encode(frameGeneration),
+                frame: encode(recovery.currentDomain, frameGeneration),
+                glyphEntries: <TerminalGlyphAtlasEntry>[glyphEntry],
               );
             },
-        submitFrame: adapter.submit,
+        submitFrame:
+            (
+              TerminalScheduledMetalFrame frame, {
+              required int modelRevision,
+              required int frameGeneration,
+            }) =>
+                TerminalMetalFrameSubmissionAdapter(
+                  recovery.currentDomain.bridge,
+                ).submit(
+                  frame,
+                  modelRevision: modelRevision,
+                  frameGeneration: frameGeneration,
+                ),
       );
-  final TerminalScreen screen = TerminalScreen(rows: 1, columns: 1);
+  var fullDamageRequestCount = 0;
+  var fullRedrawRequestCount = 0;
+  recovery =
+      TerminalMetalFailureRecoveryCoordinator<
+        TerminalMetalRendererRecoveryDomain
+      >(
+        initialDomain: initialDomain,
+        prepareReplacement: () => TerminalMetalRendererRecoveryDomain.prepare(
+          atlas: atlas,
+          config: renderer.config,
+          view: view,
+        ),
+        requestFullDamage: () {
+          fullDamageRequestCount++;
+          screen.requestFullSnapshot();
+        },
+        requestFullRedraw: () {
+          if (!scheduler.requestFullRedraw()) {
+            throw StateError('recovery redraw requires an initialized model');
+          }
+          fullRedrawRequestCount++;
+        },
+      );
+  final int resourceGeneration = atlas.resourceGeneration;
   final TerminalDamagePacket? packet = TerminalDamageCodec.capture(
     screen,
     damageGeneration: 1,
-    requiredResourceGeneration: 1,
+    requiredResourceGeneration: resourceGeneration,
   );
   if (packet == null) {
     throw StateError('initial screen did not produce a full snapshot');
   }
   final TerminalDamageApplyResult applied = scheduler.applyDamage(
     TerminalDamageCodec.decode(packet.copyBytes()),
-    availableResourceGeneration: 1,
+    availableResourceGeneration: resourceGeneration,
     monotonicMicros: 0,
   );
   if (!applied.isApplied) {
@@ -1521,13 +1603,13 @@ _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
   final TerminalDamagePacket? bellPacket = TerminalDamageCodec.capture(
     screen,
     damageGeneration: 2,
-    requiredResourceGeneration: 1,
+    requiredResourceGeneration: resourceGeneration,
   );
   if (bellPacket == null ||
       !scheduler
           .applyDamage(
             TerminalDamageCodec.decode(bellPacket.copyBytes()),
-            availableResourceGeneration: 1,
+            availableResourceGeneration: resourceGeneration,
             monotonicMicros: 2,
           )
           .isApplied) {
@@ -1552,7 +1634,60 @@ _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
       scheduler.pendingFrameCount != 0) {
     throw StateError('bound native occlusion scheduler outcome mismatch');
   }
+
+  final int retiredRendererGeneration = renderer.generation;
+  if (!recovery.requestRecovery(TerminalMetalFailureKind.commandExecution)) {
+    throw StateError('bound renderer recovery request was not retained');
+  }
+  final TerminalMetalRecoveryResult recovered = recovery.processNewest();
+  final TerminalMetalRendererRecoveryDomain replacement =
+      recovery.currentDomain;
+  final bool rendererRecovered =
+      recovered.isRecovered &&
+      recovered.attempt == 1 &&
+      recovered.rendererGeneration > retiredRendererGeneration &&
+      recovered.abandonedPinCount == 3 &&
+      renderer.isDisposed &&
+      bridge.isAbandoned &&
+      bridge.pinnedSubmissionCount == 0 &&
+      atlas.livePinCount == 0 &&
+      replacement.isActivated &&
+      replacement.bridge.isSynchronized &&
+      replacement.bridge.nativeAtlasGeneration == resourceGeneration &&
+      fullDamageRequestCount == 1 &&
+      fullRedrawRequestCount == 1;
+  if (!rendererRecovered) {
+    throw StateError('bound native renderer recovery ownership mismatch');
+  }
+  final TerminalDamagePacket? recoveryPacket = TerminalDamageCodec.capture(
+    screen,
+    damageGeneration: 3,
+    requiredResourceGeneration: resourceGeneration,
+  );
+  if (recoveryPacket == null ||
+      !recoveryPacket.isFullSnapshot ||
+      !scheduler
+          .applyDamage(
+            TerminalDamageCodec.decode(recoveryPacket.copyBytes()),
+            availableResourceGeneration: resourceGeneration,
+            monotonicMicros: 4,
+          )
+          .isApplied) {
+    throw StateError('recovery did not publish a full current screen model');
+  }
+  final TerminalFrameAttemptResult recoveryFrame = scheduler.submitNewest();
+  final bool recoveryFrameObserved =
+      recoveryFrame.isAccepted &&
+      recoveryFrame.frameGeneration == 13 &&
+      recoveryFrame.requiresFullRedraw &&
+      lastBuiltPresentation!.requiresFullRedraw &&
+      replacement.renderer.state().lastAcceptedFrameGeneration == 13 &&
+      scheduler.pendingFrameCount == 0;
+  if (!recoveryFrameObserved) {
+    throw StateError('replacement renderer rejected its full recovery frame');
+  }
   return (
+    recovery: recovery,
     scheduler: scheduler,
     observation:
         'NATIVE_FRAME_SCHEDULER stale=$staleObserved '
@@ -1561,6 +1696,13 @@ _exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer) {
         'submission_token_nonzero=${accepted.submissionToken > 0} '
         'occluded=$occludedObserved resume_full=$resumeObserved '
         'resume_frame=${resumed.frameGeneration} '
+        'recovered=$rendererRecovered '
+        'renderer_generation_advanced='
+        '${replacement.renderer.generation > retiredRendererGeneration} '
+        'atlas_republished=${replacement.bridge.isSynchronized} '
+        'abandoned_pins=${recovered.abandonedPinCount} '
+        'recovery_full=$recoveryFrameObserved '
+        'recovery_frame=${recoveryFrame.frameGeneration} '
         'pending=${scheduler.pendingFrameCount}',
   );
 }

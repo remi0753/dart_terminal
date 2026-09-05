@@ -14,6 +14,7 @@ import 'font_shaping_test.dart';
 import 'frame_scheduler_test.dart';
 import 'glyph_atlas_test.dart';
 import 'golden_image_test.dart';
+import 'metal_failure_recovery_test.dart';
 import 'metal_pipeline_test.dart';
 import 'product_parser_benchmark_test.dart';
 import 'product_parser_corpus_test.dart';
@@ -60,6 +61,7 @@ Future<void> main() async {
   runFontShapingTests();
   runGlyphAtlasTests();
   runMetalPipelineTests();
+  runMetalFailureRecoveryTests();
   runReferenceRendererTests();
   runRenderRebuildCoordinatorTests();
   runRenderResourceRebuilderTests();

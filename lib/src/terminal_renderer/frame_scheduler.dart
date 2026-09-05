@@ -488,6 +488,17 @@ final class TerminalNewestFrameScheduler<Frame> {
     return true;
   }
 
+  /// Retains one full-redraw marker for the newest initialized model.
+  ///
+  /// Replacing the marker also preserves a request made synchronously while a
+  /// frame is being built: acceptance of the older marker cannot clear it.
+  bool requestFullRedraw() {
+    if (!model.isInitialized) return false;
+    _fullRedrawMarker = Object();
+    _pending = true;
+    return true;
+  }
+
   TerminalFrameAttemptResult submitNewest() {
     if (_attempting) {
       throw StateError('frame submission attempt is already active');

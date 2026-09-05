@@ -37,11 +37,14 @@ final class TerminalGlyphAtlasMetalBridge {
   int _nativeResetEpoch = -1;
   int _nativeCatalogGeneration = 0;
   int _nativeScale16_16 = 0;
+  bool _abandoned = false;
 
   int get nativeAtlasGeneration => _nativeAtlasGeneration;
   int get pendingUploadCount => _pendingUploads.length;
   int get pinnedSubmissionCount => _pinnedSubmissionTokens.length;
+  bool get isAbandoned => _abandoned;
   bool get isSynchronized =>
+      !_abandoned &&
       _nativeAtlasGeneration == atlas.resourceGeneration &&
       _nativeResetEpoch == atlas.resetEpoch &&
       _nativeCatalogGeneration == atlas.catalogGeneration &&
@@ -50,6 +53,7 @@ final class TerminalGlyphAtlasMetalBridge {
       atlas.pendingUploadPageCount == 0;
 
   TerminalGlyphAtlasSyncDisposition synchronize() {
+    _requireActive();
     TerminalGlyphAtlasSnapshot snapshot = atlas.snapshot();
     if (_nativeAtlasGeneration == 0 ||
         _nativeResetEpoch != snapshot.resetEpoch ||
@@ -119,6 +123,7 @@ final class TerminalGlyphAtlasMetalBridge {
     required int y,
     TerminalReferenceColor maskColor = const TerminalReferenceColor(0xffffffff),
   }) {
+    _requireActive();
     atlas.validateEntry(
       entry,
       expectedResourceGeneration: atlas.resourceGeneration,
@@ -152,6 +157,7 @@ final class TerminalGlyphAtlasMetalBridge {
     TerminalMetalFrame frame, {
     required Iterable<TerminalGlyphAtlasEntry> glyphEntries,
   }) {
+    _requireActive();
     if (_pendingUploads.isNotEmpty || atlas.pendingUploadPageCount != 0) {
       throw StateError('atlas uploads must be synchronized before submission');
     }
@@ -175,6 +181,7 @@ final class TerminalGlyphAtlasMetalBridge {
   }
 
   TerminalMetalRendererState retireCompletedSubmissions() {
+    _requireActive();
     final TerminalMetalRendererState snapshot = renderer.state();
     while (_pinnedSubmissionTokens.isNotEmpty &&
         _pinnedSubmissionTokens.first <= snapshot.retiredThroughToken) {
@@ -183,6 +190,26 @@ final class TerminalGlyphAtlasMetalBridge {
       atlas.completeSubmission(token);
     }
     return snapshot;
+  }
+
+  /// Permanently retires this renderer-local atlas ownership domain.
+  ///
+  /// Native submission tokens restart for a replacement renderer, so every
+  /// CPU-atlas pin owned by this bridge must be released before that renderer
+  /// can submit. The operation is idempotent and the bridge rejects all later
+  /// synchronization, encoding, submission, and retirement work.
+  int abandonRenderer() {
+    if (_abandoned) return 0;
+    _abandoned = true;
+    final List<int> tokens = List<int>.of(_pinnedSubmissionTokens);
+    _pinnedSubmissionTokens.clear();
+    _pendingUploads.clear();
+    _alphaSlots.clear();
+    _colorSlots.clear();
+    for (final int token in tokens) {
+      atlas.completeSubmission(token);
+    }
+    return tokens.length;
   }
 
   TerminalGlyphAtlasSyncDisposition? _resetNative(
@@ -290,6 +317,12 @@ final class TerminalGlyphAtlasMetalBridge {
 
   Map<int, int> _slotMap(TerminalGlyphAtlasFormat format) =>
       format == TerminalGlyphAtlasFormat.alpha8 ? _alphaSlots : _colorSlots;
+
+  void _requireActive() {
+    if (_abandoned) {
+      throw StateError('Metal atlas bridge belongs to a retired renderer');
+    }
+  }
 }
 
 TerminalMetalAtlasFormat _metalFormat(TerminalGlyphAtlasFormat format) =>

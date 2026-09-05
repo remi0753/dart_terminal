@@ -167,6 +167,42 @@ roadmap item must not begin until both recovery children are committed.
   typed Metal failure state`), reread the product roadmap, and confirmed the
   renderer recreation/atlas/full-redraw child remains next. The dependency
   worktree is clean.
+- 2026-09-06: the existing native view binding deliberately accepts only one
+  renderer generation. A replacement therefore cannot bind while the old
+  renderer remains attached. The selected product sequence prepares a fresh
+  unbound renderer and fully synchronizes a snapshot of the current Dart atlas
+  first, then performs old bridge abandonment, old renderer release/view
+  detach, replacement bind, and submission-domain publication synchronously.
+  A preparation failure leaves the old domain untouched; a bind failure leaves
+  no published renderer, disposes the unpublishable candidate, and retains the
+  single pending request while its bounded budget remains.
+- 2026-09-06: recovery will be represented by a generic domain coordinator and
+  one concrete Metal domain. The generic seam makes creation and bind failures
+  deterministic without exposing the native debug injector through the
+  product. The concrete domain owns one renderer/bridge pair, enforces a newer
+  renderer generation and complete atlas synchronization before activation,
+  and abandons bridge-local pins exactly once before renderer disposal.
+- 2026-09-06: frame submission and encoding will resolve the coordinator's
+  current domain at each attempt rather than retain an adapter closed over the
+  retired bridge. `TerminalNewestFrameScheduler` will gain an explicit
+  one-marker full-redraw request. Recovery success will request both a full
+  terminal snapshot and that redraw marker only after the replacement is bound;
+  repeated requests still retain at most one pending recovery/redraw unit.
+- 2026-09-06: implemented the bounded generic coordinator and concrete Metal
+  ownership domain. A fresh bridge snapshots and uploads every live atlas page
+  while unbound. The handoff then abandons all bridge-tracked old submission
+  tokens, disposes/detaches the old renderer, binds the strictly newer one, and
+  emits full-damage/full-redraw callbacks before publishing it to dynamic frame
+  encoder/submission closures. Shutdown abandons the final bridge/domain once.
+- 2026-09-06: the product smoke now uses one real CoreText glyph so three old
+  native READY submissions also own three Dart atlas pins. Recovery verifies
+  all three pins are released before the replacement's token space starts,
+  republishes the complete glyph page without changing the Dart atlas
+  generation, and submits frame 13 as a full redraw through the new renderer.
+- 2026-09-06: the first local analysis invocation was blocked only by the
+  workspace sandbox denying a modification-time update to Dart's user telemetry
+  session file. Re-running the same analyzer with the required filesystem
+  permission succeeded with no issues; no source workaround was introduced.
 
 ## Verification results
 
@@ -194,5 +230,32 @@ roadmap item must not begin until both recovery children are committed.
   pass in 2,274 ms and 1,764 ms respectively.
 - Adjacent dependency commit: `2a7035a Expose typed Metal failure state`.
 
-The first child is complete. Renderer recreation, atlas republish, and recovery
-full-redraw ownership remain unimplemented and keep the parent in progress.
+At this checkpoint the first child was complete, while renderer recreation,
+atlas republish, and recovery full-redraw ownership still kept the parent in
+progress.
+
+### Renderer recreation, atlas republish, and full-redraw child
+
+- Focused recovery tests pass preparation failure without old-domain
+  retirement, activation failure without partial candidate publication,
+  successful retry with one full-damage/full-redraw pair, duplicate request
+  coalescing, strict renderer-generation advance, idempotent abandonment, and
+  exhaustion after the configured two-attempt fixture.
+- Frame scheduler and Metal pipeline focused tests pass. The complete product
+  `make test` passes with 98 formatted files, no analyzer issues, and the full
+  test aggregate including the new recovery suite.
+- `make runtime-source-check` passes with `tracked=179 native_sources=0`.
+- Developer JIT and Release AOT builds both pass. Their real AppKit/Metal smoke
+  passes in 2,213 ms and 1,770 ms, verifying three old glyph pins released,
+  strictly newer renderer binding, complete atlas republish, and accepted full
+  recovery frame 13.
+- Developer JIT and Release AOT bundle audits both pass with one helper, one
+  native-asset set, and one declared capability.
+- Product, adjacent `dart_appkit`, and official Dart SDK worktrees were reviewed
+  before completion. The adjacent and SDK trees are clean; the product tree
+  contains only this child task's implementation, tests, matrix/readme, memo,
+  and roadmap state changes.
+
+Both ordered children and the parent recovery item now meet their completion
+criteria. Frame timing, atlas hit-rate, and uploaded-byte metrics remain the
+next Phase 4 roadmap item.

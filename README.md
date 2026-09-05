@@ -104,7 +104,8 @@ model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後�
 - signed monotonic時刻でcursor blinkとvisual BELを各1 deadlineに制限するpresentation
   clock、visibility/occlusion中のbuild/submit停止、hidden tickを再生しないresume full redraw
 - renderer ABI v8のtyped device/shader/command failure state、bounded drawable
-  unavailable観測、READY frameを保持する明示的on-demand presentation retry
+  unavailable観測、READY frameを保持する明示的on-demand presentation retry、
+  最大3回のrenderer再生成、旧submission pinの一括解放、全atlas再公開とfull redraw
 
 ## 起動
 
