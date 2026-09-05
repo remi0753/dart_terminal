@@ -10,6 +10,7 @@ import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal/src/runtime_lifecycle.dart';
 import 'package:dart_terminal/src/terminal_session.dart';
 
+import 'font_shaping_test.dart';
 import 'golden_image_test.dart';
 import 'product_parser_benchmark_test.dart';
 import 'product_parser_corpus_test.dart';
@@ -44,6 +45,7 @@ Future<void> main() async {
   runProductParserBenchmarkTests();
   runProductParserCorpusTests();
   runGoldenImageTests();
+  runFontShapingTests();
   runReferenceRendererTests();
   runTerminalHistoryReflowTests();
   runTerminalPaletteTests();

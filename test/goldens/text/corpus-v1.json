@@ -1,0 +1,98 @@
+{
+  "format": "dart-terminal-text-golden-corpus",
+  "version": 1,
+  "scales": [1, 2],
+  "cases": [
+    {
+      "id": "latin-ligature",
+      "family": "Times-Roman",
+      "text": "office ffi",
+      "cells": 10,
+      "utf16Length": 10,
+      "scalarCount": 10,
+      "ligatures": true,
+      "fallback": false,
+      "color": false,
+      "rtl": false,
+      "multiUnitCluster": true
+    },
+    {
+      "id": "cjk-wide",
+      "family": "Menlo",
+      "text": "日本語",
+      "cells": 6,
+      "utf16Length": 3,
+      "scalarCount": 3,
+      "ligatures": true,
+      "fallback": true,
+      "color": false,
+      "rtl": false,
+      "multiUnitCluster": false
+    },
+    {
+      "id": "emoji-zwj-modifier",
+      "family": "Menlo",
+      "text": "👩🏽‍💻",
+      "cells": 2,
+      "utf16Length": 7,
+      "scalarCount": 4,
+      "ligatures": true,
+      "fallback": true,
+      "color": true,
+      "rtl": false,
+      "multiUnitCluster": true
+    },
+    {
+      "id": "emoji-flag",
+      "family": "Menlo",
+      "text": "🇯🇵",
+      "cells": 2,
+      "utf16Length": 4,
+      "scalarCount": 2,
+      "ligatures": true,
+      "fallback": true,
+      "color": true,
+      "rtl": false,
+      "multiUnitCluster": true
+    },
+    {
+      "id": "combining",
+      "family": "Menlo",
+      "text": "é",
+      "cells": 1,
+      "utf16Length": 2,
+      "scalarCount": 2,
+      "ligatures": true,
+      "fallback": false,
+      "color": false,
+      "rtl": false,
+      "multiUnitCluster": true
+    },
+    {
+      "id": "arabic-run",
+      "family": "Menlo",
+      "text": "سلام",
+      "cells": 4,
+      "utf16Length": 4,
+      "scalarCount": 4,
+      "ligatures": true,
+      "fallback": true,
+      "color": false,
+      "rtl": true,
+      "multiUnitCluster": true
+    },
+    {
+      "id": "hebrew-combining-run",
+      "family": "Menlo",
+      "text": "שָׁלוֹם",
+      "cells": 4,
+      "utf16Length": 7,
+      "scalarCount": 7,
+      "ligatures": true,
+      "fallback": true,
+      "color": false,
+      "rtl": true,
+      "multiUnitCluster": true
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Phase 4 — CoreText font catalog, fallback, metrics, and shaping cache
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-05
 - Scope: second Phase 4 roadmap item
 - Related: ADR-001, ADR-002, ADR-004, TXT-01, TXT-03–05, TXT-07,
@@ -176,6 +176,56 @@ the first. Atlas work must not start until both are committed.
   the already-tested renderer dylib preloaded exercised the public facade and
   passed. Product Developer/Release bundles independently proved normal code
   asset packaging, so the failed invocation is not treated as a product fault.
+- 2026-09-06: after product commit `34a046c`, reread the roadmap and began the
+  second child. The worktrees were clean, the catalog child was the only newly
+  checked item, and packed shaping/cache remained the first unchecked task.
+- 2026-09-06: selected ABI version 3 with a little-endian version-one packed
+  buffer: an 80-byte header followed by contiguous 40-byte run, 144-byte face,
+  and 48-byte glyph records. Hard limits are 1 MiB input, 65,536 runs, 4,096
+  faces, 1,048,576 glyphs, and 64 MiB output. The size-query call never writes
+  partial output; the fill call builds in aligned native storage and copies to
+  the caller only after complete validation.
+- 2026-09-06: CoreText is called once per complete text unit. Native output
+  preserves per-run resolved face identity/flags, glyph positions/advances,
+  RTL state, and logical UTF-16 cluster spans. Cluster boundaries are derived
+  in linear time from run string indices and cannot split a surrogate pair;
+  native retains no caller pointer or shaped-text cache.
+- 2026-09-06: the Dart decoder checks magic/version, exact section arithmetic,
+  reserved/padding bytes, counts, scalar boundaries, disjoint full run coverage,
+  face/run flag aggregation, glyph/run/face identity, clusters, and finite
+  geometry before publishing immutable lists. The cache key uses catalog
+  generation, style, feature bits, and exact copied UTF-8 bytes. Default and
+  maximum entry/byte budgets are explicit; oversized entries are returned but
+  not retained, and both entry and byte pressure evict true LRU entries.
+- 2026-09-06: added a reviewed version-one product text corpus for Latin
+  ligatures, CJK/wide, emoji ZWJ/modifier, regional-indicator flag, combining,
+  Arabic ligature, and Hebrew combining text. It declares terminal cell counts
+  and 1x/2x reference-surface geometry so the next atlas task can add raster
+  pixels without redefining shaping expectations.
+- 2026-09-06: the first shaping native test build compiled the ABI and all four
+  packed record size assertions, then failed only because the capability test
+  still asserted ABI version 2. The additive shaping entry point intentionally
+  advances the package ABI to 3; the stale expectation was updated rather than
+  weakening the version check.
+- 2026-09-06: the initial Dart shaping build and existing facade tests passed,
+  while analysis reported one directive-ordering info in the catalog library.
+  The imports are now alphabetized; no lint was suppressed.
+- 2026-09-06: the first corrupt-buffer test run failed because its handcrafted
+  NaN mutation used `ByteData`'s default big-endian write against the specified
+  little-endian wire format, producing a finite value when decoded. The fixture
+  now writes explicit little endian, matching every other packed field.
+- 2026-09-06: the first product formatting invocation was sandbox-blocked when
+  the Dart tool attempted to refresh its user telemetry session timestamp. It
+  made no source change; formatting and tests were rerun with required host
+  access rather than changing telemetry or repository policy.
+- 2026-09-06: the first product corpus run found one Arabic cluster expectation
+  mismatch and one import-ordering info. Refined diagnostics established that
+  CoreText forms a multi-code-unit cluster in `سلام`; the reviewed corpus now
+  records that observed value. The first edit accidentally targeted the CJK
+  boolean, but ID-scoped review caught and restored CJK before completion.
+- 2026-09-06: the first manifest ABI edit matched the earlier PTY capability
+  field. An explicit ID-scoped audit caught it before bundle validation; PTY
+  remains ABI 2 and only the renderer capability advances from 2 to 3.
 
 ## Verification results
 
@@ -199,6 +249,38 @@ the first. Atlas work must not start until both are committed.
   change was present.
 - Adjacent dependency commit: `36bcbcb Add generation-owned CoreText font
   catalogs`.
-- The first ordered subtask is complete. Whole-run packed shaping and the
-  Dart-owned bounded LRU remain the next unchecked child; this parent task and
-  Phase 4 remain in progress.
+- At that checkpoint the first ordered subtask was complete and whole-run
+  packed shaping plus the Dart-owned bounded LRU remained the next child.
+
+### Whole-run shaping and cache subtask
+
+- C11/C++20 headers and focused native capability tests passed with exact
+  80/40/144/48-byte record layouts. Size query/retry, untouched undersized
+  buffers, malformed/over-limit input, unknown features, stale handles,
+  Latin/CJK/color emoji/combining clusters, ligature on/off, and 200 concurrent
+  whole-run shapes across four threads passed.
+- Renderer package analysis and Dart tests passed. Live CoreText coverage
+  includes Latin, CJK/wide, emoji ZWJ/modifier/flag, combining, Arabic/Hebrew
+  RTL, four styles, and ligature feature changes. Handcrafted corrupt buffers,
+  exact section/padding/finite checks, entry and byte LRU eviction, oversized
+  non-retention, feature/style key separation, generation/liveness, clear, and
+  idempotent disposal passed.
+- The complete adjacent `make test` suite passed after the ABI implementation,
+  covering native bridge, runtime assembly, AppKit, PTY, examples, FFI, and the
+  renderer package. Final focused native/Dart tests also passed after the last
+  boundary and cache cases were added.
+- Dart Terminal `make test` passed with the seven-case source-controlled text
+  corpus and both 1x/2x placement geometries. `make runtime-source-check`
+  passed with `tracked=152` and `native_sources=0`.
+- Developer JIT and Release AOT arm64 bundle audits passed with renderer ABI 3.
+  Their GUI integration smokes passed in 2396 ms and 1812 ms respectively.
+- A focused Release AOT renderer test executable compiled and passed through
+  the public facade with the tested capability dylib preloaded.
+- Both diffs passed whitespace/error checks and the official SDK checkout was
+  clean. No native pointer is retained, no product-native source was added, and
+  actual glyph rasterization remains correctly deferred to the next roadmap
+  item.
+- Adjacent dependency commit: `9a60857 Add bounded CoreText run shaping`.
+- Both ordered children and the CoreText font catalog/fallback/metrics/shaping
+  cache parent are complete. Phase 4 continues with the monochrome/color glyph
+  atlas item.

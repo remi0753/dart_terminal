@@ -120,15 +120,15 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| TXT-01 | extended grapheme、emoji ZWJ/VS/RI、combining sequence | P0 | 3/4 | `G:src/unicode/grapheme.zig`, `G:src/terminal/page.zig` | CoreText/format gate |
+| TXT-01 | extended grapheme、emoji ZWJ/VS/RI、combining sequence | P0 | 3/4 | `G:src/unicode/grapheme.zig`, `G:src/terminal/page.zig` | Unicode 17 terminal ownershipに加え、CoreText whole-runのZWJ/modifier/RI/combining UTF-16 cluster mappingを完了。raster goldenはatlas項目 |
 | TXT-02 | East Asian width と ambiguous-width policy。terminal mode と app cursor width が同期 | P0 | 3 | `G:src/unicode/props.zig`, `G:src/terminal/size_report.zig` | 未実装 |
-| TXT-03 | CoreText discovery、ordered fallback、Apple Color Emoji、symbol font | P0 | 4 | `G:src/font/discovery.zig`, `G:src/font/DeferredFace.zig`, `G:src/font/face/coretext.zig` | generation-owned catalogとCJK/color emoji fallback resolveを完了。全run shapingは同roadmap項目の次subtask |
+| TXT-03 | CoreText discovery、ordered fallback、Apple Color Emoji、symbol font | P0 | 4 | `G:src/font/discovery.zig`, `G:src/font/DeferredFace.zig`, `G:src/font/face/coretext.zig` | generation-owned catalog、CJK/color emoji fallback、全run face identity/copyを完了 |
 | TXT-04 | regular/bold/italic/bold-italic、synthetic style policy | P0 | 4 | `G:src/font/Collection.zig`, `G:src/font/face/coretext.zig` | actual/syntheticを区別する4-style policyとstable face identityを完了 |
 | TXT-05 | cell metrics、baseline、underline/strike、1x/2x/scale/zoom の pixel alignment | P0 | 4 | `G:src/font/Metrics.zig`, `G:src/renderer/generic.zig` | cell advance/height、baseline、underline/strike metricsを完了。scale/pixel alignmentはresize/rebuild項目で接続 |
-| TXT-06 | Latin/CJK/emoji/Powerline/box/Nerd Font golden corpus | P0 | 4 | `G:src/font/res/`, `G:src/font/sprite/`, font tests | corpus Phase 0 |
-| TXT-07 | ligature/OpenType feature toggle と cursor 下の shaping break | P1 | 4/8 | `G:src/font/shaper/coretext.zig`, `G:src/font/shaper/feature.zig` | Phase 0 gate |
+| TXT-06 | Latin/CJK/emoji/Powerline/box/Nerd Font golden corpus | P0 | 4 | `G:src/font/res/`, `G:src/font/sprite/`, font tests | Latin/CJK/wide/emoji/combining/Arabic/Hebrew/ligatureのversion 1 text corpusと1x/2x geometryを準備。raster・Powerline・box・Nerd Fontはatlas項目 |
+| TXT-07 | ligature/OpenType feature toggle と cursor 下の shaping break | P1 | 4/8 | `G:src/font/shaper/coretext.zig`, `G:src/font/shaper/feature.zig` | ligature on/offのglyph count・multi-unit clusterとfeature-separated cacheを完了。cursor下breakはPhase 8 |
 | TXT-08 | variable axes、codepoint override、fallback diagnostics | P1 | 4/8 | `G:src/font/opentype/`, `G:src/font/CodepointMap.zig` | 未実装 |
-| TXT-09 | grapheme 内 Arabic/Hebrew shaping。terminal layout 自体は LTR | P1 | 4 | `G:src/font/shaper/testdata/arabic.txt`, `G:src/font/shaper/coretext.zig` | Phase 0 で設計確認 |
+| TXT-09 | grapheme 内 Arabic/Hebrew shaping。terminal layout 自体は LTR | P1 | 4 | `G:src/font/shaper/testdata/arabic.txt`, `G:src/font/shaper/coretext.zig` | Arabic ligatureとHebrew combiningをRTL CoreText runとして完了。terminal cell layout ownershipはDart側に維持 |
 | TXT-10 | synthetic box/block/braille/Powerline glyph で cell gap を防ぐ | P1 | 4 | `G:src/font/sprite/draw/` | 未実装 |
 
 ## Metal renderer と frame scheduling
