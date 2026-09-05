@@ -2,6 +2,8 @@ import 'terminal_screen.dart';
 import 'terminal_style.dart';
 import 'terminal_unicode.dart';
 
+part 'terminal_viewport.dart';
+
 enum TerminalScreenKind { primary, alternate }
 
 /// Owns fixed-size primary and alternate grids with shared resources.
@@ -22,7 +24,7 @@ final class TerminalScreenSet {
         scrollback ?? TerminalScrollback();
     final TerminalScrollbackAttachment scrollbackAttachment =
         TerminalScrollbackAttachment(sharedScrollback);
-    return TerminalScreenSet._(
+    final TerminalScreenSet result = TerminalScreenSet._(
       primary: createTerminalScreenWithScrollback(
         rows: rows,
         columns: columns,
@@ -44,6 +46,8 @@ final class TerminalScreenSet {
       scrollback: sharedScrollback,
       scrollbackAttachment: scrollbackAttachment,
     );
+    result._viewport = TerminalViewport._(result);
+    return result;
   }
 
   TerminalScreenSet._({
@@ -65,6 +69,7 @@ final class TerminalScreenSet {
   final TerminalGraphemeTable graphemeTable;
   final TerminalScrollback scrollback;
   final TerminalScrollbackAttachment _scrollbackAttachment;
+  late final TerminalViewport _viewport;
 
   TerminalScreenKind _activeKind = TerminalScreenKind.primary;
   bool _mode1049Active = false;
@@ -80,6 +85,7 @@ final class TerminalScreenSet {
   bool get usingAlternate => _activeKind == TerminalScreenKind.alternate;
   bool get mode1049Active => _mode1049Active;
   int get transitionGeneration => _transitionGeneration;
+  TerminalViewport get viewport => _viewport;
 
   /// Atomically replaces both fixed-size grids after visible-line reflow.
   void resize({required int rows, required int columns}) {

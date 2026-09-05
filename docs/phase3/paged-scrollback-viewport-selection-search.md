@@ -184,6 +184,9 @@ subtasks pass.
   page rows, line cap, and rows affordable under the byte cap. A single row
   larger than the cap clears older history rather than retaining a
   discontinuous suffix with the newest row missing.
+- Fixed-page storage/capture completed in `b8e04a4`. The clean-worktree
+  roadmap review makes history/screen viewport offset and alternate isolation
+  the current child.
 
 ## Decisions and alternatives
 
@@ -201,6 +204,20 @@ subtasks pass.
 - Keep source column width per page and start a new page after a width change.
   This avoids rewriting retained content during the storage child and provides
   complete input for the later history-aware reflow child.
+- Define viewport offset as rows above the bottom: zero projects the active
+  grid, and the primary maximum equals retained history rows. Positive
+  navigation moves toward older rows. While scrolled back, each successfully
+  appended history row increases the offset so the top projected row remains
+  stable; page eviction or clear clamps to the oldest retained row.
+- Keep the primary offset while an alternate screen is active, but project the
+  alternate grid with an effective offset and maximum of zero. Returning to
+  primary restores its clamped position. This keeps application-owned
+  alternate contents isolated without discarding an explicit user viewport
+  choice.
+- Expose raw source columns per projected row during this child. History pages
+  may still have a pre-resize width; callers can inspect that width without
+  inventing clipped wide-cell topology. The next child will reflow all retained
+  pages to the current primary width.
 
 ## Verification results
 
@@ -234,6 +251,36 @@ subtasks pass.
 
 This completes ordered subtask 1. The parent remains open; viewport state and
 alternate-screen projection are now the first unchecked child.
+
+### History/screen viewport and alternate isolation
+
+- Focused tests passed bottom projection, row and page navigation, top/bottom
+  jumps, offset clamping, history/screen boundary mapping, raw source column
+  widths, row metadata, all six cell fields, wide-pair topology, and cursor
+  visibility inside or outside the projected rows.
+- While scrolled back, new output increased the offset and retained the same
+  top row. Page-granular eviction preserved the anchor while retained and
+  clamped to the new oldest row after eviction. Explicit history clear reset
+  to bottom, including when more output arrived before the viewport next
+  observed the clear; a separate continuity generation prevents reviving the
+  invalidated old offset.
+- DEC 47, 1047, and 1049 tests projected alternate contents only at offset
+  zero, made alternate navigation a no-op, and restored the preserved primary
+  offset on return. Screen-set resize retained the same viewport object,
+  updated its dimensions/revision, and exposed old-history/current-screen
+  source widths without clipping a wide pair.
+- Viewport generation stayed unchanged for repeated reads and advanced for
+  navigation, active-grid/history changes, screen transitions, and resize.
+  Invalid projected rows and source columns were rejected.
+- `make test` passed VT table freshness, formatting of 60 files, full static
+  analysis with no issues, and the complete test runner. The focused viewport
+  suite compiled to a Release AOT executable and completed successfully.
+- `git diff --cached --check` passed. The staged-source Dart-only audit passed
+  with 116 tracked files and zero native source files, including the viewport
+  projection and its focused test.
+
+This completes ordered subtask 2. The parent remains open; scrollback-aware
+resize/reflow and stable logical anchors are now the first unchecked child.
 
 ## Risks and handoff
 

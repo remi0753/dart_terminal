@@ -659,7 +659,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] paged scrollback、viewport、selection/search primitives
   - [x] fixed-page bounded scrollback storage と primary full-screen capture
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）
-  - [ ] history/screen viewport offset と alternate-screen isolation
+  - [x] history/screen viewport offset と alternate-screen isolation
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）
   - [ ] scrollback-aware resize/reflow と stable logical anchors
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）

@@ -35,12 +35,16 @@ final class TerminalScrollback {
   int _pageCount = 0;
   int _allocatedBytes = 0;
   int _generation = 1;
+  int _totalRowsAppended = 0;
+  int _continuityGeneration = 1;
   TerminalScrollbackAttachment? _attachment;
 
   int get length => _length;
   int get pageCount => _pageCount;
   int get allocatedBytes => _allocatedBytes;
   int get generation => _generation;
+  int get totalRowsAppended => _totalRowsAppended;
+  int get continuityGeneration => _continuityGeneration;
   bool get isEmpty => _length == 0;
 
   int columnsAt(int row) => _locate(row).page.columns;
@@ -79,6 +83,7 @@ final class TerminalScrollback {
       return;
     }
     _dropAllPages();
+    _continuityGeneration++;
     _generation++;
   }
 
@@ -172,6 +177,9 @@ final class TerminalScrollback {
       if (capacity == 0) {
         final bool changed = _head != null;
         _dropAllPages();
+        if (changed) {
+          _continuityGeneration++;
+        }
         return changed;
       }
       final _ScrollbackPage allocated = _ScrollbackPage(
@@ -187,6 +195,7 @@ final class TerminalScrollback {
 
     page.appendScreenRow(source, row);
     _length++;
+    _totalRowsAppended++;
     return true;
   }
 
