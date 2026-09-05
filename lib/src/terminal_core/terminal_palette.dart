@@ -36,6 +36,8 @@ final class TerminalPalette {
   int _defaultForeground;
   int _defaultBackground;
   int _generation = 1;
+  final List<WeakReference<TerminalScreen>> _screens =
+      <WeakReference<TerminalScreen>>[];
 
   int get generation => _generation;
   int get defaultForeground => _defaultForeground;
@@ -79,7 +81,7 @@ final class TerminalPalette {
     for (int item = 0; item < count; item++) {
       _colors[indices[item]] = colors[item];
     }
-    _generation++;
+    _didChange();
     return true;
   }
 
@@ -99,7 +101,7 @@ final class TerminalPalette {
       final int index = indices[item];
       _colors[index] = _initialColors[index];
     }
-    _generation++;
+    _didChange();
     return true;
   }
 
@@ -115,7 +117,7 @@ final class TerminalPalette {
       return false;
     }
     _colors.setAll(0, _initialColors);
-    _generation++;
+    _didChange();
     return true;
   }
 
@@ -125,7 +127,7 @@ final class TerminalPalette {
       return false;
     }
     _defaultForeground = color;
-    _generation++;
+    _didChange();
     return true;
   }
 
@@ -135,7 +137,7 @@ final class TerminalPalette {
       return false;
     }
     _defaultBackground = color;
-    _generation++;
+    _didChange();
     return true;
   }
 
@@ -144,7 +146,7 @@ final class TerminalPalette {
       return false;
     }
     _defaultForeground = _initialDefaultForeground;
-    _generation++;
+    _didChange();
     return true;
   }
 
@@ -153,8 +155,32 @@ final class TerminalPalette {
       return false;
     }
     _defaultBackground = _initialDefaultBackground;
-    _generation++;
+    _didChange();
     return true;
+  }
+
+  void _attach(TerminalScreen screen) {
+    for (int index = _screens.length - 1; index >= 0; index--) {
+      final TerminalScreen? attached = _screens[index].target;
+      if (attached == null) {
+        _screens.removeAt(index);
+      } else if (identical(attached, screen)) {
+        return;
+      }
+    }
+    _screens.add(WeakReference<TerminalScreen>(screen));
+  }
+
+  void _didChange() {
+    _generation++;
+    for (int index = _screens.length - 1; index >= 0; index--) {
+      final TerminalScreen? screen = _screens[index].target;
+      if (screen == null) {
+        _screens.removeAt(index);
+      } else {
+        screen._palettePresentationChanged();
+      }
+    }
   }
 
   static Uint32List _validatedColorCopy(List<int> colors) {

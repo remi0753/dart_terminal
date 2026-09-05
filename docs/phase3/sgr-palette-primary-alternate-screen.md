@@ -1,6 +1,6 @@
 # Phase 3 — SGR, palette, and primary/alternate screen
 
-- Status: in progress
+- Status: completed
 - Date: 2026-09-05
 - Scope: the first incomplete Phase 3 roadmap item after the typed-array screen
 - Related: `ROADMAP.md` sections 5.3, 5.5, 6, and Phase 3;
@@ -157,6 +157,16 @@ ownership as independently reviewable state boundaries.
   printing and erase paths always write zero defaults. Cursor save/restore
   currently preserves position only, and the sink counts all SGR/OSC as
   unsupported.
+- The first screen-set analysis reported only a directive-ordering lint in the
+  aggregate test entry point: `terminal_screen_set_test.dart` sorts before
+  `terminal_screen_test.dart`. Reorder those imports and rerun analysis; no
+  product-code fault was involved.
+- The authoritative xterm control-sequence reference distinguishes the four
+  transitions used here: 47 selects alternate/normal without an added clear;
+  1047 selects alternate and clears it before returning to normal; 1048 is
+  DECSC/DECRC; and 1049 saves, clears/selects alternate, then returns to normal
+  and restores. See
+  [XTerm Control Sequences](https://www.invisible-island.net/xterm/ctlseqs/ctlseqs.html).
 - The first subtask now uses ten packed style bits: bold, faint, italic, a
   three-bit underline kind, blink, inverse, conceal, and strike. The supported
   state space has at most 768 combinations, below the default 4,096-entry hard
@@ -196,9 +206,23 @@ ownership as independently reviewable state boundaries.
   color resolution without advancing screen/resource generations and damage.
   Rare palette/default changes deliberately dirty every visible row; cell
   tokens remain unchanged and normal output continues to use range damage.
+- Register screens with a shared palette through weak references. Every attached
+  grid receives generation and damage notification when logical colors change,
+  while retaining a palette outside a screen set cannot keep discarded screens
+  alive indefinitely.
 - Preserve configured palette resources across RIS. Screen content and
   rendition reset there, while OSC 104/110/111 are the explicit palette and
   default-color reset operations.
+- Give the screen set one transition generation distinct from each grid's
+  content generation and the palette/style resource generations. Switching
+  always requests full damage/snapshot on the newly active grid; repeated
+  already-satisfied transitions do not invent new generations.
+- Follow the xterm transition distinctions recorded above: mode 47 preserves
+  both buffers, 1047 clears alternate before returning, 1048 saves/restores the
+  active cursor and rendition, and 1049 saves primary then clears/uses
+  alternate and restores primary on exit. Repeated 1049 set/reset is
+  idempotent; an intervening mode-47 switch cannot overwrite the saved primary
+  state.
 
 ## Verification results
 
@@ -257,6 +281,37 @@ The first subtask was committed as
   Release AOT executable.
 - `make runtime-source-check` passed after staging the palette part and focused
   tests with `tracked=99` and `native_sources=0`.
+
+The second subtask was committed as
+`fb2a4f8 Add bounded terminal palette mutations`.
+
+### Primary/alternate screen ownership and DEC switching
+
+- Focused direct tests passed for two distinct fixed-size grids sharing one
+  style table and palette, stable cross-grid style IDs, palette mutation damage
+  on both grids, and independent content/cursor/rendition/wrap state.
+- Mode 47 preserves both grids across switches. Mode 1047 preserves alternate
+  while active and clears it before returning. Mode 1048 saves/restores the
+  active position and rendition. Mode 1049 clears on entry, restores primary on
+  exit, preserves the exited alternate for an explicit later mode-47 switch,
+  and does not resave/reclear on repeated transitions.
+- Every actual switch requests full dirty rows and a full snapshot on the new
+  active grid. Transition, screen, palette, and style generations retain their
+  separate scopes; already-satisfied mode transitions are idempotent.
+- Screen-set RIS tests passed for clearing/resetting both grids, returning to
+  primary, and preserving shared immutable styles plus explicit palette
+  mutations. A single-screen sink rejects screen-set-only modes safely.
+- DEC 47/1047/1048/1049 parser dispatch passed without unsupported actions. A
+  representative 1049 save/clear/restore plus mode-47 preservation stream
+  produced identical primary/alternate cells, color/style IDs, current/saved
+  state, wrap state, screen generations, and transition generation as one
+  chunk, every split including empty edges, and bytewise.
+- Final `make test` passed for 49 formatted Dart files, generated-parser-table
+  freshness, analysis with no issues, and all repository tests.
+- The focused screen-set/DEC-mode suite compiled and exited successfully as a
+  Release AOT executable.
+- `make runtime-source-check` passed after staging the screen-set product/test
+  files with `tracked=101` and `native_sources=0`.
 
 ## Risks and handoff
 

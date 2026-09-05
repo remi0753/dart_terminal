@@ -82,6 +82,7 @@ final class TerminalScreen {
     }
     _nextLogicalLineId = rows + 1;
     _writeDefaultTabStops();
+    palette._attach(this);
   }
 
   static const int maxRows = 4096;
@@ -353,9 +354,7 @@ final class TerminalScreen {
   }
 
   void setPaletteColors(List<int> indices, List<int> colors, [int? count]) {
-    if (palette._setColors(indices, colors, count ?? indices.length)) {
-      _palettePresentationChanged();
-    }
+    palette._setColors(indices, colors, count ?? indices.length);
   }
 
   void resetPaletteColor(int index) {
@@ -363,39 +362,27 @@ final class TerminalScreen {
   }
 
   void resetPaletteColors(List<int> indices, [int? count]) {
-    if (palette._resetColors(indices, count ?? indices.length)) {
-      _palettePresentationChanged();
-    }
+    palette._resetColors(indices, count ?? indices.length);
   }
 
   void resetPalette() {
-    if (palette._resetAllColors()) {
-      _palettePresentationChanged();
-    }
+    palette._resetAllColors();
   }
 
   void setDefaultForegroundColor(int color) {
-    if (palette._setDefaultForeground(color)) {
-      _palettePresentationChanged();
-    }
+    palette._setDefaultForeground(color);
   }
 
   void setDefaultBackgroundColor(int color) {
-    if (palette._setDefaultBackground(color)) {
-      _palettePresentationChanged();
-    }
+    palette._setDefaultBackground(color);
   }
 
   void resetDefaultForegroundColor() {
-    if (palette._resetDefaultForeground()) {
-      _palettePresentationChanged();
-    }
+    palette._resetDefaultForeground();
   }
 
   void resetDefaultBackgroundColor() {
-    if (palette._resetDefaultBackground()) {
-      _palettePresentationChanged();
-    }
+    palette._resetDefaultBackground();
   }
 
   void homeCursor() {
@@ -1134,6 +1121,17 @@ final class TerminalScreen {
   /// Records that a renderer has accepted a complete snapshot of this screen.
   void acknowledgeFullSnapshot() {
     _fullSnapshotRequired = false;
+  }
+
+  void requestFullSnapshot() {
+    bool changed = _markEveryRowDirty();
+    if (!_fullSnapshotRequired) {
+      _fullSnapshotRequired = true;
+      changed = true;
+    }
+    if (changed) {
+      _incrementGeneration();
+    }
   }
 
   void markAllDirty() {

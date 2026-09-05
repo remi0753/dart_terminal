@@ -63,6 +63,8 @@ pane-owned persistent login shell です。Phase 0 の native spike source は�
   16/256色・truecolor・default colorのsemicolon/colon SGR適用
 - typed xterm-256 palette、logical default foreground/background、bounded
   OSC 4/10/11/104/110/111 color mutationとpalette-aware damage
+- shared style/palette資源と独立したgrid/stateを持つprimary/alternate screen、
+  DEC private mode 47/1047/1048/1049、切替時full-snapshot contract
 
 ## 起動
 

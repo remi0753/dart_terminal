@@ -642,12 +642,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （[`docs/phase3/typed-array-grid-screen-state.md`](docs/phase3/typed-array-grid-screen-state.md) を参照して実施）
   - [x] cursor/edit/scroll operations と parser action sink
     （[`docs/phase3/typed-array-grid-screen-state.md`](docs/phase3/typed-array-grid-screen-state.md) を参照して実施）
-- [ ] SGR、palette、primary/alternate screen
+- [x] SGR、palette、primary/alternate screen
   - [x] style table、rendition state、SGR application
     （[`docs/phase3/sgr-palette-primary-alternate-screen.md`](docs/phase3/sgr-palette-primary-alternate-screen.md) を参照して実施）
   - [x] xterm-256 palette、default color、OSC color mutation
     （[`docs/phase3/sgr-palette-primary-alternate-screen.md`](docs/phase3/sgr-palette-primary-alternate-screen.md) を参照して実施）
-  - [ ] primary/alternate screen owner と DEC 47/1047/1048/1049
+  - [x] primary/alternate screen owner と DEC 47/1047/1048/1049
     （[`docs/phase3/sgr-palette-primary-alternate-screen.md`](docs/phase3/sgr-palette-primary-alternate-screen.md) を参照して実施）
 - [ ] wide/grapheme cells と resize/reflow
 - [ ] paged scrollback、viewport、selection/search primitives

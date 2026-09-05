@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'terminal_screen.dart';
+import 'terminal_screen_set.dart';
 import 'terminal_style.dart';
 import 'vt_parser.dart';
 import 'vt_parser_table.dart';
@@ -11,9 +12,18 @@ import 'vt_parser_table.dart';
 /// to later roadmap tasks. They are counted as unsupported without throwing or
 /// corrupting the visible screen.
 final class TerminalScreenParserSink implements VtParserSink {
-  TerminalScreenParserSink(this.screen);
+  TerminalScreenParserSink(TerminalScreen screen)
+    : _screen = screen,
+      screenSet = null;
 
-  final TerminalScreen screen;
+  TerminalScreenParserSink.forScreenSet(TerminalScreenSet screens)
+    : _screen = null,
+      screenSet = screens;
+
+  final TerminalScreen? _screen;
+  final TerminalScreenSet? screenSet;
+
+  TerminalScreen get screen => screenSet?.activeScreen ?? _screen!;
 
   int _unsupportedControlCount = 0;
   int _unsupportedSequenceCount = 0;
@@ -86,7 +96,12 @@ final class TerminalScreenParserSink implements VtParserSink {
       case 0x4d:
         screen.reverseIndex();
       case 0x63:
-        screen.resetScreen();
+        final TerminalScreenSet? screens = screenSet;
+        if (screens == null) {
+          screen.resetScreen();
+        } else {
+          screens.reset();
+        }
       default:
         _unsupportedSequenceCount++;
     }
@@ -779,11 +794,37 @@ final class TerminalScreenParserSink implements VtParserSink {
           screen.setCursorPresentation(blinking: enabled);
         case 25:
           screen.setCursorPresentation(visible: enabled);
+        case 47:
+          _setScreenMode(enabled, 47);
         case 69:
           screen.setMode(TerminalScreenMode.horizontalMargins, enabled);
+        case 1047:
+          _setScreenMode(enabled, 1047);
+        case 1048:
+          _setScreenMode(enabled, 1048);
+        case 1049:
+          _setScreenMode(enabled, 1049);
         default:
           _unsupportedSequenceCount++;
       }
+    }
+  }
+
+  void _setScreenMode(bool enabled, int mode) {
+    final TerminalScreenSet? screens = screenSet;
+    if (screens == null) {
+      _unsupportedSequenceCount++;
+      return;
+    }
+    switch (mode) {
+      case 47:
+        screens.setAlternateMode47(enabled);
+      case 1047:
+        screens.setAlternateMode1047(enabled);
+      case 1048:
+        screens.setCursorSaveMode1048(enabled);
+      case 1049:
+        screens.setAlternateMode1049(enabled);
     }
   }
 
