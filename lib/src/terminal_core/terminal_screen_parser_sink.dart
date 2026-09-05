@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'terminal_reply.dart';
 import 'terminal_screen.dart';
 import 'terminal_screen_set.dart';
 import 'terminal_style.dart';
@@ -8,20 +9,27 @@ import 'vt_parser_table.dart';
 
 /// Applies the currently supported VT screen actions to a [TerminalScreen].
 ///
-/// SGR, palette, alternate-screen, protocol strings, and query replies belong
-/// to later roadmap tasks. They are counted as unsupported without throwing or
-/// corrupting the visible screen.
+/// Unsupported protocol strings are counted without throwing or corrupting the
+/// visible screen. Supported query replies are emitted synchronously through a
+/// bounded callback and never recursively enter the parser.
 final class TerminalScreenParserSink implements VtParserSink {
-  TerminalScreenParserSink(TerminalScreen screen)
-    : _screen = screen,
-      screenSet = null;
+  TerminalScreenParserSink(
+    TerminalScreen screen, {
+    TerminalReplyHandler? onReply,
+  }) : _screen = screen,
+       screenSet = null,
+       _onReply = onReply;
 
-  TerminalScreenParserSink.forScreenSet(TerminalScreenSet screens)
-    : _screen = null,
-      screenSet = screens;
+  TerminalScreenParserSink.forScreenSet(
+    TerminalScreenSet screens, {
+    TerminalReplyHandler? onReply,
+  }) : _screen = null,
+       screenSet = screens,
+       _onReply = onReply;
 
   final TerminalScreen? _screen;
   final TerminalScreenSet? screenSet;
+  final TerminalReplyHandler? _onReply;
 
   TerminalScreen get screen => screenSet?.activeScreen ?? _screen!;
 
@@ -31,10 +39,15 @@ final class TerminalScreenParserSink implements VtParserSink {
   int _limitCount = 0;
   int _malformedCount = 0;
   int _incompleteCount = 0;
+  int _acceptedReplyCount = 0;
+  int _rejectedReplyCount = 0;
   final Uint16List _oscPaletteIndices = Uint16List(
     TerminalPalette.maxBatchEntries,
   );
   final Uint32List _oscPaletteColors = Uint32List(
+    TerminalPalette.maxBatchEntries,
+  );
+  final Uint16List _oscPaletteQueryIndices = Uint16List(
     TerminalPalette.maxBatchEntries,
   );
 
@@ -44,6 +57,8 @@ final class TerminalScreenParserSink implements VtParserSink {
   int get limitCount => _limitCount;
   int get malformedCount => _malformedCount;
   int get incompleteCount => _incompleteCount;
+  int get acceptedReplyCount => _acceptedReplyCount;
+  int get rejectedReplyCount => _rejectedReplyCount;
 
   @override
   void print(int scalar) {
@@ -120,6 +135,9 @@ final class TerminalScreenParserSink implements VtParserSink {
     }
     if (_hasSubparameters(sequence)) {
       _unsupportedSequenceCount++;
+      return;
+    }
+    if (_dispatchCsiQuery(sequence)) {
       return;
     }
     if (sequence.privateMarker == 0x3f && sequence.intermediateCount == 0) {
@@ -281,6 +299,144 @@ final class TerminalScreenParserSink implements VtParserSink {
     _incompleteCount++;
   }
 
+  bool _dispatchCsiQuery(VtSequenceHeader sequence) {
+    if (sequence.intermediateCount == 0 && sequence.finalByte == 0x63) {
+      if (sequence.privateMarker == null || sequence.privateMarker == 0x3e) {
+        _reportDeviceAttributes(sequence);
+        return true;
+      }
+      return false;
+    }
+    if (sequence.intermediateCount == 0 && sequence.finalByte == 0x6e) {
+      if (sequence.privateMarker == null || sequence.privateMarker == 0x3f) {
+        _reportDeviceStatus(sequence);
+        return true;
+      }
+      return false;
+    }
+    if (sequence.intermediateCount == 1 &&
+        sequence.intermediateAt(0) == 0x24 &&
+        sequence.finalByte == 0x70 &&
+        (sequence.privateMarker == null || sequence.privateMarker == 0x3f)) {
+      _reportMode(sequence);
+      return true;
+    }
+    return false;
+  }
+
+  void _reportDeviceAttributes(VtSequenceHeader sequence) {
+    if (sequence.parameters.length > 1) {
+      _unsupportedSequenceCount++;
+      return;
+    }
+    final int parameter = sequence.parameters.length == 0
+        ? 0
+        : sequence.parameters.valueAt(0) ?? 0;
+    if (parameter != 0) {
+      _unsupportedSequenceCount++;
+      return;
+    }
+    _emitReply(
+      sequence.privateMarker == null
+          ? TerminalReplyEncoder.primaryDeviceAttributes()
+          : TerminalReplyEncoder.secondaryDeviceAttributes(),
+    );
+  }
+
+  void _reportDeviceStatus(VtSequenceHeader sequence) {
+    if (sequence.parameters.length != 1) {
+      _unsupportedSequenceCount++;
+      return;
+    }
+    final int? parameter = sequence.parameters.valueAt(0);
+    if (sequence.privateMarker == null && parameter == 5) {
+      _emitReply(TerminalReplyEncoder.terminalStatusOk());
+      return;
+    }
+    if (parameter == 6) {
+      final bool origin = screen.modeEnabled(TerminalScreenMode.origin);
+      final int row = screen.cursorRow - (origin ? screen.topMargin : 0) + 1;
+      final int column =
+          screen.cursorColumn - (origin ? screen.activeLeftMargin : 0) + 1;
+      _emitReply(
+        TerminalReplyEncoder.cursorPosition(
+          row: row,
+          column: column,
+          decPrivate: sequence.privateMarker == 0x3f,
+        ),
+      );
+      return;
+    }
+    _unsupportedSequenceCount++;
+  }
+
+  void _reportMode(VtSequenceHeader sequence) {
+    if (sequence.parameters.length != 1) {
+      _unsupportedSequenceCount++;
+      return;
+    }
+    final int? mode = sequence.parameters.valueAt(0);
+    if (mode == null) {
+      _unsupportedSequenceCount++;
+      return;
+    }
+    final bool decPrivate = sequence.privateMarker == 0x3f;
+    _emitReply(
+      TerminalReplyEncoder.modeReport(
+        mode: mode,
+        status: _modeReportStatus(mode, decPrivate: decPrivate),
+        decPrivate: decPrivate,
+      ),
+    );
+  }
+
+  TerminalModeReportStatus _modeReportStatus(
+    int mode, {
+    required bool decPrivate,
+  }) {
+    final bool? enabled;
+    if (!decPrivate) {
+      enabled = mode == 4
+          ? screen.modeEnabled(TerminalScreenMode.insert)
+          : null;
+    } else {
+      enabled = switch (mode) {
+        5 => screen.modeEnabled(TerminalScreenMode.reverseVideo),
+        6 => screen.modeEnabled(TerminalScreenMode.origin),
+        7 => screen.modeEnabled(TerminalScreenMode.autoWrap),
+        12 => screen.cursorBlinking,
+        25 => screen.cursorVisible,
+        47 || 1047 => screenSet?.usingAlternate,
+        69 => screen.modeEnabled(TerminalScreenMode.horizontalMargins),
+        1049 => screenSet?.mode1049Active,
+        _ => null,
+      };
+    }
+    if (enabled == null) {
+      return TerminalModeReportStatus.notRecognized;
+    }
+    return enabled
+        ? TerminalModeReportStatus.set
+        : TerminalModeReportStatus.reset;
+  }
+
+  void _emitReply(Uint8List reply) {
+    final TerminalReplyHandler? handler = _onReply;
+    if (handler == null) {
+      _rejectedReplyCount++;
+      return;
+    }
+    try {
+      if (handler(reply)) {
+        _acceptedReplyCount++;
+      } else {
+        _rejectedReplyCount++;
+      }
+    } on Object {
+      _rejectedReplyCount++;
+    }
+  }
+
   void _setAnsiModes(VtSequenceHeader sequence, bool enabled) {
     if (sequence.parameters.length == 0) {
       _unsupportedSequenceCount++;
@@ -298,9 +454,11 @@ final class TerminalScreenParserSink implements VtParserSink {
 
   bool _applyOscPalette(VtStringSequence sequence, int start) {
     int offset = start;
-    int count = 0;
+    int pairCount = 0;
+    int mutationCount = 0;
+    int queryCount = 0;
     while (offset < sequence.payloadLength) {
-      if (count >= TerminalPalette.maxBatchEntries) {
+      if (pairCount >= TerminalPalette.maxBatchEntries) {
         return false;
       }
       final int indexEnd = _findPayloadByte(sequence, offset, 0x3b);
@@ -315,21 +473,46 @@ final class TerminalScreenParserSink implements VtParserSink {
       );
       final int colorStart = indexEnd + 1;
       final int colorEnd = _findPayloadByte(sequence, colorStart, 0x3b);
-      final int color = _parseOscColor(sequence, colorStart, colorEnd);
-      if (index < 0 || color < 0) {
+      if (index < 0 || colorStart >= colorEnd) {
         return false;
       }
-      _oscPaletteIndices[count] = index;
-      _oscPaletteColors[count] = color;
-      count++;
+      if (colorEnd - colorStart == 1 &&
+          sequence.payloadByteAt(colorStart) == 0x3f) {
+        _oscPaletteQueryIndices[queryCount++] = index;
+      } else {
+        final int color = _parseOscColor(sequence, colorStart, colorEnd);
+        if (color < 0) {
+          return false;
+        }
+        _oscPaletteIndices[mutationCount] = index;
+        _oscPaletteColors[mutationCount] = color;
+        mutationCount++;
+      }
+      pairCount++;
       offset = colorEnd < sequence.payloadLength
           ? colorEnd + 1
           : sequence.payloadLength;
     }
-    if (count == 0) {
+    if (pairCount == 0) {
       return false;
     }
-    screen.setPaletteColors(_oscPaletteIndices, _oscPaletteColors, count);
+    if (mutationCount != 0) {
+      screen.setPaletteColors(
+        _oscPaletteIndices,
+        _oscPaletteColors,
+        mutationCount,
+      );
+    }
+    for (int query = 0; query < queryCount; query++) {
+      final int index = _oscPaletteQueryIndices[query];
+      _emitReply(
+        TerminalReplyEncoder.paletteColor(
+          index: index,
+          color: screen.paletteColorAt(index),
+          terminator: sequence.terminator,
+        ),
+      );
+    }
     return true;
   }
 
@@ -373,6 +556,19 @@ final class TerminalScreenParserSink implements VtParserSink {
     if (start >= sequence.payloadLength ||
         _findPayloadByte(sequence, start, 0x3b) != sequence.payloadLength) {
       return false;
+    }
+    if (sequence.payloadLength - start == 1 &&
+        sequence.payloadByteAt(start) == 0x3f) {
+      _emitReply(
+        TerminalReplyEncoder.defaultColor(
+          command: foreground ? 10 : 11,
+          color: foreground
+              ? screen.defaultForegroundColor
+              : screen.defaultBackgroundColor,
+          terminator: sequence.terminator,
+        ),
+      );
+      return true;
     }
     final int color = _parseOscColor(sequence, start, sequence.payloadLength);
     if (color < 0) {

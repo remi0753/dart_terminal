@@ -279,8 +279,8 @@ void _testOscColorMutationAndRejection() {
     'rejected OSC colors leave generation unchanged',
   );
   _expect(
-    sink.unsupportedSequenceCount == 5,
-    'query, malformed, and unrelated OSC are counted',
+    sink.unsupportedSequenceCount == 3 && sink.rejectedReplyCount == 2,
+    'queries are recognized while malformed and unrelated OSC are counted',
   );
 
   final StringBuffer oversized = StringBuffer('4');
@@ -289,7 +289,7 @@ void _testOscColorMutationAndRejection() {
   }
   parser.parse(Uint8List.fromList(_osc(oversized.toString())));
   _expect(
-    sink.unsupportedSequenceCount == 6 &&
+    sink.unsupportedSequenceCount == 4 &&
         screen.paletteGeneration == generation,
     'OSC palette mutation count is bounded and atomic',
   );

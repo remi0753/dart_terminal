@@ -101,11 +101,11 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| CAP-01 | DA/DA2、DSR/CPR、DEC private mode、DECRQM の request/reply | P0 | 3/6 | `G:src/terminal/device_attributes.zig`, `G:src/terminal/device_status.zig`, `G:src/terminal/modes.zig` | 未実装 |
+| CAP-01 | DA/DA2、DSR/CPR、DEC private mode、DECRQM の request/reply | P0 | 3/6 | `G:src/terminal/device_attributes.zig`, `G:src/terminal/device_status.zig`, `G:src/terminal/modes.zig` | bounded 7-bit encoderとterminal-core dispatchを完了。product PTY connectionは現在タスク |
 | CAP-02 | application cursor/keypad、bracketed paste、focus report | P0 | 3/5 | `G:src/input/key_encode.zig`, `G:src/terminal/paste.zig`, `G:src/terminal/focus.zig` | 未実装 |
 | CAP-03 | mouse X10、UTF-8、URXVT、SGR mode/encoding | P0 | 3/5 | `G:src/terminal/mouse.zig`, `G:src/input/mouse_encode.zig` | 未実装 |
 | CAP-04 | xterm-256color 互換 terminfo と SSH fallback | P0/P1 | 6/8 | `G:src/terminfo/`, `G:src/cli/ssh.zig` | 未実装 |
-| CAP-05 | window/tab title、OSC 7 cwd、OSC 8 hyperlink、palette/default color query/change | P0 | 3/6 | `G:src/terminal/osc/parsers/` | bounded OSC 4/10/11/104/110/111 palette/default色change/resetを完了。query reply、title/cwd/hyperlinkは後続 |
+| CAP-05 | window/tab title、OSC 7 cwd、OSC 8 hyperlink、palette/default color query/change | P0 | 3/6 | `G:src/terminal/osc/parsers/` | bounded OSC 4/10/11 palette/default色query/changeと104/110/111 resetを完了。title/cwd/hyperlinkは後続 |
 | CAP-06 | OSC 52 は read/write policy、confirmation、size limit 付き | P0/P1 | 6/9 | `G:src/terminal/clipboard.zig`, `G:src/terminal/osc/parsers/clipboard_operation.zig` | 未実装 |
 | CAP-07 | XTGETTCAP、DECRQSS、window/size report | P1 | 6 | `G:src/terminal/dcs.zig`, `G:src/terminal/size_report.zig` | 未実装 |
 | CAP-08 | Kitty keyboard と progressive enhancement。legacy encoding を regression させない | P1 | 9 | `G:src/input/kitty.zig`, `G:src/terminal/kitty/key.zig` | 未実装 |

@@ -71,6 +71,8 @@ pane-owned persistent login shell です。Phase 0 の native spike source は�
   history/active gridを投影するbounded viewportとstable logical anchor
 - end-exclusive cell/word/logical-line selection、soft/hard wrap準拠のbounded
   text extraction、cell-aligned exact scalarのforward/backward bounded search
+- 最大64 byteのreply encoderと、DA/DA2、DSR/CPR、DECRQM、OSC palette/default
+  color queryのterminal-core dispatch
 
 ## 起動
 

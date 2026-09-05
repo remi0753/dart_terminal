@@ -15,6 +15,7 @@ import 'terminal_core_test.dart';
 import 'terminal_history_reflow_test.dart';
 import 'terminal_palette_test.dart';
 import 'terminal_reflow_test.dart';
+import 'terminal_reply_test.dart';
 import 'terminal_screen_set_test.dart';
 import 'terminal_screen_test.dart';
 import 'terminal_scrollback_test.dart';
@@ -36,6 +37,7 @@ Future<void> main() async {
   runTerminalHistoryReflowTests();
   runTerminalPaletteTests();
   runTerminalReflowTests();
+  runTerminalReplyTests();
   runTerminalScrollbackTests();
   runTerminalScreenTests();
   runTerminalScreenSetTests();
