@@ -38,6 +38,10 @@ enum TerminalScreenMode {
 
 enum TerminalCursorShape { block, underline, bar }
 
+/// Validates a package-level replacement request before ownership changes.
+void validateTerminalScreenDimensions(int rows, int columns) =>
+    TerminalScreen._validateDimensions(rows, columns);
+
 /// Internal package construction path for the screen-set-owned primary grid.
 TerminalScreen createTerminalScreenWithScrollback({
   required int rows,
@@ -105,12 +109,14 @@ final class TerminalScreen {
        _dirtyEnds = Uint16List(rows),
        _rowFlags = Uint8List(rows),
        _logicalLineIds = Uint32List(rows),
+       _logicalLineEpochs = Uint64List(rows),
        _tabStops = Uint8List(columns),
        _pendingScalars = Uint32List(graphemeTable.maximumClusterLength) {
     _widthFlags.fillRange(0, cellCount, TerminalCellFlags.narrow);
     _dirtyStarts.fillRange(0, rows, columns);
     for (int row = 0; row < rows; row++) {
       _logicalLineIds[row] = row + 1;
+      _logicalLineEpochs[row] = _logicalLineEpoch;
     }
     _nextLogicalLineId = rows + 1;
     _writeDefaultTabStops();
@@ -144,6 +150,7 @@ final class TerminalScreen {
   final Uint16List _dirtyEnds;
   final Uint8List _rowFlags;
   final Uint32List _logicalLineIds;
+  final Uint64List _logicalLineEpochs;
   final Uint8List _tabStops;
   final TerminalGraphemeBreaker _graphemeBreaker = TerminalGraphemeBreaker();
   final Uint32List _pendingScalars;
@@ -160,6 +167,7 @@ final class TerminalScreen {
   int _savedBackground = 0;
   int _savedStyleId = 0;
   late int _nextLogicalLineId;
+  int _logicalLineEpoch = 1;
   int _generation = 1;
   bool _fullSnapshotRequired = true;
 
@@ -245,10 +253,17 @@ final class TerminalScreen {
 
   int logicalLineIdAt(int row) => _logicalLineIds[_physicalRowFor(row)];
 
+  int logicalLineEpochAt(int row) => _logicalLineEpochs[_physicalRowFor(row)];
+
   /// Throws when any row violates the packed wide/continuation contract.
   void validateCellTopology() {
     for (int row = 0; row < rows; row++) {
       final int physical = _physicalRow(row);
+      if ((_rowFlags[physical] & ~TerminalRowFlags.knownMask) != 0 ||
+          _logicalLineIds[physical] == 0 ||
+          _logicalLineEpochs[physical] == 0) {
+        throw StateError('invalid row metadata at $row');
+      }
       for (int column = 0; column < columns; column++) {
         final int index = physical * columns + column;
         final int flags = _widthFlags[index];
@@ -436,6 +451,18 @@ final class TerminalScreen {
       return;
     }
     _logicalLineIds[physical] = logicalLineId;
+    _markDirtyPhysical(physical, 0, columns);
+    _incrementGeneration();
+  }
+
+  void _setLogicalLineIdentity(int row, int logicalLineId, int epoch) {
+    final int physical = _physicalRowFor(row);
+    if (_logicalLineIds[physical] == logicalLineId &&
+        _logicalLineEpochs[physical] == epoch) {
+      return;
+    }
+    _logicalLineIds[physical] = logicalLineId;
+    _logicalLineEpochs[physical] = epoch;
     _markDirtyPhysical(physical, 0, columns);
     _incrementGeneration();
   }
@@ -1261,8 +1288,10 @@ final class TerminalScreen {
     _hyperlinks.fillRange(0, cellCount, 0);
     _widthFlags.fillRange(0, cellCount, TerminalCellFlags.narrow);
     _rowFlags.fillRange(0, rows, 0);
+    _advanceLogicalLineEpoch();
     for (int row = 0; row < rows; row++) {
       _logicalLineIds[row] = row + 1;
+      _logicalLineEpochs[row] = _logicalLineEpoch;
     }
     _nextLogicalLineId = rows + 1;
     _markEveryRowDirty();
@@ -1483,6 +1512,7 @@ final class TerminalScreen {
   void _wrapToNextLine() {
     final int previousRow = _cursorRow;
     final int logicalLineId = logicalLineIdAt(previousRow);
+    final int logicalLineEpoch = logicalLineEpochAt(previousRow);
     final int flags = rowFlagsAt(previousRow);
     setRowFlags(
       previousRow,
@@ -1492,7 +1522,7 @@ final class TerminalScreen {
     final int right = _horizontalRightForCursor();
     _moveCursorClamped(previousRow, left, 0, rows - 1, left, right);
     index();
-    setLogicalLineId(_cursorRow, logicalLineId);
+    _setLogicalLineIdentity(_cursorRow, logicalLineId, logicalLineEpoch);
   }
 
   void _setCellGroup(
@@ -1957,6 +1987,7 @@ final class TerminalScreen {
         _clearCellRange(physical, 0, columns);
         _rowFlags[physical] = 0;
         _logicalLineIds[physical] = _allocateLogicalLineId();
+        _logicalLineEpochs[physical] = _logicalLineEpoch;
       }
       _markEveryRowDirty();
       _incrementGeneration();
@@ -1971,6 +2002,7 @@ final class TerminalScreen {
       if (fullWidth) {
         _rowFlags[destination] = _rowFlags[source];
         _logicalLineIds[destination] = _logicalLineIds[source];
+        _logicalLineEpochs[destination] = _logicalLineEpochs[source];
       }
     }
     for (int row = bottom - amount + 1; row <= bottom; row++) {
@@ -1979,6 +2011,7 @@ final class TerminalScreen {
       if (fullWidth) {
         _rowFlags[physical] = 0;
         _logicalLineIds[physical] = _allocateLogicalLineId();
+        _logicalLineEpochs[physical] = _logicalLineEpoch;
       }
     }
     _markRegionDirty(top, bottom, left, right + 1);
@@ -1995,6 +2028,7 @@ final class TerminalScreen {
         _clearCellRange(physical, 0, columns);
         _rowFlags[physical] = 0;
         _logicalLineIds[physical] = _allocateLogicalLineId();
+        _logicalLineEpochs[physical] = _logicalLineEpoch;
       }
       _markEveryRowDirty();
       _incrementGeneration();
@@ -2009,6 +2043,7 @@ final class TerminalScreen {
       if (fullWidth) {
         _rowFlags[destination] = _rowFlags[source];
         _logicalLineIds[destination] = _logicalLineIds[source];
+        _logicalLineEpochs[destination] = _logicalLineEpochs[source];
       }
     }
     for (int row = top; row < top + amount; row++) {
@@ -2017,6 +2052,7 @@ final class TerminalScreen {
       if (fullWidth) {
         _rowFlags[physical] = 0;
         _logicalLineIds[physical] = _allocateLogicalLineId();
+        _logicalLineEpochs[physical] = _logicalLineEpoch;
       }
     }
     _markRegionDirty(top, bottom, left, right + 1);
@@ -2031,14 +2067,24 @@ final class TerminalScreen {
 
   int _allocateLogicalLineId() {
     if (_nextLogicalLineId > maxLogicalLineId) {
+      _advanceLogicalLineEpoch();
       for (int row = 0; row < rows; row++) {
-        _logicalLineIds[_physicalRow(row)] = row + 1;
+        final int physical = _physicalRow(row);
+        _logicalLineIds[physical] = row + 1;
+        _logicalLineEpochs[physical] = _logicalLineEpoch;
       }
       _nextLogicalLineId = rows + 1;
       _markEveryRowDirty();
       _fullSnapshotRequired = true;
     }
     return _nextLogicalLineId++;
+  }
+
+  void _advanceLogicalLineEpoch() {
+    if (_logicalLineEpoch == 0x7fffffffffffffff) {
+      throw StateError('logical-line epoch capacity exhausted');
+    }
+    _logicalLineEpoch++;
   }
 
   bool _markDirtyPhysical(int physical, int start, int end) {

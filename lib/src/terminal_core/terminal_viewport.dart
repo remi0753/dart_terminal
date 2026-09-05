@@ -1,5 +1,93 @@
 part of 'terminal_screen_set.dart';
 
+/// A display-cell position within one logical terminal line.
+final class TerminalLogicalAnchor {
+  static const int maxCellOffset = 0x7fffffffffffffff;
+  static const int maxLogicalLineEpoch = 0x7fffffffffffffff;
+
+  factory TerminalLogicalAnchor({
+    required TerminalScreenKind screenKind,
+    required int logicalLineId,
+    required int logicalLineEpoch,
+    required int cellOffset,
+  }) {
+    if (logicalLineId <= 0 || logicalLineId > TerminalScreen.maxLogicalLineId) {
+      throw RangeError.range(
+        logicalLineId,
+        1,
+        TerminalScreen.maxLogicalLineId,
+        'logicalLineId',
+      );
+    }
+    if (logicalLineEpoch <= 0 || logicalLineEpoch > maxLogicalLineEpoch) {
+      throw RangeError.range(
+        logicalLineEpoch,
+        1,
+        maxLogicalLineEpoch,
+        'logicalLineEpoch',
+      );
+    }
+    if (cellOffset < 0 || cellOffset > maxCellOffset) {
+      throw RangeError.range(cellOffset, 0, maxCellOffset, 'cellOffset');
+    }
+    return TerminalLogicalAnchor._(
+      screenKind,
+      logicalLineId,
+      logicalLineEpoch,
+      cellOffset,
+    );
+  }
+
+  const TerminalLogicalAnchor._(
+    this.screenKind,
+    this.logicalLineId,
+    this.logicalLineEpoch,
+    this.cellOffset,
+  );
+
+  final TerminalScreenKind screenKind;
+  final int logicalLineId;
+  final int logicalLineEpoch;
+  final int cellOffset;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalLogicalAnchor &&
+      other.screenKind == screenKind &&
+      other.logicalLineId == logicalLineId &&
+      other.logicalLineEpoch == logicalLineEpoch &&
+      other.cellOffset == cellOffset;
+
+  @override
+  int get hashCode =>
+      Object.hash(screenKind, logicalLineId, logicalLineEpoch, cellOffset);
+
+  @override
+  String toString() =>
+      'TerminalLogicalAnchor('
+      '$screenKind, $logicalLineId, $logicalLineEpoch, $cellOffset)';
+}
+
+/// A currently visible coordinate resolved from a logical anchor.
+final class TerminalViewportPosition {
+  const TerminalViewportPosition({required this.row, required this.column});
+
+  final int row;
+  final int column;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalViewportPosition &&
+      other.row == row &&
+      other.column == column;
+
+  @override
+  int get hashCode => Object.hash(row, column);
+
+  @override
+  String toString() => 'TerminalViewportPosition($row, $column)';
+}
+
 /// Navigable row projection over primary history plus the active screen.
 ///
 /// Positive offsets and scroll deltas move toward older primary rows. An
@@ -122,6 +210,13 @@ final class TerminalViewport {
         : _screens.activeScreen.logicalLineIdAt(location.row);
   }
 
+  int logicalLineEpochAt(int viewportRow) {
+    final _ViewportLocation location = _locate(viewportRow);
+    return location.history
+        ? _screens.scrollback.logicalLineEpochAt(location.row)
+        : _screens.activeScreen.logicalLineEpochAt(location.row);
+  }
+
   int contentAt(int viewportRow, int column) {
     final _ViewportLocation location = _locate(viewportRow);
     return location.history
@@ -164,6 +259,36 @@ final class TerminalViewport {
         : _screens.activeScreen.widthFlagsAt(location.row, column);
   }
 
+  TerminalLogicalAnchor anchorAt(int viewportRow, int column) {
+    final _ViewportLocation location = _locate(viewportRow);
+    final TerminalScreenKind kind = _screens.activeKind;
+    final int combinedRow = kind == TerminalScreenKind.primary
+        ? (location.history
+              ? location.row
+              : _screens.scrollback.length + location.row)
+        : location.row;
+    return _anchorAtCombined(kind, combinedRow, column);
+  }
+
+  TerminalViewportPosition? positionOf(TerminalLogicalAnchor anchor) {
+    _sync();
+    if (anchor.screenKind != _screens.activeKind) {
+      return null;
+    }
+    final _CombinedPosition? position = _resolveCombined(anchor);
+    if (position == null) {
+      return null;
+    }
+    final int start = anchor.screenKind == TerminalScreenKind.primary
+        ? _screens.scrollback.length - _primaryOffset
+        : 0;
+    final int viewportRow = position.row - start;
+    if (viewportRow < 0 || viewportRow >= _screens.activeScreen.rows) {
+      return null;
+    }
+    return TerminalViewportPosition(row: viewportRow, column: position.column);
+  }
+
   _ViewportLocation _locate(int viewportRow) {
     _sync();
     final TerminalScreen screen = _screens.activeScreen;
@@ -188,6 +313,331 @@ final class TerminalViewport {
     }
     _primaryOffset = next;
     _generation++;
+  }
+
+  ({TerminalLogicalAnchor? anchor, bool atBottom})
+  capturePrimaryReflowPosition() {
+    _sync();
+    if (_primaryOffset == 0) {
+      return (anchor: null, atBottom: true);
+    }
+    final int combinedRow = _screens.scrollback.length - _primaryOffset;
+    return (
+      anchor: _anchorAtCombined(TerminalScreenKind.primary, combinedRow, 0),
+      atBottom: false,
+    );
+  }
+
+  void restorePrimaryReflowPosition(
+    TerminalLogicalAnchor? anchor, {
+    required bool wasAtBottom,
+  }) {
+    if (wasAtBottom || anchor == null) {
+      _primaryOffset = 0;
+      return;
+    }
+    final _CombinedPosition? position = _resolveCombined(anchor);
+    if (position == null) {
+      _primaryOffset = _screens.scrollback.length;
+      return;
+    }
+    _primaryOffset = (_screens.scrollback.length - position.row).clamp(
+      0,
+      _screens.scrollback.length,
+    );
+  }
+
+  TerminalLogicalAnchor _anchorAtCombined(
+    TerminalScreenKind kind,
+    int row,
+    int column,
+  ) {
+    final int columns = _combinedColumnsAt(kind, row);
+    if (column < 0 || column >= columns) {
+      throw RangeError.range(column, 0, columns - 1, 'column');
+    }
+    final int normalized =
+        column > 0 &&
+            (_combinedWidthFlagsAt(kind, row, column) &
+                    TerminalCellFlags.widthMask) ==
+                TerminalCellFlags.continuation
+        ? column - 1
+        : column;
+    return TerminalLogicalAnchor(
+      screenKind: kind,
+      logicalLineId: _combinedLogicalLineIdAt(kind, row),
+      logicalLineEpoch: _combinedLogicalLineEpochAt(kind, row),
+      cellOffset:
+          _combinedLogicalOffsetAt(kind, row) +
+          _combinedLogicalCellIndex(kind, row, normalized),
+    );
+  }
+
+  _CombinedPosition? _resolveCombined(TerminalLogicalAnchor anchor) {
+    final int rowCount = _combinedRowCount(anchor.screenKind);
+    for (int row = 0; row < rowCount; row++) {
+      if (_combinedLogicalLineIdAt(anchor.screenKind, row) !=
+              anchor.logicalLineId ||
+          _combinedLogicalLineEpochAt(anchor.screenKind, row) !=
+              anchor.logicalLineEpoch) {
+        continue;
+      }
+      final int base = _combinedLogicalOffsetAt(anchor.screenKind, row);
+      if (anchor.cellOffset < base) {
+        continue;
+      }
+      final int logicalCellCount = _combinedLogicalCellCount(
+        anchor.screenKind,
+        row,
+      );
+      final bool joinsNext = _combinedJoinsNext(anchor.screenKind, row);
+      if (anchor.cellOffset >= base + logicalCellCount && joinsNext) {
+        continue;
+      }
+      final int logicalCell = (anchor.cellOffset - base).clamp(
+        0,
+        logicalCellCount == 0 ? 0 : logicalCellCount - 1,
+      );
+      return _CombinedPosition(
+        row,
+        _combinedColumnForLogicalCell(anchor.screenKind, row, logicalCell),
+      );
+    }
+    return null;
+  }
+
+  int _combinedRowCount(TerminalScreenKind kind) =>
+      kind == TerminalScreenKind.primary
+      ? _screens.scrollback.length + _screens.primary.rows
+      : _screens.alternate.rows;
+
+  int _combinedColumnsAt(TerminalScreenKind kind, int row) {
+    final int rowCount = _combinedRowCount(kind);
+    if (row < 0 || row >= rowCount) {
+      throw RangeError.range(row, 0, rowCount - 1, 'row');
+    }
+    if (kind == TerminalScreenKind.primary &&
+        row < _screens.scrollback.length) {
+      return _screens.scrollback.columnsAt(row);
+    }
+    return kind == TerminalScreenKind.primary
+        ? _screens.primary.columns
+        : _screens.alternate.columns;
+  }
+
+  int _combinedRowFlagsAt(TerminalScreenKind kind, int row) {
+    if (kind == TerminalScreenKind.primary &&
+        row < _screens.scrollback.length) {
+      return _screens.scrollback.rowFlagsAt(row);
+    }
+    return kind == TerminalScreenKind.primary
+        ? _screens.primary.rowFlagsAt(row - _screens.scrollback.length)
+        : _screens.alternate.rowFlagsAt(row);
+  }
+
+  int _combinedLogicalLineIdAt(TerminalScreenKind kind, int row) {
+    if (kind == TerminalScreenKind.primary &&
+        row < _screens.scrollback.length) {
+      return _screens.scrollback.logicalLineIdAt(row);
+    }
+    return kind == TerminalScreenKind.primary
+        ? _screens.primary.logicalLineIdAt(row - _screens.scrollback.length)
+        : _screens.alternate.logicalLineIdAt(row);
+  }
+
+  int _combinedLogicalLineEpochAt(TerminalScreenKind kind, int row) {
+    if (kind == TerminalScreenKind.primary &&
+        row < _screens.scrollback.length) {
+      return _screens.scrollback.logicalLineEpochAt(row);
+    }
+    return kind == TerminalScreenKind.primary
+        ? _screens.primary.logicalLineEpochAt(row - _screens.scrollback.length)
+        : _screens.alternate.logicalLineEpochAt(row);
+  }
+
+  int _combinedWidthFlagsAt(TerminalScreenKind kind, int row, int column) {
+    if (kind == TerminalScreenKind.primary &&
+        row < _screens.scrollback.length) {
+      return _screens.scrollback.widthFlagsAt(row, column);
+    }
+    return kind == TerminalScreenKind.primary
+        ? _screens.primary.widthFlagsAt(
+            row - _screens.scrollback.length,
+            column,
+          )
+        : _screens.alternate.widthFlagsAt(row, column);
+  }
+
+  int _combinedLogicalOffsetAt(TerminalScreenKind kind, int row) {
+    if (kind == TerminalScreenKind.primary &&
+        row < _screens.scrollback.length) {
+      return _screens.scrollback.logicalCellOffsetAt(row);
+    }
+    int start = row;
+    while (start > 0 &&
+        _combinedRowFlagsAt(kind, start - 1) & TerminalRowFlags.softWrapped !=
+            0 &&
+        _combinedLogicalLineIdAt(kind, start - 1) ==
+            _combinedLogicalLineIdAt(kind, row) &&
+        _combinedLogicalLineEpochAt(kind, start - 1) ==
+            _combinedLogicalLineEpochAt(kind, row)) {
+      start--;
+    }
+    int offset =
+        kind == TerminalScreenKind.primary && start < _screens.scrollback.length
+        ? _screens.scrollback.logicalCellOffsetAt(start)
+        : 0;
+    for (int current = start; current < row; current++) {
+      offset += _combinedLogicalCellCount(kind, current);
+    }
+    return offset;
+  }
+
+  int _combinedRowExtent(TerminalScreenKind kind, int row) {
+    final int columns = _combinedColumnsAt(kind, row);
+    int extent = 0;
+    for (int column = 0; column < columns; column++) {
+      if (_combinedContentAt(kind, row, column) != 0 ||
+          _combinedForegroundAt(kind, row, column) != 0 ||
+          _combinedBackgroundAt(kind, row, column) != 0 ||
+          _combinedStyleAt(kind, row, column) != 0 ||
+          _combinedHyperlinkAt(kind, row, column) != 0 ||
+          _combinedWidthFlagsAt(kind, row, column) !=
+              TerminalCellFlags.narrow) {
+        extent = column + 1;
+      }
+    }
+    if (!(kind == TerminalScreenKind.primary &&
+        row < _screens.scrollback.length)) {
+      final TerminalScreen screen = kind == TerminalScreenKind.primary
+          ? _screens.primary
+          : _screens.alternate;
+      final int screenRow = kind == TerminalScreenKind.primary
+          ? row - _screens.scrollback.length
+          : row;
+      if (screen.cursorRow == screenRow && screen.cursorColumn + 1 > extent) {
+        extent = screen.cursorColumn + 1;
+      }
+      if (screen.savedCursorRow == screenRow &&
+          screen.savedCursorColumn + 1 > extent) {
+        extent = screen.savedCursorColumn + 1;
+      }
+    }
+    return extent;
+  }
+
+  int _combinedLogicalCellCount(TerminalScreenKind kind, int row) {
+    final int extent = _combinedRowExtent(kind, row);
+    int count = 0;
+    for (int column = 0; column < extent; column++) {
+      if ((_combinedWidthFlagsAt(kind, row, column) &
+              TerminalCellFlags.widthMask) !=
+          TerminalCellFlags.continuation) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  int _combinedLogicalCellIndex(
+    TerminalScreenKind kind,
+    int row,
+    int targetColumn,
+  ) {
+    int logicalCell = 0;
+    for (int column = 0; column < targetColumn; column++) {
+      if ((_combinedWidthFlagsAt(kind, row, column) &
+              TerminalCellFlags.widthMask) !=
+          TerminalCellFlags.continuation) {
+        logicalCell++;
+      }
+    }
+    return logicalCell;
+  }
+
+  int _combinedColumnForLogicalCell(
+    TerminalScreenKind kind,
+    int row,
+    int targetCell,
+  ) {
+    final int columns = _combinedColumnsAt(kind, row);
+    int logicalCell = 0;
+    for (int column = 0; column < columns; column++) {
+      if ((_combinedWidthFlagsAt(kind, row, column) &
+              TerminalCellFlags.widthMask) ==
+          TerminalCellFlags.continuation) {
+        continue;
+      }
+      if (logicalCell == targetCell) {
+        return column;
+      }
+      logicalCell++;
+    }
+    return 0;
+  }
+
+  bool _combinedJoinsNext(TerminalScreenKind kind, int row) =>
+      row + 1 < _combinedRowCount(kind) &&
+      _combinedRowFlagsAt(kind, row) & TerminalRowFlags.softWrapped != 0 &&
+      _combinedLogicalLineIdAt(kind, row + 1) ==
+          _combinedLogicalLineIdAt(kind, row) &&
+      _combinedLogicalLineEpochAt(kind, row + 1) ==
+          _combinedLogicalLineEpochAt(kind, row);
+
+  int _combinedContentAt(TerminalScreenKind kind, int row, int column) {
+    if (kind == TerminalScreenKind.primary &&
+        row < _screens.scrollback.length) {
+      return _screens.scrollback.contentAt(row, column);
+    }
+    return kind == TerminalScreenKind.primary
+        ? _screens.primary.contentAt(row - _screens.scrollback.length, column)
+        : _screens.alternate.contentAt(row, column);
+  }
+
+  int _combinedForegroundAt(TerminalScreenKind kind, int row, int column) {
+    if (kind == TerminalScreenKind.primary &&
+        row < _screens.scrollback.length) {
+      return _screens.scrollback.foregroundAt(row, column);
+    }
+    return kind == TerminalScreenKind.primary
+        ? _screens.primary.foregroundAt(
+            row - _screens.scrollback.length,
+            column,
+          )
+        : _screens.alternate.foregroundAt(row, column);
+  }
+
+  int _combinedBackgroundAt(TerminalScreenKind kind, int row, int column) {
+    if (kind == TerminalScreenKind.primary &&
+        row < _screens.scrollback.length) {
+      return _screens.scrollback.backgroundAt(row, column);
+    }
+    return kind == TerminalScreenKind.primary
+        ? _screens.primary.backgroundAt(
+            row - _screens.scrollback.length,
+            column,
+          )
+        : _screens.alternate.backgroundAt(row, column);
+  }
+
+  int _combinedStyleAt(TerminalScreenKind kind, int row, int column) {
+    if (kind == TerminalScreenKind.primary &&
+        row < _screens.scrollback.length) {
+      return _screens.scrollback.styleAt(row, column);
+    }
+    return kind == TerminalScreenKind.primary
+        ? _screens.primary.styleAt(row - _screens.scrollback.length, column)
+        : _screens.alternate.styleAt(row, column);
+  }
+
+  int _combinedHyperlinkAt(TerminalScreenKind kind, int row, int column) {
+    if (kind == TerminalScreenKind.primary &&
+        row < _screens.scrollback.length) {
+      return _screens.scrollback.hyperlinkAt(row, column);
+    }
+    return kind == TerminalScreenKind.primary
+        ? _screens.primary.hyperlinkAt(row - _screens.scrollback.length, column)
+        : _screens.alternate.hyperlinkAt(row, column);
   }
 
   void _sync() {
@@ -235,4 +685,11 @@ final class _ViewportLocation {
 
   final bool history;
   final int row;
+}
+
+final class _CombinedPosition {
+  const _CombinedPosition(this.row, this.column);
+
+  final int row;
+  final int column;
 }

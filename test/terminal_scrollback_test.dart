@@ -9,7 +9,7 @@ void runTerminalScrollbackTests() {
   _testPageStorageFidelityAndLineEviction();
   _testByteCapAndUnrepresentableRows();
   _testRepeatedPageEvictionStaysBounded();
-  _testMixedWidthsAndReplacementOwnership();
+  _testReflowedWidthAndReplacementOwnership();
   _testCapturePolicyAndResetLifetime();
   _testParserCaptureAndAlternateIsolation();
   _testConfigurationAndAccessBounds();
@@ -48,6 +48,7 @@ void _testPageStorageFidelityAndLineEviction() {
   );
   screen.setRowFlags(0, TerminalRowFlags.prompt | TerminalRowFlags.hardBreak);
   screen.setLogicalLineId(0, 41);
+  final int logicalLineEpoch = screen.logicalLineEpochAt(0);
   final int generation = history.generation;
   screen.scrollUp(1);
 
@@ -82,11 +83,12 @@ void _testPageStorageFidelityAndLineEviction() {
   _expect(
     history.rowFlagsAt(0) ==
             TerminalRowFlags.prompt | TerminalRowFlags.hardBreak &&
-        history.logicalLineIdAt(0) == 41,
+        history.logicalLineIdAt(0) == 41 &&
+        history.logicalLineEpochAt(0) == logicalLineEpoch,
     'row metadata is copied exactly',
   );
   _expect(
-    history.allocatedBytes == 2 * (4 * 17 + 5),
+    history.allocatedBytes == 2 * (4 * 17 + 21),
     'allocated bytes count full typed page capacity',
   );
   final int graphemeId = screens.graphemeTable.intern(const <int>[
@@ -145,7 +147,7 @@ void _testPageStorageFidelityAndLineEviction() {
 }
 
 void _testByteCapAndUnrepresentableRows() {
-  const int threeColumnPageBytes = 2 * (3 * 17 + 5);
+  const int threeColumnPageBytes = 2 * (3 * 17 + 21);
   final TerminalScrollback bounded = TerminalScrollback(
     maxLines: 10,
     maxBytes: threeColumnPageBytes * 2,
@@ -183,7 +185,7 @@ void _testByteCapAndUnrepresentableRows() {
   changing.primary.setNarrowCell(0, 0, 0x58);
   changing.primary.scrollUp(1);
   _expect(
-    tiny.length == 1 && tiny.pageCount == 1 && tiny.allocatedBytes == 39,
+    tiny.length == 1 && tiny.pageCount == 1 && tiny.allocatedBytes == 55,
     'byte cap reduces page capacity for a representable row',
   );
   final int generation = tiny.generation;
@@ -223,13 +225,13 @@ void _testRepeatedPageEvictionStaysBounded() {
         history.pageCount == 4 &&
         history.logicalLineIdAt(0) == 4081 &&
         history.logicalLineIdAt(15) == 4096 &&
-        history.allocatedBytes == 4 * 4 * (2 * 17 + 5),
+        history.allocatedBytes == 4 * 4 * (2 * 17 + 21),
     'repeated page eviction remains bounded and ordered',
   );
   history.validateCellTopology();
 }
 
-void _testMixedWidthsAndReplacementOwnership() {
+void _testReflowedWidthAndReplacementOwnership() {
   final TerminalScrollback history = TerminalScrollback(
     maxLines: 20,
     maxBytes: 10000,
@@ -255,12 +257,12 @@ void _testMixedWidthsAndReplacementOwnership() {
   screens.primary.scrollUp(1);
   _expect(
     history.length == 2 &&
-        history.pageCount == 2 &&
-        history.columnsAt(0) == 3 &&
+        history.pageCount == 1 &&
+        history.columnsAt(0) == 5 &&
         history.columnsAt(1) == 5 &&
         history.contentAt(0, 0) == 0x41 &&
         history.contentAt(1, 0) == 0x42,
-    'column changes close the tail page and preserve source widths',
+    'resize reflows retained history before later rows append at the new width',
   );
   _expect(
     identical(screens.scrollback, history),

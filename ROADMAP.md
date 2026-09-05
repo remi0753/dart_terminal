@@ -661,7 +661,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）
   - [x] history/screen viewport offset と alternate-screen isolation
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）
-  - [ ] scrollback-aware resize/reflow と stable logical anchors
+  - [x] scrollback-aware resize/reflow と stable logical anchors
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）
   - [ ] selection extraction、word/line semantics、bounded search
     （[`docs/phase3/paged-scrollback-viewport-selection-search.md`](docs/phase3/paged-scrollback-viewport-selection-search.md) を参照して実施）

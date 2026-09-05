@@ -95,18 +95,30 @@ final class TerminalScreenSet {
         columns == alternate.columns) {
       return;
     }
-    final TerminalScreen nextPrimary = primary.resized(
-      rows: rows,
-      columns: columns,
-    );
+    validateTerminalScreenDimensions(rows, columns);
+    final ({TerminalLogicalAnchor? anchor, bool atBottom}) viewportPosition =
+        viewport.capturePrimaryReflowPosition();
+    final TerminalScreenHistoryResizeResult primaryResize =
+        resizeTerminalScreenWithHistory(
+          primary,
+          scrollback,
+          rows: rows,
+          columns: columns,
+        );
+    final TerminalScreen nextPrimary = primaryResize.screen;
     final TerminalScreen nextAlternate = alternate.resized(
       rows: rows,
       columns: columns,
     );
+    primaryResize.commitHistory();
     _scrollbackAttachment.activate(nextPrimary);
     _primary = nextPrimary;
     _alternate = nextAlternate;
     _transitionGeneration++;
+    viewport.restorePrimaryReflowPosition(
+      viewportPosition.anchor,
+      wasAtBottom: viewportPosition.atBottom,
+    );
   }
 
   /// DEC private mode 47: switch buffers without clearing either buffer.

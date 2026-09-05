@@ -6,7 +6,7 @@ void runTerminalViewportTests() {
   _testHistoryScreenProjectionAndNavigation();
   _testScrolledOutputStabilityEvictionAndClear();
   _testAlternateIsolationAndOffsetRestore();
-  _testResizeIdentityAndMixedSourceWidths();
+  _testResizeIdentityAndReflowedHistoryWidth();
   _testGenerationAndAccessBounds();
 }
 
@@ -65,6 +65,8 @@ void _testHistoryScreenProjectionAndNavigation() {
         viewport.isHistoryRow(0) &&
         !viewport.isHistoryRow(1) &&
         viewport.logicalLineIdAt(0) == 103 &&
+        viewport.logicalLineEpochAt(0) ==
+            screens.scrollback.logicalLineEpochAt(2) &&
         viewport.rowFlagsAt(0) == TerminalRowFlags.output &&
         viewport.cursorRow == 1 &&
         viewport.cursorColumn == 2,
@@ -217,7 +219,7 @@ void _testAlternateIsolationAndOffsetRestore() {
   );
 }
 
-void _testResizeIdentityAndMixedSourceWidths() {
+void _testResizeIdentityAndReflowedHistoryWidth() {
   final TerminalScreenSet screens = TerminalScreenSet(rows: 2, columns: 3);
   _setRow(screens.primary, 0, 0x41, 501);
   screens.primary.scrollUp(1);
@@ -232,11 +234,11 @@ void _testResizeIdentityAndMixedSourceWidths() {
         viewport.columns == 5 &&
         viewport.offset == 1 &&
         viewport.maximumOffset == 1 &&
-        viewport.columnsAt(0) == 3 &&
+        viewport.columnsAt(0) == 5 &&
         viewport.columnsAt(1) == 5 &&
         viewport.contentAt(0, 0) == 0x41 &&
         viewport.generation > generation,
-    'resize preserves viewport identity and exposes mixed raw source widths',
+    'resize preserves viewport identity and reflows history to the new width',
   );
 }
 

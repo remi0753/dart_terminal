@@ -59,6 +59,16 @@ final class TerminalScrollback {
     return location.page.logicalLineIds[location.row];
   }
 
+  int logicalLineEpochAt(int row) {
+    final _ScrollbackLocation location = _locate(row);
+    return location.page.logicalLineEpochs[location.row];
+  }
+
+  int logicalCellOffsetAt(int row) {
+    final _ScrollbackLocation location = _locate(row);
+    return location.page.logicalCellOffsets[location.row];
+  }
+
   int contentAt(int row, int column) =>
       _cellValue(row, column, (_ScrollbackPage page) => page.content);
 
@@ -92,6 +102,11 @@ final class TerminalScrollback {
     int rowsSeen = 0;
     int pagesSeen = 0;
     int bytesSeen = 0;
+    int previousFlags = 0;
+    int previousLogicalLineId = 0;
+    int previousLogicalLineEpoch = 0;
+    int previousLogicalOffset = 0;
+    int previousLogicalCellCount = 0;
     _ScrollbackPage? previous;
     _ScrollbackPage? page = _head;
     while (page != null) {
@@ -108,6 +123,29 @@ final class TerminalScrollback {
           throw StateError('invalid scrollback row metadata');
         }
         _validatePageRowTopology(page, row);
+        final int logicalLineId = page.logicalLineIds[row];
+        final int logicalLineEpoch = page.logicalLineEpochs[row];
+        final int logicalOffset = page.logicalCellOffsets[row];
+        if (logicalLineEpoch == 0) {
+          throw StateError('invalid scrollback logical-line epoch');
+        }
+        if (rowsSeen + row != 0) {
+          final bool joined =
+              previousFlags & TerminalRowFlags.softWrapped != 0 &&
+              previousLogicalLineId == logicalLineId &&
+              previousLogicalLineEpoch == logicalLineEpoch;
+          final int expected = joined
+              ? previousLogicalOffset + previousLogicalCellCount
+              : 0;
+          if (logicalOffset != expected) {
+            throw StateError('invalid scrollback logical cell offset');
+          }
+        }
+        previousFlags = flags;
+        previousLogicalLineId = logicalLineId;
+        previousLogicalLineEpoch = logicalLineEpoch;
+        previousLogicalOffset = logicalOffset;
+        previousLogicalCellCount = page.logicalCellCount(row);
       }
       rowsSeen += page.usedRows;
       pagesSeen++;
@@ -162,13 +200,17 @@ final class TerminalScrollback {
   }
 
   bool _appendScreenRow(TerminalScreen source, int row) {
+    final int logicalOffset = _nextLogicalCellOffset(
+      source.logicalLineIdAt(row),
+      source.logicalLineEpochAt(row),
+    );
     while (_length >= maxLines) {
       _evictHead();
     }
 
     _ScrollbackPage? page = _tail;
     if (page == null || page.columns != source.columns || page.isFull) {
-      final int bytesPerRow = source.columns * 17 + 5;
+      final int bytesPerRow = source.columns * 17 + 21;
       final int capacity = _minimum3(
         pageRows,
         maxLines,
@@ -193,10 +235,42 @@ final class TerminalScrollback {
       page = allocated;
     }
 
-    page.appendScreenRow(source, row);
+    page.appendScreenRow(source, row, logicalOffset);
     _length++;
     _totalRowsAppended++;
     return true;
+  }
+
+  void _appendReflowRow(_ReflowRow row, int columns) {
+    while (_length >= maxLines) {
+      _evictHead();
+    }
+
+    _ScrollbackPage? page = _tail;
+    if (page == null || page.columns != columns || page.isFull) {
+      final int bytesPerRow = columns * 17 + 21;
+      final int capacity = _minimum3(
+        pageRows,
+        maxLines,
+        maxBytes ~/ bytesPerRow,
+      );
+      if (capacity == 0) {
+        _dropAllPages();
+        return;
+      }
+      final _ScrollbackPage allocated = _ScrollbackPage(
+        columns: columns,
+        capacity: capacity,
+      );
+      while (_allocatedBytes + allocated.allocatedBytes > maxBytes) {
+        _evictHead();
+      }
+      _appendPage(allocated);
+      page = allocated;
+    }
+
+    page.appendReflowRow(row);
+    _length++;
   }
 
   void _appendPage(_ScrollbackPage page) {
@@ -210,6 +284,21 @@ final class TerminalScrollback {
     _tail = page;
     _pageCount++;
     _allocatedBytes += page.allocatedBytes;
+  }
+
+  int _nextLogicalCellOffset(int logicalLineId, int logicalLineEpoch) {
+    final _ScrollbackPage? tail = _tail;
+    if (tail == null || tail.usedRows == 0) {
+      return 0;
+    }
+    final int previousRow = tail.usedRows - 1;
+    if (tail.rowFlags[previousRow] & TerminalRowFlags.softWrapped == 0 ||
+        tail.logicalLineIds[previousRow] != logicalLineId ||
+        tail.logicalLineEpochs[previousRow] != logicalLineEpoch) {
+      return 0;
+    }
+    return tail.logicalCellOffsets[previousRow] +
+        tail.logicalCellCount(previousRow);
   }
 
   void _evictHead() {
@@ -238,6 +327,26 @@ final class TerminalScrollback {
     _length = 0;
     _pageCount = 0;
     _allocatedBytes = 0;
+  }
+
+  void _replacePagesFrom(TerminalScrollback replacement) {
+    if (replacement.maxLines != maxLines ||
+        replacement.maxBytes != maxBytes ||
+        replacement.pageRows != pageRows ||
+        replacement._attachment != null) {
+      throw StateError('incompatible scrollback replacement');
+    }
+    _head = replacement._head;
+    _tail = replacement._tail;
+    _length = replacement._length;
+    _pageCount = replacement._pageCount;
+    _allocatedBytes = replacement._allocatedBytes;
+    replacement._head = null;
+    replacement._tail = null;
+    replacement._length = 0;
+    replacement._pageCount = 0;
+    replacement._allocatedBytes = 0;
+    _generation++;
   }
 
   void _claim(TerminalScrollbackAttachment attachment) {
@@ -326,7 +435,9 @@ final class _ScrollbackPage {
       hyperlinks = Uint16List(columns * capacity),
       widthFlags = Uint8List(columns * capacity),
       rowFlags = Uint8List(capacity),
-      logicalLineIds = Uint32List(capacity) {
+      logicalLineIds = Uint32List(capacity),
+      logicalLineEpochs = Uint64List(capacity),
+      logicalCellOffsets = Uint64List(capacity) {
     widthFlags.fillRange(0, widthFlags.length, TerminalCellFlags.narrow);
   }
 
@@ -340,14 +451,16 @@ final class _ScrollbackPage {
   final Uint8List widthFlags;
   final Uint8List rowFlags;
   final Uint32List logicalLineIds;
+  final Uint64List logicalLineEpochs;
+  final Uint64List logicalCellOffsets;
   _ScrollbackPage? previous;
   _ScrollbackPage? next;
   int usedRows = 0;
 
   bool get isFull => usedRows == capacity;
-  int get allocatedBytes => capacity * (columns * 17 + 5);
+  int get allocatedBytes => capacity * (columns * 17 + 21);
 
-  void appendScreenRow(TerminalScreen source, int row) {
+  void appendScreenRow(TerminalScreen source, int row, int logicalOffset) {
     if (isFull || source.columns != columns) {
       throw StateError('incompatible scrollback page append');
     }
@@ -392,7 +505,78 @@ final class _ScrollbackPage {
     );
     rowFlags[usedRows] = source._rowFlags[sourcePhysical];
     logicalLineIds[usedRows] = source._logicalLineIds[sourcePhysical];
+    logicalLineEpochs[usedRows] = source._logicalLineEpochs[sourcePhysical];
+    logicalCellOffsets[usedRows] = logicalOffset;
     usedRows++;
+  }
+
+  void appendReflowRow(_ReflowRow row) {
+    if (isFull) {
+      throw StateError('full scrollback page append');
+    }
+    final int destinationStart = usedRows * columns;
+    int column = 0;
+    for (final _ReflowCell cell in row.cells) {
+      final int index = destinationStart + column;
+      final int width = cell.width;
+      final int leadFlags =
+          (width == 2 ? TerminalCellFlags.wide : TerminalCellFlags.narrow) |
+          (cell.replacement ? 0 : cell.flags & TerminalCellFlags.grapheme) |
+          (cell.flags & TerminalCellFlags.protected);
+      content[index] = cell.content;
+      foreground[index] = cell.foreground;
+      background[index] = cell.background;
+      styles[index] = cell.style;
+      hyperlinks[index] = cell.hyperlink;
+      widthFlags[index] = leadFlags;
+      if (width == 2) {
+        final int continuation = index + 1;
+        content[continuation] = 0;
+        foreground[continuation] = cell.foreground;
+        background[continuation] = cell.background;
+        styles[continuation] = cell.style;
+        hyperlinks[continuation] = cell.hyperlink;
+        widthFlags[continuation] =
+            TerminalCellFlags.continuation |
+            (cell.flags & TerminalCellFlags.protected);
+      }
+      column += width;
+    }
+    rowFlags[usedRows] = row.flags;
+    logicalLineIds[usedRows] = row.logicalLineId;
+    logicalLineEpochs[usedRows] = row.logicalLineEpoch;
+    logicalCellOffsets[usedRows] = row.logicalOffset;
+    usedRows++;
+  }
+
+  int rowExtent(int row) {
+    final int start = row * columns;
+    int extent = 0;
+    for (int column = 0; column < columns; column++) {
+      final int index = start + column;
+      if (content[index] != 0 ||
+          foreground[index] != 0 ||
+          background[index] != 0 ||
+          styles[index] != 0 ||
+          hyperlinks[index] != 0 ||
+          widthFlags[index] != TerminalCellFlags.narrow) {
+        extent = column + 1;
+      }
+    }
+    return extent;
+  }
+
+  int logicalCellCount(int row) {
+    final int start = row * columns;
+    final int extent = rowExtent(row);
+    int count = 0;
+    for (int column = 0; column < extent; column++) {
+      if ((widthFlags[start + column] & TerminalCellFlags.widthMask) !=
+          TerminalCellFlags.continuation) {
+        count++;
+      }
+    }
+    return count;
   }
 }
 

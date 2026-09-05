@@ -24,7 +24,12 @@ export 'src/terminal_core/terminal_screen.dart'
 export 'src/terminal_core/terminal_screen_parser_sink.dart'
     show TerminalScreenParserSink;
 export 'src/terminal_core/terminal_screen_set.dart'
-    show TerminalScreenKind, TerminalScreenSet, TerminalViewport;
+    show
+        TerminalLogicalAnchor,
+        TerminalScreenKind,
+        TerminalScreenSet,
+        TerminalViewport,
+        TerminalViewportPosition;
 export 'src/terminal_core/terminal_style.dart'
     show TerminalStyleAttributes, TerminalStyleTable, TerminalUnderlineStyle;
 export 'src/terminal_core/terminal_unicode.dart'

@@ -43,9 +43,11 @@ final class _ReflowCell {
 }
 
 final class _ReflowLine {
-  _ReflowLine(this.logicalLineId);
+  _ReflowLine(this.logicalLineId, this.logicalLineEpoch, this.logicalOffset);
 
   final int logicalLineId;
+  final int logicalLineEpoch;
+  final int logicalOffset;
   final List<_ReflowCell> cells = <_ReflowCell>[];
   int semanticFlags = 0;
   bool hardBreak = false;
@@ -55,11 +57,15 @@ final class _ReflowLine {
 final class _ReflowRow {
   _ReflowRow({
     required this.logicalLineId,
+    required this.logicalLineEpoch,
+    required this.logicalOffset,
     required this.flags,
     required this.cells,
   });
 
   final int logicalLineId;
+  final int logicalLineEpoch;
+  final int logicalOffset;
   final int flags;
   final List<_ReflowCell> cells;
 }
@@ -72,6 +78,117 @@ final class _MappedPosition {
   final bool atRightEdge;
 }
 
+final class _ReflowPositions {
+  const _ReflowPositions(this.active, this.saved);
+
+  final _MappedPosition? active;
+  final _MappedPosition? saved;
+}
+
+final class _ReflowSource {
+  const _ReflowSource(this.screen, [this.history]);
+
+  final TerminalScreen screen;
+  final TerminalScrollback? history;
+
+  int get rowCount => (history?.length ?? 0) + screen.rows;
+
+  int columnsAt(int row) =>
+      _isHistoryRow(row) ? history!.columnsAt(row) : screen.columns;
+
+  int rowFlagsAt(int row) => _isHistoryRow(row)
+      ? history!.rowFlagsAt(row)
+      : screen.rowFlagsAt(_screenRow(row));
+
+  int logicalLineIdAt(int row) => _isHistoryRow(row)
+      ? history!.logicalLineIdAt(row)
+      : screen.logicalLineIdAt(_screenRow(row));
+
+  int logicalLineEpochAt(int row) => _isHistoryRow(row)
+      ? history!.logicalLineEpochAt(row)
+      : screen.logicalLineEpochAt(_screenRow(row));
+
+  int contentAt(int row, int column) => _isHistoryRow(row)
+      ? history!.contentAt(row, column)
+      : screen.contentAt(_screenRow(row), column);
+
+  int foregroundAt(int row, int column) => _isHistoryRow(row)
+      ? history!.foregroundAt(row, column)
+      : screen.foregroundAt(_screenRow(row), column);
+
+  int backgroundAt(int row, int column) => _isHistoryRow(row)
+      ? history!.backgroundAt(row, column)
+      : screen.backgroundAt(_screenRow(row), column);
+
+  int styleAt(int row, int column) => _isHistoryRow(row)
+      ? history!.styleAt(row, column)
+      : screen.styleAt(_screenRow(row), column);
+
+  int hyperlinkAt(int row, int column) => _isHistoryRow(row)
+      ? history!.hyperlinkAt(row, column)
+      : screen.hyperlinkAt(_screenRow(row), column);
+
+  int widthFlagsAt(int row, int column) => _isHistoryRow(row)
+      ? history!.widthFlagsAt(row, column)
+      : screen.widthFlagsAt(_screenRow(row), column);
+
+  int activeCursorColumnAt(int row) {
+    final int screenRow = _screenRowOrNegative(row);
+    return screenRow == screen._cursorRow ? screen._cursorColumn : -1;
+  }
+
+  int savedCursorColumnAt(int row) {
+    final int screenRow = _screenRowOrNegative(row);
+    return screenRow == screen._savedCursorRow ? screen._savedCursorColumn : -1;
+  }
+
+  int logicalCellOffsetAt(int row) {
+    int start = row;
+    final int logicalLineId = logicalLineIdAt(row);
+    final int logicalLineEpoch = logicalLineEpochAt(row);
+    while (start > 0 &&
+        rowFlagsAt(start - 1) & TerminalRowFlags.softWrapped != 0 &&
+        logicalLineIdAt(start - 1) == logicalLineId &&
+        logicalLineEpochAt(start - 1) == logicalLineEpoch) {
+      start--;
+    }
+    int offset = _isHistoryRow(start) ? history!.logicalCellOffsetAt(start) : 0;
+    for (int current = start; current < row; current++) {
+      offset += _reflowLogicalCellCount(this, current);
+    }
+    return offset;
+  }
+
+  bool _isHistoryRow(int row) => row < (history?.length ?? 0);
+
+  int _screenRow(int row) => row - (history?.length ?? 0);
+
+  int _screenRowOrNegative(int row) =>
+      _isHistoryRow(row) ? -1 : _screenRow(row);
+}
+
+/// Package-internal transaction built before a screen set publishes resize.
+final class TerminalScreenHistoryResizeResult {
+  TerminalScreenHistoryResizeResult._(
+    this.screen,
+    this._history,
+    this._replacement,
+  );
+
+  final TerminalScreen screen;
+  final TerminalScrollback _history;
+  final TerminalScrollback _replacement;
+  bool _committed = false;
+
+  void commitHistory() {
+    if (_committed) {
+      throw StateError('history resize result was already committed');
+    }
+    _history._replacePagesFrom(_replacement);
+    _committed = true;
+  }
+}
+
 TerminalScreen _resizeTerminalScreen(
   TerminalScreen source, {
   required int rows,
@@ -79,8 +196,64 @@ TerminalScreen _resizeTerminalScreen(
 }) {
   TerminalScreen._validateDimensions(rows, columns);
   source.validateCellTopology();
-  final List<_ReflowLine> lines = _extractReflowLines(source);
+  final List<_ReflowLine> lines = _extractReflowLines(_ReflowSource(source));
   final List<_ReflowRow> reflowed = _wrapReflowLines(lines, columns);
+  final _ReflowPositions positions = _findReflowPositions(reflowed, columns);
+  final int windowStart = _reflowWindowStart(
+    reflowed.length,
+    rows,
+    positions.active?.row,
+  );
+  return _buildReflowedScreen(
+    source,
+    reflowed,
+    positions,
+    windowStart: windowStart,
+    rows: rows,
+    columns: columns,
+  );
+}
+
+TerminalScreenHistoryResizeResult resizeTerminalScreenWithHistory(
+  TerminalScreen source,
+  TerminalScrollback history, {
+  required int rows,
+  required int columns,
+}) {
+  TerminalScreen._validateDimensions(rows, columns);
+  source.validateCellTopology();
+  history.validateCellTopology();
+  final List<_ReflowLine> lines = _extractReflowLines(
+    _ReflowSource(source, history),
+  );
+  final List<_ReflowRow> reflowed = _wrapReflowLines(lines, columns);
+  final _ReflowPositions positions = _findReflowPositions(reflowed, columns);
+  final int windowStart = _reflowWindowStart(
+    reflowed.length,
+    rows,
+    positions.active?.row,
+  );
+  final TerminalScrollback replacement = TerminalScrollback(
+    maxLines: history.maxLines,
+    maxBytes: history.maxBytes,
+    pageRows: history.pageRows,
+  );
+  for (int row = 0; row < windowStart; row++) {
+    replacement._appendReflowRow(reflowed[row], columns);
+  }
+  replacement.validateCellTopology();
+  final TerminalScreen target = _buildReflowedScreen(
+    source,
+    reflowed,
+    positions,
+    windowStart: windowStart,
+    rows: rows,
+    columns: columns,
+  );
+  return TerminalScreenHistoryResizeResult._(target, history, replacement);
+}
+
+_ReflowPositions _findReflowPositions(List<_ReflowRow> reflowed, int columns) {
   _MappedPosition? active;
   _MappedPosition? saved;
   for (int row = 0; row < reflowed.length; row++) {
@@ -99,12 +272,17 @@ TerminalScreen _resizeTerminalScreen(
       column += cell.width;
     }
   }
+  return _ReflowPositions(active, saved);
+}
 
-  final int windowStart = _reflowWindowStart(
-    reflowed.length,
-    rows,
-    active?.row,
-  );
+TerminalScreen _buildReflowedScreen(
+  TerminalScreen source,
+  List<_ReflowRow> reflowed,
+  _ReflowPositions positions, {
+  required int windowStart,
+  required int rows,
+  required int columns,
+}) {
   final int retainedCount = (reflowed.length - windowStart).clamp(0, rows);
   final TerminalScreen target = TerminalScreen._(
     rows: rows,
@@ -114,12 +292,14 @@ TerminalScreen _resizeTerminalScreen(
     graphemeTable: source.graphemeTable,
     scrollbackAttachment: source._scrollbackAttachment,
   );
+  target._logicalLineEpoch = source._logicalLineEpoch;
 
   int nextLogicalLineId = source._nextLogicalLineId;
   var needsLogicalLineRenumber = false;
   for (int targetRow = 0; targetRow < retainedCount; targetRow++) {
     final _ReflowRow input = reflowed[windowStart + targetRow];
     target._logicalLineIds[targetRow] = input.logicalLineId;
+    target._logicalLineEpochs[targetRow] = input.logicalLineEpoch;
     target._rowFlags[targetRow] = input.flags;
     int targetColumn = 0;
     for (final _ReflowCell cell in input.cells) {
@@ -133,6 +313,7 @@ TerminalScreen _resizeTerminalScreen(
       break;
     }
     target._logicalLineIds[targetRow] = nextLogicalLineId++;
+    target._logicalLineEpochs[targetRow] = target._logicalLineEpoch;
   }
   if (needsLogicalLineRenumber) {
     nextLogicalLineId = _renumberLogicalLines(target);
@@ -140,13 +321,13 @@ TerminalScreen _resizeTerminalScreen(
   target._nextLogicalLineId = nextLogicalLineId;
 
   final _MappedPosition mappedActive = _positionInWindow(
-    active,
+    positions.active,
     windowStart,
     rows,
     columns,
   );
   final _MappedPosition mappedSaved = _positionInWindow(
-    saved,
+    positions.saved,
     windowStart,
     rows,
     columns,
@@ -195,11 +376,15 @@ TerminalScreen _resizeTerminalScreen(
   return target;
 }
 
-List<_ReflowLine> _extractReflowLines(TerminalScreen source) {
+List<_ReflowLine> _extractReflowLines(_ReflowSource source) {
   final List<_ReflowLine> lines = <_ReflowLine>[];
   int row = 0;
-  while (row < source.rows) {
-    final _ReflowLine line = _ReflowLine(source.logicalLineIdAt(row));
+  while (row < source.rowCount) {
+    final _ReflowLine line = _ReflowLine(
+      source.logicalLineIdAt(row),
+      source.logicalLineEpochAt(row),
+      source.logicalCellOffsetAt(row),
+    );
     while (true) {
       final int flags = source.rowFlagsAt(row);
       line.semanticFlags |=
@@ -209,11 +394,13 @@ List<_ReflowLine> _extractReflowLines(TerminalScreen source) {
               TerminalRowFlags.output);
       line.hardBreak = flags & TerminalRowFlags.hardBreak != 0;
       final int extent = _reflowRowExtent(source, row);
-      final int activeColumn = source._cursorRow == row
-          ? _normalizeSourceColumn(source, row, source._cursorColumn)
+      final int sourceActiveColumn = source.activeCursorColumnAt(row);
+      final int sourceSavedColumn = source.savedCursorColumnAt(row);
+      final int activeColumn = sourceActiveColumn >= 0
+          ? _normalizeSourceColumn(source, row, sourceActiveColumn)
           : -1;
-      final int savedColumn = source._savedCursorRow == row
-          ? _normalizeSourceColumn(source, row, source._savedCursorColumn)
+      final int savedColumn = sourceSavedColumn >= 0
+          ? _normalizeSourceColumn(source, row, sourceSavedColumn)
           : -1;
       for (int column = 0; column < extent; column++) {
         final int cellFlags = source.widthFlagsAt(row, column);
@@ -237,8 +424,9 @@ List<_ReflowLine> _extractReflowLines(TerminalScreen source) {
       final bool softWrapped = flags & TerminalRowFlags.softWrapped != 0;
       final bool joinsNext =
           softWrapped &&
-          row + 1 < source.rows &&
-          source.logicalLineIdAt(row + 1) == line.logicalLineId;
+          row + 1 < source.rowCount &&
+          source.logicalLineIdAt(row + 1) == line.logicalLineId &&
+          source.logicalLineEpochAt(row + 1) == line.logicalLineEpoch;
       if (!joinsNext) {
         line.continuesBeyondVisible = softWrapped;
         break;
@@ -251,23 +439,37 @@ List<_ReflowLine> _extractReflowLines(TerminalScreen source) {
   return lines;
 }
 
-int _reflowRowExtent(TerminalScreen screen, int row) {
+int _reflowRowExtent(_ReflowSource screen, int row) {
   int extent = 0;
-  for (int column = 0; column < screen.columns; column++) {
+  for (int column = 0; column < screen.columnsAt(row); column++) {
     if (!_isCanonicalBlank(screen, row, column)) {
       extent = column + 1;
     }
   }
-  if (screen._cursorRow == row && screen._cursorColumn + 1 > extent) {
-    extent = screen._cursorColumn + 1;
+  final int activeColumn = screen.activeCursorColumnAt(row);
+  if (activeColumn >= 0 && activeColumn + 1 > extent) {
+    extent = activeColumn + 1;
   }
-  if (screen._savedCursorRow == row && screen._savedCursorColumn + 1 > extent) {
-    extent = screen._savedCursorColumn + 1;
+  final int savedColumn = screen.savedCursorColumnAt(row);
+  if (savedColumn >= 0 && savedColumn + 1 > extent) {
+    extent = savedColumn + 1;
   }
   return extent;
 }
 
-bool _isCanonicalBlank(TerminalScreen screen, int row, int column) =>
+int _reflowLogicalCellCount(_ReflowSource screen, int row) {
+  final int extent = _reflowRowExtent(screen, row);
+  int count = 0;
+  for (int column = 0; column < extent; column++) {
+    if ((screen.widthFlagsAt(row, column) & TerminalCellFlags.widthMask) !=
+        TerminalCellFlags.continuation) {
+      count++;
+    }
+  }
+  return count;
+}
+
+bool _isCanonicalBlank(_ReflowSource screen, int row, int column) =>
     screen.contentAt(row, column) == 0 &&
     screen.foregroundAt(row, column) == 0 &&
     screen.backgroundAt(row, column) == 0 &&
@@ -275,7 +477,7 @@ bool _isCanonicalBlank(TerminalScreen screen, int row, int column) =>
     screen.hyperlinkAt(row, column) == 0 &&
     screen.widthFlagsAt(row, column) == TerminalCellFlags.narrow;
 
-int _normalizeSourceColumn(TerminalScreen screen, int row, int column) {
+int _normalizeSourceColumn(_ReflowSource screen, int row, int column) {
   if (column > 0 &&
       (screen.widthFlagsAt(row, column) & TerminalCellFlags.widthMask) ==
           TerminalCellFlags.continuation) {
@@ -310,6 +512,7 @@ List<_ReflowRow> _wrapReflowLines(List<_ReflowLine> lines, int columns) {
     if (current.isNotEmpty || rows.isEmpty) {
       rows.add(current);
     }
+    int logicalOffset = line.logicalOffset;
     for (int row = 0; row < rows.length; row++) {
       final bool finalRow = row == rows.length - 1;
       int flags = line.semanticFlags;
@@ -321,10 +524,13 @@ List<_ReflowRow> _wrapReflowLines(List<_ReflowLine> lines, int columns) {
       result.add(
         _ReflowRow(
           logicalLineId: line.logicalLineId,
+          logicalLineEpoch: line.logicalLineEpoch,
+          logicalOffset: logicalOffset,
           flags: flags,
           cells: rows[row],
         ),
       );
+      logicalOffset += rows[row].length;
     }
   }
   return result;
@@ -404,6 +610,7 @@ int _normalizeCursorColumn(TerminalScreen screen, int row, int column) {
 }
 
 int _renumberLogicalLines(TerminalScreen screen) {
+  screen._advanceLogicalLineEpoch();
   var next = 1;
   for (int row = 0; row < screen.rows; row++) {
     if (row == 0 ||
@@ -414,6 +621,7 @@ int _renumberLogicalLines(TerminalScreen screen) {
       next++;
     }
     screen._logicalLineIds[row] = next - 1;
+    screen._logicalLineEpochs[row] = screen._logicalLineEpoch;
   }
   return next;
 }

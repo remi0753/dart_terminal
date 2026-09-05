@@ -179,14 +179,29 @@ subtasks pass.
   the same internal movement helper with capture disabled. Partial vertical or
   horizontal regions fail the full-grid check, and alternate screens have no
   attachment.
-- Typed page accounting uses 17 bytes per allocated cell plus 5 bytes per row
-  for flags and logical-line ID. Page capacity is the minimum of configured
+- Typed page accounting initially used 17 bytes per allocated cell plus 5
+  bytes per row for flags and logical-line ID. Stable reflow anchors require a
+  retained `Uint64` logical-cell offset and a `Uint64` logical-line reuse epoch
+  per row, bringing current metadata to 21 bytes per row. Page capacity is the
+  minimum of configured
   page rows, line cap, and rows affordable under the byte cap. A single row
   larger than the cap clears older history rather than retaining a
   discontinuous suffix with the newest row missing.
 - Fixed-page storage/capture completed in `b8e04a4`. The clean-worktree
   roadmap review makes history/screen viewport offset and alternate isolation
   the current child.
+- Viewport navigation completed in `09c651b`. The clean-worktree roadmap
+  review made scrollback-aware resize/reflow and stable logical anchors the
+  current child.
+- The existing resize path already extracted and wrapped canonical visible
+  cells, but discarded reflowed rows outside the cursor-containing target
+  window. History-aware resize must treat retained pages and the primary grid
+  as one chronological source, then route rows before that window back into a
+  replacement history store.
+- ADR-003 explicitly treats 32-bit logical-line IDs as reusable cache aids.
+  An anchor containing only that ID and an offset could therefore alias new
+  content after screen reset or ID rollover. A 64-bit reuse epoch is retained
+  with each screen/history row and included in every public anchor.
 
 ## Decisions and alternatives
 
@@ -214,10 +229,27 @@ subtasks pass.
   primary restores its clamped position. This keeps application-owned
   alternate contents isolated without discarding an explicit user viewport
   choice.
-- Expose raw source columns per projected row during this child. History pages
-  may still have a pre-resize width; callers can inspect that width without
-  inventing clipped wide-cell topology. The next child will reflow all retained
-  pages to the current primary width.
+- During the viewport child, expose raw source columns per projected row so a
+  pre-reflow mixed-width history never clips a wide pair. History-aware resize
+  now replaces every retained page at the current primary width, while the
+  accessor remains self-describing for rows captured between resizes.
+- Represent a stable position as screen kind, logical-line ID, logical-line
+  epoch, and lead-cell ordinal. Counting canonical lead cells rather than
+  display columns keeps the position stable when a width-two cell must become
+  a one-column replacement glyph. Continuation coordinates normalize to their
+  lead.
+- Persist each retained row's logical-cell offset from the beginning of its
+  logical line. If page eviction removes only the prefix of a soft-wrapped
+  line, its first retained row keeps a non-zero offset; an anchor in the
+  removed prefix then fails resolution instead of aliasing the suffix.
+- Build the complete replacement history and both replacement screens before
+  publishing any state. Only after all validation/allocation succeeds does the
+  screen set transfer replacement pages, activate primary ownership, publish
+  both grids, and restore either bottom-follow or the anchored viewport top.
+- Resolve public anchors only when their row is currently projected by the
+  active viewport. An intact off-screen anchor remains stable and resolves
+  after navigation brings its physical row into view; an evicted or wrong-
+  screen anchor returns no position.
 
 ## Verification results
 
@@ -282,6 +314,49 @@ alternate-screen projection are now the first unchecked child.
 This completes ordered subtask 2. The parent remains open; scrollback-aware
 resize/reflow and stable logical anchors are now the first unchecked child.
 
+### Scrollback-aware resize/reflow and stable logical anchors
+
+- Focused tests passed narrower/shorter and wider/taller round trips over a
+  logical line spanning one-row page boundaries and the history/screen
+  boundary. Reflow repaginated every retained row at the target width under
+  the original line/byte/page caps, moved content between history and the
+  visible grid, and preserved cursor and viewport-top mappings.
+- Wide cells, continuations, interned graphemes, colors, styles, hyperlinks,
+  protection flags, semantic row flags, and logical identities survived
+  history-inclusive reflow. A one-column target produced narrow U+FFFD while
+  its lead-cell ordinal anchors remained stable.
+- Page-prefix eviction retained non-zero logical offsets for the remaining
+  suffix and made removed anchors unresolved. Separate hard-line cap tests
+  also proved reflow eviction does not exceed allocated-byte or row limits.
+- Logical-line reuse epochs prevented an anchor made before `resetScreen()`
+  from resolving to a new row with the same 32-bit logical-line ID. Epochs are
+  copied through row movement, scrollback capture, reflow, and public viewport
+  metadata.
+- Primary history remained isolated while alternate mode was active. Resize
+  preserved alternate ownership/content and the hidden primary viewport
+  anchor. Invalid dimensions left both screen objects, history bytes/content,
+  viewport offset, and transition generation unchanged; same-size resize was
+  a no-op.
+- During test development, an initial wide/grapheme expectation omitted the
+  cursor-retained blank row, and a shortened viewport expectation attempted to
+  resolve an intact but off-screen anchor. Both tests were corrected to match
+  the existing cursor-preserving reflow and visible-only resolution contracts.
+  An attempted all-ones unsigned Dart integer bound evaluated as negative, so
+  public 64-bit values use the native signed maximum. The first sandboxed
+  analyzer retry also required the approved environment because Dart tried to
+  update its home-directory telemetry timestamp.
+- Focused static analysis and the history/reflow/scrollback/viewport/screen
+  suites passed. `make test` passed VT table freshness, formatting of 61 files,
+  full static analysis with no issues, and the complete test runner. The new
+  focused suite compiled to a Release AOT executable and completed
+  successfully.
+- `git diff --cached --check` passed. The staged-source Dart-only audit passed
+  with 117 tracked files and zero native source files.
+
+This completes ordered subtask 3. The parent remains open; selection
+extraction, word/logical-line semantics, and bounded search are now the first
+unchecked child.
+
 ## Risks and handoff
 
 - Whole-page eviction can retain fewer than the nominal line cap when the
@@ -290,6 +365,8 @@ resize/reflow and stable logical anchors are now the first unchecked child.
 - Very wide rows can make a 256-row page too large for the byte cap. Page
   capacity must be reduced deterministically or the row must be declined
   without allocating beyond the cap.
-- History-aware reflow may temporarily require old plus replacement storage.
-  Subtask 3 must construct replacements before publication and account for
-  peak-allocation failure separately from steady-state caps.
+- History-aware reflow temporarily requires old plus replacement storage and
+  an intermediate bounded-by-input cell model. All fallible construction now
+  precedes publication, so allocation failure leaves the old state reachable;
+  peak memory can still exceed the configured steady-state history cap during
+  a resize and remains a performance consideration for future profiling.
