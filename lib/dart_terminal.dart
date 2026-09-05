@@ -26,6 +26,8 @@ export 'src/terminal_core/terminal_screen_set.dart'
     show TerminalScreenKind, TerminalScreenSet;
 export 'src/terminal_core/terminal_style.dart'
     show TerminalStyleAttributes, TerminalStyleTable, TerminalUnderlineStyle;
+export 'src/terminal_core/terminal_unicode.dart'
+    show TerminalGraphemeBreaker, TerminalGraphemeTable, TerminalUnicode;
 export 'src/terminal_core/vt_parser.dart'
     show
         VtDcsSequence,

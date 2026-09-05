@@ -16,6 +16,7 @@ import 'terminal_palette_test.dart';
 import 'terminal_screen_set_test.dart';
 import 'terminal_screen_test.dart';
 import 'terminal_style_test.dart';
+import 'terminal_unicode_test.dart';
 import 'vt_parser_test.dart';
 
 @Native<Uint64 Function()>(
@@ -30,6 +31,7 @@ Future<void> main() async {
   runTerminalScreenTests();
   runTerminalScreenSetTests();
   runTerminalStyleTests();
+  runTerminalUnicodeTests();
   runVtParserTests();
   _testEditing();
   _testUnicodeEditing();
