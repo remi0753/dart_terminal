@@ -19,6 +19,7 @@ import 'product_parser_corpus_test.dart';
 import 'reference_renderer_test.dart';
 import 'runtime_lifecycle_test.dart';
 import 'terminal_core_test.dart';
+import 'terminal_damage_copy_test.dart';
 import 'terminal_damage_test.dart';
 import 'terminal_history_reflow_test.dart';
 import 'terminal_palette_test.dart';
@@ -46,6 +47,7 @@ external int _livePtySessionCount();
 Future<void> main() async {
   runTerminalCoreTests();
   runTerminalDamageTests();
+  runTerminalDamageCopyTests();
   runProductParserBenchmarkTests();
   runProductParserCorpusTests();
   runGoldenImageTests();

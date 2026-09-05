@@ -22,9 +22,11 @@ override INTEGRATION_TOOL := $(DART) run tool/runtime_integration_smoke.dart
 override BUNDLE_AUDIT_TOOL := $(DART) run tool/dart_only_bundle_audit.dart
 override PRODUCT_PARSER_BENCHMARK_DIR := $(PROJECT_ROOT)/build/benchmarks
 override PRODUCT_PARSER_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_parser_benchmark
+override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_damage_benchmark
 
 .PHONY: help dependencies test product-parser-corpus product-parser-properties \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
+	product-damage-benchmark-build product-damage-benchmark \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
 	developer-jit-integration developer-jit-lifecycle developer-jit-traffic \
@@ -42,6 +44,7 @@ help:
 	@echo "  make product-parser-corpus        Replay reviewed product parser fixtures"
 	@echo "  make product-parser-properties    Run deterministic property and fuzz cases"
 	@echo "  make product-parser-benchmark     Run the Release AOT 100 MiB/s parser gate"
+	@echo "  make product-damage-benchmark     Run the Release AOT 100,000-cell damage gate"
 	@echo "  make vt-parser-table              Regenerate the Dart VT transition table"
 	@echo "  make vt-parser-table-check        Reject a stale generated parser table"
 	@echo "  make developer-jit-build          Build the generic-host JIT application"
@@ -86,6 +89,14 @@ product-parser-benchmark-build: dependencies
 
 product-parser-benchmark: product-parser-benchmark-build
 	@$(PRODUCT_PARSER_BENCHMARK)
+
+product-damage-benchmark-build: dependencies
+	@mkdir -p $(PRODUCT_PARSER_BENCHMARK_DIR)
+	@cd $(PROJECT_ROOT) && $(DART) compile exe tool/terminal_damage_benchmark.dart \
+		-o $(PRODUCT_DAMAGE_BENCHMARK)
+
+product-damage-benchmark: product-damage-benchmark-build
+	@$(PRODUCT_DAMAGE_BENCHMARK)
 
 runtime-source-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/dart_only_source_audit.dart

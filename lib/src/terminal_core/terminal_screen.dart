@@ -242,6 +242,78 @@ final class TerminalScreen {
 
   int widthFlagsAt(int row, int column) => _widthFlags[_cellIndex(row, column)];
 
+  /// Copies one logical-row span into independently owned packed columns.
+  ///
+  /// Every source and destination bound is checked before the first write.
+  /// The private authoritative arrays never escape this screen owner.
+  void copyPackedCellSpanTo({
+    required int row,
+    required int firstColumn,
+    required int cellCount,
+    required int destinationOffset,
+    required Uint32List content,
+    required Uint32List foreground,
+    required Uint32List background,
+    required Uint16List styles,
+    required Uint16List hyperlinks,
+    required Uint8List widthFlags,
+  }) {
+    _checkRow(row);
+    if (cellCount <= 0 ||
+        cellCount > columns ||
+        firstColumn < 0 ||
+        firstColumn > columns - cellCount) {
+      throw RangeError.range(
+        firstColumn,
+        0,
+        columns - 1,
+        'firstColumn',
+        'cellCount does not fit the logical row',
+      );
+    }
+    if (destinationOffset < 0 ||
+        destinationOffset > content.length - cellCount ||
+        destinationOffset > foreground.length - cellCount ||
+        destinationOffset > background.length - cellCount ||
+        destinationOffset > styles.length - cellCount ||
+        destinationOffset > hyperlinks.length - cellCount ||
+        destinationOffset > widthFlags.length - cellCount) {
+      throw RangeError.value(
+        destinationOffset,
+        'destinationOffset',
+        'cell span does not fit every destination column',
+      );
+    }
+    final int sourceStart = _physicalRow(row) * columns + firstColumn;
+    final int destinationEnd = destinationOffset + cellCount;
+    content.setRange(destinationOffset, destinationEnd, _content, sourceStart);
+    foreground.setRange(
+      destinationOffset,
+      destinationEnd,
+      _foreground,
+      sourceStart,
+    );
+    background.setRange(
+      destinationOffset,
+      destinationEnd,
+      _background,
+      sourceStart,
+    );
+    styles.setRange(destinationOffset, destinationEnd, _styles, sourceStart);
+    hyperlinks.setRange(
+      destinationOffset,
+      destinationEnd,
+      _hyperlinks,
+      sourceStart,
+    );
+    widthFlags.setRange(
+      destinationOffset,
+      destinationEnd,
+      _widthFlags,
+      sourceStart,
+    );
+  }
+
   int rowVersionAt(int row) => _rowVersions[_physicalRowFor(row)];
 
   int dirtyStartAt(int row) => _dirtyStarts[_physicalRowFor(row)];

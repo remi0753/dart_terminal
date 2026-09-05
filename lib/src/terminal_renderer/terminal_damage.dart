@@ -220,6 +220,36 @@ abstract final class TerminalDamageCodec {
     data.setUint32(64, layout.widthFlagsOffset, Endian.little);
     data.setUint32(68, layout.totalBytes, Endian.little);
     data.setUint32(72, full ? 1 : 0, Endian.little);
+    final Uint32List content = Uint32List.view(
+      bytes.buffer,
+      bytes.offsetInBytes + layout.contentOffset,
+      cellCount,
+    );
+    final Uint32List foreground = Uint32List.view(
+      bytes.buffer,
+      bytes.offsetInBytes + layout.foregroundOffset,
+      cellCount,
+    );
+    final Uint32List background = Uint32List.view(
+      bytes.buffer,
+      bytes.offsetInBytes + layout.backgroundOffset,
+      cellCount,
+    );
+    final Uint16List styles = Uint16List.view(
+      bytes.buffer,
+      bytes.offsetInBytes + layout.styleOffset,
+      cellCount,
+    );
+    final Uint16List hyperlinks = Uint16List.view(
+      bytes.buffer,
+      bytes.offsetInBytes + layout.hyperlinkOffset,
+      cellCount,
+    );
+    final Uint8List widthFlags = Uint8List.view(
+      bytes.buffer,
+      bytes.offsetInBytes + layout.widthFlagsOffset,
+      cellCount,
+    );
     var packedCell = 0;
     for (int index = 0; index < rows.length; index++) {
       final _CaptureRow captured = rows[index];
@@ -240,38 +270,19 @@ abstract final class TerminalDamageCodec {
       data.setUint16(record + 16, captured.start, Endian.little);
       data.setUint16(record + 18, count, Endian.little);
       data.setUint8(record + 20, screen.rowFlagsAt(captured.row));
-      for (int column = captured.start; column < captured.end; column++) {
-        data.setUint32(
-          layout.contentOffset + packedCell * 4,
-          screen.contentAt(captured.row, column),
-          Endian.little,
-        );
-        data.setUint32(
-          layout.foregroundOffset + packedCell * 4,
-          screen.foregroundAt(captured.row, column),
-          Endian.little,
-        );
-        data.setUint32(
-          layout.backgroundOffset + packedCell * 4,
-          screen.backgroundAt(captured.row, column),
-          Endian.little,
-        );
-        data.setUint16(
-          layout.styleOffset + packedCell * 2,
-          screen.styleAt(captured.row, column),
-          Endian.little,
-        );
-        data.setUint16(
-          layout.hyperlinkOffset + packedCell * 2,
-          screen.hyperlinkAt(captured.row, column),
-          Endian.little,
-        );
-        data.setUint8(
-          layout.widthFlagsOffset + packedCell,
-          screen.widthFlagsAt(captured.row, column),
-        );
-        packedCell++;
-      }
+      screen.copyPackedCellSpanTo(
+        row: captured.row,
+        firstColumn: captured.start,
+        cellCount: count,
+        destinationOffset: packedCell,
+        content: content,
+        foreground: foreground,
+        background: background,
+        styles: styles,
+        hyperlinks: hyperlinks,
+        widthFlags: widthFlags,
+      );
+      packedCell += count;
     }
     if (packedCell != cellCount) {
       throw StateError('damage capture cell accounting is corrupt');
