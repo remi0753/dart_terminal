@@ -12,8 +12,8 @@ Rosetta、Universal、Intel-native 実機確認は、M1 の製品 contract が�
 pane-owned persistent login shell です。Phase 0 の native spike source は移行時に削除し、
 成立性と測定結果は `docs/phase0` に保存しています。Dart-only VT parser と screen
 model、および CoreText/Metal renderer は製品実装へ移行済みです。IME と入力source
-受け入れmatrixに加え、terminal mouse reporting、local selection、drag autoscrollも
-製品経路へ接続済みで、wheel/trackpad履歴スクロールなどは後続 Phase です。
+受け入れmatrixに加え、terminal mouse reporting、local selection、drag autoscroll、
+precision/momentum trackpad scrollも製品経路へ接続済みです。
 
 現在選定している製品 contract は、未改変の公式 Dart だけを使う AppKit root と、
 独立して回収・再生成できる公式 Dart 子プロセス worker です。M1/arm64 Developer JIT
@@ -56,9 +56,10 @@ model、および CoreText/Metal renderer は製品実装へ移行済みです�
 - PTY通知欠落時もpane ownerを閉じ、status 75でhost終了するclassified recovery
 - AppKit main-thread root と公式 Dart 子プロセス worker の bounded lifecycle
   （M1/arm64 Developer JIT / Release AOT）
-- native event protocol v4（source generation、nanosecond timestamp、operation
+- native event protocol v5（source generation、nanosecond timestamp、operation
   ID、focus/visibility/occlusion/backing scale/screen state、application/window
-  lifecycle、menu action）と、旧 v1/v2/v3 endpoint との compatibility negotiation
+  lifecycle、menu action、precision/momentum scroll）と、旧 v1/v2/v3/v4
+  endpoint との compatibility negotiation
 - generic/custom `View` 境界と、型を保った content-view attachment
 - `dart_terminal_renderer_macos` の公開 facadeからdependency-owned
   `TerminalMetalView : MTKView`を通常起動で生成・attachし、live terminal screenを
@@ -345,9 +346,11 @@ PTY bytesはincremental parserからtyped-array画面へ適用され、そのcan
 screen、wide/grapheme、soft wrap、resize reflow、cursor、visual bellをCoreText/Metalで
 表示します。`TextView`やnewline単位のtext projectionは製品表示に使いません。
 
-現在のviewportはbottom-followです。履歴をwheel/trackpadで移動する操作、selection、
-clipboardとkeybind設定ファイルは後続Phaseで実装します。これらが未実装でも、通常の
-大量出力後に最新promptが表示範囲外へ隠れることはありません。
+viewportはbottom-followを既定とし、primary historyをprecision/momentum trackpadや
+wheelで移動できます。terminal mouse tracking中はwheel reportをPTYへ排他的に送り、
+Shift overrideとalternate-screen cursor-key emulationも同じbounded routingで扱います。
+clipboardとkeybind設定ファイルは後続Phaseです。通常の大量出力後に最新promptが
+表示範囲外へ隠れることはありません。
 
 `TerminalPaneOwner`がpaneを、`TerminalPane`がsession generationを、
 `TerminalSession`が公開`PtyProcess`を所有します。実backendとdeterministic fakeは

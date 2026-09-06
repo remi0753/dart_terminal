@@ -20,6 +20,7 @@ import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_encoder.dart';
 import 'terminal_input/terminal_key_event.dart';
 import 'terminal_input/terminal_mouse_router.dart';
+import 'terminal_input/terminal_scroll_router.dart';
 import 'terminal_input/terminal_selection_autoscroll.dart';
 import 'terminal_input/terminal_selection_gesture.dart';
 import 'terminal_input/terminal_text_input_event_router.dart';
@@ -505,6 +506,8 @@ final class TerminalApplication {
           );
       final _TerminalMouseProductObservation mouseObservation =
           _TerminalMouseProductObservation();
+      final _TerminalScrollProductObservation scrollObservation =
+          _TerminalScrollProductObservation();
       final _TerminalSelectionProductOwner createdSelectionOwner =
           _TerminalSelectionProductOwner(
             gesture: TerminalSelectionGestureController(
@@ -521,6 +524,29 @@ final class TerminalApplication {
         onLocalSelection: (TerminalLocalSelectionIntent intent) {
           mouseObservation.recordLocalSelection(intent);
           createdSelectionOwner.handle(intent);
+        },
+      );
+      final TerminalScrollRouter scrollRouter = TerminalScrollRouter(
+        onTerminalReport: (Uint8List bytes) {
+          scrollObservation.recordTerminalReport(bytes);
+          createdPane.sendInput(bytes);
+        },
+        onLocalScroll: (int rows) {
+          final TerminalViewport viewport =
+              terminalSession!.terminalScreenSet.viewport;
+          final int before = viewport.offset;
+          viewport.scrollByRows(rows);
+          scrollObservation.recordLocalScroll(
+            requestedRows: rows,
+            before: before,
+            after: viewport.offset,
+          );
+          createdSelectionOwner.synchronize();
+          createdMetalSurface.notifyViewportChanged();
+        },
+        onAlternateScreenInput: (Uint8List bytes) {
+          scrollObservation.recordAlternateInput(bytes);
+          createdPane.sendInput(bytes);
         },
       );
       textInputSubscription = createdTextInputClient.events.listen(
@@ -819,7 +845,24 @@ final class TerminalApplication {
             case AppKitKeyEvent():
               break;
             case AppKitScrollEvent():
-              break;
+              final TerminalScreenSet screens =
+                  terminalSession!.terminalScreenSet;
+              final TerminalScreen scrollScreen = screens.activeScreen;
+              final TerminalFontCatalogMetrics metrics =
+                  createdMetalSurface.fontMetrics;
+              final TerminalScrollRouteResult result = scrollRouter.route(
+                event,
+                mouseModes: screens.mouseModes,
+                keyboardModes: screens.keyboardModes,
+                usingAlternateScreen: screens.usingAlternate,
+                rows: scrollScreen.rows,
+                columns: scrollScreen.columns,
+                cellWidth: metrics.cellWidth,
+                cellHeight: metrics.cellHeight,
+              );
+              if (result.disposition == TerminalScrollDisposition.ignored) {
+                scrollObservation.recordIgnored(result.ignoreReason!);
+              }
             case AppKitMouseEvent():
               final TerminalScreen mouseScreen =
                   terminalSession!.terminalScreenSet.activeScreen;
@@ -928,6 +971,7 @@ final class TerminalApplication {
               textInputEventRouter,
               mouseObservation,
               createdSelectionOwner,
+              scrollObservation,
             );
           } else if (shellExitTest != RuntimeShellExitTestScenario.none) {
             await _exerciseShellExitPolicy(
@@ -1279,6 +1323,7 @@ final class TerminalApplication {
     TerminalTextInputEventRouter textInputEventRouter,
     _TerminalMouseProductObservation mouseObservation,
     _TerminalSelectionProductOwner selectionOwner,
+    _TerminalScrollProductObservation scrollObservation,
   ) async {
     const String prompt = '__DT_DISPLAY_PROMPT__ ';
     const String colorMarker = '__DT_COLOR__';
@@ -1319,6 +1364,14 @@ final class TerminalApplication {
       window,
       mouseObservation,
       selectionOwner,
+    );
+    final bool scroll = await _exerciseScrollInput(
+      application,
+      session,
+      pane,
+      surface,
+      window,
+      scrollObservation,
     );
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
@@ -1386,7 +1439,8 @@ final class TerminalApplication {
           textInput &&
           inputMatrix &&
           mouse &&
-          selection) {
+          selection &&
+          scroll) {
         final int? workerProcessId = lifecycle.workerPid;
         _expectLifecycle(
           workerProcessId != null,
@@ -1399,6 +1453,7 @@ final class TerminalApplication {
           'frame_bounded=$frameBounded system_font=$systemFont '
           'mode_key=$modeKey text_input=$textInput '
           'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
+          'scroll=$scroll '
           'font_size=${baseline.fontPointSize.toStringAsFixed(1)} '
           'rows=${screen.rows} '
           'columns=${screen.columns} '
@@ -1421,6 +1476,7 @@ final class TerminalApplication {
       'frame_bounded=$frameBounded system_font=$systemFont '
       'mode_key=$modeKey text_input=$textInput '
       'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
+      'scroll=$scroll '
       'font_size=${baseline.fontPointSize}',
     );
   }
@@ -1976,6 +2032,264 @@ final class TerminalApplication {
     return true;
   }
 
+  static Future<bool> _exerciseScrollInput(
+    AppKitApplication application,
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+    Window window,
+    _TerminalScrollProductObservation observation,
+  ) async {
+    final TerminalScreenSet screens = session.terminalScreenSet;
+    final TerminalViewport viewport = screens.viewport;
+    final TerminalFontCatalogMetrics metrics = surface.fontMetrics;
+    _expectLifecycle(
+      application.eventProtocolVersion >= 5,
+      'scroll acceptance requires AppKit event protocol 5',
+    );
+    _expectLifecycle(
+      viewport.maximumOffset >= 3,
+      'scroll acceptance requires retained primary history',
+    );
+    viewport.scrollToBottom();
+    surface.notifyViewportChanged();
+
+    void inject({
+      required double deltaY,
+      double deltaX = 0,
+      bool precise = false,
+      AppKitScrollPhase phase = AppKitScrollPhase.none,
+      AppKitScrollPhase momentumPhase = AppKitScrollPhase.none,
+      bool directionInverted = false,
+      int modifiers = 0,
+      int column = 2,
+      int row = 2,
+    }) {
+      _injectScrollEventForTesting(
+        application,
+        window,
+        x: (column - 0.5) * metrics.cellWidth,
+        y: (row - 0.5) * metrics.cellHeight,
+        deltaX: deltaX,
+        deltaY: deltaY,
+        precise: precise,
+        phase: phase,
+        momentumPhase: momentumPhase,
+        directionInverted: directionInverted,
+        modifiers: modifiers,
+        monotonicNanoseconds: observation.nextInjectedTimestamp(),
+      );
+    }
+
+    final int acceptedFrames = surface.snapshot().acceptedFrameCount;
+    inject(
+      deltaY: metrics.cellHeight * 0.6,
+      precise: true,
+      phase: AppKitScrollPhase.began,
+      directionInverted: true,
+    );
+    await _waitForScrollObservation(
+      observation,
+      terminalReports: 0,
+      localScrolls: 0,
+      alternateInputs: 0,
+      ignored: 1,
+    );
+    inject(
+      deltaY: metrics.cellHeight * 0.6,
+      precise: true,
+      phase: AppKitScrollPhase.changed,
+      directionInverted: true,
+    );
+    await _waitForScrollObservation(
+      observation,
+      terminalReports: 0,
+      localScrolls: 1,
+      alternateInputs: 0,
+      ignored: 1,
+    );
+    await _waitForViewportOffset(viewport, minimum: 1, maximum: 1);
+    inject(
+      deltaY: 0,
+      precise: true,
+      phase: AppKitScrollPhase.ended,
+      directionInverted: true,
+    );
+    await _waitForScrollObservation(
+      observation,
+      terminalReports: 0,
+      localScrolls: 1,
+      alternateInputs: 0,
+      ignored: 2,
+    );
+    inject(
+      deltaY: metrics.cellHeight * 0.8,
+      precise: true,
+      momentumPhase: AppKitScrollPhase.began,
+      directionInverted: true,
+    );
+    await _waitForScrollObservation(
+      observation,
+      terminalReports: 0,
+      localScrolls: 2,
+      alternateInputs: 0,
+      ignored: 2,
+    );
+    await _waitForViewportOffset(viewport, minimum: 2, maximum: 2);
+    inject(
+      deltaY: 0,
+      precise: true,
+      momentumPhase: AppKitScrollPhase.ended,
+      directionInverted: true,
+    );
+    await _waitForScrollObservation(
+      observation,
+      terminalReports: 0,
+      localScrolls: 2,
+      alternateInputs: 0,
+      ignored: 3,
+    );
+
+    final Stopwatch frameDeadline = Stopwatch()..start();
+    var metalViewport = false;
+    while (frameDeadline.elapsed < const Duration(seconds: 3)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      metalViewport =
+          snapshot.acceptedFrameCount > acceptedFrames &&
+          snapshot.viewportOffset == 2;
+      if (metalViewport) break;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    inject(deltaY: -2, phase: AppKitScrollPhase.began, directionInverted: true);
+    await _waitForScrollObservation(
+      observation,
+      terminalReports: 0,
+      localScrolls: 3,
+      alternateInputs: 0,
+      ignored: 3,
+    );
+    await _waitForViewportOffset(viewport, minimum: 0, maximum: 0);
+
+    final List<int> expectedWheel = ascii.encode('\x1b[<64;2;2M\x1b[<64;2;2M');
+    final String expectedWheelHex = expectedWheel
+        .map((int byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    pane.insertText(
+      "stty raw -echo; printf '\\033[?1000h\\033[?1006h\\r\\n"
+      "__DT_SCROLL_%s_READY__\\r\\n' 'MOUSE'; "
+      "bytes=\$(dd bs=1 count=${expectedWheel.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "printf '\\033[?1000l\\033[?1006l'; stty sane; "
+      "if [ \"\$bytes\" = '$expectedWheelHex' ]; then "
+      "printf '\\r\\n__DT_SCROLL_%s_EXACT__\\r\\n' 'MOUSE'; else "
+      "printf '\\r\\n__DT_SCROLL_%s_MISMATCH__\\r\\n' 'MOUSE'; fi",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, '__DT_SCROLL_MOUSE_READY__');
+    _expectLifecycle(
+      screens.mouseModes ==
+          const TerminalMouseModes(
+            tracking: TerminalMouseTrackingMode.normal,
+            encoding: TerminalMouseCoordinateEncoding.sgr,
+          ),
+      'scroll mouse reporting mode was not active at the ready boundary',
+    );
+    inject(deltaY: 1, modifiers: ModifierKeys.shiftBit);
+    await _waitForScrollObservation(
+      observation,
+      terminalReports: 0,
+      localScrolls: 4,
+      alternateInputs: 0,
+      ignored: 3,
+    );
+    await _waitForViewportOffset(viewport, minimum: 1, maximum: 1);
+    inject(deltaY: 2);
+    await _waitForScrollObservation(
+      observation,
+      terminalReports: 1,
+      localScrolls: 4,
+      alternateInputs: 0,
+      ignored: 3,
+    );
+    await _waitForAsciiMarker(session, '__DT_SCROLL_MOUSE_EXACT__');
+    _expectLifecycle(
+      screens.mouseModes == const TerminalMouseModes(),
+      'scroll mouse reporting modes did not reset after exact capture',
+    );
+    viewport.scrollToBottom();
+    surface.notifyViewportChanged();
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+
+    const List<int> expectedAlternate = <int>[
+      0x1b,
+      0x4f,
+      0x42,
+      0x1b,
+      0x4f,
+      0x42,
+    ];
+    final String expectedAlternateHex = expectedAlternate
+        .map((int byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    pane.insertText(
+      "stty raw -echo; printf '\\033[?1049h\\033[?1h\\r\\n"
+      "__DT_SCROLL_%s_READY__\\r\\n' 'ALT'; "
+      "bytes=\$(dd bs=1 count=${expectedAlternate.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "printf '\\033[?1l\\033[?1049l'; stty sane; "
+      "if [ \"\$bytes\" = '$expectedAlternateHex' ]; then "
+      "printf '\\r\\n__DT_SCROLL_%s_EXACT__\\r\\n' 'ALT'; else "
+      "printf '\\r\\n__DT_SCROLL_%s_MISMATCH__\\r\\n' 'ALT'; fi",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, '__DT_SCROLL_ALT_READY__');
+    _expectLifecycle(
+      screens.usingAlternate && screens.keyboardModes.applicationCursorKeys,
+      'alternate screen/application cursor modes were not active',
+    );
+    inject(deltaY: -2);
+    await _waitForScrollObservation(
+      observation,
+      terminalReports: 1,
+      localScrolls: 4,
+      alternateInputs: 1,
+      ignored: 3,
+    );
+    await _waitForAsciiMarker(session, '__DT_SCROLL_ALT_EXACT__');
+    _expectLifecycle(
+      !screens.usingAlternate && !screens.keyboardModes.applicationCursorKeys,
+      'alternate scroll fixture did not restore primary keyboard modes',
+    );
+    viewport.scrollToBottom();
+    surface.notifyViewportChanged();
+
+    final bool exclusive =
+        observation.terminalReportCount == 1 &&
+        observation.terminalReportBytes == expectedWheel.length &&
+        observation.localScrollCount == 4 &&
+        observation.localRequestedRows == 1 &&
+        observation.localMovedRows == 1 &&
+        observation.alternateInputCount == 1 &&
+        observation.alternateInputBytes == expectedAlternate.length &&
+        observation.ignoredCount == 3;
+    _expectLifecycle(
+      metalViewport && exclusive,
+      'scroll product acceptance did not preserve bounded exclusive ownership',
+    );
+    stdout.writeln(
+      'TERMINAL_SCROLL_TEST protocol=5 precise=true momentum=true '
+      'wheel=true mouse_report=true shift_override=true alternate=true '
+      'app_cursor=true local=true metal=true exclusive=true '
+      'reports=${observation.terminalReportCount} '
+      'local=${observation.localScrollCount} '
+      'alternate_inputs=${observation.alternateInputCount} '
+      'ignored=${observation.ignoredCount} '
+      'bytes=${observation.terminalReportBytes} '
+      'alternate_bytes=${observation.alternateInputBytes}',
+    );
+    return true;
+  }
+
   static Future<void> _waitForSelectionGeneration(
     _TerminalSelectionProductOwner owner,
     int minimum,
@@ -2100,6 +2414,34 @@ final class TerminalApplication {
     );
   }
 
+  static Future<void> _waitForScrollObservation(
+    _TerminalScrollProductObservation observation, {
+    required int terminalReports,
+    required int localScrolls,
+    required int alternateInputs,
+    required int ignored,
+  }) async {
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 3) &&
+        (observation.terminalReportCount < terminalReports ||
+            observation.localScrollCount < localScrolls ||
+            observation.alternateInputCount < alternateInputs ||
+            observation.ignoredCount < ignored)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      observation.terminalReportCount == terminalReports &&
+          observation.localScrollCount == localScrolls &&
+          observation.alternateInputCount == alternateInputs &&
+          observation.ignoredCount == ignored,
+      'scroll ownership counts changed unexpectedly: '
+      'reports=${observation.terminalReportCount}/$terminalReports '
+      'local=${observation.localScrollCount}/$localScrolls '
+      'alternate=${observation.alternateInputCount}/$alternateInputs '
+      'ignored=${observation.ignoredCount}/$ignored',
+    );
+  }
+
   static void _injectMouseEventForTesting(
     AppKitApplication application,
     Window window, {
@@ -2129,6 +2471,56 @@ final class TerminalApplication {
       button,
       modifiers,
       clickCount,
+    ]);
+  }
+
+  static void _injectScrollEventForTesting(
+    AppKitApplication application,
+    Window window, {
+    required double x,
+    required double y,
+    required double deltaX,
+    required double deltaY,
+    required bool precise,
+    required AppKitScrollPhase phase,
+    required AppKitScrollPhase momentumPhase,
+    required bool directionInverted,
+    required int modifiers,
+    required int monotonicNanoseconds,
+  }) {
+    final int handle = appkit_testing.nativeWindowHandleForTesting(window);
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      14,
+      handle,
+      handle >> 32,
+      monotonicNanoseconds,
+      0,
+      x,
+      y,
+      deltaX,
+      deltaY,
+      precise,
+      switch (phase) {
+        AppKitScrollPhase.none => 0,
+        AppKitScrollPhase.began => 1,
+        AppKitScrollPhase.stationary => 2,
+        AppKitScrollPhase.changed => 4,
+        AppKitScrollPhase.ended => 8,
+        AppKitScrollPhase.cancelled => 16,
+        AppKitScrollPhase.mayBegin => 32,
+      },
+      switch (momentumPhase) {
+        AppKitScrollPhase.none => 0,
+        AppKitScrollPhase.began => 1,
+        AppKitScrollPhase.stationary => 2,
+        AppKitScrollPhase.changed => 4,
+        AppKitScrollPhase.ended => 8,
+        AppKitScrollPhase.cancelled => 16,
+        AppKitScrollPhase.mayBegin => 32,
+      },
+      directionInverted,
+      modifiers,
     ]);
   }
 
@@ -2665,6 +3057,46 @@ final class _TerminalMouseProductObservation {
   }
 
   void recordIgnored(TerminalMouseIgnoreReason reason) {
+    ignoredCount++;
+    lastIgnoreReason = reason;
+  }
+}
+
+final class _TerminalScrollProductObservation {
+  int terminalReportCount = 0;
+  int terminalReportBytes = 0;
+  int localScrollCount = 0;
+  int localRequestedRows = 0;
+  int localMovedRows = 0;
+  int alternateInputCount = 0;
+  int alternateInputBytes = 0;
+  int ignoredCount = 0;
+  int _nextTimestamp = 2000000;
+  TerminalScrollIgnoreReason? lastIgnoreReason;
+
+  int nextInjectedTimestamp() => _nextTimestamp++;
+
+  void recordTerminalReport(Uint8List bytes) {
+    terminalReportCount++;
+    terminalReportBytes += bytes.length;
+  }
+
+  void recordLocalScroll({
+    required int requestedRows,
+    required int before,
+    required int after,
+  }) {
+    localScrollCount++;
+    localRequestedRows += requestedRows;
+    localMovedRows += after - before;
+  }
+
+  void recordAlternateInput(Uint8List bytes) {
+    alternateInputCount++;
+    alternateInputBytes += bytes.length;
+  }
+
+  void recordIgnored(TerminalScrollIgnoreReason reason) {
     ignoredCount++;
     lastIgnoreReason = reason;
   }

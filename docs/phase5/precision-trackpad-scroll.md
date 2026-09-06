@@ -1,6 +1,6 @@
 # Precision trackpad scroll
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-06
 - Scope: sixth Phase 5 production-input roadmap item
 - Related: CAP-03, IN-06, SCR-07, IN-02
@@ -182,6 +182,27 @@ is implemented early.
 - 2026-09-06: adding the sealed `AppKitScrollEvent` made the existing product
   window-event switch non-exhaustive. Subtask 2 adds only an explicit no-op arm;
   the event is deliberately not consumed until ordered product integration.
+- 2026-09-06: completed ordered subtask 3. The live window subscription now
+  routes protocol v5 scroll events with the current active-screen dimensions,
+  CoreText cell metrics, keyboard modes, mouse modes, and screen kind. Terminal
+  report and alternate-key bytes use the existing bounded pane PTY input path.
+- 2026-09-06: primary local callbacks mutate the existing viewport, synchronize
+  stable selection anchors/projection, and request a Metal viewport refresh.
+  The acceptance snapshot observed a newer accepted frame at history offset 2.
+- 2026-09-06: the real-window fixture sends two 0.6-row precise physical events,
+  preserves their 0.2-row remainder through a zero-delta physical end, and adds
+  a 0.8-row momentum begin to emit the next row. Momentum end clears the final
+  remainder; a bounded reverse event returns to bottom.
+- 2026-09-06: the real raw/no-echo PTY fixture activates SGR mouse reporting,
+  proves Shift performs one local history step, and compares two wheel-up packets
+  byte-for-byte. A separate alternate-screen/application-cursor fixture compares
+  two cursor-down sequences byte-for-byte. Final callback totals prove the same
+  source event was never delivered to two owners.
+- 2026-09-06: the first post-integration smoke run stopped after both bundle
+  audits because its current-protocol oracle still required literal v4 metadata.
+  Current-path expectations now require v5, while the dependency's explicit v4
+  negotiation and legacy fixtures remain unchanged. Both smoke modes passed on
+  the rerun.
 
 ## Verification results
 
@@ -209,6 +230,33 @@ is implemented early.
   whole-package analysis, native asset hooks, and the full Dart suite completed.
 - `git diff --check`: passed before commit.
 
+### Product integration and M1 acceptance
+
+- `dart format`, whole-package `dart analyze`, and `CI=true make test`: passed;
+  the final full suite checked 133 Dart files with zero formatting changes and
+  no analyzer issues.
+- `CI=true make RUNTIME_ARCH=arm64 runtime-terminal-display-integration`:
+  passed. Developer JIT completed in 1970 ms and Release AOT in 1416 ms. Each
+  mode required the exact `TERMINAL_SCROLL_TEST` evidence for protocol v5,
+  precise/momentum accumulation, xterm wheel reporting, Shift override,
+  alternate application-cursor bytes, local Metal movement, and exclusive
+  ownership.
+- `CI=true make RUNTIME_ARCH=arm64 runtime-source-check`: passed with 230
+  tracked files and zero product native source files.
+- `CI=true make RUNTIME_ARCH=arm64 runtime-bundle-audit`: passed in both modes;
+  each bundle retained one helper, one declared native asset, and one capability.
+- `CI=true make RUNTIME_ARCH=arm64 runtime-integration`: passed after updating
+  the current-protocol oracle. Developer JIT completed in 2197 ms and Release
+  AOT in 1758 ms.
+- `CI=true make RUNTIME_ARCH=arm64 runtime-resource-integration`: passed 1,000
+  iterations in each mode with baseline 12 and peak 14 native objects. Developer
+  stress/total time was 5756/9700 ms; Release was 5360/12291 ms.
+- `git diff --check`: passed before the completion commit.
+
 ## Follow-up handoff
 
-Pending.
+- The next roadmap item owns clipboard copying, bracketed paste, newline/control
+  policy, confirmation, and large-paste throttling. It may consume selected text
+  and the existing general pasteboard but must not change scroll ownership.
+- Horizontal scroll remains intentionally actionless until a later explicit
+  product requirement; the v5 AppKit event retains its delta for that future use.
