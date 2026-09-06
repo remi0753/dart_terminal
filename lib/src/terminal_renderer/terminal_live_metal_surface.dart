@@ -37,6 +37,7 @@ final class TerminalLiveMetalSurfaceSnapshot {
     required this.viewportHeight,
     required this.scale16_16,
     required this.lastAppliedDamageGeneration,
+    required this.lastAcceptedModelRevision,
     required this.lastAcceptedFrameGeneration,
     required this.rendererGeneration,
     required this.atlasResourceGeneration,
@@ -54,6 +55,7 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int viewportHeight;
   final int scale16_16;
   final int lastAppliedDamageGeneration;
+  final int lastAcceptedModelRevision;
   final int lastAcceptedFrameGeneration;
   final int rendererGeneration;
   final int atlasResourceGeneration;
@@ -403,6 +405,7 @@ final class TerminalLiveMetalSurface {
       viewportHeight: _viewportHeight,
       scale16_16: atlas.scale16_16,
       lastAppliedDamageGeneration: _scheduler.model.lastDamageGeneration,
+      lastAcceptedModelRevision: _scheduler.lastAcceptedModelRevision,
       lastAcceptedFrameGeneration: _scheduler.lastAcceptedFrameGeneration,
       rendererGeneration: domain?.renderer.generation ?? 0,
       atlasResourceGeneration: atlas.resourceGeneration,
@@ -512,7 +515,8 @@ final class TerminalLiveMetalSurface {
         ),
       );
       throw StateError(
-        'live Metal surface rejected damage: ${result.disposition.name}',
+        'live Metal surface rejected damage: ${result.disposition.name} '
+        '${_damageRejectionContext(damage)}',
       );
     }
     final TerminalDamageAckHandlingResult acknowledgement = _outbox.acknowledge(
@@ -544,6 +548,32 @@ final class TerminalLiveMetalSurface {
       }
     }
     _retryRequested = _scheduler.hasPendingFrame;
+  }
+
+  String _damageRejectionContext(TerminalDecodedDamage damage) {
+    final TerminalDamageRenderModel model = _scheduler.model;
+    String rowVersion = 'none';
+    if (model.isInitialized &&
+        damage.columns == model.columns &&
+        damage.rows == model.rows) {
+      for (final TerminalDamageRowRecord record in damage.rowRecords) {
+        final int retained = model.rowVersionAt(record.row);
+        if (record.rowVersion != retained + 1) {
+          rowVersion = '${record.row}:$retained>${record.rowVersion}';
+          break;
+        }
+      }
+    }
+    return 'incoming_generation=${damage.damageGeneration} '
+        'retained_generation=${model.lastDamageGeneration} '
+        'full=${damage.isFullSnapshot} '
+        'incoming_grid=${damage.rows}x${damage.columns} '
+        'retained_grid=${model.rows}x${model.columns} '
+        'incoming_resource=${damage.requiredResourceGeneration} '
+        'retained_resource=${model.requiredResourceGeneration} '
+        'incoming_bell=${damage.visualBellGeneration} '
+        'retained_bell=${model.visualBellGeneration} '
+        'row_version=$rowVersion';
   }
 
   void _requestRecovery(

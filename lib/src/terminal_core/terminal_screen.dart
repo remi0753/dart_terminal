@@ -321,11 +321,20 @@ final class TerminalScreen {
     );
   }
 
-  int rowVersionAt(int row) => _rowVersions[_physicalRowFor(row)];
+  int rowVersionAt(int row) {
+    _checkRow(row);
+    return _rowVersions[row];
+  }
 
-  int dirtyStartAt(int row) => _dirtyStarts[_physicalRowFor(row)];
+  int dirtyStartAt(int row) {
+    _checkRow(row);
+    return _dirtyStarts[row];
+  }
 
-  int dirtyEndAt(int row) => _dirtyEnds[_physicalRowFor(row)];
+  int dirtyEndAt(int row) {
+    _checkRow(row);
+    return _dirtyEnds[row];
+  }
 
   bool isRowDirty(int row) => dirtyStartAt(row) < dirtyEndAt(row);
 
@@ -2256,15 +2265,16 @@ final class TerminalScreen {
   }
 
   bool _markDirtyPhysical(int physical, int start, int end) {
-    final int previousStart = _dirtyStarts[physical];
-    final int previousEnd = _dirtyEnds[physical];
+    final int logical = (physical - _firstPhysicalRow) % rows;
+    final int previousStart = _dirtyStarts[logical];
+    final int previousEnd = _dirtyEnds[logical];
     final bool wasClean = previousStart >= previousEnd;
     if (wasClean) {
       if (_advanceRowVersion(physical)) {
         return true;
       }
-      _dirtyStarts[physical] = start;
-      _dirtyEnds[physical] = end;
+      _dirtyStarts[logical] = start;
+      _dirtyEnds[logical] = end;
       return true;
     }
     final int nextStart = start < previousStart ? start : previousStart;
@@ -2272,8 +2282,8 @@ final class TerminalScreen {
     if (nextStart == previousStart && nextEnd == previousEnd) {
       return false;
     }
-    _dirtyStarts[physical] = nextStart;
-    _dirtyEnds[physical] = nextEnd;
+    _dirtyStarts[logical] = nextStart;
+    _dirtyEnds[logical] = nextEnd;
     return true;
   }
 
@@ -2286,9 +2296,10 @@ final class TerminalScreen {
   }
 
   bool _advanceRowVersion(int physical) {
-    final int version = _rowVersions[physical];
+    final int logical = (physical - _firstPhysicalRow) % rows;
+    final int version = _rowVersions[logical];
     if (version < maxRowVersion) {
-      _rowVersions[physical] = version + 1;
+      _rowVersions[logical] = version + 1;
       return false;
     }
     for (int row = 0; row < rows; row++) {

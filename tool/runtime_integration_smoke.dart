@@ -21,7 +21,7 @@ enum _RuntimeMode {
   final String payloadName;
 }
 
-enum _Suite { smoke, lifecycle, traffic, resource, fault, all }
+enum _Suite { smoke, display, lifecycle, traffic, resource, fault, all }
 
 final class _Options {
   const _Options({
@@ -136,7 +136,8 @@ _Options _parseOptions(List<String> arguments) {
           .firstOrNull;
       if (selected == null) {
         throw const _SmokeException(
-          '--suite must be smoke, lifecycle, traffic, resource, fault, or all',
+          '--suite must be smoke, display, lifecycle, traffic, resource, '
+          'fault, or all',
         );
       }
       suite = selected;
@@ -356,14 +357,21 @@ Future<_ProcessObservation> _launch(
             )) {
       await _expectProcessAbsent(workerProcessId);
     }
-    await _expectRuntimeDiagnostics(
-      options,
-      invocation,
-      diagnosticsDirectory,
-      processId: process.pid,
-      status: status,
-      expectedPhase: expectedDiagnosticPhase,
-    );
+    try {
+      await _expectRuntimeDiagnostics(
+        options,
+        invocation,
+        diagnosticsDirectory,
+        processId: process.pid,
+        status: status,
+        expectedPhase: expectedDiagnosticPhase,
+      );
+    } on _SmokeException catch (error) {
+      throw _SmokeException(
+        '${error.message}; stdout=${completedStdout.trim()} '
+        'stderr=${completedStderr.trim()}',
+      );
+    }
     return _ProcessObservation(
       processId: process.pid,
       status: status,
@@ -599,10 +607,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     options,
     invocation,
     const <String>['--auto-close-after=1'],
-    environment: const <String, String>{
-      'DT_RUNTIME_EVENT_WIRE_TEST': '1',
-      'DT_RUNTIME_CUSTOM_VIEW_TEST': '1',
-    },
+    environment: const <String, String>{'DT_RUNTIME_EVENT_WIRE_TEST': '1'},
   );
   _expect(
     observation.status == 0,
@@ -618,13 +623,6 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     'NATIVE_CUSTOM_VIEW '
         'provider=dart_terminal.TerminalMetalView attached=true '
         'renderer_bound=true',
-    'NATIVE_FRAME_SCHEDULER stale=true accepted=true first_frame=1 '
-        'accepted_frame=11 submission_token_nonzero=true occluded=true '
-        'resume_full=true resume_frame=12 recovered=true '
-        'renderer_generation_advanced=true atlas_republished=true '
-        'abandoned_pins=3 recovery_full=true recovery_frame=13 metrics=true '
-        'frame_build_samples=4 frame_submit_samples=4 atlas_hit_rate=0.500 '
-        'atlas_uploads=1 uploaded_bytes=4096 pending=0',
     'Automated close scheduled after 1 seconds.',
     'Dart Terminal shut down cleanly.',
   ]) {
@@ -840,6 +838,62 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
   );
 }
 
+Future<void> _runTerminalDisplay(
+  _Options options,
+  _Invocation invocation,
+) async {
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>['--runtime-terminal-display-test'],
+    environment: const <String, String>{
+      'DT_RUNTIME_TERMINAL_DISPLAY_TEST': '1',
+    },
+    timeout: const Duration(seconds: 15),
+  );
+  _expect(
+    observation.status == 0,
+    'terminal display application exited with status ${observation.status}; '
+    'stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'terminal display application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stdoutText.contains(
+      'NATIVE_CUSTOM_VIEW '
+      'provider=dart_terminal.TerminalMetalView attached=true '
+      'renderer_bound=true',
+    ),
+    'terminal display launch did not use the default Metal surface',
+  );
+  final RegExp acceptance = RegExp(
+    r'^TERMINAL_DISPLAY_TEST sgr_stripped=true styled=true '
+    r'wrapped_rows=([2-9]|[1-9][0-9]+) prompt_bottom=true '
+    r'metal_default=true newest_frame=true frame_bounded=true '
+    r'rows=([4-9]|[1-9][0-9]+) '
+    r'columns=([2-9][0-9]|[1-9][0-9]{2,}) '
+    r'frame_build_delta=[1-9][0-9]*$',
+    multiLine: true,
+  );
+  _expect(
+    acceptance.hasMatch(observation.stdoutText),
+    'terminal display launch omitted its content-free acceptance result',
+  );
+  _expect(
+    observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+    'terminal display launch did not complete clean ownership teardown',
+  );
+  stdout.writeln(
+    'RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'elapsed_ms=${observation.elapsed.inMilliseconds}',
+  );
+}
+
 Future<void> _runShellExitPolicySmoke(
   _Options options,
   _Invocation invocation, {
@@ -886,15 +940,6 @@ Future<void> _runShellExitPolicySmoke(
     pane: pane,
     session: session,
   );
-  _expect(
-    _containsOrderedValues(nativeStages, const <String>[
-      'processExitReady',
-      'waitpidResult',
-      'exitPublished',
-    ]),
-    '$scenario did not publish the kernel-to-Dart PTY exit boundary: '
-    '$nativeStages',
-  );
   final bool externallyReaped = nativeStages.contains('externalReapObserved');
   final bool ptyOwnedReap = RegExp(
     '^TERMINAL_PTY_NATIVE pane=$pane session=$session '
@@ -905,6 +950,18 @@ Future<void> _runShellExitPolicySmoke(
   _expect(
     externallyReaped || ptyOwnedReap,
     '$scenario observed exit readiness without a classified reap owner',
+  );
+  final List<String> expectedExitBoundary = externallyReaped
+      ? const <String>[
+          'processExitReady',
+          'externalReapObserved',
+          'exitPublished',
+        ]
+      : const <String>['processExitReady', 'waitpidResult', 'exitPublished'];
+  _expect(
+    _containsOrderedValues(nativeStages, expectedExitBoundary),
+    '$scenario did not publish its classified kernel-to-Dart PTY exit '
+    'boundary: $nativeStages',
   );
   _expect(
     RegExp(
@@ -1737,6 +1794,9 @@ Future<void> main(List<String> arguments) async {
     final _Invocation invocation = await _loadInvocation(options);
     if (options.suite == _Suite.smoke || options.suite == _Suite.all) {
       await _runSmoke(options, invocation);
+    }
+    if (options.suite == _Suite.display || options.suite == _Suite.all) {
+      await _runTerminalDisplay(options, invocation);
     }
     if (options.suite == _Suite.lifecycle || options.suite == _Suite.all) {
       await _runLifecycle(options, invocation);

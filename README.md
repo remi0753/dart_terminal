@@ -11,7 +11,8 @@ Rosetta、Universal、Intel-native 実機確認は、M1 の製品 contract が�
 現在の通常エントリーポイントは、再利用可能な `dart_pty_macos` を使う
 pane-owned persistent login shell です。Phase 0 の native spike source は移行時に削除し、
 成立性と測定結果は `docs/phase0` に保存しています。Dart-only VT parser と screen
-model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後続 Phase です。
+model、および CoreText/Metal renderer は製品実装へ移行済みです。IME、選択、
+履歴スクロールなどの対話機能は後続 Phase です。
 
 現在選定している製品 contract は、未改変の公式 Dart だけを使う AppKit root と、
 独立して回収・再生成できる公式 Dart 子プロセス worker です。M1/arm64 Developer JIT
@@ -41,10 +42,10 @@ model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後�
 - native event protocol v4（source generation、nanosecond timestamp、operation
   ID、focus/visibility/occlusion/backing scale/screen state、application/window
   lifecycle、menu action）と、旧 v1/v2/v3 endpoint との compatibility negotiation
-- generic `View` / `TextView` 境界と、型を保った content-view attachment
-- `dart_terminal_renderer_macos` の公開 facade から dependency-owned
-  `TerminalMetalView : MTKView` を生成・attach できる custom-view 境界
-  （renderer、shader、frame submission は Phase 4）
+- generic/custom `View` 境界と、型を保った content-view attachment
+- `dart_terminal_renderer_macos` の公開 facadeからdependency-owned
+  `TerminalMetalView : MTKView`を通常起動で生成・attachし、live terminal screenを
+  CoreText shaping、bounded glyph atlas、Metal frame submissionへ接続する製品表示
 - `dev.dart-terminal` の macOS Unified Logging と、終了状態を判定できる
   privacy-safe なローカル実行メタデータ（M1/arm64 Developer JIT / Release AOT）
 - generation／AppKit-main domain付きnative handle registryと、off-domain
@@ -108,6 +109,9 @@ model は製品実装へ移行済みで、CoreText/Metal renderer、IME は後�
   最大3回のrenderer再生成、旧submission pinの一括解放、全atlas再公開とfull redraw、
   native GPU completion時間と受理済みatlas upload count/bytes、Dart frame
   build/submit時間、atlas hit rate、世代整合済みのimmutable aggregate metrics
+- canonical screenを唯一の表示元とするlive Metal surface owner。SGR/DEC sequenceを
+  cell stateとして描画し、terminal soft wrapとresize reflowで行を決め、履歴位置が
+  bottomの間は大量出力後も最新prompt/cursorを最終表示行に保つ
 
 ## 起動
 
@@ -247,6 +251,7 @@ stress、shutdown fault injection を個別に再検証する場合:
 
 ```shell
 make RUNTIME_ARCH=arm64 release-aot-integration
+make RUNTIME_ARCH=arm64 release-aot-display
 make RUNTIME_ARCH=arm64 release-aot-lifecycle
 make RUNTIME_ARCH=arm64 release-aot-traffic
 make RUNTIME_ARCH=arm64 release-aot-resource
@@ -270,11 +275,14 @@ make runtime-source-check
 make test
 make RUNTIME_ARCH=arm64 runtime-bundle-audit
 make RUNTIME_ARCH=arm64 runtime-integration
+make RUNTIME_ARCH=arm64 runtime-terminal-display-integration
 ```
 
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
-smoke、lifecycle、bounded traffic、resource stress、shutdown fault suite をまとめて
-実行します。resource stress は実アプリの Dart API から 1,000 組の Window/View を生成・
+smoke、real-PTY live Metal display、lifecycle、bounded traffic、resource stress、
+shutdown fault suiteをまとめて実行します。display suiteはSGR除去、style、soft wrap、
+bottom prompt、newest-only frame boundをDeveloper JIT/Release AOTの実GUIで確認します。
+resource stress は実アプリの Dart API から 1,000 組の Window/View を生成・
 破棄し、毎回 native handle が基準値へ戻ることを確認します。shutdown fault suite は
 malformed/late event、double dispose、worker crash を封じ込め、最終 native handle が 0、
 記録した worker PID が消滅することを確認します。いずれも専用の integration-test gate が
@@ -304,27 +312,28 @@ lib/src/terminal_core/               decoder、生成VT table、parser、SoA scr
 lib/src/runtime_lifecycle.dart       root/worker lifecycle coordinator
 lib/src/terminal_pane.dart           pane/session ID、owner、close状態
 lib/src/terminal_session.dart        persistent login shellとPTY入出力
-lib/src/terminal_buffer.dart         Phase 3までのbounded plain-text投影
+lib/src/terminal_renderer/           CoreText/atlas/Metalのlive製品表示
+lib/src/terminal_buffer.dart         lifecycle診断用のlegacy text projection
 test/run_tests.dart                  UI 非依存部分の最小テスト
 ../dart_appkit/packages/              AppKit、runtime、PTY、renderer の公開 package
 ```
 
-## 製品実装へ進む際の境界
+## 現在の製品境界
 
 通常エントリーポイントは1 paneが1つのpersistent login shellを所有します。
-現在の表示はCR/LF/Backspaceだけを扱うbounded plain-text投影で、引き続き
-`TextView`を使います。一方、renderer packageのcustom-view providerと
-`TerminalMetalView`の生成・attach境界に加え、incremental parserのactionを
-typed-array画面へ適用する`TerminalScreenParserSink`まで用意済みです。本格的な
-terminal emulator表示には次の機能が必要です。
+PTY bytesはincremental parserからtyped-array画面へ適用され、そのcanonical screenが
+通常起動の`TerminalMetalView`へdamageとして渡ります。SGR/palette、primary/alternate
+screen、wide/grapheme、soft wrap、resize reflow、cursor、visual bellをCoreText/Metalで
+表示します。`TextView`やnewline単位のtext projectionは製品表示に使いません。
 
-1. SGR/palette、primary/alternate screen、wide/grapheme、reflow/scrollback
-2. 色・属性・カーソル・選択・スクロールを描画する CoreText/Metal renderer
-3. IME、クリップボード、キーバインドの仕上げ
+現在のviewportはbottom-followです。履歴をwheel/trackpadで移動する操作、selection、
+IME、clipboardと高度なkeybindは後続Phaseで実装します。これらが未実装でも、通常の
+大量出力後に最新promptが表示範囲外へ隠れることはありません。
 
 `TerminalPaneOwner`がpaneを、`TerminalPane`がsession generationを、
 `TerminalSession`が公開`PtyProcess`を所有します。実backendとdeterministic fakeは
-同じ境界で交換できます。`TerminalBuffer`はPhase 3でANSI画面モデルへ置き換えます。
+同じ境界で交換できます。`TerminalBuffer`はcontent-free lifecycle fixtureの補助として
+のみ残り、表示行やpixelを決めません。
 
 Ghostty クラスの品質へ進めるために必要な機能、目標アーキテクチャ、段階別の
 完了条件、性能予算、テスト戦略、リスクは [`ROADMAP.md`](ROADMAP.md) に

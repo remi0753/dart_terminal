@@ -76,6 +76,30 @@ Future<void> main() async {
       );
     }
 
+    final String terminalApplication = await File(
+      'lib/src/terminal_application.dart',
+    ).readAsString();
+    for (final String required in <String>[
+      'TerminalRendererMacos.createView()',
+      'TerminalLiveMetalSurface.attach(',
+      'screenSet: terminalSession!.terminalScreenSet',
+    ]) {
+      _expect(
+        terminalApplication.contains(required),
+        'product terminal omits its default Metal connection: $required',
+      );
+    }
+    for (final String forbidden in <String>[
+      'TextView(',
+      'createdPane.render()',
+      'DT_RUNTIME_CUSTOM_VIEW_TEST',
+    ]) {
+      _expect(
+        !terminalApplication.contains(forbidden),
+        'product terminal retains a legacy display path: $forbidden',
+      );
+    }
+
     final Map<String, Object?> manifest = jsonDecode(
       await File('macos_application.json').readAsString(),
     ) as Map<String, Object?>;

@@ -1,6 +1,6 @@
 # Phase 4 — Product Metal surface and live viewport integration
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-06
 - Scope: Phase 4 completion repair discovered after the initial closeout
 - Related: ADR-002, ADR-003, ADR-004, SCR-05, SCR-07–09, TXT-01–07,
@@ -171,6 +171,72 @@ committed.
 
 ## Verification results
 
+- 2026-09-06: the first `make runtime-terminal-display-integration` built the
+  Developer JIT bundle and launched its real PTY GUI, but the in-process
+  acceptance exited with software-failure status 70. The harness originally
+  omitted captured output from this assertion, so it was extended with
+  content-free stdout/stderr failure context before diagnosing the invariant;
+  the task remains incomplete.
+- 2026-09-06: the repeated Developer JIT launch showed every product invariant
+  true (`sgr_stripped`, styled marker, two soft-wrapped rows, bottom prompt,
+  newest accepted revision, bounded frame/pins), but still timed out because a
+  redundant completion clause inspected the legacy diagnostic
+  `TerminalBuffer`. The acceptance was corrected to wait for and inspect only
+  `TerminalScreenSet.activeScreen`; this also prevents future tests from making
+  the removed display projection an accidental dependency.
+- 2026-09-06: Developer JIT then passed. The first Release AOT repetition also
+  emitted every true display invariant, but a scheduled surface drain ran while
+  pane shutdown was mutating its screen and rejected a delta as
+  `needsFullSnapshot`. Review found a teardown ownership inversion: the pane/
+  session owner was awaited before its dependent render surface cancelled its
+  timer and closed the damage relationship. Cleanup now disposes the live Metal
+  surface before shutting down the pane owner, and the display fixture begins a
+  deterministic forced pane close before closing its window. No render retry is
+  allowed to outlive the canonical screen owner.
+- 2026-09-06: the next Release AOT repetition still ended at the
+  `shutdown-started` diagnostic phase with status 70. Because runtime diagnostic
+  validation happened before `_ProcessObservation` was returned, its failure
+  hid the already-captured application output; the harness now appends that
+  content-free context to diagnostic validation failures for precise teardown
+  diagnosis. The task remains incomplete pending the repeated launch.
+- 2026-09-06: captured output proved the failure occurred during the display
+  loop, before its acceptance line. `TerminalDamageRenderModel` correctly
+  requires an incremental row version to be the retained logical row's exact
+  successor, but a terminal scroll rotates or copies physical rows between
+  logical coordinates. With different row histories their versions are not
+  comparable; the earlier ring test used equal versions and masked this case.
+  Row versions now belong to damage packet logical coordinates rather than
+  physical ring slots; dirty marking maps a physical storage slot back to its
+  current logical row before advancing. A regression deliberately gives rows
+  different versions before ring rotation and proves the incremental packet
+  advances every retained logical row exactly once. Normal scroll therefore
+  keeps the Phase 4 incremental-damage contract without a full snapshot per
+  output line.
+- 2026-09-06: the first real-PTY repetition after moving row versions to
+  logical coordinates still hit `needsFullSnapshot` intermittently in Release
+  AOT. Content-free structural diagnostics showed consecutive damage/resource/
+  bell generations and equal dimensions, but one dirty logical row retained
+  the same version. Its dirty interval was still stored by physical ring slot,
+  so a scroll could move the already-dirty marker to a different logical row.
+  Dirty spans now use the same logical coordinate domain as row versions;
+  cell/style/line payload remains in the optimized physical ring. The regression
+  dirties a row immediately before rotation and checks both its moved content
+  and each destination row's single version advance.
+- 2026-09-06: after scroll snapshots were corrected, Release AOT reached and
+  printed the complete display acceptance. Teardown then exposed the other half
+  of the dependency-order fix: `TerminalPane` publishes its final `closed`
+  state through `onChanged`, which still referenced the already-disposed
+  surface. The callback now snapshots the nullable surface and ignores it once
+  disposed, so late owner state notification cannot restart render work.
+- 2026-09-06: the first complete `make runtime-verify` reached the pre-existing
+  Release smoke abnormal-shell case and observed the valid competing-reaper
+  sequence `processExitReady`, `externalReapObserved`, `exitPublished`. Its
+  assertion nevertheless required a later `waitpidResult`, which is exclusive
+  to the PTY-owned reap branch and contradicted the Phase 2 documented contract.
+  The harness now first classifies the reap owner and then checks the ordered
+  boundary for that branch. No PTY acceptance condition was weakened: both
+  branches still require a valid raw kernel status and one decoded exit.
+
 - 2026-09-06: `dart run test/terminal_screen_metal_compositor_test.dart`
   reached restored CoreText/Metal build hooks and native execution, then failed
   the initial combined SGR-layer assertion. This is not an Xcode/component
@@ -218,8 +284,25 @@ committed.
   connects the live `TerminalSession.terminalScreenSet`. Rows and columns are
   derived from CoreText cell metrics, resize rebinds the reflowed active screen,
   backing-scale change resets and republishes the atlas after pin retirement,
-  and hidden/occluded state applies damage while suppressing frame builds.
-  Recovery retries also tolerate the interval where a failed activation has
+  and visible/occluded window state controls the newest-only presentation loop.
+- 2026-09-06: the final acceptance uses a gated real zsh PTY rather than a
+  synthetic frame fixture. It emits more physical and soft-wrapped rows than
+  the current grid, an SGR bold/direct-color marker, and a final prompt. The
+  process inspects the canonical `TerminalScreen` for stripped control bytes,
+  style state, soft-wrap flags, cursor/prompt placement on the bottom row, and
+  verifies that Metal accepted the newest damage revision with at most one
+  pending frame and the native submission-slot pin bound.
+- 2026-09-06: review of the first acceptance draft found two test defects before
+  execution: the zsh loop variable had an extra Dart escape, and the result
+  matcher rejected ordinary row counts beginning with 1–3. Both were corrected;
+  option parsing now also rejects missing gates, duplicate display scenarios,
+  and combinations with other runtime fixtures.
+- 2026-09-06: the previous application-local synthetic Metal scheduler probe
+  and its `DT_RUNTIME_CUSTOM_VIEW_TEST` startup path were removed. Source audit
+  now requires the unconditional custom view/live-screen binding and rejects
+  `TextView`, `TerminalPane.render`, or the old gate in the product application.
+- 2026-09-06: hidden/occluded state applies damage while suppressing frame
+  builds. Recovery retries also tolerate the interval where a failed activation has
   abandoned the old domain but has not yet prepared its replacement; no stale
   renderer is dereferenced between bounded attempts.
 - 2026-09-06: `make test` passed with 103 formatted files, clean analysis, a
@@ -234,3 +317,11 @@ committed.
 - 2026-09-06: after hardening the no-current-domain recovery retry, the final
   repeated `make test` again passed format, clean analysis, generated-table
   verification, and the complete test runner.
+- 2026-09-06: final `make runtime-verify` passed without exclusions. It verified
+  103 formatted files, clean analysis, the complete native-backed test runner,
+  source audit (`tracked=188`, `native_sources=0`), Developer JIT and Release AOT
+  bundle audits, ordinary real-PTY GUI smoke (2413/1866 ms), live Metal display
+  acceptance (558/353 ms), all 16 lifecycle cases per mode, bounded traffic
+  (`backpressured=384`), 1,000-iteration resource stress (`baseline=12`,
+  `peak=14`), shutdown faults, and PTY deadline recovery. The adjacent
+  `dart_appkit` and bundled official Dart SDK worktrees remained clean.

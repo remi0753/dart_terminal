@@ -278,6 +278,8 @@ void _testFullSparseAndRingDamage() {
   ring.setNarrowCell(1, 0, 0x42);
   ring.setNarrowCell(2, 0, 0x43);
   ring.setRowFlags(1, TerminalRowFlags.output);
+  ring.clearDamage();
+  ring.setNarrowCell(0, 1, 0x58);
   final int movedLogicalLine = ring.logicalLineIdAt(1);
   final TerminalDamageRenderModel ringModel = TerminalDamageRenderModel();
   final TerminalDamagePacket ringFull = _capture(
@@ -295,6 +297,7 @@ void _testFullSparseAndRingDamage() {
     'ring baseline applies',
   );
   ring.acknowledgeFullSnapshot();
+  ring.setNarrowCell(2, 1, 0x59);
   ring.scrollUp(1);
   final TerminalDamagePacket ringDelta = _capture(
     ring,
@@ -305,20 +308,22 @@ void _testFullSparseAndRingDamage() {
     ringDelta.copyBytes(),
   );
   _expect(
-    ringDecoded.rowRecords.length == 3,
-    'ring rotation publishes every logically moved viewport row',
+    !ringDelta.isFullSnapshot && ringDecoded.rowRecords.length == 3,
+    'ring rotation publishes every logically moved viewport row as a delta',
   );
   _expect(
     ringModel.apply(ringDecoded, availableResourceGeneration: 1).isApplied,
-    'ring rotation delta applies in logical-row order',
+    'ring rotation delta advances logical rather than physical row versions',
   );
   _expect(
     ringModel.contentAt(0, 0) == 0x42 &&
         ringModel.contentAt(1, 0) == 0x43 &&
+        ringModel.contentAt(1, 1) == 0x59 &&
         ringModel.contentAt(2, 0) == 0 &&
         ringModel.rowFlagsAt(0) == TerminalRowFlags.output &&
         ringModel.logicalLineIdAt(0) == movedLogicalLine,
-    'retained model follows physical ring reuse without exposing it',
+    'pre-scroll dirty content follows physical ring reuse without moving its '
+    'damage metadata to another logical row',
   );
 }
 

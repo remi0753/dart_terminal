@@ -46,11 +46,10 @@ font、input、config、macOS UI、release workflow の実装とテストを確�
 優先する。
 
 現在の Dart Terminal は、M1/arm64 Developer JIT / Release AOT の未改変 AppKit
-main-thread root、manifest-declared Dart worker helper、generic `View` / `TextView`、
-dependency-owned renderer capability、v4 native event、privacy-safe な local-run metadata、
-およびtyped pane/session ownerが保持するpersistent login zshまでである。製品
-repositoryのnative sourceは削除済みである。通常表示はまだ`TextView`上の
-plain-text投影であり、VT coreとMetal rendererは後続Phaseへdeferする。
+main-thread root、manifest-declared Dart worker helper、dependency-owned
+`TerminalMetalView`、v4 native event、privacy-safeなlocal-run metadata、typed
+pane/session ownerが保持するpersistent login zsh、Dart-only VT coreとlive
+CoreText/Metal表示までである。製品repositoryのnative sourceは削除済みである。
 下表の「現在」が `未実装` でも欠落ではなく、指定 Phase まで明示的に defer した
 backlog である。
 
@@ -63,8 +62,8 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
 | RT-01 | release AOT root isolate が AppKit main thread に attach し、main run loop を所有しない | P0 | 1 | `G:macos/Sources/App/main.swift`, native macOS app lifecycle | M1 Developer/Release stock root 完了 |
-| RT-02 | pane ごとの長寿命 runtime worker と window ごとの render coordinator を起動、停止、異常回収できる | P0 | 1 | `G:src/termio/Thread.zig`, `G:src/renderer/Thread.zig` | M1 Developer/Release process worker の lifecycle/再生成/bounded traffic 完了、pane/render は後続 |
-| RT-03 | UI、PTY I/O、terminal state、render resource の thread/owner が一意 | P0 | 1 | `G:src/termio/mailbox.zig`, `G:src/renderer/message.zig` | M1 両 mode の root/process owner、v1–v4 event generation、generic/custom View、dependency-owned TerminalMetalView shell、window/application state、menu action、AppKit handle domain/async destruction、1,000 Window/View handle churn、main-thread diagnostics phase、PTY capabilityとtyped pane/session owner完了。terminal core/render stateは後続 |
+| RT-02 | pane ごとの長寿命 runtime worker と window ごとの render coordinator を起動、停止、異常回収できる | P0 | 1 | `G:src/termio/Thread.zig`, `G:src/renderer/Thread.zig` | M1 Developer/Release process worker lifecycle/再生成/bounded traffic、typed pane/session、window-owned live Metal surfaceとbounded renderer recoveryを完了 |
+| RT-03 | UI、PTY I/O、terminal state、render resource の thread/owner が一意 | P0 | 1 | `G:src/termio/mailbox.zig`, `G:src/renderer/message.zig` | M1両modeのroot/process owner、v1–v4 event generation、window/application state、menu、AppKit handle domain/async destruction、PTY、canonical screen、font/atlas/Metal surfaceの単一ownerとdeterministic teardownを完了 |
 | PTY-01 | 1 pane = 1 persistent PTY。slave が controlling terminal になり、新 session/process group を持つ | P0 | 2 | `G:src/pty.zig`, `G:src/pty.c`, `G:src/termio/Exec.zig` | 製品persistent paneとcapability完了 |
 | PTY-02 | shell/command を `argv`、`envp`、cwd で起動し、shell interpolation を行わない | P0 | 2 | `G:src/Command.zig`, `G:src/termio/Exec.zig` | `dart_pty_macos` 完了 |
 | PTY-03 | macOS login shell、`TERM`、`COLORTERM`、locale、initial cwd が zero-config で妥当 | P0 | 2 | `G:src/termio/Exec.zig`, `G:src/os/shell.zig` | login zsh/cwd/env/TTY contract 完了 |
@@ -135,15 +134,15 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| REN-01 | `MTKView`/Metal lifecycle、drawable resize/backing scale、device/shader/drawable failure path | P0 | 4 | `G:src/renderer/Metal.zig`, `G:macos/Sources/Helpers/MetalView.swift` | view bind/detach、drawable presentation、GPU completion、resize/backing-scale full rebuild、typed device/shader/command fault、drawable retry、bounded renderer recreationを完了 |
-| REN-02 | background、cell background、glyph、decoration、cursor、selection を packed instance で描画 | P0 | 4 | `G:src/renderer/shaders/shaders.metal`, `G:src/renderer/cell.zig` | build-time metallib、strict little-endian packed encoder、全6 visual kindのordered pipeline/readback完了 |
+| REN-01 | `MTKView`/Metal lifecycle、drawable resize/backing scale、device/shader/drawable failure path | P0 | 4 | `G:src/renderer/Metal.zig`, `G:macos/Sources/Helpers/MetalView.swift` | 通常起動のlive screenへbind/detach、drawable presentation、GPU completion、resize/backing-scale full rebuild、typed device/shader/command fault、drawable retry、bounded renderer recreationを完了 |
+| REN-02 | background、cell background、glyph、decoration、cursor、selection を packed instance で描画 | P0 | 4 | `G:src/renderer/shaders/shaders.metal`, `G:src/renderer/cell.zig` | canonical style/palette/graphemeから全terminal layerをcomposeし、build-time metallib、strict little-endian packed encoder、ordered pipeline/readbackと実GUI SGR/style検証を完了（selectionの操作接続はPhase 5） |
 | REN-03 | grayscale/color atlas、growth/eviction/generation validation | P0 | 4 | `G:src/font/Atlas.zig`, `G:src/renderer/generic.zig` | bounded Dart atlas、LRU/pin/generation、矩形差分upload、stable slice、空を含むgeneration-safe native full reset、scale/font rebuild、renderer recovery時の全snapshot再公開と旧pin解放、lookup hit rateとaccepted upload count/bytesを完了 |
-| REN-04 | damage coalescing、stale generation discard、full snapshot は recovery/resize のみ | P0 | 4 | `G:src/renderer/row.zig`, `G:src/renderer/State.zig`, `G:src/renderer/message.zig` | one-in-flight exact ACK、newest frame、native outcome、resize/scale/font中のpublication pauseとmatching-resource full snapshot、renderer切替成功後のone-marker full damage/redrawを完了 |
+| REN-04 | damage coalescing、stale generation discard、full snapshot は recovery/resize のみ | P0 | 4 | `G:src/renderer/row.zig`, `G:src/renderer/State.zig`, `G:src/renderer/message.zig` | live canonical screenのone-in-flight exact ACK、newest frame、native outcome、resize/scale/font中のpublication pauseとmatching-resource full snapshot、renderer切替成功後のone-marker full damage/redrawを完了 |
 | REN-05 | double/triple buffering と submit token/fence。GPU 完了前に buffer を再利用しない | P0 | 4 | `G:src/renderer/metal/Frame.zig`, `G:src/renderer/metal/buffer.zig` | 3つの固定native slot、copied submit、即時backpressure、newest-ready選択、GPU完了retire watermark、Dart atlas unpin、成功GPU timing count/total/maxを完了 |
-| REN-06 | vsync/frame pacing、cursor blink、occlusion pause、resume full redraw | P0 | 4 | `G:src/renderer/generic.zig`, `G:src/renderer/Thread.zig` | cursor/BEL metadata、bounded monotonic animation clock、visibility/occlusion pause、hidden tickを再生しないresume full redrawを完了 |
+| REN-06 | vsync/frame pacing、cursor blink、occlusion pause、resume full redraw | P0 | 4 | `G:src/renderer/generic.zig`, `G:src/renderer/Thread.zig` | live windowのcursor/BEL metadata、bounded monotonic animation clock、visibility/occlusion pause、hidden tickを再生しないresume full redrawを完了 |
 | REN-07 | deterministic screenshot と CPU/reference renderer を golden oracle にする | P0 | 4 | `G:src/terminal/render.zig`, renderer test paths | bounded Dart-only RGBA compositor、versioned checksum付きgolden format、primitive/実CoreText atlas fixture、Metal offscreen readbackとの1x/2x pixel比較を完了 |
 | REN-08 | image/search/hyperlink/inspector overlay、P3/sRGB blending | P1 | 4/9 | `G:src/renderer/image.zig`, `Overlay.zig`, `link.zig` | 未実装 |
-| REN-09 | 60/120 Hz、複数 window/pane の fair scheduling。遅延時は中間 frame を捨てる | P1 | 4/7 | `G:src/renderer/Thread.zig`, `G:src/renderer/generic.zig` | 1 paneのnewest-only frame discard、constant-size backpressure state、bounded build/submit timing snapshotを完了。vsync/fair multi-pane benchmarkは後続 |
+| REN-09 | 60/120 Hz、複数 window/pane の fair scheduling。遅延時は中間 frame を捨てる | P1 | 4/7 | `G:src/renderer/Thread.zig`, `G:src/renderer/generic.zig` | live 1 paneのnewest-only frame discard、constant-size backpressure state、bounded build/submit timing snapshot、実PTYで最新damage frameとbottom promptを検証済み。vsync/fair multi-pane benchmarkは後続 |
 
 ## Keyboard、IME、mouse、selection、clipboard
 

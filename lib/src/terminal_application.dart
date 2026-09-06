@@ -10,14 +10,8 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'runtime_lifecycle.dart';
 import 'terminal_core/terminal_screen.dart';
-import 'terminal_core/terminal_screen_parser_sink.dart';
+import 'terminal_core/terminal_style.dart';
 import 'terminal_pane.dart';
-import 'terminal_renderer/frame_scheduler.dart';
-import 'terminal_renderer/glyph_atlas.dart';
-import 'terminal_renderer/metal_atlas_bridge.dart';
-import 'terminal_renderer/metal_failure_recovery.dart';
-import 'terminal_renderer/renderer_metrics.dart';
-import 'terminal_renderer/terminal_damage.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_session.dart';
 
@@ -63,6 +57,7 @@ final class TerminalOptions {
     this.runtimeResourceStress = false,
     this.runtimeShutdownFaultInjection = false,
     this.runtimePtyExitFaultInjection = false,
+    this.runtimeTerminalDisplayTest = false,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
     this.runtimeLifecycleScenario = RuntimeLifecycleScenario.normal,
     this.runtimeWorkerCommand =
@@ -79,6 +74,7 @@ final class TerminalOptions {
     var runtimeResourceStress = false;
     var runtimeShutdownFaultInjection = false;
     var runtimePtyExitFaultInjection = false;
+    var runtimeTerminalDisplayTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
     for (final String argument in arguments) {
@@ -111,6 +107,15 @@ final class TerminalOptions {
           );
         }
         runtimePtyExitFaultInjection = true;
+        continue;
+      }
+      if (argument == '--runtime-terminal-display-test') {
+        if (runtimeTerminalDisplayTest) {
+          throw const FormatException(
+            '--runtime-terminal-display-test may only be supplied once',
+          );
+        }
+        runtimeTerminalDisplayTest = true;
         continue;
       }
       if (argument.startsWith(workingDirectoryPrefix)) {
@@ -244,12 +249,32 @@ final class TerminalOptions {
         'runtime fault',
       );
     }
+    if (runtimeTerminalDisplayTest &&
+        (environment ??
+                Platform.environment)['DT_RUNTIME_TERMINAL_DISPLAY_TEST'] !=
+            '1') {
+      throw const FormatException(
+        'terminal display test requires the integration-test gate',
+      );
+    }
+    if (runtimeTerminalDisplayTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'terminal display test cannot be combined with another runtime test',
+      );
+    }
     return TerminalOptions(
       initialWorkingDirectory: initialWorkingDirectory,
       autoCloseAfter: autoCloseAfter,
       runtimeResourceStress: runtimeResourceStress,
       runtimeShutdownFaultInjection: runtimeShutdownFaultInjection,
       runtimePtyExitFaultInjection: runtimePtyExitFaultInjection,
+      runtimeTerminalDisplayTest: runtimeTerminalDisplayTest,
       runtimeShellExitTestScenario: selectedShellExitTest,
       runtimeLifecycleScenario: selectedScenario,
       runtimeWorkerCommand:
@@ -265,6 +290,7 @@ final class TerminalOptions {
   final bool runtimeResourceStress;
   final bool runtimeShutdownFaultInjection;
   final bool runtimePtyExitFaultInjection;
+  final bool runtimeTerminalDisplayTest;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
   final RuntimeLifecycleScenario runtimeLifecycleScenario;
   final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
@@ -312,43 +338,12 @@ final class TerminalApplication {
     final Completer<void> closed = Completer<void>();
     final bool emitNativeEventWireObservation =
         Platform.environment['DT_RUNTIME_EVENT_WIRE_TEST'] == '1';
-    final bool exerciseLegacyMetalProbe =
-        Platform.environment['DT_RUNTIME_CUSTOM_VIEW_TEST'] == '1';
     var currentWindowWidth = 920.0;
     var currentWindowHeight = 580.0;
 
     try {
       final View createdContentView = TerminalRendererMacos.createView();
       contentView = createdContentView;
-      if (exerciseLegacyMetalProbe) {
-        final TerminalMetalRenderer createdRenderer =
-            TerminalMetalRenderer.open(
-              config: const TerminalMetalRendererConfig(
-                maximumViewportWidth: 1024,
-                maximumViewportHeight: 1024,
-                maximumInstances: 1024,
-                atlasWidth: 64,
-                atlasHeight: 64,
-                maximumAlphaPages: 1,
-                maximumColorPages: 1,
-              ),
-            );
-        createdRenderer.bindToView(createdContentView);
-        final ({
-          String observation,
-          TerminalMetalFailureRecoveryCoordinator<
-            TerminalMetalRendererRecoveryDomain
-          >
-          recovery,
-          TerminalNewestFrameScheduler<TerminalScheduledMetalFrame> scheduler,
-        })
-        frameSchedulerProbe = _exerciseBoundMetalFrameScheduler(
-          createdRenderer,
-          createdContentView,
-        );
-        stdout.writeln(frameSchedulerProbe.observation);
-        frameSchedulerProbe.recovery.dispose();
-      }
       final Window createdWindow =
           Window(
               frame: const Rect.fromLTWH(100, 90, 920, 580),
@@ -374,20 +369,26 @@ final class TerminalApplication {
               final bool isShellExitTest =
                   options.runtimeShellExitTestScenario !=
                   RuntimeShellExitTestScenario.none;
+              final bool isTerminalDisplayTest =
+                  options.runtimeTerminalDisplayTest;
               final TerminalSession createdSession = TerminalSession(
                 id: id,
                 ptyBackend: ptyBackend,
                 initialWorkingDirectory: options.initialWorkingDirectory,
-                environment: isShellExitTest
+                environment: isShellExitTest || isTerminalDisplayTest
                     ? <String, String>{
                         ...Platform.environment,
-                        'TERM': 'dumb',
+                        'TERM': isTerminalDisplayTest
+                            ? 'xterm-256color'
+                            : 'dumb',
                         'LC_ALL': 'C',
-                        'PS1': '__RUNTIME_SHELL_EXIT_READY__ ',
+                        'PS1': isTerminalDisplayTest
+                            ? '__DT_DISPLAY_PROMPT__ '
+                            : '__RUNTIME_SHELL_EXIT_READY__ ',
                         'RPS1': '',
                       }
                     : null,
-                shellArguments: isShellExitTest
+                shellArguments: isShellExitTest || isTerminalDisplayTest
                     ? const <String>['-f']
                     : const <String>[],
                 gracefulShutdownTimeout: options.runtimePtyExitFaultInjection
@@ -413,7 +414,10 @@ final class TerminalApplication {
               return createdSession;
             },
         onChanged: () {
-          metalSurface?.notifyScreenChanged();
+          final TerminalLiveMetalSurface? surface = metalSurface;
+          if (surface != null && !surface.isDisposed) {
+            surface.notifyScreenChanged();
+          }
         },
         onExitRequested: createdWindow.requestClose,
         lifecycleObserver: (TerminalPaneLifecycleObservation observation) {
@@ -804,7 +808,15 @@ final class TerminalApplication {
           }
           final RuntimeShellExitTestScenario shellExitTest =
               options.runtimeShellExitTestScenario;
-          if (shellExitTest != RuntimeShellExitTestScenario.none) {
+          if (options.runtimeTerminalDisplayTest) {
+            await _exerciseTerminalDisplay(
+              createdLifecycle,
+              terminalSession!,
+              createdPane,
+              createdMetalSurface,
+              createdWindow,
+            );
+          } else if (shellExitTest != RuntimeShellExitTestScenario.none) {
             await _exerciseShellExitPolicy(
               shellExitTest,
               createdLifecycle,
@@ -1002,6 +1014,9 @@ final class TerminalApplication {
             menu.dispose();
           }
         }
+        if (metalSurface != null && !metalSurface.isDisposed) {
+          metalSurface.dispose();
+        }
         final TerminalPaneOwner? owner = paneOwner;
         if (owner != null) {
           final TerminalPaneOwnerShutdownResult result = await owner.shutdown();
@@ -1017,9 +1032,6 @@ final class TerminalApplication {
         }
         if (window != null && !window.isDisposed) {
           window.dispose();
-        }
-        if (metalSurface != null && !metalSurface.isDisposed) {
-          metalSurface.dispose();
         }
         if (contentView != null && !contentView.isDisposed) {
           contentView.dispose();
@@ -1135,6 +1147,166 @@ final class TerminalApplication {
     if (scenario == RuntimeShellExitTestScenario.nonZero) {
       window.requestClose();
     }
+  }
+
+  static Future<void> _exerciseTerminalDisplay(
+    RuntimeLifecycleCoordinator lifecycle,
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+    Window window,
+  ) async {
+    const String prompt = '__DT_DISPLAY_PROMPT__ ';
+    const String colorMarker = '__DT_COLOR__';
+    const String wrapStart = '__DT_WRAP_START__';
+    const String wrapEnd = '__DT_WRAP_END__';
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
+    final TerminalScreen initialScreen = session.terminalScreenSet.activeScreen;
+    final int fillerLines = initialScreen.rows + 12;
+    final String wrappedPayload =
+        wrapStart +
+        List<String>.filled(initialScreen.columns * 2, 'W').join() +
+        wrapEnd;
+    pane.insertText(
+      "for i in {1..$fillerLines}; do printf 'FILL%03d\\n' \$i; done; "
+      "printf '\\033[1;31m$colorMarker\\033[0m\\n'; "
+      "printf '$wrappedPayload\\n'",
+    );
+    await pane.submit();
+
+    final Stopwatch deadline = Stopwatch()..start();
+    var sgrStripped = false;
+    var styled = false;
+    var promptBottom = false;
+    var newestFrame = false;
+    var frameBounded = false;
+    var wrappedRows = 0;
+    while (deadline.elapsed < const Duration(seconds: 8)) {
+      final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+      final _TerminalAsciiPosition? color = _findAscii(screen, colorMarker);
+      final String bottom = _asciiRow(screen, screen.rows - 1);
+      wrappedRows = <int>[
+        for (int row = 0; row < screen.rows; row++)
+          if (screen.rowFlagsAt(row) & TerminalRowFlags.softWrapped != 0) row,
+      ].length;
+      sgrStripped = _screenHasNoRawSgr(screen);
+      styled =
+          color != null &&
+          TerminalStyleAttributes.has(
+            screen.styleTable.attributesAt(
+              screen.styleAt(color.row, color.column),
+            ),
+            TerminalStyleAttributes.bold,
+          ) &&
+          screen.foregroundAt(color.row, color.column) != 0;
+      promptBottom =
+          bottom.contains(prompt) &&
+          screen.cursorRow == screen.rows - 1 &&
+          screen.cursorColumn >= prompt.length;
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      newestFrame =
+          snapshot.acceptedFrameCount > baseline.acceptedFrameCount &&
+          snapshot.lastAcceptedModelRevision ==
+              snapshot.lastAppliedDamageGeneration &&
+          snapshot.lastAcceptedModelRevision > 0;
+      frameBounded =
+          snapshot.pendingFrameCount <= 1 && snapshot.liveAtlasPinCount <= 3;
+      if (sgrStripped &&
+          styled &&
+          wrappedRows >= 2 &&
+          promptBottom &&
+          newestFrame &&
+          frameBounded) {
+        final int? workerProcessId = lifecycle.workerPid;
+        _expectLifecycle(
+          workerProcessId != null,
+          'terminal display test lost its runtime worker',
+        );
+        stdout.writeln(
+          'TERMINAL_DISPLAY_TEST sgr_stripped=$sgrStripped styled=$styled '
+          'wrapped_rows=$wrappedRows prompt_bottom=$promptBottom '
+          'metal_default=true newest_frame=$newestFrame '
+          'frame_bounded=$frameBounded rows=${screen.rows} '
+          'columns=${screen.columns} '
+          'frame_build_delta='
+          '${snapshot.frameBuildCount - baseline.frameBuildCount}',
+        );
+        _expectLifecycle(
+          pane.requestClose(force: true) == TerminalPaneCloseDecision.allow,
+          'terminal display test could not begin deterministic pane close',
+        );
+        window.close();
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw TimeoutException(
+      'terminal display acceptance did not settle: '
+      'sgr_stripped=$sgrStripped styled=$styled wrapped_rows=$wrappedRows '
+      'prompt_bottom=$promptBottom newest_frame=$newestFrame '
+      'frame_bounded=$frameBounded',
+    );
+  }
+
+  static Future<void> _waitForTerminalDisplayPrompt(
+    TerminalSession session, {
+    required int minimumOccurrences,
+  }) async {
+    const String prompt = '__DT_DISPLAY_PROMPT__ ';
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+      final int occurrences = <int>[
+        for (int row = 0; row < screen.rows; row++)
+          if (_asciiRow(screen, row).contains(prompt)) row,
+      ].length;
+      if (occurrences >= minimumOccurrences) {
+        return;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before publishing its prompt',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw TimeoutException('display-test zsh did not publish its prompt');
+  }
+
+  static _TerminalAsciiPosition? _findAscii(
+    TerminalScreen screen,
+    String pattern,
+  ) {
+    for (int row = 0; row < screen.rows; row++) {
+      final int column = _asciiRow(screen, row).indexOf(pattern);
+      if (column >= 0) {
+        return _TerminalAsciiPosition(row: row, column: column);
+      }
+    }
+    return null;
+  }
+
+  static String _asciiRow(TerminalScreen screen, int row) =>
+      String.fromCharCodes(<int>[
+        for (int column = 0; column < screen.columns; column++)
+          screen.widthFlagsAt(row, column) & TerminalCellFlags.grapheme != 0 ||
+                  screen.widthFlagsAt(row, column) &
+                          TerminalCellFlags.widthMask ==
+                      TerminalCellFlags.continuation ||
+                  screen.contentAt(row, column) == 0
+              ? 0x20
+              : screen.contentAt(row, column),
+      ]);
+
+  static bool _screenHasNoRawSgr(TerminalScreen screen) {
+    for (int row = 0; row < screen.rows; row++) {
+      final String text = _asciiRow(screen, row);
+      if (text.contains('[0m') || text.contains('[1;31m')) return false;
+      for (int column = 0; column < screen.columns; column++) {
+        if (screen.contentAt(row, column) == 0x1b) return false;
+      }
+    }
+    return true;
   }
 
   static Future<void> _waitForShellExitTestPrompt(
@@ -1405,312 +1577,11 @@ final class TerminalApplication {
   }
 }
 
-({
-  String observation,
-  TerminalMetalFailureRecoveryCoordinator<TerminalMetalRendererRecoveryDomain>
-  recovery,
-  TerminalNewestFrameScheduler<TerminalScheduledMetalFrame> scheduler,
-})
-_exerciseBoundMetalFrameScheduler(TerminalMetalRenderer renderer, View view) {
-  final TerminalFontCatalog catalog = TerminalFontCatalog.open();
-  final TerminalShapingCache shapingCache = TerminalShapingCache(catalog);
-  final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
-    catalogGeneration: catalog.generation,
-    limits: const TerminalGlyphAtlasLimits(
-      pageWidth: 64,
-      pageHeight: 64,
-      maximumAlphaPages: 1,
-      maximumColorPages: 1,
-      maximumEntries: 1,
-      maximumRetainedBytes: 64 * 64 * 4,
-      gutter: 0,
-    ),
-  );
-  late final TerminalGlyphAtlasEntry glyphEntry;
-  try {
-    final TerminalShapedText shaped = shapingCache.shape('A');
-    glyphEntry = atlas
-        .ingest(catalog.rasterizeShaped(shaped, scale: atlas.scale))
-        .single;
-    atlas.lookup(glyphEntry.key);
-    atlas.lookup(
-      TerminalGlyphAtlasKey(
-        catalogGeneration: glyphEntry.key.catalogGeneration,
-        faceId: glyphEntry.key.faceId,
-        glyphId: (glyphEntry.key.glyphId + 1) & 0xffff,
-        scale16_16: glyphEntry.key.scale16_16,
-      ),
-    );
-  } finally {
-    shapingCache.dispose();
-    catalog.dispose();
-  }
-  final TerminalGlyphAtlasMetalBridge bridge = TerminalGlyphAtlasMetalBridge(
-    atlas: atlas,
-    renderer: renderer,
-  );
-  if (bridge.synchronize() != TerminalGlyphAtlasSyncDisposition.synchronized ||
-      bridge.nativeAtlasGeneration != atlas.resourceGeneration) {
-    throw StateError('bound Metal renderer rejected its initial atlas reset');
-  }
-  final TerminalMetalRendererRecoveryDomain initialDomain =
-      TerminalMetalRendererRecoveryDomain.active(
-        renderer: renderer,
-        bridge: bridge,
-        view: view,
-      );
-  TerminalMetalFrame encode(
-    TerminalMetalRendererRecoveryDomain domain,
-    int frameGeneration,
-  ) => TerminalMetalFrameEncoder.encode(
-    renderer: domain.renderer,
-    frameGeneration: frameGeneration,
-    atlasGeneration: domain.bridge.nativeAtlasGeneration,
-    viewportWidth: 64,
-    viewportHeight: 64,
-    scale16_16: 1 << 16,
-    backgroundRgba: 0,
-    instances: <TerminalMetalInstance>[
-      domain.bridge.glyphInstance(glyphEntry, x: 0, y: 0)!,
-    ],
-  );
+final class _TerminalAsciiPosition {
+  const _TerminalAsciiPosition({required this.row, required this.column});
 
-  final TerminalMetalSubmissionResult seed = bridge.submit(
-    encode(initialDomain, 10),
-    glyphEntries: <TerminalGlyphAtlasEntry>[glyphEntry],
-  );
-  if (!seed.isAccepted) {
-    throw StateError('bound Metal renderer rejected stale-floor seed');
-  }
-  final TerminalScreen screen = TerminalScreen(rows: 1, columns: 1);
-  late final TerminalMetalFailureRecoveryCoordinator<
-    TerminalMetalRendererRecoveryDomain
-  >
-  recovery;
-  TerminalFramePresentation? lastBuiltPresentation;
-  final TerminalNewestFrameScheduler<TerminalScheduledMetalFrame> scheduler =
-      TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>(
-        model: TerminalDamageRenderModel(),
-        buildFrame:
-            (
-              TerminalDamageRenderModel model, {
-              required int modelRevision,
-              required int frameGeneration,
-              required TerminalFramePresentation presentation,
-            }) {
-              lastBuiltPresentation = presentation;
-              return TerminalScheduledMetalFrame(
-                frame: encode(recovery.currentDomain, frameGeneration),
-                glyphEntries: <TerminalGlyphAtlasEntry>[glyphEntry],
-              );
-            },
-        submitFrame:
-            (
-              TerminalScheduledMetalFrame frame, {
-              required int modelRevision,
-              required int frameGeneration,
-            }) =>
-                TerminalMetalFrameSubmissionAdapter(
-                  recovery.currentDomain.bridge,
-                ).submit(
-                  frame,
-                  modelRevision: modelRevision,
-                  frameGeneration: frameGeneration,
-                ),
-      );
-  var fullDamageRequestCount = 0;
-  var fullRedrawRequestCount = 0;
-  recovery =
-      TerminalMetalFailureRecoveryCoordinator<
-        TerminalMetalRendererRecoveryDomain
-      >(
-        initialDomain: initialDomain,
-        prepareReplacement: () => TerminalMetalRendererRecoveryDomain.prepare(
-          atlas: atlas,
-          config: renderer.config,
-          view: view,
-        ),
-        requestFullDamage: () {
-          fullDamageRequestCount++;
-          screen.requestFullSnapshot();
-        },
-        requestFullRedraw: () {
-          if (!scheduler.requestFullRedraw()) {
-            throw StateError('recovery redraw requires an initialized model');
-          }
-          fullRedrawRequestCount++;
-        },
-      );
-  final int resourceGeneration = atlas.resourceGeneration;
-  final TerminalDamagePacket? packet = TerminalDamageCodec.capture(
-    screen,
-    damageGeneration: 1,
-    requiredResourceGeneration: resourceGeneration,
-  );
-  if (packet == null) {
-    throw StateError('initial screen did not produce a full snapshot');
-  }
-  final TerminalDamageApplyResult applied = scheduler.applyDamage(
-    TerminalDamageCodec.decode(packet.copyBytes()),
-    availableResourceGeneration: resourceGeneration,
-    monotonicMicros: 0,
-  );
-  if (!applied.isApplied) {
-    throw StateError('frame scheduler rejected its initial full snapshot');
-  }
-
-  final TerminalFrameAttemptResult stale = scheduler.submitNewest();
-  final TerminalFrameAttemptResult accepted = scheduler.submitNewest();
-  final bool staleObserved =
-      stale.disposition == TerminalFrameAttemptDisposition.stale &&
-      stale.frameGeneration == 1;
-  final bool acceptedObserved =
-      accepted.isAccepted &&
-      accepted.frameGeneration == 11 &&
-      accepted.submissionToken > 0 &&
-      renderer.state().lastAcceptedFrameGeneration == 11;
-  if (!staleObserved || !acceptedObserved || scheduler.pendingFrameCount != 0) {
-    throw StateError('bound native frame scheduler outcome mismatch');
-  }
-  screen.acknowledgeFullSnapshot();
-  final int visibleBuildCount = scheduler.buildCount;
-  scheduler.updateWindowState(isOccluded: true, monotonicMicros: 1);
-  TerminalScreenParserSink(screen).execute(0x07);
-  final TerminalDamagePacket? bellPacket = TerminalDamageCodec.capture(
-    screen,
-    damageGeneration: 2,
-    requiredResourceGeneration: resourceGeneration,
-  );
-  if (bellPacket == null ||
-      !scheduler
-          .applyDamage(
-            TerminalDamageCodec.decode(bellPacket.copyBytes()),
-            availableResourceGeneration: resourceGeneration,
-            monotonicMicros: 2,
-          )
-          .isApplied) {
-    throw StateError('bound scheduler rejected hidden BEL damage');
-  }
-  final TerminalFrameAttemptResult paused = scheduler.submitNewest();
-  final bool occludedObserved =
-      paused.disposition == TerminalFrameAttemptDisposition.paused &&
-      paused.frameGeneration == 0 &&
-      scheduler.buildCount == visibleBuildCount;
-  scheduler.updateWindowState(isOccluded: false, monotonicMicros: 3);
-  final TerminalFrameAttemptResult resumed = scheduler.submitNewest();
-  final bool resumeObserved =
-      resumed.isAccepted &&
-      resumed.frameGeneration == 12 &&
-      resumed.requiresFullRedraw &&
-      lastBuiltPresentation!.requiresFullRedraw &&
-      lastBuiltPresentation!.cursorDrawn &&
-      !lastBuiltPresentation!.visualBellActive;
-  if (!occludedObserved ||
-      !resumeObserved ||
-      scheduler.pendingFrameCount != 0) {
-    throw StateError('bound native occlusion scheduler outcome mismatch');
-  }
-
-  final int retiredRendererGeneration = renderer.generation;
-  if (!recovery.requestRecovery(TerminalMetalFailureKind.commandExecution)) {
-    throw StateError('bound renderer recovery request was not retained');
-  }
-  final TerminalMetalRecoveryResult recovered = recovery.processNewest();
-  final TerminalMetalRendererRecoveryDomain replacement =
-      recovery.currentDomain;
-  final bool rendererRecovered =
-      recovered.isRecovered &&
-      recovered.attempt == 1 &&
-      recovered.rendererGeneration > retiredRendererGeneration &&
-      recovered.abandonedPinCount == 3 &&
-      renderer.isDisposed &&
-      bridge.isAbandoned &&
-      bridge.pinnedSubmissionCount == 0 &&
-      atlas.livePinCount == 0 &&
-      replacement.isActivated &&
-      replacement.bridge.isSynchronized &&
-      replacement.bridge.nativeAtlasGeneration == resourceGeneration &&
-      fullDamageRequestCount == 1 &&
-      fullRedrawRequestCount == 1;
-  if (!rendererRecovered) {
-    throw StateError('bound native renderer recovery ownership mismatch');
-  }
-  final TerminalDamagePacket? recoveryPacket = TerminalDamageCodec.capture(
-    screen,
-    damageGeneration: 3,
-    requiredResourceGeneration: resourceGeneration,
-  );
-  if (recoveryPacket == null ||
-      !recoveryPacket.isFullSnapshot ||
-      !scheduler
-          .applyDamage(
-            TerminalDamageCodec.decode(recoveryPacket.copyBytes()),
-            availableResourceGeneration: resourceGeneration,
-            monotonicMicros: 4,
-          )
-          .isApplied) {
-    throw StateError('recovery did not publish a full current screen model');
-  }
-  final TerminalFrameAttemptResult recoveryFrame = scheduler.submitNewest();
-  final bool recoveryFrameObserved =
-      recoveryFrame.isAccepted &&
-      recoveryFrame.frameGeneration == 13 &&
-      recoveryFrame.requiresFullRedraw &&
-      lastBuiltPresentation!.requiresFullRedraw &&
-      replacement.renderer.state().lastAcceptedFrameGeneration == 13 &&
-      scheduler.pendingFrameCount == 0;
-  if (!recoveryFrameObserved) {
-    throw StateError('replacement renderer rejected its full recovery frame');
-  }
-  final TerminalRendererMetricsSnapshot metrics =
-      TerminalRendererMetricsSnapshot.capture<TerminalScheduledMetalFrame>(
-        scheduler: scheduler,
-        bridge: replacement.bridge,
-      );
-  final bool metricsObserved =
-      metrics.rendererGeneration == replacement.renderer.generation &&
-      metrics.atlasResourceGeneration == resourceGeneration &&
-      metrics.pendingAtlasUploadCount == 0 &&
-      metrics.pinnedSubmissionCount == 1 &&
-      metrics.frames.buildCount == 4 &&
-      metrics.frames.submissionCount == 4 &&
-      metrics.frames.acceptedCount == 3 &&
-      metrics.frames.staleCount == 1 &&
-      metrics.frames.backpressureCount == 0 &&
-      metrics.frames.supersededCount == 0 &&
-      metrics.atlas.hitCount == 1 &&
-      metrics.atlas.missCount == 1 &&
-      metrics.atlas.hitRate == 0.5 &&
-      metrics.native.acceptedAtlasUploadCount == 1 &&
-      metrics.native.acceptedAtlasUploadBytes == 64 * 64;
-  if (!metricsObserved) {
-    throw StateError('renderer metrics snapshot is inconsistent');
-  }
-  return (
-    recovery: recovery,
-    scheduler: scheduler,
-    observation:
-        'NATIVE_FRAME_SCHEDULER stale=$staleObserved '
-        'accepted=$acceptedObserved first_frame=${stale.frameGeneration} '
-        'accepted_frame=${accepted.frameGeneration} '
-        'submission_token_nonzero=${accepted.submissionToken > 0} '
-        'occluded=$occludedObserved resume_full=$resumeObserved '
-        'resume_frame=${resumed.frameGeneration} '
-        'recovered=$rendererRecovered '
-        'renderer_generation_advanced='
-        '${replacement.renderer.generation > retiredRendererGeneration} '
-        'atlas_republished=${replacement.bridge.isSynchronized} '
-        'abandoned_pins=${recovered.abandonedPinCount} '
-        'recovery_full=$recoveryFrameObserved '
-        'recovery_frame=${recoveryFrame.frameGeneration} '
-        'metrics=$metricsObserved '
-        'frame_build_samples=${metrics.frames.buildCount} '
-        'frame_submit_samples=${metrics.frames.submissionCount} '
-        'atlas_hit_rate=${metrics.atlas.hitRate.toStringAsFixed(3)} '
-        'atlas_uploads=${metrics.native.acceptedAtlasUploadCount} '
-        'uploaded_bytes=${metrics.native.acceptedAtlasUploadBytes} '
-        'pending=${scheduler.pendingFrameCount}',
-  );
+  final int row;
+  final int column;
 }
 
 /// Maps one AppKit key-down event to the active terminal pane.

@@ -475,6 +475,10 @@ void _testOptions() {
     'PTY exit fault injection defaults off',
   );
   _expect(
+    !options.runtimeTerminalDisplayTest,
+    'terminal display test defaults off',
+  );
+  _expect(
     options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none,
     'shell exit policy test defaults off',
   );
@@ -609,6 +613,47 @@ void _testOptions() {
       environment: const <String, String>{'DT_RUNTIME_SHELL_EXIT_TEST': '1'},
     ),
     'shell exit policy test and automatic close are mutually exclusive',
+  );
+  final TerminalOptions terminalDisplayTestOptions = _parseOptions(
+    const <String>['--runtime-terminal-display-test'],
+    environment: const <String, String>{
+      'DT_RUNTIME_TERMINAL_DISPLAY_TEST': '1',
+    },
+  );
+  _expect(
+    terminalDisplayTestOptions.runtimeTerminalDisplayTest,
+    'gated terminal display test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>[
+      '--runtime-terminal-display-test',
+    ], environment: const <String, String>{}),
+    'terminal display test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-terminal-display-test',
+        '--runtime-terminal-display-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_TERMINAL_DISPLAY_TEST': '1',
+      },
+    ),
+    'duplicate terminal display test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-terminal-display-test',
+        '--runtime-shell-exit-test=clean-control-d',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_TERMINAL_DISPLAY_TEST': '1',
+        'DT_RUNTIME_SHELL_EXIT_TEST': '1',
+      },
+    ),
+    'terminal display and shell exit tests are mutually exclusive',
   );
   _expectThrows(
     () => _parseOptions(
