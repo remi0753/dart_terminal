@@ -4,7 +4,8 @@
 
 - Date started: 2026-09-07
 - Scope: second Phase 6 compatibility-hardening roadmap item
-- Status: subtasks 1–2 complete; subtask 3 pending
+- Status: subtasks 1–2 complete; subtask 3 baseline child complete, external
+  capture and acceptance children pending
 
 ## Purpose and background
 
@@ -47,6 +48,21 @@ is never comparator evidence.
    - Complete when the corpus covers core editing/rendition/mode/query families,
      every result is agreement, accepted quirk, explicit gap, or unavailable,
      and all focused/full checks pass.
+
+The third subtask is itself ordered into three independently verified commits:
+
+1. define the reviewed case manifest, immutable Dart baseline observations, and
+   deterministic bounded report/freshness gate;
+2. execute the pinned external comparators and check in normalized evidence
+   without claiming fields their capture boundary cannot observe;
+3. reduce mismatches to byte-level cases, classify every result in a reviewed
+   acceptance report, and close the parent harness only when no result is
+   silently ignored.
+
+The split is required because case selection/report mechanics, GUI/X11 product
+capture, and semantic acceptance have different dependencies and failure modes.
+The parent and original corpus item remain incomplete through the first two
+commits.
 
 Each subtask is documented, verified, committed independently, and followed by
 a ROADMAP reread. The parent remains incomplete until all three are complete.
@@ -316,6 +332,36 @@ a ROADMAP reread. The parent remains incomplete until all three are complete.
   `7e5c90b1850b520baaf2f65ecf850c673111cad8c953a7641921b470bc84d411`
   was enforced by the runner, and the live self-test passed. The binary and raw
   result again matched the ledger hashes exactly. The VM was stopped again.
+- 2026-09-07: after commit `3458fbd`, ROADMAP was reread and the clean worktree
+  confirmed that the reviewed corpus is the next item. It was split before code
+  changes into case/baseline/report infrastructure, pinned external capture,
+  and mismatch acceptance. This prevents a GUI/X11 dependency from allowing an
+  unreviewed or Dart-only fixture to be presented as completed black-box
+  evidence. The first child item will cover editing, rendition, mode, and query
+  families using inventory-traceable byte streams; external results and their
+  acceptance remain explicitly out of scope until the next ordered children.
+- 2026-09-07: the reviewed version 1 case manifest now contains four sorted,
+  inventory-traceable agreement candidates. Editing exercises CUP/ICH/DCH/ECH;
+  rendition preserves bold, underline, direct foreground and indexed background
+  before independent reset; mode transitions cover DECCKM, DECOM, DECAWM,
+  normal/SGR mouse, and bracketed paste; query combines DSR status/CPR and three
+  ordered DECRQM replies. The 146 input bytes are stable for whole input, every
+  single split, and bytewise delivery, totaling 154 runs.
+- 2026-09-07: the baseline generator records one full common-contract Dart
+  observation per case and a deterministic report tied to exact SHA-256 values
+  for the case manifest, sequence inventory, implementation manifest, inputs,
+  and observation files. The implementation manifest hash is embedded in the
+  Dart provenance rather than using an ambiguous working-tree label. The report
+  states `external_captures=0` globally and `external_evidence=pending` per case,
+  so this child cannot be mistaken for black-box product evidence. The corpus
+  check also rejects a missing/stale report, missing/stale observations, extra
+  JSON observation files, duplicated/missing required families, chunk-sensitive
+  behavior, or a manifest with the wrong scope.
+- 2026-09-07: baseline-child verification passed the focused corpus test,
+  standalone freshness target, static analysis, and `CI=true make test`. The
+  full gate formatted 156 files without changes, revalidated all earlier
+  generated compatibility and adapter evidence, ran the 154 reviewed baseline
+  splits, and completed the full Dart Terminal test runner.
 
 ## Primary product references for adapter execution
 

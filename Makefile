@@ -26,7 +26,7 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 
 .PHONY: help dependencies test compatibility-inventory compatibility-inventory-check \
 	compatibility-manifest compatibility-manifest-check terminal-differential-contract-check \
-	terminal-differential-adapters-check \
+	terminal-differential-adapters-check terminal-differential-corpus-check \
 	product-parser-corpus product-parser-properties \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
 	product-damage-benchmark-build product-damage-benchmark \
@@ -54,6 +54,7 @@ help:
 	@echo "  make compatibility-manifest-check Reject a stale implemented sequence manifest"
 	@echo "  make terminal-differential-contract-check  Validate the bounded black-box driver contract"
 	@echo "  make terminal-differential-adapters-check  Validate pinned comparators and capture evidence"
+	@echo "  make terminal-differential-corpus-check  Validate reviewed Dart baseline observations"
 	@echo "  make vt-parser-table              Regenerate the Dart VT transition table"
 	@echo "  make vt-parser-table-check        Reject a stale generated parser table"
 	@echo "  make developer-jit-build          Build the generic-host JIT application"
@@ -103,7 +104,10 @@ terminal-differential-contract-check: dependencies
 terminal-differential-adapters-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_differential_adapters.dart --check
 
-test: dependencies vt-parser-table-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check
+terminal-differential-corpus-check: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_differential_corpus.dart --check
+
+test: dependencies vt-parser-table-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart

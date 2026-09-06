@@ -157,7 +157,10 @@ final class TerminalDifferentialManifest {
     final int version = _integer(root['version'], 'version');
     _expect(version == 1, 'unsupported manifest version $version');
     final String scope = _text(root['scope'], 'scope', 64);
-    _expect(scope == 'contract-smoke', 'unsupported manifest scope $scope');
+    _expect(
+      scope == 'contract-smoke' || scope == 'reviewed-corpus',
+      'unsupported manifest scope $scope',
+    );
     final int observationVersion = _integer(
       root['observation_version'],
       'observation_version',
@@ -1258,6 +1261,10 @@ TerminalDifferentialContractResult runTerminalDifferentialContractChecks({
         File(manifestPath),
         inventoryIds: inventoryIds,
       );
+  _expect(
+    manifest.scope == 'contract-smoke',
+    'contract check requires contract-smoke scope',
+  );
   const DartTerminalDifferentialBackend backend =
       DartTerminalDifferentialBackend();
   const TerminalDifferentialComparator comparator =

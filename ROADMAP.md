@@ -853,6 +853,9 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] versioned case/observation/subprocess driver contractとDart backend
   - [x] pinned xterm/Ghostty/Kitty adapterとavailability/provenance self-test
   - [ ] reviewed differential corpus、mismatch report、acceptance分類
+    - [x] reviewed case manifest、Dart baseline、deterministic report gate
+    - [ ] pinned comparator capture実行とnormalized evidence
+    - [ ] mismatch最小化、acceptance report、harness完了判定
 - [ ] `vttest` を参考に採用/非採用項目を明文化
 - [ ] tmux、ssh、mosh、Neovim、Emacs、ncurses、fzf、lazygit の matrix
 - [ ] terminfo source、compile/install/fallback
