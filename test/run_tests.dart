@@ -76,6 +76,7 @@ import 'terminal_unicode_test.dart';
 import 'terminal_viewport_render_model_test.dart';
 import 'terminal_viewport_test.dart';
 import 'terminal_wide_grapheme_test.dart';
+import 'vt_parser_inspector_test.dart';
 import 'vt_parser_test.dart';
 
 @Native<Uint64 Function()>(
@@ -149,6 +150,7 @@ Future<void> main() async {
   runTerminalViewportRenderModelTests();
   runTerminalWideGraphemeTests();
   runVtParserTests();
+  runVtParserInspectorTests();
   _testEditing();
   _testUnicodeEditing();
   _testHistoryNavigation();

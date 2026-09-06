@@ -89,6 +89,13 @@ export 'src/terminal_core/vt_parser.dart'
         VtStringSequence,
         VtStringTerminator,
         VtUncapturedSequenceKind;
+export 'src/terminal_core/vt_parser_inspector.dart'
+    show
+        VtParserInspectionEvent,
+        VtParserInspectionKind,
+        VtParserInspectionObserver,
+        VtParserInspector,
+        VtParserInspectorLimits;
 export 'src/terminal_core/vt_parser_table.dart' show VtParserState;
 export 'src/terminal_input/terminal_appkit_key_adapter.dart'
     show TerminalAppKitKeyAdapter;
