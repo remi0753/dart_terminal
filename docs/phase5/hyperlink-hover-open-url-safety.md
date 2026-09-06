@@ -265,6 +265,40 @@ Primary references:
   fields, separated explicit-ID spans, wide-cell geometry, canonical-state
   immutability, and native Metal readback at 1x and 2x.
 
+### 2026-09-06 — allowlisted AppKit external URL boundary
+
+- Added the closed `dart_appkit` `AllowedExternalUrl` value type. It preserves
+  the exact approved text but can only be constructed by a parser that accepts
+  absolute `http`, `https`, or `mailto` schemes within 4096 UTF-8 bytes. Web
+  targets require an authority and host and reject credentials; mail targets
+  require a non-authority recipient.
+- Both the Dart policy and native bridge reject raw controls, whitespace,
+  backslashes, soft-hyphen/bidi/invisible formatting characters, malformed
+  percent escapes, and percent-encoded controls, backslashes, or invisible
+  formatting. Encoded ASCII space remains accepted because it is an ordinary
+  URL component representation rather than raw ambiguous input.
+- `AppKitApplication.openExternalUrl` accepts only the closed value type. The
+  optional ABI-v1 symbol copies the text, revalidates the complete policy on
+  the AppKit main thread, constructs `NSURL` only afterward, and calls
+  `NSWorkspace.openURL` directly without shell interpolation. A zero/one output
+  distinguishes Launch Services refusal from bridge failure and is initialized
+  to zero on all error and wrong-thread paths.
+- The native test exercises the same post-validation dispatch with a recorder
+  or refusing opener, so accepted targets reach that point exactly once and
+  rejected targets never do. FFI smoke runs off-main and therefore proves the
+  real Mach-O symbol/thread guard without opening the user's browser or mail
+  client. Missing-symbol compatibility returns status 8 against the legacy
+  bridge fixture.
+- The first Dart API run exposed that Dart's `Uri.isAbsolute` rejects otherwise
+  valid fragment-bearing references. The check was narrowed to the intended
+  security condition—presence of the explicit allowlisted scheme—and the test
+  passed. The first complete native run then exposed over-rejection of `%20` in
+  a mail subject; encoded ASCII space was separated from the still-rejected
+  encoded control/invisible set. The subsequent complete suite passed.
+- The reusable dependency change was committed independently as `08ad353 Add
+  allowlisted external URL opening`. The product repository remained otherwise
+  unchanged while that dependency commit was prepared.
+
 ## Verification results
 
 ### Bounded OSC 8 table and cell lifecycle
@@ -291,4 +325,16 @@ Primary references:
 - Final `CI=true make test`: passed; all 137 files were format-clean, analyzer
   reported no issues, parser-table freshness and native build hooks passed,
   and the complete Dart test suite passed.
+- `git diff --check`: passed during final pre-commit review.
+
+### Allowlisted AppKit external URL boundary
+
+- Explicit `dart format` over the ten changed Dart sources: passed.
+- Focused `make native-test dart-test`: native bridge tests and Dart analysis
+  passed; the first Dart run found the fragment issue recorded above, and the
+  corrected rerun passed every API and launcher test.
+- Final `make test` in `dart_appkit`: passed every C11/C++20 header and
+  warning-as-error gate, native bridge/runner/runtime/renderer/PTY test, Dart
+  package analysis/test, Kernel compilation, real Mach-O FFI smoke, and legacy
+  additive-symbol fallback.
 - `git diff --check`: passed during final pre-commit review.
