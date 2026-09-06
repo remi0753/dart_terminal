@@ -1989,7 +1989,7 @@ final class TerminalApplication {
         observation.approvalCount == 1 &&
         observation.nativeWriteEnqueuedCount - writeBaseline == expectedChunks;
     _expectLifecycle(
-      observation.copyCount == 1 &&
+      observation.copyCount == 5 &&
           observation.confirmationCount == 1 &&
           observation.busyCount == 0 &&
           observation.tooLargeCount == 0 &&
@@ -2029,25 +2029,39 @@ final class TerminalApplication {
     _TerminalClipboardProductObservation observation,
   ) async {
     const String marker = 'COPYCLIPBOARD';
-    pane.insertText("printf '\\r\\nCOPY%s\\r\\n' 'CLIPBOARD'");
+    const String cjkMarker = 'COPYCJK';
+    const String cjkText = '日本語';
+    pane.insertText(
+      "printf '\\r\\nCOPY%s\\r\\nCOPY%s%sEND\\r\\n' "
+      "'CLIPBOARD' 'CJK' '日本語'",
+    );
     await pane.submit();
     await _waitForAsciiMarker(session, marker);
+    await _waitForAsciiMarker(session, cjkMarker);
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     final _TerminalAsciiPosition position = _findAscii(
       session.terminalScreenSet.activeScreen,
       marker,
     )!;
+    final _TerminalAsciiPosition cjkPosition = _findAscii(
+      session.terminalScreenSet.activeScreen,
+      cjkMarker,
+    )!;
     final TerminalFontCatalogMetrics metrics = surface.fontMetrics;
     final int initialReports = mouseObservation.terminalReportCount;
 
-    Future<void> inject(AppKitMouseEventKind kind, int column) async {
+    Future<void> inject(
+      AppKitMouseEventKind kind,
+      _TerminalAsciiPosition target,
+      int column,
+    ) async {
       final int generation = selectionOwner.gesture.snapshot.generation;
       _injectMouseEventForTesting(
         application,
         window,
         kind: kind,
         x: (column + 0.5) * metrics.cellWidth,
-        y: (position.row + 0.5) * metrics.cellHeight,
+        y: (target.row + 0.5) * metrics.cellHeight,
         button: 0,
         modifiers: 0,
         clickCount: 1,
@@ -2056,33 +2070,75 @@ final class TerminalApplication {
       await _waitForSelectionGeneration(selectionOwner, generation + 1);
     }
 
-    await inject(AppKitMouseEventKind.down, position.column);
-    await inject(
-      AppKitMouseEventKind.dragged,
-      position.column + marker.length - 1,
-    );
-    await inject(AppKitMouseEventKind.up, position.column + marker.length - 1);
-    _expectSelectionText(selectionOwner, marker, TerminalSelectionUnit.cell);
-    final int copyBaseline = observation.copyCount;
-    copyItem.performAction();
-    final Stopwatch deadline = Stopwatch()..start();
-    while (deadline.elapsed < const Duration(seconds: 3) &&
-        observation.copyCount == copyBaseline &&
-        observation.failure == null) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+    Future<void> selectAndCopy({
+      required _TerminalAsciiPosition target,
+      required int startColumn,
+      required int endColumn,
+      required String expected,
+    }) async {
+      await inject(AppKitMouseEventKind.down, target, startColumn);
+      await inject(AppKitMouseEventKind.dragged, target, endColumn);
+      await inject(AppKitMouseEventKind.up, target, endColumn);
+      _expectSelectionText(
+        selectionOwner,
+        expected,
+        TerminalSelectionUnit.cell,
+      );
+      final int copyBaseline = observation.copyCount;
+      copyItem.performAction();
+      final Stopwatch deadline = Stopwatch()..start();
+      while (deadline.elapsed < const Duration(seconds: 3) &&
+          observation.copyCount == copyBaseline &&
+          observation.failure == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      _expectLifecycle(
+        observation.failure == null &&
+            observation.copyCount == copyBaseline + 1 &&
+            clipboard.text == expected &&
+            clipboard.changeCount == observation.copyChangeCount &&
+            observation.copiedUtf8Bytes == utf8.encode(expected).length &&
+            mouseObservation.terminalReportCount == initialReports,
+        'native Copy menu did not publish the exact stable selection: '
+        'expected=$expected actual=${clipboard.text}',
+      );
     }
-    _expectLifecycle(
-      observation.failure == null &&
-          observation.copyCount == copyBaseline + 1 &&
-          clipboard.text == marker &&
-          clipboard.changeCount == observation.copyChangeCount &&
-          observation.copiedUtf8Bytes == marker.length &&
-          mouseObservation.terminalReportCount == initialReports,
-      'native Copy menu did not publish the exact stable selection',
+
+    await selectAndCopy(
+      target: position,
+      startColumn: position.column,
+      endColumn: position.column + marker.length - 1,
+      expected: marker,
+    );
+    final int cjkStart = cjkPosition.column + cjkMarker.length;
+    await selectAndCopy(
+      target: cjkPosition,
+      startColumn: cjkStart + 1,
+      endColumn: cjkStart + 1,
+      expected: cjkText[0],
+    );
+    await selectAndCopy(
+      target: cjkPosition,
+      startColumn: cjkStart + 2,
+      endColumn: cjkStart + 2,
+      expected: cjkText[1],
+    );
+    await selectAndCopy(
+      target: cjkPosition,
+      startColumn: cjkStart + 5,
+      endColumn: cjkStart + 5,
+      expected: cjkText[2],
+    );
+    await selectAndCopy(
+      target: cjkPosition,
+      startColumn: cjkStart + 1,
+      endColumn: cjkStart + 4,
+      expected: cjkText,
     );
     stdout.writeln(
       'TERMINAL_CLIPBOARD_COPY_TEST selection=true menu=true exact=true '
-      'local_only=true bytes=${observation.copiedUtf8Bytes}',
+      'cjk_individual=true cjk_wide=true local_only=true '
+      'bytes=${observation.copiedUtf8Bytes}',
     );
   }
 

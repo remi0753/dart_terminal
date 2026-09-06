@@ -11,10 +11,80 @@ void runTerminalScreenMetalCompositorTests() {
   _testInverseBackgroundAndConcealMapping();
   _testWrappedOverflowKeepsNewestPromptVisible();
   _testWideGraphemeUsesCanonicalGrid();
+  _testCjkGlyphOriginsFollowCanonicalGrid();
   _testPreeditUsesTransientMetalLayers();
   _testSelectionProjectionUsesOverlayLayer();
   _testHyperlinkHoverUsesDecorationLayer();
   _testPreeditRespectsRendererInstanceLimit();
+}
+
+void _testCjkGlyphOriginsFollowCanonicalGrid() {
+  const String text = 'A日本語B';
+  const List<int> terminalColumns = <int>[0, 1, 3, 5, 7];
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 8);
+  _parse(screens, utf8.encode(text));
+  final TerminalSelectionRange selection = screens.viewport.selectionRange(
+    screens.viewport.anchorAt(0, 3),
+    screens.viewport.anchorAfter(0, 3),
+  )!;
+
+  for (final double scale in <double>[1, 2]) {
+    final _CompositionFixture fixture = _compose(
+      screens,
+      scale: scale,
+      fontFamily: TerminalLiveMetalSurface.defaultFontFamily,
+      selection: screens.viewport.projectSelection(selection),
+    );
+    try {
+      final TerminalShapedText shaped = fixture.shapingCache.shape(text);
+      final List<TerminalMetalInstance> glyphInstances = fixture
+          .composition
+          .instances
+          .where((TerminalMetalInstance instance) => instance.kind.isGlyph)
+          .toList();
+      _expect(
+        shaped.glyphs.length == terminalColumns.length &&
+            glyphInstances.length == shaped.glyphs.length,
+        'mixed ASCII/CJK fixture retains one visible glyph per grapheme',
+      );
+      final List<int> glyphOrigins = <int>[];
+      for (int index = 0; index < shaped.glyphs.length; index++) {
+        final TerminalShapedGlyph glyph = shaped.glyphs[index];
+        final TerminalGlyphAtlasEntry entry = fixture.atlas.lookup(
+          TerminalGlyphAtlasKey(
+            catalogGeneration: fixture.catalog.generation,
+            faceId: glyph.faceId,
+            glyphId: glyph.glyphId,
+            scale16_16: fixture.atlas.scale16_16,
+          ),
+        )!;
+        glyphOrigins.add(glyphInstances[index].x - entry.originX);
+      }
+      final List<int> expectedOrigins = <int>[
+        for (final int column in terminalColumns)
+          (column * fixture.catalog.metrics.cellWidth * scale).round(),
+      ];
+      final TerminalMetalInstance overlay = fixture.composition.instances
+          .singleWhere(
+            (TerminalMetalInstance instance) =>
+                instance.kind == TerminalMetalInstanceKind.selection,
+          );
+      final int expectedOverlayLeft =
+          (3 * fixture.catalog.metrics.cellWidth * scale).round();
+      final int expectedOverlayRight =
+          (5 * fixture.catalog.metrics.cellWidth * scale).round();
+      _expect(
+        glyphOrigins.toString() == expectedOrigins.toString() &&
+            overlay.x == expectedOverlayLeft &&
+            overlay.width == expectedOverlayRight - expectedOverlayLeft,
+        'CoreText fallback glyph origins and wide selection overlay follow '
+        'terminal columns at ${scale}x (actual=$glyphOrigins '
+        'expected=$expectedOrigins overlay=${overlay.x}/${overlay.width})',
+      );
+    } finally {
+      fixture.dispose();
+    }
+  }
 }
 
 void _testHyperlinkHoverUsesDecorationLayer() {
@@ -399,10 +469,13 @@ _CompositionFixture _compose(
   TerminalSelectionProjection? selection,
   int hoveredHyperlinkId = 0,
   double scale = 1,
+  String fontFamily = 'Menlo',
   TerminalMetalRendererConfig rendererConfig =
       const TerminalMetalRendererConfig(),
 }) {
-  final TerminalFontCatalog catalog = TerminalFontCatalog.open();
+  final TerminalFontCatalog catalog = TerminalFontCatalog.open(
+    family: fontFamily,
+  );
   final TerminalShapingCache shapingCache = TerminalShapingCache(catalog);
   final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
     catalogGeneration: catalog.generation,
@@ -463,6 +536,7 @@ _CompositionFixture _compose(
     return _CompositionFixture(
       catalog: catalog,
       shapingCache: shapingCache,
+      atlas: atlas,
       bridge: bridge,
       renderer: renderer,
       composition: composition,
@@ -503,6 +577,7 @@ final class _CompositionFixture {
   const _CompositionFixture({
     required this.catalog,
     required this.shapingCache,
+    required this.atlas,
     required this.bridge,
     required this.renderer,
     required this.composition,
@@ -512,6 +587,7 @@ final class _CompositionFixture {
 
   final TerminalFontCatalog catalog;
   final TerminalShapingCache shapingCache;
+  final TerminalGlyphAtlas atlas;
   final TerminalGlyphAtlasMetalBridge bridge;
   final TerminalMetalRenderer renderer;
   final TerminalScreenMetalComposition composition;

@@ -820,6 +820,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] bounded visible UTF-16 snapshotとselection/cursor mapping
   - [x] `TerminalMetalView`のAppKit accessibility contractとchange notification
   - [x] 実製品同期と両runtime VoiceOver受け入れ
+- [x] CJK wide-cellの表示幅・pointer selection・clipboard抽出を一致させる
+  （[`docs/phase5/cjk-wide-cell-selection-copy-geometry.md`](docs/phase5/cjk-wide-cell-selection-copy-geometry.md) を参照して実施）
 
 終了条件:
 

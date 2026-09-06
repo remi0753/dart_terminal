@@ -242,8 +242,12 @@ final class TerminalScreenMetalCompositor {
           model.backgroundAt(row, column),
           attributes,
         ).foregroundRgba;
-        final StringBuffer text = StringBuffer();
         final int runStart = column;
+        final _TerminalTextRunBuilder run = _TerminalTextRunBuilder(
+          row: row,
+          startColumn: runStart,
+          style: fontStyle,
+        );
         int nextColumn = column;
         while (nextColumn < model.columns) {
           final int nextFlags = model.widthFlagsAt(row, nextColumn);
@@ -267,18 +271,13 @@ final class TerminalScreenMetalCompositor {
               nextColors.foregroundRgba != foregroundRgba) {
             break;
           }
-          text.write(_cellText(nextContent, nextFlags));
-          nextColumn += nextWidth == TerminalCellFlags.wide ? 2 : 1;
+          final int nextCellColumns = nextWidth == TerminalCellFlags.wide
+              ? 2
+              : 1;
+          run.add(_cellText(nextContent, nextFlags), nextCellColumns);
+          nextColumn += nextCellColumns;
         }
-        textRuns.add(
-          _TerminalTextRun(
-            row: row,
-            startColumn: runStart,
-            text: text.toString(),
-            style: fontStyle,
-            colorRgba: foregroundRgba,
-          ),
-        );
+        textRuns.add(run.build(foregroundRgba));
         column = nextColumn;
       }
     }
@@ -361,15 +360,15 @@ final class TerminalScreenMetalCompositor {
     final List<TerminalGlyphAtlasEntry> retainedGlyphs =
         <TerminalGlyphAtlasEntry>[];
     for (final _TerminalShapedRun shapedRun in shapedRuns) {
-      final int runLeft = _columnPixel(
-        shapedRun.run.startColumn,
-        metrics,
-        scale,
-      );
       final int baseline =
           ((shapedRun.run.row * metrics.cellHeight + metrics.baseline) * scale)
               .round();
-      for (final TerminalShapedGlyph glyph in shapedRun.shaped.glyphs) {
+      for (
+        int glyphIndex = 0;
+        glyphIndex < shapedRun.shaped.glyphs.length;
+        glyphIndex++
+      ) {
+        final TerminalShapedGlyph glyph = shapedRun.shaped.glyphs[glyphIndex];
         final TerminalGlyphAtlasKey key = TerminalGlyphAtlasKey(
           catalogGeneration: catalog.generation,
           faceId: glyph.faceId,
@@ -382,8 +381,12 @@ final class TerminalScreenMetalCompositor {
             'visible glyph was evicted before frame encoding',
           );
         }
+        // CoreText advances describe font/fallback typography. Inter-grapheme
+        // placement remains owned by the canonical terminal cell grid.
         final int x =
-            runLeft + (glyph.positionX * scale).round() + entry.originX;
+            (shapedRun.gridPositionX(glyphIndex, metrics.cellWidth) * scale)
+                .round() +
+            entry.originX;
         final int y = baseline - entry.originY;
         if (entry.isEmpty ||
             x >= viewportWidth ||
@@ -745,32 +748,88 @@ final class TerminalScreenMetalCompositor {
 }
 
 final class _TerminalTextRun {
-  const _TerminalTextRun({
+  _TerminalTextRun({
     required this.row,
     required this.startColumn,
     required this.text,
+    required Iterable<_TerminalTextCluster> clusters,
     required this.style,
     required this.colorRgba,
-  });
+  }) : clusters = List<_TerminalTextCluster>.unmodifiable(clusters) {
+    if (text.isEmpty || this.clusters.isEmpty) {
+      throw ArgumentError('terminal text run must not be empty');
+    }
+    var expectedUtf16Start = 0;
+    var expectedColumn = startColumn;
+    for (final _TerminalTextCluster cluster in this.clusters) {
+      if (cluster.utf16Start != expectedUtf16Start ||
+          cluster.utf16End <= cluster.utf16Start ||
+          cluster.startColumn != expectedColumn ||
+          cluster.endColumn <= cluster.startColumn) {
+        throw StateError('terminal text run has non-contiguous clusters');
+      }
+      expectedUtf16Start = cluster.utf16End;
+      expectedColumn = cluster.endColumn;
+    }
+    if (expectedUtf16Start != text.length) {
+      throw StateError('terminal text run does not cover its UTF-16 text');
+    }
+  }
 
   final int row;
   final int startColumn;
   final String text;
+  final List<_TerminalTextCluster> clusters;
   final TerminalFontStyle style;
   final int colorRgba;
+
+  int clusterIndexAt(int utf16Offset) {
+    var low = 0;
+    var high = clusters.length;
+    while (low < high) {
+      final int middle = low + ((high - low) >> 1);
+      final _TerminalTextCluster cluster = clusters[middle];
+      if (utf16Offset < cluster.utf16Start) {
+        high = middle;
+      } else if (utf16Offset >= cluster.utf16End) {
+        low = middle + 1;
+      } else {
+        return middle;
+      }
+    }
+    throw StateError('shaped glyph is outside its terminal text run');
+  }
 }
 
 final class _TerminalTextRunBuilder {
-  _TerminalTextRunBuilder({required this.row, required this.startColumn})
-    : nextColumn = startColumn;
+  _TerminalTextRunBuilder({
+    required this.row,
+    required this.startColumn,
+    this.style = TerminalFontStyle.regular,
+  }) : nextColumn = startColumn;
 
   final int row;
   final int startColumn;
+  final TerminalFontStyle style;
   final StringBuffer _text = StringBuffer();
+  final List<_TerminalTextCluster> _clusters = <_TerminalTextCluster>[];
+  int _utf16Length = 0;
   int nextColumn;
 
   void add(String text, int width) {
+    if (text.isEmpty || (width != 1 && width != 2)) {
+      throw ArgumentError('terminal text cluster must occupy one or two cells');
+    }
+    _clusters.add(
+      _TerminalTextCluster(
+        utf16Start: _utf16Length,
+        utf16End: _utf16Length + text.length,
+        startColumn: nextColumn,
+        endColumn: nextColumn + width,
+      ),
+    );
     _text.write(text);
+    _utf16Length += text.length;
     nextColumn += width;
   }
 
@@ -778,16 +837,85 @@ final class _TerminalTextRunBuilder {
     row: row,
     startColumn: startColumn,
     text: _text.toString(),
-    style: TerminalFontStyle.regular,
+    clusters: _clusters,
+    style: style,
     colorRgba: colorRgba,
   );
 }
 
+final class _TerminalTextCluster {
+  const _TerminalTextCluster({
+    required this.utf16Start,
+    required this.utf16End,
+    required this.startColumn,
+    required this.endColumn,
+  });
+
+  final int utf16Start;
+  final int utf16End;
+  final int startColumn;
+  final int endColumn;
+}
+
 final class _TerminalShapedRun {
-  const _TerminalShapedRun(this.run, this.shaped);
+  _TerminalShapedRun(this.run, this.shaped)
+    : _gridLayout = _TerminalShapedGridLayout.compute(run, shaped);
 
   final _TerminalTextRun run;
   final TerminalShapedText shaped;
+  final _TerminalShapedGridLayout _gridLayout;
+
+  double gridPositionX(int glyphIndex, double cellWidth) =>
+      _gridLayout.positionX(glyphIndex, cellWidth);
+}
+
+final class _TerminalShapedGridLayout {
+  _TerminalShapedGridLayout._({
+    required this.run,
+    required this.shaped,
+    required this.glyphClusterIndexes,
+    required this.clusterNaturalOrigins,
+  });
+
+  factory _TerminalShapedGridLayout.compute(
+    _TerminalTextRun run,
+    TerminalShapedText shaped,
+  ) {
+    final List<int> glyphClusterIndexes = List<int>.filled(
+      shaped.glyphs.length,
+      0,
+    );
+    final List<double?> clusterNaturalOrigins = List<double?>.filled(
+      run.clusters.length,
+      null,
+    );
+    for (int index = 0; index < shaped.glyphs.length; index++) {
+      final TerminalShapedGlyph glyph = shaped.glyphs[index];
+      final int clusterIndex = run.clusterIndexAt(glyph.utf16Start);
+      glyphClusterIndexes[index] = clusterIndex;
+      clusterNaturalOrigins[clusterIndex] ??= glyph.positionX;
+    }
+    return _TerminalShapedGridLayout._(
+      run: run,
+      shaped: shaped,
+      glyphClusterIndexes: List<int>.unmodifiable(glyphClusterIndexes),
+      clusterNaturalOrigins: List<double?>.unmodifiable(clusterNaturalOrigins),
+    );
+  }
+
+  final _TerminalTextRun run;
+  final TerminalShapedText shaped;
+  final List<int> glyphClusterIndexes;
+  final List<double?> clusterNaturalOrigins;
+
+  double positionX(int glyphIndex, double cellWidth) {
+    final int clusterIndex = glyphClusterIndexes[glyphIndex];
+    final _TerminalTextCluster cluster = run.clusters[clusterIndex];
+    final double naturalOrigin = clusterNaturalOrigins[clusterIndex]!;
+    return cluster.startColumn * cellWidth +
+        shaped.glyphs[glyphIndex].positionX -
+        naturalOrigin;
+  }
 }
 
 final class _TerminalCellColors {

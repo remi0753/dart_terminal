@@ -13,7 +13,7 @@ pane-owned persistent login shell です。Phase 0 の native spike source は�
 成立性と測定結果は `docs/phase0` に保存しています。Dart-only VT parser と screen
 model、および CoreText/Metal renderer は製品実装へ移行済みです。IME と入力source
 受け入れmatrixに加え、terminal mouse reporting、local selection、drag autoscroll、
-precision/momentum trackpad scrollも製品経路へ接続済みです。
+precision/momentum trackpad scroll、standard Copy/Pasteも製品経路へ接続済みです。
 `TerminalMetalView` は同じ可視 viewport、local selection、cursor、cell metricsを
 boundedなread-only text areaとしてVoiceOverにも公開します。
 
@@ -42,7 +42,10 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   Shift overrideは同じpointer eventをPTYへ重複送信せずlocal selection intentへ配送
 - stable logical anchorを使うcharacter/word/logical-line multi-click selection、
   forward/reverse drag、1 deadlineのbounded edge autoscroll、history-aware viewport
-  projection、1x/2x Metal selection overlay
+  projection、1x/2x Metal selection overlay。CJK fallback glyphもcanonicalなwidth-two
+  cellへ配置し、全角文字の左右どちらからでも同じgraphemeを選択・コピーする
+- native Edit menuからのbounded plain-text Copy/Paste、wide CJKを含むexact Copy、
+  bracketed paste、newline正規化、危険またはlarge pasteの再操作confirmation
 - キー入力、Backspace/Delete、左右移動、Home/End、zsh自身の行編集とコマンド履歴
 - 1 paneにつき1つのTTY付きinteractive login zsh
 - 同じshell内での`cd`、環境変数、background job、`jobs`、`fg`/`bg`
@@ -133,7 +136,8 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   cell stateとして描画し、terminal soft wrapとresize reflowで行を決め、履歴位置が
   bottomの間は大量出力後も最新prompt/cursorを最終表示行に保つ。zero-configでは
   macOS system monospaceを読みやすい14ptで使用し、CoreText bitmapをtop-downでatlasへ
-  公開して非対称glyphも上下反転せず表示する
+  公開して非対称glyphも上下反転せず表示する。fallbackの自然字送りには依存せず、
+  各CoreText clusterをcanonicalなnarrow/wide cell原点へ配置する
 - bounded immutable OSC 8 linkをscreen/history/reflowへ保持し、visible cellのhoverを
   Metal underlineで表示する。exact Command-primary-clickだけを再解決して所有し、
   `http`/`https`/`mailto` allowlistをDart/AppKitの両境界で通ったtargetだけを開く
@@ -359,8 +363,8 @@ screen、wide/grapheme、soft wrap、resize reflow、cursor、visual bellをCore
 viewportはbottom-followを既定とし、primary historyをprecision/momentum trackpadや
 wheelで移動できます。terminal mouse tracking中はwheel reportをPTYへ排他的に送り、
 Shift overrideとalternate-screen cursor-key emulationも同じbounded routingで扱います。
-clipboardとkeybind設定ファイルは後続Phaseです。通常の大量出力後に最新promptが
-表示範囲外へ隠れることはありません。
+standard clipboardは製品経路へ接続済みで、keybind設定ファイルは後続Phaseです。
+通常の大量出力後に最新promptが表示範囲外へ隠れることはありません。
 
 `TerminalPaneOwner`がpaneを、`TerminalPane`がsession generationを、
 `TerminalSession`が公開`PtyProcess`を所有します。実backendとdeterministic fakeは

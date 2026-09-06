@@ -1023,7 +1023,7 @@ Future<void> _runClipboardProduct(
   _expect(
     observation.stdoutText.contains(
           'TERMINAL_CLIPBOARD_COPY_TEST selection=true menu=true exact=true '
-          'local_only=true bytes=13',
+          'cjk_individual=true cjk_wide=true local_only=true bytes=9',
         ) &&
         observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
     'clipboard launch omitted selection Copy or clean ownership teardown',
