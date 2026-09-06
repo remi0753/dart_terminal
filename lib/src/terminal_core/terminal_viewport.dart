@@ -312,6 +312,15 @@ final class TerminalViewport {
     int maxScalars = TerminalSelectionText.defaultMaxScalars,
   }) => _extractSelection(this, range, maxScalars: maxScalars);
 
+  /// Whether both selection boundaries still belong to retained active content.
+  bool isSelectionAvailable(TerminalSelectionRange range) {
+    _sync();
+    return range.start.screenKind == _screens.activeKind &&
+        range.end.screenKind == _screens.activeKind &&
+        _resolveDocumentBoundary(this, range.start) != null &&
+        _resolveDocumentBoundary(this, range.end) != null;
+  }
+
   /// Searches active retained logical lines without crossing hard boundaries.
   ///
   /// Returns null only when an explicit [start] boundary is unavailable.

@@ -45,6 +45,7 @@ import 'terminal_screen_metal_compositor_test.dart';
 import 'terminal_screen_set_test.dart';
 import 'terminal_screen_test.dart';
 import 'terminal_scrollback_test.dart';
+import 'terminal_selection_gesture_test.dart';
 import 'terminal_selection_search_test.dart';
 import 'terminal_session_reply_test.dart';
 import 'terminal_snapshot_test.dart';
@@ -85,6 +86,7 @@ Future<void> main() async {
   runTerminalKeyEncoderTests();
   runTerminalMouseEncoderTests();
   runTerminalMouseRouterTests();
+  runTerminalSelectionGestureTests();
   runTerminalLiveMetalSurfaceFontTests();
   runTerminalPaletteTests();
   runTerminalPreeditTests();

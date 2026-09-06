@@ -58,11 +58,16 @@ void _testPointNormalizationAndLocalPhases() {
         begin.localSelection!.cell == TerminalPointerCell(row: 0, column: 0) &&
         begin.localSelection!.clickCount == 2 &&
         begin.localSelection!.modifiers.option &&
+        begin.localSelection!.verticalEdge ==
+            TerminalPointerVerticalEdge.above &&
         update.localSelection!.phase == TerminalLocalSelectionPhase.update &&
         update.localSelection!.cell == TerminalPointerCell(row: 1, column: 1) &&
+        update.localSelection!.verticalEdge ==
+            TerminalPointerVerticalEdge.inside &&
         end.localSelection!.phase == TerminalLocalSelectionPhase.end &&
-        end.localSelection!.cell == TerminalPointerCell(row: 3, column: 9),
-    'normal-shell gestures map, clamp, and emit only local intents',
+        end.localSelection!.cell == TerminalPointerCell(row: 3, column: 9) &&
+        end.localSelection!.verticalEdge == TerminalPointerVerticalEdge.below,
+    'normal-shell gestures map, clamp, classify edges, and emit local intents',
   );
   _expectThrows<UnsupportedError>(
     () => begin.terminalBytes.add(1),
@@ -264,6 +269,7 @@ void _testProtocolBoundsAndInputValidation() {
       button: TerminalMouseButton.none,
       clickCount: 1,
       modifiers: const ModifierKeys(0),
+      verticalEdge: TerminalPointerVerticalEdge.inside,
     ),
     'public local intents require a physical button',
   );

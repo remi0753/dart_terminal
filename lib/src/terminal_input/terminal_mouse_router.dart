@@ -18,6 +18,8 @@ enum TerminalMouseIgnoreReason {
 
 enum TerminalLocalSelectionPhase { begin, update, end }
 
+enum TerminalPointerVerticalEdge { inside, above, below }
+
 final class TerminalPointerCell {
   TerminalPointerCell({required this.row, required this.column}) {
     RangeError.checkValueInInterval(
@@ -58,6 +60,7 @@ final class TerminalLocalSelectionIntent {
     required this.button,
     required this.clickCount,
     required this.modifiers,
+    this.verticalEdge = TerminalPointerVerticalEdge.inside,
   }) {
     if (button == TerminalMouseButton.none) {
       throw ArgumentError('local selection requires a physical button');
@@ -78,6 +81,7 @@ final class TerminalLocalSelectionIntent {
   final TerminalMouseButton button;
   final int clickCount;
   final ModifierKeys modifiers;
+  final TerminalPointerVerticalEdge verticalEdge;
 }
 
 final class TerminalMouseRouteResult {
@@ -225,6 +229,7 @@ final class TerminalMouseRouter {
         button: physicalButton,
         clickCount: source.clickCount,
         modifiers: source.modifiers,
+        verticalEdge: _verticalEdge(source.y, rows * cellHeight),
       );
       onLocalSelection(intent);
       return TerminalMouseRouteResult.local(intent);
@@ -250,6 +255,13 @@ final class TerminalMouseRouter {
 
   static int _cellIndex(double point, double extent, int count) =>
       math.min(math.max((point / extent).floor(), 0), count - 1);
+
+  static TerminalPointerVerticalEdge _verticalEdge(double y, double height) =>
+      y < 0
+      ? TerminalPointerVerticalEdge.above
+      : y >= height
+      ? TerminalPointerVerticalEdge.below
+      : TerminalPointerVerticalEdge.inside;
 
   static void _validateGeometry(
     AppKitMouseEvent source, {
