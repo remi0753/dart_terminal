@@ -1,0 +1,173 @@
+import 'package:dart_appkit/dart_appkit.dart';
+import 'package:dart_terminal/dart_terminal.dart';
+
+void main() => runTerminalAppKitKeyAdapterTests();
+
+void runTerminalAppKitKeyAdapterTests() {
+  _testVirtualKeyMap();
+  _testEventFieldsRemainIndependent();
+}
+
+void _testVirtualKeyMap() {
+  const Map<int, TerminalPhysicalKey> expected = <int, TerminalPhysicalKey>{
+    0: TerminalPhysicalKey.keyA,
+    1: TerminalPhysicalKey.keyS,
+    2: TerminalPhysicalKey.keyD,
+    3: TerminalPhysicalKey.keyF,
+    4: TerminalPhysicalKey.keyH,
+    5: TerminalPhysicalKey.keyG,
+    6: TerminalPhysicalKey.keyZ,
+    7: TerminalPhysicalKey.keyX,
+    8: TerminalPhysicalKey.keyC,
+    9: TerminalPhysicalKey.keyV,
+    10: TerminalPhysicalKey.section,
+    11: TerminalPhysicalKey.keyB,
+    12: TerminalPhysicalKey.keyQ,
+    13: TerminalPhysicalKey.keyW,
+    14: TerminalPhysicalKey.keyE,
+    15: TerminalPhysicalKey.keyR,
+    16: TerminalPhysicalKey.keyY,
+    17: TerminalPhysicalKey.keyT,
+    18: TerminalPhysicalKey.digit1,
+    19: TerminalPhysicalKey.digit2,
+    20: TerminalPhysicalKey.digit3,
+    21: TerminalPhysicalKey.digit4,
+    22: TerminalPhysicalKey.digit6,
+    23: TerminalPhysicalKey.digit5,
+    24: TerminalPhysicalKey.equal,
+    25: TerminalPhysicalKey.digit9,
+    26: TerminalPhysicalKey.digit7,
+    27: TerminalPhysicalKey.minus,
+    28: TerminalPhysicalKey.digit8,
+    29: TerminalPhysicalKey.digit0,
+    30: TerminalPhysicalKey.rightBracket,
+    31: TerminalPhysicalKey.keyO,
+    32: TerminalPhysicalKey.keyU,
+    33: TerminalPhysicalKey.leftBracket,
+    34: TerminalPhysicalKey.keyI,
+    35: TerminalPhysicalKey.keyP,
+    36: TerminalPhysicalKey.enter,
+    37: TerminalPhysicalKey.keyL,
+    38: TerminalPhysicalKey.keyJ,
+    39: TerminalPhysicalKey.quote,
+    40: TerminalPhysicalKey.keyK,
+    41: TerminalPhysicalKey.semicolon,
+    42: TerminalPhysicalKey.backslash,
+    43: TerminalPhysicalKey.comma,
+    44: TerminalPhysicalKey.slash,
+    45: TerminalPhysicalKey.keyN,
+    46: TerminalPhysicalKey.keyM,
+    47: TerminalPhysicalKey.period,
+    48: TerminalPhysicalKey.tab,
+    49: TerminalPhysicalKey.space,
+    50: TerminalPhysicalKey.grave,
+    51: TerminalPhysicalKey.backspace,
+    53: TerminalPhysicalKey.escape,
+    64: TerminalPhysicalKey.f17,
+    65: TerminalPhysicalKey.keypadDecimal,
+    67: TerminalPhysicalKey.keypadMultiply,
+    69: TerminalPhysicalKey.keypadAdd,
+    75: TerminalPhysicalKey.keypadDivide,
+    76: TerminalPhysicalKey.keypadEnter,
+    78: TerminalPhysicalKey.keypadSubtract,
+    79: TerminalPhysicalKey.f18,
+    80: TerminalPhysicalKey.f19,
+    81: TerminalPhysicalKey.keypadEquals,
+    82: TerminalPhysicalKey.keypad0,
+    83: TerminalPhysicalKey.keypad1,
+    84: TerminalPhysicalKey.keypad2,
+    85: TerminalPhysicalKey.keypad3,
+    86: TerminalPhysicalKey.keypad4,
+    87: TerminalPhysicalKey.keypad5,
+    88: TerminalPhysicalKey.keypad6,
+    89: TerminalPhysicalKey.keypad7,
+    90: TerminalPhysicalKey.f20,
+    91: TerminalPhysicalKey.keypad8,
+    92: TerminalPhysicalKey.keypad9,
+    93: TerminalPhysicalKey.jisYen,
+    94: TerminalPhysicalKey.jisUnderscore,
+    95: TerminalPhysicalKey.jisKeypadComma,
+    96: TerminalPhysicalKey.f5,
+    97: TerminalPhysicalKey.f6,
+    98: TerminalPhysicalKey.f7,
+    99: TerminalPhysicalKey.f3,
+    100: TerminalPhysicalKey.f8,
+    101: TerminalPhysicalKey.f9,
+    102: TerminalPhysicalKey.jisEisu,
+    103: TerminalPhysicalKey.f11,
+    104: TerminalPhysicalKey.jisKana,
+    105: TerminalPhysicalKey.f13,
+    106: TerminalPhysicalKey.f16,
+    107: TerminalPhysicalKey.f14,
+    109: TerminalPhysicalKey.f10,
+    111: TerminalPhysicalKey.f12,
+    113: TerminalPhysicalKey.f15,
+    114: TerminalPhysicalKey.insert,
+    115: TerminalPhysicalKey.home,
+    116: TerminalPhysicalKey.pageUp,
+    117: TerminalPhysicalKey.deleteForward,
+    118: TerminalPhysicalKey.f4,
+    119: TerminalPhysicalKey.end,
+    120: TerminalPhysicalKey.f2,
+    121: TerminalPhysicalKey.pageDown,
+    122: TerminalPhysicalKey.f1,
+    123: TerminalPhysicalKey.arrowLeft,
+    124: TerminalPhysicalKey.arrowRight,
+    125: TerminalPhysicalKey.arrowDown,
+    126: TerminalPhysicalKey.arrowUp,
+  };
+  for (final MapEntry<int, TerminalPhysicalKey> entry in expected.entries) {
+    _expect(
+      TerminalAppKitKeyAdapter.physicalKeyForCode(entry.key) == entry.value,
+      'virtual key ${entry.key} maps to ${entry.value.name}',
+    );
+  }
+  for (final int unknown in <int>[-1, 52, 54, 63, 68, 71, 108, 127]) {
+    _expect(
+      TerminalAppKitKeyAdapter.physicalKeyForCode(unknown) ==
+          TerminalPhysicalKey.unknown,
+      'unmapped virtual key $unknown remains unknown',
+    );
+  }
+}
+
+void _testEventFieldsRemainIndependent() {
+  const int allModifiers =
+      ModifierKeys.capsLockBit |
+      ModifierKeys.shiftBit |
+      ModifierKeys.controlBit |
+      ModifierKeys.optionBit |
+      ModifierKeys.commandBit |
+      ModifierKeys.numericPadBit |
+      ModifierKeys.functionBit;
+  final TerminalKeyEvent event = TerminalAppKitKeyAdapter.adapt(
+    const AppKitKeyEvent(
+      windowHandle: 77,
+      monotonicMicros: 88,
+      kind: AppKitKeyEventKind.down,
+      keyCode: 0,
+      modifiers: ModifierKeys(allModifiers),
+      isRepeat: true,
+      characters: 'Ä',
+      charactersIgnoringModifiers: 'a',
+    ),
+  );
+  _expect(
+    event.physicalKey == TerminalPhysicalKey.keyA &&
+        event.text == 'Ä' &&
+        event.unmodifiedText == 'a' &&
+        event.isRepeat &&
+        event.modifiers.capsLock &&
+        event.modifiers.shift &&
+        event.modifiers.control &&
+        event.modifiers.option &&
+        event.modifiers.command &&
+        event.modifiers.numericPad &&
+        event.modifiers.function,
+    'physical key, produced text, modifiers, and repeat stay independent',
+  );
+}
+
+void _expect(bool condition, String message) {
+  if (!condition) throw StateError(message);
+}

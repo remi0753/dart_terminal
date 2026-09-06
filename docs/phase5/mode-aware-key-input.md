@@ -1,6 +1,6 @@
 # Phase 5 — mode-aware key encoding and configurable keybindings
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-06
 - Scope: first Phase 5 production-input roadmap item
 - Related: IN-01, IN-02, IN-09, UI-05, CAP-08
@@ -213,3 +213,42 @@ combined product verification succeed.
   `native_sources=0`.
 - The second ordered subtask is complete. The parent remains in progress pending
   AppKit physical-key adaptation and the single-write PTY integration.
+
+### 2026-09-06 — AppKit-to-PTY product integration
+
+- Added one AppKit adapter covering the stable macOS virtual-key positions used
+  by the legacy encoder, including navigation, F1–F20, keypad, and JIS-specific
+  positions. Produced and unmodified text, all seven modifier fields, and repeat
+  are copied independently; unmapped key codes remain typed `unknown` input.
+- Replaced the application key-code switch with an injectable router. Resolution
+  has one observable outcome: ignored, one action, or one bounded encoded write.
+  The standard route retains tracked Control-D EOF, while ordinary Control-C,
+  Control-Z, and Control-backslash now reach the PTY as termios-interpreted bytes.
+  Explicit Command passthrough strips only the application-owned Command flag;
+  unrecognized Command input remains ignored after native menu arbitration.
+- `TerminalPane` exposes an ownership-copying input write bounded to 256 bytes,
+  and `TerminalSession` enforces the same bound before delegating to its existing
+  single PTY writer and backpressure observation. Encoder construction can no
+  longer select a limit above this product boundary.
+- Unit/product routing coverage verifies the complete adapter mapping, independent
+  event fields and repeat, application-cursor `ESC O A`, ordinary Control-C,
+  tracked and unbound Control-D, explicit Command passthrough, key-up/Command
+  suppression, single delivery, input ownership, and over-limit rejection.
+- The first sandboxed focused test attempt failed before test execution because
+  the Metal build hook and Dart telemetry could not write their home-directory
+  caches. Re-running with host access succeeded; this was an execution-environment
+  restriction and required no product workaround.
+- The arm64 real-window display acceptance now enables DECCKM from the live zsh,
+  routes a synthetic decoded AppKit Up event through the product router, reads
+  exactly three bytes from the real PTY, and requires marker
+  `__DT_KEY_1b4f41__`. Developer JIT passed in 1,502 ms and Release AOT in 737 ms;
+  both also retained SGR, wrap, bottom prompt, newest Metal frame, bounded frame,
+  and system-font acceptance.
+- Final `make test` passed VT table freshness, formatting of 112 Dart files with
+  zero changes, static analysis with no issues, and the complete test suite.
+  `make runtime-source-check` passed with `tracked=201` and `native_sources=0`.
+  Developer JIT and Release AOT arm64 bundle audits each passed with one helper,
+  one native asset, and one declared capability.
+- All three ordered subtasks and the parent mode-aware keyboard/keybinding item
+  are complete. IME composition ownership and preedit rendering remain the next
+  roadmap task rather than being folded into raw key routing.

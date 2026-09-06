@@ -6,10 +6,12 @@ import 'dart:typed_data';
 import 'package:dart_pty_macos/dart_pty_macos.dart';
 
 import 'terminal_buffer.dart';
+import 'terminal_core/terminal_keyboard_modes.dart';
 import 'terminal_core/terminal_reply.dart';
 import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_core/vt_parser.dart';
+import 'terminal_input/terminal_key_event.dart';
 import 'terminal_pane.dart';
 
 enum TerminalSessionLifecycleStage {
@@ -252,6 +254,9 @@ final class TerminalSession implements TerminalPaneSession {
         : TerminalPaneSessionExitDisposition.nonZero;
   }
 
+  @override
+  TerminalKeyboardModes get keyboardModes => terminalScreenSet.keyboardModes;
+
   int? get processId => _process?.pid;
   PtyExit? get exit => _exit;
   Object? get failure => _failure;
@@ -442,6 +447,21 @@ final class TerminalSession implements TerminalPaneSession {
         TerminalSessionLifecycleStage.eofWriteBackpressured,
       null => TerminalSessionLifecycleStage.eofWriteIgnored,
     }, writeRequestId: receipt?.requestId);
+  }
+
+  @override
+  void sendInput(Uint8List bytes) {
+    if (bytes.length > TerminalInputLimits.maximumEncodedBytesPerKeyEvent) {
+      throw RangeError.range(
+        bytes.length,
+        0,
+        TerminalInputLimits.maximumEncodedBytesPerKeyEvent,
+        'bytes.length',
+      );
+    }
+    if (bytes.isNotEmpty) {
+      _write(bytes);
+    }
   }
 
   @override

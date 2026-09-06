@@ -1,3 +1,8 @@
+import 'dart:typed_data';
+
+import 'terminal_core/terminal_keyboard_modes.dart';
+import 'terminal_input/terminal_key_event.dart';
+
 /// Stable application identity for one logical terminal pane.
 final class PaneId {
   const PaneId(this.value) : assert(value > 0);
@@ -164,6 +169,7 @@ abstract interface class TerminalPaneSession {
   TerminalSessionId get id;
   bool get isLive;
   TerminalPaneSessionExitDisposition? get exitDisposition;
+  TerminalKeyboardModes get keyboardModes;
 
   Future<void> start();
   String render();
@@ -181,6 +187,7 @@ abstract interface class TerminalPaneSession {
   void suspend();
   void quitForegroundProcess();
   void sendEndOfFile();
+  void sendInput(Uint8List bytes);
   void resize({required int rows, required int columns});
   void showCloseConfirmation();
   Future<TerminalPaneSessionShutdownResult> shutdown();
@@ -347,6 +354,7 @@ final class TerminalPane {
 
   TerminalPaneState get state => _state;
   bool get isLive => _session.isLive;
+  TerminalKeyboardModes get keyboardModes => _session.keyboardModes;
   bool get closeConfirmationPending =>
       _state == TerminalPaneState.confirmationPending;
   TerminalPaneSessionShutdownResult? get shutdownResult => _shutdownResult;
@@ -446,6 +454,22 @@ final class TerminalPane {
   void sendEndOfFile() {
     _recordInteraction();
     _session.sendEndOfFile();
+  }
+
+  void sendInput(Uint8List bytes) {
+    if (bytes.length > TerminalInputLimits.maximumEncodedBytesPerKeyEvent) {
+      throw RangeError.range(
+        bytes.length,
+        0,
+        TerminalInputLimits.maximumEncodedBytesPerKeyEvent,
+        'bytes.length',
+      );
+    }
+    if (bytes.isEmpty) {
+      return;
+    }
+    _recordInteraction();
+    _session.sendInput(Uint8List.fromList(bytes));
   }
 
   void resize({required int rows, required int columns}) {

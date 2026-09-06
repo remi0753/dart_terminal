@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_pty_macos/dart_pty_macos.dart';
@@ -23,6 +24,7 @@ import 'render_rebuild_coordinator_test.dart';
 import 'render_resource_rebuilder_test.dart';
 import 'renderer_metrics_test.dart';
 import 'runtime_lifecycle_test.dart';
+import 'terminal_appkit_key_adapter_test.dart';
 import 'terminal_core_test.dart';
 import 'terminal_damage_copy_test.dart';
 import 'terminal_damage_test.dart';
@@ -72,6 +74,7 @@ Future<void> main() async {
   runRenderResourceRebuilderTests();
   runRendererMetricsTests();
   runTerminalHistoryReflowTests();
+  runTerminalAppKitKeyAdapterTests();
   runTerminalKeyBindingTests();
   runTerminalKeyEncoderTests();
   runTerminalLiveMetalSurfaceFontTests();
@@ -98,6 +101,7 @@ Future<void> main() async {
   _testNativeObservationFormatting();
   await _testPaneIdentityOwnershipAndClosePolicy();
   await _testControlDAppKitKeyRoute();
+  await _testModeAwareAppKitKeyRoute();
   await runRuntimeLifecycleTests().timeout(const Duration(seconds: 30));
   await runTerminalSessionReplyTests();
   await _testPersistentCommandSession();
@@ -156,7 +160,7 @@ Future<void> _testControlDAppKitKeyRoute() async {
     onExitRequested: () {},
   );
   await pane.start();
-  TerminalKeyEventRouter.handleKeyDown(
+  final TerminalKeyRouteResult result = TerminalKeyEventRouter().handleKeyDown(
     const AppKitKeyEvent(
       windowHandle: 1,
       monotonicMicros: 1,
@@ -170,10 +174,201 @@ Future<void> _testControlDAppKitKeyRoute() async {
     pane,
   );
   _expect(
-    session.endOfFileCount == 1,
+    session.endOfFileCount == 1 &&
+        result.disposition == TerminalKeyRouteDisposition.action &&
+        result.action == TerminalKeyBindingAction.sendEndOfFile,
     'decoded AppKit Control-D routes exactly once to terminal EOF input',
   );
   await owner.shutdown();
+}
+
+Future<void> _testModeAwareAppKitKeyRoute() async {
+  final TerminalPaneOwner owner = TerminalPaneOwner();
+  late final _FakePaneSession session;
+  final TerminalPane pane = owner.createPane(
+    sessionFactory:
+        (
+          TerminalSessionId id, {
+          required void Function() onChanged,
+          required void Function() onTerminated,
+        }) {
+          session = _FakePaneSession(
+            id: id,
+            onChanged: onChanged,
+            onTerminated: onTerminated,
+          );
+          return session;
+        },
+    onChanged: () {},
+    onExitRequested: () {},
+  );
+  await pane.start();
+  session.keyboardModes = const TerminalKeyboardModes(
+    applicationCursorKeys: true,
+  );
+
+  final TerminalKeyEventRouter standardRouter = TerminalKeyEventRouter();
+  final TerminalKeyRouteResult cursorResult = standardRouter.handleKeyDown(
+    _appKitKeyEvent(
+      keyCode: 126,
+      characters: '\uf700',
+      unmodifiedCharacters: '\uf700',
+      modifierBits: ModifierKeys.functionBit,
+    ),
+    pane,
+  );
+  _expect(
+    cursorResult.disposition == TerminalKeyRouteDisposition.encoded &&
+        cursorResult.encodedByteCount == 3 &&
+        _bytesEqual(session.inputWrites.single, <int>[0x1b, 0x4f, 0x41]),
+    'AppKit Up reads DECCKM state and produces one SS3 pane write',
+  );
+
+  final TerminalKeyRouteResult controlCResult = standardRouter.handleKeyDown(
+    _appKitKeyEvent(
+      keyCode: 8,
+      characters: '\x03',
+      unmodifiedCharacters: 'c',
+      modifierBits: ModifierKeys.controlBit,
+    ),
+    pane,
+  );
+  _expect(
+    controlCResult.disposition == TerminalKeyRouteDisposition.encoded &&
+        _bytesEqual(session.inputWrites.last, <int>[0x03]) &&
+        session.interruptCount == 0,
+    'ordinary Control-C is terminal input rather than an application signal',
+  );
+
+  final int writesBeforeIgnored = session.inputWrites.length;
+  _expect(
+    standardRouter
+            .handleKeyDown(
+              _appKitKeyEvent(
+                keyCode: 0,
+                characters: 'a',
+                unmodifiedCharacters: 'a',
+                modifierBits: ModifierKeys.commandBit,
+              ),
+              pane,
+            )
+            .disposition ==
+        TerminalKeyRouteDisposition.ignored,
+    'unbound Command input has no implicit PTY bytes',
+  );
+  _expect(
+    standardRouter
+                .handleKeyDown(
+                  _appKitKeyEvent(
+                    keyCode: 0,
+                    characters: 'a',
+                    unmodifiedCharacters: 'a',
+                    kind: AppKitKeyEventKind.up,
+                  ),
+                  pane,
+                )
+                .disposition ==
+            TerminalKeyRouteDisposition.ignored &&
+        session.inputWrites.length == writesBeforeIgnored,
+    'key-up and ignored Command input do not duplicate a pane write',
+  );
+
+  final TerminalKeyEventRouter passthroughRouter = TerminalKeyEventRouter(
+    bindingEngine: TerminalKeyBindingEngine.standard(
+      overrides: const <TerminalKeyBindingDefinition>[
+        TerminalKeyBindingDefinition.passthrough(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.keyA,
+            command: true,
+          ),
+        ),
+      ],
+    ),
+  );
+  final TerminalKeyRouteResult passthroughResult = passthroughRouter
+      .handleKeyDown(
+        _appKitKeyEvent(
+          keyCode: 0,
+          characters: 'a',
+          unmodifiedCharacters: 'a',
+          modifierBits: ModifierKeys.commandBit,
+        ),
+        pane,
+      );
+  _expect(
+    passthroughResult.disposition == TerminalKeyRouteDisposition.encoded &&
+        _bytesEqual(session.inputWrites.last, <int>[0x61]),
+    'explicit Command passthrough reaches the terminal encoder exactly once',
+  );
+
+  final TerminalKeyEventRouter unboundRouter = TerminalKeyEventRouter(
+    bindingEngine: TerminalKeyBindingEngine.standard(
+      overrides: const <TerminalKeyBindingDefinition>[
+        TerminalKeyBindingDefinition.unbind(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.keyD,
+            control: true,
+          ),
+        ),
+      ],
+    ),
+  );
+  final TerminalKeyRouteResult unboundResult = unboundRouter.handleKeyDown(
+    _appKitKeyEvent(
+      keyCode: 2,
+      characters: '\x04',
+      unmodifiedCharacters: 'd',
+      modifierBits: ModifierKeys.controlBit,
+    ),
+    pane,
+  );
+  _expect(
+    unboundResult.disposition == TerminalKeyRouteDisposition.encoded &&
+        _bytesEqual(session.inputWrites.last, <int>[0x04]) &&
+        session.endOfFileCount == 0,
+    'unbinding tracked Control-D restores ordinary encoded terminal input',
+  );
+
+  final Uint8List ownedInput = Uint8List.fromList(<int>[0x7a]);
+  pane.sendInput(ownedInput);
+  ownedInput[0] = 0;
+  _expect(
+    session.inputWrites.last.single == 0x7a,
+    'pane input copies caller-owned bytes before session delegation',
+  );
+  _expectThrows(
+    () => pane.sendInput(
+      Uint8List(TerminalInputLimits.maximumEncodedBytesPerKeyEvent + 1),
+    ),
+    'pane input rejects writes beyond the per-key-event bound',
+    expectedType: RangeError,
+  );
+  await owner.shutdown();
+}
+
+AppKitKeyEvent _appKitKeyEvent({
+  required int keyCode,
+  required String characters,
+  required String unmodifiedCharacters,
+  int modifierBits = 0,
+  AppKitKeyEventKind kind = AppKitKeyEventKind.down,
+}) => AppKitKeyEvent(
+  windowHandle: 1,
+  monotonicMicros: 1,
+  kind: kind,
+  keyCode: keyCode,
+  modifiers: ModifierKeys(modifierBits),
+  isRepeat: false,
+  characters: characters,
+  charactersIgnoringModifiers: unmodifiedCharacters,
+);
+
+bool _bytesEqual(List<int> actual, List<int> expected) {
+  if (actual.length != expected.length) return false;
+  for (var index = 0; index < actual.length; index++) {
+    if (actual[index] != expected[index]) return false;
+  }
+  return true;
 }
 
 Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
@@ -1541,15 +1736,20 @@ final class _FakePaneSession implements TerminalPaneSession {
   final void Function() _onChanged;
   final void Function() _onTerminated;
   final List<String> insertedText = <String>[];
+  final List<Uint8List> inputWrites = <Uint8List>[];
 
   var startCount = 0;
   var disposeCount = 0;
   var confirmationCount = 0;
   var endOfFileCount = 0;
+  var interruptCount = 0;
   var failStart = false;
   var failShutdown = false;
   var _live = false;
   TerminalPaneSessionExitDisposition? _exitDisposition;
+
+  @override
+  TerminalKeyboardModes keyboardModes = const TerminalKeyboardModes();
 
   @override
   bool get isLive => _live;
@@ -1612,7 +1812,9 @@ final class _FakePaneSession implements TerminalPaneSession {
   Future<void> submit() async {}
 
   @override
-  void interrupt() {}
+  void interrupt() {
+    ++interruptCount;
+  }
 
   @override
   void suspend() {}
@@ -1623,6 +1825,11 @@ final class _FakePaneSession implements TerminalPaneSession {
   @override
   void sendEndOfFile() {
     ++endOfFileCount;
+  }
+
+  @override
+  void sendInput(Uint8List bytes) {
+    inputWrites.add(bytes);
   }
 
   @override

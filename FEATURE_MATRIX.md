@@ -148,15 +148,15 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| IN-01 | physical key、produced text、modifiers、repeat を別 field として保持 | P0 | 5 | `G:src/input/key.zig`, `G:macos/Sources/Ghostty/Ghostty.Input.swift` | field分離済みの一部key eventと、AppKit responderへ二重配送しないwindow単位のDart専有routing基盤まで完了 |
-| IN-02 | US/JIS/layout switch/dead key/function/navigation/keypad と terminal mode-aware encoding | P0 | 5 | `G:src/input/KeymapDarwin.zig`, `G:src/input/key_encode.zig`, keyboard tests | 未実装 |
+| IN-01 | physical key、produced text、modifiers、repeat を別 field として保持 | P0 | 5 | `G:src/input/key.zig`, `G:macos/Sources/Ghostty/Ghostty.Input.swift` | AppKit adapterから製品routerまでfield分離とrepeat保持、単一action/write配送を完了 |
+| IN-02 | US/JIS/layout switch/dead key/function/navigation/keypad と terminal mode-aware encoding | P0 | 5 | `G:src/input/KeymapDarwin.zig`, `G:src/input/key_encode.zig`, keyboard tests | macOS physical key map、DECCKM/DECPAM対応のbounded legacy xterm encoder、実PTYのmode-aware入力を完了。layout/dead key/CJK/emoji実機matrixは後続項目 |
 | IN-03 | `NSTextInputClient` marked/commit/cancel/replacement/candidate rect。raw key と IME を二重送信しない | P0 | 5 | `G:macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` | Phase 0 gate |
 | IN-04 | 日本語 IME、emoji picker、Unicode Hex Input、key repeat の automated/manual matrix | P0 | 5 | same AppKit surface implementation and macOS tests | Phase 0 gate |
 | IN-05 | char/word/line multi-click selection、drag、autoscroll | P0 | 5 | `G:src/terminal/Selection.zig`, `SelectionGesture.zig`, SurfaceView | 未実装 |
 | IN-06 | precision/momentum scroll と terminal mouse report/local selection arbitration | P0 | 5 | `G:src/input/mouse.zig`, `G:src/input/mouse_encode.zig` | 未実装 |
 | IN-07 | standard clipboard、bracketed paste、newline normalization | P0 | 5 | `G:src/input/paste.zig`, `G:src/terminal/paste.zig`, NSPasteboard helpers | plain-text general pasteboard と明示的 Paste action の基盤のみ完了。bracketed paste/newline policy は Phase 5 |
 | IN-08 | multiline/control paste confirmation と large-paste bounded throttle | P0 | 5 | `G:macos/Sources/Features/ClipboardConfirmation/`, `G:src/termio/mailbox.zig` | 未実装 |
-| IN-09 | keybind/action registry、conflict、unbound/passthrough、menu shortcut arbitration | P0 | 5/8 | `G:src/input/Binding.zig`, `G:src/input/config.zig`, MenuShortcutManager | 未実装 |
+| IN-09 | keybind/action registry、conflict、unbound/passthrough、menu shortcut arbitration | P0 | 5/8 | `G:src/input/Binding.zig`, `G:src/input/config.zig`, MenuShortcutManager | bounded immutable engine、stable action、exact chord、conflict、override/unbound/passthrough、native menu優先境界を完了。設定ファイル接続はPhase 8 |
 | IN-10 | Option-click cursor、semantic prompt selection、drag/drop、Services、Quick Look | P1/P2 | 5/10 | macOS Surface View, `G:macos/Sources/Features/Services/` | 未実装 |
 
 ## Native macOS application experience

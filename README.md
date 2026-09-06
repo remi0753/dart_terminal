@@ -22,12 +22,16 @@ model、および CoreText/Metal renderer は製品実装へ移行済みです�
 ## 現在できること
 
 - AppKit のネイティブウィンドウを Dart から表示
-- window単位で選択できるAppKit/Dart key routingと、terminalのDart専有入力
-- キー入力、Backspace/Delete、左右移動、Home/End
-- zsh自身の行編集と上下キーによるコマンド履歴
+- AppKitのphysical key、produced/unmodified text、7種のmodifier、repeatを分離して
+  1回だけterminalへ配送するwindow単位のDart専有key routing
+- DECCKM/DECPAMを反映するbounded legacy xterm encoder（UTF-8、Control/Option、
+  navigation、F1–F20、keypad）
+- stable action、exact chord、conflict検出、override、unbound、passthroughを備えた
+  immutable keybind engineと、AppKit menu shortcut優先の競合境界
+- キー入力、Backspace/Delete、左右移動、Home/End、zsh自身の行編集とコマンド履歴
 - 1 paneにつき1つのTTY付きinteractive login zsh
 - 同じshell内での`cd`、環境変数、background job、`jobs`、`fg`/`bg`
-- Control-C/Z/\\、Control-Dによるsignal/EOF入力
+- Control-C/Z/\\を含むtermios準拠のPTY byte入力と、追跡可能なControl-D EOF action
 - Control-Dは常にPTY入力として扱い、shellの正常終了時はpane/windowを自動で閉じ、
   非0・signal・終了監視失敗時は理由を表示した非live paneを保持する終了policy
 - ウィンドウサイズに追従する`TIOCSWINSZ`/`SIGWINCH`
@@ -329,7 +333,7 @@ screen、wide/grapheme、soft wrap、resize reflow、cursor、visual bellをCore
 表示します。`TextView`やnewline単位のtext projectionは製品表示に使いません。
 
 現在のviewportはbottom-followです。履歴をwheel/trackpadで移動する操作、selection、
-IME、clipboardと高度なkeybindは後続Phaseで実装します。これらが未実装でも、通常の
+IME、clipboardとkeybind設定ファイルは後続Phaseで実装します。これらが未実装でも、通常の
 大量出力後に最新promptが表示範囲外へ隠れることはありません。
 
 `TerminalPaneOwner`がpaneを、`TerminalPane`がsession generationを、

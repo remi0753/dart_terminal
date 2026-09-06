@@ -11,6 +11,10 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 import 'runtime_lifecycle.dart';
 import 'terminal_core/terminal_screen.dart';
 import 'terminal_core/terminal_style.dart';
+import 'terminal_input/terminal_appkit_key_adapter.dart';
+import 'terminal_input/terminal_key_binding.dart';
+import 'terminal_input/terminal_key_encoder.dart';
+import 'terminal_input/terminal_key_event.dart';
 import 'terminal_pane.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_session.dart';
@@ -558,6 +562,7 @@ final class TerminalApplication {
           }),
         );
 
+      final TerminalKeyEventRouter keyEventRouter = TerminalKeyEventRouter();
       applicationEventSubscription = application.events.listen(
         (AppKitEvent event) {
           switch (event) {
@@ -726,7 +731,7 @@ final class TerminalApplication {
                 );
               }
             case AppKitKeyEvent() when event.kind == AppKitKeyEventKind.down:
-              TerminalKeyEventRouter.handleKeyDown(event, createdPane);
+              keyEventRouter.handleKeyDown(event, createdPane);
             case AppKitKeyEvent():
             case AppKitMouseEvent():
           }
@@ -815,6 +820,7 @@ final class TerminalApplication {
               createdPane,
               createdMetalSurface,
               createdWindow,
+              keyEventRouter,
             );
           } else if (shellExitTest != RuntimeShellExitTestScenario.none) {
             await _exerciseShellExitPolicy(
@@ -1155,11 +1161,18 @@ final class TerminalApplication {
     TerminalPane pane,
     TerminalLiveMetalSurface surface,
     Window window,
+    TerminalKeyEventRouter keyEventRouter,
   ) async {
     const String prompt = '__DT_DISPLAY_PROMPT__ ';
     const String colorMarker = '__DT_COLOR__';
     const String wrapStart = '__DT_WRAP_START__';
     const String wrapEnd = '__DT_WRAP_END__';
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    final bool modeKey = await _exerciseModeAwareKeyInput(
+      session,
+      pane,
+      keyEventRouter,
+    );
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
     final bool systemFont =
@@ -1221,7 +1234,8 @@ final class TerminalApplication {
           promptBottom &&
           newestFrame &&
           frameBounded &&
-          systemFont) {
+          systemFont &&
+          modeKey) {
         final int? workerProcessId = lifecycle.workerPid;
         _expectLifecycle(
           workerProcessId != null,
@@ -1232,6 +1246,7 @@ final class TerminalApplication {
           'wrapped_rows=$wrappedRows prompt_bottom=$promptBottom '
           'metal_default=true newest_frame=$newestFrame '
           'frame_bounded=$frameBounded system_font=$systemFont '
+          'mode_key=$modeKey '
           'font_size=${baseline.fontPointSize.toStringAsFixed(1)} '
           'rows=${screen.rows} '
           'columns=${screen.columns} '
@@ -1252,7 +1267,71 @@ final class TerminalApplication {
       'sgr_stripped=$sgrStripped styled=$styled wrapped_rows=$wrappedRows '
       'prompt_bottom=$promptBottom newest_frame=$newestFrame '
       'frame_bounded=$frameBounded system_font=$systemFont '
+      'mode_key=$modeKey '
       'font_size=${baseline.fontPointSize}',
+    );
+  }
+
+  static Future<bool> _exerciseModeAwareKeyInput(
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalKeyEventRouter keyEventRouter,
+  ) async {
+    const String expectedMarker = '__DT_KEY_1b4f41__';
+    pane.insertText(
+      "printf '\\033[?1h'; stty raw -echo; "
+      "key=\$(dd bs=1 count=3 2>/dev/null | od -An -tx1 | tr -d ' \\n'); "
+      "stty sane; printf '\\033[?1l\\r\\n__DT_KEY_%s__\\r\\n' \"\$key\"",
+    );
+    await pane.submit();
+
+    final Stopwatch modeDeadline = Stopwatch()..start();
+    while (!session.keyboardModes.applicationCursorKeys &&
+        modeDeadline.elapsed < const Duration(seconds: 3)) {
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before enabling application cursor mode',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      session.keyboardModes.applicationCursorKeys,
+      'display-test did not observe DEC application cursor mode',
+    );
+
+    final TerminalKeyRouteResult route = keyEventRouter.handleKeyDown(
+      const AppKitKeyEvent(
+        windowHandle: 1,
+        monotonicMicros: 1,
+        kind: AppKitKeyEventKind.down,
+        keyCode: 126,
+        modifiers: ModifierKeys(ModifierKeys.functionBit),
+        isRepeat: false,
+        characters: '\uf700',
+        charactersIgnoringModifiers: '\uf700',
+      ),
+      pane,
+    );
+    _expectLifecycle(
+      route.disposition == TerminalKeyRouteDisposition.encoded &&
+          route.encodedByteCount == 3,
+      'display-test application cursor event was not encoded once',
+    );
+
+    final Stopwatch markerDeadline = Stopwatch()..start();
+    while (markerDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+      if (_findAscii(screen, expectedMarker) != null) {
+        return true;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before reporting encoded key bytes',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw TimeoutException(
+      'display-test did not receive application cursor bytes $expectedMarker',
     );
   }
 
@@ -1591,73 +1670,114 @@ final class _TerminalAsciiPosition {
   final int column;
 }
 
-/// Maps one AppKit key-down event to the active terminal pane.
+enum TerminalKeyRouteDisposition { ignored, encoded, action }
+
+/// Observable single-outcome result of routing one AppKit key event.
+final class TerminalKeyRouteResult {
+  const TerminalKeyRouteResult._(
+    this.disposition, {
+    this.encodedByteCount = 0,
+    this.action,
+  });
+
+  static const TerminalKeyRouteResult ignored = TerminalKeyRouteResult._(
+    TerminalKeyRouteDisposition.ignored,
+  );
+
+  factory TerminalKeyRouteResult.encoded(int byteCount) =>
+      TerminalKeyRouteResult._(
+        TerminalKeyRouteDisposition.encoded,
+        encodedByteCount: byteCount,
+      );
+
+  factory TerminalKeyRouteResult.action(TerminalKeyBindingAction action) =>
+      TerminalKeyRouteResult._(
+        TerminalKeyRouteDisposition.action,
+        action: action,
+      );
+
+  final TerminalKeyRouteDisposition disposition;
+  final int encodedByteCount;
+  final TerminalKeyBindingAction? action;
+}
+
+/// Resolves and encodes one AppKit key-down event for the active terminal pane.
 ///
-/// This small seam is also used by the GUI-key-path regression so Control-D is
-/// exercised from the same decoded AppKit event shape as the live window.
+/// Each handled event invokes exactly one action or one bounded pane write.
+/// Native AppKit menu key equivalents are consumed before this router receives
+/// events, so it never redispatches menu commands.
 final class TerminalKeyEventRouter {
-  const TerminalKeyEventRouter._();
+  TerminalKeyEventRouter({
+    TerminalKeyBindingEngine? bindingEngine,
+    TerminalKeyEncoder? encoder,
+  }) : _bindingEngine = bindingEngine ?? TerminalKeyBindingEngine.standard(),
+       _encoder = encoder ?? TerminalKeyEncoder();
 
-  static void handleKeyDown(AppKitKeyEvent event, TerminalPane pane) {
-    if (event.modifiers.control && event.keyCode == 8) {
-      pane.interrupt();
-      return;
-    }
-    if (event.modifiers.control && event.keyCode == 2) {
-      pane.sendEndOfFile();
-      return;
-    }
-    if (event.modifiers.control && event.keyCode == 6) {
-      pane.suspend();
-      return;
-    }
-    if (event.modifiers.control && event.keyCode == 42) {
-      pane.quitForegroundProcess();
-      return;
-    }
-    if (event.modifiers.command) {
-      return;
-    }
+  final TerminalKeyBindingEngine _bindingEngine;
+  final TerminalKeyEncoder _encoder;
 
-    switch (event.keyCode) {
-      case 36:
-      case 76:
-        unawaited(pane.submit());
-        return;
-      case 51:
-        pane.deleteBackward();
-        return;
-      case 117:
-        pane.deleteForward();
-        return;
-      case 123:
-        pane.moveLeft();
-        return;
-      case 124:
-        pane.moveRight();
-        return;
-      case 125:
-        pane.nextHistory();
-        return;
-      case 126:
-        pane.previousHistory();
-        return;
-      case 115:
-        pane.moveToStart();
-        return;
-      case 119:
-        pane.moveToEnd();
-        return;
+  TerminalKeyRouteResult handleKeyDown(
+    AppKitKeyEvent appKitEvent,
+    TerminalPane pane,
+  ) {
+    if (appKitEvent.kind != AppKitKeyEventKind.down) {
+      return TerminalKeyRouteResult.ignored;
     }
-
-    if (event.modifiers.control || event.modifiers.function) {
-      return;
-    }
-    final Iterable<int> printableRunes = event.characters.runes.where(
-      (int rune) =>
-          rune >= 0x20 && rune != 0x7f && (rune < 0xf700 || rune > 0xf8ff),
+    final TerminalKeyEvent event = TerminalAppKitKeyAdapter.adapt(appKitEvent);
+    final TerminalKeyBindingResolution resolution = _bindingEngine.resolve(
+      event,
     );
-    pane.insertText(String.fromCharCodes(printableRunes));
+    switch (resolution.kind) {
+      case TerminalKeyBindingResolutionKind.action:
+        final TerminalKeyBindingAction action = resolution.action!;
+        _performAction(action, pane);
+        return TerminalKeyRouteResult.action(action);
+      case TerminalKeyBindingResolutionKind.passthrough:
+        return _encode(_withoutCommand(event), pane);
+      case TerminalKeyBindingResolutionKind.noMatch:
+        return _encode(event, pane);
+    }
+  }
+
+  TerminalKeyRouteResult _encode(TerminalKeyEvent event, TerminalPane pane) {
+    final Uint8List bytes = _encoder.encode(event, modes: pane.keyboardModes);
+    if (bytes.isEmpty) {
+      return TerminalKeyRouteResult.ignored;
+    }
+    pane.sendInput(bytes);
+    return TerminalKeyRouteResult.encoded(bytes.length);
+  }
+
+  static TerminalKeyEvent _withoutCommand(TerminalKeyEvent event) =>
+      TerminalKeyEvent(
+        physicalKey: event.physicalKey,
+        text: event.text,
+        unmodifiedText: event.unmodifiedText,
+        modifiers: TerminalKeyModifiers(
+          capsLock: event.modifiers.capsLock,
+          shift: event.modifiers.shift,
+          control: event.modifiers.control,
+          option: event.modifiers.option,
+          numericPad: event.modifiers.numericPad,
+          function: event.modifiers.function,
+        ),
+        isRepeat: event.isRepeat,
+      );
+
+  static void _performAction(
+    TerminalKeyBindingAction action,
+    TerminalPane pane,
+  ) {
+    switch (action) {
+      case TerminalKeyBindingAction.sendEndOfFile:
+        pane.sendEndOfFile();
+      case TerminalKeyBindingAction.sendInterruptSignal:
+        pane.interrupt();
+      case TerminalKeyBindingAction.sendSuspendSignal:
+        pane.suspend();
+      case TerminalKeyBindingAction.sendQuitSignal:
+        pane.quitForegroundProcess();
+    }
   }
 }
 

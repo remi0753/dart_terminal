@@ -5,6 +5,8 @@ export 'src/runtime_lifecycle.dart' show RuntimeLifecycleScenario;
 export 'src/terminal_application.dart'
     show
         TerminalApplication,
+        TerminalKeyRouteDisposition,
+        TerminalKeyRouteResult,
         TerminalKeyEventRouter,
         TerminalOptions,
         RuntimeShellExitTestScenario,
@@ -72,11 +74,17 @@ export 'src/terminal_core/vt_parser.dart'
         VtStringTerminator,
         VtUncapturedSequenceKind;
 export 'src/terminal_core/vt_parser_table.dart' show VtParserState;
+export 'src/terminal_input/terminal_appkit_key_adapter.dart'
+    show TerminalAppKitKeyAdapter;
 export 'src/terminal_input/terminal_key_binding.dart';
 export 'src/terminal_input/terminal_key_encoder.dart'
     show TerminalKeyEncoder, TerminalKeyEncodingLimitException;
 export 'src/terminal_input/terminal_key_event.dart'
-    show TerminalKeyEvent, TerminalKeyModifiers, TerminalPhysicalKey;
+    show
+        TerminalInputLimits,
+        TerminalKeyEvent,
+        TerminalKeyModifiers,
+        TerminalPhysicalKey;
 export 'src/terminal_pane.dart'
     show
         PaneId,

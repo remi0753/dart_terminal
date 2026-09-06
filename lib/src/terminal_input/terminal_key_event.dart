@@ -111,6 +111,10 @@ enum TerminalPhysicalKey {
   jisKana,
 }
 
+abstract final class TerminalInputLimits {
+  static const int maximumEncodedBytesPerKeyEvent = 256;
+}
+
 /// Independent modifier fields retained from the platform event.
 final class TerminalKeyModifiers {
   const TerminalKeyModifiers({

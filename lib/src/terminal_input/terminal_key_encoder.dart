@@ -24,12 +24,18 @@ final class TerminalKeyEncodingLimitException implements Exception {
 /// Kitty keyboard and modifyOtherKeys are intentionally separate later
 /// protocols. An empty result means that this event has no terminal bytes.
 final class TerminalKeyEncoder {
-  TerminalKeyEncoder({this.maximumEncodedBytes = 256}) {
-    if (maximumEncodedBytes <= 0) {
-      throw RangeError.value(
+  TerminalKeyEncoder({
+    this.maximumEncodedBytes =
+        TerminalInputLimits.maximumEncodedBytesPerKeyEvent,
+  }) {
+    if (maximumEncodedBytes <= 0 ||
+        maximumEncodedBytes >
+            TerminalInputLimits.maximumEncodedBytesPerKeyEvent) {
+      throw RangeError.range(
         maximumEncodedBytes,
+        1,
+        TerminalInputLimits.maximumEncodedBytesPerKeyEvent,
         'maximumEncodedBytes',
-        'must be positive',
       );
     }
   }

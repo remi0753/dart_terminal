@@ -139,6 +139,13 @@ void _testTextControlAndBounds() {
     () => TerminalKeyEncoder(maximumEncodedBytes: 0),
     'nonpositive encoder bounds are rejected',
   );
+  _expectThrowsRange(
+    () => TerminalKeyEncoder(
+      maximumEncodedBytes:
+          TerminalInputLimits.maximumEncodedBytesPerKeyEvent + 1,
+    ),
+    'encoder bounds cannot exceed the product pane input limit',
+  );
 }
 
 void _testCursorNavigationAndModifiers() {
