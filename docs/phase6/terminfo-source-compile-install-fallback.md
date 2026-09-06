@@ -384,3 +384,6 @@ promoted terminal semantics rather than advertising them early.
 - No blocker remains. The later OSC policy retained `Ms` as deliberately
   unadvertised while adding bounded OSC 52 denial; opt-in advertisement remains
   owned by the Phase 9 confirmation/policy UI.
+- Phase 6 closure additionally replays DEC Special Graphics and the explicit
+  negative XTGETTCAP policy from raw bytes in the versioned compatibility
+  corpus. The final coverage report pins these two cases and this owner record.

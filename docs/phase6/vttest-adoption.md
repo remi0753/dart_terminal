@@ -220,3 +220,7 @@ crashes, corruption, or unbounded resources remain blockers.
 - 2026-09-07 OSC-policy reconciliation retained all 34 dispositions. VT-31's
   prerequisite is now automated, while OSC 52 remains intentionally outside
   the pinned vttest menu surface and is covered by its dedicated security gate.
+- 2026-09-07 Phase closure kept the same 9 AUTO, 9 MANUAL, 4 CONDITIONAL, and
+  12 EXCLUDE decisions. The nine compatibility fix families promoted by actual
+  application/differential evidence now have a separate raw-byte corpus and
+  deterministic coverage gate; interactive vttest remains supplemental.

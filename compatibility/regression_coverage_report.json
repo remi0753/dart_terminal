@@ -1,0 +1,245 @@
+{
+  "format": "dart-terminal-compatibility-regression-coverage",
+  "version": 1,
+  "status": "accepted-with-nonblocking-duration-follow-up",
+  "sources": [
+    {
+      "path": "test/corpus/compatibility/regressions_v1.json",
+      "sha256": "002011a991caf67c5b142ec000ea8f8d20223ce203254e7d0b9bc3697a97d4bb"
+    },
+    {
+      "path": "compatibility/sequence_mode_inventory.json",
+      "sha256": "8221927ae46a80829402426c28caf5c48086f2e4e4e8e283bca29c8892240182"
+    },
+    {
+      "path": "compatibility/implemented_sequence_manifest.json",
+      "sha256": "5af834d2defeebf22f52fdf548334250cbcad99071ca00cf33710b37dc3bedcf"
+    },
+    {
+      "path": "compatibility/application_matrix_acceptance.json",
+      "sha256": "5955698aa9d52563a013d7d8f401efdfe9508922e4d5a77aedc6d20e3c70da37"
+    },
+    {
+      "path": "compatibility/differential_acceptance_report.json",
+      "sha256": "05040ac5f34e4f3fbf1fa154426972a0aac01d4d0a849764b016c6a4019e3532"
+    },
+    {
+      "path": "test/corpus/parser/sequence_trace_case_v1.json",
+      "sha256": "4b83900d95def53701bb4e7101a400ba30085f4e8cad64678fc3f92032804cc3"
+    },
+    {
+      "path": "test/corpus/parser/sequence_trace_v1.json",
+      "sha256": "fb2dff170a141623379440e6a76f350eb8a2acb3eeea4ae1c5ba05c85b65b25f"
+    },
+    {
+      "path": "README.md",
+      "sha256": "74506371d05f13465489d999b7fe4bc53d71d1e378b3803de734ca1624bfa4c6"
+    },
+    {
+      "path": "FEATURE_MATRIX.md",
+      "sha256": "78b83d7ff43cc87a4962dcd3cbdb6815f0aa671367f7ea504c85fa77c4031feb"
+    }
+  ],
+  "fix_families": [
+    {
+      "id": "dec-special-graphics",
+      "case_ids": [
+        "dec-special-graphics"
+      ],
+      "owner": "docs/phase6/terminfo-source-compile-install-fallback.md",
+      "owner_sha256": "5bb9099cc7a3abd7aad863e7d593cc7636457b5d1418a66382330470926f20e7",
+      "status": "covered"
+    },
+    {
+      "id": "xtgettcap-policy",
+      "case_ids": [
+        "xtgettcap-explicit-negative"
+      ],
+      "owner": "docs/phase6/terminfo-source-compile-install-fallback.md",
+      "owner_sha256": "5bb9099cc7a3abd7aad863e7d593cc7636457b5d1418a66382330470926f20e7",
+      "status": "covered"
+    },
+    {
+      "id": "osc-metadata",
+      "case_ids": [
+        "osc-metadata-title-stack-hyperlink"
+      ],
+      "owner": "docs/phase6/osc-title-cwd-hyperlink-palette-clipboard-policy.md",
+      "owner_sha256": "4ebf9e73292b1747b78273d059941c64c0f8c4b60423d10426dfe0b7d7ee7dce",
+      "status": "covered"
+    },
+    {
+      "id": "osc-color-policy",
+      "case_ids": [
+        "osc-palette-default-cursor-color"
+      ],
+      "owner": "docs/phase6/osc-title-cwd-hyperlink-palette-clipboard-policy.md",
+      "owner_sha256": "4ebf9e73292b1747b78273d059941c64c0f8c4b60423d10426dfe0b7d7ee7dce",
+      "status": "covered"
+    },
+    {
+      "id": "osc52-default-deny",
+      "case_ids": [
+        "osc52-default-deny"
+      ],
+      "owner": "docs/phase6/osc-title-cwd-hyperlink-palette-clipboard-policy.md",
+      "owner_sha256": "4ebf9e73292b1747b78273d059941c64c0f8c4b60423d10426dfe0b7d7ee7dce",
+      "status": "covered"
+    },
+    {
+      "id": "focus-reporting",
+      "case_ids": [
+        "focus-mode-report"
+      ],
+      "owner": "docs/phase6/focus-mouse-bracketed-paste-query-reports.md",
+      "owner_sha256": "310cc6fae80616bc20aa2b6099ddaddc8c8b4e48f40df96e1af5f1b6e122f968",
+      "status": "covered"
+    },
+    {
+      "id": "sgr-pixel-mouse",
+      "case_ids": [
+        "sgr-pixel-mouse-mode-report"
+      ],
+      "owner": "docs/phase6/focus-mouse-bracketed-paste-query-reports.md",
+      "owner_sha256": "310cc6fae80616bc20aa2b6099ddaddc8c8b4e48f40df96e1af5f1b6e122f968",
+      "status": "covered"
+    },
+    {
+      "id": "decrqss-sgr",
+      "case_ids": [
+        "decrqss-current-sgr"
+      ],
+      "owner": "docs/phase6/decrqss-sgr-gap.md",
+      "owner_sha256": "392871ebc5753190552767421ec126195e6faee38a4e2cbc995a032c2ddef5c6",
+      "status": "covered"
+    },
+    {
+      "id": "xterm-query-reports",
+      "case_ids": [
+        "xterm-version-window-reports"
+      ],
+      "owner": "docs/phase6/focus-mouse-bracketed-paste-query-reports.md",
+      "owner_sha256": "310cc6fae80616bc20aa2b6099ddaddc8c8b4e48f40df96e1af5f1b6e122f968",
+      "status": "covered"
+    }
+  ],
+  "owned_application_gaps": [
+    {
+      "id": "application-escape-mode",
+      "disposition": "explicit-unsupported",
+      "impact": "input-semantics",
+      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
+      "variants": 2,
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "hilite-mouse",
+      "disposition": "explicit-unsupported",
+      "impact": "input-events",
+      "owner": "ROADMAP.md#phase-6-focus-mouse-query",
+      "variants": 1,
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "kitty-keyboard-query",
+      "disposition": "explicit-unsupported",
+      "impact": "input-protocol",
+      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
+      "variants": 1,
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "synchronized-output",
+      "disposition": "explicit-unsupported",
+      "impact": "presentation-atomicity",
+      "owner": "ROADMAP.md#phase-9-synchronized-output-rendering",
+      "variants": 2,
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "theme-report",
+      "disposition": "explicit-unsupported",
+      "impact": "query-fallback",
+      "owner": "ROADMAP.md#phase-9-light-dark-notification-reports",
+      "variants": 1,
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "theme-updates",
+      "disposition": "explicit-unsupported",
+      "impact": "theme-notification",
+      "owner": "ROADMAP.md#phase-9-light-dark-notification-reports",
+      "variants": 2,
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "xtmodkeys",
+      "disposition": "explicit-unsupported",
+      "impact": "input-protocol",
+      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
+      "variants": 2,
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "xtqmodkeys",
+      "disposition": "explicit-unsupported",
+      "impact": "query-fallback",
+      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
+      "variants": 1,
+      "screen_mutation": false,
+      "matrix_blocker": false
+    }
+  ],
+  "acceptance": {
+    "regression_corpus": {
+      "cases": 9,
+      "fix_families": 9,
+      "input_bytes": 390,
+      "split_runs": 417
+    },
+    "inventory": {
+      "records": 260,
+      "implemented": 85,
+      "partial": 19,
+      "safe_ignore": 9,
+      "explicit_unsupported": 147,
+      "implementation_selectors": 82,
+      "implementation_modes": 22
+    },
+    "application_matrix": {
+      "cells": 8,
+      "clean_agreements": 3,
+      "documented_gap_cells": 5,
+      "gaps": 8,
+      "unique_sequences": 12,
+      "unsupported_increments": 71
+    },
+    "differential": {
+      "accepted": 12,
+      "agreements": 8,
+      "semantic_agreements": 1,
+      "documented_gaps": 0,
+      "unavailable": 4,
+      "unexpected_mismatches": 0,
+      "silent_results": 0
+    },
+    "parser_trace": {
+      "input_bytes": 97,
+      "events": 11
+    }
+  },
+  "phase_exit": {
+    "known_p0_silent_corruption": 0,
+    "unsupported_sequences_classified": true,
+    "fix_families_with_byte_regressions": 9,
+    "duration_only_soak": "low-priority-nonblocking-follow-up",
+    "blocking_failures": 0
+  }
+}

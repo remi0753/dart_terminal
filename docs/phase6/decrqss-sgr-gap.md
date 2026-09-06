@@ -63,3 +63,5 @@ counts Neovim's query as a reject.
   gaps.
 - Real-PTY Developer JIT and Release AOT product runs observe the exact 9-byte
   default reply.
+- The Phase 6 compatibility corpus adds a separate styled current-SGR raw-byte
+  case and binds it to this resolved gap in the final coverage reconciliation.

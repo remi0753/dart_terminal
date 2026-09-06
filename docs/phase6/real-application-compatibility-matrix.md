@@ -497,3 +497,8 @@ immutable PTY bytes rather than by rewriting their provenance.
   report and linked from ROADMAP. Character-set, XTGETTCAP, XTVERSION, and
   window-size gaps are closed; later Phase 9 owners retain input, presentation,
   and theme gaps, while highlight mode has an evidence-backed non-adoption.
+- Phase closure imports the accepted 3 clean/5 documented-gap cells, 8 owned
+  explicit-unsupported gaps, 12 variants, and 71 unsupported increments into
+  the deterministic regression coverage report. Every remaining minimal gap
+  has `screen_mutation=false` and `matrix_blocker=false`; none is accepted as a
+  silent screen-state change.

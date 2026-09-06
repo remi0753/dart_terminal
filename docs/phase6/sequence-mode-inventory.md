@@ -289,3 +289,7 @@ complete.
   and 22 modes (104 declarations): XTVERSION is implemented, XTWINOPS remains
   partial with exact report operations 14/18 plus title operations 22/23, and
   DECRQSS remains partial with only the complete SGR payload implemented.
+- 2026-09-07: Phase closure revalidated that all 9 safe-ignore records use the
+  bounded `ignore` disposition and all 147 unsupported records use explicit
+  `reject`. The final regression coverage report pins these totals and the
+  82-selector/22-mode implementation reconciliation.

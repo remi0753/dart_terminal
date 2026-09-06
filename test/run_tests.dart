@@ -30,6 +30,7 @@ import 'terminal_application_acceptance_test.dart';
 import 'terminal_application_evidence_test.dart';
 import 'terminal_application_matrix_test.dart';
 import 'terminal_compatibility_inventory_test.dart';
+import 'terminal_compatibility_regression_coverage_test.dart';
 import 'terminal_compatibility_regressions_test.dart';
 import 'terminal_compatibility_surface_test.dart';
 import 'terminal_core_test.dart';
@@ -99,6 +100,7 @@ Future<void> main() async {
   runTerminalDifferentialAdapterTests();
   runTerminalDifferentialCorpusTests();
   runTerminalDifferentialEvidenceTests();
+  runTerminalCompatibilityRegressionCoverageTests();
   runProductParserBenchmarkTests();
   runProductParserCorpusTests();
   runGoldenImageTests();

@@ -408,3 +408,7 @@ compatibility classification until every policy branch is fixed.
   included in the final staged review. All four ordered children now satisfy
   the parent completion conditions; no duration-only soak or other blocker
   remains.
+- Phase 6 closure also consolidates metadata/title-stack/hyperlink, palette and
+  default/cursor color, and deny-by-default OSC 52 into three raw-byte corpus
+  cases. The deterministic coverage report pins their observations and this
+  policy owner without granting clipboard authority.

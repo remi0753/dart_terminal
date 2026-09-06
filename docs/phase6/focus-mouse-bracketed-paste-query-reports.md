@@ -396,3 +396,7 @@ and committed before the next unit starts.
   runner.
 - `git diff --check`: passed before the final roadmap update and is repeated
   in the commit review.
+- The Phase 6 compatibility corpus independently replays focus reporting, SGR
+  pixel-mouse mode, and XTVERSION/XTWINOPS reports through every single split
+  plus bytewise delivery. Its coverage report binds all three fix families to
+  this owner while retaining highlight mode 1001 as explicit non-adoption.

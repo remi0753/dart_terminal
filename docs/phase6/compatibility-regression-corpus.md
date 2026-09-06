@@ -155,6 +155,33 @@ committed before the next unit starts.
   nonexistent owner paths, duplicate IDs, and an expected-observation change.
   Regeneration remains explicit and reviewable; normal checking never updates
   the source oracle.
+- 2026-09-07: the closure unit uses one generated version 1 report rather than
+  treating the individual gate outputs as an implicit checklist. The report
+  pins the corpus, 260-record inventory, 104-declaration implementation
+  manifest, application and differential acceptance, parser trace case/result,
+  README, FEATURE_MATRIX, and each distinct fix-family owner by SHA-256.
+- 2026-09-07: required family IDs, unique case IDs, and owner paths are code
+  constants. Report generation rejects a missing, duplicated, extra, renamed,
+  or reassigned family before it can emit `status=accepted`. The committed
+  report is byte-compared with a fresh generation, so source, count, ownership,
+  or Phase-exit mutations fail without rewriting evidence.
+- 2026-09-07: closure reruns the corpus, inventory reconciliation,
+  real-application acceptance, differential acceptance, and parser trace
+  reproduction. It additionally requires every inventory `safe-ignore` to use
+  bounded `ignore`, every `unsupported` record to use `reject`, and every
+  accepted application gap to remain explicit unsupported, owned,
+  non-screen-mutating, and nonblocking.
+- 2026-09-07: the first combined documentation/Makefile patch was rejected by
+  `apply_patch` because an intentionally empty vttest context hunk was invalid.
+  No partial edit was applied; the changes were split into valid, reviewable
+  patches before proceeding.
+- 2026-09-07: the Phase exit decision is based on bounded evidence: no
+  differential silent result or unexpected mismatch, no application matrix
+  blocker or silent screen mutation, all 147 unsupported records explicitly
+  rejected, all nine compatibility fixes covered, and all correctness/resource
+  gates passing. The unexecuted 30-day duration-only soak remains the exact
+  low-priority, nonblocking follow-up required by the roadmap-wide policy; it is
+  not represented as completed evidence.
 
 ## Verification results — corpus contract and cases
 
@@ -176,4 +203,33 @@ committed before the next unit starts.
 
 ## Verification results — coverage and Phase closure
 
-- Pending the second ordered unit.
+- `dart analyze tool/terminal_compatibility_regression_coverage.dart
+  test/terminal_compatibility_regression_coverage_test.dart test/run_tests.dart`:
+  passed with no issues after formatting the new tool and test.
+- `dart run tool/terminal_compatibility_regression_coverage.dart --generate`
+  and `--check`: regenerated and accepted 9 fix families, 9 cases, 417 replay
+  plans, 8 owned application gaps, and zero known P0 silent-corruption results.
+- `dart run test/terminal_compatibility_regression_coverage_test.dart`: passed
+  exact totals/status and rejected stale family count, unknown family, source
+  hash, and silent-corruption mutations.
+- `make terminal-compatibility-regression-coverage-check`: passed the new
+  normal dependency path, including 390-byte corpus replay before deterministic
+  report checking.
+- `CI=true make test`: passed parser-table/trace, regression corpus/coverage,
+  inventory/implementation, differential, application, and terminfo freshness
+  gates; all 188 Dart files were already formatted, static analysis reported no
+  issues, and the complete Dart Terminal test runner passed.
+- The final `git diff --check`, staged-scope review, and clean-worktree check are
+  performed immediately around the completion commit.
+
+## Phase closure and handoff
+
+- All nine Phase 6 roadmap items and every ordered child are complete after the
+  final status update. No Phase 7 implementation is started in this session.
+- The accepted machine-readable closure evidence is
+  `compatibility/regression_coverage_report.json`. Remaining application gaps
+  are explicit non-adoptions/later Phase 9 owners, not hidden Phase 6 work.
+- There is no severe blocker. Thirty-day or duration-only soak remains
+  deliberately unexecuted and low-priority/nonblocking; a later run may add
+  evidence without reopening Phase 6 unless it finds a reproducible
+  correctness, resource, safety, data-loss, crash, or silent-corruption defect.

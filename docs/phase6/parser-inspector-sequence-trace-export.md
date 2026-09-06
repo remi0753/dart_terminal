@@ -172,6 +172,9 @@ committed before the next unit starts.
   formatting of 181 Dart files with no changes; static analysis with no issues;
   and the complete Dart test runner.
 - `git diff --check`: run in the final pre-commit review.
+- The final compatibility coverage gate independently regenerates the same
+  97-byte/11-event redacted fixture before accepting Phase 6 closure, and pins
+  both trace-case and expected-trace hashes in its deterministic report.
 
 ## Verification results — trace export and closure
 

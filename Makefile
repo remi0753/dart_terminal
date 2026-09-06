@@ -32,6 +32,7 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	product-parser-corpus product-parser-properties \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
 	terminal-parser-trace terminal-parser-trace-check \
+	terminal-compatibility-regressions-check terminal-compatibility-regression-coverage terminal-compatibility-regression-coverage-check \
 	product-damage-benchmark-build product-damage-benchmark \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
@@ -69,6 +70,9 @@ help:
 	@echo "  make vt-parser-table-check        Reject a stale generated parser table"
 	@echo "  make terminal-parser-trace        Regenerate the bounded parser trace"
 	@echo "  make terminal-parser-trace-check  Reject a stale parser trace fixture"
+	@echo "  make terminal-compatibility-regressions-check  Replay byte-level compatibility fixes"
+	@echo "  make terminal-compatibility-regression-coverage  Regenerate Phase 6 coverage reconciliation"
+	@echo "  make terminal-compatibility-regression-coverage-check  Reject stale or incomplete reconciliation"
 	@echo "  make developer-jit-build          Build the generic-host JIT application"
 	@echo "  make developer-jit-run            Build and run the JIT application"
 	@echo "  make release-aot-build             Build the generic-host AOT application"
@@ -100,6 +104,15 @@ terminal-parser-trace: dependencies
 
 terminal-parser-trace-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_parser_trace.dart --check
+
+terminal-compatibility-regressions-check: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_compatibility_regressions.dart --check
+
+terminal-compatibility-regression-coverage: dependencies terminal-compatibility-regressions-check
+	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_compatibility_regression_coverage.dart --generate
+
+terminal-compatibility-regression-coverage-check: dependencies terminal-compatibility-regressions-check
+	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_compatibility_regression_coverage.dart --check
 
 compatibility-inventory: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_terminal_compatibility_inventory.dart
@@ -146,7 +159,7 @@ terminal-terminfo: dependencies
 terminal-terminfo-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_terminfo.dart --check
 
-test: dependencies vt-parser-table-check terminal-parser-trace-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check
+test: dependencies vt-parser-table-check terminal-parser-trace-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart

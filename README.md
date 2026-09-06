@@ -125,6 +125,10 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - 厳密検証するbyte-exact product parser corpus manifest、shell/less/top/vimの
   review済み記録snapshotをwhole・全single split・bytewiseで再生する非書換えharness、
   固定seedのproperty testと境界別fuzz seed/mutation corpus
+- DEC文字セット、XTGETTCAP、OSC metadata/color/clipboard、focus/mouse、DECRQSS、
+  XTVERSION/XTWINOPSの9修正familyを390 input byte・417 chunk planで固定するversion 1
+  compatibility regression corpus。inventory、differential、実アプリの所有者付きgap、
+  parser traceを一つの決定論的coverage reportで照合し、通常`make test`でfreshnessを検証
 - Phase 0 mixed workloadを使うcapture-disabled product parserのRelease AOT
   100 MiB/s regression gate（同一seedのexact counter/integrity検証付き）
 - 1x/2xの決定論的integer alpha合成、固定layer順、solid/mask/color bitmapを扱う
