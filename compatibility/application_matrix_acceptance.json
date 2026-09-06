@@ -1,0 +1,360 @@
+{
+  "format": "dart-terminal-application-acceptance",
+  "version": 1,
+  "evidence_index_path": "compatibility/application_matrix_evidence.json",
+  "evidence_index_sha256": "b2422e4a6a3c6073306f2c615ec9b85d49621440f06998c3435871949caa554e",
+  "trace_tool_path": "tool/terminal_application_unsupported_trace.dart",
+  "trace_tool_sha256": "62cddaab40420b436d86c3d5a71fe49b750ea206bd0f7ee7cd73d7e579e50404",
+  "status": "accepted-with-owned-gaps",
+  "totals": {
+    "cells": 8,
+    "clean_agreements": 1,
+    "documented_gap_cells": 7,
+    "unique_sequences": 28,
+    "unsupported_increments": 526,
+    "gaps": 16,
+    "safe_ignore_gaps": 2,
+    "explicit_unsupported_gaps": 14
+  },
+  "cells": [
+    {
+      "application_id": "emacs",
+      "scenario_id": "emacs-terminal-ui",
+      "classification": "documented-gap",
+      "accepted": true,
+      "gap_ids": [
+        "focus-reporting",
+        "xtversion"
+      ]
+    },
+    {
+      "application_id": "fzf",
+      "scenario_id": "fzf-filter-selection",
+      "classification": "documented-gap",
+      "accepted": true,
+      "gap_ids": [
+        "synchronized-output"
+      ]
+    },
+    {
+      "application_id": "lazygit",
+      "scenario_id": "lazygit-repository-ui",
+      "classification": "documented-gap",
+      "accepted": true,
+      "gap_ids": [
+        "charset-designation",
+        "focus-reporting",
+        "kitty-keyboard-query",
+        "sgr-pixel-mouse",
+        "synchronized-output",
+        "title-stack",
+        "window-size-report",
+        "xtqmodkeys",
+        "xtversion"
+      ]
+    },
+    {
+      "application_id": "mosh",
+      "scenario_id": "mosh-local-session",
+      "classification": "documented-gap",
+      "accepted": true,
+      "gap_ids": [
+        "focus-reporting",
+        "hilite-mouse"
+      ]
+    },
+    {
+      "application_id": "ncurses",
+      "scenario_id": "ncurses-resize-ui",
+      "classification": "documented-gap",
+      "accepted": true,
+      "gap_ids": [
+        "charset-designation",
+        "title-stack"
+      ]
+    },
+    {
+      "application_id": "neovim",
+      "scenario_id": "neovim-editing-ui",
+      "classification": "documented-gap",
+      "accepted": true,
+      "gap_ids": [
+        "charset-designation",
+        "decrqss",
+        "focus-reporting",
+        "kitty-keyboard-query",
+        "xtgettcap",
+        "xtmodkeys"
+      ]
+    },
+    {
+      "application_id": "ssh",
+      "scenario_id": "ssh-local-pty",
+      "classification": "clean-agreement",
+      "accepted": true,
+      "gap_ids": []
+    },
+    {
+      "application_id": "tmux",
+      "scenario_id": "tmux-session-resize",
+      "classification": "documented-gap",
+      "accepted": true,
+      "gap_ids": [
+        "application-escape-mode",
+        "charset-designation",
+        "focus-reporting",
+        "theme-report",
+        "theme-updates",
+        "title-stack",
+        "window-size-report",
+        "xtversion"
+      ]
+    }
+  ],
+  "gaps": [
+    {
+      "id": "application-escape-mode",
+      "disposition": "explicit-unsupported",
+      "impact": "input-semantics",
+      "inventory_ids": [],
+      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
+      "minimal_hex": "1b5b3f3737323768",
+      "variants": [
+        "1b5b3f3737323768",
+        "1b5b3f373732376c"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "charset-designation",
+      "disposition": "explicit-unsupported",
+      "impact": "visible-content",
+      "inventory_ids": [
+        "dec:esc:designate-g0-ascii",
+        "dec:esc:designate-g0-dec-special",
+        "dec:esc:designate-g1-dec-special"
+      ],
+      "owner": "ROADMAP.md#phase-6-terminfo",
+      "minimal_hex": "1b2830",
+      "variants": [
+        "1b2830",
+        "1b2842",
+        "1b2930"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "decrqss",
+      "disposition": "safe-ignore",
+      "impact": "query-fallback",
+      "inventory_ids": [
+        "dec:dcs:decrqss"
+      ],
+      "owner": "docs/phase6/decrqss-sgr-gap.md",
+      "minimal_hex": "1b5024716d1b5c",
+      "variants": [
+        "1b5024716d1b5c"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "focus-reporting",
+      "disposition": "explicit-unsupported",
+      "impact": "input-events",
+      "inventory_ids": [
+        "xterm:mode:xterm-focus-reporting"
+      ],
+      "owner": "ROADMAP.md#phase-6-focus-mouse-query",
+      "minimal_hex": "1b5b3f3130303468",
+      "variants": [
+        "1b5b3f3130303468",
+        "1b5b3f313030346c"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "hilite-mouse",
+      "disposition": "explicit-unsupported",
+      "impact": "input-events",
+      "inventory_ids": [
+        "xterm:mode:xterm-hilite-mouse-tracking"
+      ],
+      "owner": "ROADMAP.md#phase-6-focus-mouse-query",
+      "minimal_hex": "1b5b3f313030316c",
+      "variants": [
+        "1b5b3f313030316c"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "kitty-keyboard-query",
+      "disposition": "explicit-unsupported",
+      "impact": "input-protocol",
+      "inventory_ids": [],
+      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
+      "minimal_hex": "1b5b3f75",
+      "variants": [
+        "1b5b3f75"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "sgr-pixel-mouse",
+      "disposition": "explicit-unsupported",
+      "impact": "input-coordinates",
+      "inventory_ids": [
+        "xterm:mode:xterm-sgr-pixel-mouse"
+      ],
+      "owner": "ROADMAP.md#phase-6-focus-mouse-query",
+      "minimal_hex": "1b5b3f313031366c",
+      "variants": [
+        "1b5b3f313031366c"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "synchronized-output",
+      "disposition": "explicit-unsupported",
+      "impact": "presentation-atomicity",
+      "inventory_ids": [],
+      "owner": "ROADMAP.md#phase-9-synchronized-output-rendering",
+      "minimal_hex": "1b5b3f3230323668",
+      "variants": [
+        "1b5b3f3230323668",
+        "1b5b3f323032366c"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "theme-report",
+      "disposition": "explicit-unsupported",
+      "impact": "query-fallback",
+      "inventory_ids": [],
+      "owner": "ROADMAP.md#phase-9-light-dark-notification-reports",
+      "minimal_hex": "1b5b3f3939366e",
+      "variants": [
+        "1b5b3f3939366e"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "theme-updates",
+      "disposition": "explicit-unsupported",
+      "impact": "theme-notification",
+      "inventory_ids": [],
+      "owner": "ROADMAP.md#phase-9-light-dark-notification-reports",
+      "minimal_hex": "1b5b3f3230333168",
+      "variants": [
+        "1b5b3f3230333168",
+        "1b5b3f323033316c"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "title-stack",
+      "disposition": "explicit-unsupported",
+      "impact": "window-metadata",
+      "inventory_ids": [
+        "xterm:csi:xtwinops"
+      ],
+      "owner": "ROADMAP.md#phase-6-osc-title-cwd-policy",
+      "minimal_hex": "1b5b32323b3274",
+      "variants": [
+        "1b5b32323b303b3074",
+        "1b5b32323b3274",
+        "1b5b32333b303b3074",
+        "1b5b32333b3274"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "window-size-report",
+      "disposition": "explicit-unsupported",
+      "impact": "query-fallback",
+      "inventory_ids": [
+        "xterm:csi:xtwinops"
+      ],
+      "owner": "ROADMAP.md#phase-6-focus-mouse-query",
+      "minimal_hex": "1b5b313474",
+      "variants": [
+        "1b5b313474",
+        "1b5b313874"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "xtgettcap",
+      "disposition": "safe-ignore",
+      "impact": "query-fallback",
+      "inventory_ids": [
+        "xterm:dcs:xtgettcap"
+      ],
+      "owner": "ROADMAP.md#phase-6-terminfo",
+      "minimal_hex": "1b502b71344437331b5c",
+      "variants": [
+        "1b502b71344437331b5c"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "xtmodkeys",
+      "disposition": "explicit-unsupported",
+      "impact": "input-protocol",
+      "inventory_ids": [
+        "xterm:csi:xtmodkeys"
+      ],
+      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
+      "minimal_hex": "1b5b3e343b306d",
+      "variants": [
+        "1b5b3e343b306d",
+        "1b5b3e343b326d"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "xtqmodkeys",
+      "disposition": "explicit-unsupported",
+      "impact": "query-fallback",
+      "inventory_ids": [
+        "xterm:csi:xtqmodkeys"
+      ],
+      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
+      "minimal_hex": "1b5b3f346d",
+      "variants": [
+        "1b5b3f346d"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    },
+    {
+      "id": "xtversion",
+      "disposition": "explicit-unsupported",
+      "impact": "query-fallback",
+      "inventory_ids": [
+        "xterm:csi:xtversion"
+      ],
+      "owner": "ROADMAP.md#phase-6-focus-mouse-query",
+      "minimal_hex": "1b5b3e71",
+      "variants": [
+        "1b5b3e3071",
+        "1b5b3e71"
+      ],
+      "screen_mutation": false,
+      "matrix_blocker": false
+    }
+  ]
+}

@@ -4,8 +4,8 @@
 
 - Date started: 2026-09-07
 - Scope: fourth Phase 6 compatibility-hardening roadmap item
-- Status: in progress; contract and application-execution children complete,
-  acceptance-classification child pending
+- Status: complete; all three ordered children committed or ready for the
+  current completion commit
 
 ## Purpose and background
 
@@ -105,6 +105,25 @@ each commit before the next child starts.
 - `CI=true make test`, format/analyze, diff review, and process/resource cleanup
   before each completion commit.
 
+## Acceptance-child implementation plan
+
+The final child replays each immutable raw PTY stream through the product parser
+and a tool-only tracing delegate. For every parser action, the delegate compares
+the product sink's unsupported counter before and after dispatch and reconstructs
+the shortest equivalent 7-bit control sequence from the parser's typed action.
+The aggregate unsupported increments must equal the counters already committed
+in raw evidence; otherwise acceptance stops rather than trusting the trace.
+
+Unique reconstructed sequences are recorded with per-application occurrence and
+counter-increment totals. Each must be classified against the versioned
+sequence/mode inventory as implemented, safe-ignore, or explicit unsupported,
+with a concrete existing or later ROADMAP owner. A sequence that mutates visible
+state before being rejected, lacks an owner, cannot be reproduced from immutable
+evidence, or produces cancel/limit/malformed/incomplete state is a matrix blocker.
+The checked-in acceptance report pins all source evidence and minimized gap
+artifacts. A normal Make gate replays and validates it; summary documentation and
+`FEATURE_MATRIX.md` are synchronized only after that gate and the full suite pass.
+
 ## Versioned contract
 
 The reviewed manifest is
@@ -201,6 +220,54 @@ names, mosh keys, private keys, authorized-key paths, or unresolved random
 temporary paths. Its success line is `TERMINAL_APPLICATION_EVIDENCE_PASS
 cells=8 output_bytes=57737 samples=32 passed_checks=41 failed_checks=7`.
 
+## Acceptance classification
+
+`tool/terminal_application_unsupported_trace.dart` replays the immutable raw
+stream while applying both recorded resizes at their original byte offsets. A
+tool-only `VtParserSink` delegate records an action only when the product sink's
+unsupported counter increases, then reconstructs the equivalent 7-bit bytes
+from the typed parser action. This accounts for all 526 unsupported increments
+as 28 unique observed variants. It does not infer bytes from documentation or
+scan arbitrary escape-looking text inside printable payloads.
+
+`compatibility/application_matrix_acceptance.json` groups those variants into
+16 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
+present in evidence. Replaying each minimal sequence produces exactly one
+bounded reject, no cancel/limit/malformed/incomplete result, and no standalone
+screen-state mutation. The two DCS query families match existing inventory
+`safe-ignore` records; the other 14 remain explicit unsupported rather than
+being silently normalized into success.
+
+| Gap | Observed applications | Current impact/disposition | Ordered owner |
+| --- | --- | --- | --- |
+| character-set designation | lazygit, ncurses, Neovim, tmux | visible-content gap; explicit unsupported | next Phase 6 terminfo task |
+| XTGETTCAP | Neovim | capability fallback; safe-ignore | next Phase 6 terminfo task |
+| title stack | lazygit, ncurses, tmux | window metadata; explicit unsupported | Phase 6 OSC title/cwd policy |
+| focus reporting | Emacs, lazygit, mosh, Neovim, tmux | input events; explicit unsupported | Phase 6 focus/mouse/query task |
+| highlight/pixel mouse | mosh, lazygit | input events/coordinates; explicit unsupported | Phase 6 focus/mouse/query task |
+| XTVERSION and window-size report | Emacs, lazygit, tmux | query fallback; explicit unsupported | Phase 6 focus/mouse/query task |
+| DECRQSS | Neovim | query fallback; safe-ignore | existing DECRQSS gap/query owner |
+| Kitty query, XTMODKEYS, XTQMODKEYS, application escape | lazygit, Neovim, tmux | input protocol; explicit unsupported | Phase 9 Kitty keyboard task |
+| synchronized output | fzf, lazygit | presentation atomicity; explicit unsupported | Phase 9 synchronized-output task |
+| theme report/update | tmux | query/notification fallback; explicit unsupported | Phase 9 light/dark reports task |
+
+The character-set gap is deliberately called visible rather than safe-ignore:
+ignoring `ESC ( 0` can leave following ACS bytes with the wrong glyph meaning.
+The matrix can close because the gap is byte-level visible, bounded, and owned
+by the immediately following terminfo task, but the Phase 6 exit condition may
+not claim absence of P0 silent corruption until that owner either implements
+the designation semantics or chooses a terminfo profile proven not to emit it.
+Likewise, the other owned protocol gaps are not claimed as implemented.
+
+The cell outcome is one clean agreement (SSH) and seven accepted documented-gap
+cells. “Accepted” means the captured workflow completed, every non-parser
+semantic check passed, all rejected bytes are explicit and owned, and no
+matrix-level crash/corruption/unbounded-resource blocker remains. It does not
+turn any false `parser-clean` check into true. The normal gate reports
+`TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=1
+documented_gap_cells=7 gaps=16 unique_sequences=28
+unsupported_increments=526`.
+
 ## Investigation log
 
 - 2026-09-07: after commit `fdc56f7`, ROADMAP was reread with a clean worktree.
@@ -251,7 +318,7 @@ cells=8 output_bytes=57737 samples=32 passed_checks=41 failed_checks=7`.
   from a temporary package expansion without installing protobuf.
 - 2026-09-07: the first formatter invocation did format the new capture
   driver, then returned nonzero because Dart telemetry attempted to update
-  `/Users/remi/.dart-tool/dart-flutter-telemetry-session.json` outside the
+  `<HOME>/.dart-tool/dart-flutter-telemetry-session.json` outside the
   workspace sandbox. This is an environment permission failure after the
   formatting operation, not a source-format failure; Dart verification is
   rerun with the already-approved external cache access rather than ignored.
@@ -295,3 +362,54 @@ cells=8 output_bytes=57737 samples=32 passed_checks=41 failed_checks=7`.
   build root remains under `/private/tmp/dart-terminal-app-matrix.9gNqAD` only
   to support the immediately following acceptance child; it is not a committed
   runtime dependency.
+- 2026-09-07: the first unsupported-sequence replay matched the committed
+  parser count for seven applications, but reported 29 rather than 25 for
+  tmux. The four extra rejects were valid scroll-region changes whose bottom
+  rows only exist after the captured resize. Replaying bytes at the fixed
+  initial geometry had lost that causal event. The tracer now applies each
+  recorded resize at its exact `output_bytes_before` offset before parsing the
+  following redraw; exact counter agreement is required rather than editing
+  the evidence or ignoring the discrepancy.
+- 2026-09-07: the first acceptance-report check rejected one unobserved
+  sequence variant. The report had used the specification-shorter
+  `CSI > 4 m` as the XTMODKEYS minimal case, while immutable Neovim evidence
+  contains only `CSI > 4 ; 0 m` and `CSI > 4 ; 2 m`. The report now uses the
+  shortest actually observed form. No synthetic variant can satisfy the
+  evidence coverage gate, and the reviewed unique-sequence total is 28.
+- 2026-09-07: eleven gap groups map to existing inventory records. Five newer
+  extensions are absent from the four-source inventory rather than being
+  mislabeled as an older xterm/DEC control: Kitty `CSI ? u`, synchronized
+  output 2026, theme report 996, theme updates 2031, and application Escape
+  mode 7727. The official Kitty keyboard specification confirms the query and
+  bounded mode-stack requirements; inspected tmux 3.6b `tty.c`/`CHANGES`
+  identifies its theme requests, and the captured source itself proves the
+  emitted bytes. These remain explicit rejects with existing Phase 9 owners;
+  extending their normative inventory belongs to those protocol tasks.
+- 2026-09-07: focused acceptance tests passed the exact baseline and negative
+  freshness, unowned-sequence, screen-mutation, and unknown-owner cases.
+  `make terminal-application-acceptance-check` reported eight accepted cells,
+  one clean agreement, seven documented-gap cells, 16 gaps, 28 unique
+  sequences, and 526 unsupported increments. Full `CI=true make test` passed
+  every freshness gate, formatted 170 Dart files without changes, reported no
+  analyzer issues, and passed the complete test runner.
+- 2026-09-07: after verification, the exact 699 MiB temporary artifact/build
+  root `/private/tmp/dart-terminal-app-matrix.9gNqAD` was deleted. No matrix
+  sockets remained. The acceptance Make target passed again after deletion,
+  proving the checked-in hashes, raw captures, normalized observations, and
+  acceptance report have no runtime dependency on the temporary binaries.
+
+## Verification results
+
+- `dart analyze`: passed with no issues.
+- `dart run test/terminal_application_acceptance_test.dart`: passed all normal
+  and negative cases.
+- `make terminal-application-acceptance-check`: passed before and after
+  temporary build cleanup with the exact reviewed totals above.
+- `CI=true make test`: passed all compatibility freshness checks, formatting,
+  static analysis, and the complete Dart test runner.
+- `git diff --check`, staged-scope review, and final worktree review are run
+  immediately before the completion commit.
+- Remaining work is not hidden: the 16 gap owners are pinned in the acceptance
+  report and linked from ROADMAP. The next ordered task receives the visible
+  character-set gap and XTGETTCAP fallback; later Phase 6/9 owners receive the
+  remaining query, metadata, input, presentation, and theme gaps.

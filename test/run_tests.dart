@@ -26,6 +26,7 @@ import 'renderer_metrics_test.dart';
 import 'runtime_lifecycle_test.dart';
 import 'terminal_accessibility_snapshot_test.dart';
 import 'terminal_appkit_key_adapter_test.dart';
+import 'terminal_application_acceptance_test.dart';
 import 'terminal_application_evidence_test.dart';
 import 'terminal_application_matrix_test.dart';
 import 'terminal_compatibility_inventory_test.dart';
@@ -104,6 +105,7 @@ Future<void> main() async {
   runTerminalHyperlinkInteractionTests();
   runTerminalHyperlinkTests();
   runTerminalAccessibilitySnapshotTests();
+  runTerminalApplicationAcceptanceTests();
   runTerminalApplicationEvidenceTests();
   await runTerminalApplicationMatrixTests();
   runTerminalInputMatrixTests();

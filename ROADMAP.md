@@ -858,19 +858,22 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] mismatch最小化、acceptance report、harness完了判定
 - [x] `vttest` を参考に採用/非採用項目を明文化
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) を参照して実施）
-- [ ] tmux、ssh、mosh、Neovim、Emacs、ncurses、fzf、lazygit の matrix
+- [x] tmux、ssh、mosh、Neovim、Emacs、ncurses、fzf、lazygit の matrix
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のadoption判断も参照して実施）
   （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) を参照して実施）
   - [x] versioned matrix contract、bounded runner、normal-gate validation
   - [x] pinned application execution、normalized evidence
-  - [ ] acceptance分類、gap最小化、matrix完了判定
+  - [x] acceptance分類、gap最小化、matrix完了判定
 - [ ] terminfo source、compile/install/fallback
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のcharacter-set判断も参照して実施）
+  （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のcharacter-set/XTGETTCAP gapを参照して実施）
 - [ ] OSC title/cwd/hyperlink/palette/clipboard policy
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のtitle判断も参照して実施）
+  （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のtitle-stack gapを参照して実施）
 - [ ] focus/mouse/bracketed paste/query reports
   （[`docs/phase6/decrqss-sgr-gap.md`](docs/phase6/decrqss-sgr-gap.md) のgapを参照して実施）
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のmanual項目も参照して実施）
+  （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のfocus/mouse/query gapを参照して実施）
 - [ ] parser inspector と sequence trace export
 - [ ] compatibility bug の regression corpus 化
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のadoption判断も参照して実施）
@@ -927,8 +930,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 目的: 現代的 TUI が使う Ghostty クラスの protocol を追加する。
 
 - [ ] Kitty keyboard protocol
+  （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のinput protocol gapを参照して実施）
 - [ ] synchronized output/rendering
+  （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のsynchronized-output gapを参照して実施）
 - [ ] light/dark notification と extended reports
+  （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のtheme report/update gapを参照して実施）
 - [ ] Kitty graphics parse/storage/placement/render
 - [ ] image animation と resource eviction
 - [ ] desktop notification、progress、semantic prompt extensions
