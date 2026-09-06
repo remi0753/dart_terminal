@@ -1,0 +1,299 @@
+{
+  "format": "dart-terminal-sequence-mode-inventory",
+  "version": 1,
+  "inventoryRevision": 1,
+  "scope": "schema-foundation",
+  "sourcePins": [
+    {
+      "id": "dec-vt510-rm-b01",
+      "family": "dec",
+      "title": "VT510 Video Terminal Programmer Information",
+      "edition": "B01, August 1995, EK-VT510-RM",
+      "artifactUrl": "https://vt100.net/mirror/mds-199909/cd3/term/vt510rmb.pdf",
+      "artifactBytes": 3378497,
+      "artifactSha256": "440bbee110eb75027a06b5b375683fbc87cb739edac32899005ad46981c7d514",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-06"
+    },
+    {
+      "id": "ecma-48-5e",
+      "family": "ecma48",
+      "title": "Control functions for coded character sets",
+      "edition": "ECMA-48, fifth edition, June 1991",
+      "artifactUrl": "https://ecma-international.org/wp-content/uploads/ECMA-48_5th_edition_june_1991.pdf",
+      "artifactBytes": 1607865,
+      "artifactSha256": "9577ad2514c411584b274ef7a4b3238c80aa93defbb349b18b8c78f78873f450",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-06"
+    },
+    {
+      "id": "xterm-411",
+      "family": "xterm",
+      "title": "XTerm Control Sequences",
+      "edition": "xterm Patch #411, 2026-08-24",
+      "artifactUrl": "https://invisible-island.net/archives/xterm/xterm-411.tgz",
+      "artifactBytes": 1633400,
+      "artifactSha256": "969be283670deadd66934865c4de6c5ab045e3a3facc2b228decf91a20d8c36c",
+      "documentPath": "xterm-411/ctlseqs.ms",
+      "documentSha256": "69773380309da4c8b5d4ec9646eec703c47bc41db29a8efa5b94c30798c72349",
+      "retrievedOn": "2026-09-06"
+    }
+  ],
+  "records": [
+    {
+      "id": "dec:dcs:decrqss",
+      "mnemonic": "DECRQSS",
+      "syntax": "DCS Ps $ q Pt ST",
+      "selector": {
+        "kind": "dcs",
+        "privateMarker": null,
+        "intermediates": [36],
+        "finalByte": 113
+      },
+      "support": "safe-ignore",
+      "disposition": "ignore",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECRQSS—Request Selection or Setting"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#dispatchDcs"
+      ],
+      "testEvidence": [
+        "test/vt_parser_test.dart#typed-sequence-families"
+      ],
+      "notes": "The bounded parser consumes the complete DCS and the screen sink records it as unsupported without mutating terminal state."
+    },
+    {
+      "id": "dec:esc:decsc",
+      "mnemonic": "DECSC",
+      "syntax": "ESC 7",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 55
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSC—Save Cursor"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#dispatchEscape"
+      ],
+      "testEvidence": [
+        "test/terminal_screen_test.dart#cursor-save-restore"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:apc:apc",
+      "mnemonic": "APC",
+      "syntax": "APC Pt ST",
+      "selector": {
+        "kind": "apc"
+      },
+      "support": "safe-ignore",
+      "disposition": "ignore",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.2, APC—Application Program Command"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#dispatchString"
+      ],
+      "testEvidence": [
+        "test/vt_parser_test.dart#typed-sequence-families"
+      ],
+      "notes": "The payload is bounded and consumed through ST, then deliberately ignored by the screen sink."
+    },
+    {
+      "id": "ecma48:c0:bel",
+      "mnemonic": "BEL",
+      "syntax": "BEL (0x07)",
+      "selector": {
+        "kind": "c0",
+        "code": 7
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.3, BEL—Bell"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#execute"
+      ],
+      "testEvidence": [
+        "test/terminal_screen_test.dart#visual-bell"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:c1:ind",
+      "mnemonic": "IND",
+      "syntax": "IND (0x84 or ESC D)",
+      "selector": {
+        "kind": "c1",
+        "code": 132
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.64, IND—Index"
+        },
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, IND—Index"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#execute"
+      ],
+      "testEvidence": [
+        "test/terminal_screen_test.dart#index"
+      ],
+      "notes": "The parser accepts the 8-bit C1 form and the DEC 7-bit ESC form dispatches the same screen operation."
+    },
+    {
+      "id": "ecma48:csi:sgr",
+      "mnemonic": "SGR",
+      "syntax": "CSI Pm m",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 109
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.117, SGR—Select Graphic Rendition"
+        },
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, CSI Ps ... Ps m"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#applySgr"
+      ],
+      "testEvidence": [
+        "test/terminal_style_test.dart#sgr"
+      ],
+      "notes": "P0 text attributes plus ANSI 16/256-color and truecolor forms are implemented; the complete ECMA/xterm rendition repertoire is not yet implemented."
+    },
+    {
+      "id": "ecma48:pm:pm",
+      "mnemonic": "PM",
+      "syntax": "PM Pt ST",
+      "selector": {
+        "kind": "pm"
+      },
+      "support": "safe-ignore",
+      "disposition": "ignore",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.94, PM—Privacy Message"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#dispatchString"
+      ],
+      "testEvidence": [
+        "test/vt_parser_test.dart#typed-sequence-families"
+      ],
+      "notes": "The payload is bounded and consumed through ST, then deliberately ignored by the screen sink."
+    },
+    {
+      "id": "ecma48:sos:sos",
+      "mnemonic": "SOS",
+      "syntax": "SOS Pt ST",
+      "selector": {
+        "kind": "sos"
+      },
+      "support": "safe-ignore",
+      "disposition": "ignore",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.138, SOS—Start of String"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#dispatchString"
+      ],
+      "testEvidence": [
+        "test/vt_parser_test.dart#typed-sequence-families"
+      ],
+      "notes": "The payload is bounded and consumed through ST, then deliberately ignored by the screen sink."
+    },
+    {
+      "id": "xterm:mode:private-2004",
+      "mnemonic": "BRACKETED-PASTE",
+      "syntax": "CSI ? 2004 h / CSI ? 2004 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 2004
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, bracketed paste mode 2004"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#setPrivateModes",
+        "lib/src/terminal_core/terminal_screen_set.dart#setBracketedPasteMode"
+      ],
+      "testEvidence": [
+        "test/terminal_screen_set_test.dart#bracketed-paste-mode"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:osc:osc-8",
+      "mnemonic": "OSC-8",
+      "syntax": "OSC 8 ; params ; URI ST",
+      "selector": {
+        "kind": "osc",
+        "command": 8
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 8 hyperlink"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#applyOscHyperlink",
+        "lib/src/terminal_core/terminal_hyperlink.dart#TerminalHyperlinkTable"
+      ],
+      "testEvidence": [
+        "test/terminal_hyperlink_test.dart#osc-8"
+      ],
+      "notes": "URI and optional id parameters are bounded; later URL opening is subject to the separate product allowlist."
+    }
+  ]
+}

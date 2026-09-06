@@ -1,0 +1,176 @@
+# Phase 6 — ECMA-48, DEC, and xterm sequence/mode inventory
+
+## Task identity
+
+- Date started: 2026-09-06
+- Scope: first Phase 6 compatibility-hardening roadmap item
+- Status: subtask 1 complete; subtasks 2–3 pending
+
+## Purpose and background
+
+Create one bounded, versioned inventory that says which ECMA-48, DEC, and
+xterm control sequences and modes Dart Terminal implements, partially
+implements, safely ignores, or does not support. The inventory must be
+traceable both to pinned primary specifications and to the actual parser,
+screen, reply, input, and OSC behavior in this repository.
+
+Phase 3 established a generated parser table, typed actions, bounded terminal
+state, query replies, corpus replay, and fuzz/property coverage. Phase 6 must
+turn those individual capabilities into an explicit compatibility management
+surface before differential testing or application matrices can be trusted.
+
+## Ordered subtasks
+
+1. **Schema, source pin, and identifier taxonomy**
+   - Define bounded versioned inventory records for sequence/mode identity,
+     source family, syntax, support state, implementation/test evidence, and
+     safety disposition.
+   - Pin primary ECMA-48, DEC VT, and xterm control-sequence references with
+     stable local citations and define deterministic identifiers for C0/C1,
+     ESC, CSI, OSC, DCS, string controls, and modes.
+   - Complete when schema validation and representative records pass focused
+     tests and the format can express every existing parser action family.
+2. **Implementation-derived manifest and freshness checker**
+   - Enumerate the repository's implemented parser dispatch, screen/query
+     handlers, modes, and OSC/DCS behavior through a checked-in manifest.
+   - Add a deterministic checker that fails when relevant source declarations
+     change without a reviewed inventory update.
+   - Complete when generation/freshness tests and the full repository suite
+     pass without weakening parser-table freshness.
+3. **Support/gap classification and review acceptance**
+   - Fill the inventory with the required ECMA-48/DEC/xterm baseline and mark
+     implementation, partial behavior, safe ignore, or unsupported status with
+     evidence and limits.
+   - Publish human-readable summaries and FEATURE_MATRIX cross-references for
+     later differential, `vttest`, real-application, terminfo, OSC-policy, and
+     regression-corpus tasks.
+   - Complete when coverage totals reconcile, every implemented feature has an
+     evidence path, every non-implemented entry has an explicit disposition,
+     and all focused/full checks pass.
+
+Each subtask is independently reviewed, documented, verified, committed, and
+followed by a ROADMAP reread. The parent remains incomplete until all three are
+complete.
+
+## Scope
+
+- ECMA-48 control functions used by terminal emulators, DEC VT100 through
+  VT5xx-compatible private controls relevant to the current architecture, and
+  the pinned xterm control-sequence baseline.
+- C0/C1, ESC, CSI, OSC, DCS, SOS/PM/APC, DEC/xterm private modes, query/reply
+  behavior, state ownership, parser recovery, and explicit resource limits.
+- Machine-readable checked-in inventory, deterministic validation/freshness,
+  human-readable support summary, and evidence links to code/tests/docs.
+- Both 7-bit and applicable 8-bit control spellings where the parser contract
+  distinguishes or normalizes them.
+
+## Out of scope
+
+- Running xterm/Ghostty/Kitty differentials; that is the next ordered task.
+- Deciding the final `vttest` adoption list, real-application compatibility
+  matrix, terminfo content, OSC policy, or parser inspector UX.
+- Implementing missing terminal sequences merely because the inventory finds
+  a gap. Gaps are classified and handed to their correct later roadmap task.
+- Exhaustive historical hardware emulation that is not relevant to a modern
+  xterm-compatible macOS terminal.
+- 24/72-hour soak or another duration-only gate. Per the user-requested ROADMAP
+  policy, those remain lower-priority follow-ups and are not blockers by
+  omission; bounded correctness/resource failures remain blockers.
+
+## Dependencies and initial facts
+
+- `tool/generate_vt_parser_table.dart` and
+  `lib/src/terminal_core/generated/vt_parser_table.g.dart` already make parser
+  state/byte classification declarative and freshness-checked.
+- `TerminalScreenParserSink`, `TerminalScreenSet`, mode types, reply encoder,
+  palette/hyperlink tables, and related focused tests contain semantic behavior
+  that cannot be inferred from parser syntax alone.
+- Phase 3 corpus/property/fuzz artifacts are evidence, not a substitute for an
+  explicit standards inventory.
+- The repository and adjacent `dart_appkit` worktrees were clean at task start;
+  `dart_terminal` started at `312dc6a`.
+
+## Completion conditions
+
+- The schema is versioned, bounded, deterministic, rejects malformed or
+  duplicate records, and represents all required sequence/mode families.
+- Primary-source pins and local citations are sufficient for a later reviewer
+  to reproduce every classification without relying on chat history.
+- Checked-in inventory and relevant implementation declarations cannot drift
+  silently; freshness verification is part of the normal test gate.
+- Every current implementation maps to at least one inventory record and test
+  or documentation evidence; all baseline gaps have explicit safe-ignore or
+  unsupported classifications and later-task ownership.
+- ROADMAP/FEATURE_MATRIX/docs are synchronized, relevant tests and full gates
+  pass, and each ordered subtask has its own completion commit.
+
+## Verification plan
+
+- Focused schema/parser tests for valid families, identifier uniqueness,
+  bounds, source pins, evidence paths, ordering, and malformed data.
+- Freshness tests against parser action declarations and semantic dispatch
+  declarations without parsing arbitrary source text at product runtime.
+- Coverage reconciliation over status/family counts plus deterministic rendered
+  summaries.
+- `CI=true make test` after each subtask; proportional parser corpus and product
+  runtime gates when semantic product behavior is affected.
+
+## Investigation log
+
+- 2026-09-06: reread README, ROADMAP, FEATURE_MATRIX, repository structure,
+  Phase 3 parser/screen/query documentation list, and both worktrees before
+  source changes. Phase 5 is complete and the first unchecked item is this
+  Phase 6 inventory.
+- 2026-09-06: the inventory item spans standards provenance, a machine-readable
+  contract, source-to-inventory drift detection, and a reviewed gap report.
+  It was therefore split before implementation into three strictly ordered
+  commits with separate completion conditions.
+- 2026-09-06: added the user-requested global ROADMAP policy that duration-only
+  soak/continuous-use evidence is a low-priority follow-up and not a blocker by
+  omission, while correctness, safety, resource-bound, and data-loss failures
+  remain blockers.
+- 2026-09-06: selected three primary baselines: ECMA-48 fifth edition (June
+  1991), DEC VT510 Video Terminal Programmer Information B01
+  (`EK-VT510-RM`), and xterm Patch #411 `ctlseqs.ms`. The official ECMA page
+  identifies the fifth edition and ISO/IEC 6429 relationship; the DEC manual's
+  Part II provides the ANSI/DEC sequence tables; xterm ships its control
+  sequence reference in the pinned source archive.
+- 2026-09-06: downloaded the exact artifacts to temporary storage, checked
+  content lengths/PDF structure, and computed SHA-256 before using them as
+  pins. The first parallel downloads of both PDFs and the xterm archive ended
+  early and produced invalid/truncated files; those hashes were rejected. The
+  ECMA server exposed byte ranges, so its remaining bytes were resumed rather
+  than treating a partial PDF as evidence.
+- 2026-09-06: accepted artifact evidence is: ECMA-48 PDF 1,607,865 bytes,
+  SHA-256 `9577ad2514c411584b274ef7a4b3238c80aa93defbb349b18b8c78f78873f450`
+  (108 pages); VT510 B01 PDF 3,378,497 bytes, SHA-256
+  `440bbee110eb75027a06b5b375683fbc87cb739edac32899005ad46981c7d514`
+  (536 pages); xterm-411 archive 1,633,400 bytes, SHA-256
+  `969be283670deadd66934865c4de6c5ab045e3a3facc2b228decf91a20d8c36c`.
+  Its 167,851-byte `xterm-411/ctlseqs.ms` document hashes to
+  `69773380309da4c8b5d4ec9646eec703c47bc41db29a8efa5b94c30798c72349`.
+- 2026-09-06: a single flat syntax string was considered for records but
+  rejected: it cannot distinguish the same final byte across ESC/CSI/DCS or
+  make mode/private-marker uniqueness mechanical. The schema will use a typed
+  selector union for `c0`, `c1`, `esc`, `csi`, `osc`, `dcs`, `sos`, `pm`,
+  `apc`, and `mode`, plus a short display syntax for reviewers.
+- 2026-09-06: the first focused analyzer run found that Dart `Uri` exposes
+  user information through `userInfo`, not a `hasUserInfo` getter. The URL
+  safety check now requires `userInfo.isEmpty`; no schema behavior was relaxed.
+- 2026-09-06: added inventory format version 1, revision 1, with strict root
+  fields, size/count/text bounds, exact source metadata, typed selector
+  decoding, sorted unique identifiers/selectors, safe repository-relative
+  evidence paths, and support/disposition consistency rules. The foundation
+  fixture contains one representative record for each of the ten selector
+  kinds and reports 5 implemented, 1 partial, and 4 bounded safe-ignore cases.
+- 2026-09-06: the first sandboxed `dart format` invocation formatted the two
+  new Dart files, then failed only while trying to update the external Dart
+  telemetry session file. Re-running the zero-diff format check in the normal
+  Dart environment succeeded; no formatter failure was hidden.
+- 2026-09-06: subtask 1 verification passed: focused `dart analyze`, direct
+  manifest validation, and the focused schema regression executable. The
+  final `CI=true make test` also passed parser-table freshness, compatibility
+  inventory validation, formatting of 143 files, full static analysis, and
+  the complete Dart Terminal test runner. The checker summary was
+  `version=1 revision=1 sources=3 records=10 implemented=5 partial=1
+  safe_ignore=4 unsupported=0`.

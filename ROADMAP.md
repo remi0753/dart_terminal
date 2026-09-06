@@ -11,6 +11,11 @@ Ghostty 調査基準: `ghostty-org/ghostty` main の
 Rosetta compatibility、Universal audit、Intel-native 実機証跡は主要ゴール後の
 低優先 follow-up とし、M1 の通常ロードマップを阻害しない。
 
+24/72時間 soak、長時間連続運転など、所要時間そのものを受け入れ条件とする項目は
+低優先 follow-up とし、未実施または短いbounded代替検証への置換だけを通常ロードマップの
+blockerにしない。短時間でも再現するcorrectness、安全性、resource上限、data lossの失敗は
+この例外に含めず、従来どおりblockerとして扱う。
+
 ## 1. 目標
 
 macOS 上で日常利用でき、速度、端末互換性、文字品質、入力品質、
@@ -839,6 +844,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 目的: 「主要アプリがたまたま動く」から、互換性を管理できる状態へ進める。
 
 - [ ] ECMA-48、DEC、xterm の sequence/mode inventory
+  （[`docs/phase6/sequence-mode-inventory.md`](docs/phase6/sequence-mode-inventory.md) を参照して実施）
+  - [x] versioned inventory schema、normative source pin、識別子taxonomy
+  - [ ] 実装由来sequence/mode manifestとfreshness checker
+  - [ ] support/gap分類、相互参照、review acceptance
 - [ ] xterm/Ghostty/Kitty との black-box differential harness
 - [ ] `vttest` を参考に採用/非採用項目を明文化
 - [ ] tmux、ssh、mosh、Neovim、Emacs、ncurses、fzf、lazygit の matrix

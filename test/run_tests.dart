@@ -26,6 +26,7 @@ import 'renderer_metrics_test.dart';
 import 'runtime_lifecycle_test.dart';
 import 'terminal_accessibility_snapshot_test.dart';
 import 'terminal_appkit_key_adapter_test.dart';
+import 'terminal_compatibility_inventory_test.dart';
 import 'terminal_core_test.dart';
 import 'terminal_damage_copy_test.dart';
 import 'terminal_damage_test.dart';
@@ -92,6 +93,7 @@ Future<void> main() async {
   runTerminalAccessibilitySnapshotTests();
   runTerminalInputMatrixTests();
   runTerminalAppKitKeyAdapterTests();
+  runTerminalCompatibilityInventoryTests();
   runTerminalKeyBindingTests();
   runTerminalKeyEncoderTests();
   runTerminalMouseEncoderTests();
