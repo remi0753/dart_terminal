@@ -355,7 +355,7 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
     'XTWINOPS',
     'ctlseqs.ms, XTWINOPS',
     support: 'partial',
-    notes: 'Bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported.',
+    notes: 'Text-area reports 14/18 and bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported.',
   ),
   0x75: _Metadata(
     'xterm',
@@ -383,6 +383,14 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
     'secondary-da',
     'SECONDARY-DA',
     'ctlseqs.ms, CSI > Ps c—Secondary Device Attributes',
+    reply: true,
+  ),
+  0x3e000071: _Metadata(
+    'xterm',
+    'xtversion',
+    'XTVERSION',
+    'ctlseqs.ms, XTVERSION',
+    notes: 'The empty and explicit-zero requests return the fixed bounded DartTerminal(1) protocol identity.',
     reply: true,
   ),
   0x3f000068: _Metadata(
@@ -1341,20 +1349,6 @@ const List<_Gap> _gaps = <_Gap>[
       'finalByte': 112,
     },
     locator: 'ctlseqs.ms, XTPUSHSGR alias',
-  ),
-  _Gap(
-    family: 'xterm',
-    kind: 'csi',
-    name: 'xtversion',
-    mnemonic: 'XTVERSION',
-    syntax: 'CSI > 0 q',
-    selector: <String, Object?>{
-      'kind': 'csi',
-      'privateMarker': 62,
-      'intermediates': <int>[],
-      'finalByte': 113,
-    },
-    locator: 'ctlseqs.ms, XTVERSION',
   ),
   _Gap(
     family: 'dec',

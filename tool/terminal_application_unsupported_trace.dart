@@ -97,7 +97,7 @@ TerminalApplicationUnsupportedTrace traceTerminalApplicationUnsupported(
   final TerminalScreenSet screens = TerminalScreenSet(
     rows: rows,
     columns: columns,
-  );
+  )..updateLogicalViewportSize(width: columns * 8, height: rows * 16);
   final TerminalScreenParserSink product =
       TerminalScreenParserSink.forScreenSet(
         screens,
@@ -115,6 +115,10 @@ TerminalApplicationUnsupportedTrace traceTerminalApplicationUnsupported(
       Uint8List.sublistView(output, offset, resize.outputBytesBefore),
     );
     screens.resize(rows: resize.rows, columns: resize.columns);
+    screens.updateLogicalViewportSize(
+      width: resize.columns * 8,
+      height: resize.rows * 16,
+    );
     offset = resize.outputBytesBefore;
   }
   parser.parse(Uint8List.sublistView(output, offset));

@@ -232,25 +232,25 @@ stream while applying both recorded resizes at their original byte offsets. A
 tool-only `VtParserSink` delegate records an action only when the product sink's
 unsupported counter increases, then reconstructs the equivalent 7-bit bytes
 from the typed parser action. The capture-time surface accounted for all 526
-unsupported increments as 28 unique observed variants; the current bounded
-DECRQSS closure replay accounts for 78 increments as 16 variants. It does not infer
+unsupported increments as 28 unique observed variants; the completed
+focus/mouse/query closure replay accounts for 71 increments as 12 variants. It does not infer
 bytes from documentation or scan arbitrary escape-looking text inside
 printable payloads.
 
 `compatibility/application_matrix_acceptance.json` groups those variants into
-10 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
+8 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
 present in evidence. Replaying each minimal sequence produces exactly one
 bounded reject, no cancel/limit/malformed/incomplete result, and no standalone
-screen-state mutation. All 10 remain explicit unsupported rather than being
+screen-state mutation. All 8 remain explicit unsupported rather than being
 silently normalized into success; DECRQSS SGR is now a supported partial DCS
 selector and no longer appears as a matrix gap.
 
-| Gap | Observed applications | Current impact/disposition | Ordered owner |
+| Compatibility area | Observed applications | Current impact/disposition | Ordered owner |
 | --- | --- | --- | --- |
 | focus reporting | Emacs, lazygit, mosh, Neovim, tmux | DEC 1004 state、native focus routing、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
 | SGR pixel mouse | lazygit | mode 1016、native physical-pixel geometry、wheel、Shift-local routing、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
 | highlight mouse | mosh | captureはmode 1001 resetのみ。stateful enable/handshakeを実装せず明示的非対応 | evidence-driven future decision |
-| XTVERSION and window-size report | Emacs, lazygit, tmux | query fallback; explicit unsupported | Phase 6 focus/mouse/query task |
+| XTVERSION and window-size report | Emacs, lazygit, tmux | fixed identity、logical text-area pixels、rows/columns、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
 | Kitty query, XTMODKEYS, XTQMODKEYS, application escape | lazygit, Neovim, tmux | input protocol; explicit unsupported | Phase 9 Kitty keyboard task |
 | synchronized output | fzf, lazygit | presentation atomicity; explicit unsupported | Phase 9 synchronized-output task |
 | theme report/update | tmux | query/notification fallback; explicit unsupported | Phase 9 light/dark reports task |
@@ -288,16 +288,19 @@ and does not justify advertising the stateful highlight handshake. Query gaps
 remain assigned to the following ordered child. The third child implements the
 complete DECRQSS SGR query without changing immutable captures. Neovim's
 current rejects fall from 4 to 3, leaving 78 increments, 16 variants, and 10
-owned gaps; the former safe-ignore gap is closed.
+owned gaps; the former safe-ignore gap is closed. The fourth child then adds
+both XTVERSION forms and XTWINOPS reports 14/18. Emacs becomes a clean
+agreement; lazygit falls from 33 to 30 current rejects and tmux from 9 to 6.
+The complete replay now has 71 increments, 12 variants, and 8 owned gaps.
 
-The cell outcome is two clean agreements (ncurses and SSH) and six accepted documented-gap
+The cell outcome is three clean agreements (Emacs, ncurses, and SSH) and five accepted documented-gap
 cells. “Accepted” means the captured workflow completed, every non-parser
 semantic check passed, all rejected bytes are explicit and owned, and no
 matrix-level crash/corruption/unbounded-resource blocker remains. It does not
 turn any false `parser-clean` check into true. The normal gate reports
-`TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=2
-documented_gap_cells=6 gaps=10 unique_sequences=16
-unsupported_increments=78`.
+`TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=3
+documented_gap_cells=5 gaps=8 unique_sequences=12
+unsupported_increments=71`.
 
 The version-2 acceptance report pins the current product implementation
 manifest. It retains the original capture counters per cell while recording
@@ -306,6 +309,13 @@ immutable PTY bytes rather than by rewriting their provenance.
 
 ## Investigation log
 
+- 2026-09-07: XTVERSION/XTWINOPS closure retained the same 57,737 immutable PTY
+  bytes and resize offsets. Emacs 1→0, lazygit 33→30, and tmux 9→6 current
+  unsupported counts produce 71 increments, 12 variants, and 8 owned gaps.
+  Four query variants and the two owned gaps disappeared; Emacs is the third
+  clean agreement. The replay supplies deterministic synthetic logical
+  geometry only to decide selector support, while exact native content-view
+  geometry and reply bytes are independently checked in both product runtimes.
 - 2026-09-07: bounded DECRQSS SGR closure retained the same 57,737 immutable
   PTY bytes and resize offsets. Neovim's current unsupported count fell from 4
   to 3; the complete replay now has 78 increments, 16 variants, and 10 owned
@@ -477,9 +487,13 @@ immutable PTY bytes rather than by rewriting their provenance.
 - Focus-mode closure replay: passed with 82 current unsupported increments, 18
   variants, and 12 owned gaps; captured/current counts remain exact in every
   cell.
+- Completed focus/mouse/query replay: passed with 71 current unsupported
+  increments, 12 variants, and 8 owned gaps; Emacs, ncurses, and SSH are clean
+  agreements and all five remaining gap cells have explicit later owners or a
+  reviewed non-adoption decision.
 - `git diff --check`, staged-scope review, and final worktree review are run
   immediately before the completion commit.
-- Remaining work is not hidden: the 12 gap owners are pinned in the acceptance
-  report and linked from ROADMAP. Character-set and XTGETTCAP gaps are closed;
-  later Phase 6/9 owners retain the remaining query, metadata, input,
-  presentation, and theme gaps.
+- Remaining work is not hidden: the 8 gap owners are pinned in the acceptance
+  report and linked from ROADMAP. Character-set, XTGETTCAP, XTVERSION, and
+  window-size gaps are closed; later Phase 9 owners retain input, presentation,
+  and theme gaps, while highlight mode has an evidence-backed non-adoption.

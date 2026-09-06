@@ -244,6 +244,10 @@ final class TerminalLiveMetalSurface {
          screen: screenSet.activeScreen,
        ) {
     _updatePixelViewport();
+    screenSet.updateLogicalViewportSize(
+      width: logicalWidth,
+      height: logicalHeight,
+    );
     late final TerminalMetalFailureRecoveryCoordinator<
       TerminalMetalRendererRecoveryDomain
     >
@@ -518,6 +522,10 @@ final class TerminalLiveMetalSurface {
     final TerminalGridSize size = gridSizeFor(
       logicalWidth: logicalWidth,
       logicalHeight: logicalHeight,
+    );
+    screenSet.updateLogicalViewportSize(
+      width: logicalWidth,
+      height: logicalHeight,
     );
     if (_logicalWidth != logicalWidth || _logicalHeight != logicalHeight) {
       _logicalWidth = logicalWidth;

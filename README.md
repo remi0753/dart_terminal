@@ -45,6 +45,8 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   `CSI I`/`CSI O`としてactive PTYへ送る製品routing
 - 完全な`DCS $ q m ST`に対し、現在のSGR属性・ANSI/256/direct色を64 byte以内の
   xterm互換形式で返すDECRQSS。外部製品固有の有効なSGR直列化差はraw証跡を保持して比較
+- `CSI > q`/`CSI > 0 q`へ固定protocol identity `DartTerminal(1)`を返すXTVERSIONと、
+  AppKit content viewのbounded logical pixel寸法・現在の行列数を返すXTWINOPS 14/18
 - stable logical anchorを使うcharacter/word/logical-line multi-click selection、
   forward/reverse drag、1 deadlineのbounded edge autoscroll、history-aware viewport
   projection、1x/2x Metal selection overlay。CJK fallback glyphもcanonicalなwidth-two
@@ -107,7 +109,7 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - end-exclusive cell/word/logical-line selection、soft/hard wrap準拠のbounded
   text extraction、cell-aligned exact scalarのforward/backward bounded search
 - 最大64 byteのreply encoderと、DA/DA2、DSR/CPR、DECRQM、DECRQSS SGR、
-  OSC palette/default color queryのterminal-core dispatch
+  XTVERSION、XTWINOPS 14/18、OSC palette/default color queryのterminal-core dispatch
 - ncurses 6.6で固定生成・能力監査した`xterm-256color` terminfoを両runtime bundleへ同梱し、
   起動時にheader/name/layoutを検証してlocal `TERMINFO`へ接続する環境contract。欠落・破損時と
   SSHのremote PTYでは私有pathを送らず標準`TERM=xterm-256color`へfallback。G0/G1、SO/SI、

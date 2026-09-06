@@ -16,6 +16,8 @@ enum TerminalScreenKind { primary, alternate }
 
 /// Owns fixed-size primary and alternate grids with shared resources.
 final class TerminalScreenSet {
+  static const int maximumLogicalViewportExtent = 65535;
+
   factory TerminalScreenSet({
     required int rows,
     required int columns,
@@ -98,6 +100,8 @@ final class TerminalScreenSet {
   bool _bracketedPaste = false;
   bool _focusReporting = false;
   int _focusReportingGeneration = 1;
+  int? _logicalViewportWidth;
+  int? _logicalViewportHeight;
   TerminalMouseTrackingMode _mouseTracking = TerminalMouseTrackingMode.none;
   TerminalMouseCoordinateEncoding _mouseEncoding =
       TerminalMouseCoordinateEncoding.legacy;
@@ -123,6 +127,36 @@ final class TerminalScreenSet {
       TerminalMouseModes(tracking: _mouseTracking, encoding: _mouseEncoding);
   int get transitionGeneration => _transitionGeneration;
   TerminalViewport get viewport => _viewport;
+  ({int width, int height})? get logicalViewportSize {
+    final int? width = _logicalViewportWidth;
+    final int? height = _logicalViewportHeight;
+    return width == null || height == null
+        ? null
+        : (width: width, height: height);
+  }
+
+  /// Publishes AppKit content-view dimensions for bounded XTWINOPS replies.
+  ///
+  /// Invalid or unrepresentable geometry clears the report rather than
+  /// retaining stale native state. Terminal grid dimensions remain separate.
+  bool updateLogicalViewportSize({
+    required double width,
+    required double height,
+  }) {
+    if (!width.isFinite ||
+        !height.isFinite ||
+        width <= 0 ||
+        height <= 0 ||
+        width > maximumLogicalViewportExtent ||
+        height > maximumLogicalViewportExtent) {
+      _logicalViewportWidth = null;
+      _logicalViewportHeight = null;
+      return false;
+    }
+    _logicalViewportWidth = width.ceil();
+    _logicalViewportHeight = height.ceil();
+    return true;
+  }
 
   /// Atomically replaces both fixed-size grids after visible-line reflow.
   void resize({required int rows, required int columns}) {

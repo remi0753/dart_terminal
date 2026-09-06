@@ -878,7 +878,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] native window title同期と両runtime製品受け入れ
   - [x] OSC 12/112 cursor color policyとrenderer反映
   - [x] deny-by-default OSC 52 policy、inventory/matrix回帰、親項目完了判定
-- [ ] focus/mouse/bracketed paste/query reports
+- [x] focus/mouse/bracketed paste/query reports
   （[`docs/phase6/decrqss-sgr-gap.md`](docs/phase6/decrqss-sgr-gap.md) のgapを参照して実施）
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のmanual項目も参照して実施）
   （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のfocus/mouse/query gapを参照して実施）
@@ -886,7 +886,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] DEC focus reporting state、native routing、両runtime製品受け入れ
   - [x] SGR pixel mouse mode、native geometry、highlight mode非採用判断
   - [x] bounded DECRQSS SGR reply、differential gap解消
-  - [ ] XTVERSION/XTWINOPS、bracketed paste回帰、matrix/親項目完了判定
+  - [x] XTVERSION/XTWINOPS、bracketed paste回帰、matrix/親項目完了判定
 - [ ] parser inspector と sequence trace export
 - [ ] compatibility bug の regression corpus 化
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のadoption判断も参照して実施）

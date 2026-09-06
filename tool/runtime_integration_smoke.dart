@@ -929,6 +929,17 @@ Future<void> _runTerminalDisplay(
     ),
     'terminal display launch omitted exact DECRQSS SGR PTY acceptance',
   );
+  final RegExp queryReportAcceptance = RegExp(
+    r'^TERMINAL_QUERY_REPORT_TEST xtversion=true pixels=true '
+    r'characters=true exact=true identity=DartTerminal\(1\) '
+    r'width=[1-9][0-9]* height=[1-9][0-9]* '
+    r'rows=[1-9][0-9]* columns=[1-9][0-9]*$',
+    multiLine: true,
+  );
+  _expect(
+    queryReportAcceptance.hasMatch(observation.stdoutText),
+    'terminal display launch omitted exact XTVERSION/XTWINOPS acceptance',
+  );
   final RegExp mouseAcceptance = RegExp(
     r'^TERMINAL_MOUSE_TEST protocols=5 x10=true utf8=true urxvt=true '
     r'sgr=true pixel=true local=true shift_override=true exact=true reports=6 '
@@ -1022,8 +1033,8 @@ Future<void> _runTerminalDisplay(
     r'wrapped_rows=([2-9]|[1-9][0-9]+) prompt_bottom=true '
     r'metal_default=true newest_frame=true frame_bounded=true '
     r'system_font=true mode_key=true text_input=true input_matrix=true '
-    r'decrqss=true focus=true mouse=true selection=true close_scroll=true '
-    r'scroll=true '
+    r'decrqss=true query_reports=true focus=true mouse=true selection=true '
+    r'close_scroll=true scroll=true '
     r'hyperlink=true '
     r'window_title=true cursor_color=true accessibility=true font_size=14\.0 '
     r'rows=([4-9]|[1-9][0-9]+) '

@@ -77,6 +77,7 @@ abstract final class TerminalCompatibilitySurface {
     0x012071,
     0x012470,
     0x3e000063,
+    0x3e000071,
     0x3f000068,
     0x3f00006c,
     0x3f00006e,

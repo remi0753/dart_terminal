@@ -9,11 +9,12 @@
 
 ## Purpose and evidence
 
-The reviewed black-box differential corpus found one reply difference in the
-rendition family. Kitty 0.48.2 and xterm 411 reply to `DECRQSS` for SGR, while
-Dart Terminal consumes the complete DCS string and emits no reply. This agrees
-with the existing `dec:dcs:decrqss` inventory classification of `safe-ignore`;
-it is not parser corruption or an unbounded string path.
+The reviewed black-box differential corpus originally found one reply
+difference in the rendition family. Kitty 0.48.2 and xterm 411 replied to
+`DECRQSS` for SGR while Dart Terminal consumed the complete DCS string and
+emitted no reply. That historical result agreed with the then-current
+`safe-ignore` classification; it was not parser corruption or an unbounded
+string path.
 
 The original styled case is reduced to the complete seven-byte sequence below.
 It contains only the introducer, `$q` selector, `m` request payload, and ST
@@ -57,7 +58,8 @@ counts Neovim's query as a reject.
   immutability, and every split/bytewise request plan.
 - Differential acceptance passes 12 cells: 8 agreements, including one
   semantic Kitty agreement, no documented gaps, and 4 unavailable results.
-- Application acceptance passes 78 replayed unsupported increments, 16 unique
-  variants, and 10 remaining owned gaps.
+- After the enclosing query-report closure, application acceptance passes 71
+  replayed unsupported increments, 12 unique variants, and 8 remaining owned
+  gaps.
 - Real-PTY Developer JIT and Release AOT product runs observe the exact 9-byte
   default reply.

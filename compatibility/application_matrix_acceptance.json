@@ -4,31 +4,29 @@
   "evidence_index_path": "compatibility/application_matrix_evidence.json",
   "evidence_index_sha256": "b2422e4a6a3c6073306f2c615ec9b85d49621440f06998c3435871949caa554e",
   "implementation_manifest_path": "compatibility/implemented_sequence_manifest.json",
-  "implementation_manifest_sha256": "476bbffc5b545212aa101a403a062004138dee729978ad855317153dcd3c10fb",
+  "implementation_manifest_sha256": "5af834d2defeebf22f52fdf548334250cbcad99071ca00cf33710b37dc3bedcf",
   "trace_tool_path": "tool/terminal_application_unsupported_trace.dart",
-  "trace_tool_sha256": "62cddaab40420b436d86c3d5a71fe49b750ea206bd0f7ee7cd73d7e579e50404",
+  "trace_tool_sha256": "ad3e13c69703151b26b4a2728a04f93ab7f2a46ebad3e917b4d574cb642ee5bc",
   "status": "accepted-with-owned-gaps",
   "totals": {
     "cells": 8,
-    "clean_agreements": 2,
-    "documented_gap_cells": 6,
-    "unique_sequences": 16,
-    "unsupported_increments": 78,
-    "gaps": 10,
+    "clean_agreements": 3,
+    "documented_gap_cells": 5,
+    "unique_sequences": 12,
+    "unsupported_increments": 71,
+    "gaps": 8,
     "safe_ignore_gaps": 0,
-    "explicit_unsupported_gaps": 10
+    "explicit_unsupported_gaps": 8
   },
   "cells": [
     {
       "application_id": "emacs",
       "scenario_id": "emacs-terminal-ui",
-      "classification": "documented-gap",
+      "classification": "clean-agreement",
       "accepted": true,
       "captured_unsupported_sequences": 3,
-      "replayed_unsupported_sequences": 1,
-      "gap_ids": [
-        "xtversion"
-      ]
+      "replayed_unsupported_sequences": 0,
+      "gap_ids": []
     },
     {
       "application_id": "fzf",
@@ -47,13 +45,11 @@
       "classification": "documented-gap",
       "accepted": true,
       "captured_unsupported_sequences": 42,
-      "replayed_unsupported_sequences": 33,
+      "replayed_unsupported_sequences": 30,
       "gap_ids": [
         "kitty-keyboard-query",
         "synchronized-output",
-        "window-size-report",
-        "xtqmodkeys",
-        "xtversion"
+        "xtqmodkeys"
       ]
     },
     {
@@ -103,13 +99,11 @@
       "classification": "documented-gap",
       "accepted": true,
       "captured_unsupported_sequences": 25,
-      "replayed_unsupported_sequences": 9,
+      "replayed_unsupported_sequences": 6,
       "gap_ids": [
         "application-escape-mode",
         "theme-report",
-        "theme-updates",
-        "window-size-report",
-        "xtversion"
+        "theme-updates"
       ]
     }
   ],
@@ -198,22 +192,6 @@
       "matrix_blocker": false
     },
     {
-      "id": "window-size-report",
-      "disposition": "explicit-unsupported",
-      "impact": "query-fallback",
-      "inventory_ids": [
-        "xterm:csi:xtwinops"
-      ],
-      "owner": "ROADMAP.md#phase-6-focus-mouse-query",
-      "minimal_hex": "1b5b313474",
-      "variants": [
-        "1b5b313474",
-        "1b5b313874"
-      ],
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
       "id": "xtmodkeys",
       "disposition": "explicit-unsupported",
       "impact": "input-protocol",
@@ -240,22 +218,6 @@
       "minimal_hex": "1b5b3f346d",
       "variants": [
         "1b5b3f346d"
-      ],
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
-      "id": "xtversion",
-      "disposition": "explicit-unsupported",
-      "impact": "query-fallback",
-      "inventory_ids": [
-        "xterm:csi:xtversion"
-      ],
-      "owner": "ROADMAP.md#phase-6-focus-mouse-query",
-      "minimal_hex": "1b5b3e71",
-      "variants": [
-        "1b5b3e3071",
-        "1b5b3e71"
       ],
       "screen_mutation": false,
       "matrix_blocker": false

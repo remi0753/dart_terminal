@@ -23,6 +23,7 @@ abstract final class TerminalReplyEncoder {
   static const int maximumCoordinate = 65535;
   static const int maximumMode = 0x7fffffff;
   static const int maximumOsc52SelectionBytes = 12;
+  static const String xtermVersionIdentity = 'DartTerminal(1)';
 
   static Uint8List primaryDeviceAttributes() => Uint8List.fromList(const <int>[
     0x1b,
@@ -42,6 +43,24 @@ abstract final class TerminalReplyEncoder {
 
   static Uint8List terminalStatusOk() =>
       Uint8List.fromList(const <int>[0x1b, 0x5b, 0x30, 0x6e]);
+
+  static Uint8List xtermVersion() {
+    final _TerminalReplyBuilder builder = _TerminalReplyBuilder()
+      ..bytes(const <int>[0x1b, 0x50, 0x3e, 0x7c])
+      ..bytes(xtermVersionIdentity.codeUnits)
+      ..terminator(VtStringTerminator.stringTerminator);
+    return builder.finish();
+  }
+
+  static Uint8List textAreaSizePixels({
+    required int height,
+    required int width,
+  }) => _textAreaSizeReport(code: 4, height: height, width: width);
+
+  static Uint8List textAreaSizeCharacters({
+    required int rows,
+    required int columns,
+  }) => _textAreaSizeReport(code: 8, height: rows, width: columns);
 
   static Uint8List xtgettcapNotFound() =>
       Uint8List.fromList(const <int>[0x1b, 0x50, 0x30, 0x2b, 0x72, 0x1b, 0x5c]);
@@ -228,6 +247,24 @@ abstract final class TerminalReplyEncoder {
       value == 0x71 ||
       value == 0x73 ||
       (value >= 0x30 && value <= 0x37);
+
+  static Uint8List _textAreaSizeReport({
+    required int code,
+    required int height,
+    required int width,
+  }) {
+    RangeError.checkValueInInterval(height, 1, maximumCoordinate, 'height');
+    RangeError.checkValueInInterval(width, 1, maximumCoordinate, 'width');
+    final _TerminalReplyBuilder builder = _TerminalReplyBuilder()
+      ..csi(null)
+      ..decimal(code)
+      ..byte(0x3b)
+      ..decimal(height)
+      ..byte(0x3b)
+      ..decimal(width)
+      ..byte(0x74);
+    return builder.finish();
+  }
 
   static void _sgrParameter(_TerminalReplyBuilder builder, int value) {
     builder

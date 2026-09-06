@@ -29,10 +29,10 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 
 | Support classification | Records |
 | --- | ---: |
-| `implemented` | 84 |
+| `implemented` | 85 |
 | `partial` | 19 |
 | `safe-ignore` | 9 |
-| `unsupported` | 148 |
+| `unsupported` | 147 |
 | **Total** | **260** |
 
 | Selector kind | Records |
@@ -49,7 +49,7 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `mode` | 80 |
 | **Total** | **260** |
 
-The 84 implemented plus 19 partial records reconcile exactly to all 103 product declarations (81 sequence selectors and 22 modes). The 9 safe-ignore records cover 6 concrete DCS forms and SOS/PM/APC; all 148 remaining records are explicitly unsupported/rejected.
+The 85 implemented plus 19 partial records reconcile exactly to all 104 product declarations (82 sequence selectors and 22 modes). The 9 safe-ignore records cover 6 concrete DCS forms and SOS/PM/APC; all 147 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 
@@ -67,7 +67,7 @@ The 84 implemented plus 19 partial records reconcile exactly to all 103 product 
 | `ecma48:csi:sgr` | `CSI m` | Text attributes and ANSI/256/direct colors are implemented; the full ECMA/xterm rendition repertoire is not. |
 | `ecma48:csi:sm` | `CSI h` | The selector is implemented for the explicitly inventoried ANSI modes only. |
 | `xterm:csi:ed` | `CSI J` | ECMA/VT modes 0–2 are implemented; xterm saved-lines mode 3 is not. |
-| `xterm:csi:xtwinops` | `CSI t` | Bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported. |
+| `xterm:csi:xtwinops` | `CSI t` | Text-area reports 14/18 and bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported. |
 | `xterm:dcs:xtgettcap` | `DCS + q Pt ST` | Bounded requests receive an explicit unavailable reply. The audited database intentionally omits security-sensitive Ms/OSC 52 and no dynamic keyboard-capability service is advertised. |
 | `xterm:osc:osc-10` | `OSC 10 ; Pt ST` | Single bounded foreground mutation/query is implemented; chained dynamic-color parameters are not. |
 | `xterm:osc:osc-11` | `OSC 11 ; Pt ST` | Single bounded background mutation/query is implemented; chained dynamic-color parameters are not. |
@@ -92,7 +92,7 @@ The 84 implemented plus 19 partial records reconcile exactly to all 103 product 
 ## Gap ownership
 
 - The next black-box differential and real-application matrix tasks decide which generic ECMA/DEC/xterm gaps become implementation work.
-- The current focus/mouse/query task has implemented focus mode 1004, SGR pixel mouse 1016, and bounded DECRQSS SGR reporting, and continues to own XTVERSION and window-size report behavior.
+- The focus/mouse/query task has implemented focus mode 1004, SGR pixel mouse 1016, bounded DECRQSS SGR, XTVERSION, and text-area size reports 14/18. Other report operations remain evidence-driven.
 - The OSC policy task has implemented title commands 0/1/2, cwd command 7, cursor color 12/112, and the security-sensitive OSC 52 deny-by-default boundary. Opt-in clipboard access remains deferred.
 - The terminfo task owns remaining XTSETTCAP decisions; the existing `v1 保留` feature-matrix decision continues to own Sixel.
 - Unsupported extended character-set, rectangular-editing, locator, printer, and terminal-local xterm resource controls stay rejected until differential/application evidence justifies a new ordered task.

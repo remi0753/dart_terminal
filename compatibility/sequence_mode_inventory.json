@@ -3986,24 +3986,28 @@
     {
       "id": "xterm:csi:xtversion",
       "mnemonic": "XTVERSION",
-      "syntax": "CSI > 0 q",
+      "syntax": "CSI > q",
       "selector": {
         "kind": "csi",
         "privateMarker": 62,
         "intermediates": [],
         "finalByte": 113
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "reply",
       "sourceRefs": [
         {
           "source": "xterm-411",
           "locator": "ctlseqs.ms, XTVERSION"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The empty and explicit-zero requests return the fixed bounded DartTerminal(1) protocol identity."
     },
     {
       "id": "xterm:csi:xtwinops",
@@ -4029,7 +4033,7 @@
       "testEvidence": [
         "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
-      "notes": "Bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported."
+      "notes": "Text-area reports 14/18 and bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported."
     },
     {
       "id": "xterm:dcs:sixel",

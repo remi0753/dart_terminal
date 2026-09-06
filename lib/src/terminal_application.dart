@@ -12,6 +12,7 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 import 'runtime_lifecycle.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
+import 'terminal_core/terminal_reply.dart';
 import 'terminal_core/terminal_screen.dart';
 import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
@@ -1712,6 +1713,7 @@ final class TerminalApplication {
       textInputEventRouter,
     );
     final bool decrqss = await _exerciseDecrqssSgr(session, pane);
+    final bool queryReports = await _exerciseQueryReports(session, pane);
     final bool focus = await _exerciseFocusReporting(
       application,
       session,
@@ -1849,6 +1851,7 @@ final class TerminalApplication {
           textInput &&
           inputMatrix &&
           decrqss &&
+          queryReports &&
           focus &&
           mouse &&
           selection &&
@@ -1870,6 +1873,7 @@ final class TerminalApplication {
           'frame_bounded=$frameBounded system_font=$systemFont '
           'mode_key=$modeKey text_input=$textInput '
           'input_matrix=$inputMatrix decrqss=$decrqss '
+          'query_reports=$queryReports '
           'focus=$focus mouse=$mouse '
           'selection=$selection '
           'close_scroll=$closeScroll '
@@ -1898,6 +1902,7 @@ final class TerminalApplication {
       'frame_bounded=$frameBounded system_font=$systemFont '
       'mode_key=$modeKey text_input=$textInput '
       'input_matrix=$inputMatrix decrqss=$decrqss '
+      'query_reports=$queryReports '
       'focus=$focus mouse=$mouse '
       'selection=$selection '
       'close_scroll=$closeScroll '
@@ -1923,6 +1928,63 @@ final class TerminalApplication {
     stdout.writeln(
       'TERMINAL_DECRQSS_TEST selector=sgr default=true xterm=true '
       'exact=true bytes=9',
+    );
+    return true;
+  }
+
+  static Future<bool> _exerciseQueryReports(
+    TerminalSession session,
+    TerminalPane pane,
+  ) async {
+    final ({int width, int height})? viewport =
+        session.terminalScreenSet.logicalViewportSize;
+    _expectLifecycle(
+      viewport != null,
+      'query report fixture requires published logical viewport geometry',
+    );
+    final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+    final Uint8List version = TerminalReplyEncoder.xtermVersion();
+    final Uint8List pixels = TerminalReplyEncoder.textAreaSizePixels(
+      height: viewport!.height,
+      width: viewport.width,
+    );
+    final Uint8List characters = TerminalReplyEncoder.textAreaSizeCharacters(
+      rows: screen.rows,
+      columns: screen.columns,
+    );
+    String hex(Uint8List bytes) =>
+        bytes.map((int byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+    final String versionHex = hex(version);
+    final String pixelsHex = hex(pixels);
+    final String charactersHex = hex(characters);
+    const String exactMarker = '__DT_QUERY_REPORT_EXACT__';
+    pane.insertText(
+      "stty raw -echo; printf '\\033[>q'; "
+      "v1=\$(dd bs=1 count=${version.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "printf '\\033[>0q'; "
+      "v2=\$(dd bs=1 count=${version.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "printf '\\033[14t'; "
+      "px=\$(dd bs=1 count=${pixels.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "printf '\\033[18t'; "
+      "ch=\$(dd bs=1 count=${characters.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "stty sane; if [ \"\$v1\" = '$versionHex' ] && "
+      "[ \"\$v2\" = '$versionHex' ] && "
+      "[ \"\$px\" = '$pixelsHex' ] && "
+      "[ \"\$ch\" = '$charactersHex' ]; then "
+      "printf '\\r\\n__DT_QUERY_REPORT_%s__\\r\\n' 'EXACT'; else "
+      "printf '\\r\\n__DT_QUERY_REPORT_%s__\\r\\n' 'MISMATCH'; fi",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, exactMarker);
+    stdout.writeln(
+      'TERMINAL_QUERY_REPORT_TEST xtversion=true pixels=true '
+      'characters=true exact=true identity=${TerminalReplyEncoder.xtermVersionIdentity} '
+      'width=${viewport.width} height=${viewport.height} '
+      'rows=${screen.rows} columns=${screen.columns}',
     );
     return true;
   }

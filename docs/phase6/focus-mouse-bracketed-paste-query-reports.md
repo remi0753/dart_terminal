@@ -4,8 +4,8 @@
 
 - Date started: 2026-09-07
 - Scope: seventh Phase 6 compatibility-hardening roadmap item
-- Current status: focus reporting, SGR pixel mouse/highlight-mode disposition,
-  and bounded DECRQSS SGR complete; XTVERSION/XTWINOPS closure is next
+- Current status: complete; all four implementation units and the parent
+  roadmap item passed their required gates
 
 ## Purpose and background
 
@@ -239,6 +239,45 @@ and committed before the next unit starts.
   but failed the final aggregate marker because its test regex still described
   the previous output contract. Adding the independent `decrqss=true` field to
   that regex fixed the stale oracle; no product behavior changed.
+- 2026-09-07: after commit `02f3ffa`, ROADMAP was reread with a clean worktree.
+  The final ordered unit is XTVERSION/XTWINOPS 14/18, regression coverage for
+  bracketed paste and existing focus/cell/pixel mouse routing, then compatibility
+  matrix and parent-item completion. Parser inspector remains later and is not
+  implemented ahead of this unit.
+- 2026-09-07: pinned xterm Patch 411 defines `CSI > q` and `CSI > 0 q` as the
+  same XTVERSION request, answered by `DCS > | text ST`; XTWINOPS 14 returns
+  `CSI 4 ; height ; width t` in pixels and operation 18 returns
+  `CSI 8 ; rows ; columns t`. Only those exact parameter forms are accepted.
+- 2026-09-07: native bridge inspection confirmed `WindowResizedEvent` uses
+  `contentView.bounds.size`, so its width/height are the same AppKit logical
+  text-area dimensions passed to the Metal surface. `TerminalScreenSet` now
+  holds only the latest rounded-out logical geometry, independent of terminal
+  rows/columns and snapshots. Non-finite, non-positive, or over-65,535 values
+  clear the report to prevent stale or unbounded replies.
+- 2026-09-07: XTVERSION uses fixed protocol identity `DartTerminal(1)`. The
+  integer is deliberately a terminal-protocol identity revision rather than an
+  invented application release version or environment-derived string. All
+  three new reply forms remain below the shared 64-byte bound.
+- 2026-09-07: application replay explicitly supplies deterministic synthetic
+  logical geometry from the recorded grid solely so the unsupported-selector
+  trace can classify operations 14/18; reply bytes are not part of that trace.
+  Actual AppKit geometry and exact reply bytes are verified separately through
+  real zsh in the product. An attempted capture-driver regeneration without
+  its deleted temporary artifact root failed at the required argument check;
+  the capture-driver edit was reverted so immutable evidence provenance was
+  not rewritten or falsely reattributed.
+- 2026-09-07: the inventory now contains 85 implemented, 19 partial, 9
+  safe-ignore, and 147 unsupported records. XTVERSION is implemented and
+  XTWINOPS remains partial because only reports 14/18 and title-stack 22/23 are
+  supported. The implementation surface has 82 selectors plus 22 modes.
+- 2026-09-07: immutable application replay removes both XTVERSION variants and
+  both window-size variants. Emacs becomes a clean agreement, lazygit falls
+  from 33 to 30 rejects, and tmux from 9 to 6, producing 71 increments, 12
+  variants, 8 owned gaps, 3 clean cells, and 5 documented-gap cells.
+- 2026-09-07: reviewed differential observations changed only implementation
+  provenance and dependent hashes. The 210 split runs and 12-cell acceptance
+  remain 8 agreements (1 semantic), no documented gaps, and 4 unavailable
+  Ghostty captures.
 
 ## Verification results — focus reporting
 
@@ -321,3 +360,39 @@ and committed before the next unit starts.
   differential/application/terminfo acceptance, formatting of 179 files,
   static analysis with no issues, and the complete Dart test runner.
 - `git diff --check`: passed in the pre-commit review.
+
+## Verification results — XTVERSION, XTWINOPS, and parent closure
+
+- `dart run test/terminal_reply_test.dart`: passed exact empty/zero XTVERSION,
+  logical-pixel and row/column report bytes, outward rounding, resize updates,
+  invalid-geometry fail-closed behavior, query immutability, invalid parameter
+  forms, fixed reply bounds, every split, and bytewise delivery.
+- `dart run test/terminal_compatibility_surface_test.dart` and
+  `dart run test/terminal_compatibility_inventory_test.dart`: passed exact
+  82-selector/22-mode declaration and 260-record reconciliation.
+- `dart run test/terminal_application_acceptance_test.dart`: passed all normal
+  and negative invariants with 3 clean cells, 5 documented-gap cells, 8 gaps,
+  12 variants, and 71 replayed unsupported increments.
+- `make runtime-terminal-display-integration`: passed on Apple M1/arm64 in
+  Developer JIT (2,853 ms) and Release AOT (2,114 ms). Each real-zsh run read
+  exact replies for `CSI > q`, `CSI > 0 q`, `CSI 14 t`, and `CSI 18 t`, while
+  the same run revalidated focus and cell/pixel mouse routing.
+- `make runtime-clipboard-integration`: passed the existing bounded exact
+  10 MiB bracketed paste, confirmation, queue, and timer responsiveness checks
+  in Developer JIT (3,480 ms) and Release AOT (2,956 ms).
+- `dart run test/terminal_focus_reporter_test.dart`,
+  `dart run test/terminal_mouse_encoder_test.dart`,
+  `dart run test/terminal_mouse_router_test.dart`,
+  `dart run test/terminal_scroll_router_test.dart`, and
+  `dart run test/terminal_paste_test.dart`: passed the complete focused input
+  regression set after the query-report changes.
+- `dart run tool/product_parser_corpus.dart`: passed 8 reviewed cases, 1,421
+  input bytes, and 1,437 split/bytewise runs with unchanged snapshot hash
+  2,091,085,125.
+- `dart analyze`: passed with no issues.
+- `CI=true make test`: passed all generated-artifact freshness checks,
+  differential/application/terminfo acceptance, formatting of 179 files with
+  no changes, static analysis with no issues, and the complete Dart test
+  runner.
+- `git diff --check`: passed before the final roadmap update and is repeated
+  in the commit review.

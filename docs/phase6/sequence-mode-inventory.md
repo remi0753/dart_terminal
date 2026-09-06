@@ -283,3 +283,9 @@ complete.
   implementation surface contains 80 selectors and 20 modes. Partial denotes
   empty read replies and denied write/clear behavior, while opt-in clipboard
   authority remains explicitly deferred.
+- 2026-09-07: the completed focus/mouse/query task evolved the same fixed
+  260-record baseline to 85 implemented, 19 partial, 9 safe-ignore, and 147
+  unsupported records. The implementation surface now contains 82 selectors
+  and 22 modes (104 declarations): XTVERSION is implemented, XTWINOPS remains
+  partial with exact report operations 14/18 plus title operations 22/23, and
+  DECRQSS remains partial with only the complete SGR payload implemented.

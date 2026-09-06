@@ -35,7 +35,7 @@ void _testGeneratedManifestIsDeterministicAndFresh() {
   _expect(
     root['format'] == 'dart-terminal-implementation-surface' &&
         root['version'] == 1 &&
-        selectors.length == 81 &&
+        selectors.length == 82 &&
         modes.length == 22 &&
         _listsEqual(ignored, const <String>['dcs', 'sos', 'pm', 'apc']),
     'manifest has the reviewed selector, mode, and policy totals',
@@ -185,6 +185,8 @@ List<int> _csiProbe(int key) {
     parameters = privateMarker == 0x3f ? '25' : '4';
   } else if (privateMarker == 0 && count == 0 && finalByte == 0x74) {
     parameters = '22;2';
+  } else if (privateMarker == 0x3e && count == 0 && finalByte == 0x71) {
+    parameters = '0';
   } else {
     parameters = switch (finalByte) {
       0x63 => '0',
@@ -244,6 +246,7 @@ List<int> _dcsProbe(int key) {
 
 _ParseResult _parse(List<int> input) {
   final TerminalScreenSet screens = TerminalScreenSet(rows: 6, columns: 8);
+  screens.updateLogicalViewportSize(width: 800, height: 600);
   final TerminalScreenParserSink sink = TerminalScreenParserSink.forScreenSet(
     screens,
     onReply: (_) => true,

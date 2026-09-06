@@ -646,6 +646,17 @@ final class TerminalScreenParserSink
   }
 
   bool _dispatchCsiQuery(VtSequenceHeader sequence) {
+    if (sequence.privateMarker == 0x3e &&
+        sequence.intermediateCount == 0 &&
+        sequence.finalByte == 0x71) {
+      _reportXtermVersion(sequence);
+      return true;
+    }
+    if (sequence.privateMarker == null &&
+        sequence.intermediateCount == 0 &&
+        sequence.finalByte == 0x74) {
+      if (_reportTextAreaSize(sequence)) return true;
+    }
     if (sequence.intermediateCount == 0 && sequence.finalByte == 0x63) {
       if (sequence.privateMarker == null || sequence.privateMarker == 0x3e) {
         _reportDeviceAttributes(sequence);
@@ -668,6 +679,45 @@ final class TerminalScreenParserSink
       return true;
     }
     return false;
+  }
+
+  void _reportXtermVersion(VtSequenceHeader sequence) {
+    if (sequence.parameters.length > 1 ||
+        (sequence.parameters.length == 1 &&
+            (sequence.parameters.valueAt(0) ?? 0) != 0)) {
+      _unsupportedSequenceCount++;
+      return;
+    }
+    _emitReply(TerminalReplyEncoder.xtermVersion());
+  }
+
+  bool _reportTextAreaSize(VtSequenceHeader sequence) {
+    if (sequence.parameters.length != 1) return false;
+    switch (sequence.parameters.valueAt(0)) {
+      case 14:
+        final ({int width, int height})? size = screenSet?.logicalViewportSize;
+        if (size == null) {
+          _unsupportedSequenceCount++;
+        } else {
+          _emitReply(
+            TerminalReplyEncoder.textAreaSizePixels(
+              height: size.height,
+              width: size.width,
+            ),
+          );
+        }
+        return true;
+      case 18:
+        _emitReply(
+          TerminalReplyEncoder.textAreaSizeCharacters(
+            rows: screen.rows,
+            columns: screen.columns,
+          ),
+        );
+        return true;
+      default:
+        return false;
+    }
   }
 
   void _reportDeviceAttributes(VtSequenceHeader sequence) {

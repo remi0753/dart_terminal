@@ -8,6 +8,7 @@ void main() => runTerminalReplyTests();
 void runTerminalReplyTests() {
   _testBoundedSemanticEncoder();
   _testDeviceStatusAndModeQueries();
+  _testXtermVersionAndWindowSizeReports();
   _testOriginRelativeCursorReports();
   _testOscColorQueriesAndTerminators();
   _testXtgettcapExplicitNegativePolicy();
@@ -31,6 +32,21 @@ void _testBoundedSemanticEncoder() {
     TerminalReplyEncoder.terminalStatusOk(),
     '\x1b[0n',
     'terminal status report',
+  );
+  _expectBytes(
+    TerminalReplyEncoder.xtermVersion(),
+    '\x1bP>|DartTerminal(1)\x1b\\',
+    'XTVERSION has a stable protocol identity',
+  );
+  _expectBytes(
+    TerminalReplyEncoder.textAreaSizePixels(height: 65535, width: 65535),
+    '\x1b[4;65535;65535t',
+    'maximum text-area pixel size reply',
+  );
+  _expectBytes(
+    TerminalReplyEncoder.textAreaSizeCharacters(rows: 4096, columns: 4096),
+    '\x1b[8;4096;4096t',
+    'bounded text-area character size reply',
   );
   _expectBytes(
     TerminalReplyEncoder.xtgettcapNotFound(),
@@ -114,6 +130,11 @@ void _testBoundedSemanticEncoder() {
     'oversized mode',
   );
   _expectThrows(
+    () => TerminalReplyEncoder.textAreaSizePixels(height: 0, width: 1),
+    RangeError,
+    'zero text-area height',
+  );
+  _expectThrows(
     () => TerminalReplyEncoder.paletteColor(
       index: 256,
       color: 0x80000000,
@@ -139,6 +160,79 @@ void _testBoundedSemanticEncoder() {
     ),
     ArgumentError,
     'unsupported dynamic color command',
+  );
+}
+
+void _testXtermVersionAndWindowSizeReports() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 5, columns: 8);
+  _expect(
+    screens.updateLogicalViewportSize(width: 919.2, height: 579.1) &&
+        screens.logicalViewportSize == (width: 920, height: 580),
+    'logical native viewport geometry rounds outward once',
+  );
+  final String before = const TerminalSnapshotFormatter().formatScreenSet(
+    screens,
+  );
+  final List<Uint8List> replies = <Uint8List>[];
+  final TerminalScreenParserSink sink = TerminalScreenParserSink.forScreenSet(
+    screens,
+    onReply: (Uint8List reply) {
+      replies.add(Uint8List.fromList(reply));
+      return true;
+    },
+  );
+  final VtParser parser = VtParser(sink: sink);
+  parser.parse(_bytes('\x1b[>q\x1b[>0q\x1b[14t\x1b[18t'));
+  _expectStrings(replies, const <String>[
+    '\x1bP>|DartTerminal(1)\x1b\\',
+    '\x1bP>|DartTerminal(1)\x1b\\',
+    '\x1b[4;580;920t',
+    '\x1b[8;5;8t',
+  ], 'XTVERSION and text-area reports follow the pinned xterm forms');
+  _expect(
+    sink.acceptedReplyCount == 4 &&
+        sink.unsupportedSequenceCount == 0 &&
+        const TerminalSnapshotFormatter().formatScreenSet(screens) == before,
+    'queries report current state without mutating the terminal snapshot',
+  );
+
+  screens.resize(rows: 7, columns: 11);
+  _expect(
+    screens.updateLogicalViewportSize(width: 1000, height: 600),
+    'valid resized viewport geometry is published',
+  );
+  parser.parse(_bytes('\x1b[14t\x1b[18t'));
+  _expectStrings(replies.sublist(4), const <String>[
+    '\x1b[4;600;1000t',
+    '\x1b[8;7;11t',
+  ], 'window reports track independent pixel and grid resizes');
+
+  _expect(
+    !screens.updateLogicalViewportSize(
+          width: TerminalScreenSet.maximumLogicalViewportExtent + 1,
+          height: 600,
+        ) &&
+        screens.logicalViewportSize == null,
+    'unrepresentable native geometry clears stale report state',
+  );
+  parser.parse(_bytes('\x1b[14t\x1b[18t'));
+  _expect(
+    sink.unsupportedSequenceCount == 1 &&
+        ascii.decode(replies.last) == '\x1b[8;7;11t',
+    'pixel reports fail closed without geometry while grid reports continue',
+  );
+
+  final TerminalScreenParserSink invalid =
+      TerminalScreenParserSink.forScreenSet(
+        TerminalScreenSet(rows: 2, columns: 2)
+          ..updateLogicalViewportSize(width: 80, height: 40),
+        onReply: (_) => true,
+      );
+  final VtParser invalidParser = VtParser(sink: invalid);
+  invalidParser.parse(_bytes('\x1b[>1q\x1b[>0;0q\x1b[14;2t\x1b[18;2t'));
+  _expect(
+    invalid.acceptedReplyCount == 0 && invalid.unsupportedSequenceCount == 4,
+    'only exact XTVERSION and XTWINOPS parameter forms are accepted',
   );
 }
 
@@ -488,6 +582,7 @@ void _testQueryChunkIndependence() {
     ..._osc('10;?'),
     ..._bytes('\x1bP+q4D73\x1b\\'),
     ..._bytes('\x1bP\x24qm\x1b\\'),
+    ..._bytes('\x1b[>q\x1b[>0q\x1b[14t\x1b[18t'),
   ]);
   final List<String> expected = _parseReplyStream(input);
   for (int split = 0; split <= input.length; split++) {
@@ -509,10 +604,11 @@ void _testQueryChunkIndependence() {
 }
 
 List<String> _parseReplyStream(Uint8List input, [List<int>? chunks]) {
-  final TerminalScreen screen = TerminalScreen(rows: 5, columns: 8);
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 5, columns: 8)
+    ..updateLogicalViewportSize(width: 920, height: 580);
   final List<String> replies = <String>[];
-  final TerminalScreenParserSink sink = TerminalScreenParserSink(
-    screen,
+  final TerminalScreenParserSink sink = TerminalScreenParserSink.forScreenSet(
+    screens,
     onReply: (Uint8List reply) {
       replies.add(ascii.decode(reply));
       return true;
