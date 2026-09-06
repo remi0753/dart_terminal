@@ -193,6 +193,7 @@ abstract interface class TerminalPaneSession {
   void sendInput(Uint8List bytes);
   Future<TerminalPasteTransferResult> paste(TerminalPastePlan plan);
   void resize({required int rows, required int columns});
+  void showClipboardNotice(TerminalClipboardNotice notice);
   void showCloseConfirmation();
   Future<TerminalPaneSessionShutdownResult> shutdown();
 }
@@ -481,6 +482,10 @@ final class TerminalPane {
   Future<TerminalPasteTransferResult> paste(TerminalPastePlan plan) {
     _recordInteraction();
     return _session.paste(plan);
+  }
+
+  void showClipboardNotice(TerminalClipboardNotice notice) {
+    _session.showClipboardNotice(notice);
   }
 
   void resize({required int rows, required int columns}) {

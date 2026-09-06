@@ -20,6 +20,7 @@ import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_encoder.dart';
 import 'terminal_input/terminal_key_event.dart';
 import 'terminal_input/terminal_mouse_router.dart';
+import 'terminal_input/terminal_paste.dart';
 import 'terminal_input/terminal_scroll_router.dart';
 import 'terminal_input/terminal_selection_autoscroll.dart';
 import 'terminal_input/terminal_selection_gesture.dart';
@@ -39,6 +40,7 @@ Application options:
 const String _runtimeWorkerName = 'dart_terminal_runtime_worker';
 const int _runtimeSoftwareFailureExitCode = 70;
 const int _runtimeTemporaryFailureExitCode = 75;
+const int _appKitLimitExceededStatus = 10;
 const Duration _runtimePtyFaultGracefulTimeout = Duration(milliseconds: 200);
 const Duration _runtimePtyFaultFinalTimeout = Duration(milliseconds: 200);
 const Duration _runtimePtyFaultCleanupTimeout = Duration(milliseconds: 200);
@@ -71,6 +73,7 @@ final class TerminalOptions {
     this.runtimeShutdownFaultInjection = false,
     this.runtimePtyExitFaultInjection = false,
     this.runtimeTerminalDisplayTest = false,
+    this.runtimeClipboardTest = false,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
     this.runtimeLifecycleScenario = RuntimeLifecycleScenario.normal,
     this.runtimeWorkerCommand =
@@ -88,6 +91,7 @@ final class TerminalOptions {
     var runtimeShutdownFaultInjection = false;
     var runtimePtyExitFaultInjection = false;
     var runtimeTerminalDisplayTest = false;
+    var runtimeClipboardTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
     for (final String argument in arguments) {
@@ -129,6 +133,15 @@ final class TerminalOptions {
           );
         }
         runtimeTerminalDisplayTest = true;
+        continue;
+      }
+      if (argument == '--runtime-clipboard-test') {
+        if (runtimeClipboardTest) {
+          throw const FormatException(
+            '--runtime-clipboard-test may only be supplied once',
+          );
+        }
+        runtimeClipboardTest = true;
         continue;
       }
       if (argument.startsWith(workingDirectoryPrefix)) {
@@ -270,6 +283,25 @@ final class TerminalOptions {
         'terminal display test requires the integration-test gate',
       );
     }
+    if (runtimeClipboardTest &&
+        (environment ?? Platform.environment)['DT_RUNTIME_CLIPBOARD_TEST'] !=
+            '1') {
+      throw const FormatException(
+        'clipboard test requires the integration-test gate',
+      );
+    }
+    if (runtimeClipboardTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'clipboard test cannot be combined with another runtime test',
+      );
+    }
     if (runtimeTerminalDisplayTest &&
         (selectedScenario != RuntimeLifecycleScenario.normal ||
             autoCloseAfter != null ||
@@ -288,6 +320,7 @@ final class TerminalOptions {
       runtimeShutdownFaultInjection: runtimeShutdownFaultInjection,
       runtimePtyExitFaultInjection: runtimePtyExitFaultInjection,
       runtimeTerminalDisplayTest: runtimeTerminalDisplayTest,
+      runtimeClipboardTest: runtimeClipboardTest,
       runtimeShellExitTestScenario: selectedShellExitTest,
       runtimeLifecycleScenario: selectedScenario,
       runtimeWorkerCommand:
@@ -304,6 +337,7 @@ final class TerminalOptions {
   final bool runtimeShutdownFaultInjection;
   final bool runtimePtyExitFaultInjection;
   final bool runtimeTerminalDisplayTest;
+  final bool runtimeClipboardTest;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
   final RuntimeLifecycleScenario runtimeLifecycleScenario;
   final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
@@ -325,6 +359,18 @@ final class TerminalApplication {
         ? _ExitNotificationSuppressingPtyBackend(nativePtyBackend)
         : nativePtyBackend;
     final AppKitApplication application = await AppKitApplication.attach();
+    final _TerminalClipboardProductObservation? clipboardObservation =
+        options.runtimeClipboardTest
+        ? _TerminalClipboardProductObservation()
+        : null;
+    final _MemoryTerminalClipboard? runtimeClipboard =
+        options.runtimeClipboardTest ? _MemoryTerminalClipboard() : null;
+    final _TerminalClipboard clipboard = runtimeClipboard != null
+        ? runtimeClipboard
+        : _AppKitTerminalClipboard(application.generalPasteboard);
+    final TerminalPasteConfirmationGate pasteConfirmationGate =
+        TerminalPasteConfirmationGate();
+    final Stopwatch pasteConfirmationClock = Stopwatch()..start();
     View? contentView;
     TerminalLiveMetalSurface? metalSurface;
     TerminalTextInputClient? textInputClient;
@@ -390,24 +436,29 @@ final class TerminalApplication {
                   RuntimeShellExitTestScenario.none;
               final bool isTerminalDisplayTest =
                   options.runtimeTerminalDisplayTest;
+              final bool isClipboardTest = options.runtimeClipboardTest;
+              final bool usesDeterministicShell =
+                  isShellExitTest || isTerminalDisplayTest || isClipboardTest;
               final TerminalSession createdSession = TerminalSession(
                 id: id,
                 ptyBackend: ptyBackend,
                 initialWorkingDirectory: options.initialWorkingDirectory,
-                environment: isShellExitTest || isTerminalDisplayTest
+                environment: usesDeterministicShell
                     ? <String, String>{
                         ...Platform.environment,
-                        'TERM': isTerminalDisplayTest
+                        'TERM': isTerminalDisplayTest || isClipboardTest
                             ? 'xterm-256color'
                             : 'dumb',
                         'LC_ALL': 'C',
                         'PS1': isTerminalDisplayTest
                             ? '__DT_DISPLAY_PROMPT__ '
+                            : isClipboardTest
+                            ? '__DT_DISPLAY_PROMPT__ '
                             : '__RUNTIME_SHELL_EXIT_READY__ ',
                         'RPS1': '',
                       }
                     : null,
-                shellArguments: isShellExitTest || isTerminalDisplayTest
+                shellArguments: usesDeterministicShell
                     ? const <String>['-f']
                     : const <String>[],
                 gracefulShutdownTimeout: options.runtimePtyExitFaultInjection
@@ -426,6 +477,7 @@ final class TerminalApplication {
                       stdout.writeln(observation.machineLine());
                     },
                 nativeObserver: (TerminalSessionNativeObservation observation) {
+                  clipboardObservation?.recordNative(observation.event);
                   stdout.writeln(observation.machineLine());
                 },
               );
@@ -609,6 +661,13 @@ final class TerminalApplication {
           modifiers: const ModifierKeys(ModifierKeys.commandBit),
         ),
       );
+      final MenuItem copyItem = ownMenuItem(
+        MenuItem(
+          title: 'Copy',
+          keyEquivalent: 'c',
+          modifiers: const ModifierKeys(ModifierKeys.commandBit),
+        ),
+      );
       final MenuItem pasteItem = ownMenuItem(
         MenuItem(
           title: 'Paste',
@@ -622,7 +681,9 @@ final class TerminalApplication {
         ..addItem(editMenuItem);
       applicationMenu.addItem(quitItem);
       fileMenu.addItem(closeItem);
-      editMenu.addItem(pasteItem);
+      editMenu
+        ..addItem(copyItem)
+        ..addItem(pasteItem);
       application.mainMenu = mainMenu;
 
       void observeMenuAction(String action, MenuItemInvokedEvent event) {
@@ -638,24 +699,201 @@ final class TerminalApplication {
         );
       }
 
+      void handleClipboardFailure(
+        Object error,
+        StackTrace stackTrace,
+        TerminalClipboardNoticeKind kind,
+      ) {
+        createdPane.showClipboardNotice(TerminalClipboardNotice(kind));
+        clipboardObservation?.recordFailure(error, stackTrace);
+      }
+
+      var pasteActionInProgress = false;
+      Future<void> pasteClipboardOnce() async {
+        final int invocationMicros = pasteConfirmationClock.elapsedMicroseconds;
+        late final PasteboardTextSnapshot snapshot;
+        try {
+          snapshot = clipboard.readText();
+        } on AppKitNativeException catch (error, stackTrace) {
+          handleClipboardFailure(
+            error,
+            stackTrace,
+            error.status == _appKitLimitExceededStatus
+                ? TerminalClipboardNoticeKind.pasteTooLarge
+                : TerminalClipboardNoticeKind.pasteUnavailable,
+          );
+          return;
+        } on Object catch (error, stackTrace) {
+          handleClipboardFailure(
+            error,
+            stackTrace,
+            TerminalClipboardNoticeKind.pasteUnavailable,
+          );
+          return;
+        }
+        if (emitNativeEventWireObservation) {
+          stdout.writeln(
+            'NATIVE_PASTEBOARD_SNAPSHOT '
+            'change_count=${snapshot.changeCount} '
+            'has_text=${snapshot.text != null}',
+          );
+        }
+        final String? text = snapshot.text;
+        if (text == null) {
+          createdPane.showClipboardNotice(
+            const TerminalClipboardNotice(
+              TerminalClipboardNoticeKind.pasteUnavailable,
+            ),
+          );
+          return;
+        }
+        late final TerminalPastePlan plan;
+        try {
+          final bool bracketed = createdPane.bracketedPasteMode;
+          if (clipboardObservation != null) {
+            Timer.run(clipboardObservation.recordPlanningYield);
+          }
+          plan = await TerminalPasteCodec.planAsync(text, bracketed: bracketed);
+        } on TerminalPasteLimitException {
+          createdPane.showClipboardNotice(
+            const TerminalClipboardNotice(
+              TerminalClipboardNoticeKind.pasteTooLarge,
+            ),
+          );
+          clipboardObservation?.recordTooLarge();
+          return;
+        }
+        final int confirmationIssuedMicros =
+            pasteConfirmationClock.elapsedMicroseconds;
+        clipboardObservation?.recordGateAttempt(
+          hadPending: pasteConfirmationGate.hasPendingConfirmation,
+          analysis: plan.analysis,
+        );
+        final TerminalPasteApprovalResult approval = pasteConfirmationGate
+            .evaluate(
+              pasteboardChangeCount: snapshot.changeCount,
+              plan: plan,
+              invocationMicros: invocationMicros,
+              confirmationIssuedMicros: confirmationIssuedMicros,
+            );
+        if (!approval.isApproved) {
+          createdPane.showClipboardNotice(
+            TerminalClipboardNotice(
+              TerminalClipboardNoticeKind.pasteConfirmationRequired,
+              analysis: approval.analysis,
+            ),
+          );
+          clipboardObservation?.recordConfirmation(
+            approval.analysis,
+            changeCount: snapshot.changeCount,
+            invocationMicros: invocationMicros,
+            issuedMicros: confirmationIssuedMicros,
+          );
+          return;
+        }
+        clipboardObservation?.recordApproval(approval.analysis);
+        final TerminalPasteTransferResult result = await createdPane.paste(
+          plan,
+        );
+        clipboardObservation?.recordTransfer(result);
+        switch (result.disposition) {
+          case TerminalPasteTransferDisposition.completed:
+            return;
+          case TerminalPasteTransferDisposition.busy:
+            createdPane.showClipboardNotice(
+              const TerminalClipboardNotice(
+                TerminalClipboardNoticeKind.pasteBusy,
+              ),
+            );
+          case TerminalPasteTransferDisposition.unavailable:
+            createdPane.showClipboardNotice(
+              const TerminalClipboardNotice(
+                TerminalClipboardNoticeKind.pasteUnavailable,
+              ),
+            );
+          case TerminalPasteTransferDisposition.cancelled:
+            createdPane.showClipboardNotice(
+              const TerminalClipboardNotice(
+                TerminalClipboardNoticeKind.pasteCancelled,
+              ),
+            );
+          case TerminalPasteTransferDisposition.writeFailed:
+            createdPane.showClipboardNotice(
+              const TerminalClipboardNotice(
+                TerminalClipboardNoticeKind.pasteFailed,
+              ),
+            );
+        }
+      }
+
+      Future<void> pasteClipboard() async {
+        if (pasteActionInProgress || createdPane.pasteInProgress) {
+          createdPane.showClipboardNotice(
+            const TerminalClipboardNotice(
+              TerminalClipboardNoticeKind.pasteBusy,
+            ),
+          );
+          clipboardObservation?.recordBusy();
+          return;
+        }
+        pasteActionInProgress = true;
+        try {
+          await pasteClipboardOnce();
+        } finally {
+          pasteActionInProgress = false;
+        }
+      }
+
       menuSubscriptions
+        ..add(
+          copyItem.onInvoked.listen((MenuItemInvokedEvent event) {
+            observeMenuAction('copy', event);
+            final TerminalSelectionText? selected = createdSelectionOwner
+                .selectedText();
+            if (selected == null || selected.text.isEmpty) {
+              createdPane.showClipboardNotice(
+                const TerminalClipboardNotice(
+                  TerminalClipboardNoticeKind.copyUnavailable,
+                ),
+              );
+              return;
+            }
+            if (selected.isTruncated) {
+              createdPane.showClipboardNotice(
+                const TerminalClipboardNotice(
+                  TerminalClipboardNoticeKind.copyTooLarge,
+                ),
+              );
+              return;
+            }
+            try {
+              final int changeCount = clipboard.writeText(selected.text);
+              pasteConfirmationGate.clear();
+              clipboardObservation?.recordCopy(
+                selected,
+                changeCount: changeCount,
+              );
+            } on Object catch (error, stackTrace) {
+              handleClipboardFailure(
+                error,
+                stackTrace,
+                TerminalClipboardNoticeKind.copyFailed,
+              );
+            }
+          }),
+        )
         ..add(
           pasteItem.onInvoked.listen((MenuItemInvokedEvent event) {
             observeMenuAction('paste', event);
-            final PasteboardTextSnapshot snapshot = application
-                .generalPasteboard
-                .readText();
-            if (emitNativeEventWireObservation) {
-              stdout.writeln(
-                'NATIVE_PASTEBOARD_SNAPSHOT '
-                'change_count=${snapshot.changeCount} '
-                'has_text=${snapshot.text != null}',
-              );
-            }
-            final String? text = snapshot.text;
-            if (text != null) {
-              createdPane.insertText(text);
-            }
+            unawaited(
+              pasteClipboard().onError((Object error, StackTrace stackTrace) {
+                handleClipboardFailure(
+                  error,
+                  stackTrace,
+                  TerminalClipboardNoticeKind.pasteFailed,
+                );
+              }),
+            );
           }),
         )
         ..add(
@@ -972,6 +1210,21 @@ final class TerminalApplication {
               mouseObservation,
               createdSelectionOwner,
               scrollObservation,
+            );
+          } else if (options.runtimeClipboardTest) {
+            await _exerciseClipboardProduct(
+              application,
+              createdLifecycle,
+              terminalSession!,
+              createdPane,
+              createdMetalSurface,
+              createdWindow,
+              mouseObservation,
+              createdSelectionOwner,
+              copyItem,
+              pasteItem,
+              runtimeClipboard!,
+              clipboardObservation!,
             );
           } else if (shellExitTest != RuntimeShellExitTestScenario.none) {
             await _exerciseShellExitPolicy(
@@ -1478,6 +1731,275 @@ final class TerminalApplication {
       'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
       'scroll=$scroll '
       'font_size=${baseline.fontPointSize}',
+    );
+  }
+
+  static Future<void> _exerciseClipboardProduct(
+    AppKitApplication application,
+    RuntimeLifecycleCoordinator lifecycle,
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+    Window window,
+    _TerminalMouseProductObservation mouseObservation,
+    _TerminalSelectionProductOwner selectionOwner,
+    MenuItem copyItem,
+    MenuItem pasteItem,
+    _MemoryTerminalClipboard clipboard,
+    _TerminalClipboardProductObservation observation,
+  ) async {
+    const int payloadBytes = 10 * 1024 * 1024;
+    const int encodedBytes =
+        payloadBytes + TerminalPasteCodec.bracketFrameBytes;
+    const int newlineOffset = payloadBytes ~/ 2;
+    const String readyMarker = '__DT_CLIPBOARD_READY__';
+    const String exactMarker = '__DT_CLIPBOARD_EXACT__';
+    const String mismatchMarker = '__DT_CLIPBOARD_MISMATCH__';
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    await _exerciseClipboardCopySelection(
+      application,
+      session,
+      pane,
+      surface,
+      window,
+      mouseObservation,
+      selectionOwner,
+      copyItem,
+      clipboard,
+      observation,
+    );
+
+    pane.insertText(
+      "stty -echo -icanon min 1 time 0; "
+      "printf '\\033[?2004h\\r\\n__DT_CLIPBOARD_%s__\\r\\n' 'READY'; "
+      "/bin/sleep 1; "
+      "/usr/bin/perl -e 'binmode STDIN; my \$n=$encodedBytes; my \$d=\"\"; "
+      "while (length(\$d) < \$n) { my \$r=sysread(STDIN, my \$b, "
+      "\$n-length(\$d)); exit 24 unless defined(\$r) && \$r > 0; "
+      "\$d .= \$b; } my \$body=substr(\$d, 6, -6); "
+      "my \$ok=substr(\$d, 0, 6) eq \"\\e[200~\" && "
+      "substr(\$d, -6) eq \"\\e[201~\" && "
+      "length(\$body) == $payloadBytes && "
+      "substr(\$body, $newlineOffset, 1) eq \"\\n\"; "
+      "substr(\$body, $newlineOffset, 1, \"a\"); "
+      "exit(\$ok && \$body !~ /[^a]/ ? 0 : 23);'; result=\$?; "
+      "printf '\\033[?2004l'; stty echo icanon; "
+      "if [ \$result -eq 0 ]; then "
+      "printf '\\r\\n__DT_CLIPBOARD_%s__\\r\\n' 'EXACT'; "
+      "else printf '\\r\\n__DT_CLIPBOARD_%s__\\r\\n' 'MISMATCH'; fi",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, readyMarker);
+    _expectLifecycle(
+      session.bracketedPasteMode,
+      'clipboard fixture did not enable bracketed paste mode',
+    );
+
+    final Uint8List source = Uint8List(payloadBytes)
+      ..fillRange(0, payloadBytes, 0x61);
+    source[newlineOffset] = 0x0a;
+    clipboard.seed(String.fromCharCodes(source));
+    final int writeBaseline = observation.nativeWriteEnqueuedCount;
+    pasteItem.performAction();
+    final Stopwatch confirmationDeadline = Stopwatch()..start();
+    while (confirmationDeadline.elapsed < const Duration(seconds: 15) &&
+        observation.confirmationCount == 0 &&
+        observation.failure == null) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final bool confirmationVisible =
+        _findAscii(
+          session.terminalScreenSet.activeScreen,
+          'paste requires confirmation',
+        ) !=
+        null;
+    final bool zeroWrite =
+        observation.confirmationCount == 1 &&
+        observation.writesAtFirstConfirmation == writeBaseline &&
+        observation.nativeWriteEnqueuedCount == writeBaseline &&
+        confirmationVisible &&
+        !pane.pasteInProgress;
+    _expectLifecycle(
+      observation.failure == null && zeroWrite,
+      'first unsafe Paste invocation wrote PTY bytes before confirmation: '
+      'confirmations=${observation.confirmationCount} '
+      'writes_at_confirmation=${observation.writesAtFirstConfirmation} '
+      'baseline=$writeBaseline '
+      'writes_now=${observation.nativeWriteEnqueuedCount} '
+      'visible=$confirmationVisible paste_active=${pane.pasteInProgress} '
+      'planning_yields=${observation.planningYieldCount}',
+    );
+
+    var timerTicks = 0;
+    final Timer responsiveTimer = Timer.periodic(
+      const Duration(milliseconds: 1),
+      (_) => timerTicks++,
+    );
+    try {
+      pasteItem.performAction();
+      final Stopwatch transferDeadline = Stopwatch()..start();
+      while (transferDeadline.elapsed < const Duration(seconds: 30) &&
+          observation.transfer == null &&
+          observation.failure == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    } finally {
+      responsiveTimer.cancel();
+    }
+    final TerminalPasteTransferResult? transfer = observation.transfer;
+    if (observation.failure != null) {
+      Error.throwWithStackTrace(
+        observation.failure!,
+        observation.failureStackTrace ?? StackTrace.current,
+      );
+    }
+    _expectLifecycle(
+      transfer != null && transfer.isCompleted,
+      'confirmed 10 MiB paste did not complete: '
+      'confirmations=${observation.confirmationCount} '
+      'approvals=${observation.approvalCount} '
+      'writes=${observation.nativeWriteEnqueuedCount - writeBaseline} '
+      'busy=${observation.busyCount} mode=${session.bracketedPasteMode} '
+      'paste_active=${pane.pasteInProgress} '
+      'pending_before=${observation.pendingBeforeAttempts} '
+      'source_lengths=${observation.attemptSourceLengths} '
+      'body_bytes=${observation.attemptBodyBytes} '
+      'newlines=${observation.attemptNewlineCounts} '
+      'controls=${observation.attemptControlCounts} '
+      'replaced=${observation.attemptReplacedCounts} '
+      'terminators=${observation.attemptTerminators} '
+      'large=${observation.attemptLarge} '
+      'bracketed=${observation.attemptBracketed} '
+      'encoded=${observation.attemptEncodedBytes} '
+      'change_counts=${observation.confirmationChangeCounts} '
+      'fingerprints=${observation.confirmationFingerprints} '
+      'invocations=${observation.confirmationInvocationMicros} '
+      'issued=${observation.confirmationIssuedMicros}',
+    );
+    final TerminalPasteTransferResult completedTransfer = transfer!;
+    await _waitForAsciiMarker(session, exactMarker);
+    _expectLifecycle(
+      _findAscii(session.terminalScreenSet.activeScreen, mismatchMarker) ==
+          null,
+      'real PTY did not validate the exact bracketed payload',
+    );
+
+    final int expectedChunks =
+        (encodedBytes + TerminalPasteCodec.defaultChunkBytes - 1) ~/
+        TerminalPasteCodec.defaultChunkBytes;
+    final TerminalPasteAnalysis? confirmed = observation.confirmedAnalysis;
+    final TerminalPasteAnalysis? approved = observation.approvedAnalysis;
+    final bool exact =
+        confirmed != null &&
+        approved != null &&
+        confirmed.fingerprint == approved.fingerprint &&
+        confirmed.encodedBytes == encodedBytes &&
+        confirmed.logicalNewlineCount == 1 &&
+        confirmed.bracketed &&
+        confirmed.isLarge &&
+        completedTransfer.encodedBytes == encodedBytes &&
+        completedTransfer.completedChunks == expectedChunks &&
+        completedTransfer.maximumQueuedBytes > 0 &&
+        completedTransfer.maximumQueuedBytes <=
+            TerminalPasteCodec.defaultChunkBytes &&
+        observation.approvalCount == 1 &&
+        observation.nativeWriteEnqueuedCount - writeBaseline == expectedChunks;
+    _expectLifecycle(
+      observation.copyCount == 1 &&
+          observation.confirmationCount == 1 &&
+          observation.busyCount == 0 &&
+          observation.tooLargeCount == 0 &&
+          observation.planningYieldCount == 2 &&
+          timerTicks > 0 &&
+          exact &&
+          lifecycle.workerPid != null,
+      'clipboard product acceptance invariants did not settle',
+    );
+    stdout.writeln(
+      'TERMINAL_CLIPBOARD_TEST copy=true paste_menu=true '
+      'confirmation=true confirmation_visible=$confirmationVisible '
+      'zero_write=$zeroWrite bracketed=true exact=$exact '
+      'bytes=${completedTransfer.encodedBytes} '
+      'chunks=${completedTransfer.completedChunks} '
+      'max_queue=${completedTransfer.maximumQueuedBytes} '
+      'planning_yields=${observation.planningYieldCount} '
+      'timer_ticks=$timerTicks',
+    );
+    _expectLifecycle(
+      pane.requestClose(force: true) == TerminalPaneCloseDecision.allow,
+      'clipboard test could not begin deterministic pane close',
+    );
+    window.close();
+  }
+
+  static Future<void> _exerciseClipboardCopySelection(
+    AppKitApplication application,
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+    Window window,
+    _TerminalMouseProductObservation mouseObservation,
+    _TerminalSelectionProductOwner selectionOwner,
+    MenuItem copyItem,
+    _MemoryTerminalClipboard clipboard,
+    _TerminalClipboardProductObservation observation,
+  ) async {
+    const String marker = 'COPYCLIPBOARD';
+    pane.insertText("printf '\\r\\nCOPY%s\\r\\n' 'CLIPBOARD'");
+    await pane.submit();
+    await _waitForAsciiMarker(session, marker);
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    final _TerminalAsciiPosition position = _findAscii(
+      session.terminalScreenSet.activeScreen,
+      marker,
+    )!;
+    final TerminalFontCatalogMetrics metrics = surface.fontMetrics;
+    final int initialReports = mouseObservation.terminalReportCount;
+
+    Future<void> inject(AppKitMouseEventKind kind, int column) async {
+      final int generation = selectionOwner.gesture.snapshot.generation;
+      _injectMouseEventForTesting(
+        application,
+        window,
+        kind: kind,
+        x: (column + 0.5) * metrics.cellWidth,
+        y: (position.row + 0.5) * metrics.cellHeight,
+        button: 0,
+        modifiers: 0,
+        clickCount: 1,
+        monotonicNanoseconds: mouseObservation.nextInjectedTimestamp(),
+      );
+      await _waitForSelectionGeneration(selectionOwner, generation + 1);
+    }
+
+    await inject(AppKitMouseEventKind.down, position.column);
+    await inject(
+      AppKitMouseEventKind.dragged,
+      position.column + marker.length - 1,
+    );
+    await inject(AppKitMouseEventKind.up, position.column + marker.length - 1);
+    _expectSelectionText(selectionOwner, marker, TerminalSelectionUnit.cell);
+    final int copyBaseline = observation.copyCount;
+    copyItem.performAction();
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 3) &&
+        observation.copyCount == copyBaseline &&
+        observation.failure == null) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      observation.failure == null &&
+          observation.copyCount == copyBaseline + 1 &&
+          clipboard.text == marker &&
+          clipboard.changeCount == observation.copyChangeCount &&
+          observation.copiedUtf8Bytes == marker.length &&
+          mouseObservation.terminalReportCount == initialReports,
+      'native Copy menu did not publish the exact stable selection',
+    );
+    stdout.writeln(
+      'TERMINAL_CLIPBOARD_COPY_TEST selection=true menu=true exact=true '
+      'local_only=true bytes=${observation.copiedUtf8Bytes}',
     );
   }
 
@@ -2940,6 +3462,147 @@ final class _TerminalAsciiPosition {
   final int column;
 }
 
+abstract interface class _TerminalClipboard {
+  PasteboardTextSnapshot readText();
+  int writeText(String text);
+}
+
+final class _AppKitTerminalClipboard implements _TerminalClipboard {
+  const _AppKitTerminalClipboard(this.pasteboard);
+
+  final Pasteboard pasteboard;
+
+  @override
+  PasteboardTextSnapshot readText() => pasteboard.readText();
+
+  @override
+  int writeText(String text) => pasteboard.writeText(text);
+}
+
+final class _MemoryTerminalClipboard implements _TerminalClipboard {
+  String? _text;
+  var _changeCount = 0;
+
+  String? get text => _text;
+  int get changeCount => _changeCount;
+
+  void seed(String text) {
+    _text = text;
+    _changeCount++;
+  }
+
+  @override
+  PasteboardTextSnapshot readText() =>
+      PasteboardTextSnapshot(text: _text, changeCount: _changeCount);
+
+  @override
+  int writeText(String text) {
+    seed(text);
+    return _changeCount;
+  }
+}
+
+final class _TerminalClipboardProductObservation {
+  var nativeWriteEnqueuedCount = 0;
+  var copyCount = 0;
+  var copiedUtf8Bytes = 0;
+  var copyChangeCount = 0;
+  var confirmationCount = 0;
+  var approvalCount = 0;
+  var busyCount = 0;
+  var tooLargeCount = 0;
+  var planningYieldCount = 0;
+  int? writesAtFirstConfirmation;
+  TerminalPasteAnalysis? confirmedAnalysis;
+  TerminalPasteAnalysis? approvedAnalysis;
+  TerminalPasteTransferResult? transfer;
+  Object? failure;
+  StackTrace? failureStackTrace;
+  final List<int> confirmationChangeCounts = <int>[];
+  final List<int> confirmationFingerprints = <int>[];
+  final List<int> confirmationInvocationMicros = <int>[];
+  final List<int> confirmationIssuedMicros = <int>[];
+  final List<bool> pendingBeforeAttempts = <bool>[];
+  final List<int> attemptSourceLengths = <int>[];
+  final List<int> attemptBodyBytes = <int>[];
+  final List<int> attemptNewlineCounts = <int>[];
+  final List<int> attemptControlCounts = <int>[];
+  final List<int> attemptReplacedCounts = <int>[];
+  final List<bool> attemptTerminators = <bool>[];
+  final List<bool> attemptLarge = <bool>[];
+  final List<bool> attemptBracketed = <bool>[];
+  final List<int> attemptEncodedBytes = <int>[];
+
+  void recordGateAttempt({
+    required bool hadPending,
+    required TerminalPasteAnalysis analysis,
+  }) {
+    pendingBeforeAttempts.add(hadPending);
+    attemptSourceLengths.add(analysis.sourceUtf16Length);
+    attemptBodyBytes.add(analysis.encodedBodyBytes);
+    attemptNewlineCounts.add(analysis.logicalNewlineCount);
+    attemptControlCounts.add(analysis.controlCharacterCount);
+    attemptReplacedCounts.add(analysis.replacedControlCount);
+    attemptTerminators.add(analysis.hasBracketTerminator);
+    attemptLarge.add(analysis.isLarge);
+    attemptBracketed.add(analysis.bracketed);
+    attemptEncodedBytes.add(analysis.encodedBytes);
+  }
+
+  void recordNative(PtyDiagnosticEvent event) {
+    if (event.stage == PtyDiagnosticStage.writeEnqueued) {
+      nativeWriteEnqueuedCount++;
+    }
+  }
+
+  void recordCopy(TerminalSelectionText text, {required int changeCount}) {
+    copyCount++;
+    copiedUtf8Bytes = utf8.encode(text.text).length;
+    copyChangeCount = changeCount;
+  }
+
+  void recordConfirmation(
+    TerminalPasteAnalysis analysis, {
+    required int changeCount,
+    required int invocationMicros,
+    required int issuedMicros,
+  }) {
+    confirmationCount++;
+    writesAtFirstConfirmation ??= nativeWriteEnqueuedCount;
+    confirmedAnalysis = analysis;
+    confirmationChangeCounts.add(changeCount);
+    confirmationFingerprints.add(analysis.fingerprint);
+    confirmationInvocationMicros.add(invocationMicros);
+    confirmationIssuedMicros.add(issuedMicros);
+  }
+
+  void recordApproval(TerminalPasteAnalysis analysis) {
+    approvalCount++;
+    approvedAnalysis = analysis;
+  }
+
+  void recordTransfer(TerminalPasteTransferResult result) {
+    transfer = result;
+  }
+
+  void recordBusy() {
+    busyCount++;
+  }
+
+  void recordTooLarge() {
+    tooLargeCount++;
+  }
+
+  void recordPlanningYield() {
+    planningYieldCount++;
+  }
+
+  void recordFailure(Object error, StackTrace stackTrace) {
+    failure ??= error;
+    failureStackTrace ??= stackTrace;
+  }
+}
+
 final class _TerminalSelectionProductOwner {
   _TerminalSelectionProductOwner({required this.gesture, required this.surface})
     : autoscroller = TerminalSelectionAutoscroller(gesture: gesture);
@@ -2957,6 +3620,15 @@ final class _TerminalSelectionProductOwner {
   bool shiftOverrideObserved = false;
   bool scrolledUp = false;
   bool scrolledDown = false;
+
+  TerminalSelectionText? selectedText({
+    int maxScalars = TerminalSelectionText.maximumScalars,
+  }) {
+    final TerminalSelectionRange? range = gesture.snapshot.range;
+    return range == null
+        ? null
+        : gesture.viewport.extractSelection(range, maxScalars: maxScalars);
+  }
 
   void handle(TerminalLocalSelectionIntent intent) {
     if (_disposed) return;

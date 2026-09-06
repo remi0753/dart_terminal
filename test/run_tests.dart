@@ -94,7 +94,7 @@ Future<void> main() async {
   runTerminalSelectionGestureTests();
   runTerminalLiveMetalSurfaceFontTests();
   runTerminalPaletteTests();
-  runTerminalPasteTests();
+  await runTerminalPasteTests();
   runTerminalPreeditTests();
   runTerminalScrollRouterTests();
   runTerminalPropertyFuzzTests();
@@ -710,6 +710,7 @@ void _testOptions() {
     !options.runtimeTerminalDisplayTest,
     'terminal display test defaults off',
   );
+  _expect(!options.runtimeClipboardTest, 'clipboard test defaults off');
   _expect(
     options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none,
     'shell exit policy test defaults off',
@@ -886,6 +887,40 @@ void _testOptions() {
       },
     ),
     'terminal display and shell exit tests are mutually exclusive',
+  );
+  final TerminalOptions clipboardTestOptions = _parseOptions(
+    const <String>['--runtime-clipboard-test'],
+    environment: const <String, String>{'DT_RUNTIME_CLIPBOARD_TEST': '1'},
+  );
+  _expect(
+    clipboardTestOptions.runtimeClipboardTest,
+    'gated clipboard product test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>[
+      '--runtime-clipboard-test',
+    ], environment: const <String, String>{}),
+    'clipboard product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-clipboard-test', '--runtime-clipboard-test'],
+      environment: const <String, String>{'DT_RUNTIME_CLIPBOARD_TEST': '1'},
+    ),
+    'duplicate clipboard product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-clipboard-test',
+        '--runtime-terminal-display-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_CLIPBOARD_TEST': '1',
+        'DT_RUNTIME_TERMINAL_DISPLAY_TEST': '1',
+      },
+    ),
+    'clipboard and display tests are mutually exclusive',
   );
   _expectThrows(
     () => _parseOptions(
@@ -2078,6 +2113,11 @@ final class _FakePaneSession implements TerminalPaneSession {
 
   @override
   void resize({required int rows, required int columns}) {}
+
+  @override
+  void showClipboardNotice(TerminalClipboardNotice notice) {
+    _onChanged();
+  }
 
   @override
   void showCloseConfirmation() {

@@ -21,7 +21,16 @@ enum _RuntimeMode {
   final String payloadName;
 }
 
-enum _Suite { smoke, display, lifecycle, traffic, resource, fault, all }
+enum _Suite {
+  smoke,
+  display,
+  clipboard,
+  lifecycle,
+  traffic,
+  resource,
+  fault,
+  all,
+}
 
 final class _Options {
   const _Options({
@@ -136,8 +145,8 @@ _Options _parseOptions(List<String> arguments) {
           .firstOrNull;
       if (selected == null) {
         throw const _SmokeException(
-          '--suite must be smoke, display, lifecycle, traffic, resource, '
-          'fault, or all',
+          '--suite must be smoke, display, clipboard, lifecycle, traffic, '
+          'resource, fault, or all',
         );
       }
       suite = selected;
@@ -950,6 +959,57 @@ Future<void> _runTerminalDisplay(
   );
   stdout.writeln(
     'RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'elapsed_ms=${observation.elapsed.inMilliseconds}',
+  );
+}
+
+Future<void> _runClipboardProduct(
+  _Options options,
+  _Invocation invocation,
+) async {
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>['--runtime-clipboard-test'],
+    environment: const <String, String>{'DT_RUNTIME_CLIPBOARD_TEST': '1'},
+    timeout: const Duration(seconds: 60),
+  );
+  _expect(
+    observation.status == 0,
+    'clipboard application exited with status ${observation.status}; '
+    'stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'clipboard application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  final RegExp acceptance = RegExp(
+    r'^TERMINAL_CLIPBOARD_TEST copy=true paste_menu=true '
+    r'confirmation=true confirmation_visible=true zero_write=true '
+    r'bracketed=true exact=true '
+    r'bytes=10485772 chunks=641 max_queue=([1-9][0-9]*) '
+    r'planning_yields=2 '
+    r'timer_ticks=([1-9][0-9]*)$',
+    multiLine: true,
+  );
+  final RegExpMatch? match = acceptance.firstMatch(observation.stdoutText);
+  _expect(
+    match != null && int.parse(match.group(1)!) <= 16 * 1024,
+    'clipboard launch omitted bounded exact 10 MiB acceptance',
+  );
+  _expect(
+    observation.stdoutText.contains(
+          'TERMINAL_CLIPBOARD_COPY_TEST selection=true menu=true exact=true '
+          'local_only=true bytes=13',
+        ) &&
+        observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+    'clipboard launch omitted selection Copy or clean ownership teardown',
+  );
+  stdout.writeln(
+    'RUNTIME_CLIPBOARD_INTEGRATION_PASS mode=${options.mode.name} '
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
@@ -1858,6 +1918,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.display || options.suite == _Suite.all) {
       await _runTerminalDisplay(options, invocation);
+    }
+    if (options.suite == _Suite.clipboard || options.suite == _Suite.all) {
+      await _runClipboardProduct(options, invocation);
     }
     if (options.suite == _Suite.lifecycle || options.suite == _Suite.all) {
       await _runLifecycle(options, invocation);

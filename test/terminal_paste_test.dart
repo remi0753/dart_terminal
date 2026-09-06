@@ -1,15 +1,172 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dart_terminal/dart_terminal.dart';
 
-void main() => runTerminalPasteTests();
+Future<void> main() => runTerminalPasteTests();
 
-void runTerminalPasteTests() {
+Future<void> runTerminalPasteTests() async {
   _testModeAwareNewlinesAndSingleFrame();
   _testControlsAndTerminatorAreSafe();
   _testUnicodeAndEverySmallChunkBoundary();
   _testAnalysisAndLimits();
+  await _testExpiringContentFreeConfirmation();
+}
+
+Future<void> _testExpiringContentFreeConfirmation() async {
+  const String boundarySource = 'A\r\n🙂\x1b[201~Z';
+  final TerminalPastePlan boundarySync = TerminalPasteCodec.plan(
+    boundarySource,
+    bracketed: true,
+  );
+  final TerminalPastePlan boundaryAsync = await TerminalPasteCodec.planAsync(
+    boundarySource,
+    bracketed: true,
+    yieldAfterCodeUnits: 1,
+  );
+  _expect(
+    boundarySync.analysis.fingerprint == boundaryAsync.analysis.fingerprint &&
+        boundarySync.analysis.encodedBytes ==
+            boundaryAsync.analysis.encodedBytes &&
+        boundarySync.analysis.logicalNewlineCount ==
+            boundaryAsync.analysis.logicalNewlineCount &&
+        boundarySync.analysis.controlCharacterCount ==
+            boundaryAsync.analysis.controlCharacterCount &&
+        _bytesEqual(
+          _collect(boundarySync, chunkBytes: 3),
+          _collect(boundaryAsync, chunkBytes: 3),
+        ),
+    'async planning matches sync analysis across CRLF/surrogate boundaries',
+  );
+  final TerminalPasteConfirmationGate gate = TerminalPasteConfirmationGate(
+    confirmationWindow: const Duration(seconds: 10),
+  );
+  final TerminalPastePlan safe = TerminalPasteCodec.plan(
+    'single line',
+    bracketed: false,
+  );
+  _expect(
+    gate
+            .evaluate(pasteboardChangeCount: 1, plan: safe, invocationMicros: 0)
+            .isApproved &&
+        !gate.hasPendingConfirmation,
+    'safe content is approved without retaining a confirmation',
+  );
+
+  final TerminalPastePlan risky = TerminalPasteCodec.plan(
+    'first\nsecond',
+    bracketed: true,
+  );
+  final TerminalPasteApprovalResult first = gate.evaluate(
+    pasteboardChangeCount: 2,
+    plan: risky,
+    invocationMicros: 100,
+    confirmationIssuedMicros: 5 * Duration.microsecondsPerSecond,
+  );
+  _expect(
+    first.disposition ==
+            TerminalPasteApprovalDisposition.confirmationRequired &&
+        gate.hasPendingConfirmation,
+    'first risky invocation requires confirmation',
+  );
+  _expect(
+    gate
+            .evaluate(
+              pasteboardChangeCount: 2,
+              plan: TerminalPasteCodec.plan('first\nsecond', bracketed: true),
+              invocationMicros: 10 * Duration.microsecondsPerSecond,
+              confirmationIssuedMicros: 15 * Duration.microsecondsPerSecond,
+            )
+            .isApproved &&
+        !gate.hasPendingConfirmation,
+    'a matching re-read is approved inside the bounded window',
+  );
+
+  gate.evaluate(
+    pasteboardChangeCount: 3,
+    plan: risky,
+    invocationMicros: 20 * Duration.microsecondsPerSecond,
+  );
+  final TerminalPasteApprovalResult changed = gate.evaluate(
+    pasteboardChangeCount: 4,
+    plan: risky,
+    invocationMicros: 21 * Duration.microsecondsPerSecond,
+  );
+  final TerminalPasteApprovalResult modeChanged = gate.evaluate(
+    pasteboardChangeCount: 4,
+    plan: TerminalPasteCodec.plan('first\nsecond', bracketed: false),
+    invocationMicros: 22 * Duration.microsecondsPerSecond,
+  );
+  final TerminalPasteApprovalResult expired = gate.evaluate(
+    pasteboardChangeCount: 4,
+    plan: TerminalPasteCodec.plan('first\nsecond', bracketed: false),
+    invocationMicros: 33 * Duration.microsecondsPerSecond,
+  );
+  _expect(
+    changed.disposition ==
+            TerminalPasteApprovalDisposition.confirmationRequired &&
+        modeChanged.disposition ==
+            TerminalPasteApprovalDisposition.confirmationRequired &&
+        expired.disposition ==
+            TerminalPasteApprovalDisposition.confirmationRequired,
+    'change count, terminal mode, and expiry each invalidate confirmation',
+  );
+  gate.clear();
+  _expect(!gate.hasPendingConfirmation, 'confirmation can be cleared');
+  final String largeSource = String.fromCharCodes(
+    Uint8List(10 * 1024 * 1024)..fillRange(0, 10 * 1024 * 1024, 0x61),
+  );
+  final TerminalPastePlan firstLarge = TerminalPasteCodec.plan(
+    '$largeSource\n',
+    bracketed: true,
+  );
+  var eventLoopAdvanced = false;
+  Timer.run(() => eventLoopAdvanced = true);
+  final TerminalPastePlan secondLarge = await TerminalPasteCodec.planAsync(
+    '$largeSource\n',
+    bracketed: true,
+  );
+  _expect(
+    eventLoopAdvanced &&
+        firstLarge.analysis.fingerprint == secondLarge.analysis.fingerprint &&
+        firstLarge.analysis.encodedBytes == secondLarge.analysis.encodedBytes,
+    'async planning yields and retains synchronous analysis parity',
+  );
+  _expect(
+    !gate
+        .evaluate(
+          pasteboardChangeCount: 9,
+          plan: firstLarge,
+          invocationMicros: 929569,
+          confirmationIssuedMicros: 1083965,
+        )
+        .isApproved,
+    'first 10 MiB invocation requests confirmation',
+  );
+  _expect(
+    gate
+        .evaluate(
+          pasteboardChangeCount: 9,
+          plan: secondLarge,
+          invocationMicros: 1190473,
+          confirmationIssuedMicros: 1342583,
+        )
+        .isApproved,
+    'matching 10 MiB re-read is approved with product timing',
+  );
+  _expectThrows<ArgumentError>(
+    () => TerminalPasteConfirmationGate(confirmationWindow: Duration.zero),
+    'non-positive confirmation window',
+  );
+  await _expectAsyncThrows<RangeError>(
+    () => TerminalPasteCodec.planAsync(
+      'x',
+      bracketed: false,
+      yieldAfterCodeUnits: 0,
+    ),
+    'zero async planning batch',
+  );
 }
 
 void _testModeAwareNewlinesAndSingleFrame() {
@@ -231,6 +388,18 @@ void _expectBytes(Uint8List actual, String expected, String description) {
 void _expectThrows<T extends Object>(void Function() body, String description) {
   try {
     body();
+  } on T {
+    return;
+  }
+  throw StateError('paste test failed: expected $T for $description');
+}
+
+Future<void> _expectAsyncThrows<T extends Object>(
+  Future<void> Function() body,
+  String description,
+) async {
+  try {
+    await body();
   } on T {
     return;
   }

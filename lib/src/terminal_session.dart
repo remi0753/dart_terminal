@@ -613,6 +613,42 @@ final class TerminalSession implements TerminalPaneSession {
   }
 
   @override
+  void showClipboardNotice(TerminalClipboardNotice notice) {
+    if (_disposed) return;
+    final String message = switch (notice.kind) {
+      TerminalClipboardNoticeKind.copyUnavailable =>
+        '[nothing selected to copy]',
+      TerminalClipboardNoticeKind.copyTooLarge =>
+        '[selection is too large to copy]',
+      TerminalClipboardNoticeKind.copyFailed => '[could not copy selection]',
+      TerminalClipboardNoticeKind.pasteUnavailable =>
+        '[clipboard does not contain plain text]',
+      TerminalClipboardNoticeKind.pasteTooLarge =>
+        '[clipboard text is too large to paste]',
+      TerminalClipboardNoticeKind.pasteConfirmationRequired =>
+        _pasteConfirmationMessage(notice.analysis),
+      TerminalClipboardNoticeKind.pasteBusy =>
+        '[a paste is already in progress]',
+      TerminalClipboardNoticeKind.pasteCancelled => '[paste was cancelled]',
+      TerminalClipboardNoticeKind.pasteFailed => '[paste could not be sent]',
+    };
+    buffer.appendStatusLine(message);
+    _terminalParser.parse(utf8.encode('\r\n$message\r\n'));
+    _notifyChanged();
+  }
+
+  static String _pasteConfirmationMessage(TerminalPasteAnalysis? analysis) {
+    if (analysis == null) {
+      return '[paste requires confirmation — repeat Paste within 10 seconds]';
+    }
+    final String breaks = analysis.logicalNewlineCount == 1
+        ? '1 line break'
+        : '${analysis.logicalNewlineCount} line breaks';
+    return '[paste requires confirmation: ${analysis.encodedBodyBytes} bytes, '
+        '$breaks — repeat Paste within 10 seconds]';
+  }
+
+  @override
   void showCloseConfirmation() {
     if (_disposed) {
       return;

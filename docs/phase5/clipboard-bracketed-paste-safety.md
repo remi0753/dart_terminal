@@ -4,7 +4,7 @@
 
 - Date started: 2026-09-06
 - Scope: seventh Phase 5 production-input roadmap item
-- Status: active
+- Status: complete
 - Ordered subtasks:
   1. add a bounded plain-text pasteboard read boundary to `dart_appkit`;
   2. add DEC bracketed-paste mode plus a bounded safe paste encoder;
@@ -277,3 +277,82 @@ Primary references:
   cases.
 - The next ordered subtask owns clipboard menu behavior, expiring explicit
   confirmation, user-visible status, and real 10 MiB both-runtime acceptance.
+
+### 2026-09-06 — product Copy/Paste and 10 MiB acceptance
+
+- Added standard Command-C Copy beside Command-V Paste. Copy extracts the
+  current stable logical selection at the existing maximum bound, refuses a
+  truncated selection instead of placing a partial value on the pasteboard,
+  and clears any pending paste confirmation after a successful write.
+- Paste now re-reads and re-plans plain text for every invocation. Safe text
+  starts the bounded paste transport immediately. Multiline, hidden-control,
+  embedded-terminator, and large text writes zero PTY bytes on the first
+  invocation and renders a content-free terminal notice asking for a repeated
+  Paste within ten seconds.
+- The confirmation token retains the pasteboard change count, source/encoded
+  lengths, risk counters, bracket-mode bit, deterministic fingerprint, and
+  monotonic expiry, but not the clipboard string or paste plan. The approval
+  timestamp is the second user invocation time rather than the end of its
+  potentially expensive rescan; a newly issued confirmation starts its window
+  when the notice is produced.
+- Clipboard failures, absent text, oversize values, concurrent Paste, transfer
+  cancellation, and write failure each map to a bounded user-visible status.
+  Clipboard statuses are fed into the same screen model used by the Metal
+  renderer as well as the legacy transcript, so the confirmation is actually
+  visible in the default product UI.
+- Added a gated runtime clipboard suite and Make targets for Developer JIT and
+  Release AOT. The suite drives real AppKit Copy/Paste menu events and a real
+  PTY while using an in-memory clipboard adapter; this deliberately avoids
+  overwriting the user's general pasteboard during automation. The normal
+  product adapter still uses `AppKitApplication.generalPasteboard`, whose real
+  native bounded read/write path is covered by the `dart_appkit` tests.
+- The product fixture creates an exact 10 MiB ASCII payload with one logical
+  newline, requires the first Paste to leave the native tracked-write count
+  unchanged, repeats Paste, and has a real Perl child validate the one
+  `ESC [ 200 ~` / `ESC [ 201 ~` frame plus every body byte. A one-millisecond
+  AppKit timer runs throughout transfer; the result must report 10,485,772
+  encoded bytes, 641 completed chunks, and at most 16,384 queued bytes.
+- Planning scans the retained bounded clipboard string in 64 KiB code-unit
+  batches and yields to the AppKit event loop between batches. Paste actions
+  are exclusive from planning through transfer, so a second action cannot
+  create parallel scans. Sync/async parity tests cover CRLF and surrogate
+  boundaries, and the runtime suite observes a main-loop callback during each
+  of the two 10 MiB scans in addition to its periodic transfer timer.
+- The initial Developer JIT fixture exposed two acceptance-only problems. It
+  first reused the broader selection/autoscroll suite without running its
+  preceding mouse-mode stage, making an unrelated shift-override assertion
+  fail. Copy acceptance was narrowed to its own real local drag selection.
+  It then mistook literal marker text echoed in the zsh command line for
+  executed output, observing zsh's stale bracket mode. Runtime markers now use
+  split `printf` substitutions and can only appear after their command stage.
+- A later run validated all 641 writes and the exact child payload but expected
+  bracket mode to remain reset after the command. zsh correctly re-enables the
+  mode when its next line editor prompt starts; the fixture now verifies its
+  explicit reset by ordered output and accepts the new prompt's valid re-enable.
+- Final review found that the original confirmation scan was synchronous on the
+  AppKit isolate. An attempted `Isolate.run` offload yielded the UI but did not
+  return the 10 MiB plan in the embedded Developer JIT runtime within the
+  bounded fixture deadline, so it was discarded. Cooperative 64 KiB planning
+  avoids isolate-transfer/embedding dependencies and passed equivalent
+  analyzer, parity, event-loop progress, and both-runtime product checks.
+- Verification: formatter and analyzer passed; the focused paste tests
+  (including a 10 MiB confirmation re-read) passed; the complete Dart unit
+  suite passed; `make developer-jit-clipboard` passed in 3,415 ms and the final
+  corrected rerun passed; `make release-aot-clipboard` passed in 2,944 ms.
+  The first sandboxed format/test attempts could not update Dart telemetry or
+  clang's Metal module cache, so all final native-backed commands were rerun in
+  the permitted host environment.
+- Final `CI=true make runtime-verify` passed after cooperative planning was in
+  place. It covered all 135 formatted
+  source files, analyzer and unit tests, generated VT table, Dart-only source
+  audit, both bundle audits, both runtime smoke/display/clipboard/lifecycle/
+  traffic/resource/shutdown-fault integrations, and PTY deadline recovery.
+  The final clipboard runs completed in 2,661 ms (Developer JIT) and 2,444 ms
+  (Release AOT); each reported 10,485,772 bytes, 641 chunks, a maximum queue of
+  16,384 bytes or less, a visible zero-write confirmation, exact child
+  validation, two planning-yield observations, and responsive transfer-timer
+  progress.
+- The automated clipboard adapter is intentionally isolated, so neither the
+  failed iterations nor the successful final regression changed the user's
+  general pasteboard. No remaining work or blocker exists in this roadmap
+  item; hyperlink safety is now the first unchecked Phase 5 task.

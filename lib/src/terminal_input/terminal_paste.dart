@@ -11,6 +11,44 @@ enum TerminalPasteTransferDisposition {
   writeFailed,
 }
 
+/// Product decision made before any paste bytes may enter the PTY.
+enum TerminalPasteApprovalDisposition { approved, confirmationRequired }
+
+/// Content-free result from the expiring paste confirmation gate.
+final class TerminalPasteApprovalResult {
+  const TerminalPasteApprovalResult({
+    required this.disposition,
+    required this.analysis,
+  });
+
+  final TerminalPasteApprovalDisposition disposition;
+  final TerminalPasteAnalysis analysis;
+
+  bool get isApproved =>
+      disposition == TerminalPasteApprovalDisposition.approved;
+}
+
+/// User-visible clipboard outcomes that do not carry clipboard contents.
+enum TerminalClipboardNoticeKind {
+  copyUnavailable,
+  copyTooLarge,
+  copyFailed,
+  pasteUnavailable,
+  pasteTooLarge,
+  pasteConfirmationRequired,
+  pasteBusy,
+  pasteCancelled,
+  pasteFailed,
+}
+
+/// Bounded metadata used to render one clipboard status notice.
+final class TerminalClipboardNotice {
+  const TerminalClipboardNotice(this.kind, {this.analysis});
+
+  final TerminalClipboardNoticeKind kind;
+  final TerminalPasteAnalysis? analysis;
+}
+
 /// Content-free outcome of one paste transport attempt.
 final class TerminalPasteTransferResult {
   const TerminalPasteTransferResult({
@@ -110,6 +148,83 @@ final class TerminalPastePlan {
   );
 }
 
+/// Requires a repeated Paste invocation for risky content.
+///
+/// The retained token contains only scalar metadata and expires after a short
+/// monotonic interval. Callers must re-read and re-plan the clipboard on every
+/// invocation; this object never retains [TerminalPastePlan] or source text.
+final class TerminalPasteConfirmationGate {
+  TerminalPasteConfirmationGate({
+    this.confirmationWindow = const Duration(seconds: 10),
+  }) {
+    if (confirmationWindow <= Duration.zero) {
+      throw ArgumentError.value(
+        confirmationWindow,
+        'confirmationWindow',
+        'must be positive',
+      );
+    }
+  }
+
+  final Duration confirmationWindow;
+  _TerminalPasteConfirmationToken? _pending;
+
+  bool get hasPendingConfirmation => _pending != null;
+
+  TerminalPasteApprovalResult evaluate({
+    required int pasteboardChangeCount,
+    required TerminalPastePlan plan,
+    required int invocationMicros,
+    int? confirmationIssuedMicros,
+  }) {
+    RangeError.checkNotNegative(pasteboardChangeCount, 'pasteboardChangeCount');
+    RangeError.checkNotNegative(invocationMicros, 'invocationMicros');
+    final int issuedMicros = confirmationIssuedMicros ?? invocationMicros;
+    RangeError.checkNotNegative(issuedMicros, 'confirmationIssuedMicros');
+    if (issuedMicros < invocationMicros) {
+      throw ArgumentError.value(
+        confirmationIssuedMicros,
+        'confirmationIssuedMicros',
+        'must not precede the invocation',
+      );
+    }
+    final TerminalPasteAnalysis analysis = plan.analysis;
+    if (!analysis.requiresConfirmation) {
+      _pending = null;
+      return TerminalPasteApprovalResult(
+        disposition: TerminalPasteApprovalDisposition.approved,
+        analysis: analysis,
+      );
+    }
+
+    final _TerminalPasteConfirmationToken candidate =
+        _TerminalPasteConfirmationToken(
+          pasteboardChangeCount: pasteboardChangeCount,
+          analysis: analysis,
+          expiresAtMicros: issuedMicros + confirmationWindow.inMicroseconds,
+        );
+    final _TerminalPasteConfirmationToken? pending = _pending;
+    if (pending != null &&
+        invocationMicros <= pending.expiresAtMicros &&
+        pending.matches(candidate)) {
+      _pending = null;
+      return TerminalPasteApprovalResult(
+        disposition: TerminalPasteApprovalDisposition.approved,
+        analysis: analysis,
+      );
+    }
+    _pending = candidate;
+    return TerminalPasteApprovalResult(
+      disposition: TerminalPasteApprovalDisposition.confirmationRequired,
+      analysis: analysis,
+    );
+  }
+
+  void clear() {
+    _pending = null;
+  }
+}
+
 /// Scans and transforms clipboard text without allocating a whole encoded copy.
 final class TerminalPasteCodec {
   const TerminalPasteCodec._();
@@ -119,6 +234,7 @@ final class TerminalPasteCodec {
   static const int defaultChunkBytes = 16 * 1024;
   static const int maximumChunkBytes = 64 * 1024;
   static const int bracketFrameBytes = 12;
+  static const int defaultPlanningYieldCodeUnits = 64 * 1024;
 
   static TerminalPastePlan plan(
     String text, {
@@ -126,10 +242,52 @@ final class TerminalPasteCodec {
     int maximumBodyBytes = maximumEncodedBodyBytes,
     int largeThresholdBytes = largePasteThresholdBytes,
   }) {
+    final _TerminalPasteScanner scanner = _TerminalPasteScanner(
+      text,
+      maximumBodyBytes: maximumBodyBytes,
+      largeThresholdBytes: largeThresholdBytes,
+    );
+    scanner.scanCodeUnits(text.length);
+    return scanner.finish(bracketed: bracketed);
+  }
+
+  /// Plans a paste while yielding between bounded source-code-unit batches.
+  static Future<TerminalPastePlan> planAsync(
+    String text, {
+    required bool bracketed,
+    int maximumBodyBytes = maximumEncodedBodyBytes,
+    int largeThresholdBytes = largePasteThresholdBytes,
+    int yieldAfterCodeUnits = defaultPlanningYieldCodeUnits,
+  }) async {
+    RangeError.checkValueInInterval(
+      yieldAfterCodeUnits,
+      1,
+      maximumEncodedBodyBytes,
+      'yieldAfterCodeUnits',
+    );
+    final _TerminalPasteScanner scanner = _TerminalPasteScanner(
+      text,
+      maximumBodyBytes: maximumBodyBytes,
+      largeThresholdBytes: largeThresholdBytes,
+    );
+    while (!scanner.isDone) {
+      scanner.scanCodeUnits(yieldAfterCodeUnits);
+      if (!scanner.isDone) await Future<void>.delayed(Duration.zero);
+    }
+    return scanner.finish(bracketed: bracketed);
+  }
+}
+
+final class _TerminalPasteScanner {
+  _TerminalPasteScanner(
+    this.text, {
+    required this.maximumBodyBytes,
+    required this.largeThresholdBytes,
+  }) {
     RangeError.checkValueInInterval(
       maximumBodyBytes,
       1,
-      maximumEncodedBodyBytes,
+      TerminalPasteCodec.maximumEncodedBodyBytes,
       'maximumBodyBytes',
     );
     RangeError.checkValueInInterval(
@@ -138,15 +296,26 @@ final class TerminalPasteCodec {
       maximumBodyBytes,
       'largeThresholdBytes',
     );
-    var offset = 0;
-    var encodedBodyBytes = 0;
-    var logicalNewlineCount = 0;
-    var controlCharacterCount = 0;
-    var replacedControlCount = 0;
-    var hasBracketTerminator = false;
-    var fingerprint = _fnvOffsetBasis;
+  }
 
-    while (offset < text.length) {
+  final String text;
+  final int maximumBodyBytes;
+  final int largeThresholdBytes;
+  var offset = 0;
+  var encodedBodyBytes = 0;
+  var logicalNewlineCount = 0;
+  var controlCharacterCount = 0;
+  var replacedControlCount = 0;
+  var hasBracketTerminator = false;
+  var fingerprint = _fnvOffsetBasis;
+
+  bool get isDone => offset >= text.length;
+
+  void scanCodeUnits(int maximumCodeUnits) {
+    RangeError.checkNotNegative(maximumCodeUnits, 'maximumCodeUnits');
+    final int requestedEnd = offset + maximumCodeUnits;
+    final int end = requestedEnd < text.length ? requestedEnd : text.length;
+    while (offset < end) {
       final int first = text.codeUnitAt(offset);
       fingerprint = _fingerprintCodeUnit(fingerprint, first);
       if (first == 0x0d) {
@@ -193,10 +362,14 @@ final class TerminalPasteCodec {
         );
       }
     }
+  }
 
+  TerminalPastePlan finish({required bool bracketed}) {
+    if (!isDone) throw StateError('paste scan is incomplete');
     final int encodedBytes = text.isEmpty
         ? 0
-        : encodedBodyBytes + (bracketed ? bracketFrameBytes : 0);
+        : encodedBodyBytes +
+              (bracketed ? TerminalPasteCodec.bracketFrameBytes : 0);
     return TerminalPastePlan._(
       text,
       TerminalPasteAnalysis._(
@@ -332,6 +505,49 @@ final class _Scalar {
 
   final int value;
   final int nextOffset;
+}
+
+final class _TerminalPasteConfirmationToken {
+  _TerminalPasteConfirmationToken({
+    required this.pasteboardChangeCount,
+    required TerminalPasteAnalysis analysis,
+    required this.expiresAtMicros,
+  }) : sourceUtf16Length = analysis.sourceUtf16Length,
+       encodedBodyBytes = analysis.encodedBodyBytes,
+       encodedBytes = analysis.encodedBytes,
+       logicalNewlineCount = analysis.logicalNewlineCount,
+       controlCharacterCount = analysis.controlCharacterCount,
+       replacedControlCount = analysis.replacedControlCount,
+       hasBracketTerminator = analysis.hasBracketTerminator,
+       isLarge = analysis.isLarge,
+       bracketed = analysis.bracketed,
+       fingerprint = analysis.fingerprint;
+
+  final int pasteboardChangeCount;
+  final int sourceUtf16Length;
+  final int encodedBodyBytes;
+  final int encodedBytes;
+  final int logicalNewlineCount;
+  final int controlCharacterCount;
+  final int replacedControlCount;
+  final bool hasBracketTerminator;
+  final bool isLarge;
+  final bool bracketed;
+  final int fingerprint;
+  final int expiresAtMicros;
+
+  bool matches(_TerminalPasteConfirmationToken other) =>
+      pasteboardChangeCount == other.pasteboardChangeCount &&
+      sourceUtf16Length == other.sourceUtf16Length &&
+      encodedBodyBytes == other.encodedBodyBytes &&
+      encodedBytes == other.encodedBytes &&
+      logicalNewlineCount == other.logicalNewlineCount &&
+      controlCharacterCount == other.controlCharacterCount &&
+      replacedControlCount == other.replacedControlCount &&
+      hasBracketTerminator == other.hasBracketTerminator &&
+      isLarge == other.isLarge &&
+      bracketed == other.bracketed &&
+      fingerprint == other.fingerprint;
 }
 
 const int _fnvOffsetBasis = 0xcbf29ce484222325;
