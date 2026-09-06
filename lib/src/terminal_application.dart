@@ -349,6 +349,8 @@ final class TerminalOptions {
 final class TerminalApplication {
   const TerminalApplication({this.options = const TerminalOptions()});
 
+  static const String _productWindowTitle = 'Dart Terminal';
+
   final TerminalOptions options;
 
   Future<void> run() async {
@@ -428,7 +430,7 @@ final class TerminalApplication {
       final Window createdWindow =
           Window(
               frame: const Rect.fromLTWH(100, 90, 920, 580),
-              title: 'Dart Terminal',
+              title: _productWindowTitle,
             )
             ..contentView = createdContentView
             ..keyEventRouting = KeyEventRouting.appKitOnly
@@ -507,6 +509,14 @@ final class TerminalApplication {
           final TerminalLiveMetalSurface? surface = metalSurface;
           if (surface != null && !surface.isDisposed) {
             surface.notifyScreenChanged();
+          }
+          if (!createdWindow.isClosed && !createdWindow.isDisposed) {
+            final String desiredTitle =
+                terminalSession?.terminalScreenSet.metadata.windowTitle ??
+                _productWindowTitle;
+            if (createdWindow.title != desiredTitle) {
+              createdWindow.title = desiredTitle;
+            }
           }
           selectionOwner?.synchronize();
         },
@@ -1720,6 +1730,11 @@ final class TerminalApplication {
       mouseObservation,
       hyperlinkObservation,
     );
+    final bool windowTitle = await _exerciseWindowTitleMetadata(
+      session,
+      pane,
+      window,
+    );
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
     final bool systemFont =
@@ -1801,6 +1816,7 @@ final class TerminalApplication {
           closeScroll &&
           scroll &&
           hyperlink &&
+          windowTitle &&
           accessibility) {
         final int? workerProcessId = lifecycle.workerPid;
         _expectLifecycle(
@@ -1815,7 +1831,7 @@ final class TerminalApplication {
           'mode_key=$modeKey text_input=$textInput '
           'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
           'close_scroll=$closeScroll '
-          'scroll=$scroll hyperlink=$hyperlink '
+          'scroll=$scroll hyperlink=$hyperlink window_title=$windowTitle '
           'accessibility=$accessibility '
           'font_size=${baseline.fontPointSize.toStringAsFixed(1)} '
           'rows=${screen.rows} '
@@ -1840,9 +1856,86 @@ final class TerminalApplication {
       'mode_key=$modeKey text_input=$textInput '
       'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
       'close_scroll=$closeScroll '
-      'scroll=$scroll hyperlink=$hyperlink '
+      'scroll=$scroll hyperlink=$hyperlink window_title=$windowTitle '
       'accessibility=$accessibility '
       'font_size=${baseline.fontPointSize}',
+    );
+  }
+
+  static Future<bool> _exerciseWindowTitleMetadata(
+    TerminalSession session,
+    TerminalPane pane,
+    Window window,
+  ) async {
+    const String nativeTitle = '__DT_NATIVE_TITLE__';
+    const String temporaryTitle = '__DT_TEMP_TITLE__';
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+
+    pane.insertText(r"printf '\033]2;__DT_NATIVE_TITLE__\007'");
+    await pane.submit();
+    await _waitForWindowTitle(
+      session,
+      window,
+      expectedMetadata: nativeTitle,
+      expectedNative: nativeTitle,
+    );
+
+    pane.insertText(r"printf '\033[22;2t\033]2;__DT_TEMP_TITLE__\007'");
+    await pane.submit();
+    await _waitForWindowTitle(
+      session,
+      window,
+      expectedMetadata: temporaryTitle,
+      expectedNative: temporaryTitle,
+    );
+
+    pane.insertText(r"printf '\033[23;2t'");
+    await pane.submit();
+    await _waitForWindowTitle(
+      session,
+      window,
+      expectedMetadata: nativeTitle,
+      expectedNative: nativeTitle,
+    );
+
+    pane.insertText(r"printf '\033c'");
+    await pane.submit();
+    await _waitForWindowTitle(
+      session,
+      window,
+      expectedMetadata: null,
+      expectedNative: _productWindowTitle,
+    );
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+
+    stdout.writeln(
+      'TERMINAL_WINDOW_TITLE_TEST metadata=true native=true stack=true '
+      'reset=true fallback=true',
+    );
+    return true;
+  }
+
+  static Future<void> _waitForWindowTitle(
+    TerminalSession session,
+    Window window, {
+    required String? expectedMetadata,
+    required String expectedNative,
+  }) async {
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 5)) {
+      if (session.terminalScreenSet.metadata.windowTitle == expectedMetadata &&
+          window.title == expectedNative) {
+        return;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before synchronizing the window title',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw TimeoutException(
+      'display-test did not synchronize metadata title '
+      '$expectedMetadata to native title $expectedNative',
     );
   }
 

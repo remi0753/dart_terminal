@@ -193,6 +193,19 @@ compatibility classification until every policy branch is fixed.
   oracles use version 2. Immutable application captures remain valid version-1
   historical evidence; their loader explicitly accepts versions 1 and 2 while
   still pinning the exact per-sample hash.
+- 2026-09-07: after the metadata completion commit, ROADMAP was reread with a
+  clean worktree and the native-title child was confirmed as the next ordered
+  task. `dart_appkit` already provides a checked, cached `Window.title` setter;
+  no adjacent package change is required. `TerminalSession` parses PTY bytes
+  before notifying `TerminalPane`, so the pane `onChanged` callback is the
+  existing root-isolate boundary where current session metadata and the native
+  window can be synchronized without adding parser-to-AppKit authority.
+- 2026-09-07: macOS has no independent terminal icon-title surface. OSC 1
+  therefore remains bounded session metadata only; OSC 0 and OSC 2 update the
+  shared window-title field and consequently the native window. A null title
+  after RIS maps back to the fixed product title `Dart Terminal`; an accepted
+  empty string remains an explicit child-provided title rather than being
+  silently rewritten.
 
 ## Decisions and verification record
 
@@ -232,3 +245,25 @@ compatibility classification until every policy branch is fixed.
 - `git diff --check` passed before the final full gate. No `dart_appkit` change,
   external clipboard access, process cwd mutation, or raw application-capture
   rewrite is included in this subtask.
+- The native child compares the accepted session window title with the cached
+  AppKit title in the existing pane change callback and performs no native call
+  when they already agree. It checks closed/disposed state before both getter
+  and setter. Null metadata maps to `Dart Terminal`; OSC 1 does not change the
+  macOS title because it only addresses icon metadata.
+- `dart format lib/src/terminal_application.dart
+  tool/runtime_integration_smoke.dart` formatted the two changed Dart files;
+  the first sandboxed `dart analyze` attempt could not update the SDK telemetry
+  session file and made no source change. Re-running with the required local
+  SDK access passed with no issues.
+- `make runtime-terminal-display-integration` passed on Apple arm64 for both
+  Developer JIT (2,653 ms) and Release AOT (1,933 ms). Each real application
+  set an OSC 2 title, verified the native `Window.title`, saved/set/restored the
+  xterm window-title stack, issued RIS, and verified both null session metadata
+  and the `Dart Terminal` native fallback before clean ownership teardown.
+- Final `CI=true make test` passed all freshness gates, formatting of 176 Dart
+  files with zero changes, clean static analysis, and the full Dart test
+  runner. Compatibility totals remained 260 records (81 implemented, 16
+  partial, 10 safe-ignore, 153 unsupported); application evidence remained 8
+  accepted cells with 92 unsupported increments across 20 variants. This
+  native-only consumer did not alter parser classifications or reviewed
+  snapshots.

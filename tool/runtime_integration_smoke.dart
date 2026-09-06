@@ -973,6 +973,15 @@ Future<void> _runTerminalDisplay(
     hyperlinkAcceptance.hasMatch(observation.stdoutText),
     'terminal display launch omitted safe hyperlink hover/open acceptance',
   );
+  final RegExp windowTitleAcceptance = RegExp(
+    r'^TERMINAL_WINDOW_TITLE_TEST metadata=true native=true stack=true '
+    r'reset=true fallback=true$',
+    multiLine: true,
+  );
+  _expect(
+    windowTitleAcceptance.hasMatch(observation.stdoutText),
+    'terminal display launch omitted native window-title acceptance',
+  );
   final RegExp accessibilityAcceptance = RegExp(
     r'^TERMINAL_ACCESSIBILITY_TEST visible=true selection=true '
     r'cursor=true native=true focus=true notifications=true$',
@@ -988,7 +997,7 @@ Future<void> _runTerminalDisplay(
     r'metal_default=true newest_frame=true frame_bounded=true '
     r'system_font=true mode_key=true text_input=true input_matrix=true '
     r'mouse=true selection=true close_scroll=true scroll=true hyperlink=true '
-    r'accessibility=true font_size=14\.0 '
+    r'window_title=true accessibility=true font_size=14\.0 '
     r'rows=([4-9]|[1-9][0-9]+) '
     r'columns=([2-9][0-9]|[1-9][0-9]{2,}) '
     r'frame_build_delta=[1-9][0-9]*$',
