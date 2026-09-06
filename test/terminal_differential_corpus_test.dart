@@ -13,11 +13,11 @@ void runTerminalDifferentialCorpusTests() {
       runReviewedDifferentialCorpusChecks();
   _expect(
     result.caseCount == 4 &&
-        result.inputBytes == 146 &&
-        result.splitRuns == 154 &&
+        result.inputBytes == 202 &&
+        result.splitRuns == 210 &&
         result.machineLine() ==
             'TERMINAL_DIFFERENTIAL_CORPUS_BASELINE_PASS cases=4 '
-                'input_bytes=146 split_runs=154 external_captures=0',
+                'input_bytes=202 split_runs=210 external_captures=0',
     'reviewed Dart baseline is byte and split exact',
   );
 

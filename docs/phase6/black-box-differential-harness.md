@@ -4,8 +4,8 @@
 
 - Date started: 2026-09-07
 - Scope: second Phase 6 compatibility-hardening roadmap item
-- Status: subtasks 1–2 complete; subtask 3 baseline child complete, external
-  capture and acceptance children pending
+- Status: subtasks 1–2 complete; subtask 3 baseline and external capture
+  children complete, acceptance child pending
 
 ## Purpose and background
 
@@ -362,6 +362,60 @@ a ROADMAP reread. The parent remains incomplete until all three are complete.
   full gate formatted 156 files without changes, revalidated all earlier
   generated compatibility and adapter evidence, ran the 154 reviewed baseline
   splits, and completed the full Dart Terminal test runner.
+- 2026-09-07: external-capture planning exposed that final screen/mode/style
+  state is not observable through the common PTY reply probe. The reviewed
+  editing case therefore appends CPR, the mode case appends six DECRQM requests,
+  and the rendition case inserts DECRQSS for SGR before reset. The declared
+  inventory IDs and `replies` field were updated and the Dart baseline was
+  regenerated: 202 input bytes now run through 210 split/bytewise plans. This
+  creates independent, byte-observable evidence without converting unobserved
+  screen/style/mode placeholders into purported product state. DECRQSS is
+  already inventoried as a safe-ignore gap in Dart Terminal.
+- 2026-09-07: Kitty 0.48.2 completed all four reviewed inputs through the pinned
+  direct launcher. Its editing CPR, six mode replies, and combined status/mode
+  query match the Dart baseline byte-for-byte. Its rendition case returns a
+  38-byte DECRQSS SGR report while Dart Terminal returns no bytes. The raw probe
+  files are preserved without normalization beyond the shared strict probe JSON
+  envelope.
+- 2026-09-07: xterm 411 completed the same four inputs in the dedicated Debian
+  aarch64/Xvfb guest. The batch runner validates the exact xterm executable,
+  configuration, reviewed manifest, dimensions, case IDs/order/bounds and probe
+  schema before retaining any result. An initial attempt to write into the Lima
+  host mount failed with `EROFS`; no partial evidence was created. The capture
+  was rerun under the guest's writable home, then copied out explicitly. The
+  exact executable was also retained under the guest home for later reruns.
+  Editing, mode and query replies match both Kitty and Dart. xterm emits a
+  36-byte DECRQSS reply whose valid SGR serialization differs from Kitty's, and
+  Dart remains silent; those raw differences are deliberately deferred to the
+  ordered acceptance child.
+- 2026-09-07: Ghostty's reviewed-corpus launch was attempted after revalidating
+  the pinned app and configuration. It failed at the same bounded AppKit
+  activation boundary before the first probe, and the exact process was cleaned
+  up. All four matrix cells are recorded as
+  `macos-activation-unavailable`, with no probe, observed field, or agreement
+  claim. This is distinct from the successful earlier one-case Ghostty PTY
+  self-test evidence.
+- 2026-09-07: the generated capture evidence index binds the reviewed manifest,
+  backend catalog, self-test ledger, eight immutable raw probe files and every
+  per-record executable/config/probe/reply hash. It contains 12 matrix attempts:
+  eight captured reply fields and four explicit unavailabilities. It also states
+  `screen_style_mode_captures=0`. Freshness validation rejects missing, stale or
+  extra raw probes and any malformed status, dimensions or provenance. Focused
+  evidence tests additionally prove that the three matching families remain
+  byte equal while both nonempty DECRQSS differences remain unreconciled for the
+  next task. Python compilation, the baseline test, evidence test and standalone
+  evidence gate pass. After capture, no comparator process remained; both DMGs
+  were detached and the xterm VM was stopped.
+- 2026-09-07: the first full gate after adding capture support stopped in an
+  existing negative catalog test: adding the common capture helper before the
+  activation helper correctly shifted the mutated helper from support-file
+  index 0 to index 1, but the assertion over-specified index 0. The test still
+  mutates the exact helper hash and now asserts the stable SHA-256 rejection
+  reason rather than an incidental array position.
+- 2026-09-07: after that correction, the focused adapter test and full gate
+  passed. `CI=true make test` validated the 210 Dart split runs, 12-cell external
+  evidence matrix, formatting of 159 files, clean analysis, all prior
+  compatibility freshness gates, and the complete Dart Terminal test runner.
 
 ## Primary product references for adapter execution
 

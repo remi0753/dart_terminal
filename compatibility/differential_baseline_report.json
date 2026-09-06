@@ -2,7 +2,7 @@
   "format": "dart-terminal-differential-baseline-report",
   "version": 1,
   "manifest_path": "test/corpus/differential/reviewed_v1.json",
-  "manifest_sha256": "8b16d38fc2142eadb4dd2370a31b8e57766b88fc9a69885263390d7379db3373",
+  "manifest_sha256": "3f981013bf7cc12a53e1016dd8f9df5c8abe66713dd3d9b360afdd351a08335b",
   "inventory_path": "compatibility/sequence_mode_inventory.json",
   "inventory_sha256": "67c1841daa9a4c2d8d0864a14c55898dd58d76a65ec7e667169317c24a00567b",
   "implementation_manifest_path": "compatibility/implemented_sequence_manifest.json",
@@ -15,24 +15,27 @@
       "inventory_ids": [
         "ecma48:csi:cup",
         "ecma48:csi:dch",
+        "ecma48:csi:dsr",
         "ecma48:csi:ech",
         "ecma48:csi:ich"
       ],
-      "input_sha256": "fee679ea7299d0506bbdd2b113b0fa2eb7347fbaf5dee1cf0aa7e3e387e6b913",
+      "input_sha256": "659c8e69f0ea45757d64ed569c2f38290fc06b0bb374edbd1fd7f7ae4db3e20e",
       "fields": [
         "text",
-        "cursor"
+        "cursor",
+        "replies"
       ],
       "expectation": "agree",
       "observation_path": "test/corpus/differential/baseline/editing-character-operations.json",
-      "observation_sha256": "1d5cb99e71429488160eb9203b4ec9054eb2638b29d5263f96634eccf93d6a3b",
-      "split_runs": 30,
+      "observation_sha256": "98aa52a72f8e7ea40aacd1e1f2c10f1cb6bdcabdeb9247d1afda12716c5c7aaa",
+      "split_runs": 34,
       "external_evidence": "pending"
     },
     {
       "id": "mode-private-transitions",
       "family": "mode",
       "inventory_ids": [
+        "dec:csi:decrqm",
         "dec:csi:decset",
         "dec:mode:decawm",
         "dec:mode:decckm",
@@ -41,14 +44,15 @@
         "xterm:mode:sgr-mouse",
         "xterm:mode:x11-mouse"
       ],
-      "input_sha256": "da3521502f4edd94e4b8281d9c38e43e80f01482b96ca55074804914346dd025",
+      "input_sha256": "19973f6a23b041529339bde4f06090501ed02d5dee8252b6c6e5811acf230c4e",
       "fields": [
-        "modes"
+        "modes",
+        "replies"
       ],
       "expectation": "agree",
       "observation_path": "test/corpus/differential/baseline/mode-private-transitions.json",
-      "observation_sha256": "97b9aa4856a92bed1e0091dccc5861337b9395942fb18ce12a83cd8926e4269c",
-      "split_runs": 41,
+      "observation_sha256": "d240087d6257823c9a4d2e22eb5fdc47493cf687175124f7dcb6bc2362608b41",
+      "split_runs": 86,
       "external_evidence": "pending"
     },
     {
@@ -77,26 +81,28 @@
       "id": "rendition-attributes-colors",
       "family": "rendition",
       "inventory_ids": [
+        "dec:dcs:decrqss",
         "ecma48:csi:sgr"
       ],
-      "input_sha256": "fd4c703434da6b34dbb4e8bd9ec2f7202fd261e3c5e5ef6bb224b0f12366f323",
+      "input_sha256": "f3d53dcb24fb433c14db5f4004dc96bd84aa9cf308d6be1c8e7998eabaa2621b",
       "fields": [
         "text",
         "style",
         "color",
-        "cursor"
+        "cursor",
+        "replies"
       ],
       "expectation": "agree",
       "observation_path": "test/corpus/differential/baseline/rendition-attributes-colors.json",
       "observation_sha256": "314f41046a09816107bcdf86bbba983aeced82aa083564aea4e19574eef8defe",
-      "split_runs": 46,
+      "split_runs": 53,
       "external_evidence": "pending"
     }
   ],
   "summary": {
     "case_count": 4,
-    "input_bytes": 146,
-    "split_runs": 154,
+    "input_bytes": 202,
+    "split_runs": 210,
     "families": [
       "editing",
       "mode",

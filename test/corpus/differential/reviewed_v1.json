@@ -10,15 +10,17 @@
       "inventory_ids": [
         "ecma48:csi:cup",
         "ecma48:csi:dch",
+        "ecma48:csi:dsr",
         "ecma48:csi:ech",
         "ecma48:csi:ich"
       ],
-      "input_hex": "41 42 43 44 45 46 47 48 1b 5b 31 3b 33 48 1b 5b 32 40 78 79 1b 5b 32 50 1b 5b 32 58",
+      "input_hex": "41 42 43 44 45 46 47 48 1b 5b 31 3b 33 48 1b 5b 32 40 78 79 1b 5b 32 50 1b 5b 32 58 1b 5b 36 6e",
       "rows": 3,
       "columns": 8,
       "fields": [
         "text",
-        "cursor"
+        "cursor",
+        "replies"
       ],
       "expectation": "agree",
       "gap_owner": null
@@ -27,6 +29,7 @@
       "id": "mode-private-transitions",
       "description": "DEC and xterm private mode transitions expose application, origin, wrap, mouse, and paste state.",
       "inventory_ids": [
+        "dec:csi:decrqm",
         "dec:csi:decset",
         "dec:mode:decawm",
         "dec:mode:decckm",
@@ -35,11 +38,12 @@
         "xterm:mode:sgr-mouse",
         "xterm:mode:x11-mouse"
       ],
-      "input_hex": "1b 5b 3f 31 68 1b 5b 3f 36 68 1b 5b 3f 37 6c 1b 5b 3f 31 30 30 30 68 1b 5b 3f 31 30 30 36 68 1b 5b 3f 32 30 30 34 68",
+      "input_hex": "1b 5b 3f 31 68 1b 5b 3f 36 68 1b 5b 3f 37 6c 1b 5b 3f 31 30 30 30 68 1b 5b 3f 31 30 30 36 68 1b 5b 3f 32 30 30 34 68 1b 5b 3f 31 24 70 1b 5b 3f 36 24 70 1b 5b 3f 37 24 70 1b 5b 3f 31 30 30 30 24 70 1b 5b 3f 31 30 30 36 24 70 1b 5b 3f 32 30 30 34 24 70",
       "rows": 3,
       "columns": 8,
       "fields": [
-        "modes"
+        "modes",
+        "replies"
       ],
       "expectation": "agree",
       "gap_owner": null
@@ -69,16 +73,18 @@
       "id": "rendition-attributes-colors",
       "description": "Bold underline direct foreground and indexed background SGR state is reset independently.",
       "inventory_ids": [
+        "dec:dcs:decrqss",
         "ecma48:csi:sgr"
       ],
-      "input_hex": "1b 5b 31 3b 34 3b 33 38 3b 32 3b 31 32 3b 33 34 3b 35 36 3b 34 38 3b 35 3b 31 37 6d 41 1b 5b 32 32 3b 32 34 3b 33 39 3b 34 39 6d 42",
+      "input_hex": "1b 5b 31 3b 34 3b 33 38 3b 32 3b 31 32 3b 33 34 3b 35 36 3b 34 38 3b 35 3b 31 37 6d 41 1b 50 24 71 6d 1b 5c 1b 5b 32 32 3b 32 34 3b 33 39 3b 34 39 6d 42",
       "rows": 3,
       "columns": 8,
       "fields": [
         "text",
         "style",
         "color",
-        "cursor"
+        "cursor",
+        "replies"
       ],
       "expectation": "agree",
       "gap_owner": null

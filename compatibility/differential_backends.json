@@ -20,6 +20,10 @@
       "config_sha256": "da0298fb5f13b6cb7b2ae2c21554292f11d802eb648e2f3f26f30a70ae758ca3",
       "support_files": [
         {
+          "path": "tool/terminal_differential_capture.dart",
+          "sha256": "ff0985b0a4adcb6128e1998da57515e87bea6069100adee29f52453807db5e4f"
+        },
+        {
           "path": "tool/terminal_differential_macos_activation.swift",
           "sha256": "7a95183789657f8c877332503c789ccd82df9778dc70b007b99091043a1e5ad7"
         },
@@ -51,6 +55,10 @@
       "config_sha256": "210905791961dc4afdcc9ceb686fcc3462bb7a2a8b8cf3d67568317c1638d732",
       "support_files": [
         {
+          "path": "tool/terminal_differential_capture.dart",
+          "sha256": "ff0985b0a4adcb6128e1998da57515e87bea6069100adee29f52453807db5e4f"
+        },
+        {
           "path": "tool/terminal_differential_probe.dart",
           "sha256": "21b8abf783572d2f30b7d1a91924082c018b576aa1ec97faf24850dd33ee89a4"
         }
@@ -80,6 +88,10 @@
         {
           "path": "tool/terminal_differential_probe_posix.py",
           "sha256": "c34d3aadb1902e213ec28e183f8f446d19b67cb7dc5f4ec02b6b80064158c9ed"
+        },
+        {
+          "path": "tool/xterm_differential_corpus_capture.py",
+          "sha256": "d155a2c0a6f4322c1ec96a87069e446597227f029f620fabd4117c8295e8bbd1"
         },
         {
           "path": "tool/xterm_differential_self_test.py",

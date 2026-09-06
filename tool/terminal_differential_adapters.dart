@@ -615,7 +615,8 @@ final class TerminalDifferentialSelfTestLedger {
         terminalDifferentialSha256(probe.readAsBytesSync()) == probeSha256,
         '$context probe SHA-256 differs',
       );
-      final _ProbeResult probeResult = _ProbeResult.load(probe);
+      final TerminalDifferentialProbeResult probeResult =
+          TerminalDifferentialProbeResult.load(probe);
       _expect(probeResult.status == 'ok', '$context probe did not pass');
       _expect(
         probeResult.terminalRows >= 4 && probeResult.terminalColumns >= 10,
@@ -685,6 +686,7 @@ final class TerminalDifferentialExternalAdapter {
     required TerminalDifferentialBackendProfile profile,
     required TerminalDifferentialCase testCase,
     required TerminalDifferentialAdapterOptions options,
+    File? rawProbeDestination,
   }) async {
     final String executable = options.executable ?? _defaultExecutable(profile);
     if (!executable.startsWith('/') || !File(executable).existsSync()) {
@@ -788,7 +790,8 @@ final class TerminalDifferentialExternalAdapter {
               : 'comparator probe capture timed out',
         );
       }
-      final _ProbeResult probeResult = _ProbeResult.load(result);
+      final TerminalDifferentialProbeResult probeResult =
+          TerminalDifferentialProbeResult.load(result);
       if (!exited) {
         try {
           processExitCode = await exitFuture.timeout(
@@ -815,6 +818,13 @@ final class TerminalDifferentialExternalAdapter {
             probeResult.terminalColumns >= testCase.columns,
         'comparator terminal dimensions are invalid',
       );
+      if (rawProbeDestination != null) {
+        rawProbeDestination.parent.createSync(recursive: true);
+        rawProbeDestination.writeAsBytesSync(
+          result.readAsBytesSync(),
+          flush: true,
+        );
+      }
       return _observation(
         profile: profile,
         testCase: testCase,
@@ -1046,8 +1056,8 @@ final class _ProcessDrain {
   Future<void> get done => _done.timeout(const Duration(seconds: 2));
 }
 
-final class _ProbeResult {
-  const _ProbeResult({
+final class TerminalDifferentialProbeResult {
+  const TerminalDifferentialProbeResult({
     required this.status,
     required this.terminalRows,
     required this.terminalColumns,
@@ -1059,7 +1069,7 @@ final class _ProbeResult {
   final int terminalColumns;
   final Uint8List replies;
 
-  static _ProbeResult load(File source) {
+  static TerminalDifferentialProbeResult load(File source) {
     _expect(source.lengthSync() <= 32 * 1024, 'probe result is too large');
     final Map<String, Object?> root = _object(
       jsonDecode(source.readAsStringSync()),
@@ -1083,7 +1093,7 @@ final class _ProbeResult {
       status == 'ok' || status == 'not-a-terminal' || status == 'overflow',
       'unknown probe status',
     );
-    return _ProbeResult(
+    return TerminalDifferentialProbeResult(
       status: status,
       terminalRows: _integer(
         root['terminal_rows'],

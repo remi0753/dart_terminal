@@ -34,6 +34,7 @@ import 'terminal_damage_test.dart';
 import 'terminal_damage_transfer_test.dart';
 import 'terminal_differential_adapters_test.dart';
 import 'terminal_differential_corpus_test.dart';
+import 'terminal_differential_evidence_test.dart';
 import 'terminal_differential_harness_test.dart';
 import 'terminal_history_reflow_test.dart';
 import 'terminal_hyperlink_interaction_test.dart';
@@ -83,6 +84,7 @@ Future<void> main() async {
   await runTerminalDifferentialHarnessTests();
   runTerminalDifferentialAdapterTests();
   runTerminalDifferentialCorpusTests();
+  runTerminalDifferentialEvidenceTests();
   runProductParserBenchmarkTests();
   runProductParserCorpusTests();
   runGoldenImageTests();

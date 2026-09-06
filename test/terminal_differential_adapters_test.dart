@@ -90,7 +90,7 @@ void _testCatalogValidation() {
       '0000000000000000000000000000000000000000000000000000000000000000',
     ),
     repositoryRoot,
-    'support_files[0] SHA-256 differs',
+    'SHA-256 differs',
   );
 }
 
