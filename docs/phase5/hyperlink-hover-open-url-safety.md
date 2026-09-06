@@ -1,0 +1,200 @@
+# Phase 5 — hyperlink hover/open and URL safety
+
+## Task identity
+
+- Date started: 2026-09-06
+- Scope: eighth Phase 5 production-input roadmap item
+- Status: in progress
+- Ordered subtasks:
+  1. add a bounded OSC 8 table, current-link state, and cell lifecycle;
+  2. add viewport hyperlink hit testing and a Metal hover overlay;
+  3. add an allowlist-enforcing external-URL open boundary to `dart_appkit`;
+  4. connect real AppKit hover/open behavior and both-runtime product acceptance.
+
+## Purpose and background
+
+Make producer-declared OSC 8 links discoverable and deliberately openable from
+the live Metal terminal without permitting arbitrary terminal output to send an
+unsafe target directly to Launch Services. The existing screen, scrollback,
+reflow, snapshot, and damage layouts already preserve a reserved 16-bit
+hyperlink ID per cell, but all product writes currently store ID zero. There is
+no URI table, parser dispatch, viewport copy, hover overlay, or OS URL-opening
+boundary.
+
+This item follows the completed clipboard task and precedes the Phase 5
+VoiceOver task. It crosses independently reusable terminal-core, renderer,
+native AppKit, and product-integration boundaries, so it is split before source
+implementation as required by the repository work rules.
+
+## Scope
+
+- Parse the standard `OSC 8 ; params ; URI ST` open form and `OSC 8 ; ; ST`
+  close form from the already bounded VT string payload.
+- Preserve a bounded immutable URI definition behind each nonzero 16-bit cell
+  ID through primary/alternate grids, scrollback, resize/reflow, viewport
+  projection, snapshots, and renderer damage.
+- Treat the optional `id` parameter as producer-supplied grouping metadata;
+  openings without `id` receive distinct cell IDs even when their URI text is
+  identical.
+- Refuse malformed UTF-8, invalid parameters, over-limit definitions, unsafe
+  URI text, and exhausted table capacity without allocating an unbounded
+  fallback or leaving a prior link active.
+- Resolve hover/click coordinates against the current visible viewport,
+  normalize wide-cell continuations, and reject stale/out-of-grid cells.
+- Render an underline-style Metal hover indication without mutating canonical
+  terminal content, style, selection, or scrollback.
+- On macOS, open only explicitly allowlisted absolute `http`, `https`, and
+  `mailto` targets. Block scheme-less, file, data, javascript, custom-scheme,
+  credential-bearing, control/invisible-character, and malformed targets
+  before calling `NSWorkspace`.
+- Open only after an intentional Command-primary-click. A consumed open action
+  must not also become terminal mouse input or a local selection gesture.
+- Exercise the real native pointer/menu/event path and a real PTY-produced OSC
+  8 fixture in both Developer JIT and Release AOT without launching the user's
+  browser during automated acceptance.
+
+## Out of scope
+
+- Regex detection of visible plain-text URLs or file paths, semantic-history
+  path resolution, configurable link matchers/actions, context menus, drag and
+  drop, link previews, visited-link history, or persistence across sessions.
+- Opening `file:` or custom schemes, executing link handlers or shell commands,
+  and a confirmation UI that bypasses the allowlist. A later explicit product
+  policy may add narrowly reviewed schemes.
+- OSC 52 clipboard access, semantic prompt ranges, search overlays, images, and
+  accessibility. VoiceOver remains the next ordered Phase 5 task.
+- Cursor artwork changes in `dart_appkit`; visible Metal hover feedback and the
+  Command-click contract are the completion boundary for this item.
+
+## Dependencies and confirmed facts
+
+- `README.md`, `ROADMAP.md`, and `FEATURE_MATRIX.md` were re-read after clipboard
+  commit `1595350`; both repositories were clean at task start.
+- `TerminalScreen`, `TerminalScrollback`, terminal reflow, state snapshots, and
+  damage codec v2 already store/copy a `Uint16` hyperlink value, reserving zero
+  for no link and `0xffff` as invalid. Public cell setters validate IDs through
+  `TerminalScreen.maxResourceId`.
+- `TerminalScreen._printNewCellGroup` nevertheless hard-codes hyperlink zero,
+  and `TerminalScreenParserSink.dispatchOsc` currently accepts only palette and
+  default-color commands. The default VT parser caps a string payload at 4096
+  bytes before dispatch.
+- `TerminalViewport.hyperlinkAt` already projects history or active-grid IDs,
+  but `TerminalViewportRenderModel` omits that channel, so the default live
+  Metal surface cannot inspect a visible link.
+- `dart_appkit` protocol v5 already delivers finite content-view mouse
+  down/up/moved/dragged coordinates and modifiers. The product routes them
+  exclusively through terminal mouse reporting or local selection.
+- `dart_appkit` has no `NSWorkspace` API. Its existing FFI bridge, typed result,
+  fake-binding, main-thread, and optional-symbol compatibility patterns are the
+  required extension points.
+- The OSC 8 proposal states that an opening sequence applies its target to
+  subsequently painted cells and that empty params/URI close the hyperlink.
+  It defines colon-separated parameters and currently standardizes `id`.
+- Apple's AppKit documentation defines `NSWorkspace.open(_:)` as the API that
+  opens a URL with the registered application and returns whether the open was
+  accepted. Ghostty's current macOS implementation separately classifies OSC 8
+  targets as untrusted before reaching that API; this project adopts the same
+  trust-boundary principle with a deliberately narrower deny-by-default policy.
+
+Primary references:
+
+- <https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda>
+- <https://developer.apple.com/documentation/appkit/nsworkspace/open(_:)> 
+- <https://github.com/ghostty-org/ghostty/blob/main/macos/Sources/Ghostty/Ghostty.App.swift>
+
+## Design decisions
+
+### Resource ownership and bounds
+
+- One session-owned `TerminalHyperlinkTable` is shared by primary and alternate
+  screens. ID zero means no link; definitions use IDs 1 through 65534 and are
+  immutable for the lifetime of the session so retained scrollback IDs cannot
+  resolve to a newly reused URI.
+- The alpha table admits at most 4096 definitions and 1 MiB total stored UTF-8
+  URI/parameter-key bytes. The parser's existing 4096-byte payload cap is the
+  per-definition ceiling. Capacity exhaustion closes the current hyperlink and
+  increments a bounded refusal counter; it never grows storage or aliases IDs.
+- Explicit producer `id` plus URI is interned so separated spans can share one
+  identity. An opening without `id` always allocates a fresh identity. Unknown
+  well-formed parameters are ignored for forward compatibility; malformed or
+  duplicate `id` data rejects the opening.
+
+### Safety and interaction
+
+- URI policy is pure and tested in Dart before the native call. It rejects
+  scalar controls, bidi formatting/isolate controls, line/paragraph separators,
+  whitespace, backslash ambiguity, missing/relative schemes, web URLs without
+  authority/host, and web credentials. Scheme comparison is ASCII
+  case-insensitive and the only allowlist is `http`, `https`, and `mailto`.
+- The native `dart_appkit` API receives only a policy-approved absolute URL,
+  repeats structural and allowlist validation before constructing `NSURL`, and
+  calls `NSWorkspace` without shell interpolation. Automated product acceptance
+  substitutes an opener recorder after the same Dart policy so no external app
+  is launched.
+- Hover is derived state keyed by current viewport generation, cell, and
+  hyperlink ID. It is discarded on pointer exit-equivalent/out-of-grid input,
+  viewport movement, link disappearance, or surface disposal. Click resolution
+  is repeated at click time rather than trusting the last hover snapshot.
+- Command-primary-click owns the event only when the clicked cell still resolves
+  to an allowed OSC 8 target. Blocked/malformed targets are consumed and produce
+  a bounded status notice; they never fall through to a less restricted opener.
+
+## Completion conditions
+
+- Valid OSC 8 open/close sequences mark exactly the subsequently printed cells,
+  preserve wide/grapheme topology and reflow/history identity, and resolve to
+  the correct immutable URI.
+- Malformed/oversized/exhausted input cannot create an unbounded table, reuse a
+  retained ID for another URI, or accidentally continue a previous link.
+- Visible history and active-grid links can be hit-tested; hover produces a
+  deterministic Metal overlay without changing terminal text or selection.
+- Only allowed absolute targets can reach `NSWorkspace`; all other schemes and
+  invisible/deceptive targets are refused before OS dispatch.
+- Command-click opens once and is not also reported to the PTY or selection.
+  Ordinary click, Shift override, and terminal mouse modes retain their current
+  exclusive routing behavior.
+- Unit, parser/reflow/renderer, `dart_appkit`, native-asset, real PTY/AppKit, and
+  both-runtime product acceptance all pass, with docs/matrix/roadmap updated.
+
+## Verification plan
+
+- Terminal core: chunk-split OSC 8 parser tests; malformed UTF-8/params, explicit
+  and implicit identity, capacity/byte ceilings, reset/screen switching,
+  wide/grapheme edits, scrollback and resize/reflow tests; snapshot/damage
+  compatibility and bounded resource diagnostics.
+- Renderer/input: viewport continuation normalization, history hit tests, stale
+  hover invalidation, overlay spans, clipping, 1x/2x deterministic instances,
+  selection coexistence, and no canonical-grid mutation.
+- `dart_appkit`: public header and fake/FFI binding tests, missing-symbol legacy
+  behavior, native structural/allowlist rejection, main-thread use, and a native
+  test hook proving only accepted URLs reach the workspace dispatch point.
+- Product: deterministic real-PTY OSC 8 output, native moved/down/up injection,
+  allowed/blocked targets, one-open/exclusive ownership counters, visible hover
+  Metal evidence, Developer JIT and Release AOT, source/bundle audits, smoke,
+  display, resource, and final full runtime verification.
+
+## Investigation and implementation log
+
+### 2026-09-06 — task start and decomposition
+
+- Re-read the product overview, ordered Phase 5 roadmap, feature matrix rows
+  `SCR-11`, `CAP-05`, `REN-08`, `SEC-01`, and `SEC-02`, and confirmed this is
+  the first unchecked task after the clean clipboard completion commit.
+- Inspected the parser sink, screen/screen-set ownership, scrollback/reflow,
+  viewport model, damage codec, Metal compositor/live surface, mouse router,
+  product event subscription, and adjacent AppKit public/native binding layers.
+- Confirmed that the pre-existing hyperlink arrays were intentional forward
+  storage, not a functioning hyperlink implementation. The current rendering
+  path drops the channel at viewport capture and product writes always use ID
+  zero.
+- Reviewed the OSC 8 proposal, Apple's `NSWorkspace` URL-opening contract, and
+  Ghostty's current separation of producer-controlled OSC 8 targets from its
+  unrestricted generic opener. No upstream source is copied.
+- Split the task before implementation because core resource identity,
+  renderer-derived hover state, reusable native URL dispatch, and real product
+  arbitration have independent safety/compatibility failure modes and must be
+  committed and re-checked in order.
+
+## Verification results
+
+- Pending implementation.

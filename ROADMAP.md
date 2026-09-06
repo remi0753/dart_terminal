@@ -810,6 +810,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] PTY completion駆動のbounded非同期paste transport
   - [x] copy/paste menu・明示確認・両runtimeの10 MiB製品受け入れ
 - [ ] hyperlink hover/open と URL safety
+  （[`docs/phase5/hyperlink-hover-open-url-safety.md`](docs/phase5/hyperlink-hover-open-url-safety.md) を参照して実施）
+  - [ ] bounded OSC 8 table・current link state・cell lifecycle
+  - [ ] viewport hyperlink hit test・Metal hover overlay
+  - [ ] `dart_appkit` のallowlist済みexternal URL open境界
+  - [ ] 実AppKit hover/open製品統合と両runtime受け入れ
 - [ ] VoiceOver の最小 visible text/selection/cursor support
 
 終了条件:
