@@ -66,6 +66,7 @@ import 'terminal_selection_search_test.dart';
 import 'terminal_session_reply_test.dart';
 import 'terminal_snapshot_test.dart';
 import 'terminal_style_test.dart';
+import 'terminal_terminfo_test.dart';
 import 'terminal_text_input_event_router_test.dart';
 import 'terminal_unicode_test.dart';
 import 'terminal_viewport_render_model_test.dart';
@@ -134,6 +135,7 @@ Future<void> main() async {
   runTerminalScreenMetalCompositorTests();
   runTerminalStyleTests();
   runTerminalTextInputEventRouterTests();
+  runTerminalTerminfoTests();
   runTerminalUnicodeTests();
   runTerminalViewportTests();
   runTerminalViewportRenderModelTests();

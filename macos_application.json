@@ -14,7 +14,7 @@
       "entrypoint": "bin/runtime_worker.dart"
     }
   ],
-  "resources": [],
+  "resources": ["resources/terminfo/78/xterm-256color"],
   "nativeAssets": [
     {
       "id": "dart_pty_macos",

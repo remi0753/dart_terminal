@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'terminal_differential_sha256.dart';
+import 'terminal_terminfo.dart';
+
 final class _AuditException implements Exception {
   const _AuditException(this.message);
 
@@ -83,6 +86,11 @@ Future<void> main(List<String> arguments) async {
         '$contents/Frameworks/libdart_terminal_renderer_macos.dylib';
     final String payload =
         '$resources/${mode == 'developer-jit' ? 'application.dill' : 'application.aot'}';
+    final TerminalTerminfoContract terminfoContract =
+        TerminalTerminfoContract.load(
+          File(defaultTerminalTerminfoContractPath),
+        );
+    final String terminfo = '$resources/${terminfoContract.compiledPath}';
     for (final String path in <String>[
       '$contents/Info.plist',
       executable,
@@ -92,11 +100,17 @@ Future<void> main(List<String> arguments) async {
       renderer,
       payload,
       '$resources/DART_SDK_LICENSE.txt',
+      terminfo,
     ]) {
       final File file = File(path);
       _expect(await file.exists(), 'required bundle file is missing: $path');
       _expect((await file.stat()).size > 0, 'bundle file is empty: $path');
     }
+    _expect(
+      terminalDifferentialSha256(await File(terminfo).readAsBytes()) ==
+          terminfoContract.compiledSha256,
+      'bundled terminfo entry differs from the reviewed contract',
+    );
     _expect(
       (await File(helper).stat()).mode & 0x49 != 0,
       'Dart helper is not executable',
