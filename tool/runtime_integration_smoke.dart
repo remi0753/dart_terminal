@@ -908,12 +908,22 @@ Future<void> _runTerminalDisplay(
     mouseAcceptance.hasMatch(observation.stdoutText),
     'terminal display launch omitted exact mouse/selection arbitration',
   );
+  final RegExp selectionAcceptance = RegExp(
+    r'^TERMINAL_SELECTION_TEST character=true word=true line=true '
+    r'reverse=true shift_override=true autoscroll_up=true '
+    r'autoscroll_down=true metal=true local_only=true$',
+    multiLine: true,
+  );
+  _expect(
+    selectionAcceptance.hasMatch(observation.stdoutText),
+    'terminal display launch omitted exact local selection acceptance',
+  );
   final RegExp acceptance = RegExp(
     r'^TERMINAL_DISPLAY_TEST sgr_stripped=true styled=true '
     r'wrapped_rows=([2-9]|[1-9][0-9]+) prompt_bottom=true '
     r'metal_default=true newest_frame=true frame_bounded=true '
     r'system_font=true mode_key=true text_input=true input_matrix=true '
-    r'mouse=true font_size=14\.0 '
+    r'mouse=true selection=true font_size=14\.0 '
     r'rows=([4-9]|[1-9][0-9]+) '
     r'columns=([2-9][0-9]|[1-9][0-9]{2,}) '
     r'frame_build_delta=[1-9][0-9]*$',

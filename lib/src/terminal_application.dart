@@ -12,6 +12,7 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 import 'runtime_lifecycle.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
 import 'terminal_core/terminal_screen.dart';
+import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_core/terminal_style.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_input_matrix.dart';
@@ -19,6 +20,8 @@ import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_encoder.dart';
 import 'terminal_input/terminal_key_event.dart';
 import 'terminal_input/terminal_mouse_router.dart';
+import 'terminal_input/terminal_selection_autoscroll.dart';
+import 'terminal_input/terminal_selection_gesture.dart';
 import 'terminal_input/terminal_text_input_event_router.dart';
 import 'terminal_pane.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
@@ -329,6 +332,7 @@ final class TerminalApplication {
     StreamSubscription<WindowEvent>? eventSubscription;
     StreamSubscription<AppKitEvent>? applicationEventSubscription;
     StreamSubscription<TerminalTextInputEvent>? textInputSubscription;
+    _TerminalSelectionProductOwner? selectionOwner;
     final List<StreamSubscription<MenuItemInvokedEvent>> menuSubscriptions =
         <StreamSubscription<MenuItemInvokedEvent>>[];
     final List<MenuItem> menuItems = <MenuItem>[];
@@ -432,6 +436,7 @@ final class TerminalApplication {
           if (surface != null && !surface.isDisposed) {
             surface.notifyScreenChanged();
           }
+          selectionOwner?.synchronize();
         },
         onExitRequested: createdWindow.requestClose,
         lifecycleObserver: (TerminalPaneLifecycleObservation observation) {
@@ -500,12 +505,23 @@ final class TerminalApplication {
           );
       final _TerminalMouseProductObservation mouseObservation =
           _TerminalMouseProductObservation();
+      final _TerminalSelectionProductOwner createdSelectionOwner =
+          _TerminalSelectionProductOwner(
+            gesture: TerminalSelectionGestureController(
+              viewport: terminalSession!.terminalScreenSet.viewport,
+            ),
+            surface: createdMetalSurface,
+          );
+      selectionOwner = createdSelectionOwner;
       final TerminalMouseRouter mouseRouter = TerminalMouseRouter(
         onTerminalReport: (Uint8List bytes) {
           mouseObservation.recordTerminalReport(bytes);
           createdPane.sendInput(bytes);
         },
-        onLocalSelection: mouseObservation.recordLocalSelection,
+        onLocalSelection: (TerminalLocalSelectionIntent intent) {
+          mouseObservation.recordLocalSelection(intent);
+          createdSelectionOwner.handle(intent);
+        },
       );
       textInputSubscription = createdTextInputClient.events.listen(
         textInputEventRouter.route,
@@ -909,6 +925,7 @@ final class TerminalApplication {
               createdTextInputClient,
               textInputEventRouter,
               mouseObservation,
+              createdSelectionOwner,
             );
           } else if (shellExitTest != RuntimeShellExitTestScenario.none) {
             await _exerciseShellExitPolicy(
@@ -1088,6 +1105,7 @@ final class TerminalApplication {
         );
         autoCloseTimer?.cancel();
         autoCloseConfirmationTimer?.cancel();
+        selectionOwner?.dispose();
         if (!lifecycleWasShutDown) {
           await lifecycle?.shutdown();
         }
@@ -1258,6 +1276,7 @@ final class TerminalApplication {
     TerminalTextInputClient textInputClient,
     TerminalTextInputEventRouter textInputEventRouter,
     _TerminalMouseProductObservation mouseObservation,
+    _TerminalSelectionProductOwner selectionOwner,
   ) async {
     const String prompt = '__DT_DISPLAY_PROMPT__ ';
     const String colorMarker = '__DT_COLOR__';
@@ -1289,6 +1308,15 @@ final class TerminalApplication {
       surface,
       window,
       mouseObservation,
+    );
+    final bool selection = await _exerciseSelectionInput(
+      application,
+      session,
+      pane,
+      surface,
+      window,
+      mouseObservation,
+      selectionOwner,
     );
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
@@ -1355,7 +1383,8 @@ final class TerminalApplication {
           modeKey &&
           textInput &&
           inputMatrix &&
-          mouse) {
+          mouse &&
+          selection) {
         final int? workerProcessId = lifecycle.workerPid;
         _expectLifecycle(
           workerProcessId != null,
@@ -1367,7 +1396,7 @@ final class TerminalApplication {
           'metal_default=true newest_frame=$newestFrame '
           'frame_bounded=$frameBounded system_font=$systemFont '
           'mode_key=$modeKey text_input=$textInput '
-          'input_matrix=$inputMatrix mouse=$mouse '
+          'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
           'font_size=${baseline.fontPointSize.toStringAsFixed(1)} '
           'rows=${screen.rows} '
           'columns=${screen.columns} '
@@ -1389,7 +1418,7 @@ final class TerminalApplication {
       'prompt_bottom=$promptBottom newest_frame=$newestFrame '
       'frame_bounded=$frameBounded system_font=$systemFont '
       'mode_key=$modeKey text_input=$textInput '
-      'input_matrix=$inputMatrix mouse=$mouse '
+      'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
       'font_size=${baseline.fontPointSize}',
     );
   }
@@ -1703,6 +1732,301 @@ final class TerminalApplication {
       'reports=$reportDelta local_intents=$localDelta bytes=$byteDelta',
     );
     return true;
+  }
+
+  static Future<bool> _exerciseSelectionInput(
+    AppKitApplication application,
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+    Window window,
+    _TerminalMouseProductObservation mouseObservation,
+    _TerminalSelectionProductOwner owner,
+  ) async {
+    const String characterMarker = '__DT_SELECT_CHAR__';
+    const String wordMarker = '__DT_SELECT_WORD__';
+    const String lineMarker = '__DT_SELECT_LINE__';
+    pane.insertText(
+      "printf '\\r\\n__DT_SELECT_%s__ABCDE\\r\\n"
+      "__DT_SELECT_%s__ alpha_beta omega\\r\\n"
+      "__DT_SELECT_%s__\\r\\n' 'CHAR' 'WORD' 'LINE'",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, lineMarker);
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+    final TerminalFontCatalogMetrics metrics = surface.fontMetrics;
+    final _TerminalAsciiPosition character = _findAscii(
+      screen,
+      characterMarker,
+    )!;
+    final _TerminalAsciiPosition word = _findAscii(screen, wordMarker)!;
+    final _TerminalAsciiPosition line = _findAscii(screen, lineMarker)!;
+    final int initialReports = mouseObservation.terminalReportCount;
+
+    Future<void> injectCell(
+      AppKitMouseEventKind kind, {
+      required int row,
+      required int column,
+      int clickCount = 1,
+      int modifiers = 0,
+    }) async {
+      final int generation = owner.gesture.snapshot.generation;
+      _injectMouseEventForTesting(
+        application,
+        window,
+        kind: kind,
+        x: (column + 0.5) * metrics.cellWidth,
+        y: (row + 0.5) * metrics.cellHeight,
+        button: 0,
+        modifiers: modifiers,
+        clickCount: clickCount,
+        monotonicNanoseconds: mouseObservation.nextInjectedTimestamp(),
+      );
+      await _waitForSelectionGeneration(owner, generation + 1);
+    }
+
+    final int characterStart = character.column + characterMarker.length;
+    await injectCell(
+      AppKitMouseEventKind.down,
+      row: character.row,
+      column: characterStart,
+    );
+    await injectCell(
+      AppKitMouseEventKind.dragged,
+      row: character.row,
+      column: characterStart + 4,
+    );
+    await injectCell(
+      AppKitMouseEventKind.up,
+      row: character.row,
+      column: characterStart + 4,
+    );
+    _expectSelectionText(owner, 'ABCDE', TerminalSelectionUnit.cell);
+
+    await injectCell(
+      AppKitMouseEventKind.down,
+      row: character.row,
+      column: characterStart + 4,
+    );
+    await injectCell(
+      AppKitMouseEventKind.dragged,
+      row: character.row,
+      column: characterStart,
+    );
+    await injectCell(
+      AppKitMouseEventKind.up,
+      row: character.row,
+      column: characterStart,
+    );
+    _expectSelectionText(
+      owner,
+      'ABCDE',
+      TerminalSelectionUnit.cell,
+      reversed: true,
+    );
+
+    final int wordColumn = word.column + wordMarker.length + 3;
+    await injectCell(
+      AppKitMouseEventKind.down,
+      row: word.row,
+      column: wordColumn,
+      clickCount: 2,
+    );
+    await injectCell(
+      AppKitMouseEventKind.up,
+      row: word.row,
+      column: wordColumn,
+      clickCount: 2,
+    );
+    _expectSelectionText(owner, 'alpha_beta', TerminalSelectionUnit.word);
+
+    await injectCell(
+      AppKitMouseEventKind.down,
+      row: line.row,
+      column: line.column + 2,
+      clickCount: 3,
+    );
+    await injectCell(
+      AppKitMouseEventKind.up,
+      row: line.row,
+      column: line.column + 2,
+      clickCount: 3,
+    );
+    _expectSelectionText(owner, lineMarker, TerminalSelectionUnit.logicalLine);
+
+    final int fillerLines = screen.rows + 8;
+    pane.insertText(
+      "i=0; while [ \$i -lt $fillerLines ]; do "
+      "printf '__DT_SCROLL_%03d__\\n' \$i; i=\$((i+1)); done; "
+      "printf '__DT_SCROLL_%s__\\n' 'BOTTOM'",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, '__DT_SCROLL_BOTTOM__');
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    final TerminalViewport viewport = session.terminalScreenSet.viewport;
+    viewport.scrollToBottom();
+    surface.notifyViewportChanged();
+    _expectLifecycle(
+      viewport.maximumOffset >= 3,
+      'selection acceptance did not create enough retained history',
+    );
+
+    await injectCell(AppKitMouseEventKind.down, row: 0, column: 1);
+    int generation = owner.gesture.snapshot.generation;
+    _injectMouseEventForTesting(
+      application,
+      window,
+      kind: AppKitMouseEventKind.dragged,
+      x: metrics.cellWidth * 1.5,
+      y: -1,
+      button: 0,
+      modifiers: 0,
+      clickCount: 1,
+      monotonicNanoseconds: mouseObservation.nextInjectedTimestamp(),
+    );
+    await _waitForSelectionGeneration(owner, generation + 1);
+    await _waitForViewportOffset(viewport, minimum: 3);
+    generation = owner.gesture.snapshot.generation;
+    _injectMouseEventForTesting(
+      application,
+      window,
+      kind: AppKitMouseEventKind.up,
+      x: metrics.cellWidth * 1.5,
+      y: -1,
+      button: 0,
+      modifiers: 0,
+      clickCount: 1,
+      monotonicNanoseconds: mouseObservation.nextInjectedTimestamp(),
+    );
+    await _waitForSelectionGeneration(owner, generation + 1);
+    final bool scrolledUp = viewport.offset >= 3 && owner.scrolledUp;
+
+    await injectCell(
+      AppKitMouseEventKind.down,
+      row: screen.rows - 1,
+      column: 1,
+    );
+    generation = owner.gesture.snapshot.generation;
+    _injectMouseEventForTesting(
+      application,
+      window,
+      kind: AppKitMouseEventKind.dragged,
+      x: metrics.cellWidth * 1.5,
+      y: screen.rows * metrics.cellHeight + 1,
+      button: 0,
+      modifiers: 0,
+      clickCount: 1,
+      monotonicNanoseconds: mouseObservation.nextInjectedTimestamp(),
+    );
+    await _waitForSelectionGeneration(owner, generation + 1);
+    await _waitForViewportOffset(viewport, maximum: 0);
+    generation = owner.gesture.snapshot.generation;
+    _injectMouseEventForTesting(
+      application,
+      window,
+      kind: AppKitMouseEventKind.up,
+      x: metrics.cellWidth * 1.5,
+      y: screen.rows * metrics.cellHeight + 1,
+      button: 0,
+      modifiers: 0,
+      clickCount: 1,
+      monotonicNanoseconds: mouseObservation.nextInjectedTimestamp(),
+    );
+    await _waitForSelectionGeneration(owner, generation + 1);
+    final bool scrolledDown = viewport.atBottom && owner.scrolledDown;
+
+    final int acceptedFrames = surface.snapshot().acceptedFrameCount;
+    final Stopwatch metalDeadline = Stopwatch()..start();
+    TerminalLiveMetalSurfaceSnapshot metal = surface.snapshot();
+    while (metalDeadline.elapsed < const Duration(seconds: 3) &&
+        (metal.acceptedFrameCount <= acceptedFrames ||
+            metal.selectionSpanCount == 0 ||
+            metal.selectionCellCount == 0 ||
+            metal.viewportOffset != 0)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      metal = surface.snapshot();
+    }
+    final bool metalSelection =
+        metal.acceptedFrameCount > acceptedFrames &&
+        metal.selectionSpanCount > 0 &&
+        metal.selectionCellCount > 0 &&
+        metal.viewportOffset == 0;
+    final bool localOnly =
+        mouseObservation.terminalReportCount == initialReports;
+    _expectLifecycle(
+      owner.characterObserved &&
+          owner.wordObserved &&
+          owner.logicalLineObserved &&
+          owner.reverseObserved &&
+          owner.shiftOverrideObserved &&
+          scrolledUp &&
+          scrolledDown &&
+          metalSelection &&
+          localOnly,
+      'selection product acceptance did not settle',
+    );
+    stdout.writeln(
+      'TERMINAL_SELECTION_TEST character=true word=true line=true '
+      'reverse=true shift_override=true autoscroll_up=true '
+      'autoscroll_down=true metal=true local_only=true',
+    );
+    return true;
+  }
+
+  static Future<void> _waitForSelectionGeneration(
+    _TerminalSelectionProductOwner owner,
+    int minimum,
+  ) async {
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 3) &&
+        owner.gesture.snapshot.generation < minimum) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      owner.gesture.snapshot.generation >= minimum,
+      'selection gesture event was not delivered',
+    );
+  }
+
+  static Future<void> _waitForViewportOffset(
+    TerminalViewport viewport, {
+    int? minimum,
+    int? maximum,
+  }) async {
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 3) &&
+        ((minimum != null && viewport.offset < minimum) ||
+            (maximum != null && viewport.offset > maximum))) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      (minimum == null || viewport.offset >= minimum) &&
+          (maximum == null || viewport.offset <= maximum),
+      'selection autoscroll viewport offset did not settle',
+    );
+  }
+
+  static void _expectSelectionText(
+    _TerminalSelectionProductOwner owner,
+    String expected,
+    TerminalSelectionUnit unit, {
+    bool reversed = false,
+  }) {
+    final TerminalSelectionGestureSnapshot snapshot = owner.gesture.snapshot;
+    final TerminalSelectionRange? range = snapshot.range;
+    final TerminalSelectionText? text = range == null
+        ? null
+        : owner.gesture.viewport.extractSelection(range, maxScalars: 1024);
+    _expectLifecycle(
+      !snapshot.isActive &&
+          snapshot.unit == unit &&
+          range != null &&
+          range.isReversed == reversed &&
+          text?.text == expected &&
+          text?.isTruncated == false,
+      'selection text/unit/direction differed from the product fixture',
+    );
   }
 
   static Future<void> _exerciseMouseProtocolStage({
@@ -2220,6 +2544,101 @@ final class _TerminalAsciiPosition {
 
   final int row;
   final int column;
+}
+
+final class _TerminalSelectionProductOwner {
+  _TerminalSelectionProductOwner({required this.gesture, required this.surface})
+    : autoscroller = TerminalSelectionAutoscroller(gesture: gesture);
+
+  final TerminalSelectionGestureController gesture;
+  final TerminalLiveMetalSurface surface;
+  final TerminalSelectionAutoscroller autoscroller;
+  final Stopwatch _clock = Stopwatch()..start();
+  Timer? _timer;
+  bool _disposed = false;
+  bool characterObserved = false;
+  bool wordObserved = false;
+  bool logicalLineObserved = false;
+  bool reverseObserved = false;
+  bool shiftOverrideObserved = false;
+  bool scrolledUp = false;
+  bool scrolledDown = false;
+
+  void handle(TerminalLocalSelectionIntent intent) {
+    if (_disposed) return;
+    final TerminalSelectionGestureUpdate update = gesture.handle(intent);
+    if (update.changed) {
+      _recordGesture(update.snapshot, intent);
+      surface.updateSelection(update.snapshot);
+    }
+    autoscroller.observeGesture(monotonicMicros: _clock.elapsedMicroseconds);
+    _schedule();
+  }
+
+  void synchronize() {
+    if (_disposed) return;
+    final TerminalSelectionGestureUpdate update = gesture.synchronize();
+    if (update.changed) surface.updateSelection(update.snapshot);
+    autoscroller.observeGesture(monotonicMicros: _clock.elapsedMicroseconds);
+    _schedule();
+  }
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  void _recordGesture(
+    TerminalSelectionGestureSnapshot snapshot,
+    TerminalLocalSelectionIntent intent,
+  ) {
+    switch (snapshot.unit) {
+      case TerminalSelectionUnit.cell:
+        characterObserved = true;
+      case TerminalSelectionUnit.word:
+        wordObserved = true;
+      case TerminalSelectionUnit.logicalLine:
+        logicalLineObserved = true;
+      case null:
+        break;
+    }
+    reverseObserved |= snapshot.range?.isReversed ?? false;
+    shiftOverrideObserved |= intent.modifiers.shift;
+  }
+
+  void _schedule() {
+    _timer?.cancel();
+    _timer = null;
+    if (_disposed) return;
+    final int? deadline = autoscroller.nextDeadlineMicros;
+    if (deadline == null) return;
+    final int now = _clock.elapsedMicroseconds;
+    _timer = Timer(
+      Duration(microseconds: deadline > now ? deadline - now : 0),
+      _tick,
+    );
+  }
+
+  void _tick() {
+    _timer = null;
+    if (_disposed) return;
+    final int before = gesture.viewport.offset;
+    final TerminalSelectionAutoscrollUpdate update = autoscroller.advance(
+      monotonicMicros: _clock.elapsedMicroseconds,
+    );
+    if (update.didScroll) {
+      final int after = gesture.viewport.offset;
+      scrolledUp |= after > before;
+      scrolledDown |= after < before;
+      surface.updateSelection(gesture.snapshot);
+      surface.notifyViewportChanged();
+    } else if (update.outcome == TerminalSelectionAutoscrollOutcome.cancelled) {
+      surface.updateSelection(gesture.snapshot);
+    }
+    _schedule();
+  }
 }
 
 final class _TerminalMouseProductObservation {

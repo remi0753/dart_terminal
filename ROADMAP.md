@@ -793,11 +793,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] DEC mouse tracking/encoding mode stateとbounded X10/UTF-8/URXVT/SGR encoder
   - [x] AppKit pointer-to-cell normalizationとterminal report/local selection arbitration
   - [x] 実AppKit/PTY製品統合と両runtimeのcross-mode acceptance
-- [ ] character/word/line selection、drag autoscroll
+- [x] character/word/line selection、drag autoscroll
   （[`docs/phase5/selection-gesture-autoscroll.md`](docs/phase5/selection-gesture-autoscroll.md) を参照して実施）
   - [x] bounded cell/word/logical-line gesture stateとstable-anchor更新
   - [x] viewport projection・Metal selection overlay・bounded drag autoscroll
-  - [ ] 実AppKit製品統合と両runtimeのselection acceptance
+  - [x] 実AppKit製品統合と両runtimeのselection acceptance
 - [ ] precision trackpad scroll
 - [ ] clipboard、bracketed paste、paste safety
 - [ ] hyperlink hover/open と URL safety

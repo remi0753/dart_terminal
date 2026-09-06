@@ -1,6 +1,6 @@
 # Phase 5 — selection gesture and drag autoscroll
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-06
 - Scope: fifth Phase 5 production-input roadmap item
 - Related: IN-05, IN-06, SCR-07, SCR-11, REN-02
@@ -212,6 +212,25 @@ implemented early.
 - 2026-09-06: as in subtask 1, the first full runner after adding a new test
   reported one import-order info while all tests passed. The runner import was
   sorted and full analysis/tests were rerun with no diagnostics.
+- 2026-09-06: completed ordered subtask 3. A product-owned gesture/autoscroll
+  owner receives only the local branch of `TerminalMouseRouter`, publishes the
+  immutable selection snapshot to the live Metal surface, and owns one Timer
+  matching the core autoscroll deadline. Timer ticks extend the stable range
+  and notify viewport rendering outside the AppKit event callback.
+- 2026-09-06: screen changes ask an existing selection to synchronize before
+  rendering; inactive/no-selection state costs no document scan. Shutdown
+  cancels the owner Timer before disposing the surface, so no late tick can
+  access released Metal/AppKit state.
+- 2026-09-06: the real product fixture writes unique character, word, logical
+  line, and scroll-history rows through the live PTY, finds their canonical
+  screen cells, and injects raw events through the existing test-only AppKit
+  boundary. It proves exact extracted text and unit, reverse direction, prior
+  Shift override, at least three upward ticks, return-to-bottom ticks, visible
+  Metal spans, and an unchanged terminal-report count across local gestures.
+- 2026-09-06: acceptance emits only fixed booleans in
+  `TERMINAL_SELECTION_TEST`; selected text and terminal content never enter
+  diagnostics. The aggregate display gate now additionally requires
+  `selection=true`.
 
 ## Verification results
 
@@ -248,5 +267,27 @@ implemented early.
   passed in Developer JIT (1382 ms) and Release AOT (891 ms), retaining exact
   input/mouse evidence, Metal output, wrapping, and bottom prompt before product
   selection wiring.
-- Real AppKit gesture ownership and observable selection/autoscroll evidence
-  remain solely in ordered subtask 3.
+- At this subtask boundary, real AppKit gesture ownership and observable
+  selection/autoscroll evidence remained solely in ordered subtask 3; they are
+  completed below.
+
+### Product and real-AppKit acceptance
+
+- `CI=true make RUNTIME_ARCH=arm64 developer-jit-display`: passed the complete
+  character/word/logical-line, reverse, Shift, upward/downward autoscroll,
+  Metal, and local-only contract in 1927 ms while retaining exact keyboard,
+  IME, input-matrix, terminal-mouse, style, wrap, and bottom-prompt evidence.
+- `CI=true make RUNTIME_ARCH=arm64 release-aot-display`: passed the same
+  contract in 1294 ms.
+- Final `CI=true make test`: passed with parser-table freshness, 131-file format
+  check (zero changes), whole-package analysis with no issues, native asset
+  hooks, and the full Dart runner.
+- Final `CI=true make RUNTIME_ARCH=arm64 runtime-source-check
+  runtime-bundle-audit runtime-integration runtime-resource-integration`:
+  passed. Source audit found 227 tracked files and no native source; both
+  bundles retained one helper, one native asset, and one capability; both smoke
+  runs passed; both 1,000-iteration resource runs remained bounded at baseline
+  12 and peak 14 descriptors.
+- Final worktree review found no `dart_appkit` changes and only this product
+  owner, acceptance, smoke gate, documentation, and progress update in the
+  `dart_terminal` task.
