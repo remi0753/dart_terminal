@@ -753,7 +753,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （[`docs/phase4/product-metal-surface-integration.md`](docs/phase4/product-metal-surface-integration.md) を参照して実施）
   - [x] canonical screen-to-Metal composition と wrap-aware regression
     （[`docs/phase4/product-metal-surface-integration.md`](docs/phase4/product-metal-surface-integration.md) を参照して実施）
-  - [ ] default live Metal surface ownership と application connection
+  - [x] default live Metal surface ownership と application connection
     （[`docs/phase4/product-metal-surface-integration.md`](docs/phase4/product-metal-surface-integration.md) を参照して実施）
   - [ ] real-PTY GUI acceptance と legacy display removal
     （[`docs/phase4/product-metal-surface-integration.md`](docs/phase4/product-metal-surface-integration.md) を参照して実施）

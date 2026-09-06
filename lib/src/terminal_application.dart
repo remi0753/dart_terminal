@@ -18,6 +18,7 @@ import 'terminal_renderer/metal_atlas_bridge.dart';
 import 'terminal_renderer/metal_failure_recovery.dart';
 import 'terminal_renderer/renderer_metrics.dart';
 import 'terminal_renderer/terminal_damage.dart';
+import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_session.dart';
 
 const String terminalUsage = '''
@@ -286,13 +287,7 @@ final class TerminalApplication {
         : nativePtyBackend;
     final AppKitApplication application = await AppKitApplication.attach();
     View? contentView;
-    TerminalMetalRenderer? metalRenderer;
-    TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>?
-    metalFrameScheduler;
-    TerminalMetalFailureRecoveryCoordinator<
-      TerminalMetalRendererRecoveryDomain
-    >?
-    metalRecovery;
+    TerminalLiveMetalSurface? metalSurface;
     Window? window;
     TerminalPaneOwner? paneOwner;
     StreamSubscription<WindowEvent>? eventSubscription;
@@ -317,17 +312,15 @@ final class TerminalApplication {
     final Completer<void> closed = Completer<void>();
     final bool emitNativeEventWireObservation =
         Platform.environment['DT_RUNTIME_EVENT_WIRE_TEST'] == '1';
-    final bool useTerminalMetalView =
+    final bool exerciseLegacyMetalProbe =
         Platform.environment['DT_RUNTIME_CUSTOM_VIEW_TEST'] == '1';
+    var currentWindowWidth = 920.0;
+    var currentWindowHeight = 580.0;
 
     try {
-      final TextView? createdTextView = useTerminalMetalView
-          ? null
-          : TextView();
-      final View createdContentView =
-          createdTextView ?? TerminalRendererMacos.createView();
+      final View createdContentView = TerminalRendererMacos.createView();
       contentView = createdContentView;
-      if (useTerminalMetalView) {
+      if (exerciseLegacyMetalProbe) {
         final TerminalMetalRenderer createdRenderer =
             TerminalMetalRenderer.open(
               config: const TerminalMetalRendererConfig(
@@ -340,8 +333,21 @@ final class TerminalApplication {
                 maximumColorPages: 1,
               ),
             );
-        metalRenderer = createdRenderer;
         createdRenderer.bindToView(createdContentView);
+        final ({
+          String observation,
+          TerminalMetalFailureRecoveryCoordinator<
+            TerminalMetalRendererRecoveryDomain
+          >
+          recovery,
+          TerminalNewestFrameScheduler<TerminalScheduledMetalFrame> scheduler,
+        })
+        frameSchedulerProbe = _exerciseBoundMetalFrameScheduler(
+          createdRenderer,
+          createdContentView,
+        );
+        stdout.writeln(frameSchedulerProbe.observation);
+        frameSchedulerProbe.recovery.dispose();
       }
       final Window createdWindow =
           Window(
@@ -354,29 +360,6 @@ final class TerminalApplication {
       window = createdWindow;
       stdout.writeln('NATIVE_KEY_EVENT_ROUTING mode=dart-only');
       application.defersTerminationRequests = true;
-      if (useTerminalMetalView) {
-        final ({
-          String observation,
-          TerminalMetalFailureRecoveryCoordinator<
-            TerminalMetalRendererRecoveryDomain
-          >
-          recovery,
-          TerminalNewestFrameScheduler<TerminalScheduledMetalFrame> scheduler,
-        })
-        frameSchedulerProbe = _exerciseBoundMetalFrameScheduler(
-          metalRenderer!,
-          createdContentView,
-        );
-        metalFrameScheduler = frameSchedulerProbe.scheduler;
-        metalRecovery = frameSchedulerProbe.recovery;
-        metalRenderer = frameSchedulerProbe.recovery.currentDomain.renderer;
-        stdout.writeln(
-          'NATIVE_CUSTOM_VIEW '
-          'provider=$terminalMetalViewProviderIdentifier attached=true '
-          'renderer_bound=true',
-        );
-        stdout.writeln(frameSchedulerProbe.observation);
-      }
 
       final TerminalPaneOwner createdPaneOwner = TerminalPaneOwner();
       paneOwner = createdPaneOwner;
@@ -430,9 +413,7 @@ final class TerminalApplication {
               return createdSession;
             },
         onChanged: () {
-          if (createdTextView != null && !createdTextView.isDisposed) {
-            createdTextView.text = createdPane.render();
-          }
+          metalSurface?.notifyScreenChanged();
         },
         onExitRequested: createdWindow.requestClose,
         lifecycleObserver: (TerminalPaneLifecycleObservation observation) {
@@ -442,9 +423,28 @@ final class TerminalApplication {
           stdout.writeln(observation.machineLine());
         },
       );
-      if (createdTextView != null) {
-        createdTextView.text = createdPane.render();
-      }
+      final TerminalLiveMetalSurface createdMetalSurface =
+          TerminalLiveMetalSurface.attach(
+            sessionId: createdPane.sessionId,
+            screenSet: terminalSession!.terminalScreenSet,
+            view: createdContentView,
+            logicalWidth: currentWindowWidth,
+            logicalHeight: currentWindowHeight,
+            backingScaleFactor: createdWindow.backingScaleFactor ?? 1,
+            isVisible: createdWindow.isVisible,
+            isOccluded: createdWindow.isOccluded,
+            onFatalError: (Object error, StackTrace stackTrace) {
+              if (!closed.isCompleted) {
+                closed.completeError(error, stackTrace);
+              }
+            },
+          );
+      metalSurface = createdMetalSurface;
+      stdout.writeln(
+        'NATIVE_CUSTOM_VIEW '
+        'provider=$terminalMetalViewProviderIdentifier attached=true '
+        'renderer_bound=true',
+      );
       if (options.runtimePtyExitFaultInjection) {
         stdout.writeln(
           'TERMINAL_PTY_FAULT exit_notification=suppressed gate=true',
@@ -649,10 +649,13 @@ final class TerminalApplication {
               );
               createdWindow.replyToCloseRequest(event, allow: allow);
             case WindowResizedEvent(:final width, :final height):
-              createdPane.resize(
-                rows: _rowsForHeight(height),
-                columns: _columnsForWidth(width),
+              currentWindowWidth = width;
+              currentWindowHeight = height;
+              final TerminalGridSize grid = createdMetalSurface.resizeViewport(
+                logicalWidth: width,
+                logicalHeight: height,
               );
+              createdPane.resize(rows: grid.rows, columns: grid.columns);
             case WindowFocusChangedEvent(:final isFocused):
               if (emitNativeEventWireObservation) {
                 _writeWindowStateEvent(
@@ -663,17 +666,7 @@ final class TerminalApplication {
                 );
               }
             case WindowVisibilityChangedEvent(:final isVisible):
-              final TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>?
-              scheduler = metalFrameScheduler;
-              if (scheduler != null) {
-                final bool changed = scheduler.updateWindowState(
-                  isVisible: isVisible,
-                  monotonicMicros: event.monotonicMicros,
-                );
-                if (changed && scheduler.isPresentationActive) {
-                  scheduler.submitNewest();
-                }
-              }
+              createdMetalSurface.updateWindowState(isVisible: isVisible);
               if (emitNativeEventWireObservation) {
                 _writeWindowStateEvent(
                   application,
@@ -683,17 +676,7 @@ final class TerminalApplication {
                 );
               }
             case WindowOcclusionChangedEvent(:final isOccluded):
-              final TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>?
-              scheduler = metalFrameScheduler;
-              if (scheduler != null) {
-                final bool changed = scheduler.updateWindowState(
-                  isOccluded: isOccluded,
-                  monotonicMicros: event.monotonicMicros,
-                );
-                if (changed && scheduler.isPresentationActive) {
-                  scheduler.submitNewest();
-                }
-              }
+              createdMetalSurface.updateWindowState(isOccluded: isOccluded);
               if (emitNativeEventWireObservation) {
                 _writeWindowStateEvent(
                   application,
@@ -703,6 +686,12 @@ final class TerminalApplication {
                 );
               }
             case WindowBackingScaleChangedEvent(:final backingScaleFactor):
+              createdMetalSurface.updateBackingScale(backingScaleFactor);
+              final TerminalGridSize grid = createdMetalSurface.gridSizeFor(
+                logicalWidth: currentWindowWidth,
+                logicalHeight: currentWindowHeight,
+              );
+              createdPane.resize(rows: grid.rows, columns: grid.columns);
               if (emitNativeEventWireObservation) {
                 _writeWindowStateEvent(
                   application,
@@ -745,10 +734,11 @@ final class TerminalApplication {
         },
       );
 
-      createdPane.resize(
-        rows: _rowsForHeight(createdWindow.frame.height),
-        columns: _columnsForWidth(createdWindow.frame.width),
+      final TerminalGridSize initialGrid = createdMetalSurface.resizeViewport(
+        logicalWidth: currentWindowWidth,
+        logicalHeight: currentWindowHeight,
       );
+      createdPane.resize(rows: initialGrid.rows, columns: initialGrid.columns);
       await createdPane.start();
       stdout.writeln(
         'TERMINAL_PANE event=started pane=${createdPane.id} '
@@ -1028,10 +1018,8 @@ final class TerminalApplication {
         if (window != null && !window.isDisposed) {
           window.dispose();
         }
-        if (metalRecovery != null && !metalRecovery.isDisposed) {
-          metalRecovery.dispose();
-        } else if (metalRenderer != null && !metalRenderer.isDisposed) {
-          metalRenderer.dispose();
+        if (metalSurface != null && !metalSurface.isDisposed) {
+          metalSurface.dispose();
         }
         if (contentView != null && !contentView.isDisposed) {
           contentView.dispose();
@@ -1414,28 +1402,6 @@ final class TerminalApplication {
       'operation_id=${event.operationId} '
       'timestamp_ns=${event.monotonicNanoseconds} $value',
     );
-  }
-
-  static int _rowsForHeight(double height) {
-    final int rows = ((height - 40) / 22).floor();
-    if (rows < 4) {
-      return 4;
-    }
-    if (rows > 200) {
-      return 200;
-    }
-    return rows;
-  }
-
-  static int _columnsForWidth(double width) {
-    final int columns = ((width - 24) / 9).floor();
-    if (columns < 20) {
-      return 20;
-    }
-    if (columns > 65535) {
-      return 65535;
-    }
-    return columns;
   }
 }
 

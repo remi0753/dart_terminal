@@ -200,3 +200,37 @@ committed.
 - 2026-09-06: repeated `make test` passed: generated VT table current, 102 Dart
   files formatted, analyzer clean, and the complete native-backed product test
   runner reported `dart_terminal tests passed`.
+- 2026-09-06: a first live-owner test attempted to create the registered
+  `TerminalMetalView` from a plain `dart run` executable. It correctly stopped
+  at `MacosNativeCapability.load` because custom-view providers are declared and
+  initialized only by the packaged `.app` capability manifest. The test was
+  removed rather than substituting a plain/fake `View` that could not prove
+  renderer binding. Grid/damage/composition logic remains in normal unit tests;
+  actual live-view ownership is verified through packaged Developer JIT and
+  Release AOT integration launches.
+- 2026-09-06: `TerminalLiveMetalSurface` now owns the product relationship:
+  one coalesced drain timer, canonical damage outbox/ACK, newest-frame
+  scheduler, presentation clock, CoreText catalog/cache, atlas and pins,
+  active/replacement Metal domains, and typed recovery. AppKit callbacks only
+  update desired viewport/scale/visibility state or flag screen damage; shaping,
+  rasterization, upload, and submission happen in the later drain turn.
+- 2026-09-06: normal startup unconditionally creates `TerminalMetalView` and
+  connects the live `TerminalSession.terminalScreenSet`. Rows and columns are
+  derived from CoreText cell metrics, resize rebinds the reflowed active screen,
+  backing-scale change resets and republishes the atlas after pin retirement,
+  and hidden/occluded state applies damage while suppressing frame builds.
+  Recovery retries also tolerate the interval where a failed activation has
+  abandoned the old domain but has not yet prepared its replacement; no stale
+  renderer is dereferenced between bounded attempts.
+- 2026-09-06: `make test` passed with 103 formatted files, clean analysis, a
+  current generated VT table, and all product tests. `make
+  runtime-source-check` passed with 187 tracked files and zero native sources.
+- 2026-09-06: `make runtime-integration` rebuilt and passed both packaged modes
+  (`developer-jit` in 2341 ms, `release-aot` in 1829 ms). A separate `make
+  developer-jit-run RUNTIME_ARGUMENTS=--auto-close-after=1` launch omitted
+  `DT_RUNTIME_CUSTOM_VIEW_TEST` and still reported the registered Metal view as
+  attached/bound, started a real PTY, processed close ownership, released the
+  session, and shut down cleanly.
+- 2026-09-06: after hardening the no-current-domain recovery retry, the final
+  repeated `make test` again passed format, clean analysis, generated-table
+  verification, and the complete test runner.
