@@ -111,7 +111,8 @@ model、および CoreText/Metal renderer は製品実装へ移行済みです�
   build/submit時間、atlas hit rate、世代整合済みのimmutable aggregate metrics
 - canonical screenを唯一の表示元とするlive Metal surface owner。SGR/DEC sequenceを
   cell stateとして描画し、terminal soft wrapとresize reflowで行を決め、履歴位置が
-  bottomの間は大量出力後も最新prompt/cursorを最終表示行に保つ
+  bottomの間は大量出力後も最新prompt/cursorを最終表示行に保つ。zero-configでは
+  macOS system monospaceを標準13ptで使用する
 
 ## 起動
 

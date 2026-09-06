@@ -757,6 +757,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （[`docs/phase4/product-metal-surface-integration.md`](docs/phase4/product-metal-surface-integration.md) を参照して実施）
   - [x] real-PTY GUI acceptance と legacy display removal
     （[`docs/phase4/product-metal-surface-integration.md`](docs/phase4/product-metal-surface-integration.md) を参照して実施）
+- [x] macOS system monospace と標準サイズをzero-config既定値にする
+  （[`docs/phase4/macos-system-default-font.md`](docs/phase4/macos-system-default-font.md) を参照して実施）
 
 終了条件:
 

@@ -1162,6 +1162,9 @@ final class TerminalApplication {
     const String wrapEnd = '__DT_WRAP_END__';
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
+    final bool systemFont =
+        baseline.usesMacosSystemMonospaceFont &&
+        baseline.fontPointSize == TerminalLiveMetalSurface.defaultFontPointSize;
     final TerminalScreen initialScreen = session.terminalScreenSet.activeScreen;
     final int fillerLines = initialScreen.rows + 12;
     final String wrappedPayload =
@@ -1217,7 +1220,8 @@ final class TerminalApplication {
           wrappedRows >= 2 &&
           promptBottom &&
           newestFrame &&
-          frameBounded) {
+          frameBounded &&
+          systemFont) {
         final int? workerProcessId = lifecycle.workerPid;
         _expectLifecycle(
           workerProcessId != null,
@@ -1227,7 +1231,9 @@ final class TerminalApplication {
           'TERMINAL_DISPLAY_TEST sgr_stripped=$sgrStripped styled=$styled '
           'wrapped_rows=$wrappedRows prompt_bottom=$promptBottom '
           'metal_default=true newest_frame=$newestFrame '
-          'frame_bounded=$frameBounded rows=${screen.rows} '
+          'frame_bounded=$frameBounded system_font=$systemFont '
+          'font_size=${baseline.fontPointSize.toStringAsFixed(1)} '
+          'rows=${screen.rows} '
           'columns=${screen.columns} '
           'frame_build_delta='
           '${snapshot.frameBuildCount - baseline.frameBuildCount}',
@@ -1245,7 +1251,8 @@ final class TerminalApplication {
       'terminal display acceptance did not settle: '
       'sgr_stripped=$sgrStripped styled=$styled wrapped_rows=$wrappedRows '
       'prompt_bottom=$promptBottom newest_frame=$newestFrame '
-      'frame_bounded=$frameBounded',
+      'frame_bounded=$frameBounded system_font=$systemFont '
+      'font_size=${baseline.fontPointSize}',
     );
   }
 

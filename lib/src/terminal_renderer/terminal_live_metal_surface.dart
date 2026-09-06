@@ -31,6 +31,8 @@ final class TerminalGridSize {
 final class TerminalLiveMetalSurfaceSnapshot {
   const TerminalLiveMetalSurfaceSnapshot({
     required this.isDisposed,
+    required this.usesMacosSystemMonospaceFont,
+    required this.fontPointSize,
     required this.rows,
     required this.columns,
     required this.viewportWidth,
@@ -49,6 +51,8 @@ final class TerminalLiveMetalSurfaceSnapshot {
   });
 
   final bool isDisposed;
+  final bool usesMacosSystemMonospaceFont;
+  final double fontPointSize;
   final int rows;
   final int columns;
   final int viewportWidth;
@@ -89,7 +93,10 @@ final class TerminalLiveMetalSurface {
     final int scale16_16 = TerminalRasterBufferV1.scaleToFixed(
       backingScaleFactor,
     );
-    final TerminalFontCatalog catalog = TerminalFontCatalog.open();
+    final TerminalFontCatalog catalog = TerminalFontCatalog.open(
+      family: defaultFontFamily,
+      pointSize: defaultFontPointSize,
+    );
     final TerminalShapingCache shapingCache = TerminalShapingCache(catalog);
     final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
       catalogGeneration: catalog.generation,
@@ -237,6 +244,12 @@ final class TerminalLiveMetalSurface {
   static const Duration retryInterval = Duration(milliseconds: 16);
   static const int minimumRows = 4;
   static const int minimumColumns = 20;
+
+  /// Empty family delegates face selection to AppKit's system monospace API.
+  static const String defaultFontFamily = '';
+
+  /// `NSFont.systemFontSize` on the supported macOS baseline.
+  static const double defaultFontPointSize = 13;
 
   final TerminalSessionId sessionId;
   final TerminalScreenSet screenSet;
@@ -399,6 +412,8 @@ final class TerminalLiveMetalSurface {
         : null;
     return TerminalLiveMetalSurfaceSnapshot(
       isDisposed: _disposed,
+      usesMacosSystemMonospaceFont: _catalog.family.isEmpty,
+      fontPointSize: _catalog.metrics.pointSize,
       rows: _boundScreen.rows,
       columns: _boundScreen.columns,
       viewportWidth: _viewportWidth,
