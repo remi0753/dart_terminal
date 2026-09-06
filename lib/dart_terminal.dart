@@ -38,7 +38,9 @@ export 'src/terminal_core/terminal_screen_set.dart'
         TerminalSearchResult,
         TerminalScreenKind,
         TerminalScreenSet,
+        TerminalSelectionProjection,
         TerminalSelectionRange,
+        TerminalSelectionSpan,
         TerminalSelectionText,
         TerminalSelectionUnit,
         TerminalViewport,
@@ -91,6 +93,7 @@ export 'src/terminal_input/terminal_mouse_encoder.dart';
 export 'src/terminal_input/terminal_mouse_event.dart';
 export 'src/terminal_input/terminal_mouse_router.dart';
 export 'src/terminal_input/terminal_preedit.dart';
+export 'src/terminal_input/terminal_selection_autoscroll.dart';
 export 'src/terminal_input/terminal_selection_gesture.dart';
 export 'src/terminal_input/terminal_text_input_event_router.dart';
 export 'src/terminal_pane.dart'
@@ -142,7 +145,9 @@ export 'src/terminal_renderer/renderer_metrics.dart';
 export 'src/terminal_renderer/terminal_damage.dart';
 export 'src/terminal_renderer/terminal_damage_transfer.dart';
 export 'src/terminal_renderer/terminal_live_metal_surface.dart';
+export 'src/terminal_renderer/terminal_render_model.dart';
 export 'src/terminal_renderer/terminal_screen_metal_compositor.dart';
+export 'src/terminal_renderer/terminal_viewport_render_model.dart';
 export 'src/terminal_session.dart'
     show
         TerminalSessionNativeObservation,

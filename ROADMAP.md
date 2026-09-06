@@ -796,7 +796,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] character/word/line selection、drag autoscroll
   （[`docs/phase5/selection-gesture-autoscroll.md`](docs/phase5/selection-gesture-autoscroll.md) を参照して実施）
   - [x] bounded cell/word/logical-line gesture stateとstable-anchor更新
-  - [ ] viewport projection・Metal selection overlay・bounded drag autoscroll
+  - [x] viewport projection・Metal selection overlay・bounded drag autoscroll
   - [ ] 実AppKit製品統合と両runtimeのselection acceptance
 - [ ] precision trackpad scroll
 - [ ] clipboard、bracketed paste、paste safety

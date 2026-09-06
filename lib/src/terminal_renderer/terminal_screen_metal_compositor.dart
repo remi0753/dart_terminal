@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import '../terminal_core/terminal_screen.dart';
+import '../terminal_core/terminal_screen_set.dart';
 import '../terminal_core/terminal_style.dart';
 import '../terminal_core/terminal_unicode.dart';
 import '../terminal_input/terminal_preedit.dart';
@@ -10,7 +11,7 @@ import 'frame_scheduler.dart';
 import 'glyph_atlas.dart';
 import 'metal_atlas_bridge.dart';
 import 'reference_renderer.dart';
-import 'terminal_damage.dart';
+import 'terminal_render_model.dart';
 
 /// Signals that atlas uploads could not be published during this frame build.
 ///
@@ -72,12 +73,13 @@ final class TerminalScreenMetalCompositor {
   final TerminalGraphemeTable graphemeTable;
 
   TerminalScreenMetalComposition compose(
-    TerminalDamageRenderModel model, {
+    TerminalRenderModel model, {
     required int frameGeneration,
     required int viewportWidth,
     required int viewportHeight,
     required TerminalFramePresentation presentation,
     TerminalPreeditLayout? preedit,
+    TerminalSelectionProjection? selection,
   }) {
     if (!model.isInitialized) {
       throw StateError('Metal composition requires an initialized model');
@@ -157,6 +159,29 @@ final class TerminalScreenMetalCompositor {
           );
         }
         column += cellColumns;
+      }
+    }
+
+    if (selection != null) {
+      for (final TerminalSelectionSpan span in selection.spans) {
+        if (span.row >= model.rows || span.endColumn > model.columns) {
+          throw StateError('selection projection exceeds the render grid');
+        }
+        final int left = _columnPixel(span.startColumn, metrics, scale);
+        final int right = _columnPixel(span.endColumn, metrics, scale);
+        final int top = _rowPixel(span.row, metrics, scale);
+        final int bottom = _rowPixel(span.row + 1, metrics, scale);
+        _addClippedSolid(
+          overlays,
+          kind: TerminalMetalInstanceKind.selection,
+          x: left,
+          y: top,
+          width: right - left,
+          height: bottom - top,
+          colorRgba: 0x4a90e260,
+          viewportWidth: viewportWidth,
+          viewportHeight: viewportHeight,
+        );
       }
     }
 
@@ -357,7 +382,7 @@ final class TerminalScreenMetalCompositor {
       }
     }
 
-    if (presentation.cursorDrawn) {
+    if (presentation.cursorDrawn && model.cursorVisible) {
       _addCursorAt(
         cursors,
         row: preedit?.caretRow ?? model.cursorRow,

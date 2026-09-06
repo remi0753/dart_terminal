@@ -183,6 +183,35 @@ implemented early.
 - 2026-09-06: the first full-suite run passed tests but reported one analyzer
   info for an unsorted new runner import. The import was reordered and the
   entire command was rerun cleanly rather than accepting a diagnostic.
+- 2026-09-06: completed ordered subtask 2. A minimal read-only
+  `TerminalRenderModel` lets the compositor consume either the existing
+  incremental damage model or an immutable typed-array viewport snapshot. The
+  live surface keeps normal bottom-follow damage unchanged and substitutes a
+  full bounded projection only while primary history is visible.
+- 2026-09-06: viewport projection copies content, foreground, background,
+  style, width/protection flags, and a visible cursor across the history/grid
+  boundary. Rows with a different stored width are clipped/padded, and an
+  orphaned wide/continuation edge is omitted rather than emitting invalid
+  topology. Scrolled-off cursors are hidden with valid placeholder coordinates.
+- 2026-09-06: stable ranges project to at most one non-empty physical-column
+  span per visible row. End boundaries preserve wide-cell coverage, offscreen
+  retained ranges yield an empty projection, and a different active screen
+  yields no projection. Metal adds these spans to the existing selection layer
+  between cell backgrounds and glyphs without editing terminal cells.
+- 2026-09-06: `TerminalSelectionAutoscroller` uses a 50 ms default interval,
+  one deadline, and a configurable 1–8 rows-per-tick cap. A delayed call moves
+  only once and schedules from the observed time; direction changes replace
+  the deadline, while mouse-up, inside movement, history bounds, alternate
+  screen, invalid anchors, and cancellation leave no pending work.
+- 2026-09-06: the initial Metal ordering test used palette token 1, which is
+  xterm black and matched the default black background, so no cell-background
+  instance was correctly emitted. The test now uses non-default token 2. Its
+  first width expectation also rounded `2 * cellWidth` directly, while the
+  compositor correctly subtracts separately rounded cell boundaries; the test
+  now follows the same deterministic boundary rule at both 1x and 2x.
+- 2026-09-06: as in subtask 1, the first full runner after adding a new test
+  reported one import-order info while all tests passed. The runner import was
+  sorted and full analysis/tests were rerun with no diagnostics.
 
 ## Verification results
 
@@ -199,3 +228,25 @@ implemented early.
   no issues, native asset hooks, and the full Dart runner.
 - Viewport projection, Metal overlay, and timed drag autoscroll remain tracked
   in ordered subtask 2; product wiring remains tracked in subtask 3.
+
+### Viewport rendering and bounded autoscroll
+
+- Focused projection tests passed for every compositor cell field, mixed
+  history/screen rows, visible/offscreen cursor, copy isolation, resource/grid
+  validation, wide-cell spans, offscreen clipping, and active-screen rejection.
+- Focused autoscroll tests passed for arming/waiting, exact deadline, no
+  catch-up after a 200 ms delay, above/below movement, direction reversal,
+  mouse-up stop, bottom/alternate bounds, interval/rate caps, and monotonic-time
+  rejection.
+- Focused Metal tests passed at 1x and 2x, proving exact cell-boundary geometry
+  and background → selection → glyph ordering. Existing SGR, wide grapheme,
+  preedit, prompt-bottom, and instance-cap cases also remained green.
+- Final `CI=true make test`: passed with parser-table freshness, 131-file format
+  check (zero changes), whole-package analysis with no issues, native asset
+  hooks, and the full Dart runner.
+- `CI=true make RUNTIME_ARCH=arm64 runtime-terminal-display-integration`:
+  passed in Developer JIT (1382 ms) and Release AOT (891 ms), retaining exact
+  input/mouse evidence, Metal output, wrapping, and bottom prompt before product
+  selection wiring.
+- Real AppKit gesture ownership and observable selection/autoscroll evidence
+  remain solely in ordered subtask 3.

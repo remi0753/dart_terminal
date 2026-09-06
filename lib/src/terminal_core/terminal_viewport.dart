@@ -321,6 +321,10 @@ final class TerminalViewport {
         _resolveDocumentBoundary(this, range.end) != null;
   }
 
+  /// Clips a stable selection to non-empty spans in the current viewport.
+  TerminalSelectionProjection? projectSelection(TerminalSelectionRange range) =>
+      _projectSelection(this, range);
+
   /// Searches active retained logical lines without crossing hard boundaries.
   ///
   /// Returns null only when an explicit [start] boundary is unavailable.

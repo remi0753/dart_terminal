@@ -55,6 +55,7 @@ final class TerminalSelectionGestureController {
   TerminalSelectionRange? _range;
   TerminalLogicalAnchor? _originStart;
   TerminalLogicalAnchor? _originEnd;
+  int? _focusColumn;
   TerminalPointerVerticalEdge _verticalEdge =
       TerminalPointerVerticalEdge.inside;
 
@@ -128,6 +129,7 @@ final class TerminalSelectionGestureController {
     _range = range;
     _originStart = start;
     _originEnd = end;
+    _focusColumn = intent.cell.column;
     _verticalEdge = intent.verticalEdge;
     _advanceGeneration();
     return _result(TerminalSelectionGestureOutcome.began);
@@ -145,13 +147,40 @@ final class TerminalSelectionGestureController {
       _advanceGeneration();
       return _result(TerminalSelectionGestureOutcome.cancelled);
     }
+    return _updateFocus(intent.cell, ending: ending, edge: intent.verticalEdge);
+  }
+
+  /// Re-resolves the clamped edge cell after one bounded viewport scroll.
+  TerminalSelectionGestureUpdate extendToAutoscrolledEdge() {
+    if (!_isActive ||
+        _focusColumn == null ||
+        _verticalEdge == TerminalPointerVerticalEdge.inside) {
+      return _result(TerminalSelectionGestureOutcome.ignored);
+    }
+    return _updateFocus(
+      TerminalPointerCell(
+        row: _verticalEdge == TerminalPointerVerticalEdge.above
+            ? 0
+            : viewport.rows - 1,
+        column: _focusColumn!.clamp(0, viewport.columns - 1),
+      ),
+      ending: false,
+      edge: _verticalEdge,
+    );
+  }
+
+  TerminalSelectionGestureUpdate _updateFocus(
+    TerminalPointerCell cell, {
+    required bool ending,
+    required TerminalPointerVerticalEdge edge,
+  }) {
     final TerminalLogicalAnchor focusStart = viewport.anchorAt(
-      intent.cell.row,
-      intent.cell.column,
+      cell.row,
+      cell.column,
     );
     final TerminalLogicalAnchor focusEnd = viewport.anchorAfter(
-      intent.cell.row,
-      intent.cell.column,
+      cell.row,
+      cell.column,
     );
     final TerminalSelectionRange? forwardProbe = viewport.selectionRange(
       _originStart!,
@@ -172,10 +201,9 @@ final class TerminalSelectionGestureController {
       return _result(TerminalSelectionGestureOutcome.cancelled);
     }
     _range = range;
+    _focusColumn = cell.column;
     _isActive = !ending;
-    _verticalEdge = ending
-        ? TerminalPointerVerticalEdge.inside
-        : intent.verticalEdge;
+    _verticalEdge = ending ? TerminalPointerVerticalEdge.inside : edge;
     _advanceGeneration();
     return _result(
       ending
@@ -193,6 +221,7 @@ final class TerminalSelectionGestureController {
     _range = null;
     _originStart = null;
     _originEnd = null;
+    _focusColumn = null;
     _verticalEdge = TerminalPointerVerticalEdge.inside;
   }
 

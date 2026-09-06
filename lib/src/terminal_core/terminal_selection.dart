@@ -2,6 +2,51 @@ part of 'terminal_screen_set.dart';
 
 enum TerminalSelectionUnit { cell, word, logicalLine }
 
+final class TerminalSelectionSpan {
+  TerminalSelectionSpan({
+    required this.row,
+    required this.startColumn,
+    required this.endColumn,
+  }) {
+    RangeError.checkValueInInterval(row, 0, TerminalScreen.maxRows - 1, 'row');
+    RangeError.checkValueInInterval(
+      startColumn,
+      0,
+      TerminalScreen.maxColumns - 1,
+      'startColumn',
+    );
+    RangeError.checkValueInInterval(
+      endColumn,
+      1,
+      TerminalScreen.maxColumns,
+      'endColumn',
+    );
+    if (startColumn >= endColumn) {
+      throw ArgumentError('selection span must be non-empty');
+    }
+  }
+
+  final int row;
+  final int startColumn;
+  final int endColumn;
+
+  int get cellCount => endColumn - startColumn;
+}
+
+final class TerminalSelectionProjection {
+  TerminalSelectionProjection._(List<TerminalSelectionSpan> spans)
+    : spans = List<TerminalSelectionSpan>.unmodifiable(spans),
+      selectedCellCount = spans.fold<int>(
+        0,
+        (int total, TerminalSelectionSpan span) => total + span.cellCount,
+      );
+
+  final List<TerminalSelectionSpan> spans;
+  final int selectedCellCount;
+
+  bool get isEmpty => spans.isEmpty;
+}
+
 /// A normalized, end-exclusive range over retained terminal content.
 final class TerminalSelectionRange {
   const TerminalSelectionRange._({
@@ -272,6 +317,73 @@ TerminalSelectionText? _extractSelection(
     scalarCount: scalarCount,
     isTruncated: false,
   );
+}
+
+TerminalSelectionProjection? _projectSelection(
+  TerminalViewport viewport,
+  TerminalSelectionRange range,
+) {
+  viewport._sync();
+  if (!viewport.isSelectionAvailable(range)) return null;
+  final _DocumentBoundary start = _resolveDocumentBoundary(
+    viewport,
+    range.start,
+  )!;
+  final _DocumentBoundary end = _resolveDocumentBoundary(viewport, range.end)!;
+  if (_compareDocumentBoundaries(start, end) > 0) return null;
+  final List<TerminalSelectionSpan> spans = <TerminalSelectionSpan>[];
+  final TerminalScreenKind kind = range.start.screenKind;
+  for (int viewportRow = 0; viewportRow < viewport.rows; viewportRow++) {
+    final _ViewportLocation location = viewport._locate(viewportRow);
+    final int combinedRow = kind == TerminalScreenKind.primary
+        ? (location.history
+              ? location.row
+              : viewport._screens.scrollback.length + location.row)
+        : location.row;
+    if (combinedRow < start.row || combinedRow > end.row) continue;
+    final int cellCount = viewport._combinedLogicalCellCount(kind, combinedRow);
+    final int firstCell = (combinedRow == start.row ? start.cellIndex : 0)
+        .clamp(0, cellCount);
+    final int lastCell = (combinedRow == end.row ? end.cellIndex : cellCount)
+        .clamp(0, cellCount);
+    if (firstCell >= lastCell) continue;
+    final int startColumn = _selectionBoundaryColumn(
+      viewport,
+      kind,
+      combinedRow,
+      firstCell,
+    );
+    final int endColumn = _selectionBoundaryColumn(
+      viewport,
+      kind,
+      combinedRow,
+      lastCell,
+    );
+    if (startColumn >= endColumn) continue;
+    spans.add(
+      TerminalSelectionSpan(
+        row: viewportRow,
+        startColumn: startColumn,
+        endColumn: endColumn,
+      ),
+    );
+  }
+  return TerminalSelectionProjection._(spans);
+}
+
+int _selectionBoundaryColumn(
+  TerminalViewport viewport,
+  TerminalScreenKind kind,
+  int row,
+  int cellIndex,
+) {
+  final int cellCount = viewport._combinedLogicalCellCount(kind, row);
+  if (cellIndex >= cellCount) {
+    return viewport._combinedRowExtent(kind, row).clamp(0, viewport.columns);
+  }
+  return viewport
+      ._combinedColumnForLogicalCell(kind, row, cellIndex)
+      .clamp(0, viewport.columns);
 }
 
 TerminalSearchResult? _searchTerminalDocument(

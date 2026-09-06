@@ -12,7 +12,60 @@ void runTerminalScreenMetalCompositorTests() {
   _testWrappedOverflowKeepsNewestPromptVisible();
   _testWideGraphemeUsesCanonicalGrid();
   _testPreeditUsesTransientMetalLayers();
+  _testSelectionProjectionUsesOverlayLayer();
   _testPreeditRespectsRendererInstanceLimit();
+}
+
+void _testSelectionProjectionUsesOverlayLayer() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 4);
+  for (int column = 0; column < 4; column++) {
+    screens.primary.setNarrowCell(0, column, 0x41 + column, background: 2);
+  }
+  final TerminalSelectionRange range = screens.viewport.selectionRange(
+    screens.viewport.anchorAt(0, 1),
+    screens.viewport.anchorAfter(0, 2),
+  )!;
+  for (final double scale in <double>[1, 2]) {
+    final _CompositionFixture fixture = _compose(
+      screens,
+      selection: screens.viewport.projectSelection(range),
+      scale: scale,
+    );
+    try {
+      final List<TerminalMetalInstance> instances =
+          fixture.composition.instances;
+      final int background = instances.indexWhere(
+        (TerminalMetalInstance instance) =>
+            instance.kind == TerminalMetalInstanceKind.cellBackground,
+      );
+      final int selection = instances.indexWhere(
+        (TerminalMetalInstance instance) =>
+            instance.kind == TerminalMetalInstanceKind.selection,
+      );
+      final int glyph = instances.indexWhere(
+        (TerminalMetalInstance instance) => instance.kind.isGlyph,
+      );
+      final TerminalMetalInstance overlay = instances[selection];
+      final int expectedLeft = (fixture.catalog.metrics.cellWidth * scale)
+          .round();
+      final int expectedRight = (fixture.catalog.metrics.cellWidth * 3 * scale)
+          .round();
+      _expect(
+        background >= 0 &&
+            selection > background &&
+            glyph > selection &&
+            overlay.x == expectedLeft &&
+            overlay.width == expectedRight - expectedLeft &&
+            overlay.height ==
+                (fixture.catalog.metrics.cellHeight * scale).round(),
+        'selection is clipped at ${scale}x between backgrounds and glyphs '
+        '(indices=$background/$selection/$glyph '
+        'rect=${overlay.x},${overlay.y},${overlay.width},${overlay.height})',
+      );
+    } finally {
+      fixture.dispose();
+    }
+  }
 }
 
 void _testInverseBackgroundAndConcealMapping() {
@@ -282,6 +335,8 @@ void _testPreeditRespectsRendererInstanceLimit() {
 _CompositionFixture _compose(
   TerminalScreenSet screens, {
   TerminalPreeditLayout? preedit,
+  TerminalSelectionProjection? selection,
+  double scale = 1,
   TerminalMetalRendererConfig rendererConfig =
       const TerminalMetalRendererConfig(),
 }) {
@@ -289,6 +344,7 @@ _CompositionFixture _compose(
   final TerminalShapingCache shapingCache = TerminalShapingCache(catalog);
   final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
     catalogGeneration: catalog.generation,
+    scale: scale,
   );
   final TerminalMetalRenderer renderer = TerminalMetalRenderer.open(
     config: rendererConfig,
@@ -313,10 +369,10 @@ _CompositionFixture _compose(
     );
     _expect(applied.isApplied, 'full screen damage applies to render model');
     final int viewportWidth = mathCeil(
-      catalog.metrics.cellWidth * model.columns,
+      catalog.metrics.cellWidth * model.columns * scale,
     );
     final int viewportHeight = mathCeil(
-      catalog.metrics.cellHeight * model.rows,
+      catalog.metrics.cellHeight * model.rows * scale,
     );
     final TerminalScreenMetalComposition composition =
         TerminalScreenMetalCompositor(
@@ -339,6 +395,7 @@ _CompositionFixture _compose(
             requiresFullRedraw: true,
           ),
           preedit: preedit,
+          selection: selection,
         );
     return _CompositionFixture(
       catalog: catalog,

@@ -7,6 +7,7 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 import '../terminal_core/terminal_screen.dart';
 import '../terminal_core/terminal_screen_set.dart';
 import '../terminal_input/terminal_preedit.dart';
+import '../terminal_input/terminal_selection_gesture.dart';
 import '../terminal_pane.dart';
 import 'frame_scheduler.dart';
 import 'glyph_atlas.dart';
@@ -14,7 +15,9 @@ import 'metal_atlas_bridge.dart';
 import 'metal_failure_recovery.dart';
 import 'terminal_damage.dart';
 import 'terminal_damage_transfer.dart';
+import 'terminal_render_model.dart';
 import 'terminal_screen_metal_compositor.dart';
+import 'terminal_viewport_render_model.dart';
 
 typedef TerminalLiveMetalSurfaceFatalError = void Function(
   Object error,
@@ -78,6 +81,10 @@ final class TerminalLiveMetalSurfaceSnapshot {
     required this.pendingFrameCount,
     required this.liveAtlasPinCount,
     required this.hasScheduledWork,
+    this.viewportOffset = 0,
+    this.selectionGeneration = 0,
+    this.selectionSpanCount = 0,
+    this.selectionCellCount = 0,
   });
 
   final bool isDisposed;
@@ -98,6 +105,10 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int pendingFrameCount;
   final int liveAtlasPinCount;
   final bool hasScheduledWork;
+  final int viewportOffset;
+  final int selectionGeneration;
+  final int selectionSpanCount;
+  final int selectionCellCount;
 }
 
 /// Owns the default live terminal screen-to-Metal relationship.
@@ -232,12 +243,15 @@ final class TerminalLiveMetalSurface {
                     graphemeTable: screenSet.graphemeTable,
                   )
                   .compose(
-                    model,
+                    _visibleRenderModel(model),
                     frameGeneration: frameGeneration,
                     viewportWidth: _viewportWidth,
                     viewportHeight: _viewportHeight,
                     presentation: presentation,
-                    preedit: _preeditLayoutForModel(model),
+                    preedit: _viewportRenderModel == null
+                        ? _preeditLayoutForModel(model)
+                        : null,
+                    selection: _selectionProjection,
                   )
                   .scheduledFrame,
       submitFrame:
@@ -322,11 +336,37 @@ final class TerminalLiveMetalSurface {
   bool _disposed = false;
   int _lastMonotonicMicros = 0;
   TerminalCaretRect? _lastPublishedCaretRect;
+  TerminalSelectionGestureSnapshot? _selectionSnapshot;
+  TerminalSelectionProjection? _selectionProjection;
+  TerminalViewportRenderModel? _viewportRenderModel;
+  int _publishedViewportGeneration = 0;
+  int _publishedSelectionGeneration = -1;
+  int _publishedProjectionResourceGeneration = 0;
   Timer? _timer;
 
   bool get isDisposed => _disposed;
   TerminalFontCatalogMetrics get fontMetrics => _catalog.metrics;
   TerminalPreeditState get preeditState => _preeditModel.state;
+
+  bool updateSelection(TerminalSelectionGestureSnapshot snapshot) {
+    _requireLive();
+    final TerminalSelectionGestureSnapshot? previous = _selectionSnapshot;
+    if (previous != null && snapshot.generation < previous.generation) {
+      throw StateError('live selection generation regressed');
+    }
+    if (previous?.generation == snapshot.generation) return false;
+    _selectionSnapshot = snapshot;
+    _needsDrain = true;
+    _scheduleImmediate();
+    return true;
+  }
+
+  void notifyViewportChanged() {
+    _requireLive();
+    _needsDrain = true;
+    _publishCaretGeometry();
+    _scheduleImmediate();
+  }
 
   bool updatePreedit({
     required int generation,
@@ -470,6 +510,7 @@ final class TerminalLiveMetalSurface {
       }
       _rebindCurrentScreen();
       _applyNewestDamage(now);
+      _refreshViewportPresentation();
       _scheduler.advancePresentation(monotonicMicros: now);
       _submitNewest();
       _needsDrain = _outbox.hasPendingDamage;
@@ -507,6 +548,10 @@ final class TerminalLiveMetalSurface {
       pendingFrameCount: _scheduler.pendingFrameCount,
       liveAtlasPinCount: atlas.livePinCount,
       hasScheduledWork: _timer != null,
+      viewportOffset: screenSet.viewport.offset,
+      selectionGeneration: _selectionSnapshot?.generation ?? 0,
+      selectionSpanCount: _selectionProjection?.spans.length ?? 0,
+      selectionCellCount: _selectionProjection?.selectedCellCount ?? 0,
     );
   }
 
@@ -587,6 +632,36 @@ final class TerminalLiveMetalSurface {
     _scheduler.requestFullRedraw();
     _publishCaretGeometry();
   }
+
+  void _refreshViewportPresentation() {
+    final TerminalViewport viewport = screenSet.viewport;
+    final int viewportGeneration = viewport.generation;
+    final int selectionGeneration = _selectionSnapshot?.generation ?? 0;
+    final int resourceGeneration = atlas.resourceGeneration;
+    if (viewportGeneration == _publishedViewportGeneration &&
+        selectionGeneration == _publishedSelectionGeneration &&
+        resourceGeneration == _publishedProjectionResourceGeneration) {
+      return;
+    }
+    _viewportRenderModel = viewport.atBottom
+        ? null
+        : TerminalViewportRenderModel.capture(
+            viewport,
+            activeScreen: _boundScreen,
+            requiredResourceGeneration: resourceGeneration,
+          );
+    final TerminalSelectionRange? range = _selectionSnapshot?.range;
+    _selectionProjection = range == null
+        ? null
+        : viewport.projectSelection(range);
+    _publishedViewportGeneration = viewportGeneration;
+    _publishedSelectionGeneration = selectionGeneration;
+    _publishedProjectionResourceGeneration = resourceGeneration;
+    if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
+  }
+
+  TerminalRenderModel _visibleRenderModel(TerminalDamageRenderModel model) =>
+      _viewportRenderModel ?? model;
 
   void _applyNewestDamage(int now) {
     final TerminalDamageTransferEnvelope? transfer = _outbox.tryCreateTransfer(

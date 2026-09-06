@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import '../terminal_core/terminal_screen.dart';
 import '../terminal_core/terminal_unicode.dart';
+import 'terminal_render_model.dart';
 
 final class TerminalDamageFormatException implements Exception {
   const TerminalDamageFormatException(this.message);
@@ -623,7 +624,7 @@ final class TerminalDamageApplyResult {
 }
 
 /// Independently owned render-side SoA model updated only by validated damage.
-final class TerminalDamageRenderModel {
+final class TerminalDamageRenderModel implements TerminalRenderModel {
   TerminalDamageRenderModel({this.limits = const TerminalDamageLimits()}) {
     limits.validate();
   }
