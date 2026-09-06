@@ -32,6 +32,7 @@ import 'terminal_palette_test.dart';
 import 'terminal_property_fuzz_test.dart';
 import 'terminal_reflow_test.dart';
 import 'terminal_reply_test.dart';
+import 'terminal_screen_metal_compositor_test.dart';
 import 'terminal_screen_set_test.dart';
 import 'terminal_screen_test.dart';
 import 'terminal_scrollback_test.dart';
@@ -77,6 +78,7 @@ Future<void> main() async {
   runTerminalScreenSetTests();
   runTerminalSelectionSearchTests();
   runTerminalSnapshotTests();
+  runTerminalScreenMetalCompositorTests();
   runTerminalStyleTests();
   runTerminalUnicodeTests();
   runTerminalViewportTests();
