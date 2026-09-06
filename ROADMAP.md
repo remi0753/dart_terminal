@@ -759,6 +759,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （[`docs/phase4/product-metal-surface-integration.md`](docs/phase4/product-metal-surface-integration.md) を参照して実施）
 - [x] macOS system monospace と標準サイズをzero-config既定値にする
   （[`docs/phase4/macos-system-default-font.md`](docs/phase4/macos-system-default-font.md) を参照して実施）
+- [x] CoreText glyph atlas の上下反転を修正し実GUI画像で判読性を確認する
+  （[`docs/phase4/glyph-raster-orientation.md`](docs/phase4/glyph-raster-orientation.md) を参照して実施）
 
 終了条件:
 

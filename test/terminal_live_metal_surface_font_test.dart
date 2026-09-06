@@ -16,6 +16,10 @@ void runTerminalLiveMetalSurfaceFontTests() {
       catalog.shape(sample),
       scale: 2,
     );
+    final TerminalRasterizedGlyph orientation = catalog
+        .rasterizeShaped(catalog.shape('L'), scale: 2)
+        .glyphs
+        .single;
     _expect(
       catalog.family.isEmpty &&
           metrics.pointSize == 13 &&
@@ -31,12 +35,33 @@ void runTerminalLiveMetalSurfaceFontTests() {
                 !glyph.isMissing &&
                 !glyph.isEmpty &&
                 glyph.copyPixels().any((int value) => value != 0),
-          ),
+          ) &&
+          _bottomBandCoverage(orientation) > _topBandCoverage(orientation),
       'live surface default uses the readable macOS system monospace metrics',
     );
   } finally {
     catalog.dispose();
   }
+}
+
+int _topBandCoverage(TerminalRasterizedGlyph glyph) =>
+    _bandCoverage(glyph, fromBottom: false);
+
+int _bottomBandCoverage(TerminalRasterizedGlyph glyph) =>
+    _bandCoverage(glyph, fromBottom: true);
+
+int _bandCoverage(TerminalRasterizedGlyph glyph, {required bool fromBottom}) {
+  final List<int> pixels = glyph.copyPixels();
+  final int bandHeight = glyph.height ~/ 3;
+  var coverage = 0;
+  for (int y = 0; y < bandHeight; y++) {
+    final int row = fromBottom ? glyph.height - 1 - y : y;
+    final int start = row * glyph.rowStride;
+    for (int x = 0; x < glyph.width; x++) {
+      coverage += pixels[start + x];
+    }
+  }
+  return coverage;
 }
 
 void _expect(bool condition, String description) {
