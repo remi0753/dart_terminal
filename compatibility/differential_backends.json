@@ -21,7 +21,7 @@
       "support_files": [
         {
           "path": "tool/terminal_differential_capture.dart",
-          "sha256": "ff0985b0a4adcb6128e1998da57515e87bea6069100adee29f52453807db5e4f"
+          "sha256": "4d3336875dccacbd78fe5a25b0164c70e807523d2c4a8287c4101ff19f2b49fd"
         },
         {
           "path": "tool/terminal_differential_macos_activation.swift",
@@ -56,7 +56,7 @@
       "support_files": [
         {
           "path": "tool/terminal_differential_capture.dart",
-          "sha256": "ff0985b0a4adcb6128e1998da57515e87bea6069100adee29f52453807db5e4f"
+          "sha256": "4d3336875dccacbd78fe5a25b0164c70e807523d2c4a8287c4101ff19f2b49fd"
         },
         {
           "path": "tool/terminal_differential_probe.dart",

@@ -41,13 +41,19 @@ void runTerminalDifferentialCorpusTests() {
                 .join(',') ==
             'editing-character-operations,mode-private-transitions,'
                 'query-status-and-modes,rendition-attributes-colors' &&
-        manifest.cases.every(
-          (TerminalDifferentialCase testCase) =>
-              testCase.expectation == TerminalDifferentialExpectation.agree &&
-              testCase.gapOwner == null &&
-              testCase.inventoryIds.isNotEmpty,
-        ),
-    'reviewed manifest covers four inventory-traceable agreement candidates',
+        manifest.cases
+            .take(3)
+            .every(
+              (TerminalDifferentialCase testCase) =>
+                  testCase.expectation ==
+                      TerminalDifferentialExpectation.agree &&
+                  testCase.gapOwner == null &&
+                  testCase.inventoryIds.isNotEmpty,
+            ) &&
+        manifest.cases.last.expectation ==
+            TerminalDifferentialExpectation.documentedGap &&
+        manifest.cases.last.gapOwner == 'docs/phase6/decrqss-sgr-gap.md',
+    'reviewed manifest covers three agreements and one owned gap candidate',
   );
 
   final Map<String, Object?> report = _object(
@@ -76,9 +82,11 @@ void runTerminalDifferentialCorpusTests() {
   _expect(
     cases.length == 4 &&
         cases.every(
-          (Object? value) => _object(value)['external_evidence'] == 'pending',
+          (Object? value) =>
+              _object(value)['external_evidence'] ==
+              'separate-acceptance-report',
         ),
-    'each reviewed baseline keeps external evidence pending',
+    'each reviewed baseline delegates external evidence to its report',
   );
 }
 

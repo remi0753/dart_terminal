@@ -161,7 +161,7 @@ ReviewedDifferentialCorpusResult runReviewedDifferentialCorpusChecks({
       'observation_path': observationPath,
       'observation_sha256': terminalDifferentialSha256(utf8.encode(encoded)),
       'split_runs': caseSplitRuns,
-      'external_evidence': 'pending',
+      'external_evidence': 'separate-acceptance-report',
     });
   }
   _expect(

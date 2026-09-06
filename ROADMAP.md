@@ -848,19 +848,20 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] versioned inventory schema、normative source pin、識別子taxonomy
   - [x] 実装由来sequence/mode manifestとfreshness checker
   - [x] support/gap分類、相互参照、review acceptance
-- [ ] xterm/Ghostty/Kitty との black-box differential harness
+- [x] xterm/Ghostty/Kitty との black-box differential harness
   （[`docs/phase6/black-box-differential-harness.md`](docs/phase6/black-box-differential-harness.md) を参照して実施）
   - [x] versioned case/observation/subprocess driver contractとDart backend
   - [x] pinned xterm/Ghostty/Kitty adapterとavailability/provenance self-test
-  - [ ] reviewed differential corpus、mismatch report、acceptance分類
+  - [x] reviewed differential corpus、mismatch report、acceptance分類
     - [x] reviewed case manifest、Dart baseline、deterministic report gate
     - [x] pinned comparator capture実行とnormalized evidence
-    - [ ] mismatch最小化、acceptance report、harness完了判定
+    - [x] mismatch最小化、acceptance report、harness完了判定
 - [ ] `vttest` を参考に採用/非採用項目を明文化
 - [ ] tmux、ssh、mosh、Neovim、Emacs、ncurses、fzf、lazygit の matrix
 - [ ] terminfo source、compile/install/fallback
 - [ ] OSC title/cwd/hyperlink/palette/clipboard policy
 - [ ] focus/mouse/bracketed paste/query reports
+  （[`docs/phase6/decrqss-sgr-gap.md`](docs/phase6/decrqss-sgr-gap.md) のgapを参照して実施）
 - [ ] parser inspector と sequence trace export
 - [ ] compatibility bug の regression corpus 化
 

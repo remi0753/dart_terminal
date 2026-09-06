@@ -31,9 +31,11 @@ Future<void> main(List<String> arguments) async {
           File(defaultTerminalCompatibilityInventoryPath),
           repositoryRoot: repositoryRoot,
         );
+    final String manifestPath =
+        values['manifest'] ?? defaultReviewedDifferentialManifestPath;
     final TerminalDifferentialManifest manifest =
         TerminalDifferentialManifest.load(
-          File(defaultReviewedDifferentialManifestPath),
+          File.fromUri(repositoryRoot.uri.resolve(manifestPath)),
           inventoryIds: <String>{
             for (final TerminalCompatibilityRecord record in inventory.records)
               record.id,
@@ -68,7 +70,7 @@ Future<void> main(List<String> arguments) async {
       }
       final Directory destination = Directory.fromUri(
         repositoryRoot.uri.resolve(
-          '$defaultExternalDifferentialCaptureDirectory/$profileId/',
+          '${values['destination'] ?? '$defaultExternalDifferentialCaptureDirectory/$profileId'}/',
         ),
       );
       destination.createSync(recursive: true);
@@ -119,6 +121,8 @@ Map<String, String> _parse(List<String> arguments) {
             'executable',
             'app-bundle',
             'display',
+            'manifest',
+            'destination',
           }.contains(name) &&
           value.isNotEmpty &&
           !result.containsKey(name) &&
@@ -132,6 +136,21 @@ Map<String, String> _parse(List<String> arguments) {
     _expect(
       !result.containsKey(name) || result[name]!.startsWith('/'),
       '$name must be absolute',
+    );
+  }
+  for (final String name in const <String>['manifest', 'destination']) {
+    if (!result.containsKey(name)) continue;
+    final String path = result[name]!;
+    _expect(
+      !path.startsWith('/') &&
+          !path.contains('\\') &&
+          path
+              .split('/')
+              .every(
+                (String segment) =>
+                    segment.isNotEmpty && segment != '.' && segment != '..',
+              ),
+      '$name must be a safe relative path',
     );
   }
   return result;

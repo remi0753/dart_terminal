@@ -86,8 +86,8 @@
         "cursor",
         "replies"
       ],
-      "expectation": "agree",
-      "gap_owner": null
+      "expectation": "documented-gap",
+      "gap_owner": "docs/phase6/decrqss-sgr-gap.md"
     }
   ]
 }

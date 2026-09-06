@@ -4,8 +4,8 @@
 
 - Date started: 2026-09-07
 - Scope: second Phase 6 compatibility-hardening roadmap item
-- Status: subtasks 1–2 complete; subtask 3 baseline and external capture
-  children complete, acceptance child pending
+- Status: complete; all three ordered subtasks and all reviewed-corpus children
+  accepted
 
 ## Purpose and background
 
@@ -416,6 +416,47 @@ a ROADMAP reread. The parent remains incomplete until all three are complete.
   passed. `CI=true make test` validated the 210 Dart split runs, 12-cell external
   evidence matrix, formatting of 159 files, clean analysis, all prior
   compatibility freshness gates, and the complete Dart Terminal test runner.
+- 2026-09-07: after commit `99d54c4`, ROADMAP was reread and the clean worktree
+  confirmed mismatch reduction/acceptance as the next and final harness child.
+  The only reply mismatch is the already-inventoried safe-ignore DECRQSS path.
+  Its styled source case reduces to the complete seven-byte `DCS $ q m ST`
+  query; every byte is required to remain that complete protocol request. A
+  separate gap record assigns it to the later ordered query-report task, and a
+  one-case manifest will obtain fresh Kitty/xterm evidence for the reduction.
+- 2026-09-07: the first acceptance generation correctly classified all reply
+  results but stopped on its own unobserved-field total. The expected value
+  omitted the editing case's `text` field: across two captured products,
+  editing contributes four unobserved fields rather than two. The exact total
+  is 16, and the invariant was corrected without weakening any classification.
+- 2026-09-07: the acceptance report classifies all 12 reviewed matrix cells:
+  six Kitty/xterm reply agreements, two Kitty/xterm rendition reply gaps, and
+  four explicit Ghostty activation unavailabilities. Every captured record
+  observes only `replies`; 16 screen, cursor, mode, style, and color fields stay
+  explicitly unobserved. No result is silent, unexpectedly mismatched, or a
+  stale documented gap.
+- 2026-09-07: the rendition difference was independently recaptured as the
+  minimal complete seven-byte `DCS $ q m ST` request. Dart Terminal emits no
+  reply, Kitty emits an eight-byte successful SGR report, and xterm emits a
+  nine-byte successful SGR report. The gate validates each bounded protocol
+  response without normalizing the products into artificial equality. Ghostty
+  remains explicitly unavailable in the current login automation context. The
+  owned gap is documented separately and linked from its later ordered
+  query-report task, where implementing the reply will deliberately make this
+  acceptance fail as stale until the expectation is changed to agreement.
+- 2026-09-07: final verification passed the focused acceptance test, the
+  standalone acceptance freshness target, and `CI=true make test`. The normal
+  gate revalidated the parser table, 260-record inventory, 85-record
+  implementation reconciliation, comparator catalog/self-tests, 210 Dart
+  corpus splits, 12-cell evidence matrix, and acceptance totals; it formatted
+  161 files without changes, reported no analyzer issues, and completed the
+  full Dart Terminal test runner. This closes the black-box harness without
+  claiming Ghostty corpus availability or any screen/style/mode observation.
+- 2026-09-07: the final process audit found one orphaned Ghostty debug capture
+  from an earlier activation investigation (parent PID 1, no child probe). It
+  was not an acceptance input and had no effect on the checked evidence. The
+  exact PID was inspected and terminated; the follow-up process query found no
+  Ghostty, Kitty, xterm, Xvfb, or differential probe process. All Lima guests
+  are stopped, and no comparator DMG remains mounted.
 
 ## Primary product references for adapter execution
 

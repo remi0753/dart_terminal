@@ -2,7 +2,7 @@
   "format": "dart-terminal-differential-baseline-report",
   "version": 1,
   "manifest_path": "test/corpus/differential/reviewed_v1.json",
-  "manifest_sha256": "3f981013bf7cc12a53e1016dd8f9df5c8abe66713dd3d9b360afdd351a08335b",
+  "manifest_sha256": "e6b5a9abacbdc1493682ba30a4c9bcfd41f056336fd5248ecd2b1588e34dabb9",
   "inventory_path": "compatibility/sequence_mode_inventory.json",
   "inventory_sha256": "67c1841daa9a4c2d8d0864a14c55898dd58d76a65ec7e667169317c24a00567b",
   "implementation_manifest_path": "compatibility/implemented_sequence_manifest.json",
@@ -29,7 +29,7 @@
       "observation_path": "test/corpus/differential/baseline/editing-character-operations.json",
       "observation_sha256": "98aa52a72f8e7ea40aacd1e1f2c10f1cb6bdcabdeb9247d1afda12716c5c7aaa",
       "split_runs": 34,
-      "external_evidence": "pending"
+      "external_evidence": "separate-acceptance-report"
     },
     {
       "id": "mode-private-transitions",
@@ -53,7 +53,7 @@
       "observation_path": "test/corpus/differential/baseline/mode-private-transitions.json",
       "observation_sha256": "d240087d6257823c9a4d2e22eb5fdc47493cf687175124f7dcb6bc2362608b41",
       "split_runs": 86,
-      "external_evidence": "pending"
+      "external_evidence": "separate-acceptance-report"
     },
     {
       "id": "query-status-and-modes",
@@ -75,7 +75,7 @@
       "observation_path": "test/corpus/differential/baseline/query-status-and-modes.json",
       "observation_sha256": "33322271054e57b6e6aea5f27d5c0e511f258c705d162be13215b2adc6ff2da6",
       "split_runs": 37,
-      "external_evidence": "pending"
+      "external_evidence": "separate-acceptance-report"
     },
     {
       "id": "rendition-attributes-colors",
@@ -92,11 +92,11 @@
         "cursor",
         "replies"
       ],
-      "expectation": "agree",
+      "expectation": "documentedGap",
       "observation_path": "test/corpus/differential/baseline/rendition-attributes-colors.json",
       "observation_sha256": "314f41046a09816107bcdf86bbba983aeced82aa083564aea4e19574eef8defe",
       "split_runs": 53,
-      "external_evidence": "pending"
+      "external_evidence": "separate-acceptance-report"
     }
   ],
   "summary": {

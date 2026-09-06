@@ -1,0 +1,23 @@
+{
+  "format": "dart-terminal-black-box-differential",
+  "version": 1,
+  "scope": "reviewed-corpus",
+  "observation_version": 1,
+  "cases": [
+    {
+      "id": "decrqss-sgr-query-gap",
+      "description": "A complete seven-byte DECRQSS SGR query isolates the missing Dart Terminal reply.",
+      "inventory_ids": [
+        "dec:dcs:decrqss"
+      ],
+      "input_hex": "1b 50 24 71 6d 1b 5c",
+      "rows": 2,
+      "columns": 4,
+      "fields": [
+        "replies"
+      ],
+      "expectation": "documented-gap",
+      "gap_owner": "docs/phase6/decrqss-sgr-gap.md"
+    }
+  ]
+}
