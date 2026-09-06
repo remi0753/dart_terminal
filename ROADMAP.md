@@ -862,7 +862,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のadoption判断も参照して実施）
   （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) を参照して実施）
   - [x] versioned matrix contract、bounded runner、normal-gate validation
-  - [ ] pinned application execution、normalized evidence
+  - [x] pinned application execution、normalized evidence
   - [ ] acceptance分類、gap最小化、matrix完了判定
 - [ ] terminfo source、compile/install/fallback
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のcharacter-set判断も参照して実施）

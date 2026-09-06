@@ -1,0 +1,161 @@
+{
+  "format": "dart-terminal-application-evidence-index",
+  "version": 1,
+  "matrix_path": "test/corpus/applications/matrix_v1.json",
+  "matrix_sha256": "2d00fb8a5e40dd5b8a1e0f594cf99d5918a49ebb97d38277a9545f2551a9dcc5",
+  "capture_driver_path": "tool/terminal_application_capture_driver.dart",
+  "capture_driver_sha256": "09a260c0aa4d51f94d4f45f8c6a34d011835f22c708f6968013ee525789d2fe4",
+  "environment": {
+    "os": "macos-26-6-2",
+    "architecture": "arm64",
+    "dart": "3.13.2",
+    "capture_method": "developer-jit-product-pty-v1"
+  },
+  "sources": [
+    {
+      "application_id": "emacs",
+      "version": "31.1",
+      "acquisition": "source-build-minimal-terminal",
+      "distribution": "https://ftp.gnu.org/gnu/emacs/emacs-31.1.tar.xz",
+      "distribution_sha256": "1da5790d9580c81932b5bf700633114468da7b3412d69faa767daebf974f4586",
+      "executable_sha256": "e94a4885614fe412d49898e7e0044058ec2f95649acaf1f2ece2c1f57724f5da"
+    },
+    {
+      "application_id": "fzf",
+      "version": "0.74.3",
+      "acquisition": "upstream-arm64-archive",
+      "distribution": "https://github.com/junegunn/fzf/releases/download/v0.74.3/fzf-0.74.3-darwin_arm64.tar.gz",
+      "distribution_sha256": "1f8501cea4f9c0c2d6110d0ff75d0ec9451cd9d7524d9a26244a154ea89f3bd5",
+      "executable_sha256": "8d13db7d771632d2a2941c115fc3f65247646128bd459779b5185e2fab97711f"
+    },
+    {
+      "application_id": "lazygit",
+      "version": "0.65.0",
+      "acquisition": "upstream-arm64-archive",
+      "distribution": "https://github.com/jesseduffield/lazygit/releases/download/v0.65.0/lazygit_0.65.0_darwin_arm64.tar.gz",
+      "distribution_sha256": "d8ea1cade9e4279e45cbb58652e84edb07e98a9f8ec0604099c8b0a8f709e63a",
+      "executable_sha256": "b8a75d38c0d7536a7f0f5f56c3e2a7572b2a38bbdbe4d06a36776ba3faaf78a1"
+    },
+    {
+      "application_id": "mosh",
+      "version": "1.4.0",
+      "acquisition": "upstream-universal-package",
+      "distribution": "https://github.com/mobile-shell/mosh/releases/download/mosh-1.4.0/mosh-1.4.0.pkg",
+      "distribution_sha256": "14d3ef7e0a0dfff7b284102d44da91f88a24921bbb07ff2ac6875e7075a4b207",
+      "executable_sha256": "5f6dea400f35ab8d2f28c821264673deb29d67fb37018692ecb9016523a5f4af"
+    },
+    {
+      "application_id": "ncurses",
+      "version": "6.6.20251230",
+      "acquisition": "homebrew-library-plus-reviewed-fixture",
+      "distribution": "https://formulae.brew.sh/formula/ncurses",
+      "distribution_sha256": "c3881a5cfce214efe54744a4664f18b7cea5caa86ff87e0231244809c1386a50",
+      "executable_sha256": "d03941fd8ec5debce4726ec82c0762b11738ae4e4c25ae8ecd893e3234066b64",
+      "fixture_path": "test/corpus/applications/support/ncurses_resize_fixture.c",
+      "fixture_sha256": "6aba160d0bab501cb315c00526e25793451cca643d8462fd5802231e086ba54b"
+    },
+    {
+      "application_id": "neovim",
+      "version": "0.12.2",
+      "acquisition": "upstream-arm64-archive",
+      "distribution": "https://github.com/neovim/neovim/releases/download/v0.12.2/nvim-macos-arm64.tar.gz",
+      "distribution_sha256": "eeddee1009734f9071266e6b1b8a70308cb60cbcc45f5e1c1023adc471450fee",
+      "executable_sha256": "81ca1c39374742c1973354ee4c2f152ae660f86a52df11e918475ff7526114e6"
+    },
+    {
+      "application_id": "ssh",
+      "version": "10.3p1-libressl-3.3.6",
+      "acquisition": "macos-system-binary",
+      "distribution": "macos-system:/usr/bin/ssh",
+      "distribution_sha256": "17542914a3fb55e7efeb35a90d594a21c84bf6a4cfe1fc8ddff5606dc2658fc3",
+      "executable_sha256": "17542914a3fb55e7efeb35a90d594a21c84bf6a4cfe1fc8ddff5606dc2658fc3"
+    },
+    {
+      "application_id": "tmux",
+      "version": "3.6b",
+      "acquisition": "source-build-libevent-static",
+      "distribution": "https://github.com/tmux/tmux/releases/download/3.6b/tmux-3.6b.tar.gz",
+      "distribution_sha256": "390759d25fdba016887ec982b808927e637070fd7d03a8021f8ef3102b9ae3c7",
+      "executable_sha256": "5eff2fa40ee929d21d85abf6240678cc933a4a636bd7b439ae119a2871195735",
+      "build_input": {
+        "product": "libevent",
+        "version": "2.1.13-stable",
+        "sha256": "f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c"
+      }
+    }
+  ],
+  "cells": [
+    {
+      "application_id": "emacs",
+      "scenario_id": "emacs-terminal-ui",
+      "status": "captured",
+      "observation_path": "test/corpus/applications/external/emacs-terminal-ui.observation.json",
+      "observation_sha256": "b2a042f046ae813333e8202f029817aad40118bc9efa8b1df51b0068a8af8cf9",
+      "raw_evidence_path": "test/corpus/applications/external/emacs-terminal-ui.capture.json",
+      "raw_evidence_sha256": "5bd95f67a26536f2e858dd21f513bf651c8ed44c9a86c0c23be4503d43799fa4"
+    },
+    {
+      "application_id": "fzf",
+      "scenario_id": "fzf-filter-selection",
+      "status": "captured",
+      "observation_path": "test/corpus/applications/external/fzf-filter-selection.observation.json",
+      "observation_sha256": "3e52f93bc97170e1a7c444abc7cda3b614d9575dac56fea4e47eeb8e3642de71",
+      "raw_evidence_path": "test/corpus/applications/external/fzf-filter-selection.capture.json",
+      "raw_evidence_sha256": "330483de68ba95eaf3b7bc313b2e88f55dfa814f40e8d140608723071140105c"
+    },
+    {
+      "application_id": "lazygit",
+      "scenario_id": "lazygit-repository-ui",
+      "status": "captured",
+      "observation_path": "test/corpus/applications/external/lazygit-repository-ui.observation.json",
+      "observation_sha256": "22fe532e894bb8898b1eeff5b6b3c2dc461fe29a80e5144c07ed428e04731c6b",
+      "raw_evidence_path": "test/corpus/applications/external/lazygit-repository-ui.capture.json",
+      "raw_evidence_sha256": "dfbb5c7ecdeed9394b543fd8c32f02bdae8d3fffd888ed6e589ce7a41a51499e"
+    },
+    {
+      "application_id": "mosh",
+      "scenario_id": "mosh-local-session",
+      "status": "captured",
+      "observation_path": "test/corpus/applications/external/mosh-local-session.observation.json",
+      "observation_sha256": "dcd5539d0fb52aac048b33e835a1d9c5c3ca549e9c1149f17475d46b314a07d3",
+      "raw_evidence_path": "test/corpus/applications/external/mosh-local-session.capture.json",
+      "raw_evidence_sha256": "fd7d1937aeb61a004c22c60591fc26680b2974c2bd5db68c0d72f4664c49a292"
+    },
+    {
+      "application_id": "ncurses",
+      "scenario_id": "ncurses-resize-ui",
+      "status": "captured",
+      "observation_path": "test/corpus/applications/external/ncurses-resize-ui.observation.json",
+      "observation_sha256": "e6d9e371cf0480424f6786b45b5c9048387aea0112f1c4cfbd840d5802b82749",
+      "raw_evidence_path": "test/corpus/applications/external/ncurses-resize-ui.capture.json",
+      "raw_evidence_sha256": "52418169a261a4973f325edd444435964730fafedff7f1bca2ac38d91d648844"
+    },
+    {
+      "application_id": "neovim",
+      "scenario_id": "neovim-editing-ui",
+      "status": "captured",
+      "observation_path": "test/corpus/applications/external/neovim-editing-ui.observation.json",
+      "observation_sha256": "3ee416db9bb5598169a06c63fe6dd80e991f564500da337194ea52db88844c97",
+      "raw_evidence_path": "test/corpus/applications/external/neovim-editing-ui.capture.json",
+      "raw_evidence_sha256": "76249f685e4935f20245baa9beaa54783562f953ac0668f17423cf24536df46f"
+    },
+    {
+      "application_id": "ssh",
+      "scenario_id": "ssh-local-pty",
+      "status": "captured",
+      "observation_path": "test/corpus/applications/external/ssh-local-pty.observation.json",
+      "observation_sha256": "f918e7772fa1fec61b0177969f1d57d9aa680a41881d9468decacf09d48edc94",
+      "raw_evidence_path": "test/corpus/applications/external/ssh-local-pty.capture.json",
+      "raw_evidence_sha256": "398c3286aa1dc4cd7c224b03165ca78ffb4a306adebb217d4fcda18622ed5aa3"
+    },
+    {
+      "application_id": "tmux",
+      "scenario_id": "tmux-session-resize",
+      "status": "captured",
+      "observation_path": "test/corpus/applications/external/tmux-session-resize.observation.json",
+      "observation_sha256": "a40fc859a0db6702156124d9f5c4d2b696d284227f75132dd2daa35dbb6f9364",
+      "raw_evidence_path": "test/corpus/applications/external/tmux-session-resize.capture.json",
+      "raw_evidence_sha256": "53eb00a0187bbc6e828ca61156b737053c5b6123b234c1d4ceb00600ff6ca874"
+    }
+  ]
+}

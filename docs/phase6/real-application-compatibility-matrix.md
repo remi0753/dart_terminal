@@ -4,8 +4,8 @@
 
 - Date started: 2026-09-07
 - Scope: fourth Phase 6 compatibility-hardening roadmap item
-- Status: in progress; contract child complete, application execution child
-  pending
+- Status: in progress; contract and application-execution children complete,
+  acceptance-classification child pending
 
 ## Purpose and background
 
@@ -72,8 +72,16 @@ each commit before the next child starts.
 - Runtime integration tools already launch both Developer JIT and Release AOT
   application bundles; their support for scripted child applications and
   canonical screen observation must be inspected before choosing the runner.
-- Local availability, exact versions, and network-independent scenarios for all
-  eight applications remain to be determined.
+- The current host exposes `/usr/bin/ssh` as OpenSSH 10.3p1 with LibreSSL
+  3.3.6 and Homebrew ncurses 6.6 at `/opt/homebrew/opt/ncurses`. The system
+  ncurses reports 6.0.20150808. tmux, mosh, Neovim, Emacs, fzf, and lazygit are
+  absent from `PATH`; Homebrew itself is 6.0.22, and the inspected prefix has
+  OpenSSL 3.6.3 but no libevent or protobuf installation.
+- Persistent package installation is unnecessary for the matrix contract and
+  would mutate the developer host. The execution child therefore prefers
+  official pinned arm64 archives or source builds under `/private/tmp`, uses a
+  current-host binary only with exact provenance, and emits an explicit
+  unavailable record when a safe bounded artifact cannot be resolved.
 
 ## Completion conditions
 
@@ -135,6 +143,64 @@ arguments/stdout/stderr/deadline, kills only its child on timeout or overflow,
 and exposes only scalar identifiers/counts in its machine line. A missing
 driver cannot become a pass.
 
+## Pinned execution evidence
+
+`tool/terminal_application_capture_driver.dart` executes each reviewed recipe
+through `dart_pty_macos`, `VtParser`, and `TerminalScreenSet`. It records the
+bounded raw PTY byte stream, terminal replies, two resize observations, parser
+counters, process exit, and four canonical screen snapshots. The driver owns
+all child processes and temporary directories. Recipes use only controlled
+content: an isolated Emacs buffer, fixed fzf candidates, an isolated lazygit
+repository, a local mosh client/server pair, the reviewed ncurses fixture, an
+isolated Neovim buffer, an ephemeral-key loopback sshd, and an isolated tmux
+socket/session. No user credentials or remote hosts are used.
+
+`tool/generate_terminal_application_evidence.dart` generated the checked-in
+index at `compatibility/application_matrix_evidence.json` and one raw capture
+plus normalized observation per scenario under
+`test/corpus/applications/external/`. The exact sources are:
+
+- GNU Emacs 31.1 source, SHA-256
+  `1da5790d9580c81932b5bf700633114468da7b3412d69faa767daebf974f4586`,
+  built terminal-only without NS/X/native compilation;
+- fzf 0.74.3 Darwin arm64 archive, SHA-256
+  `1f8501cea4f9c0c2d6110d0ff75d0ec9451cd9d7524d9a26244a154ea89f3bd5`;
+- lazygit 0.65.0 Darwin arm64 archive, SHA-256
+  `d8ea1cade9e4279e45cbb58652e84edb07e98a9f8ec0604099c8b0a8f709e63a`;
+- mosh 1.4.0 upstream universal macOS package, SHA-256
+  `14d3ef7e0a0dfff7b284102d44da91f88a24921bbb07ff2ac6875e7075a4b207`;
+- Homebrew ncurses 6.6.20251230 plus
+  `test/corpus/applications/support/ncurses_resize_fixture.c`;
+- Neovim 0.12.2 macOS arm64 archive, SHA-256
+  `eeddee1009734f9071266e6b1b8a70308cb60cbcc45f5e1c1023adc471450fee`;
+- macOS `/usr/bin/ssh` 10.3p1 with LibreSSL 3.3.6, executable SHA-256
+  `17542914a3fb55e7efeb35a90d594a21c84bf6a4cfe1fc8ddff5606dc2658fc3`;
+- tmux 3.6b source, SHA-256
+  `390759d25fdba016887ec982b808927e637070fd7d03a8021f8ef3102b9ae3c7`,
+  built with libevent 2.1.13-stable source SHA-256
+  `f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c`
+  and Homebrew ncurses.
+
+All eight cells were captured. The aggregate is 57,737 PTY bytes and 32
+snapshots. All cells exited cleanly, kept the cursor bounded, displayed the
+controlled marker, restored the primary screen, and observed both resizes.
+SSH also had a clean parser result. The other seven retain `parser-clean=false`
+because they emitted unsupported sequences: Emacs 3, fzf 28, lazygit 42, mosh
+7, ncurses 297, Neovim 124, and tmux 25. None recorded cancel, size-limit,
+malformed, incomplete, or rejected-reply events. These are intentionally not
+called accepted here; the ordered acceptance child must identify the exact
+bytes, collapse duplicates, and classify each sequence before the matrix can
+close.
+
+`tool/terminal_application_evidence.dart` is the normal-gate validator. It
+pins source identities and hashes, matrix and driver freshness, exact cell
+membership, relative evidence paths, raw/normalized artifact hashes, bounded
+output and snapshot hashes, required stages/resizes/parser counters, semantic
+check derivation, and content safety. It rejects home-directory paths, user
+names, mosh keys, private keys, authorized-key paths, or unresolved random
+temporary paths. Its success line is `TERMINAL_APPLICATION_EVIDENCE_PASS
+cells=8 output_bytes=57737 samples=32 passed_checks=41 failed_checks=7`.
+
 ## Investigation log
 
 - 2026-09-07: after commit `fdc56f7`, ROADMAP was reread with a clean worktree.
@@ -164,3 +230,68 @@ driver cannot become a pass.
   analysis, and passed the full Dart Terminal test runner. This child records
   no external application pass; exact tools and evidence belong to the next
   ordered child.
+- 2026-09-07: execution-child discovery found OpenSSH 10.3p1 at
+  `/usr/bin/ssh`, Homebrew ncurses 6.6.20251230, and system ncurses
+  6.0.20150808. The other six matrix programs are not on `PATH`. libevent and
+  protobuf, needed by local tmux/mosh source builds respectively, are also
+  absent. This is a provenance fact rather than an application failure; safe
+  temporary artifacts are investigated before any cell may be classified
+  unavailable.
+- 2026-09-07: upstream release inspection identified tmux 3.6b and its
+  libevent/ncurses build dependencies, Neovim 0.12.2 with an official macOS
+  arm64 archive, and lazygit 0.62.0. fzf's upstream installer confirms the
+  Darwin arm64 archive naming convention. Exact archive URLs and hashes are
+  retained in the eventual backend catalog rather than inferred from mutable
+  `latest` URLs.
+- 2026-09-07: exact current artifacts were resolved as fzf 0.74.3
+  (`1f8501ce…f3bd5`), lazygit 0.65.0 (`d8ea1cad…9e63a`), Neovim 0.12.2
+  (`eeddee10…50fee`), and tmux 3.6b (`390759d2…ae3c7`). The official mosh
+  1.4.0 macOS package is universal arm64/x86_64, and its client/server link
+  only macOS system ncurses, zlib, libc++, and libSystem; it can therefore run
+  from a temporary package expansion without installing protobuf.
+- 2026-09-07: the first formatter invocation did format the new capture
+  driver, then returned nonzero because Dart telemetry attempted to update
+  `/Users/remi/.dart-tool/dart-flutter-telemetry-session.json` outside the
+  workspace sandbox. This is an environment permission failure after the
+  formatting operation, not a source-format failure; Dart verification is
+  rerun with the already-approved external cache access rather than ignored.
+- 2026-09-07: the first live Emacs cell exited before resize with
+  `standard input is not a tty`. The cause was not Emacs: after the driver
+  consumed and closed its request pipe, the native exec-error pipe could reuse
+  fd 0; the forked child then closed that numeric pipe descriptor after
+  `forkpty` had rebound fd 0 to the slave, accidentally closing PTY stdin.
+  `dart_pty_macos` now moves both internal pipe descriptors above stderr before
+  forking. A subprocess regression closes its parent stdin, launches
+  `/usr/bin/tty`, and requires a `/dev/ttys…` result. The complete package test
+  passed all ten cases, including the new regression and async exec failure.
+- 2026-09-07: the short-lived diagnostic which exposed controlled Emacs bytes
+  as base64 was removed once the fd collision was identified. Normal driver
+  failure diagnostics remain content-free (byte count and lifecycle error).
+- 2026-09-07: after the PTY fix, Emacs completed its real interaction with all
+  expected evidence, but the contract rejected the observation because the OS
+  identifier `macos-26.6.2` used dots where the versioned identifier grammar
+  allows hyphens. The producer was corrected to `macos-26-6-2`; the parser
+  contract was not relaxed.
+- 2026-09-07: Emacs, fzf, and lazygit then produced valid observations. The
+  first mosh attempt stopped before launching its client because the
+  content-free canonical-config helper constructed a validating `PtyCommand`
+  with the placeholder working directory `<TMP>`, which is not absolute. Both
+  mosh and SSH canonical templates now use the valid stable placeholder base
+  `/private/tmp`; runtime temporary paths remain excluded from their hashes.
+- 2026-09-07: the first evidence-validator regression run reached the intended
+  private-path negative case, but the test appended its sentinel after the
+  canonical snapshot `end` marker. Snapshot-envelope validation correctly
+  rejected that malformed fixture before content-safety validation. The test
+  now inserts the sentinel immediately before `end`, recomputes the hash, and
+  preserves every earlier invariant so the negative case isolates the intended
+  safety check; production validation was not relaxed.
+- 2026-09-07: the focused evidence regression and
+  `make terminal-application-evidence-check` passed. `CI=true make test` then
+  passed every compatibility freshness gate, formatted 167 files without
+  changes, completed static analysis with no issues, and passed the complete
+  test runner. A post-run process check found no matrix application or sshd
+  alive. Two orphan tmux sockets left by earlier failed attempts were removed
+  by exact path, and a repeated socket search was empty. The pinned artifact
+  build root remains under `/private/tmp/dart-terminal-app-matrix.9gNqAD` only
+  to support the immediately following acceptance child; it is not a committed
+  runtime dependency.
