@@ -158,6 +158,9 @@ final class TerminalViewport {
   int? get cursorColumn =>
       cursorRow == null ? null : _screens.activeScreen.cursorColumn;
 
+  bool get cursorVisible =>
+      cursorRow != null && _screens.activeScreen.cursorVisible;
+
   /// Moves by physical rows; positive values move toward older history.
   void scrollByRows(int rows) {
     _sync();
@@ -313,6 +316,19 @@ final class TerminalViewport {
     return location.history
         ? _screens.scrollback.widthFlagsAt(location.row, column)
         : _screens.activeScreen.widthFlagsAt(location.row, column);
+  }
+
+  List<int> _cellScalarsAt(int viewportRow, int column) {
+    final int flags = widthFlagsAt(viewportRow, column);
+    if ((flags & TerminalCellFlags.widthMask) ==
+        TerminalCellFlags.continuation) {
+      return const <int>[];
+    }
+    final int content = contentAt(viewportRow, column);
+    if (flags & TerminalCellFlags.grapheme != 0) {
+      return _screens.graphemeTable.scalarsAt(content);
+    }
+    return <int>[content == 0 ? 0x20 : content];
   }
 
   /// Returns the stable boundary at a projected cell's canonical lead.

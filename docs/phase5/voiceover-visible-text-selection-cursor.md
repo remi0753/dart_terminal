@@ -189,6 +189,43 @@ Primary references:
   native selector/notification behavior, and product acceptance are separately
   reviewable artifacts with ordered dependencies.
 
+### 2026-09-06 — bounded visible UTF-16 snapshot
+
+- Added a Dart-only immutable viewport snapshot with explicit UTF-8, UTF-16,
+  and column-boundary limits. It projects every physical visible row, trims
+  irrelevant trailing blanks, preserves blanks needed by a cursor/selection,
+  and records one monotonic per-column UTF-16 boundary map.
+- Wide continuation columns share the lead grapheme's starting boundary and the
+  boundary after the complete wide cell reaches its end. Interned combining and
+  emoji graphemes are resolved from the session table, so no public range can
+  split a surrogate pair or grapheme merely because it spans multiple UTF-16
+  units.
+- Visible selection uses the existing stable selection projection and becomes
+  one range over physical rows; an independently reported visible cursor is the
+  collapsed selected range only when no selection is visible. Offscreen or
+  presentation-hidden cursors are absent.
+- The first focused test expected a selected blank beyond retained row content.
+  The diagnostic run showed the existing selection model correctly ended at
+  the last stable logical cell (`界A` + soft wrap + `B`). The fixture was aligned
+  to that established selection semantic rather than expanding accessibility
+  into a second selection policy.
+- A subsequent limit fixture attempted to place a terminal-width-two emoji
+  through the width-one cell setter and was correctly rejected by the canonical
+  grid invariant. The fixture now uses the normal classified print path; no
+  production width validation was weakened.
+
 ## Verification results
 
-Pending.
+### Bounded visible UTF-16 snapshot and mapping
+
+- Explicit `dart format` over all changed Dart sources: passed.
+- Focused static analysis over the screen-set parts, public exports, and new
+  test: passed with no issues.
+- `dart run test/terminal_accessibility_snapshot_test.dart`: passed after the
+  two fixture corrections recorded above.
+- First `CI=true make test`: every test passed but analysis reported one
+  directive-order info in the master test. The imports were sorted.
+- Final `CI=true make test`: passed; all 141 files were format-clean, analysis
+  reported no issues, parser-table freshness and native hooks passed, and the
+  complete Dart test suite passed.
+- `git diff --check`: passed during final pre-commit review.
