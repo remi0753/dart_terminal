@@ -812,7 +812,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] hyperlink hover/open と URL safety
   （[`docs/phase5/hyperlink-hover-open-url-safety.md`](docs/phase5/hyperlink-hover-open-url-safety.md) を参照して実施）
   - [x] bounded OSC 8 table・current link state・cell lifecycle
-  - [ ] viewport hyperlink hit test・Metal hover overlay
+  - [x] viewport hyperlink hit test・Metal hover overlay
   - [ ] `dart_appkit` のallowlist済みexternal URL open境界
   - [ ] 実AppKit hover/open製品統合と両runtime受け入れ
 - [ ] VoiceOver の最小 visible text/selection/cursor support

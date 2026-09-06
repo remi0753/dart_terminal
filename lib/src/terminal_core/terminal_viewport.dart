@@ -258,6 +258,56 @@ final class TerminalViewport {
         : _screens.activeScreen.hyperlinkAt(location.row, column);
   }
 
+  /// Resolves a visible cell to an immutable OSC 8 definition.
+  ///
+  /// Pointer-style out-of-grid coordinates return null. A wide continuation
+  /// resolves to its canonical lead so a later click cannot split the cell.
+  TerminalHyperlinkHit? hitTestHyperlink(int viewportRow, int column) {
+    _sync();
+    if (viewportRow < 0 || viewportRow >= _screens.activeScreen.rows) {
+      return null;
+    }
+    final int sourceColumns = columnsAt(viewportRow);
+    if (column < 0 || column >= sourceColumns) {
+      return null;
+    }
+    int leadColumn = column;
+    int flags = widthFlagsAt(viewportRow, leadColumn);
+    if ((flags & TerminalCellFlags.widthMask) ==
+        TerminalCellFlags.continuation) {
+      if (leadColumn == 0) return null;
+      leadColumn--;
+      flags = widthFlagsAt(viewportRow, leadColumn);
+      if ((flags & TerminalCellFlags.widthMask) != TerminalCellFlags.wide) {
+        return null;
+      }
+    }
+    final int hyperlink = hyperlinkAt(viewportRow, leadColumn);
+    final TerminalHyperlinkTable table = _screens.hyperlinkTable;
+    if (hyperlink <= 0 || hyperlink > table.definitionCount) {
+      return null;
+    }
+    return TerminalHyperlinkHit(
+      viewportGeneration: _generation,
+      row: viewportRow,
+      column: leadColumn,
+      pointerColumn: column,
+      cellWidth: (flags & TerminalCellFlags.widthMask) == TerminalCellFlags.wide
+          ? 2
+          : 1,
+      definition: table.definitionAt(hyperlink),
+    );
+  }
+
+  /// Re-resolves a prior physical pointer position after viewport mutation.
+  TerminalHyperlinkHit? refreshHyperlinkHit(TerminalHyperlinkHit previous) {
+    final TerminalHyperlinkHit? current = hitTestHyperlink(
+      previous.row,
+      previous.pointerColumn,
+    );
+    return current?.hyperlinkId == previous.hyperlinkId ? current : null;
+  }
+
   int widthFlagsAt(int viewportRow, int column) {
     final _ViewportLocation location = _locate(viewportRow);
     return location.history

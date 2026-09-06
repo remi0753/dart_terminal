@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
+import '../terminal_core/terminal_hyperlink.dart';
 import '../terminal_core/terminal_screen.dart';
 import '../terminal_core/terminal_screen_set.dart';
 import '../terminal_input/terminal_preedit.dart';
@@ -85,6 +86,9 @@ final class TerminalLiveMetalSurfaceSnapshot {
     this.selectionGeneration = 0,
     this.selectionSpanCount = 0,
     this.selectionCellCount = 0,
+    this.hyperlinkHoverId = 0,
+    this.hyperlinkHoverRow = -1,
+    this.hyperlinkHoverColumn = -1,
   });
 
   final bool isDisposed;
@@ -109,6 +113,9 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int selectionGeneration;
   final int selectionSpanCount;
   final int selectionCellCount;
+  final int hyperlinkHoverId;
+  final int hyperlinkHoverRow;
+  final int hyperlinkHoverColumn;
 }
 
 /// Owns the default live terminal screen-to-Metal relationship.
@@ -252,6 +259,7 @@ final class TerminalLiveMetalSurface {
                         ? _preeditLayoutForModel(model)
                         : null,
                     selection: _selectionProjection,
+                    hoveredHyperlinkId: _hyperlinkHover?.hyperlinkId ?? 0,
                   )
                   .scheduledFrame,
       submitFrame:
@@ -338,6 +346,7 @@ final class TerminalLiveMetalSurface {
   TerminalCaretRect? _lastPublishedCaretRect;
   TerminalSelectionGestureSnapshot? _selectionSnapshot;
   TerminalSelectionProjection? _selectionProjection;
+  TerminalHyperlinkHit? _hyperlinkHover;
   TerminalViewportRenderModel? _viewportRenderModel;
   int _publishedViewportGeneration = 0;
   int _publishedSelectionGeneration = -1;
@@ -359,6 +368,42 @@ final class TerminalLiveMetalSurface {
     _needsDrain = true;
     _scheduleImmediate();
     return true;
+  }
+
+  /// Resolves and publishes a derived hover at one visible cell coordinate.
+  bool updateHyperlinkHover({required int row, required int column}) {
+    _requireLive();
+    final TerminalHyperlinkHit? next = screenSet.viewport.hitTestHyperlink(
+      row,
+      column,
+    );
+    final TerminalHyperlinkHit? previous = _hyperlinkHover;
+    _hyperlinkHover = next;
+    if (previous?.hyperlinkId == next?.hyperlinkId) {
+      return false;
+    }
+    if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
+    _needsDrain = true;
+    _scheduleImmediate();
+    return true;
+  }
+
+  bool clearHyperlinkHover() {
+    _requireLive();
+    if (_hyperlinkHover == null) return false;
+    _hyperlinkHover = null;
+    if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
+    _needsDrain = true;
+    _scheduleImmediate();
+    return true;
+  }
+
+  TerminalHyperlinkHit? hyperlinkAtCell({
+    required int row,
+    required int column,
+  }) {
+    _requireLive();
+    return screenSet.viewport.hitTestHyperlink(row, column);
   }
 
   void notifyViewportChanged() {
@@ -511,6 +556,7 @@ final class TerminalLiveMetalSurface {
       _rebindCurrentScreen();
       _applyNewestDamage(now);
       _refreshViewportPresentation();
+      _refreshHyperlinkHover();
       _scheduler.advancePresentation(monotonicMicros: now);
       _submitNewest();
       _needsDrain = _outbox.hasPendingDamage;
@@ -552,12 +598,16 @@ final class TerminalLiveMetalSurface {
       selectionGeneration: _selectionSnapshot?.generation ?? 0,
       selectionSpanCount: _selectionProjection?.spans.length ?? 0,
       selectionCellCount: _selectionProjection?.selectedCellCount ?? 0,
+      hyperlinkHoverId: _hyperlinkHover?.hyperlinkId ?? 0,
+      hyperlinkHoverRow: _hyperlinkHover?.row ?? -1,
+      hyperlinkHoverColumn: _hyperlinkHover?.pointerColumn ?? -1,
     );
   }
 
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _hyperlinkHover = null;
     _timer?.cancel();
     _timer = null;
     _outbox.notifyPortClosed(sessionId);
@@ -658,6 +708,17 @@ final class TerminalLiveMetalSurface {
     _publishedSelectionGeneration = selectionGeneration;
     _publishedProjectionResourceGeneration = resourceGeneration;
     if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
+  }
+
+  void _refreshHyperlinkHover() {
+    final TerminalHyperlinkHit? previous = _hyperlinkHover;
+    if (previous == null) return;
+    final TerminalHyperlinkHit? refreshed = screenSet.viewport
+        .refreshHyperlinkHit(previous);
+    _hyperlinkHover = refreshed;
+    if (refreshed == null && _scheduler.model.isInitialized) {
+      _scheduler.requestFullRedraw();
+    }
   }
 
   TerminalRenderModel _visibleRenderModel(TerminalDamageRenderModel model) =>

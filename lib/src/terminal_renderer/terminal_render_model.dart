@@ -15,5 +15,6 @@ abstract interface class TerminalRenderModel {
   int foregroundAt(int row, int column);
   int backgroundAt(int row, int column);
   int styleAt(int row, int column);
+  int hyperlinkAt(int row, int column);
   int widthFlagsAt(int row, int column);
 }

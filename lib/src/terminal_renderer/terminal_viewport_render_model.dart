@@ -19,11 +19,13 @@ final class TerminalViewportRenderModel implements TerminalRenderModel {
     required Uint32List foreground,
     required Uint32List background,
     required Uint16List styles,
+    required Uint16List hyperlinks,
     required Uint8List widthFlags,
   }) : _content = content,
        _foreground = foreground,
        _background = background,
        _styles = styles,
+       _hyperlinks = hyperlinks,
        _widthFlags = widthFlags;
 
   factory TerminalViewportRenderModel.capture(
@@ -51,6 +53,7 @@ final class TerminalViewportRenderModel implements TerminalRenderModel {
     final Uint32List foreground = Uint32List(cellCount);
     final Uint32List background = Uint32List(cellCount);
     final Uint16List styles = Uint16List(cellCount);
+    final Uint16List hyperlinks = Uint16List(cellCount);
     final Uint8List widthFlags = Uint8List(cellCount);
     for (int row = 0; row < rows; row++) {
       final int sourceColumns = viewport.columnsAt(row);
@@ -71,6 +74,7 @@ final class TerminalViewportRenderModel implements TerminalRenderModel {
         foreground[index] = viewport.foregroundAt(row, column);
         background[index] = viewport.backgroundAt(row, column);
         styles[index] = viewport.styleAt(row, column);
+        hyperlinks[index] = viewport.hyperlinkAt(row, column);
         widthFlags[index] = flags;
       }
     }
@@ -88,6 +92,7 @@ final class TerminalViewportRenderModel implements TerminalRenderModel {
       foreground: foreground,
       background: background,
       styles: styles,
+      hyperlinks: hyperlinks,
       widthFlags: widthFlags,
     );
   }
@@ -111,6 +116,7 @@ final class TerminalViewportRenderModel implements TerminalRenderModel {
   final Uint32List _foreground;
   final Uint32List _background;
   final Uint16List _styles;
+  final Uint16List _hyperlinks;
   final Uint8List _widthFlags;
 
   @override
@@ -124,6 +130,8 @@ final class TerminalViewportRenderModel implements TerminalRenderModel {
   int backgroundAt(int row, int column) => _background[_index(row, column)];
   @override
   int styleAt(int row, int column) => _styles[_index(row, column)];
+  @override
+  int hyperlinkAt(int row, int column) => _hyperlinks[_index(row, column)];
   @override
   int widthFlagsAt(int row, int column) => _widthFlags[_index(row, column)];
 

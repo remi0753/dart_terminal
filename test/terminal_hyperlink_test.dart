@@ -10,8 +10,78 @@ void runTerminalHyperlinkTests() {
   _testOscOpenCloseAndIdentity();
   _testMalformedAndLimitedSequencesCloseCurrentLink();
   _testHyperlinksSurviveWideGraphemeHistoryAndReflow();
+  _testViewportHitTestingAndStaleRefresh();
   _testScreenSwitchAndResetState();
   _testSnapshotDefinitionsAndLimits();
+}
+
+void _testViewportHitTestingAndStaleRefresh() {
+  final TerminalScreenSet screens = TerminalScreenSet(
+    rows: 2,
+    columns: 4,
+    scrollback: TerminalScrollback(maxLines: 4, maxBytes: 4096, pageRows: 1),
+  );
+  final int first = screens.hyperlinkTable.tryIntern(
+    uri: 'https://first.test',
+    explicitId: 'first',
+  )!;
+  final int second = screens.hyperlinkTable.tryIntern(
+    uri: 'https://second.test',
+    explicitId: 'second',
+  )!;
+  screens.primary.setWideCell(0, 1, 0x754c, hyperlink: first);
+  final TerminalHyperlinkHit lead = screens.viewport.hitTestHyperlink(0, 1)!;
+  final TerminalHyperlinkHit continuation = screens.viewport.hitTestHyperlink(
+    0,
+    2,
+  )!;
+  _expect(
+    lead.hyperlinkId == continuation.hyperlinkId &&
+        lead.column == 1 &&
+        continuation.column == 1 &&
+        lead.pointerColumn == 1 &&
+        continuation.pointerColumn == 2 &&
+        lead.cellWidth == 2 &&
+        lead.uri == 'https://first.test',
+    'wide continuation hit normalizes to one immutable lead definition',
+  );
+  _expect(
+    screens.viewport.hitTestHyperlink(-1, 0) == null &&
+        screens.viewport.hitTestHyperlink(0, -1) == null &&
+        screens.viewport.hitTestHyperlink(2, 0) == null &&
+        screens.viewport.hitTestHyperlink(0, 4) == null &&
+        screens.viewport.hitTestHyperlink(1, 0) == null,
+    'pointer-style blank and out-of-grid hits return null',
+  );
+
+  screens.primary.setWideCell(0, 1, 0x754c, hyperlink: second);
+  _expect(
+    screens.viewport.refreshHyperlinkHit(lead) == null,
+    'a changed cell invalidates a stale hover instead of retargeting it',
+  );
+  final TerminalHyperlinkHit replacement = screens.viewport.hitTestHyperlink(
+    0,
+    2,
+  )!;
+  _expect(
+    replacement.hyperlinkId == second &&
+        replacement.viewportGeneration > lead.viewportGeneration,
+    'a fresh hit observes the replacement generation and URI identity',
+  );
+
+  screens.primary.scrollUp(1);
+  screens.primary.setNarrowCell(1, 0, 0x58, hyperlink: first);
+  screens.viewport.scrollByRows(1);
+  final TerminalHyperlinkHit history = screens.viewport.hitTestHyperlink(0, 2)!;
+  _expect(
+    history.hyperlinkId == second && screens.viewport.isHistoryRow(0),
+    'hit testing resolves retained history through the visible projection',
+  );
+  screens.viewport.scrollToBottom();
+  _expect(
+    screens.viewport.refreshHyperlinkHit(history) == null,
+    'viewport navigation invalidates a hit whose physical row now differs',
+  );
 }
 
 void _testBoundedImmutableTable() {

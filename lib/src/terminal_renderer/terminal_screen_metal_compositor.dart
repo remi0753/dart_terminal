@@ -32,6 +32,7 @@ final class TerminalScreenMetalComposition {
     required this.shapedRunCount,
     required this.renderedCellCount,
     required this.preeditCellCount,
+    required this.hyperlinkHoverCellCount,
   }) : instances = List<TerminalMetalInstance>.unmodifiable(instances);
 
   final TerminalScheduledMetalFrame scheduledFrame;
@@ -39,6 +40,7 @@ final class TerminalScreenMetalComposition {
   final int shapedRunCount;
   final int renderedCellCount;
   final int preeditCellCount;
+  final int hyperlinkHoverCellCount;
 }
 
 /// Canonical screen-grid to Metal composition boundary.
@@ -80,12 +82,22 @@ final class TerminalScreenMetalCompositor {
     required TerminalFramePresentation presentation,
     TerminalPreeditLayout? preedit,
     TerminalSelectionProjection? selection,
+    int hoveredHyperlinkId = 0,
   }) {
     if (!model.isInitialized) {
       throw StateError('Metal composition requires an initialized model');
     }
     if (model.requiredResourceGeneration > atlas.resourceGeneration) {
       throw StateError('Metal composition resources trail screen damage');
+    }
+    if (hoveredHyperlinkId < 0 ||
+        hoveredHyperlinkId > TerminalScreen.maxResourceId) {
+      throw RangeError.range(
+        hoveredHyperlinkId,
+        0,
+        TerminalScreen.maxResourceId,
+        'hoveredHyperlinkId',
+      );
     }
 
     final double scale = atlas.scale;
@@ -101,6 +113,7 @@ final class TerminalScreenMetalCompositor {
     final List<TerminalMetalInstance> cursors = <TerminalMetalInstance>[];
     final List<_TerminalTextRun> textRuns = <_TerminalTextRun>[];
     var renderedCellCount = 0;
+    var hyperlinkHoverCellCount = 0;
 
     for (int row = 0; row < model.rows; row++) {
       var column = 0;
@@ -154,6 +167,21 @@ final class TerminalScreenMetalCompositor {
             row: row,
             metrics: metrics,
             scale: scale,
+            viewportWidth: viewportWidth,
+            viewportHeight: viewportHeight,
+          );
+        }
+        if (hoveredHyperlinkId != 0 &&
+            model.hyperlinkAt(row, column) == hoveredHyperlinkId) {
+          hyperlinkHoverCellCount += cellColumns;
+          _addClippedSolid(
+            decorations,
+            kind: TerminalMetalInstanceKind.decoration,
+            x: left,
+            y: _underlinePixel(row, metrics, scale),
+            width: right - left,
+            height: math.max(1, (metrics.underlineThickness * scale).round()),
+            colorRgba: colors.foregroundRgba,
             viewportWidth: viewportWidth,
             viewportHeight: viewportHeight,
           );
@@ -420,6 +448,7 @@ final class TerminalScreenMetalCompositor {
       shapedRunCount: shapedRuns.length,
       renderedCellCount: renderedCellCount,
       preeditCellCount: preedit?.cells.length ?? 0,
+      hyperlinkHoverCellCount: hyperlinkHoverCellCount,
     );
   }
 

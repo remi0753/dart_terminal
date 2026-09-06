@@ -22,6 +22,7 @@ void _testHistoryProjectionCopiesEveryRenderField() {
       foreground: row + 1,
       background: row + 4,
       style: row + 7,
+      hyperlink: row + 10,
       isProtected: true,
     );
   }
@@ -47,6 +48,7 @@ void _testHistoryProjectionCopiesEveryRenderField() {
         visible.foregroundAt(0, 0) == 3 &&
         visible.backgroundAt(0, 0) == 6 &&
         visible.styleAt(0, 0) == 9 &&
+        visible.hyperlinkAt(0, 0) == 12 &&
         visible.widthFlagsAt(0, 0) ==
             TerminalCellFlags.narrow | TerminalCellFlags.protected &&
         visible.contentAt(1, 0) == 0x44 &&

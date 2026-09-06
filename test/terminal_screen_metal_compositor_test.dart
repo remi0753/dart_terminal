@@ -13,7 +13,68 @@ void runTerminalScreenMetalCompositorTests() {
   _testWideGraphemeUsesCanonicalGrid();
   _testPreeditUsesTransientMetalLayers();
   _testSelectionProjectionUsesOverlayLayer();
+  _testHyperlinkHoverUsesDecorationLayer();
   _testPreeditRespectsRendererInstanceLimit();
+}
+
+void _testHyperlinkHoverUsesDecorationLayer() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 6);
+  _parse(
+    screens,
+    utf8.encode(
+      '\x1b]8;id=hover;https://example.test\x07A界'
+      '\x1b]8;;\x07X'
+      '\x1b]8;id=hover;https://example.test\x07B'
+      '\x1b]8;;\x07',
+    ),
+  );
+  final int hyperlink = screens.activeScreen.hyperlinkAt(0, 0);
+  final List<int> canonicalBefore = _screenContent(screens.activeScreen);
+  for (final double scale in <double>[1, 2]) {
+    final _CompositionFixture fixture = _compose(
+      screens,
+      hoveredHyperlinkId: hyperlink,
+      scale: scale,
+    );
+    try {
+      final List<TerminalMetalInstance> hover = fixture.composition.instances
+          .where(
+            (TerminalMetalInstance instance) =>
+                instance.kind == TerminalMetalInstanceKind.decoration,
+          )
+          .toList();
+      final int expectedThickness =
+          (fixture.catalog.metrics.underlineThickness * scale).round().clamp(
+            1,
+            1 << 20,
+          );
+      _expect(
+        fixture.composition.hyperlinkHoverCellCount == 4 &&
+            hover.length == 3 &&
+            hover.every(
+              (TerminalMetalInstance instance) =>
+                  instance.height == expectedThickness,
+            ) &&
+            hover[0].width ==
+                (fixture.catalog.metrics.cellWidth * scale).round() &&
+            hover[1].width ==
+                (fixture.catalog.metrics.cellWidth * 2 * scale).round() &&
+            _screenContent(screens.activeScreen).toString() ==
+                canonicalBefore.toString(),
+        'OSC 8 hover underlines scalar/wide/grouped cells at ${scale}x '
+        'without mutating canonical content',
+      );
+      final Uint8List rgba = fixture.renderer.renderRgba(
+        fixture.composition.scheduledFrame.frame,
+      );
+      _expect(
+        rgba.any((int byte) => byte != 0),
+        'hyperlink hover frame is accepted by native Metal at ${scale}x',
+      );
+    } finally {
+      fixture.dispose();
+    }
+  }
 }
 
 void _testSelectionProjectionUsesOverlayLayer() {
@@ -336,6 +397,7 @@ _CompositionFixture _compose(
   TerminalScreenSet screens, {
   TerminalPreeditLayout? preedit,
   TerminalSelectionProjection? selection,
+  int hoveredHyperlinkId = 0,
   double scale = 1,
   TerminalMetalRendererConfig rendererConfig =
       const TerminalMetalRendererConfig(),
@@ -396,6 +458,7 @@ _CompositionFixture _compose(
           ),
           preedit: preedit,
           selection: selection,
+          hoveredHyperlinkId: hoveredHyperlinkId,
         );
     return _CompositionFixture(
       catalog: catalog,

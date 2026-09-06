@@ -15,6 +15,81 @@ final class TerminalHyperlinkDefinition {
   final int utf8Bytes;
 }
 
+/// One hyperlink resolved against an exact visible viewport generation.
+final class TerminalHyperlinkHit {
+  factory TerminalHyperlinkHit({
+    required int viewportGeneration,
+    required int row,
+    required int column,
+    required int pointerColumn,
+    required int cellWidth,
+    required TerminalHyperlinkDefinition definition,
+  }) {
+    if (viewportGeneration <= 0) {
+      throw RangeError.value(
+        viewportGeneration,
+        'viewportGeneration',
+        'must be positive',
+      );
+    }
+    if (row < 0 || column < 0 || pointerColumn < 0) {
+      throw RangeError('hyperlink hit coordinates must be non-negative');
+    }
+    if (cellWidth != 1 && cellWidth != 2) {
+      throw RangeError.value(cellWidth, 'cellWidth', 'must be one or two');
+    }
+    return TerminalHyperlinkHit._(
+      viewportGeneration,
+      row,
+      column,
+      pointerColumn,
+      cellWidth,
+      definition,
+    );
+  }
+
+  const TerminalHyperlinkHit._(
+    this.viewportGeneration,
+    this.row,
+    this.column,
+    this.pointerColumn,
+    this.cellWidth,
+    this.definition,
+  );
+
+  final int viewportGeneration;
+  final int row;
+  final int column;
+  final int pointerColumn;
+  final int cellWidth;
+  final TerminalHyperlinkDefinition definition;
+
+  int get hyperlinkId => definition.id;
+  String get uri => definition.uri;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalHyperlinkHit &&
+      other.viewportGeneration == viewportGeneration &&
+      other.row == row &&
+      other.column == column &&
+      other.pointerColumn == pointerColumn &&
+      other.cellWidth == cellWidth &&
+      other.definition.id == definition.id &&
+      other.definition.uri == definition.uri;
+
+  @override
+  int get hashCode => Object.hash(
+    viewportGeneration,
+    row,
+    column,
+    pointerColumn,
+    cellWidth,
+    definition.id,
+    definition.uri,
+  );
+}
+
 /// Session-owned bounded OSC 8 definition table.
 ///
 /// Definitions are never reused: scrollback and reflow may retain a cell ID

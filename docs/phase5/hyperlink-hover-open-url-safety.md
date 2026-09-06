@@ -235,6 +235,36 @@ Primary references:
   corrected, then the full analyzer and focused hyperlink test passed with no
   issues.
 
+### 2026-09-06 — viewport hit test and Metal hover overlay
+
+- Added `TerminalViewport.hitTestHyperlink`, which treats pointer coordinates
+  outside the currently projected source row as no hit, normalizes a wide-cell
+  continuation to its canonical lead while retaining the actual pointer
+  column, rejects zero/undefined IDs, and returns one immutable URI definition
+  tied to the observed viewport generation.
+- Added explicit prior-hit refresh. It re-resolves the same physical pointer
+  position after screen/history/offset changes and retains the hover only when
+  the cell still has the same immutable hyperlink ID. It never retargets a
+  click merely because a different link moved under a stale coordinate.
+- `TerminalViewportRenderModel` now copies the existing hyperlink channel along
+  with content, colors, styles, and width flags. This closes the only data loss
+  between scrolled history and the default live Metal compositor; the retained
+  damage model already implemented the same render-model field.
+- The compositor accepts one bounded hovered ID, scans it during the existing
+  visible-cell traversal, and emits foreground-colored underline rectangles on
+  the decoration layer. Wide cells produce one double-width rectangle; a
+  producer-grouped ID may underline separated visible spans. Canonical cells,
+  styles, selection, and scrollback remain untouched.
+- The live surface owns only the latest resolved hover, coalesces equal-ID
+  moves, requests a full visual redraw on enter/leave, refreshes the hit after
+  every pending screen/viewport update, and clears it on disappearance or
+  disposal. Its content-free snapshot exposes only ID and cell coordinates,
+  never URI text.
+- Focused tests cover active/history hits, out-of-grid input, continuation
+  normalization, replacement and viewport stale invalidation, copied render
+  fields, separated explicit-ID spans, wide-cell geometry, canonical-state
+  immutability, and native Metal readback at 1x and 2x.
+
 ## Verification results
 
 ### Bounded OSC 8 table and cell lifecycle
@@ -247,4 +277,18 @@ Primary references:
   described above. After correcting it, the final `CI=true make test` passed
   cleanly: all 137 files were format-clean, full analysis reported no issues,
   all native build hooks ran, and the complete Dart test suite passed.
+- `git diff --check`: passed during final pre-commit review.
+
+### Viewport hit test and Metal hover overlay
+
+- Explicit `dart format` over the ten changed Dart sources: passed.
+- Focused static analysis over hyperlink, viewport, render-model, compositor,
+  live-surface, and test sources: passed with no issues.
+- `dart run test/terminal_hyperlink_test.dart`: passed.
+- `dart run test/terminal_viewport_render_model_test.dart`: passed.
+- `dart run test/terminal_screen_metal_compositor_test.dart`: passed, including
+  1x/2x native Metal frame rendering.
+- Final `CI=true make test`: passed; all 137 files were format-clean, analyzer
+  reported no issues, parser-table freshness and native build hooks passed,
+  and the complete Dart test suite passed.
 - `git diff --check`: passed during final pre-commit review.
