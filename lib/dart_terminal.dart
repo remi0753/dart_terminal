@@ -16,6 +16,7 @@ export 'src/terminal_core/streaming_utf8_decoder.dart'
     show StreamingUtf8Decoder, Utf8ScalarSink;
 export 'src/terminal_core/terminal_keyboard_modes.dart'
     show TerminalKeyboardModes;
+export 'src/terminal_core/terminal_mouse_modes.dart';
 export 'src/terminal_core/terminal_reply.dart'
     show TerminalModeReportStatus, TerminalReplyEncoder, TerminalReplyHandler;
 export 'src/terminal_core/terminal_screen.dart'
@@ -86,6 +87,8 @@ export 'src/terminal_input/terminal_key_event.dart'
         TerminalKeyEvent,
         TerminalKeyModifiers,
         TerminalPhysicalKey;
+export 'src/terminal_input/terminal_mouse_encoder.dart';
+export 'src/terminal_input/terminal_mouse_event.dart';
 export 'src/terminal_input/terminal_preedit.dart';
 export 'src/terminal_input/terminal_text_input_event_router.dart';
 export 'src/terminal_pane.dart'

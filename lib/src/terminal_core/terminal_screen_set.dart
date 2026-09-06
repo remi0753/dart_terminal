@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'terminal_keyboard_modes.dart';
+import 'terminal_mouse_modes.dart';
 import 'terminal_screen.dart';
 import 'terminal_style.dart';
 import 'terminal_unicode.dart';
@@ -79,6 +80,9 @@ final class TerminalScreenSet {
   bool _mode1049Active = false;
   bool _applicationCursorKeys = false;
   bool _applicationKeypad = false;
+  TerminalMouseTrackingMode _mouseTracking = TerminalMouseTrackingMode.none;
+  TerminalMouseCoordinateEncoding _mouseEncoding =
+      TerminalMouseCoordinateEncoding.legacy;
   int _transitionGeneration = 1;
 
   TerminalScreen get primary => _primary;
@@ -94,6 +98,8 @@ final class TerminalScreenSet {
     applicationCursorKeys: _applicationCursorKeys,
     applicationKeypad: _applicationKeypad,
   );
+  TerminalMouseModes get mouseModes =>
+      TerminalMouseModes(tracking: _mouseTracking, encoding: _mouseEncoding);
   int get transitionGeneration => _transitionGeneration;
   TerminalViewport get viewport => _viewport;
 
@@ -186,6 +192,41 @@ final class TerminalScreenSet {
     _transitionGeneration++;
   }
 
+  void setMouseTrackingMode(TerminalMouseTrackingMode mode, bool enabled) {
+    if (mode == TerminalMouseTrackingMode.none) {
+      throw ArgumentError.value(mode, 'mode', 'must be a DEC tracking mode');
+    }
+    final TerminalMouseTrackingMode next = enabled
+        ? mode
+        : (_mouseTracking == mode
+              ? TerminalMouseTrackingMode.none
+              : _mouseTracking);
+    if (_mouseTracking == next) return;
+    _mouseTracking = next;
+    _transitionGeneration++;
+  }
+
+  void setMouseCoordinateEncoding(
+    TerminalMouseCoordinateEncoding encoding,
+    bool enabled,
+  ) {
+    if (encoding == TerminalMouseCoordinateEncoding.legacy) {
+      throw ArgumentError.value(
+        encoding,
+        'encoding',
+        'must be an extended DEC coordinate encoding',
+      );
+    }
+    final TerminalMouseCoordinateEncoding next = enabled
+        ? encoding
+        : (_mouseEncoding == encoding
+              ? TerminalMouseCoordinateEncoding.legacy
+              : _mouseEncoding);
+    if (_mouseEncoding == next) return;
+    _mouseEncoding = next;
+    _transitionGeneration++;
+  }
+
   /// DEC private mode 1049: save primary, clear/use alternate, then restore.
   void setAlternateMode1049(bool enabled) {
     if (enabled) {
@@ -223,6 +264,8 @@ final class TerminalScreenSet {
     _mode1049Active = false;
     _applicationCursorKeys = false;
     _applicationKeypad = false;
+    _mouseTracking = TerminalMouseTrackingMode.none;
+    _mouseEncoding = TerminalMouseCoordinateEncoding.legacy;
     primary.synchronizeVisualBellGeneration(visualBellGeneration);
     primary.requestFullSnapshot();
     _transitionGeneration++;

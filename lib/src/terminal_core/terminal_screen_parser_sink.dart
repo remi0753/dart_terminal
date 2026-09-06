@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'terminal_mouse_modes.dart';
 import 'terminal_reply.dart';
 import 'terminal_screen.dart';
 import 'terminal_screen_set.dart';
@@ -435,7 +436,7 @@ final class TerminalScreenParserSink
         47 || 1047 => screenSet?.usingAlternate,
         69 => screen.modeEnabled(TerminalScreenMode.horizontalMargins),
         1049 => screenSet?.mode1049Active,
-        _ => null,
+        _ => screenSet?.mouseModes.decPrivateModeState(mode),
       };
     }
     if (enabled == null) {
@@ -1029,6 +1030,8 @@ final class TerminalScreenParserSink
           screen.setMode(TerminalScreenMode.origin, enabled);
         case 7:
           screen.setMode(TerminalScreenMode.autoWrap, enabled);
+        case 9:
+          _setMouseTrackingMode(TerminalMouseTrackingMode.x10, enabled);
         case 12:
           screen.setCursorPresentation(blinking: enabled);
         case 25:
@@ -1037,6 +1040,27 @@ final class TerminalScreenParserSink
           _setScreenMode(enabled, 47);
         case 69:
           screen.setMode(TerminalScreenMode.horizontalMargins, enabled);
+        case 1000:
+          _setMouseTrackingMode(TerminalMouseTrackingMode.normal, enabled);
+        case 1002:
+          _setMouseTrackingMode(TerminalMouseTrackingMode.buttonEvent, enabled);
+        case 1003:
+          _setMouseTrackingMode(TerminalMouseTrackingMode.anyEvent, enabled);
+        case 1005:
+          _setMouseCoordinateEncoding(
+            TerminalMouseCoordinateEncoding.utf8,
+            enabled,
+          );
+        case 1006:
+          _setMouseCoordinateEncoding(
+            TerminalMouseCoordinateEncoding.sgr,
+            enabled,
+          );
+        case 1015:
+          _setMouseCoordinateEncoding(
+            TerminalMouseCoordinateEncoding.urxvt,
+            enabled,
+          );
         case 1047:
           _setScreenMode(enabled, 1047);
         case 1048:
@@ -1047,6 +1071,27 @@ final class TerminalScreenParserSink
           _unsupportedSequenceCount++;
       }
     }
+  }
+
+  void _setMouseTrackingMode(TerminalMouseTrackingMode mode, bool enabled) {
+    final TerminalScreenSet? screens = screenSet;
+    if (screens == null) {
+      _unsupportedSequenceCount++;
+      return;
+    }
+    screens.setMouseTrackingMode(mode, enabled);
+  }
+
+  void _setMouseCoordinateEncoding(
+    TerminalMouseCoordinateEncoding encoding,
+    bool enabled,
+  ) {
+    final TerminalScreenSet? screens = screenSet;
+    if (screens == null) {
+      _unsupportedSequenceCount++;
+      return;
+    }
+    screens.setMouseCoordinateEncoding(encoding, enabled);
   }
 
   void _setScreenMode(bool enabled, int mode) {

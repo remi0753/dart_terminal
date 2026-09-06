@@ -789,6 +789,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [x] US/JIS/dead key/CJK/emoji/key repeat matrix
   （[`docs/phase5/input-source-matrix.md`](docs/phase5/input-source-matrix.md) を参照して実施）
 - [ ] mouse protocol と local selection arbitration
+  （[`docs/phase5/mouse-protocol-selection-arbitration.md`](docs/phase5/mouse-protocol-selection-arbitration.md) を参照して実施）
+  - [x] DEC mouse tracking/encoding mode stateとbounded X10/UTF-8/URXVT/SGR encoder
+  - [ ] AppKit pointer-to-cell normalizationとterminal report/local selection arbitration
+  - [ ] 実AppKit/PTY製品統合と両runtimeのcross-mode acceptance
 - [ ] character/word/line selection、drag autoscroll
 - [ ] precision trackpad scroll
 - [ ] clipboard、bracketed paste、paste safety
