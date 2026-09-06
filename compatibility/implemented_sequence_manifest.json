@@ -1,0 +1,615 @@
+{
+  "format": "dart-terminal-implementation-surface",
+  "version": 1,
+  "selectors": [
+    {
+      "key": "c0:7",
+      "kind": "c0",
+      "code": 7,
+      "handler": "execute"
+    },
+    {
+      "key": "c0:8",
+      "kind": "c0",
+      "code": 8,
+      "handler": "execute"
+    },
+    {
+      "key": "c0:9",
+      "kind": "c0",
+      "code": 9,
+      "handler": "execute"
+    },
+    {
+      "key": "c0:10",
+      "kind": "c0",
+      "code": 10,
+      "handler": "execute"
+    },
+    {
+      "key": "c0:11",
+      "kind": "c0",
+      "code": 11,
+      "handler": "execute"
+    },
+    {
+      "key": "c0:12",
+      "kind": "c0",
+      "code": 12,
+      "handler": "execute"
+    },
+    {
+      "key": "c0:13",
+      "kind": "c0",
+      "code": 13,
+      "handler": "execute"
+    },
+    {
+      "key": "c1:132",
+      "kind": "c1",
+      "code": 132,
+      "handler": "execute"
+    },
+    {
+      "key": "c1:133",
+      "kind": "c1",
+      "code": 133,
+      "handler": "execute"
+    },
+    {
+      "key": "c1:136",
+      "kind": "c1",
+      "code": 136,
+      "handler": "execute"
+    },
+    {
+      "key": "c1:141",
+      "kind": "c1",
+      "code": 141,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:0:0:55",
+      "kind": "esc",
+      "intermediates": [],
+      "finalByte": 55,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:0:0:56",
+      "kind": "esc",
+      "intermediates": [],
+      "finalByte": 56,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:0:0:61",
+      "kind": "esc",
+      "intermediates": [],
+      "finalByte": 61,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:0:0:62",
+      "kind": "esc",
+      "intermediates": [],
+      "finalByte": 62,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:0:0:68",
+      "kind": "esc",
+      "intermediates": [],
+      "finalByte": 68,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:0:0:69",
+      "kind": "esc",
+      "intermediates": [],
+      "finalByte": 69,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:0:0:72",
+      "kind": "esc",
+      "intermediates": [],
+      "finalByte": 72,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:0:0:77",
+      "kind": "esc",
+      "intermediates": [],
+      "finalByte": 77,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:0:0:99",
+      "kind": "esc",
+      "intermediates": [],
+      "finalByte": 99,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:64",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 64,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:65",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 65,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:66",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 66,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:67",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 67,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:68",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 68,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:69",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 69,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:70",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 70,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:71",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 71,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:72",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 72,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:73",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 73,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:74",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 74,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:75",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 75,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:76",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 76,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:77",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 77,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:80",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 80,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:83",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 83,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:84",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 84,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:88",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 88,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:90",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 90,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:96",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 96,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:99",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 99,
+      "handler": "reply"
+    },
+    {
+      "key": "csi:-1:0:0:100",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 100,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:102",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 102,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:103",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 103,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:104",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 104,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:108",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 108,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:109",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 109,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:110",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 110,
+      "handler": "reply"
+    },
+    {
+      "key": "csi:-1:0:0:114",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 114,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:115",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 115,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:0:0:117",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 117,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:1:32:113",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [
+        32
+      ],
+      "finalByte": 113,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:-1:1:36:112",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [
+        36
+      ],
+      "finalByte": 112,
+      "handler": "reply"
+    },
+    {
+      "key": "csi:62:0:0:99",
+      "kind": "csi",
+      "privateMarker": 62,
+      "intermediates": [],
+      "finalByte": 99,
+      "handler": "reply"
+    },
+    {
+      "key": "csi:63:0:0:104",
+      "kind": "csi",
+      "privateMarker": 63,
+      "intermediates": [],
+      "finalByte": 104,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:63:0:0:108",
+      "kind": "csi",
+      "privateMarker": 63,
+      "intermediates": [],
+      "finalByte": 108,
+      "handler": "execute"
+    },
+    {
+      "key": "csi:63:0:0:110",
+      "kind": "csi",
+      "privateMarker": 63,
+      "intermediates": [],
+      "finalByte": 110,
+      "handler": "reply"
+    },
+    {
+      "key": "csi:63:1:36:112",
+      "kind": "csi",
+      "privateMarker": 63,
+      "intermediates": [
+        36
+      ],
+      "finalByte": 112,
+      "handler": "reply"
+    },
+    {
+      "key": "osc:4",
+      "kind": "osc",
+      "command": 4,
+      "handler": "execute-or-reply"
+    },
+    {
+      "key": "osc:8",
+      "kind": "osc",
+      "command": 8,
+      "handler": "execute"
+    },
+    {
+      "key": "osc:10",
+      "kind": "osc",
+      "command": 10,
+      "handler": "execute-or-reply"
+    },
+    {
+      "key": "osc:11",
+      "kind": "osc",
+      "command": 11,
+      "handler": "execute-or-reply"
+    },
+    {
+      "key": "osc:104",
+      "kind": "osc",
+      "command": 104,
+      "handler": "execute"
+    },
+    {
+      "key": "osc:110",
+      "kind": "osc",
+      "command": 110,
+      "handler": "execute"
+    },
+    {
+      "key": "osc:111",
+      "kind": "osc",
+      "command": 111,
+      "handler": "execute"
+    }
+  ],
+  "modes": [
+    {
+      "key": "mode:0:4",
+      "private": false,
+      "number": 4,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:1",
+      "private": true,
+      "number": 1,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:5",
+      "private": true,
+      "number": 5,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:6",
+      "private": true,
+      "number": 6,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:7",
+      "private": true,
+      "number": 7,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:9",
+      "private": true,
+      "number": 9,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:12",
+      "private": true,
+      "number": 12,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:25",
+      "private": true,
+      "number": 25,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:47",
+      "private": true,
+      "number": 47,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:69",
+      "private": true,
+      "number": 69,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:1000",
+      "private": true,
+      "number": 1000,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:1002",
+      "private": true,
+      "number": 1002,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:1003",
+      "private": true,
+      "number": 1003,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:1005",
+      "private": true,
+      "number": 1005,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:1006",
+      "private": true,
+      "number": 1006,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:1015",
+      "private": true,
+      "number": 1015,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:1047",
+      "private": true,
+      "number": 1047,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:1048",
+      "private": true,
+      "number": 1048,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:1049",
+      "private": true,
+      "number": 1049,
+      "handler": "execute"
+    },
+    {
+      "key": "mode:1:2004",
+      "private": true,
+      "number": 2004,
+      "handler": "execute"
+    }
+  ],
+  "boundedUnsupportedFamilies": [
+    "dcs",
+    "sos",
+    "pm",
+    "apc"
+  ]
+}

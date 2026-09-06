@@ -4,7 +4,7 @@
 
 - Date started: 2026-09-06
 - Scope: first Phase 6 compatibility-hardening roadmap item
-- Status: subtask 1 complete; subtasks 2–3 pending
+- Status: subtasks 1–2 complete; subtask 3 pending
 
 ## Purpose and background
 
@@ -174,3 +174,36 @@ complete.
   the complete Dart Terminal test runner. The checker summary was
   `version=1 revision=1 sources=3 records=10 implemented=5 partial=1
   safe_ignore=4 unsupported=0`.
+- 2026-09-06: after commit `88c27f7`, reread the global duration-only policy
+  and Phase 6 ordering. Subtask 2 is now active. Its bounded goal is to expose
+  the implemented semantic dispatch surface as product-code declarations,
+  generate a checked-in machine manifest from those declarations, and make
+  the normal test gate reject stale output. Standards-wide gap classification
+  remains subtask 3 and will not be mixed into this commit.
+- 2026-09-07: syntax recognition alone was rejected as the implementation
+  source because the VT table intentionally accepts generic ESC/CSI/DCS/string
+  syntax while semantic support lives in the screen sink. Added a sorted,
+  immutable `TerminalCompatibilitySurface` product-code declaration instead.
+  The sink now gates controls, ESC/CSI selectors, OSC commands, and ANSI/DEC
+  modes through that declaration before its semantic switches. A case cannot
+  become reachable merely by changing a switch; its selector must enter the
+  declared surface and therefore change the generated manifest.
+- 2026-09-07: the implementation manifest contains 65 supported selector
+  shapes (11 controls, 9 ESC, 38 CSI, and 7 OSC), 20 set/reset modes (1 ANSI
+  and 19 DEC private), and the bounded-unsupported DCS/SOS/PM/APC families.
+  Selector keys encode private markers and intermediate bytes, so query forms
+  such as DA/DSR/DECRQM cannot collide with ordinary CSI final bytes. Sorted
+  list lookup is allocation-free and bounded by at most 38 entries.
+- 2026-09-07: generation is deterministic, and both the command-line checker
+  and the normal `make test` gate compare the checked-in JSON byte-for-byte.
+  Regression coverage also proves that missing or changed output is stale,
+  feeds every declared selector and every mode set/reset through the actual
+  parser/screen sink, verifies all four unsupported string families are
+  consumed exactly once within parser bounds, and checks undeclared examples
+  remain explicitly unsupported.
+- 2026-09-07: subtask 2 verification passed: focused static analysis, direct
+  generation freshness, the 65-selector/20-mode reconciliation executable,
+  `PRODUCT_PARSER_CORPUS_PASS` for 8 cases and 1,437 split runs, and final
+  `CI=true make test`. The full gate passed parser-table freshness, schema
+  validation, implementation-manifest freshness, formatting of 146 files,
+  full static analysis, and the complete test runner.

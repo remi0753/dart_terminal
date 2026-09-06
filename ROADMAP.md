@@ -846,7 +846,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] ECMA-48、DEC、xterm の sequence/mode inventory
   （[`docs/phase6/sequence-mode-inventory.md`](docs/phase6/sequence-mode-inventory.md) を参照して実施）
   - [x] versioned inventory schema、normative source pin、識別子taxonomy
-  - [ ] 実装由来sequence/mode manifestとfreshness checker
+  - [x] 実装由来sequence/mode manifestとfreshness checker
   - [ ] support/gap分類、相互参照、review acceptance
 - [ ] xterm/Ghostty/Kitty との black-box differential harness
 - [ ] `vttest` を参考に採用/非採用項目を明文化

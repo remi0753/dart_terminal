@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'terminal_compatibility_surface.dart';
 import 'terminal_mouse_modes.dart';
 import 'terminal_reply.dart';
 import 'terminal_screen.dart';
@@ -85,6 +86,10 @@ final class TerminalScreenParserSink
   @override
   void execute(int controlByte) {
     screen.breakGraphemeSequence();
+    if (!TerminalCompatibilitySurface.supportsControl(controlByte)) {
+      _unsupportedControlCount++;
+      return;
+    }
     switch (controlByte) {
       case 0x07:
         screen.ringVisualBell();
@@ -114,7 +119,13 @@ final class TerminalScreenParserSink
   @override
   void dispatchEscape(VtEscapeSequence sequence) {
     screen.breakGraphemeSequence();
-    if (sequence.intermediateCount != 0) {
+    if (!TerminalCompatibilitySurface.supportsEscape(
+      finalByte: sequence.finalByte,
+      intermediateCount: sequence.intermediateCount,
+      firstIntermediate: sequence.intermediateCount == 0
+          ? 0
+          : sequence.intermediateAt(0),
+    )) {
       _unsupportedSequenceCount++;
       return;
     }
@@ -161,6 +172,17 @@ final class TerminalScreenParserSink
   @override
   void dispatchCsi(VtSequenceHeader sequence) {
     screen.breakGraphemeSequence();
+    if (!TerminalCompatibilitySurface.supportsCsi(
+      privateMarker: sequence.privateMarker,
+      finalByte: sequence.finalByte,
+      intermediateCount: sequence.intermediateCount,
+      firstIntermediate: sequence.intermediateCount == 0
+          ? 0
+          : sequence.intermediateAt(0),
+    )) {
+      _unsupportedSequenceCount++;
+      return;
+    }
     if (sequence.privateMarker == null &&
         sequence.intermediateCount == 0 &&
         sequence.finalByte == 0x6d) {
@@ -267,6 +289,10 @@ final class TerminalScreenParserSink
     final int command = _parsePayloadDecimal(sequence, 0, commandEnd, 999);
     final bool hasPayload = commandEnd < sequence.payloadLength;
     final int payloadStart = hasPayload ? commandEnd + 1 : commandEnd;
+    if (!TerminalCompatibilitySurface.supportsOsc(command)) {
+      _unsupportedSequenceCount++;
+      return;
+    }
     bool supported = false;
     switch (command) {
       case 4:
@@ -302,12 +328,18 @@ final class TerminalScreenParserSink
   @override
   void dispatchDcs(VtDcsSequence sequence) {
     screen.breakGraphemeSequence();
+    assert(TerminalCompatibilitySurface.dcsIsBoundedUnsupported);
     _unsupportedSequenceCount++;
   }
 
   @override
   void dispatchString(VtStringSequence sequence) {
     screen.breakGraphemeSequence();
+    assert(
+      TerminalCompatibilitySurface.boundedUnsupportedStringKinds.contains(
+        sequence.kind,
+      ),
+    );
     _unsupportedSequenceCount++;
   }
 
@@ -495,7 +527,8 @@ final class TerminalScreenParserSink
     }
     for (int index = 0; index < sequence.parameters.length; index++) {
       final int? mode = sequence.parameters.valueAt(index);
-      if (mode == 4) {
+      if (mode != null &&
+          TerminalCompatibilitySurface.supportsMode(mode, decPrivate: false)) {
         screen.setMode(TerminalScreenMode.insert, enabled);
       } else {
         _unsupportedSequenceCount++;
@@ -1149,7 +1182,13 @@ final class TerminalScreenParserSink
       return;
     }
     for (int index = 0; index < sequence.parameters.length; index++) {
-      switch (sequence.parameters.valueAt(index)) {
+      final int? mode = sequence.parameters.valueAt(index);
+      if (mode == null ||
+          !TerminalCompatibilitySurface.supportsMode(mode, decPrivate: true)) {
+        _unsupportedSequenceCount++;
+        continue;
+      }
+      switch (mode) {
         case 1:
           final TerminalScreenSet? screens = screenSet;
           if (screens == null) {
