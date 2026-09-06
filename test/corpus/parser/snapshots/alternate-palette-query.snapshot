@@ -1,8 +1,8 @@
-dart-terminal-state-snapshot version=2 kind=screen-set
+dart-terminal-state-snapshot version=3 kind=screen-set
 set active=alternate mode1049=true viewport_offset=0 primary_viewport_offset=0
 metadata window_title=null icon_title=null cwd=null window_title_stack=[] icon_title_stack=[]
 resources styles=0 graphemes=0 palette=256
-palette defaults foreground=#abcdef background=#000000
+palette defaults foreground=#abcdef background=#000000 cursor=#e5e5e5
 palette range=000-015 colors=#000000,#112233,#00cd00,#cdcd00,#0000ee,#cd00cd,#00cdcd,#e5e5e5,#7f7f7f,#ff0000,#00ff00,#ffff00,#5c5cff,#ff00ff,#00ffff,#ffffff
 palette range=016-031 colors=#000000,#00005f,#000087,#0000af,#0000d7,#0000ff,#005f00,#005f5f,#005f87,#005faf,#005fd7,#005fff,#008700,#00875f,#008787,#0087af
 palette range=032-047 colors=#0087d7,#0087ff,#00af00,#00af5f,#00af87,#00afaf,#00afd7,#00afff,#00d700,#00d75f,#00d787,#00d7af,#00d7d7,#00d7ff,#00ff00,#00ff5f

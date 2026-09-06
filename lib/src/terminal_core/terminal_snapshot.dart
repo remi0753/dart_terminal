@@ -53,7 +53,7 @@ final class TerminalSnapshotLimitException implements Exception {
 
 /// Produces a deterministic, line-oriented terminal-state test oracle.
 ///
-/// Format version 1 describes final semantic state. Mutation-path details such
+/// The format describes final semantic state. Mutation-path details such
 /// as damage ranges and generation counters are deliberately omitted so equal
 /// final states remain equal across parser chunk plans. The formatter only
 /// observes terminal objects and never acknowledges damage or moves a viewport.
@@ -63,7 +63,7 @@ final class TerminalSnapshotFormatter {
   });
 
   static const String formatName = 'dart-terminal-state-snapshot';
-  static const int formatVersion = 2;
+  static const int formatVersion = 3;
 
   final TerminalSnapshotFormatLimits limits;
 
@@ -302,7 +302,8 @@ final class TerminalSnapshotFormatter {
     }
     writer.line(
       'palette defaults foreground=${_directColor(palette.defaultForeground)} '
-      'background=${_directColor(palette.defaultBackground)}',
+      'background=${_directColor(palette.defaultBackground)} '
+      'cursor=${_directColor(palette.cursorColor)}',
     );
     for (int start = 0; start < TerminalPalette.colorCount; start += 16) {
       final List<String> colors = <String>[];

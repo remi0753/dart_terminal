@@ -8,6 +8,7 @@ void main() => runTerminalScreenMetalCompositorTests();
 
 void runTerminalScreenMetalCompositorTests() {
   _testAnsiStylesBecomeMetalLayers();
+  _testCursorColorUsesIndependentMetalLayer();
   _testInverseBackgroundAndConcealMapping();
   _testWrappedOverflowKeepsNewestPromptVisible();
   _testWideGraphemeUsesCanonicalGrid();
@@ -16,6 +17,37 @@ void runTerminalScreenMetalCompositorTests() {
   _testSelectionProjectionUsesOverlayLayer();
   _testHyperlinkHoverUsesDecorationLayer();
   _testPreeditRespectsRendererInstanceLimit();
+}
+
+void _testCursorColorUsesIndependentMetalLayer() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 2);
+  _parse(screens, ascii.encode('X\x1b]12;#123456\x07'));
+  final _CompositionFixture fixture = _compose(screens);
+  try {
+    final TerminalMetalInstance cursor = fixture.composition.instances
+        .singleWhere(
+          (TerminalMetalInstance instance) =>
+              instance.kind == TerminalMetalInstanceKind.cursor,
+        );
+    final TerminalMetalInstance glyph = fixture.composition.instances
+        .singleWhere((TerminalMetalInstance instance) => instance.kind.isGlyph);
+    _expect(
+      cursor.colorRgba == 0x123456c0 &&
+          glyph.colorRgba == 0xe5e5e5ff &&
+          screens.palette.defaultForeground ==
+              TerminalPalette.xtermDefaultForeground,
+      'OSC 12 colors only the Metal cursor layer, not text foreground',
+    );
+    final Uint8List rgba = fixture.renderer.renderRgba(
+      fixture.composition.scheduledFrame.frame,
+    );
+    _expect(
+      rgba.any((int byte) => byte != 0),
+      'custom cursor color produces a native Metal frame',
+    );
+  } finally {
+    fixture.dispose();
+  }
 }
 
 void _testCjkGlyphOriginsFollowCanonicalGrid() {

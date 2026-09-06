@@ -103,7 +103,7 @@ void _testRawEvidenceValidation() {
   unsupportedVersionSample['snapshot'] =
       (unsupportedVersionSample['snapshot']! as String).replaceFirst(
         'version=1 ',
-        'version=3 ',
+        'version=4 ',
       );
   unsupportedVersionSample['snapshot_sha256'] = terminalDifferentialSha256(
     utf8.encode(unsupportedVersionSample['snapshot']! as String),

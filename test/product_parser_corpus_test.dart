@@ -24,13 +24,13 @@ void _testReviewedProductCorpus() {
   _expect(result.inputBytes == 1421, 'reviewed corpus input byte count');
   _expect(result.splitRuns == 1437, 'reviewed corpus exhaustive split count');
   _expect(
-    result.snapshotHash == 1430189535,
+    result.snapshotHash == 1997758255,
     'reviewed corpus aggregate snapshot hash',
   );
   _expect(
     result.machineLine() ==
         'PRODUCT_PARSER_CORPUS_PASS cases=8 input_bytes=1421 '
-            'split_runs=1437 snapshot_hash=1430189535',
+            'split_runs=1437 snapshot_hash=1997758255',
     'corpus result has stable machine-readable output',
   );
 }

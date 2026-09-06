@@ -29,7 +29,8 @@ String generateTerminalImplementationManifestSource() {
         'key': 'osc:$command',
         'kind': 'osc',
         'command': command,
-        'handler': command == 4 || command == 10 || command == 11
+        'handler':
+            command == 4 || command == 10 || command == 11 || command == 12
             ? 'execute-or-reply'
             : 'execute',
       },

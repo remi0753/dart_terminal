@@ -230,6 +230,7 @@ final class TerminalScreen {
   int get graphemeGeneration => graphemeTable.generation;
   int get defaultForegroundColor => palette.defaultForeground;
   int get defaultBackgroundColor => palette.defaultBackground;
+  int get cursorColor => palette.cursorColor;
   int get generation => _generation;
   bool get fullSnapshotRequired => _fullSnapshotRequired;
   int get fullSnapshotRequestEpoch => _fullSnapshotRequestEpoch;
@@ -764,6 +765,14 @@ final class TerminalScreen {
 
   void resetDefaultBackgroundColor() {
     palette._resetDefaultBackground();
+  }
+
+  void setCursorColor(int color) {
+    palette._setCursorColor(color);
+  }
+
+  void resetCursorColor() {
+    palette._resetCursorColor();
   }
 
   void homeCursor() {
@@ -2454,6 +2463,11 @@ final class TerminalScreen {
 
   void _palettePresentationChanged() {
     _markEveryRowDirty();
+    _incrementGeneration();
+  }
+
+  void _cursorColorPresentationChanged() {
+    _presentationDamageRequired = true;
     _incrementGeneration();
   }
 

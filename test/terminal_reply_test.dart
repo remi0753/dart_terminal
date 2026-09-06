@@ -69,6 +69,15 @@ void _testBoundedSemanticEncoder() {
     '\x1b]10;rgb:0101/0202/0303\x07',
     'default color reply preserves BEL',
   );
+  _expectBytes(
+    TerminalReplyEncoder.defaultColor(
+      command: 12,
+      color: 0x80123456,
+      terminator: VtStringTerminator.stringTerminator,
+    ),
+    '\x1b]12;rgb:1212/3434/5656\x1b\\',
+    'cursor color reply preserves ST',
+  );
   _expect(
     maximumCursor.length <= TerminalReplyEncoder.maximumReplyBytes,
     'every semantic reply remains under the fixed byte limit',
@@ -114,12 +123,12 @@ void _testBoundedSemanticEncoder() {
   );
   _expectThrows(
     () => TerminalReplyEncoder.defaultColor(
-      command: 12,
+      command: 13,
       color: 0x80000000,
       terminator: VtStringTerminator.bell,
     ),
     ArgumentError,
-    'unsupported default color command',
+    'unsupported dynamic color command',
   );
 }
 

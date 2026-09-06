@@ -35,7 +35,7 @@ void _testGeneratedManifestIsDeterministicAndFresh() {
   _expect(
     root['format'] == 'dart-terminal-implementation-surface' &&
         root['version'] == 1 &&
-        selectors.length == 77 &&
+        selectors.length == 79 &&
         modes.length == 20 &&
         _listsEqual(ignored, const <String>['dcs', 'sos', 'pm', 'apc']),
     'manifest has the reviewed selector, mode, and policy totals',
@@ -216,9 +216,11 @@ List<int> _oscProbe(int command) {
     8 => '8;;https://example.invalid/',
     10 => '10;#102030',
     11 => '11;#405060',
+    12 => '12;#708090',
     104 => '104',
     110 => '110',
     111 => '111',
+    112 => '112',
     _ => throw StateError('missing OSC probe for $command'),
   };
   return ascii.encode('\x1b]$payload\x07');

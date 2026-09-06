@@ -98,8 +98,12 @@ abstract final class TerminalReplyEncoder {
     required int color,
     required VtStringTerminator terminator,
   }) {
-    if (command != 10 && command != 11) {
-      throw ArgumentError.value(command, 'command', 'must be OSC 10 or OSC 11');
+    if (command != 10 && command != 11 && command != 12) {
+      throw ArgumentError.value(
+        command,
+        'command',
+        'must be OSC 10, OSC 11, or OSC 12',
+      );
     }
     final _TerminalReplyBuilder builder = _TerminalReplyBuilder()
       ..osc()

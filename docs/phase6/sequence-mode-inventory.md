@@ -272,3 +272,8 @@ complete.
   product declarations now comprise 77 selectors and 20 modes. Added selectors
   are OSC 0/1/2/7 and partial XTWINOPS title stack; original source pins and
   baseline scope remain unchanged.
+- 2026-09-07: the next OSC cursor-color child moved OSC 112 to implemented and
+  OSC 12 to partial, producing 82 implemented, 17 partial, 10 safe-ignore, and
+  151 unsupported records. The implementation surface now contains 79
+  selectors plus the unchanged 20 modes. OSC 12 is partial because bounded RGB
+  mutation/query is implemented without arbitrary named/chained xterm colors.

@@ -52,14 +52,22 @@ void _testStandaloneSnapshotIsExactAndReadable() {
     visible: false,
     blinking: false,
   );
+  screen.setCursorColor(0x80abcdef);
   screen.clearAllTabStops();
   screen.setTabStop(3);
 
   const TerminalSnapshotFormatter formatter = TerminalSnapshotFormatter();
   final String snapshot = formatter.formatScreen(screen);
   _expect(
-    snapshot.startsWith('dart-terminal-state-snapshot version=2 kind=screen\n'),
+    snapshot.startsWith('dart-terminal-state-snapshot version=3 kind=screen\n'),
     'standalone snapshot has a versioned header',
+  );
+  _expect(
+    snapshot.contains(
+      'palette defaults foreground=#e5e5e5 background=#000000 '
+      'cursor=#abcdef\n',
+    ),
+    'snapshot retains independent cursor color state',
   );
   _expect(
     snapshot.contains(

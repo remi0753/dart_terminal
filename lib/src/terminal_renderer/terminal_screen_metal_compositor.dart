@@ -702,7 +702,7 @@ final class TerminalScreenMetalCompositor {
       y: rectangle.$2,
       width: rectangle.$3,
       height: rectangle.$4,
-      colorRgba: _rgba(palette.resolveToken(0, foreground: true), alpha: 0xc0),
+      colorRgba: _rgba(palette.cursorColor, alpha: 0xc0),
       viewportWidth: viewportWidth,
       viewportHeight: viewportHeight,
     );

@@ -982,6 +982,15 @@ Future<void> _runTerminalDisplay(
     windowTitleAcceptance.hasMatch(observation.stdoutText),
     'terminal display launch omitted native window-title acceptance',
   );
+  final RegExp cursorColorAcceptance = RegExp(
+    r'^TERMINAL_CURSOR_COLOR_TEST mutation=true text_independent=true '
+    r'presentation=true metal=true reset=true$',
+    multiLine: true,
+  );
+  _expect(
+    cursorColorAcceptance.hasMatch(observation.stdoutText),
+    'terminal display launch omitted independent cursor-color acceptance',
+  );
   final RegExp accessibilityAcceptance = RegExp(
     r'^TERMINAL_ACCESSIBILITY_TEST visible=true selection=true '
     r'cursor=true native=true focus=true notifications=true$',
@@ -997,7 +1006,7 @@ Future<void> _runTerminalDisplay(
     r'metal_default=true newest_frame=true frame_bounded=true '
     r'system_font=true mode_key=true text_input=true input_matrix=true '
     r'mouse=true selection=true close_scroll=true scroll=true hyperlink=true '
-    r'window_title=true accessibility=true font_size=14\.0 '
+    r'window_title=true cursor_color=true accessibility=true font_size=14\.0 '
     r'rows=([4-9]|[1-9][0-9]+) '
     r'columns=([2-9][0-9]|[1-9][0-9]{2,}) '
     r'frame_build_delta=[1-9][0-9]*$',

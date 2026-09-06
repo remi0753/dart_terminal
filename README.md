@@ -85,8 +85,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   wrap-pending、cursor shape/blink/visibilityのtyped stateとatomic reset/clamp
 - bounded style ID table、current/saved rendition、P0 text attributes、ANSI
   16/256色・truecolor・default colorのsemicolon/colon SGR適用
-- typed xterm-256 palette、logical default foreground/background、bounded
-  OSC 4/10/11/104/110/111 color mutationとpalette-aware damage
+- typed xterm-256 palette、logical default foreground/background、独立cursor color、
+  bounded OSC 4/10/11/12/104/110/111/112 color mutation/query/reset、
+  palette-aware row damageとcursor-only presentation damage
 - session-ownedなbounded title/icon/OSC 7 file-URI metadata、OSC 0/1/2、
   10段title stack、strict UTF-8/control/bidi境界、OSC 0/2からAppKit window titleへの
   root-isolate同期とRIS後のproduct title復帰
@@ -107,7 +108,7 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - session-owned screen set/parserへのraw PTY byte feed、従来text projectionとの
   single-subscription共存、generated replyのnative bounded write queue接続
 - historyとprimary/alternate grid、Unicode resource、mode/cursor/character-set/parser countを
-  網羅し、行・cell・resource・出力上限を持つversion 1 terminal-state snapshotと、
+  網羅し、行・cell・resource・出力上限を持つversion 3 terminal-state snapshotと、
   最初の相違位置・escaped contextを返すbounded comparison diagnostics
 - 厳密検証するbyte-exact product parser corpus manifest、shell/less/top/vimの
   review済み記録snapshotをwhole・全single split・bytewiseで再生する非書換えharness、

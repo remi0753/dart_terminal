@@ -448,6 +448,15 @@ const Map<int, _Metadata> _oscMetadata = <int, _Metadata>{
     support: 'partial',
     notes: 'Single bounded background mutation/query is implemented; chained dynamic-color parameters are not.',
   ),
+  12: _Metadata(
+    'xterm',
+    'osc-12',
+    'OSC-12',
+    'ctlseqs.ms, OSC 12—Cursor color',
+    support: 'partial',
+    notes: 'Single bounded cursor-color mutation/query is implemented independently of text foreground; chained dynamic-color parameters are not.',
+    reply: true,
+  ),
   104: _Metadata(
     'xterm',
     'osc-104',
@@ -465,6 +474,12 @@ const Map<int, _Metadata> _oscMetadata = <int, _Metadata>{
     'osc-111',
     'OSC-111',
     'ctlseqs.ms, OSC 111—Reset background color',
+  ),
+  112: _Metadata(
+    'xterm',
+    'osc-112',
+    'OSC-112',
+    'ctlseqs.ms, OSC 112—Reset cursor color',
   ),
 };
 
@@ -1803,32 +1818,12 @@ const List<_Gap> _gaps = <_Gap>[
   _Gap(
     family: 'xterm',
     kind: 'osc',
-    name: 'osc-12',
-    mnemonic: 'OSC-12',
-    syntax: 'OSC 12 ; color ST',
-    selector: <String, Object?>{'kind': 'osc', 'command': 12},
-    locator: 'ctlseqs.ms, OSC 12—Cursor color',
-    notes: 'Not implemented; owned by the later OSC policy task.',
-  ),
-  _Gap(
-    family: 'xterm',
-    kind: 'osc',
     name: 'osc-52',
     mnemonic: 'OSC-52',
     syntax: 'OSC 52 ; selection ; data ST',
     selector: <String, Object?>{'kind': 'osc', 'command': 52},
     locator: 'ctlseqs.ms, OSC 52—Manipulate Selection Data',
     notes: 'Not implemented; security-sensitive clipboard access requires the later explicit OSC policy task.',
-  ),
-  _Gap(
-    family: 'xterm',
-    kind: 'osc',
-    name: 'osc-112',
-    mnemonic: 'OSC-112',
-    syntax: 'OSC 112 ST',
-    selector: <String, Object?>{'kind': 'osc', 'command': 112},
-    locator: 'ctlseqs.ms, OSC 112—Reset cursor color',
-    notes: 'Not implemented; owned by the later OSC policy task.',
   ),
 ];
 

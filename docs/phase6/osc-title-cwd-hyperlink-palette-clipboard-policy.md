@@ -206,6 +206,38 @@ compatibility classification until every policy branch is fixed.
   after RIS maps back to the fixed product title `Dart Terminal`; an accepted
   empty string remains an explicit child-provided title rather than being
   silently rewritten.
+- 2026-09-07: commit `8a7ba8f` completed native title synchronization.
+  ROADMAP, README, FEATURE_MATRIX, and the clean worktree were reread
+  immediately afterward; OSC 12/112 cursor color is the next ordered child.
+  The existing palette is already session-shared by the primary and alternate
+  grids and is observed directly by the Metal compositor, while each attached
+  screen can publish metadata-only presentation damage. This permits an
+  independent initial/current cursor color without treating it as token-zero
+  text foreground or transferring duplicate color state in cell damage.
+- 2026-09-07: cursor-color mutation will advance the bounded palette
+  generation but use presentation-only screen invalidation rather than dirtying
+  every text row. OSC 12 accepts the same strict xterm color grammar as OSC
+  10/11 plus the single `?` query; OSC 112 accepts only an empty payload and
+  restores the constructor-provided initial cursor color. Query replies retain
+  the request's BEL or ST terminator. RIS follows the existing dynamic-palette
+  policy and does not silently reset the color.
+- 2026-09-07: the first manifest/inventory regeneration intentionally stopped
+  after writing the implementation manifest because the inventory generator's
+  exact-key gate found OSC 12/112 missing from its reviewed implemented
+  metadata. The stale inventory and summary were not written. Their pinned
+  xterm locators and partial/full support policy were then moved from the old
+  unsupported-gap declarations into the implemented metadata before retrying
+  generation in dependency order.
+- 2026-09-07: cursor color is semantic terminal state, so the readable
+  snapshot format advances from version 2 to version 3 and adds it to the
+  palette-defaults record. The eight reviewed product oracles were updated
+  only for the version and default cursor field; their 1,421 input bytes remain
+  unchanged. The aggregate corpus hash is now `1997758255`. The same schema
+  addition and newly recognized OSC selectors move the fixed fuzz state hash
+  to `1051389745` across the unchanged 837 executions and 66,675 bytes.
+  Immutable version-1 application captures remain unchanged and the loader now
+  accepts historical versions 1/2 plus current version 3 while retaining exact
+  per-sample hashes.
 
 ## Decisions and verification record
 
@@ -267,3 +299,43 @@ compatibility classification until every policy branch is fixed.
   accepted cells with 92 unsupported increments across 20 variants. This
   native-only consumer did not alter parser classifications or reviewed
   snapshots.
+- OSC 12/112 now own one configured initial/current direct-sRGB cursor color in
+  `TerminalPalette`. Cursor mutation increments the palette generation and
+  marks presentation damage on both attached grids without dirtying cell rows;
+  identical changes remain no-ops. Primary/alternate switching shares the
+  value, and RIS deliberately preserves it until OSC 112 restores the initial
+  color.
+- Focused palette tests passed default/configured/invalid colors, mutation,
+  BEL/ST query bytes, alternate-screen persistence, reset, malformed atomic
+  rejection, whole/split/bytewise parsing, and presentation-only damage.
+  Reply, compatibility-surface, version-3 snapshot, and native Metal
+  compositor tests passed; the compositor observed `0x123456c0` on the cursor
+  instance while the text glyph remained `0xe5e5e5ff`.
+- Manifest/inventory generation then passed with 99 product declarations and
+  260 inventory records: 82 implemented, 17 partial, 10 safe-ignore, and 151
+  unsupported. OSC 112 is implemented; OSC 12 remains partial only because the
+  product deliberately accepts bounded RGB syntax rather than arbitrary xterm
+  color names/chained parameters. Immutable application evidence and the
+  reviewed acceptance replay remained 8 accepted cells, 92 unsupported
+  increments, 20 variants, and 13 owned gaps; only its implementation-manifest
+  hash pin changed.
+- `make runtime-terminal-display-integration` passed the live
+  presentation-only cursor mutation and reset in Developer JIT (2,634 ms) and
+  Release AOT (2,007 ms). Both arm64 products retained the default text
+  foreground, accepted a newer Metal frame for OSC 12, accepted another frame
+  for OSC 112, and completed clean ownership teardown.
+- The first full gate stopped at the differential baseline freshness check
+  because that reviewed baseline pins the implementation-surface SHA. The
+  official generator replayed all four cases over 210 split runs; observations
+  remained unchanged apart from their provenance, and regenerated acceptance
+  retained 12 accepted attempts (6 agreements, 2 documented gaps, 4 unavailable).
+- The second full gate reached the Dart tests and found that the raw-application
+  negative fixture still used snapshot version 3 as its deliberately
+  unsupported value. Since version 3 is now current, the fixture was advanced
+  to version 4; this changes no accepted historical evidence or parser rule.
+- Final `CI=true make test` passed every parser-table, inventory, manifest,
+  differential, application-matrix, and terminfo freshness gate; formatting
+  checked 176 Dart files with zero changes, analysis reported no issues, and
+  the complete Dart test runner passed. `git diff --check` also passed. No
+  `dart_appkit` source, native clipboard authority, or cell foreground token is
+  changed by this child.

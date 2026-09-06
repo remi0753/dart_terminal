@@ -162,8 +162,9 @@ String generateTerminalCompatibilitySummary(
       '1016, and remaining report behavior.',
     )
     ..writeln(
-      '- The OSC policy task owns title commands 0/1/2, cwd command 7, cursor '
-      'color 12/112, and security-sensitive clipboard command 52.',
+      '- The OSC policy task has implemented title commands 0/1/2, cwd '
+      'command 7, and cursor color 12/112; its remaining gap is the '
+      'security-sensitive clipboard command 52.',
     )
     ..writeln(
       '- The terminfo task owns remaining XTSETTCAP decisions; the existing '

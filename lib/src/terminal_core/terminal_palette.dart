@@ -6,35 +6,47 @@ final class TerminalPalette {
     List<int>? colors,
     int defaultForeground = xtermDefaultForeground,
     int defaultBackground = xtermDefaultBackground,
+    int cursorColor = xtermDefaultCursorColor,
   }) {
     final Uint32List initial = colors == null
         ? _createXtermColors()
         : _validatedColorCopy(colors);
     _validateDirectColor(defaultForeground, 'defaultForeground');
     _validateDirectColor(defaultBackground, 'defaultBackground');
-    return TerminalPalette._(initial, defaultForeground, defaultBackground);
+    _validateDirectColor(cursorColor, 'cursorColor');
+    return TerminalPalette._(
+      initial,
+      defaultForeground,
+      defaultBackground,
+      cursorColor,
+    );
   }
 
   TerminalPalette._(
     Uint32List initial,
     this._initialDefaultForeground,
     this._initialDefaultBackground,
+    this._initialCursorColor,
   ) : _initialColors = initial,
       _colors = Uint32List.fromList(initial),
       _defaultForeground = _initialDefaultForeground,
-      _defaultBackground = _initialDefaultBackground;
+      _defaultBackground = _initialDefaultBackground,
+      _cursorColor = _initialCursorColor;
 
   static const int colorCount = 256;
   static const int maxBatchEntries = 256;
   static const int xtermDefaultForeground = 0x80e5e5e5;
   static const int xtermDefaultBackground = 0x80000000;
+  static const int xtermDefaultCursorColor = xtermDefaultForeground;
 
   final Uint32List _initialColors;
   final Uint32List _colors;
   final int _initialDefaultForeground;
   final int _initialDefaultBackground;
+  final int _initialCursorColor;
   int _defaultForeground;
   int _defaultBackground;
+  int _cursorColor;
   int _generation = 1;
   final List<WeakReference<TerminalScreen>> _screens =
       <WeakReference<TerminalScreen>>[];
@@ -42,6 +54,7 @@ final class TerminalPalette {
   int get generation => _generation;
   int get defaultForeground => _defaultForeground;
   int get defaultBackground => _defaultBackground;
+  int get cursorColor => _cursorColor;
   int get typedStorageBytes => colorCount * 4 * 2;
 
   int colorAt(int index) {
@@ -159,6 +172,25 @@ final class TerminalPalette {
     return true;
   }
 
+  bool _setCursorColor(int color) {
+    _validateDirectColor(color, 'color');
+    if (_cursorColor == color) {
+      return false;
+    }
+    _cursorColor = color;
+    _didChange(cursorOnly: true);
+    return true;
+  }
+
+  bool _resetCursorColor() {
+    if (_cursorColor == _initialCursorColor) {
+      return false;
+    }
+    _cursorColor = _initialCursorColor;
+    _didChange(cursorOnly: true);
+    return true;
+  }
+
   void _attach(TerminalScreen screen) {
     for (int index = _screens.length - 1; index >= 0; index--) {
       final TerminalScreen? attached = _screens[index].target;
@@ -171,12 +203,14 @@ final class TerminalPalette {
     _screens.add(WeakReference<TerminalScreen>(screen));
   }
 
-  void _didChange() {
+  void _didChange({bool cursorOnly = false}) {
     _generation++;
     for (int index = _screens.length - 1; index >= 0; index--) {
       final TerminalScreen? screen = _screens[index].target;
       if (screen == null) {
         _screens.removeAt(index);
+      } else if (cursorOnly) {
+        screen._cursorColorPresentationChanged();
       } else {
         screen._palettePresentationChanged();
       }

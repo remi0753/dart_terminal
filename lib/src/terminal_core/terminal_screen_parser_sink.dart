@@ -339,11 +339,15 @@ final class TerminalScreenParserSink
       case 10:
         supported =
             hasPayload &&
-            _applyOscDefaultColor(sequence, payloadStart, foreground: true);
+            _applyOscDynamicColor(sequence, payloadStart, command: command);
       case 11:
         supported =
             hasPayload &&
-            _applyOscDefaultColor(sequence, payloadStart, foreground: false);
+            _applyOscDynamicColor(sequence, payloadStart, command: command);
+      case 12:
+        supported =
+            hasPayload &&
+            _applyOscDynamicColor(sequence, payloadStart, command: command);
       case 104:
         supported = _applyOscPaletteReset(sequence, payloadStart, hasPayload);
       case 110:
@@ -355,6 +359,11 @@ final class TerminalScreenParserSink
         supported = _payloadIsEmpty(sequence, payloadStart, hasPayload);
         if (supported) {
           screen.resetDefaultBackgroundColor();
+        }
+      case 112:
+        supported = _payloadIsEmpty(sequence, payloadStart, hasPayload);
+        if (supported) {
+          screen.resetCursorColor();
         }
     }
     if (!supported) {
@@ -886,10 +895,10 @@ final class TerminalScreenParserSink
     return true;
   }
 
-  bool _applyOscDefaultColor(
+  bool _applyOscDynamicColor(
     VtStringSequence sequence,
     int start, {
-    required bool foreground,
+    required int command,
   }) {
     if (start >= sequence.payloadLength ||
         _findPayloadByte(sequence, start, 0x3b) != sequence.payloadLength) {
@@ -899,10 +908,13 @@ final class TerminalScreenParserSink
         sequence.payloadByteAt(start) == 0x3f) {
       _emitReply(
         TerminalReplyEncoder.defaultColor(
-          command: foreground ? 10 : 11,
-          color: foreground
-              ? screen.defaultForegroundColor
-              : screen.defaultBackgroundColor,
+          command: command,
+          color: switch (command) {
+            10 => screen.defaultForegroundColor,
+            11 => screen.defaultBackgroundColor,
+            12 => screen.cursorColor,
+            _ => throw StateError('unsupported dynamic color command'),
+          },
           terminator: sequence.terminator,
         ),
       );
@@ -912,10 +924,15 @@ final class TerminalScreenParserSink
     if (color < 0) {
       return false;
     }
-    if (foreground) {
-      screen.setDefaultForegroundColor(color);
-    } else {
-      screen.setDefaultBackgroundColor(color);
+    switch (command) {
+      case 10:
+        screen.setDefaultForegroundColor(color);
+      case 11:
+        screen.setDefaultBackgroundColor(color);
+      case 12:
+        screen.setCursorColor(color);
+      default:
+        throw StateError('unsupported dynamic color command');
     }
     return true;
   }

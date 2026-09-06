@@ -876,7 +876,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のtitle-stack gapを参照して実施）
   - [x] bounded title/cwd metadata、OSC 0/1/2/7、title stack、snapshot contract
   - [x] native window title同期と両runtime製品受け入れ
-  - [ ] OSC 12/112 cursor color policyとrenderer反映
+  - [x] OSC 12/112 cursor color policyとrenderer反映
   - [ ] deny-by-default OSC 52 policy、inventory/matrix回帰、親項目完了判定
 - [ ] focus/mouse/bracketed paste/query reports
   （[`docs/phase6/decrqss-sgr-gap.md`](docs/phase6/decrqss-sgr-gap.md) のgapを参照して実施）

@@ -1735,6 +1735,11 @@ final class TerminalApplication {
       pane,
       window,
     );
+    final bool cursorColor = await _exerciseCursorColorPresentation(
+      session,
+      pane,
+      surface,
+    );
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
     final bool systemFont =
@@ -1817,6 +1822,7 @@ final class TerminalApplication {
           scroll &&
           hyperlink &&
           windowTitle &&
+          cursorColor &&
           accessibility) {
         final int? workerProcessId = lifecycle.workerPid;
         _expectLifecycle(
@@ -1832,6 +1838,7 @@ final class TerminalApplication {
           'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
           'close_scroll=$closeScroll '
           'scroll=$scroll hyperlink=$hyperlink window_title=$windowTitle '
+          'cursor_color=$cursorColor '
           'accessibility=$accessibility '
           'font_size=${baseline.fontPointSize.toStringAsFixed(1)} '
           'rows=${screen.rows} '
@@ -1857,6 +1864,7 @@ final class TerminalApplication {
       'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
       'close_scroll=$closeScroll '
       'scroll=$scroll hyperlink=$hyperlink window_title=$windowTitle '
+      'cursor_color=$cursorColor '
       'accessibility=$accessibility '
       'font_size=${baseline.fontPointSize}',
     );
@@ -1936,6 +1944,73 @@ final class TerminalApplication {
     throw TimeoutException(
       'display-test did not synchronize metadata title '
       '$expectedMetadata to native title $expectedNative',
+    );
+  }
+
+  static Future<bool> _exerciseCursorColorPresentation(
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+  ) async {
+    const int expectedColor = 0x80123456;
+    final TerminalPalette palette = session.terminalScreenSet.palette;
+    final int initialCursorColor = palette.cursorColor;
+    final int initialForeground = palette.defaultForeground;
+    final TerminalLiveMetalSurfaceSnapshot before = surface.snapshot();
+
+    pane.insertText(r"printf '\033]12;#123456\007'");
+    await pane.submit();
+    await _waitForCursorColorFrame(
+      session,
+      surface,
+      expectedColor: expectedColor,
+      minimumAcceptedFrameCount: before.acceptedFrameCount + 1,
+    );
+    _expectLifecycle(
+      palette.defaultForeground == initialForeground,
+      'OSC 12 changed the default text foreground',
+    );
+
+    final TerminalLiveMetalSurfaceSnapshot mutated = surface.snapshot();
+    pane.insertText(r"printf '\033]112\007'");
+    await pane.submit();
+    await _waitForCursorColorFrame(
+      session,
+      surface,
+      expectedColor: initialCursorColor,
+      minimumAcceptedFrameCount: mutated.acceptedFrameCount + 1,
+    );
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+
+    stdout.writeln(
+      'TERMINAL_CURSOR_COLOR_TEST mutation=true text_independent=true '
+      'presentation=true metal=true reset=true',
+    );
+    return true;
+  }
+
+  static Future<void> _waitForCursorColorFrame(
+    TerminalSession session,
+    TerminalLiveMetalSurface surface, {
+    required int expectedColor,
+    required int minimumAcceptedFrameCount,
+  }) async {
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      if (session.terminalScreenSet.palette.cursorColor == expectedColor &&
+          snapshot.acceptedFrameCount >= minimumAcceptedFrameCount) {
+        return;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before presenting the cursor color',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw TimeoutException(
+      'display-test did not present cursor color '
+      '0x${expectedColor.toRadixString(16)}',
     );
   }
 

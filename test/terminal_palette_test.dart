@@ -9,6 +9,7 @@ void runTerminalPaletteTests() {
   _testXtermPaletteDefaultsAndResolution();
   _testPaletteMutationResetDamageAndAtomicity();
   _testDefaultColorMutationAndReset();
+  _testCursorColorMutationQueryResetAndDamage();
   _testOscColorMutationAndRejection();
   _testOscColorChunkIndependence();
 }
@@ -70,6 +71,10 @@ void _testXtermPaletteDefaultsAndResolution() {
     'default background',
   );
   _expect(
+    palette.cursorColor == TerminalPalette.xtermDefaultCursorColor,
+    'default cursor color',
+  );
+  _expect(
     palette.resolveToken(0, foreground: true) == palette.defaultForeground,
     'foreground default token resolves',
   );
@@ -100,12 +105,14 @@ void _testXtermPaletteDefaultsAndResolution() {
     colors: custom,
     defaultForeground: 0x80445566,
     defaultBackground: 0x80778899,
+    cursorColor: 0x80aabbcc,
   );
   custom[0] = 0x80ffffff;
   _expect(
     configured.colorAt(0) == 0x80112233,
     'configured palette copies caller storage',
   );
+  _expect(configured.cursorColor == 0x80aabbcc, 'configured cursor color');
   _expectThrowsArgumentError(
     () => TerminalPalette(colors: <int>[0x80000000]),
     'configured palette requires 256 entries',
@@ -114,6 +121,96 @@ void _testXtermPaletteDefaultsAndResolution() {
   _expectThrowsArgumentError(
     () => TerminalPalette(colors: invalid),
     'configured palette rejects untagged colors',
+  );
+  _expectThrowsArgumentError(
+    () => TerminalPalette(cursorColor: 0x00ffffff),
+    'configured palette rejects untagged cursor color',
+  );
+}
+
+void _testCursorColorMutationQueryResetAndDamage() {
+  final TerminalPalette palette = TerminalPalette(
+    defaultForeground: 0x80111111,
+    cursorColor: 0x80222222,
+  );
+  final TerminalScreenSet screens = TerminalScreenSet(
+    rows: 2,
+    columns: 3,
+    palette: palette,
+  );
+  screens.primary.clearDamage();
+  screens.alternate.clearDamage();
+  final int generation = palette.generation;
+  final List<Uint8List> replies = <Uint8List>[];
+  final TerminalScreenParserSink sink = TerminalScreenParserSink.forScreenSet(
+    screens,
+    onReply: (Uint8List reply) {
+      replies.add(Uint8List.fromList(reply));
+      return true;
+    },
+  );
+  final VtParser parser = VtParser(sink: sink);
+
+  parser.parse(Uint8List.fromList(_osc('12;#123456')));
+  _expect(
+    palette.cursorColor == 0x80123456 &&
+        palette.defaultForeground == 0x80111111 &&
+        palette.generation == generation + 1,
+    'OSC 12 changes only independent cursor color state',
+  );
+  for (final TerminalScreen screen in <TerminalScreen>[
+    screens.primary,
+    screens.alternate,
+  ]) {
+    _expect(
+      screen.presentationDamageRequired &&
+          !screen.isRowDirty(0) &&
+          !screen.isRowDirty(1),
+      'cursor color publishes presentation-only damage to both screens',
+    );
+  }
+
+  parser.parse(Uint8List.fromList(_osc('12;?', bell: false)));
+  _expect(
+    utf8.decode(replies.single) == '\x1b]12;rgb:1212/3434/5656\x1b\\' &&
+        sink.acceptedReplyCount == 1 &&
+        palette.generation == generation + 1,
+    'OSC 12 query is byte-exact and does not mutate color',
+  );
+
+  screens.setAlternateMode47(true);
+  _expect(
+    screens.activeScreen.cursorColor == 0x80123456,
+    'cursor color survives primary/alternate switching',
+  );
+  parser.parse(Uint8List.fromList(_osc('112', bell: false)));
+  _expect(
+    palette.cursorColor == 0x80222222 &&
+        palette.defaultForeground == 0x80111111,
+    'OSC 112 restores configured cursor color only',
+  );
+
+  final int resetGeneration = palette.generation;
+  parser.parse(
+    Uint8List.fromList(<int>[
+      ..._osc('12;#12'),
+      ..._osc('12;#010203;extra'),
+      ..._osc('112;unexpected'),
+    ]),
+  );
+  parser.finish();
+  _expect(
+    sink.unsupportedSequenceCount == 3 &&
+        palette.cursorColor == 0x80222222 &&
+        palette.generation == resetGeneration,
+    'malformed cursor color operations reject atomically',
+  );
+
+  screens.activeScreen.setCursorColor(0x80abcdef);
+  screens.activeScreen.resetScreen();
+  _expect(
+    palette.cursorColor == 0x80abcdef,
+    'RIS does not silently reset dynamic cursor color state',
   );
 }
 
@@ -325,6 +422,8 @@ void _testOscColorChunkIndependence() {
     ..._osc('4;0;#123456;255;rgb:f/8/0'),
     ..._osc('10;rgb:1111/2222/3333', bell: false),
     ..._osc('11;#abc'),
+    ..._osc('12;#123456'),
+    ..._osc('112'),
     ..._osc('104;255'),
   ]);
   final List<int> expected = _oscSnapshot(input);
@@ -358,6 +457,7 @@ List<int> _oscSnapshot(Uint8List input, [List<int>? chunks]) {
     screen.paletteColorAt(255),
     screen.defaultForegroundColor,
     screen.defaultBackgroundColor,
+    screen.cursorColor,
     screen.paletteGeneration,
     screen.generation,
     screen.dirtyStartAt(0),
