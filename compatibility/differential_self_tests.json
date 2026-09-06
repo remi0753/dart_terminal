@@ -1,0 +1,53 @@
+{
+  "format": "dart-terminal-differential-self-tests",
+  "version": 1,
+  "input_hex": "1b5b3f31681b5b3f312470",
+  "expected_replies_hex": "1b5b3f313b312479",
+  "captures": [
+    {
+      "profile_id": "ghostty-tip-492300c-macos-arm64",
+      "status": "passed",
+      "automation_status": "activation-unavailable",
+      "captured_on": "2026-09-07",
+      "host_os": "macos",
+      "host_version": "26.6.2",
+      "architecture": "arm64",
+      "executable_sha256": "7f8474bf1d5d169a7b0645d19c82ea57ee1ab3c1f43d0f587a6c2be7c5e4fefd",
+      "config_sha256": "da0298fb5f13b6cb7b2ae2c21554292f11d802eb648e2f3f26f30a70ae758ca3",
+      "probe_path": "test/corpus/differential/self-test/ghostty-query.json",
+      "probe_sha256": "e19afac078faf37132d59156e919faf1bad64251c12aacd6dee78af325fc28ad",
+      "runner": "macos-open-activation-v1",
+      "notes": "docs/phase6/black-box-differential-harness.md"
+    },
+    {
+      "profile_id": "kitty-0-48-2-macos-arm64",
+      "status": "passed",
+      "automation_status": "passed",
+      "captured_on": "2026-09-07",
+      "host_os": "macos",
+      "host_version": "26.6.2",
+      "architecture": "arm64",
+      "executable_sha256": "4e58d3cbd3fd2749fd20232602c26c2b7672dfe605760804d55bdcd1b42e6b7c",
+      "config_sha256": "210905791961dc4afdcc9ceb686fcc3462bb7a2a8b8cf3d67568317c1638d732",
+      "probe_path": "test/corpus/differential/self-test/kitty-query.json",
+      "probe_sha256": "e19afac078faf37132d59156e919faf1bad64251c12aacd6dee78af325fc28ad",
+      "runner": "macos-direct-v1",
+      "notes": "docs/phase6/black-box-differential-harness.md"
+    },
+    {
+      "profile_id": "xterm-411-linux-aarch64",
+      "status": "passed",
+      "automation_status": "passed",
+      "captured_on": "2026-09-07",
+      "host_os": "linux",
+      "host_version": "debian-13.6",
+      "architecture": "aarch64",
+      "executable_sha256": "ee6478dc8355834516557106f7384b4e4f63373fe6019d09a468d25209673426",
+      "config_sha256": "7e5c90b1850b520baaf2f65ecf850c673111cad8c953a7641921b470bc84d411",
+      "probe_path": "test/corpus/differential/self-test/xterm-query.json",
+      "probe_sha256": "04169e641b696c077296df46650547f1e2161ee43e752827fb1a9200bd67a7ca",
+      "runner": "linux-xvfb-v1",
+      "notes": "docs/phase6/black-box-differential-harness.md"
+    }
+  ]
+}

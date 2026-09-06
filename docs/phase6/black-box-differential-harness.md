@@ -4,7 +4,7 @@
 
 - Date started: 2026-09-07
 - Scope: second Phase 6 compatibility-hardening roadmap item
-- Status: subtask 1 complete; subtasks 2–3 pending
+- Status: subtasks 1–2 complete; subtask 3 pending
 
 ## Purpose and background
 
@@ -172,3 +172,165 @@ a ROADMAP reread. The parent remains incomplete until all three are complete.
   static analysis, all focused subprocess classifications, and the complete
   Dart Terminal test runner. No external comparator was installed or claimed in
   this contract-only subtask.
+- 2026-09-07: subtask 2 started after commit `8507b65` and a ROADMAP reread.
+  The worktree was clean. The host still had no `xterm`, `ghostty`, or `kitty`
+  on `PATH` or in `/Applications`; Homebrew itself was present but none of
+  XQuartz, xterm, Ghostty, or Kitty was installed. Two unrelated stopped Lima
+  guests were deliberately left untouched. Docker Desktop was present, though
+  access to its socket from the restricted build environment still required a
+  separate read-only availability check.
+- 2026-09-07: selected official comparator pins before writing adapter code.
+  Ghostty uses the upstream tip build at source revision
+  `492300cad104195411d12217dd22f1cd05f31376`: the universal zip is 33,716,154
+  bytes with SHA-256 `50ef638569c8381f9288066cffeb4c9c3ce69d4e702cd5760a65bc046013d0cc`,
+  and the DMG is 33,808,577 bytes with SHA-256
+  `629e994b85a6c7e224183ca202f2da62ae742a4671b36ad3904d7ca600da78d5`.
+  Its reported identity is `Ghostty 1.3.2-main-+492300cad`; the DMG executable
+  SHA-256 is `7f8474bf1d5d169a7b0645d19c82ea57ee1ab3c1f43d0f587a6c2be7c5e4fefd`.
+  Kitty uses release 0.48.2: its 49,397,324-byte official DMG has SHA-256
+  `f804f58ee4b69c76f84eb3281e140748269a63f3f4a816015a8dec2a06d2b195`
+  and the contained executable has SHA-256
+  `4e58d3cbd3fd2749fd20232602c26c2b7672dfe605760804d55bdcd1b42e6b7c`.
+  These values were obtained from the official GitHub release APIs and checked
+  again on the downloaded artifacts. Exact source/archive/build pins will be
+  used for xterm because upstream distributes source rather than a macOS app.
+- 2026-09-07: both read-only DMGs were mounted under `/private/tmp`. Initial
+  sandboxed `codesign --verify` calls misleadingly reported inaccessible bundle
+  files and invalid signatures. Repeating the checks outside the filesystem
+  sandbox made the distinction explicit: both mounted application bundles pass
+  `codesign --verify --deep --strict` and satisfy their designated
+  requirements. This failure mode must not be converted into a provenance
+  rejection by the self-test.
+- 2026-09-07: CLI inspection confirmed two different macOS launch boundaries.
+  Kitty accepts a child program directly, isolated configuration via
+  `--config`, a bounded remote-control socket via `--listen-on`, and a hidden
+  startup mode. Ghostty explicitly rejects launching its macOS GUI from its
+  executable; the documented CLI directs callers to `open -na Ghostty.app
+  --args ...`, while the special `-e` argument supplies the child command.
+  Therefore a shared adapter may normalize observations and provenance, but
+  product launch/capture must remain product-specific. A real PTY probe will be
+  used for query/reply self-tests so executable presence alone cannot be
+  reported as black-box capture evidence.
+- 2026-09-07: the first formatter pass on the new adapter stopped at an invalid
+  attempted pattern-expression spelling around `Uri.tryParse`; the URI is now
+  parsed into an explicitly nullable local before validating its HTTPS scheme
+  and host. The same command also exposed the restricted environment's known
+  inability to update Dart's user telemetry timestamp after formatting the
+  independently parseable probe file; subsequent checks use the repository's
+  established build environment rather than interpreting telemetry write
+  failure as a source failure.
+- 2026-09-07: the first genuine Kitty query capture returned the exact expected
+  eight-byte DECRQM response, but the live self-test classified the enclosing
+  process as crashed because Kitty's macOS default intentionally keeps the app
+  process alive after its last window closes; the bounded adapter then killed
+  it during cleanup. Rather than accepting a self-inflicted signal as product
+  success, the isolated checked-in Kitty configuration now enables the official
+  `macos_quit_when_last_window_closed` option. The configuration hash was
+  refreshed so a persistent or user-configured process cannot be mistaken for
+  the pinned comparator.
+- 2026-09-07: Ghostty repeatedly booted as a healthy but childless, windowless
+  process when launched through its documented macOS `open -na ... --args -e`
+  path, so no probe file appeared. This exactly reproduces upstream discussion
+  #13287: command-bearing launches only create the initial surface from
+  `applicationDidBecomeActive` and can lose the LaunchServices activation race.
+  A direct `NSRunningApplication.activate` call made the window materialize and
+  produced the exact eight-byte response. The adapter therefore identifies the
+  just-launched PID by its unique probe-result argument and exact executable,
+  waits for AppKit launch initialization, and invokes that OS API through a
+  minimal checked-in Swift helper. `osascript activate`, `open` reactivation,
+  JXA, and a System Events frontmost request either did not deliver the required
+  event or waited on Accessibility automation, so they were rejected. The
+  isolated config also disables the short-command abnormal-exit hold before
+  requiring clean process shutdown.
+- 2026-09-07: the implemented adapter catalog pins one profile for each product
+  and rejects unknown keys, unsafe paths, non-HTTPS artifacts, missing files,
+  unexpected versions, architectures, executable hashes, configuration hashes,
+  and capture-support-file hashes. The launchers do not invoke a shell. They use
+  private temporary result paths, bounded input/reply/diagnostic sizes and
+  deadlines, drain both child pipes, and terminate only the exact process they
+  launched. The common observation deliberately marks screen/cursor/mode fields
+  as unobserved placeholders for the query-only self-test and asks the
+  comparator to evaluate `replies` only; the later corpus must not present
+  those placeholders as screen evidence.
+- 2026-09-07: official Kitty 0.48.2 passed again through the finished macOS
+  direct launcher. With a 4-row by 10-column PTY it returned
+  `1b5b3f313b312479` for `DECCKM set; DECRQM DECCKM`, and the adapter exited
+  normally after the checked configuration closed the last window. No Kitty
+  process remained. The raw capture is checked in unchanged with SHA-256
+  `e19afac078faf37132d59156e919faf1bad64251c12aacd6dee78af325fc28ad`.
+- 2026-09-07: xterm 411 was built and tested in the dedicated aarch64 Lima guest
+  running Debian 13.6 (`gcc` 14.2.0, glibc 2.41, libX11 1.8.12, libXt 1.2.1,
+  Xvfb 21.1.16). The exact configure command was
+  `/tmp/xterm-411/configure --prefix=/opt/dart-terminal-xterm-411
+  --enable-wide-chars --enable-256-color --disable-setuid --disable-setgid
+  --with-app-defaults=/opt/dart-terminal-xterm-411/share/X11/app-defaults`,
+  followed by `make -j2`. An initial repeat in a different build directory and
+  with a different prefix produced different executable hashes because the
+  default `-g` build embeds paths; it was rejected rather than changing the
+  ledger. Repeating at the original `/tmp/xterm-411` path reproduced executable
+  SHA-256 `ee6478dc8355834516557106f7384b4e4f63373fe6019d09a468d25209673426`.
+  The Xvfb/PTY self-test then passed with the same eight reply bytes, and its
+  regenerated raw file reproduced SHA-256
+  `04169e641b696c077296df46650547f1e2161ee43e752827fb1a9200bd67a7ca`.
+- 2026-09-07: Ghostty produced a genuine 4-by-10 PTY capture with the same exact
+  reply after `NSRunningApplication.activate` delivered its initial-window
+  activation on this host. Its checked raw capture has the same SHA-256 as the
+  Kitty raw capture. Repeat automation is not available in the current login
+  context: `NSWorkspace.frontmostApplication` is `com.apple.loginwindow`, and
+  although `activate` can return true, Ghostty does not become active before the
+  two-second bound. This matches upstream discussion #13287 rather than a
+  terminal crash. The live command now reports that specific activation
+  unavailability and kills the exact launched Ghostty PID. The self-test ledger
+  therefore records `status=passed` for the genuine capture separately from
+  `automation_status=activation-unavailable`; it does not turn the unavailable
+  repeat into agreement. No Ghostty process remained after the check.
+- 2026-09-07: Swift type-check initially warned that
+  `activateIgnoringOtherApps` is deprecated since macOS 14 and has no effect.
+  The helper now requests only `activateAllWindows`, waits for the observable
+  `isActive` transition, and returns a distinct bounded failure when the login
+  context cannot yield activation; the support-file hash was refreshed.
+- 2026-09-07: `compatibility/differential_self_tests.json` binds the version 1
+  input and expected reply to all three profile IDs, host versions and
+  architectures, executable/configuration hashes, immutable raw capture files,
+  runner identities, and this decision record. `--check` validates that ledger
+  plus every configured support file. Focused validation covers stale config,
+  helper and capture hashes, unsafe paths, insecure URLs, malformed versions,
+  incomplete capture state, invalid dates, and the two standard SHA-256 test
+  vectors. The focused Dart test and the normal adapter target pass.
+- 2026-09-07: subtask 2 final verification passed Python bytecode compilation
+  for both POSIX tools, warning-free Swift type-check, the focused Dart schema
+  tests, `make terminal-differential-adapters-check`, genuine Kitty and xterm
+  live self-tests, and `CI=true make test`. The full gate validated generated
+  parser/inventory/implementation data, 28 differential contract split runs,
+  three pinned profiles and captures, formatting of 154 files, clean static
+  analysis, and the complete Dart Terminal test runner. The Ghostty repeat
+  ended in the expected bounded `activation-unavailable` state; its earlier
+  genuine capture remains validated byte/hash exact and is not counted as a
+  successful repeat. Final process inspection found no Ghostty or Kitty child;
+  both read-only DMGs were detached, and the dedicated xterm VM was stopped but
+  retained for the next ordered corpus subtask.
+- 2026-09-07: the staged whitespace check found one surplus blank line in the
+  xterm configuration and POSIX probe. Removing them changed both pinned
+  support hashes, so the xterm result was not assumed transferable: xterm was
+  rebuilt once more at the reproducible path, the updated configuration hash
+  `7e5c90b1850b520baaf2f65ecf850c673111cad8c953a7641921b470bc84d411`
+  was enforced by the runner, and the live self-test passed. The binary and raw
+  result again matched the ledger hashes exactly. The VM was stopped again.
+
+## Primary product references for adapter execution
+
+- Kitty remote control and protocol:
+  <https://sw.kovidgoyal.net/kitty/remote-control/> and
+  <https://sw.kovidgoyal.net/kitty/rc_protocol/>
+- Kitty launch/configuration options:
+  <https://sw.kovidgoyal.net/kitty/launch/> and
+  <https://sw.kovidgoyal.net/kitty/conf/>
+- xterm manual and official patch archive:
+  <https://www.invisible-island.net/xterm/manpage/xterm.html> and
+  <https://invisible-island.net/archives/xterm/xterm-411.tgz>
+- Ghostty binary installation/configuration and AppleScript boundaries:
+  <https://ghostty.org/docs/install/binary>,
+  <https://ghostty.org/docs/config/reference>, and
+  <https://ghostty.org/docs/features/applescript>
+- Ghostty upstream activation-race report used to classify the current-host
+  limitation: <https://github.com/ghostty-org/ghostty/discussions/13287>
