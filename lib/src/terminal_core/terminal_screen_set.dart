@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'terminal_hyperlink.dart';
 import 'terminal_keyboard_modes.dart';
 import 'terminal_mouse_modes.dart';
 import 'terminal_screen.dart';
@@ -19,12 +20,15 @@ final class TerminalScreenSet {
     TerminalStyleTable? styleTable,
     TerminalPalette? palette,
     TerminalGraphemeTable? graphemeTable,
+    TerminalHyperlinkTable? hyperlinkTable,
     TerminalScrollback? scrollback,
   }) {
     final TerminalStyleTable sharedStyles = styleTable ?? TerminalStyleTable();
     final TerminalPalette sharedPalette = palette ?? TerminalPalette();
     final TerminalGraphemeTable sharedGraphemes =
         graphemeTable ?? TerminalGraphemeTable();
+    final TerminalHyperlinkTable sharedHyperlinks =
+        hyperlinkTable ?? TerminalHyperlinkTable();
     final TerminalScrollback sharedScrollback =
         scrollback ?? TerminalScrollback();
     final TerminalScrollbackAttachment scrollbackAttachment =
@@ -36,6 +40,7 @@ final class TerminalScreenSet {
         styleTable: sharedStyles,
         palette: sharedPalette,
         graphemeTable: sharedGraphemes,
+        hyperlinkTable: sharedHyperlinks,
         scrollbackAttachment: scrollbackAttachment,
       ),
       alternate: TerminalScreen(
@@ -44,10 +49,12 @@ final class TerminalScreenSet {
         styleTable: sharedStyles,
         palette: sharedPalette,
         graphemeTable: sharedGraphemes,
+        hyperlinkTable: sharedHyperlinks,
       ),
       styleTable: sharedStyles,
       palette: sharedPalette,
       graphemeTable: sharedGraphemes,
+      hyperlinkTable: sharedHyperlinks,
       scrollback: sharedScrollback,
       scrollbackAttachment: scrollbackAttachment,
     );
@@ -61,6 +68,7 @@ final class TerminalScreenSet {
     required this.styleTable,
     required this.palette,
     required this.graphemeTable,
+    required this.hyperlinkTable,
     required this.scrollback,
     required TerminalScrollbackAttachment scrollbackAttachment,
   }) : _primary = primary,
@@ -72,6 +80,7 @@ final class TerminalScreenSet {
   final TerminalStyleTable styleTable;
   final TerminalPalette palette;
   final TerminalGraphemeTable graphemeTable;
+  final TerminalHyperlinkTable hyperlinkTable;
   final TerminalScrollback scrollback;
   final TerminalScrollbackAttachment _scrollbackAttachment;
   late final TerminalViewport _viewport;

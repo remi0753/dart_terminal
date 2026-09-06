@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'terminal_hyperlink.dart';
 import 'terminal_style.dart';
 import 'terminal_unicode.dart';
 
@@ -49,6 +50,7 @@ TerminalScreen createTerminalScreenWithScrollback({
   required TerminalStyleTable styleTable,
   required TerminalPalette palette,
   required TerminalGraphemeTable graphemeTable,
+  required TerminalHyperlinkTable hyperlinkTable,
   required TerminalScrollbackAttachment scrollbackAttachment,
 }) {
   TerminalScreen._validateDimensions(rows, columns);
@@ -58,6 +60,7 @@ TerminalScreen createTerminalScreenWithScrollback({
     styleTable: styleTable,
     palette: palette,
     graphemeTable: graphemeTable,
+    hyperlinkTable: hyperlinkTable,
     scrollbackAttachment: scrollbackAttachment,
   );
   scrollbackAttachment.activate(screen);
@@ -77,6 +80,7 @@ final class TerminalScreen {
     TerminalStyleTable? styleTable,
     TerminalPalette? palette,
     TerminalGraphemeTable? graphemeTable,
+    TerminalHyperlinkTable? hyperlinkTable,
   }) {
     _validateDimensions(rows, columns);
     return TerminalScreen._(
@@ -85,6 +89,7 @@ final class TerminalScreen {
       styleTable: styleTable ?? TerminalStyleTable(),
       palette: palette ?? TerminalPalette(),
       graphemeTable: graphemeTable ?? TerminalGraphemeTable(),
+      hyperlinkTable: hyperlinkTable ?? TerminalHyperlinkTable(),
       scrollbackAttachment: null,
     );
   }
@@ -95,6 +100,7 @@ final class TerminalScreen {
     required this.styleTable,
     required this.palette,
     required this.graphemeTable,
+    required this.hyperlinkTable,
     required TerminalScrollbackAttachment? scrollbackAttachment,
   }) : cellCount = rows * columns,
        _scrollbackAttachment = scrollbackAttachment,
@@ -137,6 +143,7 @@ final class TerminalScreen {
   final TerminalStyleTable styleTable;
   final TerminalPalette palette;
   final TerminalGraphemeTable graphemeTable;
+  final TerminalHyperlinkTable hyperlinkTable;
   final TerminalScrollbackAttachment? _scrollbackAttachment;
 
   final Uint32List _content;
@@ -979,8 +986,9 @@ final class TerminalScreen {
 
   /// Classifies and prints one scalar, extending the preceding grapheme when
   /// Unicode's streaming boundary rules require it.
-  void printScalar(int scalar) {
+  void printScalar(int scalar, {int hyperlink = 0}) {
     TerminalUnicode.validateScalar(scalar);
+    _validateResourceId(hyperlink, 'hyperlink');
     if (scalar == 0) {
       throw ArgumentError.value(scalar, 'scalar', 'NUL is not printable');
     }
@@ -1022,12 +1030,13 @@ final class TerminalScreen {
           graphemeId,
           graphemeTable.widthAt(graphemeId),
           isGrapheme: true,
+          hyperlink: hyperlink,
         );
         return;
       }
       breakGraphemeSequence();
     }
-    _printNewCellGroup(scalar, width, isGrapheme: false);
+    _printNewCellGroup(scalar, width, isGrapheme: false, hyperlink: hyperlink);
   }
 
   /// Prints a caller-classified width-one scalar at the cursor.
@@ -1044,7 +1053,7 @@ final class TerminalScreen {
       );
     }
     breakGraphemeSequence();
-    _printNewCellGroup(scalar, 1, isGrapheme: false);
+    _printNewCellGroup(scalar, 1, isGrapheme: false, hyperlink: 0);
     breakGraphemeSequence();
   }
 
@@ -1780,7 +1789,12 @@ final class TerminalScreen {
         _widthFlags[continuation] == continuationFlags;
   }
 
-  void _printNewCellGroup(int content, int width, {required bool isGrapheme}) {
+  void _printNewCellGroup(
+    int content,
+    int width, {
+    required bool isGrapheme,
+    required int hyperlink,
+  }) {
     if (_wrapPending) {
       _wrapToNextLine();
     }
@@ -1815,7 +1829,7 @@ final class TerminalScreen {
       foreground: _currentForeground,
       background: _currentBackground,
       style: _currentStyleId,
-      hyperlink: 0,
+      hyperlink: hyperlink,
       isProtected: false,
     );
     _positionCursorAfterCell(row, column, storedWidth, right);

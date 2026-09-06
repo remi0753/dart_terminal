@@ -279,6 +279,7 @@ TerminalScreen _buildReflowedScreen(
     styleTable: source.styleTable,
     palette: source.palette,
     graphemeTable: source.graphemeTable,
+    hyperlinkTable: source.hyperlinkTable,
     scrollbackAttachment: source._scrollbackAttachment,
   );
   target._logicalLineEpoch = source._logicalLineEpoch;

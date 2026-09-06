@@ -14,6 +14,8 @@ export 'src/terminal_application.dart'
 export 'src/terminal_buffer.dart' show TerminalBuffer;
 export 'src/terminal_core/streaming_utf8_decoder.dart'
     show StreamingUtf8Decoder, Utf8ScalarSink;
+export 'src/terminal_core/terminal_hyperlink.dart'
+    show TerminalHyperlinkDefinition, TerminalHyperlinkTable;
 export 'src/terminal_core/terminal_keyboard_modes.dart'
     show TerminalKeyboardModes;
 export 'src/terminal_core/terminal_mouse_modes.dart';

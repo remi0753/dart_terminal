@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'terminal_mouse_modes.dart';
@@ -43,6 +44,9 @@ final class TerminalScreenParserSink
   int _incompleteCount = 0;
   int _acceptedReplyCount = 0;
   int _rejectedReplyCount = 0;
+  int _acceptedHyperlinkCount = 0;
+  int _rejectedHyperlinkCount = 0;
+  int _currentHyperlinkId = 0;
   final Uint16List _oscPaletteIndices = Uint16List(
     TerminalPalette.maxBatchEntries,
   );
@@ -61,17 +65,20 @@ final class TerminalScreenParserSink
   int get incompleteCount => _incompleteCount;
   int get acceptedReplyCount => _acceptedReplyCount;
   int get rejectedReplyCount => _rejectedReplyCount;
+  int get acceptedHyperlinkCount => _acceptedHyperlinkCount;
+  int get rejectedHyperlinkCount => _rejectedHyperlinkCount;
+  int get currentHyperlinkId => _currentHyperlinkId;
 
   @override
   void print(int scalar) {
-    screen.printScalar(scalar);
+    screen.printScalar(scalar, hyperlink: _currentHyperlinkId);
   }
 
   @override
   void printAscii(Uint8List bytes, int start, int end) {
     final TerminalScreen target = screen;
     for (var index = start; index < end; index++) {
-      target.printScalar(bytes[index]);
+      target.printScalar(bytes[index], hyperlink: _currentHyperlinkId);
     }
   }
 
@@ -139,6 +146,7 @@ final class TerminalScreenParserSink
       case 0x4d:
         screen.reverseIndex();
       case 0x63:
+        _currentHyperlinkId = 0;
         final TerminalScreenSet? screens = screenSet;
         if (screens == null) {
           screen.resetScreen();
@@ -263,6 +271,8 @@ final class TerminalScreenParserSink
     switch (command) {
       case 4:
         supported = hasPayload && _applyOscPalette(sequence, payloadStart);
+      case 8:
+        supported = hasPayload && _applyOscHyperlink(sequence, payloadStart);
       case 10:
         supported =
             hasPayload &&
@@ -304,24 +314,37 @@ final class TerminalScreenParserSink
   @override
   void cancel(VtParserState state, int controlByte) {
     screen.breakGraphemeSequence();
+    if (state == VtParserState.oscString) {
+      _currentHyperlinkId = 0;
+    }
     _cancelCount++;
   }
 
   @override
   void limit(VtParserState state, VtParserLimitKind kind) {
     screen.breakGraphemeSequence();
+    if (state == VtParserState.oscString) {
+      _currentHyperlinkId = 0;
+      _rejectedHyperlinkCount++;
+    }
     _limitCount++;
   }
 
   @override
   void malformed(VtParserState state, int byte) {
     screen.breakGraphemeSequence();
+    if (state == VtParserState.oscString) {
+      _currentHyperlinkId = 0;
+    }
     _malformedCount++;
   }
 
   @override
   void incomplete(VtParserState state) {
     screen.breakGraphemeSequence();
+    if (state == VtParserState.oscString) {
+      _currentHyperlinkId = 0;
+    }
     _incompleteCount++;
   }
 
@@ -478,6 +501,115 @@ final class TerminalScreenParserSink
         _unsupportedSequenceCount++;
       }
     }
+  }
+
+  bool _applyOscHyperlink(VtStringSequence sequence, int start) {
+    final int parametersEnd = _findPayloadByte(sequence, start, 0x3b);
+    if (parametersEnd >= sequence.payloadLength) {
+      return _rejectHyperlink();
+    }
+    final int uriStart = parametersEnd + 1;
+    if (uriStart == sequence.payloadLength) {
+      if (parametersEnd != start) {
+        return _rejectHyperlink();
+      }
+      _currentHyperlinkId = 0;
+      _acceptedHyperlinkCount++;
+      return true;
+    }
+
+    final ({bool valid, String? explicitId}) parameters =
+        _parseOscHyperlinkParameters(sequence, start, parametersEnd);
+    if (!parameters.valid) {
+      return _rejectHyperlink();
+    }
+    final Uint8List uriBytes = Uint8List(sequence.payloadLength - uriStart);
+    for (int index = 0; index < uriBytes.length; index++) {
+      uriBytes[index] = sequence.payloadByteAt(uriStart + index);
+    }
+    final String uri;
+    try {
+      uri = utf8.decode(uriBytes, allowMalformed: false);
+    } on FormatException {
+      return _rejectHyperlink();
+    }
+    final int? hyperlink = screen.hyperlinkTable.tryIntern(
+      uri: uri,
+      explicitId: parameters.explicitId,
+    );
+    if (hyperlink == null) {
+      return _rejectHyperlink();
+    }
+    _currentHyperlinkId = hyperlink;
+    _acceptedHyperlinkCount++;
+    return true;
+  }
+
+  ({bool valid, String? explicitId}) _parseOscHyperlinkParameters(
+    VtStringSequence sequence,
+    int start,
+    int end,
+  ) {
+    if (start == end) {
+      return (valid: true, explicitId: null);
+    }
+    String? explicitId;
+    int offset = start;
+    while (offset < end) {
+      final int componentEnd = _findPayloadByte(sequence, offset, 0x3a, end);
+      final int equals = _findPayloadByte(sequence, offset, 0x3d, componentEnd);
+      if (equals == offset || equals >= componentEnd) {
+        return (valid: false, explicitId: null);
+      }
+      for (int index = offset; index < equals; index++) {
+        final int byte = sequence.payloadByteAt(index);
+        final bool validKeyByte =
+            (byte >= 0x30 && byte <= 0x39) ||
+            (byte >= 0x41 && byte <= 0x5a) ||
+            (byte >= 0x61 && byte <= 0x7a) ||
+            byte == 0x2d ||
+            byte == 0x5f;
+        if (!validKeyByte) {
+          return (valid: false, explicitId: null);
+        }
+      }
+      for (int index = equals + 1; index < componentEnd; index++) {
+        final int byte = sequence.payloadByteAt(index);
+        if (byte < 0x21 || byte > 0x7e) {
+          return (valid: false, explicitId: null);
+        }
+      }
+      if (equals + 1 == componentEnd) {
+        return (valid: false, explicitId: null);
+      }
+      final bool isId =
+          equals - offset == 2 &&
+          sequence.payloadByteAt(offset) == 0x69 &&
+          sequence.payloadByteAt(offset + 1) == 0x64;
+      if (isId) {
+        if (explicitId != null) {
+          return (valid: false, explicitId: null);
+        }
+        explicitId = String.fromCharCodes(
+          List<int>.generate(
+            componentEnd - equals - 1,
+            (int index) => sequence.payloadByteAt(equals + 1 + index),
+            growable: false,
+          ),
+        );
+      }
+      if (componentEnd + 1 == end) {
+        return (valid: false, explicitId: null);
+      }
+      offset = componentEnd + 1;
+    }
+    return (valid: true, explicitId: explicitId);
+  }
+
+  bool _rejectHyperlink() {
+    _currentHyperlinkId = 0;
+    _rejectedHyperlinkCount++;
+    return true;
   }
 
   bool _applyOscPalette(VtStringSequence sequence, int start) {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'terminal_hyperlink.dart';
 import 'terminal_screen.dart';
 import 'terminal_screen_parser_sink.dart';
 import 'terminal_screen_set.dart';
@@ -13,17 +14,23 @@ final class TerminalSnapshotFormatLimits {
     this.maxCells = 4 * 1024 * 1024,
     this.maxStyleDefinitions = TerminalStyleTable.defaultCapacity,
     this.maxGraphemeDefinitions = TerminalGraphemeTable.defaultCapacity,
+    this.maxHyperlinkDefinitions = TerminalHyperlinkTable.defaultCapacity,
+    this.maxHyperlinkUtf8Bytes = TerminalHyperlinkTable.defaultMaximumUtf8Bytes,
     this.maxOutputCharacters = 16 * 1024 * 1024,
   }) : assert(maxRows > 0),
        assert(maxCells > 0),
        assert(maxStyleDefinitions >= 0),
        assert(maxGraphemeDefinitions >= 0),
+       assert(maxHyperlinkDefinitions >= 0),
+       assert(maxHyperlinkUtf8Bytes >= 0),
        assert(maxOutputCharacters > 0);
 
   final int maxRows;
   final int maxCells;
   final int maxStyleDefinitions;
   final int maxGraphemeDefinitions;
+  final int maxHyperlinkDefinitions;
+  final int maxHyperlinkUtf8Bytes;
   final int maxOutputCharacters;
 }
 
@@ -68,7 +75,11 @@ final class TerminalSnapshotFormatter {
     _validateScreenParserSink(screen, parserSink);
     _checkCount('rows', screen.rows, limits.maxRows);
     _checkCount('cells', screen.cellCount, limits.maxCells);
-    _checkResources(screen.styleTable, screen.graphemeTable);
+    _checkResources(
+      screen.styleTable,
+      screen.graphemeTable,
+      screen.hyperlinkTable,
+    );
 
     final _SnapshotWriter writer = _SnapshotWriter(limits.maxOutputCharacters);
     writer.line('$formatName version=$formatVersion kind=screen');
@@ -76,6 +87,7 @@ final class TerminalSnapshotFormatter {
       writer,
       screen.styleTable,
       screen.graphemeTable,
+      screen.hyperlinkTable,
       screen.palette,
     );
     _writeScreen(writer, 'screen', screen);
@@ -99,7 +111,11 @@ final class TerminalSnapshotFormatter {
       );
     }
     _checkScreenSetSize(screens);
-    _checkResources(screens.styleTable, screens.graphemeTable);
+    _checkResources(
+      screens.styleTable,
+      screens.graphemeTable,
+      screens.hyperlinkTable,
+    );
 
     final _SnapshotWriter writer = _SnapshotWriter(limits.maxOutputCharacters);
     writer.line('$formatName version=$formatVersion kind=screen-set');
@@ -113,6 +129,7 @@ final class TerminalSnapshotFormatter {
       writer,
       screens.styleTable,
       screens.graphemeTable,
+      screens.hyperlinkTable,
       screens.palette,
     );
     _writeHistory(writer, screens.scrollback, screens.graphemeTable);
@@ -142,6 +159,18 @@ final class TerminalSnapshotFormatter {
       throw ArgumentError.value(
         limits.maxGraphemeDefinitions,
         'limits.maxGraphemeDefinitions',
+      );
+    }
+    if (limits.maxHyperlinkDefinitions < 0) {
+      throw ArgumentError.value(
+        limits.maxHyperlinkDefinitions,
+        'limits.maxHyperlinkDefinitions',
+      );
+    }
+    if (limits.maxHyperlinkUtf8Bytes < 0) {
+      throw ArgumentError.value(
+        limits.maxHyperlinkUtf8Bytes,
+        'limits.maxHyperlinkUtf8Bytes',
       );
     }
     if (limits.maxOutputCharacters <= 0) {
@@ -188,6 +217,7 @@ final class TerminalSnapshotFormatter {
   void _checkResources(
     TerminalStyleTable styles,
     TerminalGraphemeTable graphemes,
+    TerminalHyperlinkTable hyperlinks,
   ) {
     _checkCount(
       'style definitions',
@@ -198,6 +228,16 @@ final class TerminalSnapshotFormatter {
       'grapheme definitions',
       graphemes.definitionCount,
       limits.maxGraphemeDefinitions,
+    );
+    _checkCount(
+      'hyperlink definitions',
+      hyperlinks.definitionCount,
+      limits.maxHyperlinkDefinitions,
+    );
+    _checkCount(
+      'hyperlink UTF-8 bytes',
+      hyperlinks.utf8Bytes,
+      limits.maxHyperlinkUtf8Bytes,
     );
   }
 
@@ -215,6 +255,7 @@ final class TerminalSnapshotFormatter {
     _SnapshotWriter writer,
     TerminalStyleTable styles,
     TerminalGraphemeTable graphemes,
+    TerminalHyperlinkTable hyperlinks,
     TerminalPalette palette,
   ) {
     writer.line(
@@ -236,6 +277,21 @@ final class TerminalSnapshotFormatter {
         'scalars=${scalars.map(_unicodeScalar).join(',')} '
         'text=${jsonEncode(String.fromCharCodes(scalars))}',
       );
+    }
+    if (hyperlinks.definitionCount != 0) {
+      writer.line(
+        'hyperlinks count=${hyperlinks.definitionCount} '
+        'utf8_bytes=${hyperlinks.utf8Bytes}',
+      );
+      for (int id = 1; id <= hyperlinks.definitionCount; id++) {
+        final TerminalHyperlinkDefinition definition = hyperlinks.definitionAt(
+          id,
+        );
+        writer.line(
+          'hyperlink id=$id explicit_id=${jsonEncode(definition.explicitId)} '
+          'uri=${jsonEncode(definition.uri)}',
+        );
+      }
     }
     writer.line(
       'palette defaults foreground=${_directColor(palette.defaultForeground)} '

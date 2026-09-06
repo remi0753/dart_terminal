@@ -195,6 +195,56 @@ Primary references:
   arbitration have independent safety/compatibility failure modes and must be
   committed and re-checked in order.
 
+### 2026-09-06 — bounded OSC 8 table and cell lifecycle
+
+- Added the session-owned `TerminalHyperlinkTable`. It uses immutable IDs 1
+  through 65534, with alpha defaults of 4096 definitions, 1 MiB aggregate
+  stored UTF-8, 4096 bytes per definition, and 1024 bytes per explicit ID.
+  Implicit openings always allocate a distinct identity; equal explicit
+  `(id, URI)` openings reuse one identity without consuming another slot.
+- Primary and alternate screens now share the table, and screen resize/reflow
+  carries that exact table instance forward. Existing cell, scrollback,
+  snapshot, and damage layouts remain 16-bit compatible; ID zero and the
+  reserved `0xffff` value are unchanged.
+- `TerminalScreen.printScalar` accepts the parser-owned current hyperlink and
+  applies it atomically to scalar, grapheme, wide lead, and continuation cells.
+  OSC dispatch already breaks the streaming grapheme boundary, so a link-state
+  transition cannot retroactively extend a preceding cell under another ID.
+- Added OSC 8 open/close dispatch with strict UTF-8 decoding, bounded
+  colon-separated parameter parsing, explicit `id`, ignored well-formed future
+  keys, and deterministic close-on-refusal behavior. Missing separators, empty
+  or duplicate IDs, unsafe URI scalars, malformed UTF-8, table limits, OSC
+  string limits, and RIS all clear the active link rather than extending stale
+  authority to later output.
+- Snapshot formatting records exact URI/explicit-ID definitions only when the
+  table is nonempty and applies separate definition-count and aggregate-byte
+  limits. Existing zero-link corpus snapshots therefore remain byte-identical,
+  while link-bearing state can no longer compare equal solely because its cell
+  IDs happen to match.
+- Added focused tests over every parser split, explicit/implicit identity,
+  malformed params and UTF-8, parser/table/byte ceilings, wide continuation,
+  combining grapheme, scrollback, resize/reflow, primary/alternate switching,
+  RIS, snapshot definitions, and snapshot resource limits.
+- The first direct `dart format` invocation formatted the requested sources but
+  then failed while updating the SDK telemetry session timestamp outside the
+  workspace sandbox. The same explicit formatter command was rerun with the
+  required filesystem permission and completed; no workaround or alternate
+  formatter was used.
+- The first full test run passed all tests but the analyzer emitted one
+  `directives_ordering` info for the new public export. The export order was
+  corrected, then the full analyzer and focused hyperlink test passed with no
+  issues.
+
 ## Verification results
 
-- Pending implementation.
+### Bounded OSC 8 table and cell lifecycle
+
+- Explicit `dart format` over all changed Dart sources: passed.
+- Focused static analysis over the core/table/snapshot/test changes: passed.
+- `dart run test/terminal_hyperlink_test.dart`: passed before and after the
+  export-order correction.
+- Initial `CI=true make test`: all tests passed, with the one analyzer info
+  described above. After correcting it, the final `CI=true make test` passed
+  cleanly: all 137 files were format-clean, full analysis reported no issues,
+  all native build hooks ran, and the complete Dart test suite passed.
+- `git diff --check`: passed during final pre-commit review.

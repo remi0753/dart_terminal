@@ -30,6 +30,7 @@ import 'terminal_damage_copy_test.dart';
 import 'terminal_damage_test.dart';
 import 'terminal_damage_transfer_test.dart';
 import 'terminal_history_reflow_test.dart';
+import 'terminal_hyperlink_test.dart';
 import 'terminal_input_matrix_test.dart';
 import 'terminal_key_binding_test.dart';
 import 'terminal_key_encoder_test.dart';
@@ -84,6 +85,7 @@ Future<void> main() async {
   runRenderResourceRebuilderTests();
   runRendererMetricsTests();
   runTerminalHistoryReflowTests();
+  runTerminalHyperlinkTests();
   runTerminalInputMatrixTests();
   runTerminalAppKitKeyAdapterTests();
   runTerminalKeyBindingTests();
