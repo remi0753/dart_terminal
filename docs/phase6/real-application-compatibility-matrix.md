@@ -232,18 +232,18 @@ stream while applying both recorded resizes at their original byte offsets. A
 tool-only `VtParserSink` delegate records an action only when the product sink's
 unsupported counter increases, then reconstructs the equivalent 7-bit bytes
 from the typed parser action. The capture-time surface accounted for all 526
-unsupported increments as 28 unique observed variants; the current focus-mode
-closure replay accounts for 82 increments as 18 variants. It does not infer
+unsupported increments as 28 unique observed variants; the current bounded
+DECRQSS closure replay accounts for 78 increments as 16 variants. It does not infer
 bytes from documentation or scan arbitrary escape-looking text inside
 printable payloads.
 
 `compatibility/application_matrix_acceptance.json` groups those variants into
-11 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
+10 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
 present in evidence. Replaying each minimal sequence produces exactly one
 bounded reject, no cancel/limit/malformed/incomplete result, and no standalone
-screen-state mutation. The remaining DECRQSS DCS query matches an inventory
-`safe-ignore` record; the other 10 remain explicit unsupported rather than
-being silently normalized into success.
+screen-state mutation. All 10 remain explicit unsupported rather than being
+silently normalized into success; DECRQSS SGR is now a supported partial DCS
+selector and no longer appears as a matrix gap.
 
 | Gap | Observed applications | Current impact/disposition | Ordered owner |
 | --- | --- | --- | --- |
@@ -251,7 +251,6 @@ being silently normalized into success.
 | SGR pixel mouse | lazygit | mode 1016、native physical-pixel geometry、wheel、Shift-local routing、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
 | highlight mouse | mosh | captureはmode 1001 resetのみ。stateful enable/handshakeを実装せず明示的非対応 | evidence-driven future decision |
 | XTVERSION and window-size report | Emacs, lazygit, tmux | query fallback; explicit unsupported | Phase 6 focus/mouse/query task |
-| DECRQSS | Neovim | query fallback; safe-ignore | existing DECRQSS gap/query owner |
 | Kitty query, XTMODKEYS, XTQMODKEYS, application escape | lazygit, Neovim, tmux | input protocol; explicit unsupported | Phase 9 Kitty keyboard task |
 | synchronized output | fzf, lazygit | presentation atomicity; explicit unsupported | Phase 9 synchronized-output task |
 | theme report/update | tmux | query/notification fallback; explicit unsupported | Phase 9 light/dark reports task |
@@ -286,7 +285,10 @@ The captured lazygit reset therefore disappears too: replay now retains 79
 unsupported increments, 17 variants, and 11 owned gaps. Mode 1001 remains an
 explicit bounded reject because the immutable mosh capture contains only reset
 and does not justify advertising the stateful highlight handshake. Query gaps
-remain assigned to the following ordered children.
+remain assigned to the following ordered child. The third child implements the
+complete DECRQSS SGR query without changing immutable captures. Neovim's
+current rejects fall from 4 to 3, leaving 78 increments, 16 variants, and 10
+owned gaps; the former safe-ignore gap is closed.
 
 The cell outcome is two clean agreements (ncurses and SSH) and six accepted documented-gap
 cells. “Accepted” means the captured workflow completed, every non-parser
@@ -294,8 +296,8 @@ semantic check passed, all rejected bytes are explicit and owned, and no
 matrix-level crash/corruption/unbounded-resource blocker remains. It does not
 turn any false `parser-clean` check into true. The normal gate reports
 `TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=2
-documented_gap_cells=6 gaps=11 unique_sequences=17
-unsupported_increments=79`.
+documented_gap_cells=6 gaps=10 unique_sequences=16
+unsupported_increments=78`.
 
 The version-2 acceptance report pins the current product implementation
 manifest. It retains the original capture counters per cell while recording
@@ -304,6 +306,11 @@ immutable PTY bytes rather than by rewriting their provenance.
 
 ## Investigation log
 
+- 2026-09-07: bounded DECRQSS SGR closure retained the same 57,737 immutable
+  PTY bytes and resize offsets. Neovim's current unsupported count fell from 4
+  to 3; the complete replay now has 78 increments, 16 variants, and 10 owned
+  gaps. The SGR request moved from safe-ignore to a partial selector with one
+  supported payload, and no original capture counter was rewritten.
 - 2026-09-07: DEC focus-mode closure replay retained the same 57,737 immutable
   PTY bytes and resize offsets. Current unsupported counts fell from 92 to 82:
   Emacs 3→1, lazygit 38→36, mosh 7→4, Neovim 6→4, and tmux 10→9. Mode 1004

@@ -4,7 +4,7 @@
   "evidence_index_path": "compatibility/application_matrix_evidence.json",
   "evidence_index_sha256": "b2422e4a6a3c6073306f2c615ec9b85d49621440f06998c3435871949caa554e",
   "implementation_manifest_path": "compatibility/implemented_sequence_manifest.json",
-  "implementation_manifest_sha256": "48311a4cb9804120b23007b490c410547b3e070fdade706f4a84ccc7b7ff0554",
+  "implementation_manifest_sha256": "476bbffc5b545212aa101a403a062004138dee729978ad855317153dcd3c10fb",
   "trace_tool_path": "tool/terminal_application_unsupported_trace.dart",
   "trace_tool_sha256": "62cddaab40420b436d86c3d5a71fe49b750ea206bd0f7ee7cd73d7e579e50404",
   "status": "accepted-with-owned-gaps",
@@ -12,10 +12,10 @@
     "cells": 8,
     "clean_agreements": 2,
     "documented_gap_cells": 6,
-    "unique_sequences": 17,
-    "unsupported_increments": 79,
-    "gaps": 11,
-    "safe_ignore_gaps": 1,
+    "unique_sequences": 16,
+    "unsupported_increments": 78,
+    "gaps": 10,
+    "safe_ignore_gaps": 0,
     "explicit_unsupported_gaps": 10
   },
   "cells": [
@@ -82,9 +82,8 @@
       "classification": "documented-gap",
       "accepted": true,
       "captured_unsupported_sequences": 124,
-      "replayed_unsupported_sequences": 4,
+      "replayed_unsupported_sequences": 3,
       "gap_ids": [
-        "decrqss",
         "kitty-keyboard-query",
         "xtmodkeys"
       ]
@@ -125,21 +124,6 @@
       "variants": [
         "1b5b3f3737323768",
         "1b5b3f373732376c"
-      ],
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
-      "id": "decrqss",
-      "disposition": "safe-ignore",
-      "impact": "query-fallback",
-      "inventory_ids": [
-        "dec:dcs:decrqss"
-      ],
-      "owner": "docs/phase6/decrqss-sgr-gap.md",
-      "minimal_hex": "1b5024716d1b5c",
-      "variants": [
-        "1b5024716d1b5c"
       ],
       "screen_mutation": false,
       "matrix_blocker": false

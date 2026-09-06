@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'terminal_style.dart';
 import 'vt_parser.dart';
 
 typedef TerminalReplyHandler = bool Function(Uint8List reply);
@@ -44,6 +45,80 @@ abstract final class TerminalReplyEncoder {
 
   static Uint8List xtgettcapNotFound() =>
       Uint8List.fromList(const <int>[0x1b, 0x50, 0x30, 0x2b, 0x72, 0x1b, 0x5c]);
+
+  /// Reports the current SGR state in the pinned xterm DECRQSS form.
+  static Uint8List decrqssSgr({
+    required int foreground,
+    required int background,
+    required int styleAttributes,
+  }) {
+    _validateSgrColor(foreground, 'foreground');
+    _validateSgrColor(background, 'background');
+    TerminalStyleAttributes.validate(styleAttributes);
+    final _TerminalReplyBuilder builder = _TerminalReplyBuilder()
+      ..bytes(const <int>[0x1b, 0x50, 0x31, 0x24, 0x72])
+      ..decimal(0);
+    if (TerminalStyleAttributes.has(
+      styleAttributes,
+      TerminalStyleAttributes.bold,
+    )) {
+      _sgrParameter(builder, 1);
+    }
+    if (TerminalStyleAttributes.has(
+      styleAttributes,
+      TerminalStyleAttributes.faint,
+    )) {
+      _sgrParameter(builder, 2);
+    }
+    if (TerminalStyleAttributes.has(
+      styleAttributes,
+      TerminalStyleAttributes.italic,
+    )) {
+      _sgrParameter(builder, 3);
+    }
+    final TerminalUnderlineStyle underline = TerminalStyleAttributes.underline(
+      styleAttributes,
+    );
+    if (underline == TerminalUnderlineStyle.single) {
+      _sgrParameter(builder, 4);
+    } else if (underline != TerminalUnderlineStyle.none) {
+      builder
+        ..byte(0x3b)
+        ..decimal(4)
+        ..byte(0x3a)
+        ..decimal(underline.index);
+    }
+    if (TerminalStyleAttributes.has(
+      styleAttributes,
+      TerminalStyleAttributes.blink,
+    )) {
+      _sgrParameter(builder, 5);
+    }
+    if (TerminalStyleAttributes.has(
+      styleAttributes,
+      TerminalStyleAttributes.inverse,
+    )) {
+      _sgrParameter(builder, 7);
+    }
+    if (TerminalStyleAttributes.has(
+      styleAttributes,
+      TerminalStyleAttributes.conceal,
+    )) {
+      _sgrParameter(builder, 8);
+    }
+    if (TerminalStyleAttributes.has(
+      styleAttributes,
+      TerminalStyleAttributes.strike,
+    )) {
+      _sgrParameter(builder, 9);
+    }
+    _writeSgrColor(builder, foreground, foreground: true);
+    _writeSgrColor(builder, background, foreground: false);
+    builder
+      ..byte(0x6d)
+      ..terminator(VtStringTerminator.stringTerminator);
+    return builder.finish();
+  }
 
   static Uint8List cursorPosition({
     required int row,
@@ -153,6 +228,53 @@ abstract final class TerminalReplyEncoder {
       value == 0x71 ||
       value == 0x73 ||
       (value >= 0x30 && value <= 0x37);
+
+  static void _sgrParameter(_TerminalReplyBuilder builder, int value) {
+    builder
+      ..byte(0x3b)
+      ..decimal(value);
+  }
+
+  static void _writeSgrColor(
+    _TerminalReplyBuilder builder,
+    int color, {
+    required bool foreground,
+  }) {
+    if (color == 0) return;
+    if (color <= 8) {
+      _sgrParameter(builder, (foreground ? 30 : 40) + color - 1);
+      return;
+    }
+    if (color <= 16) {
+      _sgrParameter(builder, (foreground ? 90 : 100) + color - 9);
+      return;
+    }
+    builder
+      ..byte(0x3b)
+      ..decimal(foreground ? 38 : 48)
+      ..byte(0x3a);
+    if (color <= 256) {
+      builder
+        ..decimal(5)
+        ..byte(0x3a)
+        ..decimal(color - 1);
+      return;
+    }
+    builder
+      ..decimal(2)
+      ..bytes(const <int>[0x3a, 0x3a])
+      ..decimal((color >> 16) & 0xff)
+      ..byte(0x3a)
+      ..decimal((color >> 8) & 0xff)
+      ..byte(0x3a)
+      ..decimal(color & 0xff);
+  }
+
+  static void _validateSgrColor(int color, String name) {
+    if (color == 0 || color >= 1 && color <= 256) return;
+    if (color >= 0x80000000 && color <= 0x80ffffff) return;
+    throw ArgumentError.value(color, name, 'is not a terminal color token');
+  }
 
   static void _writeRgb(_TerminalReplyBuilder builder, int color) {
     if (color < 0x80000000 || color > 0x80ffffff) {

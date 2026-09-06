@@ -189,6 +189,18 @@ const Map<int, _Metadata> _escapeMetadata = <int, _Metadata>{
 };
 
 const Map<int, _Metadata> _dcsMetadata = <int, _Metadata>{
+  0x012471: _Metadata(
+    'dec',
+    'decrqss',
+    'DECRQSS',
+    'Part II chapter 5, DECRQSS—Request Selection or Setting',
+    support: 'partial',
+    notes:
+        'The complete SGR request payload m receives the current rendition in '
+        'a bounded pinned-xterm form. Other status-string selectors remain '
+        'explicit bounded unsupported.',
+    reply: true,
+  ),
   0x012b71: _Metadata(
     'xterm',
     'xtgettcap',
@@ -1932,21 +1944,6 @@ const List<_Gap> _dcsAndStringRecords = <_Gap>[
     },
     locator:
         'Part II chapter 5, DECAUPSS—Assign User Preferred Supplemental Set',
-    notes: _boundedIgnoreNotes,
-  ),
-  _Gap(
-    family: 'dec',
-    kind: 'dcs',
-    name: 'decrqss',
-    mnemonic: 'DECRQSS',
-    syntax: 'DCS \$ q Pt ST',
-    selector: <String, Object?>{
-      'kind': 'dcs',
-      'privateMarker': null,
-      'intermediates': <int>[36],
-      'finalByte': 113,
-    },
-    locator: 'Part II chapter 5, DECRQSS—Request Selection or Setting',
     notes: _boundedIgnoreNotes,
   ),
   _Gap(

@@ -4,8 +4,8 @@
 
 - Date recorded: 2026-09-07
 - Owner: ordered `focus/mouse/bracketed paste/query reports` roadmap item
-- Current status: explicit bounded safe-ignore; implementation deferred to its
-  ordered owner
+- Current status: resolved by bounded current-SGR reporting in its ordered
+  owner
 
 ## Purpose and evidence
 
@@ -26,33 +26,38 @@ hex: 1b 50 24 71 6d 1b 5c
 ```
 
 Pinned Kitty and xterm raw captures and the Dart observation are validated by
-the differential acceptance gate. Their exact SGR serialization is
-product-specific; acceptance depends on both external products producing a
-bounded valid success reply while Dart produces none, not on rewriting one
-product's bytes into the other's.
+the differential acceptance gate. Dart now matches xterm's pinned form
+byte-for-byte. Kitty uses a different valid serialization; it is accepted as a
+semantic agreement only after both replies independently parse to the same
+style and colors. The differing raw bytes remain in the acceptance report.
 
 ## Scope and non-goals
 
-- This record makes the omission visible and gives it a later roadmap owner.
-- It does not implement DCS reply semantics ahead of the ordered query-report
-  task.
+- This record preserves the minimized regression and documents its resolution
+  by the ordered query-report task.
+- Only the complete unparameterized SGR payload `m` is implemented.
 - It does not weaken malformed/incomplete DCS bounds or classify arbitrary DCS
   payloads as supported.
 - Screen, style, and mode state were not observed through the PTY probe and are
   not covered by this accepted reply gap.
 
-## Future completion conditions
+## Resolution
 
-The owning query-report task must either implement bounded DECRQSS SGR replies
-with byte-level regression coverage, or retain safe-ignore with application
-evidence that no P0 compatibility path depends on the reply. If implemented,
-this `documented-gap` expectation must become `agree`; the acceptance gate is
-designed to fail when the gap becomes stale.
+`TerminalReplyEncoder.decrqssSgr` emits the current rendition in a stable
+xterm-compatible order. The default reply is 9 bytes and the largest supported
+state is 63 bytes, within the existing 64-byte reply limit. The parser accepts
+only `DCS $ q m ST`; other payloads and parameterized requests remain bounded
+unsupported. The minimized regression moved from `mismatches/` to
+`regressions/decrqss_sgr_v1.json`, and the real-application replay no longer
+counts Neovim's query as a reject.
 
 ## Verification
 
-- `dart run test/terminal_differential_acceptance_test.dart` passed.
-- `make terminal-differential-acceptance-check` passed with 12 accepted matrix
-  cells: 6 agreements, 2 documented gaps, and 4 unavailable results.
-- `CI=true make test` passed formatting, static analysis, all compatibility
-  freshness checks, and the full Dart Terminal test runner.
+- Reply/parser tests pass exact default/styled/maximal bytes, invalid input,
+  immutability, and every split/bytewise request plan.
+- Differential acceptance passes 12 cells: 8 agreements, including one
+  semantic Kitty agreement, no documented gaps, and 4 unavailable results.
+- Application acceptance passes 78 replayed unsupported increments, 16 unique
+  variants, and 10 remaining owned gaps.
+- Real-PTY Developer JIT and Release AOT product runs observe the exact 9-byte
+  default reply.

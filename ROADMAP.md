@@ -885,7 +885,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （[`docs/phase6/focus-mouse-bracketed-paste-query-reports.md`](docs/phase6/focus-mouse-bracketed-paste-query-reports.md) の順序と完了条件を参照して実施）
   - [x] DEC focus reporting state、native routing、両runtime製品受け入れ
   - [x] SGR pixel mouse mode、native geometry、highlight mode非採用判断
-  - [ ] bounded DECRQSS SGR reply、differential gap解消
+  - [x] bounded DECRQSS SGR reply、differential gap解消
   - [ ] XTVERSION/XTWINOPS、bracketed paste回帰、matrix/親項目完了判定
 - [ ] parser inspector と sequence trace export
 - [ ] compatibility bug の regression corpus 化

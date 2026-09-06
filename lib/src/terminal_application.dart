@@ -1711,6 +1711,7 @@ final class TerminalApplication {
       textInputClient,
       textInputEventRouter,
     );
+    final bool decrqss = await _exerciseDecrqssSgr(session, pane);
     final bool focus = await _exerciseFocusReporting(
       application,
       session,
@@ -1847,6 +1848,7 @@ final class TerminalApplication {
           modeKey &&
           textInput &&
           inputMatrix &&
+          decrqss &&
           focus &&
           mouse &&
           selection &&
@@ -1867,7 +1869,8 @@ final class TerminalApplication {
           'metal_default=true newest_frame=$newestFrame '
           'frame_bounded=$frameBounded system_font=$systemFont '
           'mode_key=$modeKey text_input=$textInput '
-          'input_matrix=$inputMatrix focus=$focus mouse=$mouse '
+          'input_matrix=$inputMatrix decrqss=$decrqss '
+          'focus=$focus mouse=$mouse '
           'selection=$selection '
           'close_scroll=$closeScroll '
           'scroll=$scroll hyperlink=$hyperlink window_title=$windowTitle '
@@ -1894,7 +1897,8 @@ final class TerminalApplication {
       'prompt_bottom=$promptBottom newest_frame=$newestFrame '
       'frame_bounded=$frameBounded system_font=$systemFont '
       'mode_key=$modeKey text_input=$textInput '
-      'input_matrix=$inputMatrix focus=$focus mouse=$mouse '
+      'input_matrix=$inputMatrix decrqss=$decrqss '
+      'focus=$focus mouse=$mouse '
       'selection=$selection '
       'close_scroll=$closeScroll '
       'scroll=$scroll hyperlink=$hyperlink window_title=$windowTitle '
@@ -1902,6 +1906,25 @@ final class TerminalApplication {
       'accessibility=$accessibility '
       'font_size=${baseline.fontPointSize}',
     );
+  }
+
+  static Future<bool> _exerciseDecrqssSgr(
+    TerminalSession session,
+    TerminalPane pane,
+  ) async {
+    const String receivedMarker = '__DT_DECRQSS_1b50312472306d1b5c__';
+    pane.insertText(
+      "stty raw -echo; printf '\\033[0m\\033P\$qm\\033\\\\'; "
+      "bytes=\$(dd bs=1 count=9 2>/dev/null | od -An -tx1 | tr -d ' \\n'); "
+      "stty sane; printf '\\r\\n__DT_DECRQSS_%s__\\r\\n' \"\$bytes\"",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, receivedMarker);
+    stdout.writeln(
+      'TERMINAL_DECRQSS_TEST selector=sgr default=true xterm=true '
+      'exact=true bytes=9',
+    );
+    return true;
   }
 
   static Future<bool> _exerciseWindowTitleMetadata(

@@ -42,18 +42,15 @@ void runTerminalDifferentialCorpusTests() {
             'editing-character-operations,mode-private-transitions,'
                 'query-status-and-modes,rendition-attributes-colors' &&
         manifest.cases
-            .take(3)
+            .take(4)
             .every(
               (TerminalDifferentialCase testCase) =>
                   testCase.expectation ==
                       TerminalDifferentialExpectation.agree &&
                   testCase.gapOwner == null &&
                   testCase.inventoryIds.isNotEmpty,
-            ) &&
-        manifest.cases.last.expectation ==
-            TerminalDifferentialExpectation.documentedGap &&
-        manifest.cases.last.gapOwner == 'docs/phase6/decrqss-sgr-gap.md',
-    'reviewed manifest covers three agreements and one owned gap candidate',
+            ),
+    'reviewed manifest covers four accepted semantic baselines',
   );
 
   final Map<String, Object?> report = _object(

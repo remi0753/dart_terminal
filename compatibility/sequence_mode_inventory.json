@@ -1136,8 +1136,8 @@
         ],
         "finalByte": 113
       },
-      "support": "safe-ignore",
-      "disposition": "ignore",
+      "support": "partial",
+      "disposition": "reply",
       "sourceRefs": [
         {
           "source": "dec-vt510-rm-b01",
@@ -1150,7 +1150,7 @@
       "testEvidence": [
         "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
-      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
+      "notes": "The complete SGR request payload m receives the current rendition in a bounded pinned-xterm form. Other status-string selectors remain explicit bounded unsupported."
     },
     {
       "id": "dec:dcs:decrsps",

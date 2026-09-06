@@ -21,13 +21,13 @@ void _testReviewedAcceptance() {
     result.acceptedCells == 8 &&
         result.cleanAgreements == 2 &&
         result.documentedGapCells == 6 &&
-        result.gaps == 11 &&
-        result.uniqueSequences == 17 &&
-        result.unsupportedIncrements == 79 &&
+        result.gaps == 10 &&
+        result.uniqueSequences == 16 &&
+        result.unsupportedIncrements == 78 &&
         result.machineLine() ==
             'TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=2 '
-                'documented_gap_cells=6 gaps=11 unique_sequences=17 '
-                'unsupported_increments=79',
+                'documented_gap_cells=6 gaps=10 unique_sequences=16 '
+                'unsupported_increments=78',
     'reviewed acceptance has exact replay-derived totals',
   );
 }
@@ -56,8 +56,8 @@ void _testUnownedSequenceFailure() {
 
 void _testScreenMutationFailure() {
   final Map<String, Object?> report = _report();
-  _gap(report, 'decrqss')['screen_mutation'] = true;
-  _expectFailure(report, 'decrqss screen-mutation classification differs');
+  _gap(report, 'hilite-mouse')['screen_mutation'] = true;
+  _expectFailure(report, 'hilite-mouse screen-mutation classification differs');
 }
 
 void _testOwnerFailure() {

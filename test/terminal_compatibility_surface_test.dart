@@ -35,7 +35,7 @@ void _testGeneratedManifestIsDeterministicAndFresh() {
   _expect(
     root['format'] == 'dart-terminal-implementation-surface' &&
         root['version'] == 1 &&
-        selectors.length == 80 &&
+        selectors.length == 81 &&
         modes.length == 22 &&
         _listsEqual(ignored, const <String>['dcs', 'sos', 'pm', 'apc']),
     'manifest has the reviewed selector, mode, and policy totals',
@@ -236,7 +236,7 @@ List<int> _dcsProbe(int key) {
     0x50,
     if (count == 1) intermediate,
     finalByte,
-    ...ascii.encode('4D73'),
+    ...ascii.encode(intermediate == 0x24 ? 'm' : '4D73'),
     0x1b,
     0x5c,
   ];

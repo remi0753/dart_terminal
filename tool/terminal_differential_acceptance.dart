@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dart_terminal/dart_terminal.dart';
+
 import 'terminal_compatibility_inventory.dart';
 import 'terminal_differential_adapters.dart';
 import 'terminal_differential_corpus.dart';
@@ -11,8 +13,8 @@ import 'terminal_differential_sha256.dart';
 
 const String defaultTerminalDifferentialAcceptancePath =
     'compatibility/differential_acceptance_report.json';
-const String defaultTerminalDifferentialMinimalGapManifestPath =
-    'test/corpus/differential/mismatches/decrqss_sgr_v1.json';
+const String defaultTerminalDifferentialDecrqssRegressionManifestPath =
+    'test/corpus/differential/regressions/decrqss_sgr_v1.json';
 
 final class TerminalDifferentialAcceptanceException implements Exception {
   const TerminalDifferentialAcceptanceException(this.message);
@@ -29,19 +31,20 @@ final class TerminalDifferentialAcceptanceResult {
     required this.agreements,
     required this.documentedGaps,
     required this.unavailable,
-    required this.minimalGapBytes,
+    required this.decrqssRegressionBytes,
   });
 
   final int accepted;
   final int agreements;
   final int documentedGaps;
   final int unavailable;
-  final int minimalGapBytes;
+  final int decrqssRegressionBytes;
 
   String machineLine() =>
       'TERMINAL_DIFFERENTIAL_ACCEPTANCE_PASS accepted=$accepted '
       'agreements=$agreements documented_gaps=$documentedGaps '
-      'unavailable=$unavailable minimal_gap_bytes=$minimalGapBytes';
+      'unavailable=$unavailable '
+      'decrqss_regression_bytes=$decrqssRegressionBytes';
 }
 
 TerminalDifferentialAcceptanceResult runTerminalDifferentialAcceptanceChecks({
@@ -91,6 +94,7 @@ TerminalDifferentialAcceptanceResult runTerminalDifferentialAcceptanceChecks({
   int agreements = 0;
   int documentedGaps = 0;
   int unavailable = 0;
+  int semanticAgreements = 0;
   int capturedUnobservedFields = 0;
   for (final TerminalDifferentialBackendProfile profile in catalog.profiles) {
     final TerminalDifferentialSelfTestCapture selfTest = selfTests.capture(
@@ -139,11 +143,19 @@ TerminalDifferentialAcceptanceResult runTerminalDifferentialAcceptanceChecks({
             File.fromUri(root.uri.resolve(probePath)),
           );
       final bool matches = _bytesEqual(baseline.replies, probe.replies);
+      final bool semanticSgrAgreement =
+          testCase.id == 'rendition-attributes-colors' &&
+          _sameSgrReportSemantics(baseline.replies, probe.replies);
       final String classification;
       if (matches &&
           testCase.expectation == TerminalDifferentialExpectation.agree) {
         classification = 'agreement';
         agreements++;
+      } else if (semanticSgrAgreement &&
+          testCase.expectation == TerminalDifferentialExpectation.agree) {
+        classification = 'semantic-agreement';
+        agreements++;
+        semanticAgreements++;
       } else if (!matches &&
           testCase.expectation ==
               TerminalDifferentialExpectation.documentedGap) {
@@ -155,7 +167,9 @@ TerminalDifferentialAcceptanceResult runTerminalDifferentialAcceptanceChecks({
         classification = 'unexpected-mismatch';
       }
       _expect(
-        classification == 'agreement' || classification == 'documented-gap',
+        classification == 'agreement' ||
+            classification == 'semantic-agreement' ||
+            classification == 'documented-gap',
         '${profile.id}/${testCase.id} is $classification',
       );
       capturedUnobservedFields += unobservedFields.length;
@@ -165,7 +179,9 @@ TerminalDifferentialAcceptanceResult runTerminalDifferentialAcceptanceChecks({
         'case_id': testCase.id,
         'classification': classification,
         'accepted': true,
-        'reason': null,
+        'reason': classification == 'semantic-agreement'
+            ? 'valid-product-specific-sgr-serialization'
+            : null,
         'expectation': testCase.expectation.name,
         'observed_fields': <String>['replies'],
         'unobserved_fields': unobservedFields,
@@ -183,15 +199,16 @@ TerminalDifferentialAcceptanceResult runTerminalDifferentialAcceptanceChecks({
   }
   _expect(
     accepted == 12 &&
-        agreements == 6 &&
-        documentedGaps == 2 &&
+        agreements == 8 &&
+        semanticAgreements == 1 &&
+        documentedGaps == 0 &&
         unavailable == 4 &&
         capturedUnobservedFields == 16,
     'reviewed acceptance totals differ',
   );
 
   final File minimalManifestFile = File.fromUri(
-    root.uri.resolve(defaultTerminalDifferentialMinimalGapManifestPath),
+    root.uri.resolve(defaultTerminalDifferentialDecrqssRegressionManifestPath),
   );
   final TerminalDifferentialManifest minimalManifest =
       TerminalDifferentialManifest.load(
@@ -201,16 +218,15 @@ TerminalDifferentialAcceptanceResult runTerminalDifferentialAcceptanceChecks({
   _expect(
     minimalManifest.scope == 'reviewed-corpus' &&
         minimalManifest.cases.length == 1,
-    'minimal gap manifest identity differs',
+    'DECRQSS regression manifest identity differs',
   );
   final TerminalDifferentialCase minimalCase = minimalManifest.cases.single;
   _expect(
     _encodeHex(minimalCase.input) == '1b5024716d1b5c' &&
         minimalCase.input.length == 7 &&
-        minimalCase.expectation ==
-            TerminalDifferentialExpectation.documentedGap &&
-        minimalCase.gapOwner == 'docs/phase6/decrqss-sgr-gap.md',
-    'minimal DECRQSS gap contract differs',
+        minimalCase.expectation == TerminalDifferentialExpectation.agree &&
+        minimalCase.gapOwner == null,
+    'minimal DECRQSS regression contract differs',
   );
   final TerminalDifferentialCase sourceCase = manifest.cases.singleWhere(
     (TerminalDifferentialCase testCase) =>
@@ -219,11 +235,14 @@ TerminalDifferentialAcceptanceResult runTerminalDifferentialAcceptanceChecks({
   _expect(
     sourceCase.input.length > minimalCase.input.length &&
         _contains(sourceCase.input, minimalCase.input),
-    'minimal gap is not a strict source-case reduction',
+    'DECRQSS regression is not a strict source-case reduction',
   );
   final TerminalDifferentialObservation dartMinimal =
       const DartTerminalDifferentialBackend().capture(minimalCase);
-  _expect(dartMinimal.replies.isEmpty, 'Dart minimal gap unexpectedly replied');
+  _expect(
+    _isSuccessfulSgrReport(dartMinimal.replies),
+    'Dart DECRQSS regression did not reply successfully',
+  );
   final List<Map<String, Object?>> minimalResults = <Map<String, Object?>>[];
   for (final TerminalDifferentialBackendProfile profile in catalog.profiles) {
     final TerminalDifferentialSelfTestCapture selfTest = selfTests.capture(
@@ -249,15 +268,18 @@ TerminalDifferentialAcceptanceResult runTerminalDifferentialAcceptanceChecks({
     _expect(probeFile.existsSync(), '$probePath is missing');
     final TerminalDifferentialProbeResult probe =
         TerminalDifferentialProbeResult.load(probeFile);
-    _expect(
-      probe.status == 'ok' && _isSuccessfulSgrReport(probe.replies),
-      '${profile.id} minimal DECRQSS reply is invalid',
+    _expect(probe.status == 'ok', '${profile.id} DECRQSS probe is invalid');
+    final bool exact = _bytesEqual(dartMinimal.replies, probe.replies);
+    final bool semantic = _sameSgrReportSemantics(
+      dartMinimal.replies,
+      probe.replies,
     );
+    _expect(semantic, '${profile.id} DECRQSS reply is not successful SGR');
     minimalResults.add(<String, Object?>{
       'profile_id': profile.id,
-      'classification': 'documented-gap',
+      'classification': exact ? 'agreement' : 'semantic-agreement',
       'accepted': true,
-      'reason': null,
+      'reason': exact ? null : 'valid-product-specific-sgr-serialization',
       'probe_path': probePath,
       'probe_sha256': terminalDifferentialSha256(probeFile.readAsBytesSync()),
       'reply_bytes': probe.replies.length,
@@ -276,8 +298,8 @@ TerminalDifferentialAcceptanceResult runTerminalDifferentialAcceptanceChecks({
         'evidence_path': defaultTerminalDifferentialEvidencePath,
         'evidence_sha256': terminalDifferentialSha256(evidenceFile.readAsBytesSync()),
         'results': results,
-        'minimal_gap': <String, Object?>{'id': minimalCase.id, 'source_case_id': sourceCase.id, 'manifest_path': defaultTerminalDifferentialMinimalGapManifestPath, 'manifest_sha256': terminalDifferentialSha256(minimalManifestFile.readAsBytesSync()), 'input_hex': _encodeHex(minimalCase.input), 'input_bytes': minimalCase.input.length, 'inventory_ids': minimalCase.inventoryIds, 'gap_owner': minimalCase.gapOwner, 'dart_reply_bytes': dartMinimal.replies.length, 'captures': minimalResults},
-        'summary': <String, Object?>{'attempts': results.length, 'accepted': accepted, 'agreements': agreements, 'documented_gaps': documentedGaps, 'unavailable': unavailable, 'unexpected_mismatches': 0, 'stale_gaps': 0, 'captured_unobserved_fields': capturedUnobservedFields, 'silent_results': 0},
+        'decrqss_regression': <String, Object?>{'id': minimalCase.id, 'source_case_id': sourceCase.id, 'manifest_path': defaultTerminalDifferentialDecrqssRegressionManifestPath, 'manifest_sha256': terminalDifferentialSha256(minimalManifestFile.readAsBytesSync()), 'input_hex': _encodeHex(minimalCase.input), 'input_bytes': minimalCase.input.length, 'inventory_ids': minimalCase.inventoryIds, 'gap_owner': minimalCase.gapOwner, 'dart_reply_bytes': dartMinimal.replies.length, 'dart_replies_sha256': terminalDifferentialSha256(dartMinimal.replies), 'captures': minimalResults},
+        'summary': <String, Object?>{'attempts': results.length, 'accepted': accepted, 'agreements': agreements, 'semantic_agreements': semanticAgreements, 'documented_gaps': documentedGaps, 'unavailable': unavailable, 'unexpected_mismatches': 0, 'stale_gaps': 0, 'captured_unobserved_fields': capturedUnobservedFields, 'silent_results': 0},
       })}\n';
   final File reportFile = File.fromUri(
     root.uri.resolve(defaultTerminalDifferentialAcceptancePath),
@@ -297,28 +319,66 @@ TerminalDifferentialAcceptanceResult runTerminalDifferentialAcceptanceChecks({
     agreements: agreements,
     documentedGaps: documentedGaps,
     unavailable: unavailable,
-    minimalGapBytes: minimalCase.input.length,
+    decrqssRegressionBytes: minimalCase.input.length,
   );
 }
 
 bool _isSuccessfulSgrReport(Uint8List replies) {
+  return _decodeSgrReport(replies) != null;
+}
+
+bool _sameSgrReportSemantics(Uint8List left, Uint8List right) {
+  final ({int attributes, int foreground, int background})? leftState =
+      _decodeSgrReport(left);
+  final ({int attributes, int foreground, int background})? rightState =
+      _decodeSgrReport(right);
+  return leftState != null && leftState == rightState;
+}
+
+({int attributes, int foreground, int background})? _decodeSgrReport(
+  Uint8List replies,
+) {
   const List<int> prefix = <int>[0x1b, 0x50, 0x31, 0x24, 0x72];
   const List<int> suffix = <int>[0x6d, 0x1b, 0x5c];
-  if (replies.length < prefix.length + suffix.length) return false;
+  if (replies.length < prefix.length + suffix.length) return null;
   for (int index = 0; index < prefix.length; index++) {
-    if (replies[index] != prefix[index]) return false;
+    if (replies[index] != prefix[index]) return null;
   }
   final int suffixOffset = replies.length - suffix.length;
   for (int index = 0; index < suffix.length; index++) {
-    if (replies[suffixOffset + index] != suffix[index]) return false;
+    if (replies[suffixOffset + index] != suffix[index]) return null;
   }
   for (int index = prefix.length; index < suffixOffset; index++) {
     final int byte = replies[index];
     if (!((byte >= 0x30 && byte <= 0x39) || byte == 0x3b || byte == 0x3a)) {
-      return false;
+      return null;
     }
   }
-  return true;
+  final Uint8List sgr = Uint8List(suffixOffset - prefix.length + 3);
+  sgr[0] = 0x1b;
+  sgr[1] = 0x5b;
+  for (int index = prefix.length; index < suffixOffset; index++) {
+    sgr[index - prefix.length + 2] = replies[index];
+  }
+  sgr[sgr.length - 1] = 0x6d;
+  final TerminalScreen screen = TerminalScreen(rows: 1, columns: 1);
+  final TerminalScreenParserSink sink = TerminalScreenParserSink(screen);
+  final VtParser parser = VtParser(sink: sink);
+  parser.parse(sgr);
+  parser.finish();
+  if (sink.unsupportedControlCount != 0 ||
+      sink.unsupportedSequenceCount != 0 ||
+      sink.cancelCount != 0 ||
+      sink.limitCount != 0 ||
+      sink.malformedCount != 0 ||
+      sink.incompleteCount != 0) {
+    return null;
+  }
+  return (
+    attributes: screen.currentStyleAttributes,
+    foreground: screen.currentForeground,
+    background: screen.currentBackground,
+  );
 }
 
 bool _contains(Uint8List source, Uint8List candidate) {

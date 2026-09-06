@@ -544,16 +544,33 @@ final class TerminalScreenParserSink
   void dispatchDcs(VtDcsSequence sequence) {
     screen.breakGraphemeSequence();
     final VtSequenceHeader header = sequence.header;
-    if (header.parameters.length == 0 &&
-        TerminalCompatibilitySurface.supportsDcs(
+    if (header.parameters.length != 0 ||
+        !TerminalCompatibilitySurface.supportsDcs(
           privateMarker: header.privateMarker,
           finalByte: header.finalByte,
           intermediateCount: header.intermediateCount,
           firstIntermediate: header.intermediateCount == 0
               ? 0
               : header.intermediateAt(0),
-        ) &&
-        _xtgettcapPayloadIsValid(sequence)) {
+        )) {
+      _unsupportedSequenceCount++;
+      return;
+    }
+    final int intermediate = header.intermediateAt(0);
+    if (intermediate == 0x24 &&
+        sequence.payloadLength == 1 &&
+        sequence.payloadByteAt(0) == 0x6d) {
+      final TerminalScreen target = screen;
+      _emitReply(
+        TerminalReplyEncoder.decrqssSgr(
+          foreground: target.currentForeground,
+          background: target.currentBackground,
+          styleAttributes: target.currentStyleAttributes,
+        ),
+      );
+      return;
+    }
+    if (intermediate == 0x2b && _xtgettcapPayloadIsValid(sequence)) {
       _emitReply(TerminalReplyEncoder.xtgettcapNotFound());
       return;
     }

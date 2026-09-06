@@ -100,7 +100,7 @@ abstract final class TerminalCompatibilitySurface {
     112,
   ];
 
-  static const List<int> dcsSelectors = <int>[0x012b71];
+  static const List<int> dcsSelectors = <int>[0x012471, 0x012b71];
 
   static const List<int> ansiModes = <int>[4];
 

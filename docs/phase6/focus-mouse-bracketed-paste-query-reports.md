@@ -4,8 +4,8 @@
 
 - Date started: 2026-09-07
 - Scope: seventh Phase 6 compatibility-hardening roadmap item
-- Current status: focus reporting and SGR pixel mouse/highlight-mode
-  disposition complete; bounded DECRQSS SGR is next
+- Current status: focus reporting, SGR pixel mouse/highlight-mode disposition,
+  and bounded DECRQSS SGR complete; XTVERSION/XTWINOPS closure is next
 
 ## Purpose and background
 
@@ -208,6 +208,37 @@ and committed before the next unit starts.
   found one directive-ordering info introduced by the new mouse-event import.
   The import was moved ahead of the mouse router; the repeated analyzer/full
   gate is required before completion.
+- 2026-09-07: implemented only the complete, unparameterized `DCS $ q m ST`
+  request. It reports current SGR without changing the screen, style, colors,
+  cursor, modes, or parser counters. Other status-string payloads and
+  parameterized forms remain bounded explicit unsupported; incomplete and
+  malformed DCS recovery is unchanged.
+- 2026-09-07: the reply uses the pinned xterm ordering: explicit reset first,
+  then attributes, foreground, and background. Defaults require 9 bytes;
+  every supported attribute plus two white direct colors requires 63 bytes,
+  so the existing 64-byte reply boundary remains sufficient. Palette entries
+  use ANSI, bright-ANSI, or colon-form 256-color encodings as appropriate.
+- 2026-09-07: the reviewed xterm capture is byte-identical to Dart. Kitty uses
+  a different valid SGR serialization, so acceptance records a semantic
+  agreement only after both raw replies independently parse to exactly the
+  same current style and colors. Raw external bytes and the reply difference
+  remain visible; no byte normalization rewrites the evidence.
+- 2026-09-07: regenerating the differential acceptance initially stopped on a
+  stale evidence-index hash after the reviewed manifest changed. The evidence
+  index was regenerated from the same immutable external probes before
+  acceptance. The matrix update also initially assigned Neovim's new replay
+  count to mosh; correcting the application IDs produced the expected Neovim
+  4→3 change without altering capture provenance.
+- 2026-09-07: the implementation/inventory totals are now 84 implemented, 19
+  partial, 9 safe-ignore, and 148 unsupported records, with 103 product
+  declarations. Application replay removes Neovim's DECRQSS reject and gap,
+  leaving 78 increments, 16 variants, and 10 owned gaps. Differential
+  acceptance contains 8 agreements (including 1 semantic agreement), no
+  documented gap, and 4 unavailable Ghostty results.
+- 2026-09-07: the first product integration run observed the exact raw reply
+  but failed the final aggregate marker because its test regex still described
+  the previous output contract. Adding the independent `decrqss=true` field to
+  that regex fixed the stale oracle; no product behavior changed.
 
 ## Verification results — focus reporting
 
@@ -264,3 +295,29 @@ and committed before the next unit starts.
   differential/application/terminfo gate, formatting of 179 files, static
   analysis with no issues, and the complete Dart test runner.
 - `git diff --check`: run in the final pre-commit review.
+
+## Verification results — bounded DECRQSS SGR
+
+- `dart run test/terminal_reply_test.dart`: passed default/styled exact bytes,
+  invalid state rejection, 63-byte maximum, state immutability, non-SGR and
+  parameterized request rejection, plus every split and bytewise parse plan.
+- `dart run test/terminal_compatibility_surface_test.dart` and
+  `dart run test/terminal_compatibility_inventory_test.dart`: passed the two
+  DCS selectors and exact 260-record/103-declaration reconciliation.
+- `dart run test/terminal_differential_corpus_test.dart`,
+  `dart run test/terminal_differential_evidence_test.dart`, and
+  `dart run test/terminal_differential_acceptance_test.dart`: passed exact
+  xterm agreement, explicit raw Kitty difference, and semantic equivalence.
+- `dart run tool/terminal_application_acceptance.dart --check`: passed eight
+  immutable captures with two clean cells, six documented-gap cells, 10 gaps,
+  16 variants, and 78 replayed unsupported increments.
+- `make runtime-terminal-display-integration`: passed on Apple M1/arm64 in
+  Developer JIT (2,712 ms) and Release AOT (2,048 ms). Both runs sent the
+  request through real zsh, read the exact 9-byte default reply, and included
+  its content-free acceptance marker.
+- `dart run tool/product_parser_corpus.dart`: passed 8 cases, 1,421 bytes, and
+  1,437 split/bytewise runs with unchanged snapshot hash 2,091,085,125.
+- `CI=true make test`: passed all generated-artifact freshness checks,
+  differential/application/terminfo acceptance, formatting of 179 files,
+  static analysis with no issues, and the complete Dart test runner.
+- `git diff --check`: passed in the pre-commit review.

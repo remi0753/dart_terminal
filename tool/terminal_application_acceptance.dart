@@ -265,10 +265,10 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
     cells.length == 8 &&
         cleanAgreements == 2 &&
         documentedGapCells == 6 &&
-        gaps.length == 11 &&
-        uniqueSequences.length == 17 &&
-        unsupportedIncrements == 79 &&
-        safeIgnoreGaps == 1,
+        gaps.length == 10 &&
+        uniqueSequences.length == 16 &&
+        unsupportedIncrements == 78 &&
+        safeIgnoreGaps == 0,
     'reviewed acceptance baseline differs',
   );
   return TerminalApplicationAcceptanceResult(
@@ -297,7 +297,6 @@ List<_AcceptanceGap> _parseGaps(
         'synchronized output/rendering',
     'ROADMAP.md#phase-9-light-dark-notification-reports':
         'light/dark notification と extended reports',
-    'docs/phase6/decrqss-sgr-gap.md': 'docs/phase6/decrqss-sgr-gap.md',
   };
   final List<Object?> values = _array(value, 'gaps');
   final List<_AcceptanceGap> result = <_AcceptanceGap>[];

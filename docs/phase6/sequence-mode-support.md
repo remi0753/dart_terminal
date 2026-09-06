@@ -30,8 +30,8 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | Support classification | Records |
 | --- | ---: |
 | `implemented` | 84 |
-| `partial` | 18 |
-| `safe-ignore` | 10 |
+| `partial` | 19 |
+| `safe-ignore` | 9 |
 | `unsupported` | 148 |
 | **Total** | **260** |
 
@@ -49,7 +49,7 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `mode` | 80 |
 | **Total** | **260** |
 
-The 84 implemented plus 18 partial records reconcile exactly to all 102 product declarations (80 sequence selectors and 22 modes). The 10 safe-ignore records cover 7 concrete DCS forms and SOS/PM/APC; all 148 remaining records are explicitly unsupported/rejected.
+The 84 implemented plus 19 partial records reconcile exactly to all 103 product declarations (81 sequence selectors and 22 modes). The 9 safe-ignore records cover 6 concrete DCS forms and SOS/PM/APC; all 148 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 
@@ -59,6 +59,7 @@ The 84 implemented plus 18 partial records reconcile exactly to all 102 product 
 | `dec:csi:decrst` | `CSI ? l` | The selector is implemented for the explicitly inventoried DEC private modes only. |
 | `dec:csi:decscusr` | `CSI SP q` | Cursor styles 0–6 are implemented; xterm resource-reset value 7 is rejected. |
 | `dec:csi:decset` | `CSI ? h` | The selector is implemented for the explicitly inventoried DEC private modes only. |
+| `dec:dcs:decrqss` | `DCS $ q Pt ST` | The complete SGR request payload m receives the current rendition in a bounded pinned-xterm form. Other status-string selectors remain explicit bounded unsupported. |
 | `ecma48:c0:ff` | `FF (0x0C)` | Handled as line feed, matching xterm rather than paged-media form feed. |
 | `ecma48:c0:vt` | `VT (0x0B)` | Handled as line feed, matching xterm rather than ECMA line-tab semantics. |
 | `ecma48:csi:dsr` | `CSI n` | Status and cursor-position requests are implemented; other DSR parameters are rejected. |
@@ -79,7 +80,6 @@ The 84 implemented plus 18 partial records reconcile exactly to all 102 product 
 | ID | Syntax |
 | --- | --- |
 | `dec:dcs:decaupss` | `DCS Ps ! u Pt ST` |
-| `dec:dcs:decrqss` | `DCS $ q Pt ST` |
 | `dec:dcs:decrsps` | `DCS Ps $ t Pt ST` |
 | `dec:dcs:decudk` | `DCS Ps ; Ps \| Pt ST` |
 | `ecma48:apc:apc` | `APC Pt ST` |
@@ -92,7 +92,7 @@ The 84 implemented plus 18 partial records reconcile exactly to all 102 product 
 ## Gap ownership
 
 - The next black-box differential and real-application matrix tasks decide which generic ECMA/DEC/xterm gaps become implementation work.
-- The current focus/mouse/query task has implemented focus mode 1004 and SGR pixel mouse 1016, and continues to own remaining report behavior.
+- The current focus/mouse/query task has implemented focus mode 1004, SGR pixel mouse 1016, and bounded DECRQSS SGR reporting, and continues to own XTVERSION and window-size report behavior.
 - The OSC policy task has implemented title commands 0/1/2, cwd command 7, cursor color 12/112, and the security-sensitive OSC 52 deny-by-default boundary. Opt-in clipboard access remains deferred.
 - The terminfo task owns remaining XTSETTCAP decisions; the existing `v1 保留` feature-matrix decision continues to own Sixel.
 - Unsupported extended character-set, rectangular-editing, locator, printer, and terminal-local xterm resource controls stay rejected until differential/application evidence justifies a new ordered task.

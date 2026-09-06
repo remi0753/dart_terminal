@@ -11,6 +11,7 @@ void runTerminalReplyTests() {
   _testOriginRelativeCursorReports();
   _testOscColorQueriesAndTerminators();
   _testXtgettcapExplicitNegativePolicy();
+  _testDecrqssSgrStateAndBounds();
   _testReplyRejectionAndMalformedRecovery();
   _testQueryChunkIndependence();
 }
@@ -35,6 +36,15 @@ void _testBoundedSemanticEncoder() {
     TerminalReplyEncoder.xtgettcapNotFound(),
     '\x1bP0+r\x1b\\',
     'XTGETTCAP absent-capability report',
+  );
+  _expectBytes(
+    TerminalReplyEncoder.decrqssSgr(
+      foreground: 0,
+      background: 0,
+      styleAttributes: 0,
+    ),
+    '\x1bP1\x24r0m\x1b\\',
+    'default SGR status follows the pinned xterm serialization',
   );
   final Uint8List maximumCursor = TerminalReplyEncoder.cursorPosition(
     row: TerminalReplyEncoder.maximumCoordinate,
@@ -129,6 +139,73 @@ void _testBoundedSemanticEncoder() {
     ),
     ArgumentError,
     'unsupported dynamic color command',
+  );
+}
+
+void _testDecrqssSgrStateAndBounds() {
+  final List<Uint8List> replies = <Uint8List>[];
+  final TerminalScreen screen = TerminalScreen(rows: 1, columns: 2);
+  final TerminalScreenParserSink sink = TerminalScreenParserSink(
+    screen,
+    onReply: (Uint8List reply) {
+      replies.add(Uint8List.fromList(reply));
+      return true;
+    },
+  );
+  final VtParser parser = VtParser(sink: sink);
+  parser.parse(
+    _bytes(
+      '\x1bP\x24qm\x1b\\'
+      '\x1b[1;4;38;2;12;34;56;48;5;17m'
+      '\x1bP\x24qm\x1b\\'
+      '\x1bP\x24qq\x1b\\'
+      '\x1bP1\x24qm\x1b\\',
+    ),
+  );
+  parser.finish();
+  final int expectedStyle =
+      TerminalStyleAttributes.bold |
+      TerminalStyleAttributes.withUnderline(0, TerminalUnderlineStyle.single);
+  _expectStrings(replies, const <String>[
+    '\x1bP1\x24r0m\x1b\\',
+    '\x1bP1\x24r0;1;4;38:2::12:34:56;48:5:17m\x1b\\',
+  ], 'DECRQSS reports default and current SGR in pinned xterm form');
+  _expect(
+    sink.acceptedReplyCount == 2 &&
+        sink.unsupportedSequenceCount == 2 &&
+        screen.currentStyleAttributes == expectedStyle &&
+        screen.currentForeground == 0x800c2238 &&
+        screen.currentBackground == 18,
+    'only the complete unparameterized SGR request replies without mutation',
+  );
+
+  final int maximumAttributes =
+      TerminalStyleAttributes.bold |
+      TerminalStyleAttributes.faint |
+      TerminalStyleAttributes.italic |
+      TerminalStyleAttributes.blink |
+      TerminalStyleAttributes.inverse |
+      TerminalStyleAttributes.conceal |
+      TerminalStyleAttributes.strike |
+      TerminalStyleAttributes.withUnderline(0, TerminalUnderlineStyle.dashed);
+  final Uint8List maximum = TerminalReplyEncoder.decrqssSgr(
+    foreground: 0x80ffffff,
+    background: 0x80ffffff,
+    styleAttributes: maximumAttributes,
+  );
+  _expect(
+    maximum.length == 63 &&
+        maximum.length <= TerminalReplyEncoder.maximumReplyBytes,
+    'the largest representable SGR report stays inside the 64-byte bound',
+  );
+  _expectThrows(
+    () => TerminalReplyEncoder.decrqssSgr(
+      foreground: 257,
+      background: 0,
+      styleAttributes: 0,
+    ),
+    ArgumentError,
+    'invalid SGR color token',
   );
 }
 
@@ -410,6 +487,7 @@ void _testQueryChunkIndependence() {
     ..._osc('10;#123456'),
     ..._osc('10;?'),
     ..._bytes('\x1bP+q4D73\x1b\\'),
+    ..._bytes('\x1bP\x24qm\x1b\\'),
   ]);
   final List<String> expected = _parseReplyStream(input);
   for (int split = 0; split <= input.length; split++) {

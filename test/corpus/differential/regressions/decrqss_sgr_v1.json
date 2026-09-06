@@ -6,7 +6,7 @@
   "cases": [
     {
       "id": "decrqss-sgr-query-gap",
-      "description": "A complete seven-byte DECRQSS SGR query isolates the missing Dart Terminal reply.",
+      "description": "A complete seven-byte DECRQSS SGR query receives a bounded successful current-rendition reply.",
       "inventory_ids": [
         "dec:dcs:decrqss"
       ],
@@ -16,8 +16,8 @@
       "fields": [
         "replies"
       ],
-      "expectation": "documented-gap",
-      "gap_owner": "docs/phase6/decrqss-sgr-gap.md"
+      "expectation": "agree",
+      "gap_owner": null
     }
   ]
 }

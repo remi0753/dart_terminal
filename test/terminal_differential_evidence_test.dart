@@ -103,11 +103,13 @@ void runTerminalDifferentialEvidenceTests() {
         );
     if (caseId == 'rendition-attributes-colors') {
       _expect(
-        dart.replies.isEmpty &&
+        dart.replies.isNotEmpty &&
             kitty.replies.isNotEmpty &&
             xterm.replies.isNotEmpty &&
+            _bytesEqual(dart.replies, xterm.replies) &&
+            !_bytesEqual(dart.replies, kitty.replies) &&
             !_bytesEqual(kitty.replies, xterm.replies),
-        'raw DECRQSS differences are preserved for later acceptance',
+        'raw DECRQSS serialization differences remain visible in evidence',
       );
     } else {
       _expect(
