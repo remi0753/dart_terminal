@@ -91,6 +91,7 @@ void _testMode47IsolationAndPreservation() {
   screens.alternate.clearDamage();
 
   screens.setAlternateMode47(true);
+  screens.setBracketedPasteMode(true);
   _expect(screens.usingAlternate, 'mode 47 selects alternate');
   _expect(
     _rowText(screens.alternate, 0) == '....',
@@ -270,6 +271,7 @@ void _testScreenSetReset() {
   screens.reset();
   _expect(
     !screens.usingAlternate &&
+        !screens.bracketedPasteMode &&
         _allBlank(screens.primary) &&
         _allBlank(screens.alternate),
     'screen-set reset clears both grids and selects primary',
@@ -318,10 +320,16 @@ void _testParserScreenModeDispatch() {
     !screens.usingAlternate && screens.alternate.contentAt(0, 0) == 0x41,
     'parser dispatches preserving mode 47 reset',
   );
+  parser.parse(Uint8List.fromList(_csi('?2004h')));
+  _expect(screens.bracketedPasteMode, 'parser dispatches mode 2004 set');
+  parser.parse(Uint8List.fromList(_csi('?2004l')));
+  _expect(!screens.bracketedPasteMode, 'parser dispatches mode 2004 reset');
+  parser.parse(Uint8List.fromList(_csi('?2004h')));
   parser.parse(Uint8List.fromList(<int>[0x1b, 0x63]));
   parser.finish();
   _expect(
     !screens.usingAlternate &&
+        !screens.bracketedPasteMode &&
         _allBlank(screens.primary) &&
         _allBlank(screens.alternate),
     'RIS through screen-set sink resets both grids',
@@ -398,6 +406,7 @@ List<int> _screenSetSnapshot(Uint8List input, [List<int>? chunks]) {
   return <int>[
     screens.activeKind.index,
     screens.mode1049Active ? 1 : 0,
+    screens.bracketedPasteMode ? 1 : 0,
     screens.transitionGeneration,
     for (final TerminalScreen screen in <TerminalScreen>[
       screens.primary,

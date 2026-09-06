@@ -80,6 +80,7 @@ final class TerminalScreenSet {
   bool _mode1049Active = false;
   bool _applicationCursorKeys = false;
   bool _applicationKeypad = false;
+  bool _bracketedPaste = false;
   TerminalMouseTrackingMode _mouseTracking = TerminalMouseTrackingMode.none;
   TerminalMouseCoordinateEncoding _mouseEncoding =
       TerminalMouseCoordinateEncoding.legacy;
@@ -94,6 +95,7 @@ final class TerminalScreenSet {
   };
   bool get usingAlternate => _activeKind == TerminalScreenKind.alternate;
   bool get mode1049Active => _mode1049Active;
+  bool get bracketedPasteMode => _bracketedPaste;
   TerminalKeyboardModes get keyboardModes => TerminalKeyboardModes(
     applicationCursorKeys: _applicationCursorKeys,
     applicationKeypad: _applicationKeypad,
@@ -192,6 +194,14 @@ final class TerminalScreenSet {
     _transitionGeneration++;
   }
 
+  void setBracketedPasteMode(bool enabled) {
+    if (_bracketedPaste == enabled) {
+      return;
+    }
+    _bracketedPaste = enabled;
+    _transitionGeneration++;
+  }
+
   void setMouseTrackingMode(TerminalMouseTrackingMode mode, bool enabled) {
     if (mode == TerminalMouseTrackingMode.none) {
       throw ArgumentError.value(mode, 'mode', 'must be a DEC tracking mode');
@@ -264,6 +274,7 @@ final class TerminalScreenSet {
     _mode1049Active = false;
     _applicationCursorKeys = false;
     _applicationKeypad = false;
+    _bracketedPaste = false;
     _mouseTracking = TerminalMouseTrackingMode.none;
     _mouseEncoding = TerminalMouseCoordinateEncoding.legacy;
     primary.synchronizeVisualBellGeneration(visualBellGeneration);

@@ -37,6 +37,7 @@ import 'terminal_live_metal_surface_font_test.dart';
 import 'terminal_mouse_encoder_test.dart';
 import 'terminal_mouse_router_test.dart';
 import 'terminal_palette_test.dart';
+import 'terminal_paste_test.dart';
 import 'terminal_preedit_test.dart';
 import 'terminal_property_fuzz_test.dart';
 import 'terminal_reflow_test.dart';
@@ -93,6 +94,7 @@ Future<void> main() async {
   runTerminalSelectionGestureTests();
   runTerminalLiveMetalSurfaceFontTests();
   runTerminalPaletteTests();
+  runTerminalPasteTests();
   runTerminalPreeditTests();
   runTerminalScrollRouterTests();
   runTerminalPropertyFuzzTests();

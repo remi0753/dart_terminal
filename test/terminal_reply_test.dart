@@ -173,7 +173,8 @@ void _testDeviceStatusAndModeQueries() {
       '\x1b[?5\x24p\x1b[?12\x24p\x1b[?25\x24p\x1b[?47h'
       '\x1b[?5\x24p\x1b[?12\x24p\x1b[?25\x24p'
       '\x1b[?47\x24p\x1b[?1047\x24p\x1b[?1048\x24p\x1b[?1049\x24p'
-      '\x1b[?1049h\x1b[?1049\x24p',
+      '\x1b[?1049h\x1b[?1049\x24p'
+      '\x1b[?2004\x24p\x1b[?2004h\x1b[?2004\x24p',
     ),
   );
   _expectStrings(screenSetReplies, const <String>[
@@ -188,6 +189,8 @@ void _testDeviceStatusAndModeQueries() {
     '\x1b[?1048;0\x24y',
     '\x1b[?1049;2\x24y',
     '\x1b[?1049;1\x24y',
+    '\x1b[?2004;2\x24y',
+    '\x1b[?2004;1\x24y',
   ], 'active-screen modes are reported without inventing 1048 state');
 }
 

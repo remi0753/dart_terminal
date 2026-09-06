@@ -208,3 +208,39 @@ Primary references:
   `35350f8` (`Bound pasteboard text reads`). The next subtask remains terminal
   DEC mode and paste planning/encoding; no product clipboard behavior has been
   enabled early.
+
+### 2026-09-06 — DEC mode and bounded paste codec
+
+- Added screen-set-owned DEC private mode 2004 with idempotent set/reset,
+  DECRQM status, RIS reset, and chunk-independent parser behavior. It remains
+  session-wide across primary/alternate screen changes, matching keyboard and
+  mouse terminal modes rather than visual grid modes.
+- Added `TerminalPasteCodec`, immutable content-free analysis, and a stateful
+  single-pass encoder. The encoder holds only one 4-byte scalar staging buffer
+  plus one caller-sized output chunk; it never constructs the complete encoded
+  10 MiB payload.
+- CRLF, CR, and LF each become one logical newline. Bracketed mode emits LF;
+  plain mode emits CR. One prefix/suffix pair spans every transport chunk.
+- The recorded xterm/Ghostty terminal-driver bytes are replaced by spaces.
+  All other C0/DEL content (including tab) is still classified for
+  confirmation, while the embedded `ESC [ 201 ~` attack is both classified
+  and made impossible by ESC replacement.
+- Analysis freezes the source UTF-16 length, normalized/body/total byte counts,
+  newline/control/replacement counts, bracket state, large-paste state, and a
+  deterministic 64-bit source fingerprint. It rejects an encoded body beyond
+  64 MiB while scanning.
+- Targeted format/analyze and paste/mode/reply tests passed. Encoder tests cover
+  CRLF/CR/LF, every replaced byte, tab classification, embedded terminator,
+  astral/combining text, malformed surrogate replacement, empty input, limits,
+  and every output chunk size from 1 through 17 bytes.
+- The first full `CI=true make test` reached the reviewed corpus and correctly
+  reported that zsh/Vim mode-2004 sequences had changed from unsupported to
+  supported. The reviewed snapshots were updated only at those parser counters
+  (`recorded-shell` 4→0, `recorded-vim` 15→12). An explicit corpus replay then
+  passed all 1,437 split runs with aggregate hash `952049488`; its pinned test
+  oracle was updated accordingly.
+- Final subtask verification: `CI=true make test` passed all 135 formatted
+  source files, analyzer checks, reviewed corpus/split/hash oracles, terminal
+  protocol/renderer/session tests, and native-asset-backed test execution.
+- No PTY transport or menu behavior was added in this subtask. The next ordered
+  work owns tracked-completion transport and consumes this frozen plan/encoder.

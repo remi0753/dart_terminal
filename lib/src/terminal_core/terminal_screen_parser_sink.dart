@@ -436,6 +436,7 @@ final class TerminalScreenParserSink
         47 || 1047 => screenSet?.usingAlternate,
         69 => screen.modeEnabled(TerminalScreenMode.horizontalMargins),
         1049 => screenSet?.mode1049Active,
+        2004 => screenSet?.bracketedPasteMode,
         _ => screenSet?.mouseModes.decPrivateModeState(mode),
       };
     }
@@ -1067,6 +1068,13 @@ final class TerminalScreenParserSink
           _setScreenMode(enabled, 1048);
         case 1049:
           _setScreenMode(enabled, 1049);
+        case 2004:
+          final TerminalScreenSet? screens = screenSet;
+          if (screens == null) {
+            _unsupportedSequenceCount++;
+          } else {
+            screens.setBracketedPasteMode(enabled);
+          }
         default:
           _unsupportedSequenceCount++;
       }

@@ -95,5 +95,5 @@ alternate row=4 flags=- logical=1:5+0 text="                                    
 alternate row=5 flags=- logical=1:6+0 text="                                        "
 alternate row=6 flags=- logical=1:7+0 text="                                        "
 alternate row=7 flags=- logical=1:8+0 text="                                        "
-parser unsupported_controls=0 unsupported_sequences=4 cancel=0 limit=0 malformed=0 incomplete=0 replies_accepted=0 replies_rejected=0
+parser unsupported_controls=0 unsupported_sequences=0 cancel=0 limit=0 malformed=0 incomplete=0 replies_accepted=0 replies_rejected=0
 end
