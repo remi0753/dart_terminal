@@ -893,6 +893,9 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] versioned sequence trace export、normal gate、親項目完了判定
 - [ ] compatibility bug の regression corpus 化
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のadoption判断も参照して実施）
+  （[`docs/phase6/compatibility-regression-corpus.md`](docs/phase6/compatibility-regression-corpus.md) の順序と完了条件を参照して実施）
+  - [x] versioned corpus contract、harness、reviewed byte cases
+  - [ ] fix-family coverage reconciliation、normal gate、Phase完了判定
 
 終了条件:
 
