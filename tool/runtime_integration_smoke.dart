@@ -619,7 +619,8 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
   );
   for (final String expected in <String>[
     'Dart Terminal is attached to the AppKit main thread.',
-    'NATIVE_KEY_EVENT_ROUTING mode=dart-only',
+    'NATIVE_KEY_EVENT_ROUTING mode=appkit-only',
+    'NATIVE_TEXT_INPUT_CLIENT attached=true routing=appkit-only client_id=',
     'NATIVE_CUSTOM_VIEW '
         'provider=dart_terminal.TerminalMetalView attached=true '
         'renderer_bound=true',
@@ -870,11 +871,28 @@ Future<void> _runTerminalDisplay(
     ),
     'terminal display launch did not use the default Metal surface',
   );
+  _expect(
+    observation.stdoutText.contains(
+      'NATIVE_TEXT_INPUT_CLIENT attached=true routing=appkit-only client_id=',
+    ),
+    'terminal display launch did not attach its native text-input client',
+  );
+  final RegExp textInputAcceptance = RegExp(
+    r'^TERMINAL_TEXT_INPUT_TEST raw=true preedit=true commit_once=true '
+    r'cancel=true candidate=true geometry_generation=[1-9][0-9]* '
+    r'frame_build_delta=[1-9][0-9]*$',
+    multiLine: true,
+  );
+  _expect(
+    textInputAcceptance.hasMatch(observation.stdoutText) &&
+        !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW'),
+    'terminal display launch omitted exclusive IME/PTY acceptance',
+  );
   final RegExp acceptance = RegExp(
     r'^TERMINAL_DISPLAY_TEST sgr_stripped=true styled=true '
     r'wrapped_rows=([2-9]|[1-9][0-9]+) prompt_bottom=true '
     r'metal_default=true newest_frame=true frame_bounded=true '
-    r'system_font=true mode_key=true font_size=14\.0 '
+    r'system_font=true mode_key=true text_input=true font_size=14\.0 '
     r'rows=([4-9]|[1-9][0-9]+) '
     r'columns=([2-9][0-9]|[1-9][0-9]{2,}) '
     r'frame_build_delta=[1-9][0-9]*$',

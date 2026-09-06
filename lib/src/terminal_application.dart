@@ -15,6 +15,7 @@ import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_encoder.dart';
 import 'terminal_input/terminal_key_event.dart';
+import 'terminal_input/terminal_text_input_event_router.dart';
 import 'terminal_pane.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_session.dart';
@@ -318,10 +319,12 @@ final class TerminalApplication {
     final AppKitApplication application = await AppKitApplication.attach();
     View? contentView;
     TerminalLiveMetalSurface? metalSurface;
+    TerminalTextInputClient? textInputClient;
     Window? window;
     TerminalPaneOwner? paneOwner;
     StreamSubscription<WindowEvent>? eventSubscription;
     StreamSubscription<AppKitEvent>? applicationEventSubscription;
+    StreamSubscription<TerminalTextInputEvent>? textInputSubscription;
     final List<StreamSubscription<MenuItemInvokedEvent>> menuSubscriptions =
         <StreamSubscription<MenuItemInvokedEvent>>[];
     final List<MenuItem> menuItems = <MenuItem>[];
@@ -354,10 +357,13 @@ final class TerminalApplication {
               title: 'Dart Terminal',
             )
             ..contentView = createdContentView
-            ..keyEventRouting = KeyEventRouting.dartOnly
+            ..keyEventRouting = KeyEventRouting.appKitOnly
             ..defersCloseRequests = true;
       window = createdWindow;
-      stdout.writeln('NATIVE_KEY_EVENT_ROUTING mode=dart-only');
+      stdout.writeln('NATIVE_KEY_EVENT_ROUTING mode=appkit-only');
+      final TerminalTextInputClient createdTextInputClient =
+          TerminalTextInputClient.attach(createdContentView);
+      textInputClient = createdTextInputClient;
       application.defersTerminationRequests = true;
 
       final TerminalPaneOwner createdPaneOwner = TerminalPaneOwner();
@@ -431,6 +437,7 @@ final class TerminalApplication {
           stdout.writeln(observation.machineLine());
         },
       );
+      final TerminalKeyEventRouter keyEventRouter = TerminalKeyEventRouter();
       final TerminalLiveMetalSurface createdMetalSurface =
           TerminalLiveMetalSurface.attach(
             sessionId: createdPane.sessionId,
@@ -441,6 +448,14 @@ final class TerminalApplication {
             backingScaleFactor: createdWindow.backingScaleFactor ?? 1,
             isVisible: createdWindow.isVisible,
             isOccluded: createdWindow.isOccluded,
+            onCaretGeometryChanged: (TerminalCaretRect rectangle) {
+              createdTextInputClient.publishCaretRect(
+                x: rectangle.x,
+                y: rectangle.y,
+                width: rectangle.width,
+                height: rectangle.height,
+              );
+            },
             onFatalError: (Object error, StackTrace stackTrace) {
               if (!closed.isCompleted) {
                 closed.completeError(error, stackTrace);
@@ -448,10 +463,53 @@ final class TerminalApplication {
             },
           );
       metalSurface = createdMetalSurface;
+      final TerminalTextInputEventRouter textInputEventRouter =
+          TerminalTextInputEventRouter(
+            clientId: createdTextInputClient.clientId,
+            onRawKeyDown: (TerminalKeyEvent event) {
+              keyEventRouter.handleTerminalKeyDown(event, createdPane);
+            },
+            onPreedit:
+                ({
+                  required int generation,
+                  required String text,
+                  required int selectionLocation,
+                  required int selectionLength,
+                }) {
+                  createdMetalSurface.updatePreedit(
+                    generation: generation,
+                    text: text,
+                    selectionLocation: selectionLocation,
+                    selectionLength: selectionLength,
+                  );
+                },
+            onClearPreedit: (int generation) {
+              createdMetalSurface.clearPreedit(generation: generation);
+            },
+            onCommit: createdPane.insertText,
+            onOverflow: (int clientId, int generation) {
+              stdout.writeln(
+                'TERMINAL_TEXT_INPUT_OVERFLOW client_id=$clientId '
+                'generation=$generation reset=true',
+              );
+            },
+          );
+      textInputSubscription = createdTextInputClient.events.listen(
+        textInputEventRouter.route,
+        onError: (Object error, StackTrace stackTrace) {
+          if (!closed.isCompleted) {
+            closed.completeError(error, stackTrace);
+          }
+        },
+      );
       stdout.writeln(
         'NATIVE_CUSTOM_VIEW '
         'provider=$terminalMetalViewProviderIdentifier attached=true '
         'renderer_bound=true',
+      );
+      stdout.writeln(
+        'NATIVE_TEXT_INPUT_CLIENT attached=true routing=appkit-only '
+        'client_id=${createdTextInputClient.clientId}',
       );
       if (options.runtimePtyExitFaultInjection) {
         stdout.writeln(
@@ -562,7 +620,6 @@ final class TerminalApplication {
           }),
         );
 
-      final TerminalKeyEventRouter keyEventRouter = TerminalKeyEventRouter();
       applicationEventSubscription = application.events.listen(
         (AppKitEvent event) {
           switch (event) {
@@ -730,8 +787,6 @@ final class TerminalApplication {
                   },
                 );
               }
-            case AppKitKeyEvent() when event.kind == AppKitKeyEventKind.down:
-              keyEventRouter.handleKeyDown(event, createdPane);
             case AppKitKeyEvent():
             case AppKitMouseEvent():
           }
@@ -821,6 +876,8 @@ final class TerminalApplication {
               createdMetalSurface,
               createdWindow,
               keyEventRouter,
+              createdTextInputClient,
+              textInputEventRouter,
             );
           } else if (shellExitTest != RuntimeShellExitTestScenario.none) {
             await _exerciseShellExitPolicy(
@@ -1005,6 +1062,7 @@ final class TerminalApplication {
         }
         await eventSubscription?.cancel();
         await applicationEventSubscription?.cancel();
+        await textInputSubscription?.cancel();
         for (final StreamSubscription<MenuItemInvokedEvent> subscription
             in menuSubscriptions) {
           await subscription.cancel();
@@ -1019,6 +1077,9 @@ final class TerminalApplication {
           if (!menu.isDisposed) {
             menu.dispose();
           }
+        }
+        if (textInputClient != null && !textInputClient.isDisposed) {
+          textInputClient.dispose();
         }
         if (metalSurface != null && !metalSurface.isDisposed) {
           metalSurface.dispose();
@@ -1162,6 +1223,8 @@ final class TerminalApplication {
     TerminalLiveMetalSurface surface,
     Window window,
     TerminalKeyEventRouter keyEventRouter,
+    TerminalTextInputClient textInputClient,
+    TerminalTextInputEventRouter textInputEventRouter,
   ) async {
     const String prompt = '__DT_DISPLAY_PROMPT__ ';
     const String colorMarker = '__DT_COLOR__';
@@ -1172,6 +1235,13 @@ final class TerminalApplication {
       session,
       pane,
       keyEventRouter,
+    );
+    final bool textInput = await _exerciseTextInput(
+      session,
+      pane,
+      surface,
+      textInputClient,
+      textInputEventRouter,
     );
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
@@ -1235,7 +1305,8 @@ final class TerminalApplication {
           newestFrame &&
           frameBounded &&
           systemFont &&
-          modeKey) {
+          modeKey &&
+          textInput) {
         final int? workerProcessId = lifecycle.workerPid;
         _expectLifecycle(
           workerProcessId != null,
@@ -1246,7 +1317,7 @@ final class TerminalApplication {
           'wrapped_rows=$wrappedRows prompt_bottom=$promptBottom '
           'metal_default=true newest_frame=$newestFrame '
           'frame_bounded=$frameBounded system_font=$systemFont '
-          'mode_key=$modeKey '
+          'mode_key=$modeKey text_input=$textInput '
           'font_size=${baseline.fontPointSize.toStringAsFixed(1)} '
           'rows=${screen.rows} '
           'columns=${screen.columns} '
@@ -1267,9 +1338,133 @@ final class TerminalApplication {
       'sgr_stripped=$sgrStripped styled=$styled wrapped_rows=$wrappedRows '
       'prompt_bottom=$promptBottom newest_frame=$newestFrame '
       'frame_bounded=$frameBounded system_font=$systemFont '
-      'mode_key=$modeKey '
+      'mode_key=$modeKey text_input=$textInput '
       'font_size=${baseline.fontPointSize}',
     );
+  }
+
+  static Future<bool> _exerciseTextInput(
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+    TerminalTextInputClient client,
+    TerminalTextInputEventRouter eventRouter,
+  ) async {
+    const String readyMarker = '__DT_IME_READY__';
+    const String receivedMarker = '__DT_IME_1b5b41e697a5e69cace8aa9e__';
+    surface.updateWindowState(isVisible: true, isOccluded: false);
+    surface.processPending();
+    pane.insertText(
+      "stty raw -echo; printf '\\r\\n__DT_%s_READY__\\r\\n' IME; "
+      "bytes=\$(dd bs=1 count=12 2>/dev/null | od -An -tx1 | tr -d ' \\n'); "
+      "stty sane; printf '\\r\\n__DT_IME_%s__\\r\\n' \"\$bytes\"",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, readyMarker);
+
+    final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
+    client.debugRunAcceptanceStage(1);
+    final Stopwatch preeditDeadline = Stopwatch()..start();
+    var preeditFrameDelta = 0;
+    while (preeditDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      preeditFrameDelta = snapshot.frameBuildCount - baseline.frameBuildCount;
+      if (eventRouter.lastGeneration >= 3 &&
+          eventRouter.isCompositionActive &&
+          surface.preeditState.isActive &&
+          snapshot.acceptedFrameCount > baseline.acceptedFrameCount &&
+          preeditFrameDelta > 0) {
+        break;
+      }
+      if (eventRouter.lastGeneration >= 3) {
+        surface.processPending();
+      }
+      _expectLifecycle(
+        session.isLive,
+        'text-input test shell exited before rendering preedit',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      eventRouter.lastGeneration >= 3 &&
+          eventRouter.isCompositionActive &&
+          surface.preeditState.isActive &&
+          preeditFrameDelta > 0,
+      'text-input test did not render staged preedit '
+      'generation=${eventRouter.lastGeneration} '
+      'router_active=${eventRouter.isCompositionActive} '
+      'surface_active=${surface.preeditState.isActive} '
+      'frame_delta=$preeditFrameDelta '
+      'accepted_delta='
+      '${surface.snapshot().acceptedFrameCount - baseline.acceptedFrameCount}',
+    );
+
+    client.debugRunAcceptanceStage(2);
+    final Stopwatch commitDeadline = Stopwatch()..start();
+    while (commitDeadline.elapsed < const Duration(seconds: 5) &&
+        (eventRouter.lastGeneration < 5 ||
+            !eventRouter.isCompositionActive ||
+            !surface.preeditState.isActive)) {
+      _expectLifecycle(
+        session.isLive,
+        'text-input test shell exited before commit delivery',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      eventRouter.lastGeneration >= 5 &&
+          eventRouter.isCompositionActive &&
+          surface.preeditState.isActive,
+      'text-input test did not commit once and begin cancellable preedit',
+    );
+
+    client.debugRunAcceptanceStage(3);
+    final Stopwatch cancelDeadline = Stopwatch()..start();
+    while (cancelDeadline.elapsed < const Duration(seconds: 5) &&
+        (eventRouter.lastGeneration < 6 ||
+            eventRouter.isCompositionActive ||
+            surface.preeditState.isActive)) {
+      _expectLifecycle(
+        session.isLive,
+        'text-input test shell exited before cancellation',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      eventRouter.lastGeneration >= 6 &&
+          !eventRouter.isCompositionActive &&
+          !surface.preeditState.isActive,
+      'text-input test did not cancel without commit',
+    );
+    await _waitForAsciiMarker(session, receivedMarker);
+    _expectLifecycle(
+      client.geometryGeneration > 0,
+      'text-input test did not publish candidate geometry',
+    );
+    stdout.writeln(
+      'TERMINAL_TEXT_INPUT_TEST raw=true preedit=true commit_once=true '
+      'cancel=true candidate=true geometry_generation='
+      '${client.geometryGeneration} frame_build_delta=$preeditFrameDelta',
+    );
+    return true;
+  }
+
+  static Future<void> _waitForAsciiMarker(
+    TerminalSession session,
+    String marker,
+  ) async {
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 5)) {
+      if (_findAscii(session.terminalScreenSet.activeScreen, marker) != null) {
+        return;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'terminal session exited before marker $marker',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw TimeoutException('terminal did not display marker $marker');
   }
 
   static Future<bool> _exerciseModeAwareKeyInput(
@@ -1723,7 +1918,16 @@ final class TerminalKeyEventRouter {
     if (appKitEvent.kind != AppKitKeyEventKind.down) {
       return TerminalKeyRouteResult.ignored;
     }
-    final TerminalKeyEvent event = TerminalAppKitKeyAdapter.adapt(appKitEvent);
+    return handleTerminalKeyDown(
+      TerminalAppKitKeyAdapter.adapt(appKitEvent),
+      pane,
+    );
+  }
+
+  TerminalKeyRouteResult handleTerminalKeyDown(
+    TerminalKeyEvent event,
+    TerminalPane pane,
+  ) {
     final TerminalKeyBindingResolution resolution = _bindingEngine.resolve(
       event,
     );

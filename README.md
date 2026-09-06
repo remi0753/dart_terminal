@@ -22,8 +22,11 @@ model、および CoreText/Metal renderer は製品実装へ移行済みです�
 ## 現在できること
 
 - AppKit のネイティブウィンドウを Dart から表示
-- AppKitのphysical key、produced/unmodified text、7種のmodifier、repeatを分離して
-  1回だけterminalへ配送するwindow単位のDart専有key routing
+- AppKitのphysical key、produced/unmodified text、7種のmodifier、repeatを分離し、
+  menu優先後にfirst responderのtext-input clientから1回だけterminalへ配送するrouting
+- 実`NSTextInputClient`のmarked text、UTF-16 selection/replacement metadata、commit、
+  cancel、candidate rect。preeditはcanonical screenを変えず、Unicode 17の折り返し、
+  選択背景、下線、composition caretをCoreText/Metal overlayとして描画
 - DECCKM/DECPAMを反映するbounded legacy xterm encoder（UTF-8、Control/Option、
   navigation、F1–F20、keypad）
 - stable action、exact chord、conflict検出、override、unbound、passthroughを備えた

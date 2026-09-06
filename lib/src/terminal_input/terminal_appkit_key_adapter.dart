@@ -4,20 +4,34 @@ import 'terminal_key_event.dart';
 
 /// Converts the stable AppKit event wire model at exactly one product boundary.
 abstract final class TerminalAppKitKeyAdapter {
-  static TerminalKeyEvent adapt(AppKitKeyEvent event) => TerminalKeyEvent(
-    physicalKey: physicalKeyForCode(event.keyCode),
-    text: event.characters,
-    unmodifiedText: event.charactersIgnoringModifiers,
-    modifiers: TerminalKeyModifiers(
-      capsLock: event.modifiers.capsLock,
-      shift: event.modifiers.shift,
-      control: event.modifiers.control,
-      option: event.modifiers.option,
-      command: event.modifiers.command,
-      numericPad: event.modifiers.numericPad,
-      function: event.modifiers.function,
-    ),
+  static TerminalKeyEvent adapt(AppKitKeyEvent event) => adaptFields(
+    keyCode: event.keyCode,
+    modifiers: event.modifiers,
     isRepeat: event.isRepeat,
+    characters: event.characters,
+    charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+  );
+
+  static TerminalKeyEvent adaptFields({
+    required int keyCode,
+    required ModifierKeys modifiers,
+    required bool isRepeat,
+    required String characters,
+    required String charactersIgnoringModifiers,
+  }) => TerminalKeyEvent(
+    physicalKey: physicalKeyForCode(keyCode),
+    text: characters,
+    unmodifiedText: charactersIgnoringModifiers,
+    modifiers: TerminalKeyModifiers(
+      capsLock: modifiers.capsLock,
+      shift: modifiers.shift,
+      control: modifiers.control,
+      option: modifiers.option,
+      command: modifiers.command,
+      numericPad: modifiers.numericPad,
+      function: modifiers.function,
+    ),
+    isRepeat: isRepeat,
   );
 
   /// Maps macOS virtual key codes to layout-independent physical positions.

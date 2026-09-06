@@ -150,8 +150,8 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | --- | --- | --- | --- | --- | --- |
 | IN-01 | physical key、produced text、modifiers、repeat を別 field として保持 | P0 | 5 | `G:src/input/key.zig`, `G:macos/Sources/Ghostty/Ghostty.Input.swift` | AppKit adapterから製品routerまでfield分離とrepeat保持、単一action/write配送を完了 |
 | IN-02 | US/JIS/layout switch/dead key/function/navigation/keypad と terminal mode-aware encoding | P0 | 5 | `G:src/input/KeymapDarwin.zig`, `G:src/input/key_encode.zig`, keyboard tests | macOS physical key map、DECCKM/DECPAM対応のbounded legacy xterm encoder、実PTYのmode-aware入力を完了。layout/dead key/CJK/emoji実機matrixは後続項目 |
-| IN-03 | `NSTextInputClient` marked/commit/cancel/replacement/candidate rect。raw key と IME を二重送信しない | P0 | 5 | `G:macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` | Phase 0 gate |
-| IN-04 | 日本語 IME、emoji picker、Unicode Hex Input、key repeat の automated/manual matrix | P0 | 5 | same AppKit surface implementation and macOS tests | Phase 0 gate |
+| IN-03 | `NSTextInputClient` marked/commit/cancel/replacement/candidate rect。raw key と IME を二重送信しない | P0 | 5 | `G:macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` | bounded native client/event/geometry、Unicode 17 preedit Metal overlay、AppKit first-responder routing、実PTYへのraw/commit単一配送とcancel抑止をM1両modeで完了 |
+| IN-04 | 日本語 IME、emoji picker、Unicode Hex Input、key repeat の automated/manual matrix | P0 | 5 | same AppKit surface implementation and macOS tests | 実`NSTextInputClient`の日本語marked/update/commit/cancel/candidate自動受け入れは完了。US/JIS切替、dead key、emoji picker、Unicode Hex、repeatのsystem input-source matrixは次項目 |
 | IN-05 | char/word/line multi-click selection、drag、autoscroll | P0 | 5 | `G:src/terminal/Selection.zig`, `SelectionGesture.zig`, SurfaceView | 未実装 |
 | IN-06 | precision/momentum scroll と terminal mouse report/local selection arbitration | P0 | 5 | `G:src/input/mouse.zig`, `G:src/input/mouse_encode.zig` | 未実装 |
 | IN-07 | standard clipboard、bracketed paste、newline normalization | P0 | 5 | `G:src/input/paste.zig`, `G:src/terminal/paste.zig`, NSPasteboard helpers | plain-text general pasteboard と明示的 Paste action の基盤のみ完了。bracketed paste/newline policy は Phase 5 |

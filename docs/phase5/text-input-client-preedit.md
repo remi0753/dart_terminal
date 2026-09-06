@@ -1,6 +1,6 @@
 # Phase 5 — NSTextInputClient and preedit overlay
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-06
 - Scope: second Phase 5 production-input roadmap item
 - Related: IN-01, IN-03, IN-04, ADR-001, ADR-003
@@ -236,3 +236,62 @@ combined product verification pass.
   text-input stream is attached yet; the final subtask must wire the native
   event stream, publish this surface geometry to its client, and prove
   mutually-exclusive raw/commit/cancel behavior through a real PTY.
+
+### 2026-09-06 — live pane and real AppKit/PTY product integration
+
+- Changed the product window from raw Dart event interception to
+  `KeyEventRouting.appKitOnly`. Native menu equivalents still run first, while
+  all remaining key down/up events reach the registered terminal view as the
+  window's first responder. Ordinary text therefore enters through AppKit's
+  input context instead of bypassing dead-key and IME processing.
+- The application now attaches exactly one `TerminalTextInputClient` to the
+  content view before creating the live surface. Surface caret rectangles are
+  published into that client, and its bounded asynchronous event stream is
+  cancelled and detached before the surface/view are torn down.
+- Added a product-owned event router. Raw key-down fields reuse the existing
+  physical/mode-aware key adapter and keybind engine; key-up is ignored for PTY
+  encoding. Marked updates affect only the transient Metal preedit model.
+  Commit first clears preedit and then inserts its UTF-8 text exactly once.
+  Cancel clears without inserting, and overflow clears plus emits a
+  content-free scalar diagnostic. Stale generations and a defensive raw event
+  received during composition cannot duplicate effects.
+- Added a three-stage, product-gated native acceptance operation in
+  `dart_terminal_renderer_macos`. It drives the registered
+  `DtrTerminalMetalView<NSTextInputClient>` itself: stage one emits an actual
+  raw navigation command, coalesces Japanese marked updates, and validates the
+  cached candidate rectangle; the application waits until a marked CoreText/
+  Metal frame is accepted; stage two revalidates the Dart-published preedit
+  caret, commits `日本語`, starts cancellable `かな`, and proves a raw key-up is
+  suppressed; stage three cancels. Header layout and every stage are covered by
+  native capability tests.
+- The real zsh is placed in raw/no-echo mode and reads exactly 12 bytes. Its
+  observed hex is `1b5b41e697a5e69cace8aa9e`: one normal-mode Arrow-Up
+  (`ESC [ A`) followed by one UTF-8 `日本語` commit. No bytes from marked
+  updates, the suppressed raw event, or cancelled `かな` are present.
+- The first two Developer JIT attempts reached native generation 3 with active
+  Dart preedit but built no frame. Scalar diagnostics showed the surface was
+  still retained as occluded when the staged check began; this was the intended
+  occlusion pause contract, not lost input. The acceptance harness now
+  explicitly publishes its known visible/non-occluded window state and performs
+  a bounded drain after event delivery. Developer JIT then passed in 1334 ms
+  and Release AOT in 760 ms.
+- `dart_appkit` full tests passed after the staged operation and after the
+  candidate-geometry follow-up. Dependency commits are `660540e` (`Add staged
+  text input acceptance path`) and `eeedbfe` (`Validate staged candidate
+  geometry updates`).
+- `make test` passed with 116 formatted files, zero analyzer issues, and the
+  complete Dart/native Metal/PTY suite. The formatter gate intentionally failed
+  on intermediate diagnostic edits and passed after final formatting.
+  `runtime-source-check` passed with 208 tracked Dart project files and no
+  native product source. Developer/Release ordinary smoke passed in 2216/1817
+  ms, both bundle audits passed with one helper, one native asset, and one
+  declared capability, and both display acceptances required the content-free
+  text-input result.
+- All 16 lifecycle scenarios passed in both Developer JIT and Release AOT,
+  including expected status 64/70/75 cases. The 1000-iteration resource test
+  passed in both modes with baseline 12 and peak 14 AppKit handles, confirming
+  the new subscription/client teardown does not grow product ownership.
+- README and IN-03/IN-04 feature status now describe the production path. This
+  parent roadmap item is complete. System-level US/JIS input-source switching,
+  dead keys, emoji picker, Unicode Hex Input, and repeat variants remain solely
+  in the immediately following matrix task.
