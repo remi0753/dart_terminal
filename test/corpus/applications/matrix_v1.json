@@ -1,0 +1,136 @@
+{
+  "format": "dart-terminal-real-application-matrix",
+  "version": 1,
+  "scope": "phase6-reviewed",
+  "observation_version": 1,
+  "applications": [
+    {
+      "id": "emacs",
+      "display_name": "Emacs",
+      "scenarios": [
+        {
+          "id": "emacs-terminal-ui",
+          "description": "Open a terminal buffer, edit controlled text, resize, and exit cleanly.",
+          "rows": 24,
+          "columns": 80,
+          "deadline_ms": 20000,
+          "maximum_output_bytes": 262144,
+          "required_fields": ["stream", "screen", "cursor", "modes", "resize", "exit"],
+          "checks": ["clean-exit", "cursor-bounded", "marker-visible", "parser-clean", "primary-restored", "resize-observed"]
+        }
+      ]
+    },
+    {
+      "id": "fzf",
+      "display_name": "fzf",
+      "scenarios": [
+        {
+          "id": "fzf-filter-selection",
+          "description": "Filter a controlled candidate list, select one entry, resize, and exit cleanly.",
+          "rows": 24,
+          "columns": 80,
+          "deadline_ms": 15000,
+          "maximum_output_bytes": 262144,
+          "required_fields": ["stream", "screen", "cursor", "modes", "resize", "exit"],
+          "checks": ["clean-exit", "cursor-bounded", "marker-visible", "parser-clean", "primary-restored", "resize-observed"]
+        }
+      ]
+    },
+    {
+      "id": "lazygit",
+      "display_name": "lazygit",
+      "scenarios": [
+        {
+          "id": "lazygit-repository-ui",
+          "description": "Open an isolated repository UI, navigate a controlled panel, resize, and quit.",
+          "rows": 24,
+          "columns": 80,
+          "deadline_ms": 20000,
+          "maximum_output_bytes": 524288,
+          "required_fields": ["stream", "screen", "cursor", "modes", "resize", "exit"],
+          "checks": ["clean-exit", "cursor-bounded", "marker-visible", "parser-clean", "primary-restored", "resize-observed"]
+        }
+      ]
+    },
+    {
+      "id": "mosh",
+      "display_name": "mosh",
+      "scenarios": [
+        {
+          "id": "mosh-local-session",
+          "description": "Run a credential-free local client/server session, resize, print a marker, and exit.",
+          "rows": 24,
+          "columns": 80,
+          "deadline_ms": 30000,
+          "maximum_output_bytes": 524288,
+          "required_fields": ["stream", "screen", "cursor", "modes", "resize", "exit"],
+          "checks": ["clean-exit", "cursor-bounded", "marker-visible", "parser-clean", "primary-restored", "resize-observed"]
+        }
+      ]
+    },
+    {
+      "id": "ncurses",
+      "display_name": "ncurses",
+      "scenarios": [
+        {
+          "id": "ncurses-resize-ui",
+          "description": "Run a linked deterministic ncurses fixture through draw, input, resize, and teardown.",
+          "rows": 24,
+          "columns": 80,
+          "deadline_ms": 15000,
+          "maximum_output_bytes": 262144,
+          "required_fields": ["stream", "screen", "cursor", "modes", "resize", "exit"],
+          "checks": ["clean-exit", "cursor-bounded", "marker-visible", "parser-clean", "primary-restored", "resize-observed"]
+        }
+      ]
+    },
+    {
+      "id": "neovim",
+      "display_name": "Neovim",
+      "scenarios": [
+        {
+          "id": "neovim-editing-ui",
+          "description": "Edit controlled Unicode text, exercise normal/insert mode, resize, and quit.",
+          "rows": 24,
+          "columns": 80,
+          "deadline_ms": 20000,
+          "maximum_output_bytes": 524288,
+          "required_fields": ["stream", "screen", "cursor", "modes", "resize", "exit"],
+          "checks": ["clean-exit", "cursor-bounded", "marker-visible", "parser-clean", "primary-restored", "resize-observed"]
+        }
+      ]
+    },
+    {
+      "id": "ssh",
+      "display_name": "OpenSSH",
+      "scenarios": [
+        {
+          "id": "ssh-local-pty",
+          "description": "Use an isolated credential-free loopback server, allocate a PTY, resize, and exit.",
+          "rows": 24,
+          "columns": 80,
+          "deadline_ms": 30000,
+          "maximum_output_bytes": 262144,
+          "required_fields": ["stream", "screen", "cursor", "modes", "resize", "exit"],
+          "checks": ["clean-exit", "cursor-bounded", "marker-visible", "parser-clean", "primary-restored", "resize-observed"]
+        }
+      ]
+    },
+    {
+      "id": "tmux",
+      "display_name": "tmux",
+      "scenarios": [
+        {
+          "id": "tmux-session-resize",
+          "description": "Create an isolated session, exercise pane UI and alternate screen, resize, and detach.",
+          "rows": 24,
+          "columns": 80,
+          "deadline_ms": 20000,
+          "maximum_output_bytes": 524288,
+          "required_fields": ["stream", "screen", "cursor", "modes", "resize", "exit"],
+          "checks": ["clean-exit", "cursor-bounded", "marker-visible", "parser-clean", "primary-restored", "resize-observed"]
+        }
+      ]
+    }
+  ]
+}
