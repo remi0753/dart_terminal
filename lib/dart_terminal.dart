@@ -89,6 +89,7 @@ export 'src/terminal_input/terminal_key_event.dart'
         TerminalPhysicalKey;
 export 'src/terminal_input/terminal_mouse_encoder.dart';
 export 'src/terminal_input/terminal_mouse_event.dart';
+export 'src/terminal_input/terminal_mouse_router.dart';
 export 'src/terminal_input/terminal_preedit.dart';
 export 'src/terminal_input/terminal_text_input_event_router.dart';
 export 'src/terminal_pane.dart'

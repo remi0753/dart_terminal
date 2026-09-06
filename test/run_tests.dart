@@ -35,6 +35,7 @@ import 'terminal_key_binding_test.dart';
 import 'terminal_key_encoder_test.dart';
 import 'terminal_live_metal_surface_font_test.dart';
 import 'terminal_mouse_encoder_test.dart';
+import 'terminal_mouse_router_test.dart';
 import 'terminal_palette_test.dart';
 import 'terminal_preedit_test.dart';
 import 'terminal_property_fuzz_test.dart';
@@ -83,6 +84,7 @@ Future<void> main() async {
   runTerminalKeyBindingTests();
   runTerminalKeyEncoderTests();
   runTerminalMouseEncoderTests();
+  runTerminalMouseRouterTests();
   runTerminalLiveMetalSurfaceFontTests();
   runTerminalPaletteTests();
   runTerminalPreeditTests();

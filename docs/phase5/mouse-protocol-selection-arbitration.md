@@ -155,6 +155,21 @@ inside these commits.
 - 2026-09-06: AppKit button numbers are mapped explicitly to xterm's
   left/middle/right order. Only Shift, Option, and Control occupy xterm modifier
   bits; Command and platform-only flags cannot leak into the protocol.
+- 2026-09-06: completed ordered subtask 2. `TerminalMouseRouter` accepts the
+  existing immutable `AppKitMouseEvent`, validates finite geometry and bounded
+  click/modifier values, maps the point through current cell width/height, and
+  clamps it to one 0-based visible-grid cell. Protocol events derive their
+  1-based coordinate from that same result.
+- 2026-09-06: routing returns exactly one of `terminalReport`,
+  `localSelection`, or `ignored`. Normal-shell down/drag/up events emit bounded
+  begin/update/end intents, active tracking emits only eligible wire bytes, and
+  Shift explicitly selects the local path. Plain movement, unsupported buttons,
+  mode-filtered events, and unrepresentable legacy/UTF-8 coordinates have typed
+  ignore reasons and no callback side effect.
+- 2026-09-06: local intents retain the complete validated AppKit modifier set
+  for the following selection-gesture task. Terminal reports deliberately
+  project only Shift/Option/Control into xterm bits; a Shift-overridden event
+  never reaches that encoder.
 
 ## Verification results
 
@@ -169,3 +184,17 @@ inside these commits.
   Dart runner.
 - Remaining parent work is tracked by ordered subtasks 2 and 3; the parent item
   intentionally remains incomplete.
+
+### Pointer normalization and arbitration
+
+- Focused analyzer and `test/terminal_mouse_router_test.dart`: passed. Tests
+  cover negative/in-range/outside-grid points, begin/update/end intents, click
+  count and modifier retention, remote SGR bytes, Shift override, X10 release,
+  button-event and any-event motion, auxiliary buttons, protocol coordinate
+  overflow, invalid metrics/points/modifiers, immutable results, and exclusive
+  callback counts.
+- `CI=true make test`: passed with parser-table freshness, 124-file format
+  check (zero changes), whole-package analysis, native asset hooks, and the full
+  Dart runner.
+- Product event subscription and real-PTY acceptance remain solely in ordered
+  subtask 3; the parent item remains incomplete.
