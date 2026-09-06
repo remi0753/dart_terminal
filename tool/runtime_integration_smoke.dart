@@ -927,6 +927,16 @@ Future<void> _runTerminalDisplay(
     selectionAcceptance.hasMatch(observation.stdoutText),
     'terminal display launch omitted exact local selection acceptance',
   );
+  final RegExp closeScrollAcceptance = RegExp(
+    r'^TERMINAL_CLOSE_SCROLL_TEST requests=3 refused=true '
+    r'chrome_press_ignored=true offset_preserved=true rows_preserved=true '
+    r'selection_preserved=true$',
+    multiLine: true,
+  );
+  _expect(
+    closeScrollAcceptance.hasMatch(observation.stdoutText),
+    'terminal display launch omitted refused-close viewport acceptance',
+  );
   final RegExp scrollAcceptance = RegExp(
     r'^TERMINAL_SCROLL_TEST protocol=5 precise=true momentum=true '
     r'wheel=true mouse_report=true shift_override=true alternate=true '
@@ -962,7 +972,7 @@ Future<void> _runTerminalDisplay(
     r'wrapped_rows=([2-9]|[1-9][0-9]+) prompt_bottom=true '
     r'metal_default=true newest_frame=true frame_bounded=true '
     r'system_font=true mode_key=true text_input=true input_matrix=true '
-    r'mouse=true selection=true scroll=true hyperlink=true '
+    r'mouse=true selection=true close_scroll=true scroll=true hyperlink=true '
     r'accessibility=true font_size=14\.0 '
     r'rows=([4-9]|[1-9][0-9]+) '
     r'columns=([2-9][0-9]|[1-9][0-9]{2,}) '

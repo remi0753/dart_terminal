@@ -822,6 +822,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] 実製品同期と両runtime VoiceOver受け入れ
 - [x] CJK wide-cellの表示幅・pointer selection・clipboard抽出を一致させる
   （[`docs/phase5/cjk-wide-cell-selection-copy-geometry.md`](docs/phase5/cjk-wide-cell-selection-copy-geometry.md) を参照して実施）
+- [x] 初回window close requestでscroll viewport位置を変更しない
+  （[`docs/phase5/window-close-scroll-position.md`](docs/phase5/window-close-scroll-position.md) を参照して実施）
 
 終了条件:
 

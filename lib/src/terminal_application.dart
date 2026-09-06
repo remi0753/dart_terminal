@@ -1678,6 +1678,15 @@ final class TerminalApplication {
       mouseObservation,
       selectionOwner,
     );
+    final bool closeScroll = await _exerciseWindowCloseScrollPosition(
+      application,
+      session,
+      pane,
+      surface,
+      window,
+      mouseObservation,
+      selectionOwner,
+    );
     final bool scroll = await _exerciseScrollInput(
       application,
       session,
@@ -1772,6 +1781,7 @@ final class TerminalApplication {
           inputMatrix &&
           mouse &&
           selection &&
+          closeScroll &&
           scroll &&
           hyperlink &&
           accessibility) {
@@ -1787,6 +1797,7 @@ final class TerminalApplication {
           'frame_bounded=$frameBounded system_font=$systemFont '
           'mode_key=$modeKey text_input=$textInput '
           'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
+          'close_scroll=$closeScroll '
           'scroll=$scroll hyperlink=$hyperlink '
           'accessibility=$accessibility '
           'font_size=${baseline.fontPointSize.toStringAsFixed(1)} '
@@ -1811,6 +1822,7 @@ final class TerminalApplication {
       'frame_bounded=$frameBounded system_font=$systemFont '
       'mode_key=$modeKey text_input=$textInput '
       'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
+      'close_scroll=$closeScroll '
       'scroll=$scroll hyperlink=$hyperlink '
       'accessibility=$accessibility '
       'font_size=${baseline.fontPointSize}',
@@ -2831,6 +2843,110 @@ final class TerminalApplication {
       'autoscroll_down=true metal=true local_only=true',
     );
     return true;
+  }
+
+  static Future<bool> _exerciseWindowCloseScrollPosition(
+    AppKitApplication application,
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+    Window window,
+    _TerminalMouseProductObservation mouseObservation,
+    _TerminalSelectionProductOwner selectionOwner,
+  ) async {
+    final TerminalViewport viewport = session.terminalScreenSet.viewport;
+    final int maximumOffset = viewport.maximumOffset;
+    _expectLifecycle(
+      maximumOffset >= 3 && pane.state == TerminalPaneState.running,
+      'close-scroll acceptance requires live scrollable primary history',
+    );
+    final List<int> targetOffsets = <int>[0, maximumOffset ~/ 2, maximumOffset];
+    var preservedCount = 0;
+    for (final int targetOffset in targetOffsets) {
+      viewport.scrollToBottom();
+      viewport.scrollByRows(targetOffset);
+      surface.notifyViewportChanged();
+      final Stopwatch frameDeadline = Stopwatch()..start();
+      while (frameDeadline.elapsed < const Duration(seconds: 3) &&
+          surface.snapshot().viewportOffset != targetOffset) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      _expectLifecycle(
+        surface.snapshot().viewportOffset == targetOffset,
+        'close-scroll fixture did not publish its initial viewport',
+      );
+
+      final int viewportGeneration = viewport.generation;
+      final List<TerminalLogicalAnchor> visibleRows = <TerminalLogicalAnchor>[
+        for (int row = 0; row < viewport.rows; row++) viewport.anchorAt(row, 0),
+      ];
+      final TerminalSelectionGestureSnapshot selection =
+          selectionOwner.gesture.snapshot;
+      final int ignoredBaseline = mouseObservation.ignoredCount;
+      final TerminalFontCatalogMetrics metrics = surface.fontMetrics;
+      _injectMouseEventForTesting(
+        application,
+        window,
+        kind: AppKitMouseEventKind.down,
+        x: metrics.cellWidth * 0.5,
+        y: -1,
+        button: 0,
+        modifiers: 0,
+        clickCount: 1,
+        monotonicNanoseconds: mouseObservation.nextInjectedTimestamp(),
+      );
+      window.requestClose();
+
+      final Stopwatch closeDeadline = Stopwatch()..start();
+      while (closeDeadline.elapsed < const Duration(seconds: 3) &&
+          (mouseObservation.ignoredCount != ignoredBaseline + 1 ||
+              pane.state != TerminalPaneState.confirmationPending)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      final TerminalSelectionGestureSnapshot afterSelection =
+          selectionOwner.gesture.snapshot;
+      final bool rowsPreserved = <int>[
+        for (int row = 0; row < viewport.rows; row++)
+          if (viewport.anchorAt(row, 0) != visibleRows[row]) row,
+      ].isEmpty;
+      final bool selectionPreserved =
+          afterSelection.generation == selection.generation &&
+          afterSelection.isActive == selection.isActive &&
+          afterSelection.unit == selection.unit &&
+          identical(afterSelection.range, selection.range) &&
+          afterSelection.verticalEdge == selection.verticalEdge;
+      final bool preserved =
+          mouseObservation.ignoredCount == ignoredBaseline + 1 &&
+          mouseObservation.lastIgnoreReason ==
+              TerminalMouseIgnoreReason.outsideViewportPress &&
+          pane.state == TerminalPaneState.confirmationPending &&
+          pane.render().contains('[shell is still running') &&
+          viewport.maximumOffset == maximumOffset &&
+          viewport.offset == targetOffset &&
+          viewport.generation == viewportGeneration &&
+          surface.snapshot().viewportOffset == targetOffset &&
+          rowsPreserved &&
+          selectionPreserved;
+      _expectLifecycle(
+        preserved,
+        'refused close changed terminal viewport/selection state at '
+        'offset $targetOffset',
+      );
+      preservedCount++;
+      pane.cancelCloseConfirmation();
+      _expectLifecycle(
+        pane.state == TerminalPaneState.running,
+        'close-scroll fixture could not restore the live pane',
+      );
+    }
+    stdout.writeln(
+      'TERMINAL_CLOSE_SCROLL_TEST requests=$preservedCount refused=true '
+      'chrome_press_ignored=true offset_preserved=true rows_preserved=true '
+      'selection_preserved=true',
+    );
+    return preservedCount == targetOffsets.length;
   }
 
   static Future<bool> _exerciseAccessibilityInput(

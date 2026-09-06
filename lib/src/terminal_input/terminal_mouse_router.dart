@@ -10,6 +10,7 @@ import 'terminal_mouse_event.dart';
 enum TerminalMouseRouteDisposition { terminalReport, localSelection, ignored }
 
 enum TerminalMouseIgnoreReason {
+  outsideViewportPress,
   noTrackingMotion,
   trackingFiltered,
   unsupportedButton,
@@ -182,6 +183,18 @@ final class TerminalMouseRouter {
       cellWidth: cellWidth,
       cellHeight: cellHeight,
     );
+    if (source.kind == AppKitMouseEventKind.down &&
+        !_isInsideGrid(
+          source,
+          rows: rows,
+          columns: columns,
+          cellWidth: cellWidth,
+          cellHeight: cellHeight,
+        )) {
+      return TerminalMouseRouteResult.ignored(
+        TerminalMouseIgnoreReason.outsideViewportPress,
+      );
+    }
     final TerminalPointerCell cell = TerminalPointerCell(
       row: _cellIndex(source.y, cellHeight, rows),
       column: _cellIndex(source.x, cellWidth, columns),
@@ -262,6 +275,18 @@ final class TerminalMouseRouter {
       : y >= height
       ? TerminalPointerVerticalEdge.below
       : TerminalPointerVerticalEdge.inside;
+
+  static bool _isInsideGrid(
+    AppKitMouseEvent source, {
+    required int rows,
+    required int columns,
+    required double cellWidth,
+    required double cellHeight,
+  }) =>
+      source.x >= 0 &&
+      source.x < columns * cellWidth &&
+      source.y >= 0 &&
+      source.y < rows * cellHeight;
 
   static void _validateGeometry(
     AppKitMouseEvent source, {

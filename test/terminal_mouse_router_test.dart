@@ -7,6 +7,7 @@ void main() => runTerminalMouseRouterTests();
 
 void runTerminalMouseRouterTests() {
   _testPointNormalizationAndLocalPhases();
+  _testOutsidePressIsIgnored();
   _testTerminalReportingAndShiftOverride();
   _testTrackingEligibilityAndIgnoredReasons();
   _testProtocolBoundsAndInputValidation();
@@ -23,8 +24,8 @@ void _testPointNormalizationAndLocalPhases() {
   final TerminalMouseRouteResult begin = router.route(
     _event(
       AppKitMouseEventKind.down,
-      x: -20,
-      y: -1,
+      x: 0,
+      y: 0,
       clickCount: 2,
       modifiers: const ModifierKeys(ModifierKeys.optionBit),
     ),
@@ -35,7 +36,7 @@ void _testPointNormalizationAndLocalPhases() {
     cellHeight: 16,
   );
   final TerminalMouseRouteResult update = router.route(
-    _event(AppKitMouseEventKind.dragged, x: 15.9, y: 31.9),
+    _event(AppKitMouseEventKind.dragged, x: -20, y: -1),
     modes: const TerminalMouseModes(),
     rows: 4,
     columns: 10,
@@ -59,11 +60,11 @@ void _testPointNormalizationAndLocalPhases() {
         begin.localSelection!.clickCount == 2 &&
         begin.localSelection!.modifiers.option &&
         begin.localSelection!.verticalEdge ==
-            TerminalPointerVerticalEdge.above &&
-        update.localSelection!.phase == TerminalLocalSelectionPhase.update &&
-        update.localSelection!.cell == TerminalPointerCell(row: 1, column: 1) &&
-        update.localSelection!.verticalEdge ==
             TerminalPointerVerticalEdge.inside &&
+        update.localSelection!.phase == TerminalLocalSelectionPhase.update &&
+        update.localSelection!.cell == TerminalPointerCell(row: 0, column: 0) &&
+        update.localSelection!.verticalEdge ==
+            TerminalPointerVerticalEdge.above &&
         end.localSelection!.phase == TerminalLocalSelectionPhase.end &&
         end.localSelection!.cell == TerminalPointerCell(row: 3, column: 9) &&
         end.localSelection!.verticalEdge == TerminalPointerVerticalEdge.below,
@@ -72,6 +73,43 @@ void _testPointNormalizationAndLocalPhases() {
   _expectThrows<UnsupportedError>(
     () => begin.terminalBytes.add(1),
     'route byte results are immutable',
+  );
+}
+
+void _testOutsidePressIsIgnored() {
+  var callbacks = 0;
+  final TerminalMouseRouter router = TerminalMouseRouter(
+    onTerminalReport: (Uint8List bytes) => callbacks++,
+    onLocalSelection: (TerminalLocalSelectionIntent intent) => callbacks++,
+  );
+  final List<AppKitMouseEvent> outsidePresses = <AppKitMouseEvent>[
+    _event(AppKitMouseEventKind.down, x: 8, y: -0.01),
+    _event(AppKitMouseEventKind.down, x: 8, y: 64),
+    _event(AppKitMouseEventKind.down, x: -0.01, y: 16),
+    _event(AppKitMouseEventKind.down, x: 80, y: 16),
+  ];
+  for (final AppKitMouseEvent press in outsidePresses) {
+    final TerminalMouseRouteResult result = _route(
+      router,
+      press,
+      const TerminalMouseModes(),
+    );
+    _expect(
+      result.disposition == TerminalMouseRouteDisposition.ignored &&
+          result.ignoreReason == TerminalMouseIgnoreReason.outsideViewportPress,
+      'a pointer press outside the terminal grid is ignored',
+    );
+  }
+  final TerminalMouseRouteResult remote = _route(
+    router,
+    _event(AppKitMouseEventKind.down, x: 8, y: -1),
+    const TerminalMouseModes(tracking: TerminalMouseTrackingMode.normal),
+  );
+  _expect(
+    remote.disposition == TerminalMouseRouteDisposition.ignored &&
+        remote.ignoreReason == TerminalMouseIgnoreReason.outsideViewportPress &&
+        callbacks == 0,
+    'window-chrome presses cannot start selection or terminal reporting',
   );
 }
 
