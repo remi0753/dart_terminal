@@ -30,6 +30,7 @@ import 'terminal_damage_copy_test.dart';
 import 'terminal_damage_test.dart';
 import 'terminal_damage_transfer_test.dart';
 import 'terminal_history_reflow_test.dart';
+import 'terminal_hyperlink_interaction_test.dart';
 import 'terminal_hyperlink_test.dart';
 import 'terminal_input_matrix_test.dart';
 import 'terminal_key_binding_test.dart';
@@ -85,6 +86,7 @@ Future<void> main() async {
   runRenderResourceRebuilderTests();
   runRendererMetricsTests();
   runTerminalHistoryReflowTests();
+  runTerminalHyperlinkInteractionTests();
   runTerminalHyperlinkTests();
   runTerminalInputMatrixTests();
   runTerminalAppKitKeyAdapterTests();
@@ -2118,6 +2120,11 @@ final class _FakePaneSession implements TerminalPaneSession {
 
   @override
   void showClipboardNotice(TerminalClipboardNotice notice) {
+    _onChanged();
+  }
+
+  @override
+  void showHyperlinkNotice(TerminalHyperlinkNoticeKind kind) {
     _onChanged();
   }
 

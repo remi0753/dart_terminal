@@ -938,12 +938,22 @@ Future<void> _runTerminalDisplay(
     scrollAcceptance.hasMatch(observation.stdoutText),
     'terminal display launch omitted exact precision-scroll acceptance',
   );
+  final RegExp hyperlinkAcceptance = RegExp(
+    r'^TERMINAL_HYPERLINK_TEST osc8=true hover=true metal=true '
+    r'allowed=true blocked=true exact=true command_exclusive=true opens=1 '
+    r'blocked_notices=1 local_passthrough=2$',
+    multiLine: true,
+  );
+  _expect(
+    hyperlinkAcceptance.hasMatch(observation.stdoutText),
+    'terminal display launch omitted safe hyperlink hover/open acceptance',
+  );
   final RegExp acceptance = RegExp(
     r'^TERMINAL_DISPLAY_TEST sgr_stripped=true styled=true '
     r'wrapped_rows=([2-9]|[1-9][0-9]+) prompt_bottom=true '
     r'metal_default=true newest_frame=true frame_bounded=true '
     r'system_font=true mode_key=true text_input=true input_matrix=true '
-    r'mouse=true selection=true scroll=true font_size=14\.0 '
+    r'mouse=true selection=true scroll=true hyperlink=true font_size=14\.0 '
     r'rows=([4-9]|[1-9][0-9]+) '
     r'columns=([2-9][0-9]|[1-9][0-9]{2,}) '
     r'frame_build_delta=[1-9][0-9]*$',

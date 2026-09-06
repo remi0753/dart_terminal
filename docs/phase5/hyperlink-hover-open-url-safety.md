@@ -4,7 +4,7 @@
 
 - Date started: 2026-09-06
 - Scope: eighth Phase 5 production-input roadmap item
-- Status: in progress
+- Status: complete
 - Ordered subtasks:
   1. add a bounded OSC 8 table, current-link state, and cell lifecycle;
   2. add viewport hyperlink hit testing and a Metal hover overlay;
@@ -299,6 +299,40 @@ Primary references:
   allowlisted external URL opening`. The product repository remained otherwise
   unchanged while that dependency commit was prepared.
 
+### 2026-09-06 — real product hover/open integration
+
+- Added a stateful interaction controller in front of the existing mouse
+  router. Ordinary motion remains observable by terminal mouse reporting while
+  also updating the derived Metal hover. Ordinary primary clicks and non-exact
+  modifier chords continue to local selection or terminal reporting unchanged.
+- An exact Command-primary down over a current OSC 8 cell arms one bounded
+  press. Its drag/up sequence is then exclusively consumed. Mouse-up resolves
+  the current cell again, compares both immutable hyperlink ID and stable
+  logical anchor with mouse-down, applies `AllowedExternalUrl`, and opens at
+  most once. Drag, link removal/replacement, viewport retargeting, focus loss,
+  resize, scale/screen change, visibility loss, or scroll cancels the press.
+- Disallowed targets and AppKit refusal/failure produce one of two fixed,
+  content-free terminal status lines. Neither URI text nor exception detail is
+  placed in terminal output, acceptance logs, or long-lived diagnostic
+  snapshots. A rejected OSC target remains consumed rather than falling
+  through to a less restricted mouse or opener path.
+- Connected the normal product callback to
+  `AppKitApplication.openExternalUrl`. The display acceptance substitutes only
+  that final callback with an in-memory recorder that itself accepts an
+  `AllowedExternalUrl`; therefore the complete parser/hit/click policy runs but
+  no browser or mail application launches during automation. The normal product
+  retains no opened target text in its observation state; exact target capture
+  exists only in the short-lived acceptance recorder.
+- Added focused interaction tests for hover pass-through, normal selection,
+  exact Command ownership, disallowed and unavailable targets, link mutation,
+  drag cancellation, modifier exactness, and out-of-grid hover clearing. The
+  product acceptance emits a real OSC 8 fixture from the PTY, observes a Metal
+  hover frame, permits one normal local click, opens one exact approved target,
+  blocks one `file:` target, and proves four Command down/up events reach
+  neither PTY mouse reporting nor selection.
+- Updated the feature matrix and product overview to describe the completed
+  bounded OSC 8, renderer overlay, URL policy, and interaction boundary.
+
 ## Verification results
 
 ### Bounded OSC 8 table and cell lifecycle
@@ -337,4 +371,25 @@ Primary references:
   warning-as-error gate, native bridge/runner/runtime/renderer/PTY test, Dart
   package analysis/test, Kernel compilation, real Mach-O FFI smoke, and legacy
   additive-symbol fallback.
+- `git diff --check`: passed during final pre-commit review.
+
+### Real product hover/open integration
+
+- Explicit `dart format` over the changed application, controller, pane,
+  session, test, and runtime-smoke sources: passed.
+- Focused analysis over the integration sources: no issues.
+- `dart run test/terminal_hyperlink_interaction_test.dart`: passed, including
+  exclusive mouse ownership and stale/blocked target cases.
+- First `CI=true make test`: all 139 files were format-clean and every test
+  passed; analysis reported one export-order info. The public exports were
+  sorted, and the final verification below reported no issues.
+- First `CI=true make RUNTIME_ARCH=arm64
+  runtime-terminal-display-integration`: passed in both real application modes;
+  Developer JIT completed in 2,285 ms and Release AOT in 1,412 ms.
+- Final `CI=true make RUNTIME_ARCH=arm64 runtime-verify`: passed. It reported
+  139 format-clean files, no analyzer issues, all Dart/native tests, a fresh VT
+  parser table, Dart-only source audit (`tracked=236`, `native_sources=0`), both
+  bundle audits, smoke, hyperlink-enabled display (1,350/1,040 ms), clipboard,
+  every lifecycle scenario, traffic, 1,000-resource stress, shutdown faults,
+  and PTY-deadline recovery in Developer JIT and Release AOT.
 - `git diff --check`: passed during final pre-commit review.

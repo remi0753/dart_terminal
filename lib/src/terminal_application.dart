@@ -10,11 +10,13 @@ import 'package:dart_pty_macos/dart_pty_macos.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'runtime_lifecycle.dart';
+import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
 import 'terminal_core/terminal_screen.dart';
 import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_core/terminal_style.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
+import 'terminal_input/terminal_hyperlink_interaction.dart';
 import 'terminal_input/terminal_input_matrix.dart';
 import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_encoder.dart';
@@ -368,6 +370,8 @@ final class TerminalApplication {
     final _TerminalClipboard clipboard = runtimeClipboard != null
         ? runtimeClipboard
         : _AppKitTerminalClipboard(application.generalPasteboard);
+    final _TerminalHyperlinkProductObservation hyperlinkObservation =
+        _TerminalHyperlinkProductObservation();
     final TerminalPasteConfirmationGate pasteConfirmationGate =
         TerminalPasteConfirmationGate();
     final Stopwatch pasteConfirmationClock = Stopwatch()..start();
@@ -578,6 +582,32 @@ final class TerminalApplication {
           createdSelectionOwner.handle(intent);
         },
       );
+      final TerminalHyperlinkInteractionController hyperlinkController =
+          TerminalHyperlinkInteractionController(
+            viewport: terminalSession!.terminalScreenSet.viewport,
+            onHoverCell: (int row, int column) {
+              createdMetalSurface.updateHyperlinkHover(
+                row: row,
+                column: column,
+              );
+            },
+            onClearHover: createdMetalSurface.clearHyperlinkHover,
+            onOpen: (AllowedExternalUrl target) {
+              if (options.runtimeTerminalDisplayTest) {
+                return hyperlinkObservation.recordAcceptanceOpen(target);
+              }
+              try {
+                return application.openExternalUrl(target);
+              } on Object catch (error, stackTrace) {
+                hyperlinkObservation.recordFailure(error, stackTrace);
+                return false;
+              }
+            },
+            onNotice: (TerminalHyperlinkNoticeKind kind) {
+              hyperlinkObservation.recordNotice(kind);
+              createdPane.showHyperlinkNotice(kind);
+            },
+          );
       final TerminalScrollRouter scrollRouter = TerminalScrollRouter(
         onTerminalReport: (Uint8List bytes) {
           scrollObservation.recordTerminalReport(bytes);
@@ -1008,6 +1038,8 @@ final class TerminalApplication {
               );
               createdWindow.replyToCloseRequest(event, allow: allow);
             case WindowResizedEvent(:final width, :final height):
+              hyperlinkController.cancelPress();
+              createdMetalSurface.clearHyperlinkHover();
               currentWindowWidth = width;
               currentWindowHeight = height;
               final TerminalGridSize grid = createdMetalSurface.resizeViewport(
@@ -1016,6 +1048,10 @@ final class TerminalApplication {
               );
               createdPane.resize(rows: grid.rows, columns: grid.columns);
             case WindowFocusChangedEvent(:final isFocused):
+              if (!isFocused) {
+                hyperlinkController.cancelPress();
+                createdMetalSurface.clearHyperlinkHover();
+              }
               if (emitNativeEventWireObservation) {
                 _writeWindowStateEvent(
                   application,
@@ -1025,6 +1061,10 @@ final class TerminalApplication {
                 );
               }
             case WindowVisibilityChangedEvent(:final isVisible):
+              if (!isVisible) {
+                hyperlinkController.cancelPress();
+                createdMetalSurface.clearHyperlinkHover();
+              }
               createdMetalSurface.updateWindowState(isVisible: isVisible);
               if (emitNativeEventWireObservation) {
                 _writeWindowStateEvent(
@@ -1045,6 +1085,8 @@ final class TerminalApplication {
                 );
               }
             case WindowBackingScaleChangedEvent(:final backingScaleFactor):
+              hyperlinkController.cancelPress();
+              createdMetalSurface.clearHyperlinkHover();
               createdMetalSurface.updateBackingScale(backingScaleFactor);
               final TerminalGridSize grid = createdMetalSurface.gridSizeFor(
                 logicalWidth: currentWindowWidth,
@@ -1060,6 +1102,8 @@ final class TerminalApplication {
                 );
               }
             case WindowScreenChangedEvent(:final screen):
+              hyperlinkController.cancelPress();
+              createdMetalSurface.clearHyperlinkHover();
               if (emitNativeEventWireObservation) {
                 _writeWindowStateEvent(
                   application,
@@ -1083,6 +1127,8 @@ final class TerminalApplication {
             case AppKitKeyEvent():
               break;
             case AppKitScrollEvent():
+              hyperlinkController.cancelPress();
+              createdMetalSurface.clearHyperlinkHover();
               final TerminalScreenSet screens =
                   terminalSession!.terminalScreenSet;
               final TerminalScreen scrollScreen = screens.activeScreen;
@@ -1106,6 +1152,18 @@ final class TerminalApplication {
                   terminalSession!.terminalScreenSet.activeScreen;
               final TerminalFontCatalogMetrics metrics =
                   createdMetalSurface.fontMetrics;
+              final TerminalHyperlinkRouteResult hyperlinkResult =
+                  hyperlinkController.route(
+                    event,
+                    rows: mouseScreen.rows,
+                    columns: mouseScreen.columns,
+                    cellWidth: metrics.cellWidth,
+                    cellHeight: metrics.cellHeight,
+                  );
+              hyperlinkObservation.recordRoute(hyperlinkResult);
+              if (hyperlinkResult.isConsumed) {
+                break;
+              }
               final TerminalMouseRouteResult result = mouseRouter.route(
                 event,
                 modes: terminalSession!.terminalScreenSet.mouseModes,
@@ -1210,6 +1268,7 @@ final class TerminalApplication {
               mouseObservation,
               createdSelectionOwner,
               scrollObservation,
+              hyperlinkObservation,
             );
           } else if (options.runtimeClipboardTest) {
             await _exerciseClipboardProduct(
@@ -1577,6 +1636,7 @@ final class TerminalApplication {
     _TerminalMouseProductObservation mouseObservation,
     _TerminalSelectionProductOwner selectionOwner,
     _TerminalScrollProductObservation scrollObservation,
+    _TerminalHyperlinkProductObservation hyperlinkObservation,
   ) async {
     const String prompt = '__DT_DISPLAY_PROMPT__ ';
     const String colorMarker = '__DT_COLOR__';
@@ -1625,6 +1685,15 @@ final class TerminalApplication {
       surface,
       window,
       scrollObservation,
+    );
+    final bool hyperlink = await _exerciseHyperlinkInput(
+      application,
+      session,
+      pane,
+      surface,
+      window,
+      mouseObservation,
+      hyperlinkObservation,
     );
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
@@ -1693,7 +1762,8 @@ final class TerminalApplication {
           inputMatrix &&
           mouse &&
           selection &&
-          scroll) {
+          scroll &&
+          hyperlink) {
         final int? workerProcessId = lifecycle.workerPid;
         _expectLifecycle(
           workerProcessId != null,
@@ -1706,7 +1776,7 @@ final class TerminalApplication {
           'frame_bounded=$frameBounded system_font=$systemFont '
           'mode_key=$modeKey text_input=$textInput '
           'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
-          'scroll=$scroll '
+          'scroll=$scroll hyperlink=$hyperlink '
           'font_size=${baseline.fontPointSize.toStringAsFixed(1)} '
           'rows=${screen.rows} '
           'columns=${screen.columns} '
@@ -1729,7 +1799,7 @@ final class TerminalApplication {
       'frame_bounded=$frameBounded system_font=$systemFont '
       'mode_key=$modeKey text_input=$textInput '
       'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
-      'scroll=$scroll '
+      'scroll=$scroll hyperlink=$hyperlink '
       'font_size=${baseline.fontPointSize}',
     );
   }
@@ -2310,6 +2380,146 @@ final class TerminalApplication {
       'TERMINAL_MOUSE_TEST protocols=4 x10=true utf8=true urxvt=true '
       'sgr=true local=true shift_override=true exact=true '
       'reports=$reportDelta local_intents=$localDelta bytes=$byteDelta',
+    );
+    return true;
+  }
+
+  static Future<bool> _exerciseHyperlinkInput(
+    AppKitApplication application,
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+    Window window,
+    _TerminalMouseProductObservation mouseObservation,
+    _TerminalHyperlinkProductObservation observation,
+  ) async {
+    const String allowedMarker = '__DT_LINK_ALLOWED__';
+    const String blockedMarker = '__DT_LINK_BLOCKED__';
+    const String allowedUri = 'https://example.test/product-path';
+    pane.insertText(
+      "printf '\\r\\n\\033]8;id=allowed;$allowedUri\\a"
+      "__DT_LINK_%s__\\033]8;;\\a\\r\\n' ALLOWED; "
+      "printf '\\033]8;id=blocked;file:///tmp/dart-terminal-blocked\\a"
+      "__DT_LINK_%s__\\033]8;;\\a\\r\\n' BLOCKED",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, allowedMarker);
+    await _waitForAsciiMarker(session, blockedMarker);
+
+    final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+    final _TerminalAsciiPosition allowed = _findAscii(screen, allowedMarker)!;
+    final _TerminalAsciiPosition blocked = _findAscii(screen, blockedMarker)!;
+    final TerminalHyperlinkHit? allowedHit = surface.hyperlinkAtCell(
+      row: allowed.row,
+      column: allowed.column,
+    );
+    final TerminalHyperlinkHit? blockedHit = surface.hyperlinkAtCell(
+      row: blocked.row,
+      column: blocked.column,
+    );
+    _expectLifecycle(
+      allowedHit != null &&
+          allowedHit.uri == allowedUri &&
+          blockedHit != null &&
+          blockedHit.uri == 'file:///tmp/dart-terminal-blocked',
+      'real PTY OSC 8 targets did not resolve at their visible cells',
+    );
+
+    final TerminalFontCatalogMetrics metrics = surface.fontMetrics;
+    void inject(
+      AppKitMouseEventKind kind,
+      _TerminalAsciiPosition position, {
+      int button = 0,
+      int modifiers = 0,
+      int? clickCount,
+    }) {
+      _injectMouseEventForTesting(
+        application,
+        window,
+        kind: kind,
+        x: (position.column + 0.5) * metrics.cellWidth,
+        y: (position.row + 0.5) * metrics.cellHeight,
+        button: button,
+        modifiers: modifiers,
+        clickCount: clickCount ?? (kind == AppKitMouseEventKind.moved ? 0 : 1),
+        monotonicNanoseconds: mouseObservation.nextInjectedTimestamp(),
+      );
+    }
+
+    final int initialReports = mouseObservation.terminalReportCount;
+    final int initialLocal = mouseObservation.localSelectionCount;
+    final int initialConsumed = observation.consumedEventCount;
+    final TerminalLiveMetalSurfaceSnapshot hoverBaseline = surface.snapshot();
+    inject(AppKitMouseEventKind.moved, allowed, button: -1);
+    final Stopwatch hoverDeadline = Stopwatch()..start();
+    var hoverMetal = false;
+    while (hoverDeadline.elapsed < const Duration(seconds: 3)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      hoverMetal =
+          snapshot.hyperlinkHoverId == allowedHit!.hyperlinkId &&
+          snapshot.hyperlinkHoverRow == allowed.row &&
+          snapshot.hyperlinkHoverColumn == allowed.column &&
+          snapshot.acceptedFrameCount > hoverBaseline.acceptedFrameCount;
+      if (hoverMetal) break;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    inject(AppKitMouseEventKind.down, allowed);
+    inject(AppKitMouseEventKind.up, allowed);
+    await _waitForMouseObservation(
+      mouseObservation,
+      terminalReports: initialReports,
+      localSelections: initialLocal + 2,
+    );
+
+    inject(
+      AppKitMouseEventKind.down,
+      allowed,
+      modifiers: ModifierKeys.commandBit,
+    );
+    inject(
+      AppKitMouseEventKind.up,
+      allowed,
+      modifiers: ModifierKeys.commandBit,
+    );
+    inject(
+      AppKitMouseEventKind.down,
+      blocked,
+      modifiers: ModifierKeys.commandBit,
+    );
+    inject(
+      AppKitMouseEventKind.up,
+      blocked,
+      modifiers: ModifierKeys.commandBit,
+    );
+
+    final bool exact =
+        observation.openedTargets.length == 1 &&
+        observation.openedTargets.single.value == allowedUri;
+    final bool exclusive =
+        observation.consumedEventCount - initialConsumed == 4 &&
+        mouseObservation.terminalReportCount == initialReports &&
+        mouseObservation.localSelectionCount == initialLocal + 2;
+    final bool blockedNotice =
+        observation.blockedNoticeCount == 1 &&
+        pane.render().contains('[link target is not allowed]');
+    _expectLifecycle(
+      hoverMetal &&
+          observation.openedActionCount == 1 &&
+          observation.blockedActionCount == 1 &&
+          observation.openUnavailableCount == 0 &&
+          observation.failure == null &&
+          exact &&
+          exclusive &&
+          blockedNotice,
+      'hyperlink product hover/open ownership did not settle',
+    );
+    stdout.writeln(
+      'TERMINAL_HYPERLINK_TEST osc8=true hover=true metal=true '
+      'allowed=true blocked=true exact=$exact command_exclusive=$exclusive '
+      'opens=${observation.openedTargets.length} '
+      'blocked_notices=${observation.blockedNoticeCount} '
+      'local_passthrough=${mouseObservation.localSelectionCount - initialLocal}',
     );
     return true;
   }
@@ -3731,6 +3941,53 @@ final class _TerminalMouseProductObservation {
   void recordIgnored(TerminalMouseIgnoreReason reason) {
     ignoredCount++;
     lastIgnoreReason = reason;
+  }
+}
+
+final class _TerminalHyperlinkProductObservation {
+  int consumedEventCount = 0;
+  int openedActionCount = 0;
+  int blockedActionCount = 0;
+  int openUnavailableCount = 0;
+  int blockedNoticeCount = 0;
+  int unavailableNoticeCount = 0;
+  final List<AllowedExternalUrl> openedTargets = <AllowedExternalUrl>[];
+  Object? failure;
+  StackTrace? failureStackTrace;
+
+  bool recordAcceptanceOpen(AllowedExternalUrl target) {
+    openedTargets.add(target);
+    return true;
+  }
+
+  void recordRoute(TerminalHyperlinkRouteResult result) {
+    if (result.isConsumed) consumedEventCount++;
+    switch (result.action) {
+      case TerminalHyperlinkAction.opened:
+        openedActionCount++;
+      case TerminalHyperlinkAction.blocked:
+        blockedActionCount++;
+      case TerminalHyperlinkAction.unavailable:
+        openUnavailableCount++;
+      case TerminalHyperlinkAction.none ||
+          TerminalHyperlinkAction.armed ||
+          TerminalHyperlinkAction.cancelled:
+        break;
+    }
+  }
+
+  void recordNotice(TerminalHyperlinkNoticeKind kind) {
+    switch (kind) {
+      case TerminalHyperlinkNoticeKind.blocked:
+        blockedNoticeCount++;
+      case TerminalHyperlinkNoticeKind.unavailable:
+        unavailableNoticeCount++;
+    }
+  }
+
+  void recordFailure(Object error, StackTrace stackTrace) {
+    failure ??= error;
+    failureStackTrace ??= stackTrace;
   }
 }
 

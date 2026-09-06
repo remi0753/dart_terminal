@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'terminal_core/terminal_keyboard_modes.dart';
+import 'terminal_input/terminal_hyperlink_interaction.dart';
 import 'terminal_input/terminal_key_event.dart';
 import 'terminal_input/terminal_paste.dart';
 
@@ -194,6 +195,7 @@ abstract interface class TerminalPaneSession {
   Future<TerminalPasteTransferResult> paste(TerminalPastePlan plan);
   void resize({required int rows, required int columns});
   void showClipboardNotice(TerminalClipboardNotice notice);
+  void showHyperlinkNotice(TerminalHyperlinkNoticeKind kind);
   void showCloseConfirmation();
   Future<TerminalPaneSessionShutdownResult> shutdown();
 }
@@ -486,6 +488,10 @@ final class TerminalPane {
 
   void showClipboardNotice(TerminalClipboardNotice notice) {
     _session.showClipboardNotice(notice);
+  }
+
+  void showHyperlinkNotice(TerminalHyperlinkNoticeKind kind) {
+    _session.showHyperlinkNotice(kind);
   }
 
   void resize({required int rows, required int columns}) {

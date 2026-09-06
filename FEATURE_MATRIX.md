@@ -93,7 +93,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | SCR-08 | paged bounded scrollback、viewport offset、先頭 eviction が O(page) 以下 | P0 | 3 | `G:src/terminal/PageList.zig`, `G:src/terminal/page.zig`, `G:src/terminal/compress/` | fixed-page SoA履歴、独立line/byte cap、O(1) page eviction、primary capture、bounded viewport、target幅へのhistory repaginationを完了 |
 | SCR-09 | row/range damage と monotonic generation。全画面転送を通常 path にしない | P0 | 3/4 | `G:src/terminal/render.zig`, `G:src/renderer/row.zig` | coalesced半開区間、cursor/BELとmetadata-only packetを含むstrict damage v2、atomic retained model、one-in-flight TTD/ACK、100,000-cell Release AOT gateを完了 |
 | SCR-10 | underline color、overline、protected/selective erase | P1 | 6 | `G:src/terminal/style.zig`, `G:src/terminal/Terminal.zig` | 未実装 |
-| SCR-11 | hyperlink、semantic prompt、search、selection anchor/word/line semantics | P1 | 3/6 | `G:src/terminal/hyperlink.zig`, `G:src/terminal/search/`, `G:src/terminal/Selection.zig` | cell/word/logical-line selection、semantic row hint、bounded exact forward/backward searchを完了。hyperlink tableと詳細semantic rangeは後続 |
+| SCR-11 | hyperlink、semantic prompt、search、selection anchor/word/line semantics | P1 | 3/6 | `G:src/terminal/hyperlink.zig`, `G:src/terminal/search/`, `G:src/terminal/Selection.zig` | bounded immutable OSC 8 table、cell/history/reflow identity、visible hit/hover/open、cell/word/logical-line selection、semantic row hint、bounded exact forward/backward searchを完了。詳細semantic rangeは後続 |
 | SCR-12 | versioned snapshot/restore と readable formatter を test/debug oracle にする | P1 | 3 | `G:src/terminal/snapshot/`, `G:src/terminal/formatter.zig` | bounded version 1 terminal-state formatterとfirst-difference diagnosticsを完了。restoreは後続 |
 
 ## Queries、modes、modern terminal protocols
@@ -104,7 +104,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | CAP-02 | application cursor/keypad、bracketed paste、focus report | P0 | 3/5 | `G:src/input/key_encode.zig`, `G:src/terminal/paste.zig`, `G:src/terminal/focus.zig` | 未実装 |
 | CAP-03 | mouse X10、UTF-8、URXVT、SGR mode/encoding | P0 | 3/5 | `G:src/terminal/mouse.zig`, `G:src/input/mouse_encode.zig` | DEC mode state、bounded exact encoder、AppKit-to-cell routing、実PTY製品受け入れをM1両modeで完了 |
 | CAP-04 | xterm-256color 互換 terminfo と SSH fallback | P0/P1 | 6/8 | `G:src/terminfo/`, `G:src/cli/ssh.zig` | 未実装 |
-| CAP-05 | window/tab title、OSC 7 cwd、OSC 8 hyperlink、palette/default color query/change | P0 | 3/6 | `G:src/terminal/osc/parsers/` | bounded OSC 4/10/11 palette/default色query/changeと104/110/111 resetを完了。title/cwd/hyperlinkは後続 |
+| CAP-05 | window/tab title、OSC 7 cwd、OSC 8 hyperlink、palette/default color query/change | P0 | 3/6 | `G:src/terminal/osc/parsers/` | bounded OSC 8 open/close・immutable identity・Metal hover・safe Command-clickと、OSC 4/10/11 palette/default色query/change、104/110/111 resetを完了。title/cwdは後続 |
 | CAP-06 | OSC 52 は read/write policy、confirmation、size limit 付き | P0/P1 | 6/9 | `G:src/terminal/clipboard.zig`, `G:src/terminal/osc/parsers/clipboard_operation.zig` | 未実装 |
 | CAP-07 | XTGETTCAP、DECRQSS、window/size report | P1 | 6 | `G:src/terminal/dcs.zig`, `G:src/terminal/size_report.zig` | 未実装 |
 | CAP-08 | Kitty keyboard と progressive enhancement。legacy encoding を regression させない | P1 | 9 | `G:src/input/kitty.zig`, `G:src/terminal/kitty/key.zig` | 未実装 |
@@ -141,7 +141,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | REN-05 | double/triple buffering と submit token/fence。GPU 完了前に buffer を再利用しない | P0 | 4 | `G:src/renderer/metal/Frame.zig`, `G:src/renderer/metal/buffer.zig` | 3つの固定native slot、copied submit、即時backpressure、newest-ready選択、GPU完了retire watermark、Dart atlas unpin、成功GPU timing count/total/maxを完了 |
 | REN-06 | vsync/frame pacing、cursor blink、occlusion pause、resume full redraw | P0 | 4 | `G:src/renderer/generic.zig`, `G:src/renderer/Thread.zig` | live windowのcursor/BEL metadata、bounded monotonic animation clock、visibility/occlusion pause、hidden tickを再生しないresume full redrawを完了 |
 | REN-07 | deterministic screenshot と CPU/reference renderer を golden oracle にする | P0 | 4 | `G:src/terminal/render.zig`, renderer test paths | bounded Dart-only RGBA compositor、versioned checksum付きgolden format、primitive/実CoreText atlas fixture、Metal offscreen readbackとの1x/2x pixel比較を完了 |
-| REN-08 | image/search/hyperlink/inspector overlay、P3/sRGB blending | P1 | 4/9 | `G:src/renderer/image.zig`, `Overlay.zig`, `link.zig` | 未実装 |
+| REN-08 | image/search/hyperlink/inspector overlay、P3/sRGB blending | P1 | 4/9 | `G:src/renderer/image.zig`, `Overlay.zig`, `link.zig` | visible viewportのhyperlink hit testとnon-mutating Metal underline overlayを完了。image/search/inspector/P3は後続 |
 | REN-09 | 60/120 Hz、複数 window/pane の fair scheduling。遅延時は中間 frame を捨てる | P1 | 4/7 | `G:src/renderer/Thread.zig`, `G:src/renderer/generic.zig` | live 1 paneのnewest-only frame discard、constant-size backpressure state、bounded build/submit timing snapshot、実PTYで最新damage frameとbottom promptを検証済み。vsync/fair multi-pane benchmarkは後続 |
 
 ## Keyboard、IME、mouse、selection、clipboard
@@ -192,8 +192,8 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | AX-01 | visible text、selection、cursor、focus を VoiceOver に公開し change notification を送る | P0 | 5/10 | `G:macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` | 未実装 |
 | AX-02 | Full Keyboard Access、Reduce Motion、Increase Contrast、Differentiate Without Color | P0 | 5/10 | macOS Surface/Splits/QuickTerminal accessibility code | 未実装 |
 | AX-03 | IME preedit と accessibility selection/range/candidate rect が同じ text model を使う | P0 | 5 | `G:macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` | Phase 0 gate |
-| SEC-01 | parser payload/count/value、scrollback、hyperlink、image、queue に hard cap | P0 | 3/5/9 | `G:src/terminal/Parser.zig`, kitty graphics storage, termio mailbox | parser、64-byte reply、scrollback、selection extraction、word scan、search query/work/result capを完了。後続hyperlink/image/queue capは未実装 |
-| SEC-02 | URL scheme allowlist/sanitization、OSC 52 policy、paste confirmation、notification rate limit | P0/P1 | 5/9 | `G:macos/Sources/Helpers/UntrustedURL.swift`, clipboard confirmation | standard pasteのmultiline/control/terminator/large確認とbounded通知を完了。URL safetyとOSC 52 policyは後続 |
+| SEC-01 | parser payload/count/value、scrollback、hyperlink、image、queue に hard cap | P0 | 3/5/9 | `G:src/terminal/Parser.zig`, kitty graphics storage, termio mailbox | parser、64-byte reply、scrollback、selection/search、OSC 8 definition count/per-entry/aggregate byte capを完了。image/後続queue capは未実装 |
+| SEC-02 | URL scheme allowlist/sanitization、OSC 52 policy、paste confirmation、notification rate limit | P0/P1 | 5/9 | `G:macos/Sources/Helpers/UntrustedURL.swift`, clipboard confirmation | Dart/native二重の`http`/`https`/`mailto` allowlist、control/invisible/credential拒否、standard pasteのmultiline/control/terminator/large確認とbounded通知を完了。OSC 52 policyは後続 |
 | SEC-03 | fork child は async-signal-safe setup と `execve` だけ。Dart runtime/ObjC allocation を呼ばない | P0 | 2 | `G:src/pty.zig`, `G:src/Command.zig` | `dart_pty_macos` child symbol audit 完了 |
 | SEC-04 | Secure Input を abnormal teardown 後も必ず解除 | P1 | 10 | `G:macos/Sources/Features/Secure Input/SecureInput.swift` | 未実装 |
 | SEC-05 | crash/update/clipboard/shell integration の data flow と opt-in/out を privacy 文書化 | P0 | 10/11 | pinned crash/update/config behaviorを比較対象にする | Phase 1 local-run metadata の local-only/no-content policy を文書化。crash/update/clipboard/shell 全体は Phase 10/11 |

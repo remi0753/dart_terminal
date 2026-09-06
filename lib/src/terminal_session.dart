@@ -11,6 +11,7 @@ import 'terminal_core/terminal_reply.dart';
 import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_core/vt_parser.dart';
+import 'terminal_input/terminal_hyperlink_interaction.dart';
 import 'terminal_input/terminal_key_event.dart';
 import 'terminal_input/terminal_paste.dart';
 import 'terminal_pane.dart';
@@ -631,6 +632,18 @@ final class TerminalSession implements TerminalPaneSession {
         '[a paste is already in progress]',
       TerminalClipboardNoticeKind.pasteCancelled => '[paste was cancelled]',
       TerminalClipboardNoticeKind.pasteFailed => '[paste could not be sent]',
+    };
+    buffer.appendStatusLine(message);
+    _terminalParser.parse(utf8.encode('\r\n$message\r\n'));
+    _notifyChanged();
+  }
+
+  @override
+  void showHyperlinkNotice(TerminalHyperlinkNoticeKind kind) {
+    if (_disposed) return;
+    final String message = switch (kind) {
+      TerminalHyperlinkNoticeKind.blocked => '[link target is not allowed]',
+      TerminalHyperlinkNoticeKind.unavailable => '[link could not be opened]',
     };
     buffer.appendStatusLine(message);
     _terminalParser.parse(utf8.encode('\r\n$message\r\n'));

@@ -132,6 +132,9 @@ precision/momentum trackpad scrollも製品経路へ接続済みです。
   bottomの間は大量出力後も最新prompt/cursorを最終表示行に保つ。zero-configでは
   macOS system monospaceを読みやすい14ptで使用し、CoreText bitmapをtop-downでatlasへ
   公開して非対称glyphも上下反転せず表示する
+- bounded immutable OSC 8 linkをscreen/history/reflowへ保持し、visible cellのhoverを
+  Metal underlineで表示する。exact Command-primary-clickだけを再解決して所有し、
+  `http`/`https`/`mailto` allowlistをDart/AppKitの両境界で通ったtargetだけを開く
 
 ## 起動
 
