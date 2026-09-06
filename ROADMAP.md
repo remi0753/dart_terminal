@@ -784,7 +784,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] `NSTextInputClient` と preedit overlay
   （[`docs/phase5/text-input-client-preedit.md`](docs/phase5/text-input-client-preedit.md) を参照して実施）
   - [x] AppKit first-responder routingとbounded native text-input client/event/geometry境界
-  - [ ] bounded Dart preedit model/layoutとCoreText/Metal overlay
+  - [x] bounded Dart preedit model/layoutとCoreText/Metal overlay
   - [ ] live pane raw/composition routingと実AppKit/PTY製品統合
 - [ ] US/JIS/dead key/CJK/emoji/key repeat matrix
 - [ ] mouse protocol と local selection arbitration

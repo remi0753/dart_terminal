@@ -187,3 +187,52 @@ combined product verification pass.
 - The reusable boundary subtask is complete in adjacent `dart_appkit`. The next
   subtask is the Dart-owned composition model, overlay, and geometry publication;
   product routing remains intentionally unchanged until that layer exists.
+
+### 2026-09-06 — bounded Dart preedit and Metal overlay
+
+- Added an immutable composition model capped at the native 64 KiB UTF-8 text
+  limit and 64 Unicode scalars per grapheme. It preserves validated AppKit
+  UTF-16 selection offsets, rejects surrogate-splitting ranges, ignores stale
+  generations, sanitizes C0/C1 and line-separator controls to replacement
+  glyphs, and gives a standalone zero-width cluster a visible dotted-circle
+  base.
+- Layout uses the terminal's Unicode 17 grapheme breaker and column-width
+  policy. Wide clusters wrap before the right edge, selected UTF-16 ranges map
+  to whole visible clusters, a caret inside a grapheme snaps after that
+  grapheme, and content beyond the fixed viewport is clipped without entering
+  scrollback or changing packed screen cells.
+- The Metal compositor receives preedit as a separate, optional frame input.
+  It batches adjacent visible clusters into CoreText runs, reuses the existing
+  shaping cache/glyph atlas, draws selection behind glyphs, draws marked-text
+  underlines above glyphs, and replaces the terminal cursor with a composition
+  bar caret for the duration of preedit. The existing layer-order contract and
+  renderer instance limit remain authoritative; over-limit frames fail before
+  submission rather than becoming partial frames.
+- The live surface owns the monotonic preedit model, requests a redraw for each
+  accepted update/clear, and publishes a finite positive local-view caret cell
+  rectangle only when its geometry changes. Native candidate lookup can consume
+  this without a synchronous callback into Dart. Backing scale stays out of the
+  logical AppKit rectangle; native performs the existing view/window/screen
+  conversion.
+- Pure tests cover narrow, wide, combining, emoji ZWJ, controls, standalone
+  marks, pathological extending clusters, UTF-8/range limits, right-edge wrap,
+  viewport clipping, selection/caret mapping, and monotonic state. Metal tests
+  verify selected background, preedit glyph/underline/caret layers, an
+  unchanged canonical screen, CPU-readable rendering, and deterministic
+  renderer-instance exhaustion.
+- A proposed source-test-only live-surface test could not call
+  `TerminalRendererMacos.initialize()` because a plain `dart` source process
+  has no bundled native-capability manifest. It was removed rather than adding
+  a false test environment. The next product-integration subtask owns the same
+  redraw/caret path inside Developer JIT and Release AOT bundles, where the
+  manifest and registered custom view exist.
+- `dart test/terminal_preedit_test.dart` passed. The compositor test initially
+  reported `deviceUnavailable` inside the restricted sandbox, then passed with
+  real GPU access. `make test` passed with 114 formatted files, zero analyzer
+  issues, and the complete Dart/native Metal/PTY suite. `git diff --check`
+  passed, and a source audit found no FFI/pointer/native operation in the Dart
+  model/compositor/live-surface additions.
+- This second subtask is complete. Product key routing remains Dart-only and no
+  text-input stream is attached yet; the final subtask must wire the native
+  event stream, publish this surface geometry to its client, and prove
+  mutually-exclusive raw/commit/cancel behavior through a real PTY.

@@ -85,6 +85,7 @@ export 'src/terminal_input/terminal_key_event.dart'
         TerminalKeyEvent,
         TerminalKeyModifiers,
         TerminalPhysicalKey;
+export 'src/terminal_input/terminal_preedit.dart';
 export 'src/terminal_pane.dart'
     show
         PaneId,

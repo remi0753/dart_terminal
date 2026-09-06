@@ -6,6 +6,7 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import '../terminal_core/terminal_screen.dart';
 import '../terminal_core/terminal_screen_set.dart';
+import '../terminal_input/terminal_preedit.dart';
 import '../terminal_pane.dart';
 import 'frame_scheduler.dart';
 import 'glyph_atlas.dart';
@@ -19,6 +20,35 @@ typedef TerminalLiveMetalSurfaceFatalError = void Function(
   Object error,
   StackTrace stackTrace,
 );
+
+typedef TerminalCaretGeometryPublisher = void Function(
+  TerminalCaretRect rectangle,
+);
+
+final class TerminalCaretRect {
+  const TerminalCaretRect({
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+  });
+
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalCaretRect &&
+      other.x == x &&
+      other.y == y &&
+      other.width == width &&
+      other.height == height;
+
+  @override
+  int get hashCode => Object.hash(x, y, width, height);
+}
 
 final class TerminalGridSize {
   const TerminalGridSize({required this.rows, required this.columns});
@@ -86,6 +116,7 @@ final class TerminalLiveMetalSurface {
     bool isOccluded = true,
     bool automaticScheduling = true,
     TerminalLiveMetalSurfaceFatalError? onFatalError,
+    TerminalCaretGeometryPublisher? onCaretGeometryChanged,
     TerminalMetalRendererConfig rendererConfig =
         const TerminalMetalRendererConfig(),
   }) {
@@ -129,6 +160,7 @@ final class TerminalLiveMetalSurface {
         isOccluded: isOccluded,
         automaticScheduling: automaticScheduling,
         onFatalError: onFatalError,
+        onCaretGeometryChanged: onCaretGeometryChanged,
         rendererConfig: rendererConfig,
         catalog: catalog,
         shapingCache: shapingCache,
@@ -155,6 +187,7 @@ final class TerminalLiveMetalSurface {
     required bool isOccluded,
     required this.automaticScheduling,
     required this.onFatalError,
+    required this.onCaretGeometryChanged,
     required this.rendererConfig,
     required TerminalFontCatalog catalog,
     required TerminalShapingCache shapingCache,
@@ -204,6 +237,7 @@ final class TerminalLiveMetalSurface {
                     viewportWidth: _viewportWidth,
                     viewportHeight: _viewportHeight,
                     presentation: presentation,
+                    preedit: _preeditLayoutForModel(model),
                   )
                   .scheduledFrame,
       submitFrame:
@@ -238,6 +272,7 @@ final class TerminalLiveMetalSurface {
     _scheduler = scheduler;
     _recovery = recovery;
     _needsDrain = true;
+    _publishCaretGeometry(force: true);
     _scheduleImmediate();
   }
 
@@ -256,10 +291,12 @@ final class TerminalLiveMetalSurface {
   final View view;
   final bool automaticScheduling;
   final TerminalLiveMetalSurfaceFatalError? onFatalError;
+  final TerminalCaretGeometryPublisher? onCaretGeometryChanged;
   final TerminalMetalRendererConfig rendererConfig;
   final TerminalGlyphAtlas atlas;
   final Stopwatch _clock = Stopwatch()..start();
   final TerminalDamageOutbox _outbox;
+  final TerminalPreeditModel _preeditModel = TerminalPreeditModel();
   late final TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>
   _scheduler;
   late final TerminalMetalFailureRecoveryCoordinator<
@@ -284,10 +321,49 @@ final class TerminalLiveMetalSurface {
   bool _processing = false;
   bool _disposed = false;
   int _lastMonotonicMicros = 0;
+  TerminalCaretRect? _lastPublishedCaretRect;
   Timer? _timer;
 
   bool get isDisposed => _disposed;
   TerminalFontCatalogMetrics get fontMetrics => _catalog.metrics;
+  TerminalPreeditState get preeditState => _preeditModel.state;
+
+  bool updatePreedit({
+    required int generation,
+    required String text,
+    required int selectionLocation,
+    required int selectionLength,
+  }) {
+    _requireLive();
+    final bool changed = _preeditModel.update(
+      generation: generation,
+      text: text,
+      selectionLocation: selectionLocation,
+      selectionLength: selectionLength,
+    );
+    if (!changed) return false;
+    if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
+    _needsDrain = true;
+    _publishCaretGeometry();
+    _scheduleImmediate();
+    return true;
+  }
+
+  bool clearPreedit({required int generation}) {
+    _requireLive();
+    final bool changed = _preeditModel.clear(generation: generation);
+    if (!changed) return false;
+    if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
+    _needsDrain = true;
+    _publishCaretGeometry();
+    _scheduleImmediate();
+    return true;
+  }
+
+  TerminalCaretRect caretRect() {
+    _requireLive();
+    return _currentCaretRect();
+  }
 
   TerminalGridSize gridSizeFor({
     required double logicalWidth,
@@ -331,6 +407,7 @@ final class TerminalLiveMetalSurface {
       _logicalHeight = logicalHeight;
       _updatePixelViewport();
       _needsDrain = true;
+      _publishCaretGeometry();
       _scheduleImmediate();
     }
     return size;
@@ -361,6 +438,7 @@ final class TerminalLiveMetalSurface {
   void notifyScreenChanged() {
     _requireLive();
     _needsDrain = true;
+    _publishCaretGeometry();
     _scheduleImmediate();
   }
 
@@ -507,6 +585,7 @@ final class TerminalLiveMetalSurface {
     _boundScreen = current;
     _outbox.rebindScreenForFullRebuild(current);
     _scheduler.requestFullRedraw();
+    _publishCaretGeometry();
   }
 
   void _applyNewestDamage(int now) {
@@ -618,6 +697,52 @@ final class TerminalLiveMetalSurface {
       1,
       rendererConfig.maximumViewportHeight,
     );
+  }
+
+  TerminalPreeditLayout? _preeditLayoutForModel(
+    TerminalDamageRenderModel model,
+  ) {
+    final TerminalPreeditState state = _preeditModel.state;
+    if (!state.isActive || !model.isInitialized) return null;
+    return TerminalPreeditLayout.compute(
+      state: state,
+      startRow: model.cursorRow,
+      startColumn: model.cursorColumn,
+      rows: model.rows,
+      columns: model.columns,
+    );
+  }
+
+  TerminalCaretRect _currentCaretRect() {
+    var row = _boundScreen.cursorRow;
+    var column = _boundScreen.cursorColumn;
+    final TerminalPreeditState state = _preeditModel.state;
+    if (state.isActive) {
+      final TerminalPreeditLayout layout = TerminalPreeditLayout.compute(
+        state: state,
+        startRow: row,
+        startColumn: column,
+        rows: _boundScreen.rows,
+        columns: _boundScreen.columns,
+      );
+      row = layout.caretRow;
+      column = layout.caretColumn;
+    }
+    return TerminalCaretRect(
+      x: column * _catalog.metrics.cellWidth,
+      y: row * _catalog.metrics.cellHeight,
+      width: _catalog.metrics.cellWidth,
+      height: _catalog.metrics.cellHeight,
+    );
+  }
+
+  void _publishCaretGeometry({bool force = false}) {
+    final TerminalCaretGeometryPublisher? publisher = onCaretGeometryChanged;
+    if (publisher == null) return;
+    final TerminalCaretRect rectangle = _currentCaretRect();
+    if (!force && rectangle == _lastPublishedCaretRect) return;
+    publisher(rectangle);
+    _lastPublishedCaretRect = rectangle;
   }
 
   void _scheduleImmediate() {

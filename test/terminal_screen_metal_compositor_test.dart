@@ -11,6 +11,8 @@ void runTerminalScreenMetalCompositorTests() {
   _testInverseBackgroundAndConcealMapping();
   _testWrappedOverflowKeepsNewestPromptVisible();
   _testWideGraphemeUsesCanonicalGrid();
+  _testPreeditUsesTransientMetalLayers();
+  _testPreeditRespectsRendererInstanceLimit();
 }
 
 void _testInverseBackgroundAndConcealMapping() {
@@ -185,13 +187,112 @@ void _testWideGraphemeUsesCanonicalGrid() {
   }
 }
 
-_CompositionFixture _compose(TerminalScreenSet screens) {
+void _testPreeditUsesTransientMetalLayers() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 2, columns: 6);
+  _parse(screens, ascii.encode('12345'));
+  final List<int> before = _screenContent(screens.activeScreen);
+  final TerminalPreeditLayout preedit = TerminalPreeditLayout.compute(
+    state: TerminalPreeditState(
+      generation: 1,
+      text: '界A',
+      selectionLocation: 0,
+      selectionLength: 1,
+    ),
+    startRow: screens.activeScreen.cursorRow,
+    startColumn: screens.activeScreen.cursorColumn,
+    rows: screens.activeScreen.rows,
+    columns: screens.activeScreen.columns,
+  );
+  final _CompositionFixture fixture = _compose(screens, preedit: preedit);
+  try {
+    final int rowTop = fixture.catalog.metrics.cellHeight.round();
+    final int selectedWidth = (fixture.catalog.metrics.cellWidth * 2).round();
+    final int caretLeft = (fixture.catalog.metrics.cellWidth * 2).round();
+    _expect(
+      fixture.composition.preeditCellCount == 2 &&
+          fixture.composition.shapedRunCount == 2 &&
+          fixture.composition.instances.any(
+            (TerminalMetalInstance instance) =>
+                instance.kind == TerminalMetalInstanceKind.selection &&
+                instance.x == 0 &&
+                instance.y == rowTop &&
+                instance.width == selectedWidth,
+          ) &&
+          fixture.composition.instances
+                  .where(
+                    (TerminalMetalInstance instance) =>
+                        instance.kind == TerminalMetalInstanceKind.decoration &&
+                        instance.y >= rowTop,
+                  )
+                  .length >=
+              2 &&
+          fixture.composition.instances.any(
+            (TerminalMetalInstance instance) =>
+                instance.kind == TerminalMetalInstanceKind.cursor &&
+                instance.x == caretLeft &&
+                instance.y == rowTop &&
+                instance.width < fixture.catalog.metrics.cellWidth,
+          ) &&
+          _screenContent(screens.activeScreen).toString() == before.toString(),
+      'preedit adds selected text, underline, and caret without editing the grid',
+    );
+    final Uint8List rgba = fixture.renderer.renderRgba(
+      fixture.composition.scheduledFrame.frame,
+    );
+    _expect(
+      rgba.any((int byte) => byte != 0),
+      'CoreText preedit glyphs and overlay layers form a renderable Metal frame',
+    );
+  } finally {
+    fixture.dispose();
+  }
+}
+
+void _testPreeditRespectsRendererInstanceLimit() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 2, columns: 6);
+  _parse(screens, ascii.encode('12345'));
+  final TerminalPreeditLayout preedit = TerminalPreeditLayout.compute(
+    state: TerminalPreeditState(
+      generation: 1,
+      text: 'AB',
+      selectionLocation: 0,
+      selectionLength: 0,
+    ),
+    startRow: screens.activeScreen.cursorRow,
+    startColumn: screens.activeScreen.cursorColumn,
+    rows: screens.activeScreen.rows,
+    columns: screens.activeScreen.columns,
+  );
+  try {
+    _compose(
+      screens,
+      preedit: preedit,
+      rendererConfig: const TerminalMetalRendererConfig(maximumInstances: 8),
+    );
+  } on StateError catch (error) {
+    _expect(
+      error.message == 'Metal instance limit exceeded',
+      'preedit exhaustion reports the renderer resource boundary',
+    );
+    return;
+  }
+  throw StateError('test failed: preedit frame cannot exceed instance limits');
+}
+
+_CompositionFixture _compose(
+  TerminalScreenSet screens, {
+  TerminalPreeditLayout? preedit,
+  TerminalMetalRendererConfig rendererConfig =
+      const TerminalMetalRendererConfig(),
+}) {
   final TerminalFontCatalog catalog = TerminalFontCatalog.open();
   final TerminalShapingCache shapingCache = TerminalShapingCache(catalog);
   final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
     catalogGeneration: catalog.generation,
   );
-  final TerminalMetalRenderer renderer = TerminalMetalRenderer.open();
+  final TerminalMetalRenderer renderer = TerminalMetalRenderer.open(
+    config: rendererConfig,
+  );
   final TerminalGlyphAtlasMetalBridge bridge = TerminalGlyphAtlasMetalBridge(
     atlas: atlas,
     renderer: renderer,
@@ -237,6 +338,7 @@ _CompositionFixture _compose(TerminalScreenSet screens) {
             visualBellActive: false,
             requiresFullRedraw: true,
           ),
+          preedit: preedit,
         );
     return _CompositionFixture(
       catalog: catalog,
@@ -255,6 +357,12 @@ _CompositionFixture _compose(TerminalScreenSet screens) {
     rethrow;
   }
 }
+
+List<int> _screenContent(TerminalScreen screen) => <int>[
+  for (int row = 0; row < screen.rows; row++)
+    for (int column = 0; column < screen.columns; column++)
+      screen.contentAt(row, column),
+];
 
 void _parse(TerminalScreenSet screens, List<int> bytes) {
   final VtParser parser = VtParser(

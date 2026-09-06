@@ -5,6 +5,7 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 import '../terminal_core/terminal_screen.dart';
 import '../terminal_core/terminal_style.dart';
 import '../terminal_core/terminal_unicode.dart';
+import '../terminal_input/terminal_preedit.dart';
 import 'frame_scheduler.dart';
 import 'glyph_atlas.dart';
 import 'metal_atlas_bridge.dart';
@@ -29,12 +30,14 @@ final class TerminalScreenMetalComposition {
     required Iterable<TerminalMetalInstance> instances,
     required this.shapedRunCount,
     required this.renderedCellCount,
+    required this.preeditCellCount,
   }) : instances = List<TerminalMetalInstance>.unmodifiable(instances);
 
   final TerminalScheduledMetalFrame scheduledFrame;
   final List<TerminalMetalInstance> instances;
   final int shapedRunCount;
   final int renderedCellCount;
+  final int preeditCellCount;
 }
 
 /// Canonical screen-grid to Metal composition boundary.
@@ -74,6 +77,7 @@ final class TerminalScreenMetalCompositor {
     required int viewportWidth,
     required int viewportHeight,
     required TerminalFramePresentation presentation,
+    TerminalPreeditLayout? preedit,
   }) {
     if (!model.isInitialized) {
       throw StateError('Metal composition requires an initialized model');
@@ -240,6 +244,19 @@ final class TerminalScreenMetalCompositor {
       );
     }
 
+    if (preedit != null) {
+      _addPreedit(
+        preedit,
+        overlays: overlays,
+        decorations: decorations,
+        textRuns: textRuns,
+        metrics: metrics,
+        scale: scale,
+        viewportWidth: viewportWidth,
+        viewportHeight: viewportHeight,
+      );
+    }
+
     final List<_TerminalShapedRun> shapedRuns = <_TerminalShapedRun>[];
     final Map<TerminalGlyphAtlasKey, TerminalGlyphRasterRequest> missing =
         <TerminalGlyphAtlasKey, TerminalGlyphRasterRequest>{};
@@ -341,9 +358,11 @@ final class TerminalScreenMetalCompositor {
     }
 
     if (presentation.cursorDrawn) {
-      _addCursor(
+      _addCursorAt(
         cursors,
-        model: model,
+        row: preedit?.caretRow ?? model.cursorRow,
+        column: preedit?.caretColumn ?? model.cursorColumn,
+        shape: preedit == null ? model.cursorShape : TerminalCursorShape.bar,
         metrics: metrics,
         scale: scale,
         viewportWidth: viewportWidth,
@@ -375,7 +394,69 @@ final class TerminalScreenMetalCompositor {
       instances: instances,
       shapedRunCount: shapedRuns.length,
       renderedCellCount: renderedCellCount,
+      preeditCellCount: preedit?.cells.length ?? 0,
     );
+  }
+
+  void _addPreedit(
+    TerminalPreeditLayout preedit, {
+    required List<TerminalMetalInstance> overlays,
+    required List<TerminalMetalInstance> decorations,
+    required List<_TerminalTextRun> textRuns,
+    required TerminalFontCatalogMetrics metrics,
+    required double scale,
+    required int viewportWidth,
+    required int viewportHeight,
+  }) {
+    final int foregroundRgba = _rgba(palette.resolveToken(0, foreground: true));
+    _TerminalTextRunBuilder? run;
+    void flushRun() {
+      final _TerminalTextRunBuilder? current = run;
+      if (current == null) return;
+      textRuns.add(current.build(foregroundRgba));
+      run = null;
+    }
+
+    for (final TerminalPreeditCell cell in preedit.cells) {
+      final int left = _columnPixel(cell.column, metrics, scale);
+      final int right = _columnPixel(cell.column + cell.width, metrics, scale);
+      final int top = _rowPixel(cell.row, metrics, scale);
+      final int bottom = _rowPixel(cell.row + 1, metrics, scale);
+      if (cell.isSelected) {
+        _addClippedSolid(
+          overlays,
+          kind: TerminalMetalInstanceKind.selection,
+          x: left,
+          y: top,
+          width: right - left,
+          height: bottom - top,
+          colorRgba: 0x4a90e280,
+          viewportWidth: viewportWidth,
+          viewportHeight: viewportHeight,
+        );
+      }
+      _addClippedSolid(
+        decorations,
+        kind: TerminalMetalInstanceKind.decoration,
+        x: left,
+        y: _underlinePixel(cell.row, metrics, scale),
+        width: right - left,
+        height: math.max(1, (metrics.underlineThickness * scale).round()),
+        colorRgba: foregroundRgba,
+        viewportWidth: viewportWidth,
+        viewportHeight: viewportHeight,
+      );
+
+      final _TerminalTextRunBuilder? current = run;
+      if (current == null ||
+          current.row != cell.row ||
+          current.nextColumn != cell.column) {
+        flushRun();
+        run = _TerminalTextRunBuilder(row: cell.row, startColumn: cell.column);
+      }
+      run!.add(cell.text, cell.width);
+    }
+    flushRun();
   }
 
   String _cellText(int content, int widthFlags) {
@@ -529,23 +610,25 @@ final class TerminalScreenMetalCompositor {
     }
   }
 
-  void _addCursor(
+  void _addCursorAt(
     List<TerminalMetalInstance> output, {
-    required TerminalDamageRenderModel model,
+    required int row,
+    required int column,
+    required TerminalCursorShape shape,
     required TerminalFontCatalogMetrics metrics,
     required double scale,
     required int viewportWidth,
     required int viewportHeight,
   }) {
-    final int left = _columnPixel(model.cursorColumn, metrics, scale);
-    final int right = _columnPixel(model.cursorColumn + 1, metrics, scale);
-    final int top = _rowPixel(model.cursorRow, metrics, scale);
-    final int bottom = _rowPixel(model.cursorRow + 1, metrics, scale);
+    final int left = _columnPixel(column, metrics, scale);
+    final int right = _columnPixel(column + 1, metrics, scale);
+    final int top = _rowPixel(row, metrics, scale);
+    final int bottom = _rowPixel(row + 1, metrics, scale);
     final int thickness = math.max(
       1,
       (metrics.underlineThickness * scale).round(),
     );
-    final (int, int, int, int) rectangle = switch (model.cursorShape) {
+    final (int, int, int, int) rectangle = switch (shape) {
       TerminalCursorShape.block => (left, top, right - left, bottom - top),
       TerminalCursorShape.underline => (
         left,
@@ -566,6 +649,16 @@ final class TerminalScreenMetalCompositor {
       viewportWidth: viewportWidth,
       viewportHeight: viewportHeight,
     );
+  }
+
+  static int _underlinePixel(
+    int row,
+    TerminalFontCatalogMetrics metrics,
+    double scale,
+  ) {
+    final int baseline = ((row * metrics.cellHeight + metrics.baseline) * scale)
+        .round();
+    return (baseline - metrics.underlinePosition * scale).round();
   }
 
   static void _addClippedSolid(
@@ -611,6 +704,29 @@ final class _TerminalTextRun {
   final String text;
   final TerminalFontStyle style;
   final int colorRgba;
+}
+
+final class _TerminalTextRunBuilder {
+  _TerminalTextRunBuilder({required this.row, required this.startColumn})
+    : nextColumn = startColumn;
+
+  final int row;
+  final int startColumn;
+  final StringBuffer _text = StringBuffer();
+  int nextColumn;
+
+  void add(String text, int width) {
+    _text.write(text);
+    nextColumn += width;
+  }
+
+  _TerminalTextRun build(int colorRgba) => _TerminalTextRun(
+    row: row,
+    startColumn: startColumn,
+    text: _text.toString(),
+    style: TerminalFontStyle.regular,
+    colorRgba: colorRgba,
+  );
 }
 
 final class _TerminalShapedRun {
