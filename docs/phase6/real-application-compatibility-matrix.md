@@ -232,22 +232,21 @@ stream while applying both recorded resizes at their original byte offsets. A
 tool-only `VtParserSink` delegate records an action only when the product sink's
 unsupported counter increases, then reconstructs the equivalent 7-bit bytes
 from the typed parser action. The capture-time surface accounted for all 526
-unsupported increments as 28 unique observed variants; the current terminfo
-closure replay accounts for 98 increments as 24 variants. It does not infer
+unsupported increments as 28 unique observed variants; the current OSC-title
+closure replay accounts for 92 increments as 20 variants. It does not infer
 bytes from documentation or scan arbitrary escape-looking text inside
 printable payloads.
 
 `compatibility/application_matrix_acceptance.json` groups those variants into
-14 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
+13 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
 present in evidence. Replaying each minimal sequence produces exactly one
 bounded reject, no cancel/limit/malformed/incomplete result, and no standalone
 screen-state mutation. The remaining DECRQSS DCS query matches an inventory
-`safe-ignore` record; the other 13 remain explicit unsupported rather than
+`safe-ignore` record; the other 12 remain explicit unsupported rather than
 being silently normalized into success.
 
 | Gap | Observed applications | Current impact/disposition | Ordered owner |
 | --- | --- | --- | --- |
-| title stack | lazygit, ncurses, tmux | window metadata; explicit unsupported | Phase 6 OSC title/cwd policy |
 | focus reporting | Emacs, lazygit, mosh, Neovim, tmux | input events; explicit unsupported | Phase 6 focus/mouse/query task |
 | highlight/pixel mouse | mosh, lazygit | input events/coordinates; explicit unsupported | Phase 6 focus/mouse/query task |
 | XTVERSION and window-size report | Emacs, lazygit, tmux | query fallback; explicit unsupported | Phase 6 focus/mouse/query task |
@@ -264,14 +263,21 @@ XTGETTCAP `Ms` query now receives an explicit unavailable response consistent
 with the audited database's OSC 52 cancellation. Other owned protocol gaps are
 not claimed as implemented.
 
-The cell outcome is one clean agreement (SSH) and seven accepted documented-gap
+The OSC title policy subsequently implemented the four captured title-stack
+variants with a bounded session-owned stack. Those variants also disappeared:
+lazygit now has 38 current increments, ncurses has zero and is a clean
+agreement, and tmux has 10. The remaining XTWINOPS variants are window-size
+queries owned by the following focus/mouse/query task; they stay explicit
+unsupported parameter variants of the partially implemented selector.
+
+The cell outcome is two clean agreements (ncurses and SSH) and six accepted documented-gap
 cells. “Accepted” means the captured workflow completed, every non-parser
 semantic check passed, all rejected bytes are explicit and owned, and no
 matrix-level crash/corruption/unbounded-resource blocker remains. It does not
 turn any false `parser-clean` check into true. The normal gate reports
-`TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=1
-documented_gap_cells=7 gaps=14 unique_sequences=24
-unsupported_increments=98`.
+`TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=2
+documented_gap_cells=6 gaps=13 unique_sequences=20
+unsupported_increments=92`.
 
 The version-2 acceptance report pins the current product implementation
 manifest. It retains the original capture counters per cell while recording
@@ -280,6 +286,11 @@ immutable PTY bytes rather than by rewriting their provenance.
 
 ## Investigation log
 
+- 2026-09-07: OSC title/title-stack closure replay retained the same 57,737
+  immutable PTY bytes and resize offsets. Current unsupported counts fell from
+  98 to 92: lazygit 40→38, ncurses 2→0, and tmux 12→10. Four title-stack
+  variants and their owned gap disappeared; ncurses became the second clean
+  agreement. No capture provenance or original counter was rewritten.
 - 2026-09-07: the terminfo closure replay used the same 57,737 immutable PTY
   bytes and original resize offsets. Current unsupported counts fell from 526
   to 98: lazygit 42→40, ncurses 297→2, Neovim 124→6, and tmux 25→12; Emacs,
@@ -431,11 +442,11 @@ immutable PTY bytes rather than by rewriting their provenance.
   temporary build cleanup with the exact reviewed totals above.
 - `CI=true make test`: passed all compatibility freshness checks, formatting,
   static analysis, and the complete Dart test runner.
-- Terminfo closure replay: passed with 98 current unsupported increments, 24
-  variants, and 14 owned gaps; captured/current counts are exact in every cell.
+- OSC title closure replay: passed with 92 current unsupported increments, 20
+  variants, and 13 owned gaps; captured/current counts are exact in every cell.
 - `git diff --check`, staged-scope review, and final worktree review are run
   immediately before the completion commit.
-- Remaining work is not hidden: the 14 gap owners are pinned in the acceptance
+- Remaining work is not hidden: the 13 gap owners are pinned in the acceptance
   report and linked from ROADMAP. Character-set and XTGETTCAP gaps are closed;
   later Phase 6/9 owners retain the remaining query, metadata, input,
   presentation, and theme gaps.

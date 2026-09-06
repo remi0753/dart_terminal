@@ -337,6 +337,14 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
     'SCOSC-DECSLRM',
     'ctlseqs.ms, CSI s / CSI Pl ; Pr s',
   ),
+  0x74: _Metadata(
+    'xterm',
+    'xtwinops',
+    'XTWINOPS',
+    'ctlseqs.ms, XTWINOPS',
+    support: 'partial',
+    notes: 'Bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported.',
+  ),
   0x75: _Metadata(
     'xterm',
     'scorc',
@@ -400,6 +408,14 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
 };
 
 const Map<int, _Metadata> _oscMetadata = <int, _Metadata>{
+  0: _Metadata(
+    'xterm',
+    'osc-0',
+    'OSC-0',
+    'ctlseqs.ms, OSC 0—Icon and window title',
+  ),
+  1: _Metadata('xterm', 'osc-1', 'OSC-1', 'ctlseqs.ms, OSC 1—Icon title'),
+  2: _Metadata('xterm', 'osc-2', 'OSC-2', 'ctlseqs.ms, OSC 2—Window title'),
   4: _Metadata(
     'xterm',
     'osc-4',
@@ -407,6 +423,13 @@ const Map<int, _Metadata> _oscMetadata = <int, _Metadata>{
     'ctlseqs.ms, OSC 4—Change/query ANSI color',
     support: 'partial',
     notes: 'Bounded indexed RGB mutation/query is implemented; xterm color names and every XParseColor form are not.',
+  ),
+  7: _Metadata(
+    'iterm2',
+    'osc-7',
+    'OSC-7',
+    'CurrentDir / OSC 7',
+    notes: 'Strict bounded file-URI session metadata is implemented without process cwd or filesystem mutation.',
   ),
   8: _Metadata('iterm2', 'osc-8', 'OSC-8', 'Anchor (OSC 8)'),
   10: _Metadata(
@@ -1386,20 +1409,6 @@ const List<_Gap> _gaps = <_Gap>[
   _Gap(
     family: 'xterm',
     kind: 'csi',
-    name: 'xtwinops',
-    mnemonic: 'XTWINOPS',
-    syntax: 'CSI Ps ; Ps ; Ps t',
-    selector: <String, Object?>{
-      'kind': 'csi',
-      'privateMarker': null,
-      'intermediates': <int>[],
-      'finalByte': 116,
-    },
-    locator: 'ctlseqs.ms, XTWINOPS',
-  ),
-  _Gap(
-    family: 'xterm',
-    kind: 'csi',
     name: 'xtsmtitle',
     mnemonic: 'XTSMTITLE',
     syntax: 'CSI > Pm t',
@@ -1790,46 +1799,6 @@ const List<_Gap> _gaps = <_Gap>[
       'finalByte': 126,
     },
     locator: 'Part II chapter 5, DECSSDT—Select Status Line Type',
-  ),
-  _Gap(
-    family: 'xterm',
-    kind: 'osc',
-    name: 'osc-0',
-    mnemonic: 'OSC-0',
-    syntax: 'OSC 0 ; title ST',
-    selector: <String, Object?>{'kind': 'osc', 'command': 0},
-    locator: 'ctlseqs.ms, OSC 0—Icon and window title',
-    notes: 'Not implemented; owned by the later OSC title/cwd/hyperlink/palette/clipboard policy task.',
-  ),
-  _Gap(
-    family: 'xterm',
-    kind: 'osc',
-    name: 'osc-1',
-    mnemonic: 'OSC-1',
-    syntax: 'OSC 1 ; title ST',
-    selector: <String, Object?>{'kind': 'osc', 'command': 1},
-    locator: 'ctlseqs.ms, OSC 1—Icon title',
-    notes: 'Not implemented; owned by the later OSC title/cwd/hyperlink/palette/clipboard policy task.',
-  ),
-  _Gap(
-    family: 'xterm',
-    kind: 'osc',
-    name: 'osc-2',
-    mnemonic: 'OSC-2',
-    syntax: 'OSC 2 ; title ST',
-    selector: <String, Object?>{'kind': 'osc', 'command': 2},
-    locator: 'ctlseqs.ms, OSC 2—Window title',
-    notes: 'Not implemented; owned by the later OSC title/cwd/hyperlink/palette/clipboard policy task.',
-  ),
-  _Gap(
-    family: 'iterm2',
-    kind: 'osc',
-    name: 'osc-7',
-    mnemonic: 'OSC-7',
-    syntax: 'OSC 7 ; file-URI ST',
-    selector: <String, Object?>{'kind': 'osc', 'command': 7},
-    locator: 'CurrentDir / OSC 7',
-    notes: 'Not implemented; owned by the later OSC title/cwd/hyperlink/palette/clipboard policy task.',
   ),
   _Gap(
     family: 'xterm',

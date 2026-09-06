@@ -58,7 +58,7 @@ void _testStandaloneSnapshotIsExactAndReadable() {
   const TerminalSnapshotFormatter formatter = TerminalSnapshotFormatter();
   final String snapshot = formatter.formatScreen(screen);
   _expect(
-    snapshot.startsWith('dart-terminal-state-snapshot version=1 kind=screen\n'),
+    snapshot.startsWith('dart-terminal-state-snapshot version=2 kind=screen\n'),
     'standalone snapshot has a versioned header',
   );
   _expect(

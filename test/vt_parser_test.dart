@@ -193,7 +193,7 @@ void _testTypedSequenceFamiliesAcrossChunks() {
     ...ascii.encode('38:2::1:2:3m'),
     0x1b,
     0x5d,
-    ...ascii.encode('0;title'),
+    ...utf8.encode('0;title日本語'),
     0x07,
     0x1b,
     0x5d,
@@ -231,7 +231,7 @@ void _testTypedSequenceFamiliesAcrossChunks() {
     'ESC intermediates=- final=7',
     'CSI private=- params=31;1 intermediates=- final=m',
     'CSI private=- params=38:2::1:2:3 intermediates=- final=m',
-    'OSC terminator=bell payload="0;title"',
+    'OSC terminator=bell payload="0;title日本語"',
     'OSC terminator=stringTerminator payload="8;;https://example"',
     r'DCS private=- params=- intermediates=$ final=q '
         'terminator=stringTerminator payload="m"',

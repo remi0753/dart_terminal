@@ -51,6 +51,26 @@ void _testRawEvidenceValidation() {
 
   Map<String, Object?> root() =>
       Map<String, Object?>.from(jsonDecode(fixture) as Map<Object?, Object?>);
+  final Map<String, Object?> versionTwo = root();
+  final List<Object?> versionTwoSamples =
+      versionTwo['samples']! as List<Object?>;
+  final Map<String, Object?> versionTwoSample =
+      versionTwoSamples.first! as Map<String, Object?>;
+  versionTwoSample['snapshot'] = (versionTwoSample['snapshot']! as String)
+      .replaceFirst('version=1 ', 'version=2 ');
+  versionTwoSample['snapshot_sha256'] = terminalDifferentialSha256(
+    utf8.encode(versionTwoSample['snapshot']! as String),
+  );
+  _expect(
+    TerminalApplicationRawEvidence.parse(
+      jsonEncode(versionTwo),
+      scenario: scenario,
+    ).samples.first.snapshot.startsWith(
+      'dart-terminal-state-snapshot version=2 ',
+    ),
+    'current snapshot version coexists with immutable version-one evidence',
+  );
+
   Map<String, Object?> invalid = root()..['extra'] = true;
   _expectRawFailure(invalid, scenario, 'raw evidence keys differ');
 
@@ -74,6 +94,21 @@ void _testRawEvidenceValidation() {
     utf8.encode(sample['snapshot']! as String),
   );
   _expectRawFailure(invalid, scenario, 'snapshot contains private data');
+
+  invalid = root();
+  final List<Object?> unsupportedVersionSamples =
+      invalid['samples']! as List<Object?>;
+  final Map<String, Object?> unsupportedVersionSample =
+      unsupportedVersionSamples.first! as Map<String, Object?>;
+  unsupportedVersionSample['snapshot'] =
+      (unsupportedVersionSample['snapshot']! as String).replaceFirst(
+        'version=1 ',
+        'version=3 ',
+      );
+  unsupportedVersionSample['snapshot_sha256'] = terminalDifferentialSha256(
+    utf8.encode(unsupportedVersionSample['snapshot']! as String),
+  );
+  _expectRawFailure(invalid, scenario, 'sample snapshot envelope is invalid');
 
   invalid = root();
   final List<Object?> invalidResizes = invalid['resizes']! as List<Object?>;

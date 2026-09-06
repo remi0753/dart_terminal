@@ -72,6 +72,7 @@ abstract final class TerminalCompatibilitySurface {
     0x6e,
     0x72,
     0x73,
+    0x74,
     0x75,
     0x012071,
     0x012470,
@@ -82,7 +83,19 @@ abstract final class TerminalCompatibilitySurface {
     0x3f012470,
   ];
 
-  static const List<int> oscCommands = <int>[4, 8, 10, 11, 104, 110, 111];
+  static const List<int> oscCommands = <int>[
+    0,
+    1,
+    2,
+    4,
+    7,
+    8,
+    10,
+    11,
+    104,
+    110,
+    111,
+  ];
 
   static const List<int> dcsSelectors = <int>[0x012b71];
 

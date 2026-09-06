@@ -302,6 +302,9 @@ final class VtParser {
   bool _stringRejected = false;
   bool _stringCancelled = false;
   int _stringLength = 0;
+  int _stringUtf8ContinuationBytes = 0;
+  int _stringUtf8ContinuationMinimum = 0x80;
+  int _stringUtf8ContinuationMaximum = 0xbf;
   VtStringKind _stringKind = VtStringKind.operatingSystemCommand;
   VtParserState _stringSourceState = VtParserState.oscString;
   VtSequenceHeader? _dcsHeader;
@@ -341,6 +344,50 @@ final class VtParser {
             for (var asciiIndex = runStart; asciiIndex < index; asciiIndex++) {
               sink.print(bytes[asciiIndex]);
             }
+          }
+          continue;
+        }
+      }
+      if (_stringActive &&
+          !_stringEscapePending &&
+          (_state == VtParserState.oscString ||
+              _state == VtParserState.dcsPassthrough ||
+              _state == VtParserState.sosPmApcString)) {
+        final int byte = bytes[index];
+        if (_stringUtf8ContinuationBytes != 0) {
+          if (byte >= _stringUtf8ContinuationMinimum &&
+              byte <= _stringUtf8ContinuationMaximum) {
+            index++;
+            _countSequenceByte(_state);
+            _appendStringByte(byte, _state);
+            _stringUtf8ContinuationBytes--;
+            _stringUtf8ContinuationMinimum = 0x80;
+            _stringUtf8ContinuationMaximum = 0xbf;
+            continue;
+          }
+          _stringUtf8ContinuationBytes = 0;
+          _stringUtf8ContinuationMinimum = 0x80;
+          _stringUtf8ContinuationMaximum = 0xbf;
+        }
+        final int continuationBytes = switch (byte) {
+          >= 0xc2 && <= 0xdf => 1,
+          >= 0xe0 && <= 0xef => 2,
+          >= 0xf0 && <= 0xf4 => 3,
+          _ => 0,
+        };
+        if (continuationBytes != 0) {
+          index++;
+          _countSequenceByte(_state);
+          _appendStringByte(byte, _state);
+          _stringUtf8ContinuationBytes = continuationBytes;
+          if (byte == 0xe0) {
+            _stringUtf8ContinuationMinimum = 0xa0;
+          } else if (byte == 0xed) {
+            _stringUtf8ContinuationMaximum = 0x9f;
+          } else if (byte == 0xf0) {
+            _stringUtf8ContinuationMinimum = 0x90;
+          } else if (byte == 0xf4) {
+            _stringUtf8ContinuationMaximum = 0x8f;
           }
           continue;
         }
@@ -739,6 +786,9 @@ final class VtParser {
     _stringRejected = _headerRejected;
     _stringCancelled = false;
     _stringLength = 0;
+    _stringUtf8ContinuationBytes = 0;
+    _stringUtf8ContinuationMinimum = 0x80;
+    _stringUtf8ContinuationMaximum = 0xbf;
     _stringKind = kind;
     _stringSourceState = state;
     _stringEscapePending = false;
@@ -849,6 +899,9 @@ final class VtParser {
     _stringRejected = false;
     _stringCancelled = false;
     _stringLength = 0;
+    _stringUtf8ContinuationBytes = 0;
+    _stringUtf8ContinuationMinimum = 0x80;
+    _stringUtf8ContinuationMaximum = 0xbf;
     _dcsHeader = null;
     _dcsPrivateMarker = 0;
     _dcsParameterCount = 0;

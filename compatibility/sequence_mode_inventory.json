@@ -3286,22 +3286,26 @@
     {
       "id": "iterm2:osc:osc-7",
       "mnemonic": "OSC-7",
-      "syntax": "OSC 7 ; file-URI ST",
+      "syntax": "OSC 7 ; Pt ST",
       "selector": {
         "kind": "osc",
         "command": 7
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "iterm2-escape-codes-2026-09-07",
           "locator": "CurrentDir / OSC 7"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; owned by the later OSC title/cwd/hyperlink/palette/clipboard policy task."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Strict bounded file-URI session metadata is implemented without process cwd or filesystem mutation."
     },
     {
       "id": "iterm2:osc:osc-8",
@@ -4004,24 +4008,28 @@
     {
       "id": "xterm:csi:xtwinops",
       "mnemonic": "XTWINOPS",
-      "syntax": "CSI Ps ; Ps ; Ps t",
+      "syntax": "CSI t",
       "selector": {
         "kind": "csi",
         "privateMarker": null,
         "intermediates": [],
         "finalByte": 116
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "partial",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "xterm-411",
           "locator": "ctlseqs.ms, XTWINOPS"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported."
     },
     {
       "id": "xterm:dcs:sixel",
@@ -5857,42 +5865,50 @@
     {
       "id": "xterm:osc:osc-0",
       "mnemonic": "OSC-0",
-      "syntax": "OSC 0 ; title ST",
+      "syntax": "OSC 0 ; Pt ST",
       "selector": {
         "kind": "osc",
         "command": 0
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "xterm-411",
           "locator": "ctlseqs.ms, OSC 0—Icon and window title"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; owned by the later OSC title/cwd/hyperlink/palette/clipboard policy task."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
     },
     {
       "id": "xterm:osc:osc-1",
       "mnemonic": "OSC-1",
-      "syntax": "OSC 1 ; title ST",
+      "syntax": "OSC 1 ; Pt ST",
       "selector": {
         "kind": "osc",
         "command": 1
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "xterm-411",
           "locator": "ctlseqs.ms, OSC 1—Icon title"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; owned by the later OSC title/cwd/hyperlink/palette/clipboard policy task."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
     },
     {
       "id": "xterm:osc:osc-10",
@@ -6057,22 +6073,26 @@
     {
       "id": "xterm:osc:osc-2",
       "mnemonic": "OSC-2",
-      "syntax": "OSC 2 ; title ST",
+      "syntax": "OSC 2 ; Pt ST",
       "selector": {
         "kind": "osc",
         "command": 2
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "xterm-411",
           "locator": "ctlseqs.ms, OSC 2—Window title"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; owned by the later OSC title/cwd/hyperlink/palette/clipboard policy task."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
     },
     {
       "id": "xterm:osc:osc-4",

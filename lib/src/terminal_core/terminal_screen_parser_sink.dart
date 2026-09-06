@@ -6,6 +6,7 @@ import 'terminal_mouse_modes.dart';
 import 'terminal_reply.dart';
 import 'terminal_screen.dart';
 import 'terminal_screen_set.dart';
+import 'terminal_session_metadata.dart';
 import 'terminal_style.dart';
 import 'vt_parser.dart';
 import 'vt_parser_table.dart';
@@ -299,6 +300,10 @@ final class TerminalScreenParserSink
         _setVerticalMargins(sequence);
       case 0x73:
         _setHorizontalMarginsOrSave(sequence);
+      case 0x74:
+        if (!_applyTitleStack(sequence)) {
+          _unsupportedSequenceCount++;
+        }
       case 0x75:
         screen.restoreCursor();
       default:
@@ -319,8 +324,16 @@ final class TerminalScreenParserSink
     }
     bool supported = false;
     switch (command) {
+      case 0:
+      case 1:
+      case 2:
+        supported =
+            hasPayload && _applyOscTitle(sequence, payloadStart, command);
       case 4:
         supported = hasPayload && _applyOscPalette(sequence, payloadStart);
+      case 7:
+        supported =
+            hasPayload && _applyOscWorkingDirectory(sequence, payloadStart);
       case 8:
         supported = hasPayload && _applyOscHyperlink(sequence, payloadStart);
       case 10:
@@ -346,6 +359,81 @@ final class TerminalScreenParserSink
     }
     if (!supported) {
       _unsupportedSequenceCount++;
+    }
+  }
+
+  bool _applyTitleStack(VtSequenceHeader sequence) {
+    final TerminalScreenSet? screens = screenSet;
+    final int length = sequence.parameters.length;
+    if (screens == null || length < 1 || length > 3) return false;
+    final int? operation = sequence.parameters.valueAt(0);
+    if (operation != 22 && operation != 23) return false;
+    final int selector = length >= 2 ? sequence.parameters.valueAt(1) ?? 0 : 0;
+    final int directSlot = length >= 3
+        ? sequence.parameters.valueAt(2) ?? 0
+        : 0;
+    if (selector < 0 || selector > 2 || directSlot != 0) return false;
+    if (operation == 22) {
+      screens.metadata.saveTitles(selector);
+    } else {
+      screens.metadata.restoreTitles(selector);
+    }
+    return true;
+  }
+
+  bool _applyOscTitle(VtStringSequence sequence, int start, int command) {
+    final TerminalScreenSet? screens = screenSet;
+    if (screens == null ||
+        sequence.payloadLength - start >
+            TerminalSessionMetadata.maximumTitleUtf8Bytes) {
+      return false;
+    }
+    final String? value = _decodeOscUtf8(sequence, start);
+    if (value == null || !TerminalSessionMetadata.isSafeTitle(value)) {
+      return false;
+    }
+    switch (command) {
+      case 0:
+        screens.metadata.setIconAndWindowTitle(value);
+      case 1:
+        screens.metadata.setIconTitle(value);
+      case 2:
+        screens.metadata.setWindowTitle(value);
+      default:
+        return false;
+    }
+    return true;
+  }
+
+  bool _applyOscWorkingDirectory(VtStringSequence sequence, int start) {
+    final TerminalScreenSet? screens = screenSet;
+    final int length = sequence.payloadLength - start;
+    if (screens == null ||
+        length <= 0 ||
+        length > TerminalSessionMetadata.maximumWorkingDirectoryUtf8Bytes) {
+      return false;
+    }
+    final String? value = _decodeOscUtf8(sequence, start);
+    if (value == null || value.isEmpty) return false;
+    final Uri? uri = Uri.tryParse(value);
+    if (uri == null || !TerminalSessionMetadata.isSafeWorkingDirectory(uri)) {
+      return false;
+    }
+    screens.metadata.setWorkingDirectory(uri);
+    return true;
+  }
+
+  static String? _decodeOscUtf8(VtStringSequence sequence, int start) {
+    final int length = sequence.payloadLength - start;
+    if (length < 0) return null;
+    final Uint8List bytes = Uint8List(length);
+    for (int index = 0; index < length; index++) {
+      bytes[index] = sequence.payloadByteAt(start + index);
+    }
+    try {
+      return utf8.decode(bytes, allowMalformed: false);
+    } on FormatException {
+      return null;
     }
   }
 

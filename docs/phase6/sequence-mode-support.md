@@ -29,10 +29,10 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 
 | Support classification | Records |
 | --- | ---: |
-| `implemented` | 77 |
-| `partial` | 15 |
+| `implemented` | 81 |
+| `partial` | 16 |
 | `safe-ignore` | 10 |
-| `unsupported` | 158 |
+| `unsupported` | 153 |
 | **Total** | **260** |
 
 | Selector kind | Records |
@@ -49,7 +49,7 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `mode` | 80 |
 | **Total** | **260** |
 
-The 77 implemented plus 15 partial records reconcile exactly to all 92 product declarations (72 sequence selectors and 20 modes). The 10 safe-ignore records cover 7 concrete DCS forms and SOS/PM/APC; all 158 remaining records are explicitly unsupported/rejected.
+The 81 implemented plus 16 partial records reconcile exactly to all 97 product declarations (77 sequence selectors and 20 modes). The 10 safe-ignore records cover 7 concrete DCS forms and SOS/PM/APC; all 153 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 
@@ -66,6 +66,7 @@ The 77 implemented plus 15 partial records reconcile exactly to all 92 product d
 | `ecma48:csi:sgr` | `CSI m` | Text attributes and ANSI/256/direct colors are implemented; the full ECMA/xterm rendition repertoire is not. |
 | `ecma48:csi:sm` | `CSI h` | The selector is implemented for the explicitly inventoried ANSI modes only. |
 | `xterm:csi:ed` | `CSI J` | ECMA/VT modes 0–2 are implemented; xterm saved-lines mode 3 is not. |
+| `xterm:csi:xtwinops` | `CSI t` | Bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported. |
 | `xterm:dcs:xtgettcap` | `DCS + q Pt ST` | Bounded requests receive an explicit unavailable reply. The audited database intentionally omits security-sensitive Ms/OSC 52 and no dynamic keyboard-capability service is advertised. |
 | `xterm:osc:osc-10` | `OSC 10 ; Pt ST` | Single bounded foreground mutation/query is implemented; chained dynamic-color parameters are not. |
 | `xterm:osc:osc-11` | `OSC 11 ; Pt ST` | Single bounded background mutation/query is implemented; chained dynamic-color parameters are not. |

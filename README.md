@@ -87,6 +87,8 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   16/256色・truecolor・default colorのsemicolon/colon SGR適用
 - typed xterm-256 palette、logical default foreground/background、bounded
   OSC 4/10/11/104/110/111 color mutationとpalette-aware damage
+- session-ownedなbounded title/icon/OSC 7 file-URI metadata、OSC 0/1/2、
+  10段title stack、strict UTF-8/control/bidi境界（native title同期は次のsubtask）
 - shared style/palette資源と独立したgrid/stateを持つprimary/alternate screen、
   DEC private mode 47/1047/1048/1049、切替時full-snapshot contract
 - Unicode 17 grapheme境界・幅判定、bounded grapheme intern、wide/continuation

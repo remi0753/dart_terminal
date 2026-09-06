@@ -267,3 +267,8 @@ complete.
   Dart Terminal test runner. No terminal runtime semantics changed in this
   classification subtask, so a product GUI/PTY run was not required for its
   acceptance.
+- 2026-09-07: the later OSC policy evolved the same 260-record baseline to 81
+  implemented, 16 partial, 10 safe-ignore, and 153 unsupported records. The 97
+  product declarations now comprise 77 selectors and 20 modes. Added selectors
+  are OSC 0/1/2/7 and partial XTWINOPS title stack; original source pins and
+  baseline scope remain unchanged.

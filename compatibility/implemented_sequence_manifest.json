@@ -420,6 +420,14 @@
       "handler": "execute"
     },
     {
+      "key": "csi:-1:0:0:116",
+      "kind": "csi",
+      "privateMarker": null,
+      "intermediates": [],
+      "finalByte": 116,
+      "handler": "execute"
+    },
+    {
       "key": "csi:-1:0:0:117",
       "kind": "csi",
       "privateMarker": null,
@@ -500,10 +508,34 @@
       "handler": "reply"
     },
     {
+      "key": "osc:0",
+      "kind": "osc",
+      "command": 0,
+      "handler": "execute"
+    },
+    {
+      "key": "osc:1",
+      "kind": "osc",
+      "command": 1,
+      "handler": "execute"
+    },
+    {
+      "key": "osc:2",
+      "kind": "osc",
+      "command": 2,
+      "handler": "execute"
+    },
+    {
       "key": "osc:4",
       "kind": "osc",
       "command": 4,
       "handler": "execute-or-reply"
+    },
+    {
+      "key": "osc:7",
+      "kind": "osc",
+      "command": 7,
+      "handler": "execute"
     },
     {
       "key": "osc:8",

@@ -19,15 +19,15 @@ void _testReviewedAcceptance() {
       runTerminalApplicationAcceptanceChecks();
   _expect(
     result.acceptedCells == 8 &&
-        result.cleanAgreements == 1 &&
-        result.documentedGapCells == 7 &&
-        result.gaps == 14 &&
-        result.uniqueSequences == 24 &&
-        result.unsupportedIncrements == 98 &&
+        result.cleanAgreements == 2 &&
+        result.documentedGapCells == 6 &&
+        result.gaps == 13 &&
+        result.uniqueSequences == 20 &&
+        result.unsupportedIncrements == 92 &&
         result.machineLine() ==
-            'TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=1 '
-                'documented_gap_cells=7 gaps=14 unique_sequences=24 '
-                'unsupported_increments=98',
+            'TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=2 '
+                'documented_gap_cells=6 gaps=13 unique_sequences=20 '
+                'unsupported_increments=92',
     'reviewed acceptance has exact replay-derived totals',
   );
 }

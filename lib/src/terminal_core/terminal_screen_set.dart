@@ -4,6 +4,7 @@ import 'terminal_hyperlink.dart';
 import 'terminal_keyboard_modes.dart';
 import 'terminal_mouse_modes.dart';
 import 'terminal_screen.dart';
+import 'terminal_session_metadata.dart';
 import 'terminal_style.dart';
 import 'terminal_unicode.dart';
 
@@ -23,6 +24,7 @@ final class TerminalScreenSet {
     TerminalGraphemeTable? graphemeTable,
     TerminalHyperlinkTable? hyperlinkTable,
     TerminalScrollback? scrollback,
+    TerminalSessionMetadata? metadata,
   }) {
     final TerminalStyleTable sharedStyles = styleTable ?? TerminalStyleTable();
     final TerminalPalette sharedPalette = palette ?? TerminalPalette();
@@ -58,6 +60,7 @@ final class TerminalScreenSet {
       hyperlinkTable: sharedHyperlinks,
       scrollback: sharedScrollback,
       scrollbackAttachment: scrollbackAttachment,
+      metadata: metadata ?? TerminalSessionMetadata(),
     );
     result._viewport = TerminalViewport._(result);
     return result;
@@ -72,6 +75,7 @@ final class TerminalScreenSet {
     required this.hyperlinkTable,
     required this.scrollback,
     required TerminalScrollbackAttachment scrollbackAttachment,
+    required this.metadata,
   }) : _primary = primary,
        _alternate = alternate,
        _scrollbackAttachment = scrollbackAttachment;
@@ -83,6 +87,7 @@ final class TerminalScreenSet {
   final TerminalGraphemeTable graphemeTable;
   final TerminalHyperlinkTable hyperlinkTable;
   final TerminalScrollback scrollback;
+  final TerminalSessionMetadata metadata;
   final TerminalScrollbackAttachment _scrollbackAttachment;
   late final TerminalViewport _viewport;
 
@@ -287,6 +292,7 @@ final class TerminalScreenSet {
     _bracketedPaste = false;
     _mouseTracking = TerminalMouseTrackingMode.none;
     _mouseEncoding = TerminalMouseCoordinateEncoding.legacy;
+    metadata.reset();
     primary.synchronizeVisualBellGeneration(visualBellGeneration);
     primary.requestFullSnapshot();
     _transitionGeneration++;

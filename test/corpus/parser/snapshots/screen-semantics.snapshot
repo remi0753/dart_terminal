@@ -1,5 +1,6 @@
-dart-terminal-state-snapshot version=1 kind=screen-set
+dart-terminal-state-snapshot version=2 kind=screen-set
 set active=primary mode1049=false viewport_offset=0 primary_viewport_offset=0
+metadata window_title=null icon_title=null cwd=null window_title_stack=[] icon_title_stack=[]
 resources styles=1 graphemes=1 palette=256
 style id=1 attributes=bold bits=0x0001
 grapheme id=1 width=1 scalars=U+0065,U+0301 text="é"

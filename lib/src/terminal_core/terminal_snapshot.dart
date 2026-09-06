@@ -63,7 +63,7 @@ final class TerminalSnapshotFormatter {
   });
 
   static const String formatName = 'dart-terminal-state-snapshot';
-  static const int formatVersion = 1;
+  static const int formatVersion = 2;
 
   final TerminalSnapshotFormatLimits limits;
 
@@ -124,6 +124,13 @@ final class TerminalSnapshotFormatter {
       'mode1049=${screens.mode1049Active} '
       'viewport_offset=${screens.viewport.offset} '
       'primary_viewport_offset=${screens.viewport.primaryOffset}',
+    );
+    writer.line(
+      'metadata window_title=${jsonEncode(screens.metadata.windowTitle)} '
+      'icon_title=${jsonEncode(screens.metadata.iconTitle)} '
+      'cwd=${jsonEncode(screens.metadata.workingDirectory?.toString())} '
+      'window_title_stack=${jsonEncode(screens.metadata.windowTitleStack)} '
+      'icon_title_stack=${jsonEncode(screens.metadata.iconTitleStack)}',
     );
     _writeResources(
       writer,

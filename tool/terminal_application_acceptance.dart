@@ -263,11 +263,11 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
   );
   _expect(
     cells.length == 8 &&
-        cleanAgreements == 1 &&
-        documentedGapCells == 7 &&
-        gaps.length == 14 &&
-        uniqueSequences.length == 24 &&
-        unsupportedIncrements == 98 &&
+        cleanAgreements == 2 &&
+        documentedGapCells == 6 &&
+        gaps.length == 13 &&
+        uniqueSequences.length == 20 &&
+        unsupportedIncrements == 92 &&
         safeIgnoreGaps == 1,
     'reviewed acceptance baseline differs',
   );
@@ -340,7 +340,8 @@ List<_AcceptanceGap> _parseGaps(
       _expect(
         disposition == 'safe-ignore'
             ? record!.support == TerminalCompatibilitySupport.safeIgnore
-            : record!.support == TerminalCompatibilitySupport.unsupported,
+            : record!.support == TerminalCompatibilitySupport.unsupported ||
+                  record.support == TerminalCompatibilitySupport.partial,
         '$id disposition differs from inventory $inventoryId',
       );
     }
