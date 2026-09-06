@@ -1,0 +1,22 @@
+{
+  "format": "dart-terminal-parser-trace-case",
+  "version": 1,
+  "case_id": "all-action-families-redacted",
+  "input_hex": "736563726574e697a5071b371b5b3f3235681b5d303b70726976617465207469746c65071b5024716d1b5c1b5f70726976617465207061796c6f61641b5c1b5b33311b371b5b313f326d1b5d6162636465666768696a6b6c6d6e6f7071071b5b31",
+  "parser_limits": {
+    "max_sequence_bytes": 64,
+    "max_string_bytes": 16,
+    "max_parameters": 32,
+    "max_intermediates": 8,
+    "max_numeric_value": 1000000
+  },
+  "inspector_limits": {
+    "max_records": 64,
+    "max_metadata_bytes": 16384
+  },
+  "export_limits": {
+    "max_input_bytes": 1048576,
+    "max_output_bytes": 1048576
+  },
+  "expected_event_count": 11
+}

@@ -4,8 +4,8 @@
 
 - Date started: 2026-09-07
 - Scope: eighth Phase 6 compatibility-hardening roadmap item
-- Current status: bounded inspector event foundation complete; versioned trace
-  export and normal-gate closure is next
+- Current status: complete; both implementation units and the parent roadmap
+  item passed their required gates
 
 ## Purpose and background
 
@@ -137,6 +137,26 @@ committed before the next unit starts.
   directive-ordering info in the aggregate runner. Moving the new inspector
   test import before the parser test restored a clean analyzer; no behavior or
   acceptance condition changed.
+- 2026-09-07: the version 1 export uses ordered JSON maps and canonical 7-bit
+  `ESC` introducers. This intentionally describes the typed action rather than
+  claiming whether its original introducer was an equivalent 8-bit C1 byte.
+  Complete non-string controls/headers have canonical hex; string families
+  separate canonical prefix and terminator hex around a redacted payload byte
+  count.
+- 2026-09-07: the report includes the exact parser, inspector, input, and
+  serialized-output limits required to reproduce it, plus total/retained/
+  evicted/oversized/observer-failure counts. A chunked JSON UTF-8 sink checks
+  the output bound before retaining each encoded chunk instead of constructing
+  an unbounded serialized string and checking afterward.
+- 2026-09-07: the local CLI accepts one explicit lowercase hex input or one
+  bounded input file without including that path in the report. Its reviewed
+  fixture covers all ten event families in 97 bytes and produces 11 events;
+  printable text and OSC/APC payload markers are absent in both text and hex
+  form from the 3,211-byte trace.
+- 2026-09-07: `terminal-parser-trace-check` was added before the other
+  compatibility freshness gates in the normal `make test` dependency graph.
+  The source case remains reviewable while generated JSON drift fails the gate
+  with an explicit regeneration command.
 
 ## Verification results — bounded inspector foundation
 
@@ -155,4 +175,18 @@ committed before the next unit starts.
 
 ## Verification results — trace export and closure
 
-- Pending the second ordered unit.
+- `dart run tool/terminal_parser_trace.dart --generate` and `--check`: generated
+  and then accepted the 97-byte, 11-event version 1 fixture. A separate
+  `--input-hex=1b5b3f323568` replay exported the exact canonical DECSET 25 CSI
+  metadata without printable content.
+- `dart run test/vt_parser_trace_test.dart`: passed deterministic schema,
+  privacy fields, reproduction limits, exact aggregate/event metadata, payload
+  absence in text and hex form, all 98 single split positions, bytewise replay,
+  committed fixture equality, eviction disclosure, streaming output overflow,
+  input overflow, and invalid-limit rejection.
+- `dart analyze`: passed with no issues before final documentation sync.
+- `CI=true make test`: passed the new parser-trace freshness check and every
+  existing generated artifact, inventory, differential, application, and
+  terminfo gate; formatting of 184 Dart files with no changes; static analysis
+  with no issues; and the complete Dart test runner.
+- `git diff --check`: run in the final pre-commit review.

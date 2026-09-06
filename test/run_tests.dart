@@ -78,6 +78,7 @@ import 'terminal_viewport_test.dart';
 import 'terminal_wide_grapheme_test.dart';
 import 'vt_parser_inspector_test.dart';
 import 'vt_parser_test.dart';
+import 'vt_parser_trace_test.dart';
 
 @Native<Uint64 Function()>(
   symbol: 'dpty_debug_live_session_count',
@@ -151,6 +152,7 @@ Future<void> main() async {
   runTerminalWideGraphemeTests();
   runVtParserTests();
   runVtParserInspectorTests();
+  runVtParserTraceTests();
   _testEditing();
   _testUnicodeEditing();
   _testHistoryNavigation();

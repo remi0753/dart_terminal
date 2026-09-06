@@ -887,10 +887,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] SGR pixel mouse mode、native geometry、highlight mode非採用判断
   - [x] bounded DECRQSS SGR reply、differential gap解消
   - [x] XTVERSION/XTWINOPS、bracketed paste回帰、matrix/親項目完了判定
-- [ ] parser inspector と sequence trace export
+- [x] parser inspector と sequence trace export
   （[`docs/phase6/parser-inspector-sequence-trace-export.md`](docs/phase6/parser-inspector-sequence-trace-export.md) の順序と完了条件を参照して実施）
   - [x] bounded parser inspector event基盤
-  - [ ] versioned sequence trace export、normal gate、親項目完了判定
+  - [x] versioned sequence trace export、normal gate、親項目完了判定
 - [ ] compatibility bug の regression corpus 化
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のadoption判断も参照して実施）
 

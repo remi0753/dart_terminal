@@ -1,0 +1,143 @@
+{
+  "format": "dart-terminal-parser-trace",
+  "version": 1,
+  "privacy": {
+    "printable_text": "count_only",
+    "string_payloads": "length_only",
+    "input_hash": "omitted",
+    "wall_clock": "omitted",
+    "paths": "omitted",
+    "environment": "omitted"
+  },
+  "limits": {
+    "parser": {
+      "sequence_bytes": 64,
+      "string_bytes": 16,
+      "parameters": 32,
+      "intermediates": 8,
+      "numeric_value": 1000000
+    },
+    "inspector": {
+      "records": 64,
+      "metadata_bytes": 16384
+    },
+    "export": {
+      "input_bytes": 1048576,
+      "output_bytes": 1048576
+    }
+  },
+  "input_bytes": 97,
+  "printable_scalars": 7,
+  "events_total": 11,
+  "events_retained": 11,
+  "retained_metadata_bytes": 534,
+  "events_evicted": 0,
+  "events_oversized": 0,
+  "observer_failures": 0,
+  "event_counts": {
+    "execute": 1,
+    "escape": 2,
+    "controlSequence": 1,
+    "operatingSystemCommand": 1,
+    "deviceControlString": 1,
+    "controlString": 1,
+    "cancel": 1,
+    "limit": 1,
+    "malformed": 1,
+    "incomplete": 1
+  },
+  "events": [
+    {
+      "ordinal": 1,
+      "kind": "execute",
+      "metadata_bytes": 48,
+      "byte_hex": "07"
+    },
+    {
+      "ordinal": 2,
+      "kind": "escape",
+      "metadata_bytes": 48,
+      "canonical_bytes_hex": "1b37"
+    },
+    {
+      "ordinal": 3,
+      "kind": "controlSequence",
+      "metadata_bytes": 53,
+      "private_marker_hex": "3f",
+      "parameters": [
+        25
+      ],
+      "subparameters": [
+        false
+      ],
+      "intermediates_hex": "",
+      "final_byte_hex": "68",
+      "canonical_bytes_hex": "1b5b3f323568"
+    },
+    {
+      "ordinal": 4,
+      "kind": "operatingSystemCommand",
+      "metadata_bytes": 48,
+      "string_kind": "operatingSystemCommand",
+      "canonical_prefix_hex": "1b5d",
+      "payload_redacted_bytes": 15,
+      "canonical_terminator_hex": "07"
+    },
+    {
+      "ordinal": 5,
+      "kind": "deviceControlString",
+      "metadata_bytes": 49,
+      "private_marker_hex": null,
+      "parameters": [],
+      "subparameters": [],
+      "intermediates_hex": "24",
+      "final_byte_hex": "71",
+      "canonical_prefix_hex": "1b502471",
+      "string_kind": "deviceControlString",
+      "payload_redacted_bytes": 1,
+      "canonical_terminator_hex": "1b5c"
+    },
+    {
+      "ordinal": 6,
+      "kind": "controlString",
+      "metadata_bytes": 48,
+      "string_kind": "applicationProgramCommand",
+      "canonical_prefix_hex": "1b5f",
+      "payload_redacted_bytes": 15,
+      "canonical_terminator_hex": "1b5c"
+    },
+    {
+      "ordinal": 7,
+      "kind": "cancel",
+      "metadata_bytes": 48,
+      "state": "csiParameter",
+      "byte_hex": "1b"
+    },
+    {
+      "ordinal": 8,
+      "kind": "escape",
+      "metadata_bytes": 48,
+      "canonical_bytes_hex": "1b37"
+    },
+    {
+      "ordinal": 9,
+      "kind": "malformed",
+      "metadata_bytes": 48,
+      "state": "csiParameter",
+      "byte_hex": "3f"
+    },
+    {
+      "ordinal": 10,
+      "kind": "limit",
+      "metadata_bytes": 48,
+      "state": "oscString",
+      "limit": "stringBytes"
+    },
+    {
+      "ordinal": 11,
+      "kind": "incomplete",
+      "metadata_bytes": 48,
+      "state": "csiParameter"
+    }
+  ]
+}

@@ -86,6 +86,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   UTF-8 decoderと、宣言的specから再生成・freshness検査できるtable-driven VT parser
 - C0/C1、ESC、CSI、OSC、DCS、SOS/PM/APCのtyped action、CAN/SUB/ESC recovery、
   parameter/subparameter保持、固定bufferとsequence/payload/count/value上限
+- 通常parserへ分岐を追加せずopt-inできるbounded parser inspectorと、文字本文・
+  control-string payload・入力hash・時刻・path・環境を保持せず、canonical header byte、
+  payload長、recovery分類、全limitをversion 1 JSONへ出力するdeterministic trace CLI
 - ADR-003準拠の非公開SoA cell/row storage、cursor save/restore、default/custom
   tab stop、coalesced row damage/versionとmonotonic screen generation基盤
 - top/bottom・optional left/right margin、origin/insert/autowrap/reverse-video、
