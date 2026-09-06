@@ -3,8 +3,10 @@ import 'dart:io';
 
 const String defaultTerminalCompatibilityInventoryPath =
     'compatibility/sequence_mode_inventory.json';
+const String defaultTerminalImplementationSurfacePath =
+    'compatibility/implemented_sequence_manifest.json';
 
-enum TerminalCompatibilitySourceFamily { dec, ecma48, xterm }
+enum TerminalCompatibilitySourceFamily { dec, ecma48, iterm2, xterm }
 
 enum TerminalCompatibilitySelectorKind {
   c0,
@@ -193,6 +195,113 @@ final class TerminalCompatibilityInventory {
         'unsupported=${counts[TerminalCompatibilitySupport.unsupported]}';
   }
 
+  String reconcileImplementationSurface(File manifest) {
+    _expect(
+      scope == 'complete-baseline',
+      'implementation reconciliation requires complete-baseline scope',
+    );
+    _expect(manifest.existsSync(), 'implementation manifest does not exist');
+    _expect(
+      manifest.lengthSync() > 0 &&
+          manifest.lengthSync() <= maximumManifestBytes,
+      'implementation manifest size is invalid',
+    );
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(manifest.readAsStringSync());
+    } on Object catch (error) {
+      throw TerminalCompatibilityInventoryException(
+        'invalid implementation manifest JSON: $error',
+      );
+    }
+    final Map<String, Object?> root = _object(decoded, 'implementation root');
+    _expectKeys(root, const <String>{
+      'format',
+      'version',
+      'selectors',
+      'modes',
+      'boundedUnsupportedFamilies',
+    }, 'implementation root');
+    _expect(
+      root['format'] == 'dart-terminal-implementation-surface' &&
+          root['version'] == 1,
+      'unsupported implementation manifest format/version',
+    );
+    final Set<String> implementationKeys = <String>{};
+    for (final String collectionName in const <String>['selectors', 'modes']) {
+      final List<Object?> values = _array(root[collectionName], collectionName);
+      _expect(
+        values.isNotEmpty && values.length <= maximumRecords,
+        '$collectionName count is invalid',
+      );
+      for (int index = 0; index < values.length; index++) {
+        final Map<String, Object?> entry = _object(
+          values[index],
+          '$collectionName[$index]',
+        );
+        final String key = _boundedText(
+          entry['key'],
+          '$collectionName[$index].key',
+          96,
+        );
+        _expect(
+          implementationKeys.add(key),
+          'duplicate implementation key $key',
+        );
+      }
+    }
+    final Set<String> inventoriedImplementationKeys = <String>{
+      for (final TerminalCompatibilityRecord record in records)
+        if (record.support == TerminalCompatibilitySupport.implemented ||
+            record.support == TerminalCompatibilitySupport.partial)
+          record.selector.canonicalKey,
+    };
+    final List<String> missing =
+        implementationKeys.difference(inventoriedImplementationKeys).toList()
+          ..sort();
+    final List<String> extra =
+        inventoriedImplementationKeys.difference(implementationKeys).toList()
+          ..sort();
+    _expect(
+      missing.isEmpty && extra.isEmpty,
+      'implementation reconciliation differs; '
+      'missing=${missing.join(',')} extra=${extra.join(',')}',
+    );
+
+    final List<Object?> familyValues = _array(
+      root['boundedUnsupportedFamilies'],
+      'boundedUnsupportedFamilies',
+    );
+    final Set<String> families = <String>{
+      for (int index = 0; index < familyValues.length; index++)
+        _boundedText(
+          familyValues[index],
+          'boundedUnsupportedFamilies[$index]',
+          8,
+        ),
+    };
+    _expect(
+      families.length == familyValues.length &&
+          families.length == 4 &&
+          families.containsAll(const <String>{'dcs', 'sos', 'pm', 'apc'}),
+      'bounded unsupported families must be dcs, sos, pm, and apc',
+    );
+    for (final String family in families) {
+      _expect(
+        records.any(
+          (TerminalCompatibilityRecord record) =>
+              record.selector.kind.name == family &&
+              record.support == TerminalCompatibilitySupport.safeIgnore &&
+              record.disposition == TerminalCompatibilityDisposition.ignore,
+        ),
+        'bounded unsupported family $family lacks safe-ignore evidence',
+      );
+    }
+    return 'TERMINAL_COMPATIBILITY_RECONCILIATION_PASS '
+        'implementation=${implementationKeys.length} '
+        'safe_ignore_families=${families.length}';
+  }
+
   static TerminalCompatibilityInventory load(
     File manifest, {
     required Directory repositoryRoot,
@@ -275,7 +384,7 @@ final class TerminalCompatibilityInventory {
     }
     _expect(
       sourceFamilies.length == TerminalCompatibilitySourceFamily.values.length,
-      'source pins must include ecma48, dec, and xterm',
+      'source pins must include ecma48, dec, iterm2, and xterm',
     );
 
     final Map<String, TerminalCompatibilitySourcePin> pinsById =
@@ -450,7 +559,7 @@ final class TerminalCompatibilityInventory {
     final String id = _boundedText(map['id'], '$context.id', 96);
     _expect(
       RegExp(
-        r'^(dec|ecma48|xterm):(c0|c1|esc|csi|osc|dcs|sos|pm|apc|mode):[a-z0-9]+(?:-[a-z0-9]+)*$',
+        r'^(dec|ecma48|iterm2|xterm):(c0|c1|esc|csi|osc|dcs|sos|pm|apc|mode):[a-z0-9]+(?:-[a-z0-9]+)*$',
       ).hasMatch(id),
       '$context.id is invalid',
     );
@@ -566,6 +675,21 @@ final class TerminalCompatibilityInventory {
         '$context reply disposition requires implementation',
       );
     }
+    if (support == TerminalCompatibilitySupport.safeIgnore) {
+      _expect(
+        disposition == TerminalCompatibilityDisposition.ignore,
+        '$context safe-ignore support requires ignore disposition',
+      );
+    }
+    if (support == TerminalCompatibilitySupport.unsupported) {
+      _expect(
+        disposition == TerminalCompatibilityDisposition.reject &&
+            implementationEvidence.isEmpty &&
+            testEvidence.isEmpty,
+        '$context unsupported support requires reject disposition and no '
+        'implementation/test evidence',
+      );
+    }
     return TerminalCompatibilityRecord(
       id: id,
       mnemonic: mnemonic,
@@ -627,7 +751,10 @@ final class TerminalCompatibilityInventory {
           kind: kind,
           intermediates: intermediates,
           finalByte: finalByte,
-          canonicalKey: 'esc:${intermediates.join('.')}:$finalByte',
+          canonicalKey:
+              'esc:${intermediates.length}:'
+              '${intermediates.isEmpty ? '0' : intermediates.join('.')}:'
+              '$finalByte',
         );
       case TerminalCompatibilitySelectorKind.csi:
       case TerminalCompatibilitySelectorKind.dcs:
@@ -664,7 +791,9 @@ final class TerminalCompatibilityInventory {
           intermediates: intermediates,
           finalByte: finalByte,
           canonicalKey:
-              '${kind.name}:${privateMarker ?? -1}:${intermediates.join('.')}:$finalByte',
+              '${kind.name}:${privateMarker ?? -1}:${intermediates.length}:'
+              '${intermediates.isEmpty ? '0' : intermediates.join('.')}:'
+              '$finalByte',
         );
       case TerminalCompatibilitySelectorKind.osc:
         _expectKeys(map, const <String>{'kind', 'command'}, context);
@@ -776,6 +905,7 @@ final class TerminalCompatibilityInventory {
   ) => switch (value) {
     'dec' => TerminalCompatibilitySourceFamily.dec,
     'ecma48' => TerminalCompatibilitySourceFamily.ecma48,
+    'iterm2' => TerminalCompatibilitySourceFamily.iterm2,
     'xterm' => TerminalCompatibilitySourceFamily.xterm,
     _ => throw TerminalCompatibilityInventoryException(
       '$context has unknown source family $value',
@@ -972,6 +1102,17 @@ void main(List<String> arguments) {
           repositoryRoot: repositoryRoot,
         );
     stdout.writeln(inventory.machineLine());
+    if (inventory.scope == 'complete-baseline') {
+      stdout.writeln(
+        inventory.reconcileImplementationSurface(
+          File.fromUri(
+            repositoryRoot.uri.resolve(
+              defaultTerminalImplementationSurfacePath,
+            ),
+          ),
+        ),
+      );
+    }
   } on Object catch (error) {
     stderr.writeln('TERMINAL_COMPATIBILITY_INVENTORY_FAIL $error');
     exitCode = 1;

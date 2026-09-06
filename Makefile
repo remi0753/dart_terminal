@@ -24,7 +24,7 @@ override PRODUCT_PARSER_BENCHMARK_DIR := $(PROJECT_ROOT)/build/benchmarks
 override PRODUCT_PARSER_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_parser_benchmark
 override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_damage_benchmark
 
-.PHONY: help dependencies test compatibility-inventory-check \
+.PHONY: help dependencies test compatibility-inventory compatibility-inventory-check \
 	compatibility-manifest compatibility-manifest-check product-parser-corpus product-parser-properties \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
 	product-damage-benchmark-build product-damage-benchmark \
@@ -46,6 +46,7 @@ help:
 	@echo "  make product-parser-properties    Run deterministic property and fuzz cases"
 	@echo "  make product-parser-benchmark     Run the Release AOT 100 MiB/s parser gate"
 	@echo "  make product-damage-benchmark     Run the Release AOT 100,000-cell damage gate"
+	@echo "  make compatibility-inventory      Regenerate sequence inventory and summary"
 	@echo "  make compatibility-inventory-check  Validate the terminal sequence/mode inventory"
 	@echo "  make compatibility-manifest       Regenerate the implemented sequence manifest"
 	@echo "  make compatibility-manifest-check Reject a stale implemented sequence manifest"
@@ -77,8 +78,14 @@ vt-parser-table:
 vt-parser-table-check:
 	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_vt_parser_table.dart --check
 
+compatibility-inventory: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_terminal_compatibility_inventory.dart
+	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_terminal_compatibility_summary.dart
+
 compatibility-inventory-check: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_terminal_compatibility_inventory.dart --check
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_compatibility_inventory.dart --check
+	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_terminal_compatibility_summary.dart --check
 
 compatibility-manifest: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_terminal_compatibility_manifest.dart

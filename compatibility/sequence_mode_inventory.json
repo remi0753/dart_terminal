@@ -1,8 +1,8 @@
 {
   "format": "dart-terminal-sequence-mode-inventory",
   "version": 1,
-  "inventoryRevision": 1,
-  "scope": "schema-foundation",
+  "inventoryRevision": 2,
+  "scope": "complete-baseline",
   "sourcePins": [
     {
       "id": "dec-vt510-rm-b01",
@@ -29,6 +29,18 @@
       "retrievedOn": "2026-09-06"
     },
     {
+      "id": "iterm2-escape-codes-2026-09-07",
+      "family": "iterm2",
+      "title": "iTerm2 Proprietary Escape Codes",
+      "edition": "retrieved 2026-09-07",
+      "artifactUrl": "https://iterm2.com/documentation-escape-codes.html",
+      "artifactBytes": 31258,
+      "artifactSha256": "b297c4fcd7ea35908e145420d743fe98fc0ee5bbb5844ed4a1f35f2d547cac98",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-07"
+    },
+    {
       "id": "xterm-411",
       "family": "xterm",
       "title": "XTerm Control Sequences",
@@ -43,13 +55,1085 @@
   ],
   "records": [
     {
-      "id": "dec:dcs:decrqss",
-      "mnemonic": "DECRQSS",
-      "syntax": "DCS Ps $ q Pt ST",
+      "id": "dec:c1:ind",
+      "mnemonic": "IND",
+      "syntax": "IND (0x84)",
+      "selector": {
+        "kind": "c1",
+        "code": 132
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, IND—Index"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:csi:dec-decrqm",
+      "mnemonic": "DEC-DECRQM",
+      "syntax": "CSI ? $ p",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 112
+      },
+      "support": "implemented",
+      "disposition": "reply",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DEC private DECRQM—Request Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:csi:dec-dsr",
+      "mnemonic": "DEC-DSR",
+      "syntax": "CSI ? n",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 110
+      },
+      "support": "partial",
+      "disposition": "reply",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DEC DSR—Device Status Report"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "DEC cursor-position reporting is implemented; printer, UDK, locator, and integrity reports are not."
+    },
+    {
+      "id": "dec:csi:dec-mc",
+      "mnemonic": "DEC-MC",
+      "syntax": "CSI ? Ps i",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 105
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DEC Media Copy"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:deccara",
+      "mnemonic": "DECCARA",
+      "syntax": "CSI Pt ; Pl ; Pb ; Pr ; Pm $ r",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 114
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECCARA—Change Attributes in Rectangular Area"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:deccra",
+      "mnemonic": "DECCRA",
+      "syntax": "CSI ... $ v",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 118
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECCRA—Copy Rectangular Area"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decdc",
+      "mnemonic": "DECDC",
+      "syntax": "CSI Ps ' ~",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          39
+        ],
+        "finalByte": 126
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECDC—Delete Column"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decefr",
+      "mnemonic": "DECEFR",
+      "syntax": "CSI Pt ; Pl ; Pb ; Pr ' w",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          39
+        ],
+        "finalByte": 119
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECEFR—Enable Filter Rectangle"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decelr",
+      "mnemonic": "DECELR",
+      "syntax": "CSI Ps ; Pu ' z",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          39
+        ],
+        "finalByte": 122
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECELR—Enable Locator Reporting"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decera",
+      "mnemonic": "DECERA",
+      "syntax": "CSI Pt ; Pl ; Pb ; Pr $ z",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 122
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECERA—Erase Rectangular Area"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decfra",
+      "mnemonic": "DECFRA",
+      "syntax": "CSI Pc ; Pt ; Pl ; Pb ; Pr $ x",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 120
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECFRA—Fill Rectangular Area"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decic",
+      "mnemonic": "DECIC",
+      "syntax": "CSI Ps ' }",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          39
+        ],
+        "finalByte": 125
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECIC—Insert Column"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decll",
+      "mnemonic": "DECLL",
+      "syntax": "CSI Ps q",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 113
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECLL—Load LEDs"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decrara",
+      "mnemonic": "DECRARA",
+      "syntax": "CSI Pt ; Pl ; Pb ; Pr ; Pm $ t",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 116
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECRARA—Reverse Attributes in Rectangular Area"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decreqtparm",
+      "mnemonic": "DECREQTPARM",
+      "syntax": "CSI Ps x",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 120
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECREQTPARM—Request Terminal Parameters"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decrqcra",
+      "mnemonic": "DECRQCRA",
+      "syntax": "CSI ... * y",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          42
+        ],
+        "finalByte": 121
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECRQCRA—Request Checksum of Rectangular Area"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decrqde",
+      "mnemonic": "DECRQDE",
+      "syntax": "CSI \" v",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          34
+        ],
+        "finalByte": 118
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECRQDE—Request Displayed Extent"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decrqlp",
+      "mnemonic": "DECRQLP",
+      "syntax": "CSI Ps ' |",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          39
+        ],
+        "finalByte": 124
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECRQLP—Request Locator Position"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decrqm",
+      "mnemonic": "DECRQM",
+      "syntax": "CSI $ p",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 112
+      },
+      "support": "implemented",
+      "disposition": "reply",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECRQM—Request Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:csi:decrqpsr",
+      "mnemonic": "DECRQPSR",
+      "syntax": "CSI Ps $ w",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 119
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECRQPSR—Request Presentation State Report"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decrqupss",
+      "mnemonic": "DECRQUPSS",
+      "syntax": "CSI & u",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          38
+        ],
+        "finalByte": 117
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECRQUPSS—Request User Preferred Supplemental Set"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decrst",
+      "mnemonic": "DECRST",
+      "syntax": "CSI ? l",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 108
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECRST—Reset DEC Private Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The selector is implemented for the explicitly inventoried DEC private modes only."
+    },
+    {
+      "id": "dec:csi:decsace",
+      "mnemonic": "DECSACE",
+      "syntax": "CSI Ps * x",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          42
+        ],
+        "finalByte": 120
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSACE—Select Attribute Change Extent"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decsasd",
+      "mnemonic": "DECSASD",
+      "syntax": "CSI Ps $ }",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 125
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSASD—Select Active Status Display"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decsca",
+      "mnemonic": "DECSCA",
+      "syntax": "CSI Ps \" q",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          34
+        ],
+        "finalByte": 113
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSCA—Select Character Protection Attribute"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decscl",
+      "mnemonic": "DECSCL",
+      "syntax": "CSI Pl ; Pc \" p",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          34
+        ],
+        "finalByte": 112
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSCL—Set Conformance Level"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decscpp",
+      "mnemonic": "DECSCPP",
+      "syntax": "CSI Ps $ |",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 124
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSCPP—Select Columns Per Page"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decscusr",
+      "mnemonic": "DECSCUSR",
+      "syntax": "CSI SP q",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          32
+        ],
+        "finalByte": 113
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSCUSR—Set Cursor Style"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Cursor styles 0–6 are implemented; xterm resource-reset value 7 is rejected."
+    },
+    {
+      "id": "dec:csi:decsed",
+      "mnemonic": "DECSED",
+      "syntax": "CSI ? Ps J",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 74
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSED—Selective Erase in Display"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decsel",
+      "mnemonic": "DECSEL",
+      "syntax": "CSI ? Ps K",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 75
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSEL—Selective Erase in Line"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decsera",
+      "mnemonic": "DECSERA",
+      "syntax": "CSI Pt ; Pl ; Pb ; Pr $ {",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 123
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSERA—Selective Erase Rectangular Area"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decset",
+      "mnemonic": "DECSET",
+      "syntax": "CSI ? h",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 104
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSET—Set DEC Private Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The selector is implemented for the explicitly inventoried DEC private modes only."
+    },
+    {
+      "id": "dec:csi:decsle",
+      "mnemonic": "DECSLE",
+      "syntax": "CSI Pm ' {",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          39
+        ],
+        "finalByte": 123
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSLE—Select Locator Events"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decsmbv",
+      "mnemonic": "DECSMBV",
+      "syntax": "CSI Ps SP u",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          32
+        ],
+        "finalByte": 117
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSMBV—Set Margin Bell Volume"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decsnls",
+      "mnemonic": "DECSNLS",
+      "syntax": "CSI Ps * |",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          42
+        ],
+        "finalByte": 124
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSNLS—Select Number of Lines per Screen"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decssdt",
+      "mnemonic": "DECSSDT",
+      "syntax": "CSI Ps $ ~",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 126
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSSDT—Select Status Line Type"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decst8c",
+      "mnemonic": "DECST8C",
+      "syntax": "CSI ? 5 W",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 87
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECST8C—Set Tab at Every Eighth Column"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decstbm",
+      "mnemonic": "DECSTBM",
+      "syntax": "CSI r",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 114
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSTBM—Set Top and Bottom Margins"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:csi:decstr",
+      "mnemonic": "DECSTR",
+      "syntax": "CSI ! p",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          33
+        ],
+        "finalByte": 112
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSTR—Soft Terminal Reset"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:decswbv",
+      "mnemonic": "DECSWBV",
+      "syntax": "CSI Ps SP t",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          32
+        ],
+        "finalByte": 116
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSWBV—Set Warning Bell Volume"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:csi:primary-da",
+      "mnemonic": "PRIMARY-DA",
+      "syntax": "CSI c",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 99
+      },
+      "support": "implemented",
+      "disposition": "reply",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DA—Primary Device Attributes"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:csi:sd-vt",
+      "mnemonic": "SD-VT",
+      "syntax": "CSI T",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 84
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, SD—Pan Up"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:csi:tertiary-da",
+      "mnemonic": "TERTIARY-DA",
+      "syntax": "CSI = Ps c",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 61,
+        "intermediates": [],
+        "finalByte": 99
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DA—Tertiary Device Attributes"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:dcs:decaupss",
+      "mnemonic": "DECAUPSS",
+      "syntax": "DCS Ps ! u Pt ST",
       "selector": {
         "kind": "dcs",
         "privateMarker": null,
-        "intermediates": [36],
+        "intermediates": [
+          33
+        ],
+        "finalByte": 117
+      },
+      "support": "safe-ignore",
+      "disposition": "ignore",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECAUPSS—Assign User Preferred Supplemental Set"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
+    },
+    {
+      "id": "dec:dcs:decrqss",
+      "mnemonic": "DECRQSS",
+      "syntax": "DCS $ q Pt ST",
+      "selector": {
+        "kind": "dcs",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
         "finalByte": 113
       },
       "support": "safe-ignore",
@@ -61,12 +1145,275 @@
         }
       ],
       "implementationEvidence": [
-        "lib/src/terminal_core/terminal_screen_parser_sink.dart#dispatchDcs"
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
       ],
       "testEvidence": [
-        "test/vt_parser_test.dart#typed-sequence-families"
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
-      "notes": "The bounded parser consumes the complete DCS and the screen sink records it as unsupported without mutating terminal state."
+      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
+    },
+    {
+      "id": "dec:dcs:decrsps",
+      "mnemonic": "DECRSPS",
+      "syntax": "DCS Ps $ t Pt ST",
+      "selector": {
+        "kind": "dcs",
+        "privateMarker": null,
+        "intermediates": [
+          36
+        ],
+        "finalByte": 116
+      },
+      "support": "safe-ignore",
+      "disposition": "ignore",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECRSPS—Restore Presentation State"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
+    },
+    {
+      "id": "dec:dcs:decudk",
+      "mnemonic": "DECUDK",
+      "syntax": "DCS Ps ; Ps | Pt ST",
+      "selector": {
+        "kind": "dcs",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 124
+      },
+      "support": "safe-ignore",
+      "disposition": "ignore",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECUDK—User Defined Keys"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
+    },
+    {
+      "id": "dec:esc:decaln",
+      "mnemonic": "DECALN",
+      "syntax": "ESC # 8",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          35
+        ],
+        "finalByte": 56
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECALN—Screen Alignment Pattern"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:esc:decbi",
+      "mnemonic": "DECBI",
+      "syntax": "ESC 6",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 54
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECBI—Back Index"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:esc:decdhl-bottom",
+      "mnemonic": "DECDHL-BOTTOM",
+      "syntax": "ESC # 4",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          35
+        ],
+        "finalByte": 52
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECDHL—Double Height Line"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:esc:decdhl-top",
+      "mnemonic": "DECDHL-TOP",
+      "syntax": "ESC # 3",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          35
+        ],
+        "finalByte": 51
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECDHL—Double Height Line"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:esc:decdwl",
+      "mnemonic": "DECDWL",
+      "syntax": "ESC # 6",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          35
+        ],
+        "finalByte": 54
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECDWL—Double Width Line"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:esc:decfi",
+      "mnemonic": "DECFI",
+      "syntax": "ESC 9",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 57
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECFI—Forward Index"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:esc:deckpam",
+      "mnemonic": "DECKPAM",
+      "syntax": "ESC =",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 61
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECKPAM—Keypad Application Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:esc:deckpnm",
+      "mnemonic": "DECKPNM",
+      "syntax": "ESC >",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 62
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECKPNM—Keypad Numeric Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:esc:decrc",
+      "mnemonic": "DECRC",
+      "syntax": "ESC 8",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 56
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECRC—Restore Cursor"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
     },
     {
       "id": "dec:esc:decsc",
@@ -86,10 +1433,446 @@
         }
       ],
       "implementationEvidence": [
-        "lib/src/terminal_core/terminal_screen_parser_sink.dart#dispatchEscape"
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
       ],
       "testEvidence": [
-        "test/terminal_screen_test.dart#cursor-save-restore"
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:esc:decswl",
+      "mnemonic": "DECSWL",
+      "syntax": "ESC # 5",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          35
+        ],
+        "finalByte": 53
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSWL—Single Width Line"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:esc:designate-g0-ascii",
+      "mnemonic": "DESIGNATE-G0-ASCII",
+      "syntax": "ESC ( B",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          40
+        ],
+        "finalByte": 66
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, SCS—Select Character Set"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:esc:designate-g0-dec-special",
+      "mnemonic": "DESIGNATE-G0-DEC-SPECIAL",
+      "syntax": "ESC ( 0",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          40
+        ],
+        "finalByte": 48
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, SCS—Select Character Set"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:esc:designate-g1-ascii",
+      "mnemonic": "DESIGNATE-G1-ASCII",
+      "syntax": "ESC ) B",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          41
+        ],
+        "finalByte": 66
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, SCS—Select Character Set"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:esc:designate-g1-dec-special",
+      "mnemonic": "DESIGNATE-G1-DEC-SPECIAL",
+      "syntax": "ESC ) 0",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          41
+        ],
+        "finalByte": 48
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, SCS—Select Character Set"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:esc:hts-7bit",
+      "mnemonic": "HTS-7BIT",
+      "syntax": "ESC H",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 72
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, HTS—Tab Set"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:esc:ind-7bit",
+      "mnemonic": "IND-7BIT",
+      "syntax": "ESC D",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 68
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, IND—Index"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:esc:nel-7bit",
+      "mnemonic": "NEL-7BIT",
+      "syntax": "ESC E",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 69
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, NEL—Next Line"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:esc:ri-7bit",
+      "mnemonic": "RI-7BIT",
+      "syntax": "ESC M",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 77
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, RI—Reverse Index"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:esc:ris",
+      "mnemonic": "RIS",
+      "syntax": "ESC c",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 99
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, RIS—Full Reset"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:esc:s7c1t",
+      "mnemonic": "S7C1T",
+      "syntax": "ESC SP F",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          32
+        ],
+        "finalByte": 70
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, S7C1T—Send 7-Bit C1 Controls"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:esc:s8c1t",
+      "mnemonic": "S8C1T",
+      "syntax": "ESC SP G",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          32
+        ],
+        "finalByte": 71
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, S8C1T—Send 8-Bit C1 Controls"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "dec:mode:decawm",
+      "mnemonic": "DECAWM",
+      "syntax": "CSI ? 7 h / CSI ? 7 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 7
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECAWM—Autowrap Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:mode:decckm",
+      "mnemonic": "DECCKM",
+      "syntax": "CSI ? 1 h / CSI ? 1 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECCKM—Cursor Keys Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:mode:declrmm",
+      "mnemonic": "DECLRMM",
+      "syntax": "CSI ? 69 h / CSI ? 69 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 69
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECLRMM—Left Right Margin Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:mode:decom",
+      "mnemonic": "DECOM",
+      "syntax": "CSI ? 6 h / CSI ? 6 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 6
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECOM—Origin Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:mode:decscnm",
+      "mnemonic": "DECSCNM",
+      "syntax": "CSI ? 5 h / CSI ? 5 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 5
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECSCNM—Screen Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "dec:mode:dectcem",
+      "mnemonic": "DECTCEM",
+      "syntax": "CSI ? 25 h / CSI ? 25 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 25
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "dec-vt510-rm-b01",
+          "locator": "Part II chapter 5, DECTCEM—Text Cursor Enable Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
       "notes": ""
     },
@@ -109,12 +1892,12 @@
         }
       ],
       "implementationEvidence": [
-        "lib/src/terminal_core/terminal_screen_parser_sink.dart#dispatchString"
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
       ],
       "testEvidence": [
-        "test/vt_parser_test.dart#typed-sequence-families"
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
-      "notes": "The payload is bounded and consumed through ST, then deliberately ignored by the screen sink."
+      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
     },
     {
       "id": "ecma48:c0:bel",
@@ -133,45 +1916,961 @@
         }
       ],
       "implementationEvidence": [
-        "lib/src/terminal_core/terminal_screen_parser_sink.dart#execute"
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
       ],
       "testEvidence": [
-        "test/terminal_screen_test.dart#visual-bell"
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
       "notes": ""
     },
     {
-      "id": "ecma48:c1:ind",
-      "mnemonic": "IND",
-      "syntax": "IND (0x84 or ESC D)",
+      "id": "ecma48:c0:bs",
+      "mnemonic": "BS",
+      "syntax": "BS (0x08)",
       "selector": {
-        "kind": "c1",
-        "code": 132
+        "kind": "c0",
+        "code": 8
       },
       "support": "implemented",
       "disposition": "execute",
       "sourceRefs": [
         {
           "source": "ecma-48-5e",
-          "locator": "clause 8.3.64, IND—Index"
-        },
-        {
-          "source": "dec-vt510-rm-b01",
-          "locator": "Part II chapter 5, IND—Index"
+          "locator": "clause 8.3.5, BS—Backspace"
         }
       ],
       "implementationEvidence": [
-        "lib/src/terminal_core/terminal_screen_parser_sink.dart#execute"
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
       ],
       "testEvidence": [
-        "test/terminal_screen_test.dart#index"
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
-      "notes": "The parser accepts the 8-bit C1 form and the DEC 7-bit ESC form dispatches the same screen operation."
+      "notes": ""
+    },
+    {
+      "id": "ecma48:c0:cr",
+      "mnemonic": "CR",
+      "syntax": "CR (0x0D)",
+      "selector": {
+        "kind": "c0",
+        "code": 13
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.15, CR—Carriage Return"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:c0:ff",
+      "mnemonic": "FF",
+      "syntax": "FF (0x0C)",
+      "selector": {
+        "kind": "c0",
+        "code": 12
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.51, FF—Form Feed"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Handled as line feed, matching xterm rather than paged-media form feed."
+    },
+    {
+      "id": "ecma48:c0:ht",
+      "mnemonic": "HT",
+      "syntax": "HT (0x09)",
+      "selector": {
+        "kind": "c0",
+        "code": 9
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.60, HT—Character Tabulation"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:c0:lf",
+      "mnemonic": "LF",
+      "syntax": "LF (0x0A)",
+      "selector": {
+        "kind": "c0",
+        "code": 10
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.74, LF—Line Feed"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:c0:si",
+      "mnemonic": "SI",
+      "syntax": "SI (0x0F)",
+      "selector": {
+        "kind": "c0",
+        "code": 15
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.119, SI—Shift In"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:c0:so",
+      "mnemonic": "SO",
+      "syntax": "SO (0x0E)",
+      "selector": {
+        "kind": "c0",
+        "code": 14
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.126, SO—Shift Out"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:c0:vt",
+      "mnemonic": "VT",
+      "syntax": "VT (0x0B)",
+      "selector": {
+        "kind": "c0",
+        "code": 11
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.161, VT—Line Tabulation"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Handled as line feed, matching xterm rather than ECMA line-tab semantics."
+    },
+    {
+      "id": "ecma48:c1:epa",
+      "mnemonic": "EPA",
+      "syntax": "EPA (0x97)",
+      "selector": {
+        "kind": "c1",
+        "code": 151
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.46, EPA—End of Guarded Area"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:c1:hts",
+      "mnemonic": "HTS",
+      "syntax": "HTS (0x88)",
+      "selector": {
+        "kind": "c1",
+        "code": 136
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.62, HTS—Character Tabulation Set"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:c1:nel",
+      "mnemonic": "NEL",
+      "syntax": "NEL (0x85)",
+      "selector": {
+        "kind": "c1",
+        "code": 133
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.86, NEL—Next Line"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:c1:ri",
+      "mnemonic": "RI",
+      "syntax": "RI (0x8D)",
+      "selector": {
+        "kind": "c1",
+        "code": 141
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.104, RI—Reverse Line Feed"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:c1:spa",
+      "mnemonic": "SPA",
+      "syntax": "SPA (0x96)",
+      "selector": {
+        "kind": "c1",
+        "code": 150
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.129, SPA—Start of Guarded Area"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:c1:ss2",
+      "mnemonic": "SS2",
+      "syntax": "SS2 (0x8E)",
+      "selector": {
+        "kind": "c1",
+        "code": 142
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.141, SS2—Single Shift Two"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:c1:ss3",
+      "mnemonic": "SS3",
+      "syntax": "SS3 (0x8F)",
+      "selector": {
+        "kind": "c1",
+        "code": 143
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.142, SS3—Single Shift Three"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:csi:cbt",
+      "mnemonic": "CBT",
+      "syntax": "CSI Z",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 90
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.7, CBT—Cursor Backward Tabulation"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:cha",
+      "mnemonic": "CHA",
+      "syntax": "CSI G",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 71
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.9, CHA—Cursor Character Absolute"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:cht",
+      "mnemonic": "CHT",
+      "syntax": "CSI I",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 73
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.10, CHT—Cursor Forward Tabulation"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:cnl",
+      "mnemonic": "CNL",
+      "syntax": "CSI E",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 69
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.12, CNL—Cursor Next Line"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:cpl",
+      "mnemonic": "CPL",
+      "syntax": "CSI F",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 70
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.13, CPL—Cursor Preceding Line"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:cub",
+      "mnemonic": "CUB",
+      "syntax": "CSI D",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 68
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.18, CUB—Cursor Left"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:cud",
+      "mnemonic": "CUD",
+      "syntax": "CSI B",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 66
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.19, CUD—Cursor Down"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:cuf",
+      "mnemonic": "CUF",
+      "syntax": "CSI C",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 67
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.20, CUF—Cursor Right"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:cup",
+      "mnemonic": "CUP",
+      "syntax": "CSI H",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 72
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.21, CUP—Cursor Position"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:cuu",
+      "mnemonic": "CUU",
+      "syntax": "CSI A",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 65
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.22, CUU—Cursor Up"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:dch",
+      "mnemonic": "DCH",
+      "syntax": "CSI P",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 80
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.26, DCH—Delete Character"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:dl",
+      "mnemonic": "DL",
+      "syntax": "CSI M",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 77
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.32, DL—Delete Line"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:dsr",
+      "mnemonic": "DSR",
+      "syntax": "CSI n",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 110
+      },
+      "support": "partial",
+      "disposition": "reply",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.35, DSR—Device Status Report"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Status and cursor-position requests are implemented; other DSR parameters are rejected."
+    },
+    {
+      "id": "ecma48:csi:ech",
+      "mnemonic": "ECH",
+      "syntax": "CSI X",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 88
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.38, ECH—Erase Character"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:el",
+      "mnemonic": "EL",
+      "syntax": "CSI K",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 75
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.41, EL—Erase in Line"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:hpa",
+      "mnemonic": "HPA",
+      "syntax": "CSI `",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 96
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.57, HPA—Character Position Absolute"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:hpr",
+      "mnemonic": "HPR",
+      "syntax": "CSI Ps a",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 97
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.59, HPR—Character Position Forward"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:csi:hvp",
+      "mnemonic": "HVP",
+      "syntax": "CSI f",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 102
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.63, HVP—Character and Line Position"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:ich",
+      "mnemonic": "ICH",
+      "syntax": "CSI @",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 64
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.64, ICH—Insert Character"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:il",
+      "mnemonic": "IL",
+      "syntax": "CSI L",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 76
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.67, IL—Insert Line"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:mc",
+      "mnemonic": "MC",
+      "syntax": "CSI Ps i",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 105
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.82, MC—Media Copy"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:csi:rep",
+      "mnemonic": "REP",
+      "syntax": "CSI Ps b",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 98
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.103, REP—Repeat"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:csi:rm",
+      "mnemonic": "RM",
+      "syntax": "CSI l",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 108
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.106, RM—Reset Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The selector is implemented for the explicitly inventoried ANSI modes only."
+    },
+    {
+      "id": "ecma48:csi:sd",
+      "mnemonic": "SD",
+      "syntax": "CSI Ps ^",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 94
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.113, SD—Scroll Down"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
     },
     {
       "id": "ecma48:csi:sgr",
       "mnemonic": "SGR",
-      "syntax": "CSI Pm m",
+      "syntax": "CSI m",
       "selector": {
         "kind": "csi",
         "privateMarker": null,
@@ -184,19 +2883,335 @@
         {
           "source": "ecma-48-5e",
           "locator": "clause 8.3.117, SGR—Select Graphic Rendition"
-        },
-        {
-          "source": "xterm-411",
-          "locator": "ctlseqs.ms, CSI Ps ... Ps m"
         }
       ],
       "implementationEvidence": [
-        "lib/src/terminal_core/terminal_screen_parser_sink.dart#applySgr"
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
       ],
       "testEvidence": [
-        "test/terminal_style_test.dart#sgr"
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
-      "notes": "P0 text attributes plus ANSI 16/256-color and truecolor forms are implemented; the complete ECMA/xterm rendition repertoire is not yet implemented."
+      "notes": "Text attributes and ANSI/256/direct colors are implemented; the full ECMA/xterm rendition repertoire is not."
+    },
+    {
+      "id": "ecma48:csi:sl",
+      "mnemonic": "SL",
+      "syntax": "CSI Ps SP @",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          32
+        ],
+        "finalByte": 64
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.121, SL—Scroll Left"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:csi:sm",
+      "mnemonic": "SM",
+      "syntax": "CSI h",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 104
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.125, SM—Set Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The selector is implemented for the explicitly inventoried ANSI modes only."
+    },
+    {
+      "id": "ecma48:csi:sr",
+      "mnemonic": "SR",
+      "syntax": "CSI Ps SP A",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          32
+        ],
+        "finalByte": 65
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.135, SR—Scroll Right"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:csi:su",
+      "mnemonic": "SU",
+      "syntax": "CSI S",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 83
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.147, SU—Scroll Up"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:vpa",
+      "mnemonic": "VPA",
+      "syntax": "CSI d",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 100
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.158, VPA—Line Position Absolute"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ecma48:csi:vpr",
+      "mnemonic": "VPR",
+      "syntax": "CSI Ps e",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 101
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.160, VPR—Line Position Forward"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:esc:ls1r",
+      "mnemonic": "LS1R",
+      "syntax": "ESC ~",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 126
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.77, LS1R—Locking Shift One Right"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:esc:ls2",
+      "mnemonic": "LS2",
+      "syntax": "ESC n",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 110
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.78, LS2—Locking Shift Two"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:esc:ls2r",
+      "mnemonic": "LS2R",
+      "syntax": "ESC }",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 125
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.79, LS2R—Locking Shift Two Right"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:esc:ls3",
+      "mnemonic": "LS3",
+      "syntax": "ESC o",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 111
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.80, LS3—Locking Shift Three"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:esc:ls3r",
+      "mnemonic": "LS3R",
+      "syntax": "ESC |",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 124
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.81, LS3R—Locking Shift Three Right"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:esc:ss2-7bit",
+      "mnemonic": "SS2-7BIT",
+      "syntax": "ESC N",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 78
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.141, SS2—Single Shift Two"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:esc:ss3-7bit",
+      "mnemonic": "SS3-7BIT",
+      "syntax": "ESC O",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 79
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 8.3.142, SS3—Single Shift Three"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "ecma48:mode:irm",
+      "mnemonic": "IRM",
+      "syntax": "CSI 4 h / CSI 4 l",
+      "selector": {
+        "kind": "mode",
+        "private": false,
+        "number": 4
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ecma-48-5e",
+          "locator": "clause 7.2.10, IRM—Insertion Replacement Mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
     },
     {
       "id": "ecma48:pm:pm",
@@ -214,12 +3229,12 @@
         }
       ],
       "implementationEvidence": [
-        "lib/src/terminal_core/terminal_screen_parser_sink.dart#dispatchString"
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
       ],
       "testEvidence": [
-        "test/vt_parser_test.dart#typed-sequence-families"
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
-      "notes": "The payload is bounded and consumed through ST, then deliberately ignored by the screen sink."
+      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
     },
     {
       "id": "ecma48:sos:sos",
@@ -233,19 +3248,1105 @@
       "sourceRefs": [
         {
           "source": "ecma-48-5e",
-          "locator": "clause 8.3.138, SOS—Start of String"
+          "locator": "clause 8.3.128, SOS—Start of String"
         }
       ],
       "implementationEvidence": [
-        "lib/src/terminal_core/terminal_screen_parser_sink.dart#dispatchString"
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
       ],
       "testEvidence": [
-        "test/vt_parser_test.dart#typed-sequence-families"
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
-      "notes": "The payload is bounded and consumed through ST, then deliberately ignored by the screen sink."
+      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
     },
     {
-      "id": "xterm:mode:private-2004",
+      "id": "iterm2:osc:osc-7",
+      "mnemonic": "OSC-7",
+      "syntax": "OSC 7 ; file-URI ST",
+      "selector": {
+        "kind": "osc",
+        "command": 7
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "iterm2-escape-codes-2026-09-07",
+          "locator": "CurrentDir / OSC 7"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; owned by the later OSC title/cwd/hyperlink/palette/clipboard policy task."
+    },
+    {
+      "id": "iterm2:osc:osc-8",
+      "mnemonic": "OSC-8",
+      "syntax": "OSC 8 ; Pt ST",
+      "selector": {
+        "kind": "osc",
+        "command": 8
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "iterm2-escape-codes-2026-09-07",
+          "locator": "Anchor (OSC 8)"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:c0:enq",
+      "mnemonic": "ENQ",
+      "syntax": "ENQ (0x05)",
+      "selector": {
+        "kind": "c0",
+        "code": 5
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, ENQ—Return Terminal Status"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:c1:decid",
+      "mnemonic": "DECID",
+      "syntax": "DECID (0x9A or ESC Z)",
+      "selector": {
+        "kind": "c1",
+        "code": 154
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DECID—Return Terminal ID"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:disable-modkeys",
+      "mnemonic": "DISABLE-MODKEYS",
+      "syntax": "CSI > Ps n",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 62,
+        "intermediates": [],
+        "finalByte": 110
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, CSI > Ps n"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:ed",
+      "mnemonic": "ED",
+      "syntax": "CSI J",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 74
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, CSI Ps J—Erase in Display"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "ECMA/VT modes 0–2 are implemented; xterm saved-lines mode 3 is not."
+    },
+    {
+      "id": "xterm:csi:scorc",
+      "mnemonic": "SCORC",
+      "syntax": "CSI u",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 117
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, CSI u—Restore cursor"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:csi:scosc-decslrm",
+      "mnemonic": "SCOSC-DECSLRM",
+      "syntax": "CSI s",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 115
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, CSI s / CSI Pl ; Pr s"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:csi:secondary-da",
+      "mnemonic": "SECONDARY-DA",
+      "syntax": "CSI > c",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 62,
+        "intermediates": [],
+        "finalByte": 99
+      },
+      "support": "implemented",
+      "disposition": "reply",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, CSI > Ps c—Secondary Device Attributes"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:csi:tbc",
+      "mnemonic": "TBC",
+      "syntax": "CSI g",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 103
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, CSI Ps g—Tab Clear"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:csi:xtchecksum",
+      "mnemonic": "XTCHECKSUM",
+      "syntax": "CSI Ps # y",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          35
+        ],
+        "finalByte": 121
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTCHECKSUM"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtfmtkeys",
+      "mnemonic": "XTFMTKEYS",
+      "syntax": "CSI > Pp ; Pv f",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 62,
+        "intermediates": [],
+        "finalByte": 102
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTFMTKEYS"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtmodkeys",
+      "mnemonic": "XTMODKEYS",
+      "syntax": "CSI > Pp ; Pv m",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 62,
+        "intermediates": [],
+        "finalByte": 109
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTMODKEYS"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtpopcolors",
+      "mnemonic": "XTPOPCOLORS",
+      "syntax": "CSI # Q",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          35
+        ],
+        "finalByte": 81
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTPOPCOLORS"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtpopsgr",
+      "mnemonic": "XTPOPSGR",
+      "syntax": "CSI # }",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          35
+        ],
+        "finalByte": 125
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTPOPSGR"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtpopsgr-alias",
+      "mnemonic": "XTPOPSGR-ALIAS",
+      "syntax": "CSI # q",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          35
+        ],
+        "finalByte": 113
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTPOPSGR alias"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtpushcolors",
+      "mnemonic": "XTPUSHCOLORS",
+      "syntax": "CSI # P",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          35
+        ],
+        "finalByte": 80
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTPUSHCOLORS"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtpushsgr",
+      "mnemonic": "XTPUSHSGR",
+      "syntax": "CSI # {",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          35
+        ],
+        "finalByte": 123
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTPUSHSGR"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtpushsgr-alias",
+      "mnemonic": "XTPUSHSGR-ALIAS",
+      "syntax": "CSI # p",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          35
+        ],
+        "finalByte": 112
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTPUSHSGR alias"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtqfmtkeys",
+      "mnemonic": "XTQFMTKEYS",
+      "syntax": "CSI ? Pp g",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 103
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTQFMTKEYS"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtqmodkeys",
+      "mnemonic": "XTQMODKEYS",
+      "syntax": "CSI ? Pp m",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 109
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTQMODKEYS"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtreportcolors",
+      "mnemonic": "XTREPORTCOLORS",
+      "syntax": "CSI # R",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          35
+        ],
+        "finalByte": 82
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTREPORTCOLORS"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtreportsgr",
+      "mnemonic": "XTREPORTSGR",
+      "syntax": "CSI Pt ; Pl ; Pb ; Pr # |",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          35
+        ],
+        "finalByte": 124
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTREPORTSGR"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtrestore",
+      "mnemonic": "XTRESTORE",
+      "syntax": "CSI ? Pm r",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 114
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTRESTORE"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtsave",
+      "mnemonic": "XTSAVE",
+      "syntax": "CSI ? Pm s",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 115
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTSAVE"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtshiftescape",
+      "mnemonic": "XTSHIFTESCAPE",
+      "syntax": "CSI > Ps s",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 62,
+        "intermediates": [],
+        "finalByte": 115
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTSHIFTESCAPE"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtsmgraphics",
+      "mnemonic": "XTSMGRAPHICS",
+      "syntax": "CSI ? Pi ; Pa ; Pv S",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 83
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTSMGRAPHICS"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtsmpointer",
+      "mnemonic": "XTSMPOINTER",
+      "syntax": "CSI > Ps p",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 62,
+        "intermediates": [],
+        "finalByte": 112
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTSMPOINTER"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtsmtitle",
+      "mnemonic": "XTSMTITLE",
+      "syntax": "CSI > Pm t",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 62,
+        "intermediates": [],
+        "finalByte": 116
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTSMTITLE"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xttitlepos",
+      "mnemonic": "XTTITLEPOS",
+      "syntax": "CSI # S",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [
+          35
+        ],
+        "finalByte": 83
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTTITLEPOS"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtversion",
+      "mnemonic": "XTVERSION",
+      "syntax": "CSI > 0 q",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 62,
+        "intermediates": [],
+        "finalByte": 113
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTVERSION"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:csi:xtwinops",
+      "mnemonic": "XTWINOPS",
+      "syntax": "CSI Ps ; Ps ; Ps t",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 116
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTWINOPS"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:dcs:sixel",
+      "mnemonic": "SIXEL",
+      "syntax": "DCS Ps q Pt ST",
+      "selector": {
+        "kind": "dcs",
+        "privateMarker": null,
+        "intermediates": [],
+        "finalByte": 113
+      },
+      "support": "safe-ignore",
+      "disposition": "ignore",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, Sixel Graphics"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
+    },
+    {
+      "id": "xterm:dcs:xtgettcap",
+      "mnemonic": "XTGETTCAP",
+      "syntax": "DCS + q Pt ST",
+      "selector": {
+        "kind": "dcs",
+        "privateMarker": null,
+        "intermediates": [
+          43
+        ],
+        "finalByte": 113
+      },
+      "support": "safe-ignore",
+      "disposition": "ignore",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTGETTCAP"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
+    },
+    {
+      "id": "xterm:dcs:xtgetxres",
+      "mnemonic": "XTGETXRES",
+      "syntax": "DCS + Q Pt ST",
+      "selector": {
+        "kind": "dcs",
+        "privateMarker": null,
+        "intermediates": [
+          43
+        ],
+        "finalByte": 81
+      },
+      "support": "safe-ignore",
+      "disposition": "ignore",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTGETXRES"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
+    },
+    {
+      "id": "xterm:dcs:xtsettcap",
+      "mnemonic": "XTSETTCAP",
+      "syntax": "DCS + p Pt ST",
+      "selector": {
+        "kind": "dcs",
+        "privateMarker": null,
+        "intermediates": [
+          43
+        ],
+        "finalByte": 112
+      },
+      "support": "safe-ignore",
+      "disposition": "ignore",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, XTSETTCAP"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
+    },
+    {
+      "id": "xterm:esc:ansi-level-1",
+      "mnemonic": "ANSI-LEVEL-1",
+      "syntax": "ESC SP L",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          32
+        ],
+        "finalByte": 76
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, ESC SP L"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:esc:ansi-level-2",
+      "mnemonic": "ANSI-LEVEL-2",
+      "syntax": "ESC SP M",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          32
+        ],
+        "finalByte": 77
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, ESC SP M"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:esc:ansi-level-3",
+      "mnemonic": "ANSI-LEVEL-3",
+      "syntax": "ESC SP N",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          32
+        ],
+        "finalByte": 78
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, ESC SP N"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:esc:decid-7bit",
+      "mnemonic": "DECID-7BIT",
+      "syntax": "ESC Z",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [],
+        "finalByte": 90
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, ESC Z—Return Terminal ID"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:esc:select-default-charset",
+      "mnemonic": "SELECT-DEFAULT-CHARSET",
+      "syntax": "ESC % @",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          37
+        ],
+        "finalByte": 64
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, ESC % @"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:esc:select-utf8",
+      "mnemonic": "SELECT-UTF8",
+      "syntax": "ESC % G",
+      "selector": {
+        "kind": "esc",
+        "intermediates": [
+          37
+        ],
+        "finalByte": 71
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, ESC % G"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:alternate-screen",
+      "mnemonic": "ALTERNATE-SCREEN",
+      "syntax": "CSI ? 47 h / CSI ? 47 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 47
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 47"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:mode:alternate-screen-clear",
+      "mnemonic": "ALTERNATE-SCREEN-CLEAR",
+      "syntax": "CSI ? 1047 h / CSI ? 1047 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1047
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1047"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:mode:alternate-screen-save",
+      "mnemonic": "ALTERNATE-SCREEN-SAVE",
+      "syntax": "CSI ? 1049 h / CSI ? 1049 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1049
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1049"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:mode:any-event-mouse",
+      "mnemonic": "ANY-EVENT-MOUSE",
+      "syntax": "CSI ? 1003 h / CSI ? 1003 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1003
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1003"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:mode:bracketed-paste",
       "mnemonic": "BRACKETED-PASTE",
       "syntax": "CSI ? 2004 h / CSI ? 2004 l",
       "selector": {
@@ -258,42 +4359,1740 @@
       "sourceRefs": [
         {
           "source": "xterm-411",
-          "locator": "ctlseqs.ms, bracketed paste mode 2004"
+          "locator": "ctlseqs.ms, DEC private mode 2004"
         }
       ],
       "implementationEvidence": [
-        "lib/src/terminal_core/terminal_screen_parser_sink.dart#setPrivateModes",
-        "lib/src/terminal_core/terminal_screen_set.dart#setBracketedPasteMode"
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
       ],
       "testEvidence": [
-        "test/terminal_screen_set_test.dart#bracketed-paste-mode"
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
       "notes": ""
     },
     {
-      "id": "xterm:osc:osc-8",
-      "mnemonic": "OSC-8",
-      "syntax": "OSC 8 ; params ; URI ST",
+      "id": "xterm:mode:button-event-mouse",
+      "mnemonic": "BUTTON-EVENT-MOUSE",
+      "syntax": "CSI ? 1002 h / CSI ? 1002 l",
       "selector": {
-        "kind": "osc",
-        "command": 8
+        "kind": "mode",
+        "private": true,
+        "number": 1002
       },
       "support": "implemented",
       "disposition": "execute",
       "sourceRefs": [
         {
           "source": "xterm-411",
-          "locator": "ctlseqs.ms, OSC 8 hyperlink"
+          "locator": "ctlseqs.ms, DEC private mode 1002"
         }
       ],
       "implementationEvidence": [
-        "lib/src/terminal_core/terminal_screen_parser_sink.dart#applyOscHyperlink",
-        "lib/src/terminal_core/terminal_hyperlink.dart#TerminalHyperlinkTable"
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
       ],
       "testEvidence": [
-        "test/terminal_hyperlink_test.dart#osc-8"
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
-      "notes": "URI and optional id parameters are bounded; later URL opening is subject to the separate product allowlist."
+      "notes": ""
+    },
+    {
+      "id": "xterm:mode:cursor-blink",
+      "mnemonic": "CURSOR-BLINK",
+      "syntax": "CSI ? 12 h / CSI ? 12 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 12
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 12"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:mode:cursor-blink-resource",
+      "mnemonic": "CURSOR-BLINK-RESOURCE",
+      "syntax": "CSI ? 13 h / CSI ? 13 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 13
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 13—cursor blink resource"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:cursor-blink-xor-resource",
+      "mnemonic": "CURSOR-BLINK-XOR-RESOURCE",
+      "syntax": "CSI ? 14 h / CSI ? 14 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 14
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 14—cursor blink XOR resource"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:cursor-save-mode",
+      "mnemonic": "CURSOR-SAVE-MODE",
+      "syntax": "CSI ? 1048 h / CSI ? 1048 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1048
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1048"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:mode:decanm",
+      "mnemonic": "DECANM",
+      "syntax": "CSI ? 2 h / CSI ? 2 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 2
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 2—DECANM—ANSI Mode"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:decarm",
+      "mnemonic": "DECARM",
+      "syntax": "CSI ? 8 h / CSI ? 8 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 8
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 8—DECARM—Autorepeat Mode"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:decbkm",
+      "mnemonic": "DECBKM",
+      "syntax": "CSI ? 67 h / CSI ? 67 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 67
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 67—DECBKM—Backarrow Key Mode"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:deccolm",
+      "mnemonic": "DECCOLM",
+      "syntax": "CSI ? 3 h / CSI ? 3 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 3
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 3—DECCOLM—Column Mode"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:decgepm",
+      "mnemonic": "DECGEPM",
+      "syntax": "CSI ? 43 h / CSI ? 43 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 43
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 43—DECGEPM—Graphic Expanded Print"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:decncsm",
+      "mnemonic": "DECNCSM",
+      "syntax": "CSI ? 95 h / CSI ? 95 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 95
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 95—DECNCSM—No Clear on Column Mode"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:decnkm",
+      "mnemonic": "DECNKM",
+      "syntax": "CSI ? 66 h / CSI ? 66 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 66
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 66—DECNKM—Numeric Keypad Mode"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:decnrcm",
+      "mnemonic": "DECNRCM",
+      "syntax": "CSI ? 42 h / CSI ? 42 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 42
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 42—DECNRCM—National Replacement Character Sets"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:decpex",
+      "mnemonic": "DECPEX",
+      "syntax": "CSI ? 19 h / CSI ? 19 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 19
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 19—DECPEX—Print Extent"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:decpff",
+      "mnemonic": "DECPFF",
+      "syntax": "CSI ? 18 h / CSI ? 18 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 18
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 18—DECPFF—Print Form Feed"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:decsclm",
+      "mnemonic": "DECSCLM",
+      "syntax": "CSI ? 4 h / CSI ? 4 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 4
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 4—DECSCLM—Scrolling Mode"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:decsdm",
+      "mnemonic": "DECSDM",
+      "syntax": "CSI ? 80 h / CSI ? 80 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 80
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 80—DECSDM—Sixel Display Mode"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:dectek",
+      "mnemonic": "DECTEK",
+      "syntax": "CSI ? 38 h / CSI ? 38 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 38
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 38—DECTEK—Tektronix Mode"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:kam",
+      "mnemonic": "KAM",
+      "syntax": "CSI 2 h / CSI 2 l",
+      "selector": {
+        "kind": "mode",
+        "private": false,
+        "number": 2
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, ANSI mode 2—KAM—Keyboard Action Mode"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:lnm",
+      "mnemonic": "LNM",
+      "syntax": "CSI 20 h / CSI 20 l",
+      "selector": {
+        "kind": "mode",
+        "private": false,
+        "number": 20
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, ANSI mode 20—LNM—Line Feed New Line Mode"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:rxvt-font-shifting",
+      "mnemonic": "RXVT-FONT-SHIFTING",
+      "syntax": "CSI ? 35 h / CSI ? 35 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 35
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 35—rxvt font shifting"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:rxvt-scroll-on-key",
+      "mnemonic": "RXVT-SCROLL-ON-KEY",
+      "syntax": "CSI ? 1011 h / CSI ? 1011 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1011
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1011—rxvt scroll on key"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:rxvt-scroll-on-output",
+      "mnemonic": "RXVT-SCROLL-ON-OUTPUT",
+      "syntax": "CSI ? 1010 h / CSI ? 1010 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1010
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1010—rxvt scroll on output"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:rxvt-scrollbar",
+      "mnemonic": "RXVT-SCROLLBAR",
+      "syntax": "CSI ? 30 h / CSI ? 30 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 30
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 30—rxvt scrollbar"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:rxvt-toolbar",
+      "mnemonic": "RXVT-TOOLBAR",
+      "syntax": "CSI ? 10 h / CSI ? 10 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 10
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 10—RXVT toolbar"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:sgr-mouse",
+      "mnemonic": "SGR-MOUSE",
+      "syntax": "CSI ? 1006 h / CSI ? 1006 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1006
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1006"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:mode:srm",
+      "mnemonic": "SRM",
+      "syntax": "CSI 12 h / CSI 12 l",
+      "selector": {
+        "kind": "mode",
+        "private": false,
+        "number": 12
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, ANSI mode 12—SRM—Send Receive Mode"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:urxvt-mouse",
+      "mnemonic": "URXVT-MOUSE",
+      "syntax": "CSI ? 1015 h / CSI ? 1015 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1015
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1015"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:mode:utf8-mouse",
+      "mnemonic": "UTF8-MOUSE",
+      "syntax": "CSI ? 1005 h / CSI ? 1005 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1005
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1005"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:mode:x10-mouse",
+      "mnemonic": "X10-MOUSE",
+      "syntax": "CSI ? 9 h / CSI ? 9 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 9
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 9"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:mode:x11-mouse",
+      "mnemonic": "X11-MOUSE",
+      "syntax": "CSI ? 1000 h / CSI ? 1000 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1000
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1000"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:mode:xterm-allow-80-132",
+      "mnemonic": "XTERM-ALLOW-80-132",
+      "syntax": "CSI ? 40 h / CSI ? 40 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 40
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 40—xterm allow 80/132"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-alt-sends-escape",
+      "mnemonic": "XTERM-ALT-SENDS-ESCAPE",
+      "syntax": "CSI ? 1039 h / CSI ? 1039 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1039
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1039—xterm Alt sends escape"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-alternate-screen-switching-permission",
+      "mnemonic": "XTERM-ALTERNATE-SCREEN-SWITCHING-PERMISSION",
+      "syntax": "CSI ? 1046 h / CSI ? 1046 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1046
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1046—xterm alternate-screen switching permission"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-alternate-scroll",
+      "mnemonic": "XTERM-ALTERNATE-SCROLL",
+      "syntax": "CSI ? 1007 h / CSI ? 1007 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1007
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1007—xterm alternate scroll"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-bell-urgency",
+      "mnemonic": "XTERM-BELL-URGENCY",
+      "syntax": "CSI ? 1042 h / CSI ? 1042 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1042
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1042—xterm bell urgency"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-cjk-width-resource-report",
+      "mnemonic": "XTERM-CJK-WIDTH-RESOURCE-REPORT",
+      "syntax": "CSI ? 1021 h / CSI ? 1021 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1021
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1021—xterm CJK width resource report"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-curses-fix",
+      "mnemonic": "XTERM-CURSES-FIX",
+      "syntax": "CSI ? 41 h / CSI ? 41 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 41
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 41—xterm curses fix"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-delete-sends-del",
+      "mnemonic": "XTERM-DELETE-SENDS-DEL",
+      "syntax": "CSI ? 1037 h / CSI ? 1037 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1037
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1037—xterm Delete sends DEL"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-eight-bit-input",
+      "mnemonic": "XTERM-EIGHT-BIT-INPUT",
+      "syntax": "CSI ? 1034 h / CSI ? 1034 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1034
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1034—xterm eight-bit input"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-emoji-width-resource-report",
+      "mnemonic": "XTERM-EMOJI-WIDTH-RESOURCE-REPORT",
+      "syntax": "CSI ? 1022 h / CSI ? 1022 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1022
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1022—xterm emoji width resource report"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-fast-scroll",
+      "mnemonic": "XTERM-FAST-SCROLL",
+      "syntax": "CSI ? 1014 h / CSI ? 1014 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1014
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1014—xterm fast scroll"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-focus-reporting",
+      "mnemonic": "XTERM-FOCUS-REPORTING",
+      "syntax": "CSI ? 1004 h / CSI ? 1004 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1004
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1004—xterm focus reporting"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-hilite-mouse-tracking",
+      "mnemonic": "XTERM-HILITE-MOUSE-TRACKING",
+      "syntax": "CSI ? 1001 h / CSI ? 1001 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1001
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1001—xterm hilite mouse tracking"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-hp-function-keys",
+      "mnemonic": "XTERM-HP-FUNCTION-KEYS",
+      "syntax": "CSI ? 1052 h / CSI ? 1052 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1052
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1052—xterm HP function keys"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-keep-clipboard",
+      "mnemonic": "XTERM-KEEP-CLIPBOARD",
+      "syntax": "CSI ? 1044 h / CSI ? 1044 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1044
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1044—xterm keep clipboard"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-keep-selection",
+      "mnemonic": "XTERM-KEEP-SELECTION",
+      "syntax": "CSI ? 1040 h / CSI ? 1040 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1040
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1040—xterm keep selection"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-legacy-keyboard-emulation",
+      "mnemonic": "XTERM-LEGACY-KEYBOARD-EMULATION",
+      "syntax": "CSI ? 1060 h / CSI ? 1060 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1060
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1060—xterm legacy keyboard emulation"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-margin-bell-decgpcm",
+      "mnemonic": "XTERM-MARGIN-BELL-DECGPCM",
+      "syntax": "CSI ? 44 h / CSI ? 44 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 44
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 44—xterm margin bell / DECGPCM"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-meta-sends-escape",
+      "mnemonic": "XTERM-META-SENDS-ESCAPE",
+      "syntax": "CSI ? 1036 h / CSI ? 1036 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1036
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1036—xterm Meta sends escape"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-numlock-modifiers",
+      "mnemonic": "XTERM-NUMLOCK-MODIFIERS",
+      "syntax": "CSI ? 1035 h / CSI ? 1035 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1035
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1035—xterm NumLock modifiers"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-pop-on-bell",
+      "mnemonic": "XTERM-POP-ON-BELL",
+      "syntax": "CSI ? 1043 h / CSI ? 1043 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1043
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1043—xterm pop on bell"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-private-width-resource-report",
+      "mnemonic": "XTERM-PRIVATE-WIDTH-RESOURCE-REPORT",
+      "syntax": "CSI ? 1023 h / CSI ? 1023 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1023
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1023—xterm private width resource report"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-readline-character-quoting",
+      "mnemonic": "XTERM-READLINE-CHARACTER-QUOTING",
+      "syntax": "CSI ? 2005 h / CSI ? 2005 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 2005
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 2005—xterm readline character quoting"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-readline-mouse-button-1",
+      "mnemonic": "XTERM-READLINE-MOUSE-BUTTON-1",
+      "syntax": "CSI ? 2001 h / CSI ? 2001 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 2001
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 2001—xterm readline mouse button 1"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-readline-mouse-button-2",
+      "mnemonic": "XTERM-READLINE-MOUSE-BUTTON-2",
+      "syntax": "CSI ? 2002 h / CSI ? 2002 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 2002
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 2002—xterm readline mouse button 2"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-readline-mouse-button-3",
+      "mnemonic": "XTERM-READLINE-MOUSE-BUTTON-3",
+      "syntax": "CSI ? 2003 h / CSI ? 2003 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 2003
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 2003—xterm readline mouse button 3"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-readline-newline-paste",
+      "mnemonic": "XTERM-READLINE-NEWLINE-PASTE",
+      "syntax": "CSI ? 2006 h / CSI ? 2006 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 2006
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 2006—xterm readline newline paste"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-sco-function-keys",
+      "mnemonic": "XTERM-SCO-FUNCTION-KEYS",
+      "syntax": "CSI ? 1053 h / CSI ? 1053 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1053
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1053—xterm SCO function keys"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-select-to-clipboard",
+      "mnemonic": "XTERM-SELECT-TO-CLIPBOARD",
+      "syntax": "CSI ? 1041 h / CSI ? 1041 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1041
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1041—xterm select to clipboard"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-sgr-pixel-mouse",
+      "mnemonic": "XTERM-SGR-PIXEL-MOUSE",
+      "syntax": "CSI ? 1016 h / CSI ? 1016 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1016
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1016—xterm SGR pixel mouse"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-sun-function-keys",
+      "mnemonic": "XTERM-SUN-FUNCTION-KEYS",
+      "syntax": "CSI ? 1051 h / CSI ? 1051 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1051
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1051—xterm Sun function keys"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-termcap-function-keys",
+      "mnemonic": "XTERM-TERMCAP-FUNCTION-KEYS",
+      "syntax": "CSI ? 1050 h / CSI ? 1050 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1050
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1050—xterm termcap function keys"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-utf-8-resource-report",
+      "mnemonic": "XTERM-UTF-8-RESOURCE-REPORT",
+      "syntax": "CSI ? 1020 h / CSI ? 1020 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1020
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1020—xterm UTF-8 resource report"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xterm-vt220-keyboard-emulation",
+      "mnemonic": "XTERM-VT220-KEYBOARD-EMULATION",
+      "syntax": "CSI ? 1061 h / CSI ? 1061 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1061
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1061—xterm VT220 keyboard emulation"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xtlogging-graphic-print-background",
+      "mnemonic": "XTLOGGING-GRAPHIC-PRINT-BACKGROUND",
+      "syntax": "CSI ? 46 h / CSI ? 46 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 46
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 46—XTLOGGING / graphic print background"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xtrevwrap",
+      "mnemonic": "XTREVWRAP",
+      "syntax": "CSI ? 45 h / CSI ? 45 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 45
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 45—XTREVWRAP—Reverse Wraparound"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:mode:xtrevwrap2",
+      "mnemonic": "XTREVWRAP2",
+      "syntax": "CSI ? 1045 h / CSI ? 1045 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1045
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1045—XTREVWRAP2—Extended Reverse Wraparound"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+    },
+    {
+      "id": "xterm:osc:osc-0",
+      "mnemonic": "OSC-0",
+      "syntax": "OSC 0 ; title ST",
+      "selector": {
+        "kind": "osc",
+        "command": 0
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 0—Icon and window title"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; owned by the later OSC title/cwd/hyperlink/palette/clipboard policy task."
+    },
+    {
+      "id": "xterm:osc:osc-1",
+      "mnemonic": "OSC-1",
+      "syntax": "OSC 1 ; title ST",
+      "selector": {
+        "kind": "osc",
+        "command": 1
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 1—Icon title"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; owned by the later OSC title/cwd/hyperlink/palette/clipboard policy task."
+    },
+    {
+      "id": "xterm:osc:osc-10",
+      "mnemonic": "OSC-10",
+      "syntax": "OSC 10 ; Pt ST",
+      "selector": {
+        "kind": "osc",
+        "command": 10
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 10—Dynamic foreground color"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Single bounded foreground mutation/query is implemented; chained dynamic-color parameters are not."
+    },
+    {
+      "id": "xterm:osc:osc-104",
+      "mnemonic": "OSC-104",
+      "syntax": "OSC 104 ; Pt ST",
+      "selector": {
+        "kind": "osc",
+        "command": 104
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 104—Reset ANSI color"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:osc:osc-11",
+      "mnemonic": "OSC-11",
+      "syntax": "OSC 11 ; Pt ST",
+      "selector": {
+        "kind": "osc",
+        "command": 11
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 11—Dynamic background color"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Single bounded background mutation/query is implemented; chained dynamic-color parameters are not."
+    },
+    {
+      "id": "xterm:osc:osc-110",
+      "mnemonic": "OSC-110",
+      "syntax": "OSC 110 ; Pt ST",
+      "selector": {
+        "kind": "osc",
+        "command": 110
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 110—Reset foreground color"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:osc:osc-111",
+      "mnemonic": "OSC-111",
+      "syntax": "OSC 111 ; Pt ST",
+      "selector": {
+        "kind": "osc",
+        "command": 111
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 111—Reset background color"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "xterm:osc:osc-112",
+      "mnemonic": "OSC-112",
+      "syntax": "OSC 112 ST",
+      "selector": {
+        "kind": "osc",
+        "command": 112
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 112—Reset cursor color"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; owned by the later OSC policy task."
+    },
+    {
+      "id": "xterm:osc:osc-12",
+      "mnemonic": "OSC-12",
+      "syntax": "OSC 12 ; color ST",
+      "selector": {
+        "kind": "osc",
+        "command": 12
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 12—Cursor color"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; owned by the later OSC policy task."
+    },
+    {
+      "id": "xterm:osc:osc-2",
+      "mnemonic": "OSC-2",
+      "syntax": "OSC 2 ; title ST",
+      "selector": {
+        "kind": "osc",
+        "command": 2
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 2—Window title"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; owned by the later OSC title/cwd/hyperlink/palette/clipboard policy task."
+    },
+    {
+      "id": "xterm:osc:osc-4",
+      "mnemonic": "OSC-4",
+      "syntax": "OSC 4 ; Pt ST",
+      "selector": {
+        "kind": "osc",
+        "command": 4
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 4—Change/query ANSI color"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Bounded indexed RGB mutation/query is implemented; xterm color names and every XParseColor form are not."
+    },
+    {
+      "id": "xterm:osc:osc-52",
+      "mnemonic": "OSC-52",
+      "syntax": "OSC 52 ; selection ; data ST",
+      "selector": {
+        "kind": "osc",
+        "command": 52
+      },
+      "support": "unsupported",
+      "disposition": "reject",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, OSC 52—Manipulate Selection Data"
+        }
+      ],
+      "implementationEvidence": [],
+      "testEvidence": [],
+      "notes": "Not implemented; security-sensitive clipboard access requires the later explicit OSC policy task."
     }
   ]
 }

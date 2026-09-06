@@ -1,16 +1,22 @@
 import 'dart:io';
 
+import '../tool/generate_terminal_compatibility_inventory.dart'
+    as inventory_generator;
+import '../tool/generate_terminal_compatibility_summary.dart'
+    as summary_generator;
 import '../tool/terminal_compatibility_inventory.dart';
 
 void main() => runTerminalCompatibilityInventoryTests();
 
 void runTerminalCompatibilityInventoryTests() {
-  _testPinnedFoundationInventory();
+  _testCompletePinnedInventory();
+  _testGeneratedArtifactsAreFresh();
+  _testImplementationSurfaceReconciliation();
   _testSchemaRejectsMalformedRecords();
   _testSelectorBoundsAndTaxonomy();
 }
 
-void _testPinnedFoundationInventory() {
+void _testCompletePinnedInventory() {
   final TerminalCompatibilityInventory inventory =
       TerminalCompatibilityInventory.load(
         File(defaultTerminalCompatibilityInventoryPath),
@@ -22,18 +28,25 @@ void _testPinnedFoundationInventory() {
       inventory.supportCounts;
   _expect(
     inventory.version == 1 &&
-        inventory.inventoryRevision == 1 &&
-        inventory.scope == 'schema-foundation' &&
-        inventory.sourcePins.length == 3 &&
-        inventory.records.length == 10 &&
-        TerminalCompatibilitySelectorKind.values.every(
-          (TerminalCompatibilitySelectorKind kind) => kinds[kind] == 1,
-        ) &&
-        support[TerminalCompatibilitySupport.implemented] == 5 &&
-        support[TerminalCompatibilitySupport.partial] == 1 &&
-        support[TerminalCompatibilitySupport.safeIgnore] == 4 &&
-        support[TerminalCompatibilitySupport.unsupported] == 0,
-    'foundation inventory covers every selector kind with exact totals',
+        inventory.inventoryRevision == 2 &&
+        inventory.scope == 'complete-baseline' &&
+        inventory.sourcePins.length == 4 &&
+        inventory.records.length == 260 &&
+        kinds[TerminalCompatibilitySelectorKind.c0] == 10 &&
+        kinds[TerminalCompatibilitySelectorKind.c1] == 9 &&
+        kinds[TerminalCompatibilitySelectorKind.esc] == 35 &&
+        kinds[TerminalCompatibilitySelectorKind.csi] == 101 &&
+        kinds[TerminalCompatibilitySelectorKind.osc] == 14 &&
+        kinds[TerminalCompatibilitySelectorKind.dcs] == 8 &&
+        kinds[TerminalCompatibilitySelectorKind.sos] == 1 &&
+        kinds[TerminalCompatibilitySelectorKind.pm] == 1 &&
+        kinds[TerminalCompatibilitySelectorKind.apc] == 1 &&
+        kinds[TerminalCompatibilitySelectorKind.mode] == 80 &&
+        support[TerminalCompatibilitySupport.implemented] == 71 &&
+        support[TerminalCompatibilitySupport.partial] == 14 &&
+        support[TerminalCompatibilitySupport.safeIgnore] == 11 &&
+        support[TerminalCompatibilitySupport.unsupported] == 164,
+    'complete baseline covers every selector kind with exact totals',
   );
   final TerminalCompatibilitySourcePin ecma = inventory.sourcePins.singleWhere(
     (TerminalCompatibilitySourcePin pin) => pin.id == 'ecma-48-5e',
@@ -44,6 +57,10 @@ void _testPinnedFoundationInventory() {
   final TerminalCompatibilitySourcePin xterm = inventory.sourcePins.singleWhere(
     (TerminalCompatibilitySourcePin pin) => pin.id == 'xterm-411',
   );
+  final TerminalCompatibilitySourcePin iterm = inventory.sourcePins.singleWhere(
+    (TerminalCompatibilitySourcePin pin) =>
+        pin.id == 'iterm2-escape-codes-2026-09-07',
+  );
   _expect(
     ecma.artifactBytes == 1607865 &&
         ecma.artifactSha256 ==
@@ -51,14 +68,17 @@ void _testPinnedFoundationInventory() {
         dec.artifactBytes == 3378497 &&
         dec.artifactSha256 ==
             '440bbee110eb75027a06b5b375683fbc87cb739edac32899005ad46981c7d514' &&
+        iterm.artifactBytes == 31258 &&
+        iterm.artifactSha256 ==
+            'b297c4fcd7ea35908e145420d743fe98fc0ee5bbb5844ed4a1f35f2d547cac98' &&
         xterm.artifactBytes == 1633400 &&
         xterm.documentPath == 'xterm-411/ctlseqs.ms' &&
         xterm.documentSha256 ==
             '69773380309da4c8b5d4ec9646eec703c47bc41db29a8efa5b94c30798c72349' &&
         inventory.machineLine() ==
-            'TERMINAL_COMPATIBILITY_INVENTORY_CHECK version=1 revision=1 '
-                'sources=3 records=10 implemented=5 partial=1 safe_ignore=4 '
-                'unsupported=0',
+            'TERMINAL_COMPATIBILITY_INVENTORY_CHECK version=1 revision=2 '
+                'sources=4 records=260 implemented=71 partial=14 '
+                'safe_ignore=11 unsupported=164',
     'primary source pins and content-free summary remain exact',
   );
   _expectThrows<UnsupportedError>(
@@ -69,6 +89,106 @@ void _testPinnedFoundationInventory() {
     () => kinds[TerminalCompatibilitySelectorKind.c0] = 9,
     'selector counts are immutable',
   );
+}
+
+void _testGeneratedArtifactsAreFresh() {
+  final File inventoryFile = File(defaultTerminalCompatibilityInventoryPath);
+  final TerminalCompatibilityInventory inventory =
+      TerminalCompatibilityInventory.load(
+        inventoryFile,
+        repositoryRoot: Directory.current,
+      );
+  _expect(
+    inventory_generator.terminalCompatibilityInventoryIsFresh(inventoryFile),
+    'checked-in inventory matches its product-derived generator',
+  );
+  _expect(
+    summary_generator.terminalCompatibilitySummaryIsFresh(
+      File(summary_generator.defaultTerminalCompatibilitySummaryPath),
+      inventory,
+    ),
+    'checked-in human-readable summary matches the inventory',
+  );
+
+  final Directory temporary = Directory.systemTemp.createTempSync(
+    'dart-terminal-compatibility-generation-',
+  );
+  try {
+    final File missing = File.fromUri(temporary.uri.resolve('missing.json'));
+    final File stale = File.fromUri(temporary.uri.resolve('stale.json'))
+      ..writeAsStringSync('{}\n');
+    final File exact = File.fromUri(temporary.uri.resolve('exact.json'))
+      ..writeAsStringSync(
+        inventory_generator.generateTerminalCompatibilityInventorySource(),
+      );
+    _expect(
+      !inventory_generator.terminalCompatibilityInventoryIsFresh(missing) &&
+          !inventory_generator.terminalCompatibilityInventoryIsFresh(stale) &&
+          inventory_generator.terminalCompatibilityInventoryIsFresh(exact),
+      'inventory freshness rejects missing/stale output and accepts exact output',
+    );
+
+    final File summaryMissing = File.fromUri(
+      temporary.uri.resolve('missing.md'),
+    );
+    final File summaryStale = File.fromUri(temporary.uri.resolve('stale.md'))
+      ..writeAsStringSync('stale\n');
+    final File summaryExact = File.fromUri(temporary.uri.resolve('exact.md'))
+      ..writeAsStringSync(
+        summary_generator.generateTerminalCompatibilitySummary(inventory),
+      );
+    _expect(
+      !summary_generator.terminalCompatibilitySummaryIsFresh(
+            summaryMissing,
+            inventory,
+          ) &&
+          !summary_generator.terminalCompatibilitySummaryIsFresh(
+            summaryStale,
+            inventory,
+          ) &&
+          summary_generator.terminalCompatibilitySummaryIsFresh(
+            summaryExact,
+            inventory,
+          ),
+      'summary freshness rejects missing/stale output and accepts exact output',
+    );
+  } finally {
+    temporary.deleteSync(recursive: true);
+  }
+}
+
+void _testImplementationSurfaceReconciliation() {
+  final TerminalCompatibilityInventory inventory =
+      TerminalCompatibilityInventory.load(
+        File(defaultTerminalCompatibilityInventoryPath),
+        repositoryRoot: Directory.current,
+      );
+  final File manifest = File(defaultTerminalImplementationSurfacePath);
+  _expect(
+    inventory.reconcileImplementationSurface(manifest) ==
+        'TERMINAL_COMPATIBILITY_RECONCILIATION_PASS implementation=85 '
+            'safe_ignore_families=4',
+    'all product declarations and safe-ignore families reconcile exactly',
+  );
+
+  final Directory temporary = Directory.systemTemp.createTempSync(
+    'dart-terminal-compatibility-reconciliation-',
+  );
+  try {
+    final File drifted = File.fromUri(temporary.uri.resolve('drifted.json'))
+      ..writeAsStringSync(
+        manifest.readAsStringSync().replaceFirst(
+          '"key": "c0:7"',
+          '"key": "c0:6"',
+        ),
+      );
+    _expectThrowsInventory(
+      () => inventory.reconcileImplementationSurface(drifted),
+      'implementation reconciliation differs',
+    );
+  } finally {
+    temporary.deleteSync(recursive: true);
+  }
 }
 
 void _testSchemaRejectsMalformedRecords() {
@@ -91,7 +211,7 @@ void _testSchemaRejectsMalformedRecords() {
   );
   _expectInvalid(
     fixture.replaceFirst(
-      'lib/src/terminal_core/terminal_screen_parser_sink.dart#dispatchDcs',
+      'lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch',
       '../terminal_screen_parser_sink.dart#dispatchDcs',
     ),
     'unsafe path',
@@ -103,6 +223,13 @@ void _testSchemaRejectsMalformedRecords() {
   _expectInvalid(
     fixture.replaceFirst('"source": "xterm-411"', '"source": "missing-source"'),
     'unknown source',
+  );
+  _expectInvalid(
+    fixture.replaceFirst(
+      '"support": "unsupported",\n      "disposition": "reject"',
+      '"support": "unsupported",\n      "disposition": "execute"',
+    ),
+    'unsupported support requires reject disposition',
   );
 }
 
@@ -117,7 +244,7 @@ void _testSelectorBoundsAndTaxonomy() {
     'outside the c0 range',
   );
   _expectInvalid(
-    fixture.replaceFirst('"id": "ecma48:c1:ind"', '"id": "ecma48:c0:ind"'),
+    fixture.replaceFirst('"id": "ecma48:c1:nel"', '"id": "ecma48:c0:nel"'),
     'selector kind differs',
   );
   _expectInvalid(
@@ -129,10 +256,25 @@ void _testSelectorBoundsAndTaxonomy() {
   );
   _expectInvalid(
     fixture.replaceFirst(
-      '"intermediates": [36],\n        "finalByte": 113',
-      '"intermediates": [48],\n        "finalByte": 113',
+      '"intermediates": [\n          36\n        ],\n        "finalByte": 112',
+      '"intermediates": [\n          48\n        ],\n        "finalByte": 112',
     ),
     'outside 32..47',
+  );
+}
+
+void _expectThrowsInventory(void Function() body, String messagePart) {
+  try {
+    body();
+  } on TerminalCompatibilityInventoryException catch (error) {
+    _expect(
+      error.message.contains(messagePart),
+      'inventory operation failed for the expected reason: $messagePart; $error',
+    );
+    return;
+  }
+  throw StateError(
+    'test failed: inventory operation was accepted: $messagePart',
   );
 }
 

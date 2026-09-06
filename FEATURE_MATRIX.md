@@ -1,6 +1,6 @@
 # Dart Terminal feature matrix
 
-最終更新: 2026-09-06<br>
+最終更新: 2026-09-07<br>
 比較基準: [`ghostty-org/ghostty@d4d8f62262cb1a974a7d2470d5f79f811fab15e4`](https://github.com/ghostty-org/ghostty/tree/d4d8f62262cb1a974a7d2470d5f79f811fab15e4)  
 対象: macOS 14 以降、Flutter 不使用<br>
 主要実機 baseline: Apple M1/arm64
@@ -44,6 +44,12 @@ font、input、config、macOS UI、release workflow の実装とテストを確�
 [configuration reference](https://ghostty.org/docs/config/reference) は利用者向け意味の
 照合に使った。公式サイトは更新されるため、機能凍結の根拠は常に pinned source を
 優先する。
+
+Phase 6 の標準互換性判断は、固定した一次資料と製品コードを照合した
+[`sequence/mode inventory`](compatibility/sequence_mode_inventory.json) を正本とし、
+人が読む場合は生成済みの
+[`support baseline`](docs/phase6/sequence-mode-support.md) を参照する。未実装という
+短い表記だけで safe-ignore と reject を混同せず、部分実装の境界も同サマリーに従う。
 
 現在の Dart Terminal は、M1/arm64 Developer JIT / Release AOT の未改変 AppKit
 main-thread root、manifest-declared Dart worker helper、dependency-owned
@@ -100,13 +106,13 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| CAP-01 | DA/DA2、DSR/CPR、DEC private mode、DECRQM の request/reply | P0 | 3/6 | `G:src/terminal/device_attributes.zig`, `G:src/terminal/device_status.zig`, `G:src/terminal/modes.zig` | bounded 7-bit encoder、terminal-core dispatch、raw PTY parse、native write queue connectionを完了 |
-| CAP-02 | application cursor/keypad、bracketed paste、focus report | P0 | 3/5 | `G:src/input/key_encode.zig`, `G:src/terminal/paste.zig`, `G:src/terminal/focus.zig` | 未実装 |
+| CAP-01 | DA/DA2、DSR/CPR、DEC private mode、DECRQM の request/reply | P0 | 3/6 | `G:src/terminal/device_attributes.zig`, `G:src/terminal/device_status.zig`, `G:src/terminal/modes.zig` | bounded 7-bit encoder、terminal-core dispatch、raw PTY parse、native write queue connectionを完了。DSR parameter と private mode の対応境界はPhase 6 inventoryで明記 |
+| CAP-02 | application cursor/keypad、bracketed paste、focus report | P0 | 3/5 | `G:src/input/key_encode.zig`, `G:src/terminal/paste.zig`, `G:src/terminal/focus.zig` | application cursor/keypadとbracketed pasteを完了。focus report（DEC 1004）はPhase 6 inventoryでunsupportedとして後続taskへ割当 |
 | CAP-03 | mouse X10、UTF-8、URXVT、SGR mode/encoding | P0 | 3/5 | `G:src/terminal/mouse.zig`, `G:src/input/mouse_encode.zig` | DEC mode state、bounded exact encoder、AppKit-to-cell routing、実PTY製品受け入れをM1両modeで完了 |
 | CAP-04 | xterm-256color 互換 terminfo と SSH fallback | P0/P1 | 6/8 | `G:src/terminfo/`, `G:src/cli/ssh.zig` | 未実装 |
-| CAP-05 | window/tab title、OSC 7 cwd、OSC 8 hyperlink、palette/default color query/change | P0 | 3/6 | `G:src/terminal/osc/parsers/` | bounded OSC 8 open/close・immutable identity・Metal hover・safe Command-clickと、OSC 4/10/11 palette/default色query/change、104/110/111 resetを完了。title/cwdは後続 |
+| CAP-05 | window/tab title、OSC 7 cwd、OSC 8 hyperlink、palette/default color query/change | P0 | 3/6 | `G:src/terminal/osc/parsers/` | bounded OSC 8 open/close・immutable identity・Metal hover・safe Command-clickと、OSC 4/10/11 palette/default色query/change、104/110/111 resetを完了。title/cwdはPhase 6 inventoryで明示的に後続へ割当 |
 | CAP-06 | OSC 52 は read/write policy、confirmation、size limit 付き | P0/P1 | 6/9 | `G:src/terminal/clipboard.zig`, `G:src/terminal/osc/parsers/clipboard_operation.zig` | 未実装 |
-| CAP-07 | XTGETTCAP、DECRQSS、window/size report | P1 | 6 | `G:src/terminal/dcs.zig`, `G:src/terminal/size_report.zig` | 未実装 |
+| CAP-07 | XTGETTCAP、DECRQSS、window/size report | P1 | 6 | `G:src/terminal/dcs.zig`, `G:src/terminal/size_report.zig` | DCS payloadを上限付きで消費しsafe-ignore。reply semanticsとwindow/size reportは未実装 |
 | CAP-08 | Kitty keyboard と progressive enhancement。legacy encoding を regression させない | P1 | 9 | `G:src/input/kitty.zig`, `G:src/terminal/kitty/key.zig` | 未実装 |
 | CAP-09 | synchronized output/rendering に timeout と bounded pending state | P1 | 9 | `G:src/terminal/modes.zig`, `G:src/renderer/State.zig` | 未実装 |
 | CAP-10 | light/dark notification、extended size/Unicode reports | P1 | 9 | `G:src/terminal/size_report.zig`, `G:src/terminal/kitty/color.zig` | 未実装 |
@@ -203,7 +209,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
 | QA-01 | byte corpus、all chunk splits、property/fuzz、snapshot diagnostics | P0 | 3/6 | parser tests, `G:src/terminal/snapshot/`, `G:test/fuzz-libghostty/` | product parser全family・UTF-8 precedence、version 1 final-state/diagnostics、4件のsemantic corpusとshell/less/top/vim記録をall-split/bytewise検証。固定seed property、7件の境界別fuzz seed、112 mutationを完了。black-box differentialはPhase 6 |
-| QA-02 | xterm/Ghostty/Kitty black-box differential と real-app matrix。bug を最小 byte regression に還元 | P1 | 6 | `G:src/terminal/` tests and VT C examples | 未実装 |
+| QA-02 | xterm/Ghostty/Kitty black-box differential と real-app matrix。bug を最小 byte regression に還元 | P1 | 6 | `G:src/terminal/` tests and VT C examples | 260件のECMA-48/DEC/xterm/iTerm selector・mode baselineと85件の製品実装照合を完了。black-box differentialとreal-app matrixは次の順序付きtask |
 | PERF-01 | parser AOT ≥100 MiB/s、AppKit event p95 <1 ms、key→PTY p95 <2 ms | P0 | 0–11 | `G:src/benchmark/`, `G:macos/Tests/BenchmarkTests.swift` | product parserはRelease AOT反復で107.67–111.92 MiB/sを確認。AppKit event/key→PTYの継続gateは後続Phase |
 | PERF-02 | 100 MiB burst で UI hang 0、bounded memory/queue。1 pane flood が他 pane latency を2倍にしない | P0/P1 | 2/7/11 | Ghostty termio/renderer threaded design | PTY reactorの連続output下force-close fairness完了。100 MiB/UI/複数paneは後続 |
 | REL-01 | child/GPU/runtime-worker fault、late event/double dispose、sleep/wake/display change、24/72h soak | P0/P1 | 1–11 | pinned tests, crash and renderer recovery paths | M1 両 mode の process fault、malformed/late event、double dispose/shutdown、1,000 Window/View leak gate、early/nonzero diagnostic metadata、GPU renderer failure/replacement 完了。sleep/soak は後続 |

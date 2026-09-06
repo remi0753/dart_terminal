@@ -4,7 +4,7 @@
 
 - Date started: 2026-09-06
 - Scope: first Phase 6 compatibility-hardening roadmap item
-- Status: subtasks 1–2 complete; subtask 3 pending
+- Status: all three subtasks complete
 
 ## Purpose and background
 
@@ -207,3 +207,63 @@ complete.
   `CI=true make test`. The full gate passed parser-table freshness, schema
   validation, implementation-manifest freshness, formatting of 146 files,
   full static analysis, and the complete test runner.
+- 2026-09-07: after commit `439ec3e`, reread Phase 6 and confirmed subtask 3 is
+  the first unchecked item. The active goal is a reviewed, human-readable
+  ECMA/DEC/xterm baseline whose support totals reconcile exactly with all 65
+  selector shapes, 20 modes, and four bounded-unsupported families in the
+  implementation manifest. Implementing gaps and starting differential tests
+  remain out of scope.
+- 2026-09-07: the host did not provide `pdftotext`; the bundled workspace PDF
+  runtime extracted all 4,644 ECMA-48 lines and all 25,031 VT510 manual lines
+  instead. Relevant rendered pages were visually checked after extraction:
+  ECMA's presentation-control table and SGR definition preserve the notation
+  columns/parameters, while the DEC ANSI table preserves its byte grid. The
+  bundled DEC render emitted Fontconfig cache warnings because its packaged
+  default cache is not writable, but produced readable PNG output and did not
+  change extracted content or source hashes.
+- 2026-09-07: full-text review of pinned xterm Patch #411 found that it does not
+  document OSC 8 hyperlinks. The earlier foundation citation was therefore
+  incorrect. Added the exact official iTerm2 Proprietary Escape Codes page as
+  a fourth pin (31,258 bytes, SHA-256
+  `b297c4fcd7ea35908e145420d743fe98fc0ee5bbb5844ed4a1f35f2d547cac98`)
+  for OSC 7 and OSC 8, and explicitly prohibited attributing OSC 8 to xterm.
+- 2026-09-07: generated the revision 2 `complete-baseline` inventory from the
+  product declarations plus reviewed gap tables. It contains 260 sorted,
+  selector-unique records: 71 implemented, 14 partial, 11 bounded safe-ignore,
+  and 164 unsupported/reject. Selector-kind totals are 10 C0, 9 C1, 35 ESC,
+  101 CSI, 14 OSC, 8 DCS, 1 each SOS/PM/APC, and 80 modes. The 85
+  implemented/partial records exactly reconcile to all 65 sequence and 20 mode
+  product declarations; safe-ignore records cover all four bounded string
+  families.
+- 2026-09-07: the baseline includes all product declarations, terminal-display
+  ECMA controls, modern-emulator-relevant VT100–VT510 families, every DEC
+  private mode number enumerated by pinned xterm #411, and high-use xterm/iTerm
+  CSI/DCS/OSC families. Historical transmission/paged typography, exhaustive
+  NRC finals, physical printer/modem variants, Tek details, host-bound key
+  output, and later Kitty/Ghostty protocols are explicitly outside this bounded
+  review, not silently supported.
+- 2026-09-07: a first formatter parse failed because human-readable DCS syntax
+  used unescaped Dart `$` literals. Escaping the display-only strings fixed the
+  source without changing selector bytes. A later readability review changed
+  byte 0x20 in intermediate syntax from literal whitespace to `SP`, yielding
+  unambiguous forms such as `CSI SP q`.
+- 2026-09-07: generated a human support summary containing the reviewed
+  boundary, source pins, exact totals, all partial limits, all bounded ignores,
+  later-task ownership, and review acceptance. `FEATURE_MATRIX.md` now links to
+  the JSON authority and generated summary and distinguishes implemented,
+  partial, safe-ignore, and unsupported behavior for affected capabilities.
+- 2026-09-07: the first expanded focused regression run failed only because a
+  malformed-fixture assertion expected an older validator message; the second
+  exposed a stale one-line JSON fixture shape after pretty-print generation.
+  Both tests were corrected to assert the current semantic rule and actual
+  multi-line selector form. No validator rule or production classification was
+  weakened. Focused analysis and the subsequent inventory regression passed;
+  the generator/validator/summary freshness gate also passed with 260/85/4
+  exact totals.
+- 2026-09-07: subtask 3 final `CI=true make test` passed inventory generation
+  freshness, strict schema/source/evidence validation, exact implementation
+  reconciliation, generated-summary freshness, the independent implementation
+  manifest check, formatting of 148 files, full static analysis, and the entire
+  Dart Terminal test runner. No terminal runtime semantics changed in this
+  classification subtask, so a product GUI/PTY run was not required for its
+  acceptance.
