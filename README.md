@@ -14,6 +14,8 @@ pane-owned persistent login shell です。Phase 0 の native spike source は�
 model、および CoreText/Metal renderer は製品実装へ移行済みです。IME と入力source
 受け入れmatrixに加え、terminal mouse reporting、local selection、drag autoscroll、
 precision/momentum trackpad scrollも製品経路へ接続済みです。
+`TerminalMetalView` は同じ可視 viewport、local selection、cursor、cell metricsを
+boundedなread-only text areaとしてVoiceOverにも公開します。
 
 現在選定している製品 contract は、未改変の公式 Dart だけを使う AppKit root と、
 独立して回収・再生成できる公式 Dart 子プロセス worker です。M1/arm64 Developer JIT
@@ -122,7 +124,7 @@ precision/momentum trackpad scrollも製品経路へ接続済みです。
   glyph atlas、native Metal atlas、full damageを同じ公開世代で切り替えるatomic rebuild
 - signed monotonic時刻でcursor blinkとvisual BELを各1 deadlineに制限するpresentation
   clock、visibility/occlusion中のbuild/submit停止、hidden tickを再生しないresume full redraw
-- renderer ABI v9のtyped device/shader/command failure state、bounded drawable
+- renderer ABI v10のtyped device/shader/command failure state、bounded drawable
   unavailable観測、READY frameを保持する明示的on-demand presentation retry、
   最大3回のrenderer再生成、旧submission pinの一括解放、全atlas再公開とfull redraw、
   native GPU completion時間と受理済みatlas upload count/bytes、Dart frame
@@ -135,6 +137,9 @@ precision/momentum trackpad scrollも製品経路へ接続済みです。
 - bounded immutable OSC 8 linkをscreen/history/reflowへ保持し、visible cellのhoverを
   Metal underlineで表示する。exact Command-primary-clickだけを再解決して所有し、
   `http`/`https`/`mailto` allowlistをDart/AppKitの両境界で通ったtargetだけを開く
+- 現在の可視physical rowだけをUTF-16 documentへ投影し、terminal column境界、local
+  selection、独立cursor、logical cell geometry、first-responder focusを、完全コピー済みの
+  `TerminalMetalView` accessibility text areaから同期的なDart再入なしでVoiceOverへ公開する
 
 ## 起動
 
@@ -304,7 +309,9 @@ make RUNTIME_ARCH=arm64 runtime-terminal-display-integration
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
 smoke、real-PTY live Metal display、lifecycle、bounded traffic、resource stress、
 shutdown fault suiteをまとめて実行します。display suiteはSGR除去、style、soft wrap、
-bottom prompt、newest-only frame boundをDeveloper JIT/Release AOTの実GUIで確認します。
+bottom prompt、newest-only frame boundに加え、PTY由来のvisible text、local selection、
+cursor、native accessibility selector/geometry/focus/notificationをDeveloper JIT/
+Release AOTの実GUIで確認します。
 resource stress は実アプリの Dart API から 1,000 組の Window/View を生成・
 破棄し、毎回 native handle が基準値へ戻ることを確認します。shutdown fault suite は
 malformed/late event、double dispose、worker crash を封じ込め、最終 native handle が 0、

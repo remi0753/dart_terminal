@@ -1712,6 +1712,16 @@ final class TerminalApplication {
       "printf '$wrappedPayload\\n'",
     );
     await pane.submit();
+    final bool accessibility = await _exerciseAccessibilityInput(
+      application,
+      session,
+      surface,
+      window,
+      mouseObservation,
+      selectionOwner,
+      selectionMarker: colorMarker,
+      promptMarker: prompt.trimRight(),
+    );
 
     final Stopwatch deadline = Stopwatch()..start();
     var sgrStripped = false;
@@ -1763,7 +1773,8 @@ final class TerminalApplication {
           mouse &&
           selection &&
           scroll &&
-          hyperlink) {
+          hyperlink &&
+          accessibility) {
         final int? workerProcessId = lifecycle.workerPid;
         _expectLifecycle(
           workerProcessId != null,
@@ -1777,6 +1788,7 @@ final class TerminalApplication {
           'mode_key=$modeKey text_input=$textInput '
           'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
           'scroll=$scroll hyperlink=$hyperlink '
+          'accessibility=$accessibility '
           'font_size=${baseline.fontPointSize.toStringAsFixed(1)} '
           'rows=${screen.rows} '
           'columns=${screen.columns} '
@@ -1800,6 +1812,7 @@ final class TerminalApplication {
       'mode_key=$modeKey text_input=$textInput '
       'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
       'scroll=$scroll hyperlink=$hyperlink '
+      'accessibility=$accessibility '
       'font_size=${baseline.fontPointSize}',
     );
   }
@@ -2762,6 +2775,106 @@ final class TerminalApplication {
       'autoscroll_down=true metal=true local_only=true',
     );
     return true;
+  }
+
+  static Future<bool> _exerciseAccessibilityInput(
+    AppKitApplication application,
+    TerminalSession session,
+    TerminalLiveMetalSurface surface,
+    Window window,
+    _TerminalMouseProductObservation mouseObservation,
+    _TerminalSelectionProductOwner selectionOwner, {
+    required String selectionMarker,
+    required String promptMarker,
+  }) async {
+    await _waitForAsciiMarker(session, selectionMarker);
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+    final _TerminalAsciiPosition position = _findAscii(
+      screen,
+      selectionMarker,
+    )!;
+    final TerminalFontCatalogMetrics metrics = surface.fontMetrics;
+
+    Future<void> inject(AppKitMouseEventKind kind, int column) async {
+      final int generation = selectionOwner.gesture.snapshot.generation;
+      _injectMouseEventForTesting(
+        application,
+        window,
+        kind: kind,
+        x: (column + 0.5) * metrics.cellWidth,
+        y: (position.row + 0.5) * metrics.cellHeight,
+        button: 0,
+        modifiers: 0,
+        clickCount: 1,
+        monotonicNanoseconds: mouseObservation.nextInjectedTimestamp(),
+      );
+      await _waitForSelectionGeneration(selectionOwner, generation + 1);
+    }
+
+    await inject(AppKitMouseEventKind.down, position.column);
+    await inject(
+      AppKitMouseEventKind.dragged,
+      position.column + selectionMarker.length - 1,
+    );
+    await inject(
+      AppKitMouseEventKind.up,
+      position.column + selectionMarker.length - 1,
+    );
+    _expectSelectionText(
+      selectionOwner,
+      selectionMarker,
+      TerminalSelectionUnit.cell,
+    );
+
+    final TerminalSelectionRange? selection =
+        selectionOwner.gesture.snapshot.range;
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 3)) {
+      final TerminalAccessibilitySnapshot projected =
+          TerminalAccessibilitySnapshot.capture(
+            session.terminalScreenSet.viewport,
+            selection: selection,
+            maxUtf8Bytes: TerminalAccessibilityViewSnapshot.maximumUtf8Bytes,
+            maxUtf16CodeUnits:
+                TerminalAccessibilityViewSnapshot.maximumUtf16CodeUnits,
+            maxColumnBoundaries:
+                TerminalAccessibilityViewSnapshot.maximumColumnBoundaries,
+          );
+      final TerminalLiveMetalSurfaceSnapshot published = surface.snapshot();
+      final bool visible =
+          projected.text.contains(selectionMarker) &&
+          projected.text.contains(promptMarker);
+      final bool selected =
+          projected.hasVisibleSelection &&
+          projected.selectedText == selectionMarker &&
+          published.accessibilityHasVisibleSelection &&
+          published.accessibilitySelectionLength == selectionMarker.length;
+      final bool cursor =
+          projected.cursorRange != null &&
+          projected.cursorRow == projected.rows - 1 &&
+          projected.cursorColumn != null &&
+          projected.cursorColumn! >= promptMarker.length &&
+          published.accessibilityHasCursor &&
+          published.accessibilityCursorRow == projected.cursorRow &&
+          published.accessibilityCursorColumn == projected.cursorColumn;
+      final bool synchronized =
+          published.accessibilityGeneration > 0 &&
+          published.accessibilityUtf16Length == projected.utf16Length;
+      if (visible && selected && cursor && synchronized) {
+        surface.debugVerifyAccessibility();
+        stdout.writeln(
+          'TERMINAL_ACCESSIBILITY_TEST visible=true selection=true '
+          'cursor=true native=true focus=true notifications=true',
+        );
+        return true;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw TimeoutException(
+      'terminal accessibility acceptance did not settle without '
+      'publishing content',
+    );
   }
 
   static Future<bool> _exerciseScrollInput(

@@ -815,11 +815,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] viewport hyperlink hit test・Metal hover overlay
   - [x] `dart_appkit` のallowlist済みexternal URL open境界
   - [x] 実AppKit hover/open製品統合と両runtime受け入れ
-- [ ] VoiceOver の最小 visible text/selection/cursor support
+- [x] VoiceOver の最小 visible text/selection/cursor support
   （[`docs/phase5/voiceover-visible-text-selection-cursor.md`](docs/phase5/voiceover-visible-text-selection-cursor.md) を参照して実施）
   - [x] bounded visible UTF-16 snapshotとselection/cursor mapping
   - [x] `TerminalMetalView`のAppKit accessibility contractとchange notification
-  - [ ] 実製品同期と両runtime VoiceOver受け入れ
+  - [x] 実製品同期と両runtime VoiceOver受け入れ
 
 終了条件:
 

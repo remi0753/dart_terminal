@@ -82,6 +82,13 @@ final class TerminalLiveMetalSurfaceSnapshot {
     required this.pendingFrameCount,
     required this.liveAtlasPinCount,
     required this.hasScheduledWork,
+    required this.accessibilityGeneration,
+    required this.accessibilityUtf16Length,
+    required this.accessibilityHasVisibleSelection,
+    required this.accessibilitySelectionLength,
+    required this.accessibilityHasCursor,
+    required this.accessibilityCursorRow,
+    required this.accessibilityCursorColumn,
     this.viewportOffset = 0,
     this.selectionGeneration = 0,
     this.selectionSpanCount = 0,
@@ -109,6 +116,13 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int pendingFrameCount;
   final int liveAtlasPinCount;
   final bool hasScheduledWork;
+  final int accessibilityGeneration;
+  final int accessibilityUtf16Length;
+  final bool accessibilityHasVisibleSelection;
+  final int accessibilitySelectionLength;
+  final bool accessibilityHasCursor;
+  final int accessibilityCursorRow;
+  final int accessibilityCursorColumn;
   final int viewportOffset;
   final int selectionGeneration;
   final int selectionSpanCount;
@@ -161,6 +175,8 @@ final class TerminalLiveMetalSurface {
         throw const TerminalMetalCompositionBackpressureException();
       }
       renderer.bindToView(view);
+      final TerminalAccessibilityClient accessibilityClient =
+          TerminalAccessibilityClient(view);
       final TerminalMetalRendererRecoveryDomain domain =
           TerminalMetalRendererRecoveryDomain.active(
             renderer: renderer,
@@ -184,6 +200,7 @@ final class TerminalLiveMetalSurface {
         shapingCache: shapingCache,
         atlas: atlas,
         initialDomain: domain,
+        accessibilityClient: accessibilityClient,
       );
     } on Object {
       bridge?.abandonRenderer();
@@ -211,8 +228,10 @@ final class TerminalLiveMetalSurface {
     required TerminalShapingCache shapingCache,
     required this.atlas,
     required TerminalMetalRendererRecoveryDomain initialDomain,
+    required TerminalAccessibilityClient accessibilityClient,
   }) : _catalog = catalog,
        _shapingCache = shapingCache,
+       _accessibilityClient = accessibilityClient,
        _logicalWidth = logicalWidth,
        _logicalHeight = logicalHeight,
        _desiredScale = backingScaleFactor,
@@ -316,6 +335,7 @@ final class TerminalLiveMetalSurface {
   final TerminalCaretGeometryPublisher? onCaretGeometryChanged;
   final TerminalMetalRendererConfig rendererConfig;
   final TerminalGlyphAtlas atlas;
+  final TerminalAccessibilityClient _accessibilityClient;
   final Stopwatch _clock = Stopwatch()..start();
   final TerminalDamageOutbox _outbox;
   final TerminalPreeditModel _preeditModel = TerminalPreeditModel();
@@ -351,6 +371,18 @@ final class TerminalLiveMetalSurface {
   int _publishedViewportGeneration = 0;
   int _publishedSelectionGeneration = -1;
   int _publishedProjectionResourceGeneration = 0;
+  int _seenAccessibilityViewportGeneration = 0;
+  int _seenAccessibilitySelectionGeneration = -1;
+  int _accessibilityGeneration = 0;
+  int _accessibilityUtf16Length = 0;
+  bool _accessibilityHasVisibleSelection = false;
+  int _accessibilitySelectionLength = 0;
+  bool _accessibilityHasCursor = false;
+  int _accessibilityCursorRow = -1;
+  int _accessibilityCursorColumn = -1;
+  double _publishedAccessibilityCellWidth = 0;
+  double _publishedAccessibilityCellHeight = 0;
+  TerminalAccessibilitySnapshot? _lastAccessibilitySnapshot;
   Timer? _timer;
 
   bool get isDisposed => _disposed;
@@ -556,6 +588,7 @@ final class TerminalLiveMetalSurface {
       _rebindCurrentScreen();
       _applyNewestDamage(now);
       _refreshViewportPresentation();
+      _refreshAccessibilityPresentation();
       _refreshHyperlinkHover();
       _scheduler.advancePresentation(monotonicMicros: now);
       _submitNewest();
@@ -594,6 +627,13 @@ final class TerminalLiveMetalSurface {
       pendingFrameCount: _scheduler.pendingFrameCount,
       liveAtlasPinCount: atlas.livePinCount,
       hasScheduledWork: _timer != null,
+      accessibilityGeneration: _accessibilityGeneration,
+      accessibilityUtf16Length: _accessibilityUtf16Length,
+      accessibilityHasVisibleSelection: _accessibilityHasVisibleSelection,
+      accessibilitySelectionLength: _accessibilitySelectionLength,
+      accessibilityHasCursor: _accessibilityHasCursor,
+      accessibilityCursorRow: _accessibilityCursorRow,
+      accessibilityCursorColumn: _accessibilityCursorColumn,
       viewportOffset: screenSet.viewport.offset,
       selectionGeneration: _selectionSnapshot?.generation ?? 0,
       selectionSpanCount: _selectionProjection?.spans.length ?? 0,
@@ -602,6 +642,12 @@ final class TerminalLiveMetalSurface {
       hyperlinkHoverRow: _hyperlinkHover?.row ?? -1,
       hyperlinkHoverColumn: _hyperlinkHover?.pointerColumn ?? -1,
     );
+  }
+
+  /// Runs the native content-free selector/range/geometry/focus acceptance.
+  void debugVerifyAccessibility() {
+    _requireLive();
+    _accessibilityClient.debugVerifyCurrentSnapshot();
   }
 
   void dispose() {
@@ -708,6 +754,86 @@ final class TerminalLiveMetalSurface {
     _publishedSelectionGeneration = selectionGeneration;
     _publishedProjectionResourceGeneration = resourceGeneration;
     if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
+  }
+
+  void _refreshAccessibilityPresentation() {
+    final TerminalViewport viewport = screenSet.viewport;
+    final int viewportGeneration = viewport.generation;
+    final int selectionGeneration = _selectionSnapshot?.generation ?? 0;
+    final double cellWidth = _catalog.metrics.cellWidth;
+    final double cellHeight = _catalog.metrics.cellHeight;
+    if (viewportGeneration == _seenAccessibilityViewportGeneration &&
+        selectionGeneration == _seenAccessibilitySelectionGeneration &&
+        cellWidth == _publishedAccessibilityCellWidth &&
+        cellHeight == _publishedAccessibilityCellHeight) {
+      return;
+    }
+    final TerminalAccessibilitySnapshot snapshot =
+        TerminalAccessibilitySnapshot.capture(
+          viewport,
+          selection: _selectionSnapshot?.range,
+          maxUtf8Bytes: TerminalAccessibilityViewSnapshot.maximumUtf8Bytes,
+          maxUtf16CodeUnits:
+              TerminalAccessibilityViewSnapshot.maximumUtf16CodeUnits,
+          maxColumnBoundaries:
+              TerminalAccessibilityViewSnapshot.maximumColumnBoundaries,
+        );
+    final TerminalAccessibilitySnapshot? previous = _lastAccessibilitySnapshot;
+    final bool metricsChanged =
+        cellWidth != _publishedAccessibilityCellWidth ||
+        cellHeight != _publishedAccessibilityCellHeight;
+    if (!metricsChanged &&
+        previous != null &&
+        _sameAccessibilitySnapshot(previous, snapshot)) {
+      _seenAccessibilityViewportGeneration = viewportGeneration;
+      _seenAccessibilitySelectionGeneration = selectionGeneration;
+      return;
+    }
+    final int generation = _accessibilityGeneration + 1;
+    _accessibilityClient.publish(
+      TerminalAccessibilityViewSnapshot(
+        generation: generation,
+        rows: snapshot.rows,
+        columns: snapshot.columns,
+        text: snapshot.text,
+        lines: <TerminalAccessibilityViewLine>[
+          for (final TerminalAccessibilityLine line in snapshot.lines)
+            TerminalAccessibilityViewLine(
+              row: line.row,
+              utf16Start: line.utf16Start,
+              utf16Length: line.utf16Length,
+              columnUtf16Offsets: line.columnUtf16Offsets,
+            ),
+        ],
+        selectedRange: TerminalAccessibilityRange(
+          location: snapshot.selectedRange.location,
+          length: snapshot.selectedRange.length,
+        ),
+        hasVisibleSelection: snapshot.hasVisibleSelection,
+        cursorRange: snapshot.cursorRange == null
+            ? null
+            : TerminalAccessibilityRange(
+                location: snapshot.cursorRange!.location,
+                length: snapshot.cursorRange!.length,
+              ),
+        cursorRow: snapshot.cursorRow,
+        cursorColumn: snapshot.cursorColumn,
+        cellWidth: cellWidth,
+        cellHeight: cellHeight,
+      ),
+    );
+    _seenAccessibilityViewportGeneration = viewportGeneration;
+    _seenAccessibilitySelectionGeneration = selectionGeneration;
+    _lastAccessibilitySnapshot = snapshot;
+    _publishedAccessibilityCellWidth = cellWidth;
+    _publishedAccessibilityCellHeight = cellHeight;
+    _accessibilityGeneration = generation;
+    _accessibilityUtf16Length = snapshot.utf16Length;
+    _accessibilityHasVisibleSelection = snapshot.hasVisibleSelection;
+    _accessibilitySelectionLength = snapshot.selectedRange.length;
+    _accessibilityHasCursor = snapshot.cursorRange != null;
+    _accessibilityCursorRow = snapshot.cursorRow ?? -1;
+    _accessibilityCursorColumn = snapshot.cursorColumn ?? -1;
   }
 
   void _refreshHyperlinkHover() {
@@ -935,4 +1061,37 @@ final class TerminalLiveMetalSurface {
       throw ArgumentError('terminal viewport must be finite and positive');
     }
   }
+}
+
+bool _sameAccessibilitySnapshot(
+  TerminalAccessibilitySnapshot first,
+  TerminalAccessibilitySnapshot second,
+) {
+  if (first.rows != second.rows ||
+      first.columns != second.columns ||
+      first.text != second.text ||
+      first.selectedRange != second.selectedRange ||
+      first.hasVisibleSelection != second.hasVisibleSelection ||
+      first.cursorRange != second.cursorRange ||
+      first.cursorRow != second.cursorRow ||
+      first.cursorColumn != second.cursorColumn ||
+      first.lines.length != second.lines.length) {
+    return false;
+  }
+  for (var index = 0; index < first.lines.length; index++) {
+    final TerminalAccessibilityLine left = first.lines[index];
+    final TerminalAccessibilityLine right = second.lines[index];
+    if (left.row != right.row ||
+        left.utf16Start != right.utf16Start ||
+        left.utf16Length != right.utf16Length ||
+        left.columnUtf16Offsets.length != right.columnUtf16Offsets.length) {
+      return false;
+    }
+    for (var column = 0; column < left.columnUtf16Offsets.length; column++) {
+      if (left.columnUtf16Offsets[column] != right.columnUtf16Offsets[column]) {
+        return false;
+      }
+    }
+  }
+  return true;
 }

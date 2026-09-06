@@ -4,7 +4,7 @@
 
 - Date started: 2026-09-06
 - Scope: final Phase 5 production-input roadmap item
-- Status: in progress
+- Status: complete
 - Ordered subtasks:
   1. build a bounded UTF-16 accessibility snapshot from the current viewport,
      local selection, and cursor;
@@ -248,6 +248,54 @@ Primary references:
   suites, Dart analysis/tests, launcher and Kernel checks, real FFI loading,
   and the legacy event fallback.
 
+### 2026-09-06 — product integration start
+
+- Re-read the roadmap after the native-boundary commit. Product synchronization
+  and both-runtime acceptance is the first and only remaining Phase 5 item;
+  Phase 6 remains out of scope for this session.
+- `TerminalLiveMetalSurface` already drains the newest viewport and local
+  selection state after damage application. It will own one
+  `TerminalAccessibilityClient`, compare semantic snapshots to suppress
+  identical publications, and publish after viewport/selection refresh using
+  the same logical CoreText cell metrics as Metal and IME caret geometry.
+- Content-free surface diagnostics will expose only generation, lengths, and
+  selection/cursor presence. The real display fixture will make a visible
+  marker selection through injected AppKit pointer events, independently
+  verify the PTY-produced prompt/output/cursor in the Dart projection, invoke
+  the native selector/geometry/focus acceptance without returning terminal
+  text, and emit booleans only. The existing display integration runs this
+  contract in Developer JIT and Release AOT.
+- The product manifest must advance the declared renderer capability from ABI
+  9 to 10 so bundle construction fails closed against an older native image.
+
+### 2026-09-06 — product synchronization and runtime acceptance
+
+- `TerminalLiveMetalSurface` now owns the renderer capability's accessibility
+  client. After applying newest damage and refreshing viewport/selection
+  projection, it captures the authoritative viewport with the local gesture
+  range and publishes the mapped line/column/range packet using the same
+  logical CoreText cell width and height used by Metal and IME caret geometry.
+- The surface first gates capture on viewport generation, selection generation,
+  and cell metrics, then compares text, line/column topology, selection, and
+  cursor semantics with the last publication. Style-only or otherwise
+  semantically identical screen generations therefore do not cross the native
+  boundary or consume an accessibility generation.
+- Surface diagnostics expose only accessibility generation, UTF-16 length,
+  selection length/presence, and cursor row/column/presence. Terminal text and
+  selected content are never written to runtime machine logs.
+- The real display fixture writes a styled marker plus wrapped output through
+  the PTY, selects the visible marker through the ordinary AppKit pointer event
+  route, and checks the bottom prompt and independent visible cursor in the
+  Dart projection. It then invokes the native content-free acceptance, which
+  verifies selector/range/geometry state, first-responder focus, and observed
+  value/selection/focus notifications before emitting booleans only.
+- The product manifest now requires renderer capability ABI 10. The smoke
+  parser requires the dedicated accessibility acceptance line and the aggregate
+  display result includes `accessibility=true` in both runtime modes.
+- The first non-escalated full Dart test could not write Clang's Metal module
+  cache under `~/.cache`; no code assertion ran or failed. Re-running the same
+  command with the required filesystem permission completed successfully.
+
 ## Verification results
 
 ### Bounded visible UTF-16 snapshot and mapping
@@ -273,3 +321,46 @@ Primary references:
   architecture/package/worklog documentation were added.
 - `git diff --check` and the staged-diff review: passed before dependency commit
   `2b1fda0`.
+
+### Product synchronization and focused acceptance
+
+- Explicit formatting and focused analysis of the live surface, application,
+  and runtime smoke tool: passed with no issues.
+- Strengthened adjacent native acceptance to require current accessibility
+  focus, a focus notification, insertion line, and cursor range geometry;
+  `make terminal-renderer-native-test` passed. This follow-up is adjacent commit
+  `cffd1da` (`Verify focused terminal accessibility state`).
+- Final escalated `CI=true make test`: passed; 141 files were format-clean,
+  analysis had no issues, build hooks and the complete Dart suite passed.
+- `make RUNTIME_ARCH=arm64 runtime-terminal-display-integration`: passed for
+  Developer JIT and Release AOT. Each real application exercised PTY output,
+  ordinary AppKit selection, bottom prompt/cursor, copied native text state,
+  selector/range/geometry, focused state, notifications, Metal frame bounds,
+  and clean teardown without logging terminal contents.
+- Final `make RUNTIME_ARCH=arm64 runtime-verify`: passed. The run repeated the
+  141-file format/analyzer/test gate and Dart-only source audit, audited both
+  application bundles, and passed Developer JIT and Release AOT smoke, terminal
+  display/accessibility, clipboard, all lifecycle scenarios, bounded traffic,
+  1,000-iteration resource stress, shutdown-fault containment, and PTY final-
+  deadline recovery. Resource handles returned to baseline 13 in both modes
+  with peak 15; the expected shutdown-timeout/deadline cases remained correctly
+  classified as status 75.
+
+## Phase 5 exit audit
+
+- Every ordered Phase 5 roadmap item is complete. The existing product
+  acceptance continues to cover Japanese marked/update/commit/cancel and
+  candidate geometry, input-source/key repeat, terminal mouse arbitration,
+  character/word/line selection and autoscroll, precision/momentum scroll,
+  safe bounded clipboard/paste, and hyperlink hover/open.
+- The 10 MiB paste path remains asynchronous and bounded, and terminal input,
+  selection, viewport scrolling, and menu actions continue to use exclusive
+  ownership checks established by their individual completed task memos.
+- This task closes the remaining accessibility exit condition: the actual
+  focused Metal view now exposes the visible PTY prompt/output, local selection,
+  and independent cursor through copied AppKit accessibility state in both
+  supported runtime modes. Full Accessibility Inspector, Full Keyboard Access,
+  and broader visual-accessibility polish remain explicitly scheduled for
+  Phase 10 and do not weaken this minimum Phase 5 contract.
+- No Phase 6 work was started. Phase 5 is the first daily-driver alpha boundary,
+  so this session stops after the completion commit and roadmap re-read.
