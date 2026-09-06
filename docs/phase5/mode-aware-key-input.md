@@ -182,3 +182,34 @@ combined product verification succeed.
   `tracked=194` and `native_sources=0`.
 - The first ordered subtask is complete. The parent remains in progress pending
   the typed keybind engine and AppKit-to-PTY integration commits.
+
+### 2026-09-06 — typed configurable keybind engine
+
+- Added four stable action IDs with explicit configuration names for the
+  existing EOF, interrupt, suspend, and quit-signal pane operations. Unknown
+  names return no action instead of falling back to a different command.
+- A binding chord contains one non-unknown physical key and the exact
+  Shift/Control/Option/Command subset. Caps Lock, numeric-pad and Function
+  provenance, produced text, and repeat remain available on the event but do not
+  silently alter chord identity.
+- The engine copies default and override iterables, rejects an unknown physical
+  key, detects duplicate chords within either layer with the exact layer and
+  indices, and stops iteration at 1,024 total definitions. Its resulting map is
+  immutable and bounded.
+- Override actions and explicit passthrough replace defaults. `unbind` removes
+  an inherited binding and produces `noMatch`, while passthrough remains a
+  distinct matched result for the application router. This keeps config-layer
+  semantics observable without coupling the engine to PTY writes.
+- The standard zero-config binding contains only Control-D -> tracked EOF.
+  Ordinary Control sequences remain encoder input, which preserves terminal
+  termios/application semantics rather than forcing signals from the UI layer.
+- Focused tests passed action-name uniqueness/round-trip, exact matching,
+  non-binding event fields, deterministic override/unbind/passthrough,
+  per-layer conflicts, unknown-key rejection, immutable construction, and the
+  1,025th-definition failure.
+- Final `make test` passed VT table freshness, formatting of 110 Dart files with
+  zero changes, static analysis with no issues, and the complete test suite.
+  `make runtime-source-check` passed with `tracked=199` and
+  `native_sources=0`.
+- The second ordered subtask is complete. The parent remains in progress pending
+  AppKit physical-key adaptation and the single-write PTY integration.

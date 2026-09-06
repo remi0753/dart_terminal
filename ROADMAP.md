@@ -779,7 +779,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] mode-aware key encoder と configurable keybind engine
   （[`docs/phase5/mode-aware-key-input.md`](docs/phase5/mode-aware-key-input.md) を参照して実施）
   - [x] DEC keyboard mode state と bounded xterm key encoder
-  - [ ] conflict検出・unbound・passthroughを備えたtyped keybind engine
+  - [x] conflict検出・unbound・passthroughを備えたtyped keybind engine
   - [ ] AppKit physical/produced/modifier/repeat入力とPTY writeの製品統合
 - [ ] `NSTextInputClient` と preedit overlay
 - [ ] US/JIS/dead key/CJK/emoji/key repeat matrix
