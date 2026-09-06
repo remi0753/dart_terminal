@@ -799,6 +799,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] viewport projection・Metal selection overlay・bounded drag autoscroll
   - [x] 実AppKit製品統合と両runtimeのselection acceptance
 - [ ] precision trackpad scroll
+  （[`docs/phase5/precision-trackpad-scroll.md`](docs/phase5/precision-trackpad-scroll.md) を参照して実施）
+  - [x] `dart_appkit` event protocol v5 とbounded scroll event境界
+  - [ ] precision/momentum accumulatorとlocal/terminal/alternate-screen routing
+  - [ ] 実AppKit製品統合と両runtimeのscroll acceptance
 - [ ] clipboard、bracketed paste、paste safety
 - [ ] hyperlink hover/open と URL safety
 - [ ] VoiceOver の最小 visible text/selection/cursor support
