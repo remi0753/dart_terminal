@@ -777,6 +777,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 目的: 日本語を含む日常入力、選択、copy/paste を完成させる。
 
 - [ ] mode-aware key encoder と configurable keybind engine
+  （[`docs/phase5/mode-aware-key-input.md`](docs/phase5/mode-aware-key-input.md) を参照して実施）
+  - [x] DEC keyboard mode state と bounded xterm key encoder
+  - [ ] conflict検出・unbound・passthroughを備えたtyped keybind engine
+  - [ ] AppKit physical/produced/modifier/repeat入力とPTY writeの製品統合
 - [ ] `NSTextInputClient` と preedit overlay
 - [ ] US/JIS/dead key/CJK/emoji/key repeat matrix
 - [ ] mouse protocol と local selection arbitration

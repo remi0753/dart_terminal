@@ -115,6 +115,20 @@ final class TerminalScreenParserSink
         screen.saveCursor();
       case 0x38:
         screen.restoreCursor();
+      case 0x3d:
+        final TerminalScreenSet? screens = screenSet;
+        if (screens == null) {
+          _unsupportedSequenceCount++;
+        } else {
+          screens.setApplicationKeypad(true);
+        }
+      case 0x3e:
+        final TerminalScreenSet? screens = screenSet;
+        if (screens == null) {
+          _unsupportedSequenceCount++;
+        } else {
+          screens.setApplicationKeypad(false);
+        }
       case 0x44:
         screen.index();
       case 0x45:
@@ -412,6 +426,7 @@ final class TerminalScreenParserSink
           : null;
     } else {
       enabled = switch (mode) {
+        1 => screenSet?.keyboardModes.applicationCursorKeys,
         5 => screen.modeEnabled(TerminalScreenMode.reverseVideo),
         6 => screen.modeEnabled(TerminalScreenMode.origin),
         7 => screen.modeEnabled(TerminalScreenMode.autoWrap),
@@ -1001,6 +1016,13 @@ final class TerminalScreenParserSink
     }
     for (int index = 0; index < sequence.parameters.length; index++) {
       switch (sequence.parameters.valueAt(index)) {
+        case 1:
+          final TerminalScreenSet? screens = screenSet;
+          if (screens == null) {
+            _unsupportedSequenceCount++;
+          } else {
+            screens.setApplicationCursorKeys(enabled);
+          }
         case 5:
           screen.setMode(TerminalScreenMode.reverseVideo, enabled);
         case 6:

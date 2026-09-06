@@ -263,5 +263,5 @@ alternate cell=6,37 content=U+0020 flags=narrow foreground=palette:12 background
 alternate cell=6,38 content=U+0020 flags=narrow foreground=palette:12 background=default style=0 hyperlink=0
 alternate cell=6,39 content=U+0020 flags=narrow foreground=palette:12 background=default style=0 hyperlink=0
 alternate row=7 flags=- logical=2:8+0 text="                                        "
-parser unsupported_controls=0 unsupported_sequences=19 cancel=0 limit=0 malformed=0 incomplete=0 replies_accepted=3 replies_rejected=0
+parser unsupported_controls=0 unsupported_sequences=15 cancel=0 limit=0 malformed=0 incomplete=0 replies_accepted=3 replies_rejected=0
 end

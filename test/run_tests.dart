@@ -28,6 +28,7 @@ import 'terminal_damage_copy_test.dart';
 import 'terminal_damage_test.dart';
 import 'terminal_damage_transfer_test.dart';
 import 'terminal_history_reflow_test.dart';
+import 'terminal_key_encoder_test.dart';
 import 'terminal_live_metal_surface_font_test.dart';
 import 'terminal_palette_test.dart';
 import 'terminal_property_fuzz_test.dart';
@@ -70,6 +71,7 @@ Future<void> main() async {
   runRenderResourceRebuilderTests();
   runRendererMetricsTests();
   runTerminalHistoryReflowTests();
+  runTerminalKeyEncoderTests();
   runTerminalLiveMetalSurfaceFontTests();
   runTerminalPaletteTests();
   runTerminalPropertyFuzzTests();

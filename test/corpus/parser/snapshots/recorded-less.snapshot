@@ -129,5 +129,5 @@ alternate cell=6,9 content=U+0020 flags=narrow foreground=default background=def
 alternate cell=6,10 content=U+0030 flags=narrow foreground=default background=default style=0 hyperlink=0
 alternate cell=6,11 content=U+0037 flags=narrow foreground=default background=default style=0 hyperlink=0
 alternate row=7 flags=- logical=2:15+0 text="                                        "
-parser unsupported_controls=0 unsupported_sequences=4 cancel=0 limit=0 malformed=0 incomplete=0 replies_accepted=0 replies_rejected=0
+parser unsupported_controls=0 unsupported_sequences=0 cancel=0 limit=0 malformed=0 incomplete=0 replies_accepted=0 replies_rejected=0
 end

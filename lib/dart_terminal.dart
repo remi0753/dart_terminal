@@ -12,6 +12,8 @@ export 'src/terminal_application.dart'
 export 'src/terminal_buffer.dart' show TerminalBuffer;
 export 'src/terminal_core/streaming_utf8_decoder.dart'
     show StreamingUtf8Decoder, Utf8ScalarSink;
+export 'src/terminal_core/terminal_keyboard_modes.dart'
+    show TerminalKeyboardModes;
 export 'src/terminal_core/terminal_reply.dart'
     show TerminalModeReportStatus, TerminalReplyEncoder, TerminalReplyHandler;
 export 'src/terminal_core/terminal_screen.dart'
@@ -70,6 +72,10 @@ export 'src/terminal_core/vt_parser.dart'
         VtStringTerminator,
         VtUncapturedSequenceKind;
 export 'src/terminal_core/vt_parser_table.dart' show VtParserState;
+export 'src/terminal_input/terminal_key_encoder.dart'
+    show TerminalKeyEncoder, TerminalKeyEncodingLimitException;
+export 'src/terminal_input/terminal_key_event.dart'
+    show TerminalKeyEvent, TerminalKeyModifiers, TerminalPhysicalKey;
 export 'src/terminal_pane.dart'
     show
         PaneId,

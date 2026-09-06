@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'terminal_keyboard_modes.dart';
 import 'terminal_screen.dart';
 import 'terminal_style.dart';
 import 'terminal_unicode.dart';
@@ -76,6 +77,8 @@ final class TerminalScreenSet {
 
   TerminalScreenKind _activeKind = TerminalScreenKind.primary;
   bool _mode1049Active = false;
+  bool _applicationCursorKeys = false;
+  bool _applicationKeypad = false;
   int _transitionGeneration = 1;
 
   TerminalScreen get primary => _primary;
@@ -87,6 +90,10 @@ final class TerminalScreenSet {
   };
   bool get usingAlternate => _activeKind == TerminalScreenKind.alternate;
   bool get mode1049Active => _mode1049Active;
+  TerminalKeyboardModes get keyboardModes => TerminalKeyboardModes(
+    applicationCursorKeys: _applicationCursorKeys,
+    applicationKeypad: _applicationKeypad,
+  );
   int get transitionGeneration => _transitionGeneration;
   TerminalViewport get viewport => _viewport;
 
@@ -163,6 +170,22 @@ final class TerminalScreenSet {
     }
   }
 
+  void setApplicationCursorKeys(bool enabled) {
+    if (_applicationCursorKeys == enabled) {
+      return;
+    }
+    _applicationCursorKeys = enabled;
+    _transitionGeneration++;
+  }
+
+  void setApplicationKeypad(bool enabled) {
+    if (_applicationKeypad == enabled) {
+      return;
+    }
+    _applicationKeypad = enabled;
+    _transitionGeneration++;
+  }
+
   /// DEC private mode 1049: save primary, clear/use alternate, then restore.
   void setAlternateMode1049(bool enabled) {
     if (enabled) {
@@ -198,6 +221,8 @@ final class TerminalScreenSet {
     alternate.resetScreen();
     _activeKind = TerminalScreenKind.primary;
     _mode1049Active = false;
+    _applicationCursorKeys = false;
+    _applicationKeypad = false;
     primary.synchronizeVisualBellGeneration(visualBellGeneration);
     primary.requestFullSnapshot();
     _transitionGeneration++;
