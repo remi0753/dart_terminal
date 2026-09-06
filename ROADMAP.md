@@ -849,6 +849,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] 実装由来sequence/mode manifestとfreshness checker
   - [x] support/gap分類、相互参照、review acceptance
 - [ ] xterm/Ghostty/Kitty との black-box differential harness
+  （[`docs/phase6/black-box-differential-harness.md`](docs/phase6/black-box-differential-harness.md) を参照して実施）
+  - [x] versioned case/observation/subprocess driver contractとDart backend
+  - [ ] pinned xterm/Ghostty/Kitty adapterとavailability/provenance self-test
+  - [ ] reviewed differential corpus、mismatch report、acceptance分類
 - [ ] `vttest` を参考に採用/非採用項目を明文化
 - [ ] tmux、ssh、mosh、Neovim、Emacs、ncurses、fzf、lazygit の matrix
 - [ ] terminfo source、compile/install/fallback

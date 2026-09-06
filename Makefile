@@ -25,7 +25,8 @@ override PRODUCT_PARSER_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_par
 override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_damage_benchmark
 
 .PHONY: help dependencies test compatibility-inventory compatibility-inventory-check \
-	compatibility-manifest compatibility-manifest-check product-parser-corpus product-parser-properties \
+	compatibility-manifest compatibility-manifest-check terminal-differential-contract-check \
+	product-parser-corpus product-parser-properties \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
 	product-damage-benchmark-build product-damage-benchmark \
 	runtime-source-check runtime-architecture-check \
@@ -50,6 +51,7 @@ help:
 	@echo "  make compatibility-inventory-check  Validate the terminal sequence/mode inventory"
 	@echo "  make compatibility-manifest       Regenerate the implemented sequence manifest"
 	@echo "  make compatibility-manifest-check Reject a stale implemented sequence manifest"
+	@echo "  make terminal-differential-contract-check  Validate the bounded black-box driver contract"
 	@echo "  make vt-parser-table              Regenerate the Dart VT transition table"
 	@echo "  make vt-parser-table-check        Reject a stale generated parser table"
 	@echo "  make developer-jit-build          Build the generic-host JIT application"
@@ -93,7 +95,10 @@ compatibility-manifest: dependencies
 compatibility-manifest-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_terminal_compatibility_manifest.dart --check
 
-test: dependencies vt-parser-table-check compatibility-inventory-check compatibility-manifest-check
+terminal-differential-contract-check: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_differential_harness.dart --check
+
+test: dependencies vt-parser-table-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart

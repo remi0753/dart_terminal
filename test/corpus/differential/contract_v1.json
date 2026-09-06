@@ -1,0 +1,48 @@
+{
+  "format": "dart-terminal-black-box-differential",
+  "version": 1,
+  "scope": "contract-smoke",
+  "observation_version": 1,
+  "cases": [
+    {
+      "id": "cursor-edit-style",
+      "description": "Cursor-back overwrite with red SGR preserves text, cell width, style, color, and cursor state.",
+      "inventory_ids": [
+        "ecma48:csi:cub",
+        "ecma48:csi:sgr"
+      ],
+      "input_hex": "41 42 43 1b 5b 32 44 1b 5b 33 31 6d 5a",
+      "rows": 2,
+      "columns": 4,
+      "fields": [
+        "screen",
+        "text",
+        "style",
+        "color",
+        "cursor"
+      ],
+      "expectation": "agree",
+      "gap_owner": null
+    },
+    {
+      "id": "private-mode-query",
+      "description": "DECCKM set followed by DECRQM exposes the mode and exact terminal reply.",
+      "inventory_ids": [
+        "dec:csi:decrqm",
+        "dec:csi:decset",
+        "dec:mode:decckm"
+      ],
+      "input_hex": "1b 5b 3f 31 68 1b 5b 3f 31 24 70",
+      "rows": 2,
+      "columns": 4,
+      "fields": [
+        "screen",
+        "cursor",
+        "modes",
+        "replies"
+      ],
+      "expectation": "agree",
+      "gap_owner": null
+    }
+  ]
+}
