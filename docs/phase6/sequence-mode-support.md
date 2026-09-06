@@ -30,9 +30,9 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | Support classification | Records |
 | --- | ---: |
 | `implemented` | 82 |
-| `partial` | 17 |
+| `partial` | 18 |
 | `safe-ignore` | 10 |
-| `unsupported` | 151 |
+| `unsupported` | 150 |
 | **Total** | **260** |
 
 | Selector kind | Records |
@@ -49,7 +49,7 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `mode` | 80 |
 | **Total** | **260** |
 
-The 82 implemented plus 17 partial records reconcile exactly to all 99 product declarations (79 sequence selectors and 20 modes). The 10 safe-ignore records cover 7 concrete DCS forms and SOS/PM/APC; all 151 remaining records are explicitly unsupported/rejected.
+The 82 implemented plus 18 partial records reconcile exactly to all 100 product declarations (80 sequence selectors and 20 modes). The 10 safe-ignore records cover 7 concrete DCS forms and SOS/PM/APC; all 150 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 
@@ -72,6 +72,7 @@ The 82 implemented plus 17 partial records reconcile exactly to all 99 product d
 | `xterm:osc:osc-11` | `OSC 11 ; Pt ST` | Single bounded background mutation/query is implemented; chained dynamic-color parameters are not. |
 | `xterm:osc:osc-12` | `OSC 12 ; Pt ST` | Single bounded cursor-color mutation/query is implemented independently of text foreground; chained dynamic-color parameters are not. |
 | `xterm:osc:osc-4` | `OSC 4 ; Pt ST` | Bounded indexed RGB mutation/query is implemented; xterm color names and every XParseColor form are not. |
+| `xterm:osc:osc-52` | `OSC 52 ; Pc ; Pd ST` | Bounded selector/data parsing is implemented with a deny-by-default policy: queries return empty data and writes/clears have no clipboard authority. Opt-in access remains deferred. |
 
 ## Bounded safe-ignore controls
 
@@ -92,7 +93,7 @@ The 82 implemented plus 17 partial records reconcile exactly to all 99 product d
 
 - The next black-box differential and real-application matrix tasks decide which generic ECMA/DEC/xterm gaps become implementation work.
 - The later focus/mouse/query task owns focus mode 1004, SGR pixel mouse 1016, and remaining report behavior.
-- The OSC policy task has implemented title commands 0/1/2, cwd command 7, and cursor color 12/112; its remaining gap is the security-sensitive clipboard command 52.
+- The OSC policy task has implemented title commands 0/1/2, cwd command 7, cursor color 12/112, and the security-sensitive OSC 52 deny-by-default boundary. Opt-in clipboard access remains deferred.
 - The terminfo task owns remaining XTSETTCAP decisions; the existing `v1 保留` feature-matrix decision continues to own Sixel.
 - Unsupported extended character-set, rectangular-editing, locator, printer, and terminal-local xterm resource controls stay rejected until differential/application evidence justifies a new ordered task.
 

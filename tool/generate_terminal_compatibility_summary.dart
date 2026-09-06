@@ -163,8 +163,8 @@ String generateTerminalCompatibilitySummary(
     )
     ..writeln(
       '- The OSC policy task has implemented title commands 0/1/2, cwd '
-      'command 7, and cursor color 12/112; its remaining gap is the '
-      'security-sensitive clipboard command 52.',
+      'command 7, cursor color 12/112, and the security-sensitive OSC 52 '
+      'deny-by-default boundary. Opt-in clipboard access remains deferred.',
     )
     ..writeln(
       '- The terminfo task owns remaining XTSETTCAP decisions; the existing '

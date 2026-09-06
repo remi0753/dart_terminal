@@ -270,6 +270,14 @@ agreement, and tmux has 10. The remaining XTWINOPS variants are window-size
 queries owned by the following focus/mouse/query task; they stay explicit
 unsupported parameter variants of the partially implemented selector.
 
+The final OSC-policy child recognizes bounded OSC 52 and enforces an explicit
+default denial. None of the 57,737 immutable application bytes contains OSC 52
+itself; the captured `Ms` XTGETTCAP query still receives unavailable because
+the bundled terminfo must not advertise unusable opt-in clipboard access.
+Replaying all eight cells therefore retains 92 unsupported increments, 20
+variants, and 13 owned gaps; only the implementation-manifest provenance pin
+changes.
+
 The cell outcome is two clean agreements (ncurses and SSH) and six accepted documented-gap
 cells. “Accepted” means the captured workflow completed, every non-parser
 semantic check passed, all rejected bytes are explicit and owned, and no

@@ -93,6 +93,7 @@ abstract final class TerminalCompatibilitySurface {
     10,
     11,
     12,
+    52,
     104,
     110,
     111,

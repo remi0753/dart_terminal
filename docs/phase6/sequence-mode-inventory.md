@@ -277,3 +277,9 @@ complete.
   151 unsupported records. The implementation surface now contains 79
   selectors plus the unchanged 20 modes. OSC 12 is partial because bounded RGB
   mutation/query is implemented without arbitrary named/chained xterm colors.
+- 2026-09-07: the final OSC policy child moved OSC 52 from unsupported to
+  partial after implementing its bounded default-deny boundary. Totals are now
+  82 implemented, 18 partial, 10 safe-ignore, and 150 unsupported records; the
+  implementation surface contains 80 selectors and 20 modes. Partial denotes
+  empty read replies and denied write/clear behavior, while opt-in clipboard
+  authority remains explicitly deferred.

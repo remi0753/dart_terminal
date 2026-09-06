@@ -30,7 +30,11 @@ String generateTerminalImplementationManifestSource() {
         'kind': 'osc',
         'command': command,
         'handler':
-            command == 4 || command == 10 || command == 11 || command == 12
+            command == 4 ||
+                command == 10 ||
+                command == 11 ||
+                command == 12 ||
+                command == 52
             ? 'execute-or-reply'
             : 'execute',
       },

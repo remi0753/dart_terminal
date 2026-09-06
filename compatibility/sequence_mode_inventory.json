@@ -6129,22 +6129,26 @@
     {
       "id": "xterm:osc:osc-52",
       "mnemonic": "OSC-52",
-      "syntax": "OSC 52 ; selection ; data ST",
+      "syntax": "OSC 52 ; Pc ; Pd ST",
       "selector": {
         "kind": "osc",
         "command": 52
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "partial",
+      "disposition": "reply",
       "sourceRefs": [
         {
           "source": "xterm-411",
           "locator": "ctlseqs.ms, OSC 52—Manipulate Selection Data"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; security-sensitive clipboard access requires the later explicit OSC policy task."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Bounded selector/data parsing is implemented with a deny-by-default policy: queries return empty data and writes/clears have no clipboard authority. Opt-in access remains deferred."
     }
   ]
 }

@@ -48,6 +48,10 @@ final class TerminalScreenParserSink
   int _rejectedReplyCount = 0;
   int _acceptedHyperlinkCount = 0;
   int _rejectedHyperlinkCount = 0;
+  int _deniedClipboardReadCount = 0;
+  int _deniedClipboardWriteCount = 0;
+  int _deniedClipboardClearCount = 0;
+  int _rejectedClipboardRequestCount = 0;
   int _currentHyperlinkId = 0;
   final Uint16List _oscPaletteIndices = Uint16List(
     TerminalPalette.maxBatchEntries,
@@ -69,6 +73,10 @@ final class TerminalScreenParserSink
   int get rejectedReplyCount => _rejectedReplyCount;
   int get acceptedHyperlinkCount => _acceptedHyperlinkCount;
   int get rejectedHyperlinkCount => _rejectedHyperlinkCount;
+  int get deniedClipboardReadCount => _deniedClipboardReadCount;
+  int get deniedClipboardWriteCount => _deniedClipboardWriteCount;
+  int get deniedClipboardClearCount => _deniedClipboardClearCount;
+  int get rejectedClipboardRequestCount => _rejectedClipboardRequestCount;
   int get currentHyperlinkId => _currentHyperlinkId;
 
   @override
@@ -348,6 +356,12 @@ final class TerminalScreenParserSink
         supported =
             hasPayload &&
             _applyOscDynamicColor(sequence, payloadStart, command: command);
+      case 52:
+        supported = _applyOscClipboardDenial(
+          sequence,
+          payloadStart,
+          hasPayload: hasPayload,
+        );
       case 104:
         supported = _applyOscPaletteReset(sequence, payloadStart, hasPayload);
       case 110:
@@ -369,6 +383,86 @@ final class TerminalScreenParserSink
     if (!supported) {
       _unsupportedSequenceCount++;
     }
+  }
+
+  bool _applyOscClipboardDenial(
+    VtStringSequence sequence,
+    int start, {
+    required bool hasPayload,
+  }) {
+    if (!hasPayload) {
+      _rejectedClipboardRequestCount++;
+      return false;
+    }
+    final int selectionEnd = _findPayloadByte(sequence, start, 0x3b);
+    final int selectionLength = selectionEnd - start;
+    if (selectionEnd >= sequence.payloadLength ||
+        selectionLength > TerminalReplyEncoder.maximumOsc52SelectionBytes) {
+      _rejectedClipboardRequestCount++;
+      return false;
+    }
+    final Uint8List selection = Uint8List(selectionLength);
+    for (int index = 0; index < selectionLength; index++) {
+      final int value = sequence.payloadByteAt(start + index);
+      if (!_isOsc52SelectionByte(value)) {
+        _rejectedClipboardRequestCount++;
+        return false;
+      }
+      selection[index] = value;
+    }
+
+    final int dataStart = selectionEnd + 1;
+    final int dataLength = sequence.payloadLength - dataStart;
+    if (dataLength == 1 && sequence.payloadByteAt(dataStart) == 0x3f) {
+      _deniedClipboardReadCount++;
+      _emitReply(
+        TerminalReplyEncoder.clipboardUnavailable(
+          selection: selection,
+          terminator: sequence.terminator,
+        ),
+      );
+    } else if (dataLength > 0 &&
+        _isValidOsc52Base64(sequence, dataStart, dataLength)) {
+      _deniedClipboardWriteCount++;
+    } else {
+      _deniedClipboardClearCount++;
+    }
+    return true;
+  }
+
+  static bool _isOsc52SelectionByte(int value) =>
+      value == 0x63 ||
+      value == 0x70 ||
+      value == 0x71 ||
+      value == 0x73 ||
+      (value >= 0x30 && value <= 0x37);
+
+  bool _isValidOsc52Base64(VtStringSequence sequence, int start, int length) {
+    if (length == 0 || length % 4 != 0) return false;
+    var padding = 0;
+    if (sequence.payloadByteAt(start + length - 1) == 0x3d) padding++;
+    if (length > 1 && sequence.payloadByteAt(start + length - 2) == 0x3d) {
+      padding++;
+    }
+    final int unpaddedEnd = start + length - padding;
+    for (int index = start; index < unpaddedEnd; index++) {
+      final int value = sequence.payloadByteAt(index);
+      final bool alphabet =
+          (value >= 0x41 && value <= 0x5a) ||
+          (value >= 0x61 && value <= 0x7a) ||
+          (value >= 0x30 && value <= 0x39) ||
+          value == 0x2b ||
+          value == 0x2f;
+      if (!alphabet) return false;
+    }
+    for (int index = unpaddedEnd; index < start + length; index++) {
+      if (sequence.payloadByteAt(index) != 0x3d) return false;
+    }
+    if (padding == 0) return true;
+    if (unpaddedEnd == start) return false;
+    return padding == 1
+        ? (length >= 4 && (unpaddedEnd - start) % 4 == 3)
+        : (length >= 4 && (unpaddedEnd - start) % 4 == 2);
   }
 
   bool _applyTitleStack(VtSequenceHeader sequence) {

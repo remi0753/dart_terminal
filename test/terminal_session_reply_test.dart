@@ -39,6 +39,15 @@ Future<void> _testRawParserFeedReplyOrderingAndCompletion() async {
     0x6e,
     0x42,
     0x1b,
+    0x5d,
+    0x35,
+    0x32,
+    0x3b,
+    0x63,
+    0x3b,
+    0x3f,
+    0x07,
+    0x1b,
     0x5b,
     0x36,
     0x6e,
@@ -60,12 +69,16 @@ Future<void> _testRawParserFeedReplyOrderingAndCompletion() async {
   _expectWrites(process.writes, const <String>[
     'u',
     '\x1b[0n',
+    '\x1b]52;c;\x07',
     '\x1b[1;4R',
     'v',
   ]);
   _expect(
-    session.terminalParserSink.acceptedReplyCount == 2 &&
-        session.terminalParserSink.rejectedReplyCount == 0,
+    session.terminalParserSink.acceptedReplyCount == 3 &&
+        session.terminalParserSink.rejectedReplyCount == 0 &&
+        session.terminalParserSink.deniedClipboardReadCount == 1 &&
+        session.terminalParserSink.deniedClipboardWriteCount == 0 &&
+        session.terminalParserSink.deniedClipboardClearCount == 0,
     'accepted reply is ordered between surrounding accepted user writes',
   );
 

@@ -21,6 +21,7 @@ abstract final class TerminalReplyEncoder {
   static const int maximumReplyBytes = 64;
   static const int maximumCoordinate = 65535;
   static const int maximumMode = 0x7fffffff;
+  static const int maximumOsc52SelectionBytes = 12;
 
   static Uint8List primaryDeviceAttributes() => Uint8List.fromList(const <int>[
     0x1b,
@@ -113,6 +114,45 @@ abstract final class TerminalReplyEncoder {
     builder.terminator(terminator);
     return builder.finish();
   }
+
+  static Uint8List clipboardUnavailable({
+    required List<int> selection,
+    required VtStringTerminator terminator,
+  }) {
+    if (selection.length > maximumOsc52SelectionBytes) {
+      throw RangeError.range(
+        selection.length,
+        0,
+        maximumOsc52SelectionBytes,
+        'selection.length',
+      );
+    }
+    final _TerminalReplyBuilder builder = _TerminalReplyBuilder()
+      ..osc()
+      ..decimal(52)
+      ..byte(0x3b);
+    for (final int value in selection) {
+      if (!_isOsc52SelectionByte(value)) {
+        throw ArgumentError.value(
+          value,
+          'selection',
+          'contains an unsupported OSC 52 selection byte',
+        );
+      }
+      builder.byte(value);
+    }
+    builder
+      ..byte(0x3b)
+      ..terminator(terminator);
+    return builder.finish();
+  }
+
+  static bool _isOsc52SelectionByte(int value) =>
+      value == 0x63 ||
+      value == 0x70 ||
+      value == 0x71 ||
+      value == 0x73 ||
+      (value >= 0x30 && value <= 0x37);
 
   static void _writeRgb(_TerminalReplyBuilder builder, int color) {
     if (color < 0x80000000 || color > 0x80ffffff) {

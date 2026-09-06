@@ -562,6 +562,12 @@
       "handler": "execute-or-reply"
     },
     {
+      "key": "osc:52",
+      "kind": "osc",
+      "command": 52,
+      "handler": "execute-or-reply"
+    },
+    {
       "key": "osc:104",
       "kind": "osc",
       "command": 104,

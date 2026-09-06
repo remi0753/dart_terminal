@@ -13,6 +13,7 @@ import 'runtime_lifecycle.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
 import 'terminal_core/terminal_screen.dart';
+import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_core/terminal_style.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
@@ -2059,6 +2060,7 @@ final class TerminalApplication {
     const String exactMarker = '__DT_CLIPBOARD_EXACT__';
     const String mismatchMarker = '__DT_CLIPBOARD_MISMATCH__';
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    await _exerciseOsc52DefaultDeny(session, pane, clipboard);
     await _exerciseClipboardCopySelection(
       application,
       session,
@@ -2221,6 +2223,7 @@ final class TerminalApplication {
     );
     stdout.writeln(
       'TERMINAL_CLIPBOARD_TEST copy=true paste_menu=true '
+      'osc52_denied=true '
       'confirmation=true confirmation_visible=$confirmationVisible '
       'zero_write=$zeroWrite bracketed=true exact=$exact '
       'bytes=${completedTransfer.encodedBytes} '
@@ -2234,6 +2237,64 @@ final class TerminalApplication {
       'clipboard test could not begin deterministic pane close',
     );
     window.close();
+  }
+
+  static Future<void> _exerciseOsc52DefaultDeny(
+    TerminalSession session,
+    TerminalPane pane,
+    _MemoryTerminalClipboard clipboard,
+  ) async {
+    const String sentinel = '__DT_OSC52_SENTINEL__';
+    const String exactMarker = '__DT_OSC52_DENY_EXACT__';
+    const String mismatchMarker = '__DT_OSC52_DENY_MISMATCH__';
+    clipboard.seed(sentinel);
+    final int changeCount = clipboard.changeCount;
+    final int reads = clipboard.readCount;
+    final int writes = clipboard.writeCount;
+    final TerminalScreenParserSink sink = session.terminalParserSink;
+    final int deniedReads = sink.deniedClipboardReadCount;
+    final int deniedWrites = sink.deniedClipboardWriteCount;
+    final int deniedClears = sink.deniedClipboardClearCount;
+    final int rejected = sink.rejectedClipboardRequestCount;
+    final int acceptedReplies = sink.acceptedReplyCount;
+
+    pane.insertText(
+      r'''stty -echo -icanon min 1 time 0; printf '\033]52;c;c2VjcmV0\007\033]52;p;clear\033\\\033]52;c;?\007'; /usr/bin/perl -e 'binmode STDIN; my $want="\e]52;c;\a"; my $got=""; while (length($got) < length($want)) { my $n=sysread(STDIN, my $b, length($want)-length($got)); exit 42 unless defined($n) && $n > 0; $got .= $b; } exit($got eq $want ? 0 : 43);'; result=$?; stty echo icanon; if [ $result -eq 0 ]; then printf '\r\n__DT_OSC52_DENY_%s__\r\n' EXACT; else printf '\r\n__DT_OSC52_DENY_%s__\r\n' MISMATCH; fi''',
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, exactMarker);
+    _expectLifecycle(
+      _findAscii(session.terminalScreenSet.activeScreen, mismatchMarker) ==
+          null,
+      'real PTY did not receive the exact empty OSC 52 query reply',
+    );
+    final bool noClipboardAuthority =
+        clipboard.text == sentinel &&
+        clipboard.changeCount == changeCount &&
+        clipboard.readCount == reads &&
+        clipboard.writeCount == writes;
+    final bool exactCounters =
+        sink.deniedClipboardReadCount == deniedReads + 1 &&
+        sink.deniedClipboardWriteCount == deniedWrites + 1 &&
+        sink.deniedClipboardClearCount == deniedClears + 1 &&
+        sink.rejectedClipboardRequestCount == rejected &&
+        sink.acceptedReplyCount == acceptedReplies + 1;
+    _expectLifecycle(
+      noClipboardAuthority && exactCounters,
+      'OSC 52 crossed the default-deny clipboard boundary: '
+      'text_unchanged=${clipboard.text == sentinel} '
+      'change_count=${clipboard.changeCount - changeCount} '
+      'reads=${clipboard.readCount - reads} writes=${clipboard.writeCount - writes} '
+      'denied_reads=${sink.deniedClipboardReadCount - deniedReads} '
+      'denied_writes=${sink.deniedClipboardWriteCount - deniedWrites} '
+      'denied_clears=${sink.deniedClipboardClearCount - deniedClears} '
+      'rejected=${sink.rejectedClipboardRequestCount - rejected} '
+      'replies=${sink.acceptedReplyCount - acceptedReplies}',
+    );
+    stdout.writeln(
+      'TERMINAL_OSC52_POLICY_TEST query_empty=true write_denied=true '
+      'clear_denied=true clipboard_callbacks=0 counters=true',
+    );
   }
 
   static Future<void> _exerciseClipboardCopySelection(
@@ -4185,9 +4246,13 @@ final class _AppKitTerminalClipboard implements _TerminalClipboard {
 final class _MemoryTerminalClipboard implements _TerminalClipboard {
   String? _text;
   var _changeCount = 0;
+  var _readCount = 0;
+  var _writeCount = 0;
 
   String? get text => _text;
   int get changeCount => _changeCount;
+  int get readCount => _readCount;
+  int get writeCount => _writeCount;
 
   void seed(String text) {
     _text = text;
@@ -4195,11 +4260,14 @@ final class _MemoryTerminalClipboard implements _TerminalClipboard {
   }
 
   @override
-  PasteboardTextSnapshot readText() =>
-      PasteboardTextSnapshot(text: _text, changeCount: _changeCount);
+  PasteboardTextSnapshot readText() {
+    _readCount++;
+    return PasteboardTextSnapshot(text: _text, changeCount: _changeCount);
+  }
 
   @override
   int writeText(String text) {
+    _writeCount++;
     seed(text);
     return _changeCount;
   }

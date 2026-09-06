@@ -88,6 +88,8 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - typed xterm-256 palette、logical default foreground/background、独立cursor color、
   bounded OSC 4/10/11/12/104/110/111/112 color mutation/query/reset、
   palette-aware row damageとcursor-only presentation damage
+- bounded OSC 52 selector/data分類とdeny-by-default clipboard境界。queryは
+  clipboard dataを含まない空応答だけを返し、write/clearはAppKit pasteboardへ到達しない
 - session-ownedなbounded title/icon/OSC 7 file-URI metadata、OSC 0/1/2、
   10段title stack、strict UTF-8/control/bidi境界、OSC 0/2からAppKit window titleへの
   root-isolate同期とRIS後のproduct title復帰

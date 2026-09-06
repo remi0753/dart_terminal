@@ -457,6 +457,15 @@ const Map<int, _Metadata> _oscMetadata = <int, _Metadata>{
     notes: 'Single bounded cursor-color mutation/query is implemented independently of text foreground; chained dynamic-color parameters are not.',
     reply: true,
   ),
+  52: _Metadata(
+    'xterm',
+    'osc-52',
+    'OSC-52',
+    'ctlseqs.ms, OSC 52—Manipulate Selection Data',
+    support: 'partial',
+    notes: 'Bounded selector/data parsing is implemented with a deny-by-default policy: queries return empty data and writes/clears have no clipboard authority. Opt-in access remains deferred.',
+    reply: true,
+  ),
   104: _Metadata(
     'xterm',
     'osc-104',
@@ -1815,16 +1824,6 @@ const List<_Gap> _gaps = <_Gap>[
     },
     locator: 'Part II chapter 5, DECSSDT—Select Status Line Type',
   ),
-  _Gap(
-    family: 'xterm',
-    kind: 'osc',
-    name: 'osc-52',
-    mnemonic: 'OSC-52',
-    syntax: 'OSC 52 ; selection ; data ST',
-    selector: <String, Object?>{'kind': 'osc', 'command': 52},
-    locator: 'ctlseqs.ms, OSC 52—Manipulate Selection Data',
-    notes: 'Not implemented; security-sensitive clipboard access requires the later explicit OSC policy task.',
-  ),
 ];
 
 const Map<int, String> _ansiModeGaps = <int, String>{
@@ -2217,7 +2216,7 @@ Map<String, Object?> _implementedOsc(int command, _Metadata metadata) =>
     _record(
       metadata: metadata,
       kind: 'osc',
-      syntax: 'OSC $command ; Pt ST',
+      syntax: command == 52 ? 'OSC 52 ; Pc ; Pd ST' : 'OSC $command ; Pt ST',
       selector: <String, Object?>{'kind': 'osc', 'command': command},
     );
 

@@ -238,6 +238,35 @@ compatibility classification until every policy branch is fixed.
   Immutable version-1 application captures remain unchanged and the loader now
   accepts historical versions 1/2 plus current version 3 while retaining exact
   per-sample hashes.
+- 2026-09-07: commit `881005d` completed the independent cursor-color child.
+  ROADMAP, README, FEATURE_MATRIX, this task memo, and the clean worktree were
+  reread immediately afterward; the deny-by-default OSC 52 child is the final
+  ordered child before the parent item can close.
+- 2026-09-07: xterm Patch #411 defines OSC 52 payload as `Pc;Pd`. `Pc` is a
+  bounded sequence of zero or more `c`, `p`, `q`, `s`, or `0` through `7`
+  selection characters. `Pd` equal to `?` queries the first selected buffer,
+  valid RFC 4648 base64 is a write, and other data denotes clear. The product
+  will preserve that classification while denying every operation: a query
+  receives only `OSC 52 ; Pc ; ST` (or BEL) with an empty data field, and
+  write/clear requests are consumed without a reply or clipboard authority.
+- 2026-09-07: the parser sink has no AppKit or clipboard callback today. That
+  absence is retained as the security boundary rather than adding a callback
+  that currently returns denial. Four explicit diagnostic counters will
+  distinguish denied reads, writes, and clears from malformed selection/data
+  envelopes. A valid denial is not an unsupported selector; malformed
+  envelopes remain bounded rejects.
+- 2026-09-07: product acceptance will run before ordinary Copy/Paste actions
+  against the existing memory-backed clipboard. A real child process will
+  issue denied write/clear requests and, in raw mode, verify the byte-exact
+  empty query reply. The memory clipboard's read/write call counters and
+  sentinel value must remain unchanged, proving PTY output cannot reach the
+  same interface that user-invoked menu actions legitimately use.
+- 2026-09-07: the first focused application compile stopped before execution
+  because the new acceptance helper named `TerminalScreenParserSink` without
+  importing its internal library. The application previously reached the sink
+  only through `TerminalSession`, so no such import existed. Adding the direct
+  import fixes the compile boundary without changing runtime behavior or
+  weakening the test.
 
 ## Decisions and verification record
 
@@ -339,3 +368,43 @@ compatibility classification until every policy branch is fixed.
   the complete Dart test runner passed. `git diff --check` also passed. No
   `dart_appkit` source, native clipboard authority, or cell foreground token is
   changed by this child.
+- OSC 52 now accepts only envelopes with a second separator and zero to twelve
+  selection bytes from xterm's `c`, `p`, `q`, `s`, `0` through `7` set. The
+  fixed parser limit bounds the whole control string at 4,096 retained bytes.
+  `?` increments the denied-read counter and emits the same selection with an
+  empty data field; syntactically valid base64 increments denied-write, while
+  empty or non-base64 data follows xterm clear semantics and increments
+  denied-clear. Invalid or oversized selection envelopes increment a separate
+  rejected-request counter and the normal unsupported-sequence diagnostic.
+- The core has no clipboard callback or decoded clipboard-data allocation.
+  Whole/single-split/bytewise tests passed exact BEL/ST replies, selection and
+  payload bounds, read/write/clear/reject counters, parser recovery, and reply
+  encoder argument bounds. The `TerminalSession` fake-PTY test also proved the
+  empty reply remains ordered between surrounding user and terminal writes.
+- `make runtime-clipboard-integration` passed on Apple arm64 in Developer JIT
+  (3,591 ms) and Release AOT (2,990 ms). A real zsh emitted one write, one
+  clear, and one query; its raw child reader received the exact empty query
+  reply, while the memory pasteboard retained its sentinel/change count and
+  recorded zero read/write interface calls before ordinary user Copy/Paste.
+- Compatibility regeneration now reconciles 100 product declarations against
+  260 records: 82 implemented, 18 partial, 10 safe-ignore, and 150 unsupported.
+  OSC 52 is partial because default denial is complete but opt-in authority is
+  deferred. The application replay retained 8 accepted cells, 2 clean cells,
+  92 unsupported increments, 20 variants, and 13 gaps. Differential baseline
+  provenance was regenerated after the expected stale-manifest check; all four
+  cases, 210 split runs, 12 accepted comparisons, and their semantic outcomes
+  remain unchanged.
+- Focused parent regression passed formatter checks for 177 Dart files, clean
+  static analysis, OSC 52 core and session reply tests, existing hyperlink and
+  palette suites, unchanged product-corpus/fuzz hashes, manifest/inventory and
+  generated-summary freshness, differential corpus/acceptance, immutable
+  application evidence/acceptance, and the 3,821-byte terminfo audit. This also
+  confirms the final denial policy did not regress the already accepted OSC 8,
+  color, title, character-set, or real-application behavior.
+- Final `CI=true make test` passed all parser-table, compatibility,
+  differential, application-matrix/evidence/acceptance, and terminfo freshness
+  gates; formatting checked 177 Dart files with zero changes, analysis found
+  no issues, and the complete Dart test runner passed. `git diff --check` is
+  included in the final staged review. All four ordered children now satisfy
+  the parent completion conditions; no duration-only soak or other blocker
+  remains.

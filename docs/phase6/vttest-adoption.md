@@ -165,13 +165,18 @@ menus are listed once rather than repeated at every terminal level.
 | VT-28 | xterm version, mode, and status-string reports | `MANUAL` | Use after the query-report owner defines exact policy. The black-box harness already prevents product-specific DECRQSS serialization from being normalized away. |
 | VT-29 | xterm alternate-screen modes 47/1047/1049 | `AUTO` | Primary/alternate ownership, clear/save/restore semantics, resize, selection isolation, and product rendering are automated. |
 | VT-30 | xterm mouse and DEC locator reports | `MANUAL` | X10/1000/1002/1003 with UTF-8/SGR/URXVT routing is automated. The later focus/mouse task owns remaining focus, pixel mouse, and any locator decision. |
-| VT-31 | xterm window title | `MANUAL` | The later OSC policy task owns OSC 0/1/2 title behavior and sanitization; only then is the visual title test meaningful. |
+| VT-31 | xterm window title | `MANUAL` | OSC 0/1/2 title sanitization and native synchronization are now automated in both product runtimes; a future interactive visual title run remains supplemental. |
 | VT-32 | xterm font and window modify/report operations | `CONDITIONAL` | Protocol-driven font/window mutation is not the same as native settings or resize. Adopt only if real-app evidence justifies a narrowly permissioned policy. |
 | VT-33 | Tektronix 4014 mode | `EXCLUDE` | Vector-terminal emulation is outside the terminal grid and renderer architecture. DETEK stays explicit unsupported. |
 | VT-34 | vttest logging and command replay | `MANUAL` | `-c`/`-l` may make a later supplemental run reproducible, but interactive keyboard/mouse prompts and visual judgments must be recorded explicitly. |
 
 Accounting: `AUTO` 9, `MANUAL` 9, `CONDITIONAL` 4, `EXCLUDE` 12; total
 34. There are no unclassified units.
+
+The pinned menus expose no OSC 52 clipboard family, so no synthetic vttest
+unit is added for it. The Phase 6 OSC owner instead provides byte-level parser,
+PTY reply, and no-pasteboard-authority product evidence; any future opt-in UI
+remains a Phase 9 security workflow rather than a visual vttest claim.
 
 ## Execution and evidence policy
 
@@ -212,3 +217,6 @@ crashes, corruption, or unbounded resources remain blockers.
   full Dart Terminal test runner.
 - No interactive Dart Terminal vttest result was claimed; that work remains
   supplemental and explicitly owned by the mapped future tasks.
+- 2026-09-07 OSC-policy reconciliation retained all 34 dispositions. VT-31's
+  prerequisite is now automated, while OSC 52 remains intentionally outside
+  the pinned vttest menu surface and is covered by its dedicated security gate.

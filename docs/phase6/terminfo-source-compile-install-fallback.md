@@ -303,7 +303,8 @@ promoted terminal semantics rather than advertising them early.
 - The audited entry advertises only the implemented `acsc`, `smacs`, and
   `rmacs` character capabilities. XTGETTCAP accepts bounded hex-name lists but
   returns xterm's explicit unavailable response for the reviewed policy; in
-  particular, `Ms` stays absent until the later OSC 52 security owner.
+  particular, `Ms` stays absent under the OSC 52 default-deny policy and must
+  not appear before the later opt-in security UI exists.
 
 ## Verification log
 
@@ -380,6 +381,6 @@ promoted terminal semantics rather than advertising them early.
 
 ## Handoff and blockers
 
-- No blocker remains. The next ordered Phase 6 item is the OSC
-  title/cwd/hyperlink/palette/clipboard policy; `Ms`/OSC 52 remains deliberately
-  unadvertised for that owner.
+- No blocker remains. The later OSC policy retained `Ms` as deliberately
+  unadvertised while adding bounded OSC 52 denial; opt-in advertisement remains
+  owned by the Phase 9 confirmation/policy UI.
