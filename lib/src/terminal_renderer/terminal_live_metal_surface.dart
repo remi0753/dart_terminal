@@ -248,8 +248,8 @@ final class TerminalLiveMetalSurface {
   /// Empty family delegates face selection to AppKit's system monospace API.
   static const String defaultFontFamily = '';
 
-  /// `NSFont.systemFontSize` on the supported macOS baseline.
-  static const double defaultFontPointSize = 13;
+  /// Product-owned readable zero-config size for the macOS system monospace.
+  static const double defaultFontPointSize = 14;
 
   final TerminalSessionId sessionId;
   final TerminalScreenSet screenSet;

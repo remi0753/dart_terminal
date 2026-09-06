@@ -22,7 +22,7 @@ void runTerminalLiveMetalSurfaceFontTests() {
         .single;
     _expect(
       catalog.family.isEmpty &&
-          metrics.pointSize == 13 &&
+          metrics.pointSize == 14 &&
           latin.isMonospaced &&
           !latin.isFallback &&
           !latin.hasMissingGlyph &&

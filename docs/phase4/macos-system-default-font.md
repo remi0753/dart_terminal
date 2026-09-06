@@ -5,6 +5,10 @@
 - Scope: Phase 4 zero-config readability repair
 - Related: TXT-03, TXT-05, REN-01–03, CFG-03
 
+Follow-up: the family-selection decision remains current, while the product
+point size was subsequently increased from 13 to 14 points in
+`larger-default-font-size.md` at the user's request.
+
 ## Purpose
 
 Use the macOS system monospaced font at the macOS standard system font size for
