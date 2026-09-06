@@ -17,6 +17,8 @@ abstract final class TerminalCompatibilitySurface {
     0x0b,
     0x0c,
     0x0d,
+    0x0e,
+    0x0f,
     0x84,
     0x85,
     0x88,
@@ -33,6 +35,10 @@ abstract final class TerminalCompatibilitySurface {
     0x48,
     0x4d,
     0x63,
+    0x012830,
+    0x012842,
+    0x012930,
+    0x012942,
   ];
 
   static const List<int> csiSelectors = <int>[
@@ -77,6 +83,8 @@ abstract final class TerminalCompatibilitySurface {
   ];
 
   static const List<int> oscCommands = <int>[4, 8, 10, 11, 104, 110, 111];
+
+  static const List<int> dcsSelectors = <int>[0x012b71];
 
   static const List<int> ansiModes = <int>[4];
 
@@ -163,6 +171,22 @@ abstract final class TerminalCompatibilitySurface {
       firstIntermediate: firstIntermediate,
     ),
   );
+
+  static bool supportsDcs({
+    required int? privateMarker,
+    required int finalByte,
+    required int intermediateCount,
+    int firstIntermediate = 0,
+  }) =>
+      privateMarker == null &&
+      _containsSorted(
+        dcsSelectors,
+        escapeSelectorKey(
+          finalByte: finalByte,
+          intermediateCount: intermediateCount,
+          firstIntermediate: firstIntermediate,
+        ),
+      );
 
   static bool supportsOsc(int command) => _containsSorted(oscCommands, command);
 

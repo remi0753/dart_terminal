@@ -166,11 +166,11 @@ String generateTerminalCompatibilitySummary(
       'color 12/112, and security-sensitive clipboard command 52.',
     )
     ..writeln(
-      '- The terminfo task owns XTGETTCAP/XTSETTCAP decisions; the existing '
+      '- The terminfo task owns remaining XTSETTCAP decisions; the existing '
       '`v1 保留` feature-matrix decision continues to own Sixel.',
     )
     ..writeln(
-      '- Unsupported character-set, rectangular-editing, locator, printer, '
+      '- Unsupported extended character-set, rectangular-editing, locator, printer, '
       'and terminal-local xterm resource controls stay rejected until '
       'differential/application evidence justifies a new ordered task.',
     )

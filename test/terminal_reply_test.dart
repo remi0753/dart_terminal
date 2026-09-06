@@ -10,6 +10,7 @@ void runTerminalReplyTests() {
   _testDeviceStatusAndModeQueries();
   _testOriginRelativeCursorReports();
   _testOscColorQueriesAndTerminators();
+  _testXtgettcapExplicitNegativePolicy();
   _testReplyRejectionAndMalformedRecovery();
   _testQueryChunkIndependence();
 }
@@ -29,6 +30,11 @@ void _testBoundedSemanticEncoder() {
     TerminalReplyEncoder.terminalStatusOk(),
     '\x1b[0n',
     'terminal status report',
+  );
+  _expectBytes(
+    TerminalReplyEncoder.xtgettcapNotFound(),
+    '\x1bP0+r\x1b\\',
+    'XTGETTCAP absent-capability report',
   );
   final Uint8List maximumCursor = TerminalReplyEncoder.cursorPosition(
     row: TerminalReplyEncoder.maximumCoordinate,
@@ -114,6 +120,68 @@ void _testBoundedSemanticEncoder() {
     ),
     ArgumentError,
     'unsupported default color command',
+  );
+}
+
+void _testXtgettcapExplicitNegativePolicy() {
+  final List<Uint8List> replies = <Uint8List>[];
+  final TerminalScreen screen = TerminalScreen(rows: 1, columns: 8);
+  final TerminalScreenParserSink sink = TerminalScreenParserSink(
+    screen,
+    onReply: (Uint8List reply) {
+      replies.add(Uint8List.fromList(reply));
+      return true;
+    },
+  );
+  final VtParser parser = VtParser(sink: sink);
+  parser.parse(_bytes('\x1bP+q4D73\x1b\\X'));
+  parser.finish();
+  _expectStrings(replies, const <String>[
+    '\x1bP0+r\x1b\\',
+  ], 'the OSC 52 Ms query is explicitly unavailable');
+  _expect(
+    sink.acceptedReplyCount == 1 &&
+        sink.unsupportedSequenceCount == 0 &&
+        screen.contentAt(0, 0) == 0x58,
+    'recognized XTGETTCAP recovers to printable input',
+  );
+
+  final TerminalScreenParserSink parameterized = TerminalScreenParserSink(
+    TerminalScreen(rows: 1, columns: 1),
+    onReply: (_) => true,
+  );
+  final VtParser parameterizedParser = VtParser(sink: parameterized);
+  parameterizedParser.parse(_bytes('\x1bP1+q4D73\x1b\\'));
+  parameterizedParser.finish();
+  _expect(
+    parameterized.unsupportedSequenceCount == 1 &&
+        parameterized.acceptedReplyCount == 0,
+    'parameterized DCS remains outside the reviewed XTGETTCAP selector',
+  );
+
+  final List<Uint8List> boundedReplies = <Uint8List>[];
+  final TerminalScreenParserSink bounded = TerminalScreenParserSink(
+    TerminalScreen(rows: 1, columns: 1),
+    onReply: (Uint8List reply) {
+      boundedReplies.add(Uint8List.fromList(reply));
+      return true;
+    },
+  );
+  final VtParser boundedParser = VtParser(sink: bounded);
+  boundedParser.parse(
+    _bytes(
+      '\x1bP+q\x1b\\'
+      '\x1bP+q4\x1b\\'
+      '\x1bP+q4G\x1b\\'
+      '\x1bP+q4D73;544E\x1b\\',
+    ),
+  );
+  boundedParser.finish();
+  _expect(
+    bounded.unsupportedSequenceCount == 3 &&
+        bounded.acceptedReplyCount == 1 &&
+        boundedReplies.length == 1,
+    'empty, odd, and non-hex payloads reject while a bounded list replies',
   );
 }
 
@@ -332,6 +400,7 @@ void _testQueryChunkIndependence() {
     ..._bytes('\x1b[?5h\x1b[3;4H\x1b[c\x1b[6n\x1b[?5\x24p'),
     ..._osc('10;#123456'),
     ..._osc('10;?'),
+    ..._bytes('\x1bP+q4D73\x1b\\'),
   ]);
   final List<String> expected = _parseReplyStream(input);
   for (int split = 0; split <= input.length; split++) {

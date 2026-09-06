@@ -67,6 +67,8 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
     'version',
     'evidence_index_path',
     'evidence_index_sha256',
+    'implementation_manifest_path',
+    'implementation_manifest_sha256',
     'trace_tool_path',
     'trace_tool_sha256',
     'status',
@@ -76,7 +78,7 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
   }, 'acceptance');
   _expect(
     report['format'] == 'dart-terminal-application-acceptance' &&
-        report['version'] == 1,
+        report['version'] == 2,
     'unsupported acceptance report',
   );
   _expect(
@@ -89,6 +91,13 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
     report['evidence_index_sha256'],
     defaultTerminalApplicationEvidencePath,
     'evidence index',
+  );
+  _pinnedFile(
+    root,
+    report['implementation_manifest_path'],
+    report['implementation_manifest_sha256'],
+    'compatibility/implemented_sequence_manifest.json',
+    'implementation manifest',
   );
   _pinnedFile(
     root,
@@ -152,7 +161,6 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
         );
     _expect(
       trace.unsupportedControls == raw.parser['unsupported_controls'] &&
-          trace.unsupportedSequences == raw.parser['unsupported_sequences'] &&
           trace.cancel == raw.parser['cancel'] &&
           trace.limit == raw.parser['limit'] &&
           trace.malformed == raw.parser['malformed'] &&
@@ -180,6 +188,8 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
         scenarioId: scenario.id,
         classification: gapIds.isEmpty ? 'clean-agreement' : 'documented-gap',
         gapIds: gapIds,
+        capturedUnsupportedSequences: raw.parser['unsupported_sequences']!,
+        replayedUnsupportedSequences: trace.unsupportedSequences,
       ),
     );
   }
@@ -201,6 +211,8 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
       'classification',
       'accepted',
       'gap_ids',
+      'captured_unsupported_sequences',
+      'replayed_unsupported_sequences',
     }, 'cell');
     final _DerivedCell expected = derivedCells[index];
     final List<String> gapIds = _strings(cell['gap_ids'], 'cell.gap_ids');
@@ -210,6 +222,10 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
           cell['scenario_id'] == expected.scenarioId &&
           cell['classification'] == expected.classification &&
           cell['accepted'] == true &&
+          cell['captured_unsupported_sequences'] ==
+              expected.capturedUnsupportedSequences &&
+          cell['replayed_unsupported_sequences'] ==
+              expected.replayedUnsupportedSequences &&
           _same(gapIds, expected.gapIds),
       '${expected.scenarioId} acceptance differs from replay',
     );
@@ -249,10 +265,10 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
     cells.length == 8 &&
         cleanAgreements == 1 &&
         documentedGapCells == 7 &&
-        gaps.length == 16 &&
-        uniqueSequences.length == 28 &&
-        unsupportedIncrements == 526 &&
-        safeIgnoreGaps == 2,
+        gaps.length == 14 &&
+        uniqueSequences.length == 24 &&
+        unsupportedIncrements == 98 &&
+        safeIgnoreGaps == 1,
     'reviewed acceptance baseline differs',
   );
   return TerminalApplicationAcceptanceResult(
@@ -408,12 +424,16 @@ final class _DerivedCell {
     required this.scenarioId,
     required this.classification,
     required this.gapIds,
+    required this.capturedUnsupportedSequences,
+    required this.replayedUnsupportedSequences,
   });
 
   final String applicationId;
   final String scenarioId;
   final String classification;
   final List<String> gapIds;
+  final int capturedUnsupportedSequences;
+  final int replayedUnsupportedSequences;
 }
 
 void _pinnedFile(

@@ -8,6 +8,7 @@ void main() => runTerminalApplicationAcceptanceTests();
 void runTerminalApplicationAcceptanceTests() {
   _testReviewedAcceptance();
   _testFreshnessFailure();
+  _testImplementationFreshnessFailure();
   _testUnownedSequenceFailure();
   _testScreenMutationFailure();
   _testOwnerFailure();
@@ -20,15 +21,24 @@ void _testReviewedAcceptance() {
     result.acceptedCells == 8 &&
         result.cleanAgreements == 1 &&
         result.documentedGapCells == 7 &&
-        result.gaps == 16 &&
-        result.uniqueSequences == 28 &&
-        result.unsupportedIncrements == 526 &&
+        result.gaps == 14 &&
+        result.uniqueSequences == 24 &&
+        result.unsupportedIncrements == 98 &&
         result.machineLine() ==
             'TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=1 '
-                'documented_gap_cells=7 gaps=16 unique_sequences=28 '
-                'unsupported_increments=526',
+                'documented_gap_cells=7 gaps=14 unique_sequences=24 '
+                'unsupported_increments=98',
     'reviewed acceptance has exact replay-derived totals',
   );
+}
+
+void _testImplementationFreshnessFailure() {
+  final Map<String, Object?> report = _report();
+  report['implementation_manifest_sha256'] = List<String>.filled(
+    64,
+    '0',
+  ).join();
+  _expectFailure(report, 'implementation manifest hash differs');
 }
 
 void _testFreshnessFailure() {

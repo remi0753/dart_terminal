@@ -27,6 +27,7 @@ export 'src/terminal_core/terminal_reply.dart'
 export 'src/terminal_core/terminal_screen.dart'
     show
         TerminalCellFlags,
+        TerminalCharacterSet,
         TerminalCursorShape,
         TerminalPalette,
         TerminalRowFlags,

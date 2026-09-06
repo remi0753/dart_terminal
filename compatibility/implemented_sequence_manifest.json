@@ -45,6 +45,18 @@
       "handler": "execute"
     },
     {
+      "key": "c0:14",
+      "kind": "c0",
+      "code": 14,
+      "handler": "execute"
+    },
+    {
+      "key": "c0:15",
+      "kind": "c0",
+      "code": 15,
+      "handler": "execute"
+    },
+    {
       "key": "c1:132",
       "kind": "c1",
       "code": 132,
@@ -129,6 +141,42 @@
       "kind": "esc",
       "intermediates": [],
       "finalByte": 99,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:1:40:48",
+      "kind": "esc",
+      "intermediates": [
+        40
+      ],
+      "finalByte": 48,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:1:40:66",
+      "kind": "esc",
+      "intermediates": [
+        40
+      ],
+      "finalByte": 66,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:1:41:48",
+      "kind": "esc",
+      "intermediates": [
+        41
+      ],
+      "finalByte": 48,
+      "handler": "execute"
+    },
+    {
+      "key": "esc:1:41:66",
+      "kind": "esc",
+      "intermediates": [
+        41
+      ],
+      "finalByte": 66,
       "handler": "execute"
     },
     {
@@ -439,6 +487,16 @@
         36
       ],
       "finalByte": 112,
+      "handler": "reply"
+    },
+    {
+      "key": "dcs:-1:1:43:113",
+      "kind": "dcs",
+      "privateMarker": null,
+      "intermediates": [
+        43
+      ],
+      "finalByte": 113,
       "handler": "reply"
     },
     {

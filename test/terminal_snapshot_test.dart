@@ -42,7 +42,10 @@ void _testStandaloneSnapshotIsExactAndReadable() {
     styleAttributes: styles.attributesAt(style),
   );
   screen.setCursorPosition(1, 4);
+  screen.designateCharacterSet(1, TerminalCharacterSet.decSpecialGraphics);
+  screen.invokeGlCharacterSet(1);
   screen.saveCursor();
+  screen.invokeGlCharacterSet(0);
   screen.setMode(TerminalScreenMode.insert, true);
   screen.setCursorPresentation(
     shape: TerminalCursorShape.bar,
@@ -105,6 +108,13 @@ void _testStandaloneSnapshotIsExactAndReadable() {
       'saved_rendition=palette:1/rgb:#445566/$style\n',
     ),
     'cursor and current/saved rendition are retained',
+  );
+  _expect(
+    snapshot.contains(
+      'screen charsets=g0:ascii,g1:decSpecialGraphics,gl:0 '
+      'saved=g0:ascii,g1:decSpecialGraphics,gl:1\n',
+    ),
+    'current and saved character-set state is retained',
   );
   _expect(
     snapshot.contains('screen tabs=3\n') && snapshot.endsWith('end\n'),

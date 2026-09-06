@@ -18,7 +18,114 @@ void runTerminalScreenTests() {
   _testLineEditingAndMarginScrolling();
   _testParserEditingDispatch();
   _testParserCursorTabAndStyleDispatch();
+  _testLegacyCharacterSetDispatchAndState();
   _testParserScreenIntegrationAcrossChunks();
+}
+
+void _testLegacyCharacterSetDispatchAndState() {
+  const List<int> expectedGraphics = <int>[
+    0x00a0,
+    0x25c6,
+    0x2592,
+    0x2409,
+    0x240c,
+    0x240d,
+    0x240a,
+    0x00b0,
+    0x00b1,
+    0x2424,
+    0x240b,
+    0x2518,
+    0x2510,
+    0x250c,
+    0x2514,
+    0x253c,
+    0x23ba,
+    0x23bb,
+    0x2500,
+    0x23bc,
+    0x23bd,
+    0x251c,
+    0x2524,
+    0x2534,
+    0x252c,
+    0x2502,
+    0x2264,
+    0x2265,
+    0x03c0,
+    0x2260,
+    0x00a3,
+    0x00b7,
+  ];
+  final TerminalScreen mapped = TerminalScreen(rows: 2, columns: 40);
+  final TerminalScreenParserSink mappedSink = _parseInto(
+    mapped,
+    Uint8List.fromList(<int>[
+      0x1b,
+      0x29,
+      0x30,
+      0x0e,
+      for (int scalar = 0x5f; scalar <= 0x7e; scalar++) scalar,
+      0x0f,
+      0x71,
+      ...utf8.encode('界'),
+    ]),
+  );
+  for (int column = 0; column < expectedGraphics.length; column++) {
+    _expect(
+      mapped.contentAt(0, column) == expectedGraphics[column],
+      'DEC Special Graphics scalar $column is exact',
+    );
+  }
+  _expect(
+    mapped.contentAt(0, 32) == 0x71 && mapped.contentAt(0, 33) == 0x754c,
+    'SI restores G0 ASCII and decoded non-ASCII bypasses GL mapping',
+  );
+  _expect(
+    mapped.g1CharacterSet == TerminalCharacterSet.decSpecialGraphics &&
+        mapped.glCharacterSetSlot == 0 &&
+        mappedSink.unsupportedControlCount == 0 &&
+        mappedSink.unsupportedSequenceCount == 0,
+    'designation and SO/SI are declared semantic operations',
+  );
+
+  final TerminalScreen state = TerminalScreen(rows: 1, columns: 8);
+  final TerminalScreenParserSink stateSink = _parseInto(
+    state,
+    Uint8List.fromList(<int>[
+      0x71,
+      0x1b,
+      0x28,
+      0x30,
+      0x1b,
+      0x37,
+      0x1b,
+      0x28,
+      0x42,
+      0x78,
+      0x1b,
+      0x38,
+      0x71,
+    ]),
+  );
+  _expect(
+    state.contentAt(0, 0) == 0x71 && state.contentAt(0, 1) == 0x2500,
+    'DECSC and DECRC save and restore the designated character sets',
+  );
+  _expect(stateSink.unsupportedSequenceCount == 0, 'character state stream');
+  final TerminalScreen resized = state.resized(rows: 2, columns: 8);
+  _expect(
+    resized.g0CharacterSet == TerminalCharacterSet.decSpecialGraphics &&
+        resized.savedG0CharacterSet == TerminalCharacterSet.decSpecialGraphics,
+    'reflow preserves current and saved character-set state',
+  );
+  state.resetTerminalState();
+  _expect(
+    state.g0CharacterSet == TerminalCharacterSet.ascii &&
+        state.g1CharacterSet == TerminalCharacterSet.ascii &&
+        state.glCharacterSetSlot == 0,
+    'terminal reset restores ASCII G0/G1 and invokes G0',
+  );
 }
 
 void _testPrintingWrappingAndCharacterEditing() {

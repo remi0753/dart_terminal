@@ -205,6 +205,86 @@ promoted terminal semantics rather than advertising them early.
   local database, malformed/missing resources fail closed, and the remote PTY
   contract retains the standard name without a private path. Character-set and
   XTGETTCAP semantics remain untouched until the final ordered subtask.
+- 2026-09-07: final-subtask inspection confirmed that the four observed
+  character-set designations (`ESC ( 0`, `ESC ( B`, `ESC ) 0`, `ESC ) B`) and
+  SO/SI invocation are rejected before semantic dispatch. `TerminalScreen`
+  currently owns the cursor and rendition saved by DECSC/DECRC, so G0/G1 and
+  GL invocation must live in the same per-screen state, participate in
+  save/restore, reset, reflow, primary/alternate switching, and snapshots.
+  Keeping the state only in the parser sink would incorrectly leak it across
+  screen switches and lose it on resize.
+- 2026-09-07: the sole captured XTGETTCAP request is `DCS + q 4D73 ST`, the
+  hex-encoded `Ms` capability. The audited terminfo deliberately cancels `Ms`
+  because OSC 52 clipboard ownership belongs to the following security-policy
+  task. The bounded compatible behavior is therefore a syntactically valid
+  negative `DCS 0 + r ST` response, not silent consumption and not advertising
+  OSC 52. Other DCS selectors remain bounded unsupported. This subtask will
+  expose only the reviewed XTGETTCAP selector and an explicit-negative policy;
+  it will not create a general dynamic terminfo service.
+- 2026-09-07: DEC Special Graphics maps only printable GL ASCII while the
+  selected G0/G1 set is active; decoded non-ASCII Unicode remains unchanged.
+  The mapping includes the VT100 line-drawing and control-picture repertoire
+  from `_` through `~`. The compiled source may advertise `acsc`, `smacs`, and
+  `rmacs` only after this exact screen behavior and its state-boundary tests
+  pass.
+- 2026-09-07: the first focused character-set test failed because its own
+  DECRC step intentionally restored the cursor and overwrote the preceding
+  ASCII probe at that saved coordinate. The fixture now prints a stable ASCII
+  prefix before DECSC and verifies that the restored DEC-mapped glyph replaces
+  only the post-save probe. No product behavior or acceptance condition was
+  weakened.
+- 2026-09-07: after that fixture correction, the screen and reply suites
+  passed. The compatibility-surface suite then stopped at its intended
+  freshness assertion because the reviewed manifest had not yet been
+  regenerated for the newly declared selectors. This is an expected staged
+  generation failure; selector and inventory artifacts are regenerated only
+  after semantic tests establish the implementation boundary.
+- 2026-09-07: deterministic replay of all eight pinned real-application byte
+  streams removed every character-set and XTGETTCAP reject. Unsupported
+  sequence increments fell from 526 to 98, including ncurses 297→2 and Neovim
+  124→6. The raw evidence retains its capture-time counters; the version-2
+  acceptance report now pins the current implementation manifest and records
+  both counts per cell so future support improvements remain auditable without
+  rewriting immutable PTY bytes.
+- 2026-09-07: the first complete repository gate stopped at the generated
+  human-readable sequence summary after the machine inventory itself passed
+  (`260` records, `92` implementation selectors). The summary had not yet been
+  regenerated after moving character sets and XTGETTCAP out of gap status.
+  This is a freshness failure, not a semantic test failure; the canonical
+  generator is used before repeating the gate.
+- 2026-09-07: after refreshing that summary, the second complete gate reached
+  the reviewed differential corpus and stopped at its freshness check. The
+  implementation-manifest hash and canonical snapshots intentionally changed
+  when character-set state became part of the product surface. The pinned
+  four-case baseline and dependent acceptance hashes therefore require normal
+  deterministic regeneration before the gate can be clean.
+- 2026-09-07: the third complete gate passed every generated artifact,
+  acceptance, format, and analyzer check, then reached the product parser
+  corpus and rejected its old aggregate snapshot hash. All eight individual
+  reviewed snapshots already matched; the sole stale value was the test's
+  expected aggregate after adding the deterministic character-set state line.
+  The reviewed result `80618664` replaces that stale expectation before the
+  full gate is repeated.
+- 2026-09-07: the fourth complete gate likewise reached the final test runner
+  after all freshness and analyzer checks, then exposed the inventory unit
+  test's pre-closure support totals. The machine inventory and generated
+  summary consistently report implemented 77, partial 15, safe-ignore 10,
+  unsupported 158; the exact unit expectation and the summary's now-obsolete
+  character-set ownership wording are synchronized before another full run.
+- 2026-09-07: the focused inventory rerun then exposed a second copy of those
+  exact totals in its machine-line assertion. The structural totals already
+  passed; this remaining content-free string is updated to the same reviewed
+  77/15/10/158 values and rerun rather than bypassed.
+- 2026-09-07: that rerun next reached its separate product-declaration
+  reconciliation assertion, whose pre-closure count was still 85. The
+  validator and generated summary both report the reviewed 92 declarations
+  (72 selectors plus 20 modes); the exact assertion is synchronized to 92.
+- 2026-09-07: the fifth complete gate passed the now-synchronized inventory
+  tests and then stopped at the deterministic property/fuzz state hash. The
+  execution, input, and mutation totals were unchanged (837 executions,
+  66,675 parsed bytes); the snapshot inclusion of character-set state changes
+  the reviewed hash to `1309664684`. The fixed-seed suite is rerun after
+  updating only that exact oracle.
 
 ## Decisions
 
@@ -217,8 +297,37 @@ promoted terminal semantics rather than advertising them early.
   malformed resources clear that explicit private lookup and fall back to the
   standard TERM name. This avoids advertising a stale local database while
   preserving unrelated child environment fields.
+- G0/G1 designation and GL invocation belong to each `TerminalScreen`, not to
+  the byte parser. DECSC/DECRC save and restore them with rendition, reset
+  returns to ASCII G0, and reflow/screen switching preserve independent state.
+- The audited entry advertises only the implemented `acsc`, `smacs`, and
+  `rmacs` character capabilities. XTGETTCAP accepts bounded hex-name lists but
+  returns xterm's explicit unavailable response for the reviewed policy; in
+  particular, `Ms` stays absent until the later OSC 52 security owner.
 
 ## Verification log
+
+- Final character-set/reply suites: pass for all 32 DEC Special Graphics
+  mappings, G0/G1 designation, SO/SI, DECSC/DECRC, reset, reflow,
+  primary/alternate isolation, whole/single-split/bytewise delivery, valid and
+  malformed XTGETTCAP payloads, transport acceptance/rejection, and the exact
+  `DCS 0 + r ST` response.
+- Compatibility inventory/manifest/summary: pass with 260 records, 92 product
+  declarations, implemented 77, partial 15, safe-ignore 10, unsupported 158.
+- Real-application replay: pass over 57,737 pinned PTY bytes and recorded
+  resizes; current result is 98 rejects, 24 variants, 14 owned gaps, with no
+  character-set or XTGETTCAP reject remaining.
+- Product parser corpus: pass for 8 cases, 1,421 bytes and 1,437 split runs;
+  deterministic snapshot hash `80618664` includes character-set state.
+- Fixed-seed property/fuzz: pass for 837 executions and 66,675 parsed bytes;
+  deterministic state hash `1309664684`.
+- Updated `make developer-jit-audit release-aot-audit`: pass on M1/arm64; both
+  signed bundles contain the final 3,821-byte reviewed entry.
+- Updated live display integration: pass in Developer JIT and Release AOT;
+  elapsed product runs were 2,554 ms and 1,934 ms.
+- Final `CI=true make test`: pass; every compatibility/terminfo/application
+  freshness gate passed, all 174 Dart files were already formatted, static
+  analysis reported no issues, and the complete test runner passed.
 
 - `dart run tool/terminal_terminfo.dart --check`: pass; 289 capability records,
   exact 3,761-byte producer regeneration, source/base/artifact/semantic hashes,
@@ -258,6 +367,19 @@ promoted terminal semantics rather than advertising them early.
   `-x -e xterm-256color -o <temporary-root>` after compiling the pinned
   standard projection under `dart-terminal-pinned-xterm-base`.
 
+## Final artifact record
+
+- Source SHA-256: `1dae7b3c7d45fc0588efcc3fe25eeab56c81389ed80d569ad16d92d41ce83961`
+- Pinned base `infocmp` SHA-256:
+  `5518916deefe8e29efd5bfddef564b45350cdb1eb450cae4045fc4ecef300291`
+- Compiled SHA-256:
+  `3de08b078eddc0d1da55635844f0999a3407389ac80a6fdb7ecc2c6d083bd260`
+- Compiled semantic projection SHA-256:
+  `ecd5b83085378f13e2c7f98fb64e8ef1efa5f17492d7c479060b2bd8724b6cf0`
+- Compiled size: 3,821 bytes; semantic projection: 289 capability records.
+
 ## Handoff and blockers
 
-- No blocker is known at task start.
+- No blocker remains. The next ordered Phase 6 item is the OSC
+  title/cwd/hyperlink/palette/clipboard policy; `Ms`/OSC 52 remains deliberately
+  unadvertised for that owner.

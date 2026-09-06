@@ -35,7 +35,7 @@ void _testGeneratedManifestIsDeterministicAndFresh() {
   _expect(
     root['format'] == 'dart-terminal-implementation-surface' &&
         root['version'] == 1 &&
-        selectors.length == 65 &&
+        selectors.length == 72 &&
         modes.length == 20 &&
         _listsEqual(ignored, const <String>['dcs', 'sos', 'pm', 'apc']),
     'manifest has the reviewed selector, mode, and policy totals',
@@ -100,6 +100,14 @@ void _testEveryDeclaredSelectorReachesSemanticDispatch() {
     _expect(
       result.sink.unsupportedSequenceCount == 0,
       'declared OSC command $command reaches semantic dispatch',
+    );
+  }
+  for (final int key in TerminalCompatibilitySurface.dcsSelectors) {
+    final _ParseResult result = _parse(_dcsProbe(key));
+    _expect(
+      result.sink.unsupportedSequenceCount == 0 &&
+          result.sink.acceptedReplyCount == 1,
+      'declared DCS key $key reaches bounded reply dispatch',
     );
   }
 }
@@ -208,6 +216,21 @@ List<int> _oscProbe(int command) {
     _ => throw StateError('missing OSC probe for $command'),
   };
   return ascii.encode('\x1b]$payload\x07');
+}
+
+List<int> _dcsProbe(int key) {
+  final int count = (key >> 16) & 0xff;
+  final int intermediate = (key >> 8) & 0xff;
+  final int finalByte = key & 0xff;
+  return <int>[
+    0x1b,
+    0x50,
+    if (count == 1) intermediate,
+    finalByte,
+    ...ascii.encode('4D73'),
+    0x1b,
+    0x5c,
+  ];
 }
 
 _ParseResult _parse(List<int> input) {

@@ -8,12 +8,64 @@ void main() => runTerminalScreenSetTests();
 void runTerminalScreenSetTests() {
   _testSharedResourcesAndPaletteDamage();
   _testMode47IsolationAndPreservation();
+  _testCharacterSetIsolationAcrossScreenSwitches();
   _testMode1047ClearOnReturn();
   _testMode1048SaveAndRestore();
   _testMode1049ClearSaveRestoreAndIdempotence();
   _testScreenSetReset();
   _testParserScreenModeDispatch();
   _testParserScreenSetChunkIndependence();
+}
+
+void _testCharacterSetIsolationAcrossScreenSwitches() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 6);
+  final TerminalScreenParserSink sink = TerminalScreenParserSink.forScreenSet(
+    screens,
+  );
+  final VtParser parser = VtParser(sink: sink);
+  parser.parse(
+    Uint8List.fromList(<int>[
+      0x1b,
+      0x29,
+      0x30,
+      0x0e,
+      0x71,
+      ..._csi('?47h'),
+      0x71,
+      0x1b,
+      0x28,
+      0x30,
+      0x78,
+      ..._csi('?47l'),
+      0x78,
+      ..._csi('?47h'),
+      0x71,
+    ]),
+  );
+  parser.finish();
+  _expect(
+    screens.primary.contentAt(0, 0) == 0x2500 &&
+        screens.primary.contentAt(0, 1) == 0x2502 &&
+        screens.primary.g0CharacterSet == TerminalCharacterSet.ascii &&
+        screens.primary.g1CharacterSet ==
+            TerminalCharacterSet.decSpecialGraphics &&
+        screens.primary.glCharacterSetSlot == 1,
+    'primary retains its invoked G1 DEC set while inactive',
+  );
+  _expect(
+    screens.alternate.contentAt(0, 0) == 0x71 &&
+        screens.alternate.contentAt(0, 1) == 0x2502 &&
+        screens.alternate.contentAt(0, 2) == 0x2500 &&
+        screens.alternate.g0CharacterSet ==
+            TerminalCharacterSet.decSpecialGraphics &&
+        screens.alternate.g1CharacterSet == TerminalCharacterSet.ascii &&
+        screens.alternate.glCharacterSetSlot == 0,
+    'alternate owns an independent G0 designation and invocation state',
+  );
+  _expect(
+    sink.unsupportedControlCount == 0 && sink.unsupportedSequenceCount == 0,
+    'screen-switch character-set stream is fully supported',
+  );
 }
 
 void _testSharedResourcesAndPaletteDamage() {
@@ -361,6 +413,22 @@ void _testParserScreenSetChunkIndependence() {
     ..._csi('?47h'),
     0x42,
     ..._csi('?47l'),
+    0x1b,
+    0x28,
+    0x30,
+    0x71,
+    0x1b,
+    0x28,
+    0x42,
+    0x1b,
+    0x29,
+    0x30,
+    0x0e,
+    0x78,
+    0x0f,
+    0x1b,
+    0x29,
+    0x42,
   ]);
   final List<int> expected = _screenSetSnapshot(input);
   for (int split = 0; split <= input.length; split++) {
@@ -377,7 +445,7 @@ void _testParserScreenSetChunkIndependence() {
   );
 
   final TerminalScreenSet reviewed = _parseScreenSet(input);
-  _expect(_rowText(reviewed.primary, 1) == '.PQ..', 'reviewed primary state');
+  _expect(_rowText(reviewed.primary, 1) == '.PQ─│', 'reviewed primary state');
   _expect(
     _rowText(reviewed.alternate, 2) == '...AB',
     'reviewed alternate state',

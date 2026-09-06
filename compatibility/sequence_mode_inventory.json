@@ -1474,17 +1474,21 @@
         ],
         "finalByte": 66
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "dec-vt510-rm-b01",
           "locator": "Part II chapter 5, SCS—Select Character Set"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
     },
     {
       "id": "dec:esc:designate-g0-dec-special",
@@ -1497,17 +1501,21 @@
         ],
         "finalByte": 48
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "dec-vt510-rm-b01",
           "locator": "Part II chapter 5, SCS—Select Character Set"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
     },
     {
       "id": "dec:esc:designate-g1-ascii",
@@ -1520,17 +1528,21 @@
         ],
         "finalByte": 66
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "dec-vt510-rm-b01",
           "locator": "Part II chapter 5, SCS—Select Character Set"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
     },
     {
       "id": "dec:esc:designate-g1-dec-special",
@@ -1543,17 +1555,21 @@
         ],
         "finalByte": 48
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "dec-vt510-rm-b01",
           "locator": "Part II chapter 5, SCS—Select Character Set"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
     },
     {
       "id": "dec:esc:hts-7bit",
@@ -2051,17 +2067,21 @@
         "kind": "c0",
         "code": 15
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "ecma-48-5e",
           "locator": "clause 8.3.119, SI—Shift In"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Invokes designated G0 into GL."
     },
     {
       "id": "ecma48:c0:so",
@@ -2071,17 +2091,21 @@
         "kind": "c0",
         "code": 14
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "ecma-48-5e",
           "locator": "clause 8.3.126, SO—Shift Out"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Invokes designated G1 into GL."
     },
     {
       "id": "ecma48:c0:vt",
@@ -4037,8 +4061,8 @@
         ],
         "finalByte": 113
       },
-      "support": "safe-ignore",
-      "disposition": "ignore",
+      "support": "partial",
+      "disposition": "reply",
       "sourceRefs": [
         {
           "source": "xterm-411",
@@ -4051,7 +4075,7 @@
       "testEvidence": [
         "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
-      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
+      "notes": "Bounded requests receive an explicit unavailable reply. The audited database intentionally omits security-sensitive Ms/OSC 52 and no dynamic keyboard-capability service is advertised."
     },
     {
       "id": "xterm:dcs:xtgetxres",

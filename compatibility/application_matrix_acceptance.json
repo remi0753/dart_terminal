@@ -1,8 +1,10 @@
 {
   "format": "dart-terminal-application-acceptance",
-  "version": 1,
+  "version": 2,
   "evidence_index_path": "compatibility/application_matrix_evidence.json",
   "evidence_index_sha256": "b2422e4a6a3c6073306f2c615ec9b85d49621440f06998c3435871949caa554e",
+  "implementation_manifest_path": "compatibility/implemented_sequence_manifest.json",
+  "implementation_manifest_sha256": "926d9607f71201811a6351acc145dcbd9b1261ee72aec22ce609734b182ccaad",
   "trace_tool_path": "tool/terminal_application_unsupported_trace.dart",
   "trace_tool_sha256": "62cddaab40420b436d86c3d5a71fe49b750ea206bd0f7ee7cd73d7e579e50404",
   "status": "accepted-with-owned-gaps",
@@ -10,11 +12,11 @@
     "cells": 8,
     "clean_agreements": 1,
     "documented_gap_cells": 7,
-    "unique_sequences": 28,
-    "unsupported_increments": 526,
-    "gaps": 16,
-    "safe_ignore_gaps": 2,
-    "explicit_unsupported_gaps": 14
+    "unique_sequences": 24,
+    "unsupported_increments": 98,
+    "gaps": 14,
+    "safe_ignore_gaps": 1,
+    "explicit_unsupported_gaps": 13
   },
   "cells": [
     {
@@ -22,6 +24,8 @@
       "scenario_id": "emacs-terminal-ui",
       "classification": "documented-gap",
       "accepted": true,
+      "captured_unsupported_sequences": 3,
+      "replayed_unsupported_sequences": 3,
       "gap_ids": [
         "focus-reporting",
         "xtversion"
@@ -32,6 +36,8 @@
       "scenario_id": "fzf-filter-selection",
       "classification": "documented-gap",
       "accepted": true,
+      "captured_unsupported_sequences": 28,
+      "replayed_unsupported_sequences": 28,
       "gap_ids": [
         "synchronized-output"
       ]
@@ -41,8 +47,9 @@
       "scenario_id": "lazygit-repository-ui",
       "classification": "documented-gap",
       "accepted": true,
+      "captured_unsupported_sequences": 42,
+      "replayed_unsupported_sequences": 40,
       "gap_ids": [
-        "charset-designation",
         "focus-reporting",
         "kitty-keyboard-query",
         "sgr-pixel-mouse",
@@ -58,6 +65,8 @@
       "scenario_id": "mosh-local-session",
       "classification": "documented-gap",
       "accepted": true,
+      "captured_unsupported_sequences": 7,
+      "replayed_unsupported_sequences": 7,
       "gap_ids": [
         "focus-reporting",
         "hilite-mouse"
@@ -68,8 +77,9 @@
       "scenario_id": "ncurses-resize-ui",
       "classification": "documented-gap",
       "accepted": true,
+      "captured_unsupported_sequences": 297,
+      "replayed_unsupported_sequences": 2,
       "gap_ids": [
-        "charset-designation",
         "title-stack"
       ]
     },
@@ -78,12 +88,12 @@
       "scenario_id": "neovim-editing-ui",
       "classification": "documented-gap",
       "accepted": true,
+      "captured_unsupported_sequences": 124,
+      "replayed_unsupported_sequences": 6,
       "gap_ids": [
-        "charset-designation",
         "decrqss",
         "focus-reporting",
         "kitty-keyboard-query",
-        "xtgettcap",
         "xtmodkeys"
       ]
     },
@@ -92,6 +102,8 @@
       "scenario_id": "ssh-local-pty",
       "classification": "clean-agreement",
       "accepted": true,
+      "captured_unsupported_sequences": 0,
+      "replayed_unsupported_sequences": 0,
       "gap_ids": []
     },
     {
@@ -99,9 +111,10 @@
       "scenario_id": "tmux-session-resize",
       "classification": "documented-gap",
       "accepted": true,
+      "captured_unsupported_sequences": 25,
+      "replayed_unsupported_sequences": 12,
       "gap_ids": [
         "application-escape-mode",
-        "charset-designation",
         "focus-reporting",
         "theme-report",
         "theme-updates",
@@ -122,25 +135,6 @@
       "variants": [
         "1b5b3f3737323768",
         "1b5b3f373732376c"
-      ],
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
-      "id": "charset-designation",
-      "disposition": "explicit-unsupported",
-      "impact": "visible-content",
-      "inventory_ids": [
-        "dec:esc:designate-g0-ascii",
-        "dec:esc:designate-g0-dec-special",
-        "dec:esc:designate-g1-dec-special"
-      ],
-      "owner": "ROADMAP.md#phase-6-terminfo",
-      "minimal_hex": "1b2830",
-      "variants": [
-        "1b2830",
-        "1b2842",
-        "1b2930"
       ],
       "screen_mutation": false,
       "matrix_blocker": false
@@ -290,21 +284,6 @@
       "variants": [
         "1b5b313474",
         "1b5b313874"
-      ],
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
-      "id": "xtgettcap",
-      "disposition": "safe-ignore",
-      "impact": "query-fallback",
-      "inventory_ids": [
-        "xterm:dcs:xtgettcap"
-      ],
-      "owner": "ROADMAP.md#phase-6-terminfo",
-      "minimal_hex": "1b502b71344437331b5c",
-      "variants": [
-        "1b502b71344437331b5c"
       ],
       "screen_mutation": false,
       "matrix_blocker": false

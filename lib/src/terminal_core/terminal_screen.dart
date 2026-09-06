@@ -39,6 +39,8 @@ enum TerminalScreenMode {
 
 enum TerminalCursorShape { block, underline, bar }
 
+enum TerminalCharacterSet { ascii, decSpecialGraphics }
+
 /// Validates a package-level replacement request before ownership changes.
 void validateTerminalScreenDimensions(int rows, int columns) =>
     TerminalScreen._validateDimensions(rows, columns);
@@ -174,6 +176,12 @@ final class TerminalScreen {
   int _savedForeground = 0;
   int _savedBackground = 0;
   int _savedStyleId = 0;
+  TerminalCharacterSet _g0CharacterSet = TerminalCharacterSet.ascii;
+  TerminalCharacterSet _g1CharacterSet = TerminalCharacterSet.ascii;
+  int _glCharacterSetSlot = 0;
+  TerminalCharacterSet _savedG0CharacterSet = TerminalCharacterSet.ascii;
+  TerminalCharacterSet _savedG1CharacterSet = TerminalCharacterSet.ascii;
+  int _savedGlCharacterSetSlot = 0;
   late int _nextLogicalLineId;
   int _logicalLineEpoch = 1;
   int _firstLogicalCellOffset = 0;
@@ -212,6 +220,12 @@ final class TerminalScreen {
   int get savedForeground => _savedForeground;
   int get savedBackground => _savedBackground;
   int get savedStyleId => _savedStyleId;
+  TerminalCharacterSet get g0CharacterSet => _g0CharacterSet;
+  TerminalCharacterSet get g1CharacterSet => _g1CharacterSet;
+  int get glCharacterSetSlot => _glCharacterSetSlot;
+  TerminalCharacterSet get savedG0CharacterSet => _savedG0CharacterSet;
+  TerminalCharacterSet get savedG1CharacterSet => _savedG1CharacterSet;
+  int get savedGlCharacterSetSlot => _savedGlCharacterSetSlot;
   int get paletteGeneration => palette.generation;
   int get graphemeGeneration => graphemeTable.generation;
   int get defaultForegroundColor => palette.defaultForeground;
@@ -609,7 +623,10 @@ final class TerminalScreen {
         _savedCursorColumn == _cursorColumn &&
         _savedForeground == _currentForeground &&
         _savedBackground == _currentBackground &&
-        _savedStyleId == _currentStyleId) {
+        _savedStyleId == _currentStyleId &&
+        _savedG0CharacterSet == _g0CharacterSet &&
+        _savedG1CharacterSet == _g1CharacterSet &&
+        _savedGlCharacterSetSlot == _glCharacterSetSlot) {
       return;
     }
     _savedCursorRow = _cursorRow;
@@ -617,6 +634,9 @@ final class TerminalScreen {
     _savedForeground = _currentForeground;
     _savedBackground = _currentBackground;
     _savedStyleId = _currentStyleId;
+    _savedG0CharacterSet = _g0CharacterSet;
+    _savedG1CharacterSet = _g1CharacterSet;
+    _savedGlCharacterSetSlot = _glCharacterSetSlot;
     _incrementGeneration();
   }
 
@@ -628,6 +648,14 @@ final class TerminalScreen {
       _currentForeground = _savedForeground;
       _currentBackground = _savedBackground;
       _currentStyleId = _savedStyleId;
+      changed = true;
+    }
+    if (_g0CharacterSet != _savedG0CharacterSet ||
+        _g1CharacterSet != _savedG1CharacterSet ||
+        _glCharacterSetSlot != _savedGlCharacterSetSlot) {
+      _g0CharacterSet = _savedG0CharacterSet;
+      _g1CharacterSet = _savedG1CharacterSet;
+      _glCharacterSetSlot = _savedGlCharacterSetSlot;
       changed = true;
     }
     if (changed) {
@@ -669,6 +697,37 @@ final class TerminalScreen {
     _currentBackground = 0;
     _currentStyleId = 0;
     _incrementGeneration();
+  }
+
+  void designateCharacterSet(int slot, TerminalCharacterSet characterSet) {
+    RangeError.checkValueInInterval(slot, 0, 1, 'slot');
+    if (slot == 0) {
+      if (_g0CharacterSet == characterSet) return;
+      _g0CharacterSet = characterSet;
+    } else {
+      if (_g1CharacterSet == characterSet) return;
+      _g1CharacterSet = characterSet;
+    }
+    _incrementGeneration();
+  }
+
+  void invokeGlCharacterSet(int slot) {
+    RangeError.checkValueInInterval(slot, 0, 1, 'slot');
+    if (_glCharacterSetSlot == slot) return;
+    _glCharacterSetSlot = slot;
+    _incrementGeneration();
+  }
+
+  int translateGlScalar(int scalar) {
+    if (scalar < 0x20 || scalar > 0x7e) return scalar;
+    final TerminalCharacterSet characterSet = _glCharacterSetSlot == 0
+        ? _g0CharacterSet
+        : _g1CharacterSet;
+    if (characterSet != TerminalCharacterSet.decSpecialGraphics ||
+        scalar < 0x5f) {
+      return scalar;
+    }
+    return _decSpecialGraphics[scalar - 0x5f];
   }
 
   void setPaletteColor(int index, int color) {
@@ -938,6 +997,12 @@ final class TerminalScreen {
         _savedForeground != 0 ||
         _savedBackground != 0 ||
         _savedStyleId != 0 ||
+        _g0CharacterSet != TerminalCharacterSet.ascii ||
+        _g1CharacterSet != TerminalCharacterSet.ascii ||
+        _glCharacterSetSlot != 0 ||
+        _savedG0CharacterSet != TerminalCharacterSet.ascii ||
+        _savedG1CharacterSet != TerminalCharacterSet.ascii ||
+        _savedGlCharacterSetSlot != 0 ||
         !_tabStopsAreDefault();
 
     _topMargin = 0;
@@ -963,6 +1028,12 @@ final class TerminalScreen {
     _savedForeground = 0;
     _savedBackground = 0;
     _savedStyleId = 0;
+    _g0CharacterSet = TerminalCharacterSet.ascii;
+    _g1CharacterSet = TerminalCharacterSet.ascii;
+    _glCharacterSetSlot = 0;
+    _savedG0CharacterSet = TerminalCharacterSet.ascii;
+    _savedG1CharacterSet = TerminalCharacterSet.ascii;
+    _savedGlCharacterSetSlot = 0;
     _writeDefaultTabStops();
     if (cursorPresentationChanged) {
       _presentationDamageRequired = true;
@@ -2390,3 +2461,38 @@ final class TerminalScreen {
     _generation++;
   }
 }
+
+const List<int> _decSpecialGraphics = <int>[
+  0x00a0,
+  0x25c6,
+  0x2592,
+  0x2409,
+  0x240c,
+  0x240d,
+  0x240a,
+  0x00b0,
+  0x00b1,
+  0x2424,
+  0x240b,
+  0x2518,
+  0x2510,
+  0x250c,
+  0x2514,
+  0x253c,
+  0x23ba,
+  0x23bb,
+  0x2500,
+  0x23bc,
+  0x23bd,
+  0x251c,
+  0x2524,
+  0x2534,
+  0x252c,
+  0x2502,
+  0x2264,
+  0x2265,
+  0x03c0,
+  0x2260,
+  0x00a3,
+  0x00b7,
+];

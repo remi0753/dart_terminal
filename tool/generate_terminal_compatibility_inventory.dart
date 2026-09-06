@@ -87,6 +87,20 @@ const Map<int, _Metadata> _controlMetadata = <int, _Metadata>{
     notes: 'Handled as line feed, matching xterm rather than paged-media form feed.',
   ),
   0x0d: _Metadata('ecma48', 'cr', 'CR', 'clause 8.3.15, CR—Carriage Return'),
+  0x0e: _Metadata(
+    'ecma48',
+    'so',
+    'SO',
+    'clause 8.3.126, SO—Shift Out',
+    notes: 'Invokes designated G1 into GL.',
+  ),
+  0x0f: _Metadata(
+    'ecma48',
+    'si',
+    'SI',
+    'clause 8.3.119, SI—Shift In',
+    notes: 'Invokes designated G0 into GL.',
+  ),
   0x84: _Metadata('dec', 'ind', 'IND', 'Part II chapter 5, IND—Index'),
   0x85: _Metadata('ecma48', 'nel', 'NEL', 'clause 8.3.86, NEL—Next Line'),
   0x88: _Metadata(
@@ -148,6 +162,45 @@ const Map<int, _Metadata> _escapeMetadata = <int, _Metadata>{
     'Part II chapter 5, RI—Reverse Index',
   ),
   0x63: _Metadata('dec', 'ris', 'RIS', 'Part II chapter 5, RIS—Full Reset'),
+  0x012830: _Metadata(
+    'dec',
+    'designate-g0-dec-special',
+    'DESIGNATE-G0-DEC-SPECIAL',
+    'Part II chapter 5, SCS—Select Character Set',
+  ),
+  0x012842: _Metadata(
+    'dec',
+    'designate-g0-ascii',
+    'DESIGNATE-G0-ASCII',
+    'Part II chapter 5, SCS—Select Character Set',
+  ),
+  0x012930: _Metadata(
+    'dec',
+    'designate-g1-dec-special',
+    'DESIGNATE-G1-DEC-SPECIAL',
+    'Part II chapter 5, SCS—Select Character Set',
+  ),
+  0x012942: _Metadata(
+    'dec',
+    'designate-g1-ascii',
+    'DESIGNATE-G1-ASCII',
+    'Part II chapter 5, SCS—Select Character Set',
+  ),
+};
+
+const Map<int, _Metadata> _dcsMetadata = <int, _Metadata>{
+  0x012b71: _Metadata(
+    'xterm',
+    'xtgettcap',
+    'XTGETTCAP',
+    'ctlseqs.ms, XTGETTCAP',
+    support: 'partial',
+    notes:
+        'Bounded requests receive an explicit unavailable reply. The audited '
+        'database intentionally omits security-sensitive Ms/OSC 52 and no '
+        'dynamic keyboard-capability service is advertised.',
+    reply: true,
+  ),
 };
 
 const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
@@ -525,24 +578,6 @@ const List<_Gap> _gaps = <_Gap>[
   ),
   _Gap(
     family: 'ecma48',
-    kind: 'c0',
-    name: 'so',
-    mnemonic: 'SO',
-    syntax: 'SO (0x0E)',
-    selector: <String, Object?>{'kind': 'c0', 'code': 14},
-    locator: 'clause 8.3.126, SO—Shift Out',
-  ),
-  _Gap(
-    family: 'ecma48',
-    kind: 'c0',
-    name: 'si',
-    mnemonic: 'SI',
-    syntax: 'SI (0x0F)',
-    selector: <String, Object?>{'kind': 'c0', 'code': 15},
-    locator: 'clause 8.3.119, SI—Shift In',
-  ),
-  _Gap(
-    family: 'ecma48',
     kind: 'c1',
     name: 'ss2',
     mnemonic: 'SS2',
@@ -741,58 +776,6 @@ const List<_Gap> _gaps = <_Gap>[
       'finalByte': 71,
     },
     locator: 'ctlseqs.ms, ESC % G',
-  ),
-  _Gap(
-    family: 'dec',
-    kind: 'esc',
-    name: 'designate-g0-dec-special',
-    mnemonic: 'DESIGNATE-G0-DEC-SPECIAL',
-    syntax: 'ESC ( 0',
-    selector: <String, Object?>{
-      'kind': 'esc',
-      'intermediates': <int>[40],
-      'finalByte': 48,
-    },
-    locator: 'Part II chapter 5, SCS—Select Character Set',
-  ),
-  _Gap(
-    family: 'dec',
-    kind: 'esc',
-    name: 'designate-g0-ascii',
-    mnemonic: 'DESIGNATE-G0-ASCII',
-    syntax: 'ESC ( B',
-    selector: <String, Object?>{
-      'kind': 'esc',
-      'intermediates': <int>[40],
-      'finalByte': 66,
-    },
-    locator: 'Part II chapter 5, SCS—Select Character Set',
-  ),
-  _Gap(
-    family: 'dec',
-    kind: 'esc',
-    name: 'designate-g1-dec-special',
-    mnemonic: 'DESIGNATE-G1-DEC-SPECIAL',
-    syntax: 'ESC ) 0',
-    selector: <String, Object?>{
-      'kind': 'esc',
-      'intermediates': <int>[41],
-      'finalByte': 48,
-    },
-    locator: 'Part II chapter 5, SCS—Select Character Set',
-  ),
-  _Gap(
-    family: 'dec',
-    kind: 'esc',
-    name: 'designate-g1-ascii',
-    mnemonic: 'DESIGNATE-G1-ASCII',
-    syntax: 'ESC ) B',
-    selector: <String, Object?>{
-      'kind': 'esc',
-      'intermediates': <int>[41],
-      'finalByte': 66,
-    },
-    locator: 'Part II chapter 5, SCS—Select Character Set',
   ),
   _Gap(
     family: 'dec',
@@ -2041,21 +2024,6 @@ const List<_Gap> _dcsAndStringRecords = <_Gap>[
   _Gap(
     family: 'xterm',
     kind: 'dcs',
-    name: 'xtgettcap',
-    mnemonic: 'XTGETTCAP',
-    syntax: 'DCS + q Pt ST',
-    selector: <String, Object?>{
-      'kind': 'dcs',
-      'privateMarker': null,
-      'intermediates': <int>[43],
-      'finalByte': 113,
-    },
-    locator: 'ctlseqs.ms, XTGETTCAP',
-    notes: _boundedIgnoreNotes,
-  ),
-  _Gap(
-    family: 'xterm',
-    kind: 'dcs',
     name: 'sixel',
     mnemonic: 'SIXEL',
     syntax: 'DCS Ps q Pt ST',
@@ -2178,6 +2146,11 @@ String generateTerminalCompatibilityInventorySource() {
     'OSC commands',
   );
   _expectExactKeys(
+    _dcsMetadata.keys,
+    TerminalCompatibilitySurface.dcsSelectors,
+    'DCS selectors',
+  );
+  _expectExactKeys(
     _ansiModeMetadata.keys,
     TerminalCompatibilitySurface.ansiModes,
     'ANSI modes',
@@ -2198,6 +2171,8 @@ String generateTerminalCompatibilityInventorySource() {
           _implementedCsi(key, _csiMetadata[key]!),
         for (final int command in TerminalCompatibilitySurface.oscCommands)
           _implementedOsc(command, _oscMetadata[command]!),
+        for (final int key in TerminalCompatibilitySurface.dcsSelectors)
+          _implementedDcs(key, _dcsMetadata[key]!),
         for (final int mode in TerminalCompatibilitySurface.ansiModes)
           _implementedMode(mode, false, _ansiModeMetadata[mode]!),
         for (final int mode in TerminalCompatibilitySurface.decPrivateModes)
@@ -2281,6 +2256,24 @@ Map<String, Object?> _implementedOsc(int command, _Metadata metadata) =>
       syntax: 'OSC $command ; Pt ST',
       selector: <String, Object?>{'kind': 'osc', 'command': command},
     );
+
+Map<String, Object?> _implementedDcs(int key, _Metadata metadata) {
+  final int count = (key >> 16) & 0xff;
+  final int intermediate = (key >> 8) & 0xff;
+  final int finalByte = key & 0xff;
+  return _record(
+    metadata: metadata,
+    kind: 'dcs',
+    syntax:
+        'DCS ${count == 1 ? '${_intermediateName(intermediate)} ' : ''}${String.fromCharCode(finalByte)} Pt ST',
+    selector: <String, Object?>{
+      'kind': 'dcs',
+      'privateMarker': null,
+      'intermediates': <int>[if (count == 1) intermediate],
+      'finalByte': finalByte,
+    },
+  );
+}
 
 Map<String, Object?> _implementedMode(
   int mode,

@@ -16,10 +16,10 @@
       "-o"
     ]
   },
-  "source_sha256": "f920fe80249c264062439212222b325c127fb2e7b02bb67b5fa83872292bbfb3",
+  "source_sha256": "1dae7b3c7d45fc0588efcc3fe25eeab56c81389ed80d569ad16d92d41ce83961",
   "base_infocmp_sha256": "5518916deefe8e29efd5bfddef564b45350cdb1eb450cae4045fc4ecef300291",
-  "compiled_sha256": "d2ab9d9bb2ed1caf8937920687307bfd1f8ebed80e54587d9d4d1d2884049b39",
-  "compiled_infocmp_sha256": "f845fec722fe4e6ccd97371d409d39bc4f33edc4ba450db9f68fd4d460c97c7e",
+  "compiled_sha256": "3de08b078eddc0d1da55635844f0999a3407389ac80a6fdb7ecc2c6d083bd260",
+  "compiled_infocmp_sha256": "ecd5b83085378f13e2c7f98fb64e8ef1efa5f17492d7c479060b2bd8724b6cf0",
   "required_capabilities": [
     "AX",
     "BD",
@@ -31,15 +31,18 @@
     "Ss",
     "Tc",
     "XM",
+    "acsc",
     "colors",
     "cup",
     "kmous",
     "pairs",
+    "rmacs",
     "rmcup",
     "setab",
     "setaf",
     "setrgbb",
     "setrgbf",
+    "smacs",
     "smcup"
   ],
   "forbidden_capabilities": [
@@ -47,7 +50,6 @@
     "Cs",
     "Ms",
     "XR",
-    "acsc",
     "fd",
     "fe",
     "mc0",
@@ -56,9 +58,7 @@
     "meml",
     "memu",
     "rep",
-    "rmacs",
     "sgr",
-    "smacs",
     "xr"
   ]
 }

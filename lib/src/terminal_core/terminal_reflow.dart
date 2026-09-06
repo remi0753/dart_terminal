@@ -346,6 +346,12 @@ TerminalScreen _buildReflowedScreen(
   target._savedForeground = source._savedForeground;
   target._savedBackground = source._savedBackground;
   target._savedStyleId = source._savedStyleId;
+  target._g0CharacterSet = source._g0CharacterSet;
+  target._g1CharacterSet = source._g1CharacterSet;
+  target._glCharacterSetSlot = source._glCharacterSetSlot;
+  target._savedG0CharacterSet = source._savedG0CharacterSet;
+  target._savedG1CharacterSet = source._savedG1CharacterSet;
+  target._savedGlCharacterSetSlot = source._savedGlCharacterSetSlot;
   target._insertMode = source._insertMode;
   target._autoWrapMode = source._autoWrapMode;
   target._reverseVideoMode = source._reverseVideoMode;

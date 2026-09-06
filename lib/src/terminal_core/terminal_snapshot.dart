@@ -361,6 +361,13 @@ final class TerminalSnapshotFormatter {
       '${_colorToken(screen.savedBackground)}/${screen.savedStyleId}',
     );
     writer.line(
+      '$name charsets=g0:${screen.g0CharacterSet.name},'
+      'g1:${screen.g1CharacterSet.name},gl:${screen.glCharacterSetSlot} '
+      'saved=g0:${screen.savedG0CharacterSet.name},'
+      'g1:${screen.savedG1CharacterSet.name},'
+      'gl:${screen.savedGlCharacterSetSlot}',
+    );
+    writer.line(
       '$name margins=${screen.topMargin},${screen.bottomMargin},'
       '${screen.leftMargin},${screen.rightMargin} '
       'modes=${TerminalScreenMode.values.map((TerminalScreenMode mode) => '${mode.name}:${screen.modeEnabled(mode)}').join(',')}',

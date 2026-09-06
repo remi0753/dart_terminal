@@ -22,6 +22,8 @@ String generateTerminalImplementationManifestSource() {
       _escapeRecord(key),
     for (final int key in TerminalCompatibilitySurface.csiSelectors)
       _csiRecord(key),
+    for (final int key in TerminalCompatibilitySurface.dcsSelectors)
+      _dcsRecord(key),
     for (final int command in TerminalCompatibilitySurface.oscCommands)
       <String, Object?>{
         'key': 'osc:$command',
@@ -116,6 +118,20 @@ Map<String, Object?> _csiRecord(int key) {
   };
 }
 
+Map<String, Object?> _dcsRecord(int key) {
+  final int count = (key >> 16) & 0xff;
+  final int firstIntermediate = (key >> 8) & 0xff;
+  final int finalByte = key & 0xff;
+  return <String, Object?>{
+    'key': 'dcs:-1:$count:$firstIntermediate:$finalByte',
+    'kind': 'dcs',
+    'privateMarker': null,
+    'intermediates': <int>[if (count == 1) firstIntermediate],
+    'finalByte': finalByte,
+    'handler': 'reply',
+  };
+}
+
 void _validateDeclarations() {
   _validateSortedUnique(
     TerminalCompatibilitySurface.controlBytes,
@@ -165,6 +181,22 @@ void _validateDeclarations() {
     TerminalCompatibilitySurface.oscCommands,
     'oscCommands',
   );
+  _validateSortedUnique(
+    TerminalCompatibilitySurface.dcsSelectors,
+    'dcsSelectors',
+  );
+  for (final int key in TerminalCompatibilitySurface.dcsSelectors) {
+    final int count = (key >> 16) & 0xff;
+    final int intermediate = (key >> 8) & 0xff;
+    final int finalByte = key & 0xff;
+    if ((count != 0 && count != 1) ||
+        (count == 0 && intermediate != 0) ||
+        (count == 1 && (intermediate < 0x20 || intermediate > 0x2f)) ||
+        finalByte < 0x40 ||
+        finalByte > 0x7e) {
+      throw StateError('dcsSelectors contains an invalid key: $key');
+    }
+  }
   _validateSortedUnique(TerminalCompatibilitySurface.ansiModes, 'ansiModes');
   _validateSortedUnique(
     TerminalCompatibilitySurface.decPrivateModes,

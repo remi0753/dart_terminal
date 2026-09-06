@@ -111,8 +111,13 @@ The final child replays each immutable raw PTY stream through the product parser
 and a tool-only tracing delegate. For every parser action, the delegate compares
 the product sink's unsupported counter before and after dispatch and reconstructs
 the shortest equivalent 7-bit control sequence from the parser's typed action.
-The aggregate unsupported increments must equal the counters already committed
-in raw evidence; otherwise acceptance stops rather than trusting the trace.
+Raw-evidence parser counters remain immutable capture-time provenance. The
+acceptance report pins the current implementation manifest, records both the
+captured and current replay count for every cell, and derives current gaps from
+the replay. Other parser diagnostics must remain identical to capture. This
+allows an implemented selector to close a pinned byte regression without
+rewriting the original capture, while any new current reject still requires an
+exact owned variant in the report.
 
 Unique reconstructed sequences are recorded with per-application occurrence and
 counter-increment totals. Each must be classified against the versioned
@@ -226,22 +231,22 @@ cells=8 output_bytes=57737 samples=32 passed_checks=41 failed_checks=7`.
 stream while applying both recorded resizes at their original byte offsets. A
 tool-only `VtParserSink` delegate records an action only when the product sink's
 unsupported counter increases, then reconstructs the equivalent 7-bit bytes
-from the typed parser action. This accounts for all 526 unsupported increments
-as 28 unique observed variants. It does not infer bytes from documentation or
-scan arbitrary escape-looking text inside printable payloads.
+from the typed parser action. The capture-time surface accounted for all 526
+unsupported increments as 28 unique observed variants; the current terminfo
+closure replay accounts for 98 increments as 24 variants. It does not infer
+bytes from documentation or scan arbitrary escape-looking text inside
+printable payloads.
 
 `compatibility/application_matrix_acceptance.json` groups those variants into
-16 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
+14 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
 present in evidence. Replaying each minimal sequence produces exactly one
 bounded reject, no cancel/limit/malformed/incomplete result, and no standalone
-screen-state mutation. The two DCS query families match existing inventory
-`safe-ignore` records; the other 14 remain explicit unsupported rather than
+screen-state mutation. The remaining DECRQSS DCS query matches an inventory
+`safe-ignore` record; the other 13 remain explicit unsupported rather than
 being silently normalized into success.
 
 | Gap | Observed applications | Current impact/disposition | Ordered owner |
 | --- | --- | --- | --- |
-| character-set designation | lazygit, ncurses, Neovim, tmux | visible-content gap; explicit unsupported | next Phase 6 terminfo task |
-| XTGETTCAP | Neovim | capability fallback; safe-ignore | next Phase 6 terminfo task |
 | title stack | lazygit, ncurses, tmux | window metadata; explicit unsupported | Phase 6 OSC title/cwd policy |
 | focus reporting | Emacs, lazygit, mosh, Neovim, tmux | input events; explicit unsupported | Phase 6 focus/mouse/query task |
 | highlight/pixel mouse | mosh, lazygit | input events/coordinates; explicit unsupported | Phase 6 focus/mouse/query task |
@@ -251,13 +256,13 @@ being silently normalized into success.
 | synchronized output | fzf, lazygit | presentation atomicity; explicit unsupported | Phase 9 synchronized-output task |
 | theme report/update | tmux | query/notification fallback; explicit unsupported | Phase 9 light/dark reports task |
 
-The character-set gap is deliberately called visible rather than safe-ignore:
-ignoring `ESC ( 0` can leave following ACS bytes with the wrong glyph meaning.
-The matrix can close because the gap is byte-level visible, bounded, and owned
-by the immediately following terminfo task, but the Phase 6 exit condition may
-not claim absence of P0 silent corruption until that owner either implements
-the designation semantics or chooses a terminfo profile proven not to emit it.
-Likewise, the other owned protocol gaps are not claimed as implemented.
+Character-set designation was a visible rather than safe-ignore gap: ignoring
+`ESC ( 0` left following ACS bytes with the wrong glyph meaning. The terminfo
+closure now implements per-screen G0/G1 state, SO/SI invocation, and DEC
+Special Graphics, so those variants are no longer listed. The captured
+XTGETTCAP `Ms` query now receives an explicit unavailable response consistent
+with the audited database's OSC 52 cancellation. Other owned protocol gaps are
+not claimed as implemented.
 
 The cell outcome is one clean agreement (SSH) and seven accepted documented-gap
 cells. “Accepted” means the captured workflow completed, every non-parser
@@ -265,10 +270,29 @@ semantic check passed, all rejected bytes are explicit and owned, and no
 matrix-level crash/corruption/unbounded-resource blocker remains. It does not
 turn any false `parser-clean` check into true. The normal gate reports
 `TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=1
-documented_gap_cells=7 gaps=16 unique_sequences=28
-unsupported_increments=526`.
+documented_gap_cells=7 gaps=14 unique_sequences=24
+unsupported_increments=98`.
+
+The version-2 acceptance report pins the current product implementation
+manifest. It retains the original capture counters per cell while recording
+the current replay counters, so compatibility fixes are demonstrated against
+immutable PTY bytes rather than by rewriting their provenance.
 
 ## Investigation log
+
+- 2026-09-07: the terminfo closure replay used the same 57,737 immutable PTY
+  bytes and original resize offsets. Current unsupported counts fell from 526
+  to 98: lazygit 42→40, ncurses 297→2, Neovim 124→6, and tmux 25→12; Emacs,
+  fzf, mosh, and SSH were unchanged. All three observed character-set variants
+  and the single `Ms` XTGETTCAP variant disappeared from the reject trace.
+- 2026-09-07: rewriting original capture counters would misrepresent the
+  product version that produced those snapshots, while requiring equality
+  forever would prevent a pinned regression corpus from proving a fix. The
+  acceptance contract therefore advances to version 2, pins the current
+  implementation manifest, and records captured/current counts per cell. It
+  still rejects any current unowned variant and still requires cancel, limit,
+  malformed, incomplete, and unsupported-control diagnostics to match the
+  immutable capture.
 
 - 2026-09-07: after commit `fdc56f7`, ROADMAP was reread with a clean worktree.
   README, FEATURE_MATRIX, vttest decisions, differential evidence, and Phase 6
@@ -407,9 +431,11 @@ unsupported_increments=526`.
   temporary build cleanup with the exact reviewed totals above.
 - `CI=true make test`: passed all compatibility freshness checks, formatting,
   static analysis, and the complete Dart test runner.
+- Terminfo closure replay: passed with 98 current unsupported increments, 24
+  variants, and 14 owned gaps; captured/current counts are exact in every cell.
 - `git diff --check`, staged-scope review, and final worktree review are run
   immediately before the completion commit.
-- Remaining work is not hidden: the 16 gap owners are pinned in the acceptance
-  report and linked from ROADMAP. The next ordered task receives the visible
-  character-set gap and XTGETTCAP fallback; later Phase 6/9 owners receive the
-  remaining query, metadata, input, presentation, and theme gaps.
+- Remaining work is not hidden: the 14 gap owners are pinned in the acceptance
+  report and linked from ROADMAP. Character-set and XTGETTCAP gaps are closed;
+  later Phase 6/9 owners retain the remaining query, metadata, input,
+  presentation, and theme gaps.

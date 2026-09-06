@@ -41,6 +41,9 @@ abstract final class TerminalReplyEncoder {
   static Uint8List terminalStatusOk() =>
       Uint8List.fromList(const <int>[0x1b, 0x5b, 0x30, 0x6e]);
 
+  static Uint8List xtgettcapNotFound() =>
+      Uint8List.fromList(const <int>[0x1b, 0x50, 0x30, 0x2b, 0x72, 0x1b, 0x5c]);
+
   static Uint8List cursorPosition({
     required int row,
     required int column,

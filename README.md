@@ -99,10 +99,11 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   color queryのterminal-core dispatch
 - ncurses 6.6で固定生成・能力監査した`xterm-256color` terminfoを両runtime bundleへ同梱し、
   起動時にheader/name/layoutを検証してlocal `TERMINFO`へ接続する環境contract。欠落・破損時と
-  SSHのremote PTYでは私有pathを送らず標準`TERM=xterm-256color`へfallback
+  SSHのremote PTYでは私有pathを送らず標準`TERM=xterm-256color`へfallback。G0/G1、SO/SI、
+  DEC Special Graphicsをscreen stateとして処理し、XTGETTCAPには監査済みcapability方針でbounded応答
 - session-owned screen set/parserへのraw PTY byte feed、従来text projectionとの
   single-subscription共存、generated replyのnative bounded write queue接続
-- historyとprimary/alternate grid、Unicode resource、mode/cursor/parser countを
+- historyとprimary/alternate grid、Unicode resource、mode/cursor/character-set/parser countを
   網羅し、行・cell・resource・出力上限を持つversion 1 terminal-state snapshotと、
   最初の相違位置・escaped contextを返すbounded comparison diagnostics
 - 厳密検証するbyte-exact product parser corpus manifest、shell/less/top/vimの

@@ -29,10 +29,10 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 
 | Support classification | Records |
 | --- | ---: |
-| `implemented` | 71 |
-| `partial` | 14 |
-| `safe-ignore` | 11 |
-| `unsupported` | 164 |
+| `implemented` | 77 |
+| `partial` | 15 |
+| `safe-ignore` | 10 |
+| `unsupported` | 158 |
 | **Total** | **260** |
 
 | Selector kind | Records |
@@ -49,7 +49,7 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `mode` | 80 |
 | **Total** | **260** |
 
-The 71 implemented plus 14 partial records reconcile exactly to all 85 product declarations (65 sequence selectors and 20 modes). The 11 safe-ignore records cover 8 concrete DCS forms and SOS/PM/APC; all 164 remaining records are explicitly unsupported/rejected.
+The 77 implemented plus 15 partial records reconcile exactly to all 92 product declarations (72 sequence selectors and 20 modes). The 10 safe-ignore records cover 7 concrete DCS forms and SOS/PM/APC; all 158 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 
@@ -66,6 +66,7 @@ The 71 implemented plus 14 partial records reconcile exactly to all 85 product d
 | `ecma48:csi:sgr` | `CSI m` | Text attributes and ANSI/256/direct colors are implemented; the full ECMA/xterm rendition repertoire is not. |
 | `ecma48:csi:sm` | `CSI h` | The selector is implemented for the explicitly inventoried ANSI modes only. |
 | `xterm:csi:ed` | `CSI J` | ECMA/VT modes 0–2 are implemented; xterm saved-lines mode 3 is not. |
+| `xterm:dcs:xtgettcap` | `DCS + q Pt ST` | Bounded requests receive an explicit unavailable reply. The audited database intentionally omits security-sensitive Ms/OSC 52 and no dynamic keyboard-capability service is advertised. |
 | `xterm:osc:osc-10` | `OSC 10 ; Pt ST` | Single bounded foreground mutation/query is implemented; chained dynamic-color parameters are not. |
 | `xterm:osc:osc-11` | `OSC 11 ; Pt ST` | Single bounded background mutation/query is implemented; chained dynamic-color parameters are not. |
 | `xterm:osc:osc-4` | `OSC 4 ; Pt ST` | Bounded indexed RGB mutation/query is implemented; xterm color names and every XParseColor form are not. |
@@ -82,7 +83,6 @@ The 71 implemented plus 14 partial records reconcile exactly to all 85 product d
 | `ecma48:pm:pm` | `PM Pt ST` |
 | `ecma48:sos:sos` | `SOS Pt ST` |
 | `xterm:dcs:sixel` | `DCS Ps q Pt ST` |
-| `xterm:dcs:xtgettcap` | `DCS + q Pt ST` |
 | `xterm:dcs:xtgetxres` | `DCS + Q Pt ST` |
 | `xterm:dcs:xtsettcap` | `DCS + p Pt ST` |
 
@@ -91,8 +91,8 @@ The 71 implemented plus 14 partial records reconcile exactly to all 85 product d
 - The next black-box differential and real-application matrix tasks decide which generic ECMA/DEC/xterm gaps become implementation work.
 - The later focus/mouse/query task owns focus mode 1004, SGR pixel mouse 1016, and remaining report behavior.
 - The OSC policy task owns title commands 0/1/2, cwd command 7, cursor color 12/112, and security-sensitive clipboard command 52.
-- The terminfo task owns XTGETTCAP/XTSETTCAP decisions; the existing `v1 保留` feature-matrix decision continues to own Sixel.
-- Unsupported character-set, rectangular-editing, locator, printer, and terminal-local xterm resource controls stay rejected until differential/application evidence justifies a new ordered task.
+- The terminfo task owns remaining XTSETTCAP decisions; the existing `v1 保留` feature-matrix decision continues to own Sixel.
+- Unsupported extended character-set, rectangular-editing, locator, printer, and terminal-local xterm resource controls stay rejected until differential/application evidence justifies a new ordered task.
 
 ## Review acceptance
 

@@ -28,6 +28,7 @@ history cell=0,4 content=U+0074 flags=narrow foreground=default background=defau
 history cell=0,5 content=U+0021 flags=narrow foreground=default background=default style=0 hyperlink=0
 screen name=primary rows=2 columns=6
 primary cursor=0,4 saved=0,0 current=default/default/0 saved_rendition=default/default/0
+primary charsets=g0:ascii,g1:ascii,gl:0 saved=g0:ascii,g1:ascii,gl:0
 primary margins=0,1,0,5 modes=origin:false,insert:false,autoWrap:true,reverseVideo:false,horizontalMargins:false
 primary cursor_style=block visible=true blinking=true wrap_pending=false
 primary tabs=-
@@ -46,6 +47,7 @@ primary cell=1,4 content=U+0064 flags=narrow foreground=default background=defau
 primary cell=1,5 content=U+0021 flags=narrow foreground=default background=default style=0 hyperlink=0
 screen name=alternate rows=2 columns=6
 alternate cursor=0,0 saved=0,0 current=default/default/0 saved_rendition=default/default/0
+alternate charsets=g0:ascii,g1:ascii,gl:0 saved=g0:ascii,g1:ascii,gl:0
 alternate margins=0,1,0,5 modes=origin:false,insert:false,autoWrap:true,reverseVideo:false,horizontalMargins:false
 alternate cursor_style=block visible=true blinking=true wrap_pending=false
 alternate tabs=-

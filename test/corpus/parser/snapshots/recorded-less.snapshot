@@ -21,6 +21,7 @@ palette range=240-255 colors=#585858,#626262,#6c6c6c,#767676,#808080,#8a8a8a,#94
 history rows=0 max_lines=32 max_bytes=131072 page_rows=8
 screen name=primary rows=8 columns=40
 primary cursor=0,0 saved=0,0 current=default/default/0 saved_rendition=default/default/0
+primary charsets=g0:ascii,g1:ascii,gl:0 saved=g0:ascii,g1:ascii,gl:0
 primary margins=0,7,0,39 modes=origin:false,insert:false,autoWrap:true,reverseVideo:false,horizontalMargins:false
 primary cursor_style=block visible=true blinking=true wrap_pending=false
 primary tabs=8,16,24,32
@@ -34,6 +35,7 @@ primary row=6 flags=- logical=1:7+0 text="                                      
 primary row=7 flags=- logical=1:8+0 text="                                        "
 screen name=alternate rows=8 columns=40
 alternate cursor=7,0 saved=0,0 current=default/default/0 saved_rendition=default/default/0
+alternate charsets=g0:ascii,g1:ascii,gl:0 saved=g0:ascii,g1:ascii,gl:0
 alternate margins=0,7,0,39 modes=origin:false,insert:false,autoWrap:true,reverseVideo:false,horizontalMargins:false
 alternate cursor_style=block visible=true blinking=true wrap_pending=false
 alternate tabs=8,16,24,32

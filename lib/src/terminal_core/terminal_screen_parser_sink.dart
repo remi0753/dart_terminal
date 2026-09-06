@@ -72,14 +72,21 @@ final class TerminalScreenParserSink
 
   @override
   void print(int scalar) {
-    screen.printScalar(scalar, hyperlink: _currentHyperlinkId);
+    final TerminalScreen target = screen;
+    target.printScalar(
+      target.translateGlScalar(scalar),
+      hyperlink: _currentHyperlinkId,
+    );
   }
 
   @override
   void printAscii(Uint8List bytes, int start, int end) {
     final TerminalScreen target = screen;
     for (var index = start; index < end; index++) {
-      target.printScalar(bytes[index], hyperlink: _currentHyperlinkId);
+      target.printScalar(
+        target.translateGlScalar(bytes[index]),
+        hyperlink: _currentHyperlinkId,
+      );
     }
   }
 
@@ -103,6 +110,10 @@ final class TerminalScreenParserSink
         screen.lineFeed();
       case 0x0d:
         screen.carriageReturn();
+      case 0x0e:
+        screen.invokeGlCharacterSet(1);
+      case 0x0f:
+        screen.invokeGlCharacterSet(0);
       case 0x84:
         screen.index();
       case 0x85:
@@ -128,6 +139,19 @@ final class TerminalScreenParserSink
     )) {
       _unsupportedSequenceCount++;
       return;
+    }
+    if (sequence.intermediateCount == 1) {
+      final int intermediate = sequence.intermediateAt(0);
+      if ((intermediate == 0x28 || intermediate == 0x29) &&
+          (sequence.finalByte == 0x30 || sequence.finalByte == 0x42)) {
+        screen.designateCharacterSet(
+          intermediate == 0x28 ? 0 : 1,
+          sequence.finalByte == 0x30
+              ? TerminalCharacterSet.decSpecialGraphics
+              : TerminalCharacterSet.ascii,
+        );
+        return;
+      }
     }
     switch (sequence.finalByte) {
       case 0x37:
@@ -328,8 +352,41 @@ final class TerminalScreenParserSink
   @override
   void dispatchDcs(VtDcsSequence sequence) {
     screen.breakGraphemeSequence();
-    assert(TerminalCompatibilitySurface.dcsIsBoundedUnsupported);
+    final VtSequenceHeader header = sequence.header;
+    if (header.parameters.length == 0 &&
+        TerminalCompatibilitySurface.supportsDcs(
+          privateMarker: header.privateMarker,
+          finalByte: header.finalByte,
+          intermediateCount: header.intermediateCount,
+          firstIntermediate: header.intermediateCount == 0
+              ? 0
+              : header.intermediateAt(0),
+        ) &&
+        _xtgettcapPayloadIsValid(sequence)) {
+      _emitReply(TerminalReplyEncoder.xtgettcapNotFound());
+      return;
+    }
     _unsupportedSequenceCount++;
+  }
+
+  bool _xtgettcapPayloadIsValid(VtDcsSequence sequence) {
+    if (sequence.payloadLength < 2) return false;
+    var componentLength = 0;
+    for (int index = 0; index < sequence.payloadLength; index++) {
+      final int byte = sequence.payloadByteAt(index);
+      if (byte == 0x3b) {
+        if (componentLength == 0 || componentLength.isOdd) return false;
+        componentLength = 0;
+        continue;
+      }
+      final bool hex =
+          byte >= 0x30 && byte <= 0x39 ||
+          byte >= 0x41 && byte <= 0x46 ||
+          byte >= 0x61 && byte <= 0x66;
+      if (!hex) return false;
+      componentLength++;
+    }
+    return componentLength != 0 && componentLength.isEven;
   }
 
   @override
