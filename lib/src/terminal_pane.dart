@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'terminal_core/terminal_keyboard_modes.dart';
 import 'terminal_input/terminal_key_event.dart';
+import 'terminal_input/terminal_paste.dart';
 
 /// Stable application identity for one logical terminal pane.
 final class PaneId {
@@ -170,6 +171,8 @@ abstract interface class TerminalPaneSession {
   bool get isLive;
   TerminalPaneSessionExitDisposition? get exitDisposition;
   TerminalKeyboardModes get keyboardModes;
+  bool get bracketedPasteMode;
+  bool get pasteInProgress;
 
   Future<void> start();
   String render();
@@ -188,6 +191,7 @@ abstract interface class TerminalPaneSession {
   void quitForegroundProcess();
   void sendEndOfFile();
   void sendInput(Uint8List bytes);
+  Future<TerminalPasteTransferResult> paste(TerminalPastePlan plan);
   void resize({required int rows, required int columns});
   void showCloseConfirmation();
   Future<TerminalPaneSessionShutdownResult> shutdown();
@@ -355,6 +359,8 @@ final class TerminalPane {
   TerminalPaneState get state => _state;
   bool get isLive => _session.isLive;
   TerminalKeyboardModes get keyboardModes => _session.keyboardModes;
+  bool get bracketedPasteMode => _session.bracketedPasteMode;
+  bool get pasteInProgress => _session.pasteInProgress;
   bool get closeConfirmationPending =>
       _state == TerminalPaneState.confirmationPending;
   TerminalPaneSessionShutdownResult? get shutdownResult => _shutdownResult;
@@ -470,6 +476,11 @@ final class TerminalPane {
     }
     _recordInteraction();
     _session.sendInput(Uint8List.fromList(bytes));
+  }
+
+  Future<TerminalPasteTransferResult> paste(TerminalPastePlan plan) {
+    _recordInteraction();
+    return _session.paste(plan);
   }
 
   void resize({required int rows, required int columns}) {

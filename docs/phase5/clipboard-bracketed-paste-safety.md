@@ -244,3 +244,36 @@ Primary references:
   protocol/renderer/session tests, and native-asset-backed test execution.
 - No PTY transport or menu behavior was added in this subtask. The next ordered
   work owns tracked-completion transport and consumes this frozen plan/encoder.
+
+### 2026-09-06 — completion-driven PTY paste transport
+
+- Added a paste-specific `TerminalPaneSession`/`TerminalPane` operation and
+  exposed the session's frozen bracketed-paste mode without weakening the
+  existing 256-byte key-event API.
+- `TerminalSession` now retains one encoded chunk of at most
+  `min(16 KiB, writeCapacityBytes)`, submits it with `writeTracked`, and does
+  not advance the encoder until the matching `writeCompleted` diagnostic.
+  `writeError` fails the transfer before counting the chunk; shutdown or
+  natural termination cancels the outstanding completion.
+- A native-capacity rejection retains and retries that same one chunk after a
+  one-millisecond event-loop yield. This is constant-memory backpressure, not a
+  retry queue, and lets AppKit timers/events run between attempts.
+- A concurrent paste returns `busy` immediately. Ordinary byte writes and
+  automatic terminal replies are rejected while a paste owns the input byte
+  stream, with only one visible status notice; this prevents them from landing
+  inside a bracket frame. Direct process signals remain out-of-band and do not
+  alter PTY byte ordering.
+- Content-free results report disposition, completed bytes/chunks,
+  backpressure attempts, maximum native queued bytes observed for the tracked
+  requests, and concurrent-input rejections. No clipboard or terminal text is
+  logged in diagnostics.
+- Fake-PTY tests prove one accepted chunk in flight, exact UTF-8/frame ordering,
+  concurrent paste/input refusal, queue-full retry and progress, native write
+  error accounting, pane delegation, and shutdown cancellation. Each progress
+  loop has a two-second test deadline so regressions fail rather than hang.
+- Verification: targeted format/analyze and the full native-asset-backed Dart
+  suite passed; final `CI=true make test` passed formatter (135 files), analyzer,
+  parser corpus/oracles, renderer/protocol/session tests, and all new transport
+  cases.
+- The next ordered subtask owns clipboard menu behavior, expiring explicit
+  confirmation, user-visible status, and real 10 MiB both-runtime acceptance.

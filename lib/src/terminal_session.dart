@@ -12,6 +12,7 @@ import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_core/vt_parser.dart';
 import 'terminal_input/terminal_key_event.dart';
+import 'terminal_input/terminal_paste.dart';
 import 'terminal_pane.dart';
 
 enum TerminalSessionLifecycleStage {
@@ -230,6 +231,12 @@ final class TerminalSession implements TerminalPaneSession {
   var _terminationNotified = false;
   var _writeBackpressured = false;
   var _replyWriteBackpressured = false;
+  Future<TerminalPasteTransferResult>? _pasteFuture;
+  Completer<_TerminalPasteWriteOutcome>? _pasteWriteCompletion;
+  int? _pasteWriteRequestId;
+  var _pasteWriteMaximumQueuedBytes = 0;
+  var _pasteConcurrentInputNoticePublished = false;
+  var _pasteConcurrentInputRejectionCount = 0;
   var _rows = 23;
   var _columns = 100;
   var _writeBackpressureCount = 0;
@@ -256,6 +263,10 @@ final class TerminalSession implements TerminalPaneSession {
 
   @override
   TerminalKeyboardModes get keyboardModes => terminalScreenSet.keyboardModes;
+  @override
+  bool get bracketedPasteMode => terminalScreenSet.bracketedPasteMode;
+  @override
+  bool get pasteInProgress => _pasteFuture != null;
 
   int? get processId => _process?.pid;
   PtyExit? get exit => _exit;
@@ -263,6 +274,8 @@ final class TerminalSession implements TerminalPaneSession {
   int get writeBackpressureCount => _writeBackpressureCount;
   int get replyWriteBackpressureCount => _replyWriteBackpressureCount;
   bool get replyWriteBackpressured => _replyWriteBackpressured;
+  int get pasteConcurrentInputRejectionCount =>
+      _pasteConcurrentInputRejectionCount;
   TerminalSessionShutdownResult? get shutdownResult => _shutdownResult;
 
   Future<void> waitForTermination() => _terminated.future;
@@ -465,6 +478,126 @@ final class TerminalSession implements TerminalPaneSession {
   }
 
   @override
+  Future<TerminalPasteTransferResult> paste(TerminalPastePlan plan) {
+    if (_pasteFuture != null) {
+      return Future<TerminalPasteTransferResult>.value(
+        _pasteResult(TerminalPasteTransferDisposition.busy),
+      );
+    }
+    if (plan.analysis.isEmpty) {
+      return Future<TerminalPasteTransferResult>.value(
+        _pasteResult(TerminalPasteTransferDisposition.completed),
+      );
+    }
+    if (!_live || _disposed || _process == null) {
+      return Future<TerminalPasteTransferResult>.value(
+        _pasteResult(TerminalPasteTransferDisposition.unavailable),
+      );
+    }
+    _pasteConcurrentInputNoticePublished = false;
+    final Future<TerminalPasteTransferResult> future = _transportPaste(plan);
+    _pasteFuture = future;
+    return future;
+  }
+
+  Future<TerminalPasteTransferResult> _transportPaste(
+    TerminalPastePlan plan,
+  ) async {
+    final int rejectionBaseline = _pasteConcurrentInputRejectionCount;
+    var encodedBytes = 0;
+    var completedChunks = 0;
+    var backpressureCount = 0;
+    var maximumQueuedBytes = 0;
+    var disposition = TerminalPasteTransferDisposition.completed;
+    final TerminalPasteChunkEncoder encoder = plan.encoder(
+      maximumChunkBytes:
+          writeCapacityBytes < TerminalPasteCodec.defaultChunkBytes
+          ? writeCapacityBytes
+          : TerminalPasteCodec.defaultChunkBytes,
+    );
+    try {
+      while (true) {
+        final Uint8List? chunk = encoder.nextChunk();
+        if (chunk == null) break;
+        while (true) {
+          final PtyProcess? process = _process;
+          if (!_live || _disposed || process == null) {
+            disposition = TerminalPasteTransferDisposition.cancelled;
+            break;
+          }
+          late final PtyWriteReceipt receipt;
+          try {
+            receipt = process.writeTracked(chunk);
+          } on StateError {
+            disposition = TerminalPasteTransferDisposition.cancelled;
+            break;
+          } on Object {
+            disposition = TerminalPasteTransferDisposition.writeFailed;
+            break;
+          }
+          if (receipt.result == PtyWriteResult.backpressured) {
+            backpressureCount++;
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+            continue;
+          }
+          final int? requestId = receipt.requestId;
+          if (requestId == null || requestId <= 0) {
+            disposition = TerminalPasteTransferDisposition.writeFailed;
+            break;
+          }
+          final Completer<_TerminalPasteWriteOutcome> completion =
+              Completer<_TerminalPasteWriteOutcome>();
+          _pasteWriteRequestId = requestId;
+          _pasteWriteMaximumQueuedBytes = 0;
+          _pasteWriteCompletion = completion;
+          final _TerminalPasteWriteOutcome outcome = await completion.future;
+          _pasteWriteRequestId = null;
+          _pasteWriteCompletion = null;
+          if (outcome.maximumQueuedBytes > maximumQueuedBytes) {
+            maximumQueuedBytes = outcome.maximumQueuedBytes;
+          }
+          if (!outcome.completed) {
+            disposition = _disposed || !_live
+                ? TerminalPasteTransferDisposition.cancelled
+                : TerminalPasteTransferDisposition.writeFailed;
+            break;
+          }
+          encodedBytes += chunk.length;
+          completedChunks++;
+          break;
+        }
+        if (disposition != TerminalPasteTransferDisposition.completed) break;
+      }
+    } finally {
+      _pasteWriteRequestId = null;
+      _pasteWriteCompletion = null;
+      _pasteWriteMaximumQueuedBytes = 0;
+      _pasteFuture = null;
+      _pasteConcurrentInputNoticePublished = false;
+    }
+    return TerminalPasteTransferResult(
+      disposition: disposition,
+      encodedBytes: encodedBytes,
+      completedChunks: completedChunks,
+      backpressureCount: backpressureCount,
+      maximumQueuedBytes: maximumQueuedBytes,
+      concurrentInputRejections:
+          _pasteConcurrentInputRejectionCount - rejectionBaseline,
+    );
+  }
+
+  static TerminalPasteTransferResult _pasteResult(
+    TerminalPasteTransferDisposition disposition,
+  ) => TerminalPasteTransferResult(
+    disposition: disposition,
+    encodedBytes: 0,
+    completedChunks: 0,
+    backpressureCount: 0,
+    maximumQueuedBytes: 0,
+    concurrentInputRejections: 0,
+  );
+
+  @override
   void resize({required int rows, required int columns}) {
     terminalScreenSet.resize(rows: rows, columns: columns);
     _rows = rows;
@@ -502,6 +635,7 @@ final class TerminalSession implements TerminalPaneSession {
 
   Future<TerminalSessionShutdownResult> _shutdown() async {
     _disposed = true;
+    _cancelPasteWrite();
     _observeLifecycle(TerminalSessionLifecycleStage.disposeStarted);
     final PtyProcess? process = _process;
     if (process == null) {
@@ -688,6 +822,9 @@ final class TerminalSession implements TerminalPaneSession {
   }
 
   PtyWriteResult? _write(List<int> bytes) {
+    if (_rejectConcurrentPasteInput()) {
+      return PtyWriteResult.backpressured;
+    }
     final PtyProcess? process = _process;
     if (!_live || _disposed || process == null) {
       return null;
@@ -712,6 +849,12 @@ final class TerminalSession implements TerminalPaneSession {
   }
 
   PtyWriteReceipt? _writeTracked(List<int> bytes) {
+    if (_rejectConcurrentPasteInput()) {
+      return const PtyWriteReceipt(
+        result: PtyWriteResult.backpressured,
+        requestId: null,
+      );
+    }
     final PtyProcess? process = _process;
     if (!_live || _disposed || process == null) {
       return null;
@@ -740,6 +883,7 @@ final class TerminalSession implements TerminalPaneSession {
         bytes.length > TerminalReplyEncoder.maximumReplyBytes) {
       return false;
     }
+    if (_rejectConcurrentPasteInput()) return false;
     final PtyProcess? process = _process;
     if (!_live || _disposed || process == null) {
       return false;
@@ -762,6 +906,7 @@ final class TerminalSession implements TerminalPaneSession {
   }
 
   void _observeNativeDiagnostic(PtyDiagnosticEvent event) {
+    _observePasteDiagnostic(event);
     final TerminalSessionNativeObserver? observer = _nativeObserver;
     if (observer == null) {
       return;
@@ -777,6 +922,71 @@ final class TerminalSession implements TerminalPaneSession {
     } on Object {
       // Diagnostics cannot change PTY ownership or shutdown behavior.
     }
+  }
+
+  void _observePasteDiagnostic(PtyDiagnosticEvent event) {
+    final Completer<_TerminalPasteWriteOutcome>? completion =
+        _pasteWriteCompletion;
+    if (completion == null || completion.isCompleted) return;
+    if (event.requestId != _pasteWriteRequestId) return;
+    final int queuedBytes = event.queuedBytes ?? 0;
+    if (queuedBytes > _pasteWriteMaximumQueuedBytes) {
+      _pasteWriteMaximumQueuedBytes = queuedBytes;
+    }
+    switch (event.stage) {
+      case PtyDiagnosticStage.writeEnqueued:
+      case PtyDiagnosticStage.writeDequeued:
+        return;
+      case PtyDiagnosticStage.writeCompleted:
+        completion.complete(
+          _TerminalPasteWriteOutcome(
+            completed: true,
+            maximumQueuedBytes: _pasteWriteMaximumQueuedBytes,
+          ),
+        );
+      case PtyDiagnosticStage.writeError:
+        completion.complete(
+          _TerminalPasteWriteOutcome(
+            completed: false,
+            maximumQueuedBytes: _pasteWriteMaximumQueuedBytes,
+          ),
+        );
+      case PtyDiagnosticStage.forceCloseDequeued:
+      case PtyDiagnosticStage.signalDelivery:
+      case PtyDiagnosticStage.waitpidResult:
+      case PtyDiagnosticStage.exitPublished:
+      case PtyDiagnosticStage.stateSnapshot:
+      case PtyDiagnosticStage.termiosSnapshot:
+      case PtyDiagnosticStage.processExitReady:
+      case PtyDiagnosticStage.externalReapObserved:
+        return;
+    }
+  }
+
+  void _cancelPasteWrite() {
+    final Completer<_TerminalPasteWriteOutcome>? completion =
+        _pasteWriteCompletion;
+    if (completion != null && !completion.isCompleted) {
+      completion.complete(
+        _TerminalPasteWriteOutcome(
+          completed: false,
+          maximumQueuedBytes: _pasteWriteMaximumQueuedBytes,
+        ),
+      );
+    }
+  }
+
+  bool _rejectConcurrentPasteInput() {
+    if (_pasteFuture == null) return false;
+    if (_pasteConcurrentInputRejectionCount < 0x7fffffff) {
+      _pasteConcurrentInputRejectionCount++;
+    }
+    if (!_pasteConcurrentInputNoticePublished && !_disposed) {
+      _pasteConcurrentInputNoticePublished = true;
+      buffer.appendStatusLine('[terminal input ignored while paste is active]');
+      _notifyChanged();
+    }
+    return true;
   }
 
   void _sendSignal(PtySignal signal) {
@@ -804,6 +1014,7 @@ final class TerminalSession implements TerminalPaneSession {
   }
 
   void _completeTermination({bool notifyOwner = true}) {
+    _cancelPasteWrite();
     if (!_terminated.isCompleted) {
       _terminated.complete();
       _observeLifecycle(TerminalSessionLifecycleStage.terminationCompleted);
@@ -842,4 +1053,14 @@ final class TerminalSession implements TerminalPaneSession {
       _onChanged();
     }
   }
+}
+
+final class _TerminalPasteWriteOutcome {
+  const _TerminalPasteWriteOutcome({
+    required this.completed,
+    this.maximumQueuedBytes = 0,
+  });
+
+  final bool completed;
+  final int maximumQueuedBytes;
 }

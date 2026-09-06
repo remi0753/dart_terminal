@@ -125,6 +125,7 @@ Future<void> main() async {
   await runRuntimeLifecycleTests().timeout(const Duration(seconds: 30));
   await runTerminalSessionReplyTests();
   await _testPersistentCommandSession();
+  await _testBoundedPasteTransport();
   await _testBoundedSessionShutdown();
   await _testRealPersistentPtySession();
   await _testControlDSemanticsMatrix().timeout(const Duration(seconds: 30));
@@ -457,6 +458,16 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
     first.state == TerminalPaneState.running &&
         sessions.first.insertedText.single == 'x',
     'terminal interaction cancels close confirmation',
+  );
+  sessions.first.bracketedPasteMode = true;
+  final TerminalPasteTransferResult delegatedPaste = await first.paste(
+    TerminalPasteCodec.plan('paste', bracketed: first.bracketedPasteMode),
+  );
+  _expect(
+    delegatedPaste.isCompleted &&
+        delegatedPaste.encodedBytes == 17 &&
+        !first.pasteInProgress,
+    'pane exposes mode state and delegates a paste plan without byte copying',
   );
   _expect(
     first.requestClose() == TerminalPaneCloseDecision.confirmationRequired,
@@ -1079,6 +1090,202 @@ Future<void> _testPersistentCommandSession() async {
     boundedBackend.processes.single.closeGracePeriods.length == 1,
     'active persistent process is closed exactly once',
   );
+}
+
+Future<void> _testBoundedPasteTransport() async {
+  final FakePtyBackend backend = FakePtyBackend();
+  final TerminalSession session = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(11), generation: 1),
+    ptyBackend: backend,
+    writeCapacityBytes: 4,
+    onChanged: () {},
+    onTerminated: () {},
+  );
+  await session.start();
+  final FakePtyProcess process = backend.processes.single;
+  final TerminalPastePlan plan = TerminalPasteCodec.plan(
+    'A🙂\r\nB',
+    bracketed: true,
+  );
+  var completed = false;
+  final Future<TerminalPasteTransferResult> transfer = session
+      .paste(plan)
+      .whenComplete(() => completed = true);
+  await Future<void>.delayed(Duration.zero);
+  _expect(
+    session.pasteInProgress && process.writes.length == 1 && !completed,
+    'paste admits only one tracked chunk before native completion',
+  );
+  final TerminalPasteTransferResult busy = await session.paste(plan);
+  _expect(
+    busy.disposition == TerminalPasteTransferDisposition.busy,
+    'a concurrent paste is rejected without a second queue',
+  );
+  session.sendInput(Uint8List.fromList(const <int>[0x78]));
+  _expect(
+    process.writes.length == 1 &&
+        session.pasteConcurrentInputRejectionCount == 1 &&
+        session.buffer.outputText.contains('ignored while paste is active'),
+    'ordinary input cannot interleave inside a paste frame',
+  );
+
+  var requestId = 1;
+  var observedWrites = 0;
+  final Stopwatch completionDeadline = Stopwatch()..start();
+  while (!completed &&
+      completionDeadline.elapsed < const Duration(seconds: 2)) {
+    if (process.writes.length > observedWrites) {
+      final Uint8List chunk = process.writes[observedWrites++];
+      process.emitDiagnostic(
+        PtyDiagnosticEvent(
+          stage: PtyDiagnosticStage.writeEnqueued,
+          requestId: requestId,
+          byteCount: chunk.length,
+          queuedBytes: chunk.length,
+        ),
+      );
+      process.drainWrites();
+      process.emitDiagnostic(
+        PtyDiagnosticEvent(
+          stage: PtyDiagnosticStage.writeCompleted,
+          requestId: requestId++,
+          byteCount: chunk.length,
+          queuedBytes: 0,
+        ),
+      );
+    }
+    await Future<void>.delayed(Duration.zero);
+  }
+  _expect(completed, 'paste completion made bounded forward progress');
+  final TerminalPasteTransferResult result = await transfer;
+  final Uint8List actual = Uint8List.fromList(
+    process.writes.expand<int>((Uint8List chunk) => chunk).toList(),
+  );
+  _expect(
+    result.isCompleted &&
+        result.encodedBytes == plan.analysis.encodedBytes &&
+        result.completedChunks == process.writes.length &&
+        result.maximumQueuedBytes == 4 &&
+        result.concurrentInputRejections == 1 &&
+        utf8.decode(actual) == '\x1b[200~A🙂\nB\x1b[201~',
+    'completion-driven chunks preserve one exact frame and bounded metrics',
+  );
+
+  final FakePtyBackend errorBackend = FakePtyBackend();
+  final TerminalSession failed = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(14), generation: 1),
+    ptyBackend: errorBackend,
+    writeCapacityBytes: 8,
+    onChanged: () {},
+    onTerminated: () {},
+  );
+  await failed.start();
+  final Future<TerminalPasteTransferResult> failedTransfer = failed.paste(
+    TerminalPasteCodec.plan('failure', bracketed: false),
+  );
+  await Future<void>.delayed(Duration.zero);
+  errorBackend.processes.single.emitDiagnostic(
+    const PtyDiagnosticEvent(
+      stage: PtyDiagnosticStage.writeError,
+      requestId: 1,
+      byteCount: 7,
+      queuedBytes: 7,
+      operationResult: -1,
+      systemError: 5,
+    ),
+  );
+  final TerminalPasteTransferResult failedResult = await failedTransfer;
+  _expect(
+    failedResult.disposition == TerminalPasteTransferDisposition.writeFailed &&
+        failedResult.encodedBytes == 0 &&
+        failedResult.completedChunks == 0 &&
+        failedResult.maximumQueuedBytes == 7,
+    'native write error fails content-free without advancing the chunk',
+  );
+
+  final FakePtyBackend backpressureBackend = FakePtyBackend();
+  final TerminalSession backpressure = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(12), generation: 1),
+    ptyBackend: backpressureBackend,
+    writeCapacityBytes: 4,
+    onChanged: () {},
+    onTerminated: () {},
+  );
+  await backpressure.start();
+  final FakePtyProcess fullProcess = backpressureBackend.processes.single;
+  _expect(
+    fullProcess.write(Uint8List(4)) == PtyWriteResult.accepted,
+    'backpressure fixture fills the native capacity',
+  );
+  final Future<TerminalPasteTransferResult> retried = backpressure.paste(
+    TerminalPasteCodec.plan('retry', bracketed: false),
+  );
+  await Future<void>.delayed(const Duration(milliseconds: 3));
+  _expect(
+    fullProcess.writes.length == 1 && backpressure.pasteInProgress,
+    'full native queue retains one chunk and one timer-backed retry only',
+  );
+  fullProcess.drainWrites();
+  await Future<void>.delayed(const Duration(milliseconds: 3));
+  var fullObserved = 1;
+  var fullRequestId = 1;
+  var retryCompleted = false;
+  unawaited(retried.whenComplete(() => retryCompleted = true));
+  final Stopwatch retryDeadline = Stopwatch()..start();
+  while (!retryCompleted &&
+      retryDeadline.elapsed < const Duration(seconds: 2)) {
+    if (fullProcess.writes.length > fullObserved) {
+      final Uint8List chunk = fullProcess.writes[fullObserved++];
+      fullProcess.emitDiagnostic(
+        PtyDiagnosticEvent(
+          stage: PtyDiagnosticStage.writeEnqueued,
+          requestId: fullRequestId,
+          byteCount: chunk.length,
+          queuedBytes: chunk.length,
+        ),
+      );
+      fullProcess.drainWrites();
+      fullProcess.emitDiagnostic(
+        PtyDiagnosticEvent(
+          stage: PtyDiagnosticStage.writeCompleted,
+          requestId: fullRequestId++,
+          byteCount: chunk.length,
+          queuedBytes: 0,
+        ),
+      );
+    }
+    await Future<void>.delayed(Duration.zero);
+  }
+  _expect(retryCompleted, 'backpressured paste made bounded forward progress');
+  final TerminalPasteTransferResult retryResult = await retried;
+  _expect(
+    retryResult.isCompleted && retryResult.backpressureCount > 0,
+    'backpressure waits and retries without dropping the retained chunk',
+  );
+
+  final FakePtyBackend cancellationBackend = FakePtyBackend();
+  final TerminalSession cancellation = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(13), generation: 1),
+    ptyBackend: cancellationBackend,
+    writeCapacityBytes: 2,
+    onChanged: () {},
+    onTerminated: () {},
+  );
+  await cancellation.start();
+  final Future<TerminalPasteTransferResult> cancelled = cancellation.paste(
+    TerminalPasteCodec.plan('cancel me', bracketed: true),
+  );
+  await Future<void>.delayed(Duration.zero);
+  final Future<TerminalSessionShutdownResult> shutdown = cancellation
+      .shutdown();
+  _expect(
+    (await cancelled).disposition == TerminalPasteTransferDisposition.cancelled,
+    'shutdown cancels an outstanding tracked paste completion',
+  );
+  await shutdown;
+  await failed.dispose();
+  await backpressure.dispose();
+  await session.dispose();
 }
 
 Future<void> _testBoundedSessionShutdown() async {
@@ -1772,6 +1979,12 @@ final class _FakePaneSession implements TerminalPaneSession {
   TerminalKeyboardModes keyboardModes = const TerminalKeyboardModes();
 
   @override
+  bool bracketedPasteMode = false;
+
+  @override
+  bool pasteInProgress = false;
+
+  @override
   bool get isLive => _live;
 
   @override
@@ -1851,6 +2064,17 @@ final class _FakePaneSession implements TerminalPaneSession {
   void sendInput(Uint8List bytes) {
     inputWrites.add(bytes);
   }
+
+  @override
+  Future<TerminalPasteTransferResult> paste(TerminalPastePlan plan) async =>
+      TerminalPasteTransferResult(
+        disposition: TerminalPasteTransferDisposition.completed,
+        encodedBytes: plan.analysis.encodedBytes,
+        completedChunks: plan.analysis.isEmpty ? 0 : 1,
+        backpressureCount: 0,
+        maximumQueuedBytes: 0,
+        concurrentInputRejections: 0,
+      );
 
   @override
   void resize({required int rows, required int columns}) {}

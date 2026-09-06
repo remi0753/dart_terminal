@@ -3,6 +3,40 @@ import 'dart:typed_data';
 /// Why a paste requires explicit confirmation before any PTY write.
 enum TerminalPasteRisk { multiline, controlCharacter, bracketTerminator, large }
 
+enum TerminalPasteTransferDisposition {
+  completed,
+  busy,
+  unavailable,
+  cancelled,
+  writeFailed,
+}
+
+/// Content-free outcome of one paste transport attempt.
+final class TerminalPasteTransferResult {
+  const TerminalPasteTransferResult({
+    required this.disposition,
+    required this.encodedBytes,
+    required this.completedChunks,
+    required this.backpressureCount,
+    required this.maximumQueuedBytes,
+    required this.concurrentInputRejections,
+  }) : assert(encodedBytes >= 0),
+       assert(completedChunks >= 0),
+       assert(backpressureCount >= 0),
+       assert(maximumQueuedBytes >= 0),
+       assert(concurrentInputRejections >= 0);
+
+  final TerminalPasteTransferDisposition disposition;
+  final int encodedBytes;
+  final int completedChunks;
+  final int backpressureCount;
+  final int maximumQueuedBytes;
+  final int concurrentInputRejections;
+
+  bool get isCompleted =>
+      disposition == TerminalPasteTransferDisposition.completed;
+}
+
 final class TerminalPasteLimitException implements Exception {
   const TerminalPasteLimitException({
     required this.limit,
