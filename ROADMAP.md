@@ -856,14 +856,20 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] reviewed case manifest、Dart baseline、deterministic report gate
     - [x] pinned comparator capture実行とnormalized evidence
     - [x] mismatch最小化、acceptance report、harness完了判定
-- [ ] `vttest` を参考に採用/非採用項目を明文化
+- [x] `vttest` を参考に採用/非採用項目を明文化
+  （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) を参照して実施）
 - [ ] tmux、ssh、mosh、Neovim、Emacs、ncurses、fzf、lazygit の matrix
+  （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のadoption判断も参照して実施）
 - [ ] terminfo source、compile/install/fallback
+  （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のcharacter-set判断も参照して実施）
 - [ ] OSC title/cwd/hyperlink/palette/clipboard policy
+  （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のtitle判断も参照して実施）
 - [ ] focus/mouse/bracketed paste/query reports
   （[`docs/phase6/decrqss-sgr-gap.md`](docs/phase6/decrqss-sgr-gap.md) のgapを参照して実施）
+  （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のmanual項目も参照して実施）
 - [ ] parser inspector と sequence trace export
 - [ ] compatibility bug の regression corpus 化
+  （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のadoption判断も参照して実施）
 
 終了条件:
 
