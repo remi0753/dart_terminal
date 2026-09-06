@@ -214,6 +214,40 @@ Primary references:
   grid invariant. The fixture now uses the normal classified print path; no
   production width validation was weakened.
 
+### 2026-09-06 — native AppKit accessibility contract
+
+- Extended the adjacent `dart_terminal_renderer_macos` capability ABI to
+  version 10. `TerminalAccessibilityClient` encodes one complete bounded packet
+  containing the visible UTF-8 text, canonical UTF-16 physical-line records,
+  per-line terminal-column boundaries, selection, cursor, and logical cell
+  metrics. It rejects malformed topology and non-increasing generations before
+  crossing the custom-view operation boundary.
+- `DtrTerminalMetalView` copies and independently validates the entire packet
+  before replacing its immutable accessibility state. Validation covers packet
+  offsets/reserved fields/limits, exact UTF-8 round trip and UTF-16 length,
+  newline topology, monotonic scalar-safe boundaries, selection endpoints,
+  exact cursor row/column mapping, and generation monotonicity. A stale or
+  malformed packet leaves the previously published native state untouched.
+- The view is now one read-only `NSAccessibilityTextAreaRole` element. Its
+  label/value/focus, visible/shared ranges, selected text/ranges, insertion
+  line, string/attributed string, line/index/style navigation, point lookup,
+  and screen-space range frames all read the copied snapshot without entering
+  Dart. Focus follows first-responder transitions.
+- Value notifications are emitted only for text, line/column layout, row/column
+  dimensions, or cell-metric changes. Selected-text notifications cover actual
+  selection or cursor changes. Native tests prove identical snapshots do not
+  notify again and malformed snapshots preserve the prior accessible value.
+- The first native compile used Foundation `MIN`/`MAX` macros; the repository's
+  warning-clean `-Wpedantic -Werror` gate correctly rejected their GNU statement
+  expressions. Explicit comparisons replaced them. A wide-emoji acceptance
+  fixture also exposed one stale ASCII-based UTF-16 cursor expectation, which
+  was corrected without changing production behavior.
+- The reusable capability was committed independently in adjacent
+  `dart_appkit` as `2b1fda0` (`Expose terminal accessibility through AppKit`).
+  Its complete `make test` passed all C11/C++20 warning gates, native capability
+  suites, Dart analysis/tests, launcher and Kernel checks, real FFI loading,
+  and the legacy event fallback.
+
 ## Verification results
 
 ### Bounded visible UTF-16 snapshot and mapping
@@ -229,3 +263,13 @@ Primary references:
   reported no issues, parser-table freshness and native hooks passed, and the
   complete Dart test suite passed.
 - `git diff --check`: passed during final pre-commit review.
+
+### Native AppKit accessibility contract
+
+- Focused `make terminal-renderer-native-test terminal-renderer-dart-test` in
+  adjacent `dart_appkit`: passed, including the real view/window selector,
+  geometry, focus, notification, malformed-packet, and lifecycle acceptance.
+- Final adjacent `make test`: passed in full after the ABI layout assertions and
+  architecture/package/worklog documentation were added.
+- `git diff --check` and the staged-diff review: passed before dependency commit
+  `2b1fda0`.

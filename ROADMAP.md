@@ -818,7 +818,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] VoiceOver の最小 visible text/selection/cursor support
   （[`docs/phase5/voiceover-visible-text-selection-cursor.md`](docs/phase5/voiceover-visible-text-selection-cursor.md) を参照して実施）
   - [x] bounded visible UTF-16 snapshotとselection/cursor mapping
-  - [ ] `TerminalMetalView`のAppKit accessibility contractとchange notification
+  - [x] `TerminalMetalView`のAppKit accessibility contractとchange notification
   - [ ] 実製品同期と両runtime VoiceOver受け入れ
 
 終了条件:
