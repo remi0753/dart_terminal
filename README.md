@@ -12,7 +12,8 @@ Rosetta、Universal、Intel-native 実機確認は、M1 の製品 contract が�
 pane-owned persistent login shell です。Phase 0 の native spike source は移行時に削除し、
 成立性と測定結果は `docs/phase0` に保存しています。Dart-only VT parser と screen
 model、および CoreText/Metal renderer は製品実装へ移行済みです。IME と入力source
-受け入れmatrixも製品経路へ接続済みで、選択、履歴スクロールなどは後続 Phase です。
+受け入れmatrixに加え、terminal mouse reporting と local selection arbitration も
+製品経路へ接続済みで、具体的な選択操作、履歴スクロールなどは後続 Phase です。
 
 現在選定している製品 contract は、未改変の公式 Dart だけを使う AppKit root と、
 独立して回収・再生成できる公式 Dart 子プロセス worker です。M1/arm64 Developer JIT
@@ -34,6 +35,9 @@ model、および CoreText/Metal renderer は製品実装へ移行済みです�
   navigation、F1–F20、keypad）
 - stable action、exact chord、conflict検出、override、unbound、passthroughを備えた
   immutable keybind engineと、AppKit menu shortcut優先の競合境界
+- DECSET 9/1000/1002/1003と1005/1006/1015を追跡し、X10/default、UTF-8、
+  URXVT、SGRのbounded mouse reportを実PTYへ送る製品routing。通常shellと
+  Shift overrideは同じpointer eventをPTYへ重複送信せずlocal selection intentへ配送
 - キー入力、Backspace/Delete、左右移動、Home/End、zsh自身の行編集とコマンド履歴
 - 1 paneにつき1つのTTY付きinteractive login zsh
 - 同じshell内での`cd`、環境変数、background job、`jobs`、`fg`/`bg`

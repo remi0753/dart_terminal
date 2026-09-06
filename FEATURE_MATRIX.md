@@ -102,7 +102,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | --- | --- | --- | --- | --- | --- |
 | CAP-01 | DA/DA2、DSR/CPR、DEC private mode、DECRQM の request/reply | P0 | 3/6 | `G:src/terminal/device_attributes.zig`, `G:src/terminal/device_status.zig`, `G:src/terminal/modes.zig` | bounded 7-bit encoder、terminal-core dispatch、raw PTY parse、native write queue connectionを完了 |
 | CAP-02 | application cursor/keypad、bracketed paste、focus report | P0 | 3/5 | `G:src/input/key_encode.zig`, `G:src/terminal/paste.zig`, `G:src/terminal/focus.zig` | 未実装 |
-| CAP-03 | mouse X10、UTF-8、URXVT、SGR mode/encoding | P0 | 3/5 | `G:src/terminal/mouse.zig`, `G:src/input/mouse_encode.zig` | 未実装 |
+| CAP-03 | mouse X10、UTF-8、URXVT、SGR mode/encoding | P0 | 3/5 | `G:src/terminal/mouse.zig`, `G:src/input/mouse_encode.zig` | DEC mode state、bounded exact encoder、AppKit-to-cell routing、実PTY製品受け入れをM1両modeで完了 |
 | CAP-04 | xterm-256color 互換 terminfo と SSH fallback | P0/P1 | 6/8 | `G:src/terminfo/`, `G:src/cli/ssh.zig` | 未実装 |
 | CAP-05 | window/tab title、OSC 7 cwd、OSC 8 hyperlink、palette/default color query/change | P0 | 3/6 | `G:src/terminal/osc/parsers/` | bounded OSC 4/10/11 palette/default色query/changeと104/110/111 resetを完了。title/cwd/hyperlinkは後続 |
 | CAP-06 | OSC 52 は read/write policy、confirmation、size limit 付き | P0/P1 | 6/9 | `G:src/terminal/clipboard.zig`, `G:src/terminal/osc/parsers/clipboard_operation.zig` | 未実装 |
@@ -153,7 +153,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | IN-03 | `NSTextInputClient` marked/commit/cancel/replacement/candidate rect。raw key と IME を二重送信しない | P0 | 5 | `G:macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` | bounded native client/event/geometry、Unicode 17 preedit Metal overlay、AppKit first-responder routing、実PTYへのraw/commit単一配送とcancel抑止をM1両modeで完了 |
 | IN-04 | 日本語 IME、emoji picker、Unicode Hex Input、key repeat の automated/manual matrix | P0 | 5 | same AppKit surface implementation and macOS tests | 日本語marked/update/commit/cancel/candidateと、US/JIS/dead key/CJK/emoji ZWJ/Unicode Hex相当/repeatを実native client・product router・実PTYで自動受け入れ。system picker/source/hardware用の非破壊manual checklistを公開 |
 | IN-05 | char/word/line multi-click selection、drag、autoscroll | P0 | 5 | `G:src/terminal/Selection.zig`, `SelectionGesture.zig`, SurfaceView | 未実装 |
-| IN-06 | precision/momentum scroll と terminal mouse report/local selection arbitration | P0 | 5 | `G:src/input/mouse.zig`, `G:src/input/mouse_encode.zig` | 未実装 |
+| IN-06 | precision/momentum scroll と terminal mouse report/local selection arbitration | P0 | 5 | `G:src/input/mouse.zig`, `G:src/input/mouse_encode.zig` | terminal mouse report/local selectionの排他的arbitrationとShift overrideを実製品経路で完了。precision/momentum scrollは後続 |
 | IN-07 | standard clipboard、bracketed paste、newline normalization | P0 | 5 | `G:src/input/paste.zig`, `G:src/terminal/paste.zig`, NSPasteboard helpers | plain-text general pasteboard と明示的 Paste action の基盤のみ完了。bracketed paste/newline policy は Phase 5 |
 | IN-08 | multiline/control paste confirmation と large-paste bounded throttle | P0 | 5 | `G:macos/Sources/Features/ClipboardConfirmation/`, `G:src/termio/mailbox.zig` | 未実装 |
 | IN-09 | keybind/action registry、conflict、unbound/passthrough、menu shortcut arbitration | P0 | 5/8 | `G:src/input/Binding.zig`, `G:src/input/config.zig`, MenuShortcutManager | bounded immutable engine、stable action、exact chord、conflict、override/unbound/passthrough、native menu優先境界を完了。設定ファイル接続はPhase 8 |

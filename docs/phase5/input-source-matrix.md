@@ -136,6 +136,13 @@ the user's global input state.
 
 ## Verification results
 
+- 2026-09-06 follow-up: the later mouse product acceptance exposed that an
+  unrelated native key-up/cancel event may advance the shared text-input client
+  generation after all 13 matrix fixtures. The product readiness assertion now
+  accepts that monotonic suffix while still requiring inactive composition and
+  the unchanged byte-exact 51-byte PTY payload; missing or duplicate fixture
+  input therefore still fails closed.
+
 - Matrix identity: version 1, 12 immutable rows, 13 events, seven required
   categories, and 51 exact PTY bytes. Unit tests also reject duplicate/invalid
   IDs, missing categories, unbounded repeat, and collection mutation.

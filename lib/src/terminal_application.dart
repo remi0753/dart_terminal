@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -9,6 +10,7 @@ import 'package:dart_pty_macos/dart_pty_macos.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'runtime_lifecycle.dart';
+import 'terminal_core/terminal_mouse_modes.dart';
 import 'terminal_core/terminal_screen.dart';
 import 'terminal_core/terminal_style.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
@@ -16,6 +18,7 @@ import 'terminal_input/terminal_input_matrix.dart';
 import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_encoder.dart';
 import 'terminal_input/terminal_key_event.dart';
+import 'terminal_input/terminal_mouse_router.dart';
 import 'terminal_input/terminal_text_input_event_router.dart';
 import 'terminal_pane.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
@@ -495,6 +498,15 @@ final class TerminalApplication {
               );
             },
           );
+      final _TerminalMouseProductObservation mouseObservation =
+          _TerminalMouseProductObservation();
+      final TerminalMouseRouter mouseRouter = TerminalMouseRouter(
+        onTerminalReport: (Uint8List bytes) {
+          mouseObservation.recordTerminalReport(bytes);
+          createdPane.sendInput(bytes);
+        },
+        onLocalSelection: mouseObservation.recordLocalSelection,
+      );
       textInputSubscription = createdTextInputClient.events.listen(
         textInputEventRouter.route,
         onError: (Object error, StackTrace stackTrace) {
@@ -789,7 +801,23 @@ final class TerminalApplication {
                 );
               }
             case AppKitKeyEvent():
+              break;
             case AppKitMouseEvent():
+              final TerminalScreen mouseScreen =
+                  terminalSession!.terminalScreenSet.activeScreen;
+              final TerminalFontCatalogMetrics metrics =
+                  createdMetalSurface.fontMetrics;
+              final TerminalMouseRouteResult result = mouseRouter.route(
+                event,
+                modes: terminalSession!.terminalScreenSet.mouseModes,
+                rows: mouseScreen.rows,
+                columns: mouseScreen.columns,
+                cellWidth: metrics.cellWidth,
+                cellHeight: metrics.cellHeight,
+              );
+              if (result.disposition == TerminalMouseRouteDisposition.ignored) {
+                mouseObservation.recordIgnored(result.ignoreReason!);
+              }
           }
         },
         onError: (Object error, StackTrace stackTrace) {
@@ -871,6 +899,7 @@ final class TerminalApplication {
               options.runtimeShellExitTestScenario;
           if (options.runtimeTerminalDisplayTest) {
             await _exerciseTerminalDisplay(
+              application,
               createdLifecycle,
               terminalSession!,
               createdPane,
@@ -879,6 +908,7 @@ final class TerminalApplication {
               keyEventRouter,
               createdTextInputClient,
               textInputEventRouter,
+              mouseObservation,
             );
           } else if (shellExitTest != RuntimeShellExitTestScenario.none) {
             await _exerciseShellExitPolicy(
@@ -1218,6 +1248,7 @@ final class TerminalApplication {
   }
 
   static Future<void> _exerciseTerminalDisplay(
+    AppKitApplication application,
     RuntimeLifecycleCoordinator lifecycle,
     TerminalSession session,
     TerminalPane pane,
@@ -1226,6 +1257,7 @@ final class TerminalApplication {
     TerminalKeyEventRouter keyEventRouter,
     TerminalTextInputClient textInputClient,
     TerminalTextInputEventRouter textInputEventRouter,
+    _TerminalMouseProductObservation mouseObservation,
   ) async {
     const String prompt = '__DT_DISPLAY_PROMPT__ ';
     const String colorMarker = '__DT_COLOR__';
@@ -1249,6 +1281,14 @@ final class TerminalApplication {
       pane,
       textInputClient,
       textInputEventRouter,
+    );
+    final bool mouse = await _exerciseMouseInput(
+      application,
+      session,
+      pane,
+      surface,
+      window,
+      mouseObservation,
     );
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
@@ -1314,7 +1354,8 @@ final class TerminalApplication {
           systemFont &&
           modeKey &&
           textInput &&
-          inputMatrix) {
+          inputMatrix &&
+          mouse) {
         final int? workerProcessId = lifecycle.workerPid;
         _expectLifecycle(
           workerProcessId != null,
@@ -1326,7 +1367,7 @@ final class TerminalApplication {
           'metal_default=true newest_frame=$newestFrame '
           'frame_bounded=$frameBounded system_font=$systemFont '
           'mode_key=$modeKey text_input=$textInput '
-          'input_matrix=$inputMatrix '
+          'input_matrix=$inputMatrix mouse=$mouse '
           'font_size=${baseline.fontPointSize.toStringAsFixed(1)} '
           'rows=${screen.rows} '
           'columns=${screen.columns} '
@@ -1348,7 +1389,7 @@ final class TerminalApplication {
       'prompt_bottom=$promptBottom newest_frame=$newestFrame '
       'frame_bounded=$frameBounded system_font=$systemFont '
       'mode_key=$modeKey text_input=$textInput '
-      'input_matrix=$inputMatrix '
+      'input_matrix=$inputMatrix mouse=$mouse '
       'font_size=${baseline.fontPointSize}',
     );
   }
@@ -1493,10 +1534,10 @@ final class TerminalApplication {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
     _expectLifecycle(
-      eventRouter.lastGeneration == finalGeneration &&
+      eventRouter.lastGeneration >= finalGeneration &&
           !eventRouter.isCompositionActive,
       'input matrix event generation/order is incomplete: '
-      'first=$firstGeneration expected_final=$finalGeneration '
+      'first=$firstGeneration expected_minimum_final=$finalGeneration '
       'actual=${eventRouter.lastGeneration}',
     );
     await _waitForAsciiMarker(session, receivedMarker);
@@ -1509,6 +1550,260 @@ final class TerminalApplication {
       'unicode_hex=true repeat=true exact=true',
     );
     return true;
+  }
+
+  static Future<bool> _exerciseMouseInput(
+    AppKitApplication application,
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+    Window window,
+    _TerminalMouseProductObservation observation,
+  ) async {
+    final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+    final TerminalFontCatalogMetrics metrics = surface.fontMetrics;
+    _expectLifecycle(
+      screen.columns >= 96,
+      'mouse UTF-8 acceptance requires at least 96 columns',
+    );
+
+    void inject(
+      AppKitMouseEventKind kind, {
+      required int column,
+      required int row,
+      int button = 0,
+      int modifiers = 0,
+    }) {
+      _injectMouseEventForTesting(
+        application,
+        window,
+        kind: kind,
+        x: (column - 0.5) * metrics.cellWidth,
+        y: (row - 0.5) * metrics.cellHeight,
+        button: button,
+        modifiers: modifiers,
+        clickCount: kind == AppKitMouseEventKind.moved ? 0 : 1,
+        monotonicNanoseconds: observation.nextInjectedTimestamp(),
+      );
+    }
+
+    final int initialLocal = observation.localSelectionCount;
+    final int initialReports = observation.terminalReportCount;
+    final int initialReportBytes = observation.terminalReportBytes;
+    inject(AppKitMouseEventKind.down, column: 1, row: 1);
+    inject(AppKitMouseEventKind.up, column: 1, row: 1);
+    await _waitForMouseObservation(
+      observation,
+      terminalReports: initialReports,
+      localSelections: initialLocal + 2,
+    );
+
+    await _exerciseMouseProtocolStage(
+      session: session,
+      pane: pane,
+      observation: observation,
+      id: 'X10',
+      enableSequence: '\\033[?9h',
+      disableSequence: '\\033[?9l',
+      expectedModes: const TerminalMouseModes(
+        tracking: TerminalMouseTrackingMode.x10,
+      ),
+      expectedBytes: const <int>[0x1b, 0x5b, 0x4d, 0x20, 0x22, 0x22],
+      expectedReportDelta: 1,
+      expectedLocalDelta: 2,
+      inject: () {
+        inject(
+          AppKitMouseEventKind.down,
+          column: 2,
+          row: 2,
+          modifiers: ModifierKeys.shiftBit,
+        );
+        inject(
+          AppKitMouseEventKind.up,
+          column: 2,
+          row: 2,
+          modifiers: ModifierKeys.shiftBit,
+        );
+        inject(AppKitMouseEventKind.down, column: 2, row: 2);
+      },
+    );
+    await _exerciseMouseProtocolStage(
+      session: session,
+      pane: pane,
+      observation: observation,
+      id: 'UTF8',
+      enableSequence: '\\033[?1000h\\033[?1005h',
+      disableSequence: '\\033[?1000l\\033[?1005l',
+      expectedModes: const TerminalMouseModes(
+        tracking: TerminalMouseTrackingMode.normal,
+        encoding: TerminalMouseCoordinateEncoding.utf8,
+      ),
+      expectedBytes: const <int>[0x1b, 0x5b, 0x4d, 0x20, 0xc2, 0x80, 0x22],
+      expectedReportDelta: 1,
+      expectedLocalDelta: 0,
+      inject: () => inject(AppKitMouseEventKind.down, column: 96, row: 2),
+    );
+    await _exerciseMouseProtocolStage(
+      session: session,
+      pane: pane,
+      observation: observation,
+      id: 'URXVT',
+      enableSequence: '\\033[?1002h\\033[?1015h',
+      disableSequence: '\\033[?1002l\\033[?1015l',
+      expectedModes: const TerminalMouseModes(
+        tracking: TerminalMouseTrackingMode.buttonEvent,
+        encoding: TerminalMouseCoordinateEncoding.urxvt,
+      ),
+      expectedBytes: ascii.encode('\x1b[73;3;4M'),
+      expectedReportDelta: 1,
+      expectedLocalDelta: 0,
+      inject: () => inject(
+        AppKitMouseEventKind.dragged,
+        column: 3,
+        row: 4,
+        button: 2,
+        modifiers: ModifierKeys.optionBit,
+      ),
+    );
+    await _exerciseMouseProtocolStage(
+      session: session,
+      pane: pane,
+      observation: observation,
+      id: 'SGR',
+      enableSequence: '\\033[?1003h\\033[?1006h',
+      disableSequence: '\\033[?1003l\\033[?1006l',
+      expectedModes: const TerminalMouseModes(
+        tracking: TerminalMouseTrackingMode.anyEvent,
+        encoding: TerminalMouseCoordinateEncoding.sgr,
+      ),
+      expectedBytes: ascii.encode('\x1b[<35;5;6M\x1b[<2;5;6m'),
+      expectedReportDelta: 2,
+      expectedLocalDelta: 0,
+      inject: () {
+        inject(AppKitMouseEventKind.moved, column: 5, row: 6, button: -1);
+        inject(AppKitMouseEventKind.up, column: 5, row: 6, button: 1);
+      },
+    );
+
+    final int reportDelta = observation.terminalReportCount - initialReports;
+    final int localDelta = observation.localSelectionCount - initialLocal;
+    final int byteDelta = observation.terminalReportBytes - initialReportBytes;
+    _expectLifecycle(
+      reportDelta == 5 &&
+          localDelta == 4 &&
+          byteDelta == 41 &&
+          observation.lastLocalSelection?.phase ==
+              TerminalLocalSelectionPhase.end &&
+          session.terminalScreenSet.mouseModes == const TerminalMouseModes(),
+      'mouse product acceptance did not preserve exclusive ownership',
+    );
+    stdout.writeln(
+      'TERMINAL_MOUSE_TEST protocols=4 x10=true utf8=true urxvt=true '
+      'sgr=true local=true shift_override=true exact=true '
+      'reports=$reportDelta local_intents=$localDelta bytes=$byteDelta',
+    );
+    return true;
+  }
+
+  static Future<void> _exerciseMouseProtocolStage({
+    required TerminalSession session,
+    required TerminalPane pane,
+    required _TerminalMouseProductObservation observation,
+    required String id,
+    required String enableSequence,
+    required String disableSequence,
+    required TerminalMouseModes expectedModes,
+    required List<int> expectedBytes,
+    required int expectedReportDelta,
+    required int expectedLocalDelta,
+    required void Function() inject,
+  }) async {
+    final String expectedHex = expectedBytes
+        .map((int byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    final String readyMarker = '__DT_MOUSE_${id}_READY__';
+    final String exactMarker = '__DT_MOUSE_${id}_EXACT__';
+    pane.insertText(
+      "stty raw -echo; printf '$enableSequence\\r\\n__DT_MOUSE_%s_READY__\\r\\n' '$id'; "
+      "bytes=\$(dd bs=1 count=${expectedBytes.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); printf '$disableSequence'; stty sane; "
+      "if [ \"\$bytes\" = '$expectedHex' ]; then "
+      "printf '\\r\\n__DT_MOUSE_%s_EXACT__\\r\\n' '$id'; else "
+      "printf '\\r\\n__DT_MOUSE_%s_MISMATCH__\\r\\n' '$id'; fi",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, readyMarker);
+    _expectLifecycle(
+      session.terminalScreenSet.mouseModes == expectedModes,
+      '$id mouse modes were not active at the ready boundary',
+    );
+    final int reports = observation.terminalReportCount;
+    final int locals = observation.localSelectionCount;
+    inject();
+    await _waitForMouseObservation(
+      observation,
+      terminalReports: reports + expectedReportDelta,
+      localSelections: locals + expectedLocalDelta,
+    );
+    await _waitForAsciiMarker(session, exactMarker);
+    _expectLifecycle(
+      session.terminalScreenSet.mouseModes == const TerminalMouseModes(),
+      '$id mouse modes did not reset after capture: '
+      '${session.terminalScreenSet.mouseModes.tracking.name}/'
+      '${session.terminalScreenSet.mouseModes.encoding.name}',
+    );
+  }
+
+  static Future<void> _waitForMouseObservation(
+    _TerminalMouseProductObservation observation, {
+    required int terminalReports,
+    required int localSelections,
+  }) async {
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 3) &&
+        (observation.terminalReportCount < terminalReports ||
+            observation.localSelectionCount < localSelections)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      observation.terminalReportCount == terminalReports &&
+          observation.localSelectionCount == localSelections,
+      'mouse event ownership counts changed unexpectedly: '
+      'reports=${observation.terminalReportCount}/$terminalReports '
+      'local=${observation.localSelectionCount}/$localSelections',
+    );
+  }
+
+  static void _injectMouseEventForTesting(
+    AppKitApplication application,
+    Window window, {
+    required AppKitMouseEventKind kind,
+    required double x,
+    required double y,
+    required int button,
+    required int modifiers,
+    required int clickCount,
+    required int monotonicNanoseconds,
+  }) {
+    final int handle = appkit_testing.nativeWindowHandleForTesting(window);
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      switch (kind) {
+        AppKitMouseEventKind.down => 10,
+        AppKitMouseEventKind.up => 11,
+        AppKitMouseEventKind.moved => 12,
+        AppKitMouseEventKind.dragged => 13,
+      },
+      handle,
+      handle >> 32,
+      monotonicNanoseconds,
+      0,
+      x,
+      y,
+      button,
+      modifiers,
+      clickCount,
+    ]);
   }
 
   static Future<void> _waitForAsciiMarker(
@@ -1925,6 +2220,33 @@ final class _TerminalAsciiPosition {
 
   final int row;
   final int column;
+}
+
+final class _TerminalMouseProductObservation {
+  int terminalReportCount = 0;
+  int terminalReportBytes = 0;
+  int localSelectionCount = 0;
+  int ignoredCount = 0;
+  int _nextTimestamp = 1000000;
+  TerminalLocalSelectionIntent? lastLocalSelection;
+  TerminalMouseIgnoreReason? lastIgnoreReason;
+
+  int nextInjectedTimestamp() => _nextTimestamp++;
+
+  void recordTerminalReport(Uint8List bytes) {
+    terminalReportCount++;
+    terminalReportBytes += bytes.length;
+  }
+
+  void recordLocalSelection(TerminalLocalSelectionIntent intent) {
+    localSelectionCount++;
+    lastLocalSelection = intent;
+  }
+
+  void recordIgnored(TerminalMouseIgnoreReason reason) {
+    ignoredCount++;
+    lastIgnoreReason = reason;
+  }
 }
 
 enum TerminalKeyRouteDisposition { ignored, encoded, action }

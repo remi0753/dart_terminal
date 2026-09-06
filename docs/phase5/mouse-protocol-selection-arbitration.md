@@ -1,6 +1,6 @@
 # Phase 5 — mouse protocol and local-selection arbitration
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-06
 - Scope: fourth Phase 5 production-input roadmap item
 - Related: CAP-03, IN-05, IN-06, SCR-07, REN-02
@@ -170,6 +170,33 @@ inside these commits.
   for the following selection-gesture task. Terminal reports deliberately
   project only Shift/Option/Control into xterm bits; a Shift-overridden event
   never reaches that encoder.
+- 2026-09-06: the first Developer JIT product run stopped before mouse stages
+  because an ambient native text-input event advanced the preceding fixed input
+  matrix from expected minimum generation 19 to 20. That matrix already proves
+  exact fixture delivery with its raw PTY byte comparison; key-up/cancel events
+  can validly advance the shared client generation without inserting a byte.
+  Its readiness check now requires at least the 13 fixture generations and an
+  inactive composition, while the unchanged 51-byte PTY equality continues to
+  reject missing or duplicate fixture bytes.
+- 2026-09-06: the next Developer JIT run captured the X10 packet exactly, but
+  its screen search found the literal success marker inside the echoed shell
+  command before the later DEC reset output was parsed. The staged command now
+  constructs ready/exact/mismatch markers from `printf` arguments, so the
+  contiguous marker exists only in post-action output. This prevents an echo
+  from satisfying either synchronization boundary.
+- 2026-09-06: completed ordered subtask 3. The live window event subscription
+  now routes each `AppKitMouseEvent` against the active screen dimensions,
+  current CoreText cell metrics, and terminal-owned DEC mouse modes. Remote
+  packets use the pane's existing bounded PTY write path; normal-shell and
+  Shift-overridden events reach only the local-selection observer.
+- 2026-09-06: the existing test-only raw AppKit event injector was sufficient
+  for deterministic real-window acceptance, so no new native or `dart_appkit`
+  API was introduced. Each injected point uses the live product font metrics
+  and window handle rather than constructing a Dart router event directly.
+- 2026-09-06: the raw/no-echo PTY fixture activates and resets X10, UTF-8,
+  URXVT, and SGR stages independently. It compares 41 exact bytes across five
+  reports while observing four local intents (normal down/up and Shift
+  down/up), and verifies that all modes are reset after each stage.
 
 ## Verification results
 
@@ -196,5 +223,31 @@ inside these commits.
 - `CI=true make test`: passed with parser-table freshness, 124-file format
   check (zero changes), whole-package analysis, native asset hooks, and the full
   Dart runner.
-- Product event subscription and real-PTY acceptance remain solely in ordered
-  subtask 3; the parent item remains incomplete.
+- At this subtask boundary, product event subscription and real-PTY acceptance
+  remained solely in ordered subtask 3; they are completed below.
+
+### Product and real-PTY acceptance
+
+- `CI=true make RUNTIME_ARCH=arm64 developer-jit-display`: passed. The real
+  AppKit window and PTY reported all four protocols with exact bytes, preserved
+  exclusive normal/Shift local ownership, retained the existing input matrix,
+  Metal frame, styled output, system-font, wrapping, and bottom-prompt gates,
+  and completed in 1715 ms.
+- `CI=true make RUNTIME_ARCH=arm64 release-aot-display`: passed with the same
+  acceptance contract and completed in 1083 ms.
+- The product smoke parser now requires the content-free
+  `TERMINAL_MOUSE_TEST` evidence line and `mouse=true` in the aggregate display
+  evidence. Protocol content is never written to diagnostics.
+- Final `CI=true make test`: passed with parser-table freshness, 124-file format
+  check (zero changes), whole-package analysis, native asset hooks, and the full
+  Dart runner.
+- Final `CI=true make RUNTIME_ARCH=arm64 runtime-source-check
+  runtime-bundle-audit runtime-integration runtime-resource-integration
+  runtime-terminal-display-integration`: passed. Source audit found 219 tracked
+  files and no native source; both bundles had one helper, one native asset, and
+  one capability; both smoke runs passed; both 1,000-iteration resource runs
+  remained bounded at baseline 12 and peak 14 descriptors; both real-window
+  display runs passed the exact mouse evidence.
+- Final diff review found only the product mouse subscription/acceptance,
+  smoke assertion, capability documentation, and roadmap completion state.
+  `dart_appkit` required no changes for this subtask.

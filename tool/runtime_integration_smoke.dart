@@ -898,12 +898,22 @@ Future<void> _runTerminalDisplay(
     inputMatrixAcceptance.hasMatch(observation.stdoutText),
     'terminal display launch omitted exact input-source matrix acceptance',
   );
+  final RegExp mouseAcceptance = RegExp(
+    r'^TERMINAL_MOUSE_TEST protocols=4 x10=true utf8=true urxvt=true '
+    r'sgr=true local=true shift_override=true exact=true reports=5 '
+    r'local_intents=4 bytes=41$',
+    multiLine: true,
+  );
+  _expect(
+    mouseAcceptance.hasMatch(observation.stdoutText),
+    'terminal display launch omitted exact mouse/selection arbitration',
+  );
   final RegExp acceptance = RegExp(
     r'^TERMINAL_DISPLAY_TEST sgr_stripped=true styled=true '
     r'wrapped_rows=([2-9]|[1-9][0-9]+) prompt_bottom=true '
     r'metal_default=true newest_frame=true frame_bounded=true '
     r'system_font=true mode_key=true text_input=true input_matrix=true '
-    r'font_size=14\.0 '
+    r'mouse=true font_size=14\.0 '
     r'rows=([4-9]|[1-9][0-9]+) '
     r'columns=([2-9][0-9]|[1-9][0-9]{2,}) '
     r'frame_build_delta=[1-9][0-9]*$',
