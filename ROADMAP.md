@@ -804,6 +804,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] precision/momentum accumulatorとlocal/terminal/alternate-screen routing
   - [x] 実AppKit製品統合と両runtimeのscroll acceptance
 - [ ] clipboard、bracketed paste、paste safety
+  （[`docs/phase5/clipboard-bracketed-paste-safety.md`](docs/phase5/clipboard-bracketed-paste-safety.md) を参照して実施）
+  - [x] `dart_appkit` のbounded plain-text pasteboard read境界
+  - [ ] DEC bracketed-paste modeとbounded安全paste encoder
+  - [ ] PTY completion駆動のbounded非同期paste transport
+  - [ ] copy/paste menu・明示確認・両runtimeの10 MiB製品受け入れ
 - [ ] hyperlink hover/open と URL safety
 - [ ] VoiceOver の最小 visible text/selection/cursor support
 
