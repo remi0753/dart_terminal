@@ -11,8 +11,8 @@ Rosetta、Universal、Intel-native 実機確認は、M1 の製品 contract が�
 現在の通常エントリーポイントは、再利用可能な `dart_pty_macos` を使う
 pane-owned persistent login shell です。Phase 0 の native spike source は移行時に削除し、
 成立性と測定結果は `docs/phase0` に保存しています。Dart-only VT parser と screen
-model、および CoreText/Metal renderer は製品実装へ移行済みです。IME、選択、
-履歴スクロールなどの対話機能は後続 Phase です。
+model、および CoreText/Metal renderer は製品実装へ移行済みです。IME と入力source
+受け入れmatrixも製品経路へ接続済みで、選択、履歴スクロールなどは後続 Phase です。
 
 現在選定している製品 contract は、未改変の公式 Dart だけを使う AppKit root と、
 独立して回収・再生成できる公式 Dart 子プロセス worker です。M1/arm64 Developer JIT
@@ -27,6 +27,9 @@ model、および CoreText/Metal renderer は製品実装へ移行済みです�
 - 実`NSTextInputClient`のmarked text、UTF-16 selection/replacement metadata、commit、
   cancel、candidate rect。preeditはcanonical screenを変えず、Unicode 17の折り返し、
   選択背景、下線、composition caretをCoreText/Metal overlayとして描画
+- US/JIS、dead key、Chinese/Japanese/Korean、emoji ZWJ、Unicode Hex相当のcommitと
+  initial/repeated navigationを、実native text clientから実PTYまでexact byteで検証する
+  versioned matrix。system input sourceを変更しない実機確認票も提供
 - DECCKM/DECPAMを反映するbounded legacy xterm encoder（UTF-8、Control/Option、
   navigation、F1–F20、keypad）
 - stable action、exact chord、conflict検出、override、unbound、passthroughを備えた
@@ -336,7 +339,7 @@ screen、wide/grapheme、soft wrap、resize reflow、cursor、visual bellをCore
 表示します。`TextView`やnewline単位のtext projectionは製品表示に使いません。
 
 現在のviewportはbottom-followです。履歴をwheel/trackpadで移動する操作、selection、
-IME、clipboardとkeybind設定ファイルは後続Phaseで実装します。これらが未実装でも、通常の
+clipboardとkeybind設定ファイルは後続Phaseで実装します。これらが未実装でも、通常の
 大量出力後に最新promptが表示範囲外へ隠れることはありません。
 
 `TerminalPaneOwner`がpaneを、`TerminalPane`がsession generationを、

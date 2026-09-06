@@ -888,11 +888,22 @@ Future<void> _runTerminalDisplay(
         !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW'),
     'terminal display launch omitted exclusive IME/PTY acceptance',
   );
+  final RegExp inputMatrixAcceptance = RegExp(
+    r'^TERMINAL_INPUT_MATRIX_TEST version=1 rows=12 events=13 bytes=51 '
+    r'categories=7 us=true jis=true dead_key=true cjk=true emoji=true '
+    r'unicode_hex=true repeat=true exact=true$',
+    multiLine: true,
+  );
+  _expect(
+    inputMatrixAcceptance.hasMatch(observation.stdoutText),
+    'terminal display launch omitted exact input-source matrix acceptance',
+  );
   final RegExp acceptance = RegExp(
     r'^TERMINAL_DISPLAY_TEST sgr_stripped=true styled=true '
     r'wrapped_rows=([2-9]|[1-9][0-9]+) prompt_bottom=true '
     r'metal_default=true newest_frame=true frame_bounded=true '
-    r'system_font=true mode_key=true text_input=true font_size=14\.0 '
+    r'system_font=true mode_key=true text_input=true input_matrix=true '
+    r'font_size=14\.0 '
     r'rows=([4-9]|[1-9][0-9]+) '
     r'columns=([2-9][0-9]|[1-9][0-9]{2,}) '
     r'frame_build_delta=[1-9][0-9]*$',

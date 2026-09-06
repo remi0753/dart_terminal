@@ -786,7 +786,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] AppKit first-responder routingとbounded native text-input client/event/geometry境界
   - [x] bounded Dart preedit model/layoutとCoreText/Metal overlay
   - [x] live pane raw/composition routingと実AppKit/PTY製品統合
-- [ ] US/JIS/dead key/CJK/emoji/key repeat matrix
+- [x] US/JIS/dead key/CJK/emoji/key repeat matrix
+  （[`docs/phase5/input-source-matrix.md`](docs/phase5/input-source-matrix.md) を参照して実施）
 - [ ] mouse protocol と local selection arbitration
 - [ ] character/word/line selection、drag autoscroll
 - [ ] precision trackpad scroll

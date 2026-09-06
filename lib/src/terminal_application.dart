@@ -12,6 +12,7 @@ import 'runtime_lifecycle.dart';
 import 'terminal_core/terminal_screen.dart';
 import 'terminal_core/terminal_style.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
+import 'terminal_input/terminal_input_matrix.dart';
 import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_encoder.dart';
 import 'terminal_input/terminal_key_event.dart';
@@ -1243,6 +1244,12 @@ final class TerminalApplication {
       textInputClient,
       textInputEventRouter,
     );
+    final bool inputMatrix = await _exerciseInputMatrix(
+      session,
+      pane,
+      textInputClient,
+      textInputEventRouter,
+    );
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
     final bool systemFont =
@@ -1306,7 +1313,8 @@ final class TerminalApplication {
           frameBounded &&
           systemFont &&
           modeKey &&
-          textInput) {
+          textInput &&
+          inputMatrix) {
         final int? workerProcessId = lifecycle.workerPid;
         _expectLifecycle(
           workerProcessId != null,
@@ -1318,6 +1326,7 @@ final class TerminalApplication {
           'metal_default=true newest_frame=$newestFrame '
           'frame_bounded=$frameBounded system_font=$systemFont '
           'mode_key=$modeKey text_input=$textInput '
+          'input_matrix=$inputMatrix '
           'font_size=${baseline.fontPointSize.toStringAsFixed(1)} '
           'rows=${screen.rows} '
           'columns=${screen.columns} '
@@ -1339,6 +1348,7 @@ final class TerminalApplication {
       'prompt_bottom=$promptBottom newest_frame=$newestFrame '
       'frame_bounded=$frameBounded system_font=$systemFont '
       'mode_key=$modeKey text_input=$textInput '
+      'input_matrix=$inputMatrix '
       'font_size=${baseline.fontPointSize}',
     );
   }
@@ -1445,6 +1455,58 @@ final class TerminalApplication {
       'TERMINAL_TEXT_INPUT_TEST raw=true preedit=true commit_once=true '
       'cancel=true candidate=true geometry_generation='
       '${client.geometryGeneration} frame_build_delta=$preeditFrameDelta',
+    );
+    return true;
+  }
+
+  static Future<bool> _exerciseInputMatrix(
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalTextInputClient client,
+    TerminalTextInputEventRouter eventRouter,
+  ) async {
+    final TerminalInputAcceptanceMatrix matrix =
+        TerminalInputAcceptanceMatrix.standard;
+    const String readyMarker = '__DT_MATRIX_READY__';
+    const String receivedMarker = '__DT_MATRIX_EXACT__';
+    pane.insertText(
+      "stty raw -echo; printf '\\r\\n__DT_%s_READY__\\r\\n' MATRIX; "
+      "bytes=\$(dd bs=1 count=${matrix.expectedBytes.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "stty sane; if [ \"\$bytes\" = '${matrix.expectedHex}' ]; then "
+      "printf '\\r\\n__DT_MATRIX_EXACT__\\r\\n'; else "
+      "printf '\\r\\n__DT_MATRIX_MISMATCH__\\r\\n'; fi",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, readyMarker);
+
+    final int firstGeneration = eventRouter.lastGeneration + 1;
+    client.debugRunAcceptanceMatrix();
+    final Stopwatch deliveryDeadline = Stopwatch()..start();
+    final int finalGeneration = firstGeneration + matrix.eventCount - 1;
+    while (deliveryDeadline.elapsed < const Duration(seconds: 5) &&
+        eventRouter.lastGeneration < finalGeneration) {
+      _expectLifecycle(
+        session.isLive,
+        'input matrix shell exited before native event delivery',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      eventRouter.lastGeneration == finalGeneration &&
+          !eventRouter.isCompositionActive,
+      'input matrix event generation/order is incomplete: '
+      'first=$firstGeneration expected_final=$finalGeneration '
+      'actual=${eventRouter.lastGeneration}',
+    );
+    await _waitForAsciiMarker(session, receivedMarker);
+    stdout.writeln(
+      'TERMINAL_INPUT_MATRIX_TEST version='
+      '${TerminalInputAcceptanceMatrix.version} rows=${matrix.rows.length} '
+      'events=${matrix.eventCount} bytes=${matrix.expectedBytes.length} '
+      'categories=${TerminalInputMatrixCategory.values.length} '
+      'us=true jis=true dead_key=true cjk=true emoji=true '
+      'unicode_hex=true repeat=true exact=true',
     );
     return true;
   }
