@@ -10,7 +10,74 @@ void runTerminalMouseEncoderTests() {
   _testTrackingEligibilityAndButtonMapping();
   _testLegacyAndUtf8Encoding();
   _testSgrAndUrxvtEncoding();
+  _testWheelEncoding();
   _testValidationAndBounds();
+}
+
+void _testWheelEncoding() {
+  const TerminalMouseEncoder encoder = TerminalMouseEncoder();
+  const TerminalMouseModes legacy = TerminalMouseModes(
+    tracking: TerminalMouseTrackingMode.normal,
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalMouseEventKind.press,
+        button: TerminalMouseButton.wheelUp,
+        modifiers: const TerminalMouseModifiers(control: true),
+      ),
+      legacy,
+    ),
+    <int>[0x1b, 0x5b, 0x4d, 0x70, 0x21, 0x21],
+    'legacy wheel-up is button 4 plus the xterm wheel and modifier bits',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalMouseEventKind.press,
+        button: TerminalMouseButton.wheelDown,
+      ),
+      const TerminalMouseModes(
+        tracking: TerminalMouseTrackingMode.normal,
+        encoding: TerminalMouseCoordinateEncoding.utf8,
+      ),
+    ),
+    <int>[0x1b, 0x5b, 0x4d, 0x61, 0x21, 0x21],
+    'UTF-8 wheel-down retains the legacy button scalar',
+  );
+  _expectAscii(
+    encoder.encode(
+      _event(
+        TerminalMouseEventKind.press,
+        button: TerminalMouseButton.wheelDown,
+        column: 4,
+        row: 7,
+        modifiers: const TerminalMouseModifiers(option: true),
+      ),
+      const TerminalMouseModes(
+        tracking: TerminalMouseTrackingMode.normal,
+        encoding: TerminalMouseCoordinateEncoding.sgr,
+      ),
+    ),
+    '\x1b[<73;4;7M',
+    'SGR wheel-down is a press and has no release report',
+  );
+  _expectAscii(
+    encoder.encode(
+      _event(
+        TerminalMouseEventKind.press,
+        button: TerminalMouseButton.wheelUp,
+        column: 4,
+        row: 7,
+      ),
+      const TerminalMouseModes(
+        tracking: TerminalMouseTrackingMode.x10,
+        encoding: TerminalMouseCoordinateEncoding.urxvt,
+      ),
+    ),
+    '\x1b[96;4;7M',
+    'URXVT wheel-up uses the biased wheel button code',
+  );
 }
 
 void _testMouseModeParsingQueryResetAndExclusivity() {

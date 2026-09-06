@@ -4,7 +4,9 @@ enum TerminalMouseButton {
   left(0),
   middle(1),
   right(2),
-  none(3);
+  none(3),
+  wheelUp(64),
+  wheelDown(65);
 
   const TerminalMouseButton(this.xtermCode);
 

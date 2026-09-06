@@ -162,6 +162,26 @@ is implemented early.
 - 2026-09-06: the next event-encoder run exposed an old negative assertion that
   treated version 5 itself as unsupported. The negative boundary now uses
   version 6; malformed v5 scroll phase and non-finite delta remain rejected.
+- 2026-09-06: completed ordered subtask 2. `TerminalScrollAccumulator` converts
+  precise point deltas by the live cell height and treats non-precise deltas as
+  row units, retaining only a sub-row remainder. Begin/may-begin and cancellation
+  establish deterministic stream boundaries; physical-to-momentum continuation
+  is not time-replayed, and momentum end drops only an unrenderable remainder.
+- 2026-09-06: classification, direction, and route-owner changes reset residual
+  state so motion cannot leak from one device/direction/consumer to another.
+  Each event is clamped to 32 emitted rows before building callbacks or bytes.
+- 2026-09-06: the scroll router assigns one owner before accumulation. Active
+  mouse tracking emits xterm wheel-up/down press packets, Shift bypasses that
+  route, a primary screen emits a signed local viewport delta, and an alternate
+  screen emits normal or application-cursor up/down bytes. Horizontal delta is
+  preserved in the AppKit event but has no vertical terminal action.
+- 2026-09-06: wheel buttons 4/5 are represented as xterm base codes 64/65 in
+  the existing bounded mouse encoder. Legacy, UTF-8, SGR, and URXVT formats all
+  use the same mode and coordinate-limit policy as physical buttons; no wheel
+  release packet is generated.
+- 2026-09-06: adding the sealed `AppKitScrollEvent` made the existing product
+  window-event switch non-exhaustive. Subtask 2 adds only an explicit no-op arm;
+  the event is deliberately not consumed until ordered product integration.
 
 ## Verification results
 
@@ -172,6 +192,21 @@ is implemented early.
   protocol negotiation/filtering, public C/C++ headers, runner C-object
   encoding, Dart codec/fault injection, format/analyze, packages, example,
   FFI bridge smoke, and the legacy event bridge fallback.
+- `git diff --check`: passed before commit.
+
+### Accumulator and exclusive routing
+
+- `dart format` on changed project sources: passed, with two newly created
+  files normalized on the first run and zero changes on the second.
+- Whole-package `dart analyze`: passed with no issues.
+- Focused `test/terminal_scroll_router_test.dart` and
+  `test/terminal_mouse_encoder_test.dart`: passed. Coverage includes precise
+  fractions, momentum continuation/end, direction and classification reset,
+  cancellation, 32-row bound, all four mouse encodings, pointer coordinates,
+  local/report/alternate ownership, application cursor mode, Shift override,
+  protocol-coordinate failure, and malformed inputs.
+- `CI=true make test`: passed; parser-table freshness, 133-file format check,
+  whole-package analysis, native asset hooks, and the full Dart suite completed.
 - `git diff --check`: passed before commit.
 
 ## Follow-up handoff

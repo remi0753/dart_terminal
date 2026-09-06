@@ -818,6 +818,8 @@ final class TerminalApplication {
               }
             case AppKitKeyEvent():
               break;
+            case AppKitScrollEvent():
+              break;
             case AppKitMouseEvent():
               final TerminalScreen mouseScreen =
                   terminalSession!.terminalScreenSet.activeScreen;
