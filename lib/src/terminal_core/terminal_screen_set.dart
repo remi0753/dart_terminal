@@ -96,6 +96,8 @@ final class TerminalScreenSet {
   bool _applicationCursorKeys = false;
   bool _applicationKeypad = false;
   bool _bracketedPaste = false;
+  bool _focusReporting = false;
+  int _focusReportingGeneration = 1;
   TerminalMouseTrackingMode _mouseTracking = TerminalMouseTrackingMode.none;
   TerminalMouseCoordinateEncoding _mouseEncoding =
       TerminalMouseCoordinateEncoding.legacy;
@@ -111,6 +113,8 @@ final class TerminalScreenSet {
   bool get usingAlternate => _activeKind == TerminalScreenKind.alternate;
   bool get mode1049Active => _mode1049Active;
   bool get bracketedPasteMode => _bracketedPaste;
+  bool get focusReportingMode => _focusReporting;
+  int get focusReportingGeneration => _focusReportingGeneration;
   TerminalKeyboardModes get keyboardModes => TerminalKeyboardModes(
     applicationCursorKeys: _applicationCursorKeys,
     applicationKeypad: _applicationKeypad,
@@ -217,6 +221,15 @@ final class TerminalScreenSet {
     _transitionGeneration++;
   }
 
+  void setFocusReportingMode(bool enabled) {
+    if (_focusReporting == enabled) {
+      return;
+    }
+    _focusReporting = enabled;
+    _focusReportingGeneration++;
+    _transitionGeneration++;
+  }
+
   void setMouseTrackingMode(TerminalMouseTrackingMode mode, bool enabled) {
     if (mode == TerminalMouseTrackingMode.none) {
       throw ArgumentError.value(mode, 'mode', 'must be a DEC tracking mode');
@@ -290,6 +303,10 @@ final class TerminalScreenSet {
     _applicationCursorKeys = false;
     _applicationKeypad = false;
     _bracketedPaste = false;
+    if (_focusReporting) {
+      _focusReporting = false;
+      _focusReportingGeneration++;
+    }
     _mouseTracking = TerminalMouseTrackingMode.none;
     _mouseEncoding = TerminalMouseCoordinateEncoding.legacy;
     metadata.reset();

@@ -569,6 +569,12 @@ const Map<int, _Metadata> _decModeMetadata = <int, _Metadata>{
     'ANY-EVENT-MOUSE',
     'ctlseqs.ms, DEC private mode 1003',
   ),
+  1004: _Metadata(
+    'xterm',
+    'xterm-focus-reporting',
+    'XTERM-FOCUS-REPORTING',
+    'ctlseqs.ms, DEC private mode 1004—xterm focus reporting',
+  ),
   1005: _Metadata(
     'xterm',
     'utf8-mouse',
@@ -1857,7 +1863,6 @@ const Map<int, String> _decModeGaps = <int, String>{
   80: 'DECSDM—Sixel Display Mode',
   95: 'DECNCSM—No Clear on Column Mode',
   1001: 'xterm hilite mouse tracking',
-  1004: 'xterm focus reporting',
   1007: 'xterm alternate scroll',
   1010: 'rxvt scroll on output',
   1011: 'rxvt scroll on key',

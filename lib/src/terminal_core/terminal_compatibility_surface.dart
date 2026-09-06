@@ -117,6 +117,7 @@ abstract final class TerminalCompatibilitySurface {
     1000,
     1002,
     1003,
+    1004,
     1005,
     1006,
     1015,

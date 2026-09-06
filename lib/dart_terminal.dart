@@ -92,6 +92,7 @@ export 'src/terminal_core/vt_parser.dart'
 export 'src/terminal_core/vt_parser_table.dart' show VtParserState;
 export 'src/terminal_input/terminal_appkit_key_adapter.dart'
     show TerminalAppKitKeyAdapter;
+export 'src/terminal_input/terminal_focus_reporter.dart';
 export 'src/terminal_input/terminal_hyperlink_interaction.dart';
 export 'src/terminal_input/terminal_input_matrix.dart';
 export 'src/terminal_input/terminal_key_binding.dart';

@@ -932,6 +932,15 @@ Future<void> _runTerminalDisplay(
     mouseAcceptance.hasMatch(observation.stdoutText),
     'terminal display launch omitted exact mouse/selection arbitration',
   );
+  final RegExp focusAcceptance = RegExp(
+    r'^TERMINAL_FOCUS_TEST mode=true blur=true duplicate=true focus=true '
+    r'reset=true exact=true reports=2 bytes=6$',
+    multiLine: true,
+  );
+  _expect(
+    focusAcceptance.hasMatch(observation.stdoutText),
+    'terminal display launch omitted exact native focus reporting',
+  );
   final RegExp selectionAcceptance = RegExp(
     r'^TERMINAL_SELECTION_TEST character=true word=true line=true '
     r'reverse=true shift_override=true autoscroll_up=true '
@@ -1005,7 +1014,8 @@ Future<void> _runTerminalDisplay(
     r'wrapped_rows=([2-9]|[1-9][0-9]+) prompt_bottom=true '
     r'metal_default=true newest_frame=true frame_bounded=true '
     r'system_font=true mode_key=true text_input=true input_matrix=true '
-    r'mouse=true selection=true close_scroll=true scroll=true hyperlink=true '
+    r'focus=true mouse=true selection=true close_scroll=true scroll=true '
+    r'hyperlink=true '
     r'window_title=true cursor_color=true accessibility=true font_size=14\.0 '
     r'rows=([4-9]|[1-9][0-9]+) '
     r'columns=([2-9][0-9]|[1-9][0-9]{2,}) '

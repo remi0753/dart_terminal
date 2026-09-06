@@ -882,6 +882,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （[`docs/phase6/decrqss-sgr-gap.md`](docs/phase6/decrqss-sgr-gap.md) のgapを参照して実施）
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のmanual項目も参照して実施）
   （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のfocus/mouse/query gapを参照して実施）
+  （[`docs/phase6/focus-mouse-bracketed-paste-query-reports.md`](docs/phase6/focus-mouse-bracketed-paste-query-reports.md) の順序と完了条件を参照して実施）
+  - [x] DEC focus reporting state、native routing、両runtime製品受け入れ
+  - [ ] SGR pixel mouse mode、native geometry、highlight mode非採用判断
+  - [ ] bounded DECRQSS SGR reply、differential gap解消
+  - [ ] XTVERSION/XTWINOPS、bracketed paste回帰、matrix/親項目完了判定
 - [ ] parser inspector と sequence trace export
 - [ ] compatibility bug の regression corpus 化
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のadoption判断も参照して実施）

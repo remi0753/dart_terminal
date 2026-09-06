@@ -4,7 +4,7 @@
   "evidence_index_path": "compatibility/application_matrix_evidence.json",
   "evidence_index_sha256": "b2422e4a6a3c6073306f2c615ec9b85d49621440f06998c3435871949caa554e",
   "implementation_manifest_path": "compatibility/implemented_sequence_manifest.json",
-  "implementation_manifest_sha256": "89f62954723fce52b12f7b8e54b1578f6cfd2e11e3dea645637a00f2f25a9a2f",
+  "implementation_manifest_sha256": "3d3fd620e524195d87c5fba1f928e02ffeaa5c65179c6fc4c77f81ecefb5e4fe",
   "trace_tool_path": "tool/terminal_application_unsupported_trace.dart",
   "trace_tool_sha256": "62cddaab40420b436d86c3d5a71fe49b750ea206bd0f7ee7cd73d7e579e50404",
   "status": "accepted-with-owned-gaps",
@@ -12,11 +12,11 @@
     "cells": 8,
     "clean_agreements": 2,
     "documented_gap_cells": 6,
-    "unique_sequences": 20,
-    "unsupported_increments": 92,
-    "gaps": 13,
+    "unique_sequences": 18,
+    "unsupported_increments": 82,
+    "gaps": 12,
     "safe_ignore_gaps": 1,
-    "explicit_unsupported_gaps": 12
+    "explicit_unsupported_gaps": 11
   },
   "cells": [
     {
@@ -25,9 +25,8 @@
       "classification": "documented-gap",
       "accepted": true,
       "captured_unsupported_sequences": 3,
-      "replayed_unsupported_sequences": 3,
+      "replayed_unsupported_sequences": 1,
       "gap_ids": [
-        "focus-reporting",
         "xtversion"
       ]
     },
@@ -48,9 +47,8 @@
       "classification": "documented-gap",
       "accepted": true,
       "captured_unsupported_sequences": 42,
-      "replayed_unsupported_sequences": 38,
+      "replayed_unsupported_sequences": 36,
       "gap_ids": [
-        "focus-reporting",
         "kitty-keyboard-query",
         "sgr-pixel-mouse",
         "synchronized-output",
@@ -65,9 +63,8 @@
       "classification": "documented-gap",
       "accepted": true,
       "captured_unsupported_sequences": 7,
-      "replayed_unsupported_sequences": 7,
+      "replayed_unsupported_sequences": 4,
       "gap_ids": [
-        "focus-reporting",
         "hilite-mouse"
       ]
     },
@@ -86,10 +83,9 @@
       "classification": "documented-gap",
       "accepted": true,
       "captured_unsupported_sequences": 124,
-      "replayed_unsupported_sequences": 6,
+      "replayed_unsupported_sequences": 4,
       "gap_ids": [
         "decrqss",
-        "focus-reporting",
         "kitty-keyboard-query",
         "xtmodkeys"
       ]
@@ -109,10 +105,9 @@
       "classification": "documented-gap",
       "accepted": true,
       "captured_unsupported_sequences": 25,
-      "replayed_unsupported_sequences": 10,
+      "replayed_unsupported_sequences": 9,
       "gap_ids": [
         "application-escape-mode",
-        "focus-reporting",
         "theme-report",
         "theme-updates",
         "window-size-report",
@@ -146,22 +141,6 @@
       "minimal_hex": "1b5024716d1b5c",
       "variants": [
         "1b5024716d1b5c"
-      ],
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
-      "id": "focus-reporting",
-      "disposition": "explicit-unsupported",
-      "impact": "input-events",
-      "inventory_ids": [
-        "xterm:mode:xterm-focus-reporting"
-      ],
-      "owner": "ROADMAP.md#phase-6-focus-mouse-query",
-      "minimal_hex": "1b5b3f3130303468",
-      "variants": [
-        "1b5b3f3130303468",
-        "1b5b3f313030346c"
       ],
       "screen_mutation": false,
       "matrix_blocker": false

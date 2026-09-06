@@ -40,6 +40,8 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - DECSET 9/1000/1002/1003と1005/1006/1015を追跡し、X10/default、UTF-8、
   URXVT、SGRのbounded mouse reportを実PTYへ送る製品routing。通常shellと
   Shift overrideは同じpointer eventをPTYへ重複送信せずlocal selection intentへ配送
+- DECSET 1004を追跡し、native windowのfocus遷移を重複なしのbounded
+  `CSI I`/`CSI O`としてactive PTYへ送る製品routing
 - stable logical anchorを使うcharacter/word/logical-line multi-click selection、
   forward/reverse drag、1 deadlineのbounded edge autoscroll、history-aware viewport
   projection、1x/2x Metal selection overlay。CJK fallback glyphもcanonicalなwidth-two

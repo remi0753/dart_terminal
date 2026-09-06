@@ -36,7 +36,7 @@ void _testGeneratedManifestIsDeterministicAndFresh() {
     root['format'] == 'dart-terminal-implementation-surface' &&
         root['version'] == 1 &&
         selectors.length == 80 &&
-        modes.length == 20 &&
+        modes.length == 21 &&
         _listsEqual(ignored, const <String>['dcs', 'sos', 'pm', 'apc']),
     'manifest has the reviewed selector, mode, and policy totals',
   );

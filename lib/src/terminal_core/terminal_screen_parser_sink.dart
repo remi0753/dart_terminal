@@ -738,6 +738,7 @@ final class TerminalScreenParserSink
         25 => screen.cursorVisible,
         47 || 1047 => screenSet?.usingAlternate,
         69 => screen.modeEnabled(TerminalScreenMode.horizontalMargins),
+        1004 => screenSet?.focusReportingMode,
         1049 => screenSet?.mode1049Active,
         2004 => screenSet?.bracketedPasteMode,
         _ => screenSet?.mouseModes.decPrivateModeState(mode),
@@ -1474,6 +1475,13 @@ final class TerminalScreenParserSink
           _setMouseTrackingMode(TerminalMouseTrackingMode.buttonEvent, enabled);
         case 1003:
           _setMouseTrackingMode(TerminalMouseTrackingMode.anyEvent, enabled);
+        case 1004:
+          final TerminalScreenSet? screens = screenSet;
+          if (screens == null) {
+            _unsupportedSequenceCount++;
+          } else {
+            screens.setFocusReportingMode(enabled);
+          }
         case 1005:
           _setMouseCoordinateEncoding(
             TerminalMouseCoordinateEncoding.utf8,

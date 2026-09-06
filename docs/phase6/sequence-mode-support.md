@@ -29,10 +29,10 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 
 | Support classification | Records |
 | --- | ---: |
-| `implemented` | 82 |
+| `implemented` | 83 |
 | `partial` | 18 |
 | `safe-ignore` | 10 |
-| `unsupported` | 150 |
+| `unsupported` | 149 |
 | **Total** | **260** |
 
 | Selector kind | Records |
@@ -49,7 +49,7 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `mode` | 80 |
 | **Total** | **260** |
 
-The 82 implemented plus 18 partial records reconcile exactly to all 100 product declarations (80 sequence selectors and 20 modes). The 10 safe-ignore records cover 7 concrete DCS forms and SOS/PM/APC; all 150 remaining records are explicitly unsupported/rejected.
+The 83 implemented plus 18 partial records reconcile exactly to all 101 product declarations (80 sequence selectors and 21 modes). The 10 safe-ignore records cover 7 concrete DCS forms and SOS/PM/APC; all 149 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 
@@ -92,7 +92,7 @@ The 82 implemented plus 18 partial records reconcile exactly to all 100 product 
 ## Gap ownership
 
 - The next black-box differential and real-application matrix tasks decide which generic ECMA/DEC/xterm gaps become implementation work.
-- The later focus/mouse/query task owns focus mode 1004, SGR pixel mouse 1016, and remaining report behavior.
+- The current focus/mouse/query task has implemented focus mode 1004 and continues to own SGR pixel mouse 1016 and remaining report behavior.
 - The OSC policy task has implemented title commands 0/1/2, cwd command 7, cursor color 12/112, and the security-sensitive OSC 52 deny-by-default boundary. Opt-in clipboard access remains deferred.
 - The terminfo task owns remaining XTSETTCAP decisions; the existing `v1 保留` feature-matrix decision continues to own Sixel.
 - Unsupported extended character-set, rectangular-editing, locator, printer, and terminal-local xterm resource controls stay rejected until differential/application evidence justifies a new ordered task.

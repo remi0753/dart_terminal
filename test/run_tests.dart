@@ -40,6 +40,7 @@ import 'terminal_differential_adapters_test.dart';
 import 'terminal_differential_corpus_test.dart';
 import 'terminal_differential_evidence_test.dart';
 import 'terminal_differential_harness_test.dart';
+import 'terminal_focus_reporter_test.dart';
 import 'terminal_history_reflow_test.dart';
 import 'terminal_hyperlink_interaction_test.dart';
 import 'terminal_hyperlink_test.dart';
@@ -88,6 +89,7 @@ Future<void> main() async {
   runFrameSchedulerTests();
   runTerminalDamageTests();
   runTerminalDamageCopyTests();
+  runTerminalFocusReporterTests();
   await runTerminalDamageTransferTests();
   await runTerminalDifferentialHarnessTests();
   runTerminalDifferentialAcceptanceTests();

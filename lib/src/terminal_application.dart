@@ -17,6 +17,7 @@ import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_core/terminal_style.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
+import 'terminal_input/terminal_focus_reporter.dart';
 import 'terminal_input/terminal_hyperlink_interaction.dart';
 import 'terminal_input/terminal_input_matrix.dart';
 import 'terminal_input/terminal_key_binding.dart';
@@ -588,6 +589,8 @@ final class TerminalApplication {
           );
       final _TerminalMouseProductObservation mouseObservation =
           _TerminalMouseProductObservation();
+      final _TerminalFocusProductObservation focusObservation =
+          _TerminalFocusProductObservation();
       final _TerminalScrollProductObservation scrollObservation =
           _TerminalScrollProductObservation();
       final _TerminalSelectionProductOwner createdSelectionOwner =
@@ -606,6 +609,12 @@ final class TerminalApplication {
         onLocalSelection: (TerminalLocalSelectionIntent intent) {
           mouseObservation.recordLocalSelection(intent);
           createdSelectionOwner.handle(intent);
+        },
+      );
+      final TerminalFocusReporter focusReporter = TerminalFocusReporter(
+        onTerminalReport: (Uint8List bytes) {
+          focusObservation.recordTerminalReport(bytes);
+          createdPane.sendInput(bytes);
         },
       );
       final TerminalHyperlinkInteractionController hyperlinkController =
@@ -1078,6 +1087,15 @@ final class TerminalApplication {
                 hyperlinkController.cancelPress();
                 createdMetalSurface.clearHyperlinkHover();
               }
+              final TerminalScreenSet screens =
+                  terminalSession!.terminalScreenSet;
+              focusObservation.recordRoute(
+                focusReporter.route(
+                  isFocused: isFocused,
+                  modeEnabled: screens.focusReportingMode,
+                  modeGeneration: screens.focusReportingGeneration,
+                ),
+              );
               if (emitNativeEventWireObservation) {
                 _writeWindowStateEvent(
                   application,
@@ -1291,6 +1309,7 @@ final class TerminalApplication {
               keyEventRouter,
               createdTextInputClient,
               textInputEventRouter,
+              focusObservation,
               mouseObservation,
               createdSelectionOwner,
               scrollObservation,
@@ -1659,6 +1678,7 @@ final class TerminalApplication {
     TerminalKeyEventRouter keyEventRouter,
     TerminalTextInputClient textInputClient,
     TerminalTextInputEventRouter textInputEventRouter,
+    _TerminalFocusProductObservation focusObservation,
     _TerminalMouseProductObservation mouseObservation,
     _TerminalSelectionProductOwner selectionOwner,
     _TerminalScrollProductObservation scrollObservation,
@@ -1687,6 +1707,13 @@ final class TerminalApplication {
       pane,
       textInputClient,
       textInputEventRouter,
+    );
+    final bool focus = await _exerciseFocusReporting(
+      application,
+      session,
+      pane,
+      window,
+      focusObservation,
     );
     final bool mouse = await _exerciseMouseInput(
       application,
@@ -1817,6 +1844,7 @@ final class TerminalApplication {
           modeKey &&
           textInput &&
           inputMatrix &&
+          focus &&
           mouse &&
           selection &&
           closeScroll &&
@@ -1836,7 +1864,8 @@ final class TerminalApplication {
           'metal_default=true newest_frame=$newestFrame '
           'frame_bounded=$frameBounded system_font=$systemFont '
           'mode_key=$modeKey text_input=$textInput '
-          'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
+          'input_matrix=$inputMatrix focus=$focus mouse=$mouse '
+          'selection=$selection '
           'close_scroll=$closeScroll '
           'scroll=$scroll hyperlink=$hyperlink window_title=$windowTitle '
           'cursor_color=$cursorColor '
@@ -1862,7 +1891,8 @@ final class TerminalApplication {
       'prompt_bottom=$promptBottom newest_frame=$newestFrame '
       'frame_bounded=$frameBounded system_font=$systemFont '
       'mode_key=$modeKey text_input=$textInput '
-      'input_matrix=$inputMatrix mouse=$mouse selection=$selection '
+      'input_matrix=$inputMatrix focus=$focus mouse=$mouse '
+      'selection=$selection '
       'close_scroll=$closeScroll '
       'scroll=$scroll hyperlink=$hyperlink window_title=$windowTitle '
       'cursor_color=$cursorColor '
@@ -2577,6 +2607,98 @@ final class TerminalApplication {
       'categories=${TerminalInputMatrixCategory.values.length} '
       'us=true jis=true dead_key=true cjk=true emoji=true '
       'unicode_hex=true repeat=true exact=true',
+    );
+    return true;
+  }
+
+  static Future<bool> _exerciseFocusReporting(
+    AppKitApplication application,
+    TerminalSession session,
+    TerminalPane pane,
+    Window window,
+    _TerminalFocusProductObservation observation,
+  ) async {
+    const String receivedMarker = '__DT_FOCUS_1b5b4f1b5b49__';
+    final int initialReports = observation.terminalReportCount;
+    final int initialBytes = observation.terminalReportBytes;
+    final int initialDuplicates = observation.duplicateTransitionCount;
+    final int initialDisabled = observation.modeDisabledCount;
+    pane.insertText(
+      "printf '\\033[?1004h'; stty raw -echo; "
+      "bytes=\$(dd bs=1 count=6 2>/dev/null | od -An -tx1 | tr -d ' \\n'); "
+      "stty sane; printf '\\033[?1004l\\r\\n__DT_FOCUS_%s__\\r\\n' "
+      '"\$bytes"',
+    );
+    await pane.submit();
+
+    final Stopwatch modeDeadline = Stopwatch()..start();
+    while (!session.terminalScreenSet.focusReportingMode &&
+        modeDeadline.elapsed < const Duration(seconds: 3)) {
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before enabling focus reporting',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      session.terminalScreenSet.focusReportingMode,
+      'display-test did not observe DEC focus reporting mode',
+    );
+
+    _injectFocusEventForTesting(
+      application,
+      window,
+      isFocused: false,
+      monotonicNanoseconds: observation.nextInjectedTimestamp(),
+    );
+    _injectFocusEventForTesting(
+      application,
+      window,
+      isFocused: false,
+      monotonicNanoseconds: observation.nextInjectedTimestamp(),
+    );
+    _injectFocusEventForTesting(
+      application,
+      window,
+      isFocused: true,
+      monotonicNanoseconds: observation.nextInjectedTimestamp(),
+    );
+    await _waitForAsciiMarker(session, receivedMarker);
+
+    final Stopwatch resetDeadline = Stopwatch()..start();
+    while (session.terminalScreenSet.focusReportingMode &&
+        resetDeadline.elapsed < const Duration(seconds: 3)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      !session.terminalScreenSet.focusReportingMode,
+      'display-test zsh did not reset DEC focus reporting mode',
+    );
+    _injectFocusEventForTesting(
+      application,
+      window,
+      isFocused: false,
+      monotonicNanoseconds: observation.nextInjectedTimestamp(),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    final int reportDelta = observation.terminalReportCount - initialReports;
+    final int byteDelta = observation.terminalReportBytes - initialBytes;
+    final int duplicateDelta =
+        observation.duplicateTransitionCount - initialDuplicates;
+    final int disabledDelta = observation.modeDisabledCount - initialDisabled;
+    _expectLifecycle(
+      reportDelta == 2 &&
+          byteDelta == 6 &&
+          duplicateDelta == 1 &&
+          disabledDelta == 1,
+      'focus product routing counts changed unexpectedly: '
+      'reports=$reportDelta bytes=$byteDelta duplicates=$duplicateDelta '
+      'disabled=$disabledDelta',
+    );
+    stdout.writeln(
+      'TERMINAL_FOCUS_TEST mode=true blur=true duplicate=true focus=true '
+      'reset=true exact=true reports=$reportDelta bytes=$byteDelta',
     );
     return true;
   }
@@ -3760,6 +3882,24 @@ final class TerminalApplication {
     ]);
   }
 
+  static void _injectFocusEventForTesting(
+    AppKitApplication application,
+    Window window, {
+    required bool isFocused,
+    required int monotonicNanoseconds,
+  }) {
+    final int handle = appkit_testing.nativeWindowHandleForTesting(window);
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      3,
+      handle,
+      handle >> 32,
+      monotonicNanoseconds,
+      0,
+      isFocused,
+    ]);
+  }
+
   static void _injectScrollEventForTesting(
     AppKitApplication application,
     Window window, {
@@ -4502,6 +4642,32 @@ final class _TerminalMouseProductObservation {
   void recordIgnored(TerminalMouseIgnoreReason reason) {
     ignoredCount++;
     lastIgnoreReason = reason;
+  }
+}
+
+final class _TerminalFocusProductObservation {
+  int terminalReportCount = 0;
+  int terminalReportBytes = 0;
+  int modeDisabledCount = 0;
+  int duplicateTransitionCount = 0;
+  int _nextTimestamp = 2000000;
+
+  int nextInjectedTimestamp() => _nextTimestamp++;
+
+  void recordTerminalReport(Uint8List bytes) {
+    terminalReportCount++;
+    terminalReportBytes += bytes.length;
+  }
+
+  void recordRoute(TerminalFocusReportResult result) {
+    switch (result.disposition) {
+      case TerminalFocusReportDisposition.terminalReport:
+        break;
+      case TerminalFocusReportDisposition.modeDisabled:
+        modeDisabledCount++;
+      case TerminalFocusReportDisposition.duplicateTransition:
+        duplicateTransitionCount++;
+    }
   }
 }
 

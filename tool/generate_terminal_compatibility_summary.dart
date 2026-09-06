@@ -158,8 +158,8 @@ String generateTerminalCompatibilitySummary(
       'decide which generic ECMA/DEC/xterm gaps become implementation work.',
     )
     ..writeln(
-      '- The later focus/mouse/query task owns focus mode 1004, SGR pixel mouse '
-      '1016, and remaining report behavior.',
+      '- The current focus/mouse/query task has implemented focus mode 1004 '
+      'and continues to own SGR pixel mouse 1016 and remaining report behavior.',
     )
     ..writeln(
       '- The OSC policy task has implemented title commands 0/1/2, cwd '
