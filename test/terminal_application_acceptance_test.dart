@@ -21,13 +21,13 @@ void _testReviewedAcceptance() {
     result.acceptedCells == 8 &&
         result.cleanAgreements == 2 &&
         result.documentedGapCells == 6 &&
-        result.gaps == 12 &&
-        result.uniqueSequences == 18 &&
-        result.unsupportedIncrements == 82 &&
+        result.gaps == 11 &&
+        result.uniqueSequences == 17 &&
+        result.unsupportedIncrements == 79 &&
         result.machineLine() ==
             'TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=2 '
-                'documented_gap_cells=6 gaps=12 unique_sequences=18 '
-                'unsupported_increments=82',
+                'documented_gap_cells=6 gaps=11 unique_sequences=17 '
+                'unsupported_increments=79',
     'reviewed acceptance has exact replay-derived totals',
   );
 }

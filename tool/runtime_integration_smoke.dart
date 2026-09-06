@@ -923,9 +923,10 @@ Future<void> _runTerminalDisplay(
     'terminal display launch omitted exact input-source matrix acceptance',
   );
   final RegExp mouseAcceptance = RegExp(
-    r'^TERMINAL_MOUSE_TEST protocols=4 x10=true utf8=true urxvt=true '
-    r'sgr=true local=true shift_override=true exact=true reports=5 '
-    r'local_intents=4 bytes=41$',
+    r'^TERMINAL_MOUSE_TEST protocols=5 x10=true utf8=true urxvt=true '
+    r'sgr=true pixel=true local=true shift_override=true exact=true reports=6 '
+    r'local_intents=6 bytes=[1-9][0-9]* pixel_bytes=[1-9][0-9]* '
+    r'scale_16_16=[1-9][0-9]*$',
     multiLine: true,
   );
   _expect(

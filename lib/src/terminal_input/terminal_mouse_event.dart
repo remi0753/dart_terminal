@@ -44,7 +44,7 @@ final class TerminalMouseModifiers {
   int get hashCode => Object.hash(shift, option, control);
 }
 
-/// One normalized, 1-based terminal-cell mouse event.
+/// One normalized, 1-based terminal cell or physical-pixel mouse event.
 final class TerminalMouseEvent {
   TerminalMouseEvent({
     required this.kind,
@@ -61,7 +61,34 @@ final class TerminalMouseEvent {
     }
   }
 
-  static const int maximumCoordinate = 4096;
+  static const int maximumCellCoordinate = 4096;
+  static const int maximumCoordinate = 65535;
+
+  /// Converts a logical AppKit point to a 1-based physical pixel coordinate.
+  ///
+  /// Returns null rather than truncating if the bounded protocol coordinate
+  /// cannot represent the point. Points outside the text grid are clamped to
+  /// its nearest edge so drag/release behavior matches cell routing.
+  static int? physicalPixelCoordinate({
+    required double point,
+    required double logicalExtent,
+    required double backingScaleFactor,
+  }) {
+    if (!point.isFinite ||
+        !logicalExtent.isFinite ||
+        !backingScaleFactor.isFinite ||
+        logicalExtent <= 0 ||
+        backingScaleFactor <= 0) {
+      throw ArgumentError(
+        'mouse pixel geometry must be finite with positive extent and scale',
+      );
+    }
+    final double boundedPoint = point.clamp(0, logicalExtent);
+    final int coordinate = boundedPoint >= logicalExtent
+        ? (logicalExtent * backingScaleFactor).ceil()
+        : (boundedPoint * backingScaleFactor).floor() + 1;
+    return coordinate < 1 || coordinate > maximumCoordinate ? null : coordinate;
+  }
 
   final TerminalMouseEventKind kind;
   final TerminalMouseButton button;

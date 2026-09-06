@@ -10,8 +10,33 @@ void runTerminalScrollRouterTests() {
   _testPreciseAccumulatorAndMomentum();
   _testDirectionClassificationPhaseAndBounds();
   _testLocalAndTerminalOwnership();
+  _testPixelMouseOwnership();
   _testAlternateScreenAndShiftOverride();
   _testCoordinateAndInputValidation();
+}
+
+void _testPixelMouseOwnership() {
+  final List<List<int>> terminal = <List<int>>[];
+  final TerminalScrollRouter router = TerminalScrollRouter(
+    onTerminalReport: (Uint8List bytes) => terminal.add(bytes),
+    onLocalScroll: (_) {},
+    onAlternateScreenInput: (_) {},
+  );
+  final TerminalScrollRouteResult result = _route(
+    router,
+    _event(deltaY: 1, x: 15.25, y: 25.25),
+    mouseModes: const TerminalMouseModes(
+      tracking: TerminalMouseTrackingMode.normal,
+      encoding: TerminalMouseCoordinateEncoding.sgrPixels,
+    ),
+    backingScaleFactor: 2,
+  );
+  _expect(
+    result.disposition == TerminalScrollDisposition.terminalReport &&
+        ascii.decode(result.terminalBytes) == '\x1b[<64;31;51M' &&
+        terminal.length == 1,
+    'pixel mouse mode reports wheel position in one-based physical pixels',
+  );
 }
 
 void _testPreciseAccumulatorAndMomentum() {
@@ -282,6 +307,7 @@ TerminalScrollRouteResult _route(
   int columns = 80,
   double cellWidth = 10,
   double cellHeight = 10,
+  double backingScaleFactor = 1,
 }) => router.route(
   event,
   mouseModes: mouseModes,
@@ -291,6 +317,7 @@ TerminalScrollRouteResult _route(
   columns: columns,
   cellWidth: cellWidth,
   cellHeight: cellHeight,
+  backingScaleFactor: backingScaleFactor,
 );
 
 AppKitScrollEvent _event({

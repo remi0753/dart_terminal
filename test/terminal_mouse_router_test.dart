@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dart_appkit/dart_appkit.dart';
@@ -9,8 +10,116 @@ void runTerminalMouseRouterTests() {
   _testPointNormalizationAndLocalPhases();
   _testOutsidePressIsIgnored();
   _testTerminalReportingAndShiftOverride();
+  _testPixelCoordinatesAndShiftOverride();
   _testTrackingEligibilityAndIgnoredReasons();
   _testProtocolBoundsAndInputValidation();
+}
+
+void _testPixelCoordinatesAndShiftOverride() {
+  final List<List<int>> reports = <List<int>>[];
+  final List<TerminalLocalSelectionIntent> intents =
+      <TerminalLocalSelectionIntent>[];
+  final TerminalMouseRouter router = TerminalMouseRouter(
+    onTerminalReport: (Uint8List bytes) => reports.add(bytes),
+    onLocalSelection: intents.add,
+  );
+  const TerminalMouseModes pixels = TerminalMouseModes(
+    tracking: TerminalMouseTrackingMode.anyEvent,
+    encoding: TerminalMouseCoordinateEncoding.sgrPixels,
+  );
+  final TerminalMouseRouteResult report = router.route(
+    _event(AppKitMouseEventKind.down, x: 8.25, y: 16.5),
+    modes: pixels,
+    rows: 4,
+    columns: 10,
+    cellWidth: 8,
+    cellHeight: 16,
+    backingScaleFactor: 2,
+  );
+  final TerminalMouseRouteResult local = router.route(
+    _event(
+      AppKitMouseEventKind.down,
+      x: 8.25,
+      y: 16.5,
+      modifiers: const ModifierKeys(ModifierKeys.shiftBit),
+    ),
+    modes: pixels,
+    rows: 4,
+    columns: 10,
+    cellWidth: 8,
+    cellHeight: 16,
+    backingScaleFactor: 2,
+  );
+  final TerminalMouseRouteResult edge = router.route(
+    _event(AppKitMouseEventKind.moved, x: 999, y: 999, button: -1),
+    modes: pixels,
+    rows: 4,
+    columns: 10,
+    cellWidth: 8,
+    cellHeight: 16,
+    backingScaleFactor: 2,
+  );
+  _expect(
+    ascii.decode(report.terminalBytes) == '\x1b[<0;17;34M' &&
+        local.disposition == TerminalMouseRouteDisposition.localSelection &&
+        local.localSelection!.cell == TerminalPointerCell(row: 1, column: 1) &&
+        ascii.decode(edge.terminalBytes) == '\x1b[<35;160;128M' &&
+        reports.length == 2 &&
+        intents.length == 1,
+    'pixel mode scales PTY reports while Shift retains cell-local selection',
+  );
+
+  final TerminalMouseRouteResult limited = router.route(
+    _event(AppKitMouseEventKind.down, x: 39999, y: 1),
+    modes: pixels,
+    rows: 1,
+    columns: 1,
+    cellWidth: 40000,
+    cellHeight: 10,
+    backingScaleFactor: 2,
+  );
+  _expect(
+    limited.disposition == TerminalMouseRouteDisposition.ignored &&
+        limited.ignoreReason ==
+            TerminalMouseIgnoreReason.protocolCoordinateLimit &&
+        reports.length == 2,
+    'pixel coordinates beyond the protocol bound emit no callback',
+  );
+  final TerminalMouseRouteResult localBeyondProtocolBound = router.route(
+    _event(
+      AppKitMouseEventKind.down,
+      x: 39999,
+      y: 1,
+      modifiers: const ModifierKeys(ModifierKeys.shiftBit),
+    ),
+    modes: pixels,
+    rows: 1,
+    columns: 1,
+    cellWidth: 40000,
+    cellHeight: 10,
+    backingScaleFactor: 2,
+  );
+  _expect(
+    localBeyondProtocolBound.disposition ==
+            TerminalMouseRouteDisposition.localSelection &&
+        localBeyondProtocolBound.localSelection!.cell ==
+            TerminalPointerCell(row: 0, column: 0) &&
+        reports.length == 2 &&
+        intents.length == 2,
+    'Shift selection remains cell-local even beyond the pixel report bound',
+  );
+  _expectThrows<ArgumentError>(
+    () => router.route(
+      _event(AppKitMouseEventKind.down),
+      modes: pixels,
+      rows: 4,
+      columns: 10,
+      cellWidth: 8,
+      cellHeight: 16,
+      backingScaleFactor: double.nan,
+    ),
+    'non-finite backing scale is rejected',
+  );
 }
 
 void _testPointNormalizationAndLocalPhases() {

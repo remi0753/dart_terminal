@@ -23,6 +23,7 @@ import 'terminal_input/terminal_input_matrix.dart';
 import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_encoder.dart';
 import 'terminal_input/terminal_key_event.dart';
+import 'terminal_input/terminal_mouse_event.dart';
 import 'terminal_input/terminal_mouse_router.dart';
 import 'terminal_input/terminal_paste.dart';
 import 'terminal_input/terminal_scroll_router.dart';
@@ -1187,6 +1188,7 @@ final class TerminalApplication {
                 columns: scrollScreen.columns,
                 cellWidth: metrics.cellWidth,
                 cellHeight: metrics.cellHeight,
+                backingScaleFactor: createdWindow.backingScaleFactor ?? 1,
               );
               if (result.disposition == TerminalScrollDisposition.ignored) {
                 scrollObservation.recordIgnored(result.ignoreReason!);
@@ -1215,6 +1217,7 @@ final class TerminalApplication {
                 columns: mouseScreen.columns,
                 cellWidth: metrics.cellWidth,
                 cellHeight: metrics.cellHeight,
+                backingScaleFactor: createdWindow.backingScaleFactor ?? 1,
               );
               if (result.disposition == TerminalMouseRouteDisposition.ignored) {
                 mouseObservation.recordIgnored(result.ignoreReason!);
@@ -2835,23 +2838,72 @@ final class TerminalApplication {
         inject(AppKitMouseEventKind.up, column: 5, row: 6, button: 1);
       },
     );
+    const int pixelColumn = 7;
+    const int pixelRow = 3;
+    final double backingScaleFactor = window.backingScaleFactor ?? 1;
+    final int physicalPixelColumn = TerminalMouseEvent.physicalPixelCoordinate(
+      point: (pixelColumn - 0.5) * metrics.cellWidth,
+      logicalExtent: screen.columns * metrics.cellWidth,
+      backingScaleFactor: backingScaleFactor,
+    )!;
+    final int physicalPixelRow = TerminalMouseEvent.physicalPixelCoordinate(
+      point: (pixelRow - 0.5) * metrics.cellHeight,
+      logicalExtent: screen.rows * metrics.cellHeight,
+      backingScaleFactor: backingScaleFactor,
+    )!;
+    final List<int> expectedPixel = ascii.encode(
+      '\x1b[<0;$physicalPixelColumn;$physicalPixelRow'
+      'M',
+    );
+    await _exerciseMouseProtocolStage(
+      session: session,
+      pane: pane,
+      observation: observation,
+      id: 'PIXEL',
+      enableSequence: '\\033[?1000h\\033[?1016h',
+      disableSequence: '\\033[?1000l\\033[?1016l',
+      expectedModes: const TerminalMouseModes(
+        tracking: TerminalMouseTrackingMode.normal,
+        encoding: TerminalMouseCoordinateEncoding.sgrPixels,
+      ),
+      expectedBytes: expectedPixel,
+      expectedReportDelta: 1,
+      expectedLocalDelta: 2,
+      inject: () {
+        inject(
+          AppKitMouseEventKind.down,
+          column: pixelColumn,
+          row: pixelRow,
+          modifiers: ModifierKeys.shiftBit,
+        );
+        inject(
+          AppKitMouseEventKind.up,
+          column: pixelColumn,
+          row: pixelRow,
+          modifiers: ModifierKeys.shiftBit,
+        );
+        inject(AppKitMouseEventKind.down, column: pixelColumn, row: pixelRow);
+      },
+    );
 
     final int reportDelta = observation.terminalReportCount - initialReports;
     final int localDelta = observation.localSelectionCount - initialLocal;
     final int byteDelta = observation.terminalReportBytes - initialReportBytes;
     _expectLifecycle(
-      reportDelta == 5 &&
-          localDelta == 4 &&
-          byteDelta == 41 &&
+      reportDelta == 6 &&
+          localDelta == 6 &&
+          byteDelta == 41 + expectedPixel.length &&
           observation.lastLocalSelection?.phase ==
               TerminalLocalSelectionPhase.end &&
           session.terminalScreenSet.mouseModes == const TerminalMouseModes(),
       'mouse product acceptance did not preserve exclusive ownership',
     );
     stdout.writeln(
-      'TERMINAL_MOUSE_TEST protocols=4 x10=true utf8=true urxvt=true '
-      'sgr=true local=true shift_override=true exact=true '
-      'reports=$reportDelta local_intents=$localDelta bytes=$byteDelta',
+      'TERMINAL_MOUSE_TEST protocols=5 x10=true utf8=true urxvt=true '
+      'sgr=true pixel=true local=true shift_override=true exact=true '
+      'reports=$reportDelta local_intents=$localDelta bytes=$byteDelta '
+      'pixel_bytes=${expectedPixel.length} '
+      'scale_16_16=${(backingScaleFactor * 65536).round()}',
     );
     return true;
   }

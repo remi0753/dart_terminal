@@ -265,9 +265,9 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
     cells.length == 8 &&
         cleanAgreements == 2 &&
         documentedGapCells == 6 &&
-        gaps.length == 12 &&
-        uniqueSequences.length == 18 &&
-        unsupportedIncrements == 82 &&
+        gaps.length == 11 &&
+        uniqueSequences.length == 17 &&
+        unsupportedIncrements == 79 &&
         safeIgnoreGaps == 1,
     'reviewed acceptance baseline differs',
   );

@@ -1,6 +1,6 @@
 enum TerminalMouseTrackingMode { none, x10, normal, buttonEvent, anyEvent }
 
-enum TerminalMouseCoordinateEncoding { legacy, utf8, sgr, urxvt }
+enum TerminalMouseCoordinateEncoding { legacy, utf8, sgr, sgrPixels, urxvt }
 
 /// Terminal-owned DEC mouse tracking and coordinate-encoding state.
 final class TerminalMouseModes {
@@ -23,6 +23,7 @@ final class TerminalMouseModes {
     1005 => encoding == TerminalMouseCoordinateEncoding.utf8,
     1006 => encoding == TerminalMouseCoordinateEncoding.sgr,
     1015 => encoding == TerminalMouseCoordinateEncoding.urxvt,
+    1016 => encoding == TerminalMouseCoordinateEncoding.sgrPixels,
     _ => null,
   };
 

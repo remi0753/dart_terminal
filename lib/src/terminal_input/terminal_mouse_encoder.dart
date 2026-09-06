@@ -53,6 +53,7 @@ final class TerminalMouseEncoder {
       TerminalMouseCoordinateEncoding.legacy => legacyMaximumCoordinate,
       TerminalMouseCoordinateEncoding.utf8 => utf8MaximumCoordinate,
       TerminalMouseCoordinateEncoding.sgr ||
+      TerminalMouseCoordinateEncoding.sgrPixels ||
       TerminalMouseCoordinateEncoding.urxvt =>
         TerminalMouseEvent.maximumCoordinate,
     };
@@ -83,7 +84,8 @@ final class TerminalMouseEncoder {
         ...utf8.encode(String.fromCharCode(event.column + 32)),
         ...utf8.encode(String.fromCharCode(event.row + 32)),
       ]),
-      TerminalMouseCoordinateEncoding.sgr => _ascii(
+      TerminalMouseCoordinateEncoding.sgr ||
+      TerminalMouseCoordinateEncoding.sgrPixels => _ascii(
         '\x1b[<$button;${event.column};${event.row}'
         '${event.kind == TerminalMouseEventKind.release ? 'm' : 'M'}',
       ),
@@ -105,7 +107,8 @@ final class TerminalMouseEncoder {
     return switch (event.kind) {
       TerminalMouseEventKind.press => event.button.xtermCode + modifiers,
       TerminalMouseEventKind.release =>
-        (encoding == TerminalMouseCoordinateEncoding.sgr
+        (encoding == TerminalMouseCoordinateEncoding.sgr ||
+                    encoding == TerminalMouseCoordinateEncoding.sgrPixels
                 ? event.button.xtermCode
                 : TerminalMouseButton.none.xtermCode) +
             modifiers,

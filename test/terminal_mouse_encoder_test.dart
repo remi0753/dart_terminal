@@ -92,25 +92,27 @@ void _testMouseModeParsingQueryResetAndExclusivity() {
   );
   final VtParser parser = VtParser(sink: sink);
 
-  parser.parse(ascii.encode('\x1b[?9h\x1b[?1000h\x1b[?1005h\x1b[?1006h'));
+  parser.parse(
+    ascii.encode('\x1b[?9h\x1b[?1000h\x1b[?1005h\x1b[?1006h\x1b[?1016h'),
+  );
   _expect(
     screens.mouseModes ==
         const TerminalMouseModes(
           tracking: TerminalMouseTrackingMode.normal,
-          encoding: TerminalMouseCoordinateEncoding.sgr,
+          encoding: TerminalMouseCoordinateEncoding.sgrPixels,
         ),
     'new tracking/encoding DECSET replaces its family predecessor',
   );
   parser.parse(
     ascii.encode(
       '\x1b[?9\$p\x1b[?1000\$p\x1b[?1005\$p\x1b[?1006\$p'
-      '\x1b[?1015\$p',
+      '\x1b[?1015\$p\x1b[?1016\$p',
     ),
   );
   _expect(
     replies.join() ==
         '\x1b[?9;2\$y\x1b[?1000;1\$y\x1b[?1005;2\$y'
-            '\x1b[?1006;1\$y\x1b[?1015;2\$y',
+            '\x1b[?1006;2\$y\x1b[?1015;2\$y\x1b[?1016;1\$y',
     'DECRQM reports each recognized mouse mode independently',
   );
 
@@ -119,7 +121,7 @@ void _testMouseModeParsingQueryResetAndExclusivity() {
     screens.mouseModes ==
         const TerminalMouseModes(
           tracking: TerminalMouseTrackingMode.normal,
-          encoding: TerminalMouseCoordinateEncoding.sgr,
+          encoding: TerminalMouseCoordinateEncoding.sgrPixels,
         ),
     'resetting non-current family members is a no-op',
   );
@@ -127,10 +129,11 @@ void _testMouseModeParsingQueryResetAndExclusivity() {
   screens.resize(rows: 3, columns: 5);
   _expect(
     screens.mouseModes.tracking == TerminalMouseTrackingMode.normal &&
-        screens.mouseModes.encoding == TerminalMouseCoordinateEncoding.sgr,
+        screens.mouseModes.encoding ==
+            TerminalMouseCoordinateEncoding.sgrPixels,
     'mouse modes survive alternate-screen activation and resize',
   );
-  parser.parse(ascii.encode('\x1b[?1000l\x1b[?1006l'));
+  parser.parse(ascii.encode('\x1b[?1000l\x1b[?1016l'));
   _expect(
     screens.mouseModes == const TerminalMouseModes(),
     'current DEC mouse modes return to defaults',
@@ -280,6 +283,31 @@ void _testSgrAndUrxvtEncoding() {
     '\x1b[<35;4;7M',
     'SGR any-motion uses no-button plus motion flag',
   );
+  const TerminalMouseModes pixels = TerminalMouseModes(
+    tracking: TerminalMouseTrackingMode.normal,
+    encoding: TerminalMouseCoordinateEncoding.sgrPixels,
+  );
+  _expectAscii(
+    encoder.encode(
+      _event(TerminalMouseEventKind.press, column: 1234, row: 5678),
+      pixels,
+    ),
+    '\x1b[<0;1234;5678M',
+    'SGR pixel mode preserves physical decimal coordinates',
+  );
+  _expectAscii(
+    encoder.encode(
+      _event(
+        TerminalMouseEventKind.release,
+        button: TerminalMouseButton.right,
+        column: 1234,
+        row: 5678,
+      ),
+      pixels,
+    ),
+    '\x1b[<2;1234;5678m',
+    'SGR pixel release retains its button and lowercase terminator',
+  );
   const TerminalMouseModes urxvt = TerminalMouseModes(
     tracking: TerminalMouseTrackingMode.normal,
     encoding: TerminalMouseCoordinateEncoding.urxvt,
@@ -318,8 +346,8 @@ void _testValidationAndBounds() {
     'coordinates are 1-based',
   );
   _expectThrows<RangeError>(
-    () => _event(TerminalMouseEventKind.press, row: 4097),
-    'coordinates are bounded by the terminal grid contract',
+    () => _event(TerminalMouseEventKind.press, row: 65536),
+    'coordinates are bounded by the mouse protocol contract',
   );
   _expectThrows<TerminalMouseEncodingLimitException>(
     () => encoder.encode(
@@ -344,6 +372,33 @@ void _testValidationAndBounds() {
       columns: 1,
     ).setMouseTrackingMode(TerminalMouseTrackingMode.none, true),
     'default tracking cannot masquerade as a DECSET mode',
+  );
+  _expect(
+    TerminalMouseEvent.physicalPixelCoordinate(
+          point: 8.25,
+          logicalExtent: 80,
+          backingScaleFactor: 2,
+        ) ==
+        17,
+    'logical AppKit points are scaled exactly once into physical pixels',
+  );
+  _expect(
+    TerminalMouseEvent.physicalPixelCoordinate(
+          point: 999,
+          logicalExtent: 80,
+          backingScaleFactor: 2,
+        ) ==
+        160,
+    'pixel coordinates clamp drag/release points to the physical grid edge',
+  );
+  _expect(
+    TerminalMouseEvent.physicalPixelCoordinate(
+          point: 40000,
+          logicalExtent: 40000,
+          backingScaleFactor: 2,
+        ) ==
+        null,
+    'unrepresentable physical pixels fail closed',
   );
 }
 

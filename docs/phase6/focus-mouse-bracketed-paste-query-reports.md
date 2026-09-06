@@ -4,8 +4,8 @@
 
 - Date started: 2026-09-07
 - Scope: seventh Phase 6 compatibility-hardening roadmap item
-- Current status: focus reporting complete; SGR pixel mouse/highlight-mode
-  disposition is active
+- Current status: focus reporting and SGR pixel mouse/highlight-mode
+  disposition complete; bounded DECRQSS SGR is next
 
 ## Purpose and background
 
@@ -177,6 +177,37 @@ and committed before the next unit starts.
   unsupported counter (8→6). Updating that one counter and the aggregate corpus
   hash was sufficient; all 1,437 split/bytewise runs matched and no grid,
   metadata, parser-error, or reply field changed.
+- 2026-09-07: implemented DEC private mode 1016 as an encoding-family member.
+  It uses the existing SGR button/release syntax but maps AppKit logical points
+  to one-based physical pixels with the live window backing scale. Coordinates
+  clamp at the text-area edge and fail closed above the fixed 65,535 protocol
+  bound; rows/columns retain their separate 4,096 cell bound.
+- 2026-09-07: pointer presses, releases, motion, and wheel reports share that
+  mapping. Shift ownership is resolved before pixel conversion, so a local
+  selection remains cell-based even when the corresponding pixel report would
+  exceed the protocol bound. This prevents report limits from disabling the
+  user escape hatch and avoids applying Retina scale to selection anchors.
+- 2026-09-07: retained DEC private mode 1001 as explicit unsupported. The
+  immutable mosh capture contains four reset packets and no enable path or
+  application/terminal highlight handshake. Treating reset as implemented
+  would advertise a stateful protocol that the terminal cannot complete.
+- 2026-09-07: regenerated the implementation manifest and inventory. Mode 1016
+  moved from unsupported to implemented, producing 84 implemented, 18 partial,
+  10 safe-ignore, and 148 unsupported records, with 102 implementation
+  declarations. The mistaken first trace invocation used an unsupported
+  `--matrix` argument; rerunning the documented no-argument tool succeeded.
+- 2026-09-07: immutable application replay removed lazygit's three mode-1016
+  resets without changing capture provenance. Lazygit now has 33 current
+  rejects, while the complete matrix has 79 increments, 17 variants, and 11
+  owned gaps. The mode-1001 reset remains a bounded explicit gap.
+- 2026-09-07: differential regeneration changed only implementation/inventory
+  provenance and dependent hashes. All four reviewed semantic observations,
+  the 12 external classifications, and the 1,437 product-corpus split runs
+  remained unchanged.
+- 2026-09-07: the first full gate completed every test but static analysis
+  found one directive-ordering info introduced by the new mouse-event import.
+  The import was moved ahead of the mouse router; the repeated analyzer/full
+  gate is required before completion.
 
 ## Verification results — focus reporting
 
@@ -200,4 +231,36 @@ and committed before the next unit starts.
 - `CI=true make test`: passed all generated-artifact freshness gates,
   differential/application/terminfo acceptance, formatting of 179 files,
   static analysis with no issues, and the complete Dart test runner.
+- `git diff --check`: run in the final pre-commit review.
+
+## Verification results — SGR pixel mouse and highlight disposition
+
+- `dart run test/terminal_mouse_encoder_test.dart`: passed mode-family
+  exclusivity, DECRQM, reset/RIS, exact SGR pixel press/release bytes, and
+  coordinate bounds.
+- `dart run test/terminal_mouse_router_test.dart`: passed 1x/2x logical-to-
+  physical conversion, edge clamping, overflow silence, invalid scale, and
+  cell-based Shift selection including coordinates beyond the report bound.
+- `dart run test/terminal_scroll_router_test.dart`: passed pixel wheel routing
+  with one-based physical coordinates and preserved ownership arbitration.
+- `dart run test/terminal_compatibility_surface_test.dart` and
+  `dart run test/terminal_compatibility_inventory_test.dart`: passed the
+  generated 22-mode/102-declaration surface and exact inventory reconciliation.
+- `dart run tool/terminal_application_acceptance.dart --check`: passed eight
+  immutable captures with two clean cells, six documented-gap cells, 11 gaps,
+  17 variants, and 79 replayed unsupported increments.
+- `make runtime-terminal-display-integration`: passed on Apple M1/arm64 in
+  Developer JIT (2,752 ms) and Release AOT (2,099 ms). Both product runs enabled
+  modes 1000/1016 in real zsh, preserved two Shift-local intents, and observed
+  the exact scaled SGR pixel packet through the PTY.
+- `dart run tool/terminal_differential_corpus.dart`: passed 4 cases, 202 input
+  bytes, and 210 split runs after provenance regeneration.
+- `dart run tool/terminal_differential_acceptance.dart`: passed 12 results as
+  six agreements, two documented gaps, and four unavailable captures.
+- `dart run tool/product_parser_corpus.dart`: passed 8 cases, 1,421 bytes, and
+  1,437 split runs with unchanged snapshot hash 2,091,085,125.
+- `dart analyze`: passed with no issues after correcting the import order.
+- Repeated `CI=true make test`: passed every generated-artifact freshness,
+  differential/application/terminfo gate, formatting of 179 files, static
+  analysis with no issues, and the complete Dart test runner.
 - `git diff --check`: run in the final pre-commit review.

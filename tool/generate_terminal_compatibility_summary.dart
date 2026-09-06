@@ -159,7 +159,7 @@ String generateTerminalCompatibilitySummary(
     )
     ..writeln(
       '- The current focus/mouse/query task has implemented focus mode 1004 '
-      'and continues to own SGR pixel mouse 1016 and remaining report behavior.',
+      'and SGR pixel mouse 1016, and continues to own remaining report behavior.',
     )
     ..writeln(
       '- The OSC policy task has implemented title commands 0/1/2, cwd '

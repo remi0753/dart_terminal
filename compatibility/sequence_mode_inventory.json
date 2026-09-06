@@ -4965,6 +4965,31 @@
       "notes": ""
     },
     {
+      "id": "xterm:mode:sgr-pixel-mouse",
+      "mnemonic": "XTERM-SGR-PIXEL-MOUSE",
+      "syntax": "CSI ? 1016 h / CSI ? 1016 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 1016
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "xterm-411",
+          "locator": "ctlseqs.ms, DEC private mode 1016—xterm SGR pixel mouse"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
       "id": "xterm:mode:srm",
       "mnemonic": "SRM",
       "syntax": "CSI 12 h / CSI 12 l",
@@ -5692,27 +5717,6 @@
         {
           "source": "xterm-411",
           "locator": "ctlseqs.ms, DEC private mode 1041—xterm select to clipboard"
-        }
-      ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
-    },
-    {
-      "id": "xterm:mode:xterm-sgr-pixel-mouse",
-      "mnemonic": "XTERM-SGR-PIXEL-MOUSE",
-      "syntax": "CSI ? 1016 h / CSI ? 1016 l",
-      "selector": {
-        "kind": "mode",
-        "private": true,
-        "number": 1016
-      },
-      "support": "unsupported",
-      "disposition": "reject",
-      "sourceRefs": [
-        {
-          "source": "xterm-411",
-          "locator": "ctlseqs.ms, DEC private mode 1016—xterm SGR pixel mouse"
         }
       ],
       "implementationEvidence": [],

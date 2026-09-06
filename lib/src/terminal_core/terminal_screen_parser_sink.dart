@@ -1497,6 +1497,11 @@ final class TerminalScreenParserSink
             TerminalMouseCoordinateEncoding.urxvt,
             enabled,
           );
+        case 1016:
+          _setMouseCoordinateEncoding(
+            TerminalMouseCoordinateEncoding.sgrPixels,
+            enabled,
+          );
         case 1047:
           _setScreenMode(enabled, 1047);
         case 1048:

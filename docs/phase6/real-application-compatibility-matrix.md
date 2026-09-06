@@ -238,17 +238,18 @@ bytes from documentation or scan arbitrary escape-looking text inside
 printable payloads.
 
 `compatibility/application_matrix_acceptance.json` groups those variants into
-12 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
+11 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
 present in evidence. Replaying each minimal sequence produces exactly one
 bounded reject, no cancel/limit/malformed/incomplete result, and no standalone
 screen-state mutation. The remaining DECRQSS DCS query matches an inventory
-`safe-ignore` record; the other 11 remain explicit unsupported rather than
+`safe-ignore` record; the other 10 remain explicit unsupported rather than
 being silently normalized into success.
 
 | Gap | Observed applications | Current impact/disposition | Ordered owner |
 | --- | --- | --- | --- |
 | focus reporting | Emacs, lazygit, mosh, Neovim, tmux | DEC 1004 state、native focus routing、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
-| highlight/pixel mouse | mosh, lazygit | input events/coordinates; explicit unsupported | Phase 6 focus/mouse/query task |
+| SGR pixel mouse | lazygit | mode 1016、native physical-pixel geometry、wheel、Shift-local routing、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
+| highlight mouse | mosh | captureはmode 1001 resetのみ。stateful enable/handshakeを実装せず明示的非対応 | evidence-driven future decision |
 | XTVERSION and window-size report | Emacs, lazygit, tmux | query fallback; explicit unsupported | Phase 6 focus/mouse/query task |
 | DECRQSS | Neovim | query fallback; safe-ignore | existing DECRQSS gap/query owner |
 | Kitty query, XTMODKEYS, XTQMODKEYS, application escape | lazygit, Neovim, tmux | input protocol; explicit unsupported | Phase 9 Kitty keyboard task |
@@ -278,8 +279,14 @@ The first focus/mouse/query child then implemented mode 1004 and native
 `CSI I`/`CSI O` routing. Its two set/reset variants disappeared without
 rewriting capture provenance. Replaying all eight cells now retains 82
 unsupported increments, 18 variants, and 12 owned gaps. The focus gap is
-closed; pixel/highlight mouse and query gaps remain assigned to the following
-ordered children.
+closed. The second child implements mode 1016 using SGR syntax and one-based
+physical pixels. Native logical AppKit points receive the live backing scale
+exactly once, while local selection and Shift override retain cell geometry.
+The captured lazygit reset therefore disappears too: replay now retains 79
+unsupported increments, 17 variants, and 11 owned gaps. Mode 1001 remains an
+explicit bounded reject because the immutable mosh capture contains only reset
+and does not justify advertising the stateful highlight handshake. Query gaps
+remain assigned to the following ordered children.
 
 The cell outcome is two clean agreements (ncurses and SSH) and six accepted documented-gap
 cells. “Accepted” means the captured workflow completed, every non-parser
@@ -287,8 +294,8 @@ semantic check passed, all rejected bytes are explicit and owned, and no
 matrix-level crash/corruption/unbounded-resource blocker remains. It does not
 turn any false `parser-clean` check into true. The normal gate reports
 `TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=2
-documented_gap_cells=6 gaps=12 unique_sequences=18
-unsupported_increments=82`.
+documented_gap_cells=6 gaps=11 unique_sequences=17
+unsupported_increments=79`.
 
 The version-2 acceptance report pins the current product implementation
 manifest. It retains the original capture counters per cell while recording

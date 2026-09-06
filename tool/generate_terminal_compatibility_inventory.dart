@@ -593,6 +593,12 @@ const Map<int, _Metadata> _decModeMetadata = <int, _Metadata>{
     'URXVT-MOUSE',
     'ctlseqs.ms, DEC private mode 1015',
   ),
+  1016: _Metadata(
+    'xterm',
+    'sgr-pixel-mouse',
+    'XTERM-SGR-PIXEL-MOUSE',
+    'ctlseqs.ms, DEC private mode 1016—xterm SGR pixel mouse',
+  ),
   1047: _Metadata(
     'xterm',
     'alternate-screen-clear',
@@ -1867,7 +1873,6 @@ const Map<int, String> _decModeGaps = <int, String>{
   1010: 'rxvt scroll on output',
   1011: 'rxvt scroll on key',
   1014: 'xterm fast scroll',
-  1016: 'xterm SGR pixel mouse',
   1020: 'xterm UTF-8 resource report',
   1021: 'xterm CJK width resource report',
   1022: 'xterm emoji width resource report',

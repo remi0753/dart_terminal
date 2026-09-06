@@ -37,9 +37,10 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   navigation、F1–F20、keypad）
 - stable action、exact chord、conflict検出、override、unbound、passthroughを備えた
   immutable keybind engineと、AppKit menu shortcut優先の競合境界
-- DECSET 9/1000/1002/1003と1005/1006/1015を追跡し、X10/default、UTF-8、
-  URXVT、SGRのbounded mouse reportを実PTYへ送る製品routing。通常shellと
-  Shift overrideは同じpointer eventをPTYへ重複送信せずlocal selection intentへ配送
+- DECSET 9/1000/1002/1003と1005/1006/1015/1016を追跡し、X10/default、UTF-8、
+  URXVT、SGRのcell座標とSGR physical-pixel座標をbounded mouse reportとして実PTYへ
+  送る製品routing。native logical pointへbacking scaleを一度だけ適用し、通常shellと
+  Shift overrideは同じpointer eventをPTYへ重複送信せずcell-based selectionへ配送
 - DECSET 1004を追跡し、native windowのfocus遷移を重複なしのbounded
   `CSI I`/`CSI O`としてactive PTYへ送る製品routing
 - stable logical anchorを使うcharacter/word/logical-line multi-click selection、

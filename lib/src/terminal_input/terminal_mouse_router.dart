@@ -175,6 +175,7 @@ final class TerminalMouseRouter {
     required int columns,
     required double cellWidth,
     required double cellHeight,
+    double backingScaleFactor = 1,
   }) {
     _validateGeometry(
       source,
@@ -182,6 +183,7 @@ final class TerminalMouseRouter {
       columns: columns,
       cellWidth: cellWidth,
       cellHeight: cellHeight,
+      backingScaleFactor: backingScaleFactor,
     );
     if (source.kind == AppKitMouseEventKind.down &&
         !_isInsideGrid(
@@ -213,19 +215,6 @@ final class TerminalMouseRouter {
       option: source.modifiers.option,
       control: source.modifiers.control,
     );
-    final TerminalMouseEvent event = TerminalMouseEvent(
-      kind: switch (source.kind) {
-        AppKitMouseEventKind.down => TerminalMouseEventKind.press,
-        AppKitMouseEventKind.up => TerminalMouseEventKind.release,
-        AppKitMouseEventKind.moved ||
-        AppKitMouseEventKind.dragged => TerminalMouseEventKind.motion,
-      },
-      button: physicalButton,
-      column: cell.terminalColumn,
-      row: cell.terminalRow,
-      modifiers: modifiers,
-    );
-
     final bool localGesture = source.kind != AppKitMouseEventKind.moved;
     final bool localOverride = modes.reportingEnabled && modifiers.shift;
     if (localGesture && (!modes.reportingEnabled || localOverride)) {
@@ -247,6 +236,40 @@ final class TerminalMouseRouter {
       onLocalSelection(intent);
       return TerminalMouseRouteResult.local(intent);
     }
+
+    final bool pixelCoordinates =
+        modes.encoding == TerminalMouseCoordinateEncoding.sgrPixels;
+    final int? terminalColumn = pixelCoordinates
+        ? TerminalMouseEvent.physicalPixelCoordinate(
+            point: source.x,
+            logicalExtent: columns * cellWidth,
+            backingScaleFactor: backingScaleFactor,
+          )
+        : cell.terminalColumn;
+    final int? terminalRow = pixelCoordinates
+        ? TerminalMouseEvent.physicalPixelCoordinate(
+            point: source.y,
+            logicalExtent: rows * cellHeight,
+            backingScaleFactor: backingScaleFactor,
+          )
+        : cell.terminalRow;
+    if (terminalColumn == null || terminalRow == null) {
+      return TerminalMouseRouteResult.ignored(
+        TerminalMouseIgnoreReason.protocolCoordinateLimit,
+      );
+    }
+    final TerminalMouseEvent event = TerminalMouseEvent(
+      kind: switch (source.kind) {
+        AppKitMouseEventKind.down => TerminalMouseEventKind.press,
+        AppKitMouseEventKind.up => TerminalMouseEventKind.release,
+        AppKitMouseEventKind.moved ||
+        AppKitMouseEventKind.dragged => TerminalMouseEventKind.motion,
+      },
+      button: physicalButton,
+      column: terminalColumn,
+      row: terminalRow,
+      modifiers: modifiers,
+    );
 
     if (_encoder.shouldReport(event, modes)) {
       try {
@@ -294,6 +317,7 @@ final class TerminalMouseRouter {
     required int columns,
     required double cellWidth,
     required double cellHeight,
+    required double backingScaleFactor,
   }) {
     if (!source.x.isFinite || !source.y.isFinite) {
       throw ArgumentError('mouse point must be finite');
@@ -304,16 +328,19 @@ final class TerminalMouseRouter {
         cellHeight <= 0) {
       throw ArgumentError('mouse cell metrics must be finite and positive');
     }
+    if (!backingScaleFactor.isFinite || backingScaleFactor <= 0) {
+      throw ArgumentError('mouse backing scale must be finite and positive');
+    }
     RangeError.checkValueInInterval(
       rows,
       1,
-      TerminalMouseEvent.maximumCoordinate,
+      TerminalMouseEvent.maximumCellCoordinate,
       'rows',
     );
     RangeError.checkValueInInterval(
       columns,
       1,
-      TerminalMouseEvent.maximumCoordinate,
+      TerminalMouseEvent.maximumCellCoordinate,
       'columns',
     );
     RangeError.checkValueInInterval(

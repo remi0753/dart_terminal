@@ -209,6 +209,7 @@ final class TerminalScrollRouter {
     required int columns,
     required double cellWidth,
     required double cellHeight,
+    double backingScaleFactor = 1,
   }) {
     _validate(
       source,
@@ -216,6 +217,7 @@ final class TerminalScrollRouter {
       columns: columns,
       cellWidth: cellWidth,
       cellHeight: cellHeight,
+      backingScaleFactor: backingScaleFactor,
     );
 
     final bool terminalReporting =
@@ -241,8 +243,27 @@ final class TerminalScrollRouter {
 
     switch (owner) {
       case _TerminalScrollOwner.terminal:
-        final int terminalColumn = _cellIndex(source.x, cellWidth, columns) + 1;
-        final int terminalRow = _cellIndex(source.y, cellHeight, rows) + 1;
+        final bool pixelCoordinates =
+            mouseModes.encoding == TerminalMouseCoordinateEncoding.sgrPixels;
+        final int? terminalColumn = pixelCoordinates
+            ? TerminalMouseEvent.physicalPixelCoordinate(
+                point: source.x,
+                logicalExtent: columns * cellWidth,
+                backingScaleFactor: backingScaleFactor,
+              )
+            : _cellIndex(source.x, cellWidth, columns) + 1;
+        final int? terminalRow = pixelCoordinates
+            ? TerminalMouseEvent.physicalPixelCoordinate(
+                point: source.y,
+                logicalExtent: rows * cellHeight,
+                backingScaleFactor: backingScaleFactor,
+              )
+            : _cellIndex(source.y, cellHeight, rows) + 1;
+        if (terminalColumn == null || terminalRow == null) {
+          return TerminalScrollRouteResult.ignored(
+            TerminalScrollIgnoreReason.protocolCoordinateLimit,
+          );
+        }
         final TerminalMouseButton button = rowDelta > 0
             ? TerminalMouseButton.wheelUp
             : TerminalMouseButton.wheelDown;
@@ -293,6 +314,7 @@ final class TerminalScrollRouter {
     required int columns,
     required double cellWidth,
     required double cellHeight,
+    required double backingScaleFactor,
   }) {
     if (source.protocolVersion < 5) {
       throw ArgumentError.value(
@@ -313,16 +335,19 @@ final class TerminalScrollRouter {
         cellHeight <= 0.0) {
       throw ArgumentError('scroll cell metrics must be finite and positive');
     }
+    if (!backingScaleFactor.isFinite || backingScaleFactor <= 0.0) {
+      throw ArgumentError('scroll backing scale must be finite and positive');
+    }
     RangeError.checkValueInInterval(
       rows,
       1,
-      TerminalMouseEvent.maximumCoordinate,
+      TerminalMouseEvent.maximumCellCoordinate,
       'rows',
     );
     RangeError.checkValueInInterval(
       columns,
       1,
-      TerminalMouseEvent.maximumCoordinate,
+      TerminalMouseEvent.maximumCellCoordinate,
       'columns',
     );
     if (source.modifiers.bits < 0 ||

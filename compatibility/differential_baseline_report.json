@@ -4,9 +4,9 @@
   "manifest_path": "test/corpus/differential/reviewed_v1.json",
   "manifest_sha256": "e6b5a9abacbdc1493682ba30a4c9bcfd41f056336fd5248ecd2b1588e34dabb9",
   "inventory_path": "compatibility/sequence_mode_inventory.json",
-  "inventory_sha256": "597d0a855bcecc700ef58f88076fd6efec562fd049b5fae7d1de8aad759fc3d3",
+  "inventory_sha256": "8fd799889fb45d801ed3355f58d3606ed2e5b49a219b1754c64685b474a460c8",
   "implementation_manifest_path": "compatibility/implemented_sequence_manifest.json",
-  "implementation_manifest_sha256": "3d3fd620e524195d87c5fba1f928e02ffeaa5c65179c6fc4c77f81ecefb5e4fe",
+  "implementation_manifest_sha256": "48311a4cb9804120b23007b490c410547b3e070fdade706f4a84ccc7b7ff0554",
   "observation_version": 1,
   "cases": [
     {
@@ -27,7 +27,7 @@
       ],
       "expectation": "agree",
       "observation_path": "test/corpus/differential/baseline/editing-character-operations.json",
-      "observation_sha256": "fdb204e9ce264756a612847f47bf84c7034b945af19fef8a6dd0765808d3f079",
+      "observation_sha256": "af3380c745d4d9016205d15fa4ca4e99812bcce4e4d872619911a295360da819",
       "split_runs": 34,
       "external_evidence": "separate-acceptance-report"
     },
@@ -51,7 +51,7 @@
       ],
       "expectation": "agree",
       "observation_path": "test/corpus/differential/baseline/mode-private-transitions.json",
-      "observation_sha256": "f8aec92dcabeac24748f370c2c7469c3ed151132e317ccecf5bde821b7d305bf",
+      "observation_sha256": "f9b1eee7baae9da78c9b32c4b496904ba83766771009fad7bbdcfa63110815fb",
       "split_runs": 86,
       "external_evidence": "separate-acceptance-report"
     },
@@ -73,7 +73,7 @@
       ],
       "expectation": "agree",
       "observation_path": "test/corpus/differential/baseline/query-status-and-modes.json",
-      "observation_sha256": "257a00c146b76732a07ed6455b8e8560f4c7beb1e83eb8cc33c60153d5d3d459",
+      "observation_sha256": "3641820a70d5e4fa7600462dd3d60c0df2a1c2856410fffc592cb17719d09e85",
       "split_runs": 37,
       "external_evidence": "separate-acceptance-report"
     },
@@ -94,7 +94,7 @@
       ],
       "expectation": "documentedGap",
       "observation_path": "test/corpus/differential/baseline/rendition-attributes-colors.json",
-      "observation_sha256": "43b0d109886a5d97c3640fd10ae98705354be92d52f4b47859a7d6b774dd8b48",
+      "observation_sha256": "6bc3379f41271735db00bbf131bb609abd1e986b4fa0ed320b09f8dc873bdd68",
       "split_runs": 53,
       "external_evidence": "separate-acceptance-report"
     }
