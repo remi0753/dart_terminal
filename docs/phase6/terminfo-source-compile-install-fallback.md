@@ -175,6 +175,36 @@ promoted terminal semantics rather than advertising them early.
   compiled bytes, semantic capability projection, deny policy, and both bundle
   copies are now independently checked. Runtime lookup remains deliberately
   untouched until the next ordered subtask.
+- 2026-09-07: after commit `a78b962`, ROADMAP was reread with a clean
+  worktree. The second subtask is now current. `MacosRuntime` resolves a
+  declared file relative to `Contents/Resources` and rejects a missing file;
+  the product can therefore distinguish the bundled path from a no-resource
+  fallback without guessing its installation directory.
+- 2026-09-07: the compiled entry begins with ncurses magic `0x011a`, a bounded
+  66-byte names section, and the primary name `xterm-256color`. Runtime
+  validation checks the regular-file layout, 32 KiB bound, accepted ncurses
+  magic, bounded names section, and audited name before exporting its database
+  root. The code signature plus bundle audit remains the exact-byte integrity
+  boundary; runtime parsing does not duplicate the build-time SHA-256 engine.
+- 2026-09-07: macOS OpenSSH 10.3p1 `ssh_config(5)` states that `SendEnv`
+  variables require client selection and server acceptance, while `TERM` is
+  always sent when a pseudo-terminal is requested because the protocol
+  requires it. Therefore the Phase 6 remote contract contains the standard
+  TERM name only and never carries the local `TERMINFO` path. General shell
+  wrappers and remote entry installation remain Phase 8.
+- 2026-09-07: focused runtime tests passed valid bundle, absent bundle,
+  malformed/truncated entry, wrong layout, inherited-environment replacement,
+  and remote PTY projection. Focused static analysis reported no issues.
+- 2026-09-07: Developer JIT and Release AOT display integrations both launched
+  the actual AppKit product and persistent PTY. The login zsh observed the
+  standard TERM name and successfully resolved the bundled entry through
+  `/usr/bin/infocmp -A "$TERMINFO"`; the content-free runtime evidence also
+  confirmed the SSH projection excludes the local database path.
+- 2026-09-07: the full normal gate passed after the product integration. The
+  second subtask is complete: ordinary product sessions receive the validated
+  local database, malformed/missing resources fail closed, and the remote PTY
+  contract retains the standard name without a private path. Character-set and
+  XTGETTCAP semantics remain untouched until the final ordered subtask.
 
 ## Decisions
 
@@ -182,6 +212,11 @@ promoted terminal semantics rather than advertising them early.
   root selects Dart Terminal's audited entry; remotely, omission of that local
   path naturally selects the host's standard entry. This avoids a shell-wrapper
   dependency in Phase 6 and leaves richer remote installation to Phase 8.
+- Product startup overrides inherited `TERM` and `COLORTERM`, and replaces an
+  inherited `TERMINFO` only after validating the bundled entry. Missing or
+  malformed resources clear that explicit private lookup and fall back to the
+  standard TERM name. This avoids advertising a stale local database while
+  preserving unrelated child environment fields.
 
 ## Verification log
 
@@ -197,6 +232,17 @@ promoted terminal semantics rather than advertising them early.
   one import-order info. This is not the final clean verification result.
 - Repeated `CI=true make test`: pass; all freshness gates passed, 172 files were
   already formatted, static analysis reported no issues, and the full Dart
+  Terminal test runner passed.
+- `dart run test/terminal_terminfo_environment_test.dart`: pass; valid,
+  missing, malformed, wrong-layout, inherited-variable, and SSH projection
+  cases passed.
+- Focused `dart analyze`: pass with no issues in the resolver, product hookup,
+  tests, and integration checker.
+- `make runtime-terminal-display-integration`: pass in Developer JIT and
+  Release AOT on M1/arm64. Actual login shells resolved the bundled database;
+  elapsed application runs were 2,707 ms and 1,945 ms respectively.
+- `CI=true make test`: pass; all freshness gates passed, 174 files were already
+  formatted, static analysis reported no issues, and the complete Dart
   Terminal test runner passed.
 
 ## First-subtask artifact record

@@ -881,6 +881,21 @@ Future<void> _runTerminalDisplay(
     'terminal display launch did not use the default Metal surface',
   );
   _expect(
+    RegExp(
+          r'^TERMINAL_TERMINFO_ENVIRONMENT disposition=bundled '
+          r'term=xterm-256color private_database=true '
+          r'compiled_bytes=[1-9][0-9]* ssh_term=xterm-256color '
+          r'ssh_private_database=false$',
+          multiLine: true,
+        ).hasMatch(observation.stdoutText) &&
+        observation.stdoutText.contains(
+          'TERMINAL_TERMINFO_TEST local=true standard_name=true '
+          'compiled_lookup=true ssh_standard_name=true '
+          'ssh_private_path=false',
+        ),
+    'terminal display launch did not install local terminfo with SSH fallback',
+  );
+  _expect(
     observation.stdoutText.contains(
       'NATIVE_TEXT_INPUT_CLIENT attached=true routing=appkit-only client_id=',
     ),

@@ -97,6 +97,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   text extraction、cell-aligned exact scalarのforward/backward bounded search
 - 最大64 byteのreply encoderと、DA/DA2、DSR/CPR、DECRQM、OSC palette/default
   color queryのterminal-core dispatch
+- ncurses 6.6で固定生成・能力監査した`xterm-256color` terminfoを両runtime bundleへ同梱し、
+  起動時にheader/name/layoutを検証してlocal `TERMINFO`へ接続する環境contract。欠落・破損時と
+  SSHのremote PTYでは私有pathを送らず標準`TERM=xterm-256color`へfallback
 - session-owned screen set/parserへのraw PTY byte feed、従来text projectionとの
   single-subscription共存、generated replyのnative bounded write queue接続
 - historyとprimary/alternate grid、Unicode resource、mode/cursor/parser countを

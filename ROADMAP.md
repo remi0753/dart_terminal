@@ -869,7 +869,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のcharacter-set/XTGETTCAP gapを参照して実施）
   （[`docs/phase6/terminfo-source-compile-install-fallback.md`](docs/phase6/terminfo-source-compile-install-fallback.md) を参照して実施）
   - [x] versioned compatible source、compiler contract、bundle resourceとfreshness gate
-  - [ ] product lookup、`TERMINFO` install、standard-name SSH fallback
+  - [x] product lookup、`TERMINFO` install、standard-name SSH fallback
   - [ ] DEC Special Graphics、XTGETTCAP policy、real-application regression closure
 - [ ] OSC title/cwd/hyperlink/palette/clipboard policy
   （[`docs/phase6/vttest-adoption.md`](docs/phase6/vttest-adoption.md) のtitle判断も参照して実施）

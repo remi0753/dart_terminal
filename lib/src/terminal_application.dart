@@ -30,6 +30,7 @@ import 'terminal_input/terminal_text_input_event_router.dart';
 import 'terminal_pane.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_session.dart';
+import 'terminal_terminfo_environment.dart';
 
 const String terminalUsage = '''
 Usage: Dart Terminal [application-options]
@@ -361,6 +362,20 @@ final class TerminalApplication {
         ? _ExitNotificationSuppressingPtyBackend(nativePtyBackend)
         : nativePtyBackend;
     final AppKitApplication application = await AppKitApplication.attach();
+    String? bundledTerminfoEntry;
+    try {
+      bundledTerminfoEntry = MacosRuntime.bundleResourcePath(
+        TerminalTerminfoEnvironment.compiledEntryRelativePath,
+      );
+    } on MacosRuntimeException {
+      bundledTerminfoEntry = null;
+    }
+    final TerminalTerminfoEnvironment terminfoEnvironment =
+        TerminalTerminfoEnvironment.resolve(
+          parentEnvironment: Platform.environment,
+          bundledEntryPath: bundledTerminfoEntry,
+        );
+    stdout.writeln(terminfoEnvironment.machineLine());
     final _TerminalClipboardProductObservation? clipboardObservation =
         options.runtimeClipboardTest
         ? _TerminalClipboardProductObservation()
@@ -449,7 +464,7 @@ final class TerminalApplication {
                 initialWorkingDirectory: options.initialWorkingDirectory,
                 environment: usesDeterministicShell
                     ? <String, String>{
-                        ...Platform.environment,
+                        ...terminfoEnvironment.environment,
                         'TERM': isTerminalDisplayTest || isClipboardTest
                             ? 'xterm-256color'
                             : 'dumb',
@@ -461,7 +476,7 @@ final class TerminalApplication {
                             : '__RUNTIME_SHELL_EXIT_READY__ ',
                         'RPS1': '',
                       }
-                    : null,
+                    : terminfoEnvironment.environment,
                 shellArguments: usesDeterministicShell
                     ? const <String>['-f']
                     : const <String>[],
@@ -1643,6 +1658,7 @@ final class TerminalApplication {
     const String wrapStart = '__DT_WRAP_START__';
     const String wrapEnd = '__DT_WRAP_END__';
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    final bool terminfo = await _exerciseTerminfoInstall(session, pane);
     final bool modeKey = await _exerciseModeAwareKeyInput(
       session,
       pane,
@@ -1776,6 +1792,7 @@ final class TerminalApplication {
           newestFrame &&
           frameBounded &&
           systemFont &&
+          terminfo &&
           modeKey &&
           textInput &&
           inputMatrix &&
@@ -1827,6 +1844,29 @@ final class TerminalApplication {
       'accessibility=$accessibility '
       'font_size=${baseline.fontPointSize}',
     );
+  }
+
+  static Future<bool> _exerciseTerminfoInstall(
+    TerminalSession session,
+    TerminalPane pane,
+  ) async {
+    pane.insertText(
+      r'''if [ "${TERM-}" = xterm-256color ] && [ -n "${TERMINFO-}" ] && /usr/bin/infocmp -A "$TERMINFO" xterm-256color >/dev/null 2>&1; then printf '\r\n__DT_TERMINFO_%s__\r\n' OK; else printf '\r\n__DT_TERMINFO_%s__\r\n' MISMATCH; fi''',
+    );
+    await pane.submit();
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 2);
+    final bool exact =
+        _findAscii(
+          session.terminalScreenSet.activeScreen,
+          '__DT_TERMINFO_OK__',
+        ) !=
+        null;
+    _expectLifecycle(exact, 'real PTY did not resolve bundled terminfo');
+    stdout.writeln(
+      'TERMINAL_TERMINFO_TEST local=true standard_name=true '
+      'compiled_lookup=true ssh_standard_name=true ssh_private_path=false',
+    );
+    return true;
   }
 
   static Future<void> _exerciseClipboardProduct(
