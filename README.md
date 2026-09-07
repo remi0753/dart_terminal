@@ -68,8 +68,10 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - native handleと独立したmonotonic window/tab/split-node ID、64 paneまでのimmutable
   binary split topology、selected tab/focused pane/reverse index、collapseとordered teardownを
   持つapplication-owned state model。AppKit adapterはnative tab group、再帰split view、
-  first responder、resize/equalize/zoomを投影し、2 tab/4 live paneの実製品gateで
-  key/IME分離とPTY/Metal/text-input/native handle回収を両runtime検証する
+  first responder、resize/equalize/zoomに加え、focused session title、bounded tab rename/
+  color、local OSC 7 cwdのproxy iconを投影する。新しいtab/splitは信頼済みlocal cwdを
+  継承し、2 tab/4 live paneの実製品gateで実zsh cwd、key/IME分離と
+  PTY/Metal/text-input/native handle回収を両runtime検証する
 - terminal内容を含めないpane state / PTY shutdown stage診断
 - Control-Dのqueue受理、native write、foreground/termios、signal、waitpid、
   kernel exit status、PTY内/外のreap、exit公開をrequest IDで追えるcontent-free診断
@@ -354,8 +356,9 @@ bottom prompt、newest-only frame boundに加え、PTY由来のvisible text、lo
 cursor、native accessibility selector/geometry/focus/notificationをDeveloper JIT/
 Release AOTの実GUIで確認します。
 native hierarchy suiteは2つのnative tabと4つのlive Metal paneを作り、splitの
-resize/equalize/zoom、first-responder focus、raw key/IMEのpane分離、split/tab close、
-4つのPTYと全native resourceの回収を両runtimeで確認します。
+resize/equalize/zoom、first-responder focus、OSC title/cwd、tab rename/color、proxy icon、
+子zshへのlocal cwd継承、raw key/IMEのpane分離、split/tab close、4つのPTYと全native
+resourceの回収を両runtimeで確認します。
 resource stress は実アプリの Dart API から 1,000 組の Window/View を生成・
 破棄し、毎回 native handle が基準値へ戻ることを確認します。shutdown fault suite は
 malformed/late event、double dispose、worker crash を封じ込め、最終 native handle が 0、

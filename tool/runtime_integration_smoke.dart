@@ -1051,7 +1051,7 @@ Future<void> _runTerminalDisplay(
   );
   final RegExp windowTitleAcceptance = RegExp(
     r'^TERMINAL_WINDOW_TITLE_TEST metadata=true native=true stack=true '
-    r'reset=true fallback=true$',
+    r'reset=true fallback=true proxy=true$',
     multiLine: true,
   );
   _expect(
@@ -1195,6 +1195,15 @@ Future<void> _runNativeHierarchy(
         ).allMatches(observation.stdoutText).length ==
         1,
     'native hierarchy acceptance summary is missing or malformed',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_TAB_METADATA_TEST title=true rename=true color=true '
+          r'cwd_inheritance=true proxy=true reset=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'native hierarchy acceptance omitted tab metadata and cwd inheritance',
   );
   _expect(
     !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&

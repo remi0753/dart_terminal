@@ -1,6 +1,6 @@
 # Phase 7 — title, tab metadata, cwd inheritance, and proxy icon
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-07
 - Scope: fifth Phase 7 roadmap item
 - Related: PTY-08, CAP-05, UI-02, UI-07
@@ -226,3 +226,61 @@ verification pass.
 - The reusable primitive and terminal adoption-record subtasks are complete.
   The parent remains in progress; native hierarchy/product projection and M1
   runtime acceptance are next.
+
+### 2026-09-07 — native hierarchy and product projection
+
+- The first terminal consumer analysis found `WindowTabColor` missing from the
+  curated public `dart_appkit.dart` export even though the implementation and
+  internal API tests passed. The adjacent package now exports the type and its
+  primary API suite imports the public library. That change also exposed the
+  test-only attachment helper as absent from `testing.dart`; it is now exported
+  only through that explicit test namespace. Focused and complete AppKit gates
+  passed, and normal follow-up commit `63dd309 Export window tab color
+  publicly` preserves the original history.
+- `TerminalNativeHierarchyAdapter` now accepts a complete presentation builder
+  while retaining the old title-only seam for compatible callers. It applies
+  title, represented file path, and byte-to-sRGB tab color to each retained
+  native window and clears optional state deterministically. Unit coverage
+  proves exact RGBA/path/title projection, live update, remote-path clearing,
+  rename/color reset, stable resource identity, and empty metadata maps after
+  native release.
+- The first enhanced hierarchy test ran its second reconciliation before the
+  existing assertion that every layout callback had fired exactly once. The
+  resulting `Too many elements` came from the test's `values.single`, not the
+  adapter. The initial-layout assertion now precedes the deliberate update;
+  the focused hierarchy suite passes.
+- The normal single-pane product uses the same resolver in its root-isolate
+  screen-change callback. OSC 7 local cwd now sets `representedFilePath`, title
+  precedence remains compatible with the Phase 6 checks, and RIS clears both
+  title metadata and the proxy path back to the product fallback.
+- The four-pane product fixture now starts its first real zsh, changes to
+  `/private/tmp`, emits accepted OSC title and OSC 7 cwd, and only then creates
+  one split and the second native tab/split with that resolved launch cwd. All
+  three descendant shells confirm their real `$PWD`; fixed command fragments
+  avoid matching an echoed success marker. The native windows exercise live
+  title/proxy state, explicit rename/color, and reset back to the focused
+  descendant session metadata before the existing raw-key/IME isolation and
+  teardown sequence.
+- M1 Developer JIT hierarchy acceptance passed in 2,349 ms and Release AOT in
+  1,419 ms. Both retained two native tabs/four live panes, inherited three real
+  PTY cwd values, emitted the exact metadata acceptance line, preserved all
+  prior input/layout checks, and ended with four clean session shutdowns, four
+  clean Metal owners, zero text clients, and zero native handles.
+- The modified normal display suite passed in Developer JIT (3,175 ms) and
+  Release AOT (2,256 ms), including title-stack/reset behavior and local proxy
+  set/clear.
+- README and FEATURE_MATRIX now distinguish completed OSC 7-based local cwd
+  inheritance/proxy behavior from the still-unimplemented process/foreground
+  discovery used by the later close-confirmation item. The compatibility
+  coverage report was regenerated after those documentation changes; all 390
+  regression bytes and 417 chunk plans passed.
+- Final `DART_SUPPRESS_ANALYTICS=true CI=true make test` passed every
+  freshness/compatibility/native and aggregate Dart test, formatted 200 files
+  with zero changes, and reported no analyzer issues.
+- Final source audit passed with `tracked=380`, `product_native_sources=0`, and
+  `reviewed_test_native_sources=1`. Developer JIT and Release AOT arm64 bundle
+  audits both passed with one helper, one native asset, and one capability.
+- All four ordered subtasks and the parent roadmap item are complete. Process
+  and foreground-command discovery remain explicitly tracked by PTY-08 and the
+  later Phase 7 close/quit-confirmation item; no new blocker or untracked work
+  was introduced here.

@@ -77,7 +77,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | PTY-05 | cell/pixel winsize、`TIOCSWINSZ`、`SIGWINCH` が resize に追従 | P0 | 2 | `G:src/pty.zig`, `G:src/termio/Exec.zig` | capability と application resize 接続完了 |
 | PTY-06 | Ctrl-C/Z/\\、EOF、foreground/background job、`fg`/`bg`、`stty`、`tty` が PTY semantics で動く | P0 | 2 | `G:src/pty.zig`, `G:src/termio/Exec.zig` | persistent session、AppKit Control-D route、clean/IGNORE_EOF/nonempty/foreground reader/raw/stopped-job実PTY matrixに加え、clean shell exitは自動close、abnormal exitはstatus付きretainまで完了 |
 | PTY-07 | EOF、child exit、HUP/TERM/KILL、grace period、`waitpid`、zombie 回収が deterministic | P0 | 2 | `G:src/Command.zig`, `G:src/termio/Exec.zig` | tracked writeからsignal/reap/exit公開までの診断、closing中force、最終期限、classified host終了、kernel statusを使う外部reap回復、runtime worker同時生存回帰まで完了 |
-| PTY-08 | current cwd と foreground process を検出し、title/close confirmation/cwd inheritance に使う | P1 | 7 | `G:src/termio/Exec.zig`, `G:macos/Sources/Ghostty/Ghostty.Surface.swift` | live-shell再操作confirmationは完了、process/cwd検出は未実装 |
+| PTY-08 | current cwd と foreground process を検出し、title/close confirmation/cwd inheritance に使う | P1 | 7 | `G:src/termio/Exec.zig`, `G:macos/Sources/Ghostty/Ghostty.Surface.swift` | strict OSC 7からlocal absolute cwdを解決して新tab/splitの実PTYへ継承する経路は完了。process/foreground検出は未実装 |
 | PTY-09 | reconnectable session | P2 | 対象外 | pinned target との差は許容。独立 project とする | v1 対象外 |
 
 ## Streaming parser と terminal screen
@@ -170,12 +170,12 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
 | UI-01 | multiple windows、native tabs、split tree、focus traversal | P0 | 7 | `G:macos/Sources/Features/Terminal/`, `Splits/SplitTree.swift` | native handle非依存のbounded window/tab/binary split state、stable ID、selected tab/focused pane、reverse index、collapse/teardownと、AppKit native tab/recursive split/first-responder projectionを完了。2 tab/4 live paneの両runtime gateでkey/IME分離とresource回収を受け入れ済み。user actionは後続 |
-| UI-02 | split resize/equalize/zoom/min cell、pane/tab title/color、cwd inheritance | P0 | 7 | `G:macos/Sources/Features/Splits/`, `Terminal/` | model-owned resize/equalize/zoom、recursive minimum-cell geometry、native projectionを完了。pane/tab title/colorとcwd inheritanceは後続 |
+| UI-02 | split resize/equalize/zoom/min cell、pane/tab title/color、cwd inheritance | P0 | 7 | `G:macos/Sources/Features/Splits/`, `Terminal/` | model-owned resize/equalize/zoom/min-cell、focused paneのOSC title/cwd、bounded tab rename/color、local cwd継承とnative projectionを両runtimeで完了 |
 | UI-03 | fullscreen、geometry、display/scale migration、reopen/restoration | P0 | 7 | `G:macos/Sources/Helpers/Fullscreen.swift`, `TerminalRestorable.swift` | v3 display/scale event substrate のみ完了。migration policy 等は未実装 |
 | UI-04 | close/quit confirmation と active process detection。pane resource を完全 teardown | P0 | 7 | `G:macos/Sources/Features/Terminal/`, Ghostty surface process metadata | live-shell再操作confirmation、clean shell auto-close、abnormal shell retain後のone-step close、pane teardown完了。active-process検出はPhase 7 |
 | UI-05 | standard menu と Edit/Window/Shell/View action。terminal input と競合しない | P0 | 7 | `G:macos/Sources/App/MainMenu.xib`, action registry | 同一bounded catalogからApplication/File/Edit/Shell/View/Window menuを投影し、implemented handlerだけを動的にenable、menu/paletteのexactly-once dispatchとPTY非漏洩を両runtimeで完了 |
 | UI-06 | Quick Terminal、global shortcut、screen selection/animation | P1 | 10 | `G:macos/Sources/Features/QuickTerminal/`, `Global Keybinds/` | 未実装 |
-| UI-07 | proxy icon、Quick Look、Secure Keyboard Entry indication | P1 | 10 | macOS Terminal/Surface, `G:macos/Sources/Features/Secure Input/` | 未実装 |
+| UI-07 | proxy icon、Quick Look、Secure Keyboard Entry indication | P1 | 10 | macOS Terminal/Surface, `G:macos/Sources/Features/Secure Input/` | local OSC 7 cwdの`NSWindow.representedURL` proxy iconはPhase 7で完了。Quick Look/Secure InputはPhase 10 |
 | UI-08 | AppleScript application→windows→tabs→terminals と App Intents | P1 | 10 | `G:macos/Sources/Features/AppleScript/`, `App Intents/` | 未実装 |
 | UI-09 | settings UI、command palette、terminal inspector | P1 | 8/10 | `G:macos/Sources/Features/Settings/`, `Command Palette/`, InspectorView | Shift-Command-Pのbounded searchable native command palette、keyboard query/selection、availability、first-responder復元、handle cleanupを完了。settings/inspectorは後続 |
 

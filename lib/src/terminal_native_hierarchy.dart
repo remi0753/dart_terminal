@@ -2,6 +2,8 @@ import 'package:dart_appkit/dart_appkit.dart';
 
 import 'terminal_application_state.dart';
 import 'terminal_pane.dart';
+import 'terminal_tab_metadata.dart';
+import 'terminal_tab_presentation.dart';
 
 typedef TerminalNativePaneLayoutCallback = void Function(
   TerminalPaneLayoutRect? rectangle, {
@@ -12,6 +14,11 @@ typedef TerminalNativePaneResourcesFactory =
     TerminalNativePaneResources Function(TerminalPane pane);
 
 typedef TerminalNativeTabTitleBuilder = String Function(
+  TerminalWindowState window,
+  TerminalTabState tab,
+);
+
+typedef TerminalNativeTabPresentationBuilder = TerminalTabPresentation Function(
   TerminalWindowState window,
   TerminalTabState tab,
 );
@@ -74,16 +81,31 @@ final class TerminalNativeHierarchyAdapter {
     this.defersCloseRequests = true,
     this.presentWindows = true,
     TerminalNativeTabTitleBuilder? titleBuilder,
+    TerminalNativeTabPresentationBuilder? presentationBuilder,
   }) : _state = state,
        _paneResourcesFactory = paneResourcesFactory,
        _windowFrame = windowFrame,
        _cellSize = cellSize,
-       _titleBuilder = titleBuilder ?? _defaultTitle {
+       _presentationBuilder =
+           presentationBuilder ??
+           (titleBuilder == null
+               ? _defaultPresentation
+               : (TerminalWindowState window, TerminalTabState tab) =>
+                     TerminalTabPresentation(
+                       title: titleBuilder(window, tab),
+                       color: null,
+                       representedFilePath: null,
+                     )) {
     if (!dividerThickness.isFinite || dividerThickness < 0) {
       throw ArgumentError.value(
         dividerThickness,
         'dividerThickness',
         'must be finite and non-negative',
+      );
+    }
+    if (titleBuilder != null && presentationBuilder != null) {
+      throw ArgumentError(
+        'titleBuilder and presentationBuilder are mutually exclusive',
       );
     }
   }
@@ -92,7 +114,7 @@ final class TerminalNativeHierarchyAdapter {
   final TerminalNativePaneResourcesFactory _paneResourcesFactory;
   final Rect _windowFrame;
   final TerminalSplitLayoutSize _cellSize;
-  final TerminalNativeTabTitleBuilder _titleBuilder;
+  final TerminalNativeTabPresentationBuilder _presentationBuilder;
   final double dividerThickness;
   final KeyEventRouting keyEventRouting;
   final bool defersCloseRequests;
@@ -208,15 +230,25 @@ final class TerminalNativeHierarchyAdapter {
       for (final MapEntry<TerminalTabId, TerminalTabState> entry
           in logicalTabs.entries) {
         final TerminalWindowState owner = tabOwners[entry.key]!;
-        final String title = _titleBuilder(owner, entry.value);
+        final TerminalTabPresentation presentation = _presentationBuilder(
+          owner,
+          entry.value,
+        );
         Window? window = _windows[entry.key];
         if (window == null) {
-          window = Window(frame: _windowFrame, title: title)
+          window = Window(frame: _windowFrame, title: presentation.title)
             ..keyEventRouting = keyEventRouting
             ..defersCloseRequests = defersCloseRequests;
           createdTabWindows.add(entry.key);
-        } else if (window.title != title) {
-          window.title = title;
+        } else if (window.title != presentation.title) {
+          window.title = presentation.title;
+        }
+        if (window.representedFilePath != presentation.representedFilePath) {
+          window.representedFilePath = presentation.representedFilePath;
+        }
+        final WindowTabColor? tabColor = _appKitColor(presentation.color);
+        if (window.tabColor != tabColor) {
+          window.tabColor = tabColor;
         }
         nextWindows[entry.key] = window;
       }
@@ -525,10 +557,23 @@ final class TerminalNativeHierarchyAdapter {
     ),
   };
 
-  static String _defaultTitle(
+  static TerminalTabPresentation _defaultPresentation(
     TerminalWindowState window,
     TerminalTabState tab,
-  ) => 'Dart Terminal — ${window.id}:${tab.id}';
+  ) => TerminalTabPresentation(
+    title: 'Dart Terminal — ${window.id}:${tab.id}',
+    color: null,
+    representedFilePath: null,
+  );
+
+  static WindowTabColor? _appKitColor(TerminalTabColor? color) => color == null
+      ? null
+      : WindowTabColor(
+          red: color.red / 255,
+          green: color.green / 255,
+          blue: color.blue / 255,
+          alpha: color.alpha / 255,
+        );
 }
 
 final class _TerminalNativeMinimumSize {

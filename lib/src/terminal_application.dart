@@ -39,6 +39,8 @@ import 'terminal_native_hierarchy.dart';
 import 'terminal_pane.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_session.dart';
+import 'terminal_tab_metadata.dart';
+import 'terminal_tab_presentation.dart';
 import 'terminal_terminfo_environment.dart';
 
 const String terminalUsage = '''
@@ -460,6 +462,8 @@ final class TerminalApplication {
     Timer? autoCloseConfirmationTimer;
     RuntimeLifecycleCoordinator? lifecycle;
     TerminalSession? terminalSession;
+    TerminalTabPresentationResolver? windowPresentationResolver;
+    TerminalTabState? windowPresentationTab;
     var lifecycleWasShutDown = false;
     var forcePaneClose = false;
     var shutdownWasClean = true;
@@ -568,11 +572,35 @@ final class TerminalApplication {
             surface.notifyScreenChanged();
           }
           if (!createdWindow.isClosed && !createdWindow.isDisposed) {
-            final String desiredTitle =
-                terminalSession?.terminalScreenSet.metadata.windowTitle ??
-                _productWindowTitle;
-            if (createdWindow.title != desiredTitle) {
-              createdWindow.title = desiredTitle;
+            final TerminalTabPresentationResolver? resolver =
+                windowPresentationResolver;
+            final TerminalTabState? tab = windowPresentationTab;
+            final TerminalTabPresentation presentation =
+                resolver != null && tab != null
+                ? resolver.resolve(tab, fallbackTitle: _productWindowTitle)
+                : TerminalTabPresentation(
+                    title:
+                        terminalSession
+                            ?.terminalScreenSet
+                            .metadata
+                            .windowTitle ??
+                        _productWindowTitle,
+                    color: null,
+                    representedFilePath: null,
+                  );
+            if (createdWindow.title != presentation.title) {
+              createdWindow.title = presentation.title;
+            }
+            if (createdWindow.representedFilePath !=
+                presentation.representedFilePath) {
+              createdWindow.representedFilePath =
+                  presentation.representedFilePath;
+            }
+            final WindowTabColor? tabColor = _windowTabColor(
+              presentation.color,
+            );
+            if (createdWindow.tabColor != tabColor) {
+              createdWindow.tabColor = tabColor;
             }
           }
           selectionOwner?.synchronize();
@@ -591,6 +619,12 @@ final class TerminalApplication {
       final TerminalPane createdPane = createdApplicationState.paneForId(
         logicalWindow.selectedTab.focusedPaneId,
       )!;
+      windowPresentationTab = logicalWindow.selectedTab;
+      windowPresentationResolver = TerminalTabPresentationResolver(
+        metadataForPane: (PaneId paneId) => paneId == createdPane.id
+            ? terminalSession?.terminalScreenSet.metadata
+            : null,
+      );
       stdout.writeln(
         createdApplicationState.machineLineForPane(createdPane.id),
       );
@@ -1729,6 +1763,7 @@ final class TerminalApplication {
     final Map<PaneId, TerminalSession> sessions = <PaneId, TerminalSession>{};
     final Map<PaneId, _TerminalHierarchyProductPane> owners =
         <PaneId, _TerminalHierarchyProductPane>{};
+    final Map<PaneId, String?> launchWorkingDirectories = <PaneId, String?>{};
     final List<TerminalPaneSessionShutdownResult> shutdowns =
         <TerminalPaneSessionShutdownResult>[];
     TerminalNativeHierarchyAdapter? hierarchy;
@@ -1736,13 +1771,18 @@ final class TerminalApplication {
     var lifecycleWasShutDown = false;
     Object? asynchronousError;
     StackTrace? asynchronousStackTrace;
+    final TerminalTabPresentationResolver presentationResolver =
+        TerminalTabPresentationResolver(
+          metadataForPane: (PaneId paneId) =>
+              sessions[paneId]?.terminalScreenSet.metadata,
+        );
 
     void recordAsynchronousError(Object error, StackTrace stackTrace) {
       asynchronousError ??= error;
       asynchronousStackTrace ??= stackTrace;
     }
 
-    TerminalPaneConfiguration configuration() {
+    TerminalPaneConfiguration configuration({String? workingDirectory}) {
       PaneId? paneId;
       return TerminalPaneConfiguration(
         sessionFactory:
@@ -1755,7 +1795,7 @@ final class TerminalApplication {
               final TerminalSession session = TerminalSession(
                 id: id,
                 ptyBackend: ptyBackend,
-                initialWorkingDirectory: initialWorkingDirectory,
+                initialWorkingDirectory: workingDirectory,
                 environment: <String, String>{
                   ...terminfoEnvironment.environment,
                   'TERM': 'xterm-256color',
@@ -1775,6 +1815,7 @@ final class TerminalApplication {
                 },
               );
               sessions[id.paneId] = session;
+              launchWorkingDirectories[id.paneId] = workingDirectory;
               return session;
             },
         onChanged: () {
@@ -1814,25 +1855,45 @@ final class TerminalApplication {
       );
 
       final TerminalWindowState logicalWindow = await state.createWindow(
-        configuration(),
+        configuration(workingDirectory: initialWorkingDirectory),
       );
       final TerminalTabState firstTab = logicalWindow.selectedTab;
       final PaneId firstPaneId = firstTab.focusedPaneId;
+      final TerminalPane firstPane = state.paneForId(firstPaneId)!;
+      await firstPane.start();
+      await _waitForAsciiMarker(sessions[firstPaneId]!, prompt.trimRight());
+      firstPane.insertText(
+        "cd /private/tmp; printf "
+        "'\\033]2;__DT_HIERARCHY_LIVE_TITLE__\\007"
+        "\\033]7;file://localhost/private/tmp\\007'",
+      );
+      await firstPane.submit();
+      await _waitForSessionMetadata(
+        sessions[firstPaneId]!,
+        expectedTitle: '__DT_HIERARCHY_LIVE_TITLE__',
+        expectedWorkingDirectory: Uri.parse('file://localhost/private/tmp'),
+      );
+      final String? inheritedWorkingDirectory = presentationResolver
+          .inheritedWorkingDirectoryForPane(firstPaneId);
+      _expectLifecycle(
+        inheritedWorkingDirectory == '/private/tmp',
+        'hierarchy acceptance did not resolve the local OSC 7 cwd',
+      );
       final TerminalPane secondPane = await state.splitPane(
         firstPaneId,
-        configuration(),
+        configuration(workingDirectory: inheritedWorkingDirectory),
         axis: TerminalSplitAxis.horizontal,
         fraction: 0.3,
       );
       final TerminalSplitNodeId firstRootId = firstTab.splitTree.root.id;
       final TerminalTabState secondTab = await state.createTab(
         logicalWindow.id,
-        configuration(),
+        configuration(workingDirectory: inheritedWorkingDirectory),
       );
       final PaneId thirdPaneId = secondTab.focusedPaneId;
       final TerminalPane fourthPane = await state.splitPane(
         thirdPaneId,
-        configuration(),
+        configuration(workingDirectory: inheritedWorkingDirectory),
         axis: TerminalSplitAxis.vertical,
         fraction: 0.7,
       );
@@ -1843,6 +1904,11 @@ final class TerminalApplication {
         thirdPaneId,
         fourthPane.id,
       ];
+      state
+        ..focusPane(firstTab.id, firstPaneId)
+        ..selectTab(logicalWindow.id, secondTab.id)
+        ..renameTab(secondTab.id, 'Pinned hierarchy tab')
+        ..setTabColor(secondTab.id, TerminalTabColor.purpleMarker);
 
       final TerminalNativeHierarchyAdapter createdHierarchy =
           TerminalNativeHierarchyAdapter(
@@ -1927,8 +1993,12 @@ final class TerminalApplication {
             windowFrame: windowFrame,
             cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
             dividerThickness: 1,
-            titleBuilder: (TerminalWindowState window, TerminalTabState tab) =>
-                'Dart Terminal — ${window.id}:${tab.id}',
+            presentationBuilder:
+                (TerminalWindowState window, TerminalTabState tab) =>
+                    presentationResolver.resolve(
+                      tab,
+                      fallbackTitle: 'Dart Terminal — ${window.id}:${tab.id}',
+                    ),
           );
       hierarchy = createdHierarchy;
       createdHierarchy.reconcile(
@@ -1948,6 +2018,18 @@ final class TerminalApplication {
             for (final PaneId paneId in paneIds)
               paneId: createdHierarchy.resourcesForPane(paneId)!,
           };
+      final Window firstNativeTab = createdHierarchy.windowForTab(firstTab.id)!;
+      final Window secondNativeTab = createdHierarchy.windowForTab(
+        secondTab.id,
+      )!;
+      _expectLifecycle(
+        firstNativeTab.title == '__DT_HIERARCHY_LIVE_TITLE__' &&
+            firstNativeTab.representedFilePath == '/private/tmp' &&
+            secondNativeTab.title == 'Pinned hierarchy tab' &&
+            secondNativeTab.tabColor ==
+                _windowTabColor(TerminalTabColor.purpleMarker),
+        'hierarchy presentation did not reach both retained native tabs',
+      );
       _expectLifecycle(
         state.windowCount == 1 &&
             state.tabCount == 2 &&
@@ -1967,7 +2049,9 @@ final class TerminalApplication {
 
       for (final PaneId paneId in paneIds) {
         final TerminalPane pane = state.paneForId(paneId)!;
-        await pane.start();
+        if (pane.state == TerminalPaneState.created) {
+          await pane.start();
+        }
         stdout.writeln(
           'TERMINAL_PANE event=started pane=${pane.id} '
           'session=${pane.sessionId}',
@@ -2007,6 +2091,57 @@ final class TerminalApplication {
 
       for (final PaneId paneId in paneIds) {
         await _waitForAsciiMarker(sessions[paneId]!, prompt.trimRight());
+      }
+      _expectLifecycle(
+        paneIds
+            .skip(1)
+            .every(
+              (PaneId paneId) =>
+                  launchWorkingDirectories[paneId] == '/private/tmp',
+            ),
+        'descendant sessions did not receive the inherited launch cwd',
+      );
+      for (final PaneId paneId in paneIds.skip(1)) {
+        final TerminalPane pane = state.paneForId(paneId)!;
+        pane.insertText(
+          "if [ \"\$PWD\" = '/private/tmp' ]; then "
+          "printf '\\r\\n__DT_INHERITED_CWD_%s__\\r\\n' "
+          "'${paneId.value}'; fi",
+        );
+        await pane.submit();
+        await _waitForAsciiMarker(
+          sessions[paneId]!,
+          '__DT_INHERITED_CWD_${paneId.value}__',
+        );
+      }
+      final TerminalPane fourthLogicalPane = state.paneForId(fourthPane.id)!;
+      fourthLogicalPane.insertText(
+        "printf "
+        "'\\033]2;__DT_HIERARCHY_DESCENDANT_TITLE__\\007"
+        "\\033]7;file://localhost/private/tmp\\007'",
+      );
+      await fourthLogicalPane.submit();
+      await _waitForSessionMetadata(
+        sessions[fourthPane.id]!,
+        expectedTitle: '__DT_HIERARCHY_DESCENDANT_TITLE__',
+        expectedWorkingDirectory: Uri.parse('file://localhost/private/tmp'),
+      );
+      state
+        ..renameTab(secondTab.id, null)
+        ..setTabColor(secondTab.id, null);
+      createdHierarchy.reconcile();
+      _expectLifecycle(
+        secondNativeTab.title == '__DT_HIERARCHY_DESCENDANT_TITLE__' &&
+            secondNativeTab.representedFilePath == '/private/tmp' &&
+            secondNativeTab.tabColor == null,
+        'hierarchy rename/color reset did not resume live session metadata',
+      );
+      stdout.writeln(
+        'TERMINAL_TAB_METADATA_TEST title=true rename=true color=true '
+        'cwd_inheritance=true proxy=true reset=true',
+      );
+
+      for (final PaneId paneId in paneIds) {
         final TerminalPane pane = state.paneForId(paneId)!;
         pane.insertText(
           "stty raw -echo; printf '\\r\\n__DT_HIERARCHY_%s_%s__\\r\\n' "
@@ -2606,60 +2741,68 @@ final class TerminalApplication {
     const String temporaryTitle = '__DT_TEMP_TITLE__';
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
 
-    pane.insertText(r"printf '\033]2;__DT_NATIVE_TITLE__\007'");
+    pane.insertText(
+      r"printf '\033]2;__DT_NATIVE_TITLE__\007\033]7;file://localhost/private/tmp\007'",
+    );
     await pane.submit();
-    await _waitForWindowTitle(
+    await _waitForWindowPresentation(
       session,
       window,
       expectedMetadata: nativeTitle,
       expectedNative: nativeTitle,
+      expectedRepresentedFilePath: '/private/tmp',
     );
 
     pane.insertText(r"printf '\033[22;2t\033]2;__DT_TEMP_TITLE__\007'");
     await pane.submit();
-    await _waitForWindowTitle(
+    await _waitForWindowPresentation(
       session,
       window,
       expectedMetadata: temporaryTitle,
       expectedNative: temporaryTitle,
+      expectedRepresentedFilePath: '/private/tmp',
     );
 
     pane.insertText(r"printf '\033[23;2t'");
     await pane.submit();
-    await _waitForWindowTitle(
+    await _waitForWindowPresentation(
       session,
       window,
       expectedMetadata: nativeTitle,
       expectedNative: nativeTitle,
+      expectedRepresentedFilePath: '/private/tmp',
     );
 
     pane.insertText(r"printf '\033c'");
     await pane.submit();
-    await _waitForWindowTitle(
+    await _waitForWindowPresentation(
       session,
       window,
       expectedMetadata: null,
       expectedNative: _productWindowTitle,
+      expectedRepresentedFilePath: null,
     );
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
 
     stdout.writeln(
       'TERMINAL_WINDOW_TITLE_TEST metadata=true native=true stack=true '
-      'reset=true fallback=true',
+      'reset=true fallback=true proxy=true',
     );
     return true;
   }
 
-  static Future<void> _waitForWindowTitle(
+  static Future<void> _waitForWindowPresentation(
     TerminalSession session,
     Window window, {
     required String? expectedMetadata,
     required String expectedNative,
+    required String? expectedRepresentedFilePath,
   }) async {
     final Stopwatch deadline = Stopwatch()..start();
     while (deadline.elapsed < const Duration(seconds: 5)) {
       if (session.terminalScreenSet.metadata.windowTitle == expectedMetadata &&
-          window.title == expectedNative) {
+          window.title == expectedNative &&
+          window.representedFilePath == expectedRepresentedFilePath) {
         return;
       }
       _expectLifecycle(
@@ -2669,10 +2812,21 @@ final class TerminalApplication {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
     throw TimeoutException(
-      'display-test did not synchronize metadata title '
-      '$expectedMetadata to native title $expectedNative',
+      'display-test did not synchronize metadata title $expectedMetadata to '
+      'native title $expectedNative and represented path '
+      '$expectedRepresentedFilePath',
     );
   }
+
+  static WindowTabColor? _windowTabColor(TerminalTabColor? color) =>
+      color == null
+      ? null
+      : WindowTabColor(
+          red: color.red / 255,
+          green: color.green / 255,
+          blue: color.blue / 255,
+          alpha: color.alpha / 255,
+        );
 
   static Future<bool> _exerciseCursorColorPresentation(
     TerminalSession session,
@@ -4845,6 +4999,30 @@ final class TerminalApplication {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
     throw TimeoutException('terminal did not display marker $marker');
+  }
+
+  static Future<void> _waitForSessionMetadata(
+    TerminalSession session, {
+    required String expectedTitle,
+    required Uri expectedWorkingDirectory,
+  }) async {
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 5)) {
+      final metadata = session.terminalScreenSet.metadata;
+      if (metadata.windowTitle == expectedTitle &&
+          metadata.workingDirectory == expectedWorkingDirectory) {
+        return;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'terminal session exited before publishing title/cwd metadata',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw TimeoutException(
+      'terminal session did not publish title $expectedTitle and cwd '
+      '$expectedWorkingDirectory',
+    );
   }
 
   static Future<bool> _exerciseModeAwareKeyInput(

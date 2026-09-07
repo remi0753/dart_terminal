@@ -47,6 +47,26 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
     axis: TerminalSplitAxis.vertical,
     fraction: 0.75,
   );
+  final Map<PaneId, TerminalSessionMetadata> metadata =
+      <PaneId, TerminalSessionMetadata>{
+        firstPane: TerminalSessionMetadata(),
+        secondPane.id: TerminalSessionMetadata()
+          ..setWindowTitle('First live title')
+          ..setWorkingDirectory(Uri.parse('file:///private/tmp/first')),
+        thirdPane: TerminalSessionMetadata(),
+        fourthPane.id: TerminalSessionMetadata()
+          ..setWindowTitle('Second live title')
+          ..setWorkingDirectory(
+            Uri.parse('file://localhost/private/tmp/second'),
+          ),
+      };
+  final TerminalTabPresentationResolver presentationResolver =
+      TerminalTabPresentationResolver(
+        metadataForPane: (PaneId paneId) => metadata[paneId],
+      );
+  state
+    ..renameTab(secondTab.id, 'Pinned second tab')
+    ..setTabColor(secondTab.id, TerminalTabColor.purpleMarker);
 
   final List<String> lifecycle = <String>[];
   final Map<PaneId, List<String>> layouts = <PaneId, List<String>>{};
@@ -75,8 +95,11 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
     windowFrame: const Rect.fromLTWH(40, 50, 800, 600),
     cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
     dividerThickness: 2,
-    titleBuilder: (TerminalWindowState window, TerminalTabState tab) =>
-        'Window ${window.id} / Tab ${tab.id}',
+    presentationBuilder: (TerminalWindowState window, TerminalTabState tab) =>
+        presentationResolver.resolve(
+          tab,
+          fallbackTitle: 'Window ${window.id} / Tab ${tab.id}',
+        ),
   );
   adapter.reconcile(
     tabSizes: <TerminalTabId, TerminalSplitLayoutSize>{
@@ -100,6 +123,11 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
   final int fourthPaneViewHandle = bindings.handleFor(
     adapter.resourcesForPane(fourthPane.id)!.view,
   );
+  final int firstWindowHandle = bindings.handleFor(
+    adapter.windowForTab(firstTab.id)!,
+  );
+  final List<double> secondTabColor =
+      bindings.windowTabColors[selectedWindowHandle]!;
   _expect(
     adapter.nativeWindowCount == 2 &&
         adapter.splitViewCount == 2 &&
@@ -111,6 +139,19 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
     'two logical tabs project to one selected native tab group and four panes',
   );
   _expect(
+    bindings.windowTitles[firstWindowHandle] == 'First live title' &&
+        bindings.windowRepresentedFilePaths[firstWindowHandle] ==
+            '/private/tmp/first' &&
+        bindings.windowTitles[selectedWindowHandle] == 'Pinned second tab' &&
+        bindings.windowRepresentedFilePaths[selectedWindowHandle] ==
+            '/private/tmp/second' &&
+        secondTabColor[0] == TerminalTabColor.purpleMarker.red / 255 &&
+        secondTabColor[1] == TerminalTabColor.purpleMarker.green / 255 &&
+        secondTabColor[2] == TerminalTabColor.purpleMarker.blue / 255 &&
+        secondTabColor[3] == 1,
+    'resolved session title, rename, cwd proxy, and color reach native tabs',
+  );
+  _expect(
     layouts.length == 4 &&
         layouts.values.every(
           (List<String> values) => values.single != 'hidden',
@@ -120,7 +161,20 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
                 'tabs=2 splits=2 panes=4 active_window=1',
     'initial projection emits one visible bounded layout per pane',
   );
-
+  state
+    ..renameTab(secondTab.id, null)
+    ..setTabColor(secondTab.id, null);
+  metadata[secondPane.id]!
+    ..setWindowTitle('Updated first title')
+    ..setWorkingDirectory(Uri.parse('file://remote.example/private/ignored'));
+  adapter.reconcile();
+  _expect(
+    bindings.windowTitles[firstWindowHandle] == 'Updated first title' &&
+        !bindings.windowRepresentedFilePaths.containsKey(firstWindowHandle) &&
+        bindings.windowTitles[selectedWindowHandle] == 'Second live title' &&
+        !bindings.windowTabColors.containsKey(selectedWindowHandle),
+    'retained windows update live title and clear remote proxy/rename/color',
+  );
   state
     ..selectTab(firstWindow.id, firstTab.id)
     ..focusPane(firstTab.id, firstPane)
@@ -198,6 +252,8 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
   adapter.dispose();
   _expect(
     bindings.objects.isEmpty &&
+        bindings.windowRepresentedFilePaths.isEmpty &&
+        bindings.windowTabColors.isEmpty &&
         firstResources.isDisposed &&
         adapter.nativeWindowCount == 0 &&
         adapter.splitViewCount == 0 &&
