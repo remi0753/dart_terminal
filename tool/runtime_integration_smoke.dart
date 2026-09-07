@@ -24,6 +24,7 @@ enum _RuntimeMode {
 enum _Suite {
   smoke,
   display,
+  hierarchy,
   clipboard,
   lifecycle,
   traffic,
@@ -145,8 +146,8 @@ _Options _parseOptions(List<String> arguments) {
           .firstOrNull;
       if (selected == null) {
         throw const _SmokeException(
-          '--suite must be smoke, display, clipboard, lifecycle, traffic, '
-          'resource, fault, or all',
+          '--suite must be smoke, display, hierarchy, clipboard, lifecycle, '
+          'traffic, resource, fault, or all',
         );
       }
       suite = selected;
@@ -1136,6 +1137,77 @@ Future<void> _runClipboardProduct(
   );
 }
 
+Future<void> _runNativeHierarchy(
+  _Options options,
+  _Invocation invocation,
+) async {
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>['--runtime-native-hierarchy-test'],
+    environment: const <String, String>{
+      'DT_RUNTIME_NATIVE_HIERARCHY_TEST': '1',
+    },
+    timeout: const Duration(seconds: 30),
+  );
+  _expect(
+    observation.status == 0,
+    'native hierarchy application exited with status ${observation.status}; '
+    'stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'native hierarchy application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_NATIVE_HIERARCHY_TEST windows=1 tabs=2 panes=4 '
+          r'splits=2 resize=true equalize=true zoom=true focus=true key=true '
+          r'ime=true isolated=true close=true sessions_clean=4 metal_clean=4 '
+          r'text_clients=0 native_handles=0$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'native hierarchy acceptance summary is missing or malformed',
+  );
+  _expect(
+    !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
+        !observation.stdoutText.contains('HIERARCHY_MISMATCH'),
+    'native hierarchy input was not isolated',
+  );
+  _expect(
+    RegExp(
+              r'^TERMINAL_SESSION_SHUTDOWN pane=[1-4] session=[1-4]:1 '
+              r'process_id=[1-9][0-9]* disposition=clean '
+              r'termination_observed=true cleanup_completed=true$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            4 &&
+        RegExp(
+              r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=4 disposition=clean$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1,
+    'native hierarchy did not cleanly shut down four exact PTY owners',
+  );
+  _expect(
+    observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+    'native hierarchy did not finish clean application teardown',
+  );
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
+  );
+  stdout.writeln(
+    'RUNTIME_NATIVE_HIERARCHY_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'tabs=2 panes=4 elapsed_ms=${observation.elapsed.inMilliseconds}',
+  );
+}
+
 Future<void> _runShellExitPolicySmoke(
   _Options options,
   _Invocation invocation, {
@@ -2039,6 +2111,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.display || options.suite == _Suite.all) {
       await _runTerminalDisplay(options, invocation);
+    }
+    if (options.suite == _Suite.hierarchy || options.suite == _Suite.all) {
+      await _runNativeHierarchy(options, invocation);
     }
     if (options.suite == _Suite.clipboard || options.suite == _Suite.all) {
       await _runClipboardProduct(options, invocation);

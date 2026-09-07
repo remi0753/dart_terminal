@@ -1,6 +1,6 @@
 # Native tabs and split layout/focus
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-07
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 7 `native tabs と split layout/focus/resize/zoom`
@@ -291,3 +291,72 @@ window ID                                native tab group
   first responders; updates retained ratios through zoom; and tears down pane
   adapters, obsolete split containers, tab windows, and pane views in the
   documented order without performing logical session shutdown.
+- 2026-09-07: began the final product-runtime subtask after rereading the
+  roadmap, product overview, feature matrix, existing display/lifecycle gates,
+  option parser, AppKit event injection hooks, pane/session ownership, live
+  Metal surface, and text-input acceptance path. The implementation target is
+  a separately gated real-product scenario so normal startup semantics and the
+  already broad single-pane display acceptance remain unchanged until later
+  menu actions expose user-driven creation.
+- The scenario will create two tabs with two panes each, one real zsh session,
+  Metal surface, native renderer view, text-input client, and input router per
+  pane. It will drive model resize/equalize/zoom/focus through the hierarchy
+  adapter, use the native text-input acceptance operation only after selecting
+  each pane as first responder, and require each PTY to observe exactly its own
+  raw navigation plus IME commit bytes.
+- Scope is the product path, its guarded option, Developer JIT/Release AOT
+  integration targets, machine-readable acceptance, documentation, and
+  proportional regressions. Normal UI commands, shortcuts, drag telemetry,
+  restoration, and scheduling fairness stay outside this subtask and retain
+  their later roadmap positions. Completion requires four clean session
+  shutdowns, disposed Metal/text-input owners, zero AppKit handles, both M1
+  runtime modes, source/bundle audits, full tests, and no weakening of existing
+  runtime suites.
+- 2026-09-07: the first focused analysis compiled the complete scenario and
+  reported only `cancel_subscriptions` for a locally created text-input
+  subscription whose ownership had already been transferred to the per-pane
+  owner. Moving subscription construction into that owner made the ownership
+  statically visible. Repeated focused analysis then reported no issues, and
+  the aggregate Dart test runner passed including option-gate, model, adapter,
+  and all prior product regressions.
+- 2026-09-07: the first Developer JIT product run created two native tabs,
+  four renderer/text-input owners, four live zsh PTYs, and the runtime worker,
+  then failed the first isolation count. All four screen models appeared to
+  contain their success markers because the fixture command itself embedded
+  the complete marker and zsh echoed it before `stty -echo` took effect; the
+  application teardown still cleanly reaped all four sessions and the worker.
+  This was an acceptance-fixture false positive, not cross-pane input. Success
+  and failure markers must be assembled with `printf` substitutions so only
+  post-read output can match them.
+- 2026-09-07: the corrected M1 Developer JIT hierarchy gate passed in 1,622 ms.
+  It selected each of four renderer views as the real native first responder,
+  delivered one raw Up key and one Japanese IME commit to only that pane's PTY,
+  observed four exact 12-byte captures with no mismatch/overflow, exercised
+  resize/equalize/zoom/unzoom, collapsed both splits and the second tab, and
+  finished with four clean session shutdowns, four disposed Metal owners, zero
+  text-input clients, zero AppKit handles, and a reaped runtime worker.
+- 2026-09-07: the identical M1 Release AOT hierarchy gate passed in 1,009 ms
+  with the same two-tab/four-pane input and cleanup contract. The reusable
+  `runtime-native-hierarchy-integration` target now runs both modes, and
+  `runtime-verify` includes it without changing ordinary startup or the existing
+  single-pane display suite.
+- 2026-09-07: the first final `make test` stopped at its freshness gate because
+  the compatibility coverage report pins `README.md` and `FEATURE_MATRIX.md`
+  hashes. The canonical generation target replayed all 390 regression bytes and
+  417 chunk plans successfully, then updated only those two documentation
+  hashes in `compatibility/regression_coverage_report.json`.
+- 2026-09-07: final `make test` passed all freshness and compatibility gates,
+  formatted 192 files with zero changes, analyzed the package with no issues,
+  and completed the aggregate runner. The source audit passed with 370 tracked
+  files, zero product native sources, and one separately reviewed test fixture.
+- 2026-09-07: final arm64 bundle audits passed for Developer JIT and Release
+  AOT. Ordinary real-product smoke passed in 2,294/1,794 ms, the unchanged live
+  display suite passed in 2,038/1,659 ms, and the reusable native hierarchy gate
+  passed in 856/505 ms. The preceding complete lifecycle regression passed all
+  16 normal/fault/usage cases in each runtime mode. No build output entered the
+  worktree.
+- The parent roadmap item is complete: model state, reusable AppKit primitives,
+  native hierarchy projection, and a real two-tab/four-pane product acceptance
+  now agree on stable identity, layout, first responder, input isolation, and
+  cleanup. User-driven menu/action creation remains the next ordered roadmap
+  task and was not implemented here.

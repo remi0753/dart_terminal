@@ -63,7 +63,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - typed pane/session ID、単一owner、live shellの再操作close確認
 - native handleと独立したmonotonic window/tab/split-node ID、64 paneまでのimmutable
   binary split topology、selected tab/focused pane/reverse index、collapseとordered teardownを
-  持つapplication-owned state model（native UIは現在も1 window/1 tab/1 pane）
+  持つapplication-owned state model。AppKit adapterはnative tab group、再帰split view、
+  first responder、resize/equalize/zoomを投影し、2 tab/4 live paneの実製品gateで
+  key/IME分離とPTY/Metal/text-input/native handle回収を両runtime検証する
 - terminal内容を含めないpane state / PTY shutdown stage診断
 - Control-Dのqueue受理、native write、foreground/termios、signal、waitpid、
   kernel exit status、PTY内/外のreap、exit公開をrequest IDで追えるcontent-free診断
@@ -232,6 +234,7 @@ Window/View resource stress、shutdown fault injection を個別に実行する�
 
 ```shell
 make RUNTIME_ARCH=arm64 developer-jit-integration
+make RUNTIME_ARCH=arm64 developer-jit-hierarchy
 make RUNTIME_ARCH=arm64 developer-jit-lifecycle
 make RUNTIME_ARCH=arm64 developer-jit-traffic
 make RUNTIME_ARCH=arm64 developer-jit-resource
@@ -311,6 +314,7 @@ stress、shutdown fault injection を個別に再検証する場合:
 ```shell
 make RUNTIME_ARCH=arm64 release-aot-integration
 make RUNTIME_ARCH=arm64 release-aot-display
+make RUNTIME_ARCH=arm64 release-aot-hierarchy
 make RUNTIME_ARCH=arm64 release-aot-lifecycle
 make RUNTIME_ARCH=arm64 release-aot-traffic
 make RUNTIME_ARCH=arm64 release-aot-resource
@@ -335,14 +339,19 @@ make test
 make RUNTIME_ARCH=arm64 runtime-bundle-audit
 make RUNTIME_ARCH=arm64 runtime-integration
 make RUNTIME_ARCH=arm64 runtime-terminal-display-integration
+make RUNTIME_ARCH=arm64 runtime-native-hierarchy-integration
 ```
 
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
-smoke、real-PTY live Metal display、lifecycle、bounded traffic、resource stress、
-shutdown fault suiteをまとめて実行します。display suiteはSGR除去、style、soft wrap、
+smoke、real-PTY live Metal display、native tab/4-pane hierarchy、lifecycle、bounded
+traffic、resource stress、shutdown fault suiteをまとめて実行します。display suiteは
+SGR除去、style、soft wrap、
 bottom prompt、newest-only frame boundに加え、PTY由来のvisible text、local selection、
 cursor、native accessibility selector/geometry/focus/notificationをDeveloper JIT/
 Release AOTの実GUIで確認します。
+native hierarchy suiteは2つのnative tabと4つのlive Metal paneを作り、splitの
+resize/equalize/zoom、first-responder focus、raw key/IMEのpane分離、split/tab close、
+4つのPTYと全native resourceの回収を両runtimeで確認します。
 resource stress は実アプリの Dart API から 1,000 組の Window/View を生成・
 破棄し、毎回 native handle が基準値へ戻ることを確認します。shutdown fault suite は
 malformed/late event、double dispose、worker crash を封じ込め、最終 native handle が 0、

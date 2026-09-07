@@ -32,6 +32,7 @@ import 'terminal_input/terminal_scroll_router.dart';
 import 'terminal_input/terminal_selection_autoscroll.dart';
 import 'terminal_input/terminal_selection_gesture.dart';
 import 'terminal_input/terminal_text_input_event_router.dart';
+import 'terminal_native_hierarchy.dart';
 import 'terminal_pane.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_session.dart';
@@ -82,6 +83,7 @@ final class TerminalOptions {
     this.runtimePtyExitFaultInjection = false,
     this.runtimeTerminalDisplayTest = false,
     this.runtimeClipboardTest = false,
+    this.runtimeNativeHierarchyTest = false,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
     this.runtimeLifecycleScenario = RuntimeLifecycleScenario.normal,
     this.runtimeWorkerCommand =
@@ -100,6 +102,7 @@ final class TerminalOptions {
     var runtimePtyExitFaultInjection = false;
     var runtimeTerminalDisplayTest = false;
     var runtimeClipboardTest = false;
+    var runtimeNativeHierarchyTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
     for (final String argument in arguments) {
@@ -150,6 +153,15 @@ final class TerminalOptions {
           );
         }
         runtimeClipboardTest = true;
+        continue;
+      }
+      if (argument == '--runtime-native-hierarchy-test') {
+        if (runtimeNativeHierarchyTest) {
+          throw const FormatException(
+            '--runtime-native-hierarchy-test may only be supplied once',
+          );
+        }
+        runtimeNativeHierarchyTest = true;
         continue;
       }
       if (argument.startsWith(workingDirectoryPrefix)) {
@@ -321,6 +333,27 @@ final class TerminalOptions {
         'terminal display test cannot be combined with another runtime test',
       );
     }
+    if (runtimeNativeHierarchyTest &&
+        (environment ??
+                Platform.environment)['DT_RUNTIME_NATIVE_HIERARCHY_TEST'] !=
+            '1') {
+      throw const FormatException(
+        'native hierarchy test requires the integration-test gate',
+      );
+    }
+    if (runtimeNativeHierarchyTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'native hierarchy test cannot be combined with another runtime test',
+      );
+    }
     return TerminalOptions(
       initialWorkingDirectory: initialWorkingDirectory,
       autoCloseAfter: autoCloseAfter,
@@ -329,6 +362,7 @@ final class TerminalOptions {
       runtimePtyExitFaultInjection: runtimePtyExitFaultInjection,
       runtimeTerminalDisplayTest: runtimeTerminalDisplayTest,
       runtimeClipboardTest: runtimeClipboardTest,
+      runtimeNativeHierarchyTest: runtimeNativeHierarchyTest,
       runtimeShellExitTestScenario: selectedShellExitTest,
       runtimeLifecycleScenario: selectedScenario,
       runtimeWorkerCommand:
@@ -346,6 +380,7 @@ final class TerminalOptions {
   final bool runtimePtyExitFaultInjection;
   final bool runtimeTerminalDisplayTest;
   final bool runtimeClipboardTest;
+  final bool runtimeNativeHierarchyTest;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
   final RuntimeLifecycleScenario runtimeLifecycleScenario;
   final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
@@ -383,6 +418,16 @@ final class TerminalApplication {
           bundledEntryPath: bundledTerminfoEntry,
         );
     stdout.writeln(terminfoEnvironment.machineLine());
+    if (options.runtimeNativeHierarchyTest) {
+      await _runNativeHierarchyProductAcceptance(
+        application,
+        ptyBackend,
+        terminfoEnvironment,
+        options.runtimeWorkerCommand,
+        options.initialWorkingDirectory,
+      );
+      return;
+    }
     final _TerminalClipboardProductObservation? clipboardObservation =
         options.runtimeClipboardTest
         ? _TerminalClipboardProductObservation()
@@ -1617,6 +1662,508 @@ final class TerminalApplication {
           ? 'Dart Terminal shut down cleanly.'
           : 'Dart Terminal shut down with classified recovery.',
     );
+  }
+
+  static Future<void> _runNativeHierarchyProductAcceptance(
+    AppKitApplication application,
+    PtyBackend ptyBackend,
+    TerminalTerminfoEnvironment terminfoEnvironment,
+    RuntimeLifecycleWorkerCommand workerCommand,
+    String? initialWorkingDirectory,
+  ) async {
+    const String prompt = '__DT_HIERARCHY_PROMPT__ ';
+    const String expectedInputHex = '1b5b41e697a5e69cace8aa9e';
+    const Rect windowFrame = Rect.fromLTWH(100, 90, 920, 580);
+    final TerminalApplicationState state = TerminalApplicationState();
+    final Map<PaneId, TerminalSession> sessions = <PaneId, TerminalSession>{};
+    final Map<PaneId, _TerminalHierarchyProductPane> owners =
+        <PaneId, _TerminalHierarchyProductPane>{};
+    final List<TerminalPaneSessionShutdownResult> shutdowns =
+        <TerminalPaneSessionShutdownResult>[];
+    TerminalNativeHierarchyAdapter? hierarchy;
+    RuntimeLifecycleCoordinator? lifecycle;
+    var lifecycleWasShutDown = false;
+    Object? asynchronousError;
+    StackTrace? asynchronousStackTrace;
+
+    void recordAsynchronousError(Object error, StackTrace stackTrace) {
+      asynchronousError ??= error;
+      asynchronousStackTrace ??= stackTrace;
+    }
+
+    TerminalPaneConfiguration configuration() {
+      PaneId? paneId;
+      return TerminalPaneConfiguration(
+        sessionFactory:
+            (
+              TerminalSessionId id, {
+              required void Function() onChanged,
+              required void Function() onTerminated,
+            }) {
+              paneId = id.paneId;
+              final TerminalSession session = TerminalSession(
+                id: id,
+                ptyBackend: ptyBackend,
+                initialWorkingDirectory: initialWorkingDirectory,
+                environment: <String, String>{
+                  ...terminfoEnvironment.environment,
+                  'TERM': 'xterm-256color',
+                  'LC_ALL': 'C',
+                  'PS1': prompt,
+                  'RPS1': '',
+                },
+                shellArguments: const <String>['-f'],
+                onChanged: onChanged,
+                onTerminated: onTerminated,
+                lifecycleObserver:
+                    (TerminalSessionLifecycleObservation observation) {
+                      stdout.writeln(observation.machineLine());
+                    },
+                nativeObserver: (TerminalSessionNativeObservation observation) {
+                  stdout.writeln(observation.machineLine());
+                },
+              );
+              sessions[id.paneId] = session;
+              return session;
+            },
+        onChanged: () {
+          final PaneId? id = paneId;
+          if (id != null) owners[id]?.notifyScreenChanged();
+        },
+        onExitRequested: () {
+          recordAsynchronousError(
+            StateError('hierarchy acceptance shell exited unexpectedly'),
+            StackTrace.current,
+          );
+        },
+        lifecycleObserver: (TerminalPaneLifecycleObservation observation) {
+          stdout.writeln(observation.machineLine());
+        },
+        exitObserver: (TerminalPaneExitObservation observation) {
+          stdout.writeln(observation.machineLine());
+        },
+      );
+    }
+
+    void checkAsynchronousError() {
+      final Object? error = asynchronousError;
+      if (error != null) {
+        Error.throwWithStackTrace(error, asynchronousStackTrace!);
+      }
+    }
+
+    try {
+      application.defersTerminationRequests = true;
+      final int initialNativeHandles = application.debugLiveObjectCount;
+      final int initialTextInputClients =
+          debugLiveTerminalTextInputClientCount();
+      _expectLifecycle(
+        initialNativeHandles == 0 && initialTextInputClients == 0,
+        'hierarchy acceptance requires clean native baselines',
+      );
+
+      final TerminalWindowState logicalWindow = await state.createWindow(
+        configuration(),
+      );
+      final TerminalTabState firstTab = logicalWindow.selectedTab;
+      final PaneId firstPaneId = firstTab.focusedPaneId;
+      final TerminalPane secondPane = await state.splitPane(
+        firstPaneId,
+        configuration(),
+        axis: TerminalSplitAxis.horizontal,
+        fraction: 0.3,
+      );
+      final TerminalSplitNodeId firstRootId = firstTab.splitTree.root.id;
+      final TerminalTabState secondTab = await state.createTab(
+        logicalWindow.id,
+        configuration(),
+      );
+      final PaneId thirdPaneId = secondTab.focusedPaneId;
+      final TerminalPane fourthPane = await state.splitPane(
+        thirdPaneId,
+        configuration(),
+        axis: TerminalSplitAxis.vertical,
+        fraction: 0.7,
+      );
+      final TerminalSplitNodeId secondRootId = secondTab.splitTree.root.id;
+      final List<PaneId> paneIds = <PaneId>[
+        firstPaneId,
+        secondPane.id,
+        thirdPaneId,
+        fourthPane.id,
+      ];
+
+      final TerminalNativeHierarchyAdapter createdHierarchy =
+          TerminalNativeHierarchyAdapter(
+            state: state,
+            paneResourcesFactory: (TerminalPane pane) {
+              final TerminalSession session = sessions[pane.id]!;
+              final View view = TerminalRendererMacos.createView();
+              final TerminalTextInputClient client =
+                  TerminalTextInputClient.attach(view);
+              late final _TerminalHierarchyProductPane owner;
+              final TerminalLiveMetalSurface surface =
+                  TerminalLiveMetalSurface.attach(
+                    sessionId: pane.sessionId,
+                    screenSet: session.terminalScreenSet,
+                    view: view,
+                    logicalWidth: windowFrame.width,
+                    logicalHeight: windowFrame.height,
+                    isVisible: false,
+                    isOccluded: true,
+                    onCaretGeometryChanged: (TerminalCaretRect rectangle) {
+                      client.publishCaretRect(
+                        x: rectangle.x,
+                        y: rectangle.y,
+                        width: rectangle.width,
+                        height: rectangle.height,
+                      );
+                    },
+                    onFatalError: recordAsynchronousError,
+                  );
+              final TerminalKeyEventRouter keyRouter = TerminalKeyEventRouter();
+              final TerminalTextInputEventRouter textRouter =
+                  TerminalTextInputEventRouter(
+                    clientId: client.clientId,
+                    onRawKeyDown: (TerminalKeyEvent event) {
+                      keyRouter.handleTerminalKeyDown(event, pane);
+                    },
+                    onPreedit:
+                        ({
+                          required int generation,
+                          required String text,
+                          required int selectionLocation,
+                          required int selectionLength,
+                        }) {
+                          surface.updatePreedit(
+                            generation: generation,
+                            text: text,
+                            selectionLocation: selectionLocation,
+                            selectionLength: selectionLength,
+                          );
+                        },
+                    onClearPreedit: (int generation) {
+                      surface.clearPreedit(generation: generation);
+                    },
+                    onCommit: pane.insertText,
+                    onOverflow: (int clientId, int generation) {
+                      recordAsynchronousError(
+                        StateError(
+                          'hierarchy text input overflow for client $clientId '
+                          'at generation $generation',
+                        ),
+                        StackTrace.current,
+                      );
+                    },
+                  );
+              owner = _TerminalHierarchyProductPane(
+                pane: pane,
+                session: session,
+                view: view,
+                client: client,
+                surface: surface,
+                textRouter: textRouter,
+                onTextInputError: recordAsynchronousError,
+              );
+              owners[pane.id] = owner;
+              return TerminalNativePaneResources(
+                paneId: pane.id,
+                view: view,
+                onLayout: owner.applyLayout,
+                onDisposeAdapters: owner.disposeAdapters,
+              );
+            },
+            windowFrame: windowFrame,
+            cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+            dividerThickness: 1,
+            titleBuilder: (TerminalWindowState window, TerminalTabState tab) =>
+                'Dart Terminal — ${window.id}:${tab.id}',
+          );
+      hierarchy = createdHierarchy;
+      createdHierarchy.reconcile(
+        tabSizes: <TerminalTabId, TerminalSplitLayoutSize>{
+          firstTab.id: TerminalSplitLayoutSize(
+            width: windowFrame.width,
+            height: windowFrame.height,
+          ),
+          secondTab.id: TerminalSplitLayoutSize(
+            width: windowFrame.width,
+            height: windowFrame.height,
+          ),
+        },
+      );
+      final Map<PaneId, TerminalNativePaneResources> initialResources =
+          <PaneId, TerminalNativePaneResources>{
+            for (final PaneId paneId in paneIds)
+              paneId: createdHierarchy.resourcesForPane(paneId)!,
+          };
+      _expectLifecycle(
+        state.windowCount == 1 &&
+            state.tabCount == 2 &&
+            state.paneCount == 4 &&
+            createdHierarchy.nativeWindowCount == 2 &&
+            createdHierarchy.splitViewCount == 2 &&
+            createdHierarchy.paneResourceCount == 4 &&
+            application.debugLiveObjectCount == 8 &&
+            debugLiveTerminalTextInputClientCount() == 4,
+        'hierarchy acceptance did not create the exact native inventory',
+      );
+      _expectLifecycle(
+        createdHierarchy.splitViewForNode(firstRootId)!.fraction == 0.3 &&
+            createdHierarchy.splitViewForNode(secondRootId)!.fraction == 0.7,
+        'hierarchy acceptance did not preserve initial split ratios',
+      );
+
+      for (final PaneId paneId in paneIds) {
+        final TerminalPane pane = state.paneForId(paneId)!;
+        await pane.start();
+        stdout.writeln(
+          'TERMINAL_PANE event=started pane=${pane.id} '
+          'session=${pane.sessionId}',
+        );
+      }
+
+      final RuntimeLifecycleCoordinator createdLifecycle =
+          RuntimeLifecycleCoordinator(
+            scenario: RuntimeLifecycleScenario.normal,
+            workerCommand: workerCommand,
+            observer: (RuntimeLifecycleObservation observation) {
+              stdout.writeln(
+                observation.machineLine(RuntimeLifecycleScenario.normal),
+              );
+            },
+            processObserver: (RuntimeLifecycleProcessObservation observation) {
+              stdout.writeln(
+                observation.machineLine(
+                  RuntimeLifecycleScenario.normal,
+                  parentProcessId: pid,
+                ),
+              );
+            },
+          );
+      lifecycle = createdLifecycle;
+      _expectLifecycle(
+        await createdLifecycle.start() == RuntimeLifecycleStartStatus.ready,
+        'hierarchy acceptance runtime worker did not become ready',
+      );
+      _writeLifecycleEvent(
+        RuntimeLifecycleScenario.normal,
+        'root-ready',
+        createdLifecycle.generation,
+      );
+      MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootReady);
+      await _expectResponse(createdLifecycle);
+
+      for (final PaneId paneId in paneIds) {
+        await _waitForAsciiMarker(sessions[paneId]!, prompt.trimRight());
+        final TerminalPane pane = state.paneForId(paneId)!;
+        pane.insertText(
+          "stty raw -echo; printf '\\r\\n__DT_HIERARCHY_%s_%s__\\r\\n' "
+          "'READY' '${paneId.value}'; "
+          "bytes=\$(dd bs=1 count=12 2>/dev/null | od -An -tx1 | tr -d ' \\n'); "
+          "stty sane; if [ \"\$bytes\" = '$expectedInputHex' ]; then "
+          "printf '\\r\\n__DT_HIERARCHY_%s_%s__\\r\\n' 'EXACT' "
+          "'${paneId.value}'; else "
+          "printf '\\r\\n__DT_HIERARCHY_%s_%s__\\r\\n' 'MISMATCH' "
+          "'${paneId.value}'; fi",
+        );
+        await pane.submit();
+      }
+      for (final PaneId paneId in paneIds) {
+        await _waitForAsciiMarker(
+          sessions[paneId]!,
+          '__DT_HIERARCHY_READY_${paneId.value}__',
+        );
+      }
+
+      state
+        ..selectTab(logicalWindow.id, firstTab.id)
+        ..focusPane(firstTab.id, firstPaneId)
+        ..resizeSplit(firstTab.id, firstRootId, 0.65)
+        ..setPaneZoom(firstTab.id, firstPaneId);
+      createdHierarchy.reconcile();
+      final SplitView firstRoot = createdHierarchy.splitViewForNode(
+        firstRootId,
+      )!;
+      _expectLifecycle(
+        firstRoot.fraction == 0.65 &&
+            firstRoot.zoomedChild == SplitViewChild.first &&
+            owners[firstPaneId]!.isVisible &&
+            !owners[secondPane.id]!.isVisible,
+        'hierarchy resize/zoom did not reach the retained native split',
+      );
+      state
+        ..setPaneZoom(firstTab.id, null)
+        ..equalizeSplits(firstTab.id);
+      createdHierarchy.resizeTab(
+        firstTab.id,
+        TerminalSplitLayoutSize(width: 700.5, height: 420.25),
+      );
+      _expectLifecycle(
+        firstRoot.fraction == 0.5 &&
+            firstRoot.zoomedChild == null &&
+            owners[firstPaneId]!.isVisible &&
+            owners[secondPane.id]!.isVisible,
+        'hierarchy equalize/unzoom did not restore both native children',
+      );
+
+      for (var index = 0; index < paneIds.length; index++) {
+        final PaneId paneId = paneIds[index];
+        final TerminalPaneLocation location = state.locationForPane(paneId)!;
+        state
+          ..selectTab(location.windowId, location.tabId)
+          ..focusPane(location.tabId, paneId);
+        createdHierarchy.reconcile();
+        final _TerminalHierarchyProductPane owner = owners[paneId]!;
+        final Stopwatch geometryDeadline = Stopwatch()..start();
+        while (owner.client.geometryGeneration == 0 &&
+            geometryDeadline.elapsed < const Duration(seconds: 5)) {
+          checkAsynchronousError();
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        _expectLifecycle(
+          owner.client.geometryGeneration > 0,
+          'hierarchy pane $paneId did not publish candidate geometry',
+        );
+        owner.client.debugRunAcceptanceStage(1);
+        await owner.waitForTextInputGeneration(3, compositionActive: true);
+        owner.client.debugRunAcceptanceStage(2);
+        await owner.waitForTextInputGeneration(5, compositionActive: true);
+        owner.client.debugRunAcceptanceStage(3);
+        await owner.waitForTextInputGeneration(6, compositionActive: false);
+        await _waitForAsciiMarker(
+          owner.session,
+          '__DT_HIERARCHY_EXACT_${paneId.value}__',
+        );
+        checkAsynchronousError();
+        final int exactSessions = paneIds
+            .where(
+              (PaneId candidate) =>
+                  _findAscii(
+                    sessions[candidate]!.terminalScreenSet.activeScreen,
+                    '__DT_HIERARCHY_EXACT_${candidate.value}__',
+                  ) !=
+                  null,
+            )
+            .length;
+        _expectLifecycle(
+          exactSessions == index + 1,
+          'hierarchy input leaked into an unfocused pane',
+        );
+      }
+      _expectLifecycle(
+        paneIds.every(
+          (PaneId paneId) =>
+              _findAscii(
+                sessions[paneId]!.terminalScreenSet.activeScreen,
+                '__DT_HIERARCHY_MISMATCH_${paneId.value}__',
+              ) ==
+              null,
+        ),
+        'hierarchy input reached a PTY with non-exact bytes',
+      );
+
+      for (final PaneId paneId in <PaneId>[
+        secondPane.id,
+        fourthPane.id,
+        thirdPaneId,
+      ]) {
+        await owners[paneId]!.cancelTextInput();
+        final TerminalPane pane = state.paneForId(paneId)!;
+        _expectLifecycle(
+          pane.requestClose(force: true) == TerminalPaneCloseDecision.allow,
+          'hierarchy pane $paneId refused deterministic close',
+        );
+        final TerminalPaneRemovalResult result = await state.removePane(paneId);
+        shutdowns.add(result.shutdown);
+        stdout.writeln(result.shutdown.machineLine());
+        createdHierarchy.reconcile();
+        _expectLifecycle(
+          owners[paneId]!.adaptersDisposed &&
+              initialResources[paneId]!.isDisposed,
+          'hierarchy pane $paneId retained native adapters after close',
+        );
+      }
+      _expectLifecycle(
+        state.windowCount == 1 &&
+            state.tabCount == 1 &&
+            state.paneCount == 1 &&
+            createdHierarchy.nativeWindowCount == 1 &&
+            createdHierarchy.splitViewCount == 0 &&
+            createdHierarchy.paneResourceCount == 1,
+        'hierarchy close did not collapse split and tab ownership',
+      );
+
+      await owners[firstPaneId]!.cancelTextInput();
+      createdHierarchy.dispose();
+      final TerminalPaneOwnerShutdownResult finalShutdown = await state
+          .shutdown();
+      shutdowns.addAll(finalShutdown.sessions);
+      for (final TerminalPaneSessionShutdownResult result
+          in finalShutdown.sessions) {
+        stdout.writeln(result.machineLine());
+      }
+      stdout.writeln(TerminalPaneOwnerShutdownResult(shutdowns).machineLine());
+      _expectLifecycle(
+        shutdowns.length == 4 &&
+            shutdowns.every(
+              (TerminalPaneSessionShutdownResult result) => result.isClean,
+            ) &&
+            owners.values.every(
+              (_TerminalHierarchyProductPane owner) =>
+                  owner.adaptersDisposed &&
+                  owner.surface.snapshot().isDisposed &&
+                  owner.surface.snapshot().liveAtlasPinCount == 0,
+            ) &&
+            debugLiveTerminalTextInputClientCount() == 0 &&
+            application.debugLiveObjectCount == 0,
+        'hierarchy acceptance cleanup retained product resources',
+      );
+      checkAsynchronousError();
+      stdout.writeln(
+        'TERMINAL_NATIVE_HIERARCHY_TEST windows=1 tabs=2 panes=4 splits=2 '
+        'resize=true equalize=true zoom=true focus=true key=true ime=true '
+        'isolated=true close=true sessions_clean=4 metal_clean=4 '
+        'text_clients=0 native_handles=0',
+      );
+
+      final RuntimeLifecycleShutdownResult lifecycleShutdown =
+          await createdLifecycle.shutdown();
+      lifecycleWasShutDown = true;
+      _expectLifecycle(
+        !lifecycleShutdown.forced &&
+            lifecycleShutdown.termination ==
+                RuntimeLifecycleWorkerTermination.graceful,
+        'hierarchy acceptance runtime worker did not stop cleanly',
+      );
+    } finally {
+      for (final _TerminalHierarchyProductPane owner
+          in owners.values.toList(growable: false).reversed) {
+        await owner.cancelTextInput();
+      }
+      if (hierarchy != null && !hierarchy.isDisposed) hierarchy.dispose();
+      for (final _TerminalHierarchyProductPane owner
+          in owners.values.toList(growable: false).reversed) {
+        if (!owner.adaptersDisposed) owner.disposeAdapters();
+        if (!owner.view.isDisposed) owner.view.dispose();
+      }
+      if (!state.isDisposed) {
+        final TerminalPaneOwnerShutdownResult result = await state.shutdown();
+        for (final TerminalPaneSessionShutdownResult session
+            in result.sessions) {
+          stdout.writeln(session.machineLine());
+        }
+      }
+      if (!lifecycleWasShutDown) await lifecycle?.shutdown();
+      _writeLifecycleEvent(
+        RuntimeLifecycleScenario.normal,
+        'root-exit',
+        lifecycle?.generation ?? 0,
+      );
+      MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
+      await application.terminate().timeout(_hostTerminationTimeout);
+    }
+    stdout.writeln('Dart Terminal shut down cleanly.');
   }
 
   static Future<void> _exerciseShellExitPolicy(
@@ -4502,6 +5049,99 @@ final class TerminalApplication {
       'source_generation=${event.sourceGeneration} '
       'operation_id=${event.operationId} '
       'timestamp_ns=${event.monotonicNanoseconds} $value',
+    );
+  }
+}
+
+final class _TerminalHierarchyProductPane {
+  _TerminalHierarchyProductPane({
+    required this.pane,
+    required this.session,
+    required this.view,
+    required TerminalTextInputClient client,
+    required this.surface,
+    required TerminalTextInputEventRouter textRouter,
+    required void Function(Object, StackTrace) onTextInputError,
+  }) : client = client,
+       textRouter = textRouter,
+       _textInputSubscription = client.events.listen(
+         textRouter.route,
+         onError: onTextInputError,
+       );
+
+  final TerminalPane pane;
+  final TerminalSession session;
+  final View view;
+  final TerminalTextInputClient client;
+  final TerminalLiveMetalSurface surface;
+  final TerminalTextInputEventRouter textRouter;
+  final StreamSubscription<TerminalTextInputEvent> _textInputSubscription;
+
+  Future<void>? _cancelFuture;
+  bool _textInputCancelled = false;
+  bool adaptersDisposed = false;
+  bool isVisible = false;
+
+  void notifyScreenChanged() {
+    if (!surface.isDisposed) surface.notifyScreenChanged();
+  }
+
+  void applyLayout(TerminalPaneLayoutRect? rectangle, {required bool visible}) {
+    if (adaptersDisposed) {
+      throw StateError('hierarchy pane ${pane.id} adapters are disposed');
+    }
+    isVisible = visible;
+    surface.updateWindowState(isVisible: visible, isOccluded: !visible);
+    if (!visible) return;
+    final TerminalPaneLayoutRect layout = rectangle!;
+    final TerminalGridSize grid = surface.resizeViewport(
+      logicalWidth: layout.width,
+      logicalHeight: layout.height,
+    );
+    pane.resize(rows: grid.rows, columns: grid.columns);
+  }
+
+  Future<void> cancelTextInput() => _cancelFuture ??= _cancelTextInput();
+
+  Future<void> _cancelTextInput() async {
+    await _textInputSubscription.cancel();
+    _textInputCancelled = true;
+  }
+
+  void disposeAdapters() {
+    if (adaptersDisposed) return;
+    if (!_textInputCancelled) {
+      throw StateError(
+        'hierarchy pane ${pane.id} text input must be cancelled first',
+      );
+    }
+    if (!client.isDisposed) client.dispose();
+    if (!surface.isDisposed) surface.dispose();
+    adaptersDisposed = true;
+    isVisible = false;
+  }
+
+  Future<void> waitForTextInputGeneration(
+    int generation, {
+    required bool compositionActive,
+  }) async {
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 5) &&
+        (textRouter.lastGeneration < generation ||
+            textRouter.isCompositionActive != compositionActive ||
+            surface.preeditState.isActive != compositionActive)) {
+      TerminalApplication._expectLifecycle(
+        session.isLive,
+        'hierarchy pane ${pane.id} exited during text-input delivery',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    TerminalApplication._expectLifecycle(
+      textRouter.lastGeneration >= generation &&
+          textRouter.isCompositionActive == compositionActive &&
+          surface.preeditState.isActive == compositionActive,
+      'hierarchy pane ${pane.id} text input did not reach generation '
+      '$generation with composition_active=$compositionActive',
     );
   }
 }

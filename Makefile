@@ -36,12 +36,12 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	product-damage-benchmark-build product-damage-benchmark \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
-	developer-jit-integration developer-jit-display developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
+	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
 	developer-jit-resource developer-jit-shutdown-fault \
 	release-aot-build release-aot-run release-aot-audit \
-	release-aot-integration release-aot-display release-aot-clipboard release-aot-lifecycle release-aot-traffic \
+	release-aot-integration release-aot-display release-aot-hierarchy release-aot-clipboard release-aot-lifecycle release-aot-traffic \
 	release-aot-resource release-aot-shutdown-fault runtime-bundle-audit \
-	runtime-integration runtime-terminal-display-integration runtime-clipboard-integration runtime-lifecycle-integration \
+	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-clipboard-integration runtime-lifecycle-integration \
 	runtime-traffic-integration runtime-resource-integration \
 	runtime-shutdown-fault-integration runtime-verify clean
 
@@ -78,6 +78,7 @@ help:
 	@echo "  make release-aot-build             Build the generic-host AOT application"
 	@echo "  make release-aot-run               Build and run the AOT application"
 	@echo "  make runtime-terminal-display-integration  Verify the live Metal terminal in both modes"
+	@echo "  make runtime-native-hierarchy-integration  Verify native tabs and four live panes in both modes"
 	@echo "  make runtime-clipboard-integration  Verify bounded Copy/Paste in both modes"
 	@echo "  make runtime-verify                Audit and integration-test both modes"
 
@@ -209,6 +210,10 @@ developer-jit-display: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
 		--suite=display $(DEVELOPER_JIT_BUNDLE)
 
+developer-jit-hierarchy: developer-jit-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
+		--suite=hierarchy $(DEVELOPER_JIT_BUNDLE)
+
 developer-jit-clipboard: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
 		--suite=clipboard $(DEVELOPER_JIT_BUNDLE)
@@ -249,6 +254,10 @@ release-aot-display: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=display $(RELEASE_AOT_BUNDLE)
 
+release-aot-hierarchy: release-aot-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
+		--suite=hierarchy $(RELEASE_AOT_BUNDLE)
+
 release-aot-clipboard: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=clipboard $(RELEASE_AOT_BUNDLE)
@@ -276,6 +285,9 @@ runtime-integration: developer-jit-integration release-aot-integration
 runtime-terminal-display-integration: \
 	developer-jit-display release-aot-display
 
+runtime-native-hierarchy-integration: \
+	developer-jit-hierarchy release-aot-hierarchy
+
 runtime-clipboard-integration: \
 	developer-jit-clipboard release-aot-clipboard
 
@@ -290,6 +302,7 @@ runtime-shutdown-fault-integration: \
 
 runtime-verify: test runtime-source-check runtime-bundle-audit \
 	runtime-integration runtime-terminal-display-integration \
+	runtime-native-hierarchy-integration \
 	runtime-clipboard-integration \
 	runtime-lifecycle-integration \
 	runtime-traffic-integration runtime-resource-integration \
