@@ -120,7 +120,7 @@ Future<void> main() async {
   runTerminalApplicationAcceptanceTests();
   runTerminalApplicationEvidenceTests();
   await runTerminalApplicationMatrixTests();
-  runTerminalApplicationStateTests();
+  await runTerminalApplicationStateTests();
   runTerminalInputMatrixTests();
   runTerminalAppKitKeyAdapterTests();
   runTerminalCompatibilityInventoryTests();

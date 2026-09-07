@@ -295,13 +295,16 @@ final class TerminalPaneOwner {
     return createdPane;
   }
 
-  Future<void> disposePane(TerminalPane pane) async {
+  Future<TerminalPaneSessionShutdownResult> disposePane(
+    TerminalPane pane,
+  ) async {
     final TerminalPane? owned = _panes[pane.id];
     if (!identical(owned, pane)) {
       throw StateError('pane ${pane.id} is not owned by this owner');
     }
-    await pane.shutdown();
+    final TerminalPaneSessionShutdownResult result = await pane.shutdown();
     _panes.remove(pane.id);
+    return result;
   }
 
   Future<TerminalPaneOwnerShutdownResult> shutdown() =>

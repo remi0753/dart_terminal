@@ -202,3 +202,34 @@ application
   then passed, and the complete repeated `make test` passed all freshness
   checks, formatted 190 files with zero changes, analyzed the package with no
   issues, and completed the aggregate Dart test runner.
+- 2026-09-07: the second subtask added `TerminalApplicationState` as the sole
+  logical owner of windows, tabs, split roots, pane reverse indexes, and one
+  transferred empty `TerminalPaneOwner`. Window, tab, and split-node IDs are
+  globally monotonic; window/tab/pane admission is bounded; public window/tab
+  lists are immutable snapshots; a model validates the full hierarchy against
+  both reverse indexes and the underlying pane owner after every mutation.
+- 2026-09-07: creating a window installs one tab/leaf/pane, creating a tab
+  selects it, and splitting a pane selects and focuses the new sibling. Explicit
+  tab selection, window activation, and pane focus validate ownership before
+  changing state, so cross-window tabs and cross-tab panes are rejected without
+  disturbing another tab's retained focus.
+- 2026-09-07: pane removal first obtains the post-removal immutable topology,
+  then awaits the pane owner's classified shutdown, then atomically updates the
+  hierarchy and indexes. It selects the next visual sibling (or the previous
+  final sibling), removes empty tabs/windows, and preserves the active-window
+  target. Whole-application shutdown rejects concurrent admission, disposes
+  panes in reverse window/tab/visual order, and memoizes its aggregate result.
+  `TerminalPaneOwner.disposePane` now returns the existing typed shutdown result
+  so no lifecycle classification is lost at the hierarchy boundary.
+- 2026-09-07: the first owner-model test run failed because the test expected a
+  newly inserted before-leaf to be the last pre-order node. The implementation
+  correctly emitted branch/new-leaf/existing-leaf order; the assertion was
+  changed to verify the branch ID and the new pane's leaf lookup directly.
+- 2026-09-07: focused owner-model tests passed for 2 windows, 3 tabs, 4 retained
+  panes, reverse lookup, isolated focus, branch/tab/window collapse, identity
+  exhaustion, transferred-owner rejection, calls after disposal, reverse-order
+  cleanup, and idempotent shutdown. Focused analysis reported no issues. The
+  full `make test` passed every freshness/compatibility gate, formatted 190
+  files with zero changes, and analyzed the package with no issues; a direct
+  aggregate `dart run test/run_tests.dart` completed with
+  `dart_terminal tests passed`.
