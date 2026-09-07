@@ -947,7 +947,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase7/fullscreen-screen-migration-restoration-reopen.md`](docs/phase7/fullscreen-screen-migration-restoration-reopen.md)
   を参照して順に実施する）
   - [x] bounded restoration snapshot と window placement/migration policy
-  - [ ] reusable AppKit frame/fullscreen primitives と versioned state events
+  - [x] reusable AppKit frame/fullscreen primitives と versioned state events
   - [ ] terminal hierarchy restoration、native projection、reopen lifecycle
   - [ ] M1 両 runtime 回帰受け入れと親項目完了判定
 - [ ] per-pane close と app quit confirmation

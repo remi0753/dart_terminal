@@ -246,3 +246,35 @@ existing root-isolate AppKit boundary and deterministic pane/native cleanup.
   `product_native_sources=0`, and `reviewed_test_native_sources=1`. Subtask 1
   is complete; the next ordered work is the independently committed reusable
   AppKit frame/fullscreen API and protocol event extension.
+- 2026-09-07: adjacent `dart_appkit` commit `47b1f5e Expose window frame and
+  fullscreen state` completed subtask 2. It keeps C ABI version 1, adds optional
+  `da_window_set_frame`/`da_window_set_fullscreen` symbols, and negotiates event
+  protocol v6 for strict immutable outer-frame and observed native-fullscreen
+  events. Version 1 through 5 layouts remain unchanged and v6-only records are
+  suppressed for older sinks.
+- 2026-09-07: AppKit owns only native mutation/observation. Frame and
+  fullscreen snapshots are deduplicated after show and later delegate changes;
+  fullscreen completion/failure events remain authoritative and no delegate
+  enters Dart synchronously. Product screen selection, clamping, persistence,
+  hierarchy identity, session launch, and reopen policy remain in this task.
+- 2026-09-07: native, runner, Dart API, fake-binding, FFI, header, and legacy
+  tests cover initial/current state, move/resize and fullscreen callbacks,
+  transition failure, validation, wrong kind/thread/stale generation,
+  cache-before-observer ordering, malformed records, and v5 filtering. The
+  final `DART_SUPPRESS_ANALYTICS=true CI=true make test` passed the complete
+  AppKit repository gate, including JIT/AOT manifest assembly and legacy image
+  fallback. An initial adjacent-repository build write was sandbox-blocked and
+  a later test fixture passed `nil` to SDK-nonnull delegate arguments; the
+  scoped rerun and corrected real-notification fixture passed without product
+  changes.
+- 2026-09-07: subtask 2 is complete. After rereading `ROADMAP.md` and this
+  record, the next ordered work is terminal hierarchy restoration, native
+  frame/fullscreen projection and screen reconciliation, plus idempotent Dock
+  reopen/default fallback lifecycle.
+- 2026-09-07: the first terminal `make runtime-source-check` for the
+  documentation checkpoint was blocked before the audit because the renderer
+  build hook could not write Metal module-cache files below
+  `~/.cache/clang/ModuleCache` under the workspace sandbox. This is an
+  environment permission failure rather than a source/audit failure; the same
+  bounded command reran with scoped permission and passed with `tracked=383`,
+  `product_native_sources=0`, and `reviewed_test_native_sources=1`.
