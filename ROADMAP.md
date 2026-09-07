@@ -924,7 +924,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase7/native-tabs-split-layout-focus.md`](docs/phase7/native-tabs-split-layout-focus.md)
   を参照して順に実施する）
   - [x] model-owned split resize/equalize/zoom と minimum-cell geometry
-  - [ ] reusable AppKit native-tab/split/first-responder primitives
+  - [x] reusable AppKit native-tab/split/first-responder primitives
   - [ ] terminal native hierarchy projection と adapter lifecycle
   - [ ] multi-tab/four-pane product runtime 統合と M1 回帰受け入れ
 - [ ] menu/action registry と command palette

@@ -221,3 +221,44 @@ window ID                                native tab group
   successfully. Full `make test` passed generated-data freshness, compatibility,
   formatting of 190 files with zero further changes, package analysis with no
   issues, and the aggregate runner with `dart_terminal tests passed`.
+- 2026-09-07: the reusable AppKit implementation now has proposed C ABI, Dart
+  FFI/API, fake bindings, header compile checks, and native tests for tab
+  grouping, nested two-child `NSSplitView`, constrained positioning, zoom, and
+  explicit first-responder selection. The focused Dart package analysis and
+  all Dart API/fake-binding tests passed.
+- 2026-09-07: the first native bridge test run compiled cleanly but failed four
+  frame-minimum assertions: child widths/heights remained below their requested
+  minima. The split was assigning a divider before AppKit had established
+  usable child frames; relying on `setPosition:ofDividerAtIndex:` alone does not
+  make initial off-window layout deterministic. The implementation must lay out
+  both child frames directly from the bounded fraction/minima, while retaining
+  `NSSplitView` delegate constraints for subsequent user drags.
+- 2026-09-07: the split implementation now assigns both child frames directly
+  from its current bounds, divider thickness, requested fraction, and two
+  minimum extents. The repeated native test passed nested horizontal/vertical
+  layout and all four minimum assertions; AppKit delegate min/max constraints
+  remain active for later interactive divider changes.
+- 2026-09-07: `dart_appkit` now exposes `Window.addTabbedWindow`,
+  `removeFromTabGroup`, `selectTab`, and `makeFirstResponder`, plus a generic
+  `SplitView` with two ordered children, stable axis, bounded position/minima,
+  equalize, and nullable zoomed child. All additions use optional symbol lookup
+  so older ABI-compatible bridge images fail with status 8 instead of failing
+  library construction. Split handles retain the generic `kView` contract and
+  are subtype-checked only for split-specific calls.
+- 2026-09-07: native tests passed three-window append order, selection and
+  detach, nested split order and axis mapping, initial minimum layout,
+  equalize, zoom/unzoom, descendant first responder, invalid/cyclic or
+  wrong-kind inputs, invalid numbers, wrong-thread rejection, and zero live
+  handles. Dart API/fake-binding tests passed state retention, native failure
+  atomicity, cross-application guards, and disposal. Real FFI smoke covered the
+  new signatures' main-thread guards; the legacy fixture returned the expected
+  unsupported-version status for every additive symbol.
+- 2026-09-07: the complete `dart_appkit make test` passed scaffold/header ABI,
+  native bridge, Runner, scheduler, event encoder, runtime lifecycle/diagnostic,
+  native capability, terminal renderer, PTY, all Dart packages, example Kernel,
+  real FFI, and legacy fallback gates. The independently committed dependency
+  result is `5cd4810 Expose native tabs and split views`.
+- 2026-09-07: after the dependency commit, the complete `dart_terminal make
+  test` passed all freshness/compatibility gates, formatting of 190 files with
+  zero changes, package analysis with no issues, and the aggregate runner with
+  `dart_terminal tests passed`. No generated product artifact changed.
