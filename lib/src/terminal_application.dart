@@ -38,6 +38,7 @@ import 'terminal_input/terminal_text_input_event_router.dart';
 import 'terminal_native_hierarchy.dart';
 import 'terminal_pane.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
+import 'terminal_restoration.dart';
 import 'terminal_session.dart';
 import 'terminal_tab_metadata.dart';
 import 'terminal_tab_presentation.dart';
@@ -479,6 +480,16 @@ final class TerminalApplication {
         Platform.environment['DT_RUNTIME_EVENT_WIRE_TEST'] == '1';
     var currentWindowWidth = 920.0;
     var currentWindowHeight = 580.0;
+    var currentWindowPlacement = TerminalWindowPlacement(
+      windowedFrame: TerminalWindowFrame(
+        left: 100,
+        top: 90,
+        width: currentWindowWidth,
+        height: currentWindowHeight,
+      ),
+      screen: null,
+      fullscreen: false,
+    );
 
     try {
       final View createdContentView = TerminalRendererMacos.createView();
@@ -1283,9 +1294,66 @@ final class TerminalApplication {
                   'value=$backingScaleFactor',
                 );
               }
+            case WindowFrameChangedEvent(:final frame):
+              if (!currentWindowPlacement.fullscreen) {
+                currentWindowPlacement = currentWindowPlacement.copyWith(
+                  windowedFrame: _terminalWindowFrame(frame),
+                );
+              }
+              if (emitNativeEventWireObservation) {
+                _writeWindowStateEvent(
+                  application,
+                  event,
+                  'frame',
+                  'left=${frame.left} top=${frame.top} '
+                      'width=${frame.width} height=${frame.height}',
+                );
+              }
+            case WindowFullscreenChangedEvent(:final isFullscreen):
+              currentWindowPlacement = currentWindowPlacement.copyWith(
+                fullscreen: isFullscreen,
+              );
+              if (!isFullscreen) {
+                final Rect restoredFrame = _appKitWindowFrame(
+                  currentWindowPlacement.windowedFrame,
+                );
+                if (createdWindow.frame != restoredFrame) {
+                  createdWindow.frame = restoredFrame;
+                }
+              }
+              if (emitNativeEventWireObservation) {
+                _writeWindowStateEvent(
+                  application,
+                  event,
+                  'fullscreen',
+                  'value=$isFullscreen',
+                );
+              }
             case WindowScreenChangedEvent(:final screen):
               hyperlinkController.cancelPress();
               createdMetalSurface.clearHyperlinkHover();
+              if (screen == null) {
+                currentWindowPlacement = currentWindowPlacement.copyWith(
+                  clearScreen: true,
+                );
+              } else {
+                final TerminalScreenPlacement observed =
+                    _terminalScreenPlacement(screen);
+                currentWindowPlacement =
+                    TerminalWindowPlacementPolicy.resolveForAvailableScreens(
+                      currentWindowPlacement,
+                      <TerminalScreenPlacement>[observed],
+                      fallbackDisplayId: observed.displayId,
+                    );
+                if (!currentWindowPlacement.fullscreen) {
+                  final Rect migratedFrame = _appKitWindowFrame(
+                    currentWindowPlacement.windowedFrame,
+                  );
+                  if (createdWindow.frame != migratedFrame) {
+                    createdWindow.frame = migratedFrame;
+                  }
+                }
+              }
               if (emitNativeEventWireObservation) {
                 _writeWindowStateEvent(
                   application,
@@ -2827,6 +2895,25 @@ final class TerminalApplication {
           blue: color.blue / 255,
           alpha: color.alpha / 255,
         );
+
+  static Rect _appKitWindowFrame(TerminalWindowFrame frame) =>
+      Rect.fromLTWH(frame.left, frame.top, frame.width, frame.height);
+
+  static TerminalWindowFrame _terminalWindowFrame(Rect frame) =>
+      TerminalWindowFrame(
+        left: frame.left,
+        top: frame.top,
+        width: frame.width,
+        height: frame.height,
+      );
+
+  static TerminalScreenPlacement _terminalScreenPlacement(
+    AppKitScreen screen,
+  ) => TerminalScreenPlacement(
+    displayId: screen.displayId,
+    frame: _terminalWindowFrame(screen.frame),
+    visibleFrame: _terminalWindowFrame(screen.visibleFrame),
+  );
 
   static Future<bool> _exerciseCursorColorPresentation(
     TerminalSession session,

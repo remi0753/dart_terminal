@@ -2,6 +2,7 @@ import 'package:dart_appkit/dart_appkit.dart';
 
 import 'terminal_application_state.dart';
 import 'terminal_pane.dart';
+import 'terminal_restoration.dart';
 import 'terminal_tab_metadata.dart';
 import 'terminal_tab_presentation.dart';
 
@@ -76,6 +77,8 @@ final class TerminalNativeHierarchyAdapter {
     required TerminalNativePaneResourcesFactory paneResourcesFactory,
     required Rect windowFrame,
     required TerminalSplitLayoutSize cellSize,
+    Map<TerminalWindowId, TerminalWindowPlacement> windowPlacements =
+        const <TerminalWindowId, TerminalWindowPlacement>{},
     this.dividerThickness = 1,
     this.keyEventRouting = KeyEventRouting.appKitOnly,
     this.defersCloseRequests = true,
@@ -86,6 +89,9 @@ final class TerminalNativeHierarchyAdapter {
        _paneResourcesFactory = paneResourcesFactory,
        _windowFrame = windowFrame,
        _cellSize = cellSize,
+       _windowPlacements = Map<TerminalWindowId, TerminalWindowPlacement>.of(
+         windowPlacements,
+       ),
        _presentationBuilder =
            presentationBuilder ??
            (titleBuilder == null
@@ -108,12 +114,22 @@ final class TerminalNativeHierarchyAdapter {
         'titleBuilder and presentationBuilder are mutually exclusive',
       );
     }
+    for (final TerminalWindowId windowId in _windowPlacements.keys) {
+      if (_state.windowForId(windowId) == null) {
+        throw ArgumentError.value(
+          windowId,
+          'windowPlacements',
+          'contains a window not retained by the application state',
+        );
+      }
+    }
   }
 
   final TerminalApplicationState _state;
   final TerminalNativePaneResourcesFactory _paneResourcesFactory;
   final Rect _windowFrame;
   final TerminalSplitLayoutSize _cellSize;
+  final Map<TerminalWindowId, TerminalWindowPlacement> _windowPlacements;
   final TerminalNativeTabPresentationBuilder _presentationBuilder;
   final double dividerThickness;
   final KeyEventRouting keyEventRouting;
@@ -145,6 +161,10 @@ final class TerminalNativeHierarchyAdapter {
       Map<TerminalSplitNodeId, SplitView>.unmodifiable(_splitViews);
   Map<PaneId, TerminalNativePaneResources> get paneResources =>
       Map<PaneId, TerminalNativePaneResources>.unmodifiable(_paneResources);
+  Map<TerminalWindowId, TerminalWindowPlacement> get windowPlacements =>
+      Map<TerminalWindowId, TerminalWindowPlacement>.unmodifiable(
+        _windowPlacements,
+      );
 
   Window? windowForTab(TerminalTabId tabId) => _windows[tabId];
 
@@ -153,6 +173,84 @@ final class TerminalNativeHierarchyAdapter {
 
   TerminalNativePaneResources? resourcesForPane(PaneId paneId) =>
       _paneResources[paneId];
+
+  TerminalWindowPlacement placementForWindow(TerminalWindowId windowId) {
+    _ensureAlive();
+    if (_state.windowForId(windowId) == null) {
+      throw StateError('unknown terminal window $windowId');
+    }
+    return _windowPlacements.putIfAbsent(windowId, _defaultPlacement);
+  }
+
+  /// Requests fullscreen for the selected native tab of one logical window.
+  void requestFullscreen(TerminalWindowId windowId, bool enabled) {
+    _ensureCanReconcile();
+    final TerminalWindowState? logicalWindow = _state.windowForId(windowId);
+    if (logicalWindow == null) {
+      throw StateError('unknown terminal window $windowId');
+    }
+    final Window? selected = _windows[logicalWindow.selectedTabId];
+    if (selected == null) {
+      throw StateError('terminal window $windowId is not projected');
+    }
+    selected.setFullscreen(enabled);
+    _windowPlacements[windowId] = placementForWindow(windowId)
+        .copyWith(fullscreen: enabled);
+  }
+
+  /// Reconciles one already-routed native event into logical placement state.
+  void handleWindowEvent(TerminalTabId sourceTabId, WindowEvent event) {
+    _ensureCanReconcile();
+    final TerminalWindowState logicalWindow = _windowForTab(sourceTabId);
+    final TerminalWindowId windowId = logicalWindow.id;
+    final TerminalWindowPlacement current = placementForWindow(windowId);
+    switch (event) {
+      case WindowFrameChangedEvent(:final frame):
+        if (!current.fullscreen) {
+          _windowPlacements[windowId] = current.copyWith(
+            windowedFrame: _terminalFrame(frame),
+          );
+        }
+      case WindowFullscreenChangedEvent(:final isFullscreen):
+        _windowPlacements[windowId] = current.copyWith(
+          fullscreen: isFullscreen,
+        );
+        if (!isFullscreen) _projectPlacement(logicalWindow);
+      case WindowScreenChangedEvent(:final screen):
+        if (screen == null) {
+          _windowPlacements[windowId] = current.copyWith(clearScreen: true);
+          return;
+        }
+        final TerminalScreenPlacement observed = _terminalScreen(screen);
+        final TerminalWindowPlacement resolved =
+            TerminalWindowPlacementPolicy.resolveForAvailableScreens(
+              current,
+              <TerminalScreenPlacement>[observed],
+              fallbackDisplayId: observed.displayId,
+            );
+        _windowPlacements[windowId] = resolved;
+        if (!resolved.fullscreen) _projectPlacement(logicalWindow);
+      case WindowClosedEvent() ||
+          WindowCloseRequestedEvent() ||
+          WindowResizedEvent() ||
+          WindowFocusChangedEvent() ||
+          WindowVisibilityChangedEvent() ||
+          WindowOcclusionChangedEvent() ||
+          WindowBackingScaleChangedEvent() ||
+          AppKitKeyEvent() ||
+          AppKitScrollEvent() ||
+          AppKitMouseEvent():
+        break;
+    }
+  }
+
+  /// Shows every logical window, optionally restoring selection/focus once.
+  void present({bool restoreSelectionAndFocus = true}) {
+    _ensureCanReconcile();
+    for (final TerminalWindowState logicalWindow in _presentationOrder()) {
+      _presentWindow(logicalWindow, force: restoreSelectionAndFocus);
+    }
+  }
 
   void resizeTab(TerminalTabId tabId, TerminalSplitLayoutSize size) {
     _ensureCanReconcile();
@@ -186,6 +284,7 @@ final class TerminalNativeHierarchyAdapter {
           <TerminalTabId, TerminalSplitLayout>{};
       final Set<PaneId> livePaneIds = <PaneId>{};
       for (final TerminalWindowState window in logicalWindows) {
+        _windowPlacements.putIfAbsent(window.id, _defaultPlacement);
         for (final TerminalTabState tab in window.tabs) {
           logicalTabs[tab.id] = tab;
           tabOwners[tab.id] = window;
@@ -234,14 +333,19 @@ final class TerminalNativeHierarchyAdapter {
           owner,
           entry.value,
         );
+        final TerminalWindowPlacement placement = placementForWindow(owner.id);
+        final Rect nativeFrame = _appKitFrame(placement.windowedFrame);
         Window? window = _windows[entry.key];
         if (window == null) {
-          window = Window(frame: _windowFrame, title: presentation.title)
+          window = Window(frame: nativeFrame, title: presentation.title)
             ..keyEventRouting = keyEventRouting
             ..defersCloseRequests = defersCloseRequests;
           createdTabWindows.add(entry.key);
         } else if (window.title != presentation.title) {
           window.title = presentation.title;
+        }
+        if (!window.isFullscreen && window.frame != nativeFrame) {
+          window.frame = nativeFrame;
         }
         if (window.representedFilePath != presentation.representedFilePath) {
           window.representedFilePath = presentation.representedFilePath;
@@ -281,25 +385,16 @@ final class TerminalNativeHierarchyAdapter {
         }
       }
 
-      final List<TerminalWindowState> presentationOrder =
-          List<TerminalWindowState>.of(logicalWindows);
-      final TerminalWindowId? activeWindowId = _state.activeWindowId;
-      presentationOrder.sort((
-        TerminalWindowState first,
-        TerminalWindowState second,
-      ) {
-        if (first.id == activeWindowId) return 1;
-        if (second.id == activeWindowId) return -1;
-        return 0;
-      });
-      for (final TerminalWindowState logicalWindow in presentationOrder) {
-        final TerminalTabState selected = logicalWindow.selectedTab;
-        final Window selectedWindow = nextWindows[selected.id]!;
-        if (presentWindows || _selectedTabs[logicalWindow.id] != selected.id) {
-          selectedWindow.selectTab();
-        }
-        selectedWindow.makeFirstResponder(
-          nextPaneResources[selected.focusedPaneId]!.view,
+      for (final TerminalWindowState logicalWindow in _presentationOrder()) {
+        final bool created = logicalWindow.tabIds.any(
+          createdTabWindows.contains,
+        );
+        _presentWindow(
+          logicalWindow,
+          windows: nextWindows,
+          paneResources: nextPaneResources,
+          force: created,
+          show: presentWindows && created,
         );
       }
 
@@ -387,6 +482,10 @@ final class TerminalNativeHierarchyAdapter {
         (TerminalTabId tabId, TerminalSplitLayoutSize _) =>
             !logicalTabs.containsKey(tabId),
       );
+      _windowPlacements.removeWhere(
+        (TerminalWindowId windowId, TerminalWindowPlacement _) =>
+            _state.windowForId(windowId) == null,
+      );
     } finally {
       _reconciling = false;
     }
@@ -431,7 +530,93 @@ final class TerminalNativeHierarchyAdapter {
     _tabSizes.clear();
     _selectedTabs.clear();
     _focusedPanes.clear();
+    _windowPlacements.clear();
   }
+
+  void _presentWindow(
+    TerminalWindowState logicalWindow, {
+    Map<TerminalTabId, Window>? windows,
+    Map<PaneId, TerminalNativePaneResources>? paneResources,
+    required bool force,
+    bool show = true,
+  }) {
+    final Map<TerminalTabId, Window> projectedWindows = windows ?? _windows;
+    final Map<PaneId, TerminalNativePaneResources> projectedPanes =
+        paneResources ?? _paneResources;
+    final TerminalTabState selected = logicalWindow.selectedTab;
+    final Window selectedWindow = projectedWindows[selected.id]!;
+    final bool selectionChanged =
+        _selectedTabs[logicalWindow.id] != selected.id;
+    final bool focusChanged =
+        _focusedPanes[selected.id] != selected.focusedPaneId;
+    if (force || selectionChanged) selectedWindow.selectTab();
+    if (force || selectionChanged || focusChanged) {
+      selectedWindow.makeFirstResponder(
+        projectedPanes[selected.focusedPaneId]!.view,
+      );
+    }
+    if (show) selectedWindow.show();
+    final bool desiredFullscreen = placementForWindow(logicalWindow.id)
+        .fullscreen;
+    if (selectedWindow.isFullscreen != desiredFullscreen) {
+      selectedWindow.setFullscreen(desiredFullscreen);
+    }
+  }
+
+  void _projectPlacement(TerminalWindowState logicalWindow) {
+    final Rect frame = _appKitFrame(
+      placementForWindow(logicalWindow.id).windowedFrame,
+    );
+    for (final TerminalTabId tabId in logicalWindow.tabIds) {
+      final Window? window = _windows[tabId];
+      if (window != null && !window.isFullscreen && window.frame != frame) {
+        window.frame = frame;
+      }
+    }
+  }
+
+  List<TerminalWindowState> _presentationOrder() {
+    final List<TerminalWindowState> result = List<TerminalWindowState>.of(
+      _state.windows,
+    );
+    final TerminalWindowId? activeWindowId = _state.activeWindowId;
+    result.sort((TerminalWindowState first, TerminalWindowState second) {
+      if (first.id == activeWindowId) return 1;
+      if (second.id == activeWindowId) return -1;
+      return 0;
+    });
+    return result;
+  }
+
+  TerminalWindowState _windowForTab(TerminalTabId tabId) {
+    for (final TerminalWindowState window in _state.windows) {
+      if (window.tabIds.contains(tabId)) return window;
+    }
+    throw StateError('unknown terminal tab $tabId');
+  }
+
+  TerminalWindowPlacement _defaultPlacement() => TerminalWindowPlacement(
+    windowedFrame: _terminalFrame(_windowFrame),
+    screen: null,
+    fullscreen: false,
+  );
+
+  static Rect _appKitFrame(TerminalWindowFrame frame) =>
+      Rect.fromLTWH(frame.left, frame.top, frame.width, frame.height);
+
+  static TerminalWindowFrame _terminalFrame(Rect frame) => TerminalWindowFrame(
+    left: frame.left,
+    top: frame.top,
+    width: frame.width,
+    height: frame.height,
+  );
+
+  static TerminalScreenPlacement _terminalScreen(AppKitScreen screen) =>
+      TerminalScreenPlacement(
+        displayId: screen.displayId,
+        frame: _terminalFrame(screen.frame),
+        visibleFrame: _terminalFrame(screen.visibleFrame),
+      );
 
   View _buildNode(
     TerminalSplitNode node,

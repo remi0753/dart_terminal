@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dart_terminal/dart_terminal.dart';
@@ -8,8 +9,61 @@ Future<void> main() => runTerminalRestorationTests();
 Future<void> runTerminalRestorationTests() async {
   _testWindowPlacementPolicy();
   _testStrictCodecRejection();
+  await _testBoundedFileStore();
   await _testHierarchyRoundTripAndFreshOwnership();
   await _testRestoreFailureIsAtomic();
+}
+
+Future<void> _testBoundedFileStore() async {
+  final Directory directory = await Directory.systemTemp.createTemp(
+    'dart-terminal-restoration-',
+  );
+  final String path = '${directory.path}/nested/state.json';
+  try {
+    final FileTerminalRestorationStore store = FileTerminalRestorationStore(
+      path,
+    );
+    _expect(await store.read() == null, 'a missing restoration file is absent');
+
+    await store.write('{"generation":1}');
+    _expect(
+      await store.read() == '{"generation":1}' &&
+          !await File('$path.pending').exists(),
+      'the first bounded file write is readable without a pending artifact',
+    );
+    await store.write('{"generation":2}');
+    _expect(
+      await store.read() == '{"generation":2}',
+      'same-directory replacement overwrites an existing restoration file',
+    );
+
+    final List<int> oversized = List<int>.filled(
+      TerminalRestorationLimits.maximumSerializedUtf8Bytes + 1,
+      0x61,
+    );
+    await _expectFutureThrows<TerminalRestorationLimitException>(() async {
+      await store.write(String.fromCharCodes(oversized));
+    }, 'the file store rejects oversized output before writing');
+    await File(path).writeAsBytes(oversized, flush: true);
+    await _expectFutureThrows<TerminalRestorationLimitException>(() async {
+      await store.read();
+    }, 'the file store rejects oversized input before decoding it');
+    await File(path).writeAsBytes(const <int>[0xff], flush: true);
+    await _expectFutureThrows<FormatException>(() async {
+      await store.read();
+    }, 'the file store rejects malformed UTF-8');
+
+    _expectThrows<ArgumentError>(
+      () => FileTerminalRestorationStore('relative.json'),
+      'the file store rejects relative paths',
+    );
+    _expectThrows<ArgumentError>(
+      () => FileTerminalRestorationStore('${directory.path}/'),
+      'the file store rejects directory-shaped paths',
+    );
+  } finally {
+    await directory.delete(recursive: true);
+  }
 }
 
 void _testWindowPlacementPolicy() {

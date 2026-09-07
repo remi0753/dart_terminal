@@ -278,3 +278,88 @@ existing root-isolate AppKit boundary and deterministic pane/native cleanup.
   environment permission failure rather than a source/audit failure; the same
   bounded command reran with scoped permission and passed with `tracked=383`,
   `product_native_sources=0`, and `reviewed_test_native_sources=1`.
+- 2026-09-07: terminal integration review found that AppKit's enter-fullscreen
+  callback published the current frame before the observed fullscreen state,
+  while resize/move callbacks could also publish animation frames before
+  completion. A consumer cannot distinguish those rectangles from the last
+  safe windowed frame, especially for a user-initiated green-button transition
+  with no prior Dart request. The reusable layer must mark will-enter/will-exit,
+  suppress frame observations during transition, and publish completion state
+  before the resulting frame. This is a correctness follow-up within the active
+  restoration item, not later roadmap work; it will be committed separately in
+  `dart_appkit` before terminal adoption continues.
+- 2026-09-07: AppKit follow-up `6d957a8 Preserve windowed frames across
+  fullscreen` marks will-enter/will-exit transitions, suppresses only
+  frame-state events during the transition, and emits observed fullscreen state
+  before the completion frame. Legacy content-resize events remain live for
+  renderer adaptation. Focused native and complete AppKit `make test` gates
+  pass, including same/opposite pending targets and enter/exit/failure ordering.
+- 2026-09-07: the terminal hierarchy adapter will keep one placement per
+  logical window and project its safe windowed frame to every retained native
+  tab while sending fullscreen intent only to the selected tab. It will consume
+  already-routed typed events keyed by logical tab, never use a native handle as
+  identity, ignore fullscreen rectangles, migrate against an observed
+  destination screen, and restore the migrated frame when exit is observed.
+- 2026-09-07: reopen/persistence is separated from the durable codec. A bounded
+  file store reads at most the codec limit, uses same-directory replacement,
+  and reports only content-free outcome kinds. A generation lifecycle will
+  load-or-default, start restored panes in hierarchy order, present once,
+  capture before native/session teardown, and coalesce concurrent reopen calls.
+  Native projection is disposed before logical session shutdown; corrupt or
+  unavailable persistence falls back to one default fresh session.
+- 2026-09-07: normal product event handling now retains the last safe windowed
+  frame outside fullscreen, migrates it through the bounded placement policy on
+  a concrete screen event, restores it after fullscreen exit, and leaves the
+  renderer's independent backing-scale rebuild path intact. The hierarchy
+  adapter owns the corresponding placement per logical window, projects one
+  frame to all native tabs, and routes typed frame/fullscreen/screen events by
+  logical tab ID rather than retaining native handles as identity.
+- 2026-09-07: the replaceable-generation lifecycle admits a bounded local file
+  through the existing strict codec, starts fresh sessions with only validated
+  local cwd launch values, subscribes each projected native tab once, and
+  provides a direct `ApplicationReopenRequestedEvent` route. Concurrent close
+  and reopen requests share their in-flight teardown/activation futures; IDs
+  advance across generations so stale logical identities cannot alias reopened
+  owners. An in-memory last-valid snapshot permits reopen even when the latest
+  durable write is unavailable.
+- 2026-09-07: the first focused analysis exposed one test-only use of
+  `containsAll` on an `Iterable`; converting the diagnostic kinds to a set fixed
+  it. Earlier compilation while introducing protocol-v6 events also found the
+  intentionally exhaustive application and command-palette switches; both now
+  explicitly handle or ignore the new frame/fullscreen event families. The
+  focused analyzer, restoration/file-store test, and hierarchy/lifecycle test
+  then passed. File-store coverage includes missing/read/replace, malformed
+  UTF-8, input/output size limits, path admission, and pending-file cleanup;
+  lifecycle coverage includes corrupt startup fallback, two-tab/four-pane
+  restore, fresh IDs/sessions, unavailable writes, duplicate Dock reopens, and
+  deterministic native-before-session teardown.
+- 2026-09-07: final ownership review found that a newly reconciled restoration
+  generation selected its tab and first responder once during reconciliation
+  and then repeated both operations while showing the window. Presentation now
+  suppresses that second restore for a newly built tree while retained-window
+  Dock presentation still selects/focuses once. Fake native counters prove one
+  select/focus/show on activation and only one additional set for two coalesced
+  hidden-window reopen requests; an explicit disposal trace proves every pane's
+  native adapters are released before any session shutdown begins.
+- 2026-09-07: analysis after that correction reported no issues. Its first
+  focused hierarchy run again encountered only the sandboxed Metal module-cache
+  write; the exact scoped rerun passed.
+- 2026-09-07: the first complete terminal `make test` attempt was blocked by
+  the workspace sandbox when the renderer hook tried to populate Clang's Metal
+  module cache below `~/.cache/clang/ModuleCache`; it did not reach source
+  tests. The same exact gate reran with scoped cache permission, formatted 203
+  files with no changes, reported no analyzer issues, passed every generated
+  contract and regression check, and ended with `dart_terminal tests passed`.
+- 2026-09-07: after the exact-once presentation correction, the complete
+  scoped `make test` gate passed again with 203 files unchanged by formatting,
+  no analyzer issues, all compatibility/differential/application/terminfo
+  checks green, and `dart_terminal tests passed`. With all eight task files
+  staged so the new source was in `git ls-files`, `make runtime-source-check`
+  also passed with `tracked=384`, `product_native_sources=0`, and
+  `reviewed_test_native_sources=1`.
+- 2026-09-07: subtask 3 completion conditions are satisfied. The normal
+  product consumes the new placement events, the reusable hierarchy/lifecycle
+  path owns bounded persistence and Dock reopen reconstruction, malformed state
+  cannot block startup, and focused plus complete gates prove fresh ownership
+  and deterministic cleanup. The next ordered work after commit is the M1
+  Developer JIT/Release AOT product scenario and parent completion decision.

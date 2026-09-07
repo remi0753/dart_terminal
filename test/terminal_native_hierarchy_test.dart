@@ -11,6 +11,7 @@ Future<void> main() => runTerminalNativeHierarchyTests();
 
 Future<void> runTerminalNativeHierarchyTests() async {
   await _testNativeHierarchyProjectionAndLifecycle();
+  await _testRestorationPersistenceAndReopenLifecycle();
 }
 
 Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
@@ -95,6 +96,32 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
     windowFrame: const Rect.fromLTWH(40, 50, 800, 600),
     cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
     dividerThickness: 2,
+    windowPlacements: <TerminalWindowId, TerminalWindowPlacement>{
+      firstWindow.id: TerminalWindowPlacement(
+        windowedFrame: TerminalWindowFrame(
+          left: -1200,
+          top: 80,
+          width: 920,
+          height: 580,
+        ),
+        screen: TerminalScreenPlacement(
+          displayId: 41,
+          frame: TerminalWindowFrame(
+            left: -1920,
+            top: 0,
+            width: 1920,
+            height: 1080,
+          ),
+          visibleFrame: TerminalWindowFrame(
+            left: -1920,
+            top: 25,
+            width: 1920,
+            height: 1055,
+          ),
+        ),
+        fullscreen: false,
+      ),
+    },
     presentationBuilder: (TerminalWindowState window, TerminalTabState tab) =>
         presentationResolver.resolve(
           tab,
@@ -123,6 +150,15 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
   final int fourthPaneViewHandle = bindings.handleFor(
     adapter.resourcesForPane(fourthPane.id)!.view,
   );
+  final List<StreamSubscription<WindowEvent>> placementSubscriptions = adapter
+      .windows
+      .entries
+      .map(
+        (MapEntry<TerminalTabId, Window> entry) => entry.value.events.listen(
+          (WindowEvent event) => adapter.handleWindowEvent(entry.key, event),
+        ),
+      )
+      .toList(growable: false);
   final int firstWindowHandle = bindings.handleFor(
     adapter.windowForTab(firstTab.id)!,
   );
@@ -174,6 +210,101 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
         bindings.windowTitles[selectedWindowHandle] == 'Second live title' &&
         !bindings.windowTabColors.containsKey(selectedWindowHandle),
     'retained windows update live title and clear remote proxy/rename/color',
+  );
+  _expect(
+    firstWindow.tabIds.every(
+          (TerminalTabId tabId) =>
+              bindings.windowFrames[bindings.handleFor(
+                adapter.windowForTab(tabId)!,
+              )] ==
+              const Rect.fromLTWH(-1200, 80, 920, 580),
+        ) &&
+        bindings.windowShowCounts[selectedWindowHandle] == 1,
+    'one logical placement is projected to every native tab and shown once',
+  );
+
+  adapter.requestFullscreen(firstWindow.id, true);
+  _expect(
+    bindings.windowFullscreenRequests[selectedWindowHandle] == true &&
+        adapter.placementForWindow(firstWindow.id).fullscreen,
+    'fullscreen intent targets only the selected native tab',
+  );
+  final int selectedGeneration = selectedWindowHandle >> 32;
+  rawEvents.add(<Object?>[
+    6,
+    9,
+    selectedWindowHandle,
+    selectedGeneration,
+    500000,
+    0,
+    -1920.0,
+    0.0,
+    1920.0,
+    1080.0,
+  ]);
+  rawEvents.add(<Object?>[
+    6,
+    15,
+    selectedWindowHandle,
+    selectedGeneration,
+    500001,
+    0,
+    true,
+  ]);
+  rawEvents.add(<Object?>[
+    6,
+    7,
+    selectedWindowHandle,
+    selectedGeneration,
+    500002,
+    0,
+    true,
+    77,
+    0.0,
+    0.0,
+    1512.0,
+    982.0,
+    0.0,
+    23.0,
+    1512.0,
+    959.0,
+  ]);
+  final TerminalWindowPlacement migratedFullscreen = adapter.placementForWindow(
+    firstWindow.id,
+  );
+  _expect(
+    migratedFullscreen.fullscreen &&
+        migratedFullscreen.screen?.displayId == 77 &&
+        migratedFullscreen.windowedFrame.width == 920 &&
+        migratedFullscreen.windowedFrame !=
+            TerminalWindowFrame(left: -1920, top: 0, width: 1920, height: 1080),
+    'fullscreen transition frames are ignored while safe placement migrates',
+  );
+  rawEvents.add(<Object?>[
+    6,
+    15,
+    selectedWindowHandle,
+    selectedGeneration,
+    500003,
+    0,
+    false,
+  ]);
+  final Rect migratedFrame = Rect.fromLTWH(
+    migratedFullscreen.windowedFrame.left,
+    migratedFullscreen.windowedFrame.top,
+    migratedFullscreen.windowedFrame.width,
+    migratedFullscreen.windowedFrame.height,
+  );
+  _expect(
+    !adapter.placementForWindow(firstWindow.id).fullscreen &&
+        firstWindow.tabIds.every(
+          (TerminalTabId tabId) =>
+              bindings.windowFrames[bindings.handleFor(
+                adapter.windowForTab(tabId)!,
+              )] ==
+              migratedFrame,
+        ),
+    'fullscreen exit restores the migrated safe frame to the native tab group',
   );
   state
     ..selectTab(firstWindow.id, firstTab.id)
@@ -250,6 +381,10 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
 
   adapter.dispose();
   adapter.dispose();
+  for (final StreamSubscription<WindowEvent> subscription
+      in placementSubscriptions) {
+    await subscription.cancel();
+  }
   _expect(
     bindings.objects.isEmpty &&
         bindings.windowRepresentedFilePaths.isEmpty &&
@@ -267,6 +402,282 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
       (_HierarchyFakeSession session) => session.shutdownCount == 1,
     ),
     'native teardown remains separate from exact logical session shutdown',
+  );
+  await application.terminate();
+  await rawEvents.close();
+}
+
+Future<void> _testRestorationPersistenceAndReopenLifecycle() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final _LifecycleMemoryStore store = _LifecycleMemoryStore('{invalid');
+  final List<_HierarchyFakeSession> sessions = <_HierarchyFakeSession>[];
+  final Map<PaneId, String?> workingDirectories = <PaneId, String?>{};
+  final List<String> nativeDisposal = <String>[];
+  final List<String> disposalOrder = <String>[];
+  final List<TerminalRestorationDiagnostic> diagnostics =
+      <TerminalRestorationDiagnostic>[];
+
+  TerminalPaneConfiguration configurationForPane(
+    TerminalRestorablePane saved,
+  ) => TerminalPaneConfiguration(
+    sessionFactory:
+        (
+          TerminalSessionId id, {
+          required void Function() onChanged,
+          required void Function() onTerminated,
+        }) {
+          final _HierarchyFakeSession session = _HierarchyFakeSession(
+            id,
+            workingDirectory: saved.workingDirectory,
+            onShutdown: () => disposalOrder.add('session:${id.paneId}'),
+          );
+          sessions.add(session);
+          workingDirectories[id.paneId] = saved.workingDirectory;
+          return session;
+        },
+    onChanged: () {},
+    onExitRequested: () {},
+  );
+
+  final TerminalRestorationLifecycle lifecycle = TerminalRestorationLifecycle(
+    persistence: TerminalRestorationPersistence(store),
+    configurationForPane: configurationForPane,
+    hierarchyFactory:
+        ({
+          required TerminalApplicationState state,
+          required Map<TerminalWindowId, TerminalWindowPlacement> placements,
+        }) => TerminalNativeHierarchyAdapter(
+          state: state,
+          paneResourcesFactory: (TerminalPane pane) {
+            final View view = View();
+            return TerminalNativePaneResources(
+              paneId: pane.id,
+              view: view,
+              onDisposeAdapters: () {
+                nativeDisposal.add('adapters:${pane.id}');
+                disposalOrder.add('native:${pane.id}');
+              },
+            );
+          },
+          windowFrame: const Rect.fromLTWH(100, 90, 920, 580),
+          cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+          windowPlacements: placements,
+          presentWindows: false,
+        ),
+    defaultPlacement: TerminalWindowPlacement(
+      windowedFrame: TerminalWindowFrame(
+        left: 100,
+        top: 90,
+        width: 920,
+        height: 580,
+      ),
+      screen: null,
+      fullscreen: false,
+    ),
+    defaultWorkingDirectory: '/private/tmp/default',
+    workingDirectoryForPane: (PaneId paneId) => workingDirectories[paneId],
+    onDiagnostic: diagnostics.add,
+  );
+
+  _expect(
+    await lifecycle.start() ==
+            TerminalRestorationStartDisposition.defaultCreated &&
+        lifecycle.current!.state.windowCount == 1 &&
+        lifecycle.current!.state.paneCount == 1 &&
+        diagnostics.map((value) => value.kind).toSet().containsAll(
+          const <TerminalRestorationDiagnosticKind>[
+            TerminalRestorationDiagnosticKind.rejected,
+            TerminalRestorationDiagnosticKind.defaultCreated,
+          ],
+        ),
+    'malformed persistence falls back to one usable default generation',
+  );
+
+  final TerminalRestorationGeneration initial = lifecycle.current!;
+  final TerminalApplicationState state = initial.state;
+  final TerminalWindowState window = state.windows.single;
+  final TerminalTabState firstTab = window.selectedTab;
+  final PaneId firstPane = firstTab.focusedPaneId;
+  final TerminalPane secondPane = await state.splitPane(
+    firstPane,
+    configurationForPane(
+      TerminalRestorablePane(workingDirectory: '/private/tmp/second'),
+    ),
+    axis: TerminalSplitAxis.horizontal,
+    fraction: 0.35,
+  );
+  final TerminalTabState secondTab = await state.createTab(
+    window.id,
+    configurationForPane(
+      TerminalRestorablePane(workingDirectory: '/private/tmp/third'),
+    ),
+  );
+  final TerminalPane fourthPane = await state.splitPane(
+    secondTab.focusedPaneId,
+    configurationForPane(
+      TerminalRestorablePane(workingDirectory: '/private/tmp/fourth'),
+    ),
+    axis: TerminalSplitAxis.vertical,
+    fraction: 0.65,
+  );
+  state
+    ..focusPane(firstTab.id, secondPane.id)
+    ..renameTab(secondTab.id, 'Restored lifecycle tab')
+    ..setTabColor(secondTab.id, TerminalTabColor.greenMarker)
+    ..focusPane(secondTab.id, fourthPane.id)
+    ..setPaneZoom(secondTab.id, fourthPane.id)
+    ..selectTab(window.id, secondTab.id);
+  lifecycle.reconcile();
+  initial.hierarchy.requestFullscreen(window.id, true);
+  final Set<int> oldPaneIds = state.paneIds
+      .map((PaneId id) => id.value)
+      .toSet();
+  final Set<int> oldWindowIds = state.windowIds
+      .map((TerminalWindowId id) => id.value)
+      .toSet();
+  final int originalSessionCount = sessions.length;
+  final TerminalRestorationSaveResult saved = await lifecycle.persistCurrent();
+  _expect(
+    state.tabCount == 2 &&
+        state.paneCount == 4 &&
+        saved.disposition == TerminalRestorationSaveDisposition.saved,
+    'multi-tab/four-pane state is persisted before teardown',
+  );
+
+  store.failWrites = true;
+  final Future<TerminalPaneOwnerShutdownResult?> firstSuspend = lifecycle
+      .suspendForReopen();
+  final Future<TerminalPaneOwnerShutdownResult?> secondSuspend = lifecycle
+      .suspendForReopen();
+  _expect(
+    identical(firstSuspend, secondSuspend),
+    'concurrent close suspension shares one teardown future',
+  );
+  final TerminalPaneOwnerShutdownResult suspended = (await firstSuspend)!;
+  _expect(
+    suspended.sessions.length == 4 &&
+        suspended.isClean &&
+        lifecycle.current == null &&
+        bindings.objects.isEmpty &&
+        sessions
+            .take(originalSessionCount)
+            .every((_HierarchyFakeSession value) => value.shutdownCount == 1) &&
+        diagnostics.last.kind == TerminalRestorationDiagnosticKind.suspended &&
+        diagnostics.any(
+          (TerminalRestorationDiagnostic value) =>
+              value.kind == TerminalRestorationDiagnosticKind.saveUnavailable,
+        ) &&
+        disposalOrder
+            .take(4)
+            .every((String value) => value.startsWith('native:')) &&
+        disposalOrder
+            .skip(4)
+            .take(4)
+            .every((String value) => value.startsWith('session:')),
+    'native projection is released before exact session shutdown even when '
+    'the persistence target is unavailable',
+  );
+
+  final Future<TerminalRestorationReopenDisposition> firstReopen = lifecycle
+      .handleReopenRequest(
+        const ApplicationReopenRequestedEvent(
+          monotonicMicros: 500100,
+          operationId: 8,
+          hasVisibleWindows: false,
+        ),
+      );
+  final Future<TerminalRestorationReopenDisposition> secondReopen = lifecycle
+      .handleReopenRequest(
+        const ApplicationReopenRequestedEvent(
+          monotonicMicros: 500101,
+          operationId: 9,
+          hasVisibleWindows: false,
+        ),
+      );
+  _expect(
+    identical(firstReopen, secondReopen) &&
+        await firstReopen == TerminalRestorationReopenDisposition.restored,
+    'concurrent Dock reopen requests create one restored generation',
+  );
+  final TerminalRestorationGeneration restored = lifecycle.current!;
+  final TerminalApplicationState restoredState = restored.state;
+  final TerminalWindowState restoredWindow = restoredState.windows.single;
+  final int restoredSelectedHandle = bindings.handleFor(
+    restored.hierarchy.windowForTab(restoredWindow.selectedTabId)!,
+  );
+  _expect(
+    restoredState.windowCount == 1 &&
+        restoredState.tabCount == 2 &&
+        restoredState.paneCount == 4 &&
+        restoredState.paneIds.every(
+          (PaneId id) => !oldPaneIds.contains(id.value),
+        ) &&
+        restoredState.windowIds.every(
+          (TerminalWindowId id) => !oldWindowIds.contains(id.value),
+        ) &&
+        restoredState.windows.single.tabs.last.customTitle ==
+            'Restored lifecycle tab' &&
+        restoredState.windows.single.tabs.last.color ==
+            TerminalTabColor.greenMarker &&
+        restoredState.windows.single.tabs.last.isZoomed &&
+        restored.launchWorkingDirectories.values.toSet().containsAll(
+          const <String>{
+            '/private/tmp/default',
+            '/private/tmp/second',
+            '/private/tmp/third',
+            '/private/tmp/fourth',
+          },
+        ) &&
+        sessions.length == originalSessionCount * 2 &&
+        bindings.windowSelectCounts[restoredSelectedHandle] == 1 &&
+        bindings.windowFirstResponderCounts[restoredSelectedHandle] == 1 &&
+        bindings.windowShowCounts[restoredSelectedHandle] == 1,
+    'reopen restores topology and trusted cwd values into fresh owners',
+  );
+
+  final int sessionsBeforeVisibleReopen = sessions.length;
+  _expect(
+    await lifecycle.reopen(hasVisibleWindows: true) ==
+            TerminalRestorationReopenDisposition.ignoredVisible &&
+        sessions.length == sessionsBeforeVisibleReopen,
+    'a reopen notification reporting visible windows is ignored',
+  );
+  final Future<TerminalRestorationReopenDisposition> presentOnce = lifecycle
+      .reopen(hasVisibleWindows: false);
+  final Future<TerminalRestorationReopenDisposition> presentDuplicate =
+      lifecycle.reopen(hasVisibleWindows: false);
+  _expect(
+    identical(presentOnce, presentDuplicate) &&
+        await presentOnce ==
+            TerminalRestorationReopenDisposition.presentedExisting &&
+        sessions.length == sessionsBeforeVisibleReopen &&
+        bindings.windowSelectCounts[restoredSelectedHandle] == 2 &&
+        bindings.windowFirstResponderCounts[restoredSelectedHandle] == 2 &&
+        bindings.windowShowCounts[restoredSelectedHandle] == 2,
+    'repeated hidden-window reopen presents existing owners without duplication',
+  );
+
+  await lifecycle.shutdown(persist: false);
+  _expect(
+    lifecycle.isDisposed &&
+        lifecycle.current == null &&
+        bindings.objects.isEmpty &&
+        sessions.every(
+          (_HierarchyFakeSession value) => value.shutdownCount == 1,
+        ) &&
+        nativeDisposal.length == sessions.length &&
+        diagnostics.every(
+          (TerminalRestorationDiagnostic value) =>
+              !value.machineLine().contains('/private/tmp') &&
+              !value.machineLine().contains('{invalid'),
+        ),
+    'final lifecycle teardown is exact and diagnostics remain content-free',
   );
   await application.terminate();
   await rawEvents.close();
@@ -303,10 +714,12 @@ void _expectThrows<T extends Object>(void Function() action, String message) {
 }
 
 final class _HierarchyFakeSession implements TerminalPaneSession {
-  _HierarchyFakeSession(this.id);
+  _HierarchyFakeSession(this.id, {this.workingDirectory, this.onShutdown});
 
   @override
   final TerminalSessionId id;
+  final String? workingDirectory;
+  final void Function()? onShutdown;
 
   var live = false;
   var shutdownCount = 0;
@@ -406,6 +819,7 @@ final class _HierarchyFakeSession implements TerminalPaneSession {
   Future<TerminalPaneSessionShutdownResult> shutdown() async {
     shutdownCount++;
     live = false;
+    onShutdown?.call();
     return TerminalPaneSessionShutdownResult(
       sessionId: id,
       processId: null,
@@ -416,11 +830,38 @@ final class _HierarchyFakeSession implements TerminalPaneSession {
   }
 }
 
+final class _LifecycleMemoryStore implements TerminalRestorationStore {
+  _LifecycleMemoryStore(this.encoded);
+
+  String? encoded;
+  bool failWrites = false;
+  int readCount = 0;
+  int writeCount = 0;
+
+  @override
+  Future<String?> read() async {
+    readCount++;
+    return encoded;
+  }
+
+  @override
+  Future<void> write(String value) async {
+    writeCount++;
+    if (failWrites) throw StateError('injected restoration write failure');
+    encoded = value;
+  }
+}
+
 final class _HierarchyNativeBindings implements NativeBindings {
-  int _nextHandle = 100;
+  int _nextHandle = (1 << 32) | 100;
   final Map<int, String> objects = <int, String>{};
   final Map<Object, int> _handles = Map<Object, int>.identity();
   final Map<int, String> windowTitles = <int, String>{};
+  final Map<int, Rect> windowFrames = <int, Rect>{};
+  final Map<int, bool> windowFullscreenRequests = <int, bool>{};
+  final Map<int, int> windowShowCounts = <int, int>{};
+  final Map<int, int> windowSelectCounts = <int, int>{};
+  final Map<int, int> windowFirstResponderCounts = <int, int>{};
   final Map<int, String> windowRepresentedFilePaths = <int, String>{};
   final Map<int, List<double>> windowTabColors = <int, List<double>>{};
   final Map<int, int> contentViews = <int, int>{};
@@ -472,7 +913,32 @@ final class _HierarchyNativeBindings implements NativeBindings {
   }) {
     final NativeValueResult<int> result = _create('window');
     windowTitles[result.value!] = title;
+    windowFrames[result.value!] = Rect.fromLTWH(x, y, width, height);
     return result;
+  }
+
+  @override
+  NativeCallResult windowSetFrame({
+    required int handle,
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+  }) {
+    windowFrames[handle] = Rect.fromLTWH(x, y, width, height);
+    return const NativeCallResult.success();
+  }
+
+  @override
+  NativeCallResult windowSetFullscreen(int handle, bool enabled) {
+    windowFullscreenRequests[handle] = enabled;
+    return const NativeCallResult.success();
+  }
+
+  @override
+  NativeCallResult windowShow(int handle) {
+    windowShowCounts[handle] = (windowShowCounts[handle] ?? 0) + 1;
+    return const NativeCallResult.success();
   }
 
   @override
@@ -563,6 +1029,7 @@ final class _HierarchyNativeBindings implements NativeBindings {
 
   @override
   NativeCallResult windowSelectTab(int handle) {
+    windowSelectCounts[handle] = (windowSelectCounts[handle] ?? 0) + 1;
     for (final List<int> group in windowTabGroups) {
       if (group.contains(handle)) selectedTabWindows[group.first] = handle;
     }
@@ -576,6 +1043,8 @@ final class _HierarchyNativeBindings implements NativeBindings {
       return const NativeCallResult.failure(1, 'view is not attached');
     }
     firstResponders[handle] = viewHandle;
+    windowFirstResponderCounts[handle] =
+        (windowFirstResponderCounts[handle] ?? 0) + 1;
     return const NativeCallResult.success();
   }
 
@@ -632,6 +1101,11 @@ final class _HierarchyNativeBindings implements NativeBindings {
     releaseOrder.add(handle);
     objects.remove(handle);
     windowTitles.remove(handle);
+    windowFrames.remove(handle);
+    windowFullscreenRequests.remove(handle);
+    windowShowCounts.remove(handle);
+    windowSelectCounts.remove(handle);
+    windowFirstResponderCounts.remove(handle);
     windowRepresentedFilePaths.remove(handle);
     windowTabColors.remove(handle);
     contentViews.remove(handle);

@@ -236,6 +236,8 @@ final class TerminalCommandPalettePresenter {
           WindowOcclusionChangedEvent() ||
           WindowBackingScaleChangedEvent() ||
           WindowScreenChangedEvent() ||
+          WindowFrameChangedEvent() ||
+          WindowFullscreenChangedEvent() ||
           AppKitMouseEvent() ||
           AppKitScrollEvent():
         break;
