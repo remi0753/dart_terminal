@@ -29,6 +29,7 @@ import 'terminal_appkit_key_adapter_test.dart';
 import 'terminal_application_acceptance_test.dart';
 import 'terminal_application_evidence_test.dart';
 import 'terminal_application_matrix_test.dart';
+import 'terminal_application_state_test.dart';
 import 'terminal_compatibility_inventory_test.dart';
 import 'terminal_compatibility_regression_coverage_test.dart';
 import 'terminal_compatibility_regressions_test.dart';
@@ -119,6 +120,7 @@ Future<void> main() async {
   runTerminalApplicationAcceptanceTests();
   runTerminalApplicationEvidenceTests();
   await runTerminalApplicationMatrixTests();
+  runTerminalApplicationStateTests();
   runTerminalInputMatrixTests();
   runTerminalAppKitKeyAdapterTests();
   runTerminalCompatibilityInventoryTests();

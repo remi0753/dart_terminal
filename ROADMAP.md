@@ -909,6 +909,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 目的: 単一 pane の製品から native macOS application へ進める。
 
 - [ ] window → tab → split tree → terminal session の state model
+  （分割と完了条件は
+  [`docs/phase7/application-state-model.md`](docs/phase7/application-state-model.md)
+  を参照して順に実施する）
+  - [x] typed window/tab/split-node identity と immutable bounded split topology
+  - [ ] application/window/tab owner、focus/index、pane lifecycle mutation
+  - [ ] single-window product bootstrap/shutdown 統合と回帰受け入れ
 - [ ] native tabs と split layout/focus/resize/zoom
 - [ ] menu/action registry と command palette
 - [ ] title、tab rename/color、cwd inheritance、proxy icon
