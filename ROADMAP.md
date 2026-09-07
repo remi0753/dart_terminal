@@ -939,8 +939,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase7/title-tab-metadata-cwd-proxy-icon.md`](docs/phase7/title-tab-metadata-cwd-proxy-icon.md)
   を参照して順に実施する）
   - [x] bounded tab presentation state と local cwd inheritance policy
-  - [ ] reusable AppKit proxy-icon と native-tab color primitives
-  - [ ] terminal 側の AppKit metadata substrate 採用記録
+  - [x] reusable AppKit proxy-icon と native-tab color primitives
+  - [x] terminal 側の AppKit metadata substrate 採用記録
   - [ ] native hierarchy metadata projection と M1 両 runtime 回帰受け入れ
 - [ ] fullscreen、screen migration、restoration、reopen
 - [ ] per-pane close と app quit confirmation

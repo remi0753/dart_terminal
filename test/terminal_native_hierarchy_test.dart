@@ -365,6 +365,8 @@ final class _HierarchyNativeBindings implements NativeBindings {
   final Map<int, String> objects = <int, String>{};
   final Map<Object, int> _handles = Map<Object, int>.identity();
   final Map<int, String> windowTitles = <int, String>{};
+  final Map<int, String> windowRepresentedFilePaths = <int, String>{};
+  final Map<int, List<double>> windowTabColors = <int, List<double>>{};
   final Map<int, int> contentViews = <int, int>{};
   final Map<int, int> firstResponders = <int, int>{};
   final List<List<int>> windowTabGroups = <List<int>>[];
@@ -420,6 +422,33 @@ final class _HierarchyNativeBindings implements NativeBindings {
   @override
   NativeCallResult windowSetTitle(int handle, String title) {
     windowTitles[handle] = title;
+    return const NativeCallResult.success();
+  }
+
+  @override
+  NativeCallResult windowSetRepresentedFilePath(int handle, String? path) {
+    if (path == null) {
+      windowRepresentedFilePaths.remove(handle);
+    } else {
+      windowRepresentedFilePaths[handle] = path;
+    }
+    return const NativeCallResult.success();
+  }
+
+  @override
+  NativeCallResult windowSetTabColor({
+    required int handle,
+    required bool hasColor,
+    required double red,
+    required double green,
+    required double blue,
+    required double alpha,
+  }) {
+    if (hasColor) {
+      windowTabColors[handle] = <double>[red, green, blue, alpha];
+    } else {
+      windowTabColors.remove(handle);
+    }
     return const NativeCallResult.success();
   }
 
@@ -547,6 +576,8 @@ final class _HierarchyNativeBindings implements NativeBindings {
     releaseOrder.add(handle);
     objects.remove(handle);
     windowTitles.remove(handle);
+    windowRepresentedFilePaths.remove(handle);
+    windowTabColors.remove(handle);
     contentViews.remove(handle);
     firstResponders.remove(handle);
     splitViewAxes.remove(handle);

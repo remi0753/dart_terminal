@@ -194,3 +194,35 @@ verification pass.
 - The first ordered subtask is complete. The parent remains in progress pending
   the generic AppKit metadata primitives, terminal dependency record, and
   product hierarchy/runtime projection.
+
+### 2026-09-07 — reusable AppKit metadata substrate and adoption
+
+- The adjacent `dart_appkit` package now exposes cached optional
+  `Window.representedFilePath` and `Window.tabColor` properties. The first maps
+  a validated absolute path to `NSWindow.representedURL`; the second maps finite
+  sRGB components to an 8-point `NSWindowTab.accessoryView` marker. Replace and
+  clear remain under the existing window owner and add no registry handle.
+- Its C ABI copies no more than 4,096 path bytes, rejects relative paths,
+  embedded NUL, invalid UTF-8, invalid color presence/components, wrong handle
+  kind/generation, and non-main-thread calls. The Dart facade additionally
+  rejects malformed UTF-16 while accepting valid non-BMP paths, caches only a
+  successful call, and uses optional FFI lookup/status 8 for older images.
+- The first native-test compile found a test-only SDK signature error: current
+  `NSColor.getRed` returns void rather than a Boolean. The test now inspects its
+  four output arguments directly. The subsequent focused and two complete
+  `dart_appkit make test` runs passed all scaffold, native bridge, runner,
+  capability, PTY, analyzer/Dart, example-build, FFI, and legacy-symbol gates.
+- The independent adjacent commit is `5e085cf Expose window presentation
+  metadata`. Both repositories were clean immediately after that commit.
+- This repository's path dependency makes the additive `NativeBindings`
+  methods visible immediately. Its hierarchy fake now models copied
+  represented paths and RGBA values and clears them on native release, so the
+  terminal remains buildable before production projection is introduced.
+- Focused formatting, analysis, and the native-hierarchy test passed. The
+  complete `make test` gate then passed every freshness/compatibility/native
+  and aggregate Dart test, formatted 200 files with zero changes, and reported
+  no analyzer issues. `make runtime-source-check` passed with `tracked=380`,
+  `product_native_sources=0`, and `reviewed_test_native_sources=1`.
+- The reusable primitive and terminal adoption-record subtasks are complete.
+  The parent remains in progress; native hierarchy/product projection and M1
+  runtime acceptance are next.
