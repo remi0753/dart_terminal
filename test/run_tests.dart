@@ -64,6 +64,7 @@ import 'terminal_preedit_test.dart';
 import 'terminal_property_fuzz_test.dart';
 import 'terminal_reflow_test.dart';
 import 'terminal_reply_test.dart';
+import 'terminal_restoration_test.dart';
 import 'terminal_screen_metal_compositor_test.dart';
 import 'terminal_screen_set_test.dart';
 import 'terminal_screen_test.dart';
@@ -149,6 +150,7 @@ Future<void> main() async {
   runTerminalPropertyFuzzTests();
   runTerminalReflowTests();
   runTerminalReplyTests();
+  await runTerminalRestorationTests();
   runTerminalScrollbackTests();
   runTerminalScreenTests();
   runTerminalScreenSetTests();
