@@ -1,6 +1,6 @@
 # Phase 7 — menu/action registry and command palette
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-07
 - Scope: fourth Phase 7 roadmap item
 - Related: IN-09, UI-05, UI-09
@@ -256,3 +256,77 @@ combined product verification pass.
   native asset, and one capability.
 - The second ordered subtask is complete. The parent remains in progress only
   for the native command-palette presenter and both-runtime acceptance.
+
+### 2026-09-07 — native command palette and product acceptance
+
+- Palette key-controller, action-registry, and menu-projection focused suites
+  passed, and focused analysis reported no issues. The first Developer JIT
+  product run then exited with classified software status 70 before the harness
+  exposed its internal assertion. Release AOT was intentionally not run after
+  the first-mode failure. The packaged application's content-free diagnostics
+  will be captured directly to identify the exact lifecycle/focus/handle
+  condition before any correction.
+- Direct gated bundle diagnostics identified the failure as the rendered-query
+  assertion, not dispatch, PTY, focus, or cleanup. The asynchronous key handler
+  mutates pure palette state before its continuation paints the native
+  `TextView`; the acceptance wait stopped as soon as the query changed and
+  raced that paint. It now waits for query, selected identity, and rendered
+  selection together before asserting. The production event order is unchanged.
+- The second Developer run completed query and exactly-once dispatch with zero
+  PTY writes and restored both native handles, but the headless smoke process
+  reported the main window as unfocused both before and after the palette. That
+  flag measures application activation, not first-responder assignment.
+  `Window.makeFirstResponder` already fails synchronously if AppKit rejects the
+  target; the presenter now records only a successful terminal-view assignment,
+  and acceptance requires exactly one such restoration instead of inventing a
+  key-window transition in an inactive test host.
+- Developer JIT then passed the complete native palette smoke in 2,539 ms and
+  Release AOT passed in 1,930 ms. Both observed the Shift-Command-P item,
+  rendered and selected `pane.focus-next`, dispatched it exactly once, added no
+  PTY write, restored the terminal first responder, and returned the live native
+  handle count to its pre-palette baseline.
+- Palette reopen waits for any in-flight close/disposal future before creating
+  a replacement window. This prevents a rapid repeated shortcut from attaching
+  a new palette to the old close future or losing ownership of its handles.
+- Added `TerminalCommandPaletteKeyController`, which consumes only key-down
+  events while the palette is open. Physical Escape/Backspace/Up/Down/Return
+  own dismissal, scalar deletion, wrapped navigation, and dispatch; printable
+  non-Command/non-Control text updates the bounded query. Key-up, command,
+  control, and post-close input are ignored, and the 257th query unit reports
+  overflow without mutation.
+- `TerminalCommandPalettePresenter` creates exactly one transient native
+  `Window` plus generic `TextView`, selects `dartOnly` key routing, renders the
+  immutable palette snapshot, rejects the window close request into its own
+  orderly dismissal, and restores the terminal view with a checked
+  `makeFirstResponder` call. Disposal cancels the event stream before closing
+  and releasing both handles. The palette-open action is intentionally hidden
+  from its own search results.
+- The product now gives previous/next pane focus real handlers backed by
+  `TerminalApplicationState`; on the current one-pane bootstrap they
+  deterministically preserve the same pane and terminal native responder. All
+  other unimplemented catalog mutations remain disabled.
+- After the reopen hardening, final Developer JIT smoke passed in 2,765 ms and
+  Release AOT smoke in 1,936 ms. The integration requires one native
+  Shift-Command-P menu action, exact `focus next` query/render selection, one
+  `pane.focus-next` dispatch, zero PTY-write delta, one successful terminal
+  first-responder restoration, and the exact pre-palette native-handle count.
+- README and FEATURE_MATRIX now describe the shared 15-action catalog, six
+  standard menus, dynamic availability, native palette, input isolation, and
+  remaining Phase 8 settings/config work. Their hashes were reconciled by
+  regenerating `compatibility/regression_coverage_report.json`.
+- Final `make test` passed every freshness and compatibility gate, formatting
+  of 198 files with zero changes, static analysis with no issues, and the full
+  aggregate suite. `make runtime-source-check` passed with `tracked=375`,
+  `product_native_sources=0`, and `reviewed_test_native_sources=1`. Final
+  Developer JIT and Release AOT arm64 bundle audits each passed with one helper,
+  one native asset, and one capability; both this repository and adjacent
+  `dart_appkit` had no unrelated or dependency-side changes.
+- All three ordered subtasks and the parent roadmap item are complete.
+- The first final aggregate run stopped at the expected compatibility-report
+  freshness gate after README and FEATURE_MATRIX were updated for the completed
+  feature. No implementation test ran or failed in that attempt. The owned
+  generated coverage report will be regenerated and the whole gate rerun.
+- After regeneration, every aggregate test passed and analysis found only one
+  directive-ordering info in the aggregate test imports: “command” sorts before
+  “compatibility.” The import is moved to that exact alphabetical position and
+  the full final gate will be rerun; test behavior is unchanged.

@@ -691,6 +691,17 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
   );
   _expect(
     RegExp(
+          r'^COMMAND_PALETTE_ACCEPTANCE shortcut=true opened=true query=true '
+          r'selected=pane\.focus-next dispatch=executed invocations=1 '
+          r'terminal_write_delta=0 first_responder_restored=true '
+          r'handles_restored=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'missing or duplicate isolated native command-palette acceptance',
+  );
+  _expect(
+    RegExp(
           r'^NATIVE_ACTION_MENU installed=true sections=6 actions=15$',
           multiLine: true,
         ).allMatches(observation.stdoutText).length ==
@@ -703,7 +714,12 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
   );
-  for (final String action in <String>['paste', 'close', 'quit']) {
+  for (final String action in <String>[
+    'application.open-command-palette',
+    'paste',
+    'close',
+    'quit',
+  ]) {
     _expect(
       menuAction(action).allMatches(observation.stdoutText).length == 1,
       'missing or duplicate $action menu-action observation',

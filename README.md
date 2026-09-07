@@ -37,6 +37,10 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   navigation、F1–F20、keypad）
 - stable action、exact chord、conflict検出、override、unbound、passthroughを備えた
   immutable keybind engineと、AppKit menu shortcut優先の競合境界
+- 15個のstable application actionを共有するbounded searchable registry、動的な
+  availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
+  native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
+  実行後にterminal first responderを復元して入力をPTYへ漏らさない
 - DECSET 9/1000/1002/1003と1005/1006/1015/1016を追跡し、X10/default、UTF-8、
   URXVT、SGRのcell座標とSGR physical-pixel座標をbounded mouse reportとして実PTYへ
   送る製品routing。native logical pointへbacking scaleを一度だけ適用し、通常shellと
@@ -85,8 +89,8 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   privacy-safe なローカル実行メタデータ（M1/arm64 Developer JIT / Release AOT）
 - generation／AppKit-main domain付きnative handle registryと、off-domain
   releaseを即時無効化してmain queueで完了するasynchronous destruction
-- 最小の Application/File/Edit menu、明示的な Paste 時だけ行う plain-text
-  pasteboard read、非同期 reply 付き Close/Quit request
+- registryから投影するApplication/File/Edit/Shell/View/Window menu、明示的な
+  Paste時だけ行うplain-text pasteboard read、非同期reply付きClose/Quit request
 - chunk境界に依存せず不正byteからdeterministicに復帰するDart-only streaming
   UTF-8 decoderと、宣言的specから再生成・freshness検査できるtable-driven VT parser
 - C0/C1、ESC、CSI、OSC、DCS、SOS/PM/APCのtyped action、CAN/SUB/ESC recovery、

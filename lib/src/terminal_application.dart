@@ -13,6 +13,7 @@ import 'runtime_lifecycle.dart';
 import 'terminal_action_menu.dart';
 import 'terminal_action_registry.dart';
 import 'terminal_application_state.dart';
+import 'terminal_command_palette.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
 import 'terminal_core/terminal_reply.dart';
@@ -454,6 +455,7 @@ final class TerminalApplication {
     StreamSubscription<TerminalTextInputEvent>? textInputSubscription;
     _TerminalSelectionProductOwner? selectionOwner;
     TerminalAppKitMenuProjection? actionMenuProjection;
+    TerminalCommandPalettePresenter? commandPalettePresenter;
     Timer? autoCloseTimer;
     Timer? autoCloseConfirmationTimer;
     RuntimeLifecycleCoordinator? lifecycle;
@@ -462,6 +464,7 @@ final class TerminalApplication {
     var forcePaneClose = false;
     var shutdownWasClean = true;
     var requestedExitCode = 0;
+    var terminalInputWriteEnqueuedCount = 0;
     void recordExitCode(int value) {
       MacosRuntime.setExitCode(value);
       requestedExitCode = value;
@@ -548,6 +551,10 @@ final class TerminalApplication {
                       stdout.writeln(observation.machineLine());
                     },
                 nativeObserver: (TerminalSessionNativeObservation observation) {
+                  if (observation.event.stage ==
+                      PtyDiagnosticStage.writeEnqueued) {
+                    terminalInputWriteEnqueuedCount++;
+                  }
                   clipboardObservation?.recordNative(observation.event);
                   stdout.writeln(observation.machineLine());
                 },
@@ -938,10 +945,15 @@ final class TerminalApplication {
 
       final TerminalActionCatalog actionCatalog =
           TerminalActionCatalog.standard();
+      late final TerminalCommandPalettePresenter installedCommandPalette;
       final TerminalActionDispatcher actionDispatcher =
           TerminalActionDispatcher(
             catalog: actionCatalog,
             registrations: <TerminalActionRegistration>[
+              TerminalActionRegistration(
+                id: TerminalActionId.openCommandPalette,
+                handler: () => installedCommandPalette.open(),
+              ),
               TerminalActionRegistration(
                 id: TerminalActionId.quitApplication,
                 isAvailable: () =>
@@ -984,8 +996,51 @@ final class TerminalApplication {
                   );
                 },
               ),
+              TerminalActionRegistration(
+                id: TerminalActionId.focusPreviousPane,
+                isAvailable: () =>
+                    createdApplicationState.activeWindow != null &&
+                    !createdWindow.isClosed &&
+                    !createdWindow.isDisposed,
+                handler: () {
+                  final TerminalTabState tab =
+                      createdApplicationState.activeWindow!.selectedTab;
+                  createdApplicationState.traversePaneFocus(
+                    tab.id,
+                    direction: TerminalPaneFocusTraversal.previous,
+                  );
+                  createdWindow.makeFirstResponder(createdContentView);
+                },
+              ),
+              TerminalActionRegistration(
+                id: TerminalActionId.focusNextPane,
+                isAvailable: () =>
+                    createdApplicationState.activeWindow != null &&
+                    !createdWindow.isClosed &&
+                    !createdWindow.isDisposed,
+                handler: () {
+                  final TerminalTabState tab =
+                      createdApplicationState.activeWindow!.selectedTab;
+                  createdApplicationState.traversePaneFocus(
+                    tab.id,
+                    direction: TerminalPaneFocusTraversal.next,
+                  );
+                  createdWindow.makeFirstResponder(createdContentView);
+                },
+              ),
             ],
           );
+      installedCommandPalette = TerminalCommandPalettePresenter(
+        dispatcher: actionDispatcher,
+        terminalWindow: createdWindow,
+        terminalView: createdContentView,
+        onError: (Object error, StackTrace stackTrace) {
+          if (!closed.isCompleted) {
+            closed.completeError(error, stackTrace);
+          }
+        },
+      );
+      commandPalettePresenter = installedCommandPalette;
       final TerminalAppKitMenuProjection
       installedActionMenu = TerminalAppKitMenuProjection.install(
         application: application,
@@ -1345,6 +1400,16 @@ final class TerminalApplication {
       switch (scenario) {
         case RuntimeLifecycleScenario.normal:
           await _expectResponse(createdLifecycle);
+          if (emitNativeEventWireObservation &&
+              options.autoCloseAfter != null) {
+            await _exerciseCommandPaletteProduct(
+              application,
+              createdWindow,
+              installedActionMenu,
+              installedCommandPalette,
+              () => terminalInputWriteEnqueuedCount,
+            );
+          }
           if (options.runtimeResourceStress) {
             _exerciseResourceStress(application);
           }
@@ -1567,6 +1632,10 @@ final class TerminalApplication {
         await eventSubscription?.cancel();
         await applicationEventSubscription?.cancel();
         await textInputSubscription?.cancel();
+        final TerminalCommandPalettePresenter? palettePresenter =
+            commandPalettePresenter;
+        commandPalettePresenter = null;
+        await palettePresenter?.dispose();
         final TerminalAppKitMenuProjection? menuProjection =
             actionMenuProjection;
         actionMenuProjection = null;
@@ -4556,6 +4625,140 @@ final class TerminalApplication {
       modifiers,
       clickCount,
     ]);
+  }
+
+  static void _injectKeyEventForTesting(
+    AppKitApplication application,
+    Window window, {
+    required int keyCode,
+    required int modifiers,
+    required String characters,
+    required String charactersIgnoringModifiers,
+    required int monotonicNanoseconds,
+  }) {
+    final int handle = appkit_testing.nativeWindowHandleForTesting(window);
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      20,
+      handle,
+      handle >> 32,
+      monotonicNanoseconds,
+      0,
+      keyCode,
+      modifiers,
+      false,
+      characters,
+      charactersIgnoringModifiers,
+    ]);
+  }
+
+  static Future<void> _exerciseCommandPaletteProduct(
+    AppKitApplication application,
+    Window terminalWindow,
+    TerminalAppKitMenuProjection menuProjection,
+    TerminalCommandPalettePresenter presenter,
+    int Function() inputWriteCount,
+  ) async {
+    final MenuItem paletteItem = menuProjection.itemForAction(
+      TerminalActionId.openCommandPalette,
+    );
+    final int expectedModifiers =
+        ModifierKeys.shiftBit | ModifierKeys.commandBit;
+    _expectLifecycle(
+      paletteItem.isEnabled &&
+          paletteItem.keyEquivalent == 'p' &&
+          paletteItem.modifiers.bits == expectedModifiers,
+      'command palette menu shortcut metadata is not Shift-Command-P',
+    );
+    final int baselineHandles = application.debugLiveObjectCount;
+    final int baselineWrites = inputWriteCount();
+    final int baselineResponderRestores =
+        presenter.terminalResponderRestoreCount;
+    paletteItem.performAction();
+    final Stopwatch openDeadline = Stopwatch()..start();
+    while (!presenter.isOpen &&
+        openDeadline.elapsed < const Duration(seconds: 2)) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    final Window? paletteWindow = presenter.activeWindow;
+    _expectLifecycle(
+      presenter.isOpen &&
+          paletteWindow != null &&
+          application.debugLiveObjectCount == baselineHandles + 2 &&
+          (presenter.renderedText ?? '').contains('Command Palette'),
+      'command palette did not own exactly one native window and text view',
+    );
+    _injectKeyEventForTesting(
+      application,
+      paletteWindow!,
+      keyCode: 3,
+      modifiers: 0,
+      characters: 'focus next',
+      charactersIgnoringModifiers: 'focus next',
+      monotonicNanoseconds: 7100000,
+    );
+    final Stopwatch queryDeadline = Stopwatch()..start();
+    while ((presenter.state.query != 'focus next' ||
+            presenter.state.selectedAction?.definition.id !=
+                TerminalActionId.focusNextPane ||
+            !(presenter.renderedText ?? '').contains('› Focus Next Pane')) &&
+        queryDeadline.elapsed < const Duration(seconds: 1)) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    _expectLifecycle(
+      presenter.state.query == 'focus next' &&
+          presenter.state.selectedAction?.definition.id ==
+              TerminalActionId.focusNextPane &&
+          (presenter.renderedText ?? '').contains('› Focus Next Pane'),
+      'palette query did not select and render Focus Next Pane',
+    );
+    _injectKeyEventForTesting(
+      application,
+      paletteWindow,
+      keyCode: 36,
+      modifiers: 0,
+      characters: '\r',
+      charactersIgnoringModifiers: '\r',
+      monotonicNanoseconds: 7200000,
+    );
+    final Stopwatch closeDeadline = Stopwatch()..start();
+    while ((presenter.isOpen ||
+            application.debugLiveObjectCount != baselineHandles ||
+            presenter.terminalResponderRestoreCount !=
+                baselineResponderRestores + 1) &&
+        closeDeadline.elapsed < const Duration(seconds: 2)) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    final TerminalActionDispatchResult? dispatch = presenter.lastDispatchResult;
+    final int writeDelta = inputWriteCount() - baselineWrites;
+    final bool handlesRestored =
+        application.debugLiveObjectCount == baselineHandles;
+    final bool responderRestored =
+        presenter.terminalResponderRestoreCount ==
+        baselineResponderRestores + 1;
+    _expectLifecycle(
+      !presenter.isOpen &&
+          presenter.dispatchCount == 1 &&
+          dispatch?.id == TerminalActionId.focusNextPane &&
+          dispatch?.disposition == TerminalActionDispatchDisposition.executed &&
+          writeDelta == 0 &&
+          handlesRestored &&
+          responderRestored,
+      'command palette acceptance failed: '
+      'open=${presenter.isOpen} dispatches=${presenter.dispatchCount} '
+      'action=${dispatch?.id?.stableName} '
+      'disposition=${dispatch?.disposition.name} writes=$writeDelta '
+      'handles_restored=$handlesRestored '
+      'responder_restored=$responderRestored',
+    );
+    stdout.writeln(
+      'COMMAND_PALETTE_ACCEPTANCE shortcut=true opened=true query=true '
+      'selected=${TerminalActionId.focusNextPane.stableName} '
+      'dispatch=${dispatch!.disposition.name} '
+      'invocations=${presenter.dispatchCount} terminal_write_delta=$writeDelta '
+      'first_responder_restored=$responderRestored '
+      'handles_restored=$handlesRestored',
+    );
   }
 
   static void _injectFocusEventForTesting(

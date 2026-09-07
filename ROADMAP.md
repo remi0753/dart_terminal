@@ -927,13 +927,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] reusable AppKit native-tab/split/first-responder primitives
   - [x] terminal native hierarchy projection と adapter lifecycle
   - [x] multi-tab/four-pane product runtime 統合と M1 回帰受け入れ
-- [ ] menu/action registry と command palette
+- [x] menu/action registry と command palette
   （分割と完了条件は
   [`docs/phase7/menu-action-registry-command-palette.md`](docs/phase7/menu-action-registry-command-palette.md)
   を参照して順に実施する）
   - [x] bounded searchable action catalog/dispatcher と palette state
   - [x] registry-driven standard menu projection と dynamic validation
-  - [ ] native command palette と M1 両 runtime 回帰受け入れ
+  - [x] native command palette と M1 両 runtime 回帰受け入れ
 - [ ] title、tab rename/color、cwd inheritance、proxy icon
 - [ ] fullscreen、screen migration、restoration、reopen
 - [ ] per-pane close と app quit confirmation

@@ -162,7 +162,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | IN-06 | precision/momentum scroll と terminal mouse report/local selection arbitration | P0 | 5/6 | `G:src/input/mouse.zig`, `G:src/input/mouse_encode.zig` | protocol v5 AppKit scroll、fractional/momentum accumulator、primary history、cell/physical-pixel xterm wheel report、Shift override、alternate-screen cursor-keyを排他的にroutingし、M1両modeの実PTY/Metal受け入れを完了 |
 | IN-07 | standard clipboard、bracketed paste、newline normalization | P0 | 5 | `G:src/input/paste.zig`, `G:src/terminal/paste.zig`, NSPasteboard helpers | bounded plain-text Copy/Paste menu、wide CJKの文字別・連続exact Copy、DEC 2004、CRLF/CR/LF正規化、危険control置換、one-frame streamingを完了 |
 | IN-08 | multiline/control paste confirmation と large-paste bounded throttle | P0 | 5 | `G:macos/Sources/Features/ClipboardConfirmation/`, `G:src/termio/mailbox.zig` | content-free 10秒再操作確認、64 MiB admission、16 KiB one-in-flight transport、10 MiB実PTY/AppKit両runtime受け入れを完了 |
-| IN-09 | keybind/action registry、conflict、unbound/passthrough、menu shortcut arbitration | P0 | 5/8 | `G:src/input/Binding.zig`, `G:src/input/config.zig`, MenuShortcutManager | bounded immutable engine、stable action、exact chord、conflict、override/unbound/passthrough、native menu優先境界を完了。設定ファイル接続はPhase 8 |
+| IN-09 | keybind/action registry、conflict、unbound/passthrough、menu shortcut arbitration | P0 | 5/8 | `G:src/input/Binding.zig`, `G:src/input/config.zig`, MenuShortcutManager | bounded immutable keybind engineと15個のsearchable application action catalog、stable ID、exact chord/shortcut conflict、override/unbound/passthrough、availability、exactly-once dispatch、native menu優先境界を完了。設定ファイル接続はPhase 8 |
 | IN-10 | Option-click cursor、semantic prompt selection、drag/drop、Services、Quick Look | P1/P2 | 5/10 | macOS Surface View, `G:macos/Sources/Features/Services/` | 未実装 |
 
 ## Native macOS application experience
@@ -173,11 +173,11 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | UI-02 | split resize/equalize/zoom/min cell、pane/tab title/color、cwd inheritance | P0 | 7 | `G:macos/Sources/Features/Splits/`, `Terminal/` | model-owned resize/equalize/zoom、recursive minimum-cell geometry、native projectionを完了。pane/tab title/colorとcwd inheritanceは後続 |
 | UI-03 | fullscreen、geometry、display/scale migration、reopen/restoration | P0 | 7 | `G:macos/Sources/Helpers/Fullscreen.swift`, `TerminalRestorable.swift` | v3 display/scale event substrate のみ完了。migration policy 等は未実装 |
 | UI-04 | close/quit confirmation と active process detection。pane resource を完全 teardown | P0 | 7 | `G:macos/Sources/Features/Terminal/`, Ghostty surface process metadata | live-shell再操作confirmation、clean shell auto-close、abnormal shell retain後のone-step close、pane teardown完了。active-process検出はPhase 7 |
-| UI-05 | standard menu と Edit/Window/Shell/View action。terminal input と競合しない | P0 | 7 | `G:macos/Sources/App/MainMenu.xib`, action registry | 最小 Application/File/Edit menu と action routing 基盤は完了。完全な action registry/競合解決は Phase 7/8 |
+| UI-05 | standard menu と Edit/Window/Shell/View action。terminal input と競合しない | P0 | 7 | `G:macos/Sources/App/MainMenu.xib`, action registry | 同一bounded catalogからApplication/File/Edit/Shell/View/Window menuを投影し、implemented handlerだけを動的にenable、menu/paletteのexactly-once dispatchとPTY非漏洩を両runtimeで完了 |
 | UI-06 | Quick Terminal、global shortcut、screen selection/animation | P1 | 10 | `G:macos/Sources/Features/QuickTerminal/`, `Global Keybinds/` | 未実装 |
 | UI-07 | proxy icon、Quick Look、Secure Keyboard Entry indication | P1 | 10 | macOS Terminal/Surface, `G:macos/Sources/Features/Secure Input/` | 未実装 |
 | UI-08 | AppleScript application→windows→tabs→terminals と App Intents | P1 | 10 | `G:macos/Sources/Features/AppleScript/`, `App Intents/` | 未実装 |
-| UI-09 | settings UI、command palette、terminal inspector | P1 | 8/10 | `G:macos/Sources/Features/Settings/`, `Command Palette/`, InspectorView | 未実装 |
+| UI-09 | settings UI、command palette、terminal inspector | P1 | 8/10 | `G:macos/Sources/Features/Settings/`, `Command Palette/`, InspectorView | Shift-Command-Pのbounded searchable native command palette、keyboard query/selection、availability、first-responder復元、handle cleanupを完了。settings/inspectorは後続 |
 
 ## Configuration、theme、shell integration
 

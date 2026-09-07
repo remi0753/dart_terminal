@@ -231,6 +231,7 @@ final class TerminalActionCatalog {
         shift: true,
         command: true,
       ),
+      isVisibleInPalette: false,
     ),
     TerminalActionDefinition(
       id: TerminalActionId.quitApplication,
