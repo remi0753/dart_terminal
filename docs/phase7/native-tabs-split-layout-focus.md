@@ -262,3 +262,32 @@ window ID                                native tab group
   test` passed all freshness/compatibility gates, formatting of 190 files with
   zero changes, package analysis with no issues, and the aggregate runner with
   `dart_terminal tests passed`. No generated product artifact changed.
+- 2026-09-07: the first hierarchy-adapter focused analysis failed only in its
+  new fake session: the test double implemented an older, smaller
+  `TerminalPaneSession` shape, used synchronous `start`, and constructed an
+  obsolete shutdown result. The adapter implementation itself produced no
+  analyzer diagnostic. The fake must reuse the complete current session test
+  contract so the lifecycle assertions exercise the same interface as product
+  panes.
+- 2026-09-07: after updating the fake session, focused analysis passed and the
+  first direct hierarchy test reached its runtime assertions. It exposed that
+  a ratio changed while a pane was zoomed remained only in the logical tree:
+  zoomed layout intentionally omits branch geometry, so the adapter had skipped
+  the native position call. Native projection must derive descendant minimum
+  extents from the same cell/divider rules even when geometry is hidden, keeping
+  the retained split ratio current for deterministic unzoom.
+- 2026-09-07: the corrected direct hierarchy test passed resource stability,
+  tab selection, first-responder focus, resize/equalize/zoom projection,
+  split collapse, tab removal, reverse native teardown, idempotent adapter
+  disposal, and exact logical session shutdown. The first full `make test` then
+  passed every gate but reported one non-fatal directive-ordering info for the
+  new public export; the export was moved to its alphabetic position before
+  final validation.
+- 2026-09-07: final full `make test` passed all generated-data freshness and
+  compatibility gates, formatted 192 files with zero changes, analyzed the
+  package with no issues, and completed the aggregate runner with
+  `dart_terminal tests passed`. The adapter now owns stable one-to-one maps for
+  logical tabs, split nodes, and panes; projects selected tabs and focused
+  first responders; updates retained ratios through zoom; and tears down pane
+  adapters, obsolete split containers, tab windows, and pane views in the
+  documented order without performing logical session shutdown.

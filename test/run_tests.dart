@@ -53,6 +53,7 @@ import 'terminal_key_encoder_test.dart';
 import 'terminal_live_metal_surface_font_test.dart';
 import 'terminal_mouse_encoder_test.dart';
 import 'terminal_mouse_router_test.dart';
+import 'terminal_native_hierarchy_test.dart';
 import 'terminal_osc52_policy_test.dart';
 import 'terminal_palette_test.dart';
 import 'terminal_paste_test.dart';
@@ -121,6 +122,7 @@ Future<void> main() async {
   runTerminalApplicationEvidenceTests();
   await runTerminalApplicationMatrixTests();
   await runTerminalApplicationStateTests();
+  await runTerminalNativeHierarchyTests();
   runTerminalInputMatrixTests();
   runTerminalAppKitKeyAdapterTests();
   runTerminalCompatibilityInventoryTests();

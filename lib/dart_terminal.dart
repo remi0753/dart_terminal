@@ -127,6 +127,7 @@ export 'src/terminal_input/terminal_scroll_router.dart';
 export 'src/terminal_input/terminal_selection_autoscroll.dart';
 export 'src/terminal_input/terminal_selection_gesture.dart';
 export 'src/terminal_input/terminal_text_input_event_router.dart';
+export 'src/terminal_native_hierarchy.dart';
 export 'src/terminal_pane.dart'
     show
         PaneId,

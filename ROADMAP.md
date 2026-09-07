@@ -925,7 +925,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] model-owned split resize/equalize/zoom と minimum-cell geometry
   - [x] reusable AppKit native-tab/split/first-responder primitives
-  - [ ] terminal native hierarchy projection と adapter lifecycle
+  - [x] terminal native hierarchy projection と adapter lifecycle
   - [ ] multi-tab/four-pane product runtime 統合と M1 回帰受け入れ
 - [ ] menu/action registry と command palette
 - [ ] title、tab rename/color、cwd inheritance、proxy icon
