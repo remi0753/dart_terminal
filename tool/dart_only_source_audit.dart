@@ -30,6 +30,9 @@ Future<void> main() async {
       '.mm',
       '.metal',
     };
+    const Set<String> reviewedTestNativeSources = <String>{
+      'test/corpus/applications/support/ncurses_resize_fixture.c',
+    };
     final List<String> nativeSources = tracked
         .where(
           (String path) =>
@@ -37,10 +40,24 @@ Future<void> main() async {
               nativeExtensions.any(path.toLowerCase().endsWith),
         )
         .toList();
+    final List<String> productNativeSources = nativeSources
+        .where((String path) => !reviewedTestNativeSources.contains(path))
+        .toList();
     _expect(
-      nativeSources.isEmpty,
-      'product repository contains native source: ${nativeSources.join(', ')}',
+      productNativeSources.isEmpty,
+      'product repository contains native source: '
+      '${productNativeSources.join(', ')}',
     );
+    for (final String path in reviewedTestNativeSources) {
+      _expect(
+        nativeSources.contains(path) && File(path).existsSync(),
+        'reviewed test native source is missing: $path',
+      );
+      _expect(
+        path.startsWith('test/corpus/applications/support/'),
+        'reviewed native source escaped the test corpus: $path',
+      );
+    }
 
     final String makefile = await File('Makefile').readAsString();
     for (final String forbidden in <String>[
@@ -57,6 +74,26 @@ Future<void> main() async {
         !makefile.contains(forbidden),
         'application build references an internal native path: $forbidden',
       );
+    }
+
+    final List<String> productSourcePaths = <String>[
+      'Makefile',
+      'macos_application.json',
+      ...tracked.where(
+        (String path) =>
+            (path.startsWith('bin/') || path.startsWith('lib/')) &&
+            File(path).existsSync(),
+      ),
+    ];
+    for (final String fixturePath in reviewedTestNativeSources) {
+      for (final String productPath in productSourcePaths) {
+        final String source = await File(productPath).readAsString();
+        _expect(
+          !source.contains(fixturePath),
+          'product build/source references test native source: '
+          '$productPath -> $fixturePath',
+        );
+      }
     }
 
     for (final String path in tracked.where(
@@ -122,7 +159,9 @@ Future<void> main() async {
       'runtime worker is not a declared Dart helper',
     );
     stdout.writeln(
-      'DART_ONLY_SOURCE_AUDIT_PASS tracked=${tracked.length} native_sources=0',
+      'DART_ONLY_SOURCE_AUDIT_PASS tracked=${tracked.length} '
+      'product_native_sources=0 '
+      'reviewed_test_native_sources=${reviewedTestNativeSources.length}',
     );
   } on Object catch (error) {
     stderr.writeln('DART_ONLY_SOURCE_AUDIT_FAIL $error');

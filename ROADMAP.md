@@ -908,6 +908,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 目的: 単一 pane の製品から native macOS application へ進める。
 
+- [x] test-only compatibility fixture と product native-source audit を分離する
+  （実施時に
+  [`docs/phase7/test-fixture-source-audit.md`](docs/phase7/test-fixture-source-audit.md)
+  を参照する）
 - [ ] window → tab → split tree → terminal session の state model
   （分割と完了条件は
   [`docs/phase7/application-state-model.md`](docs/phase7/application-state-model.md)
