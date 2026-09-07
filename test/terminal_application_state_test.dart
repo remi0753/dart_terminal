@@ -11,9 +11,165 @@ Future<void> runTerminalApplicationStateTests() async {
   _testSplitTopologyValidationAndBounds();
   _testSplitResizeEqualizeTraversalAndLayout();
   await _testApplicationHierarchyFocusAndIndexes();
+  await _testTabPresentationAndCwdPolicy();
   await _testApplicationLayoutMutations();
   await _testPaneRemovalAndOrderedShutdown();
   await _testApplicationLimitsAndDisposedState();
+}
+
+Future<void> _testTabPresentationAndCwdPolicy() async {
+  final List<_StateFakeSession> sessions = <_StateFakeSession>[];
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalPaneConfiguration configuration = _configuration(sessions);
+  final TerminalWindowState window = await state.createWindow(configuration);
+  final TerminalTabState tab = window.selectedTab;
+  final PaneId firstPaneId = tab.focusedPaneId;
+  final TerminalPane secondPane = await state.splitPane(
+    firstPaneId,
+    configuration,
+    axis: TerminalSplitAxis.horizontal,
+  );
+  final Map<PaneId, TerminalSessionMetadata> metadata =
+      <PaneId, TerminalSessionMetadata>{
+        firstPaneId: TerminalSessionMetadata(),
+        secondPane.id: TerminalSessionMetadata(),
+      };
+  final TerminalTabPresentationResolver resolver =
+      TerminalTabPresentationResolver(
+        metadataForPane: (PaneId paneId) => metadata[paneId],
+      );
+
+  state.focusPane(tab.id, firstPaneId);
+  TerminalTabPresentation presentation = resolver.resolve(
+    tab,
+    fallbackTitle: 'Dart Terminal',
+  );
+  _expect(
+    presentation.title == 'Dart Terminal' &&
+        presentation.color == null &&
+        presentation.representedFilePath == null,
+    'tab presentation starts from the trusted product fallback',
+  );
+
+  metadata[firstPaneId]!
+    ..setWorkingDirectory(Uri.parse('file://localhost/private/tmp/Project%20A'))
+    ..setWindowTitle('live 日本語');
+  presentation = resolver.resolve(tab, fallbackTitle: 'Dart Terminal');
+  _expect(
+    presentation.title == 'live 日本語' &&
+        presentation.representedFilePath == '/private/tmp/Project A' &&
+        resolver.inheritedWorkingDirectoryForPane(firstPaneId) ==
+            '/private/tmp/Project A',
+    'focused session title and decoded local OSC 7 cwd drive presentation',
+  );
+
+  metadata[firstPaneId]!
+    ..reset()
+    ..setWorkingDirectory(
+      Uri.parse('file://localhost/private/tmp/Project%20A'),
+    );
+  _expect(
+    resolver.resolve(tab, fallbackTitle: 'Dart Terminal').title == 'Project A',
+    'local cwd basename supplies a title only when the session title is absent',
+  );
+  metadata[firstPaneId]!.setWindowTitle('live 日本語');
+
+  _expect(
+    state.renameTab(tab.id, 'Pinned tab') &&
+        !state.renameTab(tab.id, 'Pinned tab') &&
+        state.setTabColor(tab.id, TerminalTabColor.blueMarker) &&
+        !state.setTabColor(tab.id, TerminalTabColor.blueMarker),
+    'tab rename and color mutations report only actual state changes',
+  );
+  presentation = resolver.resolve(tab, fallbackTitle: 'Dart Terminal');
+  _expect(
+    presentation.title == 'Pinned tab' &&
+        presentation.color == TerminalTabColor.blueMarker &&
+        presentation.representedFilePath == '/private/tmp/Project A',
+    'user rename overrides live title without discarding cwd or color',
+  );
+
+  metadata[secondPane.id]!.setWorkingDirectory(
+    Uri.parse('file://remote.example/private/remote'),
+  );
+  state
+    ..focusPane(tab.id, secondPane.id)
+    ..renameTab(tab.id, null)
+    ..setTabColor(tab.id, null);
+  presentation = resolver.resolve(tab, fallbackTitle: 'Dart Terminal');
+  _expect(
+    presentation.title == 'Dart Terminal' &&
+        presentation.color == null &&
+        presentation.representedFilePath == null &&
+        resolver.inheritedWorkingDirectoryForPane(
+              secondPane.id,
+              fallback: '/trusted/fallback',
+            ) ==
+            '/trusted/fallback',
+    'remote OSC 7 authority cannot become a title path, proxy, or launch cwd',
+  );
+
+  metadata[secondPane.id]!.setWindowTitle('');
+  _expect(
+    resolver.resolve(tab, fallbackTitle: 'Dart Terminal').title.isEmpty,
+    'an explicitly accepted empty OSC title is not rewritten',
+  );
+  _expect(
+    TerminalTabPresentationResolver.localFilePath(
+          Uri.parse('file:///private/tmp/%00unsafe'),
+        ) ==
+        null,
+    'percent-decoded control data cannot become filesystem authority',
+  );
+  _expect(
+    TerminalTabPresentationResolver.localFilePath(
+              Uri.parse('file:///private/tmp/Project%20B'),
+            ) ==
+            '/private/tmp/Project B' &&
+        TerminalTabPresentationResolver.localFilePath(
+              Uri.parse('file://LOCALHOST/'),
+            ) ==
+            '/',
+    'empty-authority and localhost absolute file URIs map deterministically',
+  );
+
+  _expectThrows<ArgumentError>(
+    () => state.renameTab(tab.id, ''),
+    'empty user tab title is rejected instead of hiding native identity',
+  );
+  _expectThrows<ArgumentError>(
+    () => state.renameTab(tab.id, 'unsafe\u202etitle'),
+    'bidirectional formatting controls are rejected from user tab titles',
+  );
+  _expectThrows<ArgumentError>(
+    () => state.renameTab(
+      tab.id,
+      List<String>.filled(
+        TerminalTabMetadataLimits.maximumCustomTitleUtf8Bytes + 1,
+        'a',
+      ).join(),
+    ),
+    'oversized user tab title is rejected atomically',
+  );
+  _expect(
+    tab.customTitle == null && tab.color == null,
+    'failed mutations preserve prior tab metadata state',
+  );
+  _expectThrows<RangeError>(
+    () => TerminalTabColor(red: 256, green: 0, blue: 0),
+    'tab color channels are byte bounded',
+  );
+  _expectThrows<ArgumentError>(
+    () => TerminalTabColor(red: 0, green: 0, blue: 0, alpha: 0),
+    'fully transparent tab colors are rejected',
+  );
+  _expectThrows<ArgumentError>(
+    () => resolver.resolve(tab, fallbackTitle: 'unsafe\u0000fallback'),
+    'unsafe fallback titles fail before native presentation',
+  );
+
+  state.validate();
+  await state.shutdown();
 }
 
 void _testTypedIdentityValues() {

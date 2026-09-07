@@ -935,6 +935,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] registry-driven standard menu projection と dynamic validation
   - [x] native command palette と M1 両 runtime 回帰受け入れ
 - [ ] title、tab rename/color、cwd inheritance、proxy icon
+  （分割と完了条件は
+  [`docs/phase7/title-tab-metadata-cwd-proxy-icon.md`](docs/phase7/title-tab-metadata-cwd-proxy-icon.md)
+  を参照して順に実施する）
+  - [x] bounded tab presentation state と local cwd inheritance policy
+  - [ ] reusable AppKit proxy-icon と native-tab color primitives
+  - [ ] terminal 側の AppKit metadata substrate 採用記録
+  - [ ] native hierarchy metadata projection と M1 両 runtime 回帰受け入れ
 - [ ] fullscreen、screen migration、restoration、reopen
 - [ ] per-pane close と app quit confirmation
 - [ ] multiple pane の scheduling/resource budget

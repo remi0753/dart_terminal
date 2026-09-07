@@ -1,4 +1,5 @@
 import 'terminal_pane.dart';
+import 'terminal_tab_metadata.dart';
 
 /// Hard bounds for the UI-root application hierarchy.
 abstract final class TerminalApplicationStateLimits {
@@ -710,16 +711,22 @@ final class TerminalTabState {
     required PaneId focusedPaneId,
   }) : _splitTree = splitTree,
        _focusedPaneId = focusedPaneId,
-       _zoomedPaneId = null;
+       _zoomedPaneId = null,
+       _customTitle = null,
+       _color = null;
 
   final TerminalTabId id;
   TerminalSplitTree _splitTree;
   PaneId _focusedPaneId;
   PaneId? _zoomedPaneId;
+  String? _customTitle;
+  TerminalTabColor? _color;
 
   TerminalSplitTree get splitTree => _splitTree;
   PaneId get focusedPaneId => _focusedPaneId;
   PaneId? get zoomedPaneId => _zoomedPaneId;
+  String? get customTitle => _customTitle;
+  TerminalTabColor? get color => _color;
   bool get isZoomed => _zoomedPaneId != null;
   List<PaneId> get paneIds => _splitTree.paneIds;
 }
@@ -1024,6 +1031,34 @@ final class TerminalApplicationState {
     validate();
   }
 
+  /// Sets a bounded user-facing tab title, or clears the override with null.
+  bool renameTab(TerminalTabId tabId, String? title) {
+    _ensureCanMutate();
+    final TerminalTabState tab = _requireTab(tabId);
+    if (title != null && !TerminalTabMetadataPolicy.isSafeCustomTitle(title)) {
+      throw ArgumentError.value(
+        title,
+        'title',
+        'must be non-empty safe text within '
+            '${TerminalTabMetadataLimits.maximumCustomTitleUtf8Bytes} UTF-8 bytes',
+      );
+    }
+    if (tab._customTitle == title) return false;
+    tab._customTitle = title;
+    validate();
+    return true;
+  }
+
+  /// Sets a native tab marker color, or clears it with null.
+  bool setTabColor(TerminalTabId tabId, TerminalTabColor? color) {
+    _ensureCanMutate();
+    final TerminalTabState tab = _requireTab(tabId);
+    if (tab._color == color) return false;
+    tab._color = color;
+    validate();
+    return true;
+  }
+
   void focusPane(TerminalTabId tabId, PaneId paneId) {
     _ensureCanMutate();
     final TerminalTabState tab = _requireTab(tabId);
@@ -1247,6 +1282,10 @@ final class TerminalApplicationState {
             (tab._zoomedPaneId != tab._focusedPaneId ||
                 !tab._splitTree.containsPane(tab._zoomedPaneId!))) {
           throw StateError('tab ${tab.id} has invalid zoom state');
+        }
+        if (tab._customTitle != null &&
+            !TerminalTabMetadataPolicy.isSafeCustomTitle(tab._customTitle!)) {
+          throw StateError('tab ${tab.id} has invalid custom title state');
         }
         for (final PaneId paneId in tab._splitTree.paneIds) {
           if (!hierarchyPanes.add(paneId)) {
