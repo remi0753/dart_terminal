@@ -215,3 +215,44 @@ combined product verification pass.
 - The first ordered subtask is complete. The parent remains in progress pending
   registry-driven native menu projection and the native palette/runtime
   acceptance commits.
+
+### 2026-09-07 — registry-driven standard menu projection
+
+- The first formatter pass updated the product/projection sources, then stopped
+  on an invalid cascade increment in a fake test item. Dart does not accept
+  `..field++` as a cascade section. The test helper now uses two explicit
+  assignments; no production behavior was involved.
+- The first aggregate gate passed every test but reported one non-fatal analyzer
+  info because the two new public exports were not alphabetized. Their order is
+  corrected and the complete gate will be rerun; no API or runtime behavior
+  changed.
+- Added a native-neutral `TerminalMenuProjectionController` that requires
+  exactly one enablement binding for every catalog action, updates only changed
+  item states, routes each invocation through the shared dispatcher, refreshes
+  after completion, classifies busy/failure without a second handler call, and
+  rejects all work after idempotent disposal.
+- `TerminalAppKitMenuProjection` now builds all six standard top-level menus,
+  separators, titles, shortcuts, and 15 action items from catalog metadata.
+  It owns every item/menu/subscription, attaches exactly one main menu, exposes
+  typed item lookup for product acceptance, and cancels/detaches/disposes in
+  deterministic reverse ownership order.
+- The product registers only implemented copy, paste, close-window, and quit
+  handlers. Copy availability tracks a valid bounded selection, paste tracks
+  transfer occupancy, and close/quit track the live window. All later hierarchy
+  mutations remain visibly disabled rather than acquiring placeholder effects.
+  Mouse/selection and terminal-change boundaries refresh native validation.
+- Existing native Paste/Close/Quit acceptance now traverses the catalog,
+  native menu projection, and dispatcher while retaining the original
+  content-free protocol-v5 observation names. The common smoke also requires
+  one `NATIVE_ACTION_MENU installed=true sections=6 actions=15` record.
+- Focused projection and registry tests passed. Final `make test` passed all
+  freshness/compatibility gates, formatting of 196 files with zero changes,
+  static analysis with no issues, and the aggregate suite. Developer JIT smoke
+  passed in 2,291 ms and Release AOT smoke in 1,727 ms, with exactly one each
+  of Paste/Close/Quit, two deferred close requests, and clean teardown.
+- `make runtime-source-check` passed with `tracked=373`,
+  `product_native_sources=0`, and `reviewed_test_native_sources=1`. Developer
+  JIT and Release AOT arm64 bundle audits each passed with one helper, one
+  native asset, and one capability.
+- The second ordered subtask is complete. The parent remains in progress only
+  for the native command-palette presenter and both-runtime acceptance.

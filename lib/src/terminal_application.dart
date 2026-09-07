@@ -10,6 +10,8 @@ import 'package:dart_pty_macos/dart_pty_macos.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'runtime_lifecycle.dart';
+import 'terminal_action_menu.dart';
+import 'terminal_action_registry.dart';
 import 'terminal_application_state.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
@@ -451,10 +453,7 @@ final class TerminalApplication {
     StreamSubscription<AppKitEvent>? applicationEventSubscription;
     StreamSubscription<TerminalTextInputEvent>? textInputSubscription;
     _TerminalSelectionProductOwner? selectionOwner;
-    final List<StreamSubscription<MenuItemInvokedEvent>> menuSubscriptions =
-        <StreamSubscription<MenuItemInvokedEvent>>[];
-    final List<MenuItem> menuItems = <MenuItem>[];
-    final List<Menu> menus = <Menu>[];
+    TerminalAppKitMenuProjection? actionMenuProjection;
     Timer? autoCloseTimer;
     Timer? autoCloseConfirmationTimer;
     RuntimeLifecycleCoordinator? lifecycle;
@@ -570,6 +569,7 @@ final class TerminalApplication {
             }
           }
           selectionOwner?.synchronize();
+          actionMenuProjection?.refresh();
         },
         onExitRequested: createdWindow.requestClose,
         lifecycleObserver: (TerminalPaneLifecycleObservation observation) {
@@ -746,68 +746,6 @@ final class TerminalApplication {
         );
       }
 
-      Menu ownMenu(Menu menu) {
-        menus.add(menu);
-        return menu;
-      }
-
-      MenuItem ownMenuItem(MenuItem item) {
-        menuItems.add(item);
-        return item;
-      }
-
-      final Menu mainMenu = ownMenu(Menu());
-      final Menu applicationMenu = ownMenu(Menu(title: 'Dart Terminal'));
-      final Menu fileMenu = ownMenu(Menu(title: 'File'));
-      final Menu editMenu = ownMenu(Menu(title: 'Edit'));
-      final MenuItem applicationMenuItem = ownMenuItem(
-        MenuItem(title: 'Dart Terminal')..submenu = applicationMenu,
-      );
-      final MenuItem fileMenuItem = ownMenuItem(
-        MenuItem(title: 'File')..submenu = fileMenu,
-      );
-      final MenuItem editMenuItem = ownMenuItem(
-        MenuItem(title: 'Edit')..submenu = editMenu,
-      );
-      final MenuItem quitItem = ownMenuItem(
-        MenuItem(
-          title: 'Quit Dart Terminal',
-          keyEquivalent: 'q',
-          modifiers: const ModifierKeys(ModifierKeys.commandBit),
-        ),
-      );
-      final MenuItem closeItem = ownMenuItem(
-        MenuItem(
-          title: 'Close',
-          keyEquivalent: 'w',
-          modifiers: const ModifierKeys(ModifierKeys.commandBit),
-        ),
-      );
-      final MenuItem copyItem = ownMenuItem(
-        MenuItem(
-          title: 'Copy',
-          keyEquivalent: 'c',
-          modifiers: const ModifierKeys(ModifierKeys.commandBit),
-        ),
-      );
-      final MenuItem pasteItem = ownMenuItem(
-        MenuItem(
-          title: 'Paste',
-          keyEquivalent: 'v',
-          modifiers: const ModifierKeys(ModifierKeys.commandBit),
-        ),
-      );
-      mainMenu
-        ..addItem(applicationMenuItem)
-        ..addItem(fileMenuItem)
-        ..addItem(editMenuItem);
-      applicationMenu.addItem(quitItem);
-      fileMenu.addItem(closeItem);
-      editMenu
-        ..addItem(copyItem)
-        ..addItem(pasteItem);
-      application.mainMenu = mainMenu;
-
       void observeMenuAction(String action, MenuItemInvokedEvent event) {
         if (!emitNativeEventWireObservation) {
           return;
@@ -966,74 +904,128 @@ final class TerminalApplication {
         }
       }
 
-      menuSubscriptions
-        ..add(
-          copyItem.onInvoked.listen((MenuItemInvokedEvent event) {
-            observeMenuAction('copy', event);
-            final TerminalSelectionText? selected = createdSelectionOwner
-                .selectedText();
-            if (selected == null || selected.text.isEmpty) {
-              createdPane.showClipboardNotice(
-                const TerminalClipboardNotice(
-                  TerminalClipboardNoticeKind.copyUnavailable,
-                ),
-              );
-              return;
-            }
-            if (selected.isTruncated) {
-              createdPane.showClipboardNotice(
-                const TerminalClipboardNotice(
-                  TerminalClipboardNoticeKind.copyTooLarge,
-                ),
-              );
-              return;
-            }
-            try {
-              final int changeCount = clipboard.writeText(selected.text);
-              pasteConfirmationGate.clear();
-              clipboardObservation?.recordCopy(
-                selected,
-                changeCount: changeCount,
-              );
-            } on Object catch (error, stackTrace) {
-              handleClipboardFailure(
-                error,
-                stackTrace,
-                TerminalClipboardNoticeKind.copyFailed,
-              );
-            }
-          }),
-        )
-        ..add(
-          pasteItem.onInvoked.listen((MenuItemInvokedEvent event) {
-            observeMenuAction('paste', event);
-            unawaited(
-              pasteClipboard().onError((Object error, StackTrace stackTrace) {
-                handleClipboardFailure(
-                  error,
-                  stackTrace,
-                  TerminalClipboardNoticeKind.pasteFailed,
-                );
-              }),
-            );
-          }),
-        )
-        ..add(
-          closeItem.onInvoked.listen((MenuItemInvokedEvent event) {
-            observeMenuAction('close', event);
-            if (!createdWindow.isClosed && !createdWindow.isDisposed) {
-              createdWindow.requestClose();
-            }
-          }),
-        )
-        ..add(
-          quitItem.onInvoked.listen((MenuItemInvokedEvent event) {
-            observeMenuAction('quit', event);
-            if (!createdWindow.isClosed && !createdWindow.isDisposed) {
-              createdWindow.requestClose();
-            }
-          }),
+      void copySelection() {
+        final TerminalSelectionText? selected = createdSelectionOwner
+            .selectedText();
+        if (selected == null || selected.text.isEmpty) {
+          createdPane.showClipboardNotice(
+            const TerminalClipboardNotice(
+              TerminalClipboardNoticeKind.copyUnavailable,
+            ),
+          );
+          return;
+        }
+        if (selected.isTruncated) {
+          createdPane.showClipboardNotice(
+            const TerminalClipboardNotice(
+              TerminalClipboardNoticeKind.copyTooLarge,
+            ),
+          );
+          return;
+        }
+        try {
+          final int changeCount = clipboard.writeText(selected.text);
+          pasteConfirmationGate.clear();
+          clipboardObservation?.recordCopy(selected, changeCount: changeCount);
+        } on Object catch (error, stackTrace) {
+          handleClipboardFailure(
+            error,
+            stackTrace,
+            TerminalClipboardNoticeKind.copyFailed,
+          );
+        }
+      }
+
+      final TerminalActionCatalog actionCatalog =
+          TerminalActionCatalog.standard();
+      final TerminalActionDispatcher actionDispatcher =
+          TerminalActionDispatcher(
+            catalog: actionCatalog,
+            registrations: <TerminalActionRegistration>[
+              TerminalActionRegistration(
+                id: TerminalActionId.quitApplication,
+                isAvailable: () =>
+                    !createdWindow.isClosed && !createdWindow.isDisposed,
+                handler: createdWindow.requestClose,
+              ),
+              TerminalActionRegistration(
+                id: TerminalActionId.closeWindow,
+                isAvailable: () =>
+                    !createdWindow.isClosed && !createdWindow.isDisposed,
+                handler: createdWindow.requestClose,
+              ),
+              TerminalActionRegistration(
+                id: TerminalActionId.copy,
+                isAvailable: () {
+                  final TerminalSelectionText? selected = createdSelectionOwner
+                      .selectedText();
+                  return selected != null &&
+                      selected.text.isNotEmpty &&
+                      !selected.isTruncated;
+                },
+                handler: copySelection,
+              ),
+              TerminalActionRegistration(
+                id: TerminalActionId.paste,
+                isAvailable: () =>
+                    !pasteActionInProgress && !createdPane.pasteInProgress,
+                handler: () {
+                  unawaited(
+                    pasteClipboard().onError((
+                      Object error,
+                      StackTrace stackTrace,
+                    ) {
+                      handleClipboardFailure(
+                        error,
+                        stackTrace,
+                        TerminalClipboardNoticeKind.pasteFailed,
+                      );
+                    }),
+                  );
+                },
+              ),
+            ],
+          );
+      final TerminalAppKitMenuProjection
+      installedActionMenu = TerminalAppKitMenuProjection.install(
+        application: application,
+        dispatcher: actionDispatcher,
+        onNativeInvocation: (TerminalActionId id, MenuItemInvokedEvent event) {
+          observeMenuAction(switch (id) {
+            TerminalActionId.copy => 'copy',
+            TerminalActionId.paste => 'paste',
+            TerminalActionId.closeWindow => 'close',
+            TerminalActionId.quitApplication => 'quit',
+            _ => id.stableName,
+          }, event);
+        },
+        onDispatched: (TerminalActionDispatchResult result) {
+          if (result.disposition == TerminalActionDispatchDisposition.failed &&
+              !closed.isCompleted) {
+            closed.completeError(result.error!, result.stackTrace!);
+          }
+        },
+      );
+      actionMenuProjection = installedActionMenu;
+      if (emitNativeEventWireObservation) {
+        stdout.writeln(
+          'NATIVE_ACTION_MENU installed=true '
+          'sections=${TerminalActionMenu.values.length} '
+          'actions=${actionCatalog.actions.length}',
         );
+      }
+      final MenuItem copyItem = installedActionMenu.itemForAction(
+        TerminalActionId.copy,
+      );
+      final MenuItem pasteItem = installedActionMenu.itemForAction(
+        TerminalActionId.paste,
+      );
+      final MenuItem closeItem = installedActionMenu.itemForAction(
+        TerminalActionId.closeWindow,
+      );
+      final MenuItem quitItem = installedActionMenu.itemForAction(
+        TerminalActionId.quitApplication,
+      );
 
       applicationEventSubscription = application.events.listen(
         (AppKitEvent event) {
@@ -1278,6 +1270,7 @@ final class TerminalApplication {
               if (result.disposition == TerminalMouseRouteDisposition.ignored) {
                 mouseObservation.recordIgnored(result.ignoreReason!);
               }
+              installedActionMenu.refresh();
           }
         },
         onError: (Object error, StackTrace stackTrace) {
@@ -1574,21 +1567,10 @@ final class TerminalApplication {
         await eventSubscription?.cancel();
         await applicationEventSubscription?.cancel();
         await textInputSubscription?.cancel();
-        for (final StreamSubscription<MenuItemInvokedEvent> subscription
-            in menuSubscriptions) {
-          await subscription.cancel();
-        }
-        application.mainMenu = null;
-        for (final MenuItem item in menuItems.reversed) {
-          if (!item.isDisposed) {
-            item.dispose();
-          }
-        }
-        for (final Menu menu in menus.reversed) {
-          if (!menu.isDisposed) {
-            menu.dispose();
-          }
-        }
+        final TerminalAppKitMenuProjection? menuProjection =
+            actionMenuProjection;
+        actionMenuProjection = null;
+        await menuProjection?.dispose();
         if (textInputClient != null && !textInputClient.isDisposed) {
           textInputClient.dispose();
         }

@@ -689,6 +689,14 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     applicationState.hasMatch(observation.stdoutText),
     'missing application active-state observation',
   );
+  _expect(
+    RegExp(
+          r'^NATIVE_ACTION_MENU installed=true sections=6 actions=15$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'missing or duplicate standard action-menu projection observation',
+  );
   RegExp menuAction(String action) => RegExp(
     '^NATIVE_MENU_ACTION negotiated=5 action=$action protocol=5 '
     r'source_generation=[1-9][0-9]* operation_id=0 '
