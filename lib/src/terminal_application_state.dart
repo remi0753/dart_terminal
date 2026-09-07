@@ -500,6 +500,22 @@ final class TerminalApplicationState {
   TerminalPaneLocation? locationForPane(PaneId paneId) =>
       _paneLocations[paneId];
 
+  /// Content-free hierarchy identity for product integration diagnostics.
+  String machineLineForPane(PaneId paneId) {
+    validate();
+    final TerminalPaneLocation location = _requirePaneLocation(paneId);
+    final TerminalWindowState window = _requireWindow(location.windowId);
+    final TerminalTabState tab = _requireTab(location.tabId);
+    final TerminalSplitLeaf leaf = tab._splitTree.leafForPane(paneId)!;
+    final TerminalPane pane = _panes[paneId]!;
+    return 'TERMINAL_APPLICATION_MODEL windows=$windowCount tabs=$tabCount '
+        'panes=$paneCount window=${window.id} tab=${tab.id} '
+        'split_leaf=${leaf.id} pane=$paneId session=${pane.sessionId} '
+        'active=${_activeWindowId == window.id} '
+        'selected=${window._selectedTabId == tab.id} '
+        'focused=${tab._focusedPaneId == paneId}';
+  }
+
   Future<TerminalWindowState> createWindow(
     TerminalPaneConfiguration configuration,
   ) async {

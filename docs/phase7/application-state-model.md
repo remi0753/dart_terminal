@@ -1,6 +1,6 @@
 # Application window/tab/split state model
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-07
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 7 `window → tab → split tree → terminal session の state model`
@@ -233,3 +233,33 @@ application
   files with zero changes, and analyzed the package with no issues; a direct
   aggregate `dart run test/run_tests.dart` completed with
   `dart_terminal tests passed`.
+- 2026-09-07: the product bootstrap now creates its initial pane through
+  `TerminalApplicationState.createWindow`, resolves the selected tab's focused
+  pane through the model index, and retains all existing per-pane input,
+  renderer, selection, title, and close adapters. Final teardown calls the
+  application model rather than retaining a separate pane owner.
+- 2026-09-07: `TERMINAL_APPLICATION_MODEL` exposes only counts and stable
+  window/tab/split-leaf/pane/session identities plus active/selected/focused
+  booleans. The ordinary runtime smoke requires exactly one consistent
+  1/1/1/1 hierarchy before accepting the existing pane lifecycle and close
+  sequence.
+- 2026-09-07: the first product acceptance attempt exposed a pre-existing
+  source-audit conflict caused by the Phase 6 reviewed ncurses C fixture. The
+  blocker, decision, failed attempt, verification, and independent completion
+  are recorded in `docs/phase7/test-fixture-source-audit.md`; commit `a8f5d0e`
+  restored the gate before product acceptance resumed.
+- 2026-09-07: final focused model tests and analysis passed. `make test` passed
+  all generated-data freshness, compatibility, format (190 files), analysis,
+  and aggregate Dart test gates. `runtime-source-check` passed with 367 tracked
+  files, zero product native sources, and one reviewed test-only native source.
+- 2026-09-07: fresh M1/arm64 product builds passed ordinary runtime smoke in
+  Developer JIT (2468 ms) and Release AOT (1827 ms), including the new hierarchy
+  assertion. Live Metal display/close/shutdown passed in Developer JIT
+  (2096 ms) and Release AOT (1669 ms). Both bundle audits retained one helper,
+  one native asset, and one native capability. The complete 16-case lifecycle
+  matrix passed in both modes, including expected status 75 timeout cases and
+  status 70 startup/root failures.
+- 2026-09-07: final diff review found only the state-model product wiring,
+  content-free smoke assertion, current README/feature-matrix descriptions,
+  generated coverage hashes, this task record, and roadmap progress. No native
+  dependency, ABI, parser, renderer, PTY, or generated build artifact changed.

@@ -286,6 +286,13 @@ Future<void> _testApplicationHierarchyFocusAndIndexes() async {
     'application retains two windows, multiple tabs, and four indexed panes',
   );
   _expect(
+    state.machineLineForPane(fourthPane) ==
+        'TERMINAL_APPLICATION_MODEL windows=2 tabs=3 panes=4 '
+            'window=12 tab=23 split_leaf=35 pane=4 session=4:1 '
+            'active=true selected=true focused=true',
+    'product model diagnostics contain only stable hierarchy identity',
+  );
+  _expect(
     state.locationForPane(firstPane) ==
             TerminalPaneLocation(
               windowId: firstWindow.id,

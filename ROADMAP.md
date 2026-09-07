@@ -912,13 +912,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase7/test-fixture-source-audit.md`](docs/phase7/test-fixture-source-audit.md)
   を参照する）
-- [ ] window → tab → split tree → terminal session の state model
+- [x] window → tab → split tree → terminal session の state model
   （分割と完了条件は
   [`docs/phase7/application-state-model.md`](docs/phase7/application-state-model.md)
   を参照して順に実施する）
   - [x] typed window/tab/split-node identity と immutable bounded split topology
   - [x] application/window/tab owner、focus/index、pane lifecycle mutation
-  - [ ] single-window product bootstrap/shutdown 統合と回帰受け入れ
+  - [x] single-window product bootstrap/shutdown 統合と回帰受け入れ
 - [ ] native tabs と split layout/focus/resize/zoom
 - [ ] menu/action registry と command palette
 - [ ] title、tab rename/color、cwd inheritance、proxy icon

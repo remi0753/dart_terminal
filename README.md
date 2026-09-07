@@ -61,6 +61,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   非0・signal・終了監視失敗時は理由を表示した非live paneを保持する終了policy
 - ウィンドウサイズに追従する`TIOCSWINSZ`/`SIGWINCH`
 - typed pane/session ID、単一owner、live shellの再操作close確認
+- native handleと独立したmonotonic window/tab/split-node ID、64 paneまでのimmutable
+  binary split topology、selected tab/focused pane/reverse index、collapseとordered teardownを
+  持つapplication-owned state model（native UIは現在も1 window/1 tab/1 pane）
 - terminal内容を含めないpane state / PTY shutdown stage診断
 - Control-Dのqueue受理、native write、foreground/termios、signal、waitpid、
   kernel exit status、PTY内/外のreap、exit公開をrequest IDで追えるcontent-free診断

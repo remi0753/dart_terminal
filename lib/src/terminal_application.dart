@@ -10,6 +10,7 @@ import 'package:dart_pty_macos/dart_pty_macos.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'runtime_lifecycle.dart';
+import 'terminal_application_state.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
 import 'terminal_core/terminal_reply.dart';
@@ -400,7 +401,7 @@ final class TerminalApplication {
     TerminalLiveMetalSurface? metalSurface;
     TerminalTextInputClient? textInputClient;
     Window? window;
-    TerminalPaneOwner? paneOwner;
+    TerminalApplicationState? applicationState;
     StreamSubscription<WindowEvent>? eventSubscription;
     StreamSubscription<AppKitEvent>? applicationEventSubscription;
     StreamSubscription<TerminalTextInputEvent>? textInputSubscription;
@@ -446,10 +447,11 @@ final class TerminalApplication {
       textInputClient = createdTextInputClient;
       application.defersTerminationRequests = true;
 
-      final TerminalPaneOwner createdPaneOwner = TerminalPaneOwner();
-      paneOwner = createdPaneOwner;
-      late final TerminalPane createdPane;
-      createdPane = createdPaneOwner.createPane(
+      final TerminalApplicationState createdApplicationState =
+          TerminalApplicationState();
+      applicationState = createdApplicationState;
+      final TerminalPaneConfiguration
+      paneConfiguration = TerminalPaneConfiguration(
         sessionFactory:
             (
               TerminalSessionId id, {
@@ -531,6 +533,14 @@ final class TerminalApplication {
         exitObserver: (TerminalPaneExitObservation observation) {
           stdout.writeln(observation.machineLine());
         },
+      );
+      final TerminalWindowState logicalWindow = await createdApplicationState
+          .createWindow(paneConfiguration);
+      final TerminalPane createdPane = createdApplicationState.paneForId(
+        logicalWindow.selectedTab.focusedPaneId,
+      )!;
+      stdout.writeln(
+        createdApplicationState.machineLineForPane(createdPane.id),
       );
       final TerminalKeyEventRouter keyEventRouter = TerminalKeyEventRouter();
       final TerminalLiveMetalSurface createdMetalSurface =
@@ -1540,9 +1550,9 @@ final class TerminalApplication {
         if (metalSurface != null && !metalSurface.isDisposed) {
           metalSurface.dispose();
         }
-        final TerminalPaneOwner? owner = paneOwner;
-        if (owner != null) {
-          final TerminalPaneOwnerShutdownResult result = await owner.shutdown();
+        final TerminalApplicationState? state = applicationState;
+        if (state != null) {
+          final TerminalPaneOwnerShutdownResult result = await state.shutdown();
           for (final TerminalPaneSessionShutdownResult session
               in result.sessions) {
             stdout.writeln(session.machineLine());

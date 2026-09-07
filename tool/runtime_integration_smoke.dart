@@ -733,6 +733,11 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
   );
   final String pane = paneMatch!.group(1)!;
   final String session = '${paneMatch.group(2)}:${paneMatch.group(3)}';
+  _expectSinglePaneApplicationModel(
+    observation.stdoutText,
+    pane: pane,
+    session: session,
+  );
   final List<String> closeDecisions = observation.stdoutText
       .split('\n')
       .where((String line) => line.startsWith('TERMINAL_PANE_CLOSE '))
@@ -845,6 +850,24 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     'RUNTIME_INTEGRATION_PASS mode=${options.mode.name} '
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'elapsed_ms=${observation.elapsed.inMilliseconds}',
+  );
+}
+
+void _expectSinglePaneApplicationModel(
+  String output, {
+  required String pane,
+  required String session,
+}) {
+  _expect(
+    RegExp(
+          '^TERMINAL_APPLICATION_MODEL windows=1 tabs=1 panes=1 '
+          r'window=1 tab=1 split_leaf=1 '
+          'pane=$pane session=$session '
+          r'active=true selected=true focused=true$',
+          multiLine: true,
+        ).allMatches(output).length ==
+        1,
+    'application did not publish exactly one indexed single-pane hierarchy',
   );
 }
 
