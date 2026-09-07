@@ -9,7 +9,9 @@ Future<void> runTerminalApplicationStateTests() async {
   _testSplitTraversalAndLookup();
   _testSplitPlacementAndCollapse();
   _testSplitTopologyValidationAndBounds();
+  _testSplitResizeEqualizeTraversalAndLayout();
   await _testApplicationHierarchyFocusAndIndexes();
+  await _testApplicationLayoutMutations();
   await _testPaneRemovalAndOrderedShutdown();
   await _testApplicationLimitsAndDisposedState();
 }
@@ -230,6 +232,129 @@ void _testSplitTopologyValidationAndBounds() {
   );
 }
 
+void _testSplitResizeEqualizeTraversalAndLayout() {
+  final TerminalSplitTree original = TerminalSplitTree(
+    root: TerminalSplitBranch(
+      id: const TerminalSplitNodeId(1),
+      axis: TerminalSplitAxis.horizontal,
+      fraction: 0.1,
+      first: const TerminalSplitLeaf(
+        id: TerminalSplitNodeId(2),
+        paneId: PaneId(1),
+      ),
+      second: TerminalSplitBranch(
+        id: const TerminalSplitNodeId(3),
+        axis: TerminalSplitAxis.vertical,
+        fraction: 0.9,
+        first: const TerminalSplitLeaf(
+          id: TerminalSplitNodeId(4),
+          paneId: PaneId(2),
+        ),
+        second: const TerminalSplitLeaf(
+          id: TerminalSplitNodeId(5),
+          paneId: PaneId(3),
+        ),
+      ),
+    ),
+  );
+  final TerminalSplitTree resized = original.resizeBranch(
+    const TerminalSplitNodeId(1),
+    0.7,
+  );
+  final TerminalSplitTree equalized = resized.equalize(
+    subtreeRootId: const TerminalSplitNodeId(3),
+  );
+  final TerminalSplitBranch originalRoot = original.root as TerminalSplitBranch;
+  final TerminalSplitBranch resizedRoot = resized.root as TerminalSplitBranch;
+  final TerminalSplitBranch equalizedRoot =
+      equalized.root as TerminalSplitBranch;
+  _expect(
+    originalRoot.fraction == 0.1 &&
+        resizedRoot.fraction == 0.7 &&
+        equalizedRoot.fraction == 0.7 &&
+        (equalizedRoot.second as TerminalSplitBranch).fraction == 0.5,
+    'resize changes one immutable branch and subtree equalize stays scoped',
+  );
+  _expect(
+    original.traversePane(
+              const PaneId(3),
+              direction: TerminalPaneFocusTraversal.next,
+            ) ==
+            const PaneId(1) &&
+        original.traversePane(
+              const PaneId(1),
+              direction: TerminalPaneFocusTraversal.previous,
+            ) ==
+            const PaneId(3),
+    'visual focus traversal wraps in both directions',
+  );
+
+  final TerminalSplitLayout layout = original.layout(
+    availableSize: TerminalSplitLayoutSize(width: 100, height: 80),
+    cellSize: TerminalSplitLayoutSize(width: 10, height: 20),
+    dividerThickness: 2,
+  );
+  final TerminalSplitBranchLayout rootLayout =
+      layout.branches[const TerminalSplitNodeId(1)]!;
+  final TerminalSplitBranchLayout nestedLayout =
+      layout.branches[const TerminalSplitNodeId(3)]!;
+  final TerminalPaneLayoutRect first = layout.panes[const PaneId(1)]!;
+  final TerminalPaneLayoutRect second = layout.panes[const PaneId(2)]!;
+  final TerminalPaneLayoutRect third = layout.panes[const PaneId(3)]!;
+  _expect(
+    rootLayout.firstExtent == 10 &&
+        rootLayout.secondExtent == 88 &&
+        rootLayout.firstMinimumExtent == 10 &&
+        nestedLayout.firstExtent == 58 &&
+        nestedLayout.secondExtent == 20 &&
+        first.left == 0 &&
+        first.width == 10 &&
+        first.height == 80 &&
+        second.left == 12 &&
+        second.top == 0 &&
+        second.width == 88 &&
+        second.height == 58 &&
+        third.left == 12 &&
+        third.top == 60 &&
+        third.width == 88 &&
+        third.height == 20,
+    'layout clamps nested fractions to one-cell descendant minima',
+  );
+  final TerminalSplitLayout zoomed = original.layout(
+    availableSize: TerminalSplitLayoutSize(width: 10.5, height: 20.25),
+    cellSize: TerminalSplitLayoutSize(width: 10, height: 20),
+    dividerThickness: 2,
+    zoomedPaneId: const PaneId(2),
+  );
+  _expect(
+    zoomed.panes.length == 1 &&
+        zoomed.branches.isEmpty &&
+        zoomed.panes[const PaneId(2)]?.width == 10.5 &&
+        zoomed.panes[const PaneId(2)]?.height == 20.25,
+    'zoom requires only the visible pane minimum and preserves topology',
+  );
+  _expectThrows<StateError>(
+    () => original.layout(
+      availableSize: TerminalSplitLayoutSize(width: 21, height: 42),
+      cellSize: TerminalSplitLayoutSize(width: 10, height: 20),
+      dividerThickness: 2,
+    ),
+    'geometry rejects a viewport narrower than the recursive cell minimum',
+  );
+  _expectThrows<StateError>(
+    () => original.resizeBranch(const TerminalSplitNodeId(2), 0.5),
+    'resize rejects a leaf identity',
+  );
+  _expectThrows<StateError>(
+    () => original.equalize(subtreeRootId: const TerminalSplitNodeId(99)),
+    'equalize rejects an unknown subtree identity',
+  );
+  _expectThrows<ArgumentError>(
+    () => TerminalSplitLayoutSize(width: 0, height: 20),
+    'layout size rejects a non-positive dimension',
+  );
+}
+
 Future<void> _testApplicationHierarchyFocusAndIndexes() async {
   final List<_StateFakeSession> sessions = <_StateFakeSession>[];
   final TerminalApplicationState state = TerminalApplicationState(
@@ -337,6 +462,77 @@ Future<void> _testApplicationHierarchyFocusAndIndexes() async {
   _expectThrows<StateError>(
     () => state.focusPane(firstTab.id, fourthPane),
     'cross-tab pane focus is rejected',
+  );
+  state.validate();
+  await state.shutdown();
+}
+
+Future<void> _testApplicationLayoutMutations() async {
+  final List<_StateFakeSession> sessions = <_StateFakeSession>[];
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalPaneConfiguration configuration = _configuration(sessions);
+  final TerminalWindowState window = await state.createWindow(configuration);
+  final TerminalTabState tab = window.selectedTab;
+  final PaneId first = tab.focusedPaneId;
+  final TerminalPane second = await state.splitPane(
+    first,
+    configuration,
+    axis: TerminalSplitAxis.horizontal,
+    fraction: 0.25,
+  );
+  final TerminalSplitNodeId rootId = tab.splitTree.root.id;
+  final TerminalPane third = await state.splitPane(
+    second.id,
+    configuration,
+    axis: TerminalSplitAxis.vertical,
+    fraction: 0.75,
+  );
+  final TerminalSplitNodeId nestedId =
+      (tab.splitTree.root as TerminalSplitBranch).second.id;
+
+  state.resizeSplit(tab.id, rootId, 0.6);
+  state.equalizeSplits(tab.id, subtreeRootId: nestedId);
+  final TerminalSplitBranch root = tab.splitTree.root as TerminalSplitBranch;
+  _expect(
+    root.fraction == 0.6 &&
+        (root.second as TerminalSplitBranch).fraction == 0.5 &&
+        tab.focusedPaneId == third.id,
+    'application layout mutations preserve focus and address typed branches',
+  );
+
+  state.setPaneZoom(tab.id, third.id);
+  _expect(
+    tab.isZoomed &&
+        tab.zoomedPaneId == third.id &&
+        state.traversePaneFocus(
+              tab.id,
+              direction: TerminalPaneFocusTraversal.next,
+            ) ==
+            third.id &&
+        tab.focusedPaneId == third.id,
+    'zoom is confined to the visible focused pane during traversal',
+  );
+  state.focusPane(tab.id, first);
+  _expect(
+    !tab.isZoomed && tab.focusedPaneId == first,
+    'changing focus clears zoom before targeting another pane',
+  );
+  _expect(
+    state.traversePaneFocus(
+              tab.id,
+              direction: TerminalPaneFocusTraversal.previous,
+            ) ==
+            third.id &&
+        tab.focusedPaneId == third.id,
+    'application focus traversal wraps in visual order',
+  );
+  _expectThrows<StateError>(
+    () => state.setPaneZoom(tab.id, second.id),
+    'application rejects zooming an unfocused pane',
+  );
+  _expectThrows<StateError>(
+    () => state.resizeSplit(tab.id, const TerminalSplitNodeId(999), 0.5),
+    'application rejects resizing an unknown branch',
   );
   state.validate();
   await state.shutdown();

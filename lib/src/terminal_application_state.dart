@@ -63,6 +63,78 @@ enum TerminalSplitAxis { horizontal, vertical }
 
 enum TerminalSplitPlacement { before, after }
 
+enum TerminalPaneFocusTraversal { previous, next }
+
+/// Positive logical-point dimensions used to project a split tree.
+final class TerminalSplitLayoutSize {
+  TerminalSplitLayoutSize({required this.width, required this.height}) {
+    if (!width.isFinite || width <= 0) {
+      throw ArgumentError.value(width, 'width', 'must be finite and positive');
+    }
+    if (!height.isFinite || height <= 0) {
+      throw ArgumentError.value(
+        height,
+        'height',
+        'must be finite and positive',
+      );
+    }
+  }
+
+  final double width;
+  final double height;
+}
+
+/// One pane's bounded logical-point rectangle in a projected split tree.
+final class TerminalPaneLayoutRect {
+  const TerminalPaneLayoutRect({
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+  });
+
+  final double left;
+  final double top;
+  final double width;
+  final double height;
+}
+
+/// Geometry and child minima for one projected split branch.
+final class TerminalSplitBranchLayout {
+  const TerminalSplitBranchLayout({
+    required this.nodeId,
+    required this.axis,
+    required this.dividerOffset,
+    required this.firstExtent,
+    required this.secondExtent,
+    required this.firstMinimumExtent,
+    required this.secondMinimumExtent,
+  });
+
+  final TerminalSplitNodeId nodeId;
+  final TerminalSplitAxis axis;
+  final double dividerOffset;
+  final double firstExtent;
+  final double secondExtent;
+  final double firstMinimumExtent;
+  final double secondMinimumExtent;
+}
+
+/// Complete immutable layout projection for one visible terminal tab.
+final class TerminalSplitLayout {
+  TerminalSplitLayout._({
+    required Map<PaneId, TerminalPaneLayoutRect> panes,
+    required Map<TerminalSplitNodeId, TerminalSplitBranchLayout> branches,
+  }) : panes = Map<PaneId, TerminalPaneLayoutRect>.unmodifiable(panes),
+       branches =
+           Map<TerminalSplitNodeId, TerminalSplitBranchLayout>.unmodifiable(
+             branches,
+           );
+
+  final Map<PaneId, TerminalPaneLayoutRect> panes;
+  final Map<TerminalSplitNodeId, TerminalSplitBranchLayout> branches;
+}
+
 /// An immutable node in a binary terminal split tree.
 sealed class TerminalSplitNode {
   const TerminalSplitNode(this.id);
@@ -225,6 +297,116 @@ final class TerminalSplitTree {
     return TerminalSplitTree(root: replacement);
   }
 
+  TerminalSplitTree resizeBranch(TerminalSplitNodeId nodeId, double fraction) {
+    if (!fraction.isFinite || fraction <= 0 || fraction >= 1) {
+      throw ArgumentError.value(
+        fraction,
+        'fraction',
+        'must be finite and strictly between zero and one',
+      );
+    }
+    final TerminalSplitNode? target = nodeForId(nodeId);
+    if (target == null) {
+      throw StateError('unknown split node $nodeId');
+    }
+    if (target is! TerminalSplitBranch) {
+      throw StateError('split node $nodeId is not a branch');
+    }
+    return TerminalSplitTree(
+      root: _replaceNode(root, nodeId, (TerminalSplitNode node) {
+        final TerminalSplitBranch branch = node as TerminalSplitBranch;
+        return TerminalSplitBranch(
+          id: branch.id,
+          axis: branch.axis,
+          fraction: fraction,
+          first: branch.first,
+          second: branch.second,
+        );
+      }),
+    );
+  }
+
+  TerminalSplitTree equalize({TerminalSplitNodeId? subtreeRootId}) {
+    final TerminalSplitNodeId targetId = subtreeRootId ?? root.id;
+    final TerminalSplitNode? target = nodeForId(targetId);
+    if (target == null) {
+      throw StateError('unknown split node $targetId');
+    }
+    if (target is! TerminalSplitBranch) {
+      throw StateError('split node $targetId is not a branch');
+    }
+    return TerminalSplitTree(
+      root: _replaceNode(root, targetId, _equalizedNode),
+    );
+  }
+
+  PaneId traversePane(
+    PaneId current, {
+    required TerminalPaneFocusTraversal direction,
+  }) {
+    final int index = paneIds.indexOf(current);
+    if (index < 0) {
+      throw StateError('pane $current is not in this split tree');
+    }
+    final int offset = direction == TerminalPaneFocusTraversal.next ? 1 : -1;
+    return paneIds[(index + offset) % paneIds.length];
+  }
+
+  TerminalSplitLayout layout({
+    required TerminalSplitLayoutSize availableSize,
+    required TerminalSplitLayoutSize cellSize,
+    double dividerThickness = 1,
+    PaneId? zoomedPaneId,
+  }) {
+    if (!dividerThickness.isFinite || dividerThickness < 0) {
+      throw ArgumentError.value(
+        dividerThickness,
+        'dividerThickness',
+        'must be finite and non-negative',
+      );
+    }
+    if (zoomedPaneId != null && !containsPane(zoomedPaneId)) {
+      throw StateError('pane $zoomedPaneId is not in this split tree');
+    }
+    final _TerminalSplitMinimumSize minimum = zoomedPaneId == null
+        ? _minimumSize(root, cellSize, dividerThickness)
+        : _TerminalSplitMinimumSize(
+            width: cellSize.width,
+            height: cellSize.height,
+          );
+    if (minimum.width > availableSize.width ||
+        minimum.height > availableSize.height) {
+      throw StateError(
+        'split tree requires at least ${minimum.width}x${minimum.height} '
+        'logical points but only ${availableSize.width}x'
+        '${availableSize.height} are available',
+      );
+    }
+    final Map<PaneId, TerminalPaneLayoutRect> panes =
+        <PaneId, TerminalPaneLayoutRect>{};
+    final Map<TerminalSplitNodeId, TerminalSplitBranchLayout> branches =
+        <TerminalSplitNodeId, TerminalSplitBranchLayout>{};
+    if (zoomedPaneId != null) {
+      panes[zoomedPaneId] = TerminalPaneLayoutRect(
+        left: 0,
+        top: 0,
+        width: availableSize.width,
+        height: availableSize.height,
+      );
+    } else {
+      _layoutNode(
+        root,
+        const _TerminalSplitOrigin(left: 0, top: 0),
+        availableSize,
+        cellSize,
+        dividerThickness,
+        panes,
+        branches,
+      );
+    }
+    return TerminalSplitLayout._(panes: panes, branches: branches);
+  }
+
   /// Returns a tree without [paneId], or `null` when it was the only leaf.
   TerminalSplitTree? removePane(PaneId paneId) {
     if (!containsPane(paneId)) {
@@ -302,6 +484,157 @@ final class TerminalSplitTree {
     ),
   };
 
+  static TerminalSplitNode _replaceNode(
+    TerminalSplitNode node,
+    TerminalSplitNodeId targetId,
+    TerminalSplitNode Function(TerminalSplitNode node) replace,
+  ) {
+    if (node.id == targetId) {
+      return replace(node);
+    }
+    return switch (node) {
+      TerminalSplitLeaf() => node,
+      TerminalSplitBranch() => TerminalSplitBranch(
+        id: node.id,
+        axis: node.axis,
+        fraction: node.fraction,
+        first: _replaceNode(node.first, targetId, replace),
+        second: _replaceNode(node.second, targetId, replace),
+      ),
+    };
+  }
+
+  static TerminalSplitNode _equalizedNode(TerminalSplitNode node) =>
+      switch (node) {
+        TerminalSplitLeaf() => node,
+        TerminalSplitBranch() => TerminalSplitBranch(
+          id: node.id,
+          axis: node.axis,
+          fraction: 0.5,
+          first: _equalizedNode(node.first),
+          second: _equalizedNode(node.second),
+        ),
+      };
+
+  static _TerminalSplitMinimumSize _minimumSize(
+    TerminalSplitNode node,
+    TerminalSplitLayoutSize cellSize,
+    double dividerThickness,
+  ) => switch (node) {
+    TerminalSplitLeaf() => _TerminalSplitMinimumSize(
+      width: cellSize.width,
+      height: cellSize.height,
+    ),
+    TerminalSplitBranch() => _combineMinimumSizes(
+      node.axis,
+      _minimumSize(node.first, cellSize, dividerThickness),
+      _minimumSize(node.second, cellSize, dividerThickness),
+      dividerThickness,
+    ),
+  };
+
+  static _TerminalSplitMinimumSize _combineMinimumSizes(
+    TerminalSplitAxis axis,
+    _TerminalSplitMinimumSize first,
+    _TerminalSplitMinimumSize second,
+    double dividerThickness,
+  ) => switch (axis) {
+    TerminalSplitAxis.horizontal => _TerminalSplitMinimumSize(
+      width: first.width + dividerThickness + second.width,
+      height: first.height > second.height ? first.height : second.height,
+    ),
+    TerminalSplitAxis.vertical => _TerminalSplitMinimumSize(
+      width: first.width > second.width ? first.width : second.width,
+      height: first.height + dividerThickness + second.height,
+    ),
+  };
+
+  static void _layoutNode(
+    TerminalSplitNode node,
+    _TerminalSplitOrigin origin,
+    TerminalSplitLayoutSize size,
+    TerminalSplitLayoutSize cellSize,
+    double dividerThickness,
+    Map<PaneId, TerminalPaneLayoutRect> panes,
+    Map<TerminalSplitNodeId, TerminalSplitBranchLayout> branches,
+  ) {
+    switch (node) {
+      case TerminalSplitLeaf():
+        panes[node.paneId] = TerminalPaneLayoutRect(
+          left: origin.left,
+          top: origin.top,
+          width: size.width,
+          height: size.height,
+        );
+      case TerminalSplitBranch():
+        final _TerminalSplitMinimumSize firstMinimum = _minimumSize(
+          node.first,
+          cellSize,
+          dividerThickness,
+        );
+        final _TerminalSplitMinimumSize secondMinimum = _minimumSize(
+          node.second,
+          cellSize,
+          dividerThickness,
+        );
+        final bool horizontal = node.axis == TerminalSplitAxis.horizontal;
+        final double axisExtent = horizontal ? size.width : size.height;
+        final double usableExtent = axisExtent - dividerThickness;
+        final double firstMinimumExtent = horizontal
+            ? firstMinimum.width
+            : firstMinimum.height;
+        final double secondMinimumExtent = horizontal
+            ? secondMinimum.width
+            : secondMinimum.height;
+        final double desiredFirstExtent = usableExtent * node.fraction;
+        final double firstExtent = desiredFirstExtent.clamp(
+          firstMinimumExtent,
+          usableExtent - secondMinimumExtent,
+        );
+        final double secondExtent = usableExtent - firstExtent;
+        branches[node.id] = TerminalSplitBranchLayout(
+          nodeId: node.id,
+          axis: node.axis,
+          dividerOffset: firstExtent,
+          firstExtent: firstExtent,
+          secondExtent: secondExtent,
+          firstMinimumExtent: firstMinimumExtent,
+          secondMinimumExtent: secondMinimumExtent,
+        );
+        _layoutNode(
+          node.first,
+          origin,
+          TerminalSplitLayoutSize(
+            width: horizontal ? firstExtent : size.width,
+            height: horizontal ? size.height : firstExtent,
+          ),
+          cellSize,
+          dividerThickness,
+          panes,
+          branches,
+        );
+        _layoutNode(
+          node.second,
+          _TerminalSplitOrigin(
+            left: horizontal
+                ? origin.left + firstExtent + dividerThickness
+                : origin.left,
+            top: horizontal
+                ? origin.top
+                : origin.top + firstExtent + dividerThickness,
+          ),
+          TerminalSplitLayoutSize(
+            width: horizontal ? secondExtent : size.width,
+            height: horizontal ? size.height : secondExtent,
+          ),
+          cellSize,
+          dividerThickness,
+          panes,
+          branches,
+        );
+    }
+  }
+
   static TerminalSplitNode? _removePane(
     TerminalSplitNode node,
     PaneId paneId,
@@ -376,14 +709,18 @@ final class TerminalTabState {
     required TerminalSplitTree splitTree,
     required PaneId focusedPaneId,
   }) : _splitTree = splitTree,
-       _focusedPaneId = focusedPaneId;
+       _focusedPaneId = focusedPaneId,
+       _zoomedPaneId = null;
 
   final TerminalTabId id;
   TerminalSplitTree _splitTree;
   PaneId _focusedPaneId;
+  PaneId? _zoomedPaneId;
 
   TerminalSplitTree get splitTree => _splitTree;
   PaneId get focusedPaneId => _focusedPaneId;
+  PaneId? get zoomedPaneId => _zoomedPaneId;
+  bool get isZoomed => _zoomedPaneId != null;
   List<PaneId> get paneIds => _splitTree.paneIds;
 }
 
@@ -652,7 +989,8 @@ final class TerminalApplicationState {
       _nextSplitNodeId = leafId.value;
       tab
         .._splitTree = replacement
-        .._focusedPaneId = pane.id;
+        .._focusedPaneId = pane.id
+        .._zoomedPaneId = null;
       window._selectedTabId = tab.id;
       _indexPane(pane, windowId: window.id, tabId: tab.id);
       _activeWindowId = window.id;
@@ -694,10 +1032,68 @@ final class TerminalApplicationState {
     }
     final TerminalPaneLocation location = _requirePaneLocation(paneId);
     final TerminalWindowState window = _requireWindow(location.windowId);
-    tab._focusedPaneId = paneId;
+    if (tab._focusedPaneId != paneId) {
+      tab
+        .._focusedPaneId = paneId
+        .._zoomedPaneId = null;
+    }
     window._selectedTabId = tabId;
     _activeWindowId = window.id;
     validate();
+  }
+
+  void resizeSplit(
+    TerminalTabId tabId,
+    TerminalSplitNodeId nodeId,
+    double fraction,
+  ) {
+    _ensureCanMutate();
+    final TerminalTabState tab = _requireTab(tabId);
+    tab._splitTree = tab._splitTree.resizeBranch(nodeId, fraction);
+    validate();
+  }
+
+  void equalizeSplits(
+    TerminalTabId tabId, {
+    TerminalSplitNodeId? subtreeRootId,
+  }) {
+    _ensureCanMutate();
+    final TerminalTabState tab = _requireTab(tabId);
+    tab._splitTree = tab._splitTree.equalize(subtreeRootId: subtreeRootId);
+    validate();
+  }
+
+  void setPaneZoom(TerminalTabId tabId, PaneId? paneId) {
+    _ensureCanMutate();
+    final TerminalTabState tab = _requireTab(tabId);
+    if (paneId != null) {
+      if (!tab._splitTree.containsPane(paneId)) {
+        throw StateError('pane $paneId does not belong to tab $tabId');
+      }
+      if (tab._focusedPaneId != paneId) {
+        throw StateError('only the focused pane may be zoomed');
+      }
+    }
+    tab._zoomedPaneId = paneId;
+    validate();
+  }
+
+  PaneId traversePaneFocus(
+    TerminalTabId tabId, {
+    required TerminalPaneFocusTraversal direction,
+  }) {
+    _ensureCanMutate();
+    final TerminalTabState tab = _requireTab(tabId);
+    final PaneId focused = tab._focusedPaneId;
+    if (tab._zoomedPaneId != null) {
+      return focused;
+    }
+    final PaneId next = tab._splitTree.traversePane(
+      focused,
+      direction: direction,
+    );
+    focusPane(tabId, next);
+    return next;
   }
 
   Future<TerminalPaneRemovalResult> removePane(PaneId paneId) async {
@@ -724,6 +1120,9 @@ final class TerminalApplicationState {
               ? removedPaneIndex
               : replacement.paneIds.length - 1;
           tab._focusedPaneId = replacement.paneIds[focusIndex];
+        }
+        if (tab._zoomedPaneId == paneId) {
+          tab._zoomedPaneId = null;
         }
       } else {
         removedTab = true;
@@ -843,6 +1242,11 @@ final class TerminalApplicationState {
         }
         if (!tab._splitTree.containsPane(tab._focusedPaneId)) {
           throw StateError('tab ${tab.id} has no valid focused pane');
+        }
+        if (tab._zoomedPaneId != null &&
+            (tab._zoomedPaneId != tab._focusedPaneId ||
+                !tab._splitTree.containsPane(tab._zoomedPaneId!))) {
+          throw StateError('tab ${tab.id} has invalid zoom state');
         }
         for (final PaneId paneId in tab._splitTree.paneIds) {
           if (!hierarchyPanes.add(paneId)) {
@@ -976,4 +1380,18 @@ final class _TerminalSplitTreeInventory {
 
   final List<TerminalSplitNodeId> nodeIds;
   final List<PaneId> paneIds;
+}
+
+final class _TerminalSplitOrigin {
+  const _TerminalSplitOrigin({required this.left, required this.top});
+
+  final double left;
+  final double top;
+}
+
+final class _TerminalSplitMinimumSize {
+  const _TerminalSplitMinimumSize({required this.width, required this.height});
+
+  final double width;
+  final double height;
 }
