@@ -39,6 +39,7 @@ import 'terminal_native_hierarchy.dart';
 import 'terminal_pane.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_restoration.dart';
+import 'terminal_restoration_lifecycle.dart';
 import 'terminal_session.dart';
 import 'terminal_tab_metadata.dart';
 import 'terminal_tab_presentation.dart';
@@ -90,6 +91,8 @@ final class TerminalOptions {
     this.runtimeTerminalDisplayTest = false,
     this.runtimeClipboardTest = false,
     this.runtimeNativeHierarchyTest = false,
+    this.runtimeRestorationTest = false,
+    this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
     this.runtimeLifecycleScenario = RuntimeLifecycleScenario.normal,
     this.runtimeWorkerCommand =
@@ -109,6 +112,7 @@ final class TerminalOptions {
     var runtimeTerminalDisplayTest = false;
     var runtimeClipboardTest = false;
     var runtimeNativeHierarchyTest = false;
+    var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
     for (final String argument in arguments) {
@@ -168,6 +172,15 @@ final class TerminalOptions {
           );
         }
         runtimeNativeHierarchyTest = true;
+        continue;
+      }
+      if (argument == '--runtime-restoration-test') {
+        if (runtimeRestorationTest) {
+          throw const FormatException(
+            '--runtime-restoration-test may only be supplied once',
+          );
+        }
+        runtimeRestorationTest = true;
         continue;
       }
       if (argument.startsWith(workingDirectoryPrefix)) {
@@ -360,6 +373,37 @@ final class TerminalOptions {
         'native hierarchy test cannot be combined with another runtime test',
       );
     }
+    final Map<String, String> selectedEnvironment =
+        environment ?? Platform.environment;
+    final String? runtimeRestorationPath = runtimeRestorationTest
+        ? selectedEnvironment['DT_RUNTIME_RESTORATION_PATH']
+        : null;
+    if (runtimeRestorationTest &&
+        selectedEnvironment['DT_RUNTIME_RESTORATION_TEST'] != '1') {
+      throw const FormatException(
+        'restoration test requires the integration-test gate',
+      );
+    }
+    if (runtimeRestorationTest &&
+        (runtimeRestorationPath == null || runtimeRestorationPath.isEmpty)) {
+      throw const FormatException(
+        'restoration test requires an isolated persistence path',
+      );
+    }
+    if (runtimeRestorationTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'restoration test cannot be combined with another runtime test',
+      );
+    }
     return TerminalOptions(
       initialWorkingDirectory: initialWorkingDirectory,
       autoCloseAfter: autoCloseAfter,
@@ -369,6 +413,8 @@ final class TerminalOptions {
       runtimeTerminalDisplayTest: runtimeTerminalDisplayTest,
       runtimeClipboardTest: runtimeClipboardTest,
       runtimeNativeHierarchyTest: runtimeNativeHierarchyTest,
+      runtimeRestorationTest: runtimeRestorationTest,
+      runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
       runtimeLifecycleScenario: selectedScenario,
       runtimeWorkerCommand:
@@ -387,6 +433,8 @@ final class TerminalOptions {
   final bool runtimeTerminalDisplayTest;
   final bool runtimeClipboardTest;
   final bool runtimeNativeHierarchyTest;
+  final bool runtimeRestorationTest;
+  final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
   final RuntimeLifecycleScenario runtimeLifecycleScenario;
   final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
@@ -424,6 +472,17 @@ final class TerminalApplication {
           bundledEntryPath: bundledTerminfoEntry,
         );
     stdout.writeln(terminfoEnvironment.machineLine());
+    if (options.runtimeRestorationTest) {
+      await _runRestorationProductAcceptance(
+        application,
+        ptyBackend,
+        terminfoEnvironment,
+        options.runtimeWorkerCommand,
+        options.initialWorkingDirectory,
+        options.runtimeRestorationPath!,
+      );
+      return;
+    }
     if (options.runtimeNativeHierarchyTest) {
       await _runNativeHierarchyProductAcceptance(
         application,
@@ -953,6 +1012,7 @@ final class TerminalApplication {
           await pasteClipboardOnce();
         } finally {
           pasteActionInProgress = false;
+          actionMenuProjection?.refresh();
         }
       }
 
@@ -1815,6 +1875,727 @@ final class TerminalApplication {
           ? 'Dart Terminal shut down cleanly.'
           : 'Dart Terminal shut down with classified recovery.',
     );
+  }
+
+  static Future<void> _runRestorationProductAcceptance(
+    AppKitApplication application,
+    PtyBackend ptyBackend,
+    TerminalTerminfoEnvironment terminfoEnvironment,
+    RuntimeLifecycleWorkerCommand workerCommand,
+    String? initialWorkingDirectory,
+    String persistencePath,
+  ) async {
+    const String prompt = '__DT_RESTORATION_PROMPT__ ';
+    const Rect windowFrame = Rect.fromLTWH(100, 90, 920, 580);
+    final Map<PaneId, TerminalSession> sessions = <PaneId, TerminalSession>{};
+    final Map<PaneId, _TerminalHierarchyProductPane> owners =
+        <PaneId, _TerminalHierarchyProductPane>{};
+    final Map<PaneId, String?> launchWorkingDirectories = <PaneId, String?>{};
+    final List<TerminalPaneSessionShutdownResult> shutdowns =
+        <TerminalPaneSessionShutdownResult>[];
+    final List<TerminalRestorationDiagnostic> restorationDiagnostics =
+        <TerminalRestorationDiagnostic>[];
+    final TerminalTabPresentationResolver presentationResolver =
+        TerminalTabPresentationResolver(
+          metadataForPane: (PaneId paneId) =>
+              sessions[paneId]?.terminalScreenSet.metadata,
+        );
+    TerminalRestorationLifecycle? restoration;
+    RuntimeLifecycleCoordinator? lifecycle;
+    StreamSubscription<ApplicationReopenRequestedEvent>? reopenSubscription;
+    var lifecycleWasShutDown = false;
+    Object? asynchronousError;
+    StackTrace? asynchronousStackTrace;
+    Completer<TerminalRestorationReopenDisposition>? reopenCompletion;
+    var reopenEventCount = 0;
+
+    void recordAsynchronousError(Object error, StackTrace stackTrace) {
+      asynchronousError ??= error;
+      asynchronousStackTrace ??= stackTrace;
+      final Completer<TerminalRestorationReopenDisposition>? completion =
+          reopenCompletion;
+      if (completion != null && !completion.isCompleted) {
+        completion.completeError(error, stackTrace);
+      }
+    }
+
+    void checkAsynchronousError() {
+      final Object? error = asynchronousError;
+      if (error != null) {
+        Error.throwWithStackTrace(error, asynchronousStackTrace!);
+      }
+    }
+
+    TerminalPaneConfiguration configurationForPane(
+      TerminalRestorablePane saved,
+    ) {
+      PaneId? paneId;
+      return TerminalPaneConfiguration(
+        sessionFactory:
+            (
+              TerminalSessionId id, {
+              required void Function() onChanged,
+              required void Function() onTerminated,
+            }) {
+              paneId = id.paneId;
+              final TerminalSession session = TerminalSession(
+                id: id,
+                ptyBackend: ptyBackend,
+                initialWorkingDirectory: saved.workingDirectory,
+                environment: <String, String>{
+                  ...terminfoEnvironment.environment,
+                  'TERM': 'xterm-256color',
+                  'LC_ALL': 'C',
+                  'PS1': prompt,
+                  'RPS1': '',
+                },
+                shellArguments: const <String>['-f'],
+                onChanged: onChanged,
+                onTerminated: onTerminated,
+                lifecycleObserver:
+                    (TerminalSessionLifecycleObservation observation) {
+                      stdout.writeln(observation.machineLine());
+                    },
+                nativeObserver: (TerminalSessionNativeObservation observation) {
+                  stdout.writeln(observation.machineLine());
+                },
+              );
+              sessions[id.paneId] = session;
+              launchWorkingDirectories[id.paneId] = saved.workingDirectory;
+              return session;
+            },
+        onChanged: () {
+          final PaneId? id = paneId;
+          if (id != null) owners[id]?.notifyScreenChanged();
+        },
+        onExitRequested: () {
+          recordAsynchronousError(
+            StateError('restoration acceptance shell exited unexpectedly'),
+            StackTrace.current,
+          );
+        },
+        lifecycleObserver: (TerminalPaneLifecycleObservation observation) {
+          stdout.writeln(observation.machineLine());
+        },
+        exitObserver: (TerminalPaneExitObservation observation) {
+          stdout.writeln(observation.machineLine());
+        },
+      );
+    }
+
+    TerminalNativePaneResources createResources(TerminalPane pane) {
+      final TerminalSession session = sessions[pane.id]!;
+      final View view = TerminalRendererMacos.createView();
+      final TerminalTextInputClient client = TerminalTextInputClient.attach(
+        view,
+      );
+      late final _TerminalHierarchyProductPane owner;
+      final TerminalLiveMetalSurface surface = TerminalLiveMetalSurface.attach(
+        sessionId: pane.sessionId,
+        screenSet: session.terminalScreenSet,
+        view: view,
+        logicalWidth: windowFrame.width,
+        logicalHeight: windowFrame.height,
+        isVisible: false,
+        isOccluded: true,
+        onCaretGeometryChanged: (TerminalCaretRect rectangle) {
+          client.publishCaretRect(
+            x: rectangle.x,
+            y: rectangle.y,
+            width: rectangle.width,
+            height: rectangle.height,
+          );
+        },
+        onFatalError: recordAsynchronousError,
+      );
+      final TerminalKeyEventRouter keyRouter = TerminalKeyEventRouter();
+      final TerminalTextInputEventRouter textRouter =
+          TerminalTextInputEventRouter(
+            clientId: client.clientId,
+            onRawKeyDown: (TerminalKeyEvent event) {
+              keyRouter.handleTerminalKeyDown(event, pane);
+            },
+            onPreedit:
+                ({
+                  required int generation,
+                  required String text,
+                  required int selectionLocation,
+                  required int selectionLength,
+                }) {
+                  surface.updatePreedit(
+                    generation: generation,
+                    text: text,
+                    selectionLocation: selectionLocation,
+                    selectionLength: selectionLength,
+                  );
+                },
+            onClearPreedit: (int generation) {
+              surface.clearPreedit(generation: generation);
+            },
+            onCommit: pane.insertText,
+            onOverflow: (int clientId, int generation) {
+              recordAsynchronousError(
+                StateError(
+                  'restoration text input overflow for client $clientId '
+                  'at generation $generation',
+                ),
+                StackTrace.current,
+              );
+            },
+          );
+      owner = _TerminalHierarchyProductPane(
+        pane: pane,
+        session: session,
+        view: view,
+        client: client,
+        surface: surface,
+        textRouter: textRouter,
+        onTextInputError: recordAsynchronousError,
+      );
+      owners[pane.id] = owner;
+      return TerminalNativePaneResources(
+        paneId: pane.id,
+        view: view,
+        onLayout: owner.applyLayout,
+        onDisposeAdapters: owner.disposeAdapters,
+      );
+    }
+
+    try {
+      application.defersTerminationRequests = true;
+      _expectLifecycle(
+        application.debugLiveObjectCount == 0 &&
+            debugLiveTerminalTextInputClientCount() == 0,
+        'restoration acceptance requires clean native baselines',
+      );
+
+      final TerminalRestorationLifecycle createdRestoration =
+          TerminalRestorationLifecycle(
+            persistence: TerminalRestorationPersistence(
+              FileTerminalRestorationStore(persistencePath),
+            ),
+            configurationForPane: configurationForPane,
+            hierarchyFactory:
+                ({
+                  required TerminalApplicationState state,
+                  required Map<TerminalWindowId, TerminalWindowPlacement>
+                  placements,
+                }) => TerminalNativeHierarchyAdapter(
+                  state: state,
+                  paneResourcesFactory: createResources,
+                  windowFrame: windowFrame,
+                  cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+                  windowPlacements: placements,
+                  dividerThickness: 1,
+                  presentWindows: false,
+                  presentationBuilder:
+                      (TerminalWindowState window, TerminalTabState tab) =>
+                          presentationResolver.resolve(
+                            tab,
+                            fallbackTitle:
+                                'Dart Terminal — ${window.id}:${tab.id}',
+                          ),
+                ),
+            defaultPlacement: TerminalWindowPlacement(
+              windowedFrame: TerminalWindowFrame(
+                left: windowFrame.left,
+                top: windowFrame.top,
+                width: windowFrame.width,
+                height: windowFrame.height,
+              ),
+              screen: null,
+              fullscreen: false,
+            ),
+            defaultWorkingDirectory: initialWorkingDirectory,
+            workingDirectoryForPane: (PaneId paneId) =>
+                presentationResolver.inheritedWorkingDirectoryForPane(paneId) ??
+                launchWorkingDirectories[paneId],
+            onDiagnostic: (TerminalRestorationDiagnostic diagnostic) {
+              restorationDiagnostics.add(diagnostic);
+              stdout.writeln(diagnostic.machineLine());
+            },
+            onEventError: recordAsynchronousError,
+          );
+      restoration = createdRestoration;
+      _expectLifecycle(
+        await createdRestoration.start() ==
+            TerminalRestorationStartDisposition.defaultCreated,
+        'missing isolated persistence did not create a default generation',
+      );
+
+      reopenSubscription = application.onReopenRequested.listen((
+        ApplicationReopenRequestedEvent event,
+      ) {
+        reopenEventCount++;
+        unawaited(
+          createdRestoration.handleReopenRequest(event).then((
+            TerminalRestorationReopenDisposition disposition,
+          ) {
+            final Completer<TerminalRestorationReopenDisposition>? completion =
+                reopenCompletion;
+            if (completion != null && !completion.isCompleted) {
+              completion.complete(disposition);
+            }
+          }, onError: recordAsynchronousError),
+        );
+      }, onError: recordAsynchronousError);
+
+      final RuntimeLifecycleCoordinator createdLifecycle =
+          RuntimeLifecycleCoordinator(
+            scenario: RuntimeLifecycleScenario.normal,
+            workerCommand: workerCommand,
+            observer: (RuntimeLifecycleObservation observation) {
+              stdout.writeln(
+                observation.machineLine(RuntimeLifecycleScenario.normal),
+              );
+            },
+            processObserver: (RuntimeLifecycleProcessObservation observation) {
+              stdout.writeln(
+                observation.machineLine(
+                  RuntimeLifecycleScenario.normal,
+                  parentProcessId: pid,
+                ),
+              );
+            },
+          );
+      lifecycle = createdLifecycle;
+      _expectLifecycle(
+        await createdLifecycle.start() == RuntimeLifecycleStartStatus.ready,
+        'restoration acceptance runtime worker did not become ready',
+      );
+      _writeLifecycleEvent(
+        RuntimeLifecycleScenario.normal,
+        'root-ready',
+        createdLifecycle.generation,
+      );
+      MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootReady);
+      await _expectResponse(createdLifecycle);
+
+      final TerminalRestorationGeneration initial = createdRestoration.current!;
+      final TerminalApplicationState initialState = initial.state;
+      final TerminalWindowState initialWindow = initialState.windows.single;
+      final TerminalTabState firstTab = initialWindow.selectedTab;
+      final PaneId firstPaneId = firstTab.focusedPaneId;
+      await _waitForAsciiMarker(sessions[firstPaneId]!, prompt.trimRight());
+      initialState
+          .paneForId(firstPaneId)!
+          .insertText(
+            "cd /private/tmp; printf "
+            "'\\033]2;__DT_RESTORATION_TITLE__\\007"
+            "\\033]7;file://localhost/private/tmp\\007'",
+          );
+      await initialState.paneForId(firstPaneId)!.submit();
+      await _waitForSessionMetadata(
+        sessions[firstPaneId]!,
+        expectedTitle: '__DT_RESTORATION_TITLE__',
+        expectedWorkingDirectory: Uri.parse('file://localhost/private/tmp'),
+      );
+      final String? inheritedWorkingDirectory = presentationResolver
+          .inheritedWorkingDirectoryForPane(firstPaneId);
+      _expectLifecycle(
+        inheritedWorkingDirectory == '/private/tmp',
+        'restoration acceptance did not resolve its inherited cwd',
+      );
+
+      final Window selectedWindow = initial.hierarchy.windowForTab(
+        firstTab.id,
+      )!;
+      final Stopwatch presentationDeadline = Stopwatch()..start();
+      while ((!selectedWindow.isVisible || selectedWindow.screen == null) &&
+          presentationDeadline.elapsed < const Duration(seconds: 3)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      _expectLifecycle(
+        selectedWindow.isVisible && selectedWindow.screen != null,
+        'native tab group did not become visible on a concrete screen',
+      );
+      final Stopwatch activationDeadline = Stopwatch()..start();
+      while (!application.isActive &&
+          activationDeadline.elapsed < const Duration(seconds: 3)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      final Rect safeWindowedFrame = selectedWindow.frame;
+      final Future<WindowFullscreenChangedEvent> entered = selectedWindow
+          .onFullscreenChanged
+          .firstWhere(
+            (WindowFullscreenChangedEvent event) => event.isFullscreen,
+          )
+          .timeout(const Duration(seconds: 8));
+      stdout.writeln(
+        'TERMINAL_RESTORATION_FULLSCREEN stage=enter-requested '
+        'active=${application.isActive} visible=${selectedWindow.isVisible}',
+      );
+      initial.hierarchy.requestFullscreen(initialWindow.id, true);
+      await entered;
+      stdout.writeln('TERMINAL_RESTORATION_FULLSCREEN stage=enter-observed');
+      _expectLifecycle(
+        selectedWindow.isFullscreen &&
+            initial.hierarchy.placementForWindow(initialWindow.id).fullscreen &&
+            initial.hierarchy
+                    .placementForWindow(initialWindow.id)
+                    .windowedFrame ==
+                TerminalWindowFrame(
+                  left: safeWindowedFrame.left,
+                  top: safeWindowedFrame.top,
+                  width: safeWindowedFrame.width,
+                  height: safeWindowedFrame.height,
+                ),
+        'native fullscreen entry did not preserve the safe windowed frame',
+      );
+      final Future<WindowFullscreenChangedEvent> exited = selectedWindow
+          .onFullscreenChanged
+          .firstWhere(
+            (WindowFullscreenChangedEvent event) => !event.isFullscreen,
+          )
+          .timeout(const Duration(seconds: 8));
+      stdout.writeln('TERMINAL_RESTORATION_FULLSCREEN stage=exit-requested');
+      initial.hierarchy.requestFullscreen(initialWindow.id, false);
+      await exited;
+      stdout.writeln('TERMINAL_RESTORATION_FULLSCREEN stage=exit-observed');
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      final TerminalWindowPlacement exitedPlacement = initial.hierarchy
+          .placementForWindow(initialWindow.id);
+      final Rect exitedFrame = _appKitWindowFrame(
+        exitedPlacement.windowedFrame,
+      );
+      final bool exitedSizePreserved =
+          exitedPlacement.windowedFrame.width == safeWindowedFrame.width &&
+          exitedPlacement.windowedFrame.height == safeWindowedFrame.height;
+      final bool exitedTabsConverged = initialWindow.tabIds.every(
+        (TerminalTabId tabId) =>
+            initial.hierarchy.windowForTab(tabId)!.frame == exitedFrame,
+      );
+      stdout.writeln(
+        'TERMINAL_RESTORATION_FULLSCREEN_EXIT observed=true '
+        'fullscreen=${selectedWindow.isFullscreen} '
+        'placement_fullscreen=${exitedPlacement.fullscreen} '
+        'size_preserved=$exitedSizePreserved '
+        'tabs_converged=$exitedTabsConverged '
+        'selected_matches=${selectedWindow.frame == exitedFrame} '
+        'safe_width=${safeWindowedFrame.width} '
+        'safe_height=${safeWindowedFrame.height} '
+        'exited_width=${exitedPlacement.windowedFrame.width} '
+        'exited_height=${exitedPlacement.windowedFrame.height}',
+      );
+      _expectLifecycle(
+        !selectedWindow.isFullscreen &&
+            !exitedPlacement.fullscreen &&
+            exitedSizePreserved &&
+            exitedTabsConverged,
+        'native fullscreen exit did not restore the safe frame',
+      );
+
+      final Stopwatch screenDeadline = Stopwatch()..start();
+      while ((selectedWindow.screen == null ||
+              selectedWindow.backingScaleFactor == null) &&
+          screenDeadline.elapsed < const Duration(seconds: 3)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      final AppKitScreen sourceScreen = selectedWindow.screen!;
+      final double destinationWidth = sourceScreen.visibleFrame.width > 700
+          ? 700
+          : sourceScreen.visibleFrame.width;
+      final double destinationHeight = sourceScreen.visibleFrame.height > 500
+          ? 500
+          : sourceScreen.visibleFrame.height;
+      final AppKitScreen destinationScreen = AppKitScreen(
+        displayId: sourceScreen.displayId + 1000000,
+        frame: sourceScreen.frame,
+        visibleFrame: Rect.fromLTWH(
+          sourceScreen.visibleFrame.left,
+          sourceScreen.visibleFrame.top,
+          destinationWidth,
+          destinationHeight,
+        ),
+      );
+      final TerminalWindowPlacement expectedMigration =
+          TerminalWindowPlacementPolicy.resolveForAvailableScreens(
+            initial.hierarchy.placementForWindow(initialWindow.id),
+            <TerminalScreenPlacement>[
+              _terminalScreenPlacement(destinationScreen),
+            ],
+            fallbackDisplayId: destinationScreen.displayId,
+          );
+      final Future<WindowScreenChangedEvent> migrationObserved = selectedWindow
+          .onScreenChanged
+          .firstWhere(
+            (WindowScreenChangedEvent event) =>
+                event.screen?.displayId == destinationScreen.displayId,
+          )
+          .timeout(const Duration(seconds: 3));
+      _injectScreenEventForTesting(
+        application,
+        selectedWindow,
+        destinationScreen,
+        monotonicNanoseconds: 900000000,
+      );
+      await migrationObserved;
+      final Rect expectedFrame = _appKitWindowFrame(
+        expectedMigration.windowedFrame,
+      );
+      final bool migrationPlacementMatched =
+          initial.hierarchy.placementForWindow(initialWindow.id) ==
+          expectedMigration;
+      final bool migrationTabsConverged = initialWindow.tabIds.every(
+        (TerminalTabId tabId) =>
+            initial.hierarchy.windowForTab(tabId)!.frame == expectedFrame,
+      );
+      final bool scaleObserved =
+          selectedWindow.backingScaleFactor != null &&
+          selectedWindow.backingScaleFactor! > 0;
+      stdout.writeln(
+        'TERMINAL_RESTORATION_SCREEN_MIGRATION observed=true '
+        'placement=$migrationPlacementMatched '
+        'tabs_converged=$migrationTabsConverged scale=$scaleObserved',
+      );
+      _expectLifecycle(
+        migrationPlacementMatched && migrationTabsConverged && scaleObserved,
+        'screen migration did not clamp the tab group with live scale state',
+      );
+
+      final TerminalPane secondPane = await initialState.splitPane(
+        firstPaneId,
+        configurationForPane(
+          TerminalRestorablePane(workingDirectory: inheritedWorkingDirectory),
+        ),
+        axis: TerminalSplitAxis.horizontal,
+        fraction: 0.35,
+      );
+      final TerminalTabState secondTab = await initialState.createTab(
+        initialWindow.id,
+        configurationForPane(
+          TerminalRestorablePane(workingDirectory: inheritedWorkingDirectory),
+        ),
+      );
+      final PaneId thirdPaneId = secondTab.focusedPaneId;
+      final TerminalPane fourthPane = await initialState.splitPane(
+        thirdPaneId,
+        configurationForPane(
+          TerminalRestorablePane(workingDirectory: inheritedWorkingDirectory),
+        ),
+        axis: TerminalSplitAxis.vertical,
+        fraction: 0.65,
+      );
+      initialState
+        ..focusPane(firstTab.id, secondPane.id)
+        ..renameTab(secondTab.id, 'Restored product tab')
+        ..setTabColor(secondTab.id, TerminalTabColor.greenMarker)
+        ..focusPane(secondTab.id, fourthPane.id)
+        ..setPaneZoom(secondTab.id, fourthPane.id)
+        ..selectTab(initialWindow.id, secondTab.id);
+      createdRestoration.reconcile();
+      initial.hierarchy.present(restoreSelectionAndFocus: false);
+      final List<PaneId> initialPaneIds = initialState.paneIds;
+      for (final PaneId paneId in initialPaneIds) {
+        final TerminalPane pane = initialState.paneForId(paneId)!;
+        if (pane.state == TerminalPaneState.created) await pane.start();
+        await _waitForAsciiMarker(sessions[paneId]!, prompt.trimRight());
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      _expectLifecycle(
+        initialState.tabCount == 2 &&
+            initialState.paneCount == 4 &&
+            initial.hierarchy.nativeWindowCount == 2 &&
+            initial.hierarchy.splitViewCount == 2 &&
+            initial.hierarchy.paneResourceCount == 4 &&
+            application.debugLiveObjectCount == 8 &&
+            debugLiveTerminalTextInputClientCount() == 4,
+        'first restoration generation did not create its exact resources',
+      );
+
+      final Set<int> oldPaneIds = initialPaneIds
+          .map((PaneId paneId) => paneId.value)
+          .toSet();
+      final Set<int> oldWindowIds = initialState.windowIds
+          .map((TerminalWindowId windowId) => windowId.value)
+          .toSet();
+      final TerminalRestorationSaveResult saved = await createdRestoration
+          .persistCurrent();
+      _expectLifecycle(
+        saved.disposition == TerminalRestorationSaveDisposition.saved &&
+            await File(persistencePath).exists(),
+        'first generation was not durably persisted',
+      );
+      for (final PaneId paneId in initialPaneIds) {
+        await owners[paneId]!.cancelTextInput();
+      }
+      final TerminalPaneOwnerShutdownResult suspended =
+          (await createdRestoration.suspendForReopen())!;
+      shutdowns.addAll(suspended.sessions);
+      for (final TerminalPaneSessionShutdownResult result
+          in suspended.sessions) {
+        stdout.writeln(result.machineLine());
+      }
+      _expectLifecycle(
+        suspended.sessions.length == 4 &&
+            suspended.isClean &&
+            application.debugLiveObjectCount == 0 &&
+            debugLiveTerminalTextInputClientCount() == 0 &&
+            initialPaneIds.every(
+              (PaneId paneId) =>
+                  owners[paneId]!.adaptersDisposed &&
+                  owners[paneId]!.surface.snapshot().isDisposed &&
+                  owners[paneId]!.surface.snapshot().liveAtlasPinCount == 0,
+            ),
+        'suspension retained first-generation product resources',
+      );
+
+      reopenCompletion = Completer<TerminalRestorationReopenDisposition>();
+      _injectApplicationReopenEventForTesting(
+        application,
+        monotonicNanoseconds: 901000000,
+      );
+      _injectApplicationReopenEventForTesting(
+        application,
+        monotonicNanoseconds: 902000000,
+      );
+      _expectLifecycle(
+        await reopenCompletion.future.timeout(const Duration(seconds: 10)) ==
+            TerminalRestorationReopenDisposition.restored,
+        'typed Dock reopen did not restore a generation',
+      );
+      await Future<void>.delayed(Duration.zero);
+      checkAsynchronousError();
+      final TerminalRestorationGeneration restored =
+          createdRestoration.current!;
+      final TerminalApplicationState restoredState = restored.state;
+      final List<PaneId> restoredPaneIds = restoredState.paneIds;
+      _expectLifecycle(
+        reopenEventCount == 2 &&
+            restoredState.windowCount == 1 &&
+            restoredState.tabCount == 2 &&
+            restoredState.paneCount == 4 &&
+            restoredPaneIds.every(
+              (PaneId paneId) => !oldPaneIds.contains(paneId.value),
+            ) &&
+            restoredState.windowIds.every(
+              (TerminalWindowId windowId) =>
+                  !oldWindowIds.contains(windowId.value),
+            ) &&
+            restoredState.windows.single.tabs.last.customTitle ==
+                'Restored product tab' &&
+            restoredState.windows.single.tabs.last.color ==
+                TerminalTabColor.greenMarker &&
+            restoredState.windows.single.tabs.last.isZoomed &&
+            restored.launchWorkingDirectories.values.every(
+              (String? value) => value == '/private/tmp',
+            ) &&
+            restored.hierarchy.nativeWindowCount == 2 &&
+            restored.hierarchy.splitViewCount == 2 &&
+            restored.hierarchy.paneResourceCount == 4 &&
+            application.debugLiveObjectCount == 8 &&
+            debugLiveTerminalTextInputClientCount() == 4 &&
+            sessions.length == 8,
+        'Dock reopen duplicated or incompletely restored product owners',
+      );
+
+      for (final PaneId paneId in restoredPaneIds) {
+        await _waitForAsciiMarker(sessions[paneId]!, prompt.trimRight());
+        final TerminalPane pane = restoredState.paneForId(paneId)!;
+        pane.insertText(
+          "if [ \"\$PWD\" = '/private/tmp' ]; then "
+          "printf '\\r\\n__DT_RESTORED_CWD_%s__\\r\\n' "
+          "'${paneId.value}'; fi",
+        );
+        await pane.submit();
+        await _waitForAsciiMarker(
+          sessions[paneId]!,
+          '__DT_RESTORED_CWD_${paneId.value}__',
+        );
+      }
+      for (final PaneId paneId in restoredPaneIds) {
+        await owners[paneId]!.cancelTextInput();
+      }
+      final TerminalPaneOwnerShutdownResult finalShutdown =
+          (await createdRestoration.shutdown(persist: false))!;
+      shutdowns.addAll(finalShutdown.sessions);
+      for (final TerminalPaneSessionShutdownResult result
+          in finalShutdown.sessions) {
+        stdout.writeln(result.machineLine());
+      }
+      _expectLifecycle(
+        shutdowns.length == 8 &&
+            shutdowns.every(
+              (TerminalPaneSessionShutdownResult result) => result.isClean,
+            ) &&
+            owners.values.every(
+              (_TerminalHierarchyProductPane owner) =>
+                  owner.adaptersDisposed &&
+                  owner.surface.snapshot().isDisposed &&
+                  owner.surface.snapshot().liveAtlasPinCount == 0,
+            ) &&
+            application.debugLiveObjectCount == 0 &&
+            debugLiveTerminalTextInputClientCount() == 0,
+        'final restoration teardown retained product resources',
+      );
+      stdout.writeln(TerminalPaneOwnerShutdownResult(shutdowns).machineLine());
+
+      final RuntimeLifecycleShutdownResult lifecycleShutdown =
+          await createdLifecycle.shutdown();
+      lifecycleWasShutDown = true;
+      _expectLifecycle(
+        !lifecycleShutdown.forced &&
+            lifecycleShutdown.termination ==
+                RuntimeLifecycleWorkerTermination.graceful,
+        'restoration acceptance runtime worker did not stop cleanly',
+      );
+      checkAsynchronousError();
+      _expectLifecycle(
+        restorationDiagnostics.any(
+              (TerminalRestorationDiagnostic diagnostic) =>
+                  diagnostic.kind ==
+                  TerminalRestorationDiagnosticKind.defaultCreated,
+            ) &&
+            restorationDiagnostics.any(
+              (TerminalRestorationDiagnostic diagnostic) =>
+                  diagnostic.kind == TerminalRestorationDiagnosticKind.saved,
+            ) &&
+            restorationDiagnostics.any(
+              (TerminalRestorationDiagnostic diagnostic) =>
+                  diagnostic.kind == TerminalRestorationDiagnosticKind.reopened,
+            ),
+        'restoration diagnostics omitted required content-free transitions',
+      );
+      stdout.writeln(
+        'TERMINAL_RESTORATION_TEST windows=1 tabs=2 panes=4 generations=2 '
+        'sessions_clean=8 fullscreen_enter=true fullscreen_exit=true '
+        'screen_migration=true frame_clamped=true scale=true persisted=true '
+        'reopen_events=2 coalesced=true fresh_ids=true cwd=true metal_clean=8 '
+        'text_clients=0 native_handles=0',
+      );
+    } finally {
+      await reopenSubscription?.cancel();
+      for (final _TerminalHierarchyProductPane owner
+          in owners.values.toList(growable: false).reversed) {
+        await owner.cancelTextInput();
+      }
+      final TerminalRestorationLifecycle? retainedRestoration = restoration;
+      if (retainedRestoration != null && !retainedRestoration.isDisposed) {
+        final TerminalPaneOwnerShutdownResult? result =
+            await retainedRestoration.shutdown(persist: false);
+        if (result != null) {
+          for (final TerminalPaneSessionShutdownResult session
+              in result.sessions) {
+            stdout.writeln(session.machineLine());
+          }
+        }
+      }
+      for (final _TerminalHierarchyProductPane owner
+          in owners.values.toList(growable: false).reversed) {
+        if (!owner.adaptersDisposed) owner.disposeAdapters();
+        if (!owner.view.isDisposed) owner.view.dispose();
+      }
+      if (!lifecycleWasShutDown) await lifecycle?.shutdown();
+      _writeLifecycleEvent(
+        RuntimeLifecycleScenario.normal,
+        'root-exit',
+        lifecycle?.generation ?? 0,
+      );
+      MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
+      await application.terminate().timeout(_hostTerminationTimeout);
+    }
+    stdout.writeln('Dart Terminal shut down cleanly.');
   }
 
   static Future<void> _runNativeHierarchyProductAcceptance(
@@ -4671,7 +5452,7 @@ final class TerminalApplication {
       'scroll product acceptance did not preserve bounded exclusive ownership',
     );
     stdout.writeln(
-      'TERMINAL_SCROLL_TEST protocol=5 precise=true momentum=true '
+      'TERMINAL_SCROLL_TEST protocol=6 precise=true momentum=true '
       'wheel=true mouse_report=true shift_override=true alternate=true '
       'app_cursor=true local=true metal=true exclusive=true '
       'reports=${observation.terminalReportCount} '
@@ -4865,6 +5646,48 @@ final class TerminalApplication {
       button,
       modifiers,
       clickCount,
+    ]);
+  }
+
+  static void _injectScreenEventForTesting(
+    AppKitApplication application,
+    Window window,
+    AppKitScreen screen, {
+    required int monotonicNanoseconds,
+  }) {
+    final int handle = appkit_testing.nativeWindowHandleForTesting(window);
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      7,
+      handle,
+      handle >> 32,
+      monotonicNanoseconds,
+      0,
+      true,
+      screen.displayId,
+      screen.frame.left,
+      screen.frame.top,
+      screen.frame.width,
+      screen.frame.height,
+      screen.visibleFrame.left,
+      screen.visibleFrame.top,
+      screen.visibleFrame.width,
+      screen.visibleFrame.height,
+    ]);
+  }
+
+  static void _injectApplicationReopenEventForTesting(
+    AppKitApplication application, {
+    required int monotonicNanoseconds,
+  }) {
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      31,
+      0,
+      0,
+      monotonicNanoseconds,
+      0,
+      false,
     ]);
   }
 

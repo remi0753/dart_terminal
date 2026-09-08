@@ -25,6 +25,7 @@ enum _Suite {
   smoke,
   display,
   hierarchy,
+  restoration,
   clipboard,
   lifecycle,
   traffic,
@@ -146,8 +147,8 @@ _Options _parseOptions(List<String> arguments) {
           .firstOrNull;
       if (selected == null) {
         throw const _SmokeException(
-          '--suite must be smoke, display, hierarchy, clipboard, lifecycle, '
-          'traffic, resource, fault, or all',
+          '--suite must be smoke, display, hierarchy, restoration, clipboard, '
+          'lifecycle, traffic, resource, fault, or all',
         );
       }
       suite = selected;
@@ -296,45 +297,100 @@ Future<_ProcessObservation> _launch(
   Map<String, String> environment = const <String, String>{},
   String expectedDiagnosticPhase = 'root-stopped',
   Duration timeout = const Duration(seconds: 12),
+  bool throughLaunchServices = false,
 }) async {
-  final String processExecutable = options.launchArchitecture == null
-      ? invocation.executable
-      : '/usr/bin/arch';
   final List<String> invocationArguments = invocation.arguments(
     applicationArguments,
   );
-  final List<String> processArguments = options.launchArchitecture == null
-      ? invocationArguments
-      : <String>[
-          '-${options.launchArchitecture}',
-          invocation.executable,
-          ...invocationArguments,
-        ];
   final Directory diagnosticsDirectory = await Directory.systemTemp.createTemp(
     'dart-terminal-runtime-diagnostics-',
   );
+  Directory? captureDirectory;
   try {
+    final Map<String, String> launchEnvironment = <String, String>{
+      ...environment,
+      'DMR_RUNTIME_DIAGNOSTICS_TEST': '1',
+      'DMR_RUNTIME_DIAGNOSTICS_DIRECTORY': diagnosticsDirectory.path,
+    };
+    late final String processExecutable;
+    late final List<String> processArguments;
+    String? capturedStdoutPath;
+    String? capturedStderrPath;
+    if (throughLaunchServices) {
+      captureDirectory = await Directory.systemTemp.createTemp(
+        'dart-terminal-runtime-output-',
+      );
+      capturedStdoutPath = '${captureDirectory.path}/stdout.txt';
+      capturedStderrPath = '${captureDirectory.path}/stderr.txt';
+      processExecutable = '/usr/bin/open';
+      processArguments = <String>[
+        '-W',
+        '-n',
+        '-F',
+        if (options.launchArchitecture != null) ...<String>[
+          '--arch',
+          options.launchArchitecture!,
+        ],
+        '-o',
+        capturedStdoutPath,
+        '--stderr',
+        capturedStderrPath,
+        for (final MapEntry<String, String> value
+            in launchEnvironment.entries) ...<String>[
+          '--env',
+          '${value.key}=${value.value}',
+        ],
+        options.bundlePath,
+        '--args',
+        ...invocationArguments,
+      ];
+    } else {
+      processExecutable = options.launchArchitecture == null
+          ? invocation.executable
+          : '/usr/bin/arch';
+      processArguments = options.launchArchitecture == null
+          ? invocationArguments
+          : <String>[
+              '-${options.launchArchitecture}',
+              invocation.executable,
+              ...invocationArguments,
+            ];
+    }
     final Stopwatch stopwatch = Stopwatch()..start();
     final Process process = await Process.start(
       processExecutable,
       processArguments,
       workingDirectory: Directory.current.path,
-      environment: <String, String>{
-        ...environment,
-        'DMR_RUNTIME_DIAGNOSTICS_TEST': '1',
-        'DMR_RUNTIME_DIAGNOSTICS_DIRECTORY': diagnosticsDirectory.path,
-      },
+      environment: throughLaunchServices ? null : launchEnvironment,
     );
-    final Future<String> stdoutText = process.stdout
+    final Future<String> launcherStdout = process.stdout
         .transform(utf8.decoder)
         .join();
-    final Future<String> stderrText = process.stderr
+    final Future<String> launcherStderr = process.stderr
         .transform(utf8.decoder)
         .join();
-    late final int status;
+    Future<String> completedOutput(
+      String launcher,
+      String? capturedPath,
+    ) async {
+      if (capturedPath == null || !await File(capturedPath).exists()) {
+        return launcher;
+      }
+      return '${await File(capturedPath).readAsString()}$launcher';
+    }
+
+    late final int launcherStatus;
     try {
-      status = await process.exitCode.timeout(timeout);
+      launcherStatus = await process.exitCode.timeout(timeout);
     } on TimeoutException {
+      if (throughLaunchServices) {
+        final int? applicationProcessId = await _runtimeDiagnosticProcessId(
+          diagnosticsDirectory,
+        );
+        if (applicationProcessId != null) {
+          Process.killPid(applicationProcessId, ProcessSignal.sigterm);
+        }
+      }
       process.kill(ProcessSignal.sigterm);
       try {
         await process.exitCode.timeout(const Duration(seconds: 1));
@@ -342,17 +398,38 @@ Future<_ProcessObservation> _launch(
         process.kill(ProcessSignal.sigkill);
         await process.exitCode;
       }
+      final String completedStdout = await completedOutput(
+        await launcherStdout,
+        capturedStdoutPath,
+      );
+      final String completedStderr = await completedOutput(
+        await launcherStderr,
+        capturedStderrPath,
+      );
       throw _SmokeException(
         '${options.mode.name} application did not exit within '
         '${timeout.inSeconds} seconds; '
-        'stdout=${(await stdoutText).trim()} '
-        'stderr=${(await stderrText).trim()}',
+        'stdout=${completedStdout.trim()} '
+        'stderr=${completedStderr.trim()}',
       );
     } finally {
       stopwatch.stop();
     }
-    final String completedStdout = await stdoutText;
-    final String completedStderr = await stderrText;
+    final String completedStdout = await completedOutput(
+      await launcherStdout,
+      capturedStdoutPath,
+    );
+    final String completedStderr = await completedOutput(
+      await launcherStderr,
+      capturedStderrPath,
+    );
+    final int processId = throughLaunchServices
+        ? await _runtimeDiagnosticProcessId(diagnosticsDirectory) ?? process.pid
+        : process.pid;
+    final int status = throughLaunchServices
+        ? await _runtimeDiagnosticExitCode(diagnosticsDirectory) ??
+              launcherStatus
+        : launcherStatus;
     final List<_WorkerProcessObservation> workerProcesses =
         _parseWorkerProcesses(completedStdout);
     for (final int workerProcessId
@@ -372,7 +449,7 @@ Future<_ProcessObservation> _launch(
         options,
         invocation,
         diagnosticsDirectory,
-        processId: process.pid,
+        processId: processId,
         status: status,
         expectedPhase: expectedDiagnosticPhase,
       );
@@ -383,7 +460,7 @@ Future<_ProcessObservation> _launch(
       );
     }
     return _ProcessObservation(
-      processId: process.pid,
+      processId: processId,
       status: status,
       stdoutText: completedStdout,
       stderrText: completedStderr,
@@ -391,10 +468,42 @@ Future<_ProcessObservation> _launch(
       workerProcesses: workerProcesses,
     );
   } finally {
+    if (captureDirectory != null && await captureDirectory.exists()) {
+      await captureDirectory.delete(recursive: true);
+    }
     if (await diagnosticsDirectory.exists()) {
       await diagnosticsDirectory.delete(recursive: true);
     }
   }
+}
+
+Future<int?> _runtimeDiagnosticProcessId(Directory directory) async {
+  final File file = File('${directory.path}/current-run.json');
+  if (!await file.exists()) return null;
+  try {
+    final Object? decoded = jsonDecode(await file.readAsString());
+    if (decoded case <String, dynamic>{'process_id': final int processId}
+        when processId > 0) {
+      return processId;
+    }
+  } on Object {
+    return null;
+  }
+  return null;
+}
+
+Future<int?> _runtimeDiagnosticExitCode(Directory directory) async {
+  final File file = File('${directory.path}/current-run.json');
+  if (!await file.exists()) return null;
+  try {
+    final Object? decoded = jsonDecode(await file.readAsString());
+    if (decoded case <String, dynamic>{'exit_code': final int exitCode}) {
+      return exitCode;
+    }
+  } on Object {
+    return null;
+  }
+  return null;
 }
 
 Future<void> _expectRuntimeDiagnostics(
@@ -643,7 +752,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     );
   }
   final RegExp eventWire = RegExp(
-    r'^NATIVE_EVENT_WIRE negotiated=5 event=window-closed protocol=5 '
+    r'^NATIVE_EVENT_WIRE negotiated=6 event=window-closed protocol=6 '
     r'source_generation=[1-9][0-9]* operation_id=0 '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -652,9 +761,9 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     eventWire.hasMatch(observation.stdoutText),
     'missing current native event wire observation',
   );
-  final String statePrefix = r'^NATIVE_WINDOW_STATE negotiated=5 event=';
+  final String statePrefix = r'^NATIVE_WINDOW_STATE negotiated=6 event=';
   final String stateMetadata =
-      r' protocol=5 source_generation=[1-9][0-9]* operation_id=0 '
+      r' protocol=6 source_generation=[1-9][0-9]* operation_id=0 '
       r'timestamp_ns=[1-9][0-9]* ';
   RegExp stateEvent(String name, String payload) =>
       RegExp('$statePrefix$name$stateMetadata$payload', multiLine: true);
@@ -674,6 +783,13 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
           r'visible_width=[1-9][0-9]*(\.[0-9]+)? '
           r'visible_height=[1-9][0-9]*(\.[0-9]+)?$',
     ),
+    'frame': stateEvent(
+      'frame',
+      r'left=-?[0-9]+(\.[0-9]+)? top=-?[0-9]+(\.[0-9]+)? '
+          r'width=[1-9][0-9]*(\.[0-9]+)? '
+          r'height=[1-9][0-9]*(\.[0-9]+)?$',
+    ),
+    'fullscreen': stateEvent('fullscreen', r'value=false$'),
   };
   for (final MapEntry<String, RegExp> stateEvent in stateEvents.entries) {
     _expect(
@@ -682,7 +798,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     );
   }
   final RegExp applicationState = RegExp(
-    r'^NATIVE_APPLICATION_STATE negotiated=5 active=(true|false)$',
+    r'^NATIVE_APPLICATION_STATE negotiated=6 active=(true|false)$',
     multiLine: true,
   );
   _expect(
@@ -709,7 +825,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     'missing or duplicate standard action-menu projection observation',
   );
   RegExp menuAction(String action) => RegExp(
-    '^NATIVE_MENU_ACTION negotiated=5 action=$action protocol=5 '
+    '^NATIVE_MENU_ACTION negotiated=6 action=$action protocol=6 '
     r'source_generation=[1-9][0-9]* operation_id=0 '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -735,7 +851,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     'missing or duplicate pasteboard snapshot observation',
   );
   final RegExp closeRequest = RegExp(
-    r'^NATIVE_WINDOW_CLOSE_REQUEST negotiated=5 protocol=5 '
+    r'^NATIVE_WINDOW_CLOSE_REQUEST negotiated=6 protocol=6 '
     r'source_generation=[1-9][0-9]* operation_id=[1-9][0-9]* '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -1029,7 +1145,7 @@ Future<void> _runTerminalDisplay(
     'terminal display launch omitted refused-close viewport acceptance',
   );
   final RegExp scrollAcceptance = RegExp(
-    r'^TERMINAL_SCROLL_TEST protocol=5 precise=true momentum=true '
+    r'^TERMINAL_SCROLL_TEST protocol=6 precise=true momentum=true '
     r'wheel=true mouse_report=true shift_override=true alternate=true '
     r'app_cursor=true local=true metal=true exclusive=true reports=1 '
     r'local=4 alternate_inputs=1 ignored=3 bytes=20 alternate_bytes=6$',
@@ -1239,6 +1355,117 @@ Future<void> _runNativeHierarchy(
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'tabs=2 panes=4 elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
+}
+
+Future<void> _runRestoration(_Options options, _Invocation invocation) async {
+  final Directory directory = await Directory.systemTemp.createTemp(
+    'dart-terminal-restoration-',
+  );
+  final String persistencePath = '${directory.path}/state.json';
+  try {
+    final _ProcessObservation observation = await _launch(
+      options,
+      invocation,
+      const <String>['--runtime-restoration-test'],
+      environment: <String, String>{
+        'DT_RUNTIME_RESTORATION_TEST': '1',
+        'DT_RUNTIME_RESTORATION_PATH': persistencePath,
+      },
+      timeout: const Duration(seconds: 60),
+      throughLaunchServices: true,
+    );
+    _expect(
+      observation.status == 0,
+      'restoration application exited with status ${observation.status}; '
+      'stdout=${observation.stdoutText.trim()} '
+      'stderr=${observation.stderrText.trim()}',
+    );
+    _expect(
+      observation.stderrText.trim().isEmpty,
+      'restoration application wrote unexpected stderr: '
+      '${observation.stderrText.trim()}',
+    );
+    _expect(
+      RegExp(
+            r'^TERMINAL_RESTORATION_TEST windows=1 tabs=2 panes=4 '
+            r'generations=2 sessions_clean=8 fullscreen_enter=true '
+            r'fullscreen_exit=true screen_migration=true frame_clamped=true '
+            r'scale=true persisted=true reopen_events=2 coalesced=true '
+            r'fresh_ids=true cwd=true metal_clean=8 text_clients=0 '
+            r'native_handles=0$',
+            multiLine: true,
+          ).allMatches(observation.stdoutText).length ==
+          1,
+      'restoration acceptance summary is missing or malformed',
+    );
+    _expect(
+      RegExp(
+                r'^TERMINAL_SESSION_SHUTDOWN pane=[1-8] session=[1-8]:1 '
+                r'process_id=[1-9][0-9]* disposition=clean '
+                r'termination_observed=true cleanup_completed=true$',
+                multiLine: true,
+              ).allMatches(observation.stdoutText).length ==
+              8 &&
+          RegExp(
+                r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=8 '
+                r'disposition=clean$',
+                multiLine: true,
+              ).allMatches(observation.stdoutText).length ==
+              1,
+      'restoration did not cleanly shut down eight exact PTY owners',
+    );
+    _expect(
+      RegExp(
+                r'^TERMINAL_RESTORATION event=defaultCreated windows=1 '
+                r'tabs=1 panes=1$',
+                multiLine: true,
+              ).allMatches(observation.stdoutText).length ==
+              1 &&
+          RegExp(
+                r'^TERMINAL_RESTORATION event=reopened windows=1 tabs=2 '
+                r'panes=4$',
+                multiLine: true,
+              ).allMatches(observation.stdoutText).length ==
+              1,
+      'restoration omitted its content-free generation diagnostics',
+    );
+    final File persistenceFile = File(persistencePath);
+    _expect(await persistenceFile.exists(), 'restoration file is missing');
+    final FileStat persistenceStat = await persistenceFile.stat();
+    _expect(
+      persistenceStat.type == FileSystemEntityType.file &&
+          persistenceStat.size > 0 &&
+          persistenceStat.size <= 512 * 1024,
+      'restoration file type or serialized bound is invalid',
+    );
+    final String encoded = await persistenceFile.readAsString();
+    final Object? decoded = jsonDecode(encoded);
+    _expect(
+      decoded is Map<String, dynamic> &&
+          decoded['version'] == 1 &&
+          decoded['windows'] is List<dynamic> &&
+          (decoded['windows'] as List<dynamic>).length == 1 &&
+          !encoded.contains('__DT_RESTORATION_PROMPT__') &&
+          !encoded.contains('__DT_RESTORED_CWD_') &&
+          !observation.stdoutText.contains(persistencePath) &&
+          !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
+          observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+      'restoration persistence or ordinary output leaked terminal content/path',
+    );
+    _expectWorkerProcessContract(
+      observation,
+      scenario: 'normal',
+      expectedCount: 1,
+    );
+    stdout.writeln(
+      'RUNTIME_RESTORATION_INTEGRATION_PASS mode=${options.mode.name} '
+      'launch_architecture=${options.launchArchitecture ?? 'native'} '
+      'generations=2 tabs=2 panes=4 elapsed_ms='
+      '${observation.elapsed.inMilliseconds}',
+    );
+  } finally {
+    if (await directory.exists()) await directory.delete(recursive: true);
+  }
 }
 
 Future<void> _runShellExitPolicySmoke(
@@ -2147,6 +2374,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.hierarchy || options.suite == _Suite.all) {
       await _runNativeHierarchy(options, invocation);
+    }
+    if (options.suite == _Suite.restoration || options.suite == _Suite.all) {
+      await _runRestoration(options, invocation);
     }
     if (options.suite == _Suite.clipboard || options.suite == _Suite.all) {
       await _runClipboardProduct(options, invocation);

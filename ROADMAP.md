@@ -942,14 +942,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] reusable AppKit proxy-icon と native-tab color primitives
   - [x] terminal 側の AppKit metadata substrate 採用記録
   - [x] native hierarchy metadata projection と M1 両 runtime 回帰受け入れ
-- [ ] fullscreen、screen migration、restoration、reopen
+- [x] fullscreen、screen migration、restoration、reopen
   （分割と完了条件は
   [`docs/phase7/fullscreen-screen-migration-restoration-reopen.md`](docs/phase7/fullscreen-screen-migration-restoration-reopen.md)
   を参照して順に実施する）
   - [x] bounded restoration snapshot と window placement/migration policy
   - [x] reusable AppKit frame/fullscreen primitives と versioned state events
   - [x] terminal hierarchy restoration、native projection、reopen lifecycle
-  - [ ] M1 両 runtime 回帰受け入れと親項目完了判定
+  - [x] M1 両 runtime 回帰受け入れと親項目完了判定
 - [ ] per-pane close と app quit confirmation
 - [ ] multiple pane の scheduling/resource budget
 - [ ] AppKit unit、integration、UI tests

@@ -146,6 +146,10 @@ final class TerminalNativeHierarchyAdapter {
   final Map<TerminalWindowId, TerminalTabId> _selectedTabs =
       <TerminalWindowId, TerminalTabId>{};
   final Map<TerminalTabId, PaneId> _focusedPanes = <TerminalTabId, PaneId>{};
+  final Map<TerminalWindowId, bool> _fullscreenRequests =
+      <TerminalWindowId, bool>{};
+  final Map<TerminalWindowId, bool> _fullscreenCompletionFrames =
+      <TerminalWindowId, bool>{};
 
   bool _reconciling = false;
   bool _disposed = false;
@@ -193,7 +197,7 @@ final class TerminalNativeHierarchyAdapter {
     if (selected == null) {
       throw StateError('terminal window $windowId is not projected');
     }
-    selected.setFullscreen(enabled);
+    _setFullscreen(windowId, selected, enabled);
     _windowPlacements[windowId] = placementForWindow(windowId)
         .copyWith(fullscreen: enabled);
   }
@@ -206,12 +210,25 @@ final class TerminalNativeHierarchyAdapter {
     final TerminalWindowPlacement current = placementForWindow(windowId);
     switch (event) {
       case WindowFrameChangedEvent(:final frame):
+        final bool? completionFullscreen = _fullscreenCompletionFrames.remove(
+          windowId,
+        );
+        if (completionFullscreen != null) {
+          if (!completionFullscreen) _projectPlacement(logicalWindow);
+          return;
+        }
         if (!current.fullscreen) {
           _windowPlacements[windowId] = current.copyWith(
             windowedFrame: _terminalFrame(frame),
           );
+          _projectPlacement(logicalWindow);
         }
       case WindowFullscreenChangedEvent(:final isFullscreen):
+        final bool requestedTransition =
+            _fullscreenRequests.remove(windowId) != null;
+        if (requestedTransition || current.fullscreen != isFullscreen) {
+          _fullscreenCompletionFrames[windowId] = isFullscreen;
+        }
         _windowPlacements[windowId] = current.copyWith(
           fullscreen: isFullscreen,
         );
@@ -369,7 +386,10 @@ final class TerminalNativeHierarchyAdapter {
           nextPaneResources,
           nextSplitViews,
         );
-        nextWindows[tab.id]!.contentView = root;
+        final Window window = nextWindows[tab.id]!;
+        if (!identical(window.contentView, root)) {
+          window.contentView = root;
+        }
       }
 
       for (final TerminalWindowState logicalWindow in logicalWindows) {
@@ -441,7 +461,6 @@ final class TerminalNativeHierarchyAdapter {
       }
       for (final Window window in removedWindows.reversed) {
         if (!window.isDisposed) {
-          window.removeFromTabGroup();
           window.dispose();
         }
       }
@@ -486,6 +505,14 @@ final class TerminalNativeHierarchyAdapter {
         (TerminalWindowId windowId, TerminalWindowPlacement _) =>
             _state.windowForId(windowId) == null,
       );
+      _fullscreenRequests.removeWhere(
+        (TerminalWindowId windowId, bool _) =>
+            _state.windowForId(windowId) == null,
+      );
+      _fullscreenCompletionFrames.removeWhere(
+        (TerminalWindowId windowId, bool _) =>
+            _state.windowForId(windowId) == null,
+      );
     } finally {
       _reconciling = false;
     }
@@ -516,7 +543,6 @@ final class TerminalNativeHierarchyAdapter {
     for (final Window window
         in _windows.values.toList(growable: false).reversed) {
       if (!window.isDisposed) {
-        window.removeFromTabGroup();
         window.dispose();
       }
     }
@@ -531,6 +557,8 @@ final class TerminalNativeHierarchyAdapter {
     _selectedTabs.clear();
     _focusedPanes.clear();
     _windowPlacements.clear();
+    _fullscreenRequests.clear();
+    _fullscreenCompletionFrames.clear();
   }
 
   void _presentWindow(
@@ -549,18 +577,28 @@ final class TerminalNativeHierarchyAdapter {
         _selectedTabs[logicalWindow.id] != selected.id;
     final bool focusChanged =
         _focusedPanes[selected.id] != selected.focusedPaneId;
+    if (show) selectedWindow.show();
     if (force || selectionChanged) selectedWindow.selectTab();
     if (force || selectionChanged || focusChanged) {
       selectedWindow.makeFirstResponder(
         projectedPanes[selected.focusedPaneId]!.view,
       );
     }
-    if (show) selectedWindow.show();
     final bool desiredFullscreen = placementForWindow(logicalWindow.id)
         .fullscreen;
     if (selectedWindow.isFullscreen != desiredFullscreen) {
-      selectedWindow.setFullscreen(desiredFullscreen);
+      _setFullscreen(logicalWindow.id, selectedWindow, desiredFullscreen);
     }
+  }
+
+  void _setFullscreen(
+    TerminalWindowId windowId,
+    Window selectedWindow,
+    bool enabled,
+  ) {
+    final bool startsTransition = selectedWindow.isFullscreen != enabled;
+    selectedWindow.setFullscreen(enabled);
+    if (startsTransition) _fullscreenRequests[windowId] = enabled;
   }
 
   void _projectPlacement(TerminalWindowState logicalWindow) {
@@ -663,7 +701,10 @@ final class TerminalNativeHierarchyAdapter {
       paneResources,
       splitViews,
     );
-    split.setChildren(first: first, second: second);
+    if (!identical(split.firstView, first) ||
+        !identical(split.secondView, second)) {
+      split.setChildren(first: first, second: second);
+    }
     final TerminalSplitBranchLayout? geometry = layout.branches[branch.id];
     final _TerminalNativeMinimumSize firstMinimum = _minimumSize(branch.first);
     final _TerminalNativeMinimumSize secondMinimum = _minimumSize(

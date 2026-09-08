@@ -771,6 +771,11 @@ void _testOptions() {
     !options.runtimeNativeHierarchyTest,
     'native hierarchy test defaults off',
   );
+  _expect(!options.runtimeRestorationTest, 'restoration test defaults off');
+  _expect(
+    options.runtimeRestorationPath == null,
+    'restoration path defaults off',
+  );
   _expect(
     options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none,
     'shell exit policy test defaults off',
@@ -1020,6 +1025,57 @@ void _testOptions() {
       },
     ),
     'native hierarchy and display tests are mutually exclusive',
+  );
+  final TerminalOptions restorationTestOptions = _parseOptions(
+    const <String>['--runtime-restoration-test'],
+    environment: const <String, String>{
+      'DT_RUNTIME_RESTORATION_TEST': '1',
+      'DT_RUNTIME_RESTORATION_PATH': '/private/tmp/restoration.json',
+    },
+  );
+  _expect(
+    restorationTestOptions.runtimeRestorationTest &&
+        restorationTestOptions.runtimeRestorationPath ==
+            '/private/tmp/restoration.json',
+    'gated restoration product test and isolated path',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-restoration-test']),
+    'restoration product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-restoration-test'],
+      environment: const <String, String>{'DT_RUNTIME_RESTORATION_TEST': '1'},
+    ),
+    'restoration product test persistence path',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-restoration-test',
+        '--runtime-restoration-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_RESTORATION_TEST': '1',
+        'DT_RUNTIME_RESTORATION_PATH': '/private/tmp/restoration.json',
+      },
+    ),
+    'duplicate restoration product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-restoration-test',
+        '--runtime-native-hierarchy-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_RESTORATION_TEST': '1',
+        'DT_RUNTIME_RESTORATION_PATH': '/private/tmp/restoration.json',
+        'DT_RUNTIME_NATIVE_HIERARCHY_TEST': '1',
+      },
+    ),
+    'restoration and native hierarchy tests are mutually exclusive',
   );
   _expectThrows(
     () => _parseOptions(

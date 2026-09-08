@@ -1,6 +1,6 @@
 # Dart Terminal feature matrix
 
-最終更新: 2026-09-07<br>
+最終更新: 2026-09-08<br>
 比較基準: [`ghostty-org/ghostty@d4d8f62262cb1a974a7d2470d5f79f811fab15e4`](https://github.com/ghostty-org/ghostty/tree/d4d8f62262cb1a974a7d2470d5f79f811fab15e4)  
 対象: macOS 14 以降、Flutter 不使用<br>
 主要実機 baseline: Apple M1/arm64
@@ -53,7 +53,7 @@ Phase 6 の標準互換性判断は、固定した一次資料と製品コード
 
 現在の Dart Terminal は、M1/arm64 Developer JIT / Release AOT の未改変 AppKit
 main-thread root、manifest-declared Dart worker helper、dependency-owned
-`TerminalMetalView`、v4 native event、privacy-safeなlocal-run metadata、typed
+`TerminalMetalView`、v6 native event、privacy-safeなlocal-run metadata、typed
 pane/session ownerが保持するpersistent login zsh、Dart-only VT coreとlive
 CoreText/Metal表示までである。製品repositoryのnative sourceは削除済みである。
 下表の「現在」が `未実装` でも欠落ではなく、指定 Phase まで明示的に defer した
@@ -171,7 +171,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | --- | --- | --- | --- | --- | --- |
 | UI-01 | multiple windows、native tabs、split tree、focus traversal | P0 | 7 | `G:macos/Sources/Features/Terminal/`, `Splits/SplitTree.swift` | native handle非依存のbounded window/tab/binary split state、stable ID、selected tab/focused pane、reverse index、collapse/teardownと、AppKit native tab/recursive split/first-responder projectionを完了。2 tab/4 live paneの両runtime gateでkey/IME分離とresource回収を受け入れ済み。user actionは後続 |
 | UI-02 | split resize/equalize/zoom/min cell、pane/tab title/color、cwd inheritance | P0 | 7 | `G:macos/Sources/Features/Splits/`, `Terminal/` | model-owned resize/equalize/zoom/min-cell、focused paneのOSC title/cwd、bounded tab rename/color、local cwd継承とnative projectionを両runtimeで完了 |
-| UI-03 | fullscreen、geometry、display/scale migration、reopen/restoration | P0 | 7 | `G:macos/Sources/Helpers/Fullscreen.swift`, `TerminalRestorable.swift` | v3 display/scale event substrate のみ完了。migration policy 等は未実装 |
+| UI-03 | fullscreen、geometry、display/scale migration、reopen/restoration | P0 | 7 | `G:macos/Sources/Helpers/Fullscreen.swift`, `TerminalRestorable.swift` | content-free versioned window/tab/split/cwd/metadata snapshot、fresh owner復元、bounded display migration/clamp、AppKit frame/fullscreen event、Dock reopen coalescingを完了。M1両modeの実fullscreen enter/exitと2世代8 PTY/Metal/text-input/native handle/worker回収で受け入れ済み |
 | UI-04 | close/quit confirmation と active process detection。pane resource を完全 teardown | P0 | 7 | `G:macos/Sources/Features/Terminal/`, Ghostty surface process metadata | live-shell再操作confirmation、clean shell auto-close、abnormal shell retain後のone-step close、pane teardown完了。active-process検出はPhase 7 |
 | UI-05 | standard menu と Edit/Window/Shell/View action。terminal input と競合しない | P0 | 7 | `G:macos/Sources/App/MainMenu.xib`, action registry | 同一bounded catalogからApplication/File/Edit/Shell/View/Window menuを投影し、implemented handlerだけを動的にenable、menu/paletteのexactly-once dispatchとPTY非漏洩を両runtimeで完了 |
 | UI-06 | Quick Terminal、global shortcut、screen selection/animation | P1 | 10 | `G:macos/Sources/Features/QuickTerminal/`, `Global Keybinds/` | 未実装 |

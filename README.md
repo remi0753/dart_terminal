@@ -71,7 +71,10 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   first responder、resize/equalize/zoomに加え、focused session title、bounded tab rename/
   color、local OSC 7 cwdのproxy iconを投影する。新しいtab/splitは信頼済みlocal cwdを
   継承し、2 tab/4 live paneの実製品gateで実zsh cwd、key/IME分離と
-  PTY/Metal/text-input/native handle回収を両runtime検証する
+  PTY/Metal/text-input/native handle回収を両runtime検証する。versionedかつ
+  terminal内容を含まない状態へwindow/tab/split/cwd/metadataと安全なwindow配置を保存し、
+  fresh sessionとして復元する。実fullscreen enter/exit、display migration/clamp、
+  Dock reopenの重複抑止、2世代8 sessionの完全回収も両runtimeで受け入れる
 - terminal内容を含めないpane state / PTY shutdown stage診断
 - Control-Dのqueue受理、native write、foreground/termios、signal、waitpid、
   kernel exit status、PTY内/外のreap、exit公開をrequest IDで追えるcontent-free診断
@@ -79,9 +82,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - PTY通知欠落時もpane ownerを閉じ、status 75でhost終了するclassified recovery
 - AppKit main-thread root と公式 Dart 子プロセス worker の bounded lifecycle
   （M1/arm64 Developer JIT / Release AOT）
-- native event protocol v5（source generation、nanosecond timestamp、operation
-  ID、focus/visibility/occlusion/backing scale/screen state、application/window
-  lifecycle、menu action、precision/momentum scroll）と、旧 v1/v2/v3/v4
+- native event protocol v6（source generation、nanosecond timestamp、operation
+  ID、focus/visibility/occlusion/backing scale/screen/frame/fullscreen state、
+  application/window lifecycle、menu action、precision/momentum scroll）と、旧 v1–v5
   endpoint との compatibility negotiation
 - generic/custom `View` 境界と、型を保った content-view attachment
 - `dart_terminal_renderer_macos` の公開 facadeからdependency-owned
@@ -346,11 +349,13 @@ make RUNTIME_ARCH=arm64 runtime-bundle-audit
 make RUNTIME_ARCH=arm64 runtime-integration
 make RUNTIME_ARCH=arm64 runtime-terminal-display-integration
 make RUNTIME_ARCH=arm64 runtime-native-hierarchy-integration
+make RUNTIME_ARCH=arm64 runtime-restoration-integration
 ```
 
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
-smoke、real-PTY live Metal display、native tab/4-pane hierarchy、lifecycle、bounded
-traffic、resource stress、shutdown fault suiteをまとめて実行します。display suiteは
+smoke、real-PTY live Metal display、native tab/4-pane hierarchy、fullscreen/migration/
+restoration/reopen、lifecycle、bounded traffic、resource stress、shutdown fault suiteを
+まとめて実行します。display suiteは
 SGR除去、style、soft wrap、
 bottom prompt、newest-only frame boundに加え、PTY由来のvisible text、local selection、
 cursor、native accessibility selector/geometry/focus/notificationをDeveloper JIT/
@@ -359,6 +364,10 @@ native hierarchy suiteは2つのnative tabと4つのlive Metal paneを作り、s
 resize/equalize/zoom、first-responder focus、OSC title/cwd、tab rename/color、proxy icon、
 子zshへのlocal cwd継承、raw key/IMEのpane分離、split/tab close、4つのPTYと全native
 resourceの回収を両runtimeで確認します。
+restoration suiteは実fullscreen enter/exit後にdisplay migrationを適用し、
+2 tab/4 paneをcontent-freeなversioned stateへ保存してfresh ownerで再生成します。
+重複Dock reopenのcoalescing、cwd継承、2世代8 PTYとMetal/text-input/native handle/
+workerの完全回収をDeveloper JIT/Release AOTで同じ契約として確認します。
 resource stress は実アプリの Dart API から 1,000 組の Window/View を生成・
 破棄し、毎回 native handle が基準値へ戻ることを確認します。shutdown fault suite は
 malformed/late event、double dispose、worker crash を封じ込め、最終 native handle が 0、

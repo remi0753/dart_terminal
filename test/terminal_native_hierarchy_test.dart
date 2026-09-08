@@ -171,7 +171,13 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
         bindings.windowTabGroups.length == 1 &&
         bindings.windowTabGroups.single.length == 2 &&
         bindings.selectedTabWindows.values.single == selectedWindowHandle &&
-        bindings.firstResponders[selectedWindowHandle] == fourthPaneViewHandle,
+        bindings.firstResponders[selectedWindowHandle] ==
+            fourthPaneViewHandle &&
+        bindings.presentationCalls.length == 3 &&
+        bindings.presentationCalls[0] == 'show:$selectedWindowHandle' &&
+        bindings.presentationCalls[1] == 'select:$selectedWindowHandle' &&
+        bindings.presentationCalls[2] ==
+            'responder:$selectedWindowHandle:$fourthPaneViewHandle',
     'two logical tabs project to one selected native tab group and four panes',
   );
   _expect(
@@ -208,7 +214,13 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
     bindings.windowTitles[firstWindowHandle] == 'Updated first title' &&
         !bindings.windowRepresentedFilePaths.containsKey(firstWindowHandle) &&
         bindings.windowTitles[selectedWindowHandle] == 'Second live title' &&
-        !bindings.windowTabColors.containsKey(selectedWindowHandle),
+        !bindings.windowTabColors.containsKey(selectedWindowHandle) &&
+        bindings.windowContentViewSetCounts[firstWindowHandle] == 1 &&
+        bindings.windowContentViewSetCounts[selectedWindowHandle] == 1 &&
+        bindings.splitViewChildrenSetCounts.length == 2 &&
+        bindings.splitViewChildrenSetCounts.values.every(
+          (int count) => count == 1,
+        ),
     'retained windows update live title and clear remote proxy/rename/color',
   );
   _expect(
@@ -295,8 +307,28 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
     migratedFullscreen.windowedFrame.width,
     migratedFullscreen.windowedFrame.height,
   );
+  bindings.windowFrames[selectedWindowHandle] = const Rect.fromLTWH(
+    0,
+    0,
+    1618,
+    1020,
+  );
+  rawEvents.add(<Object?>[
+    6,
+    9,
+    selectedWindowHandle,
+    selectedGeneration,
+    500004,
+    0,
+    0.0,
+    0.0,
+    1618.0,
+    1020.0,
+  ]);
   _expect(
     !adapter.placementForWindow(firstWindow.id).fullscreen &&
+        adapter.placementForWindow(firstWindow.id).windowedFrame ==
+            migratedFullscreen.windowedFrame &&
         firstWindow.tabIds.every(
           (TerminalTabId tabId) =>
               bindings.windowFrames[bindings.handleFor(
@@ -304,7 +336,44 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
               )] ==
               migratedFrame,
         ),
-    'fullscreen exit restores the migrated safe frame to the native tab group',
+    'fullscreen exit ignores its completion frame and restores the migrated '
+    'safe frame to the native tab group',
+  );
+  final Rect settledWindowedFrame = Rect.fromLTWH(
+    migratedFrame.left + 12,
+    migratedFrame.top + 8,
+    migratedFrame.width,
+    migratedFrame.height,
+  );
+  bindings.windowFrames[selectedWindowHandle] = settledWindowedFrame;
+  rawEvents.add(<Object?>[
+    6,
+    9,
+    selectedWindowHandle,
+    selectedGeneration,
+    500005,
+    0,
+    settledWindowedFrame.left,
+    settledWindowedFrame.top,
+    settledWindowedFrame.width,
+    settledWindowedFrame.height,
+  ]);
+  _expect(
+    adapter.placementForWindow(firstWindow.id).windowedFrame ==
+            TerminalWindowFrame(
+              left: settledWindowedFrame.left,
+              top: settledWindowedFrame.top,
+              width: settledWindowedFrame.width,
+              height: settledWindowedFrame.height,
+            ) &&
+        firstWindow.tabIds.every(
+          (TerminalTabId tabId) =>
+              bindings.windowFrames[bindings.handleFor(
+                adapter.windowForTab(tabId)!,
+              )] ==
+              settledWindowedFrame,
+        ),
+    'an authoritative windowed frame converges every native tab',
   );
   state
     ..selectTab(firstWindow.id, firstTab.id)
@@ -387,6 +456,7 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
   }
   _expect(
     bindings.objects.isEmpty &&
+        bindings.windowTabGroups.isEmpty &&
         bindings.windowRepresentedFilePaths.isEmpty &&
         bindings.windowTabColors.isEmpty &&
         firstResources.isDisposed &&
@@ -865,11 +935,14 @@ final class _HierarchyNativeBindings implements NativeBindings {
   final Map<int, String> windowRepresentedFilePaths = <int, String>{};
   final Map<int, List<double>> windowTabColors = <int, List<double>>{};
   final Map<int, int> contentViews = <int, int>{};
+  final Map<int, int> windowContentViewSetCounts = <int, int>{};
   final Map<int, int> firstResponders = <int, int>{};
+  final List<String> presentationCalls = <String>[];
   final List<List<int>> windowTabGroups = <List<int>>[];
   final Map<int, int> selectedTabWindows = <int, int>{};
   final Map<int, int> splitViewAxes = <int, int>{};
   final Map<int, List<int>> splitViewChildren = <int, List<int>>{};
+  final Map<int, int> splitViewChildrenSetCounts = <int, int>{};
   final Map<int, double> splitViewFractions = <int, double>{};
   final Map<int, int> splitViewZoomedChildren = <int, int>{};
   final List<int> releaseOrder = <int>[];
@@ -938,6 +1011,7 @@ final class _HierarchyNativeBindings implements NativeBindings {
   @override
   NativeCallResult windowShow(int handle) {
     windowShowCounts[handle] = (windowShowCounts[handle] ?? 0) + 1;
+    presentationCalls.add('show:$handle');
     return const NativeCallResult.success();
   }
 
@@ -977,6 +1051,8 @@ final class _HierarchyNativeBindings implements NativeBindings {
   @override
   NativeCallResult windowSetContentView(int windowHandle, int viewHandle) {
     contentViews[windowHandle] = viewHandle;
+    windowContentViewSetCounts[windowHandle] =
+        (windowContentViewSetCounts[windowHandle] ?? 0) + 1;
     return const NativeCallResult.success();
   }
 
@@ -1011,6 +1087,11 @@ final class _HierarchyNativeBindings implements NativeBindings {
 
   @override
   NativeCallResult windowRemoveFromTabGroup(int handle) {
+    _removeWindowFromTabGroups(handle);
+    return const NativeCallResult.success();
+  }
+
+  void _removeWindowFromTabGroups(int handle) {
     for (final List<int> group in windowTabGroups.toList()) {
       final int oldKey = group.first;
       if (!group.remove(handle)) continue;
@@ -1024,12 +1105,12 @@ final class _HierarchyNativeBindings implements NativeBindings {
       }
       break;
     }
-    return const NativeCallResult.success();
   }
 
   @override
   NativeCallResult windowSelectTab(int handle) {
     windowSelectCounts[handle] = (windowSelectCounts[handle] ?? 0) + 1;
+    presentationCalls.add('select:$handle');
     for (final List<int> group in windowTabGroups) {
       if (group.contains(handle)) selectedTabWindows[group.first] = handle;
     }
@@ -1043,6 +1124,7 @@ final class _HierarchyNativeBindings implements NativeBindings {
       return const NativeCallResult.failure(1, 'view is not attached');
     }
     firstResponders[handle] = viewHandle;
+    presentationCalls.add('responder:$handle:$viewHandle');
     windowFirstResponderCounts[handle] =
         (windowFirstResponderCounts[handle] ?? 0) + 1;
     return const NativeCallResult.success();
@@ -1066,6 +1148,8 @@ final class _HierarchyNativeBindings implements NativeBindings {
     int firstViewHandle,
     int secondViewHandle,
   ) {
+    splitViewChildrenSetCounts[splitViewHandle] =
+        (splitViewChildrenSetCounts[splitViewHandle] ?? 0) + 1;
     splitViewChildren[splitViewHandle] = <int>[
       firstViewHandle,
       secondViewHandle,
@@ -1099,6 +1183,7 @@ final class _HierarchyNativeBindings implements NativeBindings {
   @override
   NativeCallResult release(int handle) {
     releaseOrder.add(handle);
+    _removeWindowFromTabGroups(handle);
     objects.remove(handle);
     windowTitles.remove(handle);
     windowFrames.remove(handle);
