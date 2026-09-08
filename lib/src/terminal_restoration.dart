@@ -13,7 +13,8 @@ abstract final class TerminalRestorationLimits {
   static const int maximumTotalTabs = 128;
   static const int maximumTabsPerWindow =
       TerminalApplicationStateLimits.maximumTabsPerWindow;
-  static const int maximumTotalPanes = 64;
+  static const int maximumTotalPanes =
+      TerminalApplicationStateLimits.maximumTotalPanes;
   static const int maximumPanesPerTab =
       TerminalApplicationStateLimits.maximumPanesPerTab;
   static const int maximumTreeDepth = maximumPanesPerTab;

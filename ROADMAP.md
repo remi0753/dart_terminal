@@ -959,6 +959,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] aggregate app quit confirmation と deferred native lifecycle coordination
   - [x] M1 両 runtime 回帰受け入れと親項目完了判定
 - [ ] multiple pane の scheduling/resource budget
+  （分割と完了条件は
+  [`docs/phase7/multiple-pane-scheduling-resource-budget.md`](docs/phase7/multiple-pane-scheduling-resource-budget.md)
+  を参照して順に実施する）
+  - [x] application-wide live-pane resource admission
+  - [ ] bounded round-robin pane render scheduling
+  - [ ] cross-pane flood/input 両 runtime 回帰受け入れと親項目完了判定
 - [ ] AppKit unit、integration、UI tests
 
 終了条件:

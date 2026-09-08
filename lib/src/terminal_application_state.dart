@@ -6,6 +6,7 @@ abstract final class TerminalApplicationStateLimits {
   static const int maximumWindows = 32;
   static const int maximumTabsPerWindow = 64;
   static const int maximumPanesPerTab = 64;
+  static const int maximumTotalPanes = 64;
   static const int maximumSplitNodesPerTab = maximumPanesPerTab * 2 - 1;
 }
 
@@ -869,6 +870,7 @@ final class TerminalApplicationState {
       if (_windows.length >= TerminalApplicationStateLimits.maximumWindows) {
         throw StateError('terminal application window limit is exhausted');
       }
+      _requirePaneCapacity();
       final TerminalWindowId windowId = TerminalWindowId(
         _nextIdentity(_nextWindowId, count: 1, name: 'window'),
       );
@@ -919,6 +921,7 @@ final class TerminalApplicationState {
           TerminalApplicationStateLimits.maximumTabsPerWindow) {
         throw StateError('terminal window tab limit is exhausted');
       }
+      _requirePaneCapacity();
       final TerminalTabId tabId = TerminalTabId(
         _nextIdentity(_nextTabId, count: 1, name: 'tab'),
       );
@@ -967,6 +970,7 @@ final class TerminalApplicationState {
           TerminalApplicationStateLimits.maximumPanesPerTab) {
         throw StateError('terminal tab pane limit is exhausted');
       }
+      _requirePaneCapacity();
       if (!fraction.isFinite || fraction <= 0 || fraction >= 1) {
         throw ArgumentError.value(
           fraction,
@@ -1245,6 +1249,9 @@ final class TerminalApplicationState {
     if (_windows.length > TerminalApplicationStateLimits.maximumWindows) {
       throw StateError('terminal application exceeds its window limit');
     }
+    if (_panes.length > TerminalApplicationStateLimits.maximumTotalPanes) {
+      throw StateError('terminal application exceeds its total pane limit');
+    }
     if (_windows.isEmpty != (_activeWindowId == null)) {
       throw StateError('active-window identity does not match window state');
     }
@@ -1387,6 +1394,12 @@ final class TerminalApplicationState {
       );
     }
     return value;
+  }
+
+  void _requirePaneCapacity() {
+    if (_panes.length >= TerminalApplicationStateLimits.maximumTotalPanes) {
+      throw StateError('terminal application total pane limit is exhausted');
+    }
   }
 
   static int _nextIdentity(

@@ -18,7 +18,90 @@ Future<void> runTerminalApplicationStateTests() async {
   await _testPaneRemovalAndOrderedShutdown();
   await _testPaneCloseCoordinator();
   await _testApplicationQuitCoordinator();
+  await _testApplicationTotalPaneAdmission();
   await _testApplicationLimitsAndDisposedState();
+}
+
+Future<void> _testApplicationTotalPaneAdmission() async {
+  final List<_StateFakeSession> sessions = <_StateFakeSession>[];
+  final TerminalPaneConfiguration configuration = _configuration(sessions);
+  final TerminalApplicationState state = TerminalApplicationState();
+  final List<TerminalWindowState> windows = <TerminalWindowState>[];
+  for (
+    var index = 0;
+    index < TerminalApplicationStateLimits.maximumWindows - 1;
+    index++
+  ) {
+    windows.add(await state.createWindow(configuration));
+  }
+  final TerminalWindowState firstWindow = windows.first;
+  while (state.paneCount < TerminalApplicationStateLimits.maximumTotalPanes) {
+    await state.createTab(firstWindow.id, configuration);
+  }
+  final int allocationCountAtLimit = sessions.length;
+  final int maximumPaneIdentity = state.paneIds.last.value;
+  final PaneId splitTarget = windows.last.selectedTab.focusedPaneId;
+  _expect(
+    state.windowCount == TerminalApplicationStateLimits.maximumWindows - 1 &&
+        state.tabCount == TerminalApplicationStateLimits.maximumTotalPanes &&
+        state.paneCount == TerminalApplicationStateLimits.maximumTotalPanes &&
+        allocationCountAtLimit ==
+            TerminalApplicationStateLimits.maximumTotalPanes,
+    'live application reaches the aggregate pane budget exactly',
+  );
+
+  await _expectFutureThrows<StateError>(
+    () => state.createWindow(configuration),
+    'aggregate pane budget refuses a new window before allocation',
+  );
+  await _expectFutureThrows<StateError>(
+    () => state.createTab(firstWindow.id, configuration),
+    'aggregate pane budget refuses a new tab before allocation',
+  );
+  await _expectFutureThrows<StateError>(
+    () => state.splitPane(
+      splitTarget,
+      configuration,
+      axis: TerminalSplitAxis.horizontal,
+    ),
+    'aggregate pane budget refuses a split before allocation',
+  );
+  _expect(
+    sessions.length == allocationCountAtLimit &&
+        state.windowCount ==
+            TerminalApplicationStateLimits.maximumWindows - 1 &&
+        state.tabCount == TerminalApplicationStateLimits.maximumTotalPanes &&
+        state.paneCount == TerminalApplicationStateLimits.maximumTotalPanes,
+    'over-budget live mutations consume no session or hierarchy resource',
+  );
+
+  final TerminalTabState removableTab = firstWindow.selectedTab;
+  final PaneId removablePane = removableTab.focusedPaneId;
+  final TerminalPaneRemovalResult removal = await state.removePane(
+    removablePane,
+  );
+  final TerminalTabState replacement = await state.createTab(
+    firstWindow.id,
+    configuration,
+  );
+  _expect(
+    removal.removedTab &&
+        !removal.removedWindow &&
+        replacement.focusedPaneId.value == maximumPaneIdentity + 1 &&
+        sessions.length == allocationCountAtLimit + 1 &&
+        state.paneCount == TerminalApplicationStateLimits.maximumTotalPanes,
+    'released aggregate capacity is reusable without failed identity gaps',
+  );
+  final TerminalPaneOwnerShutdownResult shutdown = await state.shutdown();
+  _expect(
+    shutdown.sessions.length ==
+            TerminalApplicationStateLimits.maximumTotalPanes &&
+        shutdown.isClean &&
+        sessions.every(
+          (_StateFakeSession session) => session.shutdownCount == 1,
+        ),
+    'aggregate-budget fixture releases every admitted and removed session',
+  );
 }
 
 Future<void> _testApplicationQuitCoordinator() async {
