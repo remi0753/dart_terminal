@@ -1169,7 +1169,8 @@ Future<void> _testPersistentCommandSession() async {
         ptyBackend.commands.single.executable == '/bin/zsh' &&
         ptyBackend.commands.single.arguments.isEmpty &&
         ptyBackend.commands.single.loginShell &&
-        ptyBackend.commands.single.readBatchBytes == 4 * 1024,
+        ptyBackend.commands.single.readBatchBytes == 4 * 1024 &&
+        ptyBackend.commands.single.readBatchesPerEventLoopTurn == 2,
     'one bounded-delivery login shell is created for the session generation',
   );
   final FakePtyProcess process = ptyBackend.processes.single;

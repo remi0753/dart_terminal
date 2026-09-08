@@ -214,6 +214,7 @@ final class TerminalSession implements TerminalPaneSession {
   static const int defaultReadBatchBytes = 4 * 1024;
   static const int defaultReadHighWaterBytes = defaultReadBatchBytes;
   static const int defaultReadLowWaterBytes = 0;
+  static const int defaultReadBatchesPerEventLoopTurn = 2;
   final int readBatchBytes;
   final int writeCapacityBytes;
   final Duration gracefulShutdownTimeout;
@@ -358,6 +359,7 @@ final class TerminalSession implements TerminalPaneSession {
           workingDirectory: _workingDirectory,
           loginShell: true,
           readBatchBytes: readBatchBytes,
+          readBatchesPerEventLoopTurn: defaultReadBatchesPerEventLoopTurn,
         ),
         initialSize: PtySize(rows: _rows, columns: _columns),
         readHighWaterBytes: defaultReadHighWaterBytes,

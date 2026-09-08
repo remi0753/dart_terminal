@@ -965,6 +965,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] application-wide live-pane resource admission
   - [x] bounded round-robin pane render scheduling
   - [x] bounded PTY/parser dispatch と Developer JIT flood 回帰
+  - [x] cooperative PTY batch turn yielding と full-matrix starvation 回帰
   - [ ] cross-pane flood/input 両 runtime 回帰受け入れと親項目完了判定
 - [ ] AppKit unit、integration、UI tests
 

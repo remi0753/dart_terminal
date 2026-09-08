@@ -132,7 +132,22 @@ queues without bound nor starves input and presentation in another pane.
   budget, PTY package/full terminal tests pass, and the Developer JIT flood
   response is no more than 2x its same-launch idle baseline.
 
-### 4. Cross-pane flood/input dual-runtime acceptance and parent completion
+### 4. Cooperative PTY batch turn yielding and full-matrix starvation regression
+
+- Keep ordinary reusable PTY consumers on immediate ordered ACK, but let a
+  command opt into acknowledging a synchronously consumed batch on a later
+  Dart event-loop turn. Combine that option with the terminal's one-batch
+  high/low watermark so the flood port cannot enqueue its successor before
+  already-ready timers and other PTY ports receive service.
+- Pin the public default/opt-in contract, timer-before-next-batch behavior, and
+  lifecycle/cleanup semantics in the reusable package. Select the option only
+  for terminal sessions and retain the existing native ABI, reactor, byte
+  order, and bounded credit ownership.
+- Completion: reusable PTY focused/full tests pass, repeated sequential
+  hierarchy runs no longer reproduce the full-matrix Release AOT starvation,
+  and the change is committed independently before returning to final evidence.
+
+### 5. Cross-pane flood/input dual-runtime acceptance and parent completion
 
 - Extend the existing hierarchy product fixture rather than duplicate its
   resource graph. Measure an idle-pane baseline and a second-pane response while
@@ -386,3 +401,91 @@ queues without bound nor starves input and presentation in another pane.
   dependency worktree is clean, and final diff review found no temporary
   diagnostic or unrelated file. This third child is complete; Release AOT and
   the final dual-runtime/evidence pass remain ordered next.
+- 2026-09-09: after commit `415ea54 Bound PTY parsing between pane turns`, the
+  clean terminal and dependency worktrees, roadmap, and this record were reread.
+  The dual-runtime acceptance/evidence child is the first unfinished item.
+  Release AOT passed the identical exact-flood hierarchy contract in 17031 ms:
+  its same-launch idle baseline was 27557 microseconds, concurrent-flood
+  response was 5607 microseconds (0.204x), and scheduler yields reached 455
+  after increasing during the flood. Together with Developer JIT's 0.241x
+  result, both supported runtime modes satisfy the stable semantic/count line,
+  mode-local 2x latency gate, bounded scheduling/frame state, and full cleanup.
+- 2026-09-09: the first complete `runtime-verify` invalidated that provisional
+  conclusion by exposing an intermittent Release AOT starvation that the
+  isolated launch did not reproduce. Developer JIT passed at 27600/8801
+  microseconds (0.319x), but the immediately following Release AOT hierarchy
+  measured 1022984 microseconds against a 23901-microsecond idle baseline
+  (42.801x) and exited 70. Input still completed before the flood marker,
+  scheduler yields advanced from 6 to 264, registrations/pending/work/frame
+  state remained bounded, and teardown was clean. The failure is therefore a
+  real latency blocker, not growth, marker loss, or cleanup failure. The parent
+  and final child remain incomplete while native-listener/ACK event-turn
+  fairness is investigated; no acceptance threshold is weakened.
+- 2026-09-09: the first reusable-package cooperative-ACK test failed and
+  sharpened the missing bound. It received 1025 callbacks with a natural
+  1024-byte maximum before enforcing exact payload setup, and consecutive
+  callbacks could precede the timer barrier: a 4 KiB byte high-water can hold
+  several partial `read(2)` results. The compatibility config is extended once
+  more with an opt-in native pause after each batch, while retaining both the
+  original prefix and the prior read-batch suffix. Terminal sessions combine
+  one native batch in flight with a later-event-turn Dart ACK; ordinary PTY
+  commands retain immediate ACK and existing native read behavior.
+- 2026-09-09: the corrected reusable native/Dart suites pass, but yielding
+  every single native batch is too slow for the product gate. The first
+  hierarchy attempt met fairness at 27502 versus 34428 microseconds (0.799x)
+  and the 4 KiB nonblocking-read aggregation rerun met it at 8186 versus 25606
+  microseconds (0.320x); both then exceeded the 120-second outer deadline before
+  the remaining Close/Quit teardown scenario completed. Timeout termination
+  caused the recorded status-23 child and destroy-status-3 cleanup errors; they
+  occurred after the fairness summary and are not accepted as clean teardown.
+- A maximum-four-callback Dart turn is the next bounded correction: native
+  still admits only one batch, the first three consumer-completed ACKs resume
+  one successor each, and the fourth ACK is deferred so another ready event is
+  serviced before any fifth callback. Automated edit review rejected applying
+  this interaction without explicit user approval due to potential deadlock
+  risk. The cooperative child remains incomplete and both worktrees retain the
+  documented, passing-package but throughput-blocked implementation.
+- 2026-09-09: the user explicitly approved proceeding with the four-callback
+  limit while requiring the adjacent package to remain general-purpose and
+  opt-in. `PtyCommand.readBatchesPerEventLoopTurn` now uses zero as the unchanged
+  default and accepts caller-selected limits one through eight. Only terminal
+  sessions pass a nonzero value, currently two. Nonzero consumers receive one
+  native batch in flight, immediate ACK for the first `limit - 1` completed
+  callbacks, and a deferred limit-th ACK; package callers can independently
+  choose fairness or retain prior throughput behavior.
+- 2026-09-09: the first four-callback Developer JIT rerun restored throughput
+  and met the latency gate at 27115 versus 26539 microseconds (1.022x), then
+  exited 70 because pane teardown observed native destroy status 3. Inspection
+  traced this to the reusable reactor's EOF condition: a final partial batch
+  made in-flight bytes lower than the high-water mark even though its ordered
+  ACK was still pending, so exit was published before `outstanding_` became
+  empty and destroy correctly refused the handle. The current child now also
+  requires exact outstanding-empty exit; cooperative delivery's existing
+  read-paused watermark ACK supplies the required wake.
+- 2026-09-09: after the outstanding-empty correction, all four sessions and
+  native resources cleaned up exactly, but a subsequent Developer JIT sample
+  measured 57337 microseconds against a 24357-microsecond baseline (2.355x).
+  Four callbacks is therefore a valid package ceiling but not a sufficiently
+  stable terminal selection. The product selects two callbacks per Dart event
+  turn, still within the user-approved maximum-four design; the package keeps
+  its caller-configurable zero-through-eight contract and unchanged zero
+  default. This trades additional bounded turns for margin under the strict 2x
+  gate without changing the 4 KiB parser batch.
+- 2026-09-09: two consecutive dual-runtime samples with the terminal's
+  two-callback selection passed the exact 100 MiB four-pane hierarchy and clean
+  teardown. The first pair measured Developer JIT 27210/26221 microseconds
+  (1.038x) and Release AOT 23723/25299 microseconds (0.938x); the second pair
+  remained below the gate at 1.624x and 0.999x respectively. Every run observed
+  the input before flood completion, positive scheduler yields, bounded
+  registrations/pending/work/frame state, and four clean PTY/Metal owners.
+- The adjacent package's complete `make test` passed warning-clean native
+  capability coverage, every Dart package analyzer/test, AppKit and launcher
+  coverage, and FFI smoke tests. The generic change was committed separately as
+  `02a13d7 Schedule bounded PTY read turns`; its default remains zero and the
+  terminal-specific value remains solely in this repository.
+- Terminal `make test` passed compatibility, differential, application,
+  terminfo, formatting of 207 Dart files, whole-project analysis, and the
+  aggregate runner. `make runtime-source-check` passed with 391 tracked files,
+  zero product native sources, and one reviewed test-native source. This
+  cooperative-turn child is complete; final dual-runtime aggregate evidence
+  remains the next ordered child.
