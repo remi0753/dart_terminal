@@ -55,6 +55,107 @@ enum TerminalPaneState {
 
 enum TerminalPaneCloseDecision { confirmationRequired, allow }
 
+/// Content-free classification of the process currently owned by one pane.
+enum TerminalPaneProcessDisposition {
+  nonLive,
+  idleShell,
+  foregroundProcess,
+  unavailable,
+}
+
+/// Same-call process identity used by close/quit admission policy.
+final class TerminalPaneProcessSnapshot {
+  const TerminalPaneProcessSnapshot._({
+    required this.sessionId,
+    required this.disposition,
+    required this.childProcessId,
+    required this.owningProcessGroup,
+    required this.foregroundProcessGroup,
+    required this.owningProcessGroupSystemError,
+    required this.foregroundProcessGroupSystemError,
+  });
+
+  factory TerminalPaneProcessSnapshot.nonLive(TerminalSessionId sessionId) =>
+      TerminalPaneProcessSnapshot._(
+        sessionId: sessionId,
+        disposition: TerminalPaneProcessDisposition.nonLive,
+        childProcessId: null,
+        owningProcessGroup: null,
+        foregroundProcessGroup: null,
+        owningProcessGroupSystemError: 0,
+        foregroundProcessGroupSystemError: 0,
+      );
+
+  factory TerminalPaneProcessSnapshot.available({
+    required TerminalSessionId sessionId,
+    required int childProcessId,
+    required int owningProcessGroup,
+    required int foregroundProcessGroup,
+  }) {
+    for (final MapEntry<String, int> identity in <String, int>{
+      'childProcessId': childProcessId,
+      'owningProcessGroup': owningProcessGroup,
+      'foregroundProcessGroup': foregroundProcessGroup,
+    }.entries) {
+      if (identity.value <= 0) {
+        throw ArgumentError.value(
+          identity.value,
+          identity.key,
+          'must be positive',
+        );
+      }
+    }
+    return TerminalPaneProcessSnapshot._(
+      sessionId: sessionId,
+      disposition: foregroundProcessGroup == owningProcessGroup
+          ? TerminalPaneProcessDisposition.idleShell
+          : TerminalPaneProcessDisposition.foregroundProcess,
+      childProcessId: childProcessId,
+      owningProcessGroup: owningProcessGroup,
+      foregroundProcessGroup: foregroundProcessGroup,
+      owningProcessGroupSystemError: 0,
+      foregroundProcessGroupSystemError: 0,
+    );
+  }
+
+  factory TerminalPaneProcessSnapshot.unavailable({
+    required TerminalSessionId sessionId,
+    int? childProcessId,
+    int? owningProcessGroup,
+    int? foregroundProcessGroup,
+    int owningProcessGroupSystemError = 0,
+    int foregroundProcessGroupSystemError = 0,
+  }) => TerminalPaneProcessSnapshot._(
+    sessionId: sessionId,
+    disposition: TerminalPaneProcessDisposition.unavailable,
+    childProcessId: childProcessId,
+    owningProcessGroup: owningProcessGroup,
+    foregroundProcessGroup: foregroundProcessGroup,
+    owningProcessGroupSystemError: owningProcessGroupSystemError,
+    foregroundProcessGroupSystemError: foregroundProcessGroupSystemError,
+  );
+
+  final TerminalSessionId sessionId;
+  final TerminalPaneProcessDisposition disposition;
+  final int? childProcessId;
+  final int? owningProcessGroup;
+  final int? foregroundProcessGroup;
+  final int owningProcessGroupSystemError;
+  final int foregroundProcessGroupSystemError;
+
+  bool get requiresConfirmation =>
+      disposition == TerminalPaneProcessDisposition.foregroundProcess ||
+      disposition == TerminalPaneProcessDisposition.unavailable;
+
+  String machineLine() =>
+      'TERMINAL_PANE_PROCESS pane=${sessionId.paneId} session=$sessionId '
+      'disposition=${disposition.name} process_id=${childProcessId ?? 0} '
+      'owning_pgid=${owningProcessGroup ?? 0} '
+      'foreground_pgid=${foregroundProcessGroup ?? 0} '
+      'owning_errno=$owningProcessGroupSystemError '
+      'foreground_errno=$foregroundProcessGroupSystemError';
+}
+
 /// Product classification of the owning shell's observed termination.
 enum TerminalPaneSessionExitDisposition { clean, nonZero, signaled, failed }
 
@@ -174,6 +275,8 @@ abstract interface class TerminalPaneSession {
   TerminalKeyboardModes get keyboardModes;
   bool get bracketedPasteMode;
   bool get pasteInProgress;
+
+  TerminalPaneProcessSnapshot processSnapshot();
 
   Future<void> start();
   String render();
@@ -370,6 +473,8 @@ final class TerminalPane {
   bool get closeConfirmationPending =>
       _state == TerminalPaneState.confirmationPending;
   TerminalPaneSessionShutdownResult? get shutdownResult => _shutdownResult;
+
+  TerminalPaneProcessSnapshot processSnapshot() => _session.processSnapshot();
 
   Future<void> start() => _startFuture ??= _start();
 

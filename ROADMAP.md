@@ -951,6 +951,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] terminal hierarchy restoration、native projection、reopen lifecycle
   - [x] M1 両 runtime 回帰受け入れと親項目完了判定
 - [ ] per-pane close と app quit confirmation
+  （分割と完了条件は
+  [`docs/phase7/per-pane-close-app-quit-confirmation.md`](docs/phase7/per-pane-close-app-quit-confirmation.md)
+  を参照して順に実施する）
+  - [x] bounded foreground-process snapshot と close-risk classification
+  - [ ] application-owned per-pane close transaction と hierarchy collapse
+  - [ ] aggregate app quit confirmation と deferred native lifecycle coordination
+  - [ ] M1 両 runtime 回帰受け入れと親項目完了判定
 - [ ] multiple pane の scheduling/resource budget
 - [ ] AppKit unit、integration、UI tests
 

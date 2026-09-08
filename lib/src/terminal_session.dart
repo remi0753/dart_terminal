@@ -279,6 +279,48 @@ final class TerminalSession implements TerminalPaneSession {
       _pasteConcurrentInputRejectionCount;
   TerminalSessionShutdownResult? get shutdownResult => _shutdownResult;
 
+  @override
+  TerminalPaneProcessSnapshot processSnapshot() {
+    if (!_live) {
+      return TerminalPaneProcessSnapshot.nonLive(id);
+    }
+    final PtyProcess? process = _process;
+    if (process == null) {
+      return TerminalPaneProcessSnapshot.unavailable(sessionId: id);
+    }
+    try {
+      final PtyProcessSnapshot snapshot = process.processSnapshot();
+      if (!_live || snapshot.hasExited) {
+        return TerminalPaneProcessSnapshot.nonLive(id);
+      }
+      final int? childProcessId = snapshot.childPid;
+      final int? owningProcessGroup = snapshot.childProcessGroup;
+      final int? foregroundProcessGroup = snapshot.foregroundProcessGroup;
+      if (!snapshot.isAvailable ||
+          childProcessId == null ||
+          owningProcessGroup == null ||
+          foregroundProcessGroup == null) {
+        return TerminalPaneProcessSnapshot.unavailable(
+          sessionId: id,
+          childProcessId: childProcessId,
+          owningProcessGroup: owningProcessGroup,
+          foregroundProcessGroup: foregroundProcessGroup,
+          owningProcessGroupSystemError: snapshot.childProcessGroupSystemError,
+          foregroundProcessGroupSystemError:
+              snapshot.foregroundProcessGroupSystemError,
+        );
+      }
+      return TerminalPaneProcessSnapshot.available(
+        sessionId: id,
+        childProcessId: childProcessId,
+        owningProcessGroup: owningProcessGroup,
+        foregroundProcessGroup: foregroundProcessGroup,
+      );
+    } on Object {
+      return TerminalPaneProcessSnapshot.unavailable(sessionId: id);
+    }
+  }
+
   Future<void> waitForTermination() => _terminated.future;
 
   @override

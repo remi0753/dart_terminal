@@ -6987,6 +6987,9 @@ final class _ExitNotificationSuppressingPtyProcess implements PtyProcess {
   PtyStats? get finalStats => _delegate.finalStats;
 
   @override
+  PtyProcessSnapshot processSnapshot() => _delegate.processSnapshot();
+
+  @override
   PtyWriteResult write(Uint8List bytes) => _delegate.write(bytes);
 
   @override

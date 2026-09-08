@@ -535,6 +535,16 @@ final class _RestorationFakeSession implements TerminalPaneSession {
   TerminalPaneSessionExitDisposition? get exitDisposition => null;
 
   @override
+  TerminalPaneProcessSnapshot processSnapshot() => shutdownCount == 0
+      ? TerminalPaneProcessSnapshot.available(
+          sessionId: id,
+          childProcessId: id.paneId.value,
+          owningProcessGroup: id.paneId.value,
+          foregroundProcessGroup: id.paneId.value,
+        )
+      : TerminalPaneProcessSnapshot.nonLive(id);
+
+  @override
   TerminalKeyboardModes get keyboardModes => const TerminalKeyboardModes();
 
   @override

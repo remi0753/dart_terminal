@@ -143,6 +143,8 @@ export 'src/terminal_pane.dart'
         TerminalPaneLifecycleObserver,
         TerminalPaneOwner,
         TerminalPaneOwnerShutdownResult,
+        TerminalPaneProcessDisposition,
+        TerminalPaneProcessSnapshot,
         TerminalPaneSession,
         TerminalPaneSessionExitDisposition,
         TerminalPaneSessionFactory,

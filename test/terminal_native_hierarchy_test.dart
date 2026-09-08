@@ -801,6 +801,16 @@ final class _HierarchyFakeSession implements TerminalPaneSession {
   TerminalPaneSessionExitDisposition? get exitDisposition => null;
 
   @override
+  TerminalPaneProcessSnapshot processSnapshot() => !live
+      ? TerminalPaneProcessSnapshot.nonLive(id)
+      : TerminalPaneProcessSnapshot.available(
+          sessionId: id,
+          childProcessId: id.paneId.value,
+          owningProcessGroup: id.paneId.value,
+          foregroundProcessGroup: id.paneId.value,
+        );
+
+  @override
   TerminalKeyboardModes get keyboardModes => const TerminalKeyboardModes();
 
   @override

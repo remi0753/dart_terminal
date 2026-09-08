@@ -183,6 +183,7 @@ Future<void> main() async {
   await _testPersistentCommandSession();
   await _testBoundedPasteTransport();
   await _testBoundedSessionShutdown();
+  await _testTerminalProcessSnapshotClassification();
   await _testRealPersistentPtySession();
   await _testControlDSemanticsMatrix().timeout(const Duration(seconds: 30));
   await _testRepeatedControlDNaturalExit().timeout(const Duration(seconds: 45));
@@ -1689,6 +1690,66 @@ Future<void> _testRealPersistentPtySession() async {
   await session.dispose();
 }
 
+Future<void> _testTerminalProcessSnapshotClassification() async {
+  final FakePtyBackend backend = FakePtyBackend(autoExitOnClose: false);
+  const TerminalSessionId sessionId = TerminalSessionId(
+    paneId: PaneId(70),
+    generation: 1,
+  );
+  final TerminalSession session = TerminalSession(
+    id: sessionId,
+    ptyBackend: backend,
+    onChanged: () {},
+    onTerminated: () {},
+  );
+  _expect(
+    session.processSnapshot().disposition ==
+        TerminalPaneProcessDisposition.nonLive,
+    'unstarted terminal session has no live process',
+  );
+  await session.start();
+  final FakePtyProcess process = backend.processes.single;
+  final TerminalPaneProcessSnapshot idle = session.processSnapshot();
+  _expect(
+    idle.disposition == TerminalPaneProcessDisposition.idleShell &&
+        idle.childProcessId == process.pid &&
+        idle.owningProcessGroup == process.pid &&
+        idle.foregroundProcessGroup == process.pid &&
+        !idle.requiresConfirmation,
+    'owning shell foreground group is classified as idle',
+  );
+  process.foregroundProcessGroup = process.pid + 10;
+  final TerminalPaneProcessSnapshot foreground = session.processSnapshot();
+  _expect(
+    foreground.disposition ==
+            TerminalPaneProcessDisposition.foregroundProcess &&
+        foreground.requiresConfirmation,
+    'distinct foreground process group requires confirmation',
+  );
+  process.foregroundProcessGroupSystemError = 6;
+  final TerminalPaneProcessSnapshot unavailable = session.processSnapshot();
+  _expect(
+    unavailable.disposition == TerminalPaneProcessDisposition.unavailable &&
+        unavailable.requiresConfirmation &&
+        unavailable.foregroundProcessGroup == null &&
+        unavailable.foregroundProcessGroupSystemError == 6 &&
+        unavailable.machineLine() ==
+            'TERMINAL_PANE_PROCESS pane=70 session=70:1 '
+                'disposition=unavailable process_id=${process.pid} '
+                'owning_pgid=${process.pid} foreground_pgid=0 '
+                'owning_errno=0 foreground_errno=6',
+    'lookup failure is conservatively classified with content-free evidence',
+  );
+  process.finish(exitCode: 0);
+  await session.waitForTermination();
+  _expect(
+    session.processSnapshot().disposition ==
+        TerminalPaneProcessDisposition.nonLive,
+    'terminated terminal session no longer requires process inspection',
+  );
+  await session.dispose();
+}
+
 Future<void> _testRepeatedControlDNaturalExit() async {
   const int repetitions = 24;
   _expect(_livePtySessionCount() == 0, 'Control-D test starts without PTYs');
@@ -2164,6 +2225,8 @@ final class _FakePaneSession implements TerminalPaneSession {
   var failShutdown = false;
   var _live = false;
   TerminalPaneSessionExitDisposition? _exitDisposition;
+  TerminalPaneProcessDisposition processDisposition =
+      TerminalPaneProcessDisposition.idleShell;
 
   @override
   TerminalKeyboardModes keyboardModes = const TerminalKeyboardModes();
@@ -2179,6 +2242,22 @@ final class _FakePaneSession implements TerminalPaneSession {
 
   @override
   TerminalPaneSessionExitDisposition? get exitDisposition => _exitDisposition;
+
+  @override
+  TerminalPaneProcessSnapshot processSnapshot() => !_live
+      ? TerminalPaneProcessSnapshot.nonLive(id)
+      : processDisposition == TerminalPaneProcessDisposition.unavailable
+      ? TerminalPaneProcessSnapshot.unavailable(sessionId: id)
+      : TerminalPaneProcessSnapshot.available(
+          sessionId: id,
+          childProcessId: id.paneId.value + 1000,
+          owningProcessGroup: id.paneId.value + 1000,
+          foregroundProcessGroup:
+              processDisposition ==
+                  TerminalPaneProcessDisposition.foregroundProcess
+              ? id.paneId.value + 2000
+              : id.paneId.value + 1000,
+        );
 
   @override
   Future<void> start() async {
