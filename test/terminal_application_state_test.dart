@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dart_terminal/dart_terminal.dart';
@@ -14,7 +15,199 @@ Future<void> runTerminalApplicationStateTests() async {
   await _testTabPresentationAndCwdPolicy();
   await _testApplicationLayoutMutations();
   await _testPaneRemovalAndOrderedShutdown();
+  await _testPaneCloseCoordinator();
   await _testApplicationLimitsAndDisposedState();
+}
+
+Future<void> _testPaneCloseCoordinator() async {
+  final List<_StateFakeSession> sessions = <_StateFakeSession>[];
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalPaneConfiguration configuration = _configuration(sessions);
+  final TerminalWindowState firstWindow = await state.createWindow(
+    configuration,
+  );
+  final TerminalTabState firstTab = firstWindow.selectedTab;
+  final TerminalPane first = state.paneForId(firstTab.focusedPaneId)!;
+  final TerminalPane second = await state.splitPane(
+    first.id,
+    configuration,
+    axis: TerminalSplitAxis.horizontal,
+  );
+  final TerminalPane third = await state.splitPane(
+    second.id,
+    configuration,
+    axis: TerminalSplitAxis.vertical,
+  );
+  final TerminalTabState secondTab = await state.createTab(
+    firstWindow.id,
+    configuration,
+  );
+  final TerminalPane fourth = state.paneForId(secondTab.focusedPaneId)!;
+  final TerminalWindowState secondWindow = await state.createWindow(
+    configuration,
+  );
+  final TerminalPane fifth = state.paneForId(
+    secondWindow.selectedTab.focusedPaneId,
+  )!;
+  for (final TerminalPane pane in <TerminalPane>[
+    first,
+    second,
+    third,
+    fourth,
+    fifth,
+  ]) {
+    await pane.start();
+  }
+  state
+    ..focusPane(firstTab.id, third.id)
+    ..activateWindow(firstWindow.id);
+  sessions[2].processDisposition =
+      TerminalPaneProcessDisposition.foregroundProcess;
+  var hierarchyChanges = 0;
+  final TerminalPaneCloseCoordinator coordinator = TerminalPaneCloseCoordinator(
+    state: state,
+    onHierarchyChanged: () => hierarchyChanges++,
+  );
+
+  final TerminalPaneCloseResult firstRequest = await coordinator.requestClose();
+  final TerminalPaneCloseConfirmation firstConfirmation =
+      firstRequest.confirmation!;
+  _expect(
+    firstRequest.disposition ==
+            TerminalPaneCloseDisposition.confirmationRequired &&
+        firstConfirmation.paneId == third.id &&
+        firstConfirmation.sessionId == third.sessionId &&
+        state.paneCount == 5 &&
+        hierarchyChanges == 0 &&
+        third.closeConfirmationPending,
+    'focused foreground pane requires an identity-bound confirmation',
+  );
+  final TerminalPaneCloseConfirmation wrongConfirmation =
+      TerminalPaneCloseConfirmation(
+        operationId: firstConfirmation.operationId + 1,
+        paneId: third.id,
+        sessionId: third.sessionId,
+        processDisposition: TerminalPaneProcessDisposition.foregroundProcess,
+      );
+  _expect(
+    (await coordinator.confirmClose(wrongConfirmation)).disposition ==
+            TerminalPaneCloseDisposition.stale &&
+        coordinator.pendingConfirmation == firstConfirmation &&
+        state.paneCount == 5,
+    'wrong operation identity cannot consume a valid confirmation',
+  );
+  third.insertText('cancel');
+  _expect(
+    (await coordinator.confirmClose(firstConfirmation)).disposition ==
+            TerminalPaneCloseDisposition.stale &&
+        state.paneCount == 5 &&
+        coordinator.pendingConfirmation == null &&
+        !third.closeConfirmationPending,
+    'terminal interaction invalidates a pending close without mutation',
+  );
+
+  final TerminalPaneCloseResult repeatedRequest = await coordinator
+      .requestClose();
+  final TerminalPaneCloseConfirmation repeatedConfirmation =
+      repeatedRequest.confirmation!;
+  final TerminalPaneCloseResult foregroundRemoval = await coordinator
+      .requestClose();
+  _expect(
+    repeatedConfirmation.operationId > firstConfirmation.operationId &&
+        foregroundRemoval.disposition == TerminalPaneCloseDisposition.removed &&
+        foregroundRemoval.removal?.paneId == third.id &&
+        !foregroundRemoval.removal!.removedTab &&
+        !foregroundRemoval.removal!.removedWindow &&
+        state.paneCount == 4 &&
+        firstTab.focusedPaneId == second.id &&
+        sessions[2].shutdownCount == 1 &&
+        hierarchyChanges == 1,
+    'repeating the exact focused request confirms one nested split removal',
+  );
+
+  sessions[1].processDisposition = TerminalPaneProcessDisposition.idleShell;
+  final TerminalPaneCloseResult idleRemoval = await coordinator.requestClose(
+    paneId: second.id,
+  );
+  _expect(
+    idleRemoval.disposition == TerminalPaneCloseDisposition.removed &&
+        firstTab.paneIds.single == first.id &&
+        firstTab.focusedPaneId == first.id &&
+        sessions[1].shutdownCount == 1 &&
+        hierarchyChanges == 2,
+    'idle shell closes immediately and selects the structural neighbor',
+  );
+
+  sessions[3].processDisposition = TerminalPaneProcessDisposition.unavailable;
+  final TerminalPaneCloseResult unavailableRequest = await coordinator
+      .requestClose(paneId: fourth.id);
+  _expect(
+    unavailableRequest.disposition ==
+            TerminalPaneCloseDisposition.confirmationRequired &&
+        coordinator.cancelClose(unavailableRequest.confirmation!) &&
+        !coordinator.cancelClose(unavailableRequest.confirmation!) &&
+        state.paneCount == 3 &&
+        !fourth.closeConfirmationPending,
+    'unavailable live process state is conservative and explicitly cancellable',
+  );
+  sessions[3].live = false;
+  final TerminalPaneCloseResult nonLiveRemoval = await coordinator.requestClose(
+    paneId: fourth.id,
+  );
+  _expect(
+    nonLiveRemoval.disposition == TerminalPaneCloseDisposition.removed &&
+        nonLiveRemoval.removal!.removedTab &&
+        !nonLiveRemoval.removal!.removedWindow &&
+        firstWindow.tabs.length == 1 &&
+        hierarchyChanges == 3,
+    'non-live background-tab pane removes its empty tab without confirmation',
+  );
+
+  sessions[4].shutdownBarrier = Completer<void>();
+  final Future<TerminalPaneCloseResult> pendingRemoval = coordinator
+      .requestClose(paneId: fifth.id);
+  await Future<void>.delayed(Duration.zero);
+  _expect(
+    coordinator.removalInProgress &&
+        (await coordinator.requestClose(paneId: first.id)).disposition ==
+            TerminalPaneCloseDisposition.busy &&
+        state.paneCount == 2,
+    'one in-flight removal excludes concurrent hierarchy mutation',
+  );
+  sessions[4].shutdownBarrier!.complete();
+  final TerminalPaneCloseResult windowRemoval = await pendingRemoval;
+  _expect(
+    windowRemoval.disposition == TerminalPaneCloseDisposition.removed &&
+        windowRemoval.removal!.removedTab &&
+        windowRemoval.removal!.removedWindow &&
+        state.windowCount == 1 &&
+        state.activeWindowId == firstWindow.id &&
+        hierarchyChanges == 4,
+    'last pane closes its window and selects the neighboring logical window',
+  );
+
+  sessions[0].failShutdown = true;
+  final TerminalPaneCloseResult failedCleanup = await coordinator.requestClose(
+    paneId: first.id,
+  );
+  _expect(
+    failedCleanup.disposition ==
+            TerminalPaneCloseDisposition.removedWithCleanupFailure &&
+        failedCleanup.removal!.shutdown.disposition ==
+            TerminalSessionShutdownDisposition.failed &&
+        state.paneCount == 0 &&
+        state.windowCount == 0 &&
+        hierarchyChanges == 5 &&
+        (await coordinator.requestClose()).disposition ==
+            TerminalPaneCloseDisposition.noTarget &&
+        failedCleanup.machineLine() ==
+            'TERMINAL_PANE_CLOSE_TRANSACTION '
+                'disposition=removedWithCleanupFailure operation_id=0 '
+                'pane=${first.id} session=${first.sessionId} '
+                'removed_tab=true removed_window=true cleanup=failed',
+    'cleanup failure remains classified after deterministic structural removal',
+  );
+  await state.shutdown();
 }
 
 Future<void> _testTabPresentationAndCwdPolicy() async {
@@ -906,6 +1099,10 @@ final class _StateFakeSession implements TerminalPaneSession {
 
   var live = false;
   var shutdownCount = 0;
+  var failShutdown = false;
+  Completer<void>? shutdownBarrier;
+  TerminalPaneProcessDisposition processDisposition =
+      TerminalPaneProcessDisposition.idleShell;
 
   @override
   bool get isLive => live;
@@ -916,11 +1113,17 @@ final class _StateFakeSession implements TerminalPaneSession {
   @override
   TerminalPaneProcessSnapshot processSnapshot() => !live
       ? TerminalPaneProcessSnapshot.nonLive(id)
+      : processDisposition == TerminalPaneProcessDisposition.unavailable
+      ? TerminalPaneProcessSnapshot.unavailable(sessionId: id)
       : TerminalPaneProcessSnapshot.available(
           sessionId: id,
           childProcessId: id.paneId.value,
           owningProcessGroup: id.paneId.value,
-          foregroundProcessGroup: id.paneId.value,
+          foregroundProcessGroup:
+              processDisposition ==
+                  TerminalPaneProcessDisposition.foregroundProcess
+              ? id.paneId.value + 1000
+              : id.paneId.value,
         );
 
   @override
@@ -1011,7 +1214,11 @@ final class _StateFakeSession implements TerminalPaneSession {
   @override
   Future<TerminalPaneSessionShutdownResult> shutdown() async {
     shutdownCount++;
+    await shutdownBarrier?.future;
     live = false;
+    if (failShutdown) {
+      throw StateError('requested state fake shutdown failure');
+    }
     return TerminalPaneSessionShutdownResult(
       sessionId: id,
       processId: null,

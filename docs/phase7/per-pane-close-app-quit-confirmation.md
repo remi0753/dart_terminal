@@ -245,3 +245,51 @@ coordination
   freshness check passed all nine fix families, 417 split runs, eight owned
   gaps, and zero known P0 silent-corruption cases. Final whitespace checks are
   clean and the adjacent dependency worktree is clean.
+- 2026-09-08: the second child keeps `TerminalApplicationState.removePane` as
+  the sole structural and session-shutdown authority. A new main-root
+  coordinator owns at most one monotonic operation, binds it to exact
+  pane/session identity, and invokes hierarchy reconciliation only after the
+  accepted removal completes. Reimplementing split/tab/window collapse in
+  native callbacks was rejected because it would create a second owner.
+- 2026-09-08: idle-shell and non-live snapshots admit immediate removal.
+  Distinct foreground or unavailable live snapshots create a content-free
+  confirmation; repeating that exact focused Close confirms it. Wrong tokens,
+  interaction-cancelled pane state, missing targets, and concurrent removal
+  return typed stale/no-target/busy results without hierarchy mutation.
+  Cleanup failure remains explicit even though the already-owned structural
+  removal completes deterministically.
+- 2026-09-08: the first focused coordinator analysis stopped before tests on
+  three local static errors: a const token assertion invoked the non-const
+  `PaneId.operator==`, and the state test lacked the `dart:async` import for two
+  `Completer` uses. The assertion now compares the const integer identities and
+  the test imports its owning library; no runtime behavior was exercised by the
+  failed attempt.
+- 2026-09-08: a second analysis showed that even the public `PaneId.value`
+  getter is not a Dart const expression, leaving two errors on the same token
+  assert. The token constructor is now non-const and performs explicit runtime
+  validation of positive operation ID, matching pane/session identity, and a
+  confirmation-requiring process disposition. This is stricter in release
+  builds than the discarded assert-only approach.
+- 2026-09-08: focused review after the first green tests found that an exact
+  token whose pane confirmation had already been cancelled returned `stale`
+  but left the bounded token cached until another request. Confirmation and
+  cancellation now retire that exact stale token immediately; a wrong token
+  still cannot consume the valid pending one. The regression asserts both
+  properties.
+- 2026-09-08: after the stale-token correction, formatting, focused analysis,
+  direct application-state tests, and direct fake-native hierarchy tests all
+  passed. Complete `make test` then passed generated/freshness checks,
+  formatting of 204 Dart files with zero changes, whole-package analysis,
+  native asset hooks, and the aggregate test runner.
+- 2026-09-08: coverage now includes foreground refusal without mutation,
+  wrong-token preservation, interaction invalidation, monotonic repeated-action
+  confirmation, idle/non-live immediate removal, unavailable-state cancel,
+  nested split and background-tab collapse, last-window selection, in-flight
+  exclusion, cleanup-failure classification, and adapter-driven release of the
+  removed pane view and split. The second ordered child has no remaining work
+  and is marked complete; aggregate Quit remains the next child.
+- 2026-09-08: README/feature evidence hashes were regenerated and the
+  compatibility freshness gate passed with zero known P0 silent-corruption
+  cases. The Dart-only source audit passed with 386 tracked files, zero product
+  native sources, and one reviewed test-native source. Whitespace checks and
+  both repository worktrees' task boundaries are clean.

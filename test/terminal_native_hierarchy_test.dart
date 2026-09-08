@@ -420,10 +420,16 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
     'a second logical window remains outside the first native tab group',
   );
 
-  await state.removePane(secondPane.id);
-  adapter.reconcile();
+  final TerminalPaneCloseCoordinator closeCoordinator =
+      TerminalPaneCloseCoordinator(
+        state: state,
+        onHierarchyChanged: adapter.reconcile,
+      );
+  final TerminalPaneCloseResult splitClose = await closeCoordinator
+      .requestClose(paneId: secondPane.id);
   _expect(
-    firstRoot.isDisposed &&
+    splitClose.disposition == TerminalPaneCloseDisposition.removed &&
+        firstRoot.isDisposed &&
         secondResources.isDisposed &&
         identical(adapter.resourcesForPane(firstPane), firstResources) &&
         adapter.splitViewForNode(firstRootId) == null &&

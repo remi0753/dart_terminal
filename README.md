@@ -65,7 +65,8 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   非0・signal・終了監視失敗時は理由を表示した非live paneを保持する終了policy
 - ウィンドウサイズに追従する`TIOCSWINSZ`/`SIGWINCH`
 - typed pane/session ID、単一owner、live shellの再操作close確認、process内容を読まない
-  child/owning/foreground process-group snapshotと保守的close-risk分類
+  child/owning/foreground process-group snapshotと保守的close-risk分類、state層の
+  identity-bound per-pane確認transactionとsplit/tab/window collapse
 - native handleと独立したmonotonic window/tab/split-node ID、64 paneまでのimmutable
   binary split topology、selected tab/focused pane/reverse index、collapseとordered teardownを
   持つapplication-owned state model。AppKit adapterはnative tab group、再帰split view、

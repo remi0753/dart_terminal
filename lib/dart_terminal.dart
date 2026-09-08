@@ -152,6 +152,7 @@ export 'src/terminal_pane.dart'
         TerminalPaneState,
         TerminalSessionShutdownDisposition,
         TerminalSessionId;
+export 'src/terminal_pane_close_coordinator.dart';
 export 'src/terminal_renderer/frame_scheduler.dart';
 export 'src/terminal_renderer/glyph_atlas.dart';
 export 'src/terminal_renderer/golden_image.dart'
