@@ -14,6 +14,7 @@ import 'frame_scheduler.dart';
 import 'glyph_atlas.dart';
 import 'metal_atlas_bridge.dart';
 import 'metal_failure_recovery.dart';
+import 'pane_work_scheduler.dart';
 import 'terminal_damage.dart';
 import 'terminal_damage_transfer.dart';
 import 'terminal_render_model.dart';
@@ -147,12 +148,20 @@ final class TerminalLiveMetalSurface {
     bool isVisible = false,
     bool isOccluded = true,
     bool automaticScheduling = true,
+    TerminalPaneWorkScheduler? paneWorkScheduler,
     TerminalLiveMetalSurfaceFatalError? onFatalError,
     TerminalCaretGeometryPublisher? onCaretGeometryChanged,
     TerminalMetalRendererConfig rendererConfig =
         const TerminalMetalRendererConfig(),
   }) {
     _validateViewport(logicalWidth, logicalHeight);
+    if (!automaticScheduling && paneWorkScheduler != null) {
+      throw ArgumentError.value(
+        paneWorkScheduler,
+        'paneWorkScheduler',
+        'requires automaticScheduling',
+      );
+    }
     final int scale16_16 = TerminalRasterBufferV1.scaleToFixed(
       backingScaleFactor,
     );
@@ -193,6 +202,7 @@ final class TerminalLiveMetalSurface {
         isVisible: isVisible,
         isOccluded: isOccluded,
         automaticScheduling: automaticScheduling,
+        paneWorkScheduler: paneWorkScheduler,
         onFatalError: onFatalError,
         onCaretGeometryChanged: onCaretGeometryChanged,
         rendererConfig: rendererConfig,
@@ -221,6 +231,7 @@ final class TerminalLiveMetalSurface {
     required bool isVisible,
     required bool isOccluded,
     required this.automaticScheduling,
+    required TerminalPaneWorkScheduler? paneWorkScheduler,
     required this.onFatalError,
     required this.onCaretGeometryChanged,
     required this.rendererConfig,
@@ -229,7 +240,8 @@ final class TerminalLiveMetalSurface {
     required this.atlas,
     required TerminalMetalRendererRecoveryDomain initialDomain,
     required TerminalAccessibilityClient accessibilityClient,
-  }) : _catalog = catalog,
+  }) : _paneWorkScheduler = paneWorkScheduler,
+       _catalog = catalog,
        _shapingCache = shapingCache,
        _accessibilityClient = accessibilityClient,
        _logicalWidth = logicalWidth,
@@ -318,6 +330,7 @@ final class TerminalLiveMetalSurface {
     _recovery = recovery;
     _needsDrain = true;
     _publishCaretGeometry(force: true);
+    _paneWorkScheduler?.register(sessionId, _runScheduled);
     _scheduleImmediate();
   }
 
@@ -335,6 +348,7 @@ final class TerminalLiveMetalSurface {
   final TerminalScreenSet screenSet;
   final View view;
   final bool automaticScheduling;
+  final TerminalPaneWorkScheduler? _paneWorkScheduler;
   final TerminalLiveMetalSurfaceFatalError? onFatalError;
   final TerminalCaretGeometryPublisher? onCaretGeometryChanged;
   final TerminalMetalRendererConfig rendererConfig;
@@ -634,7 +648,8 @@ final class TerminalLiveMetalSurface {
       acceptedFrameCount: _scheduler.metrics.acceptedCount,
       pendingFrameCount: _scheduler.pendingFrameCount,
       liveAtlasPinCount: atlas.livePinCount,
-      hasScheduledWork: _timer != null,
+      hasScheduledWork:
+          _timer != null || (_paneWorkScheduler?.isPending(sessionId) ?? false),
       accessibilityGeneration: _accessibilityGeneration,
       accessibilityUtf16Length: _accessibilityUtf16Length,
       accessibilityHasVisibleSelection: _accessibilityHasVisibleSelection,
@@ -664,6 +679,7 @@ final class TerminalLiveMetalSurface {
     _hyperlinkHover = null;
     _timer?.cancel();
     _timer = null;
+    _paneWorkScheduler?.unregister(sessionId);
     _outbox.notifyPortClosed(sessionId);
     _recovery.dispose();
     _shapingCache.dispose();
@@ -1017,6 +1033,13 @@ final class TerminalLiveMetalSurface {
 
   void _scheduleImmediate() {
     if (!automaticScheduling || _disposed || _processing) return;
+    final TerminalPaneWorkScheduler? paneScheduler = _paneWorkScheduler;
+    if (paneScheduler != null) {
+      if (!paneScheduler.request(sessionId)) {
+        throw StateError('live Metal surface is absent from pane scheduler');
+      }
+      return;
+    }
     _timer?.cancel();
     _timer = Timer(Duration.zero, _runScheduled);
   }
@@ -1040,6 +1063,13 @@ final class TerminalLiveMetalSurface {
       if (delay == null || animationDelay < delay) delay = animationDelay;
     }
     if (delay != null) {
+      final TerminalPaneWorkScheduler? paneScheduler = _paneWorkScheduler;
+      if (paneScheduler != null) {
+        if (!paneScheduler.request(sessionId, delay: delay)) {
+          throw StateError('live Metal surface is absent from pane scheduler');
+        }
+        return;
+      }
       _timer?.cancel();
       _timer = Timer(delay, _runScheduled);
     }

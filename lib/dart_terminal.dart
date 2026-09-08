@@ -167,6 +167,7 @@ export 'src/terminal_renderer/golden_image.dart'
         TerminalGoldenImageMismatchException;
 export 'src/terminal_renderer/metal_atlas_bridge.dart';
 export 'src/terminal_renderer/metal_failure_recovery.dart';
+export 'src/terminal_renderer/pane_work_scheduler.dart';
 export 'src/terminal_renderer/reference_renderer.dart'
     show
         TerminalReferenceBitmap,

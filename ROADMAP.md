@@ -963,7 +963,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase7/multiple-pane-scheduling-resource-budget.md`](docs/phase7/multiple-pane-scheduling-resource-budget.md)
   を参照して順に実施する）
   - [x] application-wide live-pane resource admission
-  - [ ] bounded round-robin pane render scheduling
+  - [x] bounded round-robin pane render scheduling
   - [ ] cross-pane flood/input 両 runtime 回帰受け入れと親項目完了判定
 - [ ] AppKit unit、integration、UI tests
 

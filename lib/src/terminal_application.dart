@@ -39,6 +39,7 @@ import 'terminal_input/terminal_text_input_event_router.dart';
 import 'terminal_native_hierarchy.dart';
 import 'terminal_pane.dart';
 import 'terminal_pane_close_coordinator.dart';
+import 'terminal_renderer/pane_work_scheduler.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_restoration.dart';
 import 'terminal_restoration_lifecycle.dart';
@@ -2618,6 +2619,7 @@ final class TerminalApplication {
     final List<TerminalPaneSessionShutdownResult> shutdowns =
         <TerminalPaneSessionShutdownResult>[];
     TerminalNativeHierarchyAdapter? hierarchy;
+    TerminalPaneWorkScheduler? paneWorkScheduler;
     TerminalAppKitMenuProjection? closeQuitMenu;
     final List<StreamSubscription<WindowCloseRequestedEvent>>
     closeRequestSubscriptions =
@@ -2775,6 +2777,13 @@ final class TerminalApplication {
         ..renameTab(secondTab.id, 'Pinned hierarchy tab')
         ..setTabColor(secondTab.id, TerminalTabColor.purpleMarker);
 
+      final TerminalPaneWorkScheduler createdPaneWorkScheduler =
+          TerminalPaneWorkScheduler(
+            onError: (_, Object error, StackTrace trace) {
+              recordAsynchronousError(error, trace);
+            },
+          );
+      paneWorkScheduler = createdPaneWorkScheduler;
       final TerminalNativeHierarchyAdapter createdHierarchy =
           TerminalNativeHierarchyAdapter(
             state: state,
@@ -2793,6 +2802,7 @@ final class TerminalApplication {
                     logicalHeight: windowFrame.height,
                     isVisible: false,
                     isOccluded: true,
+                    paneWorkScheduler: createdPaneWorkScheduler,
                     onCaretGeometryChanged: (TerminalCaretRect rectangle) {
                       client.publishCaretRect(
                         x: rectangle.x,
@@ -2902,6 +2912,8 @@ final class TerminalApplication {
             createdHierarchy.nativeWindowCount == 2 &&
             createdHierarchy.splitViewCount == 2 &&
             createdHierarchy.paneResourceCount == 4 &&
+            createdPaneWorkScheduler.registeredPaneCount == 4 &&
+            createdPaneWorkScheduler.pendingPaneCount <= 4 &&
             application.debugLiveObjectCount == 8 &&
             debugLiveTerminalTextInputClientCount() == 4,
         'hierarchy acceptance did not create the exact native inventory',
@@ -3166,6 +3178,14 @@ final class TerminalApplication {
             'hierarchy acceptance runtime worker did not stop cleanly',
           );
           createdHierarchy.dispose();
+          final TerminalPaneWorkSchedulerSnapshot schedulerAfterHierarchy =
+              createdPaneWorkScheduler.snapshot();
+          _expectLifecycle(
+            schedulerAfterHierarchy.registeredPaneCount == 0 &&
+                schedulerAfterHierarchy.pendingPaneCount == 0,
+            'hierarchy disposal retained shared pane scheduling work',
+          );
+          createdPaneWorkScheduler.dispose();
         },
         terminateProgrammatically: () async {
           programmaticTerminationCount++;
@@ -3560,7 +3580,10 @@ final class TerminalApplication {
             nativeCloseRequestCount == 3 &&
             nativeTerminationRequestCount == 2 &&
             closeMenuInvocationCount == 3 &&
-            quitMenuInvocationCount == 2,
+            quitMenuInvocationCount == 2 &&
+            createdPaneWorkScheduler.snapshot().isDisposed &&
+            createdPaneWorkScheduler.snapshot().registeredPaneCount == 0 &&
+            createdPaneWorkScheduler.snapshot().pendingPaneCount == 0,
         'Close/Quit acceptance retained product resources or lost a route',
       );
       checkAsynchronousError();
@@ -3602,6 +3625,7 @@ final class TerminalApplication {
         if (!owner.adaptersDisposed) owner.disposeAdapters();
         if (!owner.view.isDisposed) owner.view.dispose();
       }
+      paneWorkScheduler?.dispose();
       if (!state.isDisposed) {
         final TerminalPaneOwnerShutdownResult result = await state.shutdown();
         for (final TerminalPaneSessionShutdownResult session

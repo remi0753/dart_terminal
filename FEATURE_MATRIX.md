@@ -148,7 +148,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | REN-06 | vsync/frame pacing、cursor blink、occlusion pause、resume full redraw | P0 | 4 | `G:src/renderer/generic.zig`, `G:src/renderer/Thread.zig` | live windowのcursor/BEL metadata、bounded monotonic animation clock、visibility/occlusion pause、hidden tickを再生しないresume full redrawを完了 |
 | REN-07 | deterministic screenshot と CPU/reference renderer を golden oracle にする | P0 | 4 | `G:src/terminal/render.zig`, renderer test paths | bounded Dart-only RGBA compositor、versioned checksum付きgolden format、primitive/実CoreText atlas fixture、Metal offscreen readbackとの1x/2x pixel比較を完了 |
 | REN-08 | image/search/hyperlink/inspector overlay、P3/sRGB blending | P1 | 4/9 | `G:src/renderer/image.zig`, `Overlay.zig`, `link.zig` | visible viewportのhyperlink hit testとnon-mutating Metal underline overlayを完了。image/search/inspector/P3は後続 |
-| REN-09 | 60/120 Hz、複数 window/pane の fair scheduling。遅延時は中間 frame を捨てる | P1 | 4/7 | `G:src/renderer/Thread.zig`, `G:src/renderer/generic.zig` | live 1 paneのnewest-only frame discard、constant-size backpressure state、bounded build/submit timing snapshot、実PTYで最新damage frameとbottom promptを検証済み。vsync/fair multi-pane benchmarkは後続 |
+| REN-09 | 60/120 Hz、複数 window/pane の fair scheduling。遅延時は中間 frame を捨てる | P1 | 4/7 | `G:src/renderer/Thread.zig`, `G:src/renderer/generic.zig` | live paneごとのnewest-only frame/constant-size backpressureに加え、64-pane admissionと1 pane 1 pending、4 work/4 ms turnの共有round-robin schedulingを4実Metal paneで完了。100 MiB cross-pane latency受け入れは次の子項目 |
 
 ## Keyboard、IME、mouse、selection、clipboard
 

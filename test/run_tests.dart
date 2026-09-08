@@ -17,6 +17,7 @@ import 'glyph_atlas_test.dart';
 import 'golden_image_test.dart';
 import 'metal_failure_recovery_test.dart';
 import 'metal_pipeline_test.dart';
+import 'pane_work_scheduler_test.dart';
 import 'product_parser_benchmark_test.dart';
 import 'product_parser_corpus_test.dart';
 import 'reference_renderer_test.dart';
@@ -114,6 +115,7 @@ Future<void> main() async {
   runGlyphAtlasTests();
   runMetalPipelineTests();
   runMetalFailureRecoveryTests();
+  await runTerminalPaneWorkSchedulerTests();
   runReferenceRendererTests();
   runRenderRebuildCoordinatorTests();
   runRenderResourceRebuilderTests();

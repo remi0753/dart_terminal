@@ -204,3 +204,49 @@ queues without bound nor starves input and presentation in another pane.
   native sources, and one reviewed test-native source; both repository
   worktrees are clean outside this child. The first child is complete and its
   roadmap item is marked before the task-local commit.
+- 2026-09-08: after commit `3c74950 Bound aggregate live pane admission`, the
+  roadmap and task record were reread. The bounded round-robin scheduler is now
+  the first unfinished child; the flood acceptance and broad AppKit test item
+  remain untouched.
+- 2026-09-08: the shared scheduler uses one insertion-ordered pending set and
+  one timer. A pane present at turn start is eligible once, while callback-time
+  requests append to a later turn. The default limits admit 64 registrations
+  and run at most four callbacks or four milliseconds per event-loop turn.
+  Immediate requests can promote a delayed retry, counters saturate, callback
+  and observer faults cannot stop peers, and unregister/dispose remove pending
+  identities without taking ownership of pane resources.
+- 2026-09-08: `TerminalLiveMetalSurface` now optionally registers its existing
+  bounded `processPending` callback with that owner. All damage/outbox/frame/
+  atlas state remains pane-local; only immediate/retry timer selection is
+  delegated. The historical per-surface timer remains the default when no
+  shared owner is supplied. The four-pane product hierarchy supplies one shared
+  scheduler, requires four exact registrations, and proves hierarchy disposal
+  unregisters every surface before scheduler disposal.
+- 2026-09-08: the first focused format changed the new scheduler, surface,
+  hierarchy, and test layouts. Analysis found only three unnecessary null-aware
+  reads of the scheduler in the success path, where the non-null local owner is
+  already in scope. Those reads now use that exact owner; no scheduler or native
+  API type error was reported.
+- 2026-09-08: after the nullability cleanup, focused formatting required no
+  changes, analysis passed with zero issues, and the direct scheduler suite
+  passed admission, coalescing, round-robin/reentrant order, delayed promotion,
+  work/time yielding, callback and observer fault isolation, exact pending-work
+  cancellation, unregister/dispose, and the one-timer automatic path. A final
+  focused rerun after adding those two edge assertions again required no format
+  changes, reported zero analyzer issues, and exited successfully.
+- 2026-09-08: Developer JIT and Release AOT hierarchy launches passed with all
+  four real Metal surfaces delegated to the shared owner, completing in 1944
+  ms and 1180 ms. Existing focus/key/IME/Close/Quit assertions remained green,
+  and teardown proved all four registrations and pending identities were gone
+  before the scheduler was disposed. README and REN-09 now describe this
+  substrate without claiming the later 100 MiB latency gate.
+- 2026-09-08: compatibility coverage was regenerated after the README and
+  feature-evidence edits and remained at nine fix families, 417 split runs,
+  eight owned gaps, and zero known P0 silent corruption. Complete `make test`
+  then passed freshness/compatibility/application/terminfo gates, formatting of
+  207 Dart files with no changes, whole-package analysis, and the aggregate
+  runner. The source audit passed with 389 tracked files, zero product native
+  sources, and one reviewed test-native source. `git diff --check` passed and
+  the adjacent `dart_appkit` worktree is clean. The second child therefore meets
+  its acceptance conditions; the exact 100 MiB dual-runtime gate remains the
+  next ordered child.
