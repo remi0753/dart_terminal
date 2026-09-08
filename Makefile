@@ -78,7 +78,7 @@ help:
 	@echo "  make release-aot-build             Build the generic-host AOT application"
 	@echo "  make release-aot-run               Build and run the AOT application"
 	@echo "  make runtime-terminal-display-integration  Verify the live Metal terminal in both modes"
-	@echo "  make runtime-native-hierarchy-integration  Verify native tabs and four live panes in both modes"
+	@echo "  make runtime-native-hierarchy-integration  Verify four-pane hierarchy and Close/Quit in both modes"
 	@echo "  make runtime-restoration-integration  Verify fullscreen, migration, restoration, and reopen in both modes"
 	@echo "  make runtime-clipboard-integration  Verify bounded Copy/Paste in both modes"
 	@echo "  make runtime-verify                Audit and integration-test both modes"

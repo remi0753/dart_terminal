@@ -12,6 +12,7 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 import 'runtime_lifecycle.dart';
 import 'terminal_action_menu.dart';
 import 'terminal_action_registry.dart';
+import 'terminal_application_quit_coordinator.dart';
 import 'terminal_application_state.dart';
 import 'terminal_command_palette.dart';
 import 'terminal_core/terminal_hyperlink.dart';
@@ -37,6 +38,7 @@ import 'terminal_input/terminal_selection_gesture.dart';
 import 'terminal_input/terminal_text_input_event_router.dart';
 import 'terminal_native_hierarchy.dart';
 import 'terminal_pane.dart';
+import 'terminal_pane_close_coordinator.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_restoration.dart';
 import 'terminal_restoration_lifecycle.dart';
@@ -2616,8 +2618,22 @@ final class TerminalApplication {
     final List<TerminalPaneSessionShutdownResult> shutdowns =
         <TerminalPaneSessionShutdownResult>[];
     TerminalNativeHierarchyAdapter? hierarchy;
+    TerminalAppKitMenuProjection? closeQuitMenu;
+    final List<StreamSubscription<WindowCloseRequestedEvent>>
+    closeRequestSubscriptions =
+        <StreamSubscription<WindowCloseRequestedEvent>>[];
+    final List<StreamSubscription<ApplicationTerminateRequestedEvent>>
+    terminationRequestSubscriptions =
+        <StreamSubscription<ApplicationTerminateRequestedEvent>>[];
     RuntimeLifecycleCoordinator? lifecycle;
     var lifecycleWasShutDown = false;
+    var programmaticTerminationCount = 0;
+    var nativeCloseRequestCount = 0;
+    var nativeTerminationRequestCount = 0;
+    var closeMenuInvocationCount = 0;
+    var quitMenuInvocationCount = 0;
+    var finalNativeHandleCount = -1;
+    var finalTextInputClientCount = -1;
     Object? asynchronousError;
     StackTrace? asynchronousStackTrace;
     final TerminalTabPresentationResolver presentationResolver =
@@ -3098,49 +3114,438 @@ final class TerminalApplication {
         'hierarchy input reached a PTY with non-exact bytes',
       );
 
-      for (final PaneId paneId in <PaneId>[
-        secondPane.id,
-        fourthPane.id,
-        thirdPaneId,
-      ]) {
-        await owners[paneId]!.cancelTextInput();
-        final TerminalPane pane = state.paneForId(paneId)!;
-        _expectLifecycle(
-          pane.requestClose(force: true) == TerminalPaneCloseDecision.allow,
-          'hierarchy pane $paneId refused deterministic close',
-        );
-        final TerminalPaneRemovalResult result = await state.removePane(paneId);
-        shutdowns.add(result.shutdown);
-        stdout.writeln(result.shutdown.machineLine());
-        createdHierarchy.reconcile();
-        _expectLifecycle(
-          owners[paneId]!.adaptersDisposed &&
-              initialResources[paneId]!.isDisposed,
-          'hierarchy pane $paneId retained native adapters after close',
-        );
+      final TerminalPaneCloseCoordinator paneCloseCoordinator =
+          TerminalPaneCloseCoordinator(
+            state: state,
+            onHierarchyChanged: createdHierarchy.reconcile,
+          );
+      Completer<TerminalPaneCloseResult>? pendingCloseResult;
+      Completer<TerminalApplicationQuitResult>? pendingNativeQuitResult;
+      Completer<TerminalApplicationQuitResult>? pendingMenuQuitResult;
+      late final TerminalApplicationQuitCoordinator quitCoordinator;
+
+      Future<void> disposeNativeRoutes() async {
+        for (final StreamSubscription<ApplicationTerminateRequestedEvent>
+            subscription
+            in terminationRequestSubscriptions.toList(growable: false)) {
+          await subscription.cancel();
+        }
+        terminationRequestSubscriptions.clear();
+        for (final StreamSubscription<WindowCloseRequestedEvent> subscription
+            in closeRequestSubscriptions.toList(growable: false)) {
+          await subscription.cancel();
+        }
+        closeRequestSubscriptions.clear();
+        final TerminalAppKitMenuProjection? menu = closeQuitMenu;
+        closeQuitMenu = null;
+        await menu?.dispose();
       }
-      _expectLifecycle(
-        state.windowCount == 1 &&
-            state.tabCount == 1 &&
-            state.paneCount == 1 &&
-            createdHierarchy.nativeWindowCount == 1 &&
-            createdHierarchy.splitViewCount == 0 &&
-            createdHierarchy.paneResourceCount == 1,
-        'hierarchy close did not collapse split and tab ownership',
+
+      quitCoordinator = TerminalApplicationQuitCoordinator(
+        state: state,
+        paneCloseCoordinator: paneCloseCoordinator,
+        replyToTerminationRequest:
+            (
+              ApplicationTerminateRequestedEvent request, {
+              required bool allow,
+            }) {
+              application.replyToTerminationRequest(request, allow: allow);
+            },
+        onPreShutdown: () async {
+          for (final _TerminalHierarchyProductPane owner in owners.values) {
+            await owner.cancelTextInput();
+          }
+          await disposeNativeRoutes();
+          final RuntimeLifecycleShutdownResult lifecycleShutdown =
+              await createdLifecycle.shutdown();
+          lifecycleWasShutDown = true;
+          _expectLifecycle(
+            !lifecycleShutdown.forced &&
+                lifecycleShutdown.termination ==
+                    RuntimeLifecycleWorkerTermination.graceful,
+            'hierarchy acceptance runtime worker did not stop cleanly',
+          );
+          createdHierarchy.dispose();
+        },
+        terminateProgrammatically: () async {
+          programmaticTerminationCount++;
+          finalTextInputClientCount = debugLiveTerminalTextInputClientCount();
+          finalNativeHandleCount = application.debugLiveObjectCount;
+          await application.terminate().timeout(_hostTerminationTimeout);
+        },
       );
 
-      await owners[firstPaneId]!.cancelTextInput();
-      createdHierarchy.dispose();
-      final TerminalPaneOwnerShutdownResult finalShutdown = await state
-          .shutdown();
-      shutdowns.addAll(finalShutdown.sessions);
+      void listenForCloseRequest(Window window) {
+        closeRequestSubscriptions.add(
+          window.onCloseRequested.listen((WindowCloseRequestedEvent event) {
+            nativeCloseRequestCount++;
+            window.replyToCloseRequest(event, allow: false);
+            unawaited(
+              paneCloseCoordinator.requestClose().then(
+                (TerminalPaneCloseResult result) {
+                  final Completer<TerminalPaneCloseResult>? waiter =
+                      pendingCloseResult;
+                  if (waiter != null && !waiter.isCompleted) {
+                    waiter.complete(result);
+                  }
+                },
+                onError: (Object error, StackTrace stackTrace) {
+                  final Completer<TerminalPaneCloseResult>? waiter =
+                      pendingCloseResult;
+                  if (waiter != null && !waiter.isCompleted) {
+                    waiter.completeError(error, stackTrace);
+                  } else {
+                    recordAsynchronousError(error, stackTrace);
+                  }
+                },
+              ),
+            );
+          }, onError: recordAsynchronousError),
+        );
+      }
+
+      listenForCloseRequest(firstNativeTab);
+      listenForCloseRequest(secondNativeTab);
+      terminationRequestSubscriptions.add(
+        application.onTerminateRequested.listen((
+          ApplicationTerminateRequestedEvent event,
+        ) {
+          nativeTerminationRequestCount++;
+          unawaited(
+            quitCoordinator
+                .handleTerminationRequest(event)
+                .then(
+                  (TerminalApplicationQuitResult result) {
+                    final Completer<TerminalApplicationQuitResult>? waiter =
+                        pendingNativeQuitResult;
+                    if (waiter != null && !waiter.isCompleted) {
+                      waiter.complete(result);
+                    }
+                  },
+                  onError: (Object error, StackTrace stackTrace) {
+                    final Completer<TerminalApplicationQuitResult>? waiter =
+                        pendingNativeQuitResult;
+                    if (waiter != null && !waiter.isCompleted) {
+                      waiter.completeError(error, stackTrace);
+                    } else {
+                      recordAsynchronousError(error, stackTrace);
+                    }
+                  },
+                ),
+          );
+        }, onError: recordAsynchronousError),
+      );
+
+      final TerminalActionDispatcher closeQuitDispatcher =
+          TerminalActionDispatcher(
+            catalog: TerminalActionCatalog.standard(),
+            registrations: <TerminalActionRegistration>[
+              TerminalActionRegistration(
+                id: TerminalActionId.closeWindow,
+                isAvailable: () =>
+                    !state.isDisposed && state.activeWindow != null,
+                handler: () {
+                  final TerminalTabId activeTabId =
+                      state.activeWindow!.selectedTab.id;
+                  final Window? activeNativeWindow = createdHierarchy
+                      .windowForTab(activeTabId);
+                  if (activeNativeWindow == null) {
+                    throw StateError(
+                      'active hierarchy tab has no native window',
+                    );
+                  }
+                  activeNativeWindow.requestClose();
+                },
+              ),
+              TerminalActionRegistration(
+                id: TerminalActionId.quitApplication,
+                isAvailable: () => !state.isDisposed,
+                handler: () async {
+                  final TerminalApplicationQuitResult result =
+                      await quitCoordinator.requestQuit();
+                  final Completer<TerminalApplicationQuitResult>? waiter =
+                      pendingMenuQuitResult;
+                  if (waiter != null && !waiter.isCompleted) {
+                    waiter.complete(result);
+                  }
+                },
+              ),
+            ],
+          );
+      final TerminalAppKitMenuProjection
+      installedCloseQuitMenu = TerminalAppKitMenuProjection.install(
+        application: application,
+        dispatcher: closeQuitDispatcher,
+        onNativeInvocation: (TerminalActionId id, MenuItemInvokedEvent event) {
+          switch (id) {
+            case TerminalActionId.closeWindow:
+              closeMenuInvocationCount++;
+            case TerminalActionId.quitApplication:
+              quitMenuInvocationCount++;
+            default:
+              break;
+          }
+        },
+        onDispatched: (TerminalActionDispatchResult result) {
+          if (result.disposition == TerminalActionDispatchDisposition.failed) {
+            recordAsynchronousError(result.error!, result.stackTrace!);
+          }
+        },
+      );
+      closeQuitMenu = installedCloseQuitMenu;
+      final MenuItem closeMenuItem = installedCloseQuitMenu.itemForAction(
+        TerminalActionId.closeWindow,
+      );
+      final MenuItem quitMenuItem = installedCloseQuitMenu.itemForAction(
+        TerminalActionId.quitApplication,
+      );
+
+      Future<TerminalPaneCloseResult> invokeCloseMenu() async {
+        final Completer<TerminalPaneCloseResult> waiter =
+            Completer<TerminalPaneCloseResult>();
+        _expectLifecycle(
+          pendingCloseResult == null,
+          'hierarchy Close invocation overlapped another request',
+        );
+        pendingCloseResult = waiter;
+        try {
+          closeMenuItem.performAction();
+          return await waiter.future.timeout(const Duration(seconds: 5));
+        } finally {
+          pendingCloseResult = null;
+        }
+      }
+
+      Future<TerminalApplicationQuitResult> invokeNativeQuit() async {
+        final Completer<TerminalApplicationQuitResult> waiter =
+            Completer<TerminalApplicationQuitResult>();
+        _expectLifecycle(
+          pendingNativeQuitResult == null,
+          'hierarchy native Quit invocation overlapped another request',
+        );
+        pendingNativeQuitResult = waiter;
+        try {
+          appkit_testing.requestApplicationTerminationForTesting(application);
+          return await waiter.future.timeout(const Duration(seconds: 5));
+        } finally {
+          pendingNativeQuitResult = null;
+        }
+      }
+
+      Future<TerminalApplicationQuitResult> invokeQuitMenu() async {
+        final Completer<TerminalApplicationQuitResult> waiter =
+            Completer<TerminalApplicationQuitResult>();
+        _expectLifecycle(
+          pendingMenuQuitResult == null,
+          'hierarchy menu Quit invocation overlapped another request',
+        );
+        pendingMenuQuitResult = waiter;
+        try {
+          quitMenuItem.performAction();
+          return await waiter.future.timeout(const Duration(seconds: 10));
+        } finally {
+          pendingMenuQuitResult = null;
+        }
+      }
+
+      state
+        ..selectTab(logicalWindow.id, firstTab.id)
+        ..focusPane(firstTab.id, secondPane.id);
+      createdHierarchy.reconcile();
+      secondPane.insertText('sleep 30');
+      await secondPane.submit();
+      final TerminalPaneProcessSnapshot closeForeground =
+          await _waitForPaneProcessDisposition(
+            secondPane,
+            TerminalPaneProcessDisposition.foregroundProcess,
+          );
+      _expectLifecycle(
+        closeForeground.foregroundProcessGroup !=
+            closeForeground.owningProcessGroup,
+        'hierarchy Close fixture did not start a distinct process group',
+      );
+      final TerminalPaneCloseResult firstClose = await invokeCloseMenu();
+      stdout.writeln(firstClose.machineLine());
+      _expectLifecycle(
+        firstClose.disposition ==
+                TerminalPaneCloseDisposition.confirmationRequired &&
+            firstClose.confirmation?.paneId == secondPane.id &&
+            state.windowCount == 1 &&
+            state.tabCount == 2 &&
+            state.paneCount == 4 &&
+            createdHierarchy.paneResourceCount == 4 &&
+            !initialResources[secondPane.id]!.isDisposed &&
+            !owners[secondPane.id]!.adaptersDisposed,
+        'foreground Close mutated hierarchy before confirmation',
+      );
+      await owners[secondPane.id]!.cancelTextInput();
+      final TerminalPaneCloseResult confirmedClose = await invokeCloseMenu();
+      stdout.writeln(confirmedClose.machineLine());
+      _expectLifecycle(
+        confirmedClose.disposition == TerminalPaneCloseDisposition.removed &&
+            confirmedClose.removal?.paneId == secondPane.id,
+        'repeated foreground Close did not remove the confirmed pane',
+      );
+      shutdowns.add(confirmedClose.removal!.shutdown);
+      stdout.writeln(confirmedClose.removal!.shutdown.machineLine());
+      _expectLifecycle(
+        state.windowCount == 1 &&
+            state.tabCount == 2 &&
+            state.paneCount == 3 &&
+            createdHierarchy.nativeWindowCount == 2 &&
+            createdHierarchy.splitViewCount == 1 &&
+            createdHierarchy.paneResourceCount == 3 &&
+            owners[secondPane.id]!.adaptersDisposed &&
+            initialResources[secondPane.id]!.isDisposed &&
+            !initialResources[firstPaneId]!.isDisposed,
+        'confirmed foreground Close did not collapse exactly one split',
+      );
+
+      state
+        ..selectTab(logicalWindow.id, secondTab.id)
+        ..focusPane(secondTab.id, fourthPane.id);
+      createdHierarchy.reconcile();
+      fourthPane.insertText('exit 23');
+      await fourthPane.submit();
+      await sessions[fourthPane.id]!.waitForTermination().timeout(
+        const Duration(seconds: 5),
+      );
+      await Future<void>.delayed(Duration.zero);
+      final TerminalPaneProcessSnapshot nonLive =
+          await _waitForPaneProcessDisposition(
+            fourthPane,
+            TerminalPaneProcessDisposition.nonLive,
+          );
+      _expectLifecycle(
+        nonLive.childProcessId == null &&
+            fourthPane.state == TerminalPaneState.exited &&
+            sessions[fourthPane.id]!.exit?.exitCode == 23,
+        'abnormal hierarchy pane did not retain a typed non-live status',
+      );
+      await owners[fourthPane.id]!.cancelTextInput();
+      final TerminalPaneCloseResult nonLiveClose = await invokeCloseMenu();
+      stdout.writeln(nonLiveClose.machineLine());
+      _expectLifecycle(
+        nonLiveClose.disposition == TerminalPaneCloseDisposition.removed &&
+            nonLiveClose.removal?.paneId == fourthPane.id &&
+            nonLiveClose.confirmation == null,
+        'non-live hierarchy pane did not close in one menu action',
+      );
+      shutdowns.add(nonLiveClose.removal!.shutdown);
+      stdout.writeln(nonLiveClose.removal!.shutdown.machineLine());
+      _expectLifecycle(
+        state.windowCount == 1 &&
+            state.tabCount == 2 &&
+            state.paneCount == 2 &&
+            createdHierarchy.nativeWindowCount == 2 &&
+            createdHierarchy.splitViewCount == 0 &&
+            createdHierarchy.paneResourceCount == 2 &&
+            owners[fourthPane.id]!.adaptersDisposed &&
+            initialResources[fourthPane.id]!.isDisposed &&
+            !initialResources[thirdPaneId]!.isDisposed,
+        'non-live Close did not collapse exactly its retained split',
+      );
+
+      state.focusPane(secondTab.id, thirdPaneId);
+      createdHierarchy.reconcile();
+      final TerminalPane thirdPane = state.paneForId(thirdPaneId)!;
+      thirdPane.insertText('sleep 30');
+      await thirdPane.submit();
+      await _waitForPaneProcessDisposition(
+        state.paneForId(firstPaneId)!,
+        TerminalPaneProcessDisposition.idleShell,
+      );
+      await _waitForPaneProcessDisposition(
+        thirdPane,
+        TerminalPaneProcessDisposition.foregroundProcess,
+      );
+
+      final TerminalApplicationQuitResult firstNativeQuit =
+          await invokeNativeQuit();
+      stdout.writeln(firstNativeQuit.machineLine());
+      stdout.writeln(firstNativeQuit.snapshot!.machineLine());
+      final List<PaneId> nativeSnapshotPanes = firstNativeQuit.snapshot!.panes
+          .map((TerminalApplicationQuitPaneSnapshot pane) => pane.paneId)
+          .toList(growable: false);
+      _expectLifecycle(
+        firstNativeQuit.disposition ==
+                TerminalApplicationQuitDisposition.confirmationRequired &&
+            firstNativeQuit.nativeOperationId != null &&
+            nativeSnapshotPanes.length == 2 &&
+            nativeSnapshotPanes[0] == firstPaneId &&
+            nativeSnapshotPanes[1] == thirdPaneId &&
+            firstNativeQuit.snapshot!.count(
+                  TerminalPaneProcessDisposition.foregroundProcess,
+                ) ==
+                1 &&
+            state.paneCount == 2 &&
+            createdHierarchy.paneResourceCount == 2,
+        'native Quit did not defer one atomic visual-order snapshot',
+      );
+      _expectLifecycle(
+        quitCoordinator.cancelQuit(firstNativeQuit.confirmation!),
+        'first native Quit confirmation could not be refused',
+      );
+      final TerminalApplicationQuitResult secondNativeQuit =
+          await invokeNativeQuit();
+      stdout.writeln(secondNativeQuit.machineLine());
+      _expectLifecycle(
+        secondNativeQuit.disposition ==
+                TerminalApplicationQuitDisposition.confirmationRequired &&
+            secondNativeQuit.nativeOperationId != null &&
+            secondNativeQuit.nativeOperationId !=
+                firstNativeQuit.nativeOperationId &&
+            state.paneCount == 2 &&
+            createdHierarchy.paneResourceCount == 2,
+        'refused native Quit did not clear pending native state for retry',
+      );
+      _expectLifecycle(
+        quitCoordinator.cancelQuit(secondNativeQuit.confirmation!),
+        'second native Quit confirmation could not be refused',
+      );
+
+      final TerminalApplicationQuitResult firstMenuQuit =
+          await invokeQuitMenu();
+      stdout.writeln(firstMenuQuit.machineLine());
+      _expectLifecycle(
+        firstMenuQuit.disposition ==
+                TerminalApplicationQuitDisposition.confirmationRequired &&
+            firstMenuQuit.nativeOperationId == null &&
+            firstMenuQuit.snapshot == firstNativeQuit.snapshot &&
+            state.windowCount == 1 &&
+            state.tabCount == 2 &&
+            state.paneCount == 2 &&
+            createdHierarchy.nativeWindowCount == 2 &&
+            createdHierarchy.paneResourceCount == 2 &&
+            !initialResources[firstPaneId]!.isDisposed &&
+            !initialResources[thirdPaneId]!.isDisposed,
+        'first menu Quit mutated the aggregate before confirmation',
+      );
+      final TerminalApplicationQuitResult acceptedMenuQuit =
+          await invokeQuitMenu();
+      stdout.writeln(acceptedMenuQuit.machineLine());
+      _expectLifecycle(
+        acceptedMenuQuit.disposition ==
+                TerminalApplicationQuitDisposition.terminated &&
+            acceptedMenuQuit.shutdown?.sessions.length == 2 &&
+            acceptedMenuQuit.shutdown!.isClean &&
+            programmaticTerminationCount == 1 &&
+            lifecycleWasShutDown,
+        'repeated menu Quit did not complete one clean aggregate teardown',
+      );
+      shutdowns.addAll(acceptedMenuQuit.shutdown!.sessions);
       for (final TerminalPaneSessionShutdownResult result
-          in finalShutdown.sessions) {
+          in acceptedMenuQuit.shutdown!.sessions) {
         stdout.writeln(result.machineLine());
       }
       stdout.writeln(TerminalPaneOwnerShutdownResult(shutdowns).machineLine());
+
       _expectLifecycle(
-        shutdowns.length == 4 &&
+        state.isDisposed &&
+            state.windowCount == 0 &&
+            state.tabCount == 0 &&
+            state.paneCount == 0 &&
+            shutdowns.length == 4 &&
             shutdowns.every(
               (TerminalPaneSessionShutdownResult result) => result.isClean,
             ) &&
@@ -3150,28 +3555,43 @@ final class TerminalApplication {
                   owner.surface.snapshot().isDisposed &&
                   owner.surface.snapshot().liveAtlasPinCount == 0,
             ) &&
-            debugLiveTerminalTextInputClientCount() == 0 &&
-            application.debugLiveObjectCount == 0,
-        'hierarchy acceptance cleanup retained product resources',
+            finalTextInputClientCount == 0 &&
+            finalNativeHandleCount == 0 &&
+            nativeCloseRequestCount == 3 &&
+            nativeTerminationRequestCount == 2 &&
+            closeMenuInvocationCount == 3 &&
+            quitMenuInvocationCount == 2,
+        'Close/Quit acceptance retained product resources or lost a route',
       );
       checkAsynchronousError();
+      stdout.writeln(
+        'TERMINAL_CLOSE_QUIT_TEST panes=4 close_requests=3 close_menu=3 '
+        'quit_menu=2 native_quit_requests=2 foreground_confirmation=true '
+        'non_live_immediate=true quit_atomic=true native_refused=true '
+        'programmatic_termination=1 sessions_clean=4 metal_clean=4 '
+        'text_clients=0 native_handles=0',
+      );
       stdout.writeln(
         'TERMINAL_NATIVE_HIERARCHY_TEST windows=1 tabs=2 panes=4 splits=2 '
         'resize=true equalize=true zoom=true focus=true key=true ime=true '
         'isolated=true close=true sessions_clean=4 metal_clean=4 '
         'text_clients=0 native_handles=0',
       );
-
-      final RuntimeLifecycleShutdownResult lifecycleShutdown =
-          await createdLifecycle.shutdown();
-      lifecycleWasShutDown = true;
-      _expectLifecycle(
-        !lifecycleShutdown.forced &&
-            lifecycleShutdown.termination ==
-                RuntimeLifecycleWorkerTermination.graceful,
-        'hierarchy acceptance runtime worker did not stop cleanly',
-      );
     } finally {
+      for (final StreamSubscription<ApplicationTerminateRequestedEvent>
+          subscription
+          in terminationRequestSubscriptions.toList(growable: false)) {
+        await subscription.cancel();
+      }
+      terminationRequestSubscriptions.clear();
+      for (final StreamSubscription<WindowCloseRequestedEvent> subscription
+          in closeRequestSubscriptions.toList(growable: false)) {
+        await subscription.cancel();
+      }
+      closeRequestSubscriptions.clear();
+      final TerminalAppKitMenuProjection? menu = closeQuitMenu;
+      closeQuitMenu = null;
+      await menu?.dispose();
       for (final _TerminalHierarchyProductPane owner
           in owners.values.toList(growable: false).reversed) {
         await owner.cancelTextInput();
@@ -5909,6 +6329,27 @@ final class TerminalApplication {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
     throw TimeoutException('terminal did not display marker $marker');
+  }
+
+  static Future<TerminalPaneProcessSnapshot> _waitForPaneProcessDisposition(
+    TerminalPane pane,
+    TerminalPaneProcessDisposition expected,
+  ) async {
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalPaneProcessSnapshot snapshot = pane.processSnapshot();
+      if (snapshot.disposition == expected) return snapshot;
+      if (expected != TerminalPaneProcessDisposition.nonLive) {
+        _expectLifecycle(
+          pane.isLive,
+          'pane ${pane.id} exited before process disposition ${expected.name}',
+        );
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw TimeoutException(
+      'pane ${pane.id} did not reach process disposition ${expected.name}',
+    );
   }
 
   static Future<void> _waitForSessionMetadata(

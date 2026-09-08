@@ -1314,6 +1314,19 @@ Future<void> _runNativeHierarchy(
   );
   _expect(
     RegExp(
+          r'^TERMINAL_CLOSE_QUIT_TEST panes=4 close_requests=3 close_menu=3 '
+          r'quit_menu=2 native_quit_requests=2 '
+          r'foreground_confirmation=true non_live_immediate=true '
+          r'quit_atomic=true native_refused=true '
+          r'programmatic_termination=1 sessions_clean=4 metal_clean=4 '
+          r'text_clients=0 native_handles=0$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'native hierarchy acceptance omitted the exact Close/Quit lifecycle',
+  );
+  _expect(
+    RegExp(
           r'^TERMINAL_TAB_METADATA_TEST title=true rename=true color=true '
           r'cwd_inheritance=true proxy=true reset=true$',
           multiLine: true,

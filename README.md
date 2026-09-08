@@ -368,8 +368,10 @@ cursor、native accessibility selector/geometry/focus/notificationをDeveloper J
 Release AOTの実GUIで確認します。
 native hierarchy suiteは2つのnative tabと4つのlive Metal paneを作り、splitの
 resize/equalize/zoom、first-responder focus、OSC title/cwd、tab rename/color、proxy icon、
-子zshへのlocal cwd継承、raw key/IMEのpane分離、split/tab close、4つのPTYと全native
-resourceの回収を両runtimeで確認します。
+子zshへのlocal cwd継承、raw key/IMEのpane分離を確認します。さらに実native menu/window
+Closeでforeground確認とnon-live即時closeを、実native terminationの拒否・再試行と
+aggregate menu Quitでatomic teardownを通し、4つのPTYと全native resourceの回収を
+Developer JIT/Release AOTの両runtimeで検証します。
 restoration suiteは実fullscreen enter/exit後にdisplay migrationを適用し、
 2 tab/4 paneをcontent-freeなversioned stateへ保存してfresh ownerで再生成します。
 重複Dock reopenのcoalescing、cwd継承、2世代8 PTYとMetal/text-input/native handle/

@@ -1,6 +1,6 @@
 # Phase 7 — per-pane close and application quit confirmation
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-08
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 7 `per-pane close と app quit confirmation`
@@ -339,3 +339,98 @@ coordination
   runner. `git diff --check` is clean and the adjacent dependency worktree has
   no changes. Product menu/event/runtime wiring intentionally remains in the
   next ordered child.
+- 2026-09-08: after commit `2a3d24a Coordinate aggregate application quit`,
+  `ROADMAP.md` was reread. The fourth child is the first unfinished item; the
+  parent and later scheduling/UI-test items remain untouched. README,
+  FEATURE_MATRIX, repository inventory, the normal bootstrap, existing
+  four-pane hierarchy acceptance, integration driver, Make targets, AppKit
+  event API/native implementation, and both worktrees were rechecked before
+  executable changes.
+- 2026-09-08: the existing gated hierarchy acceptance already owns the exact
+  real resource graph required here: two native tabs, four PTYs, four Metal
+  surfaces, four text-input clients, and one runtime worker in Developer JIT
+  and Release AOT. Extending that scenario is selected over duplicating a
+  second large fixture. Its direct forced removals will be replaced by the
+  actual menu/native-window Close route, non-live immediate removal, one real
+  deferred application-termination refusal, and menu-driven aggregate Quit.
+- 2026-09-08: `Window.requestClose` already creates a real deferred native
+  request, but the reusable AppKit testing surface has no way to request normal
+  NSApplication termination: its public `terminate` deliberately marks the
+  request programmatic and bypasses deferral. A minimal test-only bridge hook
+  that calls ordinary `[NSApp terminate:nil]` is required to exercise the real
+  delegate/event/reply path without synthesizing a Dart event whose operation
+  ID the native bridge does not own. The hook will remain outside the ordinary
+  `dart_appkit.dart` export and will not expose product data.
+- 2026-09-08: the AppKit hook now enters the existing native termination
+  state machine, requires terminate-later, and is optional at the FFI lookup
+  boundary. Warning-clean native bridge tests, whole `dart_appkit` analysis/API
+  tests, launcher tests, real FFI loading, and legacy fallback all passed in
+  the focused `make native-test dart-test ffi-smoke` run.
+- 2026-09-08: complete adjacent `make test` also passed scaffold/header
+  validation, warning-clean bridge/Runner/runtime/renderer/PTy compilation,
+  all native capability and lifecycle suites, every Dart package analysis and
+  test, launcher/Kernel compilation, real FFI loading, and legacy fallback.
+  The dependency change is ready for its own commit before terminal wiring.
+- 2026-09-08: adjacent commit `ab5a78e Expose deferred termination test hook`
+  contains only that reusable test boundary, and the adjacent worktree is
+  clean. `ROADMAP.md` was reread after the dependency commit; the dual-runtime
+  acceptance child remains the first unfinished item.
+- 2026-09-08: the hierarchy fixture now reserves structural mutation through
+  the product Close/Quit coordinators. Each menu Close asks the selected native
+  tab window for a real deferred close; the matching native callback refuses
+  window ownership transfer and lets the application coordinator remove only
+  the focused pane. Text-input ownership is cancelled immediately before an
+  accepted removal so hierarchy reconciliation can release the pane adapters
+  synchronously without weakening the first confirmation boundary.
+- 2026-09-08: the planned runtime sequence is exact and content-free: a
+  distinct `sleep` process group requires two Close invocations with no first-
+  request structural change; an exited status-23 pane closes once; two real
+  native termination requests are separately refused to prove native pending
+  state is cleared; and two menu Quit invocations capture then accept the same
+  remaining two-pane visual-order snapshot. Accepted Quit cancels native event
+  and text-input routes, reaps the worker, disposes the hierarchy, shuts both
+  PTYs, and only then calls programmatic application termination.
+- 2026-09-08: the first focused analysis found no type error but rejected the
+  single nullable application-event subscription as potentially uncancelled.
+  Both window and application native subscriptions are now kept in explicit
+  owned lists that are cancelled and cleared in accepted teardown and the
+  failure cleanup path; this makes route ownership mechanically auditable.
+- 2026-09-08: after that ownership correction, focused formatting made no
+  further changes and analysis passed with zero issues. The Developer JIT
+  hierarchy launch then passed through the real application bundle in 2250 ms,
+  including all four PTYs, native menu/window requests, native deferred
+  termination hook, Metal/text-input cleanup, and the runtime worker contract.
+  The integration driver now requires the exact Close/Quit route counts and
+  zero-resource summary in addition to the established hierarchy summary.
+- 2026-09-08: focused formatting and analysis of both the product fixture and
+  strengthened integration driver passed with zero changes/issues. Release
+  AOT then passed the same exact route and owner assertions in 1441 ms. Both
+  modes therefore prove three menu/native Close requests, two separately
+  refused real native Quit requests, two menu Quit invocations, one final
+  programmatic termination, four clean PTY shutdowns, four disposed zero-pin
+  Metal surfaces, zero text-input clients/native handles, and one gracefully
+  reaped runtime worker. Full repository and runtime verification remain
+  required before marking the child or parent complete.
+- 2026-09-08: documentation-bound compatibility evidence was regenerated after
+  the README and feature-matrix updates. Generation passed nine regression
+  families, 390 input bytes, and 417 split runs; the resulting report remains
+  part of this task diff for the subsequent freshness and full-suite checks.
+- 2026-09-08: complete `make test` passed every generated/freshness contract,
+  all compatibility/differential/application/terminfo gates, formatting of 205
+  Dart files with zero changes, whole-package analysis with zero issues,
+  native-asset hooks, and the aggregate test runner. The coverage freshness
+  result remains nine fix families, 417 split runs, eight owned gaps, and zero
+  known P0 silent-corruption cases.
+- 2026-09-08: the Dart-only source audit passed with 388 tracked files, zero
+  product native sources, and one reviewed test-native fixture. The new native
+  bridge hook remains owned and committed in the reusable AppKit dependency,
+  not copied into this product repository.
+- 2026-09-08: final `make RUNTIME_ARCH=arm64 runtime-verify` passed the complete
+  matrix in both Developer JIT and Release AOT: bundle audits, smoke, real-PTY
+  display, the strengthened hierarchy/Close/Quit acceptance, restoration,
+  clipboard, all 16 lifecycle scenarios, bounded traffic, 1000-iteration
+  resource stress, shutdown fault, and PTY-deadline handling. Resource stress
+  stayed at baseline 33 and peak 35 native handles in both modes. The parent
+  objective and all four ordered children now satisfy their completion
+  criteria; no blocker or untracked follow-up was found, so the roadmap child
+  and parent are marked complete.
