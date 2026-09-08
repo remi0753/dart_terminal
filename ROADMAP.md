@@ -956,7 +956,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] bounded foreground-process snapshot と close-risk classification
   - [x] application-owned per-pane close transaction と hierarchy collapse
-  - [ ] aggregate app quit confirmation と deferred native lifecycle coordination
+  - [x] aggregate app quit confirmation と deferred native lifecycle coordination
   - [ ] M1 両 runtime 回帰受け入れと親項目完了判定
 - [ ] multiple pane の scheduling/resource budget
 - [ ] AppKit unit、integration、UI tests

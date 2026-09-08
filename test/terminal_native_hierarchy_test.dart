@@ -12,6 +12,107 @@ Future<void> main() => runTerminalNativeHierarchyTests();
 Future<void> runTerminalNativeHierarchyTests() async {
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
+  await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testNativeTerminationReplyAndHierarchyCleanup() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  application.defersTerminationRequests = true;
+  final List<String> lifecycle = <String>[];
+  final List<_HierarchyFakeSession> sessions = <_HierarchyFakeSession>[];
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalWindowState window = await state.createWindow(
+    TerminalPaneConfiguration(
+      sessionFactory:
+          (
+            TerminalSessionId id, {
+            required void Function() onChanged,
+            required void Function() onTerminated,
+          }) {
+            final _HierarchyFakeSession session = _HierarchyFakeSession(
+              id,
+              onShutdown: () => lifecycle.add('session'),
+            );
+            sessions.add(session);
+            return session;
+          },
+      onChanged: () {},
+      onExitRequested: () {},
+    ),
+  );
+  await state.paneForId(window.selectedTab.focusedPaneId)!.start();
+  final TerminalNativeHierarchyAdapter hierarchy =
+      TerminalNativeHierarchyAdapter(
+        state: state,
+        paneResourcesFactory: (TerminalPane pane) =>
+            TerminalNativePaneResources(
+              paneId: pane.id,
+              view: View(),
+              onDisposeAdapters: () => lifecycle.add('native'),
+            ),
+        windowFrame: const Rect.fromLTWH(40, 50, 800, 600),
+        cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+        presentWindows: false,
+      );
+  hierarchy.reconcile();
+  var programmaticTerminationCount = 0;
+  final TerminalPaneCloseCoordinator paneClose = TerminalPaneCloseCoordinator(
+    state: state,
+    onHierarchyChanged: hierarchy.reconcile,
+  );
+  final TerminalApplicationQuitCoordinator quit =
+      TerminalApplicationQuitCoordinator(
+        state: state,
+        paneCloseCoordinator: paneClose,
+        replyToTerminationRequest:
+            (
+              ApplicationTerminateRequestedEvent request, {
+              required bool allow,
+            }) {
+              lifecycle.add('reply');
+              application.replyToTerminationRequest(request, allow: allow);
+            },
+        onPreShutdown: () async {
+          hierarchy.dispose();
+        },
+        terminateProgrammatically: () async {
+          programmaticTerminationCount++;
+        },
+      );
+  const ApplicationTerminateRequestedEvent request =
+      ApplicationTerminateRequestedEvent(monotonicMicros: 77, operationId: 77);
+  final TerminalApplicationQuitResult result = await quit
+      .handleTerminationRequest(request);
+  _expect(
+    result.disposition == TerminalApplicationQuitDisposition.terminated &&
+        result.nativeOperationId == 77 &&
+        bindings.terminationDeferralEnabled &&
+        bindings.terminationReplies.join(',') == '77:true' &&
+        lifecycle.join(',') == 'native,session,reply' &&
+        sessions.single.shutdownCount == 1 &&
+        hierarchy.paneResourceCount == 0 &&
+        hierarchy.splitViewCount == 0 &&
+        hierarchy.nativeWindowCount == 0 &&
+        bindings.objects.isEmpty &&
+        state.isDisposed &&
+        programmaticTerminationCount == 0,
+    'native Quit replies allow once and only after hierarchy/session cleanup',
+  );
+  _expect(
+    (await quit.handleTerminationRequest(request)).disposition ==
+            TerminalApplicationQuitDisposition.stale &&
+        bindings.terminationReplies.length == 1 &&
+        sessions.single.shutdownCount == 1,
+    'completed duplicate native Quit neither replies nor tears down twice',
+  );
+  await application.terminate();
+  await rawEvents.close();
 }
 
 Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
@@ -962,6 +1063,8 @@ final class _HierarchyNativeBindings implements NativeBindings {
   final Map<int, double> splitViewFractions = <int, double>{};
   final Map<int, int> splitViewZoomedChildren = <int, int>{};
   final List<int> releaseOrder = <int>[];
+  final List<String> terminationReplies = <String>[];
+  var terminationDeferralEnabled = false;
 
   int handleFor(Object resource) => _handles[resource]!;
 
@@ -991,6 +1094,21 @@ final class _HierarchyNativeBindings implements NativeBindings {
 
   @override
   NativeCallResult applicationTerminate() => const NativeCallResult.success();
+
+  @override
+  NativeCallResult applicationSetTerminationRequestDeferral(bool enabled) {
+    terminationDeferralEnabled = enabled;
+    return const NativeCallResult.success();
+  }
+
+  @override
+  NativeCallResult applicationReplyToTerminationRequest({
+    required int operationId,
+    required bool allow,
+  }) {
+    terminationReplies.add('$operationId:$allow');
+    return const NativeCallResult.success();
+  }
 
   @override
   NativeValueResult<int> windowCreate({

@@ -293,3 +293,49 @@ coordination
   cases. The Dart-only source audit passed with 386 tracked files, zero product
   native sources, and one reviewed test-native source. Whitespace checks and
   both repository worktrees' task boundaries are clean.
+- 2026-09-08: the aggregate Quit coordinator captures panes in deterministic
+  window/tab/split visual order and binds the confirmation token to every
+  pane/session identity plus the same-call process IDs, groups, disposition,
+  and lookup errors. Any foreground or unavailable pane makes the whole
+  transaction conservative; idle and non-live panes do not. Snapshot lookup
+  exceptions and session-identity mismatches are converted to unavailable
+  rather than weakening admission.
+- 2026-09-08: Quit reserves pane mutation through the existing Close
+  coordinator. The reservation cancels a pending pane confirmation, refuses
+  to interrupt an in-flight removal, and makes later pane Close requests busy
+  until Quit is cancelled, becomes stale, or is accepted. This preserves the
+  no-partial-removal boundary without adding a second hierarchy owner.
+- 2026-09-08: menu and native Quit share one transaction but retain separate
+  lifecycle completion: menu acceptance invokes programmatic termination only
+  after hierarchy/session shutdown, while a deferred native request receives
+  its matching allow reply after shutdown. Duplicate pending operations
+  coalesce, competing operations receive one refusal, and a bounded 64-entry
+  reply ledger prevents recent duplicate replies. Pre-shutdown cleanup faults
+  are classified while application pane shutdown and termination continue.
+- 2026-09-08: the first focused format changed only the new coordinator. The
+  subsequent analysis reported an async return inside a `try` block and one
+  export-order lint; no type or API error was found. The begin path was reshaped
+  so reservation release covers only synchronous snapshot/setup failure and
+  cannot accidentally encompass accepted asynchronous teardown; the export
+  was sorted.
+- 2026-09-08: the first direct application-state run reached the final cached
+  completion assertion, then failed because `confirmQuit` checked the retained
+  completion future before the completed result and classified an already-used
+  token as busy rather than stale. Teardown itself completed. Completed-state
+  precedence now makes old confirmation tokens unambiguously stale.
+- 2026-09-08: after that correction, focused formatting, analysis, the direct
+  application-state test, and the direct fake-AppKit hierarchy test passed.
+  Coverage includes zero-pane immediate native Quit; four panes across two
+  windows and two tabs with idle, foreground, non-live, and unavailable states;
+  aggregate stale/cancel/retry; Close exclusion; native duplicate/competition;
+  teardown faults; and native allow only after hierarchy and session cleanup.
+- 2026-09-08: final child verification regenerated the documentation-bound
+  compatibility report, then passed all nine regression families with 417
+  split runs, eight owned gaps, and zero known P0 silent-corruption cases. The
+  Dart-only source audit passed with 387 tracked files, zero product native
+  sources, and one reviewed test-native source. Complete `make test` passed
+  every generated/freshness gate, formatting of 205 Dart files with zero
+  changes, whole-package analysis, native asset hooks, and the aggregate test
+  runner. `git diff --check` is clean and the adjacent dependency worktree has
+  no changes. Product menu/event/runtime wiring intentionally remains in the
+  next ordered child.

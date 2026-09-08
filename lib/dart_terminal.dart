@@ -13,6 +13,7 @@ export 'src/terminal_application.dart'
         TerminalOptions,
         RuntimeShellExitTestScenario,
         terminalUsage;
+export 'src/terminal_application_quit_coordinator.dart';
 export 'src/terminal_application_state.dart';
 export 'src/terminal_buffer.dart' show TerminalBuffer;
 export 'src/terminal_command_palette.dart';

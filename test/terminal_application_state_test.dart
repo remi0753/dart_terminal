@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_terminal/dart_terminal.dart';
 
 Future<void> main() => runTerminalApplicationStateTests();
@@ -16,7 +17,217 @@ Future<void> runTerminalApplicationStateTests() async {
   await _testApplicationLayoutMutations();
   await _testPaneRemovalAndOrderedShutdown();
   await _testPaneCloseCoordinator();
+  await _testApplicationQuitCoordinator();
   await _testApplicationLimitsAndDisposedState();
+}
+
+Future<void> _testApplicationQuitCoordinator() async {
+  final List<String> emptyReplies = <String>[];
+  final TerminalApplicationState emptyState = TerminalApplicationState();
+  final TerminalApplicationQuitCoordinator emptyCoordinator =
+      TerminalApplicationQuitCoordinator(
+        state: emptyState,
+        replyToTerminationRequest:
+            (
+              ApplicationTerminateRequestedEvent request, {
+              required bool allow,
+            }) {
+              emptyReplies.add('${request.operationId}:$allow');
+            },
+      );
+  const ApplicationTerminateRequestedEvent emptyRequest =
+      ApplicationTerminateRequestedEvent(monotonicMicros: 1, operationId: 1);
+  final TerminalApplicationQuitResult emptyResult = await emptyCoordinator
+      .handleTerminationRequest(emptyRequest);
+  _expect(
+    emptyResult.disposition == TerminalApplicationQuitDisposition.terminated &&
+        emptyResult.snapshot!.panes.isEmpty &&
+        emptyReplies.join(',') == '1:true' &&
+        emptyState.isDisposed &&
+        (await emptyCoordinator.handleTerminationRequest(emptyRequest))
+                .disposition ==
+            TerminalApplicationQuitDisposition.stale &&
+        emptyReplies.length == 1,
+    'empty application quits immediately and replies once to one native ID',
+  );
+
+  final List<_StateFakeSession> sessions = <_StateFakeSession>[];
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalPaneConfiguration configuration = _configuration(sessions);
+  final TerminalWindowState firstWindow = await state.createWindow(
+    configuration,
+  );
+  final TerminalTabState firstTab = firstWindow.selectedTab;
+  final TerminalPane first = state.paneForId(firstTab.focusedPaneId)!;
+  final TerminalPane second = await state.splitPane(
+    first.id,
+    configuration,
+    axis: TerminalSplitAxis.horizontal,
+  );
+  final TerminalTabState secondTab = await state.createTab(
+    firstWindow.id,
+    configuration,
+  );
+  final TerminalPane third = state.paneForId(secondTab.focusedPaneId)!;
+  final TerminalWindowState secondWindow = await state.createWindow(
+    configuration,
+  );
+  final TerminalPane fourth = state.paneForId(
+    secondWindow.selectedTab.focusedPaneId,
+  )!;
+  for (final TerminalPane pane in <TerminalPane>[
+    first,
+    second,
+    third,
+    fourth,
+  ]) {
+    await pane.start();
+  }
+  sessions[0].processDisposition = TerminalPaneProcessDisposition.idleShell;
+  sessions[1].processDisposition =
+      TerminalPaneProcessDisposition.foregroundProcess;
+  sessions[2].live = false;
+  sessions[3].failProcessSnapshot = true;
+  state
+    ..focusPane(firstTab.id, second.id)
+    ..activateWindow(firstWindow.id);
+
+  final TerminalPaneCloseCoordinator paneClose = TerminalPaneCloseCoordinator(
+    state: state,
+  );
+  final TerminalPaneCloseResult paneConfirmation = await paneClose
+      .requestClose();
+  final List<String> replies = <String>[];
+  var preShutdownCount = 0;
+  var programmaticTerminationCount = 0;
+  final TerminalApplicationQuitCoordinator coordinator =
+      TerminalApplicationQuitCoordinator(
+        state: state,
+        paneCloseCoordinator: paneClose,
+        replyToTerminationRequest:
+            (
+              ApplicationTerminateRequestedEvent request, {
+              required bool allow,
+            }) {
+              replies.add('${request.operationId}:$allow');
+            },
+        onPreShutdown: () async {
+          preShutdownCount++;
+          throw StateError('injected pre-shutdown failure');
+        },
+        terminateProgrammatically: () async {
+          programmaticTerminationCount++;
+        },
+      );
+  const ApplicationTerminateRequestedEvent firstNative =
+      ApplicationTerminateRequestedEvent(monotonicMicros: 41, operationId: 41);
+  final TerminalApplicationQuitResult firstRequest = await coordinator
+      .handleTerminationRequest(firstNative);
+  final TerminalApplicationQuitConfirmation firstConfirmation =
+      firstRequest.confirmation!;
+  final TerminalApplicationQuitSnapshot firstSnapshot =
+      firstConfirmation.snapshot;
+  _expect(
+    paneConfirmation.disposition ==
+            TerminalPaneCloseDisposition.confirmationRequired &&
+        !second.closeConfirmationPending &&
+        paneClose.applicationQuitInProgress &&
+        firstRequest.disposition ==
+            TerminalApplicationQuitDisposition.confirmationRequired &&
+        firstSnapshot.panes
+                .map((TerminalApplicationQuitPaneSnapshot pane) => pane.paneId)
+                .join(',') ==
+            '${first.id},${second.id},${third.id},${fourth.id}' &&
+        firstSnapshot.count(TerminalPaneProcessDisposition.idleShell) == 1 &&
+        firstSnapshot.count(TerminalPaneProcessDisposition.foregroundProcess) ==
+            1 &&
+        firstSnapshot.count(TerminalPaneProcessDisposition.nonLive) == 1 &&
+        firstSnapshot.count(TerminalPaneProcessDisposition.unavailable) == 1 &&
+        state.paneCount == 4 &&
+        replies.isEmpty,
+    'native Quit atomically snapshots mixed panes and cancels pane Close',
+  );
+  _expect(
+    (await paneClose.requestClose()).disposition ==
+            TerminalPaneCloseDisposition.busy &&
+        (await coordinator.handleTerminationRequest(firstNative))
+                .confirmation ==
+            firstConfirmation &&
+        replies.isEmpty &&
+        state.paneCount == 4,
+    'pending Quit blocks partial pane removal and coalesces its native ID',
+  );
+
+  const ApplicationTerminateRequestedEvent competingNative =
+      ApplicationTerminateRequestedEvent(monotonicMicros: 42, operationId: 42);
+  _expect(
+    (await coordinator.handleTerminationRequest(competingNative)).disposition ==
+        TerminalApplicationQuitDisposition.busy,
+    'competing native Quit is refused while one confirmation is pending',
+  );
+  _expect(
+    (await coordinator.handleTerminationRequest(competingNative)).disposition ==
+        TerminalApplicationQuitDisposition.stale,
+    'a duplicate refused native operation is stale',
+  );
+  sessions[1].processDisposition = TerminalPaneProcessDisposition.idleShell;
+  _expect(
+    (await coordinator.confirmQuit(firstConfirmation)).disposition ==
+            TerminalApplicationQuitDisposition.stale &&
+        replies.join(',') == '42:false,41:false' &&
+        !paneClose.applicationQuitInProgress &&
+        state.paneCount == 4,
+    'changed process identity invalidates the aggregate and refuses its ID',
+  );
+
+  const ApplicationTerminateRequestedEvent retryNative =
+      ApplicationTerminateRequestedEvent(monotonicMicros: 43, operationId: 43);
+  final TerminalApplicationQuitResult retryRequest = await coordinator
+      .handleTerminationRequest(retryNative);
+  _expect(
+    retryRequest.disposition ==
+            TerminalApplicationQuitDisposition.confirmationRequired &&
+        coordinator.cancelQuit(retryRequest.confirmation!) &&
+        !coordinator.cancelQuit(retryRequest.confirmation!) &&
+        replies.join(',') == '42:false,41:false,43:false' &&
+        state.paneCount == 4,
+    'aggregate cancellation refuses one native request and preserves all panes',
+  );
+
+  sessions[0].failShutdown = true;
+  final TerminalApplicationQuitResult menuRequest = await coordinator
+      .requestQuit();
+  final TerminalApplicationQuitConfirmation menuConfirmation =
+      menuRequest.confirmation!;
+  final TerminalApplicationQuitResult completed = await coordinator
+      .requestQuit();
+  _expect(
+    menuRequest.disposition ==
+            TerminalApplicationQuitDisposition.confirmationRequired &&
+        completed.disposition ==
+            TerminalApplicationQuitDisposition.terminatedWithCleanupFailure &&
+        completed.preShutdownFailed &&
+        completed.shutdown!.disposition ==
+            TerminalSessionShutdownDisposition.failed &&
+        completed.snapshot == menuConfirmation.snapshot &&
+        preShutdownCount == 1 &&
+        programmaticTerminationCount == 1 &&
+        sessions.every(
+          (_StateFakeSession session) => session.shutdownCount == 1,
+        ) &&
+        state.isDisposed &&
+        state.paneCount == 0 &&
+        state.windowCount == 0 &&
+        identical(await coordinator.requestQuit(), completed) &&
+        (await coordinator.confirmQuit(menuConfirmation)).disposition ==
+            TerminalApplicationQuitDisposition.stale &&
+        completed.machineLine() ==
+            'TERMINAL_APPLICATION_QUIT '
+                'disposition=terminatedWithCleanupFailure operation_id=0 '
+                'native_operation_id=0 panes=4 cleanup=failed '
+                'pre_shutdown_failed=true',
+    'confirmed menu Quit tears down all panes once and reports cleanup faults',
+  );
 }
 
 Future<void> _testPaneCloseCoordinator() async {
@@ -1100,6 +1311,7 @@ final class _StateFakeSession implements TerminalPaneSession {
   var live = false;
   var shutdownCount = 0;
   var failShutdown = false;
+  var failProcessSnapshot = false;
   Completer<void>? shutdownBarrier;
   TerminalPaneProcessDisposition processDisposition =
       TerminalPaneProcessDisposition.idleShell;
@@ -1111,20 +1323,25 @@ final class _StateFakeSession implements TerminalPaneSession {
   TerminalPaneSessionExitDisposition? get exitDisposition => null;
 
   @override
-  TerminalPaneProcessSnapshot processSnapshot() => !live
-      ? TerminalPaneProcessSnapshot.nonLive(id)
-      : processDisposition == TerminalPaneProcessDisposition.unavailable
-      ? TerminalPaneProcessSnapshot.unavailable(sessionId: id)
-      : TerminalPaneProcessSnapshot.available(
-          sessionId: id,
-          childProcessId: id.paneId.value,
-          owningProcessGroup: id.paneId.value,
-          foregroundProcessGroup:
-              processDisposition ==
-                  TerminalPaneProcessDisposition.foregroundProcess
-              ? id.paneId.value + 1000
-              : id.paneId.value,
-        );
+  TerminalPaneProcessSnapshot processSnapshot() {
+    if (failProcessSnapshot) {
+      throw StateError('injected process snapshot failure');
+    }
+    return !live
+        ? TerminalPaneProcessSnapshot.nonLive(id)
+        : processDisposition == TerminalPaneProcessDisposition.unavailable
+        ? TerminalPaneProcessSnapshot.unavailable(sessionId: id)
+        : TerminalPaneProcessSnapshot.available(
+            sessionId: id,
+            childProcessId: id.paneId.value,
+            owningProcessGroup: id.paneId.value,
+            foregroundProcessGroup:
+                processDisposition ==
+                    TerminalPaneProcessDisposition.foregroundProcess
+                ? id.paneId.value + 1000
+                : id.paneId.value,
+          );
+  }
 
   @override
   TerminalKeyboardModes get keyboardModes => const TerminalKeyboardModes();

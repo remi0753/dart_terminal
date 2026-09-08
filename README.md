@@ -66,7 +66,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - ウィンドウサイズに追従する`TIOCSWINSZ`/`SIGWINCH`
 - typed pane/session ID、単一owner、live shellの再操作close確認、process内容を読まない
   child/owning/foreground process-group snapshotと保守的close-risk分類、state層の
-  identity-bound per-pane確認transactionとsplit/tab/window collapse
+  identity-bound per-pane確認transactionとsplit/tab/window collapse。全paneをvisual順に
+  固定するaggregate Quit transactionは、Closeとの相互排他、stale/cancel/retry、AppKit
+  deferred terminationへのexactly-once reply、cleanup後のprogrammatic terminationを扱う
 - native handleと独立したmonotonic window/tab/split-node ID、64 paneまでのimmutable
   binary split topology、selected tab/focused pane/reverse index、collapseとordered teardownを
   持つapplication-owned state model。AppKit adapterはnative tab group、再帰split view、
@@ -303,6 +305,8 @@ shellが終了しないことは正常なPTY semanticsです。
 異常終了paneはstatus lineを確認した後、一度のCloseで終了できます。
 終了時の`TERMINAL_SESSION_SHUTDOWN`と`TERMINAL_PANE_OWNER_SHUTDOWN`は、同じ
 typed ID、固定されたdisposition、termination/cleanupの真偽だけで最終結果を示します。
+`TERMINAL_APPLICATION_QUIT_SNAPSHOT`と`TERMINAL_APPLICATION_QUIT`もpane数、固定process
+分類、opaque operation ID、cleanup分類だけを示し、terminal内容やprocess名を含みません。
 最終期限を超えた場合もpaneとhostの終了処理を続け、正常終了を名乗らずstatus 75と
 `outcome=failure`を記録します。
 

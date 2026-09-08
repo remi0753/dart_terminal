@@ -118,14 +118,34 @@ final class TerminalPaneCloseCoordinator {
   TerminalPaneCloseConfirmation? _pendingConfirmation;
   var _nextOperationId = 0;
   var _removalInProgress = false;
+  var _applicationQuitInProgress = false;
 
   TerminalPaneCloseConfirmation? get pendingConfirmation =>
       _pendingConfirmation;
   bool get removalInProgress => _removalInProgress;
+  bool get applicationQuitInProgress => _applicationQuitInProgress;
+
+  /// Reserves hierarchy mutation for one aggregate application-quit flow.
+  ///
+  /// A pending pane confirmation is cancelled before the reservation is
+  /// granted. An in-flight pane removal cannot be interrupted and therefore
+  /// makes the quit request temporarily busy.
+  bool beginApplicationQuit() {
+    if (_removalInProgress || _applicationQuitInProgress) {
+      return false;
+    }
+    _cancelPending();
+    _applicationQuitInProgress = true;
+    return true;
+  }
+
+  void endApplicationQuit() {
+    _applicationQuitInProgress = false;
+  }
 
   /// Repeating the same pending request is an explicit confirmation.
   Future<TerminalPaneCloseResult> requestClose({PaneId? paneId}) async {
-    if (_removalInProgress) {
+    if (_removalInProgress || _applicationQuitInProgress) {
       return const TerminalPaneCloseResult.busy();
     }
     final PaneId? targetId = paneId ?? _focusedPaneId();
@@ -171,7 +191,7 @@ final class TerminalPaneCloseCoordinator {
   Future<TerminalPaneCloseResult> confirmClose(
     TerminalPaneCloseConfirmation confirmation,
   ) async {
-    if (_removalInProgress) {
+    if (_removalInProgress || _applicationQuitInProgress) {
       return const TerminalPaneCloseResult.busy();
     }
     if (_pendingConfirmation != confirmation) {
