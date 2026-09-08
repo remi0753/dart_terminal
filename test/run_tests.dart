@@ -1168,8 +1168,9 @@ Future<void> _testPersistentCommandSession() async {
     ptyBackend.commands.length == 1 &&
         ptyBackend.commands.single.executable == '/bin/zsh' &&
         ptyBackend.commands.single.arguments.isEmpty &&
-        ptyBackend.commands.single.loginShell,
-    'one login shell is created for the session generation',
+        ptyBackend.commands.single.loginShell &&
+        ptyBackend.commands.single.readBatchBytes == 4 * 1024,
+    'one bounded-delivery login shell is created for the session generation',
   );
   final FakePtyProcess process = ptyBackend.processes.single;
   final int processId = session.processId!;
@@ -1600,6 +1601,18 @@ Future<void> _testBoundedSessionShutdown() async {
     'non-positive session shutdown timeout',
     expectedType: ArgumentError,
   );
+  for (final int readBatchBytes in <int>[0, 64 * 1024 + 1]) {
+    _expectThrows(
+      () => TerminalSession(
+        id: const TerminalSessionId(paneId: PaneId(12), generation: 1),
+        readBatchBytes: readBatchBytes,
+        onChanged: () {},
+        onTerminated: () {},
+      ),
+      'out-of-range terminal parser delivery bound',
+      expectedType: RangeError,
+    );
+  }
 }
 
 Future<void> _testRealPersistentPtySession() async {

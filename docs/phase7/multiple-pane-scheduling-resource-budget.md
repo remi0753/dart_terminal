@@ -119,7 +119,20 @@ queues without bound nor starves input and presentation in another pane.
   faults, unregister/dispose, and surface delegation; focused/full checks pass
   before an independent commit.
 
-### 3. Cross-pane flood/input dual-runtime acceptance and parent completion
+### 3. Bounded PTY/parser dispatch and Developer JIT flood regression
+
+- Preserve the reusable PTY's 64 KiB default while adding a backward-compatible
+  size-prefixed per-command delivery bound, and select 4 KiB for synchronous
+  terminal parsing so one callback cannot monopolize the UI isolate for the
+  observed 162 ms.
+- Keep aggregate throughput bounded and prove the reusable PTY native/Dart
+  suites plus the Developer JIT 100 MiB hierarchy gate before an independent
+  prerequisite commit. Record the reusable package change in its worklog.
+- Completion: one callback is demonstrably bounded below the measured input
+  budget, PTY package/full terminal tests pass, and the Developer JIT flood
+  response is no more than 2x its same-launch idle baseline.
+
+### 4. Cross-pane flood/input dual-runtime acceptance and parent completion
 
 - Extend the existing hierarchy product fixture rather than duplicate its
   resource graph. Measure an idle-pane baseline and a second-pane response while
@@ -250,3 +263,126 @@ queues without bound nor starves input and presentation in another pane.
   the adjacent `dart_appkit` worktree is clean. The second child therefore meets
   its acceptance conditions; the exact 100 MiB dual-runtime gate remains the
   next ordered child.
+- 2026-09-08: after commit `86812b9 Schedule pane rendering fairly`, the clean
+  worktree, roadmap, and this record were reread. The cross-pane 100 MiB
+  flood/input dual-runtime acceptance is now the first unfinished item. Its
+  scope is limited to extending the existing four-pane hierarchy fixture,
+  enforcing the latency and bounded-state contract, updating its driver and
+  evidence, and completing the scheduling/resource parent; the later general
+  AppKit test task remains out of scope.
+- 2026-09-08: the existing hierarchy fixture is selected because it already
+  owns two visible sibling panes, two hidden-tab panes, four real PTYs and Metal
+  surfaces, native text-input routers, a shared scheduler, a runtime worker,
+  and exact Close/Quit teardown. The flood will be exactly 104857600 bytes of
+  alternating `X` and carriage return, produced by bounded external pipeline
+  output. This repeatedly damages one on-screen cell while keeping the legacy
+  transcript line and scrollback bounded; NUL-only traffic was rejected because
+  it would not exercise visible render work, and newline traffic was rejected
+  because it would add irrelevant million-row scroll churn.
+- 2026-09-08: the response metric starts at a scheduled event-loop deadline,
+  routes a generated command through the pane's existing text-input router,
+  and ends only after its distinct marker is parsed and a forced full snapshot
+  containing that screen state is accepted by Metal. Three idle samples are
+  taken in the same launch and their maximum is the conservative baseline; the
+  flood sample must be no more than twice it and must complete before the flood
+  marker. Dynamic microseconds and scheduler counters are separated from an
+  exact content-free semantic summary so Developer JIT and Release AOT can
+  share the same stable contract without pretending timings are identical.
+- 2026-09-08: the first implementation extends only the hierarchy application
+  path and its integration driver, raises that suite's outer timeout from 30 to
+  120 seconds, and keeps every existing gate enabled. Focused formatting changed
+  only the application layout; focused analysis reported zero issues and the
+  aggregate Dart runner passed before launching native product acceptance.
+- 2026-09-08: the first Developer JIT launch generated and drained the full
+  flood and then cleaned all four PTYs, surfaces, text clients, native handles,
+  and the worker, but exited 70 at the new compound fairness assertion. The
+  measurement line was still located after that assertion, so the failing
+  predicate could not be distinguished from the safe log. This diagnostic
+  ordering is corrected before rerunning; no acceptance bound is weakened.
+- 2026-09-08: the diagnostic rerun isolated the failure to latency: idle was
+  23476 microseconds and flood response was 162070 microseconds (6.904x).
+  Every other predicate passed: input completed before the flood marker,
+  scheduler registration/pending peaks were 4, observed work was at most 4,
+  yields advanced from 12 to 14, the flood frame advanced, and all per-pane
+  frame queues stayed at one or less. Cleanup again reaped all resources.
+- 2026-09-08: the failure shows the prior assumption that a 64 KiB native PTY
+  delivery is a sufficient UI-isolate parser bound is false in Developer JIT
+  for the repeated visible-cell workload. This newly required prerequisite is
+  split into an ordered roadmap child before further implementation: tune only
+  the reusable package's fixed read delivery unit (no ABI/queue/ACK change),
+  verify its package contracts and the Developer JIT flood gate, commit it,
+  then return to Release AOT and parent completion.
+- 2026-09-09: repository ADR and Phase 0 evidence require burst deliveries of
+  at least 64 KiB by default, so the global 8 KiB constant edit was rejected
+  before commit. The adopted compatibility design appends `read_batch_bytes`
+  to the existing size-prefixed ABI-v5 config. Old struct prefixes and zero use
+  64 KiB; `PtyCommand` validates a consumer-selected 1..64 KiB bound; the
+  terminal session selects 4 KiB. Ordered ACKs, high/low watermarks, native
+  queue caps, reactor-turn count, and default throughput semantics do not
+  change. Native tests cover default 64 KiB, selected 4 KiB, and an old prefix.
+- 2026-09-09: the PATH `clang-format` was Chromium's checkout-dependent wrapper
+  and exited before changing the adjacent native files. Xcode's concrete
+  formatter is used instead; Dart formatting of the PTY API/tests and terminal
+  consumer/acceptance required no changes.
+- 2026-09-09: the first focused native run failed only because the new test
+  incorrectly required an observed callback to equal 64 KiB. PTY reads may
+  return less than their requested maximum, so default coverage now requires a
+  positive callback no larger than 64 KiB. The result also means an 8 KiB cap
+  need not reduce the platform's natural delivery; the terminal-specific cap
+  is 4 KiB and the configured native fixture pins that bound.
+- 2026-09-09: after correction, the warning-clean native contract passed along
+  with package analysis and the first seven Dart PTY cases. The existing
+  competing-reaper test then retained exit 37 but its race chose the normal
+  reap path, so `firstWhere(externalReapObserved)` found no element. No changed
+  line participates in reap ordering; the focused Dart suite is rerun once to
+  determine whether this is the known nondeterministic system-reaper race.
+- 2026-09-09: the immediate Dart PTY rerun passed all ten cases, including the
+  exact external-reap diagnostic, without a source change. The assertion is
+  retained. Focused package contracts and terminal analysis are now green; the
+  512-byte consumer proceeds to the Developer JIT 100 MiB gate.
+- 2026-09-09: the first 512-byte Developer JIT run still failed the unchanged
+  latency gate at 168436 microseconds versus a 28246-microsecond baseline
+  (5.964x); all other boundedness, overlap, yield, presentation, and cleanup
+  predicates passed. Inspection showed the listener facade ACKed before its
+  synchronous output stream delivered to the parser, allowing native credit to
+  refill while Dart messages remained queued. ACK is moved after synchronous
+  delivery and the terminal selects a 4 KiB high watermark with zero low
+  watermark, so at most the current consumer callback is admitted. Other PTY
+  consumers retain their existing default batch and watermark settings.
+- 2026-09-09: warning-clean native and Dart PTY focused suites pass after the
+  ACK/watermark correction. The Developer JIT hierarchy then passed the exact
+  100 MiB gate in 16626 ms, including the 2x response bound, input-before-flood
+  completion, positive scheduler yields, bounded scheduler/frame state, all
+  prior hierarchy/IME/metadata/Close/Quit checks, four clean sessions/surfaces,
+  zero text/native handles, and a reaped worker. The assertion is tightened to
+  require the scheduler yield count to increase during the flood (not merely be
+  positive from setup), and the integration summary now exposes content-free
+  timing/yield values for the final confirmation rerun.
+- 2026-09-09: the adjacent `dart_appkit` complete `make test` passed scaffold,
+  bridge/Runner, message-pump/event, runtime/capability/renderer/PTY native
+  contracts, all Dart package analysis/tests, launcher/Kernel, FFI, and legacy
+  fallback gates after the backward-compatible PTY change. That prerequisite
+  is ready for its own dependency-repository commit before the terminal child
+  is finalized.
+- 2026-09-09: the reusable PTY prerequisite was committed independently in
+  `dart_appkit` as `b229bf4 Bound PTY delivery by consumer work`. The terminal
+  roadmap and this task record were reread immediately afterward; bounded
+  PTY/parser dispatch remains the first unfinished child. Its final tightened
+  Developer JIT rerun passed in 16818 ms: the conservative idle baseline was
+  25159 microseconds, the concurrent-flood response was 6049 microseconds
+  (0.241x), and scheduler yields reached 32 after increasing during the exact
+  104857600-byte flood. All existing hierarchy and cleanup gates also passed.
+- 2026-09-09: terminal-side unit coverage now pins the 4 KiB default delivered
+  to `PtyCommand` and rejects zero or larger-than-64-KiB session overrides.
+  Focused format checked four changed Dart files with zero rewrites, focused
+  analysis reported no issues, and the direct aggregate Dart runner passed.
+- 2026-09-09: terminal `make test` passed all generated/freshness,
+  compatibility, differential, application, terminfo, formatting of 207 Dart
+  files, whole-project analysis, and aggregate runner gates. Compatibility
+  evidence remains nine fix families, 417 split runs, eight owned gaps, and
+  zero known P0 silent corruption. `make runtime-source-check` passed with 391
+  tracked files, zero product native sources, and one reviewed test-native
+  source. The terminal and dependency diffs pass whitespace checks, the
+  dependency worktree is clean, and final diff review found no temporary
+  diagnostic or unrelated file. This third child is complete; Release AOT and
+  the final dual-runtime/evidence pass remain ordered next.

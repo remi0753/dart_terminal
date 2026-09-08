@@ -145,6 +145,7 @@ final class TerminalSession implements TerminalPaneSession {
     Map<String, String>? environment,
     this.shellExecutable = '/bin/zsh',
     List<String> shellArguments = const <String>[],
+    this.readBatchBytes = defaultReadBatchBytes,
     this.writeCapacityBytes = 1024 * 1024,
     this.gracefulShutdownTimeout = const Duration(seconds: 3),
     this.finalShutdownTimeout = const Duration(seconds: 1),
@@ -163,6 +164,15 @@ final class TerminalSession implements TerminalPaneSession {
        _workingDirectory = Directory(
          initialWorkingDirectory ?? Directory.current.path,
        ).absolute.path {
+    if (readBatchBytes <= 0 ||
+        readBatchBytes > PtyCommand.maximumReadBatchBytes) {
+      throw RangeError.range(
+        readBatchBytes,
+        1,
+        PtyCommand.maximumReadBatchBytes,
+        'readBatchBytes',
+      );
+    }
     if (writeCapacityBytes <= 0) {
       throw ArgumentError.value(
         writeCapacityBytes,
@@ -201,6 +211,10 @@ final class TerminalSession implements TerminalPaneSession {
   final Map<String, String> _environment;
   final String shellExecutable;
   final List<String> shellArguments;
+  static const int defaultReadBatchBytes = 4 * 1024;
+  static const int defaultReadHighWaterBytes = defaultReadBatchBytes;
+  static const int defaultReadLowWaterBytes = 0;
+  final int readBatchBytes;
   final int writeCapacityBytes;
   final Duration gracefulShutdownTimeout;
   final Duration finalShutdownTimeout;
@@ -343,8 +357,11 @@ final class TerminalSession implements TerminalPaneSession {
           includeParentEnvironment: false,
           workingDirectory: _workingDirectory,
           loginShell: true,
+          readBatchBytes: readBatchBytes,
         ),
         initialSize: PtySize(rows: _rows, columns: _columns),
+        readHighWaterBytes: defaultReadHighWaterBytes,
+        readLowWaterBytes: defaultReadLowWaterBytes,
         writeCapacityBytes: writeCapacityBytes,
         enableDiagnostics: true,
       );

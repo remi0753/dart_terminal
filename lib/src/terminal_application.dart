@@ -2610,6 +2610,8 @@ final class TerminalApplication {
   ) async {
     const String prompt = '__DT_HIERARCHY_PROMPT__ ';
     const String expectedInputHex = '1b5b41e697a5e69cace8aa9e';
+    const int fairnessFloodByteCount = 100 * 1024 * 1024;
+    const Duration fairnessProbeDelay = Duration(milliseconds: 20);
     const Rect windowFrame = Rect.fromLTWH(100, 90, 920, 580);
     final TerminalApplicationState state = TerminalApplicationState();
     final Map<PaneId, TerminalSession> sessions = <PaneId, TerminalSession>{};
@@ -2709,6 +2711,58 @@ final class TerminalApplication {
       if (error != null) {
         Error.throwWithStackTrace(error, asynchronousStackTrace!);
       }
+    }
+
+    void routeCommittedText(
+      _TerminalHierarchyProductPane owner,
+      String text,
+      int monotonicNanoseconds,
+    ) {
+      final TerminalTextInputRouteResult result = owner.textRouter.route(
+        TerminalTextInputCommitEvent(
+          clientId: owner.client.clientId,
+          generation: owner.textRouter.lastGeneration + 1,
+          monotonicNanoseconds: monotonicNanoseconds,
+          text: text,
+          replacement: TerminalTextInputRange.notFound,
+        ),
+      );
+      _expectLifecycle(
+        result.disposition == TerminalTextInputRouteDisposition.committed,
+        'fairness probe did not traverse the committed-text input route',
+      );
+    }
+
+    Future<int> measureVisibleResponse(
+      _TerminalHierarchyProductPane owner, {
+      required String command,
+      required String marker,
+    }) async {
+      final Stopwatch stopwatch = Stopwatch()..start();
+      final Completer<void> dispatched = Completer<void>();
+      Timer(fairnessProbeDelay, () async {
+        try {
+          routeCommittedText(
+            owner,
+            command,
+            stopwatch.elapsedMicroseconds * 1000,
+          );
+          await owner.pane.submit();
+          dispatched.complete();
+        } on Object catch (error, stackTrace) {
+          dispatched.completeError(error, stackTrace);
+        }
+      });
+      await dispatched.future.timeout(const Duration(seconds: 5));
+      await _waitForAsciiMarkerPresented(
+        owner,
+        marker,
+        timeout: const Duration(seconds: 10),
+      );
+      checkAsynchronousError();
+      final int latencyMicros =
+          stopwatch.elapsedMicroseconds - fairnessProbeDelay.inMicroseconds;
+      return latencyMicros <= 0 ? 1 : latencyMicros;
     }
 
     try {
@@ -3124,6 +3178,129 @@ final class TerminalApplication {
               null,
         ),
         'hierarchy input reached a PTY with non-exact bytes',
+      );
+
+      state
+        ..selectTab(logicalWindow.id, firstTab.id)
+        ..focusPane(firstTab.id, secondPane.id);
+      createdHierarchy.reconcile();
+      final _TerminalHierarchyProductPane floodOwner = owners[firstPaneId]!;
+      final _TerminalHierarchyProductPane probeOwner = owners[secondPane.id]!;
+      _expectLifecycle(
+        floodOwner.isVisible && probeOwner.isVisible,
+        'fairness acceptance requires two visible sibling panes',
+      );
+      await _waitForPaneProcessDisposition(
+        floodOwner.pane,
+        TerminalPaneProcessDisposition.idleShell,
+      );
+      await _waitForPaneProcessDisposition(
+        probeOwner.pane,
+        TerminalPaneProcessDisposition.idleShell,
+      );
+
+      final List<int> baselineLatencyMicros = <int>[];
+      for (var sample = 1; sample <= 3; sample++) {
+        final String marker = '__DT_FAIRNESS_INPUT_BASELINE_${sample}__';
+        baselineLatencyMicros.add(
+          await measureVisibleResponse(
+            probeOwner,
+            command:
+                "printf '\\r\\n__DT_FAIRNESS_%s_%s_%s__\\r\\n' "
+                "'INPUT' 'BASELINE' '$sample'",
+            marker: marker,
+          ),
+        );
+      }
+      final int idleBaselineMicros = baselineLatencyMicros.reduce(
+        (int current, int candidate) =>
+            candidate > current ? candidate : current,
+      );
+      final TerminalPaneWorkSchedulerSnapshot schedulerBeforeFlood =
+          createdPaneWorkScheduler.snapshot();
+      final int floodAcceptedFramesBefore = floodOwner.surface
+          .snapshot()
+          .acceptedFrameCount;
+      const String floodCompleteMarker = '__DT_FAIRNESS_FLOOD_COMPLETE__';
+      final Future<int> floodLatencyFuture = measureVisibleResponse(
+        probeOwner,
+        command:
+            "printf '\\r\\n__DT_FAIRNESS_%s_%s__\\r\\n' "
+            "'INPUT' 'FLOOD'",
+        marker: '__DT_FAIRNESS_INPUT_FLOOD__',
+      );
+      routeCommittedText(
+        floodOwner,
+        "/usr/bin/yes X | /usr/bin/tr '\\n' '\\r' | "
+        '/usr/bin/head -c $fairnessFloodByteCount; '
+        "printf '\\r\\n__DT_FAIRNESS_%s_%s__\\r\\n' "
+        "'FLOOD' 'COMPLETE'",
+        1,
+      );
+      await floodOwner.pane.submit();
+      final int floodLatencyMicros = await floodLatencyFuture;
+      final bool inputCompletedDuringFlood =
+          _findAscii(
+            floodOwner.session.terminalScreenSet.activeScreen,
+            floodCompleteMarker,
+          ) ==
+          null;
+      await _waitForAsciiMarkerPresented(
+        floodOwner,
+        floodCompleteMarker,
+        timeout: const Duration(seconds: 90),
+      );
+      final TerminalPaneWorkSchedulerSnapshot schedulerAfterFlood =
+          createdPaneWorkScheduler.snapshot();
+      final List<TerminalLiveMetalSurfaceSnapshot> surfaceSnapshots = owners
+          .values
+          .map(
+            (_TerminalHierarchyProductPane owner) => owner.surface.snapshot(),
+          )
+          .toList(growable: false);
+      final int ratioMilli =
+          (floodLatencyMicros * 1000 + idleBaselineMicros - 1) ~/
+          idleBaselineMicros;
+      final bool framesBounded = surfaceSnapshots.every(
+        (TerminalLiveMetalSurfaceSnapshot snapshot) =>
+            snapshot.pendingFrameCount <= 1,
+      );
+      stdout.writeln(
+        'TERMINAL_MULTI_PANE_FAIRNESS_MEASUREMENT '
+        'baseline_us=$idleBaselineMicros flood_us=$floodLatencyMicros '
+        'ratio_milli=$ratioMilli input_during_flood='
+        '$inputCompletedDuringFlood scheduler_registered='
+        '${schedulerAfterFlood.registeredPaneCount} scheduler_pending='
+        '${schedulerAfterFlood.pendingPaneCount} scheduler_yields='
+        '${schedulerAfterFlood.yieldCount} scheduler_yields_before='
+        '${schedulerBeforeFlood.yieldCount} scheduler_peak_pending='
+        '${schedulerAfterFlood.peakPendingPaneCount} '
+        'scheduler_max_work_observed='
+        '${schedulerAfterFlood.maximumWorkPerTurnObserved} '
+        'flood_frame_advanced='
+        '${floodOwner.surface.snapshot().acceptedFrameCount > floodAcceptedFramesBefore} '
+        'frames_bounded=$framesBounded',
+      );
+      _expectLifecycle(
+        inputCompletedDuringFlood &&
+            floodLatencyMicros <= idleBaselineMicros * 2 &&
+            schedulerAfterFlood.registeredPaneCount == 4 &&
+            schedulerAfterFlood.pendingPaneCount <= 4 &&
+            schedulerAfterFlood.peakPendingPaneCount <= 4 &&
+            schedulerAfterFlood.maximumWorkPerTurnObserved <= 4 &&
+            schedulerAfterFlood.yieldCount > 0 &&
+            schedulerAfterFlood.yieldCount > schedulerBeforeFlood.yieldCount &&
+            floodOwner.surface.snapshot().acceptedFrameCount >
+                floodAcceptedFramesBefore &&
+            framesBounded,
+        '100 MiB pane flood violated cross-pane fairness or bounded state',
+      );
+      stdout.writeln(
+        'TERMINAL_MULTI_PANE_FAIRNESS_TEST bytes=$fairnessFloodByteCount '
+        'panes=4 baseline_samples=3 input_visible=true '
+        'input_completed_during_flood=true flood_complete=true '
+        'scheduler_registered=4 scheduler_pending_bound=4 '
+        'scheduler_work_bound=4 scheduler_yielded=true frames_bounded=true',
       );
 
       final TerminalPaneCloseCoordinator paneCloseCoordinator =
@@ -6339,10 +6516,11 @@ final class TerminalApplication {
 
   static Future<void> _waitForAsciiMarker(
     TerminalSession session,
-    String marker,
-  ) async {
+    String marker, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
     final Stopwatch deadline = Stopwatch()..start();
-    while (deadline.elapsed < const Duration(seconds: 5)) {
+    while (deadline.elapsed < timeout) {
       if (_findAscii(session.terminalScreenSet.activeScreen, marker) != null) {
         return;
       }
@@ -6353,6 +6531,40 @@ final class TerminalApplication {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
     throw TimeoutException('terminal did not display marker $marker');
+  }
+
+  static Future<void> _waitForAsciiMarkerPresented(
+    _TerminalHierarchyProductPane owner,
+    String marker, {
+    required Duration timeout,
+  }) async {
+    final Stopwatch deadline = Stopwatch()..start();
+    int? markerDamageGeneration;
+    int? markerAcceptedFrameCount;
+    while (deadline.elapsed < timeout) {
+      final TerminalScreen screen =
+          owner.session.terminalScreenSet.activeScreen;
+      final TerminalLiveMetalSurfaceSnapshot snapshot = owner.surface
+          .snapshot();
+      if (markerDamageGeneration == null &&
+          _findAscii(screen, marker) != null) {
+        markerDamageGeneration = snapshot.lastAppliedDamageGeneration;
+        markerAcceptedFrameCount = snapshot.acceptedFrameCount;
+        screen.requestFullSnapshot();
+        owner.notifyScreenChanged();
+      }
+      if (markerDamageGeneration != null &&
+          snapshot.lastAppliedDamageGeneration > markerDamageGeneration &&
+          snapshot.acceptedFrameCount > markerAcceptedFrameCount!) {
+        return;
+      }
+      _expectLifecycle(
+        owner.session.isLive,
+        'terminal session exited before presenting marker $marker',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    throw TimeoutException('terminal did not present marker $marker');
   }
 
   static Future<TerminalPaneProcessSnapshot> _waitForPaneProcessDisposition(

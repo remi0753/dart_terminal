@@ -1288,7 +1288,7 @@ Future<void> _runNativeHierarchy(
     environment: const <String, String>{
       'DT_RUNTIME_NATIVE_HIERARCHY_TEST': '1',
     },
-    timeout: const Duration(seconds: 30),
+    timeout: const Duration(seconds: 120),
   );
   _expect(
     observation.status == 0,
@@ -1335,6 +1335,47 @@ Future<void> _runNativeHierarchy(
     'native hierarchy acceptance omitted tab metadata and cwd inheritance',
   );
   _expect(
+    RegExp(
+          r'^TERMINAL_MULTI_PANE_FAIRNESS_TEST bytes=104857600 panes=4 '
+          r'baseline_samples=3 input_visible=true '
+          r'input_completed_during_flood=true flood_complete=true '
+          r'scheduler_registered=4 scheduler_pending_bound=4 '
+          r'scheduler_work_bound=4 scheduler_yielded=true '
+          r'frames_bounded=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'native hierarchy acceptance omitted cross-pane flood fairness',
+  );
+  final RegExpMatch? fairnessMeasurement = RegExp(
+    r'^TERMINAL_MULTI_PANE_FAIRNESS_MEASUREMENT '
+    r'baseline_us=([1-9][0-9]*) flood_us=([1-9][0-9]*) '
+    r'ratio_milli=([1-9][0-9]*) input_during_flood=true '
+    r'scheduler_registered=4 scheduler_pending=([0-4]) '
+    r'scheduler_yields=([1-9][0-9]*) scheduler_yields_before=([0-9]+) '
+    r'scheduler_peak_pending=([1-4]) '
+    r'scheduler_max_work_observed=([1-4]) '
+    r'flood_frame_advanced=true frames_bounded=true$',
+    multiLine: true,
+  ).firstMatch(observation.stdoutText);
+  _expect(
+    fairnessMeasurement != null,
+    'native hierarchy fairness measurement is missing or malformed',
+  );
+  final int idleBaselineMicros = int.parse(fairnessMeasurement!.group(1)!);
+  final int floodLatencyMicros = int.parse(fairnessMeasurement.group(2)!);
+  final int ratioMilli = int.parse(fairnessMeasurement.group(3)!);
+  final int schedulerYields = int.parse(fairnessMeasurement.group(5)!);
+  final int schedulerYieldsBefore = int.parse(fairnessMeasurement.group(6)!);
+  _expect(
+    floodLatencyMicros <= idleBaselineMicros * 2 &&
+        schedulerYields > schedulerYieldsBefore &&
+        ratioMilli ==
+            (floodLatencyMicros * 1000 + idleBaselineMicros - 1) ~/
+                idleBaselineMicros,
+    'native hierarchy cross-pane response exceeded 2x idle baseline',
+  );
+  _expect(
     !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
         !observation.stdoutText.contains('HIERARCHY_MISMATCH'),
     'native hierarchy input was not isolated',
@@ -1366,7 +1407,10 @@ Future<void> _runNativeHierarchy(
   stdout.writeln(
     'RUNTIME_NATIVE_HIERARCHY_INTEGRATION_PASS mode=${options.mode.name} '
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
-    'tabs=2 panes=4 elapsed_ms=${observation.elapsed.inMilliseconds}',
+    'tabs=2 panes=4 baseline_us=$idleBaselineMicros '
+    'flood_us=$floodLatencyMicros ratio_milli=$ratioMilli '
+    'scheduler_yields=$schedulerYields '
+    'elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }
 
