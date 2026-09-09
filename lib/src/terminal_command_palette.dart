@@ -98,21 +98,47 @@ typedef TerminalCommandPaletteErrorObserver = void Function(
   StackTrace stackTrace,
 );
 
+final class TerminalCommandPaletteFocusTarget {
+  const TerminalCommandPaletteFocusTarget({
+    required this.window,
+    required this.view,
+  });
+
+  final Window window;
+  final View view;
+}
+
+typedef TerminalCommandPaletteFocusTargetProvider =
+    TerminalCommandPaletteFocusTarget Function();
+
 /// Product-owned transient native command-palette window.
 final class TerminalCommandPalettePresenter {
   TerminalCommandPalettePresenter({
     required this.dispatcher,
-    required this.terminalWindow,
-    required this.terminalView,
+    required Window terminalWindow,
+    required View terminalView,
     this.onDispatched,
     this.onError,
-  }) : state = TerminalCommandPaletteState(dispatcher) {
+  }) : _focusTarget = (() => TerminalCommandPaletteFocusTarget(
+         window: terminalWindow,
+         view: terminalView,
+       )),
+       state = TerminalCommandPaletteState(dispatcher) {
+    _keys = TerminalCommandPaletteKeyController(state);
+  }
+
+  TerminalCommandPalettePresenter.withFocusTarget({
+    required this.dispatcher,
+    required TerminalCommandPaletteFocusTargetProvider focusTarget,
+    this.onDispatched,
+    this.onError,
+  }) : _focusTarget = focusTarget,
+       state = TerminalCommandPaletteState(dispatcher) {
     _keys = TerminalCommandPaletteKeyController(state);
   }
 
   final TerminalActionDispatcher dispatcher;
-  final Window terminalWindow;
-  final View terminalView;
+  final TerminalCommandPaletteFocusTargetProvider _focusTarget;
   final TerminalCommandPaletteDispatchObserver? onDispatched;
   final TerminalCommandPaletteErrorObserver? onError;
   final TerminalCommandPaletteState state;
@@ -134,6 +160,12 @@ final class TerminalCommandPalettePresenter {
   TerminalActionDispatchResult? get lastDispatchResult => _lastDispatchResult;
   int get dispatchCount => _dispatchCount;
   int get terminalResponderRestoreCount => _terminalResponderRestoreCount;
+
+  /// Current terminal window restored after dismissing the palette.
+  Window get terminalWindow => _focusTarget().window;
+
+  /// Current terminal view restored after dismissing the palette.
+  View get terminalView => _focusTarget().view;
 
   Future<void> open() async {
     final Future<void>? closing = _closingFuture;
@@ -335,13 +367,15 @@ final class TerminalCommandPalettePresenter {
         if (view != null && !view.isDisposed) {
           view.dispose();
         }
-        if (restoreTerminalFocus &&
-            !terminalWindow.isClosed &&
-            !terminalWindow.isDisposed &&
-            !terminalView.isDisposed) {
-          terminalWindow.show();
-          terminalWindow.makeFirstResponder(terminalView);
-          _terminalResponderRestoreCount++;
+        if (restoreTerminalFocus) {
+          final TerminalCommandPaletteFocusTarget target = _focusTarget();
+          if (!target.window.isClosed &&
+              !target.window.isDisposed &&
+              !target.view.isDisposed) {
+            target.window.show();
+            target.window.makeFirstResponder(target.view);
+            _terminalResponderRestoreCount++;
+          }
         }
         completion.complete();
       } on Object catch (error, stackTrace) {

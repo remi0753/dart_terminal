@@ -525,7 +525,13 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
   metadata[secondPane.id]!
     ..setWindowTitle('Updated first title')
     ..setWorkingDirectory(Uri.parse('file://remote.example/private/ignored'));
-  adapter.reconcile();
+  final Map<PaneId, int> layoutCountsBeforePresentationRefresh = <PaneId, int>{
+    for (final MapEntry<PaneId, List<String>> entry in layouts.entries)
+      entry.key: entry.value.length,
+  };
+  final int presentationCallCountBeforeRefresh =
+      bindings.presentationCalls.length;
+  adapter.refreshPresentation();
   _expect(
     bindings.windowTitles[firstWindowHandle] == 'Updated first title' &&
         !bindings.windowRepresentedFilePaths.containsKey(firstWindowHandle) &&
@@ -536,8 +542,14 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
         bindings.splitViewChildrenSetCounts.length == 2 &&
         bindings.splitViewChildrenSetCounts.values.every(
           (int count) => count == 1,
-        ),
-    'retained windows update live title and clear remote proxy/rename/color',
+        ) &&
+        layouts.entries.every(
+          (MapEntry<PaneId, List<String>> entry) =>
+              entry.value.length ==
+              layoutCountsBeforePresentationRefresh[entry.key],
+        ) &&
+        bindings.presentationCalls.length == presentationCallCountBeforeRefresh,
+    'presentation refresh updates retained metadata without layout or focus',
   );
   _expect(
     firstWindow.tabIds.every(

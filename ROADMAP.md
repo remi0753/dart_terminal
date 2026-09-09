@@ -983,7 +983,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] command palette起動直後のimplemented action availabilityを同期する
   - [x] terminal product hierarchy action coordinatorを実装する
-  - [ ] 通常起動をmulti-window/tab/pane native hierarchyへ移行する
+  - [x] 通常起動をmulti-window/tab/pane native hierarchyへ移行する
   - [ ] native window lifecycle、per-pane close、app quitを通常階層へ接続する
   - [ ] user-driven actionのM1両runtime受け入れとPhase 7再完了判定
 

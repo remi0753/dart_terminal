@@ -191,3 +191,45 @@ to confirm the next target.
   freshness/generator check, formatting of 211 files with zero changes,
   whole-package analysis, build hooks, and the aggregate runner. This closes
   the action-coordinator subtask without changing `dart_appkit`.
+- 2026-09-09: began the ordinary-product integration subtask after rereading
+  the roadmap and this contract. The compatibility/fault/acceptance branches
+  depend on the existing single-pane lifecycle and machine output, so the new
+  hierarchy route is selected only for a zero-config normal run with no
+  auto-close or gated runtime scenario. `make RUNTIME_ARCH=arm64
+  developer-jit-run` meets that predicate and therefore uses the same logical
+  state, native hierarchy, and action coordinator as new window/tab/split.
+- 2026-09-09: the interactive hierarchy now creates a fresh terminal session,
+  renderer view, text-input client, Metal surface, selection gesture, mouse,
+  scroll, focus reporter, and hyperlink controller for every pane. Native
+  tab-window events are subscribed after each reconciliation and route focus,
+  resize, visibility, occlusion, backing scale, screen/frame/fullscreen, mouse,
+  and scroll to the owning logical tab and pane. Pointer coordinates are
+  translated from the split content view into pane-local coordinates before
+  existing bounded routers consume them.
+- 2026-09-09: metadata output must not run full hierarchy reconciliation on
+  every PTY screen change. Added a presentation-only refresh to update native
+  title, represented local path, and tab color while preserving layout and
+  first responder. Fake-AppKit coverage proves the refresh emits no new
+  layout/focus projection. The focused native-hierarchy and command-palette
+  tests both passed with exit 0 outside the sandbox; their first restricted
+  native run hit only the known Clang module-cache denial. Static analysis
+  reports no issues; the Dart command then reports the known sandbox-only
+  analytics timestamp denial.
+- 2026-09-09: close, aggregate Quit confirmation, removal-before-reconcile,
+  and Dock reopen semantics remain deliberately assigned to the immediately
+  following lifecycle subtask. Until that commit, the ordinary hierarchy
+  rejects native close/terminate requests and enters aggregate cleanup rather
+  than bypassing owned teardown.
+- 2026-09-09: the first two complete-test attempts stopped at the formatting
+  gate because the check-only formatter detected the most recent integration
+  edit; no later test was treated as executed. Applied the formatter, then
+  regenerated the pinned Phase 7 corpus because formatting changed its source
+  digest. The final `make test` passed all freshness and generated-evidence
+  checks, formatted 211 files with zero changes, reported no analyzer issues,
+  completed native build hooks, and passed the aggregate Dart test runner.
+  The ordinary-product hierarchy subtask is complete.
+- 2026-09-09: retained the exported presenter's `terminalWindow` and
+  `terminalView` read API as dynamic getters when introducing the active-pane
+  focus-target provider, avoiding an unnecessary public API break. Regenerated
+  the pinned evidence and repeated `make test`; formatting remained unchanged,
+  analysis reported no issues, and the complete runner passed again.

@@ -39,6 +39,7 @@ import 'terminal_input/terminal_text_input_event_router.dart';
 import 'terminal_native_hierarchy.dart';
 import 'terminal_pane.dart';
 import 'terminal_pane_close_coordinator.dart';
+import 'terminal_product_hierarchy_actions.dart';
 import 'terminal_renderer/pane_work_scheduler.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_restoration.dart';
@@ -488,6 +489,16 @@ final class TerminalApplication {
     }
     if (options.runtimeNativeHierarchyTest) {
       await _runNativeHierarchyProductAcceptance(
+        application,
+        ptyBackend,
+        terminfoEnvironment,
+        options.runtimeWorkerCommand,
+        options.initialWorkingDirectory,
+      );
+      return;
+    }
+    if (_usesInteractiveProductHierarchy(options)) {
+      await _runInteractiveHierarchyProduct(
         application,
         ptyBackend,
         terminfoEnvironment,
@@ -1941,6 +1952,776 @@ final class TerminalApplication {
           ? 'Dart Terminal shut down cleanly.'
           : 'Dart Terminal shut down with classified recovery.',
     );
+  }
+
+  static bool _usesInteractiveProductHierarchy(TerminalOptions options) =>
+      options.runtimeLifecycleScenario == RuntimeLifecycleScenario.normal &&
+      options.autoCloseAfter == null &&
+      !options.runtimeResourceStress &&
+      !options.runtimeShutdownFaultInjection &&
+      !options.runtimePtyExitFaultInjection &&
+      !options.runtimeTerminalDisplayTest &&
+      !options.runtimeClipboardTest &&
+      !options.runtimeNativeHierarchyTest &&
+      !options.runtimeRestorationTest &&
+      options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
+
+  static Future<void> _runInteractiveHierarchyProduct(
+    AppKitApplication application,
+    PtyBackend ptyBackend,
+    TerminalTerminfoEnvironment terminfoEnvironment,
+    RuntimeLifecycleWorkerCommand workerCommand,
+    String? initialWorkingDirectory,
+  ) async {
+    const Rect windowFrame = Rect.fromLTWH(100, 90, 920, 580);
+    final TerminalApplicationState state = TerminalApplicationState();
+    final Map<PaneId, TerminalSession> sessions = <PaneId, TerminalSession>{};
+    final Map<PaneId, String?> launchWorkingDirectories = <PaneId, String?>{};
+    final Map<PaneId, _TerminalHierarchyProductPane> owners =
+        <PaneId, _TerminalHierarchyProductPane>{};
+    final Map<PaneId, _TerminalSelectionProductOwner> selections =
+        <PaneId, _TerminalSelectionProductOwner>{};
+    final Map<PaneId, TerminalMouseRouter> mouseRouters =
+        <PaneId, TerminalMouseRouter>{};
+    final Map<PaneId, TerminalScrollRouter> scrollRouters =
+        <PaneId, TerminalScrollRouter>{};
+    final Map<PaneId, TerminalFocusReporter> focusReporters =
+        <PaneId, TerminalFocusReporter>{};
+    final Map<PaneId, TerminalHyperlinkInteractionController>
+    hyperlinkControllers = <PaneId, TerminalHyperlinkInteractionController>{};
+    final Map<TerminalTabId, StreamSubscription<WindowEvent>>
+    windowSubscriptions = <TerminalTabId, StreamSubscription<WindowEvent>>{};
+    final TerminalPaneWorkScheduler paneWorkScheduler =
+        TerminalPaneWorkScheduler();
+    final TerminalTabPresentationResolver presentationResolver =
+        TerminalTabPresentationResolver(
+          metadataForPane: (PaneId paneId) =>
+              sessions[paneId]?.terminalScreenSet.metadata,
+        );
+    final _TerminalClipboard clipboard = _AppKitTerminalClipboard(
+      application.generalPasteboard,
+    );
+    final TerminalPasteConfirmationGate pasteConfirmationGate =
+        TerminalPasteConfirmationGate();
+    final Stopwatch pasteClock = Stopwatch()..start();
+    final Completer<void> closed = Completer<void>();
+    TerminalNativeHierarchyAdapter? hierarchy;
+    TerminalProductHierarchyActionCoordinator? actionCoordinator;
+    TerminalAppKitMenuProjection? menuProjection;
+    TerminalCommandPalettePresenter? palettePresenter;
+    RuntimeLifecycleCoordinator? lifecycle;
+    StreamSubscription<AppKitEvent>? applicationSubscription;
+    var lifecycleWasShutDown = false;
+    Object? asynchronousError;
+    StackTrace? asynchronousStackTrace;
+
+    void recordAsynchronousError(Object error, StackTrace stackTrace) {
+      asynchronousError ??= error;
+      asynchronousStackTrace ??= stackTrace;
+      if (!closed.isCompleted) closed.completeError(error, stackTrace);
+    }
+
+    String? inheritedWorkingDirectory(PaneId? sourcePaneId) {
+      if (sourcePaneId == null) return initialWorkingDirectory;
+      return presentationResolver.inheritedWorkingDirectoryForPane(
+            sourcePaneId,
+          ) ??
+          launchWorkingDirectories[sourcePaneId] ??
+          initialWorkingDirectory;
+    }
+
+    TerminalPaneConfiguration configuration(PaneId? sourcePaneId) {
+      final String? workingDirectory = inheritedWorkingDirectory(sourcePaneId);
+      PaneId? paneId;
+      return TerminalPaneConfiguration(
+        sessionFactory:
+            (
+              TerminalSessionId id, {
+              required void Function() onChanged,
+              required void Function() onTerminated,
+            }) {
+              paneId = id.paneId;
+              final TerminalSession session = TerminalSession(
+                id: id,
+                ptyBackend: ptyBackend,
+                initialWorkingDirectory: workingDirectory,
+                environment: terminfoEnvironment.environment,
+                onChanged: onChanged,
+                onTerminated: onTerminated,
+                lifecycleObserver:
+                    (TerminalSessionLifecycleObservation observation) {
+                      stdout.writeln(observation.machineLine());
+                    },
+                nativeObserver: (TerminalSessionNativeObservation observation) {
+                  stdout.writeln(observation.machineLine());
+                },
+              );
+              sessions[id.paneId] = session;
+              launchWorkingDirectories[id.paneId] = workingDirectory;
+              return session;
+            },
+        onChanged: () {
+          final PaneId? id = paneId;
+          if (id == null) return;
+          owners[id]?.notifyScreenChanged();
+          selections[id]?.synchronize();
+          final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+          if (nativeHierarchy != null && !nativeHierarchy.isDisposed) {
+            nativeHierarchy.refreshPresentation();
+          }
+          final TerminalAppKitMenuProjection? menu = menuProjection;
+          if (menu != null && !menu.isDisposed) menu.refresh();
+          final TerminalCommandPalettePresenter? palette = palettePresenter;
+          if (palette != null && !palette.isDisposed) palette.refresh();
+        },
+        onExitRequested: () {
+          if (state.paneCount == 1 && !closed.isCompleted) {
+            closed.complete();
+          }
+        },
+        lifecycleObserver: (TerminalPaneLifecycleObservation observation) {
+          stdout.writeln(observation.machineLine());
+        },
+        exitObserver: (TerminalPaneExitObservation observation) {
+          stdout.writeln(observation.machineLine());
+        },
+      );
+    }
+
+    TerminalNativePaneResources createResources(TerminalPane pane) {
+      final TerminalSession session = sessions[pane.id]!;
+      final View view = TerminalRendererMacos.createView();
+      final TerminalTextInputClient client = TerminalTextInputClient.attach(
+        view,
+      );
+      late final _TerminalHierarchyProductPane owner;
+      final TerminalLiveMetalSurface surface = TerminalLiveMetalSurface.attach(
+        sessionId: pane.sessionId,
+        screenSet: session.terminalScreenSet,
+        view: view,
+        logicalWidth: windowFrame.width,
+        logicalHeight: windowFrame.height,
+        isVisible: false,
+        isOccluded: true,
+        paneWorkScheduler: paneWorkScheduler,
+        onCaretGeometryChanged: (TerminalCaretRect rectangle) {
+          client.publishCaretRect(
+            x: rectangle.x,
+            y: rectangle.y,
+            width: rectangle.width,
+            height: rectangle.height,
+          );
+        },
+        onFatalError: recordAsynchronousError,
+      );
+      final TerminalKeyEventRouter keyRouter = TerminalKeyEventRouter();
+      final TerminalTextInputEventRouter textRouter =
+          TerminalTextInputEventRouter(
+            clientId: client.clientId,
+            onRawKeyDown: (TerminalKeyEvent event) {
+              state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
+              final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+              if (nativeHierarchy != null && !nativeHierarchy.isDisposed) {
+                nativeHierarchy.reconcile();
+              }
+              keyRouter.handleTerminalKeyDown(event, pane);
+            },
+            onPreedit:
+                ({
+                  required int generation,
+                  required String text,
+                  required int selectionLocation,
+                  required int selectionLength,
+                }) {
+                  surface.updatePreedit(
+                    generation: generation,
+                    text: text,
+                    selectionLocation: selectionLocation,
+                    selectionLength: selectionLength,
+                  );
+                },
+            onClearPreedit: (int generation) {
+              surface.clearPreedit(generation: generation);
+            },
+            onCommit: (String text) {
+              state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
+              pane.insertText(text);
+            },
+            onOverflow: (int clientId, int generation) {
+              stdout.writeln(
+                'TERMINAL_TEXT_INPUT_OVERFLOW client_id=$clientId '
+                'generation=$generation reset=true',
+              );
+            },
+          );
+      owner = _TerminalHierarchyProductPane(
+        pane: pane,
+        session: session,
+        view: view,
+        client: client,
+        surface: surface,
+        textRouter: textRouter,
+        onTextInputError: recordAsynchronousError,
+      );
+      owners[pane.id] = owner;
+      selections[pane.id] = _TerminalSelectionProductOwner(
+        gesture: TerminalSelectionGestureController(
+          viewport: session.terminalScreenSet.viewport,
+        ),
+        surface: surface,
+      );
+      mouseRouters[pane.id] = TerminalMouseRouter(
+        onTerminalReport: pane.sendInput,
+        onLocalSelection: (TerminalLocalSelectionIntent intent) {
+          selections[pane.id]?.handle(intent);
+        },
+      );
+      scrollRouters[pane.id] = TerminalScrollRouter(
+        onTerminalReport: pane.sendInput,
+        onLocalScroll: (int rows) {
+          final TerminalViewport viewport = session.terminalScreenSet.viewport;
+          viewport.scrollByRows(rows);
+          selections[pane.id]?.synchronize();
+          surface.notifyViewportChanged();
+        },
+        onAlternateScreenInput: pane.sendInput,
+      );
+      focusReporters[pane.id] = TerminalFocusReporter(
+        onTerminalReport: pane.sendInput,
+      );
+      hyperlinkControllers[pane.id] = TerminalHyperlinkInteractionController(
+        viewport: session.terminalScreenSet.viewport,
+        onHoverCell: (int row, int column) {
+          surface.updateHyperlinkHover(row: row, column: column);
+        },
+        onClearHover: surface.clearHyperlinkHover,
+        onOpen: (AllowedExternalUrl target) {
+          try {
+            return application.openExternalUrl(target);
+          } on Object {
+            return false;
+          }
+        },
+        onNotice: pane.showHyperlinkNotice,
+      );
+      return TerminalNativePaneResources(
+        paneId: pane.id,
+        view: view,
+        onLayout: owner.applyLayout,
+        onDisposeAdapters: () {
+          selections.remove(pane.id)?.dispose();
+          mouseRouters.remove(pane.id);
+          scrollRouters.remove(pane.id);
+          focusReporters.remove(pane.id);
+          hyperlinkControllers.remove(pane.id)?.cancelPress();
+          owner.disposeAdapters();
+          owners.remove(pane.id);
+          sessions.remove(pane.id);
+          launchWorkingDirectories.remove(pane.id);
+        },
+      );
+    }
+
+    TerminalPane? activePane() {
+      final PaneId? paneId = state.activeWindow?.selectedTab.focusedPaneId;
+      return paneId == null ? null : state.paneForId(paneId);
+    }
+
+    _TerminalSelectionProductOwner? activeSelection() {
+      final PaneId? paneId = state.activeWindow?.selectedTab.focusedPaneId;
+      return paneId == null ? null : selections[paneId];
+    }
+
+    TerminalWindowState? windowForTab(TerminalTabId tabId) {
+      for (final TerminalWindowState window in state.windows) {
+        if (window.tabForId(tabId) != null) return window;
+      }
+      return null;
+    }
+
+    PaneId? paneAt(TerminalTabState tab, double x, double y) {
+      for (final PaneId paneId in tab.paneIds) {
+        final TerminalPaneLayoutRect? rectangle = owners[paneId]?.layout;
+        if (rectangle != null &&
+            x >= rectangle.left &&
+            x < rectangle.left + rectangle.width &&
+            y >= rectangle.top &&
+            y < rectangle.top + rectangle.height) {
+          return paneId;
+        }
+      }
+      return null;
+    }
+
+    AppKitMouseEvent localMouseEvent(
+      AppKitMouseEvent event,
+      TerminalPaneLayoutRect rectangle,
+    ) => AppKitMouseEvent(
+      windowHandle: event.windowHandle,
+      monotonicMicros: event.monotonicMicros,
+      protocolVersion: event.protocolVersion,
+      sourceGeneration: event.sourceGeneration,
+      monotonicNanoseconds: event.monotonicNanoseconds,
+      operationId: event.operationId,
+      kind: event.kind,
+      x: event.x - rectangle.left,
+      y: event.y - rectangle.top,
+      button: event.button,
+      modifiers: event.modifiers,
+      clickCount: event.clickCount,
+    );
+
+    AppKitScrollEvent localScrollEvent(
+      AppKitScrollEvent event,
+      TerminalPaneLayoutRect rectangle,
+    ) => AppKitScrollEvent(
+      windowHandle: event.windowHandle,
+      monotonicMicros: event.monotonicMicros,
+      protocolVersion: event.protocolVersion,
+      sourceGeneration: event.sourceGeneration,
+      monotonicNanoseconds: event.monotonicNanoseconds,
+      operationId: event.operationId,
+      x: event.x - rectangle.left,
+      y: event.y - rectangle.top,
+      scrollingDeltaX: event.scrollingDeltaX,
+      scrollingDeltaY: event.scrollingDeltaY,
+      hasPreciseScrollingDeltas: event.hasPreciseScrollingDeltas,
+      phase: event.phase,
+      momentumPhase: event.momentumPhase,
+      directionInvertedFromDevice: event.directionInvertedFromDevice,
+      modifiers: event.modifiers,
+    );
+
+    void cancelHyperlinkInteraction(TerminalTabState tab) {
+      for (final PaneId paneId in tab.paneIds) {
+        hyperlinkControllers[paneId]?.cancelPress();
+        owners[paneId]?.surface.clearHyperlinkHover();
+      }
+    }
+
+    late final void Function() synchronizeWindowSubscriptions;
+
+    void reconcileInteractiveHierarchy() {
+      final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+      if (nativeHierarchy == null || nativeHierarchy.isDisposed) return;
+      nativeHierarchy.reconcile();
+      synchronizeWindowSubscriptions();
+    }
+
+    void routeWindowEvent(TerminalTabId tabId, WindowEvent event) {
+      final TerminalTabState? tab = state.tabForId(tabId);
+      final TerminalWindowState? logicalWindow = windowForTab(tabId);
+      if (tab == null || logicalWindow == null) return;
+      final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+      if (nativeHierarchy == null || nativeHierarchy.isDisposed) return;
+      switch (event) {
+        case WindowClosedEvent():
+          if (!closed.isCompleted) closed.complete();
+        case WindowCloseRequestedEvent():
+          final Window? window = nativeHierarchy.windowForTab(tabId);
+          if (window != null && !window.isClosed && !window.isDisposed) {
+            window.replyToCloseRequest(event, allow: false);
+          }
+          if (!closed.isCompleted) closed.complete();
+        case WindowResizedEvent(:final width, :final height):
+          cancelHyperlinkInteraction(tab);
+          nativeHierarchy.resizeTab(
+            tabId,
+            TerminalSplitLayoutSize(width: width, height: height),
+          );
+        case WindowFocusChangedEvent(:final isFocused):
+          if (isFocused) {
+            state
+              ..activateWindow(logicalWindow.id)
+              ..selectTab(logicalWindow.id, tabId);
+            reconcileInteractiveHierarchy();
+          } else {
+            cancelHyperlinkInteraction(tab);
+          }
+          final PaneId focusedPaneId = tab.focusedPaneId;
+          final TerminalScreenSet screens =
+              sessions[focusedPaneId]!.terminalScreenSet;
+          focusReporters[focusedPaneId]?.route(
+            isFocused: isFocused,
+            modeEnabled: screens.focusReportingMode,
+            modeGeneration: screens.focusReportingGeneration,
+          );
+          final TerminalAppKitMenuProjection? menu = menuProjection;
+          if (menu != null && !menu.isDisposed) menu.refresh();
+          final TerminalCommandPalettePresenter? palette = palettePresenter;
+          if (palette != null && !palette.isDisposed) palette.refresh();
+        case WindowVisibilityChangedEvent(:final isVisible):
+          if (!isVisible) cancelHyperlinkInteraction(tab);
+          for (final PaneId paneId in tab.paneIds) {
+            final _TerminalHierarchyProductPane? owner = owners[paneId];
+            owner?.surface.updateWindowState(
+              isVisible: isVisible && owner.isVisible,
+            );
+          }
+        case WindowOcclusionChangedEvent(:final isOccluded):
+          for (final PaneId paneId in tab.paneIds) {
+            owners[paneId]?.surface.updateWindowState(isOccluded: isOccluded);
+          }
+        case WindowBackingScaleChangedEvent(:final backingScaleFactor):
+          cancelHyperlinkInteraction(tab);
+          for (final PaneId paneId in tab.paneIds) {
+            final _TerminalHierarchyProductPane? owner = owners[paneId];
+            final TerminalPaneLayoutRect? rectangle = owner?.layout;
+            if (owner == null || rectangle == null) continue;
+            owner.surface.updateBackingScale(backingScaleFactor);
+            owner.applyLayout(rectangle, visible: owner.isVisible);
+          }
+        case WindowScreenChangedEvent() ||
+            WindowFrameChangedEvent() ||
+            WindowFullscreenChangedEvent():
+          cancelHyperlinkInteraction(tab);
+          nativeHierarchy.handleWindowEvent(tabId, event);
+        case AppKitMouseEvent():
+          PaneId paneId = paneAt(tab, event.x, event.y) ?? tab.focusedPaneId;
+          final _TerminalHierarchyProductPane? owner = owners[paneId];
+          final TerminalPaneLayoutRect? rectangle = owner?.layout;
+          if (owner == null || rectangle == null) return;
+          if (event.kind == AppKitMouseEventKind.down &&
+              paneId != tab.focusedPaneId) {
+            state
+              ..activateWindow(logicalWindow.id)
+              ..selectTab(logicalWindow.id, tabId)
+              ..focusPane(tabId, paneId);
+            reconcileInteractiveHierarchy();
+          }
+          for (final PaneId otherPaneId in tab.paneIds) {
+            if (otherPaneId != paneId) {
+              owners[otherPaneId]?.surface.clearHyperlinkHover();
+            }
+          }
+          final TerminalScreenSet screens = sessions[paneId]!.terminalScreenSet;
+          final TerminalScreen screen = screens.activeScreen;
+          final TerminalFontCatalogMetrics metrics = owner.surface.fontMetrics;
+          final AppKitMouseEvent localized = localMouseEvent(event, rectangle);
+          final TerminalHyperlinkRouteResult hyperlinkResult =
+              hyperlinkControllers[paneId]!.route(
+                localized,
+                rows: screen.rows,
+                columns: screen.columns,
+                cellWidth: metrics.cellWidth,
+                cellHeight: metrics.cellHeight,
+              );
+          if (!hyperlinkResult.isConsumed) {
+            mouseRouters[paneId]!.route(
+              localized,
+              modes: screens.mouseModes,
+              rows: screen.rows,
+              columns: screen.columns,
+              cellWidth: metrics.cellWidth,
+              cellHeight: metrics.cellHeight,
+              backingScaleFactor:
+                  nativeHierarchy.windowForTab(tabId)?.backingScaleFactor ?? 1,
+            );
+          }
+          final TerminalAppKitMenuProjection? menu = menuProjection;
+          if (menu != null && !menu.isDisposed) menu.refresh();
+        case AppKitScrollEvent():
+          final PaneId paneId =
+              paneAt(tab, event.x, event.y) ?? tab.focusedPaneId;
+          final _TerminalHierarchyProductPane? owner = owners[paneId];
+          final TerminalPaneLayoutRect? rectangle = owner?.layout;
+          if (owner == null || rectangle == null) return;
+          cancelHyperlinkInteraction(tab);
+          final TerminalScreenSet screens = sessions[paneId]!.terminalScreenSet;
+          final TerminalScreen screen = screens.activeScreen;
+          final TerminalFontCatalogMetrics metrics = owner.surface.fontMetrics;
+          scrollRouters[paneId]!.route(
+            localScrollEvent(event, rectangle),
+            mouseModes: screens.mouseModes,
+            keyboardModes: screens.keyboardModes,
+            usingAlternateScreen: screens.usingAlternate,
+            rows: screen.rows,
+            columns: screen.columns,
+            cellWidth: metrics.cellWidth,
+            cellHeight: metrics.cellHeight,
+            backingScaleFactor:
+                nativeHierarchy.windowForTab(tabId)?.backingScaleFactor ?? 1,
+          );
+        case AppKitKeyEvent():
+          break;
+      }
+    }
+
+    synchronizeWindowSubscriptions = () {
+      final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+      if (nativeHierarchy == null || nativeHierarchy.isDisposed) return;
+      final Set<TerminalTabId> liveTabIds = nativeHierarchy.windows.keys
+          .toSet();
+      for (final TerminalTabId tabId
+          in windowSubscriptions.keys
+              .where((TerminalTabId tabId) => !liveTabIds.contains(tabId))
+              .toList(growable: false)) {
+        unawaited(windowSubscriptions.remove(tabId)!.cancel());
+      }
+      for (final MapEntry<TerminalTabId, Window> entry
+          in nativeHierarchy.windows.entries) {
+        windowSubscriptions.putIfAbsent(
+          entry.key,
+          () => entry.value.events.listen(
+            (WindowEvent event) => routeWindowEvent(entry.key, event),
+            onError: recordAsynchronousError,
+          ),
+        );
+      }
+    };
+
+    Future<void> paste() async {
+      final TerminalPane? pane = activePane();
+      if (pane == null) return;
+      final int invocationMicros = pasteClock.elapsedMicroseconds;
+      PasteboardTextSnapshot snapshot;
+      try {
+        snapshot = clipboard.readText();
+      } on Object {
+        pane.showClipboardNotice(
+          const TerminalClipboardNotice(
+            TerminalClipboardNoticeKind.pasteUnavailable,
+          ),
+        );
+        return;
+      }
+      final String? text = snapshot.text;
+      if (text == null) {
+        pane.showClipboardNotice(
+          const TerminalClipboardNotice(
+            TerminalClipboardNoticeKind.pasteUnavailable,
+          ),
+        );
+        return;
+      }
+      TerminalPastePlan plan;
+      try {
+        plan = await TerminalPasteCodec.planAsync(
+          text,
+          bracketed: pane.bracketedPasteMode,
+        );
+      } on TerminalPasteLimitException {
+        pane.showClipboardNotice(
+          const TerminalClipboardNotice(
+            TerminalClipboardNoticeKind.pasteTooLarge,
+          ),
+        );
+        return;
+      }
+      final TerminalPasteApprovalResult approval = pasteConfirmationGate
+          .evaluate(
+            pasteboardChangeCount: snapshot.changeCount,
+            plan: plan,
+            invocationMicros: invocationMicros,
+            confirmationIssuedMicros: pasteClock.elapsedMicroseconds,
+          );
+      if (!approval.isApproved) {
+        pane.showClipboardNotice(
+          TerminalClipboardNotice(
+            TerminalClipboardNoticeKind.pasteConfirmationRequired,
+            analysis: approval.analysis,
+          ),
+        );
+        return;
+      }
+      await pane.paste(plan);
+    }
+
+    try {
+      application.defersTerminationRequests = true;
+      final TerminalWindowState initialWindow = await state.createWindow(
+        configuration(null),
+      );
+      final TerminalPane initialPane = state.paneForId(
+        initialWindow.selectedTab.focusedPaneId,
+      )!;
+      await initialPane.start();
+
+      final TerminalNativeHierarchyAdapter createdHierarchy =
+          TerminalNativeHierarchyAdapter(
+            state: state,
+            paneResourcesFactory: createResources,
+            windowFrame: windowFrame,
+            cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+            dividerThickness: 1,
+            defersCloseRequests: true,
+            presentationBuilder:
+                (TerminalWindowState window, TerminalTabState tab) =>
+                    presentationResolver.resolve(
+                      tab,
+                      fallbackTitle: _productWindowTitle,
+                    ),
+          );
+      hierarchy = createdHierarchy;
+      reconcileInteractiveHierarchy();
+
+      final TerminalProductHierarchyActionCoordinator createdActions =
+          TerminalProductHierarchyActionCoordinator(
+            state: state,
+            configurationFactory: configuration,
+            reconcile: reconcileInteractiveHierarchy,
+            onChanged: () {
+              menuProjection?.refresh();
+              palettePresenter?.refresh();
+            },
+          );
+      actionCoordinator = createdActions;
+      final TerminalActionCatalog catalog = TerminalActionCatalog.standard();
+      late final TerminalCommandPalettePresenter installedPalette;
+      final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+        catalog: catalog,
+        registrations: <TerminalActionRegistration>[
+          TerminalActionRegistration(
+            id: TerminalActionId.openCommandPalette,
+            handler: () => installedPalette.open(),
+          ),
+          TerminalActionRegistration(
+            id: TerminalActionId.quitApplication,
+            handler: () {
+              if (!closed.isCompleted) closed.complete();
+            },
+          ),
+          TerminalActionRegistration(
+            id: TerminalActionId.closeWindow,
+            isAvailable: () => state.activeWindow != null,
+            handler: () {
+              if (!closed.isCompleted) closed.complete();
+            },
+          ),
+          TerminalActionRegistration(
+            id: TerminalActionId.copy,
+            isAvailable: () {
+              final TerminalSelectionText? selected = activeSelection()
+                  ?.selectedText();
+              return selected != null &&
+                  selected.text.isNotEmpty &&
+                  !selected.isTruncated;
+            },
+            handler: () {
+              final TerminalSelectionText? selected = activeSelection()
+                  ?.selectedText();
+              if (selected != null && selected.text.isNotEmpty) {
+                clipboard.writeText(selected.text);
+                pasteConfirmationGate.clear();
+              }
+            },
+          ),
+          TerminalActionRegistration(
+            id: TerminalActionId.paste,
+            isAvailable: () {
+              final TerminalPane? pane = activePane();
+              return pane != null && !pane.pasteInProgress;
+            },
+            handler: paste,
+          ),
+          ...createdActions.registrations(),
+        ],
+      );
+      installedPalette = TerminalCommandPalettePresenter.withFocusTarget(
+        dispatcher: dispatcher,
+        focusTarget: () {
+          final TerminalTabState tab = state.activeWindow!.selectedTab;
+          return TerminalCommandPaletteFocusTarget(
+            window: createdHierarchy.windowForTab(tab.id)!,
+            view: createdHierarchy.resourcesForPane(tab.focusedPaneId)!.view,
+          );
+        },
+        onError: recordAsynchronousError,
+      );
+      palettePresenter = installedPalette;
+      menuProjection = TerminalAppKitMenuProjection.install(
+        application: application,
+        dispatcher: dispatcher,
+        onDispatched: (TerminalActionDispatchResult result) {
+          installedPalette.refresh();
+          if (result.disposition == TerminalActionDispatchDisposition.failed) {
+            recordAsynchronousError(result.error!, result.stackTrace!);
+          }
+        },
+      );
+      applicationSubscription = application.events.listen((AppKitEvent event) {
+        switch (event) {
+          case ApplicationActiveChangedEvent():
+            break;
+          case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
+            if (!hasVisibleWindows) createdHierarchy.present();
+          case ApplicationTerminateRequestedEvent():
+            application.replyToTerminationRequest(event, allow: false);
+            if (!closed.isCompleted) closed.complete();
+          case WindowEvent() || MenuItemInvokedEvent():
+            break;
+        }
+      }, onError: recordAsynchronousError);
+
+      final RuntimeLifecycleCoordinator createdLifecycle =
+          RuntimeLifecycleCoordinator(
+            scenario: RuntimeLifecycleScenario.normal,
+            workerCommand: workerCommand,
+            observer: (RuntimeLifecycleObservation observation) {
+              stdout.writeln(
+                observation.machineLine(RuntimeLifecycleScenario.normal),
+              );
+            },
+            processObserver: (RuntimeLifecycleProcessObservation observation) {
+              stdout.writeln(
+                observation.machineLine(
+                  RuntimeLifecycleScenario.normal,
+                  parentProcessId: pid,
+                ),
+              );
+            },
+          );
+      lifecycle = createdLifecycle;
+      _expectLifecycle(
+        await createdLifecycle.start() == RuntimeLifecycleStartStatus.ready,
+        'interactive product worker did not become ready',
+      );
+      _writeLifecycleEvent(
+        RuntimeLifecycleScenario.normal,
+        'root-ready',
+        createdLifecycle.generation,
+      );
+      MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootReady);
+      await _expectResponse(createdLifecycle);
+      stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
+      await closed.future;
+    } finally {
+      MacosRuntime.recordDiagnosticPhase(
+        RuntimeDiagnosticPhase.shutdownStarted,
+      );
+      await applicationSubscription?.cancel();
+      for (final StreamSubscription<WindowEvent> subscription
+          in windowSubscriptions.values.toList(growable: false)) {
+        await subscription.cancel();
+      }
+      windowSubscriptions.clear();
+      await palettePresenter?.dispose();
+      await menuProjection?.dispose();
+      actionCoordinator?.dispose();
+      for (final _TerminalHierarchyProductPane owner in owners.values.toList(
+        growable: false,
+      )) {
+        await owner.cancelTextInput();
+      }
+      hierarchy?.dispose();
+      paneWorkScheduler.dispose();
+      final TerminalPaneOwnerShutdownResult shutdown = await state.shutdown();
+      for (final TerminalPaneSessionShutdownResult session
+          in shutdown.sessions) {
+        stdout.writeln(session.machineLine());
+      }
+      stdout.writeln(shutdown.machineLine());
+      if (!lifecycleWasShutDown) {
+        await lifecycle?.shutdown();
+        lifecycleWasShutDown = true;
+      }
+      final Object? error = asynchronousError;
+      if (error != null && !closed.isCompleted) {
+        Error.throwWithStackTrace(error, asynchronousStackTrace!);
+      }
+      await application.terminate().timeout(_hostTerminationTimeout);
+      MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
+    }
   }
 
   static Future<void> _runRestorationProductAcceptance(
@@ -7250,6 +8031,7 @@ final class _TerminalHierarchyProductPane {
   bool _textInputCancelled = false;
   bool adaptersDisposed = false;
   bool isVisible = false;
+  TerminalPaneLayoutRect? layout;
 
   void notifyScreenChanged() {
     if (!surface.isDisposed) surface.notifyScreenChanged();
@@ -7260,12 +8042,13 @@ final class _TerminalHierarchyProductPane {
       throw StateError('hierarchy pane ${pane.id} adapters are disposed');
     }
     isVisible = visible;
+    this.layout = rectangle;
     surface.updateWindowState(isVisible: visible, isOccluded: !visible);
     if (!visible) return;
-    final TerminalPaneLayoutRect layout = rectangle!;
+    final TerminalPaneLayoutRect resolvedLayout = rectangle!;
     final TerminalGridSize grid = surface.resizeViewport(
-      logicalWidth: layout.width,
-      logicalHeight: layout.height,
+      logicalWidth: resolvedLayout.width,
+      logicalHeight: resolvedLayout.height,
     );
     pane.resize(rows: grid.rows, columns: grid.columns);
   }
@@ -7288,6 +8071,7 @@ final class _TerminalHierarchyProductPane {
     if (!surface.isDisposed) surface.dispose();
     adaptersDisposed = true;
     isVisible = false;
+    layout = null;
   }
 
   Future<void> waitForTextInputGeneration(

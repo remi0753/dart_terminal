@@ -278,6 +278,29 @@ final class TerminalNativeHierarchyAdapter {
     reconcile();
   }
 
+  /// Refreshes retained native title, tab color, and represented URL only.
+  void refreshPresentation() {
+    _ensureCanReconcile();
+    for (final TerminalWindowState logicalWindow in _state.windows) {
+      for (final TerminalTabState tab in logicalWindow.tabs) {
+        final Window? window = _windows[tab.id];
+        if (window == null) continue;
+        final TerminalTabPresentation presentation = _presentationBuilder(
+          logicalWindow,
+          tab,
+        );
+        if (window.title != presentation.title) {
+          window.title = presentation.title;
+        }
+        if (window.representedFilePath != presentation.representedFilePath) {
+          window.representedFilePath = presentation.representedFilePath;
+        }
+        final WindowTabColor? tabColor = _appKitColor(presentation.color);
+        if (window.tabColor != tabColor) window.tabColor = tabColor;
+      }
+    }
+  }
+
   void reconcile({Map<TerminalTabId, TerminalSplitLayoutSize>? tabSizes}) {
     _ensureCanReconcile();
     _reconciling = true;
