@@ -1,6 +1,6 @@
 # Phase 7 — AppKit unit, integration, and UI tests
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-09
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 7 `AppKit unit、integration、UI tests`
@@ -196,6 +196,19 @@ the normal gate instead of relying on prose or a previous manual run.
   real PTY/Metal/text-input owners. Both windows and all presentation/cwd/split
   state are persisted, the Dock reopen reconstructs eight fresh owners, and
   both generations contribute sixteen exact clean shutdown results.
+- 2026-09-09: the first final `runtime-verify` stopped at the pre-runtime
+  compatibility coverage freshness check after README and FEATURE_MATRIX were
+  reconciled. The report pins those documentation sources, so their two
+  expected SHA-256 values were stale. The canonical generator retained all
+  semantic totals and changed only those two hashes; the complete matrix is
+  rerun rather than treating this expected generated-data dependency as a pass.
+- 2026-09-09: Phase 7 exit review found no remaining correctness or resource
+  blocker. Multi-window/tab/four-pane repetition is covered by three fake and
+  two real generations; focused raw key, IME, and Shift-Command-P action
+  routing are isolated; every Close/Quit/restoration generation reaches zero
+  owned resources; and the final 100 MiB runs remained below the 2x bound.
+  Long-duration soak and non-M1 platform evidence retain their roadmap-wide
+  low-priority status and do not weaken these correctness gates.
 
 ## Verification log
 
@@ -227,3 +240,26 @@ the normal gate instead of relying on prose or a previous manual run.
   PTY shutdowns, 16 disposed Metal owners, zero text-input clients, zero native
   handles, one worker lifecycle, bounded content-free persistence, and
   duplicate-reopen coalescing.
+- The first final `make RUNTIME_ARCH=arm64 runtime-verify` stopped at the stale
+  documentation hashes described above. Regenerating
+  `compatibility/regression_coverage_report.json` changed only the README and
+  FEATURE_MATRIX SHA-256 pins; all fixed totals remained 9 fix families, 417
+  split runs, 8 owned gaps, and 0 known P0 silent corruption.
+- The complete `make RUNTIME_ARCH=arm64 runtime-verify` rerun passed:
+  `make test`; source audit (`tracked=396`, product native sources `0`, reviewed
+  test native sources `1`); both bundle audits (one helper, asset, and
+  capability); smoke and live display; hierarchy; restoration; clipboard;
+  all lifecycle scenarios; traffic (`384` bounded rejections per mode); 1,000
+  Window/View resource iterations (`baseline=33`, `peak=35`); and shutdown/PTY
+  fault recovery in Developer JIT and Release AOT.
+- The final hierarchy measurements were Developer JIT 25,393 us idle versus
+  25,127 us flood (0.990x, 15 yields) and Release AOT 23,872 us versus 21,407 us
+  (0.897x, 176 yields). Final restoration was
+  `generations=2 windows=2 tabs=4 panes=8` in 3,767 ms and 3,318 ms,
+  respectively. No stderr, leaked worker, PTY, Metal pin, text-input client, or
+  native handle remained.
+- After marking the Phase 7 item complete, the final `make test` and
+  `make runtime-source-check` rerun remained green: 209 Dart files required no
+  formatting, analysis reported no issues, the aggregate runner passed, and
+  the source audit retained `396/0/1` tracked/product-native/reviewed-fixture
+  counts.

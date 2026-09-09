@@ -40,7 +40,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - 15個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
-  実行後にterminal first responderを復元して入力をPTYへ漏らさない
+  実行後にterminal first responderを復元して入力をPTYへ漏らさない。4-paneの実製品
+  gateでも`Focus Next Pane`を1回だけ実行し、terminal write 0と対象paneだけのfocus変更を
+  両runtimeで検証する
 - DECSET 9/1000/1002/1003と1005/1006/1015/1016を追跡し、X10/default、UTF-8、
   URXVT、SGRのcell座標とSGR physical-pixel座標をbounded mouse reportとして実PTYへ
   送る製品routing。native logical pointへbacking scaleを一度だけ適用し、通常shellと
@@ -78,7 +80,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   PTY/Metal/text-input/native handle回収を両runtime検証する。versionedかつ
   terminal内容を含まない状態へwindow/tab/split/cwd/metadataと安全なwindow配置を保存し、
   fresh sessionとして復元する。実fullscreen enter/exit、display migration/clamp、
-  Dock reopenの重複抑止、2世代8 sessionの完全回収も両runtimeで受け入れる
+  Dock reopenの重複抑止に加え、2 logical window × 各2 tab × 各4 paneを2世代へ
+  再生成し、16 sessionの完全回収も両runtimeで受け入れる。fake-AppKitでは同じ構成を
+  3世代、合計24 sessionで通常test gate化する
 - terminal内容を含めないpane state / PTY shutdown stage診断
 - Control-Dのqueue受理、native write、foreground/termios、signal、waitpid、
   kernel exit status、PTY内/外のreap、exit公開をrequest IDで追えるcontent-free診断
@@ -368,7 +372,9 @@ cursor、native accessibility selector/geometry/focus/notificationをDeveloper J
 Release AOTの実GUIで確認します。
 native hierarchy suiteは2つのnative tabと4つのlive Metal paneを作り、splitの
 resize/equalize/zoom、first-responder focus、OSC title/cwd、tab rename/color、proxy icon、
-子zshへのlocal cwd継承、raw key/IMEのpane分離を確認します。さらに実native menu/window
+子zshへのlocal cwd継承、raw key/IMEのpane分離を確認します。Shift-Command-Pのnative
+command paletteから`Focus Next Pane`をexactly-onceで実行してterminal write 0、対象pane
+だけのfocus変更、正しいfirst responder復元も確認します。さらに実native menu/window
 Closeでforeground確認とnon-live即時closeを、実native terminationの拒否・再試行と
 aggregate menu Quitでatomic teardownを通し、4つのPTYと全native resourceの回収を
 Developer JIT/Release AOTの両runtimeで検証します。4つのsurfaceは1 pane 1 pending、
@@ -382,9 +388,11 @@ event-loop turnあたり2 callbackを選びます。同期consumerの完了後�
 このturn budgetは`dart_appkit`の汎用per-command設定で、既定値0は従来どおり即時ACKです。
 他アプリは既定動作を保つか、用途に応じて1〜8を独立に選択できます。
 restoration suiteは実fullscreen enter/exit後にdisplay migrationを適用し、
-2 tab/4 paneをcontent-freeなversioned stateへ保存してfresh ownerで再生成します。
-重複Dock reopenのcoalescing、cwd継承、2世代8 PTYとMetal/text-input/native handle/
-workerの完全回収をDeveloper JIT/Release AOTで同じ契約として確認します。
+2 logical window × 各2 tab × 各4 paneをcontent-freeなversioned stateへ保存してfresh
+ownerで再生成します。重複Dock reopenのcoalescing、cwd継承、2世代16 PTYと
+Metal/text-input/native handle/workerの完全回収をDeveloper JIT/Release AOTで同じ契約として
+確認します。Phase 7の4終了条件はversioned coverage inventoryがunit、fake-AppKit
+integration、real-AppKit UIの各証拠と通常`make test`への収録を照合します。
 resource stress は実アプリの Dart API から 1,000 組の Window/View を生成・
 破棄し、毎回 native handle が基準値へ戻ることを確認します。shutdown fault suite は
 malformed/late event、double dispose、worker crash を封じ込め、最終 native handle が 0、
