@@ -95,6 +95,7 @@ final class TerminalOptions {
     this.runtimeTerminalDisplayTest = false,
     this.runtimeClipboardTest = false,
     this.runtimeNativeHierarchyTest = false,
+    this.runtimeUserActionsTest = false,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
@@ -116,6 +117,7 @@ final class TerminalOptions {
     var runtimeTerminalDisplayTest = false;
     var runtimeClipboardTest = false;
     var runtimeNativeHierarchyTest = false;
+    var runtimeUserActionsTest = false;
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
@@ -176,6 +178,15 @@ final class TerminalOptions {
           );
         }
         runtimeNativeHierarchyTest = true;
+        continue;
+      }
+      if (argument == '--runtime-user-actions-test') {
+        if (runtimeUserActionsTest) {
+          throw const FormatException(
+            '--runtime-user-actions-test may only be supplied once',
+          );
+        }
+        runtimeUserActionsTest = true;
         continue;
       }
       if (argument == '--runtime-restoration-test') {
@@ -364,6 +375,28 @@ final class TerminalOptions {
         'native hierarchy test requires the integration-test gate',
       );
     }
+    if (runtimeUserActionsTest &&
+        (environment ?? Platform.environment)['DT_RUNTIME_USER_ACTIONS_TEST'] !=
+            '1') {
+      throw const FormatException(
+        'user actions test requires the integration-test gate',
+      );
+    }
+    if (runtimeUserActionsTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'user actions test cannot be combined with another runtime test',
+      );
+    }
     if (runtimeNativeHierarchyTest &&
         (selectedScenario != RuntimeLifecycleScenario.normal ||
             autoCloseAfter != null ||
@@ -403,6 +436,7 @@ final class TerminalOptions {
             runtimeTerminalDisplayTest ||
             runtimeClipboardTest ||
             runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
             selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
       throw const FormatException(
         'restoration test cannot be combined with another runtime test',
@@ -417,6 +451,7 @@ final class TerminalOptions {
       runtimeTerminalDisplayTest: runtimeTerminalDisplayTest,
       runtimeClipboardTest: runtimeClipboardTest,
       runtimeNativeHierarchyTest: runtimeNativeHierarchyTest,
+      runtimeUserActionsTest: runtimeUserActionsTest,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
@@ -437,6 +472,7 @@ final class TerminalOptions {
   final bool runtimeTerminalDisplayTest;
   final bool runtimeClipboardTest;
   final bool runtimeNativeHierarchyTest;
+  final bool runtimeUserActionsTest;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
@@ -497,13 +533,15 @@ final class TerminalApplication {
       );
       return;
     }
-    if (_usesInteractiveProductHierarchy(options)) {
+    if (options.runtimeUserActionsTest ||
+        _usesInteractiveProductHierarchy(options)) {
       await _runInteractiveHierarchyProduct(
         application,
         ptyBackend,
         terminfoEnvironment,
         options.runtimeWorkerCommand,
         options.initialWorkingDirectory,
+        runUserActionAcceptance: options.runtimeUserActionsTest,
       );
       return;
     }
@@ -1971,11 +2009,14 @@ final class TerminalApplication {
     PtyBackend ptyBackend,
     TerminalTerminfoEnvironment terminfoEnvironment,
     RuntimeLifecycleWorkerCommand workerCommand,
-    String? initialWorkingDirectory,
-  ) async {
+    String? initialWorkingDirectory, {
+    bool runUserActionAcceptance = false,
+  }) async {
+    const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
     const Rect windowFrame = Rect.fromLTWH(100, 90, 920, 580);
     final TerminalApplicationState state = TerminalApplicationState();
     final Map<PaneId, TerminalSession> sessions = <PaneId, TerminalSession>{};
+    final List<TerminalSession> allSessions = <TerminalSession>[];
     final Map<PaneId, String?> launchWorkingDirectories = <PaneId, String?>{};
     final Map<PaneId, _TerminalHierarchyProductPane> owners =
         <PaneId, _TerminalHierarchyProductPane>{};
@@ -2010,11 +2051,17 @@ final class TerminalApplication {
     TerminalAppKitMenuProjection? menuProjection;
     TerminalCommandPalettePresenter? palettePresenter;
     Future<void> Function(PaneId? paneId)? closePaneRequest;
+    void Function()? reconcileRequest;
     RuntimeLifecycleCoordinator? lifecycle;
     StreamSubscription<AppKitEvent>? applicationSubscription;
     final Set<PaneId> deferredExitPaneIds = <PaneId>{};
+    final List<TerminalActionId> nativeActionInvocations = <TerminalActionId>[];
+    final List<TerminalActionDispatchResult> actionDispatches =
+        <TerminalActionDispatchResult>[];
+    var terminalInputDeliveryCount = 0;
     var lifecycleWasShutDown = false;
-    var productResourcesDisposed = false;
+    var hierarchyReconciliationInProgress = false;
+    Future<void>? productResourceDisposalFuture;
     Object? asynchronousError;
     StackTrace? asynchronousStackTrace;
 
@@ -2048,7 +2095,18 @@ final class TerminalApplication {
                 id: id,
                 ptyBackend: ptyBackend,
                 initialWorkingDirectory: workingDirectory,
-                environment: terminfoEnvironment.environment,
+                environment: runUserActionAcceptance
+                    ? <String, String>{
+                        ...terminfoEnvironment.environment,
+                        'TERM': 'xterm-256color',
+                        'LC_ALL': 'C',
+                        'PS1': acceptancePrompt,
+                        'RPS1': '',
+                      }
+                    : terminfoEnvironment.environment,
+                shellArguments: runUserActionAcceptance
+                    ? const <String>['-f']
+                    : const <String>[],
                 onChanged: onChanged,
                 onTerminated: onTerminated,
                 lifecycleObserver:
@@ -2060,6 +2118,7 @@ final class TerminalApplication {
                 },
               );
               sessions[id.paneId] = session;
+              allSessions.add(session);
               launchWorkingDirectories[id.paneId] = workingDirectory;
               return session;
             },
@@ -2069,7 +2128,9 @@ final class TerminalApplication {
           owners[id]?.notifyScreenChanged();
           selections[id]?.synchronize();
           final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
-          if (nativeHierarchy != null && !nativeHierarchy.isDisposed) {
+          if (nativeHierarchy != null &&
+              !nativeHierarchy.isDisposed &&
+              !hierarchyReconciliationInProgress) {
             nativeHierarchy.refreshPresentation();
           }
           final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -2100,11 +2161,29 @@ final class TerminalApplication {
     }
 
     TerminalNativePaneResources createResources(TerminalPane pane) {
+      if (runUserActionAcceptance) {
+        stdout.writeln(
+          'TERMINAL_USER_ACTIONS_STAGE stage=pane-resource-start '
+          'pane=${pane.id.value}',
+        );
+      }
       final TerminalSession session = sessions[pane.id]!;
       final View view = TerminalRendererMacos.createView();
+      if (runUserActionAcceptance) {
+        stdout.writeln(
+          'TERMINAL_USER_ACTIONS_STAGE stage=pane-view-created '
+          'pane=${pane.id.value}',
+        );
+      }
       final TerminalTextInputClient client = TerminalTextInputClient.attach(
         view,
       );
+      if (runUserActionAcceptance) {
+        stdout.writeln(
+          'TERMINAL_USER_ACTIONS_STAGE stage=pane-text-input-attached '
+          'pane=${pane.id.value}',
+        );
+      }
       late final _TerminalHierarchyProductPane owner;
       final TerminalLiveMetalSurface surface = TerminalLiveMetalSurface.attach(
         sessionId: pane.sessionId,
@@ -2125,16 +2204,20 @@ final class TerminalApplication {
         },
         onFatalError: recordAsynchronousError,
       );
+      if (runUserActionAcceptance) {
+        stdout.writeln(
+          'TERMINAL_USER_ACTIONS_STAGE stage=pane-metal-attached '
+          'pane=${pane.id.value}',
+        );
+      }
       final TerminalKeyEventRouter keyRouter = TerminalKeyEventRouter();
       final TerminalTextInputEventRouter textRouter =
           TerminalTextInputEventRouter(
             clientId: client.clientId,
             onRawKeyDown: (TerminalKeyEvent event) {
+              if (runUserActionAcceptance) terminalInputDeliveryCount++;
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
-              final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
-              if (nativeHierarchy != null && !nativeHierarchy.isDisposed) {
-                nativeHierarchy.reconcile();
-              }
+              reconcileRequest?.call();
               keyRouter.handleTerminalKeyDown(event, pane);
             },
             onPreedit:
@@ -2155,6 +2238,7 @@ final class TerminalApplication {
               surface.clearPreedit(generation: generation);
             },
             onCommit: (String text) {
+              if (runUserActionAcceptance) terminalInputDeliveryCount++;
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
               pane.insertText(text);
             },
@@ -2175,6 +2259,12 @@ final class TerminalApplication {
         onTextInputError: recordAsynchronousError,
       );
       owners[pane.id] = owner;
+      if (runUserActionAcceptance) {
+        stdout.writeln(
+          'TERMINAL_USER_ACTIONS_STAGE stage=pane-resource-ready '
+          'pane=${pane.id.value}',
+        );
+      }
       selections[pane.id] = _TerminalSelectionProductOwner(
         gesture: TerminalSelectionGestureController(
           viewport: session.terminalScreenSet.viewport,
@@ -2315,9 +2405,17 @@ final class TerminalApplication {
     void reconcileInteractiveHierarchy() {
       final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
       if (nativeHierarchy == null || nativeHierarchy.isDisposed) return;
-      nativeHierarchy.reconcile();
+      if (hierarchyReconciliationInProgress) return;
+      hierarchyReconciliationInProgress = true;
+      try {
+        nativeHierarchy.reconcile();
+      } finally {
+        hierarchyReconciliationInProgress = false;
+      }
       synchronizeWindowSubscriptions();
     }
+
+    reconcileRequest = reconcileInteractiveHierarchy;
 
     void routeWindowEvent(TerminalTabId tabId, WindowEvent event) {
       final TerminalTabState? tab = state.tabForId(tabId);
@@ -2498,9 +2596,7 @@ final class TerminalApplication {
       }
     };
 
-    Future<void> disposeProductResources() async {
-      if (productResourcesDisposed) return;
-      productResourcesDisposed = true;
+    Future<void> disposeProductResourcesOnce() async {
       for (final StreamSubscription<WindowEvent> subscription
           in windowSubscriptions.values.toList(growable: false)) {
         await subscription.cancel();
@@ -2518,12 +2614,18 @@ final class TerminalApplication {
       if (nativeHierarchy != null && !nativeHierarchy.isDisposed) {
         nativeHierarchy.dispose();
       }
+      for (final _TerminalHierarchyProductPane owner in owners.values) {
+        if (!owner.adaptersDisposed) owner.disposeAdapters();
+      }
       paneWorkScheduler.dispose();
       if (!lifecycleWasShutDown) {
         await lifecycle?.shutdown();
         lifecycleWasShutDown = true;
       }
     }
+
+    Future<void> disposeProductResources() =>
+        productResourceDisposalFuture ??= disposeProductResourcesOnce();
 
     Future<void> paste() async {
       final TerminalPane? pane = activePane();
@@ -2614,6 +2716,9 @@ final class TerminalApplication {
       );
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootReady);
       await _expectResponse(createdLifecycle);
+      if (runUserActionAcceptance) {
+        stdout.writeln('TERMINAL_USER_ACTIONS_STAGE stage=worker-ready');
+      }
 
       final TerminalWindowState initialWindow = await state.createWindow(
         configuration(null),
@@ -2621,7 +2726,6 @@ final class TerminalApplication {
       final TerminalPane initialPane = state.paneForId(
         initialWindow.selectedTab.focusedPaneId,
       )!;
-      await initialPane.start();
 
       final TerminalNativeHierarchyAdapter createdHierarchy =
           TerminalNativeHierarchyAdapter(
@@ -2640,6 +2744,13 @@ final class TerminalApplication {
           );
       hierarchy = createdHierarchy;
       reconcileInteractiveHierarchy();
+      if (runUserActionAcceptance) {
+        stdout.writeln('TERMINAL_USER_ACTIONS_STAGE stage=hierarchy-projected');
+      }
+      await initialPane.start();
+      if (runUserActionAcceptance) {
+        stdout.writeln('TERMINAL_USER_ACTIONS_STAGE stage=pane-started');
+      }
 
       final TerminalPaneCloseCoordinator createdPaneCloseCoordinator =
           TerminalPaneCloseCoordinator(
@@ -2675,6 +2786,10 @@ final class TerminalApplication {
         final TerminalPaneCloseResult result = await createdPaneCloseCoordinator
             .requestClose(paneId: paneId);
         stdout.writeln(result.machineLine());
+        final TerminalPaneRemovalResult? removal = result.removal;
+        if (removal != null) {
+          stdout.writeln(removal.shutdown.machineLine());
+        }
         final TerminalAppKitMenuProjection? menu = menuProjection;
         if (menu != null && !menu.isDisposed) menu.refresh();
         final TerminalCommandPalettePresenter? palette = palettePresenter;
@@ -2779,19 +2894,34 @@ final class TerminalApplication {
             view: resources.view,
           );
         },
+        onDispatched: (TerminalActionDispatchResult result) {
+          if (runUserActionAcceptance) actionDispatches.add(result);
+          final TerminalAppKitMenuProjection? menu = menuProjection;
+          if (menu != null && !menu.isDisposed) menu.refresh();
+          if (result.disposition == TerminalActionDispatchDisposition.failed) {
+            recordAsynchronousError(result.error!, result.stackTrace!);
+          }
+        },
         onError: recordAsynchronousError,
       );
       palettePresenter = installedPalette;
       menuProjection = TerminalAppKitMenuProjection.install(
         application: application,
         dispatcher: dispatcher,
+        onNativeInvocation: (TerminalActionId id, MenuItemInvokedEvent event) {
+          if (runUserActionAcceptance) nativeActionInvocations.add(id);
+        },
         onDispatched: (TerminalActionDispatchResult result) {
+          if (runUserActionAcceptance) actionDispatches.add(result);
           installedPalette.refresh();
           if (result.disposition == TerminalActionDispatchDisposition.failed) {
             recordAsynchronousError(result.error!, result.stackTrace!);
           }
         },
       );
+      if (runUserActionAcceptance) {
+        stdout.writeln('TERMINAL_USER_ACTIONS_STAGE stage=menu-installed');
+      }
       applicationSubscription = application.events.listen((AppKitEvent event) {
         switch (event) {
           case ApplicationActiveChangedEvent():
@@ -2835,6 +2965,24 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
+      if (runUserActionAcceptance) {
+        await _exerciseUserActionProduct(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          menu: menuProjection,
+          palette: installedPalette,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          nativeActionInvocations: nativeActionInvocations,
+          actionDispatches: actionDispatches,
+          terminalInputDeliveryCount: () => terminalInputDeliveryCount,
+          reconcile: reconcileInteractiveHierarchy,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
+      }
       await closed.future;
     } finally {
       MacosRuntime.recordDiagnosticPhase(
@@ -2858,6 +3006,316 @@ final class TerminalApplication {
       }
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
     }
+    stdout.writeln('Dart Terminal shut down cleanly.');
+  }
+
+  static Future<void> _exerciseUserActionProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalAppKitMenuProjection menu,
+    required TerminalCommandPalettePresenter palette,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required List<TerminalActionId> nativeActionInvocations,
+    required List<TerminalActionDispatchResult> actionDispatches,
+    required int Function() terminalInputDeliveryCount,
+    required void Function() reconcile,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    var eventTimestamp = 12000000;
+
+    Future<void> waitFor(
+      bool Function() predicate,
+      String message, {
+      Duration timeout = const Duration(seconds: 10),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (!predicate() && deadline.elapsed < timeout) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      _expectLifecycle(predicate(), message);
+    }
+
+    Future<void> performMenuAction(
+      TerminalActionId id, {
+      required String keyEquivalent,
+      required int modifiers,
+      required bool Function() completed,
+    }) async {
+      final MenuItem item = menu.itemForAction(id);
+      _expectLifecycle(
+        item.isEnabled &&
+            item.keyEquivalent == keyEquivalent &&
+            item.modifiers.bits == modifiers,
+        'user action ${id.stableName} is unavailable or has wrong shortcut',
+      );
+      final int invocationBaseline = nativeActionInvocations.length;
+      final int dispatchBaseline = actionDispatches.length;
+      item.performAction();
+      await waitFor(
+        () =>
+            completed() &&
+            nativeActionInvocations.length == invocationBaseline + 1 &&
+            actionDispatches.length == dispatchBaseline + 1,
+        'user action ${id.stableName} did not complete exactly once',
+      );
+      _expectLifecycle(
+        nativeActionInvocations.last == id &&
+            actionDispatches.last.id == id &&
+            actionDispatches.last.disposition ==
+                TerminalActionDispatchDisposition.executed,
+        'user action ${id.stableName} did not use the shared dispatcher',
+      );
+    }
+
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1 &&
+          hierarchy.paneResourceCount == 1,
+      'user action product did not start from the ordinary 1/1/1 hierarchy',
+    );
+    await _waitForAsciiMarker(sessions.values.single, prompt);
+    final int actionInputBaseline = terminalInputDeliveryCount();
+
+    await performMenuAction(
+      TerminalActionId.splitPaneRight,
+      keyEquivalent: 'd',
+      modifiers: ModifierKeys.commandBit,
+      completed: () =>
+          state.paneCount == 2 &&
+          hierarchy.paneResourceCount == 2 &&
+          hierarchy.splitViewCount == 1,
+    );
+
+    final MenuItem paletteItem = menu.itemForAction(
+      TerminalActionId.openCommandPalette,
+    );
+    _expectLifecycle(
+      paletteItem.isEnabled &&
+          paletteItem.keyEquivalent == 'p' &&
+          paletteItem.modifiers.bits ==
+              ModifierKeys.shiftBit | ModifierKeys.commandBit,
+      'user action command palette shortcut is unavailable',
+    );
+    final int paletteInvocationBaseline = nativeActionInvocations.length;
+    final int paletteDispatchBaseline = actionDispatches.length;
+    paletteItem.performAction();
+    await waitFor(
+      () =>
+          palette.isOpen &&
+          !(palette.renderedText ?? '').contains(
+            'Split Pane Down  — Unavailable',
+          ) &&
+          nativeActionInvocations.length == paletteInvocationBaseline + 1 &&
+          actionDispatches.length == paletteDispatchBaseline + 1,
+      'implemented split action remained unavailable in command palette',
+    );
+    final Window paletteWindow = palette.activeWindow!;
+    _injectKeyEventForTesting(
+      application,
+      paletteWindow,
+      keyCode: 1,
+      modifiers: 0,
+      characters: 'split pane down',
+      charactersIgnoringModifiers: 'split pane down',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          palette.state.query == 'split pane down' &&
+          palette.state.selectedAction?.definition.id ==
+              TerminalActionId.splitPaneDown,
+      'command palette did not select Split Pane Down',
+    );
+    _injectKeyEventForTesting(
+      application,
+      paletteWindow,
+      keyCode: 36,
+      modifiers: 0,
+      characters: '\r',
+      charactersIgnoringModifiers: '\r',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          !palette.isOpen &&
+          state.paneCount == 3 &&
+          hierarchy.paneResourceCount == 3 &&
+          hierarchy.splitViewCount == 2,
+      'command palette Split Pane Down did not project a third pane',
+    );
+    _expectLifecycle(
+      palette.lastDispatchResult?.id == TerminalActionId.splitPaneDown &&
+          palette.lastDispatchResult?.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          palette.terminalResponderRestoreCount == 1,
+      'command palette creation did not execute once and restore focus',
+    );
+
+    await performMenuAction(
+      TerminalActionId.newTab,
+      keyEquivalent: 't',
+      modifiers: ModifierKeys.commandBit,
+      completed: () =>
+          state.tabCount == 2 &&
+          state.paneCount == 4 &&
+          hierarchy.nativeWindowCount == 2,
+    );
+    await performMenuAction(
+      TerminalActionId.newWindow,
+      keyEquivalent: 'n',
+      modifiers: ModifierKeys.commandBit,
+      completed: () =>
+          state.windowCount == 2 &&
+          state.tabCount == 3 &&
+          state.paneCount == 5 &&
+          hierarchy.nativeWindowCount == 3 &&
+          hierarchy.paneResourceCount == 5,
+    );
+    _expectLifecycle(
+      terminalInputDeliveryCount() == actionInputBaseline,
+      'menu or command-palette hierarchy action leaked into terminal input',
+    );
+
+    final List<PaneId> createdPaneIds = state.paneIds;
+    for (final PaneId paneId in createdPaneIds) {
+      await _waitForAsciiMarker(sessions[paneId]!, prompt);
+      final TerminalPaneLocation location = state.locationForPane(paneId)!;
+      state
+        ..activateWindow(location.windowId)
+        ..selectTab(location.windowId, location.tabId)
+        ..focusPane(location.tabId, paneId);
+      reconcile();
+      final _TerminalHierarchyProductPane owner = owners[paneId]!;
+      final TerminalTextInputRouteResult keyResult = owner.textRouter.route(
+        TerminalTextInputKeyEvent(
+          clientId: owner.client.clientId,
+          generation: owner.textRouter.lastGeneration + 1,
+          monotonicNanoseconds: eventTimestamp++,
+          kind: TerminalTextInputKeyKind.down,
+          keyCode: 123,
+          modifiers: const ModifierKeys(0),
+          isRepeat: false,
+          characters: '',
+          charactersIgnoringModifiers: '',
+        ),
+      );
+      final String marker = '__DT_USER_ACTION_PANE_${paneId.value}__';
+      final TerminalTextInputRouteResult commitResult = owner.textRouter.route(
+        TerminalTextInputCommitEvent(
+          clientId: owner.client.clientId,
+          generation: owner.textRouter.lastGeneration + 1,
+          monotonicNanoseconds: eventTimestamp++,
+          text: "printf '$marker'",
+          replacement: TerminalTextInputRange.notFound,
+        ),
+      );
+      await owner.pane.submit();
+      await _waitForAsciiMarker(owner.session, marker);
+      await _waitForAsciiMarker(owner.session, prompt);
+      _expectLifecycle(
+        keyResult.disposition == TerminalTextInputRouteDisposition.rawKey &&
+            commitResult.disposition ==
+                TerminalTextInputRouteDisposition.committed &&
+            createdPaneIds
+                    .where(
+                      (PaneId candidate) =>
+                          _findAscii(
+                            sessions[candidate]!.terminalScreenSet.activeScreen,
+                            marker,
+                          ) !=
+                          null,
+                    )
+                    .length ==
+                1,
+        'created pane $paneId did not isolate physical-key and IME input',
+      );
+    }
+    _expectLifecycle(
+      terminalInputDeliveryCount() - actionInputBaseline ==
+          createdPaneIds.length * 2,
+      'created panes did not each receive one physical key and one IME commit',
+    );
+
+    final TerminalWindowState firstWindow = state.windows.first;
+    final TerminalTabState firstTab = firstWindow.tabs.first;
+    final PaneId closedPaneId = firstTab.paneIds.first;
+    state
+      ..activateWindow(firstWindow.id)
+      ..selectTab(firstWindow.id, firstTab.id)
+      ..focusPane(firstTab.id, closedPaneId);
+    reconcile();
+    await performMenuAction(
+      TerminalActionId.closeWindow,
+      keyEquivalent: 'w',
+      modifiers: ModifierKeys.commandBit,
+      completed: () =>
+          state.paneForId(closedPaneId) == null &&
+          state.windowCount == 2 &&
+          state.tabCount == 3 &&
+          state.paneCount == 4 &&
+          hierarchy.paneResourceCount == 4,
+    );
+    _expectLifecycle(
+      allSessions
+              .singleWhere(
+                (TerminalSession session) => session.id.paneId == closedPaneId,
+              )
+              .shutdownResult
+              ?.isClean ==
+          true,
+      'menu Close did not cleanly release its exact pane session',
+    );
+
+    final MenuItem quitItem = menu.itemForAction(
+      TerminalActionId.quitApplication,
+    );
+    _expectLifecycle(
+      quitItem.isEnabled &&
+          quitItem.keyEquivalent == 'q' &&
+          quitItem.modifiers.bits == ModifierKeys.commandBit,
+      'user action Quit is unavailable or has wrong shortcut',
+    );
+    final int quitInvocationBaseline = nativeActionInvocations.length;
+    quitItem.performAction();
+    try {
+      await closed.future.timeout(const Duration(seconds: 1));
+    } on TimeoutException {
+      _expectLifecycle(
+        !quitItem.isDisposed,
+        'user action Quit neither completed nor retained confirmation',
+      );
+      quitItem.performAction();
+      await closed.future.timeout(const Duration(seconds: 15));
+    }
+    await Future<void>.delayed(Duration.zero);
+    _expectLifecycle(
+      nativeActionInvocations.length >= quitInvocationBaseline + 1 &&
+          nativeActionInvocations[quitInvocationBaseline] ==
+              TerminalActionId.quitApplication &&
+          state.isDisposed &&
+          hierarchy.isDisposed &&
+          allSessions.length == 5 &&
+          allSessions.every(
+            (TerminalSession session) =>
+                session.shutdownResult?.isClean == true,
+          ) &&
+          debugLiveTerminalTextInputClientCount() == 0 &&
+          application.debugLiveObjectCount == 0,
+      'user action Quit did not release all product owners exactly once',
+    );
+    stdout.writeln(
+      'TERMINAL_USER_ACTIONS_TEST windows=2 tabs=3 panes=4 '
+      'created_panes=5 split_right=true split_down=true new_tab=true '
+      'new_window=true palette=true command_availability=true '
+      'menu_zero_write=true input_isolated=true close=true quit=true '
+      'sessions_clean=5 text_clients=0 native_handles=0',
+    );
   }
 
   static Future<void> _runRestorationProductAcceptance(

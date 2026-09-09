@@ -977,7 +977,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] deterministic coverage contract と repeated fake-AppKit topology
   - [x] multi-window dual-runtime UI と menu-shortcut isolation
   - [x] full regression、evidence reconciliation、Phase 7 完了判定
-- [ ] 通常起動でwindow/tab/splitのuser actionを有効にする
+- [x] 通常起動でwindow/tab/splitのuser actionを有効にする
   （分割と完了条件は
   [`docs/phase7/user-facing-window-tab-split-actions.md`](docs/phase7/user-facing-window-tab-split-actions.md)
   を参照して順に実施する）
@@ -985,7 +985,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] terminal product hierarchy action coordinatorを実装する
   - [x] 通常起動をmulti-window/tab/pane native hierarchyへ移行する
   - [x] native window lifecycle、per-pane close、app quitを通常階層へ接続する
-  - [ ] user-driven actionのM1両runtime受け入れとPhase 7再完了判定
+  - [x] user-driven actionのM1両runtime受け入れとPhase 7再完了判定
 
 終了条件:
 

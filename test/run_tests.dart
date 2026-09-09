@@ -778,6 +778,7 @@ void _testOptions() {
     !options.runtimeNativeHierarchyTest,
     'native hierarchy test defaults off',
   );
+  _expect(!options.runtimeUserActionsTest, 'user actions test defaults off');
   _expect(!options.runtimeRestorationTest, 'restoration test defaults off');
   _expect(
     options.runtimeRestorationPath == null,
@@ -1032,6 +1033,41 @@ void _testOptions() {
       },
     ),
     'native hierarchy and display tests are mutually exclusive',
+  );
+  final TerminalOptions userActionsTestOptions = _parseOptions(
+    const <String>['--runtime-user-actions-test'],
+    environment: const <String, String>{'DT_RUNTIME_USER_ACTIONS_TEST': '1'},
+  );
+  _expect(
+    userActionsTestOptions.runtimeUserActionsTest,
+    'gated ordinary-product user actions test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-user-actions-test']),
+    'user actions product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-user-actions-test',
+        '--runtime-user-actions-test',
+      ],
+      environment: const <String, String>{'DT_RUNTIME_USER_ACTIONS_TEST': '1'},
+    ),
+    'duplicate user actions product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-user-actions-test',
+        '--runtime-native-hierarchy-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_USER_ACTIONS_TEST': '1',
+        'DT_RUNTIME_NATIVE_HIERARCHY_TEST': '1',
+      },
+    ),
+    'user actions and native hierarchy tests are mutually exclusive',
   );
   final TerminalOptions restorationTestOptions = _parseOptions(
     const <String>['--runtime-restoration-test'],

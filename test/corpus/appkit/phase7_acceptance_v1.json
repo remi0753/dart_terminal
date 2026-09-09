@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "de17992aa35a552daaefb4ddecd7dc7644c6949dea8e79410d21fd4566da0e59"
+          "sha256": "7a4e6da2c464541124e0bbf7da05b4783d255fef5ccd093261ad4fdc070f0722"
         },
         {
           "path": "lib/src/terminal_input/terminal_text_input_event_router.dart",
@@ -109,6 +109,11 @@
           "suite": "display",
           "application_marker": "COMMAND_PALETTE_ACCEPTANCE",
           "driver_marker": "RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS"
+        },
+        {
+          "suite": "actions",
+          "application_marker": "TERMINAL_USER_ACTIONS_TEST",
+          "driver_marker": "RUNTIME_USER_ACTIONS_INTEGRATION_PASS"
         }
       ]
     },
@@ -159,6 +164,11 @@
           "suite": "restoration",
           "application_marker": "TERMINAL_RESTORATION_TEST",
           "driver_marker": "RUNTIME_RESTORATION_INTEGRATION_PASS"
+        },
+        {
+          "suite": "actions",
+          "application_marker": "TERMINAL_USER_ACTIONS_TEST",
+          "driver_marker": "RUNTIME_USER_ACTIONS_INTEGRATION_PASS"
         }
       ]
     },
@@ -177,7 +187,7 @@
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "de17992aa35a552daaefb4ddecd7dc7644c6949dea8e79410d21fd4566da0e59"
+          "sha256": "7a4e6da2c464541124e0bbf7da05b4783d255fef5ccd093261ad4fdc070f0722"
         }
       ],
       "unit_tests": [
@@ -213,7 +223,7 @@
     "source_references": 13,
     "unit_tests": 10,
     "integration_tests": 4,
-    "ui_assertions": 6,
+    "ui_assertions": 8,
     "blocking_failures": 0
   }
 }

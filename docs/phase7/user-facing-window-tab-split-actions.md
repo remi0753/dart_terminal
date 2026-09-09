@@ -280,3 +280,66 @@ to confirm the next target.
   hooks, and the aggregate Dart runner. `dart_appkit` remains unchanged. This
   closes the native lifecycle/per-pane close/application Quit subtask; the next
   task is the gated user-driven Developer JIT and Release AOT acceptance.
+- 2026-09-09: after commit `58ad352`, reread the roadmap and began the final
+  user-driven acceptance subtask. Added a separately environment-gated runtime
+  option which enters the ordinary interactive hierarchy method with a
+  deterministic shell fixture; it does not call the older hand-built hierarchy
+  acceptance method. Thus the test and plain developer launch share pane
+  configuration, resource factories, event routes, dispatcher registrations,
+  close/quit coordination, and cleanup.
+- 2026-09-09: the planned action sequence invokes native projected menu items
+  for Split Right, New Tab, New Window, Close, and Quit, and opens the command
+  palette through its native item before selecting Split Down through injected
+  palette key events. It reaches two logical windows, three tabs, and five
+  created live panes, proves every pane accepts isolated raw-key and IME input,
+  closes one pane back to an exact four-pane hierarchy, then verifies five
+  clean session generations and zero text/native handles after Quit.
+- 2026-09-09: the first Developer JIT action run timed out before initial native
+  hierarchy projection. Forced teardown then exposed a secondary scheduler
+  ownership fault because a partially created Metal surface was not yet in the
+  hierarchy's committed resource map. A shared disposal future now serializes
+  concurrent Quit/finally cleanup, and cleanup explicitly releases any orphan
+  pane adapters created before a failed reconciliation.
+- 2026-09-09: stage diagnostics reduced the initial failure to a synchronous
+  presentation re-entry. Applying the first layout resizes the terminal
+  session; its change callback attempted `refreshPresentation` while the native
+  hierarchy was already reconciling. The ordinary terminal product now owns a
+  single guarded reconciliation route, suppresses presentation-only refresh
+  during that route, and uses it for physical-key focus changes and acceptance
+  focus changes. The generic `dart_appkit` API and behavior are unchanged.
+- 2026-09-09: after Split Right and palette-driven Split Down succeeded, New
+  Tab remained disabled. The action coordinator had refreshed the menu while
+  the shared dispatcher still reported the palette action as running, leaving
+  every menu item with a stale busy snapshot. The palette completion observer
+  now refreshes the native menu after the dispatcher returns to idle. The next
+  run created all five panes through Split Right, Split Down, New Tab, and New
+  Window without terminal-input leakage.
+- 2026-09-09: the user-action driver initially expected the final aggregate
+  owner result to contain all five created panes. Close correctly releases one
+  pane before Quit, so the ownership evidence is one separately emitted clean
+  session result plus a four-pane aggregate Quit result. The driver now checks
+  that exact boundary: five unique clean session lines and one clean
+  `pane_count=4` owner line.
+- 2026-09-09: standalone real-product acceptance passed on arm64 in Developer
+  JIT (`windows=2 tabs=3 panes=4`, 1,707 ms) and Release AOT (933 ms). The
+  action scenario uses the same ordinary-product method and reached five live
+  panes before Close; it verified native shortcut metadata, exactly-once shared
+  dispatch, post-palette command availability, zero menu writes to PTY, raw-key
+  and IME isolation for every pane, five clean sessions, and zero text-input or
+  native handles.
+- 2026-09-09: the first final `make test` stopped only at the expected stale
+  Phase 7 evidence gate after adding the action UI requirements. Regenerated
+  `test/corpus/appkit/phase7_acceptance_v1.json`; the repeated complete test
+  passed every generator/freshness check, formatting of 211 files with zero
+  changes, whole-package analysis with no issues, native build hooks, and the
+  aggregate Dart runner. The reviewed Phase 7 inventory now contains 13 source
+  references, 10 unit-test references, four integration suites, and eight UI
+  assertions.
+- 2026-09-09: final `make RUNTIME_ARCH=arm64 runtime-verify` passed source and
+  both bundle audits plus every Developer JIT/Release AOT runtime suite. The
+  action suite passed again at 1,046/600 ms; hierarchy flood ratios were
+  1.040/0.962, the 1,000-iteration resource tests returned from peak 35 to
+  baseline 33 handles, and all lifecycle, restoration, clipboard, traffic,
+  shutdown-fault, and PTY-deadline cases passed. README and FEATURE_MATRIX now
+  describe the zero-config actions and their evidence. All Phase 7 roadmap
+  items and exit conditions are complete.

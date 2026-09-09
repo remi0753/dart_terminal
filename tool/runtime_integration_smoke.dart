@@ -25,6 +25,7 @@ enum _Suite {
   smoke,
   display,
   hierarchy,
+  actions,
   restoration,
   clipboard,
   lifecycle,
@@ -147,8 +148,8 @@ _Options _parseOptions(List<String> arguments) {
           .firstOrNull;
       if (selected == null) {
         throw const _SmokeException(
-          '--suite must be smoke, display, hierarchy, restoration, clipboard, '
-          'lifecycle, traffic, resource, fault, or all',
+          '--suite must be smoke, display, hierarchy, actions, restoration, '
+          'clipboard, lifecycle, traffic, resource, fault, or all',
         );
       }
       suite = selected;
@@ -1425,6 +1426,71 @@ Future<void> _runNativeHierarchy(
   );
 }
 
+Future<void> _runUserActions(_Options options, _Invocation invocation) async {
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>['--runtime-user-actions-test'],
+    environment: const <String, String>{'DT_RUNTIME_USER_ACTIONS_TEST': '1'},
+    timeout: const Duration(seconds: 45),
+  );
+  _expect(
+    observation.status == 0,
+    'user actions application exited with status ${observation.status}; '
+    'stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'user actions application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_USER_ACTIONS_TEST windows=2 tabs=3 panes=4 '
+          r'created_panes=5 split_right=true split_down=true new_tab=true '
+          r'new_window=true palette=true command_availability=true '
+          r'menu_zero_write=true input_isolated=true close=true quit=true '
+          r'sessions_clean=5 text_clients=0 native_handles=0$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted exact user-action hierarchy acceptance',
+  );
+  _expect(
+    RegExp(
+              r'^TERMINAL_SESSION_SHUTDOWN pane=[1-5] session=[1-5]:1 '
+              r'process_id=[1-9][0-9]* disposition=clean '
+              r'termination_observed=true cleanup_completed=true$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            5 &&
+        RegExp(
+              r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=4 disposition=clean$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1 &&
+        observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+    'ordinary product did not cleanly release five created pane generations',
+  );
+  _expect(
+    !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
+        !observation.stdoutText.contains('HIERARCHY_MISMATCH'),
+    'ordinary product user actions leaked or overflowed terminal input',
+  );
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
+  );
+  stdout.writeln(
+    'RUNTIME_USER_ACTIONS_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'windows=2 tabs=3 panes=4 elapsed_ms='
+    '${observation.elapsed.inMilliseconds}',
+  );
+}
+
 Future<void> _runRestoration(_Options options, _Invocation invocation) async {
   final Directory directory = await Directory.systemTemp.createTemp(
     'dart-terminal-restoration-',
@@ -2468,6 +2534,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.hierarchy || options.suite == _Suite.all) {
       await _runNativeHierarchy(options, invocation);
+    }
+    if (options.suite == _Suite.actions || options.suite == _Suite.all) {
+      await _runUserActions(options, invocation);
     }
     if (options.suite == _Suite.restoration || options.suite == _Suite.all) {
       await _runRestoration(options, invocation);

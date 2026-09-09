@@ -40,9 +40,11 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - 15個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
-  実行後にterminal first responderを復元して入力をPTYへ漏らさない。4-paneの実製品
-  gateでも`Focus Next Pane`を1回だけ実行し、terminal write 0と対象paneだけのfocus変更を
-  両runtimeで検証する
+  dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
+  漏らさない。通常起動ではCommand-N/T/D、Shift-Command-DからNew Window、New Tab、
+  Split Pane Right/Downを使用でき、focus traversal、tab selection、equalize、zoomも文脈に
+  応じて有効になる。実製品gateではmenuとpaletteから2 window/3 tab/5 paneを生成し、
+  terminal write 0と各paneの入力分離を両runtimeで検証する
 - DECSET 9/1000/1002/1003と1005/1006/1015/1016を追跡し、X10/default、UTF-8、
   URXVT、SGRのcell座標とSGR physical-pixel座標をbounded mouse reportとして実PTYへ
   送る製品routing。native logical pointへbacking scaleを一度だけ適用し、通常shellと
@@ -76,7 +78,8 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   持つapplication-owned state model。AppKit adapterはnative tab group、再帰split view、
   first responder、resize/equalize/zoomに加え、focused session title、bounded tab rename/
   color、local OSC 7 cwdのproxy iconを投影する。新しいtab/splitは信頼済みlocal cwdを
-  継承し、2 tab/4 live paneの実製品gateで実zsh cwd、key/IME分離と
+  継承する。zero-configの通常起動もこの階層を使い、menu/paletteからwindow/tab/splitを
+  追加できる。2 tab/4 live paneの実製品gateで実zsh cwd、key/IME分離と
   PTY/Metal/text-input/native handle回収を両runtime検証する。versionedかつ
   terminal内容を含まない状態へwindow/tab/split/cwd/metadataと安全なwindow配置を保存し、
   fresh sessionとして復元する。実fullscreen enter/exit、display migration/clamp、
@@ -359,13 +362,14 @@ make RUNTIME_ARCH=arm64 runtime-bundle-audit
 make RUNTIME_ARCH=arm64 runtime-integration
 make RUNTIME_ARCH=arm64 runtime-terminal-display-integration
 make RUNTIME_ARCH=arm64 runtime-native-hierarchy-integration
+make RUNTIME_ARCH=arm64 runtime-user-actions-integration
 make RUNTIME_ARCH=arm64 runtime-restoration-integration
 ```
 
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
-smoke、real-PTY live Metal display、native tab/4-pane hierarchy、fullscreen/migration/
-restoration/reopen、lifecycle、bounded traffic、resource stress、shutdown fault suiteを
-まとめて実行します。display suiteは
+smoke、real-PTY live Metal display、native tab/4-pane hierarchy、通常製品のuser action、
+fullscreen/migration/restoration/reopen、lifecycle、bounded traffic、resource stress、
+shutdown fault suiteをまとめて実行します。display suiteは
 SGR除去、style、soft wrap、
 bottom prompt、newest-only frame boundに加え、PTY由来のvisible text、local selection、
 cursor、native accessibility selector/geometry/focus/notificationをDeveloper JIT/
@@ -379,6 +383,11 @@ Closeでforeground確認とnon-live即時closeを、実native terminationの拒�
 aggregate menu Quitでatomic teardownを通し、4つのPTYと全native resourceの回収を
 Developer JIT/Release AOTの両runtimeで検証します。4つのsurfaceは1 pane 1 pending、
 4 work/4 ms turnの共有round-robin schedulerを使い、個別timerによる競合を避けます。
+user action suiteは通常起動と同じdispatcher、hierarchy、pane resource factory、Close/Quit
+経路を使い、native menuのSplit Right/New Tab/New Window/Close/Quitと、command paletteの
+Split Downを操作します。2 window/3 tab/5 paneの生成、各paneへのraw key/IME分離、
+1 paneを閉じた後の4-pane階層、5つのPTY世代と全Metal/text-input/native handleの回収を
+Developer JIT/Release AOTで要求します。
 同じsuiteは1 paneから正確に100 MiBを出力している間に別paneの入力を既存のtext-input
 routeからPTY、parser、Metal受理まで測り、同一launchのidle baselineの2倍以内、flood
 完了前の応答、schedulerのyield増加、pending/work/frame上限を両runtimeで要求します。

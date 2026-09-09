@@ -133,6 +133,11 @@ const List<_CriterionRequirement> _requirements = <_CriterionRequirement>[
         applicationMarker: 'COMMAND_PALETTE_ACCEPTANCE',
         driverMarker: 'RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS',
       ),
+      _UiRequirement(
+        suite: 'actions',
+        applicationMarker: 'TERMINAL_USER_ACTIONS_TEST',
+        driverMarker: 'RUNTIME_USER_ACTIONS_INTEGRATION_PASS',
+      ),
     ],
   ),
   _CriterionRequirement(
@@ -175,6 +180,11 @@ const List<_CriterionRequirement> _requirements = <_CriterionRequirement>[
         suite: 'restoration',
         applicationMarker: 'TERMINAL_RESTORATION_TEST',
         driverMarker: 'RUNTIME_RESTORATION_INTEGRATION_PASS',
+      ),
+      _UiRequirement(
+        suite: 'actions',
+        applicationMarker: 'TERMINAL_USER_ACTIONS_TEST',
+        driverMarker: 'RUNTIME_USER_ACTIONS_INTEGRATION_PASS',
       ),
     ],
   ),
