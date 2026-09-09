@@ -1305,12 +1305,23 @@ Future<void> _runNativeHierarchy(
     RegExp(
           r'^TERMINAL_NATIVE_HIERARCHY_TEST windows=1 tabs=2 panes=4 '
           r'splits=2 resize=true equalize=true zoom=true focus=true key=true '
-          r'ime=true isolated=true close=true sessions_clean=4 metal_clean=4 '
+          r'ime=true menu_shortcut=true isolated=true close=true '
+          r'sessions_clean=4 metal_clean=4 '
           r'text_clients=0 native_handles=0$',
           multiLine: true,
         ).allMatches(observation.stdoutText).length ==
         1,
     'native hierarchy acceptance summary is missing or malformed',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_HIERARCHY_MENU_SHORTCUT_TEST panes=4 shortcut=true '
+          r'action=pane\.focus-next invocations=1 terminal_write_delta=0 '
+          r'focused_only=true first_responder=true handles_restored=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'native hierarchy omitted isolated command-palette shortcut routing',
   );
   _expect(
     RegExp(
@@ -1444,11 +1455,12 @@ Future<void> _runRestoration(_Options options, _Invocation invocation) async {
     );
     _expect(
       RegExp(
-            r'^TERMINAL_RESTORATION_TEST windows=1 tabs=2 panes=4 '
-            r'generations=2 sessions_clean=8 fullscreen_enter=true '
+            r'^TERMINAL_RESTORATION_TEST windows=2 tabs=4 panes=8 '
+            r'panes_per_window=4 generations=2 sessions_clean=16 '
+            r'fullscreen_enter=true '
             r'fullscreen_exit=true screen_migration=true frame_clamped=true '
             r'scale=true persisted=true reopen_events=2 coalesced=true '
-            r'fresh_ids=true cwd=true metal_clean=8 text_clients=0 '
+            r'fresh_ids=true cwd=true metal_clean=16 text_clients=0 '
             r'native_handles=0$',
             multiLine: true,
           ).allMatches(observation.stdoutText).length ==
@@ -1457,14 +1469,15 @@ Future<void> _runRestoration(_Options options, _Invocation invocation) async {
     );
     _expect(
       RegExp(
-                r'^TERMINAL_SESSION_SHUTDOWN pane=[1-8] session=[1-8]:1 '
+                r'^TERMINAL_SESSION_SHUTDOWN pane=([1-9]|1[0-6]) '
+                r'session=([1-9]|1[0-6]):1 '
                 r'process_id=[1-9][0-9]* disposition=clean '
                 r'termination_observed=true cleanup_completed=true$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
-              8 &&
+              16 &&
           RegExp(
-                r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=8 '
+                r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=16 '
                 r'disposition=clean$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
@@ -1479,8 +1492,8 @@ Future<void> _runRestoration(_Options options, _Invocation invocation) async {
               ).allMatches(observation.stdoutText).length ==
               1 &&
           RegExp(
-                r'^TERMINAL_RESTORATION event=reopened windows=1 tabs=2 '
-                r'panes=4$',
+                r'^TERMINAL_RESTORATION event=reopened windows=2 tabs=4 '
+                r'panes=8$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
               1,
@@ -1501,7 +1514,7 @@ Future<void> _runRestoration(_Options options, _Invocation invocation) async {
       decoded is Map<String, dynamic> &&
           decoded['version'] == 1 &&
           decoded['windows'] is List<dynamic> &&
-          (decoded['windows'] as List<dynamic>).length == 1 &&
+          (decoded['windows'] as List<dynamic>).length == 2 &&
           !encoded.contains('__DT_RESTORATION_PROMPT__') &&
           !encoded.contains('__DT_RESTORED_CWD_') &&
           !observation.stdoutText.contains(persistencePath) &&
@@ -1517,7 +1530,7 @@ Future<void> _runRestoration(_Options options, _Invocation invocation) async {
     stdout.writeln(
       'RUNTIME_RESTORATION_INTEGRATION_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
-      'generations=2 tabs=2 panes=4 elapsed_ms='
+      'generations=2 windows=2 tabs=4 panes=8 elapsed_ms='
       '${observation.elapsed.inMilliseconds}',
     );
   } finally {

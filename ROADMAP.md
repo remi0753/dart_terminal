@@ -975,7 +975,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase7/appkit-unit-integration-ui-tests.md`](docs/phase7/appkit-unit-integration-ui-tests.md)
   を参照して順に実施する）
   - [x] deterministic coverage contract と repeated fake-AppKit topology
-  - [ ] multi-window dual-runtime UI と menu-shortcut isolation
+  - [x] multi-window dual-runtime UI と menu-shortcut isolation
   - [ ] full regression、evidence reconciliation、Phase 7 完了判定
 
 終了条件:

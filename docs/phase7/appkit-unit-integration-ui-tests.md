@@ -185,6 +185,17 @@ the normal gate instead of relying on prose or a previous manual run.
   bookkeeping, not a retained owner: the assertion now addresses each exact
   eight-session generation by its bounded index range. The rerun passed all
   three generations.
+- 2026-09-09: the hierarchy UI test now counts product text-input deliveries
+  around the native Shift-Command-P menu item, opens the real command palette,
+  selects `pane.focus-next`, and restores the view for the newly focused pane.
+  The accepted action count is one and the delivery delta is zero. The existing
+  four-pane raw-key/IME exact-marker sequence continues to reject an unfocused
+  or malformed delivery.
+- 2026-09-09: the restoration UI graph now contains two logical windows. Each
+  owns two native tabs and four panes across two splits, for eight concurrent
+  real PTY/Metal/text-input owners. Both windows and all presentation/cwd/split
+  state are persisted, the Dock reopen reconstructs eight fresh owners, and
+  both generations contribute sixteen exact clean shutdown results.
 
 ## Verification log
 
@@ -203,3 +214,16 @@ the normal gate instead of relying on prose or a previous manual run.
   data/inventory freshness checks, formatting of 209 files with zero changes,
   analysis with no issues, and the aggregate runner with
   `dart_terminal tests passed`.
+- After the UI changes, `make test` again passed all freshness, formatting,
+  analysis, and aggregate test gates.
+- `make RUNTIME_ARCH=arm64 runtime-native-hierarchy-integration` passed in
+  both modes. Developer JIT measured 26,923 us idle versus 28,776 us under
+  flood (1.069x, 102 scheduler yields); Release AOT measured 22,467 us versus
+  22,463 us (1.000x, 76 yields). Both runs also accepted the four-pane native
+  command-palette shortcut with zero terminal delivery.
+- `make RUNTIME_ARCH=arm64 runtime-restoration-integration` passed in both
+  modes with `generations=2 windows=2 tabs=4 panes=8`: Developer JIT completed
+  in 4,386 ms and Release AOT in 3,716 ms. Each mode validated 16 exact clean
+  PTY shutdowns, 16 disposed Metal owners, zero text-input clients, zero native
+  handles, one worker lifecycle, bounded content-free persistence, and
+  duplicate-reopen coalescing.

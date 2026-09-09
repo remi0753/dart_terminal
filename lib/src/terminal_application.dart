@@ -2442,13 +2442,52 @@ final class TerminalApplication {
         axis: TerminalSplitAxis.vertical,
         fraction: 0.65,
       );
+      final TerminalWindowState auxiliaryWindow = await initialState
+          .createWindow(
+            configurationForPane(
+              TerminalRestorablePane(
+                workingDirectory: inheritedWorkingDirectory,
+              ),
+            ),
+          );
+      final TerminalTabState auxiliaryFirstTab = auxiliaryWindow.selectedTab;
+      final PaneId fifthPaneId = auxiliaryFirstTab.focusedPaneId;
+      final TerminalPane sixthPane = await initialState.splitPane(
+        fifthPaneId,
+        configurationForPane(
+          TerminalRestorablePane(workingDirectory: inheritedWorkingDirectory),
+        ),
+        axis: TerminalSplitAxis.horizontal,
+        fraction: 0.45,
+      );
+      final TerminalTabState auxiliarySecondTab = await initialState.createTab(
+        auxiliaryWindow.id,
+        configurationForPane(
+          TerminalRestorablePane(workingDirectory: inheritedWorkingDirectory),
+        ),
+      );
+      final PaneId seventhPaneId = auxiliarySecondTab.focusedPaneId;
+      final TerminalPane eighthPane = await initialState.splitPane(
+        seventhPaneId,
+        configurationForPane(
+          TerminalRestorablePane(workingDirectory: inheritedWorkingDirectory),
+        ),
+        axis: TerminalSplitAxis.vertical,
+        fraction: 0.55,
+      );
       initialState
         ..focusPane(firstTab.id, secondPane.id)
         ..renameTab(secondTab.id, 'Restored product tab')
         ..setTabColor(secondTab.id, TerminalTabColor.greenMarker)
         ..focusPane(secondTab.id, fourthPane.id)
         ..setPaneZoom(secondTab.id, fourthPane.id)
-        ..selectTab(initialWindow.id, secondTab.id);
+        ..selectTab(initialWindow.id, secondTab.id)
+        ..focusPane(auxiliaryFirstTab.id, sixthPane.id)
+        ..focusPane(auxiliarySecondTab.id, eighthPane.id)
+        ..renameTab(auxiliarySecondTab.id, 'Restored auxiliary tab')
+        ..setTabColor(auxiliarySecondTab.id, TerminalTabColor.purpleMarker)
+        ..selectTab(auxiliaryWindow.id, auxiliarySecondTab.id)
+        ..activateWindow(initialWindow.id);
       createdRestoration.reconcile();
       initial.hierarchy.present(restoreSelectionAndFocus: false);
       final List<PaneId> initialPaneIds = initialState.paneIds;
@@ -2459,13 +2498,24 @@ final class TerminalApplication {
       }
       await Future<void>.delayed(const Duration(milliseconds: 250));
       _expectLifecycle(
-        initialState.tabCount == 2 &&
-            initialState.paneCount == 4 &&
-            initial.hierarchy.nativeWindowCount == 2 &&
-            initial.hierarchy.splitViewCount == 2 &&
-            initial.hierarchy.paneResourceCount == 4 &&
-            application.debugLiveObjectCount == 8 &&
-            debugLiveTerminalTextInputClientCount() == 4,
+        initialState.windowCount == 2 &&
+            initialState.tabCount == 4 &&
+            initialState.paneCount == 8 &&
+            initialState.windows.every(
+              (TerminalWindowState window) =>
+                  window.tabs.length == 2 &&
+                  window.tabs.fold<int>(
+                        0,
+                        (int total, TerminalTabState tab) =>
+                            total + tab.paneIds.length,
+                      ) ==
+                      4,
+            ) &&
+            initial.hierarchy.nativeWindowCount == 4 &&
+            initial.hierarchy.splitViewCount == 4 &&
+            initial.hierarchy.paneResourceCount == 8 &&
+            application.debugLiveObjectCount == 16 &&
+            debugLiveTerminalTextInputClientCount() == 8,
         'first restoration generation did not create its exact resources',
       );
 
@@ -2493,7 +2543,7 @@ final class TerminalApplication {
         stdout.writeln(result.machineLine());
       }
       _expectLifecycle(
-        suspended.sessions.length == 4 &&
+        suspended.sessions.length == 8 &&
             suspended.isClean &&
             application.debugLiveObjectCount == 0 &&
             debugLiveTerminalTextInputClientCount() == 0 &&
@@ -2528,9 +2578,9 @@ final class TerminalApplication {
       final List<PaneId> restoredPaneIds = restoredState.paneIds;
       _expectLifecycle(
         reopenEventCount == 2 &&
-            restoredState.windowCount == 1 &&
-            restoredState.tabCount == 2 &&
-            restoredState.paneCount == 4 &&
+            restoredState.windowCount == 2 &&
+            restoredState.tabCount == 4 &&
+            restoredState.paneCount == 8 &&
             restoredPaneIds.every(
               (PaneId paneId) => !oldPaneIds.contains(paneId.value),
             ) &&
@@ -2538,20 +2588,34 @@ final class TerminalApplication {
               (TerminalWindowId windowId) =>
                   !oldWindowIds.contains(windowId.value),
             ) &&
-            restoredState.windows.single.tabs.last.customTitle ==
+            restoredState.windows.first.tabs.last.customTitle ==
                 'Restored product tab' &&
-            restoredState.windows.single.tabs.last.color ==
+            restoredState.windows.first.tabs.last.color ==
                 TerminalTabColor.greenMarker &&
-            restoredState.windows.single.tabs.last.isZoomed &&
+            restoredState.windows.first.tabs.last.isZoomed &&
+            restoredState.windows.last.tabs.last.customTitle ==
+                'Restored auxiliary tab' &&
+            restoredState.windows.last.tabs.last.color ==
+                TerminalTabColor.purpleMarker &&
+            restoredState.windows.every(
+              (TerminalWindowState window) =>
+                  window.tabs.length == 2 &&
+                  window.tabs.fold<int>(
+                        0,
+                        (int total, TerminalTabState tab) =>
+                            total + tab.paneIds.length,
+                      ) ==
+                      4,
+            ) &&
             restored.launchWorkingDirectories.values.every(
               (String? value) => value == '/private/tmp',
             ) &&
-            restored.hierarchy.nativeWindowCount == 2 &&
-            restored.hierarchy.splitViewCount == 2 &&
-            restored.hierarchy.paneResourceCount == 4 &&
-            application.debugLiveObjectCount == 8 &&
-            debugLiveTerminalTextInputClientCount() == 4 &&
-            sessions.length == 8,
+            restored.hierarchy.nativeWindowCount == 4 &&
+            restored.hierarchy.splitViewCount == 4 &&
+            restored.hierarchy.paneResourceCount == 8 &&
+            application.debugLiveObjectCount == 16 &&
+            debugLiveTerminalTextInputClientCount() == 8 &&
+            sessions.length == 16,
         'Dock reopen duplicated or incompletely restored product owners',
       );
 
@@ -2580,7 +2644,7 @@ final class TerminalApplication {
         stdout.writeln(result.machineLine());
       }
       _expectLifecycle(
-        shutdowns.length == 8 &&
+        shutdowns.length == 16 &&
             shutdowns.every(
               (TerminalPaneSessionShutdownResult result) => result.isClean,
             ) &&
@@ -2623,10 +2687,11 @@ final class TerminalApplication {
         'restoration diagnostics omitted required content-free transitions',
       );
       stdout.writeln(
-        'TERMINAL_RESTORATION_TEST windows=1 tabs=2 panes=4 generations=2 '
-        'sessions_clean=8 fullscreen_enter=true fullscreen_exit=true '
+        'TERMINAL_RESTORATION_TEST windows=2 tabs=4 panes=8 '
+        'panes_per_window=4 generations=2 sessions_clean=16 '
+        'fullscreen_enter=true fullscreen_exit=true '
         'screen_migration=true frame_clamped=true scale=true persisted=true '
-        'reopen_events=2 coalesced=true fresh_ids=true cwd=true metal_clean=8 '
+        'reopen_events=2 coalesced=true fresh_ids=true cwd=true metal_clean=16 '
         'text_clients=0 native_handles=0',
       );
     } finally {
@@ -2698,6 +2763,7 @@ final class TerminalApplication {
     var nativeTerminationRequestCount = 0;
     var closeMenuInvocationCount = 0;
     var quitMenuInvocationCount = 0;
+    var terminalInputDeliveryCount = 0;
     var finalNativeHandleCount = -1;
     var finalTextInputClientCount = -1;
     Object? asynchronousError;
@@ -2934,6 +3000,7 @@ final class TerminalApplication {
                   TerminalTextInputEventRouter(
                     clientId: client.clientId,
                     onRawKeyDown: (TerminalKeyEvent event) {
+                      terminalInputDeliveryCount++;
                       keyRouter.handleTerminalKeyDown(event, pane);
                     },
                     onPreedit:
@@ -2953,7 +3020,10 @@ final class TerminalApplication {
                     onClearPreedit: (int generation) {
                       surface.clearPreedit(generation: generation);
                     },
-                    onCommit: pane.insertText,
+                    onCommit: (String text) {
+                      terminalInputDeliveryCount++;
+                      pane.insertText(text);
+                    },
                     onOverflow: (int clientId, int generation) {
                       recordAsynchronousError(
                         StateError(
@@ -3240,6 +3310,81 @@ final class TerminalApplication {
               null,
         ),
         'hierarchy input reached a PTY with non-exact bytes',
+      );
+
+      final int menuShortcutInputBaseline = terminalInputDeliveryCount;
+      final TerminalActionCatalog hierarchyActionCatalog =
+          TerminalActionCatalog.standard();
+      late final TerminalCommandPalettePresenter hierarchyPalette;
+      final TerminalActionDispatcher hierarchyActionDispatcher =
+          TerminalActionDispatcher(
+            catalog: hierarchyActionCatalog,
+            registrations: <TerminalActionRegistration>[
+              TerminalActionRegistration(
+                id: TerminalActionId.openCommandPalette,
+                handler: () => hierarchyPalette.open(),
+              ),
+              TerminalActionRegistration(
+                id: TerminalActionId.focusNextPane,
+                handler: () {
+                  final TerminalTabState tab = state.activeWindow!.selectedTab;
+                  state.traversePaneFocus(
+                    tab.id,
+                    direction: TerminalPaneFocusTraversal.next,
+                  );
+                  createdHierarchy.reconcile();
+                },
+              ),
+            ],
+          );
+      final Window hierarchyPaletteTerminalWindow = createdHierarchy
+          .windowForTab(secondTab.id)!;
+      hierarchyPalette = TerminalCommandPalettePresenter(
+        dispatcher: hierarchyActionDispatcher,
+        terminalWindow: hierarchyPaletteTerminalWindow,
+        terminalView: owners[thirdPaneId]!.view,
+        onError: recordAsynchronousError,
+      );
+      final TerminalAppKitMenuProjection hierarchyActionMenu =
+          TerminalAppKitMenuProjection.install(
+            application: application,
+            dispatcher: hierarchyActionDispatcher,
+            onDispatched: (TerminalActionDispatchResult result) {
+              if (result.disposition ==
+                  TerminalActionDispatchDisposition.failed) {
+                recordAsynchronousError(result.error!, result.stackTrace!);
+              }
+            },
+          );
+      try {
+        await _exerciseCommandPaletteProduct(
+          application,
+          hierarchyPaletteTerminalWindow,
+          hierarchyActionMenu,
+          hierarchyPalette,
+          () => terminalInputDeliveryCount,
+        );
+        checkAsynchronousError();
+        _expectLifecycle(
+          secondTab.focusedPaneId == thirdPaneId &&
+              hierarchyPalette.dispatchCount == 1 &&
+              terminalInputDeliveryCount == menuShortcutInputBaseline,
+          'hierarchy menu shortcut changed terminal input or the wrong pane',
+        );
+      } finally {
+        await hierarchyPalette.dispose();
+        await hierarchyActionMenu.dispose();
+      }
+      createdHierarchy.reconcile();
+      _expectLifecycle(
+        application.debugLiveObjectCount == 8 &&
+            debugLiveTerminalTextInputClientCount() == 4,
+        'hierarchy menu shortcut retained native palette resources',
+      );
+      stdout.writeln(
+        'TERMINAL_HIERARCHY_MENU_SHORTCUT_TEST panes=4 shortcut=true '
+        'action=pane.focus-next invocations=1 terminal_write_delta=0 '
+        'focused_only=true first_responder=true handles_restored=true',
       );
 
       state
@@ -3836,7 +3981,7 @@ final class TerminalApplication {
       stdout.writeln(
         'TERMINAL_NATIVE_HIERARCHY_TEST windows=1 tabs=2 panes=4 splits=2 '
         'resize=true equalize=true zoom=true focus=true key=true ime=true '
-        'isolated=true close=true sessions_clean=4 metal_clean=4 '
+        'menu_shortcut=true isolated=true close=true sessions_clean=4 metal_clean=4 '
         'text_clients=0 native_handles=0',
       );
     } finally {
