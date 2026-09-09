@@ -109,7 +109,7 @@ final class TerminalCommandPaletteFocusTarget {
 }
 
 typedef TerminalCommandPaletteFocusTargetProvider =
-    TerminalCommandPaletteFocusTarget Function();
+    TerminalCommandPaletteFocusTarget? Function();
 
 /// Product-owned transient native command-palette window.
 final class TerminalCommandPalettePresenter {
@@ -162,10 +162,10 @@ final class TerminalCommandPalettePresenter {
   int get terminalResponderRestoreCount => _terminalResponderRestoreCount;
 
   /// Current terminal window restored after dismissing the palette.
-  Window get terminalWindow => _focusTarget().window;
+  Window get terminalWindow => _requireFocusTarget().window;
 
   /// Current terminal view restored after dismissing the palette.
-  View get terminalView => _focusTarget().view;
+  View get terminalView => _requireFocusTarget().view;
 
   Future<void> open() async {
     final Future<void>? closing = _closingFuture;
@@ -368,8 +368,9 @@ final class TerminalCommandPalettePresenter {
           view.dispose();
         }
         if (restoreTerminalFocus) {
-          final TerminalCommandPaletteFocusTarget target = _focusTarget();
-          if (!target.window.isClosed &&
+          final TerminalCommandPaletteFocusTarget? target = _focusTarget();
+          if (target != null &&
+              !target.window.isClosed &&
               !target.window.isDisposed &&
               !target.view.isDisposed) {
             target.window.show();
@@ -387,4 +388,8 @@ final class TerminalCommandPalettePresenter {
     }();
     return completion.future;
   }
+
+  TerminalCommandPaletteFocusTarget _requireFocusTarget() =>
+      _focusTarget() ??
+      (throw StateError('terminal command-palette focus target is absent'));
 }

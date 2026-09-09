@@ -25,7 +25,7 @@
         {
           "path": "test/terminal_application_state_test.dart",
           "entrypoint": "runTerminalApplicationStateTests",
-          "sha256": "e123a530c65fe142419371ee95727feb313a6abea97a43e27bd8962c071f7c21"
+          "sha256": "6920d51e80e769fa23e418f5ecca601a5003364001454a69dc4045450f5eeeb7"
         },
         {
           "path": "test/terminal_restoration_test.dart",
@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "2ef17759e6694facd09a0a62e32fcbd8d12607b5a530856f9ea1171c6063b5f2"
+          "sha256": "de17992aa35a552daaefb4ddecd7dc7644c6949dea8e79410d21fd4566da0e59"
         },
         {
           "path": "lib/src/terminal_input/terminal_text_input_event_router.dart",
@@ -67,7 +67,7 @@
         },
         {
           "path": "lib/src/terminal_product_hierarchy_actions.dart",
-          "sha256": "b1145a0b24f14028fd7b4dbc42ff49df1f1ab516012f784767020d02a0db357d"
+          "sha256": "2272010beaccea6f848530da53ea08aee1798a571be8b1b2ea69439e22f73a39"
         }
       ],
       "unit_tests": [
@@ -89,7 +89,7 @@
         {
           "path": "test/terminal_product_hierarchy_actions_test.dart",
           "entrypoint": "runTerminalProductHierarchyActionTests",
-          "sha256": "99659e31a772dcc9ac58521ff51bdc0c3f0814173acf8399e82579874b086666"
+          "sha256": "3c18dd1e4250103ab30964e8c133d95d538a58b27feb11f663bc3d693dedcbed"
         }
       ],
       "integration_tests": [
@@ -134,7 +134,7 @@
         {
           "path": "test/terminal_application_state_test.dart",
           "entrypoint": "runTerminalApplicationStateTests",
-          "sha256": "e123a530c65fe142419371ee95727feb313a6abea97a43e27bd8962c071f7c21"
+          "sha256": "6920d51e80e769fa23e418f5ecca601a5003364001454a69dc4045450f5eeeb7"
         },
         {
           "path": "test/runtime_lifecycle_test.dart",
@@ -177,7 +177,7 @@
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "2ef17759e6694facd09a0a62e32fcbd8d12607b5a530856f9ea1171c6063b5f2"
+          "sha256": "de17992aa35a552daaefb4ddecd7dc7644c6949dea8e79410d21fd4566da0e59"
         }
       ],
       "unit_tests": [

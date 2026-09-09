@@ -5,6 +5,7 @@ import 'terminal_pane.dart';
 typedef TerminalProductPaneConfigurationFactory =
     TerminalPaneConfiguration Function(PaneId? inheritanceSourcePaneId);
 typedef TerminalProductHierarchyReconciler = void Function();
+typedef TerminalProductHierarchyMutationAdmission = bool Function();
 
 /// Terminal-owned user actions over the logical and native hierarchy.
 ///
@@ -16,14 +17,17 @@ final class TerminalProductHierarchyActionCoordinator {
     required this.state,
     required TerminalProductPaneConfigurationFactory configurationFactory,
     required TerminalProductHierarchyReconciler reconcile,
+    TerminalProductHierarchyMutationAdmission? canMutate,
     void Function()? onChanged,
   }) : _configurationFactory = configurationFactory,
        _reconcile = reconcile,
+       _canMutate = canMutate,
        _onChanged = onChanged;
 
   final TerminalApplicationState state;
   final TerminalProductPaneConfigurationFactory _configurationFactory;
   final TerminalProductHierarchyReconciler _reconcile;
+  final TerminalProductHierarchyMutationAdmission? _canMutate;
   final void Function()? _onChanged;
   bool _disposed = false;
 
@@ -113,7 +117,8 @@ final class TerminalProductHierarchyActionCoordinator {
   bool _hasMultipleTabs() =>
       _isMutable && (_activeWindow?.tabs.length ?? 0) > 1;
 
-  bool get _isMutable => !_disposed && !state.isDisposed;
+  bool get _isMutable =>
+      !_disposed && !state.isDisposed && (_canMutate?.call() ?? true);
   bool get _hasPaneCapacity =>
       state.paneCount < TerminalApplicationStateLimits.maximumTotalPanes;
   TerminalWindowState? get _activeWindow =>

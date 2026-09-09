@@ -2009,9 +2009,12 @@ final class TerminalApplication {
     TerminalProductHierarchyActionCoordinator? actionCoordinator;
     TerminalAppKitMenuProjection? menuProjection;
     TerminalCommandPalettePresenter? palettePresenter;
+    Future<void> Function(PaneId? paneId)? closePaneRequest;
     RuntimeLifecycleCoordinator? lifecycle;
     StreamSubscription<AppKitEvent>? applicationSubscription;
+    final Set<PaneId> deferredExitPaneIds = <PaneId>{};
     var lifecycleWasShutDown = false;
+    var productResourcesDisposed = false;
     Object? asynchronousError;
     StackTrace? asynchronousStackTrace;
 
@@ -2075,8 +2078,16 @@ final class TerminalApplication {
           if (palette != null && !palette.isDisposed) palette.refresh();
         },
         onExitRequested: () {
-          if (state.paneCount == 1 && !closed.isCompleted) {
-            closed.complete();
+          final PaneId? id = paneId;
+          if (id == null || state.paneForId(id) == null) return;
+          final Future<void> Function(PaneId? paneId)? request =
+              closePaneRequest;
+          if (request == null) {
+            deferredExitPaneIds.add(id);
+          } else {
+            unawaited(
+              request(id).then<void>((_) {}, onError: recordAsynchronousError),
+            );
           }
         },
         lifecycleObserver: (TerminalPaneLifecycleObservation observation) {
@@ -2316,13 +2327,30 @@ final class TerminalApplication {
       if (nativeHierarchy == null || nativeHierarchy.isDisposed) return;
       switch (event) {
         case WindowClosedEvent():
-          if (!closed.isCompleted) closed.complete();
+          final Future<void> Function(PaneId? paneId)? request =
+              closePaneRequest;
+          if (request != null) {
+            unawaited(
+              request(tab.focusedPaneId)
+                  .then<void>((_) {}, onError: recordAsynchronousError),
+            );
+          }
         case WindowCloseRequestedEvent():
           final Window? window = nativeHierarchy.windowForTab(tabId);
           if (window != null && !window.isClosed && !window.isDisposed) {
             window.replyToCloseRequest(event, allow: false);
           }
-          if (!closed.isCompleted) closed.complete();
+          state
+            ..activateWindow(logicalWindow.id)
+            ..selectTab(logicalWindow.id, tabId);
+          final Future<void> Function(PaneId? paneId)? request =
+              closePaneRequest;
+          if (request != null) {
+            unawaited(
+              request(tab.focusedPaneId)
+                  .then<void>((_) {}, onError: recordAsynchronousError),
+            );
+          }
         case WindowResizedEvent(:final width, :final height):
           cancelHyperlinkInteraction(tab);
           nativeHierarchy.resizeTab(
@@ -2470,6 +2498,33 @@ final class TerminalApplication {
       }
     };
 
+    Future<void> disposeProductResources() async {
+      if (productResourcesDisposed) return;
+      productResourcesDisposed = true;
+      for (final StreamSubscription<WindowEvent> subscription
+          in windowSubscriptions.values.toList(growable: false)) {
+        await subscription.cancel();
+      }
+      windowSubscriptions.clear();
+      await palettePresenter?.dispose();
+      await menuProjection?.dispose();
+      actionCoordinator?.dispose();
+      for (final _TerminalHierarchyProductPane owner in owners.values.toList(
+        growable: false,
+      )) {
+        await owner.cancelTextInput();
+      }
+      final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+      if (nativeHierarchy != null && !nativeHierarchy.isDisposed) {
+        nativeHierarchy.dispose();
+      }
+      paneWorkScheduler.dispose();
+      if (!lifecycleWasShutDown) {
+        await lifecycle?.shutdown();
+        lifecycleWasShutDown = true;
+      }
+    }
+
     Future<void> paste() async {
       final TerminalPane? pane = activePane();
       if (pane == null) return;
@@ -2529,6 +2584,37 @@ final class TerminalApplication {
 
     try {
       application.defersTerminationRequests = true;
+      final RuntimeLifecycleCoordinator createdLifecycle =
+          RuntimeLifecycleCoordinator(
+            scenario: RuntimeLifecycleScenario.normal,
+            workerCommand: workerCommand,
+            observer: (RuntimeLifecycleObservation observation) {
+              stdout.writeln(
+                observation.machineLine(RuntimeLifecycleScenario.normal),
+              );
+            },
+            processObserver: (RuntimeLifecycleProcessObservation observation) {
+              stdout.writeln(
+                observation.machineLine(
+                  RuntimeLifecycleScenario.normal,
+                  parentProcessId: pid,
+                ),
+              );
+            },
+          );
+      lifecycle = createdLifecycle;
+      _expectLifecycle(
+        await createdLifecycle.start() == RuntimeLifecycleStartStatus.ready,
+        'interactive product worker did not become ready',
+      );
+      _writeLifecycleEvent(
+        RuntimeLifecycleScenario.normal,
+        'root-ready',
+        createdLifecycle.generation,
+      );
+      MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootReady);
+      await _expectResponse(createdLifecycle);
+
       final TerminalWindowState initialWindow = await state.createWindow(
         configuration(null),
       );
@@ -2555,17 +2641,70 @@ final class TerminalApplication {
       hierarchy = createdHierarchy;
       reconcileInteractiveHierarchy();
 
+      final TerminalPaneCloseCoordinator createdPaneCloseCoordinator =
+          TerminalPaneCloseCoordinator(
+            state: state,
+            onBeforePaneRemoved: (PaneId paneId) async {
+              await owners[paneId]?.cancelTextInput();
+            },
+            onHierarchyChanged: () {
+              reconcileInteractiveHierarchy();
+              final TerminalAppKitMenuProjection? menu = menuProjection;
+              if (menu != null && !menu.isDisposed) menu.refresh();
+              final TerminalCommandPalettePresenter? palette = palettePresenter;
+              if (palette != null && !palette.isDisposed) palette.refresh();
+            },
+          );
       final TerminalProductHierarchyActionCoordinator createdActions =
           TerminalProductHierarchyActionCoordinator(
             state: state,
             configurationFactory: configuration,
             reconcile: reconcileInteractiveHierarchy,
+            canMutate: () =>
+                !createdPaneCloseCoordinator.removalInProgress &&
+                !createdPaneCloseCoordinator.applicationQuitInProgress,
             onChanged: () {
-              menuProjection?.refresh();
-              palettePresenter?.refresh();
+              final TerminalAppKitMenuProjection? menu = menuProjection;
+              if (menu != null && !menu.isDisposed) menu.refresh();
+              final TerminalCommandPalettePresenter? palette = palettePresenter;
+              if (palette != null && !palette.isDisposed) palette.refresh();
             },
           );
       actionCoordinator = createdActions;
+      closePaneRequest = (PaneId? paneId) async {
+        final TerminalPaneCloseResult result = await createdPaneCloseCoordinator
+            .requestClose(paneId: paneId);
+        stdout.writeln(result.machineLine());
+        final TerminalAppKitMenuProjection? menu = menuProjection;
+        if (menu != null && !menu.isDisposed) menu.refresh();
+        final TerminalCommandPalettePresenter? palette = palettePresenter;
+        if (palette != null && !palette.isDisposed) palette.refresh();
+      };
+      final TerminalApplicationQuitCoordinator createdQuitCoordinator =
+          TerminalApplicationQuitCoordinator(
+            state: state,
+            paneCloseCoordinator: createdPaneCloseCoordinator,
+            replyToTerminationRequest:
+                (
+                  ApplicationTerminateRequestedEvent request, {
+                  required bool allow,
+                }) {
+                  application.replyToTerminationRequest(request, allow: allow);
+                },
+            onPreShutdown: disposeProductResources,
+            terminateProgrammatically: () async {
+              if (!closed.isCompleted) closed.complete();
+            },
+          );
+      for (final PaneId paneId in deferredExitPaneIds.toList(growable: false)) {
+        deferredExitPaneIds.remove(paneId);
+        if (state.paneForId(paneId) != null) {
+          unawaited(
+            closePaneRequest(paneId)
+                .then<void>((_) {}, onError: recordAsynchronousError),
+          );
+        }
+      }
       final TerminalActionCatalog catalog = TerminalActionCatalog.standard();
       late final TerminalCommandPalettePresenter installedPalette;
       final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
@@ -2577,15 +2716,23 @@ final class TerminalApplication {
           ),
           TerminalActionRegistration(
             id: TerminalActionId.quitApplication,
-            handler: () {
-              if (!closed.isCompleted) closed.complete();
+            isAvailable: () =>
+                !state.isDisposed &&
+                !createdPaneCloseCoordinator.removalInProgress,
+            handler: () async {
+              final TerminalApplicationQuitResult result =
+                  await createdQuitCoordinator.requestQuit();
+              stdout.writeln(result.machineLine());
             },
           ),
           TerminalActionRegistration(
             id: TerminalActionId.closeWindow,
-            isAvailable: () => state.activeWindow != null,
-            handler: () {
-              if (!closed.isCompleted) closed.complete();
+            isAvailable: () =>
+                state.activeWindow != null &&
+                !createdPaneCloseCoordinator.removalInProgress &&
+                !createdPaneCloseCoordinator.applicationQuitInProgress,
+            handler: () async {
+              await closePaneRequest!(null);
             },
           ),
           TerminalActionRegistration(
@@ -2620,10 +2767,16 @@ final class TerminalApplication {
       installedPalette = TerminalCommandPalettePresenter.withFocusTarget(
         dispatcher: dispatcher,
         focusTarget: () {
-          final TerminalTabState tab = state.activeWindow!.selectedTab;
+          final TerminalWindowState? activeWindow = state.activeWindow;
+          if (activeWindow == null) return null;
+          final TerminalTabState tab = activeWindow.selectedTab;
+          final Window? window = createdHierarchy.windowForTab(tab.id);
+          final TerminalNativePaneResources? resources = createdHierarchy
+              .resourcesForPane(tab.focusedPaneId);
+          if (window == null || resources == null) return null;
           return TerminalCommandPaletteFocusTarget(
-            window: createdHierarchy.windowForTab(tab.id)!,
-            view: createdHierarchy.resourcesForPane(tab.focusedPaneId)!.view,
+            window: window,
+            view: resources.view,
           );
         },
         onError: recordAsynchronousError,
@@ -2644,45 +2797,43 @@ final class TerminalApplication {
           case ApplicationActiveChangedEvent():
             break;
           case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
-            if (!hasVisibleWindows) createdHierarchy.present();
+            if (hasVisibleWindows || state.isDisposed) break;
+            if (state.windowCount > 0) {
+              createdHierarchy.present();
+              break;
+            }
+            unawaited(
+              dispatcher.dispatch(TerminalActionId.newWindow).then<void>((
+                TerminalActionDispatchResult result,
+              ) {
+                if (result.disposition ==
+                    TerminalActionDispatchDisposition.failed) {
+                  recordAsynchronousError(result.error!, result.stackTrace!);
+                }
+              }, onError: recordAsynchronousError),
+            );
           case ApplicationTerminateRequestedEvent():
-            application.replyToTerminationRequest(event, allow: false);
-            if (!closed.isCompleted) closed.complete();
+            unawaited(
+              createdQuitCoordinator.handleTerminationRequest(event).then<void>(
+                (TerminalApplicationQuitResult result) {
+                  stdout.writeln(result.machineLine());
+                  if ((result.disposition ==
+                              TerminalApplicationQuitDisposition.terminated ||
+                          result.disposition ==
+                              TerminalApplicationQuitDisposition
+                                  .terminatedWithCleanupFailure) &&
+                      !closed.isCompleted) {
+                    closed.complete();
+                  }
+                },
+                onError: recordAsynchronousError,
+              ),
+            );
           case WindowEvent() || MenuItemInvokedEvent():
             break;
         }
       }, onError: recordAsynchronousError);
 
-      final RuntimeLifecycleCoordinator createdLifecycle =
-          RuntimeLifecycleCoordinator(
-            scenario: RuntimeLifecycleScenario.normal,
-            workerCommand: workerCommand,
-            observer: (RuntimeLifecycleObservation observation) {
-              stdout.writeln(
-                observation.machineLine(RuntimeLifecycleScenario.normal),
-              );
-            },
-            processObserver: (RuntimeLifecycleProcessObservation observation) {
-              stdout.writeln(
-                observation.machineLine(
-                  RuntimeLifecycleScenario.normal,
-                  parentProcessId: pid,
-                ),
-              );
-            },
-          );
-      lifecycle = createdLifecycle;
-      _expectLifecycle(
-        await createdLifecycle.start() == RuntimeLifecycleStartStatus.ready,
-        'interactive product worker did not become ready',
-      );
-      _writeLifecycleEvent(
-        RuntimeLifecycleScenario.normal,
-        'root-ready',
-        createdLifecycle.generation,
-      );
-      MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootReady);
-      await _expectResponse(createdLifecycle);
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
       await closed.future;
     } finally {
@@ -2690,36 +2841,21 @@ final class TerminalApplication {
         RuntimeDiagnosticPhase.shutdownStarted,
       );
       await applicationSubscription?.cancel();
-      for (final StreamSubscription<WindowEvent> subscription
-          in windowSubscriptions.values.toList(growable: false)) {
-        await subscription.cancel();
-      }
-      windowSubscriptions.clear();
-      await palettePresenter?.dispose();
-      await menuProjection?.dispose();
-      actionCoordinator?.dispose();
-      for (final _TerminalHierarchyProductPane owner in owners.values.toList(
-        growable: false,
-      )) {
-        await owner.cancelTextInput();
-      }
-      hierarchy?.dispose();
-      paneWorkScheduler.dispose();
+      applicationSubscription = null;
+      await disposeProductResources();
       final TerminalPaneOwnerShutdownResult shutdown = await state.shutdown();
       for (final TerminalPaneSessionShutdownResult session
           in shutdown.sessions) {
         stdout.writeln(session.machineLine());
       }
       stdout.writeln(shutdown.machineLine());
-      if (!lifecycleWasShutDown) {
-        await lifecycle?.shutdown();
-        lifecycleWasShutDown = true;
-      }
       final Object? error = asynchronousError;
       if (error != null && !closed.isCompleted) {
         Error.throwWithStackTrace(error, asynchronousStackTrace!);
       }
-      await application.terminate().timeout(_hostTerminationTimeout);
+      if (!application.isTerminated) {
+        await application.terminate().timeout(_hostTerminationTimeout);
+      }
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
     }
   }

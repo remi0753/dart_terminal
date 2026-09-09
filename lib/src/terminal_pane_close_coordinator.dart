@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'terminal_application_state.dart';
 import 'terminal_pane.dart';
+
+typedef TerminalPanePreRemovalCallback = FutureOr<void> Function(PaneId paneId);
 
 enum TerminalPaneCloseDisposition {
   confirmationRequired,
@@ -106,13 +110,16 @@ final class TerminalPaneCloseResult {
 final class TerminalPaneCloseCoordinator {
   TerminalPaneCloseCoordinator({
     required TerminalApplicationState state,
+    TerminalPanePreRemovalCallback? onBeforePaneRemoved,
     void Function()? onHierarchyChanged,
   }) : _state = state,
+       _onBeforePaneRemoved = onBeforePaneRemoved,
        _onHierarchyChanged = onHierarchyChanged;
 
   static const int maximumOperationId = 0x7fffffffffffffff;
 
   final TerminalApplicationState _state;
+  final TerminalPanePreRemovalCallback? _onBeforePaneRemoved;
   final void Function()? _onHierarchyChanged;
 
   TerminalPaneCloseConfirmation? _pendingConfirmation;
@@ -228,6 +235,7 @@ final class TerminalPaneCloseCoordinator {
     }
     _removalInProgress = true;
     try {
+      await _onBeforePaneRemoved?.call(paneId);
       final TerminalPaneRemovalResult removal = await _state.removePane(paneId);
       _onHierarchyChanged?.call();
       return TerminalPaneCloseResult.removed(removal);

@@ -358,8 +358,25 @@ Future<void> _testPaneCloseCoordinator() async {
   sessions[2].processDisposition =
       TerminalPaneProcessDisposition.foregroundProcess;
   var hierarchyChanges = 0;
+  final List<PaneId> preRemovedPaneIds = <PaneId>[];
+  final Map<PaneId, _StateFakeSession> sessionByPaneId =
+      <PaneId, _StateFakeSession>{
+        first.id: sessions[0],
+        second.id: sessions[1],
+        third.id: sessions[2],
+        fourth.id: sessions[3],
+        fifth.id: sessions[4],
+      };
   final TerminalPaneCloseCoordinator coordinator = TerminalPaneCloseCoordinator(
     state: state,
+    onBeforePaneRemoved: (PaneId paneId) async {
+      _expect(
+        sessionByPaneId[paneId]!.shutdownCount == 0,
+        'pre-removal callback runs before session shutdown',
+      );
+      await Future<void>.delayed(Duration.zero);
+      preRemovedPaneIds.add(paneId);
+    },
     onHierarchyChanged: () => hierarchyChanges++,
   );
 
@@ -415,6 +432,7 @@ Future<void> _testPaneCloseCoordinator() async {
         state.paneCount == 4 &&
         firstTab.focusedPaneId == second.id &&
         sessions[2].shutdownCount == 1 &&
+        preRemovedPaneIds.join(',') == '${third.id}' &&
         hierarchyChanges == 1,
     'repeating the exact focused request confirms one nested split removal',
   );
@@ -491,6 +509,8 @@ Future<void> _testPaneCloseCoordinator() async {
             TerminalSessionShutdownDisposition.failed &&
         state.paneCount == 0 &&
         state.windowCount == 0 &&
+        preRemovedPaneIds.join(',') ==
+            '${third.id},${second.id},${fourth.id},${fifth.id},${first.id}' &&
         hierarchyChanges == 5 &&
         (await coordinator.requestClose()).disposition ==
             TerminalPaneCloseDisposition.noTarget &&

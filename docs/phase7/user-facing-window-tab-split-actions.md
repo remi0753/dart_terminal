@@ -233,3 +233,50 @@ to confirm the next target.
   focus-target provider, avoiding an unnecessary public API break. Regenerated
   the pinned evidence and repeated `make test`; formatting remained unchanged,
   analysis reported no issues, and the complete runner passed again.
+- 2026-09-09: after commit `9f7e0e1`, reread the roadmap and began the native
+  lifecycle subtask. The existing pane-close coordinator currently shuts down
+  the session before its synchronous hierarchy callback, but the product's
+  native pane adapter requires its asynchronous text-input subscription to be
+  cancelled before reconciliation disposes that adapter. The selected change
+  is an optional terminal-generic pre-removal callback on the close coordinator;
+  the ordinary product supplies cancellation, while existing callers retain
+  unchanged behavior. No terminal policy is added to `dart_appkit`.
+- 2026-09-09: connected Close Window and native close requests to the focused
+  pane-close transaction. Confirmation-required panes retain their existing
+  terminal overlay and require the repeated identity-bound close; admitted
+  removal awaits that pane's text-input cancellation, shuts down its session,
+  collapses logical tab/window state, then reconciles and releases native
+  resources. Non-live shell exits enter the same path instead of leaving dead
+  panes in the hierarchy.
+- 2026-09-09: connected menu Quit and native application termination to the
+  aggregate quit coordinator. Accepted teardown cancels window/menu/palette
+  routes, cancels every remaining text-input subscription, disposes hierarchy
+  and the shared scheduler, stops the runtime worker, shuts down every session,
+  and only then permits/programmatically performs native termination. A
+  confirmation-required request remains pending under the existing repeated
+  action contract.
+- 2026-09-09: closing the last logical window no longer quits the macOS app.
+  A Dock reopen with no visible windows presents retained windows or dispatches
+  the same New Window product action when none remain. The command palette's
+  dynamic focus target is now nullable during this valid zero-window state;
+  the existing exported non-null getters remain and fail explicitly only when
+  queried without a target.
+- 2026-09-09: focused application-state coverage proves the asynchronous
+  pre-removal callback completes before each session shutdown across split,
+  tab, window, and final-pane collapse. Application-state, native-hierarchy,
+  and command-palette focused tests all passed with exit 0; static analysis
+  reported no issues apart from the already documented sandbox analytics
+  timestamp failure after completion.
+- 2026-09-09: native close can run outside the menu action dispatcher, so a
+  concurrent creation action could otherwise be advertised while logical
+  removal is in flight. Added an optional product-supplied mutation-admission
+  predicate to the terminal-only hierarchy coordinator. The ordinary product
+  disables creation/navigation mutation during pane removal or aggregate Quit;
+  coordinator coverage proves the external gate without changing its default
+  behavior for other callers. The focused test passed with exit 0.
+- 2026-09-09: regenerated the Phase 7 evidence after the lifecycle changes.
+  Complete `make test` passed all freshness/generator checks, formatting of 211
+  files with zero changes, whole-package analysis with no issues, native build
+  hooks, and the aggregate Dart runner. `dart_appkit` remains unchanged. This
+  closes the native lifecycle/per-pane close/application Quit subtask; the next
+  task is the gated user-driven Developer JIT and Release AOT acceptance.

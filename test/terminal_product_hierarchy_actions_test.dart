@@ -130,6 +130,15 @@ Future<void> _testSerializationFailureAndDisposal() async {
     'failed pane start rolls logical state back and reconciles cleanup once',
   );
 
+  harness.mutationAllowed = false;
+  _expect(
+    dispatcher
+        .snapshotsForMenu(TerminalActionMenu.shell)
+        .every((snapshot) => !snapshot.isEnabled),
+    'an external close/quit transaction gates hierarchy mutations',
+  );
+  harness.mutationAllowed = true;
+
   harness.coordinator.dispose();
   _expect(
     dispatcher
@@ -178,12 +187,14 @@ final class _Harness {
         state: state,
         configurationFactory: configuration,
         reconcile: () => reconcileCount++,
+        canMutate: () => mutationAllowed,
         onChanged: () => changedCount++,
       );
   int reconcileCount = 0;
   int changedCount = 0;
   Completer<void>? nextStartBarrier;
   bool failNextStart = false;
+  bool mutationAllowed = true;
 
   Future<TerminalWindowState> createInitialWindow() async {
     final TerminalWindowState window = await state.createWindow(
