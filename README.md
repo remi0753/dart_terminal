@@ -373,6 +373,14 @@ Closeでforeground確認とnon-live即時closeを、実native terminationの拒�
 aggregate menu Quitでatomic teardownを通し、4つのPTYと全native resourceの回収を
 Developer JIT/Release AOTの両runtimeで検証します。4つのsurfaceは1 pane 1 pending、
 4 work/4 ms turnの共有round-robin schedulerを使い、個別timerによる競合を避けます。
+同じsuiteは1 paneから正確に100 MiBを出力している間に別paneの入力を既存のtext-input
+routeからPTY、parser、Metal受理まで測り、同一launchのidle baselineの2倍以内、flood
+完了前の応答、schedulerのyield増加、pending/work/frame上限を両runtimeで要求します。
+terminal parser向けPTYは4 KiB/0のread high/low watermark、4 KiB delivery、1 Dart
+event-loop turnあたり2 callbackを選びます。同期consumerの完了後にACKし、2 callback
+ごとに次のturnへ譲るため、1つのflood portがready timerや別PTYを飢餓状態にしません。
+このturn budgetは`dart_appkit`の汎用per-command設定で、既定値0は従来どおり即時ACKです。
+他アプリは既定動作を保つか、用途に応じて1〜8を独立に選択できます。
 restoration suiteは実fullscreen enter/exit後にdisplay migrationを適用し、
 2 tab/4 paneをcontent-freeなversioned stateへ保存してfresh ownerで再生成します。
 重複Dock reopenのcoalescing、cwd継承、2世代8 PTYとMetal/text-input/native handle/

@@ -958,7 +958,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] application-owned per-pane close transaction と hierarchy collapse
   - [x] aggregate app quit confirmation と deferred native lifecycle coordination
   - [x] M1 両 runtime 回帰受け入れと親項目完了判定
-- [ ] multiple pane の scheduling/resource budget
+- [x] multiple pane の scheduling/resource budget
   （分割と完了条件は
   [`docs/phase7/multiple-pane-scheduling-resource-budget.md`](docs/phase7/multiple-pane-scheduling-resource-budget.md)
   を参照して順に実施する）
@@ -969,7 +969,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] full-matrix Release AOT resource auto-close sequencing 回帰
     （[`docs/phase7/runtime-resource-close-sequence-blocker.md`](docs/phase7/runtime-resource-close-sequence-blocker.md)
     を参照して実施する）
-  - [ ] cross-pane flood/input 両 runtime 回帰受け入れと親項目完了判定
+  - [x] cross-pane flood/input 両 runtime 回帰受け入れと親項目完了判定
 - [ ] AppKit unit、integration、UI tests
 
 終了条件:

@@ -1,6 +1,6 @@
 # Phase 7 — multiple-pane scheduling and resource budget
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-08
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 7 `multiple pane の scheduling/resource budget`
@@ -571,3 +571,22 @@ queues without bound nor starves input and presentation in another pane.
   26156/31536 microseconds (0.830x) and Release AOT 20491/25153 microseconds
   (0.815x). This recovery child is complete; final evidence and parent
   completion are again the first unfinished work.
+- 2026-09-09: final evidence uses the corrected complete arm64 matrix rather
+  than any earlier isolated sample. Developer JIT delivered the separate-pane
+  input through PTY, parser, forced damage, and Metal acceptance in 26156
+  microseconds against a 31536-microsecond idle baseline (0.830x), with 284
+  scheduler yields. Release AOT delivered it in 20491 versus 25153 microseconds
+  (0.815x), with 166 yields. Both observed input before the exact 100 MiB flood
+  marker and retained four registrations, zero final pending work, bounded turn
+  work/newest-frame state, four clean PTYs and Metal surfaces, zero text-input
+  and native handles, and one reaped worker.
+- README and feature evidence now record the terminal's explicit 4 KiB and two-
+  callback scheduling selection while preserving the reusable package's zero
+  default and caller-selectable one-through-eight budget. All ordered children,
+  the six acceptance conditions, and the parent completion criteria are met;
+  no untracked scheduling/resource work remains.
+- After regenerating compatibility coverage, final `make test` passed all
+  freshness and compatibility gates, formatting of 207 Dart files,
+  whole-project analysis, and the aggregate runner. Final
+  `make runtime-source-check` passed with 392 tracked files, zero product
+  native sources, and one reviewed test-native source.
