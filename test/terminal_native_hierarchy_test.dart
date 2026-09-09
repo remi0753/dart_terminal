@@ -6,6 +6,7 @@ import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_appkit/src/api.dart' show attachApplicationForTesting;
 import 'package:dart_appkit/src/native/native_bindings.dart';
 import 'package:dart_terminal/dart_terminal.dart';
+import 'package:dart_terminal/src/terminal_appkit_policy.dart';
 
 Future<void> main() => runTerminalNativeHierarchyTests();
 
@@ -130,7 +131,10 @@ Future<void> _testRepeatedMultiWindowRestoredProjection() async {
         TerminalNativeHierarchyAdapter(
           state: state,
           paneResourcesFactory: (TerminalPane pane) =>
-              TerminalNativePaneResources(paneId: pane.id, view: View()),
+              TerminalNativePaneResources(
+                paneId: pane.id,
+                view: View(configuration: terminalBaseViewConfiguration),
+              ),
           windowFrame: const Rect.fromLTWH(80, 70, 760, 520),
           cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
           dividerThickness: 1,
@@ -268,7 +272,7 @@ Future<void> _testNativeTerminationReplyAndHierarchyCleanup() async {
         paneResourcesFactory: (TerminalPane pane) =>
             TerminalNativePaneResources(
               paneId: pane.id,
-              view: View(),
+              view: View(configuration: terminalBaseViewConfiguration),
               onDisposeAdapters: () => lifecycle.add('native'),
             ),
         windowFrame: const Rect.fromLTWH(40, 50, 800, 600),
@@ -390,7 +394,7 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
   final TerminalNativeHierarchyAdapter adapter = TerminalNativeHierarchyAdapter(
     state: state,
     paneResourcesFactory: (TerminalPane pane) {
-      final View view = View();
+      final View view = View(configuration: terminalBaseViewConfiguration);
       return TerminalNativePaneResources(
         paneId: pane.id,
         view: view,
@@ -457,7 +461,7 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
   final TerminalNativePaneResources secondResources = adapter.resourcesForPane(
     secondPane.id,
   )!;
-  final SplitView firstRoot = adapter.splitViewForNode(firstRootId)!;
+  final TwoPaneSplitView firstRoot = adapter.splitViewForNode(firstRootId)!;
   final int firstRootHandle = bindings.handleFor(firstRoot);
   final int secondPaneViewHandle = bindings.handleFor(secondResources.view);
   final int selectedWindowHandle = bindings.handleFor(
@@ -503,6 +507,17 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
         bindings.windowTitles[selectedWindowHandle] == 'Pinned second tab' &&
         bindings.windowRepresentedFilePaths[selectedWindowHandle] ==
             '/private/tmp/second' &&
+        bindings.windowStyleMasks.values.every(
+          (int mask) => mask == dartAppKitDefaultWindowStyleMask,
+        ) &&
+        bindings.viewConfigurations.values.every(
+          (NativeViewConfiguration configuration) =>
+              configuration.isCompatibilityDefault,
+        ) &&
+        bindings.windowTabAccessoryShapes[selectedWindowHandle] ==
+            dartAppKitWindowTabAccessoryShapeEllipse &&
+        bindings.windowTabAccessoryExtents[selectedWindowHandle]![0] == 8 &&
+        bindings.windowTabAccessoryExtents[selectedWindowHandle]![1] == 8 &&
         secondTabColor[0] == TerminalTabColor.purpleMarker.red / 255 &&
         secondTabColor[1] == TerminalTabColor.purpleMarker.green / 255 &&
         secondTabColor[2] == TerminalTabColor.purpleMarker.blue / 255 &&
@@ -767,7 +782,7 @@ Future<void> _testNativeHierarchyProjectionAndLifecycle() async {
     'collapsed split disposes pane adapters, then split, then removed pane view',
   );
 
-  final SplitView secondRoot = adapter.splitViews.values.single;
+  final TwoPaneSplitView secondRoot = adapter.splitViews.values.single;
   final Window removedTabWindow = adapter.windowForTab(secondTab.id)!;
   await state.removePane(fourthPane.id);
   adapter.reconcile();
@@ -859,7 +874,9 @@ Future<void> _testRestorationPersistenceAndReopenLifecycle() async {
         }) => TerminalNativeHierarchyAdapter(
           state: state,
           paneResourcesFactory: (TerminalPane pane) {
-            final View view = View();
+            final View view = View(
+              configuration: terminalBaseViewConfiguration,
+            );
             return TerminalNativePaneResources(
               paneId: pane.id,
               view: view,
@@ -1272,12 +1289,18 @@ final class _HierarchyNativeBindings implements NativeBindings {
   final Map<Object, int> _handles = Map<Object, int>.identity();
   final Map<int, String> windowTitles = <int, String>{};
   final Map<int, Rect> windowFrames = <int, Rect>{};
+  final Map<int, int> windowStyleMasks = <int, int>{};
   final Map<int, bool> windowFullscreenRequests = <int, bool>{};
   final Map<int, int> windowShowCounts = <int, int>{};
   final Map<int, int> windowSelectCounts = <int, int>{};
   final Map<int, int> windowFirstResponderCounts = <int, int>{};
   final Map<int, String> windowRepresentedFilePaths = <int, String>{};
   final Map<int, List<double>> windowTabColors = <int, List<double>>{};
+  final Map<int, int> windowTabAccessoryShapes = <int, int>{};
+  final Map<int, List<double>> windowTabAccessoryExtents =
+      <int, List<double>>{};
+  final Map<int, NativeViewConfiguration> viewConfigurations =
+      <int, NativeViewConfiguration>{};
   final Map<int, int> contentViews = <int, int>{};
   final Map<int, int> windowContentViewSetCounts = <int, int>{};
   final Map<int, int> firstResponders = <int, int>{};
@@ -1344,10 +1367,12 @@ final class _HierarchyNativeBindings implements NativeBindings {
     required double width,
     required double height,
     required String title,
+    required int styleMask,
   }) {
     final NativeValueResult<int> result = _create('window');
     windowTitles[result.value!] = title;
     windowFrames[result.value!] = Rect.fromLTWH(x, y, width, height);
+    windowStyleMasks[result.value!] = styleMask;
     return result;
   }
 
@@ -1393,18 +1418,25 @@ final class _HierarchyNativeBindings implements NativeBindings {
   }
 
   @override
-  NativeCallResult windowSetTabColor({
+  NativeCallResult windowSetTabAccessory({
     required int handle,
-    required bool hasColor,
+    required bool hasAccessory,
+    required int shape,
+    required double width,
+    required double height,
     required double red,
     required double green,
     required double blue,
     required double alpha,
   }) {
-    if (hasColor) {
+    if (hasAccessory) {
       windowTabColors[handle] = <double>[red, green, blue, alpha];
+      windowTabAccessoryShapes[handle] = shape;
+      windowTabAccessoryExtents[handle] = <double>[width, height];
     } else {
       windowTabColors.remove(handle);
+      windowTabAccessoryShapes.remove(handle);
+      windowTabAccessoryExtents.remove(handle);
     }
     return const NativeCallResult.success();
   }
@@ -1492,7 +1524,11 @@ final class _HierarchyNativeBindings implements NativeBindings {
   }
 
   @override
-  NativeValueResult<int> viewCreate() => _create('view');
+  NativeValueResult<int> viewCreate(NativeViewConfiguration configuration) {
+    final NativeValueResult<int> result = _create('view');
+    viewConfigurations[result.value!] = configuration;
+    return result;
+  }
 
   @override
   NativeValueResult<int> splitViewCreate(int axis) {
@@ -1548,12 +1584,16 @@ final class _HierarchyNativeBindings implements NativeBindings {
     objects.remove(handle);
     windowTitles.remove(handle);
     windowFrames.remove(handle);
+    windowStyleMasks.remove(handle);
     windowFullscreenRequests.remove(handle);
     windowShowCounts.remove(handle);
     windowSelectCounts.remove(handle);
     windowFirstResponderCounts.remove(handle);
     windowRepresentedFilePaths.remove(handle);
     windowTabColors.remove(handle);
+    windowTabAccessoryShapes.remove(handle);
+    windowTabAccessoryExtents.remove(handle);
+    viewConfigurations.remove(handle);
     contentViews.remove(handle);
     firstResponders.remove(handle);
     splitViewAxes.remove(handle);

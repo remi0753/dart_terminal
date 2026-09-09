@@ -1,5 +1,6 @@
 import 'package:dart_appkit/dart_appkit.dart';
 
+import '../terminal_appkit_policy.dart';
 import '../terminal_core/terminal_hyperlink.dart';
 import '../terminal_core/terminal_screen_set.dart';
 
@@ -164,7 +165,10 @@ final class TerminalHyperlinkInteractionController {
             hyperlinkId,
           );
         }
-        final AllowedExternalUrl? target = AllowedExternalUrl.tryParse(hit.uri);
+        final AllowedExternalUrl? target = AllowedExternalUrl.tryParse(
+          hit.uri,
+          policy: terminalExternalUrlPolicy,
+        );
         if (target == null) {
           onNotice(TerminalHyperlinkNoticeKind.blocked);
           return TerminalHyperlinkRouteResult.consumed(

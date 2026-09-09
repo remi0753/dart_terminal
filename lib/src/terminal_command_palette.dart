@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dart_appkit/dart_appkit.dart';
 
 import 'terminal_action_registry.dart';
+import 'terminal_appkit_policy.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_key_event.dart';
 
@@ -182,13 +183,16 @@ final class TerminalCommandPalettePresenter {
       existing.show();
       return;
     }
-    final TextView view = TextView();
+    final TextView view = TextView(
+      configuration: terminalCommandPaletteTextViewConfiguration,
+    );
     Window? window;
     StreamSubscription<WindowEvent>? subscription;
     try {
       window = Window(
         frame: const Rect.fromLTWH(220, 180, 560, 420),
         title: 'Command Palette',
+        configuration: terminalWindowConfiguration,
       )..contentView = view;
       window
         ..keyEventRouting = KeyEventRouting.dartOnly

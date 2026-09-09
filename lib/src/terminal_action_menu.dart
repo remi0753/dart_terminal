@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dart_appkit/dart_appkit.dart';
 
 import 'terminal_action_registry.dart';
+import 'terminal_appkit_policy.dart';
 
 typedef TerminalMenuEnabledReader = bool Function();
 typedef TerminalMenuEnabledWriter = void Function(bool value);
@@ -146,12 +147,16 @@ final class TerminalAppKitMenuProjection {
         return item;
       }
 
-      final Menu mainMenu = ownMenu(Menu());
+      final Menu mainMenu = ownMenu(
+        Menu(configuration: terminalMenuConfiguration),
+      );
       final Map<TerminalActionMenu, Menu> actionMenus =
           <TerminalActionMenu, Menu>{};
       for (final TerminalActionMenu section in TerminalActionMenu.values) {
         final String title = _menuTitle(section);
-        final Menu menu = ownMenu(Menu(title: title));
+        final Menu menu = ownMenu(
+          Menu(title: title, configuration: terminalMenuConfiguration),
+        );
         actionMenus[section] = menu;
         mainMenu.addItem(ownItem(MenuItem(title: title)..submenu = menu));
       }

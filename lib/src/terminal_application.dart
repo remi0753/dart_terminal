@@ -12,6 +12,7 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 import 'runtime_lifecycle.dart';
 import 'terminal_action_menu.dart';
 import 'terminal_action_registry.dart';
+import 'terminal_appkit_policy.dart';
 import 'terminal_application_quit_coordinator.dart';
 import 'terminal_application_state.dart';
 import 'terminal_command_palette.dart';
@@ -497,7 +498,9 @@ final class TerminalApplication {
     final PtyBackend ptyBackend = options.runtimePtyExitFaultInjection
         ? _ExitNotificationSuppressingPtyBackend(nativePtyBackend)
         : nativePtyBackend;
-    final AppKitApplication application = await AppKitApplication.attach();
+    final AppKitApplication application = await AppKitApplication.attach(
+      externalUrlPolicy: terminalExternalUrlPolicy,
+    );
     String? bundledTerminfoEntry;
     try {
       bundledTerminfoEntry = MacosRuntime.bundleResourcePath(
@@ -609,6 +612,7 @@ final class TerminalApplication {
           Window(
               frame: const Rect.fromLTWH(100, 90, 920, 580),
               title: _productWindowTitle,
+              configuration: terminalWindowConfiguration,
             )
             ..contentView = createdContentView
             ..keyEventRouting = KeyEventRouting.appKitOnly
@@ -718,11 +722,11 @@ final class TerminalApplication {
               createdWindow.representedFilePath =
                   presentation.representedFilePath;
             }
-            final WindowTabColor? tabColor = _windowTabColor(
+            final WindowTabAccessory? tabAccessory = terminalTabAccessory(
               presentation.color,
             );
-            if (createdWindow.tabColor != tabColor) {
-              createdWindow.tabColor = tabColor;
+            if (createdWindow.tabAccessory != tabAccessory) {
+              createdWindow.tabAccessory = tabAccessory;
             }
           }
           selectionOwner?.synchronize();
@@ -4463,8 +4467,8 @@ final class TerminalApplication {
         firstNativeTab.title == '__DT_HIERARCHY_LIVE_TITLE__' &&
             firstNativeTab.representedFilePath == '/private/tmp' &&
             secondNativeTab.title == 'Pinned hierarchy tab' &&
-            secondNativeTab.tabColor ==
-                _windowTabColor(TerminalTabColor.purpleMarker),
+            secondNativeTab.tabAccessory ==
+                terminalTabAccessory(TerminalTabColor.purpleMarker),
         'hierarchy presentation did not reach both retained native tabs',
       );
       _expectLifecycle(
@@ -4572,7 +4576,7 @@ final class TerminalApplication {
       _expectLifecycle(
         secondNativeTab.title == '__DT_HIERARCHY_DESCENDANT_TITLE__' &&
             secondNativeTab.representedFilePath == '/private/tmp' &&
-            secondNativeTab.tabColor == null,
+            secondNativeTab.tabAccessory == null,
         'hierarchy rename/color reset did not resume live session metadata',
       );
       stdout.writeln(
@@ -4607,7 +4611,7 @@ final class TerminalApplication {
         ..resizeSplit(firstTab.id, firstRootId, 0.65)
         ..setPaneZoom(firstTab.id, firstPaneId);
       createdHierarchy.reconcile();
-      final SplitView firstRoot = createdHierarchy.splitViewForNode(
+      final TwoPaneSplitView firstRoot = createdHierarchy.splitViewForNode(
         firstRootId,
       )!;
       _expectLifecycle(
@@ -5871,16 +5875,6 @@ final class TerminalApplication {
       '$expectedRepresentedFilePath',
     );
   }
-
-  static WindowTabColor? _windowTabColor(TerminalTabColor? color) =>
-      color == null
-      ? null
-      : WindowTabColor(
-          red: color.red / 255,
-          green: color.green / 255,
-          blue: color.blue / 255,
-          alpha: color.alpha / 255,
-        );
 
   static Rect _appKitWindowFrame(TerminalWindowFrame frame) =>
       Rect.fromLTWH(frame.left, frame.top, frame.width, frame.height);
@@ -8367,10 +8361,11 @@ final class TerminalApplication {
       View? temporaryView;
       Window? temporaryWindow;
       try {
-        temporaryView = View();
+        temporaryView = View(configuration: terminalBaseViewConfiguration);
         temporaryWindow = Window(
           frame: const Rect.fromLTWH(0, 0, 64, 32),
           title: 'Dart Terminal resource probe',
+          configuration: terminalWindowConfiguration,
         )..contentView = temporaryView;
         final int activeCount = application.debugLiveObjectCount;
         peak = activeCount > peak ? activeCount : peak;
@@ -8426,10 +8421,11 @@ final class TerminalApplication {
             Error.throwWithStackTrace(error, stackTrace);
           },
         );
-    final View view = View();
+    final View view = View(configuration: terminalBaseViewConfiguration);
     final Window window = Window(
       frame: const Rect.fromLTWH(0, 0, 64, 32),
       title: 'Dart Terminal shutdown fault probe',
+      configuration: terminalWindowConfiguration,
     )..contentView = view;
     final StreamSubscription<WindowEvent> windowEvents = window.events.listen((
       _,

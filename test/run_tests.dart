@@ -30,6 +30,7 @@ import 'terminal_accessibility_snapshot_test.dart';
 import 'terminal_action_menu_test.dart';
 import 'terminal_action_registry_test.dart';
 import 'terminal_appkit_key_adapter_test.dart';
+import 'terminal_appkit_policy_test.dart';
 import 'terminal_application_acceptance_test.dart';
 import 'terminal_application_evidence_test.dart';
 import 'terminal_application_matrix_test.dart';
@@ -137,6 +138,7 @@ Future<void> main() async {
   await runTerminalNativeHierarchyTests();
   runTerminalInputMatrixTests();
   runTerminalAppKitKeyAdapterTests();
+  runTerminalAppKitPolicyTests();
   runTerminalCompatibilityInventoryTests();
   runTerminalCompatibilityRegressionTests();
   runTerminalCompatibilitySurfaceTests();

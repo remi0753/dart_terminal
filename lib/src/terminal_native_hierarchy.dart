@@ -1,9 +1,9 @@
 import 'package:dart_appkit/dart_appkit.dart';
 
+import 'terminal_appkit_policy.dart';
 import 'terminal_application_state.dart';
 import 'terminal_pane.dart';
 import 'terminal_restoration.dart';
-import 'terminal_tab_metadata.dart';
 import 'terminal_tab_presentation.dart';
 
 typedef TerminalNativePaneLayoutCallback = void Function(
@@ -137,8 +137,8 @@ final class TerminalNativeHierarchyAdapter {
   final bool presentWindows;
 
   final Map<TerminalTabId, Window> _windows = <TerminalTabId, Window>{};
-  final Map<TerminalSplitNodeId, SplitView> _splitViews =
-      <TerminalSplitNodeId, SplitView>{};
+  final Map<TerminalSplitNodeId, TwoPaneSplitView> _splitViews =
+      <TerminalSplitNodeId, TwoPaneSplitView>{};
   final Map<PaneId, TerminalNativePaneResources> _paneResources =
       <PaneId, TerminalNativePaneResources>{};
   final Map<TerminalTabId, TerminalSplitLayoutSize> _tabSizes =
@@ -161,8 +161,8 @@ final class TerminalNativeHierarchyAdapter {
 
   Map<TerminalTabId, Window> get windows =>
       Map<TerminalTabId, Window>.unmodifiable(_windows);
-  Map<TerminalSplitNodeId, SplitView> get splitViews =>
-      Map<TerminalSplitNodeId, SplitView>.unmodifiable(_splitViews);
+  Map<TerminalSplitNodeId, TwoPaneSplitView> get splitViews =>
+      Map<TerminalSplitNodeId, TwoPaneSplitView>.unmodifiable(_splitViews);
   Map<PaneId, TerminalNativePaneResources> get paneResources =>
       Map<PaneId, TerminalNativePaneResources>.unmodifiable(_paneResources);
   Map<TerminalWindowId, TerminalWindowPlacement> get windowPlacements =>
@@ -172,7 +172,7 @@ final class TerminalNativeHierarchyAdapter {
 
   Window? windowForTab(TerminalTabId tabId) => _windows[tabId];
 
-  SplitView? splitViewForNode(TerminalSplitNodeId nodeId) =>
+  TwoPaneSplitView? splitViewForNode(TerminalSplitNodeId nodeId) =>
       _splitViews[nodeId];
 
   TerminalNativePaneResources? resourcesForPane(PaneId paneId) =>
@@ -295,8 +295,12 @@ final class TerminalNativeHierarchyAdapter {
         if (window.representedFilePath != presentation.representedFilePath) {
           window.representedFilePath = presentation.representedFilePath;
         }
-        final WindowTabColor? tabColor = _appKitColor(presentation.color);
-        if (window.tabColor != tabColor) window.tabColor = tabColor;
+        final WindowTabAccessory? tabAccessory = terminalTabAccessory(
+          presentation.color,
+        );
+        if (window.tabAccessory != tabAccessory) {
+          window.tabAccessory = tabAccessory;
+        }
       }
     }
   }
@@ -377,9 +381,14 @@ final class TerminalNativeHierarchyAdapter {
         final Rect nativeFrame = _appKitFrame(placement.windowedFrame);
         Window? window = _windows[entry.key];
         if (window == null) {
-          window = Window(frame: nativeFrame, title: presentation.title)
-            ..keyEventRouting = keyEventRouting
-            ..defersCloseRequests = defersCloseRequests;
+          window =
+              Window(
+                  frame: nativeFrame,
+                  title: presentation.title,
+                  configuration: terminalWindowConfiguration,
+                )
+                ..keyEventRouting = keyEventRouting
+                ..defersCloseRequests = defersCloseRequests;
           createdTabWindows.add(entry.key);
         } else if (window.title != presentation.title) {
           window.title = presentation.title;
@@ -390,15 +399,17 @@ final class TerminalNativeHierarchyAdapter {
         if (window.representedFilePath != presentation.representedFilePath) {
           window.representedFilePath = presentation.representedFilePath;
         }
-        final WindowTabColor? tabColor = _appKitColor(presentation.color);
-        if (window.tabColor != tabColor) {
-          window.tabColor = tabColor;
+        final WindowTabAccessory? tabAccessory = terminalTabAccessory(
+          presentation.color,
+        );
+        if (window.tabAccessory != tabAccessory) {
+          window.tabAccessory = tabAccessory;
         }
         nextWindows[entry.key] = window;
       }
 
-      final Map<TerminalSplitNodeId, SplitView> nextSplitViews =
-          <TerminalSplitNodeId, SplitView>{};
+      final Map<TerminalSplitNodeId, TwoPaneSplitView> nextSplitViews =
+          <TerminalSplitNodeId, TwoPaneSplitView>{};
       for (final MapEntry<TerminalTabId, TerminalTabState> entry
           in logicalTabs.entries) {
         final TerminalTabState tab = entry.value;
@@ -460,9 +471,9 @@ final class TerminalNativeHierarchyAdapter {
               )
               .map((entry) => entry.value)
               .toList(growable: false);
-      final List<SplitView> removedSplitViews = _splitViews.entries
+      final List<TwoPaneSplitView> removedSplitViews = _splitViews.entries
           .where(
-            (MapEntry<TerminalSplitNodeId, SplitView> entry) =>
+            (MapEntry<TerminalSplitNodeId, TwoPaneSplitView> entry) =>
                 !nextSplitViews.containsKey(entry.key),
           )
           .map((entry) => entry.value)
@@ -479,7 +490,7 @@ final class TerminalNativeHierarchyAdapter {
           in removedPaneResources.reversed) {
         resources._disposeAdapters();
       }
-      for (final SplitView split in removedSplitViews.reversed) {
+      for (final TwoPaneSplitView split in removedSplitViews.reversed) {
         if (!split.isDisposed) split.dispose();
       }
       for (final Window window in removedWindows.reversed) {
@@ -559,7 +570,7 @@ final class TerminalNativeHierarchyAdapter {
         in _paneResources.values.toList(growable: false).reversed) {
       resources._disposeAdapters();
     }
-    for (final SplitView split
+    for (final TwoPaneSplitView split
         in _splitViews.values.toList(growable: false).reversed) {
       if (!split.isDisposed) split.dispose();
     }
@@ -684,7 +695,7 @@ final class TerminalNativeHierarchyAdapter {
     PaneId? zoomedPaneId,
     TerminalSplitLayout layout,
     Map<PaneId, TerminalNativePaneResources> paneResources,
-    Map<TerminalSplitNodeId, SplitView> splitViews,
+    Map<TerminalSplitNodeId, TwoPaneSplitView> splitViews,
   ) => switch (node) {
     TerminalSplitLeaf() => paneResources[node.paneId]!.view,
     TerminalSplitBranch() => _buildBranch(
@@ -696,17 +707,18 @@ final class TerminalNativeHierarchyAdapter {
     ),
   };
 
-  SplitView _buildBranch(
+  TwoPaneSplitView _buildBranch(
     TerminalSplitBranch branch,
     PaneId? zoomedPaneId,
     TerminalSplitLayout layout,
     Map<PaneId, TerminalNativePaneResources> paneResources,
-    Map<TerminalSplitNodeId, SplitView> splitViews,
+    Map<TerminalSplitNodeId, TwoPaneSplitView> splitViews,
   ) {
     final SplitViewAxis axis = branch.axis == TerminalSplitAxis.horizontal
         ? SplitViewAxis.horizontal
         : SplitViewAxis.vertical;
-    final SplitView split = _splitViews[branch.id] ?? SplitView(axis: axis);
+    final TwoPaneSplitView split =
+        _splitViews[branch.id] ?? TwoPaneSplitView(axis: axis);
     if (split.axis != axis) {
       throw StateError('split ${branch.id} changed its native axis');
     }
@@ -814,15 +826,6 @@ final class TerminalNativeHierarchyAdapter {
     color: null,
     representedFilePath: null,
   );
-
-  static WindowTabColor? _appKitColor(TerminalTabColor? color) => color == null
-      ? null
-      : WindowTabColor(
-          red: color.red / 255,
-          green: color.green / 255,
-          blue: color.blue / 255,
-          alpha: color.alpha / 255,
-        );
 }
 
 final class _TerminalNativeMinimumSize {

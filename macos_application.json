@@ -7,6 +7,16 @@
     "version": "0.1.0",
     "minimumSystemVersion": "14.0"
   },
+  "runner": {
+    "activationPolicy": "regular",
+    "activateOnLaunch": true,
+    "terminateAfterLastWindowClosed": false,
+    "reopenHandled": true,
+    "messagePump": {
+      "maxMessagesPerTurn": 64,
+      "maxTimePerTurnMicros": 4000
+    }
+  },
   "dart": {"entrypoint": "bin/main.dart"},
   "dartHelpers": [
     {
