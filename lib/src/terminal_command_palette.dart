@@ -204,6 +204,17 @@ final class TerminalCommandPalettePresenter {
     return _close(restoreTerminalFocus: true, closeWindow: true);
   }
 
+  /// Refreshes availability after an external dispatcher transition.
+  ///
+  /// Opening the palette can itself be an action. Its first snapshot is then
+  /// captured while the dispatcher is busy, so the menu owner calls this once
+  /// that dispatch has completed.
+  void refresh() {
+    if (_isDisposed || !state.isOpen) return;
+    state.refresh();
+    _render();
+  }
+
   Future<void> dispose() {
     if (_isDisposed) {
       return _closingFuture ?? Future<void>.value();

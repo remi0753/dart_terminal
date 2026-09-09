@@ -5,7 +5,61 @@ Future<void> main() => runTerminalCommandPaletteTests();
 
 Future<void> runTerminalCommandPaletteTests() async {
   await _testEditingNavigationAndInvocation();
+  await _testRefreshAfterOpeningDispatch();
   await _testIgnoredDismissAndOverflow();
+}
+
+Future<void> _testRefreshAfterOpeningDispatch() async {
+  late final TerminalCommandPaletteState state;
+  final TerminalActionCatalog catalog = TerminalActionCatalog(
+    <TerminalActionDefinition>[
+      _definition(TerminalActionId.openCommandPalette, 'Command Palette'),
+      _definition(TerminalActionId.focusNextPane, 'Focus Next Pane'),
+      _definition(TerminalActionId.newTab, 'New Tab'),
+    ],
+  );
+  final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+    catalog: catalog,
+    registrations: <TerminalActionRegistration>[
+      TerminalActionRegistration(
+        id: TerminalActionId.openCommandPalette,
+        handler: () => state.open(),
+      ),
+      TerminalActionRegistration(
+        id: TerminalActionId.focusNextPane,
+        handler: () {},
+      ),
+    ],
+  );
+  state = TerminalCommandPaletteState(dispatcher);
+
+  final Future<TerminalActionDispatchResult> opening = dispatcher.dispatch(
+    TerminalActionId.openCommandPalette,
+  );
+  await Future<void>.delayed(Duration.zero);
+  _expect(
+    state.isOpen && state.results.every((result) => !result.isEnabled),
+    'opening action snapshots are conservatively disabled while dispatch runs',
+  );
+  _expect(
+    (await opening).disposition == TerminalActionDispatchDisposition.executed,
+    'palette opening action completes normally',
+  );
+  state.refresh();
+  _expect(
+    state.results
+            .singleWhere(
+              (result) =>
+                  result.definition.id == TerminalActionId.focusNextPane,
+            )
+            .isEnabled &&
+        !state.results
+            .singleWhere(
+              (result) => result.definition.id == TerminalActionId.newTab,
+            )
+            .isEnabled,
+    'post-dispatch refresh enables only implemented actions',
+  );
 }
 
 Future<void> _testEditingNavigationAndInvocation() async {

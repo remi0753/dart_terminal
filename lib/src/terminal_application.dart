@@ -1163,6 +1163,7 @@ final class TerminalApplication {
           }, event);
         },
         onDispatched: (TerminalActionDispatchResult result) {
+          installedCommandPalette.refresh();
           if (result.disposition == TerminalActionDispatchDisposition.failed &&
               !closed.isCompleted) {
             closed.completeError(result.error!, result.stackTrace!);
@@ -3350,6 +3351,7 @@ final class TerminalApplication {
             application: application,
             dispatcher: hierarchyActionDispatcher,
             onDispatched: (TerminalActionDispatchResult result) {
+              hierarchyPalette.refresh();
               if (result.disposition ==
                   TerminalActionDispatchDisposition.failed) {
                 recordAsynchronousError(result.error!, result.stackTrace!);
@@ -6572,12 +6574,22 @@ final class TerminalApplication {
         openDeadline.elapsed < const Duration(seconds: 2)) {
       await Future<void>.delayed(const Duration(milliseconds: 5));
     }
+    while ((presenter.renderedText ?? '').contains(
+          'Focus Next Pane  — Unavailable',
+        ) &&
+        openDeadline.elapsed < const Duration(seconds: 2)) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
     final Window? paletteWindow = presenter.activeWindow;
     _expectLifecycle(
       presenter.isOpen &&
           paletteWindow != null &&
           application.debugLiveObjectCount == baselineHandles + 2 &&
-          (presenter.renderedText ?? '').contains('Command Palette'),
+          (presenter.renderedText ?? '').contains('Command Palette') &&
+          (presenter.renderedText ?? '').contains('Focus Next Pane') &&
+          !(presenter.renderedText ?? '').contains(
+            'Focus Next Pane  — Unavailable',
+          ),
       'command palette did not own exactly one native window and text view',
     );
     _injectKeyEventForTesting(
