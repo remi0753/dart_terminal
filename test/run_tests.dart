@@ -40,6 +40,7 @@ import 'terminal_compatibility_inventory_test.dart';
 import 'terminal_compatibility_regression_coverage_test.dart';
 import 'terminal_compatibility_regressions_test.dart';
 import 'terminal_compatibility_surface_test.dart';
+import 'terminal_config_test.dart';
 import 'terminal_core_test.dart';
 import 'terminal_damage_copy_test.dart';
 import 'terminal_damage_test.dart';
@@ -143,6 +144,7 @@ Future<void> main() async {
   runTerminalCompatibilityRegressionTests();
   runTerminalCompatibilitySurfaceTests();
   await runTerminalCommandPaletteTests();
+  runTerminalConfigTests();
   runTerminalKeyBindingTests();
   runTerminalKeyEncoderTests();
   runTerminalMouseEncoderTests();
@@ -1178,7 +1180,7 @@ TerminalOptions _parseOptions(
   Map<String, String>? environment,
 }) => TerminalOptions.parse(
   arguments,
-  environment: environment,
+  environment: environment ?? const <String, String>{},
   runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
     executable: '/usr/bin/true',
   ),

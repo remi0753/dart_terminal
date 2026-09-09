@@ -16,6 +16,7 @@ import 'terminal_appkit_policy.dart';
 import 'terminal_application_quit_coordinator.dart';
 import 'terminal_application_state.dart';
 import 'terminal_command_palette.dart';
+import 'terminal_config.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
 import 'terminal_core/terminal_reply.dart';
@@ -54,6 +55,8 @@ const String terminalUsage = '''
 Usage: Dart Terminal [application-options]
 
 Application options:
+  --config=PATH              Read this configuration file.
+  --no-config                Do not read a configuration file.
   --working-directory=PATH   Initial command working directory.
   --auto-close-after=SECONDS Close automatically (for smoke testing).
 ''';
@@ -103,14 +106,26 @@ final class TerminalOptions {
     this.runtimeLifecycleScenario = RuntimeLifecycleScenario.normal,
     this.runtimeWorkerCommand =
         const RuntimeLifecycleWorkerCommand.unconfigured(),
+    this.effectiveConfiguration,
+    this.configurationDiagnostics = const <TerminalConfigDiagnostic>[],
   });
 
   factory TerminalOptions.parse(
     List<String> arguments, {
     Map<String, String>? environment,
     RuntimeLifecycleWorkerCommand? runtimeWorkerCommand,
+    TerminalConfigFileSystem? configFileSystem,
+    String? currentDirectory,
   }) {
-    String? initialWorkingDirectory;
+    final TerminalConfigResolution configuration =
+        TerminalConfigLoader(fileSystem: configFileSystem).resolve(
+          arguments,
+          environment: environment,
+          currentDirectory: currentDirectory,
+        );
+    final String? initialWorkingDirectory = configuration.snapshot.value(
+      TerminalProductConfigSchema.workingDirectory,
+    );
     Duration? autoCloseAfter;
     var runtimeResourceStress = false;
     var runtimeShutdownFaultInjection = false;
@@ -122,8 +137,7 @@ final class TerminalOptions {
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
-    for (final String argument in arguments) {
-      const String workingDirectoryPrefix = '--working-directory=';
+    for (final String argument in configuration.remainingArguments) {
       const String autoClosePrefix = '--auto-close-after=';
       const String lifecyclePrefix = '--runtime-lifecycle-scenario=';
       const String shellExitTestPrefix = '--runtime-shell-exit-test=';
@@ -197,19 +211,6 @@ final class TerminalOptions {
           );
         }
         runtimeRestorationTest = true;
-        continue;
-      }
-      if (argument.startsWith(workingDirectoryPrefix)) {
-        if (initialWorkingDirectory != null) {
-          throw const FormatException(
-            '--working-directory may only be supplied once',
-          );
-        }
-        final String value = argument.substring(workingDirectoryPrefix.length);
-        if (value.isEmpty) {
-          throw const FormatException('--working-directory requires a path');
-        }
-        initialWorkingDirectory = value;
         continue;
       }
       if (argument.startsWith(autoClosePrefix)) {
@@ -462,6 +463,8 @@ final class TerminalOptions {
           RuntimeLifecycleWorkerCommand(
             executable: MacosRuntime.bundleHelperPath(_runtimeWorkerName),
           ),
+      effectiveConfiguration: configuration.snapshot,
+      configurationDiagnostics: configuration.snapshot.diagnostics,
     );
   }
 
@@ -479,6 +482,8 @@ final class TerminalOptions {
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
   final RuntimeLifecycleScenario runtimeLifecycleScenario;
   final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
+  final TerminalConfigSnapshot? effectiveConfiguration;
+  final List<TerminalConfigDiagnostic> configurationDiagnostics;
 }
 
 final class TerminalApplication {

@@ -998,7 +998,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 目的: zero-config と高度な customization を両立する。
 
-- [ ] typed config schema と diagnostics
+- [x] typed config schema と diagnostics
 - [ ] theme/palette/font/window/input/scrollback options
 - [ ] declarative keybind と action reference generation
 - [ ] safe reload、per-option live/new-session policy

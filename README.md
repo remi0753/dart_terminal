@@ -225,6 +225,30 @@ make RUNTIME_ARCH=arm64 developer-jit-run \
 make RUNTIME_ARCH=arm64 developer-jit-integration
 ```
 
+## Configuration
+
+設定ファイルがなくても従来どおり起動します。既定では
+`$XDG_CONFIG_HOME/dart-terminal/config` を使用し、`XDG_CONFIG_HOME` が未指定なら
+`~/Library/Application Support/Dart Terminal/config` を探索します。存在しない既定ファイルは
+エラーにしません。別のファイルを使う場合は `--config=PATH`、設定ファイルを一切読まない
+場合は `--no-config` を指定します。
+
+設定はUTF-8の`key = value`形式です。空行と`#`以降のコメントを使用でき、空白や`#`を含む
+値はdouble quoteで囲めます。`include`の相対pathは、それを記述した設定ファイルを基準に
+解決します。include先を先に適用し、include元、command lineの順に上書きします。
+
+```text
+include = shared.conf
+working-directory = "/Users/example/Terminal Work"
+```
+
+現在のschemaが公開する設定項目は`working-directory`です。theme、font、window、input、
+scrollback、keybind等はPhase 8の後続タスクで同じtyped schemaへ追加します。
+unknown key、不正な値、読めない明示ファイル、include cycle等はpath、line、column、安定した
+diagnostic code、可能な場合は修正案とともに標準エラーへ表示します。有効な最後の値または
+schema defaultへ復旧して起動を続けます。一方、command line自体の不正やintegration専用
+fault optionのgate違反は従来どおりusage errorです。
+
 Developer JIT は application Kernel、自己完結 worker helper、および未改変の
 JIT Engine を含む開発専用 bundle です。成果物は
 `build/runtime/<architecture>/developer-jit/DartTerminal.app` に作られ、

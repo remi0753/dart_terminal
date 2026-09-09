@@ -13,6 +13,10 @@ void main(List<String> arguments) {
   MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStarting);
   try {
     final TerminalOptions options = TerminalOptions.parse(arguments);
+    for (final TerminalConfigDiagnostic diagnostic
+        in options.configurationDiagnostics) {
+      stderr.writeln(diagnostic.format());
+    }
     if (options.runtimeLifecycleScenario ==
         RuntimeLifecycleScenario.rootStartupFailure) {
       stdout.writeln(

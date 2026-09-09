@@ -183,8 +183,8 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 
 | ID | parity unit / acceptance | 優先度 | Phase | pinned Ghostty evidence | 現在 |
 | --- | --- | --- | --- | --- | --- |
-| CFG-01 | typed schema と default/file/CLI priority。zero-config default | P0 | 8 | `G:src/config/Config.zig`, `G:src/config/file_load.zig` | 起動引数2個のみ |
-| CFG-02 | location/include、diagnostic file/line/column、invalid config で起動を破壊しない | P0 | 8 | `G:src/config/file_load.zig`, `ErrorList.zig` | 未実装 |
+| CFG-01 | typed schema と default/file/CLI priority。zero-config default | P0 | 8 | `G:src/config/Config.zig`, `G:src/config/file_load.zig` | immutable typed schema、winner provenance、default < include先 < include元 < CLIの決定的priorityを実装。zero-configは従来値を保ち、`working-directory`を最初のschema optionとして接続 |
+| CFG-02 | location/include、diagnostic file/line/column、invalid config で起動を破壊しない | P0 | 8 | `G:src/config/file_load.zig`, `ErrorList.zig` | XDG/macOS既定location、明示`--config`/`--no-config`、relative include、cycle/depth/file/byte/line/assignment/diagnostic上限を実装。UTF-8・構文・unknown key・不正値・read失敗をfile/line/column/code/修正案で報告し、最後の有効値またはdefaultで起動継続 |
 | CFG-03 | palette/font/padding/scrollback/cursor/shell/cwd/keybind の typed options | P0 | 8 | `G:src/config/Config.zig`, `theme.zig`, `key.zig` | 未実装 |
 | CFG-04 | reload と live/new-session/restart policy を option ごとに宣言 | P0 | 8 | `G:src/config/Config.zig`, macOS Config | 未実装 |
 | CFG-05 | light/dark pair、custom/built-in themes、system appearance | P1 | 8 | `G:src/config/theme.zig`, theme testdata | 未実装 |

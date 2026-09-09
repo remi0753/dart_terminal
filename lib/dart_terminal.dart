@@ -17,6 +17,7 @@ export 'src/terminal_application_quit_coordinator.dart';
 export 'src/terminal_application_state.dart';
 export 'src/terminal_buffer.dart' show TerminalBuffer;
 export 'src/terminal_command_palette.dart';
+export 'src/terminal_config.dart';
 export 'src/terminal_core/streaming_utf8_decoder.dart'
     show StreamingUtf8Decoder, Utf8ScalarSink;
 export 'src/terminal_core/terminal_hyperlink.dart'
