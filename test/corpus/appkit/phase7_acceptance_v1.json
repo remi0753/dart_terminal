@@ -1,0 +1,210 @@
+{
+  "format": "dart-terminal-phase7-appkit-acceptance",
+  "version": 1,
+  "status": "covered",
+  "criteria": [
+    {
+      "id": "multi-window-tab-pane-restoration",
+      "summary": "multiple windows, tabs, and four-pane graphs repeat with fresh owners",
+      "status": "covered",
+      "sources": [
+        {
+          "path": "lib/src/terminal_application_state.dart",
+          "sha256": "a4cb6c698c4eda0c391319f4cc5be9150ce6b8232ca155f8df1a6d0b3dee1f34"
+        },
+        {
+          "path": "lib/src/terminal_restoration.dart",
+          "sha256": "165705c803718ac025ca3a80f396fcdacf12380abfc5741e0097fd62f614ca5a"
+        },
+        {
+          "path": "lib/src/terminal_native_hierarchy.dart",
+          "sha256": "036072c1c2feed658b9cdcabaccbc55469592c0fde863e3c02f09bd366db0cc6"
+        }
+      ],
+      "unit_tests": [
+        {
+          "path": "test/terminal_application_state_test.dart",
+          "entrypoint": "runTerminalApplicationStateTests",
+          "sha256": "e123a530c65fe142419371ee95727feb313a6abea97a43e27bd8962c071f7c21"
+        },
+        {
+          "path": "test/terminal_restoration_test.dart",
+          "entrypoint": "runTerminalRestorationTests",
+          "sha256": "aa70bc7bb353305e6612f96457524694990f28388d1f69c4ebf92e5aed564e08"
+        }
+      ],
+      "integration_tests": [
+        {
+          "path": "test/terminal_native_hierarchy_test.dart",
+          "entrypoint": "runTerminalNativeHierarchyTests",
+          "sha256": "2fe58f138808b81bec9f31d7a72368646013cc01f53cf7a2a811ca0d1e2e478e"
+        }
+      ],
+      "ui_assertions": [
+        {
+          "suite": "restoration",
+          "application_marker": "TERMINAL_RESTORATION_TEST",
+          "driver_marker": "RUNTIME_RESTORATION_INTEGRATION_PASS"
+        }
+      ]
+    },
+    {
+      "id": "focused-input-and-menu-isolation",
+      "summary": "focus, raw key, IME, and menu shortcuts never leak to another pane",
+      "status": "covered",
+      "sources": [
+        {
+          "path": "lib/src/terminal_application.dart",
+          "sha256": "a2bb97e2ca9b21c7c2fabbaa651a17bb8eb98bf768d4683509e8088752b5e272"
+        },
+        {
+          "path": "lib/src/terminal_input/terminal_text_input_event_router.dart",
+          "sha256": "2639357ed1315149743bfd2511e6f9ca23af6da15662f737bc9ac0c0c5415d9a"
+        },
+        {
+          "path": "lib/src/terminal_action_menu.dart",
+          "sha256": "a6253d2b77a4ecadc08bb24c7d1f5bc365cb0fb587ac535e024d0bba360527a2"
+        }
+      ],
+      "unit_tests": [
+        {
+          "path": "test/terminal_appkit_key_adapter_test.dart",
+          "entrypoint": "runTerminalAppKitKeyAdapterTests",
+          "sha256": "98fec102f5a149b6b75d0b1fcfa4cf93beac5dd14b8eabc9a085d2713d0199af"
+        },
+        {
+          "path": "test/terminal_text_input_event_router_test.dart",
+          "entrypoint": "runTerminalTextInputEventRouterTests",
+          "sha256": "3debbf74cac452062d2e3c739eba3c2132c8edcf2547013091df5e44b6af7fd0"
+        },
+        {
+          "path": "test/terminal_action_menu_test.dart",
+          "entrypoint": "runTerminalActionMenuTests",
+          "sha256": "7d8010980d3785bd846716fd638a46383f311282e19badbf5f003a1cecb6ca9a"
+        }
+      ],
+      "integration_tests": [
+        {
+          "path": "test/terminal_native_hierarchy_test.dart",
+          "entrypoint": "runTerminalNativeHierarchyTests",
+          "sha256": "2fe58f138808b81bec9f31d7a72368646013cc01f53cf7a2a811ca0d1e2e478e"
+        }
+      ],
+      "ui_assertions": [
+        {
+          "suite": "hierarchy",
+          "application_marker": "TERMINAL_NATIVE_HIERARCHY_TEST",
+          "driver_marker": "RUNTIME_NATIVE_HIERARCHY_INTEGRATION_PASS"
+        },
+        {
+          "suite": "display",
+          "application_marker": "COMMAND_PALETTE_ACCEPTANCE",
+          "driver_marker": "RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS"
+        }
+      ]
+    },
+    {
+      "id": "pane-resource-cleanup",
+      "summary": "pane close and restoration reclaim PTY, Metal, text, native, and worker owners",
+      "status": "covered",
+      "sources": [
+        {
+          "path": "lib/src/terminal_pane.dart",
+          "sha256": "8a5273e8fbdf5a86a6b8d9b9a382f73b8855d7e4721e55d78ae64f7bf906750f"
+        },
+        {
+          "path": "lib/src/terminal_native_hierarchy.dart",
+          "sha256": "036072c1c2feed658b9cdcabaccbc55469592c0fde863e3c02f09bd366db0cc6"
+        },
+        {
+          "path": "lib/src/runtime_lifecycle.dart",
+          "sha256": "10e1be2b7f5ddfaaceb802450eb1bf99117046ac0982d7527c21ff76dabe21d4"
+        }
+      ],
+      "unit_tests": [
+        {
+          "path": "test/terminal_application_state_test.dart",
+          "entrypoint": "runTerminalApplicationStateTests",
+          "sha256": "e123a530c65fe142419371ee95727feb313a6abea97a43e27bd8962c071f7c21"
+        },
+        {
+          "path": "test/runtime_lifecycle_test.dart",
+          "entrypoint": "runRuntimeLifecycleTests",
+          "sha256": "c95364de960d95d919f9e04ce8294588d4ad90cbdadd0735a796e639e245021d"
+        }
+      ],
+      "integration_tests": [
+        {
+          "path": "test/terminal_native_hierarchy_test.dart",
+          "entrypoint": "runTerminalNativeHierarchyTests",
+          "sha256": "2fe58f138808b81bec9f31d7a72368646013cc01f53cf7a2a811ca0d1e2e478e"
+        }
+      ],
+      "ui_assertions": [
+        {
+          "suite": "hierarchy",
+          "application_marker": "TERMINAL_CLOSE_QUIT_TEST",
+          "driver_marker": "RUNTIME_NATIVE_HIERARCHY_INTEGRATION_PASS"
+        },
+        {
+          "suite": "restoration",
+          "application_marker": "TERMINAL_RESTORATION_TEST",
+          "driver_marker": "RUNTIME_RESTORATION_INTEGRATION_PASS"
+        }
+      ]
+    },
+    {
+      "id": "cross-pane-flood-fairness",
+      "summary": "one 100 MiB pane flood does not starve another pane input or grow queues",
+      "status": "covered",
+      "sources": [
+        {
+          "path": "lib/src/terminal_renderer/pane_work_scheduler.dart",
+          "sha256": "d19d3e10af49f4027ff08f31df8a17d26d1190be061586547dde6cbe764d962a"
+        },
+        {
+          "path": "lib/src/terminal_session.dart",
+          "sha256": "9945f05ceb08754cef14aaa56909bc7c6f2daca2d702629ffabf777223f31fba"
+        },
+        {
+          "path": "lib/src/terminal_application.dart",
+          "sha256": "a2bb97e2ca9b21c7c2fabbaa651a17bb8eb98bf768d4683509e8088752b5e272"
+        }
+      ],
+      "unit_tests": [
+        {
+          "path": "test/pane_work_scheduler_test.dart",
+          "entrypoint": "runTerminalPaneWorkSchedulerTests",
+          "sha256": "76eeb5529995b8c3bf1e725bbf3c85601eb024aaf802d7b6b4212388d485682d"
+        },
+        {
+          "path": "test/frame_scheduler_test.dart",
+          "entrypoint": "runFrameSchedulerTests",
+          "sha256": "cab81f1d61cab9517c7faf33e183a21f7170ba78a325ee9bb3b0a2264ef91575"
+        }
+      ],
+      "integration_tests": [
+        {
+          "path": "test/terminal_native_hierarchy_test.dart",
+          "entrypoint": "runTerminalNativeHierarchyTests",
+          "sha256": "2fe58f138808b81bec9f31d7a72368646013cc01f53cf7a2a811ca0d1e2e478e"
+        }
+      ],
+      "ui_assertions": [
+        {
+          "suite": "hierarchy",
+          "application_marker": "TERMINAL_MULTI_PANE_FAIRNESS_TEST",
+          "driver_marker": "RUNTIME_NATIVE_HIERARCHY_INTEGRATION_PASS"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "criteria": 4,
+    "source_references": 12,
+    "unit_tests": 9,
+    "integration_tests": 4,
+    "ui_assertions": 6,
+    "blocking_failures": 0
+  }
+}

@@ -32,6 +32,7 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	product-parser-corpus product-parser-properties \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
 	terminal-parser-trace terminal-parser-trace-check \
+	phase7-appkit-acceptance phase7-appkit-acceptance-check \
 	terminal-compatibility-regressions-check terminal-compatibility-regression-coverage terminal-compatibility-regression-coverage-check \
 	product-damage-benchmark-build product-damage-benchmark \
 	runtime-source-check runtime-architecture-check \
@@ -70,6 +71,8 @@ help:
 	@echo "  make vt-parser-table-check        Reject a stale generated parser table"
 	@echo "  make terminal-parser-trace        Regenerate the bounded parser trace"
 	@echo "  make terminal-parser-trace-check  Reject a stale parser trace fixture"
+	@echo "  make phase7-appkit-acceptance    Regenerate the Phase 7 AppKit test inventory"
+	@echo "  make phase7-appkit-acceptance-check  Reject stale Phase 7 AppKit test evidence"
 	@echo "  make terminal-compatibility-regressions-check  Replay byte-level compatibility fixes"
 	@echo "  make terminal-compatibility-regression-coverage  Regenerate Phase 6 coverage reconciliation"
 	@echo "  make terminal-compatibility-regression-coverage-check  Reject stale or incomplete reconciliation"
@@ -106,6 +109,12 @@ terminal-parser-trace: dependencies
 
 terminal-parser-trace-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_parser_trace.dart --check
+
+phase7-appkit-acceptance: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/phase7_appkit_acceptance.dart --generate
+
+phase7-appkit-acceptance-check: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/phase7_appkit_acceptance.dart --check
 
 terminal-compatibility-regressions-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_compatibility_regressions.dart --check
@@ -161,7 +170,7 @@ terminal-terminfo: dependencies
 terminal-terminfo-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_terminfo.dart --check
 
-test: dependencies vt-parser-table-check terminal-parser-trace-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check
+test: dependencies vt-parser-table-check terminal-parser-trace-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart

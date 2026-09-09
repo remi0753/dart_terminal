@@ -971,6 +971,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     を参照して実施する）
   - [x] cross-pane flood/input 両 runtime 回帰受け入れと親項目完了判定
 - [ ] AppKit unit、integration、UI tests
+  （分割と完了条件は
+  [`docs/phase7/appkit-unit-integration-ui-tests.md`](docs/phase7/appkit-unit-integration-ui-tests.md)
+  を参照して順に実施する）
+  - [x] deterministic coverage contract と repeated fake-AppKit topology
+  - [ ] multi-window dual-runtime UI と menu-shortcut isolation
+  - [ ] full regression、evidence reconciliation、Phase 7 完了判定
 
 終了条件:
 

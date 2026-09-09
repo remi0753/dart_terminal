@@ -10,9 +10,224 @@ import 'package:dart_terminal/dart_terminal.dart';
 Future<void> main() => runTerminalNativeHierarchyTests();
 
 Future<void> runTerminalNativeHierarchyTests() async {
+  await _testRepeatedMultiWindowRestoredProjection();
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testRepeatedMultiWindowRestoredProjection() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final List<_HierarchyFakeSession> allSessions = <_HierarchyFakeSession>[];
+  final Set<int> priorPaneIds = <int>{};
+  final Set<int> priorWindowIds = <int>{};
+  final Set<int> priorTabIds = <int>{};
+  final Set<int> priorSplitIds = <int>{};
+  String? canonicalSnapshot;
+
+  TerminalPaneConfiguration configuration(String? workingDirectory) =>
+      TerminalPaneConfiguration(
+        sessionFactory:
+            (
+              TerminalSessionId id, {
+              required void Function() onChanged,
+              required void Function() onTerminated,
+            }) {
+              final _HierarchyFakeSession session = _HierarchyFakeSession(
+                id,
+                workingDirectory: workingDirectory,
+              );
+              allSessions.add(session);
+              return session;
+            },
+        onChanged: () {},
+        onExitRequested: () {},
+      );
+
+  var state = TerminalApplicationState();
+  var workingDirectories = <PaneId, String?>{};
+  for (var windowIndex = 0; windowIndex < 2; windowIndex++) {
+    final String cwd = '/private/tmp/phase7-window-${windowIndex + 1}';
+    final TerminalWindowState window = await state.createWindow(
+      configuration(cwd),
+    );
+    final TerminalTabState firstTab = window.selectedTab;
+    workingDirectories[firstTab.focusedPaneId] = cwd;
+    final TerminalPane firstSibling = await state.splitPane(
+      firstTab.focusedPaneId,
+      configuration(cwd),
+      axis: TerminalSplitAxis.horizontal,
+      fraction: 0.4,
+    );
+    workingDirectories[firstSibling.id] = cwd;
+    final TerminalTabState secondTab = await state.createTab(
+      window.id,
+      configuration(cwd),
+    );
+    workingDirectories[secondTab.focusedPaneId] = cwd;
+    final TerminalPane secondSibling = await state.splitPane(
+      secondTab.focusedPaneId,
+      configuration(cwd),
+      axis: TerminalSplitAxis.vertical,
+      fraction: 0.6,
+    );
+    workingDirectories[secondSibling.id] = cwd;
+    state
+      ..focusPane(firstTab.id, firstSibling.id)
+      ..focusPane(secondTab.id, secondSibling.id)
+      ..renameTab(secondTab.id, 'Phase 7 restored window ${windowIndex + 1}')
+      ..setTabColor(secondTab.id, TerminalTabColor.blueMarker)
+      ..selectTab(window.id, secondTab.id);
+  }
+  state.activateWindow(state.windowIds.first);
+  var placements = <TerminalWindowId, TerminalWindowPlacement>{
+    for (var index = 0; index < state.windowIds.length; index++)
+      state.windowIds[index]: TerminalWindowPlacement(
+        windowedFrame: TerminalWindowFrame(
+          left: 80 + index * 120,
+          top: 70 + index * 90,
+          width: 760,
+          height: 520,
+        ),
+        screen: null,
+        fullscreen: false,
+      ),
+  };
+
+  for (var generation = 0; generation < 3; generation++) {
+    final Set<int> paneIds = state.paneIds.map((PaneId id) => id.value).toSet();
+    final Set<int> windowIds = state.windowIds
+        .map((TerminalWindowId id) => id.value)
+        .toSet();
+    final Set<int> tabIds = state.windows
+        .expand((TerminalWindowState window) => window.tabIds)
+        .map((TerminalTabId id) => id.value)
+        .toSet();
+    final Set<int> splitIds = state.windows
+        .expand((TerminalWindowState window) => window.tabs)
+        .expand((TerminalTabState tab) => tab.splitTree.nodeIds)
+        .map((TerminalSplitNodeId id) => id.value)
+        .toSet();
+    _expect(
+      paneIds.intersection(priorPaneIds).isEmpty &&
+          windowIds.intersection(priorWindowIds).isEmpty &&
+          tabIds.intersection(priorTabIds).isEmpty &&
+          splitIds.intersection(priorSplitIds).isEmpty,
+      'restored fake-AppKit generations reuse runtime identities',
+    );
+    priorPaneIds.addAll(paneIds);
+    priorWindowIds.addAll(windowIds);
+    priorTabIds.addAll(tabIds);
+    priorSplitIds.addAll(splitIds);
+
+    final TerminalNativeHierarchyAdapter adapter =
+        TerminalNativeHierarchyAdapter(
+          state: state,
+          paneResourcesFactory: (TerminalPane pane) =>
+              TerminalNativePaneResources(paneId: pane.id, view: View()),
+          windowFrame: const Rect.fromLTWH(80, 70, 760, 520),
+          cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+          dividerThickness: 1,
+          windowPlacements: placements,
+          presentWindows: false,
+        );
+    adapter.reconcile(
+      tabSizes: <TerminalTabId, TerminalSplitLayoutSize>{
+        for (final TerminalWindowState window in state.windows)
+          for (final TerminalTabState tab in window.tabs)
+            tab.id: TerminalSplitLayoutSize(width: 760, height: 520),
+      },
+    );
+    _expect(
+      state.windowCount == 2 &&
+          state.tabCount == 4 &&
+          state.paneCount == 8 &&
+          state.windows.every(
+            (TerminalWindowState window) =>
+                window.tabs.length == 2 &&
+                window.tabs.every(
+                  (TerminalTabState tab) => tab.paneIds.length == 2,
+                ),
+          ) &&
+          adapter.nativeWindowCount == 4 &&
+          adapter.splitViewCount == 4 &&
+          adapter.paneResourceCount == 8 &&
+          bindings.objects.length == 16 &&
+          bindings.windowTabGroups.length == 2 &&
+          bindings.windowTabGroups.every(
+            (List<int> group) => group.length == 2,
+          ) &&
+          bindings.selectedTabWindows.length == 2 &&
+          bindings.firstResponders.length == 2,
+      'generation $generation did not project two four-pane tabbed windows',
+    );
+
+    final TerminalRestorationSnapshot snapshot =
+        TerminalApplicationRestorationCapture.capture(
+          state,
+          placementForWindow: (TerminalWindowId id) => placements[id]!,
+          workingDirectoryForPane: (PaneId id) => workingDirectories[id],
+        );
+    final String encoded = TerminalRestorationCodec.encode(snapshot);
+    canonicalSnapshot ??= encoded;
+    _expect(
+      encoded == canonicalSnapshot,
+      'fresh fake-AppKit identities changed the content-free snapshot',
+    );
+
+    adapter.dispose();
+    await state.shutdown();
+    final List<_HierarchyFakeSession> generationSessions = allSessions.sublist(
+      generation * 8,
+      (generation + 1) * 8,
+    );
+    _expect(
+      generationSessions.length == 8 &&
+          generationSessions.every(
+            (_HierarchyFakeSession session) => session.shutdownCount == 1,
+          ) &&
+          bindings.objects.isEmpty &&
+          bindings.windowTabGroups.isEmpty &&
+          bindings.selectedTabWindows.isEmpty &&
+          bindings.firstResponders.isEmpty,
+      'generation $generation retained fake sessions or native handles',
+    );
+
+    if (generation < 2) {
+      final int seed = (generation + 1) * 1000;
+      final TerminalRestorationResult restored =
+          await TerminalApplicationRestorer.restore(
+            TerminalRestorationCodec.decode(encoded),
+            into: TerminalApplicationState(
+              paneOwner: TerminalPaneOwner(initialPaneId: seed + 300),
+              initialWindowId: seed,
+              initialTabId: seed + 100,
+              initialSplitNodeId: seed + 200,
+            ),
+            configurationForPane: (TerminalRestorablePane pane) =>
+                configuration(pane.workingDirectory),
+          );
+      state = restored.applicationState;
+      placements = restored.placements;
+      workingDirectories = restored.launchWorkingDirectories;
+    }
+  }
+
+  _expect(
+    allSessions.length == 24 &&
+        allSessions.every(
+          (_HierarchyFakeSession session) => session.shutdownCount == 1,
+        ),
+    'three fake-AppKit generations do not own 24 exact sessions',
+  );
+  await application.terminate();
+  await rawEvents.close();
 }
 
 Future<void> _testNativeTerminationReplyAndHierarchyCleanup() async {
