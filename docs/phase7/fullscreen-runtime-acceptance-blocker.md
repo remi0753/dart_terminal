@@ -1,8 +1,30 @@
 # Phase 7 fullscreen runtime acceptance recovery record
 
-- Status: resolved on 2026-09-08
+- Status: resolved again on 2026-09-09
 
-## Resolution
+## Resurfaced condition
+
+The 2026-09-09 scheduling/resource-budget `runtime-verify` passed its exact
+100 MiB four-pane hierarchy in Developer JIT and Release AOT, then failed the
+following Developer JIT restoration suite at the same external foreground
+boundary described below. Two focused retries reported a visible window on a
+concrete screen but `active=false`; real fullscreen entry produced no callback
+within eight seconds, while PTY, worker, and native cleanup remained clean.
+
+System Events access is authorized and can read the current frontmost process,
+but a one-shot DartTerminal frontmost request did not change the application
+snapshot. A bounded request-and-confirm loop never observed the test process as
+frontmost before it exited. The multiple-pane final child therefore remains
+incomplete. Resume with the existing recovery procedure when the managed
+desktop can grant the launched bundle genuine foreground ownership.
+
+The user then foregrounded the test window during retry. Focused Developer JIT
+and Release AOT restoration passed, followed by two complete matrices in which
+both restoration modes also passed. The foreground condition is therefore
+cleared for this session. The later aggregate failure is tracked in
+[`runtime-resource-close-sequence-blocker.md`](runtime-resource-close-sequence-blocker.md).
+
+## Prior resolution
 
 The user granted the required `System Events` desktop-automation permission in
 the interactive session. A frontmost query then succeeded, both runtime bundles
@@ -22,9 +44,12 @@ roadmap parent are complete.
 
 ## Current ordered task
 
-This recovery record is historical. The final M1 Developer JIT/Release AOT
-acceptance child and its `fullscreen、screen migration、restoration、reopen`
-parent are complete. The next Phase 7 item is selected from `ROADMAP.md`.
+The completed `fullscreen、screen migration、restoration、reopen` parent remains
+valid. Its transition gate briefly blocked aggregate verification for
+`multiple pane の scheduling/resource budget`, then passed in both focused and
+complete-matrix retries after the test window received foreground ownership.
+The current ordered work is the final cross-pane evidence child in
+`ROADMAP.md`.
 
 ## Historical blocking condition
 

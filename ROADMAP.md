@@ -966,6 +966,9 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] bounded round-robin pane render scheduling
   - [x] bounded PTY/parser dispatch と Developer JIT flood 回帰
   - [x] cooperative PTY batch turn yielding と full-matrix starvation 回帰
+  - [x] full-matrix Release AOT resource auto-close sequencing 回帰
+    （[`docs/phase7/runtime-resource-close-sequence-blocker.md`](docs/phase7/runtime-resource-close-sequence-blocker.md)
+    を参照して実施する）
   - [ ] cross-pane flood/input 両 runtime 回帰受け入れと親項目完了判定
 - [ ] AppKit unit、integration、UI tests
 

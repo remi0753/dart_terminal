@@ -2133,6 +2133,30 @@ Future<void> _runResource(_Options options, _Invocation invocation) async {
     'resource counts do not prove a stable two-handle pair: '
     'baseline=$baseline peak=$peak final=$finalCount',
   );
+  final List<String> closeStages =
+      RegExp(r'^TERMINAL_RESOURCE_CLOSE stage=([a-z-]+)', multiLine: true)
+          .allMatches(result.stdoutText)
+          .map((RegExpMatch match) => match.group(1)!)
+          .toList();
+  _expect(
+    _sameStrings(closeStages, const <String>[
+      'initial-timer-scheduled',
+      'initial-timer-fired',
+      'paste-action-posted',
+      'close-action-posted',
+      'request-observed',
+      'decision-published',
+      'request-replied',
+      'confirmation-timer-scheduled',
+      'confirmation-timer-fired',
+      'quit-action-posted',
+      'request-observed',
+      'decision-published',
+      'request-replied',
+    ]),
+    'resource close confirmation did not wait for the first native reply: '
+    '$closeStages',
+  );
   _expect(
     RegExp(
           r'^NATIVE_RESOURCE_FINAL handles=0$',

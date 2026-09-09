@@ -1264,6 +1264,12 @@ final class TerminalApplication {
                 closed.complete();
               }
             case WindowCloseRequestedEvent():
+              if (options.runtimeResourceStress) {
+                stdout.writeln(
+                  'TERMINAL_RESOURCE_CLOSE stage=request-observed '
+                  'pane_state=${createdPane.state.name}',
+                );
+              }
               if (emitNativeEventWireObservation) {
                 stdout.writeln(
                   'NATIVE_WINDOW_CLOSE_REQUEST '
@@ -1283,7 +1289,50 @@ final class TerminalApplication {
                 'decision=${allow ? 'allow' : 'confirmation-required'} '
                 'state=${createdPane.state.name}',
               );
+              if (options.runtimeResourceStress) {
+                stdout.writeln(
+                  'TERMINAL_RESOURCE_CLOSE stage=decision-published '
+                  'allow=$allow pane_state=${createdPane.state.name}',
+                );
+              }
               createdWindow.replyToCloseRequest(event, allow: allow);
+              if (options.runtimeResourceStress) {
+                stdout.writeln(
+                  'TERMINAL_RESOURCE_CLOSE stage=request-replied '
+                  'allow=$allow pane_state=${createdPane.state.name}',
+                );
+              }
+              if (!allow &&
+                  options.autoCloseAfter != null &&
+                  autoCloseConfirmationTimer == null) {
+                autoCloseConfirmationTimer = Timer(
+                  const Duration(milliseconds: 100),
+                  () {
+                    if (options.runtimeResourceStress) {
+                      stdout.writeln(
+                        'TERMINAL_RESOURCE_CLOSE '
+                        'stage=confirmation-timer-fired '
+                        'pane_state=${createdPane.state.name}',
+                      );
+                    }
+                    if (!createdWindow.isClosed && !createdWindow.isDisposed) {
+                      quitItem.performAction();
+                      if (options.runtimeResourceStress) {
+                        stdout.writeln(
+                          'TERMINAL_RESOURCE_CLOSE '
+                          'stage=quit-action-posted',
+                        );
+                      }
+                    }
+                  },
+                );
+                if (options.runtimeResourceStress) {
+                  stdout.writeln(
+                    'TERMINAL_RESOURCE_CLOSE '
+                    'stage=confirmation-timer-scheduled',
+                  );
+                }
+              }
             case WindowResizedEvent(:final width, :final height):
               hyperlinkController.cancelPress();
               createdMetalSurface.clearHyperlinkHover();
@@ -1767,18 +1816,31 @@ final class TerminalApplication {
           'Automated close scheduled after '
           '${autoCloseAfter.inSeconds} seconds.',
         );
+        if (options.runtimeResourceStress) {
+          stdout.writeln(
+            'TERMINAL_RESOURCE_CLOSE stage=initial-timer-scheduled',
+          );
+        }
         autoCloseTimer = Timer(autoCloseAfter, () {
+          if (options.runtimeResourceStress) {
+            stdout.writeln(
+              'TERMINAL_RESOURCE_CLOSE stage=initial-timer-fired '
+              'pane_state=${createdPane.state.name}',
+            );
+          }
           if (!createdWindow.isClosed && !createdWindow.isDisposed) {
             pasteItem.performAction();
+            if (options.runtimeResourceStress) {
+              stdout.writeln(
+                'TERMINAL_RESOURCE_CLOSE stage=paste-action-posted',
+              );
+            }
             closeItem.performAction();
-            autoCloseConfirmationTimer = Timer(
-              const Duration(milliseconds: 100),
-              () {
-                if (!createdWindow.isClosed && !createdWindow.isDisposed) {
-                  quitItem.performAction();
-                }
-              },
-            );
+            if (options.runtimeResourceStress) {
+              stdout.writeln(
+                'TERMINAL_RESOURCE_CLOSE stage=close-action-posted',
+              );
+            }
           }
         });
       }

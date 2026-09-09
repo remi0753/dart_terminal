@@ -147,7 +147,20 @@ queues without bound nor starves input and presentation in another pane.
   hierarchy runs no longer reproduce the full-matrix Release AOT starvation,
   and the change is committed independently before returning to final evidence.
 
-### 5. Cross-pane flood/input dual-runtime acceptance and parent completion
+### 5. Full-matrix Release AOT resource auto-close sequencing regression
+
+- Preserve the existing foreground-risk confirmation and aggregate Quit
+  semantics while identifying why the Release AOT resource fixture's second
+  bounded close request is not observed only after the preceding full matrix.
+- Use
+  [`runtime-resource-close-sequence-blocker.md`](runtime-resource-close-sequence-blocker.md)
+  as the reproduction and recovery record. Do not replace confirmation with an
+  unconditional force-close or accept a focused-only result.
+- Completion: focused resource coverage, sequential dual-runtime resource
+  coverage, and the complete runtime matrix all exit deterministically with
+  clean PTY, worker, text-input, Metal, and native ownership.
+
+### 6. Cross-pane flood/input dual-runtime acceptance and parent completion
 
 - Extend the existing hierarchy product fixture rather than duplicate its
   resource graph. Measure an idle-pane baseline and a second-pane response while
@@ -489,3 +502,72 @@ queues without bound nor starves input and presentation in another pane.
   zero product native sources, and one reviewed test-native source. This
   cooperative-turn child is complete; final dual-runtime aggregate evidence
   remains the next ordered child.
+- 2026-09-09: the final `make RUNTIME_ARCH=arm64 runtime-verify` kept the target
+  hierarchy green: Developer JIT measured 27380/26165 microseconds (1.047x)
+  with 79 scheduler yields, and Release AOT measured 23617/23866 microseconds
+  (0.990x) with 102 yields. The aggregate command nevertheless failed in the
+  following existing Developer JIT restoration scenario: fullscreen enter was
+  requested while the window was visible, but its awaited state event did not
+  arrive within eight seconds. The scenario still closed its PTY, reaped the
+  worker, and released the application cleanly. This is not accepted as a
+  successful final matrix; focused restoration reproduction and event-order
+  inspection are required before the parent can complete.
+- The focused `make RUNTIME_ARCH=arm64 developer-jit-restoration` reproduced
+  the same condition twice: the selected real window was visible and attached
+  to a concrete screen, but the request milestone remained `active=false` and
+  no enter event arrived in eight seconds. Both failures again closed the PTY,
+  reaped the worker, and released owned resources.
+- The already-authorized System Events query succeeded and reported ChatGPT as
+  the current frontmost application. A one-shot request located DartTerminal
+  but did not make its Dart active snapshot true. A bounded helper then
+  repeatedly requested and checked the test process's frontmost property; it
+  never observed success before the test timed out and the process disappeared
+  (`-1728`). This matches the previously documented managed-desktop blocker,
+  not a terminal scheduling or PTY ownership failure.
+- The provisional README, feature-matrix, and generated coverage edits were
+  returned to their pre-child content so an incomplete final acceptance is not
+  advertised. The final child and its parent remain unchecked. Resume requires
+  an interactive desktop state that grants the launched test bundle genuine
+  frontmost ownership; do not replace the real fullscreen events or weaken the
+  aggregate gate.
+- 2026-09-09: on retry with the user foregrounding the test window, focused
+  Developer JIT restoration passed in 4767 ms and Release AOT passed in 3552
+  ms. The next complete matrix passed the target hierarchies at 0.809x and
+  0.670x and both restoration modes, but Release AOT resource stress timed out
+  after its successful 1000-iteration `baseline=33 peak=35 final=33` summary.
+  It emitted the first close decision as `confirmation-required` and then no
+  second close decision or shutdown lifecycle within 60 seconds.
+- A focused Release AOT resource rerun immediately passed in 14571 ms. A second
+  complete matrix again passed target hierarchies at 0.839x and 0.705x and both
+  restoration modes, then stopped at the identical Release AOT resource close
+  point. Timeout cleanup left no DartTerminal or runtime-worker process. The
+  failure is therefore a reproducible full-sequence close/timer blocker rather
+  than a native resource-count failure or the resolved fullscreen condition.
+- The ordered task is split before further implementation: recover the
+  full-matrix Release AOT resource auto-close sequence without bypassing the
+  foreground-risk confirmation, then return to final cross-pane evidence. The
+  new blocker is recorded in
+  [`runtime-resource-close-sequence-blocker.md`](runtime-resource-close-sequence-blocker.md).
+- 2026-09-09: the user explicitly requested continued diagnosis and repair.
+  Sequential `runtime-resource-integration` passed Developer JIT in 18318 ms
+  and Release AOT in 17604 ms, so the immediate paired resource order alone
+  does not reproduce the aggregate failure. Resource-gated close/timer/menu
+  milestones are added next to locate the stopped boundary before changing
+  behavior.
+- 2026-09-09: the full-matrix resource failure was an ordering race in the
+  integration auto-close path. Its second menu action was timed 100 ms after
+  posting the first action, rather than after Dart handled the first native
+  close request and replied `allow=false`. Under delayed event delivery the
+  second action reached native while the first operation was pending and was
+  correctly coalesced, leaving only the initial confirmation. The timer now
+  starts after the first native reply; the real risk classification and second
+  confirmation remain intact.
+- Resource-gated content-free milestones and the runtime driver pin the exact
+  initial action, first request/decision/reply, confirmation delay, and second
+  request/decision/reply order. `make test` passed, sequential resource
+  integration passed in 17969/17890 ms, and the complete arm64
+  `runtime-verify` passed through Release AOT resource in 17913 ms and all
+  subsequent fault/deadline gates. Its target hierarchy measured Developer JIT
+  26156/31536 microseconds (0.830x) and Release AOT 20491/25153 microseconds
+  (0.815x). This recovery child is complete; final evidence and parent
+  completion are again the first unfinished work.
