@@ -155,6 +155,7 @@ export 'src/terminal_pane.dart'
         TerminalSessionShutdownDisposition,
         TerminalSessionId;
 export 'src/terminal_pane_close_coordinator.dart';
+export 'src/terminal_product_configuration.dart';
 export 'src/terminal_product_hierarchy_actions.dart';
 export 'src/terminal_renderer/frame_scheduler.dart';
 export 'src/terminal_renderer/glyph_atlas.dart';

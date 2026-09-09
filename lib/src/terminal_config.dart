@@ -9,6 +9,14 @@ enum TerminalConfigDiagnosticSeverity { warning, error }
 
 enum TerminalConfigSourceKind { schemaDefault, file, commandLine }
 
+enum TerminalConfiguredTheme { defaultTheme }
+
+enum TerminalConfiguredSyntheticStyle { allow, deny }
+
+enum TerminalConfiguredOptionKey { escape, text }
+
+enum TerminalConfiguredCursorShape { block, underline, bar }
+
 final class TerminalConfigLimits {
   const TerminalConfigLimits({
     this.maxFiles = 32,
@@ -242,6 +250,25 @@ final class LocalTerminalConfigFileSystem implements TerminalConfigFileSystem {
 }
 
 abstract final class TerminalProductConfigSchema {
+  static const List<int> defaultAnsiColors = <int>[
+    0x80000000,
+    0x80cd0000,
+    0x8000cd00,
+    0x80cdcd00,
+    0x800000ee,
+    0x80cd00cd,
+    0x8000cdcd,
+    0x80e5e5e5,
+    0x807f7f7f,
+    0x80ff0000,
+    0x8000ff00,
+    0x80ffff00,
+    0x805c5cff,
+    0x80ff00ff,
+    0x8000ffff,
+    0x80ffffff,
+  ];
+
   static final TerminalConfigOption<String?> workingDirectory =
       TerminalConfigOption<String?>(
         name: 'working-directory',
@@ -250,8 +277,169 @@ abstract final class TerminalProductConfigSchema {
         parser: _parseNonEmptyPath,
       );
 
+  static final TerminalConfigOption<TerminalConfiguredTheme> theme =
+      TerminalConfigOption<TerminalConfiguredTheme>(
+        name: 'theme',
+        description: 'Base theme name.',
+        defaultValue: TerminalConfiguredTheme.defaultTheme,
+        parser: _parseTheme,
+      );
+
+  static final TerminalConfigOption<int> paletteForeground =
+      TerminalConfigOption<int>(
+        name: 'palette-foreground',
+        description: 'Default terminal foreground color.',
+        defaultValue: 0x80e5e5e5,
+        parser: _parseColor,
+      );
+
+  static final TerminalConfigOption<int> paletteBackground =
+      TerminalConfigOption<int>(
+        name: 'palette-background',
+        description: 'Default terminal background color.',
+        defaultValue: 0x80000000,
+        parser: _parseColor,
+      );
+
+  static final TerminalConfigOption<int> paletteCursor =
+      TerminalConfigOption<int>(
+        name: 'palette-cursor',
+        description: 'Terminal cursor color.',
+        defaultValue: 0x80e5e5e5,
+        parser: _parseColor,
+      );
+
+  static final List<TerminalConfigOption<int>> ansiPalette =
+      List<TerminalConfigOption<int>>.unmodifiable(
+        List<TerminalConfigOption<int>>.generate(
+          defaultAnsiColors.length,
+          (int index) => TerminalConfigOption<int>(
+            name: 'palette-$index',
+            description: 'ANSI palette color $index.',
+            defaultValue: defaultAnsiColors[index],
+            parser: _parseColor,
+          ),
+          growable: false,
+        ),
+      );
+
+  static final TerminalConfigOption<String> fontFamily =
+      TerminalConfigOption<String>(
+        name: 'font-family',
+        description: 'Terminal monospace font family, or `system`.',
+        defaultValue: '',
+        parser: _parseFontFamily,
+      );
+
+  static final TerminalConfigOption<double> fontSize =
+      TerminalConfigOption<double>(
+        name: 'font-size',
+        description: 'Terminal font size in points.',
+        defaultValue: 14,
+        parser: _parseFontSize,
+      );
+
+  static final TerminalConfigOption<TerminalConfiguredSyntheticStyle>
+  fontSyntheticStyle = TerminalConfigOption<TerminalConfiguredSyntheticStyle>(
+    name: 'font-synthetic-style',
+    description: 'Whether missing bold and italic faces may be synthesized.',
+    defaultValue: TerminalConfiguredSyntheticStyle.allow,
+    parser: _parseSyntheticStyle,
+  );
+
+  static final TerminalConfigOption<double> windowWidth =
+      TerminalConfigOption<double>(
+        name: 'window-width',
+        description: 'Initial terminal window width in logical points.',
+        defaultValue: 920,
+        parser: _parseWindowWidth,
+      );
+
+  static final TerminalConfigOption<double> windowHeight =
+      TerminalConfigOption<double>(
+        name: 'window-height',
+        description: 'Initial terminal window height in logical points.',
+        defaultValue: 580,
+        parser: _parseWindowHeight,
+      );
+
+  static final TerminalConfigOption<double> windowPaddingHorizontal =
+      TerminalConfigOption<double>(
+        name: 'window-padding-horizontal',
+        description: 'Horizontal terminal content padding in logical points.',
+        defaultValue: 0,
+        parser: _parseWindowPadding,
+      );
+
+  static final TerminalConfigOption<double> windowPaddingVertical =
+      TerminalConfigOption<double>(
+        name: 'window-padding-vertical',
+        description: 'Vertical terminal content padding in logical points.',
+        defaultValue: 0,
+        parser: _parseWindowPadding,
+      );
+
+  static final TerminalConfigOption<TerminalConfiguredOptionKey>
+  macosOptionKey = TerminalConfigOption<TerminalConfiguredOptionKey>(
+    name: 'macos-option-key',
+    description: 'Treat the macOS Option key as `escape` or composed `text`.',
+    defaultValue: TerminalConfiguredOptionKey.escape,
+    parser: _parseOptionKey,
+  );
+
+  static final TerminalConfigOption<int> scrollbackLines =
+      TerminalConfigOption<int>(
+        name: 'scrollback-lines',
+        description: 'Maximum retained primary-screen history lines.',
+        defaultValue: 10000,
+        parser: _parseScrollbackLines,
+      );
+
+  static final TerminalConfigOption<int> scrollbackBytes =
+      TerminalConfigOption<int>(
+        name: 'scrollback-bytes',
+        description: 'Maximum retained primary-screen history bytes.',
+        defaultValue: 64 * 1024 * 1024,
+        parser: _parseScrollbackBytes,
+      );
+
+  static final TerminalConfigOption<TerminalConfiguredCursorShape> cursorShape =
+      TerminalConfigOption<TerminalConfiguredCursorShape>(
+        name: 'cursor-shape',
+        description: 'Initial terminal cursor shape.',
+        defaultValue: TerminalConfiguredCursorShape.block,
+        parser: _parseCursorShape,
+      );
+
+  static final TerminalConfigOption<bool> cursorBlink =
+      TerminalConfigOption<bool>(
+        name: 'cursor-blink',
+        description: 'Whether the initial terminal cursor blinks.',
+        defaultValue: true,
+        parser: _parseBoolean,
+      );
+
   static final TerminalConfigSchema instance = TerminalConfigSchema(
-    <TerminalConfigOptionBase>[workingDirectory],
+    <TerminalConfigOptionBase>[
+      workingDirectory,
+      theme,
+      paletteForeground,
+      paletteBackground,
+      paletteCursor,
+      ...ansiPalette,
+      fontFamily,
+      fontSize,
+      fontSyntheticStyle,
+      windowWidth,
+      windowHeight,
+      windowPaddingHorizontal,
+      windowPaddingVertical,
+      macosOptionKey,
+      scrollbackLines,
+      scrollbackBytes,
+      cursorShape,
+      cursorBlink,
+    ],
   );
 }
 
@@ -891,6 +1079,216 @@ TerminalConfigDecodeResult<String?> _parseNonEmptyPath(String value) {
   return TerminalConfigDecodeResult<String?>.success(value);
 }
 
+TerminalConfigDecodeResult<TerminalConfiguredTheme> _parseTheme(String value) =>
+    switch (value) {
+      'default' =>
+        const TerminalConfigDecodeResult<TerminalConfiguredTheme>.success(
+          TerminalConfiguredTheme.defaultTheme,
+        ),
+      _ => const TerminalConfigDecodeResult<TerminalConfiguredTheme>.failure(
+        'theme must be `default`',
+        hint: 'use `theme = default`; additional themes are added later',
+      ),
+    };
+
+TerminalConfigDecodeResult<int> _parseColor(String value) {
+  if (!RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(value)) {
+    return const TerminalConfigDecodeResult<int>.failure(
+      'color must use `#RRGGBB` hexadecimal notation',
+      hint: 'for example, use `#e5e5e5`',
+    );
+  }
+  return TerminalConfigDecodeResult<int>.success(
+    0x80000000 | int.parse(value.substring(1), radix: 16),
+  );
+}
+
+TerminalConfigDecodeResult<String> _parseFontFamily(String value) {
+  if (value == 'system') {
+    return const TerminalConfigDecodeResult<String>.success('');
+  }
+  if (value.isEmpty) {
+    return const TerminalConfigDecodeResult<String>.failure(
+      'font family must not be empty',
+      hint: 'use `system` for the macOS system monospace font',
+    );
+  }
+  final List<int> encoded = utf8.encode(value);
+  if (encoded.length > 256 || encoded.contains(0) || _containsControl(value)) {
+    return const TerminalConfigDecodeResult<String>.failure(
+      'font family must be control-free UTF-8 within 256 bytes',
+      hint: 'shorten the family name or use `system`',
+    );
+  }
+  return TerminalConfigDecodeResult<String>.success(value);
+}
+
+TerminalConfigDecodeResult<double> _parseFontSize(String value) =>
+    _parseFiniteDouble(
+      value,
+      minimum: 4,
+      maximum: 128,
+      description: 'font size',
+    );
+
+TerminalConfigDecodeResult<TerminalConfiguredSyntheticStyle>
+_parseSyntheticStyle(String value) => switch (value) {
+  'allow' =>
+    const TerminalConfigDecodeResult<TerminalConfiguredSyntheticStyle>.success(
+      TerminalConfiguredSyntheticStyle.allow,
+    ),
+  'deny' =>
+    const TerminalConfigDecodeResult<TerminalConfiguredSyntheticStyle>.success(
+      TerminalConfiguredSyntheticStyle.deny,
+    ),
+  _ =>
+    const TerminalConfigDecodeResult<TerminalConfiguredSyntheticStyle>.failure(
+      'font synthetic style must be `allow` or `deny`',
+      hint: 'use `font-synthetic-style = allow` for the default behavior',
+    ),
+};
+
+TerminalConfigDecodeResult<double> _parseWindowWidth(String value) =>
+    _parseFiniteDouble(
+      value,
+      minimum: 480,
+      maximum: 8192,
+      description: 'window width',
+    );
+
+TerminalConfigDecodeResult<double> _parseWindowHeight(String value) =>
+    _parseFiniteDouble(
+      value,
+      minimum: 320,
+      maximum: 8192,
+      description: 'window height',
+    );
+
+TerminalConfigDecodeResult<double> _parseWindowPadding(String value) =>
+    _parseFiniteDouble(
+      value,
+      minimum: 0,
+      maximum: 64,
+      description: 'window padding',
+    );
+
+TerminalConfigDecodeResult<TerminalConfiguredOptionKey> _parseOptionKey(
+  String value,
+) => switch (value) {
+  'escape' =>
+    const TerminalConfigDecodeResult<TerminalConfiguredOptionKey>.success(
+      TerminalConfiguredOptionKey.escape,
+    ),
+  'text' =>
+    const TerminalConfigDecodeResult<TerminalConfiguredOptionKey>.success(
+      TerminalConfiguredOptionKey.text,
+    ),
+  _ => const TerminalConfigDecodeResult<TerminalConfiguredOptionKey>.failure(
+    'macOS Option key behavior must be `escape` or `text`',
+    hint: 'use `macos-option-key = escape` for the default behavior',
+  ),
+};
+
+TerminalConfigDecodeResult<int> _parseScrollbackLines(String value) =>
+    _parseBoundedInteger(
+      value,
+      minimum: 1,
+      maximum: 1000000,
+      description: 'scrollback lines',
+    );
+
+TerminalConfigDecodeResult<int> _parseScrollbackBytes(String value) {
+  final RegExpMatch? match = RegExp(r'^([0-9]+)(B|KiB|MiB|GiB)?$')
+      .firstMatch(value);
+  if (match == null) {
+    return const TerminalConfigDecodeResult<int>.failure(
+      'scrollback bytes must be an integer with optional B/KiB/MiB/GiB suffix',
+      hint: 'for example, use `64MiB`',
+    );
+  }
+  final int? magnitude = int.tryParse(match.group(1)!);
+  final int multiplier = switch (match.group(2)) {
+    'KiB' => 1024,
+    'MiB' => 1024 * 1024,
+    'GiB' => 1024 * 1024 * 1024,
+    _ => 1,
+  };
+  if (magnitude == null ||
+      magnitude <= 0 ||
+      magnitude > (1024 * 1024 * 1024) ~/ multiplier) {
+    return const TerminalConfigDecodeResult<int>.failure(
+      'scrollback bytes must be between 1 byte and 1 GiB',
+      hint: 'reduce the configured history byte cap',
+    );
+  }
+  return TerminalConfigDecodeResult<int>.success(magnitude * multiplier);
+}
+
+TerminalConfigDecodeResult<TerminalConfiguredCursorShape> _parseCursorShape(
+  String value,
+) => switch (value) {
+  'block' =>
+    const TerminalConfigDecodeResult<TerminalConfiguredCursorShape>.success(
+      TerminalConfiguredCursorShape.block,
+    ),
+  'underline' =>
+    const TerminalConfigDecodeResult<TerminalConfiguredCursorShape>.success(
+      TerminalConfiguredCursorShape.underline,
+    ),
+  'bar' =>
+    const TerminalConfigDecodeResult<TerminalConfiguredCursorShape>.success(
+      TerminalConfiguredCursorShape.bar,
+    ),
+  _ => const TerminalConfigDecodeResult<TerminalConfiguredCursorShape>.failure(
+    'cursor shape must be `block`, `underline`, or `bar`',
+    hint: 'use `cursor-shape = block` for the default behavior',
+  ),
+};
+
+TerminalConfigDecodeResult<bool> _parseBoolean(String value) => switch (value) {
+  'true' => const TerminalConfigDecodeResult<bool>.success(true),
+  'false' => const TerminalConfigDecodeResult<bool>.success(false),
+  _ => const TerminalConfigDecodeResult<bool>.failure(
+    'boolean value must be `true` or `false`',
+    hint: 'use a lowercase boolean literal',
+  ),
+};
+
+TerminalConfigDecodeResult<double> _parseFiniteDouble(
+  String value, {
+  required double minimum,
+  required double maximum,
+  required String description,
+}) {
+  final double? parsed = double.tryParse(value);
+  if (parsed == null ||
+      !parsed.isFinite ||
+      parsed < minimum ||
+      parsed > maximum) {
+    return TerminalConfigDecodeResult<double>.failure(
+      '$description must be a finite number from $minimum to $maximum',
+      hint: 'choose a value within the supported range',
+    );
+  }
+  return TerminalConfigDecodeResult<double>.success(parsed);
+}
+
+TerminalConfigDecodeResult<int> _parseBoundedInteger(
+  String value, {
+  required int minimum,
+  required int maximum,
+  required String description,
+}) {
+  final int? parsed = int.tryParse(value);
+  if (parsed == null || parsed < minimum || parsed > maximum) {
+    return TerminalConfigDecodeResult<int>.failure(
+      '$description must be an integer from $minimum to $maximum',
+      hint: 'choose a value within the supported range',
+    );
+  }
+  return TerminalConfigDecodeResult<int>.success(parsed);
+}
+
 TerminalConfigDecodeResult<String> _decodeScalar(String raw) {
   if (raw.isEmpty) {
     return const TerminalConfigDecodeResult<String>.success('');
@@ -961,10 +1359,28 @@ String _stripComment(String line) {
       continue;
     }
     if (character == '#' && !quoted) {
+      if (_isHexColorLiteralAt(line, index)) {
+        index += 6;
+        continue;
+      }
       return line.substring(0, index);
     }
   }
   return line;
+}
+
+bool _isHexColorLiteralAt(String value, int offset) {
+  if (offset + 7 > value.length) return false;
+  for (var index = offset + 1; index < offset + 7; index += 1) {
+    final int code = value.codeUnitAt(index);
+    final bool digit = code >= 0x30 && code <= 0x39;
+    final bool lower = code >= 0x61 && code <= 0x66;
+    final bool upper = code >= 0x41 && code <= 0x46;
+    if (!digit && !lower && !upper) return false;
+  }
+  if (offset + 7 == value.length) return true;
+  final String next = value[offset + 7];
+  return next == ' ' || next == '\t' || next == '#';
 }
 
 int _firstNonWhitespace(String value, int start, int end) {
