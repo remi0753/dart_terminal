@@ -93,6 +93,10 @@ const List<_CriterionRequirement> _requirements = <_CriterionRequirement>[
       _SourceRequirement('lib/src/terminal_action_menu.dart', <String>[
         'final class TerminalAppKitMenuProjection',
       ]),
+      _SourceRequirement(
+        'lib/src/terminal_product_hierarchy_actions.dart',
+        <String>['final class TerminalProductHierarchyActionCoordinator'],
+      ),
     ],
     unitTests: <_TestRequirement>[
       _TestRequirement(
@@ -106,6 +110,10 @@ const List<_CriterionRequirement> _requirements = <_CriterionRequirement>[
       _TestRequirement(
         'test/terminal_action_menu_test.dart',
         'runTerminalActionMenuTests',
+      ),
+      _TestRequirement(
+        'test/terminal_product_hierarchy_actions_test.dart',
+        'runTerminalProductHierarchyActionTests',
       ),
     ],
     integrationTests: <_TestRequirement>[

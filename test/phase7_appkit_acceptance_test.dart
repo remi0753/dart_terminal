@@ -12,13 +12,13 @@ void runPhase7AppKitAcceptanceTests() {
   final Phase7AppKitAcceptanceResult result = runPhase7AppKitAcceptanceChecks();
   _expect(
     result.criteria == 4 &&
-        result.sourceReferences == 12 &&
-        result.unitTests == 9 &&
+        result.sourceReferences == 13 &&
+        result.unitTests == 10 &&
         result.integrationTests == 4 &&
         result.uiAssertions == 6 &&
         result.machineLine() ==
-            'PHASE7_APPKIT_ACCEPTANCE_PASS criteria=4 source_refs=12 '
-                'unit_tests=9 integration_tests=4 ui_assertions=6',
+            'PHASE7_APPKIT_ACCEPTANCE_PASS criteria=4 source_refs=13 '
+                'unit_tests=10 integration_tests=4 ui_assertions=6',
     'reviewed Phase 7 layer totals are exact',
   );
   final Map<String, Object?> report =

@@ -173,3 +173,21 @@ to confirm the next target.
   repeated `make test`; all generators/freshness checks, formatting of 209
   files with zero changes, whole-package analysis, native build hooks, and the
   aggregate Dart test runner passed with exit 0.
+- 2026-09-09: began the action-coordinator subtask after rereading the roadmap
+  and task contract. Added a terminal-only coordinator with no AppKit types;
+  callers supply the generic native-hierarchy reconcile callback and a pane
+  configuration factory. It owns dynamic bounds/context availability and the
+  handlers for window/tab/split creation, focus traversal, tab selection,
+  equalize, and zoom. Newly allocated panes must start before projection, and
+  a start failure removes the pane and reconciles the rollback.
+- 2026-09-09: focused coordinator coverage passed outside the sandbox after the
+  expected Clang/Dart cache denial in the restricted run. It verifies exact
+  targets, cwd-inheritance source identities, one reconcile/change publication
+  per successful action, dispatcher busy serialization, start-failure
+  rollback, disposal, and the 64-pane aggregate availability boundary. The
+  Phase 7 evidence generator now pins the coordinator and its unit test.
+- 2026-09-09: regenerated the Phase 7 acceptance inventory with 13 source
+  references and 10 unit-test references. Complete `make test` passed every
+  freshness/generator check, formatting of 211 files with zero changes,
+  whole-package analysis, build hooks, and the aggregate runner. This closes
+  the action-coordinator subtask without changing `dart_appkit`.

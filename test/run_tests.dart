@@ -63,6 +63,7 @@ import 'terminal_osc52_policy_test.dart';
 import 'terminal_palette_test.dart';
 import 'terminal_paste_test.dart';
 import 'terminal_preedit_test.dart';
+import 'terminal_product_hierarchy_actions_test.dart';
 import 'terminal_property_fuzz_test.dart';
 import 'terminal_reflow_test.dart';
 import 'terminal_reply_test.dart';
@@ -117,6 +118,7 @@ Future<void> main() async {
   runMetalPipelineTests();
   runMetalFailureRecoveryTests();
   await runTerminalPaneWorkSchedulerTests();
+  await runTerminalProductHierarchyActionTests();
   runPhase7AppKitAcceptanceTests();
   runReferenceRendererTests();
   runRenderRebuildCoordinatorTests();

@@ -64,6 +64,10 @@
         {
           "path": "lib/src/terminal_action_menu.dart",
           "sha256": "a6253d2b77a4ecadc08bb24c7d1f5bc365cb0fb587ac535e024d0bba360527a2"
+        },
+        {
+          "path": "lib/src/terminal_product_hierarchy_actions.dart",
+          "sha256": "b1145a0b24f14028fd7b4dbc42ff49df1f1ab516012f784767020d02a0db357d"
         }
       ],
       "unit_tests": [
@@ -81,6 +85,11 @@
           "path": "test/terminal_action_menu_test.dart",
           "entrypoint": "runTerminalActionMenuTests",
           "sha256": "7d8010980d3785bd846716fd638a46383f311282e19badbf5f003a1cecb6ca9a"
+        },
+        {
+          "path": "test/terminal_product_hierarchy_actions_test.dart",
+          "entrypoint": "runTerminalProductHierarchyActionTests",
+          "sha256": "99659e31a772dcc9ac58521ff51bdc0c3f0814173acf8399e82579874b086666"
         }
       ],
       "integration_tests": [
@@ -201,8 +210,8 @@
   ],
   "totals": {
     "criteria": 4,
-    "source_references": 12,
-    "unit_tests": 9,
+    "source_references": 13,
+    "unit_tests": 10,
     "integration_tests": 4,
     "ui_assertions": 6,
     "blocking_failures": 0
