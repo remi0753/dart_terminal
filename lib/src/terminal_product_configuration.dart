@@ -118,6 +118,8 @@ final class TerminalProductPaletteConfiguration {
 final class TerminalProductConfiguration {
   TerminalProductConfiguration._({
     required this.workingDirectory,
+    required this.shellExecutable,
+    required this.shellIntegration,
     required this.theme,
     required this.palette,
     required this.fontFamily,
@@ -142,6 +144,10 @@ final class TerminalProductConfiguration {
   ) => TerminalProductConfiguration._(
     workingDirectory: snapshot.value(
       TerminalProductConfigSchema.workingDirectory,
+    ),
+    shellExecutable: snapshot.value(TerminalProductConfigSchema.shell),
+    shellIntegration: snapshot.value(
+      TerminalProductConfigSchema.shellIntegration,
     ),
     theme: snapshot.value(TerminalProductConfigSchema.theme),
     palette: _paletteConfigurationFromSnapshot(snapshot),
@@ -183,6 +189,8 @@ final class TerminalProductConfiguration {
       );
 
   final String? workingDirectory;
+  final String shellExecutable;
+  final TerminalConfiguredShellIntegration shellIntegration;
   final TerminalConfiguredTheme theme;
   final TerminalProductPaletteConfiguration palette;
   final String fontFamily;

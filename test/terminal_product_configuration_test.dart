@@ -122,7 +122,7 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
   _expect(
     live.map((TerminalConfigOptionBase option) => option.name).join(',') ==
             'macos-option-key,keybind' &&
-        schema.options.length == 34 &&
+        schema.options.length == 36 &&
         schema.options.every(
           (TerminalConfigOptionBase option) =>
               option.applicationPolicy ==
@@ -252,19 +252,22 @@ void _testDefaultsAndSchemaInventory() {
   final TerminalProductConfiguration defaults =
       TerminalProductConfiguration.defaults;
   _expect(
-    TerminalProductConfigSchema.instance.options.length == 34 &&
+    TerminalProductConfigSchema.instance.options.length == 36 &&
         TerminalProductConfigSchema.instance.options
                 .map((TerminalConfigOptionBase option) => option.name)
                 .toSet()
                 .length ==
-            34 &&
+            36 &&
         TerminalProductConfigSchema.instance.options.every(
           (TerminalConfigOptionBase option) => option.description.isNotEmpty,
         ),
-    'product schema has 34 unique documented options',
+    'product schema has 36 unique documented options',
   );
   _expect(
     defaults.workingDirectory == null &&
+        defaults.shellExecutable == '/bin/zsh' &&
+        defaults.shellIntegration ==
+            TerminalConfiguredShellIntegration.detect &&
         defaults.theme == TerminalConfiguredTheme.system &&
         defaults.palette.foreground == 0x80e5e5e5 &&
         defaults.palette.background == 0x80000000 &&
@@ -480,6 +483,8 @@ void _testBuiltInThemePairAndCustomOverlay() {
 void _testCompleteFileProfile() {
   final StringBuffer config = StringBuffer()
     ..writeln('working-directory = /configured/work')
+    ..writeln('shell = /opt/homebrew/bin/fish')
+    ..writeln('shell-integration = fish')
     ..writeln('theme = default')
     ..writeln('palette-foreground = #112233 # configured foreground')
     ..writeln('palette-background = #010203')
@@ -516,6 +521,8 @@ void _testCompleteFileProfile() {
   _expect(snapshot.diagnostics.isEmpty, 'complete profile has no diagnostics');
   _expect(
     profile.workingDirectory == '/configured/work' &&
+        profile.shellExecutable == '/opt/homebrew/bin/fish' &&
+        profile.shellIntegration == TerminalConfiguredShellIntegration.fish &&
         profile.theme == TerminalConfiguredTheme.system &&
         profile.palette.foreground == 0x80112233 &&
         profile.palette.background == 0x80010203 &&
@@ -553,6 +560,8 @@ void _testInvalidValuesRecoverIndependently() {
     const <String, String>{
       '/invalid': '''
 theme = unknown
+shell = zsh
+shell-integration = automatic
 palette-foreground = red
 palette-0 = #ffff
 font-family =
@@ -577,7 +586,7 @@ cursor-blink = yes
   final TerminalProductConfiguration recovered =
       TerminalProductConfiguration.fromSnapshot(snapshot);
   _expect(
-    snapshot.diagnostics.length == 15 &&
+    snapshot.diagnostics.length == 17 &&
         snapshot.diagnostics.every(
           (TerminalConfigDiagnostic diagnostic) =>
               diagnostic.code == 'CFG_INVALID_VALUE' &&
@@ -589,6 +598,9 @@ cursor-blink = yes
   _expect(
     recovered.palette.foreground ==
             TerminalProductConfiguration.defaults.palette.foreground &&
+        recovered.shellExecutable == '/bin/zsh' &&
+        recovered.shellIntegration ==
+            TerminalConfiguredShellIntegration.detect &&
         recovered.fontSize == TerminalProductConfiguration.defaults.fontSize &&
         recovered.windowWidth ==
             TerminalProductConfiguration.defaults.windowWidth &&

@@ -242,6 +242,8 @@ make RUNTIME_ARCH=arm64 developer-jit-integration
 ```text
 include = shared.conf
 working-directory = "/Users/example/Terminal Work"
+shell = /bin/zsh
+shell-integration = detect
 theme = system
 font-family = "JetBrains Mono"
 font-size = 15
@@ -260,7 +262,9 @@ keybind = control+d=unbind
 keybind = shift+control+k=pane.focus-next
 ```
 
-現在のschemaは`working-directory`に加え、`theme`、default foreground/background/cursor、
+現在のschemaは`working-directory`、新しいsession用の絶対`shell` executableと
+`shell-integration = detect | none | zsh | bash | fish | nushell`に加え、`theme`、
+default foreground/background/cursor、
 ANSI palette 0–15、font family/size/synthetic style、初期window sizeとpadding、macOS Option keyの
 `escape`/`text`動作、scrollback line/byte cap、初期cursor shape/blinkを公開します。同じ名前を
 `--font-size=15`のようにcommand lineでも指定できます。解決済み設定は新しいwindow/tab/splitの
@@ -287,8 +291,9 @@ scrollback、font、padding、window frameは書き換えません。自動file 
 ANSI palette 0–15 だけを上書きします。OSCによる実行中のpalette変更はさらに上位のlayerとして
 保持され、OSC reset時は現在のtheme値へ戻ります。`system` をcaptureした既存paneはmacOSの
 effective appearanceをlive追従し、固定`light`/`dark` paneは追従しません。reloadでthemeを
-変更しても既存paneのpolicyは変わらず、新しく作るwindow/tab/splitから反映されます。shell
-integrationはPhase 8の後続タスクです。
+変更しても既存paneのpolicyは変わらず、新しく作るwindow/tab/splitから反映されます。
+shell設定と、無効・unsupported・resource欠落時に通常shellへ戻すbounded launch planは
+定義済みです。bundle resourceと通常起動への投影はPhase 8の同じ親タスク内で順に完成させます。
 
 設定値が実際の通常製品へ反映されることは、実設定ファイルから4 paneを生成し、表示色、
 font、window/padding、cursor、Option入力、scrollback上限、pane/application keybind、

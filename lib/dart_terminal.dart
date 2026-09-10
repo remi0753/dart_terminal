@@ -202,5 +202,6 @@ export 'src/terminal_session.dart'
         TerminalSessionNativeObservation,
         TerminalSessionNativeObserver,
         TerminalSessionShutdownResult;
+export 'src/terminal_shell_integration.dart';
 export 'src/terminal_tab_metadata.dart';
 export 'src/terminal_tab_presentation.dart';

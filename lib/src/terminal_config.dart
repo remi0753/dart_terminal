@@ -32,6 +32,15 @@ enum TerminalConfiguredOptionKey { escape, text }
 
 enum TerminalConfiguredCursorShape { block, underline, bar }
 
+enum TerminalConfiguredShellIntegration {
+  detect,
+  none,
+  zsh,
+  bash,
+  fish,
+  nushell,
+}
+
 final class TerminalConfigLimits {
   const TerminalConfigLimits({
     this.maxFiles = 32,
@@ -499,6 +508,25 @@ abstract final class TerminalProductConfigSchema {
         parser: _parseNonEmptyPath,
       );
 
+  static final TerminalConfigOption<String> shell =
+      TerminalConfigOption<String>(
+        name: 'shell',
+        description: 'Absolute executable path for new terminal sessions.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
+        defaultValue: '/bin/zsh',
+        parser: _parseShellExecutable,
+      );
+
+  static final TerminalConfigOption<TerminalConfiguredShellIntegration>
+  shellIntegration = TerminalConfigOption<TerminalConfiguredShellIntegration>(
+    name: 'shell-integration',
+    description:
+        'Shell integration policy: detect, none, zsh, bash, fish, or nushell.',
+    applicationPolicy: TerminalConfigApplicationPolicy.newSession,
+    defaultValue: TerminalConfiguredShellIntegration.detect,
+    parser: _parseShellIntegration,
+  );
+
   static final TerminalConfigOption<TerminalConfiguredTheme> theme =
       TerminalConfigOption<TerminalConfiguredTheme>(
         name: 'theme',
@@ -676,6 +704,8 @@ abstract final class TerminalProductConfigSchema {
   static final TerminalConfigSchema instance = TerminalConfigSchema(
     <TerminalConfigOptionBase>[
       workingDirectory,
+      shell,
+      shellIntegration,
       theme,
       paletteForeground,
       paletteBackground,
@@ -1391,6 +1421,64 @@ TerminalConfigDecodeResult<String?> _parseNonEmptyPath(String value) {
   }
   return TerminalConfigDecodeResult<String?>.success(value);
 }
+
+TerminalConfigDecodeResult<String> _parseShellExecutable(String value) {
+  if (!value.startsWith('/')) {
+    return const TerminalConfigDecodeResult<String>.failure(
+      'shell executable must be an absolute path',
+      hint: 'for example, use `shell = /bin/zsh`',
+    );
+  }
+  final List<int> encoded = utf8.encode(value);
+  if (encoded.length > 4096 || _containsControl(value)) {
+    return const TerminalConfigDecodeResult<String>.failure(
+      'shell executable must be control-free UTF-8 within 4096 bytes',
+      hint: 'use a shorter absolute executable path',
+    );
+  }
+  if (value.endsWith('/')) {
+    return const TerminalConfigDecodeResult<String>.failure(
+      'shell executable must name a file, not a directory',
+      hint: 'for example, use `shell = /bin/zsh`',
+    );
+  }
+  return TerminalConfigDecodeResult<String>.success(value);
+}
+
+TerminalConfigDecodeResult<TerminalConfiguredShellIntegration>
+_parseShellIntegration(String value) => switch (value) {
+  'detect' =>
+    const TerminalConfigDecodeResult<
+      TerminalConfiguredShellIntegration
+    >.success(TerminalConfiguredShellIntegration.detect),
+  'none' =>
+    const TerminalConfigDecodeResult<
+      TerminalConfiguredShellIntegration
+    >.success(TerminalConfiguredShellIntegration.none),
+  'zsh' =>
+    const TerminalConfigDecodeResult<
+      TerminalConfiguredShellIntegration
+    >.success(TerminalConfiguredShellIntegration.zsh),
+  'bash' =>
+    const TerminalConfigDecodeResult<
+      TerminalConfiguredShellIntegration
+    >.success(TerminalConfiguredShellIntegration.bash),
+  'fish' =>
+    const TerminalConfigDecodeResult<
+      TerminalConfiguredShellIntegration
+    >.success(TerminalConfiguredShellIntegration.fish),
+  'nushell' =>
+    const TerminalConfigDecodeResult<
+      TerminalConfiguredShellIntegration
+    >.success(TerminalConfiguredShellIntegration.nushell),
+  _ =>
+    const TerminalConfigDecodeResult<
+      TerminalConfiguredShellIntegration
+    >.failure(
+      'shell integration must be `detect`, `none`, `zsh`, `bash`, `fish`, or `nushell`',
+      hint: 'use `shell-integration = detect` for automatic selection',
+    ),
+};
 
 TerminalConfigDecodeResult<TerminalConfiguredTheme> _parseTheme(
   String value,
