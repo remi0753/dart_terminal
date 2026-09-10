@@ -3307,7 +3307,9 @@ final class TerminalApplication {
           );
         },
         onDispatched: (TerminalActionDispatchResult result) {
-          if (runUserActionAcceptance) actionDispatches.add(result);
+          if (runUserActionAcceptance || runConfigurationAcceptance) {
+            actionDispatches.add(result);
+          }
           final TerminalAppKitMenuProjection? menu = menuProjection;
           if (menu != null && !menu.isDisposed) menu.refresh();
           if (result.disposition == TerminalActionDispatchDisposition.failed) {
@@ -3422,6 +3424,8 @@ final class TerminalApplication {
           hierarchy: createdHierarchy,
           dispatcher: dispatcher,
           menu: menuProjection,
+          palette: installedPalette,
+          settings: settingsPresenter!,
           sessions: sessions,
           allSessions: allSessions,
           owners: owners,
@@ -4128,6 +4132,8 @@ final class TerminalApplication {
     required TerminalNativeHierarchyAdapter hierarchy,
     required TerminalActionDispatcher dispatcher,
     required TerminalAppKitMenuProjection menu,
+    required TerminalCommandPalettePresenter palette,
+    required TerminalSettingsInspectorPresenter settings,
     required Map<PaneId, TerminalSession> sessions,
     required List<TerminalSession> allSessions,
     required Map<PaneId, _TerminalHierarchyProductPane> owners,
@@ -4238,6 +4244,12 @@ final class TerminalApplication {
         configurationReloadController!;
     final String configurationPath =
         reloadController.effectiveSnapshot.rootPath!;
+    final TerminalSession stableSession = initialSession;
+    final _TerminalHierarchyProductPane stableOwner = initialOwner;
+    final Window stableWindow = nativeWindow;
+    final int nativeHandleBaseline = application.debugLiveObjectCount;
+    final int settingsResponderBaseline =
+        settings.terminalResponderRestoreCount;
     _expectLifecycle(
       nativeWindow.frame.width == configuredWindowWidth &&
           nativeWindow.frame.height == configuredWindowHeight &&
@@ -4259,6 +4271,92 @@ final class TerminalApplication {
       'configured product did not project the resolved initial profile',
     );
     await _waitForAsciiMarker(initialSession, prompt);
+
+    final MenuItem settingsItem = menu.itemForAction(
+      TerminalActionId.openSettings,
+    );
+    _expectLifecycle(
+      settingsItem.isEnabled &&
+          settingsItem.keyEquivalent == ',' &&
+          settingsItem.modifiers.bits == ModifierKeys.commandBit,
+      'Settings action was unavailable or did not own Command-comma',
+    );
+    final int settingsMenuInvocationBaseline = nativeActionInvocations.length;
+    final int settingsMenuDispatchBaseline = actionDispatches.length;
+    settingsItem.performAction();
+    await waitFor(
+      () =>
+          settings.isOpen &&
+          nativeActionInvocations.length ==
+              settingsMenuInvocationBaseline + 1 &&
+          actionDispatches.length == settingsMenuDispatchBaseline + 1,
+      'native Settings menu action did not open exactly once',
+    );
+    final Window initialSettingsWindow = settings.activeWindow!;
+    _injectKeyEventForTesting(
+      application,
+      initialSettingsWindow,
+      keyCode: 17,
+      modifiers: 0,
+      characters: 'theme',
+      charactersIgnoringModifiers: 'theme',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          settings.state.query == 'theme' &&
+          settings.state.selectedEntry?.option.name == 'theme',
+      'native Settings search did not select the theme option',
+    );
+    final initialTheme = settings.state.selectedEntry!;
+    _expectLifecycle(
+      nativeActionInvocations.last == TerminalActionId.openSettings &&
+          actionDispatches.last.id == TerminalActionId.openSettings &&
+          actionDispatches.last.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          application.debugLiveObjectCount == nativeHandleBaseline + 2 &&
+          settings.state.effectiveSnapshot.schema.options.length == 36 &&
+          initialTheme.canonicalValue == 'system' &&
+          initialTheme.source.kind == TerminalConfigSourceKind.file &&
+          initialTheme.source.path == configurationPath &&
+          initialTheme.source.line == 1 &&
+          initialTheme.option.applicationPolicy ==
+              TerminalConfigApplicationPolicy.newSession &&
+          settings.state.diagnostics.length == 2 &&
+          (settings.renderedText ?? '').contains('CFG_DEPRECATED_VALUE') &&
+          (settings.renderedText ?? '').contains('CFG_INVALID_VALUE') &&
+          identical(sessions[initialPaneId], stableSession) &&
+          identical(owners[initialPaneId], stableOwner) &&
+          identical(hierarchy.windowForTab(initialTab.id), stableWindow),
+      'Settings did not expose canonical startup state and diagnostics '
+      'without replacing terminal owners',
+    );
+    final TerminalActionDispatchResult singletonDispatch = await dispatcher
+        .dispatch(TerminalActionId.openSettings);
+    _expectLifecycle(
+      singletonDispatch.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          identical(settings.activeWindow, initialSettingsWindow) &&
+          application.debugLiveObjectCount == nativeHandleBaseline + 2,
+      'shared Settings redispatch created duplicate native owners',
+    );
+    _injectKeyEventForTesting(
+      application,
+      initialSettingsWindow,
+      keyCode: 53,
+      modifiers: 0,
+      characters: '\u001b',
+      charactersIgnoringModifiers: '\u001b',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          !settings.isOpen &&
+          application.debugLiveObjectCount == nativeHandleBaseline &&
+          settings.terminalResponderRestoreCount ==
+              settingsResponderBaseline + 1,
+      'native Settings close did not restore focus and release its owners',
+    );
 
     const String paletteMarker = '__DT_CONFIG_PALETTE__';
     initialOwner.pane.insertText(
@@ -4425,16 +4523,98 @@ final class TerminalApplication {
           configurationAuthority.acceptedGeneration == 0,
       'reload action was unavailable or incorrectly reserved a native shortcut',
     );
-    final TerminalSession stableSession = initialSession;
-    final _TerminalHierarchyProductPane stableOwner = initialOwner;
-    final Window stableWindow = nativeWindow;
+    final MenuItem paletteItem = menu.itemForAction(
+      TerminalActionId.openCommandPalette,
+    );
+    final int paletteInvocationBaseline = nativeActionInvocations.length;
+    final int paletteDispatchBaseline = actionDispatches.length;
+    final int paletteResponderBaseline = palette.terminalResponderRestoreCount;
+    paletteItem.performAction();
+    await waitFor(
+      () =>
+          palette.isOpen &&
+          nativeActionInvocations.length == paletteInvocationBaseline + 1 &&
+          actionDispatches.length == paletteDispatchBaseline + 1,
+      'configuration acceptance could not open the shared command palette',
+    );
+    final Window paletteWindow = palette.activeWindow!;
+    _injectKeyEventForTesting(
+      application,
+      paletteWindow,
+      keyCode: 1,
+      modifiers: 0,
+      characters: 'settings',
+      charactersIgnoringModifiers: 'settings',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          palette.state.query == 'settings' &&
+          palette.state.selectedAction?.definition.id ==
+              TerminalActionId.openSettings,
+      'command palette did not discover the shared Settings action',
+    );
+    _injectKeyEventForTesting(
+      application,
+      paletteWindow,
+      keyCode: 36,
+      modifiers: 0,
+      characters: '\r',
+      charactersIgnoringModifiers: '\r',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          !palette.isOpen &&
+          settings.isOpen &&
+          actionDispatches.length == paletteDispatchBaseline + 2 &&
+          application.debugLiveObjectCount == nativeHandleBaseline + 2,
+      'command palette did not transfer native ownership to Settings',
+    );
+    _expectLifecycle(
+      palette.lastDispatchResult?.id == TerminalActionId.openSettings &&
+          palette.lastDispatchResult?.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          palette.terminalResponderRestoreCount == paletteResponderBaseline &&
+          actionDispatches.last.id == TerminalActionId.openSettings,
+      'command-palette Settings dispatch stole focus or lost shared identity',
+    );
+    final Window reloadSettingsWindow = settings.activeWindow!;
+    _injectKeyEventForTesting(
+      application,
+      reloadSettingsWindow,
+      keyCode: 3,
+      modifiers: 0,
+      characters: 'font-size',
+      charactersIgnoringModifiers: 'font-size',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          settings.state.query == 'font-size' &&
+          settings.state.selectedEntry?.option.name == 'font-size',
+      'Settings did not search the accepted font-size entry',
+    );
+    _expectLifecycle(
+      settings.state.selectedEntry?.canonicalValue == '18' &&
+          settings.state.selectedEntry?.source.path == configurationPath &&
+          (settings.renderedText ?? '').contains('Policy: new-session'),
+      'Settings lost accepted font-size provenance or policy',
+    );
     File(configurationPath).writeAsStringSync(
       'font-size = enormous\nmacos-option-key = escape\n',
       flush: true,
     );
-    final int rejectedNativeBaseline = nativeActionInvocations.length;
     final int rejectedDispatchBaseline = actionDispatches.length;
-    reloadItem.performAction();
+    _injectKeyEventForTesting(
+      application,
+      reloadSettingsWindow,
+      keyCode: 15,
+      modifiers: ModifierKeys.commandBit,
+      characters: 'r',
+      charactersIgnoringModifiers: 'r',
+      monotonicNanoseconds: eventTimestamp++,
+    );
     await waitFor(
       () =>
           configurationReloads.length == 1 &&
@@ -4450,12 +4630,17 @@ final class TerminalApplication {
           rejectedReload.diagnostics.single.source.line == 1 &&
           reloadController.acceptedGeneration == 0 &&
           configurationAuthority.acceptedGeneration == 0 &&
-          nativeActionInvocations.length == rejectedNativeBaseline + 1 &&
-          nativeActionInvocations.last ==
-              TerminalActionId.reloadConfiguration &&
           actionDispatches.last.id == TerminalActionId.reloadConfiguration &&
           actionDispatches.last.disposition ==
               TerminalActionDispatchDisposition.executed &&
+          settings.reloadRequestCount == 1 &&
+          settings.lastReloadResult?.id ==
+              TerminalActionId.reloadConfiguration &&
+          settings.state.acceptedGeneration == 0 &&
+          settings.state.selectedEntry?.canonicalValue == '18' &&
+          settings.state.diagnosticContext == 'latest reload attempt' &&
+          settings.state.diagnostics.single.code == 'CFG_INVALID_VALUE' &&
+          (settings.renderedText ?? '').contains('Fix:') &&
           identical(sessions[initialPaneId], stableSession) &&
           identical(owners[initialPaneId], stableOwner) &&
           identical(hierarchy.windowForTab(initialTab.id), stableWindow) &&
@@ -4489,9 +4674,16 @@ keybind = control+d=terminal.send-end-of-file
 keybind = command+k=passthrough
 keybind = control+k=pane.focus-next
 ''', flush: true);
-    final int appliedNativeBaseline = nativeActionInvocations.length;
     final int appliedDispatchBaseline = actionDispatches.length;
-    reloadItem.performAction();
+    _injectKeyEventForTesting(
+      application,
+      reloadSettingsWindow,
+      keyCode: 15,
+      modifiers: ModifierKeys.commandBit,
+      characters: 'r',
+      charactersIgnoringModifiers: 'r',
+      monotonicNanoseconds: eventTimestamp++,
+    );
     await waitFor(
       () =>
           configurationReloads.length == 2 &&
@@ -4507,12 +4699,13 @@ keybind = control+k=pane.focus-next
           reloadController.acceptedGeneration == 1 &&
           configurationAuthority.acceptedGeneration == 1 &&
           configurationAuthority.liveGeneration == 1 &&
-          nativeActionInvocations.length == appliedNativeBaseline + 1 &&
-          nativeActionInvocations.last ==
-              TerminalActionId.reloadConfiguration &&
           actionDispatches.last.id == TerminalActionId.reloadConfiguration &&
           actionDispatches.last.disposition ==
               TerminalActionDispatchDisposition.executed &&
+          settings.reloadRequestCount == 2 &&
+          settings.state.acceptedGeneration == 1 &&
+          settings.state.selectedEntry?.canonicalValue == '20' &&
+          settings.state.diagnostics.isEmpty &&
           identical(sessions[initialPaneId], stableSession) &&
           identical(owners[initialPaneId], stableOwner) &&
           identical(hierarchy.windowForTab(initialTab.id), stableWindow) &&
@@ -4523,6 +4716,23 @@ keybind = control+k=pane.focus-next
           initialScreens.scrollback.maxLines == configuredScrollbackLines &&
           initialScreens.activeScreen.cursorShape == TerminalCursorShape.bar,
       'accepted reload did not preserve existing new-session resources',
+    );
+    _injectKeyEventForTesting(
+      application,
+      reloadSettingsWindow,
+      keyCode: 53,
+      modifiers: 0,
+      characters: '\u001b',
+      charactersIgnoringModifiers: '\u001b',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          !settings.isOpen &&
+          application.debugLiveObjectCount == nativeHandleBaseline &&
+          settings.terminalResponderRestoreCount ==
+              settingsResponderBaseline + 2,
+      'Settings reload workflow did not release owners and restore focus',
     );
     final int liveEofBaseline = endOfFileActionCount();
     final TerminalKeyRouteResult liveUnbindResult = routeConfiguredKey(
@@ -4750,8 +4960,10 @@ keybind = control+k=pane.focus-next
       'keybind_pane=true keybind_application=true unbind=true '
       'passthrough=true invalid_recovery=true native_menu_priority=true '
       'reload_rejected=true reload_applied=true live_existing=true '
-      'new_session=true panes=4 independent=true sessions_clean=4 text_clients=0 '
-      'native_handles=0',
+      'new_session=true settings_menu=true settings_palette=true '
+      'settings_singleton=true settings_search=true settings_diagnostics=true '
+      'settings_reload=true settings_focus=true panes=4 independent=true '
+      'sessions_clean=4 text_clients=0 native_handles=0',
     );
   }
 

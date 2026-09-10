@@ -1,6 +1,6 @@
 # Settings UI and effective-configuration inspector
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-11 after commit `dc5603a`
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 8 `settings UI と effective-config inspector`
@@ -492,3 +492,162 @@ the next child.
   action/focus/key-equivalent integration, focused tests, generated evidence,
   README/feature/roadmap progress, and this task record. The adjacent
   `dart_appkit` worktree remained clean.
+
+## Current subtask: dual-runtime acceptance and Phase completion
+
+- Status: complete
+- Started: 2026-09-11 after commit `5a00590`
+- Purpose: prove that the schema-owned effective view and shared native
+  Settings workflow operate through the packaged ordinary product in both M1
+  Developer JIT and Release AOT, then re-evaluate every Phase 8 exit condition.
+- Background: the existing gated configuration suite already owns one isolated
+  real file, normal AppKit/menu/PTY/Metal hierarchy, invalid and corrected
+  reloads, stable resource identities, later-pane projection, and exact
+  cleanup. Extending this scenario gives Settings the same evidence without a
+  second runtime harness or synthetic application path.
+- Scope: packaged `--show-config` early-exit ownership and canonical output;
+  deprecated plus invalid startup diagnostics; native Settings menu metadata;
+  command-palette discovery/dispatch; direct shared-action singleton behavior;
+  native inspector search, provenance/policy/diagnostic rendering, rejected and
+  accepted reload through Command-R, terminal resource isolation, focus and
+  handle cleanup; both focused runtime modes and the complete runtime matrix;
+  final README/feature/roadmap/memo reconciliation.
+- Out of scope: writable settings, new schema/reload semantics, a new runtime
+  suite, Phase 9 protocols, Phase 10 terminal/parser inspector work, Intel or
+  Universal follow-up, and changes to generic AppKit APIs unless real-product
+  evidence exposes a package defect.
+- Dependencies: the existing configuration acceptance gate and real-event
+  injector, generated schema/effective formatter, shared action catalog/menu
+  and command palette, the single product reload controller and Settings
+  presenter, runtime builder/bundle audit, source/bundle/shell evidence gates,
+  and the committed adjacent `dart_appkit` runtime termination correction.
+- Completion conditions: both packaged modes exit `--show-config` before
+  worker/application/native ownership while preserving canonical value,
+  provenance, policy, and diagnostics; real Settings is reached by the native
+  menu and palette, reuses one Window/TextView pair, searches all accepted
+  entries, exposes startup/reload diagnostics, and performs both rejected and
+  accepted reloads without replacing the live pane/PTY; Escape restores the
+  terminal responder and owners return to baseline; the complete test,
+  source, bundle, runtime, and Phase 8 exit matrix passes.
+- Validation: focused Developer JIT then Release AOT configuration acceptance;
+  generated/freshness, format, analysis, aggregate tests and source audit;
+  both bundle audits and complete `runtime-verify`; final diff/source/ownership
+  review; task and parent roadmap completion; one task-scoped commit.
+
+### Initial findings and decisions
+
+- The post-`5a00590` worktree and adjacent `dart_appkit` worktree are clean.
+  The Settings parent is the only incomplete Phase 8 item and this acceptance
+  child is its only incomplete ordered subtask.
+- A new runtime suite would duplicate bundle launches and configuration
+  lifecycle. The existing `configuration` suite is the exact dependency owner
+  and will be extended in place, retaining its current make targets and its
+  inclusion in `runtime-verify`.
+- The packaged early-exit check will launch the actual bundle with the same
+  isolated file before the GUI scenario. It must emit only the bounded
+  effective document, create zero worker processes, and end in the normal
+  root-stopped diagnostic phase.
+- The file will use the real `theme = default` compatibility spelling together
+  with its existing rejected reserved shortcut. This makes both the migration
+  warning and actionable invalid-startup recovery visible in CLI and Settings
+  without changing the canonical `system` product value or reload diff.
+- The real UI sequence will open Settings first from its native Command-comma
+  menu item, redispatch the shared action while open to prove singleton
+  ownership, close it, and then select Settings from the real command palette.
+  Rejected and corrected reloads will be requested by native Command-R inside
+  that inspector, replacing the older direct reload-menu trigger while keeping
+  the same last-known-good and live/new-session assertions.
+- The first focused format/analyze command formatted only the runtime smoke
+  driver, then the analyzer was blocked before producing a result because the
+  managed sandbox denied a timestamp update below `~/.dart-tool`. The unchanged
+  analysis is rerun with the repository's established external cache access;
+  this is an environment restriction, not a source diagnostic.
+- The first external analyzer run found that a context-only patch had inserted
+  five new acceptance identity locals into the adjacent theme exercise rather
+  than the configuration exercise; it also found an unnecessary explicit
+  effective-entry type without a local import. The misplaced locals were
+  removed, inserted immediately after the configuration suite's `nativeWindow`
+  binding, and the entry now uses local type inference. No runtime attempt was
+  made with the invalid source.
+- The first Developer JIT configuration run built and signed the product but
+  rejected the new packaged `--show-config` expectation before launching the
+  GUI scenario. The initial assertion did not include its bounded observation,
+  so the driver message is expanded with stdout/stderr/worker details before
+  retrying; no acceptance condition is weakened.
+- The detailed retry showed that all ownership, count, canonical, diagnostic,
+  CLI-override, and termination expectations were satisfied. The sole mismatch
+  was correctly distinct provenance coordinates: an effective file value owns
+  the option start at column 1, while its migration diagnostic owns the value
+  at column 9. The effective-entry assertion is corrected to column 1; the GUI
+  stderr expression is also aligned to the already-tested stable migration
+  message and hint rather than an invented paraphrase.
+- The corrected Developer JIT acceptance passed in 1381 ms. Its packaged early
+  process reported 36 options, 39 retained entries, two diagnostics, canonical
+  `system`, file/CLI provenance, zero workers, and no application marker. The
+  real product then passed the complete Settings/effective-config contract and
+  shut down four clean sessions with zero text clients or native handles.
+- Release AOT passed the identical bundled contract in 853 ms, including the
+  clean early process, native menu and palette dispatch, singleton handle
+  ownership, searchable accepted values, rejected/applied Settings reloads,
+  stable original pane/session/window identities, later-resource projection,
+  focus restoration, and complete four-session/native cleanup.
+- The first aggregate `make test` passed parser, configuration-reference, and
+  keybinding/action gates (36 options, 19 actions, 10 reserved shortcuts), then
+  correctly rejected the Phase 7 reviewed-AppKit inventory after the ordinary
+  product acceptance source changed. Its generator is run before continuing;
+  only source-evidence hashes are expected to move.
+- Regeneration changed only the two expected `terminal_application.dart`
+  hashes. The next complete `make test` passed every freshness and compatibility
+  gate, formatted all 241 Dart files with zero changes, reported no analyzer
+  issues, and completed the aggregate `dart_terminal tests passed` run.
+
+### Final aggregate validation and Phase 8 exit audit
+
+- `CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64
+  runtime-verify` completed with exit status zero. It repeated all generated
+  and compatibility gates, formatted 241 Dart files with zero changes,
+  reported no analyzer issues, completed the aggregate tests, and passed the
+  source audit with 446 tracked files, zero product native sources, and the one
+  reviewed test-only native source.
+- Developer JIT and Release AOT bundle audits each passed with one helper, one
+  asset, and one capability. Ordinary smoke, real PTY/Metal display, user
+  actions, theme, shell integration, fullscreen/restoration, clipboard, all
+  lifecycle classifications, bounded traffic, resource stress, shutdown
+  faults, and PTY deadline handling passed in both modes.
+- The full-matrix configuration runs repeated the new Settings/effective-config
+  contract in 1292 ms for Developer JIT and 788 ms for Release AOT. Each mode
+  proved zero worker/application ownership for packaged `--show-config`, exact
+  canonical/provenance/policy and migration/error diagnostics, menu/palette
+  action identity, singleton Window/TextView ownership, search, rejected and
+  accepted Settings reload, original pane/session/window retention, later-pane
+  projection, focus restoration, four clean sessions, and zero final native
+  handles.
+- Four-pane flood isolation remained within budget at 1.033x in Developer JIT
+  and 0.951x in Release AOT. Resource stress completed 1000 iterations at
+  `baseline=37`, `peak=39`, and returned to baseline in both runtimes.
+- Phase 8 exit condition 1 is satisfied by the real startup with one deprecated
+  warning and one rejected reserved shortcut: the application continues and
+  both CLI/Settings expose exact file, line/column, stable code, and repair
+  hint. Exit condition 2 is satisfied by both Settings-driven reloads retaining
+  the original pane, PTY session, owner, screen, surface, and native window.
+- Exit condition 3 is satisfied by the same 36-option schema feeding canonical
+  effective output, generated CLI/help/reference and Settings, while the
+  19-action catalog feeds menu/palette/keybinding/reference with 10 reserved
+  shortcuts. All freshness gates passed. Exit condition 4 is satisfied by the
+  full dual-runtime shell-integration suite, whose explicit `none` case remained
+  an ordinary terminal and ended with complete cleanup.
+- README, IN-09, UI-09, CFG-07, this record, and the final roadmap child/parent
+  are reconciled to the verified result. Phase 8 is complete; Phase 9 remains
+  untouched as required.
+- Regenerating the compatibility coverage report after that reconciliation
+  changed only its tracked README and feature-matrix hashes; fix-family,
+  acceptance, and owned-gap content remained unchanged.
+- The final post-documentation `make test` again passed every generated and
+  compatibility check, formatted 241 files with zero changes, reported no
+  analyzer issues, and completed all Dart tests. The final source audit again
+  reported `tracked=446`, `product_native_sources=0`, and
+  `reviewed_test_native_sources=1`.
+- Final `git diff --check` passed. The eight changed files are limited to the
+  real acceptance path/driver, its two generated hash records, README and
+  feature evidence, Phase 8 roadmap completion, and this reproducible task
+  record. The adjacent `dart_appkit` worktree remains clean at `2b36186`.

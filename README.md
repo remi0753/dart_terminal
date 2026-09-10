@@ -339,8 +339,10 @@ make RUNTIME_ARCH=arm64 runtime-shell-integration
 設定値が実際の通常製品へ反映されることは、実設定ファイルから4 paneを生成し、表示色、
 font、window/padding、cursor、Option入力、scrollback上限、pane/application keybind、
 unbind、Command passthrough、invalid reserved shortcutからの復旧、invalid/corrected reload、
-live/new-session policy、native menu優先、独立resource、終了時cleanupをDeveloper JITと
-Release AOTで確認します。両runtimeのgateは
+live/new-session policy、native menu優先、独立resourceに加え、worker/AppKit所有を作らない
+`--show-config`、Settingsのnative menu/command palette/shared action、canonical valueと
+diagnostic検索、Settings内reload、focus/handle cleanupをDeveloper JITとRelease AOTで確認します。
+両runtimeのgateは
 次で再実行できます。
 
 ```shell
@@ -492,7 +494,7 @@ make RUNTIME_ARCH=arm64 runtime-restoration-integration
 
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
 smoke、real-PTY live Metal display、native tab/4-pane hierarchy、通常製品のuser action、
-configuration reload、light/dark/system appearance、
+effective-config early exit/Settings/configuration reload、light/dark/system appearance、
 fullscreen/migration/restoration/reopen、lifecycle、bounded traffic、resource stress、
 shutdown fault suiteをまとめて実行します。display suiteは
 SGR除去、style、soft wrap、

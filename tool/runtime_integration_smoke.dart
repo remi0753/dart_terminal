@@ -1517,7 +1517,7 @@ Future<void> _runConfiguration(_Options options, _Invocation invocation) async {
   final String configurationPath = '${directory.path}/config';
   try {
     await File(configurationPath).writeAsString('''
-theme = system
+theme = default
 palette-foreground = #d0d1d2
 palette-background = #111213
 palette-cursor = #f0e0d0
@@ -1540,6 +1540,62 @@ keybind = command+k=passthrough
 keybind = control+k=pane.focus-next
 keybind = command+d=pane.focus-next
 ''');
+    final _ProcessObservation effectiveObservation = await _launch(
+      options,
+      invocation,
+      <String>[
+        '--config=$configurationPath',
+        '--show-config',
+        '--font-size=21',
+      ],
+      timeout: const Duration(seconds: 20),
+    );
+    final List<String> effectiveLines = const LineSplitter().convert(
+      effectiveObservation.stdoutText,
+    );
+    final String effectiveTheme = effectiveLines.singleWhere(
+      (String line) => line.contains('name="theme"'),
+    );
+    final String effectiveFontSize = effectiveLines.singleWhere(
+      (String line) => line.contains('name="font-size"'),
+    );
+    _expect(
+      effectiveObservation.status == 0 &&
+          effectiveObservation.stderrText.isEmpty &&
+          effectiveObservation.workerProcesses.isEmpty &&
+          effectiveLines.first ==
+              'dart-terminal-effective-config version=1 options=36 '
+                  'entries=39 diagnostics=2' &&
+          effectiveLines[1] == 'root path=${jsonEncode(configurationPath)}' &&
+          effectiveTheme.contains('value="system"') &&
+          effectiveTheme.contains('policy=new-session') &&
+          effectiveTheme.contains('source=file') &&
+          effectiveTheme.contains('line=1 column=1') &&
+          effectiveFontSize.contains('value="21"') &&
+          effectiveFontSize.contains('policy=new-session') &&
+          effectiveFontSize.contains('source=command-line') &&
+          effectiveFontSize.contains('line=3 column=13') &&
+          effectiveLines
+                  .where((String line) => line.startsWith('diagnostic '))
+                  .length ==
+              2 &&
+          effectiveObservation.stdoutText.contains(
+            'diagnostic severity=warning code="CFG_DEPRECATED_VALUE"',
+          ) &&
+          effectiveObservation.stdoutText.contains(
+            'diagnostic severity=error code="CFG_INVALID_VALUE"',
+          ) &&
+          effectiveLines.last == 'end' &&
+          !effectiveObservation.stdoutText.contains(
+            'Dart Terminal is attached to the AppKit main thread.',
+          ) &&
+          !effectiveObservation.stdoutText.contains('RUNTIME_WORKER_PROCESS'),
+      'packaged show-config did not exit before ownership with canonical '
+      'effective values, provenance, policy, and diagnostics; '
+      'stdout=${effectiveObservation.stdoutText.trim()} '
+      'stderr=${effectiveObservation.stderrText.trim()} '
+      'workers=${effectiveObservation.workerProcesses.length}',
+    );
     final _ProcessObservation observation = await _launch(
       options,
       invocation,
@@ -1555,7 +1611,10 @@ keybind = command+d=pane.focus-next
     );
     final String diagnosticText = observation.stderrText.trim();
     final RegExpMatch? diagnostic = RegExp(
-      r'^.+/config:[0-9]+:[0-9]+: error\[CFG_INVALID_VALUE\]: '
+      r'^.+/config:1:9: warning\[CFG_DEPRECATED_VALUE\]: '
+      r'`theme = default` is deprecated\n'
+      r'  hint: replace it with `theme = system`\n'
+      r'.+/config:[0-9]+:[0-9]+: error\[CFG_INVALID_VALUE\]: '
       r'`keybind`: keybind chord `command\+d` is reserved by a native menu item\n'
       r'  hint: choose a chord that is not listed as a reserved native shortcut\n'
       r'.+/config:1:13: error\[CFG_INVALID_VALUE\]: `font-size`: '
@@ -1590,7 +1649,10 @@ keybind = command+d=pane.focus-next
             r'keybind_pane=true keybind_application=true unbind=true '
             r'passthrough=true invalid_recovery=true native_menu_priority=true '
             r'reload_rejected=true reload_applied=true live_existing=true '
-            r'new_session=true panes=4 independent=true '
+            r'new_session=true settings_menu=true settings_palette=true '
+            r'settings_singleton=true settings_search=true '
+            r'settings_diagnostics=true settings_reload=true '
+            r'settings_focus=true panes=4 independent=true '
             r'sessions_clean=4 text_clients=0 native_handles=0$',
             multiLine: true,
           ).allMatches(observation.stdoutText).length ==
@@ -1626,7 +1688,7 @@ keybind = command+d=pane.focus-next
     stdout.writeln(
       'RUNTIME_CONFIGURATION_INTEGRATION_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
-      'panes=4 keybinds=true reload=true '
+      'panes=4 keybinds=true reload=true settings=true effective_config=true '
       'elapsed_ms=${observation.elapsed.inMilliseconds}',
     );
   } finally {
