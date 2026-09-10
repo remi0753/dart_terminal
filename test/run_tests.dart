@@ -15,6 +15,7 @@ import 'font_shaping_test.dart';
 import 'frame_scheduler_test.dart';
 import 'glyph_atlas_test.dart';
 import 'golden_image_test.dart';
+import 'keybind_action_reference_test.dart';
 import 'metal_failure_recovery_test.dart';
 import 'metal_pipeline_test.dart';
 import 'pane_work_scheduler_test.dart';
@@ -117,6 +118,7 @@ Future<void> main() async {
   runProductParserBenchmarkTests();
   runProductParserCorpusTests();
   runGoldenImageTests();
+  runKeybindActionReferenceTests();
   runFontShapingTests();
   runGlyphAtlasTests();
   runMetalPipelineTests();

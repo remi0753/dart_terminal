@@ -36,7 +36,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - DECCKM/DECPAMを反映するbounded legacy xterm encoder（UTF-8、Control/Option、
   navigation、F1–F20、keypad）
 - stable action、exact chord、conflict検出、override、unbound、passthroughを備えた
-  immutable keybind engineと、AppKit menu shortcut優先の競合境界
+  immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
+  shortcut優先の競合境界。全key/action/default/reserved shortcutは
+  [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
 - 15個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
@@ -253,13 +255,18 @@ scrollback-lines = 50000
 scrollback-bytes = 128MiB
 cursor-shape = bar
 cursor-blink = false
+keybind = control+d=unbind
+keybind = shift+control+k=pane.focus-next
 ```
 
 現在のschemaは`working-directory`に加え、`theme`、default foreground/background/cursor、
 ANSI palette 0–15、font family/size/synthetic style、初期window sizeとpadding、macOS Option keyの
 `escape`/`text`動作、scrollback line/byte cap、初期cursor shape/blinkを公開します。同じ名前を
 `--font-size=15`のようにcommand lineでも指定できます。解決済み設定は新しいwindow/tab/splitの
-各paneへ適用され、既存paneのmutable resourceを共有しません。declarative keybind、reload、
+各paneへ適用され、既存paneのmutable resourceを共有しません。`keybind`は複数回指定でき、
+exact physical key chordをpane actionまたはapplication actionへ割り当てます。構文、全key名、
+action ID、`unbind`/`passthrough`、既定binding、予約済みnative shortcutは
+[Keybindings and actions](docs/reference/keybindings-and-actions.md)を参照してください。reload、
 light/dark theme catalog、shell integrationはPhase 8の後続タスクです。
 unknown key、不正な値、読めない明示ファイル、include cycle等はpath、line、column、安定した
 diagnostic code、可能な場合は修正案とともに標準エラーへ表示します。有効な最後の値または
@@ -500,7 +507,7 @@ screen、wide/grapheme、soft wrap、resize reflow、cursor、visual bellをCore
 viewportはbottom-followを既定とし、primary historyをprecision/momentum trackpadや
 wheelで移動できます。terminal mouse tracking中はwheel reportをPTYへ排他的に送り、
 Shift overrideとalternate-screen cursor-key emulationも同じbounded routingで扱います。
-standard clipboardは製品経路へ接続済みで、keybind設定ファイルは後続Phaseです。
+standard clipboardとkeybind設定は製品経路へ接続済みです。
 通常の大量出力後に最新promptが表示範囲外へ隠れることはありません。
 
 `TerminalPaneOwner`がpaneを、`TerminalPane`がsession generationを、

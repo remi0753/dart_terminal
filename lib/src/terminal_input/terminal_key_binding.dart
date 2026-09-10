@@ -1,6 +1,11 @@
 import '../terminal_action_registry.dart';
 import 'terminal_key_event.dart';
 
+abstract final class TerminalKeyBindingLimits {
+  static const int maximumDefinitionCount = 1024;
+  static const int maximumConfigurationUnits = 512;
+}
+
 /// Stable action IDs accepted by the initial configurable binding engine.
 enum TerminalKeyBindingAction {
   sendEndOfFile('terminal.send-end-of-file'),
@@ -79,6 +84,13 @@ final class TerminalKeyBindingChord {
 
 /// Stable configuration names for the physical-key binding surface.
 abstract final class TerminalKeyBindingVocabulary {
+  static const List<String> modifierConfigNames = <String>[
+    'shift',
+    'control',
+    'option',
+    'command',
+  ];
+
   static String configNameForKey(TerminalPhysicalKey key) {
     if (key == TerminalPhysicalKey.unknown) {
       throw ArgumentError.value(key, 'key', 'unknown has no config name');
@@ -174,9 +186,12 @@ final class TerminalKeyBindingDefinition {
   final TerminalKeyBindingAction? action;
   final TerminalActionId? applicationAction;
 
+  static const String unbindConfigName = 'unbind';
+  static const String passthroughConfigName = 'passthrough';
+
   String get targetConfigName => switch (directive) {
-    TerminalKeyBindingDirective.unbind => 'unbind',
-    TerminalKeyBindingDirective.passthrough => 'passthrough',
+    TerminalKeyBindingDirective.unbind => unbindConfigName,
+    TerminalKeyBindingDirective.passthrough => passthroughConfigName,
     TerminalKeyBindingDirective.action =>
       action?.configName ?? applicationAction!.stableName,
   };
@@ -337,7 +352,8 @@ final class TerminalKeyBindingEngine {
 
   const TerminalKeyBindingEngine._(this._bindings, this.definitionCount);
 
-  static const int maximumDefinitionCount = 1024;
+  static const int maximumDefinitionCount =
+      TerminalKeyBindingLimits.maximumDefinitionCount;
   static const int standardDefinitionCount = 1;
   static const List<TerminalKeyBindingDefinition> standardDefinitions =
       <TerminalKeyBindingDefinition>[

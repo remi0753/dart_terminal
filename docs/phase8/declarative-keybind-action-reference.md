@@ -226,3 +226,45 @@ the next begins. `ROADMAP.md` and this memo are reread after every commit.
 - The pane/application action routing and native-menu arbitration subtask is
   complete; generated user documentation and its freshness gate remain the
   next ordered work.
+- The keybinding compatibility constants are now explicit authorities:
+  `TerminalKeyBindingLimits` owns the 1,024-definition and 512-UTF-16 value
+  bounds, `TerminalKeyBindingVocabulary.modifierConfigNames` owns canonical
+  modifier spelling/order, and the special target names are constants on
+  `TerminalKeyBindingDefinition`. Config decoding and documentation generation
+  consume those declarations instead of repeating literals.
+- `tool/generate_keybind_action_reference.dart` validates unique round-tripping
+  key names, unique target namespaces, full application-catalog coverage,
+  reconciled configured/default bounds, convertible unique native shortcuts,
+  and non-reserved valid defaults before emitting deterministic Markdown.
+  The checked-in result is `docs/reference/keybindings-and-actions.md`.
+- The reference contains declaration precedence and bounds, all 105 physical
+  key names, 4 pane action IDs, 15 application actions with titles/menu
+  ownership, 1 standard binding, both special directives, and all 9 reserved
+  native shortcuts. Two consecutive generation runs produced a source accepted
+  by the new `keybind-action-reference-check` freshness gate.
+- `test/keybind_action_reference_test.dart` independently requires the
+  committed source to equal a fresh generation, checks every current key,
+  pane/application action, and standard binding is present, and rejects a
+  mutated reference. The aggregate runner invokes this test and `make test`
+  runs the freshness target before formatting/analysis/test execution.
+- README now links the generated reference from both the product inventory and
+  Configuration guide. Feature evidence marks IN-09/CFG-03 as implemented but
+  awaiting the final M1 keybind acceptance, and CFG-07 as complete only for the
+  action/keybinding reference; full effective-config/help/settings generation
+  and deprecated migration warnings remain later work.
+- The first complete run after those evidence edits passed the new reference
+  gate, then correctly rejected the existing compatibility coverage report as
+  stale. Its generator changed only the README and FEATURE_MATRIX source hashes
+  (not criteria or accepted gaps). The next complete
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` run passed every freshness
+  gate, formatted 220 files with zero changes, reported no analysis issues, and
+  passed the aggregate Dart suite.
+- The generated keybind/action reference and freshness gate subtask is
+  complete. The real M1 Developer JIT/Release AOT product acceptance is next.
+- After staging the new generator, test, and reference so the Git-based source
+  inventory included them, `make runtime-source-check` passed with
+  `tracked=413`, `product_native_sources=0`, and
+  `reviewed_test_native_sources=1`.
+- Restaging this final audit note was once rejected by the workspace's
+  `.git/index.lock` restriction; the identical one-file `git add` was retried
+  with repository metadata write permission.

@@ -1428,11 +1428,14 @@ TerminalConfigDecodeResult<TerminalConfiguredCursorShape> _parseCursorShape(
 TerminalConfigDecodeResult<TerminalKeyBindingDefinition> _parseKeyBinding(
   String value,
 ) {
-  if (value.isEmpty || value.length > 512 || _containsControl(value)) {
+  if (value.isEmpty ||
+      value.length > TerminalKeyBindingLimits.maximumConfigurationUnits ||
+      _containsControl(value)) {
     return const TerminalConfigDecodeResult<
       TerminalKeyBindingDefinition
     >.failure(
-      'keybind must be control-free text within 512 UTF-16 units',
+      'keybind must be control-free text within '
+      '${TerminalKeyBindingLimits.maximumConfigurationUnits} UTF-16 units',
       hint: 'use `keybind = control+k=terminal.send-interrupt-signal`',
     );
   }
@@ -1533,12 +1536,12 @@ TerminalConfigDecodeResult<TerminalKeyBindingDefinition> _parseKeyBinding(
       hint: 'choose a chord that is not listed as a reserved native shortcut',
     );
   }
-  if (targetText == 'unbind') {
+  if (targetText == TerminalKeyBindingDefinition.unbindConfigName) {
     return TerminalConfigDecodeResult<TerminalKeyBindingDefinition>.success(
       TerminalKeyBindingDefinition.unbind(chord: chord),
     );
   }
-  if (targetText == 'passthrough') {
+  if (targetText == TerminalKeyBindingDefinition.passthroughConfigName) {
     return TerminalConfigDecodeResult<TerminalKeyBindingDefinition>.success(
       TerminalKeyBindingDefinition.passthrough(chord: chord),
     );
@@ -1567,12 +1570,9 @@ TerminalConfigDecodeResult<TerminalKeyBindingDefinition> _parseKeyBinding(
   );
 }
 
-const Set<String> _terminalKeyBindingModifiers = <String>{
-  'shift',
-  'control',
-  'option',
-  'command',
-};
+final Set<String> _terminalKeyBindingModifiers = Set<String>.unmodifiable(
+  TerminalKeyBindingVocabulary.modifierConfigNames,
+);
 
 final Set<TerminalKeyBindingChord> _reservedNativeMenuChords =
     Set<TerminalKeyBindingChord>.unmodifiable(
