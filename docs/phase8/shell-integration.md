@@ -105,6 +105,44 @@ remote-PTY behavior.
 Each subtask is documented, verified, marked complete, and committed before
 the next begins. After each commit, reread `ROADMAP.md` and this memo.
 
+## Current subtask: new-session projection and shell execution coverage
+
+- Status: complete
+- Started: 2026-09-11 after commit `84b4aed`
+- Completed: 2026-09-11
+- Purpose: turn the validated bundle contract and immutable profile into the
+  exact executable, argv, environment, and login-shell inputs owned by every
+  newly created ordinary `TerminalSession`.
+- Background: the normal product hierarchy already captures
+  `configurationAuthority.newSessionConfiguration` once per pane and creates
+  all sessions through one factory, but it still relies on `TerminalSession`'s
+  hard-coded `/bin/zsh` default. The application currently resolves only the
+  terminfo resource at startup.
+- Scope: add a fail-closed bundle-resource state, resolve it once at application
+  startup, build one content-free launch plan per newly created pane, project
+  that plan atomically into `TerminalSession`, and verify command capture with
+  fake PTYs plus startup execution with installed zsh/bash.
+- Out of scope: a new runtime command-line scenario or GUI evidence (the fourth
+  subtask), prompt/cwd/title/close semantics (the following roadmap item),
+  optional shell installation, home-directory mutation, and changes to
+  `dart_appkit` or `dart_pty_macos`.
+- Dependencies and risks: deterministic acceptance paths deliberately pass
+  `-f`; the planner must retain those existing arguments and avoid integration.
+  A corrupt/missing contract must not prevent application startup. Reload may
+  change only later pane plans. User startup files must run once, and temporary
+  ZDOTDIR/ENV/XDG variables must not remain after resource execution.
+- Completion conditions: bundle state is immutable and content/path-free in
+  diagnostics; ordinary pane creation uses captured shell executable/policy;
+  fake PTYs prove all four successful projections and every fallback; installed
+  zsh/bash prove integration markers and user startup behavior in real PTYs;
+  focused and aggregate format/analyze/tests plus source audit pass.
+- Validation plan: bundle missing/invalid/valid fixtures; fake `PtyCommand`
+  capture including reload/new-pane separation; real zsh and forced bash PTY
+  probes with isolated temporary HOME/startup files (Apple bash through manual
+  profile opt-in when automatic ENV startup is unavailable); optional fish/nu
+  execution only when already installed; then complete `make test`, source
+  audit, staged diff review, roadmap update, and one independent commit.
+
 ## Completion conditions
 
 1. The typed schema validates bounded shell selection and integration policy,
@@ -221,8 +259,8 @@ the next begins. After each commit, reread `ROADMAP.md` and this memo.
   data-directory list; nushell also receives its module import expression.
 - Injected and parent environment values are capped at 64 KiB each. Resource
   roots must be absolute, NUL-free, within 4096 UTF-8 bytes, and declare which
-  shell contracts were validated. The future resource loader can therefore
-  fail closed by passing no validated set.
+  shell contracts were validated. The resource loader therefore fails closed
+  by passing no validated set.
 - Targeted format, analyze, schema/profile tests, and the new planner suite pass
   after correcting the invalid-CLI expectation. The suite covers every policy,
   default values, reload classification, immutable inputs/outputs, all four
@@ -296,6 +334,84 @@ the next begins. After each commit, reread `ROADMAP.md` and this memo.
   `git diff --cached --check` is clean, and the staged name/status review contains
   only the versioned resources, contract/runtime/tooling/tests, manifest/audit,
   regenerated compatibility evidence, and this task's user/engineering docs.
+- The worktree is clean immediately after the second-subtask commit `84b4aed`.
+  The required roadmap/memo reread identifies new-session projection as the
+  first unchecked item; the parent and its M1 product-acceptance child remain
+  incomplete.
+- The normal interactive hierarchy has one per-pane session factory. It already
+  captures the configuration authority's immutable new-session profile and
+  inherited/configured cwd before construction, so shell planning belongs in
+  that same closure. Test-only display/configuration/theme paths pass `-f` and
+  must continue through the planner's ordinary-shell fallback unchanged.
+- `TerminalSession` owns the final `PtyCommand` and already stores executable,
+  arguments, and environment immutably, but hard-codes `loginShell: true` at the
+  final native boundary. Atomic plan projection therefore needs to include that
+  fourth field rather than copying only three of four command properties.
+- The initial code search for shell configuration failed twice without changing
+  files: first because a pattern beginning with `--shell` was parsed as an `rg`
+  option, then because `--glob` was placed after the option terminator and was
+  parsed as a path. Moving all options before `--` produced the intended scoped
+  results.
+- The first focused analyzer run after projection implementation found eight
+  positional-argument type/count errors. A context-only patch had inserted the
+  new bundle state into the adjacent restoration acceptance call instead of the
+  ordinary interactive hierarchy call. The signatures made the mistake
+  explicit; the bundle argument is removed from restoration and added only to
+  `_runInteractiveHierarchyProduct`, with no change to either test-only flow.
+- A first correction still matched the identical native-hierarchy argument
+  prefix, which a numbered source read exposed before another analyzer run.
+  The corrected patch includes each callee name and moves the argument only to
+  the intended interactive hierarchy. That inspection command also mistakenly
+  passed this Markdown memo to `dart format`; the Dart source needed no change,
+  while the expected Markdown parse diagnostics caused a nonzero exit. All
+  subsequent formatter calls remain restricted to Dart files.
+- The first focused projection execution passed bundle fallback, all fake PTY
+  mappings, reload capture, integrated zsh, and disabled zsh, but the forced
+  bash output did not match the expected marker/startup/restoration tuple. The
+  probe is rerun with its bounded isolated-test output attached to the failure
+  so the bash startup difference can be diagnosed rather than weakening the
+  expectation.
+- The bounded bash output showed `.bash_profile` loaded normally while `ENV`
+  remained the integration path, the injection flag remained `1`, and no
+  integration marker was set. This confirms Apple's Bash 3.2 patch applies even
+  when the user forces the bash policy; labeling that launch integrated would
+  be incorrect.
+- A direct open of the pinned GitHub source produced a web cache miss. A
+  domain-limited search then recovered the official planner, shell-integration
+  README, and bash resource. They explicitly state that macOS `/bin/bash` does
+  not support automatic integration and recommend sourcing the bash resource
+  manually; standard bash retains the POSIX `ENV` plan. Therefore `/bin/bash`
+  now always returns `appleBashUnsupported`, including forced policy, while an
+  isolated temporary `.bash_profile` manually sources Dart Terminal's resource
+  to exercise the supported Apple-bash opt-in path without modifying user files.
+- The repository search used to locate the pinned revision also named a missing
+  `.agents` path and exited with an `rg` warning after still returning the
+  relevant roadmap/docs matches. Removing that nonexistent path is sufficient
+  for future searches; no source changed.
+- After the Apple-bash correction, focused formatting is unchanged, analysis
+  reports no issues, and both the existing planner suite and the new projection
+  suite pass. The latter executes integrated and disabled zsh plus manually
+  opted-in Apple bash in real PTYs, and verifies standard bash/fish/nushell
+  command projection with fake PTYs because those executables are not installed.
+- The first aggregate `make test` attempt reached the Phase 7 AppKit acceptance
+  freshness check and reported its source evidence stale because the ordinary
+  hierarchy implementation changed. This is the expected generated hash
+  dependency, not a behavioral failure; the established generator is run before
+  repeating the complete gate.
+- Regenerating `test/corpus/appkit/phase7_acceptance_v1.json` updates only the
+  ordinary hierarchy source hash. The repeated complete gate passes every
+  freshness/evidence check, formats 229 Dart files without changes, reports no
+  analyzer issues, completes the real-shell projection tests inside the
+  aggregate runner, and ends with `dart_terminal tests passed`.
+- After updating README/feature status, compatibility coverage is regenerated
+  with 9 fix families, 9 cases, and 417 split runs. The final complete gate
+  repeats successfully with all generated contracts fresh, 229 formatted files
+  unchanged, no analyzer issues, and all aggregate tests passing.
+- The staged-candidate source audit passes with 431 tracked files, zero product
+  native sources, and the one existing reviewed test-native fixture. The staged
+  diff is whitespace-clean and contains only the application/session/bundle
+  projection, planner correction, tests, generated evidence, and this task's
+  documentation.
 
 ## Resolved split questions
 

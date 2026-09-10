@@ -296,7 +296,10 @@ shell設定と、無効・unsupported・resource欠落時に通常shellへ戻す
 定義済みです。zsh、bash、fish、nushell向けのversion 1 bootstrap resourceもbundleへ
 宣言し、固定path、size、SHA-256、UTF-8をまとめて検証できない場合は部分適用しない
 contractを設けています。現段階のresourceは実行確認用markerだけを提供し、通常起動への
-投影とprompt/cwd/title連携はPhase 8の同じ親タスク内で順に完成させます。
+新しいpaneはcapture済みのshell executable/policyから検証済みlaunch planを生成します。
+macOS同梱の`/bin/bash`は`ENV` startupを無効化しているため、明示`bash` policyでも通常の
+login shellへ安全にfallbackします。両runtimeの製品受け入れとprompt/cwd/title連携は
+Phase 8の同じ親タスク内で順に完成させます。
 
 設定値が実際の通常製品へ反映されることは、実設定ファイルから4 paneを生成し、表示色、
 font、window/padding、cursor、Option入力、scrollback上限、pane/application keybind、

@@ -11,7 +11,7 @@ enum TerminalShellIntegrationDisposition {
   disabled,
   unsupportedShell,
   unsupportedArguments,
-  automaticAppleBash,
+  appleBashUnsupported,
   resourcesUnavailable,
   environmentLimitExceeded,
 }
@@ -268,13 +268,110 @@ final class TerminalShellIntegrationContract {
   }
 }
 
+enum TerminalShellIntegrationBundleDisposition {
+  bundled,
+  fallbackMissing,
+  fallbackInvalid,
+}
+
+/// Immutable application-startup result for bundled integration resources.
+///
+/// File-system failures are reduced to a content-free fallback disposition.
+/// New panes can therefore use one reviewed resource generation without doing
+/// file I/O or exposing a private bundle path in diagnostics.
+final class TerminalShellIntegrationBundle {
+  const TerminalShellIntegrationBundle._({
+    required this.disposition,
+    required TerminalShellIntegrationResources? resources,
+    required this.fileCount,
+  }) : _resources = resources;
+
+  static TerminalShellIntegrationBundle resolve({String? bundledContractPath}) {
+    if (bundledContractPath == null) {
+      return const TerminalShellIntegrationBundle._(
+        disposition: TerminalShellIntegrationBundleDisposition.fallbackMissing,
+        resources: null,
+        fileCount: 0,
+      );
+    }
+    if (!bundledContractPath.startsWith('/') ||
+        !bundledContractPath.endsWith(
+          '/${TerminalShellIntegrationContract.relativePath}',
+        )) {
+      return const TerminalShellIntegrationBundle._(
+        disposition: TerminalShellIntegrationBundleDisposition.fallbackInvalid,
+        resources: null,
+        fileCount: 0,
+      );
+    }
+    try {
+      final File contractFile = File(bundledContractPath);
+      final TerminalShellIntegrationContract contract =
+          TerminalShellIntegrationContract.load(contractFile);
+      final TerminalShellIntegrationResources resources = contract
+          .validateResources(contractFile.parent);
+      return TerminalShellIntegrationBundle._(
+        disposition: TerminalShellIntegrationBundleDisposition.bundled,
+        resources: resources,
+        fileCount: contract.files.length,
+      );
+    } on TerminalShellIntegrationException {
+      return const TerminalShellIntegrationBundle._(
+        disposition: TerminalShellIntegrationBundleDisposition.fallbackInvalid,
+        resources: null,
+        fileCount: 0,
+      );
+    } on FileSystemException {
+      return const TerminalShellIntegrationBundle._(
+        disposition: TerminalShellIntegrationBundleDisposition.fallbackInvalid,
+        resources: null,
+        fileCount: 0,
+      );
+    } on ArgumentError {
+      return const TerminalShellIntegrationBundle._(
+        disposition: TerminalShellIntegrationBundleDisposition.fallbackInvalid,
+        resources: null,
+        fileCount: 0,
+      );
+    }
+  }
+
+  final TerminalShellIntegrationBundleDisposition disposition;
+  final TerminalShellIntegrationResources? _resources;
+  final int fileCount;
+
+  bool get usesBundledResources =>
+      disposition == TerminalShellIntegrationBundleDisposition.bundled;
+
+  TerminalShellLaunchPlan createLaunchPlan({
+    required String executable,
+    Iterable<String> arguments = const <String>[],
+    required Map<String, String> environment,
+    required TerminalConfiguredShellIntegration policy,
+    TerminalShellIntegrationPlanner planner =
+        const TerminalShellIntegrationPlanner(),
+  }) => planner.plan(
+    executable: executable,
+    arguments: arguments,
+    environment: environment,
+    policy: policy,
+    resources: _resources,
+  );
+
+  String machineLine() =>
+      'TERMINAL_SHELL_INTEGRATION_BUNDLE '
+      'disposition=${disposition.name} '
+      'version=${usesBundledResources ? TerminalShellIntegrationContract.integrationVersion : 0} '
+      'shells=${usesBundledResources ? TerminalShellKind.values.length : 0} '
+      'files=$fileCount';
+}
+
 /// A validated bundle-resource root and the shell integrations it contains.
 ///
-/// The resource-contract loader introduced by the next implementation step is
-/// responsible for checking file type, size, and content hash before creating
-/// this value. Keeping that validation outside the planner makes a failed load
-/// indistinguishable from an unavailable integration and preserves the
-/// ordinary shell launch transaction.
+/// [TerminalShellIntegrationContract.validateResources] checks file type, size,
+/// and content hash before creating this value. Keeping that validation outside
+/// the planner makes a failed load indistinguishable from an unavailable
+/// integration and preserves the ordinary shell launch transaction.
 final class TerminalShellIntegrationResources {
   TerminalShellIntegrationResources({
     required this.rootPath,
@@ -385,12 +482,11 @@ final class TerminalShellIntegrationPlanner {
     if (shell == null) {
       return fallback(TerminalShellIntegrationDisposition.unsupportedShell);
     }
-    if (!forced &&
-        isDarwin &&
+    if (isDarwin &&
         shell == TerminalShellKind.bash &&
         executable == '/bin/bash') {
       return fallback(
-        TerminalShellIntegrationDisposition.automaticAppleBash,
+        TerminalShellIntegrationDisposition.appleBashUnsupported,
         shell: shell,
       );
     }

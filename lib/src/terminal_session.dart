@@ -16,6 +16,7 @@ import 'terminal_input/terminal_hyperlink_interaction.dart';
 import 'terminal_input/terminal_key_event.dart';
 import 'terminal_input/terminal_paste.dart';
 import 'terminal_pane.dart';
+import 'terminal_shell_integration.dart';
 
 enum TerminalSessionLifecycleStage {
   startRequested,
@@ -144,8 +145,10 @@ final class TerminalSession implements TerminalPaneSession {
     PtyBackend? ptyBackend,
     String? initialWorkingDirectory,
     Map<String, String>? environment,
-    this.shellExecutable = '/bin/zsh',
+    String shellExecutable = '/bin/zsh',
     List<String> shellArguments = const <String>[],
+    bool loginShell = true,
+    TerminalShellLaunchPlan? shellLaunchPlan,
     this.readBatchBytes = defaultReadBatchBytes,
     this.writeCapacityBytes = 1024 * 1024,
     this.gracefulShutdownTimeout = const Duration(seconds: 3),
@@ -162,13 +165,26 @@ final class TerminalSession implements TerminalPaneSession {
        _lifecycleObserver = lifecycleObserver,
        _nativeObserver = nativeObserver,
        _ptyBackend = ptyBackend ?? MacosPtyBackend.shared,
-       shellArguments = List<String>.unmodifiable(shellArguments),
+       shellExecutable = shellLaunchPlan?.executable ?? shellExecutable,
+       shellArguments = List<String>.unmodifiable(
+         shellLaunchPlan?.arguments ?? shellArguments,
+       ),
+       loginShell = shellLaunchPlan?.loginShell ?? loginShell,
        _environment = Map<String, String>.unmodifiable(
-         environment ?? Platform.environment,
+         shellLaunchPlan?.environment ?? environment ?? Platform.environment,
        ),
        _workingDirectory = Directory(
          initialWorkingDirectory ?? Directory.current.path,
        ).absolute.path {
+    if (shellLaunchPlan != null &&
+        (environment != null ||
+            shellExecutable != '/bin/zsh' ||
+            shellArguments.isNotEmpty ||
+            !loginShell)) {
+      throw ArgumentError(
+        'shellLaunchPlan cannot be combined with individual shell inputs',
+      );
+    }
     if (readBatchBytes <= 0 ||
         readBatchBytes > PtyCommand.maximumReadBatchBytes) {
       throw RangeError.range(
@@ -223,6 +239,7 @@ final class TerminalSession implements TerminalPaneSession {
   final Map<String, String> _environment;
   final String shellExecutable;
   final List<String> shellArguments;
+  final bool loginShell;
   static const int defaultReadBatchBytes = 4 * 1024;
   static const int defaultReadHighWaterBytes = defaultReadBatchBytes;
   static const int defaultReadLowWaterBytes = 0;
@@ -369,7 +386,7 @@ final class TerminalSession implements TerminalPaneSession {
           environment: environment,
           includeParentEnvironment: false,
           workingDirectory: _workingDirectory,
-          loginShell: true,
+          loginShell: loginShell,
           readBatchBytes: readBatchBytes,
           readBatchesPerEventLoopTurn: defaultReadBatchesPerEventLoopTurn,
         ),

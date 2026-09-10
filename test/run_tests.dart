@@ -84,6 +84,7 @@ import 'terminal_selection_search_test.dart';
 import 'terminal_session_configuration_test.dart';
 import 'terminal_session_metadata_test.dart';
 import 'terminal_session_reply_test.dart';
+import 'terminal_shell_integration_projection_test.dart';
 import 'terminal_shell_integration_resource_test.dart';
 import 'terminal_shell_integration_test.dart';
 import 'terminal_snapshot_test.dart';
@@ -177,6 +178,7 @@ Future<void> main() async {
   await runTerminalSessionConfigurationTests();
   runTerminalShellIntegrationTests();
   runTerminalShellIntegrationResourceTests();
+  await runTerminalShellIntegrationProjectionTests();
   runTerminalSelectionSearchTests();
   runTerminalSnapshotTests();
   runTerminalScreenMetalCompositorTests();

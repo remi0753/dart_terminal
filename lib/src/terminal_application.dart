@@ -51,6 +51,7 @@ import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_restoration.dart';
 import 'terminal_restoration_lifecycle.dart';
 import 'terminal_session.dart';
+import 'terminal_shell_integration.dart';
 import 'terminal_tab_metadata.dart';
 import 'terminal_tab_presentation.dart';
 import 'terminal_terminfo_environment.dart';
@@ -610,6 +611,19 @@ final class TerminalApplication {
           bundledEntryPath: bundledTerminfoEntry,
         );
     stdout.writeln(terminfoEnvironment.machineLine());
+    String? bundledShellIntegrationContract;
+    try {
+      bundledShellIntegrationContract = MacosRuntime.bundleResourcePath(
+        TerminalShellIntegrationContract.relativePath,
+      );
+    } on MacosRuntimeException {
+      bundledShellIntegrationContract = null;
+    }
+    final TerminalShellIntegrationBundle shellIntegrationBundle =
+        TerminalShellIntegrationBundle.resolve(
+          bundledContractPath: bundledShellIntegrationContract,
+        );
+    stdout.writeln(shellIntegrationBundle.machineLine());
     if (options.runtimeRestorationTest) {
       await _runRestorationProductAcceptance(
         application,
@@ -645,6 +659,7 @@ final class TerminalApplication {
         application,
         ptyBackend,
         terminfoEnvironment,
+        shellIntegrationBundle,
         options.runtimeWorkerCommand,
         options.initialWorkingDirectory,
         productConfiguration,
@@ -2125,6 +2140,7 @@ final class TerminalApplication {
     AppKitApplication application,
     PtyBackend ptyBackend,
     TerminalTerminfoEnvironment terminfoEnvironment,
+    TerminalShellIntegrationBundle shellIntegrationBundle,
     RuntimeLifecycleWorkerCommand workerCommand,
     String? initialWorkingDirectory,
     TerminalProductConfiguration productConfiguration, {
@@ -2240,28 +2256,35 @@ final class TerminalApplication {
             }) {
               paneId = id.paneId;
               paneConfigurations[id.paneId] = capturedConfiguration;
+              final bool usesDeterministicShell =
+                  runUserActionAcceptance ||
+                  runConfigurationAcceptance ||
+                  runThemeAcceptance;
+              final Map<String, String> shellEnvironment =
+                  usesDeterministicShell
+                  ? <String, String>{
+                      ...terminfoEnvironment.environment,
+                      'TERM': 'xterm-256color',
+                      'LC_ALL': 'C',
+                      'PS1': acceptancePrompt,
+                      'RPS1': '',
+                    }
+                  : terminfoEnvironment.environment;
+              final TerminalShellLaunchPlan shellLaunchPlan =
+                  shellIntegrationBundle.createLaunchPlan(
+                    executable: capturedConfiguration.shellExecutable,
+                    arguments: usesDeterministicShell
+                        ? const <String>['-f']
+                        : const <String>[],
+                    environment: shellEnvironment,
+                    policy: capturedConfiguration.shellIntegration,
+                  );
+              stdout.writeln(shellLaunchPlan.machineLine());
               final TerminalSession session = TerminalSession(
                 id: id,
                 ptyBackend: ptyBackend,
                 initialWorkingDirectory: workingDirectory,
-                environment:
-                    runUserActionAcceptance ||
-                        runConfigurationAcceptance ||
-                        runThemeAcceptance
-                    ? <String, String>{
-                        ...terminfoEnvironment.environment,
-                        'TERM': 'xterm-256color',
-                        'LC_ALL': 'C',
-                        'PS1': acceptancePrompt,
-                        'RPS1': '',
-                      }
-                    : terminfoEnvironment.environment,
-                shellArguments:
-                    runUserActionAcceptance ||
-                        runConfigurationAcceptance ||
-                        runThemeAcceptance
-                    ? const <String>['-f']
-                    : const <String>[],
+                shellLaunchPlan: shellLaunchPlan,
                 onChanged: onChanged,
                 onTerminated: onTerminated,
                 lifecycleObserver:

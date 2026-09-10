@@ -201,7 +201,7 @@ void _testBashDetectionAndForcedPlan() {
   );
   _expect(
     automatic.disposition ==
-            TerminalShellIntegrationDisposition.automaticAppleBash &&
+            TerminalShellIntegrationDisposition.appleBashUnsupported &&
         automatic.shell == TerminalShellKind.bash &&
         automatic.arguments.isEmpty &&
         automatic.environment['ENV'] == '/Users/test/.env' &&
@@ -210,7 +210,7 @@ void _testBashDetectionAndForcedPlan() {
   );
 
   final TerminalShellLaunchPlan forced = planner.plan(
-    executable: '/bin/bash',
+    executable: '/opt/homebrew/bin/bash',
     environment: original,
     policy: TerminalConfiguredShellIntegration.bash,
     resources: _resources(),
@@ -226,6 +226,21 @@ void _testBashDetectionAndForcedPlan() {
         forced.environment['ENV'] ==
             '${_resources().rootPath}/bash/dart-terminal-integration.bash',
     'explicit bash policy constructs the documented POSIX ENV bootstrap',
+  );
+
+  final TerminalShellLaunchPlan forcedApple = planner.plan(
+    executable: '/bin/bash',
+    environment: original,
+    policy: TerminalConfiguredShellIntegration.bash,
+    resources: _resources(),
+  );
+  _expect(
+    forcedApple.disposition ==
+            TerminalShellIntegrationDisposition.appleBashUnsupported &&
+        forcedApple.arguments.isEmpty &&
+        forcedApple.environment['ENV'] == '/Users/test/.env' &&
+        !forcedApple.environment.containsKey('DART_TERMINAL_BASH_INJECT'),
+    'explicit policy cannot bypass the Apple bash ENV startup limitation',
   );
 
   final TerminalShellLaunchPlan portable =
