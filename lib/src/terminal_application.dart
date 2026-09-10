@@ -102,6 +102,7 @@ final class TerminalOptions {
     this.runtimeClipboardTest = false,
     this.runtimeNativeHierarchyTest = false,
     this.runtimeUserActionsTest = false,
+    this.runtimeConfigurationTest = false,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
@@ -136,6 +137,7 @@ final class TerminalOptions {
     var runtimeClipboardTest = false;
     var runtimeNativeHierarchyTest = false;
     var runtimeUserActionsTest = false;
+    var runtimeConfigurationTest = false;
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
@@ -204,6 +206,15 @@ final class TerminalOptions {
           );
         }
         runtimeUserActionsTest = true;
+        continue;
+      }
+      if (argument == '--runtime-configuration-test') {
+        if (runtimeConfigurationTest) {
+          throw const FormatException(
+            '--runtime-configuration-test may only be supplied once',
+          );
+        }
+        runtimeConfigurationTest = true;
         continue;
       }
       if (argument == '--runtime-restoration-test') {
@@ -401,6 +412,30 @@ final class TerminalOptions {
         'user actions test cannot be combined with another runtime test',
       );
     }
+    if (runtimeConfigurationTest &&
+        (environment ??
+                Platform.environment)['DT_RUNTIME_CONFIGURATION_TEST'] !=
+            '1') {
+      throw const FormatException(
+        'configuration test requires the integration-test gate',
+      );
+    }
+    if (runtimeConfigurationTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'configuration test cannot be combined with another runtime test',
+      );
+    }
     if (runtimeNativeHierarchyTest &&
         (selectedScenario != RuntimeLifecycleScenario.normal ||
             autoCloseAfter != null ||
@@ -456,6 +491,7 @@ final class TerminalOptions {
       runtimeClipboardTest: runtimeClipboardTest,
       runtimeNativeHierarchyTest: runtimeNativeHierarchyTest,
       runtimeUserActionsTest: runtimeUserActionsTest,
+      runtimeConfigurationTest: runtimeConfigurationTest,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
@@ -479,6 +515,7 @@ final class TerminalOptions {
   final bool runtimeClipboardTest;
   final bool runtimeNativeHierarchyTest;
   final bool runtimeUserActionsTest;
+  final bool runtimeConfigurationTest;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
@@ -544,6 +581,7 @@ final class TerminalApplication {
       return;
     }
     if (options.runtimeUserActionsTest ||
+        options.runtimeConfigurationTest ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -559,6 +597,7 @@ final class TerminalApplication {
         options.initialWorkingDirectory,
         productConfiguration,
         runUserActionAcceptance: options.runtimeUserActionsTest,
+        runConfigurationAcceptance: options.runtimeConfigurationTest,
       );
       return;
     }
@@ -2019,6 +2058,7 @@ final class TerminalApplication {
       !options.runtimeTerminalDisplayTest &&
       !options.runtimeClipboardTest &&
       !options.runtimeNativeHierarchyTest &&
+      !options.runtimeConfigurationTest &&
       !options.runtimeRestorationTest &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
@@ -2030,6 +2070,7 @@ final class TerminalApplication {
     String? initialWorkingDirectory,
     TerminalProductConfiguration productConfiguration, {
     bool runUserActionAcceptance = false,
+    bool runConfigurationAcceptance = false,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
     final Rect windowFrame = Rect.fromLTWH(
@@ -2119,7 +2160,8 @@ final class TerminalApplication {
                 id: id,
                 ptyBackend: ptyBackend,
                 initialWorkingDirectory: workingDirectory,
-                environment: runUserActionAcceptance
+                environment:
+                    runUserActionAcceptance || runConfigurationAcceptance
                     ? <String, String>{
                         ...terminfoEnvironment.environment,
                         'TERM': 'xterm-256color',
@@ -2128,7 +2170,8 @@ final class TerminalApplication {
                         'RPS1': '',
                       }
                     : terminfoEnvironment.environment,
-                shellArguments: runUserActionAcceptance
+                shellArguments:
+                    runUserActionAcceptance || runConfigurationAcceptance
                     ? const <String>['-f']
                     : const <String>[],
                 onChanged: onChanged,
@@ -3017,7 +3060,19 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      if (runUserActionAcceptance) {
+      if (runConfigurationAcceptance) {
+        await _exerciseConfigurationProduct(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          dispatcher: dispatcher,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
+      } else if (runUserActionAcceptance) {
         await _exerciseUserActionProduct(
           application: application,
           state: state,
@@ -3059,6 +3114,266 @@ final class TerminalApplication {
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
     }
     stdout.writeln('Dart Terminal shut down cleanly.');
+  }
+
+  static Future<void> _exerciseConfigurationProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalActionDispatcher dispatcher,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    const int configuredForeground = 0x80d0d1d2;
+    const int configuredBackground = 0x80111213;
+    const int configuredCursor = 0x80f0e0d0;
+    const int configuredAnsiGreen = 0x8012ab34;
+    const double configuredWindowWidth = 1110;
+    const double configuredWindowHeight = 710;
+    const double configuredHorizontalPadding = 18;
+    const double configuredVerticalPadding = 11;
+    const int configuredScrollbackLines = 8;
+    const int configuredScrollbackBytes = 1024 * 1024;
+    var eventTimestamp = 13000000;
+
+    Future<void> waitFor(
+      bool Function() predicate,
+      String message, {
+      Duration timeout = const Duration(seconds: 10),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (!predicate() && deadline.elapsed < timeout) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      _expectLifecycle(predicate(), message);
+    }
+
+    Future<void> dispatch(TerminalActionId id) async {
+      final TerminalActionDispatchResult result = await dispatcher.dispatch(id);
+      _expectLifecycle(
+        result.disposition == TerminalActionDispatchDisposition.executed,
+        'configured product action ${id.stableName} did not execute',
+      );
+    }
+
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1 &&
+          hierarchy.paneResourceCount == 1,
+      'configured product did not start from the ordinary 1/1/1 hierarchy',
+    );
+    final TerminalWindowState initialWindow = state.windows.single;
+    final TerminalTabState initialTab = initialWindow.selectedTab;
+    final PaneId initialPaneId = initialTab.focusedPaneId;
+    final TerminalSession initialSession = sessions[initialPaneId]!;
+    final _TerminalHierarchyProductPane initialOwner = owners[initialPaneId]!;
+    final Window nativeWindow = hierarchy.windowForTab(initialTab.id)!;
+    final TerminalScreenSet initialScreens = initialSession.terminalScreenSet;
+    _expectLifecycle(
+      nativeWindow.frame.width == configuredWindowWidth &&
+          nativeWindow.frame.height == configuredWindowHeight &&
+          initialScreens.palette.defaultForeground == configuredForeground &&
+          initialScreens.palette.defaultBackground == configuredBackground &&
+          initialScreens.palette.cursorColor == configuredCursor &&
+          initialScreens.palette.colorAt(2) == configuredAnsiGreen &&
+          initialScreens.scrollback.maxLines == configuredScrollbackLines &&
+          initialScreens.scrollback.maxBytes == configuredScrollbackBytes &&
+          initialScreens.activeScreen.cursorShape == TerminalCursorShape.bar &&
+          !initialScreens.activeScreen.cursorBlinking &&
+          initialOwner.surface.fontFamily == 'Menlo' &&
+          initialOwner.surface.fontMetrics.pointSize == 18 &&
+          initialOwner.surface.syntheticStylePolicy ==
+              TerminalSyntheticStylePolicy.reject &&
+          initialOwner.surface.horizontalPadding ==
+              configuredHorizontalPadding &&
+          initialOwner.surface.verticalPadding == configuredVerticalPadding,
+      'configured product did not project the resolved initial profile',
+    );
+    await _waitForAsciiMarker(initialSession, prompt);
+
+    const String paletteMarker = '__DT_CONFIG_PALETTE__';
+    initialOwner.pane.insertText(
+      "printf '\\033[32m__DT_CONFIG_%s__\\033[0m\\n' PALETTE",
+    );
+    await initialOwner.pane.submit();
+    await _waitForAsciiMarkerPresented(
+      initialOwner,
+      paletteMarker,
+      timeout: const Duration(seconds: 8),
+    );
+    final TerminalScreen paletteScreen = initialScreens.activeScreen;
+    final _TerminalAsciiPosition palettePosition = _findAscii(
+      paletteScreen,
+      paletteMarker,
+    )!;
+    _expectLifecycle(
+      paletteScreen.palette.resolveToken(
+            paletteScreen.foregroundAt(
+              palettePosition.row,
+              palettePosition.column,
+            ),
+            foreground: true,
+          ) ==
+          configuredAnsiGreen,
+      'configured ANSI palette color did not reach a presented Metal frame',
+    );
+
+    const String optionMarker = 'c3a5__END__';
+    initialOwner.pane.insertText(
+      "printf '__DT_OPTION_HEX__'; "
+      "dd bs=1 count=2 2>/dev/null | od -An -tx1 | tr -d ' \\n'; "
+      "printf '__END__\\n'",
+    );
+    await initialOwner.pane.submit();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final TerminalTextInputRouteResult optionResult = initialOwner.textRouter
+        .route(
+          TerminalTextInputKeyEvent(
+            clientId: initialOwner.client.clientId,
+            generation: initialOwner.textRouter.lastGeneration + 1,
+            monotonicNanoseconds: eventTimestamp++,
+            kind: TerminalTextInputKeyKind.down,
+            keyCode: 0,
+            modifiers: const ModifierKeys(ModifierKeys.optionBit),
+            isRepeat: false,
+            characters: 'å',
+            charactersIgnoringModifiers: 'a',
+          ),
+        );
+    await initialOwner.pane.submit();
+    await _waitForAsciiMarker(
+      initialSession,
+      optionMarker,
+      timeout: const Duration(seconds: 8),
+    );
+    _expectLifecycle(
+      optionResult.disposition == TerminalTextInputRouteDisposition.rawKey,
+      'configured Option key did not use the raw terminal key route',
+    );
+
+    final int initialRows = initialScreens.activeScreen.rows;
+    initialOwner.pane.insertText(
+      "i=0; while (( i < ${initialRows + 32} )); do "
+      "printf '__DT_CONFIG_HISTORY_%03d__\\n' \$i; ((i++)); done",
+    );
+    await initialOwner.pane.submit();
+    await waitFor(
+      () =>
+          initialScreens.scrollback.totalRowsAppended >
+              configuredScrollbackLines &&
+          _findAscii(initialScreens.activeScreen, prompt) != null,
+      'configured output did not fill and cap primary-screen history',
+    );
+    _expectLifecycle(
+      initialScreens.scrollback.length <= configuredScrollbackLines &&
+          initialScreens.scrollback.allocatedBytes <= configuredScrollbackBytes,
+      'configured scrollback exceeded its line or byte cap',
+    );
+
+    await dispatch(TerminalActionId.splitPaneRight);
+    await dispatch(TerminalActionId.newTab);
+    await dispatch(TerminalActionId.newWindow);
+    _expectLifecycle(
+      state.windowCount == 2 &&
+          state.tabCount == 3 &&
+          state.paneCount == 4 &&
+          hierarchy.nativeWindowCount == 3 &&
+          hierarchy.paneResourceCount == 4,
+      'configured profile could not create the ordinary split/tab/window set',
+    );
+    for (final TerminalSession session in sessions.values) {
+      await _waitForAsciiMarker(session, prompt);
+    }
+
+    final List<TerminalScreenSet> screenSets = sessions.values
+        .map((TerminalSession session) => session.terminalScreenSet)
+        .toList(growable: false);
+    final List<_TerminalHierarchyProductPane> paneOwners = owners.values.toList(
+      growable: false,
+    );
+    final bool inherited =
+        screenSets.every(
+          (TerminalScreenSet screens) =>
+              screens.palette.defaultForeground == configuredForeground &&
+              screens.palette.defaultBackground == configuredBackground &&
+              screens.palette.cursorColor == configuredCursor &&
+              screens.palette.colorAt(2) == configuredAnsiGreen &&
+              screens.scrollback.maxLines == configuredScrollbackLines &&
+              screens.scrollback.maxBytes == configuredScrollbackBytes &&
+              screens.activeScreen.cursorShape == TerminalCursorShape.bar &&
+              !screens.activeScreen.cursorBlinking,
+        ) &&
+        paneOwners.every((_TerminalHierarchyProductPane owner) {
+          final TerminalLiveMetalSurfaceSnapshot snapshot = owner.surface
+              .snapshot();
+          return owner.surface.fontFamily == 'Menlo' &&
+              owner.surface.fontMetrics.pointSize == 18 &&
+              owner.surface.syntheticStylePolicy ==
+                  TerminalSyntheticStylePolicy.reject &&
+              owner.surface.horizontalPadding == configuredHorizontalPadding &&
+              owner.surface.verticalPadding == configuredVerticalPadding &&
+              snapshot.contentOffsetX > 0 &&
+              snapshot.contentOffsetY > 0 &&
+              snapshot.contentViewportWidth ==
+                  snapshot.viewportWidth - snapshot.contentOffsetX * 2 &&
+              snapshot.contentViewportHeight ==
+                  snapshot.viewportHeight - snapshot.contentOffsetY * 2;
+        }) &&
+        hierarchy.windows.values.every(
+          (Window window) =>
+              window.frame.width == configuredWindowWidth &&
+              window.frame.height == configuredWindowHeight,
+        );
+    final bool independent =
+        screenSets
+                .map((TerminalScreenSet screens) => screens.palette)
+                .toSet()
+                .length ==
+            screenSets.length &&
+        screenSets
+                .map((TerminalScreenSet screens) => screens.scrollback)
+                .toSet()
+                .length ==
+            screenSets.length &&
+        paneOwners
+                .map((_TerminalHierarchyProductPane owner) => owner.surface)
+                .toSet()
+                .length ==
+            paneOwners.length;
+    _expectLifecycle(
+      inherited && independent,
+      'new configured panes did not inherit independent product resources',
+    );
+
+    await dispatch(TerminalActionId.quitApplication);
+    if (!closed.isCompleted) {
+      await dispatch(TerminalActionId.quitApplication);
+    }
+    await closed.future.timeout(const Duration(seconds: 15));
+    await Future<void>.delayed(Duration.zero);
+    _expectLifecycle(
+      state.isDisposed &&
+          hierarchy.isDisposed &&
+          allSessions.length == 4 &&
+          allSessions.every(
+            (TerminalSession session) =>
+                session.shutdownResult?.isClean == true,
+          ) &&
+          debugLiveTerminalTextInputClientCount() == 0 &&
+          application.debugLiveObjectCount == 0,
+      'configured product did not cleanly release all resources',
+    );
+    stdout.writeln(
+      'TERMINAL_CONFIGURATION_TEST config_file=true palette=true font=true '
+      'window=true padding=true option_text=true scrollback=true cursor=true '
+      'panes=4 independent=true sessions_clean=4 text_clients=0 '
+      'native_handles=0',
+    );
   }
 
   static Future<void> _exerciseUserActionProduct({

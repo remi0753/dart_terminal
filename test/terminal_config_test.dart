@@ -293,6 +293,41 @@ working-directory = /from-file
     overridden.initialWorkingDirectory == '/from-cli',
     'TerminalOptions applies the schema CLI winner',
   );
+  final TerminalOptions runtimeConfiguration = TerminalOptions.parse(
+    const <String>['--no-config', '--runtime-configuration-test'],
+    environment: const <String, String>{'DT_RUNTIME_CONFIGURATION_TEST': '1'},
+    configFileSystem: files,
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    runtimeConfiguration.runtimeConfigurationTest,
+    'TerminalOptions admits the isolated configuration acceptance gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>['--no-config', '--runtime-configuration-test'],
+      environment: const <String, String>{},
+      configFileSystem: files,
+    ),
+    'configuration acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>[
+        '--no-config',
+        '--runtime-configuration-test',
+        '--runtime-user-actions-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_CONFIGURATION_TEST': '1',
+        'DT_RUNTIME_USER_ACTIONS_TEST': '1',
+      },
+      configFileSystem: files,
+    ),
+    'configuration acceptance cannot be combined with another runtime test',
+  );
   _expectThrows(
     () => TerminalOptions.parse(
       const <String>['--working-directory=/one', '--working-directory=/two'],

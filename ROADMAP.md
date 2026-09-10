@@ -999,13 +999,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 目的: zero-config と高度な customization を両立する。
 
 - [x] typed config schema と diagnostics
-- [ ] theme/palette/font/window/input/scrollback options
+- [x] theme/palette/font/window/input/scrollback options
   （分割と完了条件は
   [`docs/phase8/product-option-families.md`](docs/phase8/product-option-families.md)
   を参照して順に実施する）
   - [x] bounded option schema と immutable new-session profile
   - [x] session/screen/renderer/input/window への product projection
-  - [ ] M1 両 runtime 回帰受け入れと親項目完了判定
+  - [x] M1 両 runtime 回帰受け入れと親項目完了判定
 - [ ] declarative keybind と action reference generation
 - [ ] safe reload、per-option live/new-session policy
 - [ ] light/dark theme と system appearance

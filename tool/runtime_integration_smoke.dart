@@ -26,6 +26,7 @@ enum _Suite {
   display,
   hierarchy,
   actions,
+  configuration,
   restoration,
   clipboard,
   lifecycle,
@@ -149,7 +150,8 @@ _Options _parseOptions(List<String> arguments) {
       if (selected == null) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
-          'clipboard, lifecycle, traffic, resource, fault, or all',
+          'configuration, clipboard, lifecycle, traffic, resource, fault, '
+          'or all',
         );
       }
       suite = selected;
@@ -1491,6 +1493,96 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
   );
 }
 
+Future<void> _runConfiguration(_Options options, _Invocation invocation) async {
+  final Directory directory = await Directory.systemTemp.createTemp(
+    'dart-terminal-runtime-configuration-',
+  );
+  final String configurationPath = '${directory.path}/config';
+  try {
+    await File(configurationPath).writeAsString('''
+theme = default
+palette-foreground = #d0d1d2
+palette-background = #111213
+palette-cursor = #f0e0d0
+palette-2 = #12ab34
+font-family = Menlo
+font-size = 18
+font-synthetic-style = deny
+window-width = 1110
+window-height = 710
+window-padding-horizontal = 18
+window-padding-vertical = 11
+macos-option-key = text
+scrollback-lines = 8
+scrollback-bytes = 1MiB
+cursor-shape = bar
+cursor-blink = false
+''');
+    final _ProcessObservation observation = await _launch(
+      options,
+      invocation,
+      <String>['--config=$configurationPath', '--runtime-configuration-test'],
+      environment: const <String, String>{'DT_RUNTIME_CONFIGURATION_TEST': '1'},
+      timeout: const Duration(seconds: 60),
+    );
+    _expect(
+      observation.status == 0,
+      'configuration application exited with status ${observation.status}; '
+      'stdout=${observation.stdoutText.trim()} '
+      'stderr=${observation.stderrText.trim()}',
+    );
+    _expect(
+      observation.stderrText.trim().isEmpty,
+      'configuration application wrote unexpected stderr: '
+      '${observation.stderrText.trim()}',
+    );
+    _expect(
+      RegExp(
+            r'^TERMINAL_CONFIGURATION_TEST config_file=true palette=true '
+            r'font=true window=true padding=true option_text=true '
+            r'scrollback=true cursor=true panes=4 independent=true '
+            r'sessions_clean=4 text_clients=0 native_handles=0$',
+            multiLine: true,
+          ).allMatches(observation.stdoutText).length ==
+          1,
+      'configured product omitted exact projection acceptance',
+    );
+    _expect(
+      RegExp(
+                r'^TERMINAL_SESSION_SHUTDOWN pane=[1-4] session=[1-4]:1 '
+                r'process_id=[1-9][0-9]* disposition=clean '
+                r'termination_observed=true cleanup_completed=true$',
+                multiLine: true,
+              ).allMatches(observation.stdoutText).length ==
+              4 &&
+          RegExp(
+                r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=4 disposition=clean$',
+                multiLine: true,
+              ).allMatches(observation.stdoutText).length ==
+              1 &&
+          observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+      'configured product did not cleanly release four pane generations',
+    );
+    _expect(
+      !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
+          !observation.stdoutText.contains('HIERARCHY_MISMATCH'),
+      'configured product leaked or overflowed terminal input',
+    );
+    _expectWorkerProcessContract(
+      observation,
+      scenario: 'normal',
+      expectedCount: 1,
+    );
+    stdout.writeln(
+      'RUNTIME_CONFIGURATION_INTEGRATION_PASS mode=${options.mode.name} '
+      'launch_architecture=${options.launchArchitecture ?? 'native'} '
+      'panes=4 elapsed_ms=${observation.elapsed.inMilliseconds}',
+    );
+  } finally {
+    await directory.delete(recursive: true);
+  }
+}
+
 Future<void> _runRestoration(_Options options, _Invocation invocation) async {
   final Directory directory = await Directory.systemTemp.createTemp(
     'dart-terminal-restoration-',
@@ -2537,6 +2629,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.actions || options.suite == _Suite.all) {
       await _runUserActions(options, invocation);
+    }
+    if (options.suite == _Suite.configuration || options.suite == _Suite.all) {
+      await _runConfiguration(options, invocation);
     }
     if (options.suite == _Suite.restoration || options.suite == _Suite.all) {
       await _runRestoration(options, invocation);

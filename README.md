@@ -266,6 +266,14 @@ diagnostic code、可能な場合は修正案とともに標準エラーへ表�
 schema defaultへ復旧して起動を続けます。一方、command line自体の不正やintegration専用
 fault optionのgate違反は従来どおりusage errorです。
 
+設定値が実際の通常製品へ反映されることは、実設定ファイルから4 paneを生成し、表示色、
+font、window/padding、cursor、Option入力、scrollback上限、独立resource、終了時cleanupを
+Developer JITとRelease AOTで確認します。両runtimeのgateは次で再実行できます。
+
+```shell
+make RUNTIME_ARCH=arm64 runtime-configuration-integration
+```
+
 Developer JIT は application Kernel、自己完結 worker helper、および未改変の
 JIT Engine を含む開発専用 bundle です。成果物は
 `build/runtime/<architecture>/developer-jit/DartTerminal.app` に作られ、

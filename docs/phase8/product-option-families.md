@@ -1,7 +1,8 @@
 # Product theme, palette, font, window, input, and scrollback options
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-10
+- Completed: 2026-09-10
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 8
   `theme/palette/font/window/input/scrollback options`
@@ -212,6 +213,154 @@ next begins. After each commit, reread `ROADMAP.md` and this memo.
 - Window padding must be projected through one explicit pane-local geometry
   value rather than by changing canonical terminal cells or adding padding to
   native package defaults.
+- The configured runtime acceptance reuses the ordinary interactive hierarchy,
+  but has its own environment-gated application flag and integration suite.
+  The harness writes one isolated real config file and supplies it through
+  `--config`, so the test covers local file I/O, schema decoding, snapshot
+  resolution, and product projection rather than constructing a profile in
+  test code.
+- The scenario will retain the existing `zsh -f` deterministic prompt and
+  create a split, tab, and window through the shared action dispatcher. It will
+  compare all resulting session palettes/scrollback caps/cursor defaults and
+  surface font/padding state, assert their mutable resources are pairwise
+  distinct, and verify the configured native frame before clean application
+  quit.
+- Option-as-text is verified across the PTY boundary: an `od` command reads the
+  first two bytes of an Option-modified `å` key event and must report `c3a5`,
+  not an Escape-prefixed byte sequence. A bounded output fixture must append
+  more history rows than the configured line cap while retained history stays
+  at or below that cap.
+- The first Developer JIT configured-product launch built and signed the bundle
+  successfully, but the host stopped at `host-starting` with status 70 because
+  AppKit rejected the requested regular activation policy. No application Dart
+  code or scenario assertion ran. This is treated as a launch-environment
+  failure pending a process-state check and retry, not as a passing or failing
+  configuration result.
+- The process-state check found an independently started
+  `make RUNTIME_ARCH=arm64 developer-jit-run` with a live DartTerminal root and
+  worker using the same bundle. It is not terminated or modified because it is
+  outside this task. The acceptance is retried directly against the completed
+  bundle to distinguish a transient launch failure from same-bundle
+  coexistence.
+- The direct retry failed at the same host-starting activation-policy boundary,
+  confirming coexistence rather than a transient Dart assertion. The
+  configured suite now launches the `.app` through LaunchServices with a new
+  instance, using the same environment/output/diagnostics transport already
+  exercised by restoration acceptance; this preserves the unrelated running
+  application and tests the packaged product entry point.
+- A temporary accessory-policy diagnostic copy reached the full Dart product
+  and exposed one scenario bug: the first palette search matched zsh's echoed
+  command text, which correctly retained the default foreground, before the
+  colored command result. The command now builds the marker through a `%s`
+  substitution so only the output contains the complete searched marker; no
+  product palette logic was changed.
+- The next diagnostic proved that Option-as-text delivered UTF-8 `c3a5` through
+  the PTY. The terminal's normal input echo placed the visible `å` between the
+  prefix and the `od` result, so the original contiguous marker expectation was
+  invalid. The stable assertion now searches for the result-only
+  `c3a5__END__`, which is absent from the echoed command and still
+  distinguishes the Escape-prefixed `1bc3` behavior. Temporary screen-content
+  diagnostics were removed after identifying the cause.
+- After both scenario corrections, the temporary accessory-policy Developer
+  JIT bundle passes the complete configured-product suite with four panes and
+  clean owner/worker/native-handle teardown. This diagnostic is useful evidence
+  that the Dart scenario and product projection work, but it does not satisfy
+  the required regular-policy Developer JIT/Release AOT gate.
+- At the first blocked checkpoint, an unrelated Terminal-owned
+  `make RUNTIME_ARCH=arm64 developer-jit-run` process and its worker remained
+  live. Direct launch, LaunchServices `-n`, and a temporary bundle with a
+  distinct identifier and name all returned the same
+  `AppKit rejected the configured activation policy` host-starting failure.
+  The existing process was not terminated because it was not started by this
+  task and might have been user-owned. A later resumption found no DartTerminal
+  process but reproduced the failure, disproving process coexistence as the
+  cause.
+- Running the generic runtime builder with `--run`, including from Terminal.app
+  with inherited stdio, also reproduced the same failure. This disproves the
+  harness `Process.start`/pipe transport hypothesis and places the failure in
+  the native host policy application before Dart starts.
+- A minimal Objective-C AppKit probe launched outside an application bundle
+  began with `NSApplicationActivationPolicyProhibited (-1)` and could not
+  transition to regular or accessory from this process context. The same probe
+  packaged as a signed `APPL` bundle and launched through LaunchServices began
+  with `NSApplicationActivationPolicyRegular (0)`. Calling
+  `setActivationPolicy:NSApplicationActivationPolicyRegular` nevertheless
+  returned false while the effective policy remained regular on macOS 26.6.2
+  (25G83).
+- Adjacent `../dart_appkit/native/runner/RunnerConfiguration.mm` treated that
+  false return as a fatal startup error without first accepting an
+  already-matching effective policy. After the user explicitly expanded the
+  task scope to the adjacent repository, its bounded correction accepts
+  `application.activationPolicy == policy` and calls `setActivationPolicy:`
+  only when a transition is required. The native regression uses an
+  already-effective prohibited CLI policy to exercise the same generic branch.
+  The complete adjacent `make test` matrix passes, and the correction is
+  committed there as `f892bb8 Make activation policy application idempotent`.
+- Rebuilding the product hosts from that adjacent commit unblocked normal
+  regular-policy startup without weakening Dart Terminal's application policy.
+  The configured-product scenario passes independently in Developer JIT and
+  Release AOT with four panes and clean teardown.
+
+## Subtask 3 verification
+
+- Focused formatting of the three changed Dart files succeeds.
+- Focused analysis of the application, runtime harness, and config test reports
+  no issues.
+- `dart run test/terminal_config_test.dart` passes with the new gate admission,
+  missing-gate rejection, and cross-runtime-test conflict cases.
+- The Developer JIT and Release AOT bundles build and sign successfully. Their
+  regular-policy configured suites pass with four panes after the adjacent
+  idempotence correction.
+- A temporary, ad-hoc-signed accessory-policy diagnostic copy passes with
+  `RUNTIME_CONFIGURATION_INTEGRATION_PASS mode=developer-jit ... panes=4`.
+- On resumption, no DartTerminal process remained, but the regular-policy
+  LaunchServices attempt still failed at `host-starting`. This disproves the
+  earlier coexistence hypothesis for that path: the configuration suite does
+  not require LaunchServices semantics, so it returns to the same direct
+  packaged-executable launch used by display, hierarchy, action, and clipboard
+  acceptance. Restoration alone retains LaunchServices because reopen is part
+  of its contract.
+- The generic builder's direct `--run` path and a Terminal.app-launched
+  `--run` path both fail at the same boundary, so inherited stdio does not
+  resolve the failure. A signed minimal AppKit probe launched through
+  LaunchServices records `initial=0`, `regular_accepted=0`, and
+  `after_regular=0`, demonstrating the adjacent runner's missing idempotent
+  already-effective-policy case.
+- `make RUNTIME_ARCH=arm64 developer-jit-configuration` passes in 2700 ms, and
+  `make RUNTIME_ARCH=arm64 release-aot-configuration` passes in 1263 ms. Both
+  validate the configured palette/ANSI rendering, Menlo 18-point font with
+  synthetic rejection, 1110×710 frame, 18×11 padding, bar/nonblinking cursor,
+  Option-as-text UTF-8 bytes, 8-line/1 MiB scrollback bounds, independent pane
+  resources, and zero remaining session/text-client/native handles.
+- The first aggregate `runtime-verify` attempts correctly rejected stale Phase
+  7 AppKit and compatibility coverage evidence. Their checked-in generators
+  updated only reviewed source/document hashes before the next attempt.
+- One aggregate attempt reached the existing Developer JIT user-actions gate
+  and observed a transient Quit completion/confirmation race. An immediate
+  isolated `developer-jit-actions` rerun passed without source changes, and the
+  next complete aggregate run passed that gate in both runtimes. No assertion
+  was weakened and no unrelated lifecycle code was changed.
+- The final `make RUNTIME_ARCH=arm64 runtime-verify` passes formatting,
+  analysis, all Dart and native tests, source/bundle audits, and every
+  Developer JIT/Release AOT integration family: ordinary launch, display,
+  hierarchy/fairness, actions, configuration, restoration, clipboard,
+  lifecycle failures, traffic backpressure, resource stress, and shutdown/PTY
+  deadline faults.
+- After updating the user-facing configuration command and CFG-03 evidence,
+  the deterministic compatibility coverage generator refreshed the two
+  document hashes. `CI=true DART_SUPPRESS_ANALYTICS=true make test` then passed
+  all freshness gates, formatting of 218 files with zero changes, analysis, and
+  the complete Dart suite.
+
+## Result
+
+The first product configuration family is complete. Zero-config behavior is
+preserved, while every new ordinary pane receives the same bounded resolved
+theme/palette/font/window/input/scrollback/cursor profile through independent
+mutable resources. Both supported M1 runtime modes verify the configuration at
+the real AppKit, Metal, PTY, and cleanup boundaries. Declarative keybinds,
+reload policy, appearance-aware themes, shell integration, and the effective
+configuration inspector remain ordered Phase 8 work.
 
 ## Subtask 2 verification
 
