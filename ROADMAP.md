@@ -1011,7 +1011,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase8/declarative-keybind-action-reference.md`](docs/phase8/declarative-keybind-action-reference.md)
   を参照して順に実施する）
   - [x] repeatable config occurrence と typed keybind grammar/profile
-  - [ ] pane/application action routing と native menu arbitration
+  - [x] pane/application action routing と native menu arbitration
   - [ ] generated keybind/action reference と freshness gate
   - [ ] M1 両 runtime 回帰受け入れと親項目完了判定
 - [ ] safe reload、per-option live/new-session policy

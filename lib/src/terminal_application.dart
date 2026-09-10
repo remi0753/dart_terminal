@@ -2099,6 +2099,8 @@ final class TerminalApplication {
     windowSubscriptions = <TerminalTabId, StreamSubscription<WindowEvent>>{};
     final TerminalPaneWorkScheduler paneWorkScheduler =
         TerminalPaneWorkScheduler();
+    final TerminalKeyBindingEngine productKeyBindingEngine =
+        productConfiguration.createKeyBindingEngine();
     final TerminalTabPresentationResolver presentationResolver =
         TerminalTabPresentationResolver(
           metadataForPane: (PaneId paneId) =>
@@ -2115,6 +2117,7 @@ final class TerminalApplication {
     TerminalProductHierarchyActionCoordinator? actionCoordinator;
     TerminalAppKitMenuProjection? menuProjection;
     TerminalCommandPalettePresenter? palettePresenter;
+    TerminalActionDispatchScheduler? keyBindingActionScheduler;
     Future<void> Function(PaneId? paneId)? closePaneRequest;
     void Function()? reconcileRequest;
     RuntimeLifecycleCoordinator? lifecycle;
@@ -2287,9 +2290,13 @@ final class TerminalApplication {
         );
       }
       final TerminalKeyEventRouter keyRouter = TerminalKeyEventRouter(
+        bindingEngine: productKeyBindingEngine,
         encoder: TerminalKeyEncoder(
           optionKeyBehavior: productConfiguration.terminalOptionKeyBehavior,
         ),
+        onApplicationAction: (TerminalActionId action) {
+          keyBindingActionScheduler?.schedule(action);
+        },
       );
       final TerminalTextInputEventRouter textRouter =
           TerminalTextInputEventRouter(
@@ -2973,6 +2980,20 @@ final class TerminalApplication {
           ),
           ...createdActions.registrations(),
         ],
+      );
+      keyBindingActionScheduler = TerminalActionDispatchScheduler(
+        dispatcher: dispatcher,
+        onDispatched: (TerminalActionDispatchResult result) {
+          if (runUserActionAcceptance) actionDispatches.add(result);
+          final TerminalAppKitMenuProjection? menu = menuProjection;
+          if (menu != null && !menu.isDisposed) menu.refresh();
+          final TerminalCommandPalettePresenter? palette = palettePresenter;
+          if (palette != null && !palette.isDisposed) palette.refresh();
+          if (result.disposition == TerminalActionDispatchDisposition.failed) {
+            recordAsynchronousError(result.error!, result.stackTrace!);
+          }
+        },
+        onError: recordAsynchronousError,
       );
       installedPalette = TerminalCommandPalettePresenter.withFocusTarget(
         dispatcher: dispatcher,
@@ -9488,6 +9509,7 @@ final class TerminalKeyRouteResult {
     this.disposition, {
     this.encodedByteCount = 0,
     this.action,
+    this.applicationAction,
   });
 
   static const TerminalKeyRouteResult ignored = TerminalKeyRouteResult._(
@@ -9506,25 +9528,37 @@ final class TerminalKeyRouteResult {
         action: action,
       );
 
+  factory TerminalKeyRouteResult.applicationAction(TerminalActionId action) =>
+      TerminalKeyRouteResult._(
+        TerminalKeyRouteDisposition.action,
+        applicationAction: action,
+      );
+
   final TerminalKeyRouteDisposition disposition;
   final int encodedByteCount;
   final TerminalKeyBindingAction? action;
+  final TerminalActionId? applicationAction;
 }
 
 /// Resolves and encodes one AppKit key-down event for the active terminal pane.
 ///
-/// Each handled event invokes exactly one action or one bounded pane write.
+/// Each handled event invokes one pane action, schedules one application
+/// action, or performs one bounded pane write. An application binding without
+/// a scheduler is consumed fail-closed and never falls through to PTY bytes.
 /// Native AppKit menu key equivalents are consumed before this router receives
 /// events, so it never redispatches menu commands.
 final class TerminalKeyEventRouter {
   TerminalKeyEventRouter({
     TerminalKeyBindingEngine? bindingEngine,
     TerminalKeyEncoder? encoder,
+    void Function(TerminalActionId action)? onApplicationAction,
   }) : _bindingEngine = bindingEngine ?? TerminalKeyBindingEngine.standard(),
-       _encoder = encoder ?? TerminalKeyEncoder();
+       _encoder = encoder ?? TerminalKeyEncoder(),
+       _onApplicationAction = onApplicationAction;
 
   final TerminalKeyBindingEngine _bindingEngine;
   final TerminalKeyEncoder _encoder;
+  final void Function(TerminalActionId action)? _onApplicationAction;
 
   TerminalKeyRouteResult handleKeyDown(
     AppKitKeyEvent appKitEvent,
@@ -9548,9 +9582,15 @@ final class TerminalKeyEventRouter {
     );
     switch (resolution.kind) {
       case TerminalKeyBindingResolutionKind.action:
-        final TerminalKeyBindingAction action = resolution.action!;
-        _performAction(action, pane);
-        return TerminalKeyRouteResult.action(action);
+        final TerminalActionId? applicationAction =
+            resolution.applicationAction;
+        if (applicationAction != null) {
+          _onApplicationAction?.call(applicationAction);
+          return TerminalKeyRouteResult.applicationAction(applicationAction);
+        }
+        final TerminalKeyBindingAction paneAction = resolution.action!;
+        _performAction(paneAction, pane);
+        return TerminalKeyRouteResult.action(paneAction);
       case TerminalKeyBindingResolutionKind.passthrough:
         return _encode(_withoutCommand(event), pane);
       case TerminalKeyBindingResolutionKind.noMatch:

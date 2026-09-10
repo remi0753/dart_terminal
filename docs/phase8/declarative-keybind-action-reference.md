@@ -189,3 +189,40 @@ the next begins. `ROADMAP.md` and this memo are reread after every commit.
 - The first commit attempt was rejected because the workspace sandbox could not
   create `.git/index.lock`; the staged scope remained intact and the identical
   commit was retried with repository metadata write approval.
+- The normal hierarchy product now constructs one immutable configured binding
+  engine and shares it across every pane router. Pane actions stay synchronous;
+  an application action is consumed by the same single-outcome router and
+  handed once to `TerminalActionDispatchScheduler`, with no PTY encoding path.
+- `TerminalActionDispatchScheduler` owns no queue. It starts exactly one call to
+  the existing `TerminalActionDispatcher`; concurrent invocations therefore
+  resolve as `busy`, and unavailable/failed outcomes remain observable. The
+  product refreshes both menu and palette availability after every scheduled
+  outcome and promotes failed outcomes to its existing asynchronous error path.
+- Pane resources can exist during the small startup interval before the shared
+  dispatcher is installed. An application-action chord received in that
+  interval is deliberately consumed with no dispatch and no terminal fallback;
+  once installed, every current and future pane closes over the same scheduler.
+- AppKit remains the owner of catalogued native shortcuts: config decoding
+  rejects those chords, native menu projection handles them before raw key
+  delivery, and the Dart router only receives accepted non-reserved configured
+  chords. The focused fake-AppKit test uses a non-reserved exact chord and
+  confirms one application identity with zero pane writes.
+- Focused analysis initially stopped on the sandbox-prohibited Dart telemetry
+  timestamp. Retrying with both `CI=true` and
+  `DART_SUPPRESS_ANALYTICS=true` reported no issues. Focused Dart tests also
+  initially stopped because the Metal compiler attempted to write its clang
+  module cache under `~/.cache`; the requested `/private/tmp` environment was
+  ignored by `xcrun metal`, so the identical tests were rerun with build-cache
+  write permission and passed.
+- The first complete test run correctly rejected stale Phase 7 AppKit evidence
+  after `terminal_application.dart` changed. Its existing generator changed
+  only the two source hashes for that file. The regenerated freshness check and
+  the complete `CI=true DART_SUPPRESS_ANALYTICS=true make test` suite pass,
+  including format of 218 files, analysis, and the aggregate Dart tests.
+- A source-audit attempt without `CI=true` repeated the telemetry permission
+  failure before the audit began. The standard CI environment passed with
+  `DART_ONLY_SOURCE_AUDIT_PASS tracked=410 product_native_sources=0
+  reviewed_test_native_sources=1`.
+- The pane/application action routing and native-menu arbitration subtask is
+  complete; generated user documentation and its freshness gate remain the
+  next ordered work.

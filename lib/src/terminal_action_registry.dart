@@ -561,6 +561,37 @@ final class TerminalActionDispatcher {
   }
 }
 
+/// Starts one action dispatch without blocking the synchronous key event path.
+///
+/// The dispatcher remains the serialization authority: a second scheduled
+/// action observes [TerminalActionDispatchDisposition.busy] instead of being
+/// retained in an application-owned queue.
+final class TerminalActionDispatchScheduler {
+  const TerminalActionDispatchScheduler({
+    required TerminalActionDispatcher dispatcher,
+    required void Function(TerminalActionDispatchResult result) onDispatched,
+    required void Function(Object error, StackTrace stackTrace) onError,
+  }) : _dispatcher = dispatcher,
+       _onDispatched = onDispatched,
+       _onError = onError;
+
+  final TerminalActionDispatcher _dispatcher;
+  final void Function(TerminalActionDispatchResult result) _onDispatched;
+  final void Function(Object error, StackTrace stackTrace) _onError;
+
+  void schedule(TerminalActionId id) {
+    unawaited(_dispatch(id));
+  }
+
+  Future<void> _dispatch(TerminalActionId id) async {
+    try {
+      _onDispatched(await _dispatcher.dispatch(id));
+    } on Object catch (error, stackTrace) {
+      _onError(error, stackTrace);
+    }
+  }
+}
+
 /// Platform-independent bounded query, selection, and invocation state.
 final class TerminalCommandPaletteState {
   TerminalCommandPaletteState(this.dispatcher);

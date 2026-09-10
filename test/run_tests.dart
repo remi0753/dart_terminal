@@ -393,6 +393,44 @@ Future<void> _testModeAwareAppKitKeyRoute() async {
     'explicit Command passthrough reaches the terminal encoder exactly once',
   );
 
+  final List<TerminalActionId> applicationActions = <TerminalActionId>[];
+  final TerminalKeyEventRouter applicationActionRouter = TerminalKeyEventRouter(
+    bindingEngine: TerminalKeyBindingEngine.standard(
+      overrides: const <TerminalKeyBindingDefinition>[
+        TerminalKeyBindingDefinition.applicationAction(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.keyK,
+            shift: true,
+            control: true,
+          ),
+          applicationAction: TerminalActionId.focusNextPane,
+        ),
+      ],
+    ),
+    onApplicationAction: applicationActions.add,
+  );
+  final int writesBeforeApplicationAction = session.inputWrites.length;
+  final TerminalKeyRouteResult applicationActionResult = applicationActionRouter
+      .handleKeyDown(
+        _appKitKeyEvent(
+          keyCode: 40,
+          characters: '\x0b',
+          unmodifiedCharacters: 'k',
+          modifierBits: ModifierKeys.shiftBit | ModifierKeys.controlBit,
+        ),
+        pane,
+      );
+  _expect(
+    applicationActionResult.disposition == TerminalKeyRouteDisposition.action &&
+        applicationActionResult.action == null &&
+        applicationActionResult.applicationAction ==
+            TerminalActionId.focusNextPane &&
+        applicationActions.length == 1 &&
+        applicationActions.single == TerminalActionId.focusNextPane &&
+        session.inputWrites.length == writesBeforeApplicationAction,
+    'configured application action routes once without a PTY write',
+  );
+
   final TerminalKeyEventRouter unboundRouter = TerminalKeyEventRouter(
     bindingEngine: TerminalKeyBindingEngine.standard(
       overrides: const <TerminalKeyBindingDefinition>[

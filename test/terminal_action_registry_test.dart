@@ -8,8 +8,88 @@ Future<void> runTerminalActionRegistryTests() async {
   _testStableStandardCatalog();
   _testCatalogValidationAndImmutability();
   await _testAvailabilityDispatchAndFailure();
+  await _testNonBlockingDispatchScheduler();
   _testSearchOrderingAndBounds();
   await _testPaletteState();
+}
+
+Future<void> _testNonBlockingDispatchScheduler() async {
+  final Completer<void> copyBarrier = Completer<void>();
+  var copyCount = 0;
+  var pasteCount = 0;
+  final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+    catalog: TerminalActionCatalog.standard(),
+    registrations: <TerminalActionRegistration>[
+      TerminalActionRegistration(
+        id: TerminalActionId.copy,
+        handler: () async {
+          copyCount++;
+          await copyBarrier.future;
+        },
+      ),
+      TerminalActionRegistration(
+        id: TerminalActionId.paste,
+        handler: () {
+          pasteCount++;
+          throw StateError('injected scheduled action failure');
+        },
+      ),
+    ],
+  );
+  final List<TerminalActionDispatchResult> results =
+      <TerminalActionDispatchResult>[];
+  final List<Object> asynchronousErrors = <Object>[];
+  final TerminalActionDispatchScheduler scheduler =
+      TerminalActionDispatchScheduler(
+        dispatcher: dispatcher,
+        onDispatched: results.add,
+        onError: (Object error, StackTrace stackTrace) {
+          asynchronousErrors.add(error);
+        },
+      );
+
+  scheduler
+    ..schedule(TerminalActionId.copy)
+    ..schedule(TerminalActionId.paste);
+  await _waitFor(
+    () => results.length == 1,
+    'busy scheduled result was not published',
+  );
+  _expect(
+    results.single.id == TerminalActionId.paste &&
+        results.single.disposition == TerminalActionDispatchDisposition.busy &&
+        copyCount == 1 &&
+        pasteCount == 0,
+    'scheduler starts once and reports a concurrent key action as busy',
+  );
+  copyBarrier.complete();
+  await _waitFor(
+    () => results.length == 2,
+    'executed scheduled result was not published',
+  );
+  _expect(
+    results.last.id == TerminalActionId.copy &&
+        results.last.disposition == TerminalActionDispatchDisposition.executed,
+    'the in-flight scheduled action completes without an intermediate queue',
+  );
+
+  scheduler.schedule(TerminalActionId.focusNextPane);
+  await _waitFor(
+    () => results.length == 3,
+    'unavailable scheduled result was not published',
+  );
+  scheduler.schedule(TerminalActionId.paste);
+  await _waitFor(
+    () => results.length == 4,
+    'failed scheduled result was not published',
+  );
+  _expect(
+    results[2].disposition == TerminalActionDispatchDisposition.unavailable &&
+        results[3].disposition == TerminalActionDispatchDisposition.failed &&
+        pasteCount == 1 &&
+        asynchronousErrors.isEmpty,
+    'unavailable and failed dispatch outcomes remain observable results',
+  );
 }
 
 void _testStableStandardCatalog() {
@@ -381,6 +461,14 @@ TerminalActionDefinition _definition(
   menu: TerminalActionMenu.application,
   shortcut: shortcut,
 );
+
+Future<void> _waitFor(bool Function() predicate, String description) async {
+  final Stopwatch timeout = Stopwatch()..start();
+  while (!predicate() && timeout.elapsed < const Duration(seconds: 2)) {
+    await Future<void>.delayed(Duration.zero);
+  }
+  _expect(predicate(), description);
+}
 
 void _expectThrows<T extends Object>(void Function() body, String description) {
   try {
