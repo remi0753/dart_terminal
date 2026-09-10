@@ -920,6 +920,10 @@ void _testOptions() {
   _expect(!options.runtimeUserActionsTest, 'user actions test defaults off');
   _expect(!options.runtimeConfigurationTest, 'configuration test defaults off');
   _expect(!options.runtimeThemeTest, 'theme test defaults off');
+  _expect(
+    !options.runtimeShellIntegrationTest,
+    'shell integration test defaults off',
+  );
   _expect(!options.runtimeRestorationTest, 'restoration test defaults off');
   _expect(
     options.runtimeRestorationPath == null,
@@ -1238,6 +1242,45 @@ void _testOptions() {
       },
     ),
     'theme and user actions tests are mutually exclusive',
+  );
+  final TerminalOptions shellIntegrationTestOptions = _parseOptions(
+    const <String>['--runtime-shell-integration-test'],
+    environment: const <String, String>{
+      'DT_RUNTIME_SHELL_INTEGRATION_TEST': '1',
+    },
+  );
+  _expect(
+    shellIntegrationTestOptions.runtimeShellIntegrationTest,
+    'gated ordinary-product shell integration test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-shell-integration-test']),
+    'shell integration product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-shell-integration-test',
+        '--runtime-shell-integration-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_SHELL_INTEGRATION_TEST': '1',
+      },
+    ),
+    'duplicate shell integration product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-shell-integration-test',
+        '--runtime-theme-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_SHELL_INTEGRATION_TEST': '1',
+        'DT_RUNTIME_THEME_TEST': '1',
+      },
+    ),
+    'shell integration and theme tests are mutually exclusive',
   );
   final TerminalOptions restorationTestOptions = _parseOptions(
     const <String>['--runtime-restoration-test'],

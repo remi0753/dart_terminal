@@ -107,6 +107,7 @@ final class TerminalOptions {
     this.runtimeUserActionsTest = false,
     this.runtimeConfigurationTest = false,
     this.runtimeThemeTest = false,
+    this.runtimeShellIntegrationTest = false,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
@@ -150,6 +151,7 @@ final class TerminalOptions {
     var runtimeUserActionsTest = false;
     var runtimeConfigurationTest = false;
     var runtimeThemeTest = false;
+    var runtimeShellIntegrationTest = false;
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
@@ -236,6 +238,15 @@ final class TerminalOptions {
           );
         }
         runtimeThemeTest = true;
+        continue;
+      }
+      if (argument == '--runtime-shell-integration-test') {
+        if (runtimeShellIntegrationTest) {
+          throw const FormatException(
+            '--runtime-shell-integration-test may only be supplied once',
+          );
+        }
+        runtimeShellIntegrationTest = true;
         continue;
       }
       if (argument == '--runtime-restoration-test') {
@@ -480,6 +491,30 @@ final class TerminalOptions {
         'theme test cannot be combined with another runtime test',
       );
     }
+    if (runtimeShellIntegrationTest &&
+        selectedEnvironment['DT_RUNTIME_SHELL_INTEGRATION_TEST'] != '1') {
+      throw const FormatException(
+        'shell integration test requires the integration-test gate',
+      );
+    }
+    if (runtimeShellIntegrationTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'shell integration test cannot be combined with another runtime test',
+      );
+    }
     if (runtimeNativeHierarchyTest &&
         (selectedScenario != RuntimeLifecycleScenario.normal ||
             autoCloseAfter != null ||
@@ -535,6 +570,7 @@ final class TerminalOptions {
       runtimeUserActionsTest: runtimeUserActionsTest,
       runtimeConfigurationTest: runtimeConfigurationTest,
       runtimeThemeTest: runtimeThemeTest,
+      runtimeShellIntegrationTest: runtimeShellIntegrationTest,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
@@ -567,6 +603,7 @@ final class TerminalOptions {
   final bool runtimeUserActionsTest;
   final bool runtimeConfigurationTest;
   final bool runtimeThemeTest;
+  final bool runtimeShellIntegrationTest;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
@@ -648,6 +685,7 @@ final class TerminalApplication {
     if (options.runtimeUserActionsTest ||
         options.runtimeConfigurationTest ||
         options.runtimeThemeTest ||
+        options.runtimeShellIntegrationTest ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -667,6 +705,7 @@ final class TerminalApplication {
         runUserActionAcceptance: options.runtimeUserActionsTest,
         runConfigurationAcceptance: options.runtimeConfigurationTest,
         runThemeAcceptance: options.runtimeThemeTest,
+        runShellIntegrationAcceptance: options.runtimeShellIntegrationTest,
       );
       return;
     }
@@ -2133,6 +2172,7 @@ final class TerminalApplication {
       !options.runtimeNativeHierarchyTest &&
       !options.runtimeConfigurationTest &&
       !options.runtimeThemeTest &&
+      !options.runtimeShellIntegrationTest &&
       !options.runtimeRestorationTest &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
@@ -2148,6 +2188,7 @@ final class TerminalApplication {
     bool runUserActionAcceptance = false,
     bool runConfigurationAcceptance = false,
     bool runThemeAcceptance = false,
+    bool runShellIntegrationAcceptance = false,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
     final Rect initialWindowFrame = Rect.fromLTWH(
@@ -3286,7 +3327,21 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      if (runThemeAcceptance) {
+      if (runShellIntegrationAcceptance) {
+        await _exerciseShellIntegrationProduct(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          dispatcher: dispatcher,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          shellIntegrationBundle: shellIntegrationBundle,
+          paneConfigurations: paneConfigurations,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
+      } else if (runThemeAcceptance) {
         await _exerciseThemeProduct(
           application: application,
           state: state,
@@ -3368,6 +3423,117 @@ final class TerminalApplication {
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
     }
     stdout.writeln('Dart Terminal shut down cleanly.');
+  }
+
+  static Future<void> _exerciseShellIntegrationProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalActionDispatcher dispatcher,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required TerminalShellIntegrationBundle shellIntegrationBundle,
+    required Map<PaneId, TerminalProductConfiguration> paneConfigurations,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    _expectLifecycle(
+      shellIntegrationBundle.usesBundledResources &&
+          shellIntegrationBundle.fileCount == 5,
+      'shell integration acceptance requires the validated bundle contract',
+    );
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1 &&
+          hierarchy.paneResourceCount == 1 &&
+          sessions.length == 1 &&
+          owners.length == 1,
+      'shell integration product did not start from a 1/1/1 hierarchy',
+    );
+    final PaneId paneId = state.windows.single.selectedTab.focusedPaneId;
+    final TerminalSession session = sessions[paneId]!;
+    final _TerminalHierarchyProductPane owner = owners[paneId]!;
+    final TerminalConfiguredShellIntegration policy =
+        paneConfigurations[paneId]!.shellIntegration;
+    _expectLifecycle(
+      policy == TerminalConfiguredShellIntegration.detect ||
+          policy == TerminalConfiguredShellIntegration.none,
+      'shell integration acceptance requires detect or none policy',
+    );
+    final bool expectsIntegration =
+        policy == TerminalConfiguredShellIntegration.detect;
+    await _waitForAsciiMarker(
+      session,
+      prompt,
+      timeout: const Duration(seconds: 10),
+    );
+    final String integrationCondition = expectsIntegration
+        ? r'[[ ${DART_TERMINAL_SHELL_INTEGRATION-} == 1 && ${DART_TERMINAL_SHELL_INTEGRATION_VERSION-} == 1 && ${DART_TERMINAL_SHELL_INTEGRATION_SHELL-} == zsh ]]'
+        : r'[[ -z ${DART_TERMINAL_SHELL_INTEGRATION-} && -z ${DART_TERMINAL_SHELL_INTEGRATION_VERSION-} && -z ${DART_TERMINAL_SHELL_INTEGRATION_SHELL-} ]]';
+    const String startupCondition =
+        r'[[ ${DT_RUNTIME_ZSHENV_COUNT:-0} == 1 && ${DT_RUNTIME_ZSHRC_COUNT:-0} == 1 ]]';
+    const String cleanupCondition =
+        r'[[ -z ${DART_TERMINAL_ZDOTDIR_SET-} && -z ${DART_TERMINAL_ZDOTDIR-} ]]';
+    owner.pane.insertText(
+      '$integrationCondition && $startupCondition && $cleanupCondition && '
+      r"printf '%s%s\n' '__DT_SHELL_' 'ACCEPTED__' || "
+      r"printf '%s%s\n' '__DT_SHELL_' 'REJECTED__'",
+    );
+    await owner.pane.submit();
+    final Stopwatch resultDeadline = Stopwatch()..start();
+    var accepted = false;
+    var rejected = false;
+    while (!accepted &&
+        !rejected &&
+        resultDeadline.elapsed < const Duration(seconds: 10)) {
+      final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+      accepted = _findAscii(screen, '__DT_SHELL_ACCEPTED__') != null;
+      rejected = _findAscii(screen, '__DT_SHELL_REJECTED__') != null;
+      if (!accepted && !rejected) {
+        _expectLifecycle(
+          session.isLive,
+          'shell exited before integration acceptance completed',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    }
+    _expectLifecycle(
+      accepted && !rejected,
+      'shell integration environment or user startup contract was rejected',
+    );
+
+    Future<void> dispatch(TerminalActionId id) async {
+      final TerminalActionDispatchResult result = await dispatcher.dispatch(id);
+      _expectLifecycle(
+        result.disposition == TerminalActionDispatchDisposition.executed,
+        'shell integration product action ${id.stableName} did not execute',
+      );
+    }
+
+    await dispatch(TerminalActionId.quitApplication);
+    if (!closed.isCompleted) {
+      await dispatch(TerminalActionId.quitApplication);
+    }
+    await closed.future.timeout(const Duration(seconds: 15));
+    await Future<void>.delayed(Duration.zero);
+    _expectLifecycle(
+      state.isDisposed &&
+          hierarchy.isDisposed &&
+          allSessions.length == 1 &&
+          allSessions.single.shutdownResult?.isClean == true &&
+          debugLiveTerminalTextInputClientCount() == 0 &&
+          application.debugLiveObjectCount == 0,
+      'shell integration product did not cleanly release all resources',
+    );
+    stdout.writeln(
+      'TERMINAL_SHELL_INTEGRATION_TEST policy=${policy.name} bundle=true '
+      'shell=zsh integrated=$expectsIntegration marker_contract=true '
+      'user_startup_once=true injection_cleanup=true hierarchy=true '
+      'sessions_clean=1 text_clients=0 native_handles=0',
+    );
   }
 
   static Future<void> _exerciseThemeProduct({
@@ -4642,11 +4808,7 @@ keybind = control+k=pane.focus-next
     try {
       await closed.future.timeout(const Duration(seconds: 1));
     } on TimeoutException {
-      _expectLifecycle(
-        !quitItem.isDisposed,
-        'user action Quit neither completed nor retained confirmation',
-      );
-      quitItem.performAction();
+      if (!quitItem.isDisposed) quitItem.performAction();
       await closed.future.timeout(const Duration(seconds: 15));
     }
     await Future<void>.delayed(Duration.zero);

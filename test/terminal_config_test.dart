@@ -489,6 +489,20 @@ working-directory = /from-file
     runtimeTheme.runtimeThemeTest,
     'TerminalOptions admits the isolated theme acceptance gate',
   );
+  final TerminalOptions runtimeShellIntegration = TerminalOptions.parse(
+    const <String>['--no-config', '--runtime-shell-integration-test'],
+    environment: const <String, String>{
+      'DT_RUNTIME_SHELL_INTEGRATION_TEST': '1',
+    },
+    configFileSystem: files,
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    runtimeShellIntegration.runtimeShellIntegrationTest,
+    'TerminalOptions admits the isolated shell integration acceptance gate',
+  );
   _expectThrows(
     () => TerminalOptions.parse(
       const <String>['--no-config', '--runtime-configuration-test'],
@@ -504,6 +518,14 @@ working-directory = /from-file
       configFileSystem: files,
     ),
     'theme acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>['--no-config', '--runtime-shell-integration-test'],
+      environment: const <String, String>{},
+      configFileSystem: files,
+    ),
+    'shell integration acceptance is unavailable without its environment gate',
   );
   _expectThrows(
     () => TerminalOptions.parse(
@@ -534,6 +556,21 @@ working-directory = /from-file
       configFileSystem: files,
     ),
     'theme acceptance cannot be combined with another runtime test',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>[
+        '--no-config',
+        '--runtime-shell-integration-test',
+        '--runtime-configuration-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_SHELL_INTEGRATION_TEST': '1',
+        'DT_RUNTIME_CONFIGURATION_TEST': '1',
+      },
+      configFileSystem: files,
+    ),
+    'shell integration acceptance cannot be combined with another runtime test',
   );
   _expectThrows(
     () => TerminalOptions.parse(

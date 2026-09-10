@@ -28,13 +28,19 @@ enum _Suite {
   actions,
   configuration,
   theme,
+  shellIntegration,
   restoration,
   clipboard,
   lifecycle,
   traffic,
   resource,
   fault,
-  all,
+  all;
+
+  String get optionName => switch (this) {
+    _Suite.shellIntegration => 'shell-integration',
+    _ => name,
+  };
 }
 
 final class _Options {
@@ -146,13 +152,13 @@ _Options _parseOptions(List<String> arguments) {
     } else if (argument.startsWith('--suite=')) {
       final String value = argument.substring('--suite='.length);
       final _Suite? selected = _Suite.values
-          .where((_Suite candidate) => candidate.name == value)
+          .where((_Suite candidate) => candidate.optionName == value)
           .firstOrNull;
       if (selected == null) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
-          'configuration, theme, clipboard, lifecycle, traffic, resource, fault, '
-          'or all',
+          'configuration, theme, shell-integration, clipboard, lifecycle, '
+          'traffic, resource, fault, or all',
         );
       }
       suite = selected;
@@ -299,6 +305,7 @@ Future<_ProcessObservation> _launch(
   _Invocation invocation,
   List<String> applicationArguments, {
   Map<String, String> environment = const <String, String>{},
+  Set<String> environmentKeysToRemove = const <String>{},
   String expectedDiagnosticPhase = 'root-stopped',
   Duration timeout = const Duration(seconds: 12),
   bool throughLaunchServices = false,
@@ -312,10 +319,18 @@ Future<_ProcessObservation> _launch(
   Directory? captureDirectory;
   try {
     final Map<String, String> launchEnvironment = <String, String>{
+      if (environmentKeysToRemove.isNotEmpty) ...Platform.environment,
       ...environment,
       'DMR_RUNTIME_DIAGNOSTICS_TEST': '1',
       'DMR_RUNTIME_DIAGNOSTICS_DIRECTORY': diagnosticsDirectory.path,
     };
+    for (final String key in environmentKeysToRemove) {
+      launchEnvironment.remove(key);
+    }
+    launchEnvironment.addAll(environment);
+    launchEnvironment['DMR_RUNTIME_DIAGNOSTICS_TEST'] = '1';
+    launchEnvironment['DMR_RUNTIME_DIAGNOSTICS_DIRECTORY'] =
+        diagnosticsDirectory.path;
     late final String processExecutable;
     late final List<String> processArguments;
     String? capturedStdoutPath;
@@ -366,6 +381,7 @@ Future<_ProcessObservation> _launch(
       processArguments,
       workingDirectory: Directory.current.path,
       environment: throughLaunchServices ? null : launchEnvironment,
+      includeParentEnvironment: environmentKeysToRemove.isEmpty,
     );
     final Future<String> launcherStdout = process.stdout
         .transform(utf8.decoder)
@@ -1702,6 +1718,148 @@ cursor-blink = false
   }
 }
 
+Future<void> _runShellIntegration(
+  _Options options,
+  _Invocation invocation,
+) async {
+  final Directory directory = await Directory.systemTemp.createTemp(
+    'dart-terminal-runtime-shell-integration-',
+  );
+  final Directory home = Directory('${directory.path}/home');
+  final Directory zdotdir = Directory('${directory.path}/zsh-user');
+  try {
+    await home.create();
+    await zdotdir.create();
+    await File('${zdotdir.path}/.zshenv').writeAsString(r'''export DT_RUNTIME_ZSHENV_COUNT=$(( ${DT_RUNTIME_ZSHENV_COUNT:-0} + 1 ))
+''');
+    await File('${zdotdir.path}/.zshrc').writeAsString(
+      r'''export DT_RUNTIME_ZSHRC_COUNT=$(( ${DT_RUNTIME_ZSHRC_COUNT:-0} + 1 ))
+PS1='__DT_USER_ACTIONS_PROMPT__ '
+RPS1=''
+''',
+    );
+    const Set<String> integrationEnvironment = <String>{
+      'DART_TERMINAL_SHELL_INTEGRATION',
+      'DART_TERMINAL_SHELL_INTEGRATION_VERSION',
+      'DART_TERMINAL_SHELL_INTEGRATION_SHELL',
+      'DART_TERMINAL_ZDOTDIR_SET',
+      'DART_TERMINAL_ZDOTDIR',
+      'DT_RUNTIME_ZSHENV_COUNT',
+      'DT_RUNTIME_ZSHRC_COUNT',
+    };
+    final Map<String, String> environment = <String, String>{
+      'DT_RUNTIME_SHELL_INTEGRATION_TEST': '1',
+      'HOME': home.path,
+      'ZDOTDIR': zdotdir.path,
+      'TERM': 'xterm-256color',
+      'LC_ALL': 'C',
+    };
+
+    Future<_ProcessObservation> runPolicy(String policy) async {
+      final String configurationPath = '${directory.path}/config-$policy';
+      await File(configurationPath).writeAsString('''
+shell = /bin/zsh
+shell-integration = $policy
+working-directory = ${directory.path}
+''');
+      final _ProcessObservation observation = await _launch(
+        options,
+        invocation,
+        <String>[
+          '--config=$configurationPath',
+          '--runtime-shell-integration-test',
+        ],
+        environment: environment,
+        environmentKeysToRemove: integrationEnvironment,
+        timeout: const Duration(seconds: 45),
+      );
+      _expect(
+        observation.status == 0,
+        '$policy shell integration application exited with status '
+        '${observation.status}; stdout=${observation.stdoutText.trim()} '
+        'stderr=${observation.stderrText.trim()}',
+      );
+      _expect(
+        observation.stderrText.trim().isEmpty,
+        '$policy shell integration application wrote unexpected stderr: '
+        '${observation.stderrText.trim()}',
+      );
+      _expect(
+        RegExp(
+              r'^TERMINAL_SHELL_INTEGRATION_BUNDLE disposition=bundled '
+              r'version=1 shells=4 files=5$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1,
+        '$policy launch did not validate the exact bundled shell contract',
+      );
+      final bool integrated = policy == 'detect';
+      _expect(
+        RegExp(
+              '^TERMINAL_SHELL_INTEGRATION disposition='
+              '${integrated ? 'integrated' : 'disabled'} '
+              'shell=${integrated ? 'zsh' : 'unknown'} integrated='
+              '$integrated\$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1,
+        '$policy launch did not publish the exact zsh launch disposition',
+      );
+      _expect(
+        RegExp(
+              '^TERMINAL_SHELL_INTEGRATION_TEST policy=$policy bundle=true '
+              'shell=zsh integrated=$integrated marker_contract=true '
+              r'user_startup_once=true injection_cleanup=true hierarchy=true '
+              r'sessions_clean=1 text_clients=0 native_handles=0$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1,
+        '$policy launch omitted exact shell execution acceptance',
+      );
+      _expect(
+        RegExp(
+                  r'^TERMINAL_SESSION_SHUTDOWN pane=1 session=1:1 '
+                  r'process_id=[1-9][0-9]* disposition=clean '
+                  r'termination_observed=true cleanup_completed=true$',
+                  multiLine: true,
+                ).allMatches(observation.stdoutText).length ==
+                1 &&
+            RegExp(
+                  r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=1 '
+                  r'disposition=clean$',
+                  multiLine: true,
+                ).allMatches(observation.stdoutText).length ==
+                1 &&
+            observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+        '$policy shell integration product did not release its pane cleanly',
+      );
+      _expect(
+        !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
+            !observation.stdoutText.contains('HIERARCHY_MISMATCH'),
+        '$policy shell integration product leaked or overflowed terminal input',
+      );
+      _expectWorkerProcessContract(
+        observation,
+        scenario: 'normal',
+        expectedCount: 1,
+      );
+      return observation;
+    }
+
+    final _ProcessObservation integrated = await runPolicy('detect');
+    final _ProcessObservation disabled = await runPolicy('none');
+    stdout.writeln(
+      'RUNTIME_SHELL_INTEGRATION_PASS mode=${options.mode.name} '
+      'launch_architecture=${options.launchArchitecture ?? 'native'} '
+      'bundle=true integrated=true disabled=true user_startup_once=true '
+      'sessions_clean=2 elapsed_ms='
+      '${integrated.elapsed.inMilliseconds + disabled.elapsed.inMilliseconds}',
+    );
+  } finally {
+    await directory.delete(recursive: true);
+  }
+}
+
 Future<void> _runRestoration(_Options options, _Invocation invocation) async {
   final Directory directory = await Directory.systemTemp.createTemp(
     'dart-terminal-restoration-',
@@ -2754,6 +2912,10 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.theme || options.suite == _Suite.all) {
       await _runTheme(options, invocation);
+    }
+    if (options.suite == _Suite.shellIntegration ||
+        options.suite == _Suite.all) {
+      await _runShellIntegration(options, invocation);
     }
     if (options.suite == _Suite.restoration || options.suite == _Suite.all) {
       await _runRestoration(options, invocation);

@@ -1030,14 +1030,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] built-in light/dark pair と layered palette/custom override
   - [x] system appearance の live product projection
   - [x] M1 両 runtime theme/appearance 受け入れと親項目完了判定
-- [ ] zsh/bash/fish/nushell integration
+- [x] zsh/bash/fish/nushell integration
   （分割と完了条件は
   [`docs/phase8/shell-integration.md`](docs/phase8/shell-integration.md)
   を参照して順に実施する）
   - [x] typed shell selection/integration policy と immutable launch-plan boundary
   - [x] versioned four-shell resources と bundle/freshness contract
   - [x] new-session projection と shell execution coverage
-  - [ ] M1 両 runtime shell-integration 受け入れと親項目完了判定
+  - [x] M1 両 runtime shell-integration 受け入れと親項目完了判定
 - [ ] cwd/title/prompt mark/jump-to-prompt/close hint
 - [ ] settings UI と effective-config inspector
 

@@ -1,6 +1,6 @@
 # zsh, bash, fish, and nushell integration
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-10
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 8 `zsh/bash/fish/nushell integration`
@@ -143,6 +143,45 @@ the next begins. After each commit, reread `ROADMAP.md` and this memo.
   execution only when already installed; then complete `make test`, source
   audit, staged diff review, roadmap update, and one independent commit.
 
+## Current subtask: M1 runtime shell-integration acceptance
+
+- Status: complete
+- Started: 2026-09-11 after commit `716c354`
+- Completed: 2026-09-11
+- Purpose: prove at the product boundary that the same validated, bundle-local
+  shell-integration contract is consumed by an installed shell in both M1
+  Developer JIT and Release AOT applications, while explicit disablement still
+  starts an ordinary usable shell.
+- Background: the previous subtask connected validated resources to every new
+  pane and established unit, fake-PTY, and real-PTY execution coverage. The
+  remaining parent condition is an application-level, gated runtime scenario
+  against both required build modes and final evidence/user documentation.
+- Scope: add one environment-gated runtime acceptance mode, exercise integrated
+  and disabled zsh launches through the ordinary product hierarchy, assert
+  content-free bundle/launch/result diagnostics, add Developer JIT and Release
+  AOT make targets, update generated/runtime evidence and user-facing support
+  documentation, and include the scenario in the complete runtime gate.
+- Out of scope: prompt marks, cwd/title semantics, jump-to-prompt, close hints,
+  optional shell installation, automatic Apple `/bin/bash` integration, user
+  home mutation, and changes to `dart_appkit` or `dart_pty_macos` unless a
+  runtime defect proves such a change necessary.
+- Dependencies and risks: the scenario depends on the host's installed zsh,
+  the declared application resource manifest, the validated five-file contract,
+  ordinary pane/session ownership, and bounded test-only activation. Test
+  startup files and configuration must live in an isolated temporary directory;
+  logs must report booleans/counts only and never terminal content or private
+  environment values.
+- Completion conditions: both build modes validate and load the bundled
+  contract, integrated zsh runs the bootstrap and isolated user startup exactly
+  as expected, `shell-integration = none` runs the same ordinary shell without
+  the integration marker, the application exits cleanly, user/evidence docs are
+  current, and all focused, aggregate, audit, and arm64 runtime gates pass.
+- Validation plan: focused option/workflow/tool tests; runtime Developer JIT
+  and Release AOT shell-integration targets; resource and source audits;
+  `make test`; `make RUNTIME_ARCH=arm64 runtime-verify`; final diff/staged-diff
+  review; then mark both this subtask and its parent complete and create one
+  task-scoped commit.
+
 ## Completion conditions
 
 1. The typed schema validates bounded shell selection and integration policy,
@@ -174,6 +213,82 @@ the next begins. After each commit, reread `ROADMAP.md` and this memo.
 
 ## Findings and decisions
 
+- The runtime driver already launches the signed Developer JIT and Release AOT
+  bundles with isolated configuration and environment gates, while the ordinary
+  hierarchy acceptance path owns a real AppKit window, real PTY, lifecycle
+  worker, one `TerminalSession` per pane, and exact final native-resource
+  assertions. The shell scenario will extend this path rather than introduce a
+  second product topology.
+- One runtime-driver invocation will launch two independent applications:
+  `detect` with the bundled zsh bootstrap and `none` with the same isolated user
+  startup files. This avoids mutating a live shell's immutable policy and proves
+  the Phase 8 disabled-startup invariant at the actual product boundary.
+- The driver will override `HOME` and `ZDOTDIR` with a temporary root containing
+  reviewed `.zshenv` and `.zshrc` fixtures. The product will inspect only fixed
+  success/failure markers written into its terminal screen; stdout evidence will
+  contain contract booleans and counts, never terminal contents, resource paths,
+  or inherited environment values.
+- The first formatter pass rejected the runtime driver's enhanced enum because
+  its final value still used a comma before an instance getter. Changing that
+  separator to the required semicolon fixes the Dart syntax; the partial pass
+  formatted only `test/run_tests.dart` and made no semantic change.
+- Focused configuration tests passed. The first aggregate Dart runner attempt
+  was correctly blocked by sandboxed Metal device access; the approved host run
+  then reached the expected generated-evidence freshness check and reported the
+  Phase 7 AppKit acceptance inventory stale because the product application
+  source changed. That inventory must be regenerated and revalidated before the
+  runner result is meaningful.
+- The first real Developer JIT scenario completed its integrated launch but the
+  driver rejected the disabled launch's content-free plan line. The product is
+  correct: the planner returns `disabled` before executable classification, so
+  that line deliberately says `shell=unknown`; the product acceptance result
+  separately identifies the configured `/bin/zsh`. The driver expectation was
+  corrected without changing launch behavior.
+- The corrected M1 Developer JIT scenario passed in 1,842 ms and the identical
+  Release AOT scenario passed in 949 ms. Each mode launched two independent
+  ordinary products, validated bundle contract version 1 with four shells and
+  five files, executed integrated zsh and explicit `none`, observed `.zshenv`
+  and `.zshrc` exactly once, confirmed private zsh injection-state cleanup, and
+  cleanly reclaimed both pane sessions, text-input clients, native handles, and
+  lifecycle workers.
+- Focused formatting covers the application, runtime driver, and option tests;
+  focused analysis reports no issues. `terminal_config_test.dart` passes, and
+  the regenerated AppKit inventory lets the host-Metal aggregate Dart runner
+  finish with `dart_terminal tests passed`. Updating README and the feature
+  matrix required the normal compatibility evidence regeneration, which passes
+  9 fix families, 9 cases, 390 input bytes, and 417 split runs.
+- The first complete arm64 runtime matrix passed all repository checks, both
+  bundle audits, ordinary smoke/display, and the 100 MiB hierarchy cases in
+  both modes, then stopped in the pre-existing Developer JIT user-actions Quit
+  assertion. The log shows all five shell generations shut down cleanly and the
+  application Quit result was `terminated`, while the acceptance coroutine
+  still reported that Quit neither completed nor retained confirmation. This is
+  treated as a timing-sensitive acceptance defect and must be reproduced and
+  corrected before this shell task can complete; later suites were not run.
+- The Quit test used a one-second timeout to distinguish immediate completion
+  from confirmation, but asserted that the native menu item must still be live
+  after any timeout. Under the preceding 100 MiB runs, teardown crossed that
+  deadline after disposing the menu but before completing the shared `closed`
+  future. The acceptance now performs the confirmation action only while the
+  item remains live and otherwise waits for the already-running Quit up to the
+  existing 15-second bound. Product Quit and confirmation policy are unchanged.
+- Formatting remains unchanged and focused analysis reports no issues after the
+  timing correction. The AppKit inventory was refreshed for the changed source,
+  and focused Developer JIT user-actions then passed its full five-session
+  action/close/Quit contract in 2,175 ms.
+- The final `make RUNTIME_ARCH=arm64 runtime-verify` passes from a staged
+  candidate. It repeats all freshness checks, formatting, analysis, aggregate
+  tests, the `tracked=431` Dart-only source audit, both bundle audits, and every
+  Developer JIT/Release AOT runtime family. In that ordered matrix the shell
+  scenario passes in 1,561 ms and 825 ms respectively, followed by restoration,
+  clipboard, all lifecycle/fault classifications, traffic/backpressure,
+  1,000-iteration resource stress, shutdown fault, and PTY deadline coverage.
+- All four ordered children and all five parent completion conditions are now
+  satisfied. In particular, explicit integration disablement preserves the
+  installed zsh's ordinary user startup behavior in both packaged runtimes;
+  fish/nushell remain optional and fully covered by their reviewed resource and
+  launch contracts on this host. No `dart_appkit` or `dart_pty_macos` change was
+  necessary.
 - The worktree was clean on `main` after commit `d332de4`; the branch was 17
   commits ahead of `origin/main` when this task began.
 - The first startup inspection combined README, feature matrix, roadmap, and a

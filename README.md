@@ -298,8 +298,13 @@ shell設定と、無効・unsupported・resource欠落時に通常shellへ戻す
 contractを設けています。現段階のresourceは実行確認用markerだけを提供し、通常起動への
 新しいpaneはcapture済みのshell executable/policyから検証済みlaunch planを生成します。
 macOS同梱の`/bin/bash`は`ENV` startupを無効化しているため、明示`bash` policyでも通常の
-login shellへ安全にfallbackします。両runtimeの製品受け入れとprompt/cwd/title連携は
-Phase 8の同じ親タスク内で順に完成させます。
+login shellへ安全にfallbackします。bundle内のzsh統合と明示的な`none`は、隔離した通常の
+`.zshenv`/`.zshrc`を各1回実行する実AppKit/PTY製品としてDeveloper JITとRelease AOTの両方で
+検証します。prompt/cwd/title連携はPhase 8の次のタスクで扱います。
+
+```shell
+make RUNTIME_ARCH=arm64 runtime-shell-integration
+```
 
 設定値が実際の通常製品へ反映されることは、実設定ファイルから4 paneを生成し、表示色、
 font、window/padding、cursor、Option入力、scrollback上限、pane/application keybind、
