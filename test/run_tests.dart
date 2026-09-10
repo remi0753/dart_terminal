@@ -88,6 +88,7 @@ import 'terminal_semantic_prompt_test.dart';
 import 'terminal_session_configuration_test.dart';
 import 'terminal_session_metadata_test.dart';
 import 'terminal_session_reply_test.dart';
+import 'terminal_settings_document_test.dart';
 import 'terminal_settings_inspector_test.dart';
 import 'terminal_shell_integration_projection_test.dart';
 import 'terminal_shell_integration_resource_test.dart';
@@ -184,6 +185,7 @@ Future<void> main() async {
   runTerminalScreenSetTests();
   runTerminalSemanticPromptTests();
   await runTerminalSettingsInspectorTests();
+  runTerminalSettingsDocumentTests();
   runTerminalSessionMetadataTests();
   await runTerminalSessionConfigurationTests();
   runTerminalShellIntegrationTests();
