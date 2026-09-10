@@ -128,6 +128,7 @@ item = three
       TerminalConfigRepeatedOption<String>(
         name: 'item',
         description: 'bounded repeated test value',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         maximumOccurrences: 2,
         parser: TerminalConfigDecodeResult<String>.success,
       );
@@ -193,6 +194,7 @@ void _testSchemaAndZeroConfig() {
       TerminalConfigOption<String?>(
         name: 'include',
         description: 'reserved',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: null,
         parser: (String value) =>
             TerminalConfigDecodeResult<String?>.success(value),

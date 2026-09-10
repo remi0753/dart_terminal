@@ -13,6 +13,9 @@ enum TerminalConfigDiagnosticSeverity { warning, error }
 
 enum TerminalConfigSourceKind { schemaDefault, file, commandLine }
 
+/// When an accepted reload may publish a changed option to product consumers.
+enum TerminalConfigApplicationPolicy { live, newSession }
+
 enum TerminalConfiguredTheme { defaultTheme }
 
 enum TerminalConfiguredSyntheticStyle { allow, deny }
@@ -105,6 +108,7 @@ final class TerminalConfigDecodeResult<T> {
 sealed class TerminalConfigOptionBase {
   String get name;
   String get description;
+  TerminalConfigApplicationPolicy get applicationPolicy;
   bool get isRepeatable;
   int? get maximumOccurrences;
   Object? get defaultValueObject;
@@ -115,6 +119,7 @@ final class TerminalConfigOption<T> extends TerminalConfigOptionBase {
   TerminalConfigOption({
     required this.name,
     required this.description,
+    required this.applicationPolicy,
     required this.defaultValue,
     required TerminalConfigValueParser<T> parser,
   }) : _parser = parser;
@@ -124,6 +129,9 @@ final class TerminalConfigOption<T> extends TerminalConfigOptionBase {
 
   @override
   final String description;
+
+  @override
+  final TerminalConfigApplicationPolicy applicationPolicy;
 
   @override
   bool get isRepeatable => false;
@@ -157,6 +165,7 @@ final class TerminalConfigRepeatedOption<T> extends TerminalConfigOptionBase {
   TerminalConfigRepeatedOption({
     required this.name,
     required this.description,
+    required this.applicationPolicy,
     required this.maximumOccurrences,
     required TerminalConfigValueParser<T> parser,
   }) : _parser = parser {
@@ -174,6 +183,9 @@ final class TerminalConfigRepeatedOption<T> extends TerminalConfigOptionBase {
 
   @override
   final String description;
+
+  @override
+  final TerminalConfigApplicationPolicy applicationPolicy;
 
   @override
   final int maximumOccurrences;
@@ -241,6 +253,7 @@ final class TerminalResolvedConfigValue<T> {
 
 final class TerminalConfigSnapshot {
   TerminalConfigSnapshot({
+    required this.schema,
     required Map<TerminalConfigOptionBase, TerminalResolvedConfigValue<Object?>>
     values,
     Map<TerminalConfigOptionBase, List<TerminalResolvedConfigValue<Object?>>>
@@ -279,6 +292,7 @@ final class TerminalConfigSnapshot {
            ),
        diagnostics = List<TerminalConfigDiagnostic>.unmodifiable(diagnostics);
 
+  final TerminalConfigSchema schema;
   final Map<TerminalConfigOptionBase, TerminalResolvedConfigValue<Object?>>
   _values;
   final Map<
@@ -319,6 +333,78 @@ final class TerminalConfigSnapshot {
             ),
       ),
     );
+  }
+}
+
+/// One semantically changed option in a configuration reload candidate.
+final class TerminalConfigChange {
+  const TerminalConfigChange(this.option);
+
+  final TerminalConfigOptionBase option;
+
+  TerminalConfigApplicationPolicy get applicationPolicy =>
+      option.applicationPolicy;
+}
+
+/// Immutable, deterministic semantic difference between two typed snapshots.
+///
+/// Provenance-only changes do not require application work and are omitted.
+final class TerminalConfigChangePlan {
+  factory TerminalConfigChangePlan.between(
+    TerminalConfigSnapshot previous,
+    TerminalConfigSnapshot candidate,
+  ) {
+    if (!identical(previous.schema, candidate.schema)) {
+      throw ArgumentError(
+        'configuration snapshots must use the same schema instance',
+      );
+    }
+    final List<TerminalConfigChange> changes = <TerminalConfigChange>[];
+    for (final TerminalConfigOptionBase option in previous.schema.options) {
+      final bool changed = option.isRepeatable
+          ? !_resolvedOccurrenceValuesEqual(
+              previous._repeatedValues[option],
+              candidate._repeatedValues[option],
+            )
+          : previous._values[option]?.value != candidate._values[option]?.value;
+      if (changed) changes.add(TerminalConfigChange(option));
+    }
+    return TerminalConfigChangePlan._(changes);
+  }
+
+  TerminalConfigChangePlan._(Iterable<TerminalConfigChange> changes)
+    : changes = List<TerminalConfigChange>.unmodifiable(changes),
+      liveChanges = List<TerminalConfigChange>.unmodifiable(
+        changes.where(
+          (TerminalConfigChange change) =>
+              change.applicationPolicy == TerminalConfigApplicationPolicy.live,
+        ),
+      ),
+      newSessionChanges = List<TerminalConfigChange>.unmodifiable(
+        changes.where(
+          (TerminalConfigChange change) =>
+              change.applicationPolicy ==
+              TerminalConfigApplicationPolicy.newSession,
+        ),
+      );
+
+  final List<TerminalConfigChange> changes;
+  final List<TerminalConfigChange> liveChanges;
+  final List<TerminalConfigChange> newSessionChanges;
+
+  bool get isEmpty => changes.isEmpty;
+
+  static bool _resolvedOccurrenceValuesEqual(
+    List<TerminalResolvedConfigValue<Object?>>? left,
+    List<TerminalResolvedConfigValue<Object?>>? right,
+  ) {
+    if (left == null || right == null || left.length != right.length) {
+      return false;
+    }
+    for (var index = 0; index < left.length; index += 1) {
+      if (left[index].value != right[index].value) return false;
+    }
+    return true;
   }
 }
 
@@ -385,6 +471,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<String?>(
         name: 'working-directory',
         description: 'Initial command working directory.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: null,
         parser: _parseNonEmptyPath,
       );
@@ -393,6 +480,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<TerminalConfiguredTheme>(
         name: 'theme',
         description: 'Base theme name.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: TerminalConfiguredTheme.defaultTheme,
         parser: _parseTheme,
       );
@@ -401,6 +489,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<int>(
         name: 'palette-foreground',
         description: 'Default terminal foreground color.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0x80e5e5e5,
         parser: _parseColor,
       );
@@ -409,6 +498,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<int>(
         name: 'palette-background',
         description: 'Default terminal background color.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0x80000000,
         parser: _parseColor,
       );
@@ -417,6 +507,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<int>(
         name: 'palette-cursor',
         description: 'Terminal cursor color.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0x80e5e5e5,
         parser: _parseColor,
       );
@@ -428,6 +519,7 @@ abstract final class TerminalProductConfigSchema {
           (int index) => TerminalConfigOption<int>(
             name: 'palette-$index',
             description: 'ANSI palette color $index.',
+            applicationPolicy: TerminalConfigApplicationPolicy.newSession,
             defaultValue: defaultAnsiColors[index],
             parser: _parseColor,
           ),
@@ -439,6 +531,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<String>(
         name: 'font-family',
         description: 'Terminal monospace font family, or `system`.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: '',
         parser: _parseFontFamily,
       );
@@ -447,6 +540,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<double>(
         name: 'font-size',
         description: 'Terminal font size in points.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 14,
         parser: _parseFontSize,
       );
@@ -455,6 +549,7 @@ abstract final class TerminalProductConfigSchema {
   fontSyntheticStyle = TerminalConfigOption<TerminalConfiguredSyntheticStyle>(
     name: 'font-synthetic-style',
     description: 'Whether missing bold and italic faces may be synthesized.',
+    applicationPolicy: TerminalConfigApplicationPolicy.newSession,
     defaultValue: TerminalConfiguredSyntheticStyle.allow,
     parser: _parseSyntheticStyle,
   );
@@ -463,6 +558,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<double>(
         name: 'window-width',
         description: 'Initial terminal window width in logical points.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 920,
         parser: _parseWindowWidth,
       );
@@ -471,6 +567,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<double>(
         name: 'window-height',
         description: 'Initial terminal window height in logical points.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 580,
         parser: _parseWindowHeight,
       );
@@ -479,6 +576,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<double>(
         name: 'window-padding-horizontal',
         description: 'Horizontal terminal content padding in logical points.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0,
         parser: _parseWindowPadding,
       );
@@ -487,6 +585,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<double>(
         name: 'window-padding-vertical',
         description: 'Vertical terminal content padding in logical points.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0,
         parser: _parseWindowPadding,
       );
@@ -495,6 +594,7 @@ abstract final class TerminalProductConfigSchema {
   macosOptionKey = TerminalConfigOption<TerminalConfiguredOptionKey>(
     name: 'macos-option-key',
     description: 'Treat the macOS Option key as `escape` or composed `text`.',
+    applicationPolicy: TerminalConfigApplicationPolicy.live,
     defaultValue: TerminalConfiguredOptionKey.escape,
     parser: _parseOptionKey,
   );
@@ -503,6 +603,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<int>(
         name: 'scrollback-lines',
         description: 'Maximum retained primary-screen history lines.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 10000,
         parser: _parseScrollbackLines,
       );
@@ -511,6 +612,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<int>(
         name: 'scrollback-bytes',
         description: 'Maximum retained primary-screen history bytes.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 64 * 1024 * 1024,
         parser: _parseScrollbackBytes,
       );
@@ -519,6 +621,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<TerminalConfiguredCursorShape>(
         name: 'cursor-shape',
         description: 'Initial terminal cursor shape.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: TerminalConfiguredCursorShape.block,
         parser: _parseCursorShape,
       );
@@ -527,6 +630,7 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<bool>(
         name: 'cursor-blink',
         description: 'Whether the initial terminal cursor blinks.',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: true,
         parser: _parseBoolean,
       );
@@ -535,6 +639,7 @@ abstract final class TerminalProductConfigSchema {
   keybind = TerminalConfigRepeatedOption<TerminalKeyBindingDefinition>(
     name: 'keybind',
     description: 'Exact physical-key chord and action override.',
+    applicationPolicy: TerminalConfigApplicationPolicy.live,
     maximumOccurrences:
         TerminalKeyBindingEngine.maximumDefinitionCount -
         TerminalKeyBindingEngine.standardDefinitionCount,
@@ -825,6 +930,7 @@ final class _TerminalConfigCollector {
 
   TerminalConfigSnapshot snapshot({required String? rootPath}) =>
       TerminalConfigSnapshot(
+        schema: schema,
         values: _values,
         repeatedValues: _repeatedValues,
         diagnostics: _diagnostics,

@@ -195,6 +195,17 @@ final class TerminalKeyBindingDefinition {
     TerminalKeyBindingDirective.action =>
       action?.configName ?? applicationAction!.stableName,
   };
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalKeyBindingDefinition &&
+      other.chord == chord &&
+      other.directive == directive &&
+      other.action == action &&
+      other.applicationAction == applicationAction;
+
+  @override
+  int get hashCode => Object.hash(chord, directive, action, applicationAction);
 }
 
 enum TerminalKeyBindingLayer { defaults, overrides }

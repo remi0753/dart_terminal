@@ -11,6 +11,101 @@ void runTerminalProductConfigurationTests() {
   _testInvalidValuesRecoverIndependently();
   _testCliPrecedenceAndCapacitySyntax();
   _testConsumerResourceFactoriesAndMappings();
+  _testApplicationPoliciesAndSemanticChangePlan();
+}
+
+void _testApplicationPoliciesAndSemanticChangePlan() {
+  final TerminalConfigSchema schema = TerminalProductConfigSchema.instance;
+  final List<TerminalConfigOptionBase> live = schema.options
+      .where(
+        (TerminalConfigOptionBase option) =>
+            option.applicationPolicy == TerminalConfigApplicationPolicy.live,
+      )
+      .toList(growable: false);
+  _expect(
+    live.map((TerminalConfigOptionBase option) => option.name).join(',') ==
+            'macos-option-key,keybind' &&
+        schema.options.length == 34 &&
+        schema.options.every(
+          (TerminalConfigOptionBase option) =>
+              option.applicationPolicy ==
+                  TerminalConfigApplicationPolicy.live ||
+              option.applicationPolicy ==
+                  TerminalConfigApplicationPolicy.newSession,
+        ),
+    'every product option declares its exact live or new-session policy',
+  );
+
+  final TerminalConfigSnapshot previous = TerminalConfigLoader().resolve(
+    const <String>[
+      '--no-config',
+      '--font-size=15',
+      '--macos-option-key=escape',
+      '--keybind=control+d=unbind',
+    ],
+    environment: const <String, String>{},
+  ).snapshot;
+  final TerminalConfigSnapshot candidate = TerminalConfigLoader().resolve(
+    const <String>[
+      '--no-config',
+      '--font-size=18',
+      '--macos-option-key=text',
+      '--keybind=control+d=terminal.send-quit-signal',
+    ],
+    environment: const <String, String>{},
+  ).snapshot;
+  final TerminalConfigChangePlan plan = TerminalConfigChangePlan.between(
+    previous,
+    candidate,
+  );
+  _expect(
+    plan.changes
+            .map((TerminalConfigChange change) => change.option.name)
+            .join(',') ==
+        'font-size,macos-option-key,keybind',
+    'change plan follows deterministic schema order',
+  );
+  _expect(
+    plan.liveChanges
+                .map((TerminalConfigChange change) => change.option.name)
+                .join(',') ==
+            'macos-option-key,keybind' &&
+        plan.newSessionChanges.single.option.name == 'font-size',
+    'change plan partitions options by declared application policy',
+  );
+
+  final TerminalConfigSnapshot sameValuesDifferentSources =
+      TerminalConfigLoader().resolve(const <String>[
+        '--no-config',
+        '--font-size=15',
+        '--macos-option-key=escape',
+        '--keybind=control+d=unbind',
+      ], environment: const <String, String>{}).snapshot;
+  _expect(
+    TerminalConfigChangePlan.between(
+      previous,
+      sameValuesDifferentSources,
+    ).isEmpty,
+    'equal scalar and semantic repeated values produce an empty plan',
+  );
+
+  final TerminalConfigOption<int> foreignOption = TerminalConfigOption<int>(
+    name: 'foreign',
+    description: 'foreign schema option',
+    applicationPolicy: TerminalConfigApplicationPolicy.newSession,
+    defaultValue: 0,
+    parser: (String value) => TerminalConfigDecodeResult<int>.success(0),
+  );
+  final TerminalConfigSnapshot foreign =
+      TerminalConfigLoader(
+        schema: TerminalConfigSchema(<TerminalConfigOptionBase>[foreignOption]),
+      ).resolve(const <String>[
+        '--no-config',
+      ], environment: const <String, String>{}).snapshot;
+  _expectThrows(
+    () => TerminalConfigChangePlan.between(previous, foreign),
+    'change planning rejects snapshots from different schema authorities',
+  );
 }
 
 void _testDefaultsAndSchemaInventory() {
@@ -26,7 +121,7 @@ void _testDefaultsAndSchemaInventory() {
         TerminalProductConfigSchema.instance.options.every(
           (TerminalConfigOptionBase option) => option.description.isNotEmpty,
         ),
-    'product schema has 33 unique documented options',
+    'product schema has 34 unique documented options',
   );
   _expect(
     defaults.theme == TerminalConfiguredTheme.defaultTheme &&
