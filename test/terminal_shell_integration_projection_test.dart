@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_pty_macos/dart_pty_macos.dart';
@@ -10,6 +11,7 @@ Future<void> main() => runTerminalShellIntegrationProjectionTests();
 Future<void> runTerminalShellIntegrationProjectionTests() async {
   _testBundleResolutionAndFallback();
   await _testFakePtyProjectionAndNewSessionCapture();
+  await _testFakeSemanticStreamProjection();
   if (Platform.isMacOS) {
     await _testInstalledShellExecution();
   }
@@ -38,7 +40,7 @@ void _testBundleResolutionAndFallback() {
         bundled.fileCount == 5 &&
         bundled.machineLine() ==
             'TERMINAL_SHELL_INTEGRATION_BUNDLE disposition=bundled '
-                'version=1 shells=4 files=5',
+                'version=2 shells=4 files=5',
     'reviewed application-startup bundle state is complete and content-free',
   );
   _expect(
@@ -266,6 +268,54 @@ Future<PtyCommand> _captureCommand(TerminalShellLaunchPlan plan) async {
   }
 }
 
+Future<void> _testFakeSemanticStreamProjection() async {
+  final FakePtyBackend backend = FakePtyBackend(autoExitOnClose: false);
+  final TerminalSession session = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(882), generation: 1),
+    ptyBackend: backend,
+    onChanged: () {},
+    onTerminated: () {},
+  );
+  try {
+    await session.start();
+    backend.processes.single.emitOutput(
+      utf8.encode(
+        '\x1b]7;file://localhost/private/tmp/project%20name\x07'
+        '\x1b]2;project name\x07'
+        '\x1b]133;A\x07prompt '
+        '\x1b]133;B\x07command\r\n'
+        '\x1b]133;C\x07output\r\n'
+        '\x1b]133;D;0\x07'
+        '\x1b]133;A\x07prompt '
+        '\x1b]133;B\x07',
+      ),
+    );
+    final TerminalScreenSet screens = session.terminalScreenSet;
+    var flags = 0;
+    for (var row = 0; row < screens.scrollback.length; row += 1) {
+      flags |= screens.scrollback.rowFlagsAt(row);
+    }
+    for (var row = 0; row < screens.primary.rows; row += 1) {
+      flags |= screens.primary.rowFlagsAt(row);
+    }
+    _expect(
+      screens.metadata.workingDirectory.toString() ==
+              'file://localhost/private/tmp/project%20name' &&
+          screens.metadata.windowTitle == 'project name' &&
+          screens.semanticPrompt.shellState ==
+              TerminalSemanticShellState.input &&
+          flags & TerminalRowFlags.prompt != 0 &&
+          flags & TerminalRowFlags.command != 0 &&
+          flags & TerminalRowFlags.output != 0,
+      'one fake shell stream projects shared cwd, title, lifecycle, and rows',
+    );
+  } finally {
+    backend.processes.single.finish(exitCode: 0);
+    await session.waitForTermination();
+    await session.dispose();
+  }
+}
+
 void _expectCommandEqualsPlan(
   PtyCommand command,
   TerminalShellLaunchPlan plan,
@@ -298,8 +348,16 @@ Future<void> _testInstalledShellExecution() async {
       ..createSync();
     File('${zshDirectory.path}/.zshenv')
         .writeAsStringSync('export DT_TEST_ZSHENV=loaded\n');
-    File('${zshDirectory.path}/.zshrc')
-        .writeAsStringSync('export DT_TEST_ZSHRC=loaded\n');
+    File('${zshDirectory.path}/.zshrc').writeAsStringSync(
+      'export DT_TEST_ZSHRC=loaded\n'
+      'function dt_test_user_precmd() { print -r -- __DT_USER_PRECMD__; }\n'
+      'precmd_functions+=(dt_test_user_precmd)\n',
+    );
+    final Directory safeDirectory = Directory('${temporary.path}/safe project')
+      ..createSync();
+    final Directory hostileDirectory = Directory(
+      '${temporary.path}/hostile\x1b]2;injected\x07',
+    )..createSync();
     final Map<String, String> zshEnvironment = <String, String>{
       'HOME': temporary.path,
       'PATH': '/usr/bin:/bin',
@@ -309,6 +367,8 @@ Future<void> _testInstalledShellExecution() async {
       'RPS1': '',
       'ZDOTDIR': zshDirectory.path,
       'HISTFILE': '/dev/null',
+      'DT_SAFE_DIR': safeDirectory.path,
+      'DT_HOSTILE_DIR': hostileDirectory.path,
     };
     final TerminalShellLaunchPlan zsh = bundle.createLaunchPlan(
       executable: '/bin/zsh',
@@ -326,8 +386,15 @@ Future<void> _testInstalledShellExecution() async {
       '"\${DART_TERMINAL_ZDOTDIR_SET-unset}"; exit',
     );
     _expect(
-      zshOutput.contains('__DT_ZSH_EXEC__:1:1:zsh:loaded:loaded:unset'),
+      zshOutput.contains('__DT_ZSH_EXEC__:1:2:zsh:loaded:loaded:unset') &&
+          zshOutput.contains('__DT_USER_PRECMD__'),
       'installed zsh executes integration and ordinary user startup exactly',
+    );
+
+    await _testInstalledZshSemantics(
+      plan: zsh,
+      workingDirectory: temporary.path,
+      safeDirectory: safeDirectory,
     );
 
     final TerminalShellLaunchPlan disabled = bundle.createLaunchPlan(
@@ -343,7 +410,10 @@ Future<void> _testInstalledShellExecution() async {
       '"\$DT_TEST_ZSHENV" "\$DT_TEST_ZSHRC"; exit',
     );
     _expect(
-      disabledOutput.contains('__DT_ZSH_DISABLED__:unset:loaded:loaded'),
+      disabledOutput.contains('__DT_ZSH_DISABLED__:unset:loaded:loaded') &&
+          !disabledOutput.contains('\x1b]133;') &&
+          !disabledOutput.contains('\x1b]7;') &&
+          !disabledOutput.contains('\x1b]2;'),
       'disabled installed zsh keeps normal startup without integration',
     );
 
@@ -355,6 +425,7 @@ Future<void> _testInstalledShellExecution() async {
     ).absolute.path;
     File('${bashHome.path}/.bash_profile').writeAsStringSync(
       'export DT_TEST_BASH_PROFILE=loaded\n'
+      'PROMPT_COMMAND=\'printf "__DT_USER_BASH_PROMPT__\\n"\'\n'
       'builtin source "$bashResource"\n',
     );
     final TerminalShellLaunchPlan bash = bundle.createLaunchPlan(
@@ -383,17 +454,135 @@ Future<void> _testInstalledShellExecution() async {
       '"\$DART_TERMINAL_SHELL_INTEGRATION_VERSION" '
       '"\$DART_TERMINAL_SHELL_INTEGRATION_SHELL" '
       '"\$DT_TEST_BASH_PROFILE" "\$ENV" '
-      '"\${DART_TERMINAL_BASH_INJECT-unset}"; exit',
+      '"\${DART_TERMINAL_BASH_INJECT-unset}"\nexit',
     );
     _expect(
       bashOutput.contains(
-        '__DT_BASH_EXEC__:1:1:bash:loaded:/original/bash-env:unset',
-      ),
+            '__DT_BASH_EXEC__:1:2:bash:loaded:/original/bash-env:unset',
+          ) &&
+          bashOutput.contains('__DT_USER_BASH_PROMPT__') &&
+          bashOutput.contains('\x1b]133;A\x07') &&
+          bashOutput.contains('\x1b]133;B\x07') &&
+          bashOutput.contains('\x1b]133;D\x07') &&
+          bashOutput.contains('\x1b]7;file://localhost'),
       'installed Apple bash manual opt-in executes integration and startup; '
       'output=${bashOutput.replaceAll('\n', r'\n')}',
     );
   } finally {
     temporary.deleteSync(recursive: true);
+  }
+}
+
+Future<void> _testInstalledZshSemantics({
+  required TerminalShellLaunchPlan plan,
+  required String workingDirectory,
+  required Directory safeDirectory,
+}) async {
+  final TerminalSession session = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(883), generation: 1),
+    initialWorkingDirectory: workingDirectory,
+    shellLaunchPlan: plan,
+    onChanged: () {},
+    onTerminated: () {},
+  );
+  try {
+    await session.start().timeout(const Duration(seconds: 5));
+    await _waitUntil(
+      () =>
+          session.terminalScreenSet.semanticPrompt.shellState ==
+              TerminalSemanticShellState.input &&
+          session.terminalScreenSet.metadata.workingDirectory != null,
+      'installed zsh initial semantic prompt and metadata',
+    );
+
+    session.insertText(
+      'printf "__DT_SEMANTIC_OUTPUT__\\n"; cd -- "\$DT_SAFE_DIR"',
+    );
+    await session.submit();
+    final Uri expectedSafe = Uri(
+      scheme: 'file',
+      host: 'localhost',
+      path: safeDirectory.path,
+    );
+    await _waitUntil(
+      () =>
+          session.terminalScreenSet.semanticPrompt.shellState ==
+              TerminalSemanticShellState.input &&
+          session.terminalScreenSet.metadata.workingDirectory == expectedSafe &&
+          session.terminalScreenSet.metadata.windowTitle == 'safe project' &&
+          session.buffer.outputText.contains('__DT_SEMANTIC_OUTPUT__') &&
+          session.buffer.outputText.contains('__DT_USER_PRECMD__'),
+      'installed zsh command lifecycle and safe cwd metadata',
+    );
+
+    var flags = 0;
+    final TerminalScreenSet screens = session.terminalScreenSet;
+    for (var row = 0; row < screens.scrollback.length; row += 1) {
+      flags |= screens.scrollback.rowFlagsAt(row);
+    }
+    for (var row = 0; row < screens.primary.rows; row += 1) {
+      flags |= screens.primary.rowFlagsAt(row);
+    }
+    _expect(
+      flags & TerminalRowFlags.prompt != 0 &&
+          flags & TerminalRowFlags.command != 0 &&
+          flags & TerminalRowFlags.output != 0,
+      'installed zsh lifecycle marks prompt, command, and output rows',
+    );
+
+    final Uri safeMetadata = screens.metadata.workingDirectory!;
+    final String safeTitle = screens.metadata.windowTitle!;
+    final int promptCount = _occurrences(
+      session.buffer.outputText,
+      '__DT_USER_PRECMD__',
+    );
+    session.insertText('cd -- "\$DT_HOSTILE_DIR"');
+    await session.submit();
+    await _waitUntil(
+      () =>
+          screens.semanticPrompt.shellState ==
+              TerminalSemanticShellState.input &&
+          _occurrences(session.buffer.outputText, '__DT_USER_PRECMD__') >
+              promptCount,
+      'installed zsh hostile cwd command completion',
+    );
+    _expect(
+      screens.metadata.workingDirectory == safeMetadata &&
+          screens.metadata.windowTitle == safeTitle &&
+          !session.buffer.outputText.contains('\x1b]2;injected\x07'),
+      'control-bearing cwd is rejected without metadata or title injection; '
+      'cwd=${screens.metadata.workingDirectory} '
+      'title=${jsonEncode(screens.metadata.windowTitle)} '
+      'output=${jsonEncode(session.buffer.outputText)}',
+    );
+
+    session.insertText('exit');
+    await session.submit();
+    await session.waitForTermination().timeout(const Duration(seconds: 8));
+    _expect(session.exit?.exitCode == 0, 'semantic zsh exits cleanly');
+  } finally {
+    await session.dispose();
+  }
+}
+
+int _occurrences(String value, String pattern) {
+  var count = 0;
+  var offset = 0;
+  while (true) {
+    final int next = value.indexOf(pattern, offset);
+    if (next < 0) return count;
+    count += 1;
+    offset = next + pattern.length;
+  }
+}
+
+Future<void> _waitUntil(bool Function() condition, String description) async {
+  final Stopwatch stopwatch = Stopwatch()..start();
+  while (!condition()) {
+    if (stopwatch.elapsed >= const Duration(seconds: 8)) {
+      throw StateError('shell integration projection timed out: $description');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
   }
 }
 

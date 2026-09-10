@@ -66,7 +66,7 @@ final class TerminalShellIntegrationContract {
       'resources/shell-integration/contract.json';
   static const String format = 'dart-terminal-shell-integration-contract';
   static const int version = 1;
-  static const int integrationVersion = 1;
+  static const int integrationVersion = 2;
   static const int maximumContractBytes = 32 * 1024;
   static const int maximumResourceBytes = 32 * 1024;
   static const int maximumTotalResourceBytes = 128 * 1024;

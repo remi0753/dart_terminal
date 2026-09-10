@@ -52,6 +52,20 @@ void _testResourcePolicyTextAndInstalledSyntax() {
           integration.contains(shell.name),
       '${shell.name} resource publishes the versioned execution marker',
     );
+    _expect(
+      integration.contains(']133;A') &&
+          integration.contains(']133;B') &&
+          integration.contains(']133;C') &&
+          integration.contains(']133;D') &&
+          integration.contains(']7;file://localhost') &&
+          integration.contains(']2;') &&
+          integration.contains('1000') &&
+          integration.contains('256') &&
+          integration.contains('[:cntrl:]') &&
+          !integration.contains('cmdline') &&
+          !integration.contains('commandline'),
+      '${shell.name} resource shares bounded content-free semantic intent',
+    );
   }
   _expect(
     zshBootstrap.contains('DART_TERMINAL_ZDOTDIR') &&
@@ -92,6 +106,45 @@ void _testResourcePolicyTextAndInstalledSyntax() {
       );
     }
   }
+
+  final String? fishExecutable = _firstInstalled(<String>[
+    '/opt/homebrew/bin/fish',
+    '/usr/local/bin/fish',
+    '/usr/bin/fish',
+  ]);
+  if (fishExecutable != null) {
+    final ProcessResult result = Process.runSync(fishExecutable, <String>[
+      '--no-execute',
+      'resources/shell-integration/'
+          '${TerminalShellIntegrationResources.fishIntegrationRelativePath}',
+    ]);
+    _expect(
+      result.exitCode == 0,
+      'installed fish rejects resource: ${result.stderr}',
+    );
+  }
+  final String? nushellExecutable = _firstInstalled(<String>[
+    '/opt/homebrew/bin/nu',
+    '/usr/local/bin/nu',
+    '/usr/bin/nu',
+  ]);
+  if (nushellExecutable != null) {
+    final ProcessResult result = Process.runSync(nushellExecutable, <String>[
+      'resources/shell-integration/'
+          '${TerminalShellIntegrationResources.nushellIntegrationRelativePath}',
+    ]);
+    _expect(
+      result.exitCode == 0,
+      'installed nushell rejects resource: ${result.stderr}',
+    );
+  }
+}
+
+String? _firstInstalled(List<String> candidates) {
+  for (final String candidate in candidates) {
+    if (File(candidate).existsSync()) return candidate;
+  }
+  return null;
 }
 
 File _contractFile([Directory? root]) => File(
@@ -111,7 +164,8 @@ void _testReviewedContractAndResources() {
               (int total, TerminalShellIntegrationFileContract file) =>
                   total + file.byteLength,
             ) ==
-            4545 &&
+            10575 &&
+        TerminalShellIntegrationContract.integrationVersion == 2 &&
         resources.availableShells.length == 4 &&
         resources.rootPath == contractFile.parent.absolute.path &&
         contract.files.every(
@@ -131,6 +185,13 @@ void _testContractValidation() {
   _expectContractFailure(
     fixture.replaceFirst('"version": 1', '"version": 2'),
     'unsupported contract version',
+  );
+  _expectContractFailure(
+    fixture.replaceFirst(
+      '"integration_version": 2',
+      '"integration_version": 3',
+    ),
+    'unsupported integration version',
   );
   _expectContractFailure(
     fixture.replaceFirst(

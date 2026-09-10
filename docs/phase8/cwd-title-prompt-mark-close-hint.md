@@ -144,8 +144,154 @@ next subtask begins.
   compatibility freshness, formatting, analysis, complete tests, source audit,
   diff review, roadmap update, and one task-scoped commit.
 
+## Current subtask: four-shell lifecycle and metadata resources
+
+- Status: complete
+- Started: 2026-09-11 after commit `19eb963`
+- Completed: 2026-09-11
+- Purpose: make each validated integration resource emit the semantic protocol
+  consumed by the preceding parser and refresh safe local metadata without
+  collecting command or prompt content.
+- Background: the five-file version-one bundle currently publishes only marker
+  environment variables. Its immutable launch plans, bundle validation,
+  ordinary product projection, fake PTY coverage, and installed zsh/bash probes
+  are complete and must remain compatible.
+- Scope: independently author idempotent zsh/bash/fish/nushell hook composition;
+  emit OSC 133 lifecycle markers, a local `file://localhost` OSC 7 cwd, and a
+  bounded cwd-basename OSC 2 title; reject control-bearing metadata at the
+  source; regenerate the exact byte/hash contract; extend resource/source,
+  startup, opt-out, hook-coexistence, fake/parser, and installed-shell tests.
+- Out of scope: prompt navigation actions, close policy, runtime GUI acceptance,
+  settings UI, command-derived titles, command/history/prompt capture, shell
+  installation, or editing user startup files.
+- Dependencies: shell hook APIs and startup ordering, the existing injection
+  cleanup contract, 32 KiB per-resource/128 KiB total caps, OSC title/cwd parser
+  bounds and local-authority rules, optional-shell absence, and the version-one
+  manifest paths.
+- Completion conditions: all four resources express the same lifecycle and
+  metadata intent with shell-native safe encoding; disabled/unsupported paths
+  emit none; user hooks/startup remain once-only; hostile/oversize cwd cannot
+  inject controls; resource validation and real/fake shell/parser evidence pass
+  without changing immutable launch-plan behavior.
+- Validation: resource/source assertions, fake semantic stream replay, real zsh
+  and forced non-Apple bash PTYs, conditional installed fish/nu tests, resource
+  generation/check, focused integration/projection/metadata/parser tests,
+  formatting, analysis, complete tests, source/bundle audit, diff review,
+  roadmap update, and one independent commit.
+
 ## Findings and decisions
 
+- The post-`19eb963` worktree check found only this task memo modified in
+  `dart_terminal`; the adjacent `dart_appkit` repository remains clean. The
+  roadmap still identifies four-shell lifecycle and metadata emission as the
+  first unfinished subtask.
+- The installed-shell inventory for this host contains `/bin/zsh` and
+  `/bin/bash`; `fish` and `nu` are absent. zsh and bash therefore receive real
+  PTY evidence, while fish and nushell retain static contract checks and run
+  syntax/execution probes conditionally when their executables are available.
+- The current generation-one resources are marker-only: five files total 4,545
+  bytes, and the runtime, contract, and focused tests all pin integration
+  version 1. Adding lifecycle and metadata behavior is a material protocol
+  revision, so the bundle's integration version becomes 2 while the JSON
+  contract schema and resource-header contract version remain 1.
+- One broad search of the official Nushell documentation returned more output
+  than the tool could retain and was unusable as evidence. Narrow direct reads
+  were used instead. The official hook reference confirms that `pre_prompt`,
+  `pre_execution`, and `env_change` are interactive-REPL hooks, that `PWD`
+  change hooks receive before/after values, and that hook lists can be extended
+  without replacing existing entries. The official command references confirm
+  byte-counting via `str length`, literal all-occurrence replacement via
+  `str replace --all`, and cwd-basename derivation via `path basename`.
+- The shared source policy is content-minimal: emit OSC 133 `A` and `B` before
+  input, `C` before execution, and `D` on the next prompt (plus post-execution
+  where a shell exposes it); emit OSC 7 only as `file://localhost` and OSC 2
+  only from the cwd basename. Never inspect or serialize command lines, prompt
+  text, history, or arbitrary environment values.
+- Metadata emission fails closed before writing: cwd is capped at 1,000 shell
+  characters (Nushell counts UTF-8 bytes), title at 256 shell characters
+  (Nushell bytes), and any C0/C1 control rejects the refresh. Four-byte UTF-8
+  worst cases still fit the parser's 4,096/1,024-byte cwd/title ceilings once
+  the fixed URI prefix is included; the parser remains the authoritative byte
+  boundary.
+  Percent, space, number-sign, and question-mark bytes are percent-escaped in
+  the local file URI. The terminal's existing 4,096-byte cwd and 1,024-byte
+  title validators remain the second boundary and additionally reject bidi
+  controls and malformed/remote URIs.
+- Zsh uses additive `add-zsh-hook` handlers for `precmd`, `preexec`, and `chpwd`;
+  bash preserves `PS0` and scalar/array `PROMPT_COMMAND`; fish uses named event
+  handlers for prompt, pre-execution, post-execution, and `PWD`; nushell appends
+  blocks to all three documented hook lists. Every resource retains its
+  existing once-only load guard and startup-cleanup behavior.
+- The first generation attempt passed `/bin/zsh -n` and `/bin/bash -n`, then
+  stopped before rewriting the contract because the Dart build hook could not
+  write Clang's Metal module cache under `~/.cache` in the workspace sandbox.
+  This is the same environment restriction seen in the preceding subtask; the
+  unchanged generation command must run with the established cache permission.
+- The first two-file `dart format` invocation formatted both edited tests, but
+  Dart then failed while updating its telemetry-session timestamp outside the
+  workspace; because the shell command stopped there, its subsequent syntax and
+  diff checks did not run. The checks must be repeated with analytics disabled.
+- The first focused gate passed resource validation and launch-plan tests, then
+  the real-zsh hostile-cwd case timed out because completion was coupled to an
+  exact echoed command string. ZLE/PTY redraw is not a stable completion
+  oracle. The test now snapshots and waits for an additional preserved user
+  `precmd` hook event, while retaining the substantive assertions that cwd and
+  title metadata remain unchanged and the hostile title fragment never reaches
+  terminal output.
+- With the stable completion oracle, the real-zsh hostile-cwd safety assertion
+  fails, proving at least one expected rejection invariant is not yet met. The
+  next reproduction adds escaped, test-only cwd/title/output context to
+  distinguish a source filter failure from an over-broad transcript assertion;
+  the task remains incomplete until this is fixed at the emitting boundary.
+- Escaped diagnostics show the source filter did reject the hostile cwd:
+  terminal cwd and title stayed on `safe project`. The failing clause was the
+  broader substring check: zsh's own default prompt safely rendered the
+  filename controls as visible `^[`/`^G` text, which legitimately retained the
+  word `injected`. The assertion now rejects the actual raw OSC 2 byte sequence;
+  visible shell-escaped filename text is outside the integration boundary and
+  is not control-sequence injection.
+- The next focused rerun passed the corrected hostile-cwd case but found no
+  `A`/`B`/`D` bytes in the Apple Bash 3.2 manual-opt-in transcript. Its initial
+  prompt ran the user `PROMPT_COMMAND`, while the test exited in that same input
+  line before a subsequent prompt could observe the integration's appended
+  handler. The probe now sends the report and `exit` as separate input lines so
+  one post-command prompt exercises both preserved and appended handlers. Apple
+  Bash remains outside automatic integration and is not used to claim PS0/C
+  support.
+- The corrected focused gate passes resource/contract validation, immutable
+  launch planning, fake semantic stream replay, real shell projection, semantic
+  parser, and metadata tests. Focused analysis of the runtime contract and both
+  resource/projection tests reports no issues. The generated version-two bundle
+  contains the same five resources across four shells and totals 10,575 bytes,
+  within both per-file and 128 KiB aggregate limits.
+- The real zsh probe observes initial metadata/input state, command output,
+  local cwd and cwd-basename title refresh, all three row classes, and additive
+  user `precmd` execution. Its control-bearing cwd leaves the last safe
+  metadata unchanged and cannot form a raw OSC 2 injection. Disabled zsh emits
+  no integration OSC families. Apple Bash 3.2 manual opt-in preserves its user
+  prompt command and emits `D`/metadata/`A`/`B` at the following prompt.
+- This host still has no fish or nushell executable, so their documented
+  conditional syntax probes are skipped rather than installing optional
+  shells. Both resources are covered by exact hashes, shared source-policy
+  assertions, launch-plan projection, and official hook/command syntax review.
+- Transactional regeneration and the subsequent freshness check both pass for
+  integration version 2 with four shells, five files, and 10,575 total bytes.
+  The complete `make test` gate passes all compatibility/resource generators,
+  formatting across 231 files, analysis, and aggregate Dart tests.
+- `make runtime-source-check` passes with 434 tracked files, zero product native
+  sources, and one reviewed test-native source. Both arm64 Developer JIT and
+  Release AOT bundles build and pass the bundle audit with one helper, one
+  native asset set, and one declared capability each. These audits created no
+  additional source changes, and `dart_appkit` remains clean.
+- Final diff review contains only the version-two runtime constant, four
+  integration resources, regenerated exact contract, focused tests, and this
+  memo/roadmap progress update. `git diff --check` passes; no command content,
+  prompt content, user startup files, optional shell installation, or unrelated
+  product behavior entered the change.
+- The first explicit-path staging attempt could not create `.git/index.lock`
+  under the workspace sandbox, and staged no files. The identical ten-path list
+  is retried with repository-metadata write permission before the required
+  independent commit.
 - The required post-commit reread confirms `d901085` left both repositories
   clean. The completed shell-integration parent is followed immediately by this
   semantic item; settings/effective-config inspection remains later and must not

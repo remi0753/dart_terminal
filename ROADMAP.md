@@ -1042,7 +1042,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （[`docs/phase8/cwd-title-prompt-mark-close-hint.md`](docs/phase8/cwd-title-prompt-mark-close-hint.md)
   を参照して順に実施する）
   - [x] bounded OSC 133 semantic state と row-flag projection
-  - [ ] four-shell cwd/title/prompt lifecycle emission と resource contract
+  - [x] four-shell cwd/title/prompt lifecycle emission と resource contract
   - [ ] viewport prompt navigation と shared product actions
   - [ ] conservative close-hint/process-snapshot composition
   - [ ] M1 両 runtime semantic-shell 受け入れと親項目完了判定
