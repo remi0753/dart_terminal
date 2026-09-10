@@ -1057,7 +1057,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （[`docs/phase8/editable-settings-editor.md`](docs/phase8/editable-settings-editor.md)
   を参照して順に実施する）
   - [x] complete configuration document、draft validation、atomic persistence
-  - [ ] NORMAL/INSERT/search/detail state と mode-invariant syntax projection
+  - [x] NORMAL/INSERT/search/detail state と mode-invariant syntax projection
   - [ ] `dart_appkit` の汎用 attributed editable text surface
   - [ ] native editor/detail composition、save/reload、focus/cleanup lifecycle
   - [ ] M1 両 runtime editable Settings 受け入れと Phase 8 再完了判定

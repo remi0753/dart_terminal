@@ -299,3 +299,62 @@ otherwise make the document look visually different.
   reported no issues, and the aggregate ended with `dart_terminal tests passed`.
 - `git diff --check`: passed. The adjacent `dart_appkit` worktree is still clean
   at `2b36186`; no native dependency change belongs to this first subtask.
+
+### 2026-09-11 — modal state and mode-invariant syntax
+
+- Added `TerminalSettingsEditorState` as a UI-independent owner of one complete
+  document buffer, UTF-16 scalar-safe selection, NORMAL/INSERT/SEARCH mode,
+  explicit search query, detail visibility, dirty/save state, schema
+  occurrences, syntax spans, and root diagnostic spans. It opens through the
+  safe document session and continues to read accepted values from the existing
+  reload controller.
+- NORMAL no longer interprets arbitrary printable input as search. `/` alone
+  enters SEARCH; bounded printable input then matches option name, syntax,
+  description, draft value, or current value and moves the same document caret.
+  `Esc` returns SEARCH to NORMAL, while a second `Esc` from NORMAL dismisses.
+  Arrow keys and `h`/`j`/`k`/`l` move the scalar-safe caret, `i` inserts at it,
+  `a` advances one scalar before entering INSERT, and `]` toggles the contextual
+  pane. Command-S is classified as one save request in every mode.
+- INSERT does not own a second value field or a per-row editing buffer. Ordinary
+  text keys are classified as `nativeEditing`; the same future native editor
+  returns its full text and selection through `synchronizeNativeDocument`.
+  Tests change both `font-size` and `cursor-blink` in one synchronization to
+  prove the model is a complete editor rather than a selected-value control.
+- The presentation scanner colors comment prefixes/text, known option names,
+  the `include` directive, equals operators, values (including `#RRGGBB`), and
+  unknown names using checked non-overlapping UTF-16 spans. It also maps all
+  active and generated-comment assignments to schema options for caret context.
+  This scanner is intentionally presentation-only; actual draft validity still
+  comes exclusively from `TerminalConfigLoader` at save.
+- Mode changes never call the document analyzer. Tests retain the exact
+  `syntaxSpans` list identity and byte-for-byte document across
+  NORMAL -> INSERT -> NORMAL, both before and after a multi-line edit. The only
+  mode-dependent rendering is the compact status string (`NORMAL`, `INSERT`, or
+  `/query`) and, in the forthcoming native surface, caret/editability chrome.
+- Context detail now presents the option name, balanced current/draft values,
+  schema syntax and description, then an `After save` section. Live options say
+  `Open terminals: Change immediately`; new-session options say
+  `Open terminals: Keep current value`; both say
+  `New terminals: Use saved value`. Relevant invalid-draft code/message/hint is
+  shown without path, line, source, `APPLIES`, or `Config Lens` fields.
+- Diagnostics from draft validation are projected to bounded root ranges for
+  future native underlining without changing the syntax-color spans. Selection
+  validation rejects positions inside surrogate pairs, and horizontal movement
+  crosses one Unicode scalar rather than one UTF-16 code unit.
+
+### Verification for ordered subtask 2
+
+- `dart run test/terminal_settings_editor_test.dart`: passed. Coverage includes
+  explicit search ownership, mode/Escape transitions, native-edit delegation,
+  Command-S, detail toggle, whole-buffer synchronization, identical syntax
+  projection across modes, live/new-terminal outcome copy, invalid diagnostic
+  detail/range, emoji selection boundaries, and query overflow atomicity.
+- `dart format --output=none --set-exit-if-changed` for the touched Dart files:
+  passed, 0 changes.
+- `dart analyze`: passed with no issues.
+- Full `make test`: passed. All generation/freshness/configuration/
+  compatibility checks passed, 245 files formatted with 0 changes, analysis
+  reported no issues, and the aggregate ended with `dart_terminal tests passed`.
+- `git diff --check`: passed. No adjacent `dart_appkit` changes have begun; its
+  worktree remains clean at `2b36186`, which is the next ordered dependency
+  subtask.
