@@ -14,6 +14,8 @@ enum TerminalActionId {
   splitPaneDown('pane.split-down'),
   focusPreviousPane('pane.focus-previous'),
   focusNextPane('pane.focus-next'),
+  jumpToPreviousPrompt('pane.jump-to-previous-prompt'),
+  jumpToNextPrompt('pane.jump-to-next-prompt'),
   togglePaneZoom('pane.toggle-zoom'),
   equalizeSplits('pane.equalize-splits'),
   copy('edit.copy'),
@@ -314,6 +316,18 @@ final class TerminalActionCatalog {
       title: 'Equalize Splits',
       menu: TerminalActionMenu.view,
       keywords: const <String>['balance', 'resize', 'panes'],
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.jumpToPreviousPrompt,
+      title: 'Jump to Previous Prompt',
+      menu: TerminalActionMenu.view,
+      keywords: const <String>['scroll', 'history', 'shell', 'back'],
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.jumpToNextPrompt,
+      title: 'Jump to Next Prompt',
+      menu: TerminalActionMenu.view,
+      keywords: const <String>['scroll', 'history', 'shell', 'forward'],
     ),
     TerminalActionDefinition(
       id: TerminalActionId.focusPreviousPane,

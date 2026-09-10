@@ -39,13 +39,14 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 16個のstable application actionを共有するbounded searchable registry、動的な
+- 18個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
   漏らさない。通常起動ではCommand-N/T/D、Shift-Command-DからNew Window、New Tab、
-  Split Pane Right/Downを使用でき、focus traversal、tab selection、equalize、zoomも文脈に
-  応じて有効になる。実製品gateではmenuとpaletteから2 window/3 tab/5 paneを生成し、
+  Split Pane Right/Downを使用でき、focus traversal、tab selection、equalize、zoom、
+  semantic promptへのprevious/next jumpも文脈に応じて有効になる。実製品gateではmenuと
+  paletteから2 window/3 tab/5 paneを生成し、
   terminal write 0と各paneの入力分離を両runtimeで検証する
 - DECSET 9/1000/1002/1003と1005/1006/1015/1016を追跡し、X10/default、UTF-8、
   URXVT、SGRのcell座標とSGR physical-pixel座標をbounded mouse reportとして実PTYへ

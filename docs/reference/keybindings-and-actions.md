@@ -74,6 +74,8 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `pane.split-down` | Split Pane Down | shell | `shift+command+d` |
 | `pane.toggle-zoom` | Toggle Pane Zoom | view | — |
 | `pane.equalize-splits` | Equalize Splits | view | — |
+| `pane.jump-to-previous-prompt` | Jump to Previous Prompt | view | — |
+| `pane.jump-to-next-prompt` | Jump to Next Prompt | view | — |
 | `pane.focus-previous` | Focus Previous Pane | window | — |
 | `pane.focus-next` | Focus Next Pane | window | — |
 | `tab.select-previous` | Select Previous Tab | window | — |

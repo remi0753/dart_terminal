@@ -6,8 +6,95 @@ void runTerminalViewportTests() {
   _testHistoryScreenProjectionAndNavigation();
   _testScrolledOutputStabilityEvictionAndClear();
   _testAlternateIsolationAndOffsetRestore();
+  _testPromptNavigation();
   _testResizeIdentityAndReflowedHistoryWidth();
   _testGenerationAndAccessBounds();
+}
+
+void _testPromptNavigation() {
+  final TerminalScreenSet screens = TerminalScreenSet(
+    rows: 3,
+    columns: 3,
+    scrollback: TerminalScrollback(maxLines: 12, maxBytes: 10000, pageRows: 2),
+  );
+  final TerminalScreen screen = screens.primary;
+  _setRow(screen, 0, 0x41, 601);
+  screen.setRowFlags(0, TerminalRowFlags.prompt);
+  _setRow(screen, 1, 0x42, 602);
+  _setRow(screen, 2, 0x43, 603);
+  screen.setRowFlags(2, TerminalRowFlags.prompt);
+  screen.scrollUp(3);
+  _setRow(screen, 0, 0x44, 604);
+  _setRow(screen, 1, 0x45, 605);
+  screen.setRowFlags(1, TerminalRowFlags.prompt | TerminalRowFlags.softWrapped);
+  _setRow(screen, 2, 0x46, 605);
+  screen.setRowFlags(2, TerminalRowFlags.prompt);
+  screen.setCursorPosition(2, 0);
+
+  final TerminalViewport viewport = screens.viewport;
+  _expect(
+    viewport.canJumpToPreviousPrompt && !viewport.canJumpToNextPrompt,
+    'bottom can move only toward an older retained prompt',
+  );
+  _expect(
+    viewport.jumpToPreviousPrompt() &&
+        viewport.offset == 1 &&
+        _rowLeads(viewport) == 'CDE',
+    'previous skips unscrollable live prompt rows and selects newest history mark',
+  );
+  _expect(
+    viewport.jumpToPreviousPrompt() &&
+        viewport.offset == 3 &&
+        _rowLeads(viewport) == 'ABC' &&
+        !viewport.canJumpToPreviousPrompt,
+    'repeated previous reaches the oldest retained prompt exactly once',
+  );
+  _expect(
+    !viewport.jumpToPreviousPrompt() && viewport.offset == 3,
+    'previous boundary is a no-op',
+  );
+  _expect(
+    viewport.jumpToNextPrompt() && viewport.offset == 1,
+    'next selects the following retained prompt',
+  );
+  _expect(
+    viewport.jumpToNextPrompt() &&
+        viewport.offset == 0 &&
+        viewport.atBottom &&
+        !viewport.canJumpToNextPrompt,
+    'next collapses a wrapped prompt logical line and returns to live grid',
+  );
+  _expect(
+    !viewport.jumpToNextPrompt() && viewport.offset == 0,
+    'next boundary is a no-op',
+  );
+
+  viewport.jumpToPreviousPrompt();
+  final int primaryOffset = viewport.offset;
+  screens.setAlternateMode47(true);
+  screens.alternate.setRowFlags(0, TerminalRowFlags.prompt);
+  _expect(
+    !viewport.canJumpToPreviousPrompt &&
+        !viewport.canJumpToNextPrompt &&
+        !viewport.jumpToPreviousPrompt() &&
+        !viewport.jumpToNextPrompt() &&
+        viewport.primaryOffset == primaryOffset,
+    'alternate prompt flags cannot move or discard the retained primary offset',
+  );
+  screens.setAlternateMode47(false);
+
+  final TerminalViewport empty = TerminalScreenSet(
+    rows: 2,
+    columns: 2,
+  ).viewport;
+  _expect(
+    !empty.canJumpToPreviousPrompt &&
+        !empty.canJumpToNextPrompt &&
+        !empty.jumpToPreviousPrompt() &&
+        !empty.jumpToNextPrompt() &&
+        empty.atBottom,
+    'missing prompt marks are deterministic no-ops',
+  );
 }
 
 void _testHistoryScreenProjectionAndNavigation() {

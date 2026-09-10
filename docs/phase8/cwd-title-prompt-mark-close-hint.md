@@ -179,8 +179,132 @@ next subtask begins.
   formatting, analysis, complete tests, source/bundle audit, diff review,
   roadmap update, and one independent commit.
 
+## Current subtask: viewport prompt navigation and shared actions
+
+- Status: complete
+- Started: 2026-09-11 after commit `071fa18`
+- Completed: 2026-09-11
+- Purpose: turn retained prompt row semantics into deterministic previous/next
+  navigation for the focused pane through the same action catalog used by
+  keybindings, native menus, and the command palette.
+- Background: the primary scrollback and active grid already preserve prompt
+  flags plus logical-line identity through wrapping, scroll, eviction, and
+  reflow. `TerminalViewport` is the sole mutable scroll-position owner, while
+  the standard product catalog currently exposes 16 actions and the normal
+  hierarchy resolves all pane-scoped product state from the focused pane ID.
+- Scope: add previous/next prompt target discovery and movement to the viewport;
+  collapse soft-wrapped rows from one prompt logical line into one target; add
+  stable catalog definitions and focused-pane product registrations; refresh
+  selection/surface projection after a move; regenerate the keybinding/action
+  reference and update exact catalog tests and runtime expectations.
+- Out of scope: shell protocol/resource changes, default shortcuts, prompt text
+  selection, cursor relocation, PTY input, alternate-screen scrolling, close
+  policy, final real-product semantic-shell acceptance, and settings UI.
+- Dependencies: semantic row flags, scrollback eviction/reflow identity,
+  viewport offset synchronization, action dispatcher serialization, product
+  focus authority, command palette/menu dynamic availability, keybinding
+  reference generation, and existing AppKit surface viewport notification.
+- Completion conditions: previous/next choose only distinct retained prompt
+  logical starts in deterministic order; repeated navigation moves between
+  available targets; alternate screens, missing/evicted marks, boundaries, and
+  already-bottom next operations are no-ops; only the focused pane changes;
+  menu/palette/keybinding catalogs expose both stable actions with no default
+  shortcut or PTY write; all derived references and exact action counts agree.
+- Validation: focused viewport/action/menu/palette/reference/product tests,
+  formatting and analysis, generated-reference freshness, complete tests,
+  source/bundle audit, diff review, roadmap update, and one independent commit.
+
 ## Findings and decisions
 
+- The required post-`071fa18` reread found both repositories clean and confirms
+  prompt navigation is the first unchecked roadmap child; close composition,
+  final runtime acceptance, and settings remain ordered later work.
+- `TerminalViewport` already synchronizes history append/eviction and owns the
+  primary offset. Its combined row helpers expose flags, logical line ID/epoch,
+  and soft-wrap continuity across scrollback and the active grid, so navigation
+  needs no duplicate mark index or mutable store.
+- A target is the first physical row carrying `TerminalRowFlags.prompt` in one
+  retained logical line. A following prompt-flag row is the same target only
+  when the preceding row soft-wraps into the same logical ID/epoch; consecutive
+  hard-broken prompts remain distinct.
+- Previous search starts above the visible top while scrolled, and above the
+  cursor row at bottom. It skips prompt rows in the live grid that cannot change
+  the current offset and continues to the newest movable retained target. Next
+  starts below the visible top and may return to offset zero when the next mark
+  is in the live grid. Both searches are bounded by retained rows and return a
+  boolean movement result; alternate ownership and missing targets return false.
+- The shared catalog currently has 16 stable actions. The selected additions
+  are `pane.jump-to-previous-prompt` and `pane.jump-to-next-prompt`, titled
+  “Jump to Previous Prompt” and “Jump to Next Prompt” in the View section,
+  without default native shortcuts. The generated keybinding action reference
+  will make both available as configurable action targets.
+- The normal hierarchy already maps the active window/tab to focused pane,
+  session, selection owner, and render surface. Successful navigation will
+  synchronize the focused selection projection and notify that one surface;
+  it will not write to the PTY or mutate application hierarchy. Availability
+  is derived from whether that focused primary viewport has a movable target.
+- The shared action implementation is an AppKit- and PTY-independent
+  `TerminalPromptNavigationActionCoordinator`. It resolves the active viewport
+  for every availability check and dispatch, publishes only successful moves,
+  and lets the normal product cancel stale hyperlink interaction, synchronize
+  selection, and invalidate exactly the still-focused matching surface.
+- The first combined format/analyze/test invocation formatted all ten requested
+  files (two changed) but analysis did not start because Dart attempted to
+  update `~/.dart-tool/dart-flutter-telemetry-session.json`, which the workspace
+  sandbox forbids. This is a validation-environment restriction rather than a
+  source failure; the identical checks are rerun with `CI=true` and
+  `DART_SUPPRESS_ANALYTICS=true`.
+- The first telemetry-suppressed analysis reached source checking and found
+  five test-fixture API spelling errors (`maxRows`, a private logical-identity
+  setter, and convenience alternate-screen names that do not exist). Existing
+  viewport tests establish the public equivalents: `maxLines`/`pageRows`,
+  `setLogicalLineId`, and DEC mode 47 setters. The fixture now uses those
+  public APIs; no product implementation changed in response.
+- Focused analysis then passed, while the coordinator test exposed an invalid
+  fixture expectation: one history prompt alone has no later prompt target, so
+  Next is correctly unavailable rather than an implicit scroll-to-bottom. A
+  distinct prompt in the live grid was added to model the intended history-to-
+  current navigation case; the viewport contract remains unchanged.
+- The corrected focused analyzer and all three viewport/coordinator/registry
+  test entrypoints pass. The first reference-regeneration attempt then reached
+  the renderer build hook but Clang could not create Metal module-cache files
+  below `~/.cache` in the workspace sandbox. As with the earlier semantic test,
+  this is an external build-cache permission constraint; regeneration is
+  retried unchanged with the established build permission.
+- With the established cache permission, reference generation, its freshness
+  check, and the standalone reference test pass. The generated inventory now
+  reports 105 physical keys, 4 pane actions, 18 application actions, 1 standard
+  binding, and 9 reserved shortcuts; both prompt actions appear in the View
+  menu with no native shortcut. README and IN-09 evidence are reconciled from
+  their stale 16/15 action counts to the current 18-action catalog.
+- The first complete `make test` passes parser-table, parser-trace, and the
+  regenerated 18-action reference gate, then rejects stale Phase 7 AppKit
+  acceptance evidence. The current action/test additions changed a hashed
+  source inventory; the evidence generator and resulting semantic diff must be
+  reviewed before the complete gate is rerun.
+- Regenerating the Phase 7 evidence changes only the two expected SHA-256 pins
+  for `terminal_application.dart`; all 4 criteria, 13 source references, 10
+  unit tests, 4 integration tests, and 8 UI assertions remain unchanged and
+  the dedicated freshness check passes.
+- The second complete gate passes that refreshed evidence and all 9 byte-level
+  compatibility regressions (390 input bytes, 417 split runs), then rejects
+  stale top-level compatibility-regression coverage. Its generator inputs are
+  inspected next so only justified derived pins or reconciliations are updated.
+- Coverage regeneration changes only the expected README and FEATURE_MATRIX
+  SHA-256 source pins. Its semantic boundary remains 9 fix families/cases, 417
+  split runs, 8 owned gaps, and zero known P0 silent-corruption cases; generation
+  and the dedicated freshness check both pass.
+- The final complete `make test` passes every generated freshness gate, formats
+  233 files without changes, reports a clean analyzer, and passes the aggregate
+  Dart test runner including the new viewport/coordinator coverage. The
+  Dart-only source audit reports 436 tracked files, zero product-native sources,
+  and one reviewed test-native source; both arm64 Developer JIT and Release AOT
+  bundles rebuild and pass the bundle audit with one helper, one native asset,
+  and one declared capability each.
+- Final review finds only prompt navigation model/actions/product wiring,
+  focused tests, generated references/pins, and current task documentation.
+  No debug artifact or unrelated change is present, `git diff --check` passes,
+  and the adjacent authorized `dart_appkit` worktree remains clean.
 - The post-`19eb963` worktree check found only this task memo modified in
   `dart_terminal`; the adjacent `dart_appkit` repository remains clean. The
   roadmap still identifies four-shell lifecycle and metadata emission as the

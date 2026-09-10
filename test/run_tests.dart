@@ -69,6 +69,7 @@ import 'terminal_paste_test.dart';
 import 'terminal_preedit_test.dart';
 import 'terminal_product_configuration_test.dart';
 import 'terminal_product_hierarchy_actions_test.dart';
+import 'terminal_prompt_navigation_test.dart';
 import 'terminal_property_fuzz_test.dart';
 import 'terminal_reflow_test.dart';
 import 'terminal_reply_test.dart';
@@ -131,6 +132,7 @@ Future<void> main() async {
   await runTerminalPaneWorkSchedulerTests();
   await runTerminalProductConfigurationTests();
   await runTerminalProductHierarchyActionTests();
+  await runTerminalPromptNavigationTests();
   runPhase7AppKitAcceptanceTests();
   runReferenceRendererTests();
   runRenderRebuildCoordinatorTests();

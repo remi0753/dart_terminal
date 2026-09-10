@@ -195,6 +195,19 @@ final class TerminalViewport {
     _setPrimaryOffset(0);
   }
 
+  bool get canJumpToPreviousPrompt =>
+      _promptTargetOffset(previous: true) != null;
+
+  bool get canJumpToNextPrompt => _promptTargetOffset(previous: false) != null;
+
+  /// Moves the newest retained prompt before the current navigation position
+  /// to the top of the primary viewport where possible.
+  bool jumpToPreviousPrompt() => _jumpToPrompt(previous: true);
+
+  /// Moves the oldest retained prompt after the current navigation position
+  /// to the top of the primary viewport, or returns to the live grid.
+  bool jumpToNextPrompt() => _jumpToPrompt(previous: false);
+
   bool isHistoryRow(int viewportRow) => _locate(viewportRow).history;
 
   /// Returns the stored source width for a projected physical row.
@@ -452,6 +465,54 @@ final class TerminalViewport {
     }
     _primaryOffset = next;
     _generation++;
+  }
+
+  bool _jumpToPrompt({required bool previous}) {
+    final int? target = _promptTargetOffset(previous: previous);
+    if (target == null) return false;
+    _setPrimaryOffset(target);
+    return true;
+  }
+
+  int? _promptTargetOffset({required bool previous}) {
+    _sync();
+    if (_screens.usingAlternate) return null;
+    final int historyLength = _screens.scrollback.length;
+    final int current = _primaryOffset;
+    if (previous) {
+      final int before = current == 0
+          ? historyLength + _screens.primary.cursorRow
+          : historyLength - current;
+      for (int row = before - 1; row >= 0; row--) {
+        if (!_isPromptStart(row)) continue;
+        final int target = (historyLength - row).clamp(0, historyLength);
+        if (target != current) return target;
+      }
+      return null;
+    }
+    if (current == 0) return null;
+    final int combinedRows = historyLength + _screens.primary.rows;
+    for (int row = historyLength - current + 1; row < combinedRows; row++) {
+      if (!_isPromptStart(row)) continue;
+      final int target = (historyLength - row).clamp(0, historyLength);
+      if (target != current) return target;
+    }
+    return null;
+  }
+
+  bool _isPromptStart(int row) {
+    if (_combinedRowFlagsAt(TerminalScreenKind.primary, row) &
+            TerminalRowFlags.prompt ==
+        0) {
+      return false;
+    }
+    if (row == 0 ||
+        _combinedRowFlagsAt(TerminalScreenKind.primary, row - 1) &
+                TerminalRowFlags.prompt ==
+            0) {
+      return true;
+    }
+    return !_combinedJoinsNext(TerminalScreenKind.primary, row - 1);
   }
 
   ({TerminalLogicalAnchor? anchor, bool atBottom})

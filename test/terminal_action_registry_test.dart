@@ -130,6 +130,19 @@ void _testStableStandardCatalog() {
   );
   _expect(
     catalog
+            .actionsForMenu(TerminalActionMenu.view)
+            .map((TerminalActionDefinition action) => action.id)
+            .join(',') ==
+        <TerminalActionId>[
+          TerminalActionId.togglePaneZoom,
+          TerminalActionId.equalizeSplits,
+          TerminalActionId.jumpToPreviousPrompt,
+          TerminalActionId.jumpToNextPrompt,
+        ].join(','),
+    'view menu contains stable prompt navigation actions in catalog order',
+  );
+  _expect(
+    catalog
                 .actionsForMenu(TerminalActionMenu.application)
                 .map((TerminalActionDefinition action) => action.id)
                 .join(',') ==
@@ -349,6 +362,17 @@ void _testSearchOrderingAndBounds() {
         dispatcher.search('clipboard')[1].definition.id ==
             TerminalActionId.paste,
     'equal keyword matches retain catalog order',
+  );
+  _expect(
+    dispatcher
+            .search('prompt')
+            .map((snapshot) => snapshot.definition.id)
+            .join(',') ==
+        <TerminalActionId>[
+          TerminalActionId.jumpToPreviousPrompt,
+          TerminalActionId.jumpToNextPrompt,
+        ].join(','),
+    'prompt actions are searchable in stable command-palette order',
   );
   _expect(
     !dispatcher

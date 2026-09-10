@@ -46,6 +46,7 @@ import 'terminal_pane.dart';
 import 'terminal_pane_close_coordinator.dart';
 import 'terminal_product_configuration.dart';
 import 'terminal_product_hierarchy_actions.dart';
+import 'terminal_prompt_navigation.dart';
 import 'terminal_renderer/pane_work_scheduler.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_restoration.dart';
@@ -2593,6 +2594,25 @@ final class TerminalApplication {
       return paneId == null ? null : selections[paneId];
     }
 
+    TerminalViewport? activeViewport() {
+      final PaneId? paneId = state.activeWindow?.selectedTab.focusedPaneId;
+      return paneId == null
+          ? null
+          : sessions[paneId]?.terminalScreenSet.viewport;
+    }
+
+    void synchronizePromptNavigation(TerminalViewport viewport) {
+      final PaneId? paneId = state.activeWindow?.selectedTab.focusedPaneId;
+      if (paneId == null ||
+          !identical(sessions[paneId]?.terminalScreenSet.viewport, viewport)) {
+        return;
+      }
+      hyperlinkControllers[paneId]?.cancelPress();
+      owners[paneId]?.surface.clearHyperlinkHover();
+      selections[paneId]?.synchronize();
+      owners[paneId]?.surface.notifyViewportChanged();
+    }
+
     TerminalWindowState? windowForTab(TerminalTabId tabId) {
       for (final TerminalWindowState window in state.windows) {
         if (window.tabForId(tabId) != null) return window;
@@ -3111,6 +3131,11 @@ final class TerminalApplication {
             },
           );
       actionCoordinator = createdActions;
+      final TerminalPromptNavigationActionCoordinator promptNavigationActions =
+          TerminalPromptNavigationActionCoordinator(
+            activeViewport: activeViewport,
+            onMoved: synchronizePromptNavigation,
+          );
       closePaneRequest = (PaneId? paneId) async {
         final TerminalPaneCloseResult result = await createdPaneCloseCoordinator
             .requestClose(paneId: paneId);
@@ -3215,6 +3240,7 @@ final class TerminalApplication {
             },
             handler: paste,
           ),
+          ...promptNavigationActions.registrations(),
           ...createdActions.registrations(),
         ],
       );
