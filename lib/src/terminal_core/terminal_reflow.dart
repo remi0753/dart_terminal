@@ -281,6 +281,8 @@ TerminalScreen _buildReflowedScreen(
     graphemeTable: source.graphemeTable,
     hyperlinkTable: source.hyperlinkTable,
     scrollbackAttachment: source._scrollbackAttachment,
+    initialCursorShape: source.initialCursorShape,
+    initialCursorBlinking: source.initialCursorBlinking,
   );
   target._logicalLineEpoch = source._logicalLineEpoch;
   target._firstLogicalCellOffset = retainedCount == 0

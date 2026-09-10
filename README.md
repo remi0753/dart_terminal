@@ -240,10 +240,27 @@ make RUNTIME_ARCH=arm64 developer-jit-integration
 ```text
 include = shared.conf
 working-directory = "/Users/example/Terminal Work"
+font-family = "JetBrains Mono"
+font-size = 15
+palette-background = #101418
+palette-foreground = #d8dee9
+window-width = 1000
+window-height = 640
+window-padding-horizontal = 12
+window-padding-vertical = 8
+macos-option-key = text
+scrollback-lines = 50000
+scrollback-bytes = 128MiB
+cursor-shape = bar
+cursor-blink = false
 ```
 
-現在のschemaが公開する設定項目は`working-directory`です。theme、font、window、input、
-scrollback、keybind等はPhase 8の後続タスクで同じtyped schemaへ追加します。
+現在のschemaは`working-directory`に加え、`theme`、default foreground/background/cursor、
+ANSI palette 0–15、font family/size/synthetic style、初期window sizeとpadding、macOS Option keyの
+`escape`/`text`動作、scrollback line/byte cap、初期cursor shape/blinkを公開します。同じ名前を
+`--font-size=15`のようにcommand lineでも指定できます。解決済み設定は新しいwindow/tab/splitの
+各paneへ適用され、既存paneのmutable resourceを共有しません。declarative keybind、reload、
+light/dark theme catalog、shell integrationはPhase 8の後続タスクです。
 unknown key、不正な値、読めない明示ファイル、include cycle等はpath、line、column、安定した
 diagnostic code、可能な場合は修正案とともに標準エラーへ表示します。有効な最後の値または
 schema defaultへ復旧して起動を続けます。一方、command line自体の不正やintegration専用

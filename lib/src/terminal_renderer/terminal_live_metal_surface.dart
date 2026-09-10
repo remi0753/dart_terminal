@@ -72,6 +72,10 @@ final class TerminalLiveMetalSurfaceSnapshot {
     required this.columns,
     required this.viewportWidth,
     required this.viewportHeight,
+    required this.contentOffsetX,
+    required this.contentOffsetY,
+    required this.contentViewportWidth,
+    required this.contentViewportHeight,
     required this.scale16_16,
     required this.lastAppliedDamageGeneration,
     required this.lastAcceptedModelRevision,
@@ -106,6 +110,10 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int columns;
   final int viewportWidth;
   final int viewportHeight;
+  final int contentOffsetX;
+  final int contentOffsetY;
+  final int contentViewportWidth;
+  final int contentViewportHeight;
   final int scale16_16;
   final int lastAppliedDamageGeneration;
   final int lastAcceptedModelRevision;
@@ -151,10 +159,17 @@ final class TerminalLiveMetalSurface {
     TerminalPaneWorkScheduler? paneWorkScheduler,
     TerminalLiveMetalSurfaceFatalError? onFatalError,
     TerminalCaretGeometryPublisher? onCaretGeometryChanged,
+    String fontFamily = defaultFontFamily,
+    double fontPointSize = defaultFontPointSize,
+    TerminalSyntheticStylePolicy syntheticStylePolicy =
+        TerminalSyntheticStylePolicy.allow,
+    double horizontalPadding = 0,
+    double verticalPadding = 0,
     TerminalMetalRendererConfig rendererConfig =
         const TerminalMetalRendererConfig(),
   }) {
     _validateViewport(logicalWidth, logicalHeight);
+    _validatePadding(horizontalPadding, verticalPadding);
     if (!automaticScheduling && paneWorkScheduler != null) {
       throw ArgumentError.value(
         paneWorkScheduler,
@@ -166,8 +181,9 @@ final class TerminalLiveMetalSurface {
       backingScaleFactor,
     );
     final TerminalFontCatalog catalog = TerminalFontCatalog.open(
-      family: defaultFontFamily,
-      pointSize: defaultFontPointSize,
+      family: fontFamily,
+      pointSize: fontPointSize,
+      syntheticStylePolicy: syntheticStylePolicy,
     );
     final TerminalShapingCache shapingCache = TerminalShapingCache(catalog);
     final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
@@ -198,6 +214,8 @@ final class TerminalLiveMetalSurface {
         view: view,
         logicalWidth: logicalWidth,
         logicalHeight: logicalHeight,
+        horizontalPadding: horizontalPadding,
+        verticalPadding: verticalPadding,
         backingScaleFactor: backingScaleFactor,
         isVisible: isVisible,
         isOccluded: isOccluded,
@@ -227,6 +245,8 @@ final class TerminalLiveMetalSurface {
     required this.view,
     required double logicalWidth,
     required double logicalHeight,
+    required this.horizontalPadding,
+    required this.verticalPadding,
     required double backingScaleFactor,
     required bool isVisible,
     required bool isOccluded,
@@ -257,8 +277,8 @@ final class TerminalLiveMetalSurface {
        ) {
     _updatePixelViewport();
     screenSet.updateLogicalViewportSize(
-      width: logicalWidth,
-      height: logicalHeight,
+      width: _contentLogicalWidth,
+      height: _contentLogicalHeight,
     );
     late final TerminalMetalFailureRecoveryCoordinator<
       TerminalMetalRendererRecoveryDomain
@@ -289,6 +309,10 @@ final class TerminalLiveMetalSurface {
                     frameGeneration: frameGeneration,
                     viewportWidth: _viewportWidth,
                     viewportHeight: _viewportHeight,
+                    contentOffsetX: _contentOffsetX,
+                    contentOffsetY: _contentOffsetY,
+                    contentViewportWidth: _contentViewportWidth,
+                    contentViewportHeight: _contentViewportHeight,
                     presentation: presentation,
                     preedit: _viewportRenderModel == null
                         ? _preeditLayoutForModel(model)
@@ -353,6 +377,8 @@ final class TerminalLiveMetalSurface {
   final TerminalCaretGeometryPublisher? onCaretGeometryChanged;
   final TerminalMetalRendererConfig rendererConfig;
   final TerminalGlyphAtlas atlas;
+  final double horizontalPadding;
+  final double verticalPadding;
   final TerminalAccessibilityClient _accessibilityClient;
   final Stopwatch _clock = Stopwatch()..start();
   final TerminalDamageOutbox _outbox;
@@ -372,6 +398,10 @@ final class TerminalLiveMetalSurface {
   double _publishedScale;
   late int _viewportWidth;
   late int _viewportHeight;
+  late int _contentOffsetX;
+  late int _contentOffsetY;
+  late int _contentViewportWidth;
+  late int _contentViewportHeight;
   bool _desiredVisible;
   bool _desiredOccluded;
   bool _publishedVisible = true;
@@ -405,7 +435,19 @@ final class TerminalLiveMetalSurface {
 
   bool get isDisposed => _disposed;
   TerminalFontCatalogMetrics get fontMetrics => _catalog.metrics;
+  String get fontFamily => _catalog.family;
+  TerminalSyntheticStylePolicy get syntheticStylePolicy =>
+      _catalog.syntheticStylePolicy;
   TerminalPreeditState get preeditState => _preeditModel.state;
+
+  double get _contentLogicalWidth =>
+      _logicalWidth - _effectiveHorizontalPadding * 2;
+  double get _contentLogicalHeight =>
+      _logicalHeight - _effectiveVerticalPadding * 2;
+  double get _effectiveHorizontalPadding =>
+      _effectivePadding(_logicalWidth, horizontalPadding);
+  double get _effectiveVerticalPadding =>
+      _effectivePadding(_logicalHeight, verticalPadding);
 
   bool updateSelection(TerminalSelectionGestureSnapshot snapshot) {
     _requireLive();
@@ -506,17 +548,22 @@ final class TerminalLiveMetalSurface {
   }) {
     _requireLive();
     _validateViewport(logicalWidth, logicalHeight);
+    _validatePadding(horizontalPadding, verticalPadding);
+    final double contentWidth =
+        logicalWidth - _effectivePadding(logicalWidth, horizontalPadding) * 2;
+    final double contentHeight =
+        logicalHeight - _effectivePadding(logicalHeight, verticalPadding) * 2;
     final double maximumLogicalWidth =
         rendererConfig.maximumViewportWidth / _desiredScale;
     final double maximumLogicalHeight =
         rendererConfig.maximumViewportHeight / _desiredScale;
     final int columns =
-        (math.min(logicalWidth, maximumLogicalWidth) /
+        (math.min(contentWidth, maximumLogicalWidth) /
                 _catalog.metrics.cellWidth)
             .floor()
             .clamp(minimumColumns, TerminalScreen.maxColumns);
     final int rows =
-        (math.min(logicalHeight, maximumLogicalHeight) /
+        (math.min(contentHeight, maximumLogicalHeight) /
                 _catalog.metrics.cellHeight)
             .floor()
             .clamp(minimumRows, TerminalScreen.maxRows);
@@ -538,8 +585,10 @@ final class TerminalLiveMetalSurface {
       logicalHeight: logicalHeight,
     );
     screenSet.updateLogicalViewportSize(
-      width: logicalWidth,
-      height: logicalHeight,
+      width:
+          logicalWidth - _effectivePadding(logicalWidth, horizontalPadding) * 2,
+      height:
+          logicalHeight - _effectivePadding(logicalHeight, verticalPadding) * 2,
     );
     if (_logicalWidth != logicalWidth || _logicalHeight != logicalHeight) {
       _logicalWidth = logicalWidth;
@@ -638,6 +687,10 @@ final class TerminalLiveMetalSurface {
       columns: _boundScreen.columns,
       viewportWidth: _viewportWidth,
       viewportHeight: _viewportHeight,
+      contentOffsetX: _contentOffsetX,
+      contentOffsetY: _contentOffsetY,
+      contentViewportWidth: _contentViewportWidth,
+      contentViewportHeight: _contentViewportHeight,
       scale16_16: atlas.scale16_16,
       lastAppliedDamageGeneration: _scheduler.model.lastDamageGeneration,
       lastAcceptedModelRevision: _scheduler.lastAcceptedModelRevision,
@@ -983,6 +1036,10 @@ final class TerminalLiveMetalSurface {
       1,
       rendererConfig.maximumViewportHeight,
     );
+    _contentOffsetX = (_effectiveHorizontalPadding * _publishedScale).round();
+    _contentOffsetY = (_effectiveVerticalPadding * _publishedScale).round();
+    _contentViewportWidth = math.max(1, _viewportWidth - _contentOffsetX * 2);
+    _contentViewportHeight = math.max(1, _viewportHeight - _contentOffsetY * 2);
   }
 
   TerminalPreeditLayout? _preeditLayoutForModel(
@@ -1015,8 +1072,8 @@ final class TerminalLiveMetalSurface {
       column = layout.caretColumn;
     }
     return TerminalCaretRect(
-      x: column * _catalog.metrics.cellWidth,
-      y: row * _catalog.metrics.cellHeight,
+      x: _effectiveHorizontalPadding + column * _catalog.metrics.cellWidth,
+      y: _effectiveVerticalPadding + row * _catalog.metrics.cellHeight,
       width: _catalog.metrics.cellWidth,
       height: _catalog.metrics.cellHeight,
     );
@@ -1099,6 +1156,18 @@ final class TerminalLiveMetalSurface {
       throw ArgumentError('terminal viewport must be finite and positive');
     }
   }
+
+  static void _validatePadding(double horizontal, double vertical) {
+    if (!horizontal.isFinite || !vertical.isFinite) {
+      throw ArgumentError('terminal padding must be finite');
+    }
+    if (horizontal < 0 || vertical < 0) {
+      throw ArgumentError('terminal padding must be non-negative');
+    }
+  }
+
+  static double _effectivePadding(double extent, double configured) =>
+      math.min(configured, math.max(0, (extent - 1) / 2));
 }
 
 bool _sameAccessibilitySnapshot(

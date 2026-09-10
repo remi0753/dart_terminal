@@ -27,6 +27,8 @@ final class TerminalScreenSet {
     TerminalHyperlinkTable? hyperlinkTable,
     TerminalScrollback? scrollback,
     TerminalSessionMetadata? metadata,
+    TerminalCursorShape initialCursorShape = TerminalCursorShape.block,
+    bool initialCursorBlinking = true,
   }) {
     final TerminalStyleTable sharedStyles = styleTable ?? TerminalStyleTable();
     final TerminalPalette sharedPalette = palette ?? TerminalPalette();
@@ -47,6 +49,8 @@ final class TerminalScreenSet {
         graphemeTable: sharedGraphemes,
         hyperlinkTable: sharedHyperlinks,
         scrollbackAttachment: scrollbackAttachment,
+        initialCursorShape: initialCursorShape,
+        initialCursorBlinking: initialCursorBlinking,
       ),
       alternate: TerminalScreen(
         rows: rows,
@@ -55,6 +59,8 @@ final class TerminalScreenSet {
         palette: sharedPalette,
         graphemeTable: sharedGraphemes,
         hyperlinkTable: sharedHyperlinks,
+        initialCursorShape: initialCursorShape,
+        initialCursorBlinking: initialCursorBlinking,
       ),
       styleTable: sharedStyles,
       palette: sharedPalette,

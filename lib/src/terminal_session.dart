@@ -8,6 +8,7 @@ import 'package:dart_pty_macos/dart_pty_macos.dart';
 import 'terminal_buffer.dart';
 import 'terminal_core/terminal_keyboard_modes.dart';
 import 'terminal_core/terminal_reply.dart';
+import 'terminal_core/terminal_screen.dart';
 import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_core/vt_parser.dart';
@@ -152,6 +153,10 @@ final class TerminalSession implements TerminalPaneSession {
     this.cleanupStepTimeout = const Duration(seconds: 1),
     TerminalSessionLifecycleObserver? lifecycleObserver,
     TerminalSessionNativeObserver? nativeObserver,
+    TerminalPalette? palette,
+    TerminalScrollback? scrollback,
+    TerminalCursorShape initialCursorShape = TerminalCursorShape.block,
+    bool initialCursorBlinking = true,
   }) : _onChanged = onChanged,
        _onTerminated = onTerminated,
        _lifecycleObserver = lifecycleObserver,
@@ -193,7 +198,14 @@ final class TerminalSession implements TerminalPaneSession {
         );
       }
     }
-    terminalScreenSet = TerminalScreenSet(rows: _rows, columns: _columns);
+    terminalScreenSet = TerminalScreenSet(
+      rows: _rows,
+      columns: _columns,
+      palette: palette,
+      scrollback: scrollback,
+      initialCursorShape: initialCursorShape,
+      initialCursorBlinking: initialCursorBlinking,
+    );
     terminalParserSink = TerminalScreenParserSink.forScreenSet(
       terminalScreenSet,
       onReply: _writeTerminalReply,

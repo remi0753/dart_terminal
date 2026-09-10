@@ -4,6 +4,11 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 void main() => runTerminalLiveMetalSurfaceFontTests();
 
 void runTerminalLiveMetalSurfaceFontTests() {
+  _testDefaultFont();
+  _testConfiguredFontPolicy();
+}
+
+void _testDefaultFont() {
   final TerminalFontCatalog catalog = TerminalFontCatalog.open(
     family: TerminalLiveMetalSurface.defaultFontFamily,
     pointSize: TerminalLiveMetalSurface.defaultFontPointSize,
@@ -38,6 +43,24 @@ void runTerminalLiveMetalSurfaceFontTests() {
           ) &&
           _bottomBandCoverage(orientation) > _topBandCoverage(orientation),
       'live surface default uses the readable macOS system monospace metrics',
+    );
+  } finally {
+    catalog.dispose();
+  }
+}
+
+void _testConfiguredFontPolicy() {
+  final TerminalFontCatalog catalog = TerminalFontCatalog.open(
+    family: 'Menlo',
+    pointSize: 18,
+    syntheticStylePolicy: TerminalSyntheticStylePolicy.reject,
+  );
+  try {
+    _expect(
+      catalog.family == 'Menlo' &&
+          catalog.metrics.pointSize == 18 &&
+          catalog.syntheticStylePolicy == TerminalSyntheticStylePolicy.reject,
+      'configured font family, point size, and synthetic policy are retained',
     );
   } finally {
     catalog.dispose();

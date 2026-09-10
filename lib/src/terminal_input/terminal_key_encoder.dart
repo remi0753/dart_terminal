@@ -19,6 +19,8 @@ final class TerminalKeyEncodingLimitException implements Exception {
       'maximum is $maximumBytes';
 }
 
+enum TerminalOptionKeyBehavior { escape, text }
+
 /// Bounded encoder for the Phase 5 legacy xterm keyboard contract.
 ///
 /// Kitty keyboard and modifyOtherKeys are intentionally separate later
@@ -27,6 +29,7 @@ final class TerminalKeyEncoder {
   TerminalKeyEncoder({
     this.maximumEncodedBytes =
         TerminalInputLimits.maximumEncodedBytesPerKeyEvent,
+    this.optionKeyBehavior = TerminalOptionKeyBehavior.escape,
   }) {
     if (maximumEncodedBytes <= 0 ||
         maximumEncodedBytes >
@@ -41,6 +44,7 @@ final class TerminalKeyEncoder {
   }
 
   final int maximumEncodedBytes;
+  final TerminalOptionKeyBehavior optionKeyBehavior;
 
   Uint8List encode(
     TerminalKeyEvent event, {
@@ -50,20 +54,42 @@ final class TerminalKeyEncoder {
       return Uint8List(0);
     }
 
-    final List<int>? special = _encodeSpecial(event, modes);
+    final TerminalKeyEvent effectiveEvent =
+        optionKeyBehavior == TerminalOptionKeyBehavior.text &&
+            event.modifiers.option
+        ? TerminalKeyEvent(
+            physicalKey: event.physicalKey,
+            text: event.text,
+            unmodifiedText: event.unmodifiedText,
+            modifiers: TerminalKeyModifiers(
+              capsLock: event.modifiers.capsLock,
+              shift: event.modifiers.shift,
+              control: event.modifiers.control,
+              command: event.modifiers.command,
+              numericPad: event.modifiers.numericPad,
+              function: event.modifiers.function,
+            ),
+            isRepeat: event.isRepeat,
+          )
+        : event;
+
+    final List<int>? special = _encodeSpecial(effectiveEvent, modes);
     if (special != null) {
       return _bounded(special);
     }
 
-    if (event.modifiers.control) {
-      final int? control = _controlByte(event.unmodifiedText);
+    if (effectiveEvent.modifiers.control) {
+      final int? control = _controlByte(effectiveEvent.unmodifiedText);
       if (control != null) {
-        return _bounded(<int>[if (event.modifiers.option) 0x1b, control]);
+        return _bounded(<int>[
+          if (effectiveEvent.modifiers.option) 0x1b,
+          control,
+        ]);
       }
     }
 
     final String printable = String.fromCharCodes(
-      event.text.runes.where(
+      effectiveEvent.text.runes.where(
         (int scalar) =>
             scalar >= 0x20 &&
             scalar != 0x7f &&
@@ -74,7 +100,7 @@ final class TerminalKeyEncoder {
       return Uint8List(0);
     }
     return _bounded(<int>[
-      if (event.modifiers.option) 0x1b,
+      if (effectiveEvent.modifiers.option) 0x1b,
       ...utf8.encode(printable),
     ]);
   }

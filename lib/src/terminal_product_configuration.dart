@@ -1,4 +1,8 @@
+import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
+
 import 'terminal_config.dart';
+import 'terminal_core/terminal_screen.dart';
+import 'terminal_input/terminal_key_encoder.dart';
 
 final class TerminalProductPaletteConfiguration {
   TerminalProductPaletteConfiguration({
@@ -102,4 +106,43 @@ final class TerminalProductConfiguration {
   double get terminalContentWidth => windowWidth - windowPaddingHorizontal * 2;
 
   double get terminalContentHeight => windowHeight - windowPaddingVertical * 2;
+
+  TerminalPalette createPalette() {
+    final TerminalPalette xterm = TerminalPalette();
+    final List<int> colors = List<int>.generate(
+      TerminalPalette.colorCount,
+      xterm.colorAt,
+      growable: false,
+    );
+    colors.setRange(0, palette.ansiColors.length, palette.ansiColors);
+    return TerminalPalette(
+      colors: colors,
+      defaultForeground: palette.foreground,
+      defaultBackground: palette.background,
+      cursorColor: palette.cursor,
+    );
+  }
+
+  TerminalScrollback createScrollback() =>
+      TerminalScrollback(maxLines: scrollbackLines, maxBytes: scrollbackBytes);
+
+  TerminalCursorShape get terminalCursorShape => switch (cursorShape) {
+    TerminalConfiguredCursorShape.block => TerminalCursorShape.block,
+    TerminalConfiguredCursorShape.underline => TerminalCursorShape.underline,
+    TerminalConfiguredCursorShape.bar => TerminalCursorShape.bar,
+  };
+
+  TerminalSyntheticStylePolicy get terminalSyntheticStylePolicy =>
+      switch (fontSyntheticStyle) {
+        TerminalConfiguredSyntheticStyle.allow =>
+          TerminalSyntheticStylePolicy.allow,
+        TerminalConfiguredSyntheticStyle.deny =>
+          TerminalSyntheticStylePolicy.reject,
+      };
+
+  TerminalOptionKeyBehavior get terminalOptionKeyBehavior =>
+      switch (macosOptionKey) {
+        TerminalConfiguredOptionKey.escape => TerminalOptionKeyBehavior.escape,
+        TerminalConfiguredOptionKey.text => TerminalOptionKeyBehavior.text,
+      };
 }

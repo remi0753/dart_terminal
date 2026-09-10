@@ -17,6 +17,53 @@ void runTerminalScreenMetalCompositorTests() {
   _testSelectionProjectionUsesOverlayLayer();
   _testHyperlinkHoverUsesDecorationLayer();
   _testPreeditRespectsRendererInstanceLimit();
+  _testContentRectangleOffsetsEveryLayer();
+}
+
+void _testContentRectangleOffsetsEveryLayer() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 2);
+  _parse(screens, ascii.encode('X'));
+  final _CompositionFixture baseline = _compose(screens);
+  final _CompositionFixture inset = _compose(
+    screens,
+    contentOffsetX: 13,
+    contentOffsetY: 7,
+  );
+  try {
+    _expect(
+      inset.composition.instances.length ==
+          baseline.composition.instances.length,
+      'content inset preserves the composed layer count',
+    );
+    for (
+      var index = 0;
+      index < baseline.composition.instances.length;
+      index++
+    ) {
+      final TerminalMetalInstance original =
+          baseline.composition.instances[index];
+      final TerminalMetalInstance translated =
+          inset.composition.instances[index];
+      _expect(
+        translated.kind == original.kind &&
+            translated.x == original.x + 13 &&
+            translated.y == original.y + 7 &&
+            translated.width == original.width &&
+            translated.height == original.height &&
+            translated.colorRgba == original.colorRgba,
+        'content inset translates layer $index without changing its payload',
+      );
+    }
+    final TerminalMetalFrame frame = inset.composition.scheduledFrame.frame;
+    _expect(
+      frame.viewportWidth == inset.viewportWidth &&
+          frame.viewportHeight == inset.viewportHeight,
+      'inset content remains encoded against the complete pane viewport',
+    );
+  } finally {
+    baseline.dispose();
+    inset.dispose();
+  }
 }
 
 void _testCursorColorUsesIndependentMetalLayer() {
@@ -504,6 +551,8 @@ _CompositionFixture _compose(
   String fontFamily = 'Menlo',
   TerminalMetalRendererConfig rendererConfig =
       const TerminalMetalRendererConfig(),
+  int contentOffsetX = 0,
+  int contentOffsetY = 0,
 }) {
   final TerminalFontCatalog catalog = TerminalFontCatalog.open(
     family: fontFamily,
@@ -535,12 +584,14 @@ _CompositionFixture _compose(
       availableResourceGeneration: atlas.resourceGeneration,
     );
     _expect(applied.isApplied, 'full screen damage applies to render model');
-    final int viewportWidth = mathCeil(
+    final int contentViewportWidth = mathCeil(
       catalog.metrics.cellWidth * model.columns * scale,
     );
-    final int viewportHeight = mathCeil(
+    final int contentViewportHeight = mathCeil(
       catalog.metrics.cellHeight * model.rows * scale,
     );
+    final int viewportWidth = contentViewportWidth + contentOffsetX * 2;
+    final int viewportHeight = contentViewportHeight + contentOffsetY * 2;
     final TerminalScreenMetalComposition composition =
         TerminalScreenMetalCompositor(
           catalog: catalog,
@@ -555,6 +606,10 @@ _CompositionFixture _compose(
           frameGeneration: 1,
           viewportWidth: viewportWidth,
           viewportHeight: viewportHeight,
+          contentOffsetX: contentOffsetX,
+          contentOffsetY: contentOffsetY,
+          contentViewportWidth: contentViewportWidth,
+          contentViewportHeight: contentViewportHeight,
           presentation: const TerminalFramePresentation(
             revision: 1,
             cursorDrawn: true,

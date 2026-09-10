@@ -11,6 +11,7 @@ void runTerminalKeyEncoderTests() {
   _testCursorNavigationAndModifiers();
   _testFunctionAndKeypadFamilies();
   _testBasicKeysAndRepeat();
+  _testOptionTextBehavior();
 }
 
 void _testKeyboardModeParsingAndReset() {
@@ -145,6 +146,46 @@ void _testTextControlAndBounds() {
           TerminalInputLimits.maximumEncodedBytesPerKeyEvent + 1,
     ),
     'encoder bounds cannot exceed the product pane input limit',
+  );
+}
+
+void _testOptionTextBehavior() {
+  final TerminalKeyEncoder encoder = TerminalKeyEncoder(
+    optionKeyBehavior: TerminalOptionKeyBehavior.text,
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyA,
+        text: 'å',
+        unmodifiedText: 'a',
+        modifiers: const TerminalKeyModifiers(option: true),
+      ),
+    ),
+    'å',
+    'Option text mode preserves composed layout text without Escape',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.arrowLeft,
+        modifiers: const TerminalKeyModifiers(option: true, shift: true),
+      ),
+    ),
+    '\x1b[1;2D',
+    'Option text mode removes Alt from xterm special-key modifiers',
+  );
+  _expect(
+    encoder
+        .encode(
+          _event(
+            TerminalPhysicalKey.keyA,
+            text: 'å',
+            modifiers: const TerminalKeyModifiers(option: true, command: true),
+          ),
+        )
+        .isEmpty,
+    'Option text mode does not weaken Command arbitration',
   );
 }
 

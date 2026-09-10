@@ -116,7 +116,10 @@ export 'src/terminal_input/terminal_hyperlink_interaction.dart';
 export 'src/terminal_input/terminal_input_matrix.dart';
 export 'src/terminal_input/terminal_key_binding.dart';
 export 'src/terminal_input/terminal_key_encoder.dart'
-    show TerminalKeyEncoder, TerminalKeyEncodingLimitException;
+    show
+        TerminalKeyEncoder,
+        TerminalKeyEncodingLimitException,
+        TerminalOptionKeyBehavior;
 export 'src/terminal_input/terminal_key_event.dart'
     show
         TerminalInputLimits,

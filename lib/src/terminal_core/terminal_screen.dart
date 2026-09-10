@@ -54,6 +54,8 @@ TerminalScreen createTerminalScreenWithScrollback({
   required TerminalGraphemeTable graphemeTable,
   required TerminalHyperlinkTable hyperlinkTable,
   required TerminalScrollbackAttachment scrollbackAttachment,
+  TerminalCursorShape initialCursorShape = TerminalCursorShape.block,
+  bool initialCursorBlinking = true,
 }) {
   TerminalScreen._validateDimensions(rows, columns);
   final TerminalScreen screen = TerminalScreen._(
@@ -64,6 +66,8 @@ TerminalScreen createTerminalScreenWithScrollback({
     graphemeTable: graphemeTable,
     hyperlinkTable: hyperlinkTable,
     scrollbackAttachment: scrollbackAttachment,
+    initialCursorShape: initialCursorShape,
+    initialCursorBlinking: initialCursorBlinking,
   );
   scrollbackAttachment.activate(screen);
   return screen;
@@ -83,6 +87,8 @@ final class TerminalScreen {
     TerminalPalette? palette,
     TerminalGraphemeTable? graphemeTable,
     TerminalHyperlinkTable? hyperlinkTable,
+    TerminalCursorShape initialCursorShape = TerminalCursorShape.block,
+    bool initialCursorBlinking = true,
   }) {
     _validateDimensions(rows, columns);
     return TerminalScreen._(
@@ -93,6 +99,8 @@ final class TerminalScreen {
       graphemeTable: graphemeTable ?? TerminalGraphemeTable(),
       hyperlinkTable: hyperlinkTable ?? TerminalHyperlinkTable(),
       scrollbackAttachment: null,
+      initialCursorShape: initialCursorShape,
+      initialCursorBlinking: initialCursorBlinking,
     );
   }
 
@@ -104,6 +112,8 @@ final class TerminalScreen {
     required this.graphemeTable,
     required this.hyperlinkTable,
     required TerminalScrollbackAttachment? scrollbackAttachment,
+    required this.initialCursorShape,
+    required this.initialCursorBlinking,
   }) : cellCount = rows * columns,
        _scrollbackAttachment = scrollbackAttachment,
        _content = Uint32List(rows * columns),
@@ -146,6 +156,8 @@ final class TerminalScreen {
   final TerminalPalette palette;
   final TerminalGraphemeTable graphemeTable;
   final TerminalHyperlinkTable hyperlinkTable;
+  final TerminalCursorShape initialCursorShape;
+  final bool initialCursorBlinking;
   final TerminalScrollbackAttachment? _scrollbackAttachment;
 
   final Uint32List _content;
@@ -202,8 +214,8 @@ final class TerminalScreen {
   bool _horizontalMarginsMode = false;
   bool _wrapPending = false;
   bool _cursorVisible = true;
-  bool _cursorBlinking = true;
-  TerminalCursorShape _cursorShape = TerminalCursorShape.block;
+  late bool _cursorBlinking = initialCursorBlinking;
+  late TerminalCursorShape _cursorShape = initialCursorShape;
   int _pendingScalarCount = 0;
   int _lastPrintRow = -1;
   int _lastPrintColumn = -1;
@@ -978,8 +990,8 @@ final class TerminalScreen {
     final bool reverseChanged = _reverseVideoMode;
     final bool cursorPresentationChanged =
         !_cursorVisible ||
-        !_cursorBlinking ||
-        _cursorShape != TerminalCursorShape.block ||
+        _cursorBlinking != initialCursorBlinking ||
+        _cursorShape != initialCursorShape ||
         _cursorRow != 0 ||
         _cursorColumn != 0;
     bool changed =
@@ -1025,8 +1037,8 @@ final class TerminalScreen {
     _horizontalMarginsMode = false;
     _wrapPending = false;
     _cursorVisible = true;
-    _cursorBlinking = true;
-    _cursorShape = TerminalCursorShape.block;
+    _cursorBlinking = initialCursorBlinking;
+    _cursorShape = initialCursorShape;
     _cursorRow = 0;
     _cursorColumn = 0;
     _savedCursorRow = 0;

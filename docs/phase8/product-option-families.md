@@ -75,8 +75,11 @@ zero-config behavior.
   owned and disposed by each live surface. Native views remain owned by the
   hierarchy adapter.
 - Padding is presentation geometry only: PTY rows/columns are derived from the
-  padded content extent, and pointer/caret/accessibility coordinates use the
-  same local terminal origin.
+  padded content extent, and pointer/caret coordinates use the same local
+  terminal origin. The existing VoiceOver text/selection/cursor contract is
+  preserved; padding-aware native accessibility geometry is tracked at the
+  complete Phase 10 accessibility pass because the current renderer packet has
+  no content-origin fields.
 - All option values have explicit finite/range/UTF-8 bounds no wider than the
   receiving component's existing hard caps.
 
@@ -146,6 +149,52 @@ next begins. After each commit, reread `ROADMAP.md` and this memo.
   font, window, input, history, and cursor values. Its zero-config defaults are
   byte-for-byte equal to the current scattered product defaults; no consumer
   reads the profile in this subtask.
+- The renderer provider's versioned accessibility snapshot encodes cell width
+  and height but no content-origin offset. Visual/pointer/IME padding can be
+  projected entirely in this repository, while exact VoiceOver hit/range
+  geometry for a nonzero inset needs a provider ABI addition. That correction
+  is deliberately tracked in the Phase 10 complete accessibility pass instead
+  of changing the sibling `dart_appkit` repository from this task.
+- Consumer projection uses the ordinary hierarchy's single pane-resource
+  factory: the immutable profile is captured once, while each invocation
+  creates independent palette, scrollback, screen, font catalog, atlas, and
+  input encoder ownership. Runtime fault/restoration acceptance paths retain
+  their existing defaults.
+- `TerminalSession` now accepts already validated palette, scrollback, and
+  initial cursor values. Both primary and alternate screens retain the cursor
+  reset defaults across resize/reflow, so RIS returns to the configured shape
+  and blink policy rather than hard-coded block/blinking state.
+- The product profile materializes a complete 256-color palette per session:
+  configured ANSI slots 0–15 replace the base entries while slots 16–255 retain
+  the audited xterm cube/grayscale. Scrollback and palette instances are never
+  shared between new panes.
+- `TerminalLiveMetalSurface` owns configured family, point size, synthetic
+  style policy, and horizontal/vertical padding. The grid and XTWINOPS logical
+  viewport use the inset content extent; the compositor clips in content
+  coordinates, translates every Metal layer once, and clears the whole pane
+  with the configured background. Caret and pointer routing use the identical
+  logical inset.
+- An AppKit window may be interactively resized below twice a configured
+  padding value. In that transient state each inset contracts symmetrically to
+  leave one positive logical point, avoiding a fatal resize; it returns to the
+  configured value as soon as the extent permits. Split minima include both
+  insets and preserve the existing base cell minima.
+- Option-key `text` policy removes Option only at the terminal byte-encoding
+  boundary. AppKit-produced/composed text is retained, Shift/Control still use
+  the legacy xterm modifier contract, and Command arbitration remains ahead of
+  terminal encoding.
+- The first formatter pass changed the requested Dart files successfully but
+  exited after failing to update the sandbox-external Dart analytics session
+  timestamp. Re-running with `CI=true DART_SUPPRESS_ANALYTICS=true` avoided the
+  telemetry write; this was an environment-side exit rather than a source
+  parse or formatting failure.
+- The first analyzer pass found that `TerminalSession` needed the direct
+  `terminal_screen.dart` import for the new palette/scrollback/cursor types.
+  Adding that import resolved all four undefined-type diagnostics.
+- The first complete `make test` correctly rejected the Phase 7 AppKit
+  acceptance inventory as stale after application and fake-AppKit test source
+  changes. `make phase7-appkit-acceptance` refreshed only the reviewed source
+  hashes; the subsequent freshness check and complete suite pass.
 - Focused profile tests pass after the color-token correction. They cover all
   33 defaults, uniqueness/documentation, immutable ANSI storage, every valid
   option family, file-to-CLI precedence, capacity suffixes, and 15 independent
@@ -163,3 +212,32 @@ next begins. After each commit, reread `ROADMAP.md` and this memo.
 - Window padding must be projected through one explicit pane-local geometry
   value rather than by changing canonical terminal cells or adding padding to
   native package defaults.
+
+## Subtask 2 verification
+
+- `terminal_product_configuration_test.dart`: consumer factories preserve the
+  configured colors/caps, retain xterm slots 16–255, map all consumer enums,
+  and return independent mutable palette/scrollback objects.
+- `terminal_session_configuration_test.dart`: two sessions do not share
+  resources; primary/alternate configured cursor defaults and RIS/reflow
+  behavior pass.
+- `terminal_key_encoder_test.dart`: Option `text` preserves composed `å`,
+  removes Alt from special-key parameters, and does not bypass Command.
+- `terminal_screen_metal_compositor_test.dart`: glyph, selection, and cursor
+  instances translate by the exact inset while the encoded viewport remains
+  the complete pane.
+- `terminal_live_metal_surface_font_test.dart`: configured Menlo 18pt with
+  synthetic-style rejection is accepted and retained.
+- `terminal_native_hierarchy_test.dart`: fake AppKit projects a configured
+  1110×710 window and the exact 18×11 content insets.
+- All six focused test entrypoints pass with build hooks enabled.
+- Final `CI=true DART_SUPPRESS_ANALYTICS=true make test` passes all generated
+  freshness/compatibility/application/terminfo gates, formats 218 files with
+  zero changes, reports no analyzer issues, and ends with
+  `dart_terminal tests passed`.
+- `make runtime-source-check` passes with `tracked=408`,
+  `product_native_sources=0`, and `reviewed_test_native_sources=1`.
+- `make developer-jit-build` produces the signed arm64 app, and
+  `make developer-jit-audit` passes with one helper, one asset set, and one
+  capability declaration. Configured real-product behavior in both runtime
+  modes remains the explicitly ordered third subtask.

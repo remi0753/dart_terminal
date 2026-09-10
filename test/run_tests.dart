@@ -79,6 +79,7 @@ import 'terminal_scrollback_test.dart';
 import 'terminal_selection_autoscroll_test.dart';
 import 'terminal_selection_gesture_test.dart';
 import 'terminal_selection_search_test.dart';
+import 'terminal_session_configuration_test.dart';
 import 'terminal_session_metadata_test.dart';
 import 'terminal_session_reply_test.dart';
 import 'terminal_snapshot_test.dart';
@@ -167,6 +168,7 @@ Future<void> main() async {
   runTerminalScreenTests();
   runTerminalScreenSetTests();
   runTerminalSessionMetadataTests();
+  await runTerminalSessionConfigurationTests();
   runTerminalSelectionSearchTests();
   runTerminalSnapshotTests();
   runTerminalScreenMetalCompositorTests();

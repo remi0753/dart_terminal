@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dart_appkit/dart_appkit.dart';
@@ -41,6 +42,7 @@ import 'terminal_input/terminal_text_input_event_router.dart';
 import 'terminal_native_hierarchy.dart';
 import 'terminal_pane.dart';
 import 'terminal_pane_close_coordinator.dart';
+import 'terminal_product_configuration.dart';
 import 'terminal_product_hierarchy_actions.dart';
 import 'terminal_renderer/pane_work_scheduler.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
@@ -543,12 +545,19 @@ final class TerminalApplication {
     }
     if (options.runtimeUserActionsTest ||
         _usesInteractiveProductHierarchy(options)) {
+      final TerminalProductConfiguration productConfiguration =
+          options.effectiveConfiguration == null
+          ? TerminalProductConfiguration.defaults
+          : TerminalProductConfiguration.fromSnapshot(
+              options.effectiveConfiguration!,
+            );
       await _runInteractiveHierarchyProduct(
         application,
         ptyBackend,
         terminfoEnvironment,
         options.runtimeWorkerCommand,
         options.initialWorkingDirectory,
+        productConfiguration,
         runUserActionAcceptance: options.runtimeUserActionsTest,
       );
       return;
@@ -2018,11 +2027,17 @@ final class TerminalApplication {
     PtyBackend ptyBackend,
     TerminalTerminfoEnvironment terminfoEnvironment,
     RuntimeLifecycleWorkerCommand workerCommand,
-    String? initialWorkingDirectory, {
+    String? initialWorkingDirectory,
+    TerminalProductConfiguration productConfiguration, {
     bool runUserActionAcceptance = false,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
-    const Rect windowFrame = Rect.fromLTWH(100, 90, 920, 580);
+    final Rect windowFrame = Rect.fromLTWH(
+      100,
+      90,
+      productConfiguration.windowWidth,
+      productConfiguration.windowHeight,
+    );
     final TerminalApplicationState state = TerminalApplicationState();
     final Map<PaneId, TerminalSession> sessions = <PaneId, TerminalSession>{};
     final List<TerminalSession> allSessions = <TerminalSession>[];
@@ -2125,6 +2140,10 @@ final class TerminalApplication {
                 nativeObserver: (TerminalSessionNativeObservation observation) {
                   stdout.writeln(observation.machineLine());
                 },
+                palette: productConfiguration.createPalette(),
+                scrollback: productConfiguration.createScrollback(),
+                initialCursorShape: productConfiguration.terminalCursorShape,
+                initialCursorBlinking: productConfiguration.cursorBlink,
               );
               sessions[id.paneId] = session;
               allSessions.add(session);
@@ -2203,6 +2222,11 @@ final class TerminalApplication {
         isVisible: false,
         isOccluded: true,
         paneWorkScheduler: paneWorkScheduler,
+        fontFamily: productConfiguration.fontFamily,
+        fontPointSize: productConfiguration.fontSize,
+        syntheticStylePolicy: productConfiguration.terminalSyntheticStylePolicy,
+        horizontalPadding: productConfiguration.windowPaddingHorizontal,
+        verticalPadding: productConfiguration.windowPaddingVertical,
         onCaretGeometryChanged: (TerminalCaretRect rectangle) {
           client.publishCaretRect(
             x: rectangle.x,
@@ -2219,7 +2243,11 @@ final class TerminalApplication {
           'pane=${pane.id.value}',
         );
       }
-      final TerminalKeyEventRouter keyRouter = TerminalKeyEventRouter();
+      final TerminalKeyEventRouter keyRouter = TerminalKeyEventRouter(
+        encoder: TerminalKeyEncoder(
+          optionKeyBehavior: productConfiguration.terminalOptionKeyBehavior,
+        ),
+      );
       final TerminalTextInputEventRouter textRouter =
           TerminalTextInputEventRouter(
             clientId: client.clientId,
@@ -2265,6 +2293,8 @@ final class TerminalApplication {
         client: client,
         surface: surface,
         textRouter: textRouter,
+        horizontalPadding: productConfiguration.windowPaddingHorizontal,
+        verticalPadding: productConfiguration.windowPaddingVertical,
         onTextInputError: recordAsynchronousError,
       );
       owners[pane.id] = owner;
@@ -2532,7 +2562,15 @@ final class TerminalApplication {
           final TerminalScreenSet screens = sessions[paneId]!.terminalScreenSet;
           final TerminalScreen screen = screens.activeScreen;
           final TerminalFontCatalogMetrics metrics = owner.surface.fontMetrics;
-          final AppKitMouseEvent localized = localMouseEvent(event, rectangle);
+          final TerminalPaneLayoutRect contentRectangle = owner.contentLayout!;
+          if (!_containsPoint(contentRectangle, event.x, event.y)) {
+            owner.surface.clearHyperlinkHover();
+            return;
+          }
+          final AppKitMouseEvent localized = localMouseEvent(
+            event,
+            contentRectangle,
+          );
           final TerminalHyperlinkRouteResult hyperlinkResult =
               hyperlinkControllers[paneId]!.route(
                 localized,
@@ -2565,8 +2603,10 @@ final class TerminalApplication {
           final TerminalScreenSet screens = sessions[paneId]!.terminalScreenSet;
           final TerminalScreen screen = screens.activeScreen;
           final TerminalFontCatalogMetrics metrics = owner.surface.fontMetrics;
+          final TerminalPaneLayoutRect contentRectangle = owner.contentLayout!;
+          if (!_containsPoint(contentRectangle, event.x, event.y)) return;
           scrollRouters[paneId]!.route(
-            localScrollEvent(event, rectangle),
+            localScrollEvent(event, contentRectangle),
             mouseModes: screens.mouseModes,
             keyboardModes: screens.keyboardModes,
             usingAlternateScreen: screens.usingAlternate,
@@ -2741,7 +2781,10 @@ final class TerminalApplication {
             state: state,
             paneResourcesFactory: createResources,
             windowFrame: windowFrame,
-            cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+            cellSize: TerminalSplitLayoutSize(
+              width: 8 + productConfiguration.windowPaddingHorizontal * 2,
+              height: 16 + productConfiguration.windowPaddingVertical * 2,
+            ),
             dividerThickness: 1,
             defersCloseRequests: true,
             presentationBuilder:
@@ -8598,6 +8641,12 @@ final class TerminalApplication {
   }
 }
 
+bool _containsPoint(TerminalPaneLayoutRect rectangle, double x, double y) =>
+    x >= rectangle.left &&
+    x < rectangle.left + rectangle.width &&
+    y >= rectangle.top &&
+    y < rectangle.top + rectangle.height;
+
 final class _TerminalHierarchyProductPane {
   _TerminalHierarchyProductPane({
     required this.pane,
@@ -8606,6 +8655,8 @@ final class _TerminalHierarchyProductPane {
     required TerminalTextInputClient client,
     required this.surface,
     required TerminalTextInputEventRouter textRouter,
+    this.horizontalPadding = 0,
+    this.verticalPadding = 0,
     required void Function(Object, StackTrace) onTextInputError,
   }) : client = client,
        textRouter = textRouter,
@@ -8620,6 +8671,8 @@ final class _TerminalHierarchyProductPane {
   final TerminalTextInputClient client;
   final TerminalLiveMetalSurface surface;
   final TerminalTextInputEventRouter textRouter;
+  final double horizontalPadding;
+  final double verticalPadding;
   final StreamSubscription<TerminalTextInputEvent> _textInputSubscription;
 
   Future<void>? _cancelFuture;
@@ -8627,6 +8680,25 @@ final class _TerminalHierarchyProductPane {
   bool adaptersDisposed = false;
   bool isVisible = false;
   TerminalPaneLayoutRect? layout;
+
+  TerminalPaneLayoutRect? get contentLayout {
+    final TerminalPaneLayoutRect? rectangle = layout;
+    if (rectangle == null) return null;
+    final double horizontal = math.min(
+      horizontalPadding,
+      math.max(0, (rectangle.width - 1) / 2),
+    );
+    final double vertical = math.min(
+      verticalPadding,
+      math.max(0, (rectangle.height - 1) / 2),
+    );
+    return TerminalPaneLayoutRect(
+      left: rectangle.left + horizontal,
+      top: rectangle.top + vertical,
+      width: rectangle.width - horizontal * 2,
+      height: rectangle.height - vertical * 2,
+    );
+  }
 
   void notifyScreenChanged() {
     if (!surface.isDisposed) surface.notifyScreenChanged();

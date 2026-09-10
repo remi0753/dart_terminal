@@ -1004,7 +1004,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase8/product-option-families.md`](docs/phase8/product-option-families.md)
   を参照して順に実施する）
   - [x] bounded option schema と immutable new-session profile
-  - [ ] session/screen/renderer/input/window への product projection
+  - [x] session/screen/renderer/input/window への product projection
   - [ ] M1 両 runtime 回帰受け入れと親項目完了判定
 - [ ] declarative keybind と action reference generation
 - [ ] safe reload、per-option live/new-session policy
@@ -1053,6 +1053,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] AppleScript dictionary と object lifecycle
 - [ ] App Intents/Shortcuts、notifications
 - [ ] complete VoiceOver/Accessibility Inspector pass
+  - [ ] configured terminal padding の accessibility hit/range geometry を
+    renderer content origin と一致させる
 - [ ] Reduce Motion/Contrast と localization
 - [ ] terminal inspector と diagnostics bundle
 

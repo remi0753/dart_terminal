@@ -185,7 +185,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | --- | --- | --- | --- | --- | --- |
 | CFG-01 | typed schema と default/file/CLI priority。zero-config default | P0 | 8 | `G:src/config/Config.zig`, `G:src/config/file_load.zig` | immutable typed schema、winner provenance、default < include先 < include元 < CLIの決定的priorityを実装。zero-configは従来値を保ち、`working-directory`を最初のschema optionとして接続 |
 | CFG-02 | location/include、diagnostic file/line/column、invalid config で起動を破壊しない | P0 | 8 | `G:src/config/file_load.zig`, `ErrorList.zig` | XDG/macOS既定location、明示`--config`/`--no-config`、relative include、cycle/depth/file/byte/line/assignment/diagnostic上限を実装。UTF-8・構文・unknown key・不正値・read失敗をfile/line/column/code/修正案で報告し、最後の有効値またはdefaultで起動継続 |
-| CFG-03 | palette/font/padding/scrollback/cursor/shell/cwd/keybind の typed options | P0 | 8 | `G:src/config/Config.zig`, `theme.zig`, `key.zig` | 未実装 |
+| CFG-03 | palette/font/padding/scrollback/cursor/shell/cwd/keybind の typed options | P0 | 8 | `G:src/config/Config.zig`, `theme.zig`, `key.zig` | working-directory、bounded theme/default・ANSI 0–15 palette、font、window/padding、Option key、scrollback、cursorのtyped optionとimmutable new-session profileを実装し、通常階層の各paneへ独立resourceとして投影。shell integration、declarative keybind、M1両runtime受け入れは後続 |
 | CFG-04 | reload と live/new-session/restart policy を option ごとに宣言 | P0 | 8 | `G:src/config/Config.zig`, macOS Config | 未実装 |
 | CFG-05 | light/dark pair、custom/built-in themes、system appearance | P1 | 8 | `G:src/config/theme.zig`, theme testdata | 未実装 |
 | CFG-06 | zsh/bash/fish/nushell integration、cwd/title/prompt mark/close hint | P1 | 8 | `G:src/shell-integration/`, `G:src/termio/shell_integration.zig` | 未実装 |

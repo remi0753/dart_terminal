@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dart_terminal/dart_terminal.dart';
+import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 void main() => runTerminalProductConfigurationTests();
 
@@ -9,6 +10,7 @@ void runTerminalProductConfigurationTests() {
   _testCompleteFileProfile();
   _testInvalidValuesRecoverIndependently();
   _testCliPrecedenceAndCapacitySyntax();
+  _testConsumerResourceFactoriesAndMappings();
 }
 
 void _testDefaultsAndSchemaInventory() {
@@ -210,6 +212,47 @@ cursor-blink = false
       'invalid CLI config value is a usage failure: $invalid',
     );
   }
+}
+
+void _testConsumerResourceFactoriesAndMappings() {
+  final TerminalConfigSnapshot snapshot = TerminalConfigLoader().resolve(
+    const <String>[
+      '--no-config',
+      '--palette-foreground=#102030',
+      '--palette-background=#405060',
+      '--palette-cursor=#708090',
+      '--palette-2=#a0b0c0',
+      '--font-synthetic-style=deny',
+      '--macos-option-key=text',
+      '--scrollback-lines=321',
+      '--scrollback-bytes=2MiB',
+      '--cursor-shape=underline',
+      '--cursor-blink=false',
+    ],
+    environment: const <String, String>{},
+  ).snapshot;
+  final TerminalProductConfiguration profile =
+      TerminalProductConfiguration.fromSnapshot(snapshot);
+  final TerminalPalette firstPalette = profile.createPalette();
+  final TerminalPalette secondPalette = profile.createPalette();
+  final TerminalScrollback firstScrollback = profile.createScrollback();
+  final TerminalScrollback secondScrollback = profile.createScrollback();
+  _expect(
+    !identical(firstPalette, secondPalette) &&
+        firstPalette.defaultForeground == 0x80102030 &&
+        firstPalette.defaultBackground == 0x80405060 &&
+        firstPalette.cursorColor == 0x80708090 &&
+        firstPalette.colorAt(2) == 0x80a0b0c0 &&
+        firstPalette.colorAt(16) == secondPalette.colorAt(16) &&
+        !identical(firstScrollback, secondScrollback) &&
+        firstScrollback.maxLines == 321 &&
+        firstScrollback.maxBytes == 2 * 1024 * 1024 &&
+        profile.terminalCursorShape == TerminalCursorShape.underline &&
+        profile.terminalSyntheticStylePolicy ==
+            TerminalSyntheticStylePolicy.reject &&
+        profile.terminalOptionKeyBehavior == TerminalOptionKeyBehavior.text,
+    'profile creates independent bounded consumer resources and exact enums',
+  );
 }
 
 final class _ProfileMemoryFileSystem implements TerminalConfigFileSystem {

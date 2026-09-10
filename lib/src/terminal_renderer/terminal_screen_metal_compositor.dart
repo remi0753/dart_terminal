@@ -83,6 +83,10 @@ final class TerminalScreenMetalCompositor {
     TerminalPreeditLayout? preedit,
     TerminalSelectionProjection? selection,
     int hoveredHyperlinkId = 0,
+    int contentOffsetX = 0,
+    int contentOffsetY = 0,
+    int? contentViewportWidth,
+    int? contentViewportHeight,
   }) {
     if (!model.isInitialized) {
       throw StateError('Metal composition requires an initialized model');
@@ -98,6 +102,18 @@ final class TerminalScreenMetalCompositor {
         TerminalScreen.maxResourceId,
         'hoveredHyperlinkId',
       );
+    }
+    final int contentWidth =
+        contentViewportWidth ?? viewportWidth - contentOffsetX * 2;
+    final int contentHeight =
+        contentViewportHeight ?? viewportHeight - contentOffsetY * 2;
+    if (contentOffsetX < 0 ||
+        contentOffsetY < 0 ||
+        contentWidth <= 0 ||
+        contentHeight <= 0 ||
+        contentOffsetX + contentWidth > viewportWidth ||
+        contentOffsetY + contentHeight > viewportHeight) {
+      throw ArgumentError('terminal content rectangle exceeds the viewport');
     }
 
     final double scale = atlas.scale;
@@ -150,8 +166,8 @@ final class TerminalScreenMetalCompositor {
             width: right - left,
             height: bottom - top,
             colorRgba: colors.backgroundRgba,
-            viewportWidth: viewportWidth,
-            viewportHeight: viewportHeight,
+            viewportWidth: contentWidth,
+            viewportHeight: contentHeight,
           );
         }
 
@@ -167,8 +183,8 @@ final class TerminalScreenMetalCompositor {
             row: row,
             metrics: metrics,
             scale: scale,
-            viewportWidth: viewportWidth,
-            viewportHeight: viewportHeight,
+            viewportWidth: contentWidth,
+            viewportHeight: contentHeight,
           );
         }
         if (hoveredHyperlinkId != 0 &&
@@ -182,8 +198,8 @@ final class TerminalScreenMetalCompositor {
             width: right - left,
             height: math.max(1, (metrics.underlineThickness * scale).round()),
             colorRgba: colors.foregroundRgba,
-            viewportWidth: viewportWidth,
-            viewportHeight: viewportHeight,
+            viewportWidth: contentWidth,
+            viewportHeight: contentHeight,
           );
         }
         column += cellColumns;
@@ -207,8 +223,8 @@ final class TerminalScreenMetalCompositor {
           width: right - left,
           height: bottom - top,
           colorRgba: 0x4a90e260,
-          viewportWidth: viewportWidth,
-          viewportHeight: viewportHeight,
+          viewportWidth: contentWidth,
+          viewportHeight: contentHeight,
         );
       }
     }
@@ -288,11 +304,11 @@ final class TerminalScreenMetalCompositor {
         kind: TerminalMetalInstanceKind.selection,
         x: 0,
         y: 0,
-        width: viewportWidth,
-        height: viewportHeight,
+        width: contentWidth,
+        height: contentHeight,
         colorRgba: 0xffffff30,
-        viewportWidth: viewportWidth,
-        viewportHeight: viewportHeight,
+        viewportWidth: contentWidth,
+        viewportHeight: contentHeight,
       );
     }
 
@@ -304,8 +320,8 @@ final class TerminalScreenMetalCompositor {
         textRuns: textRuns,
         metrics: metrics,
         scale: scale,
-        viewportWidth: viewportWidth,
-        viewportHeight: viewportHeight,
+        viewportWidth: contentWidth,
+        viewportHeight: contentHeight,
       );
     }
 
@@ -389,13 +405,13 @@ final class TerminalScreenMetalCompositor {
             entry.originX;
         final int y = baseline - entry.originY;
         if (entry.isEmpty ||
-            x >= viewportWidth ||
-            y >= viewportHeight ||
+            x >= contentWidth ||
+            y >= contentHeight ||
             x + entry.width <= 0 ||
             y + entry.height <= 0) {
           continue;
         }
-        if (entry.width > viewportWidth || entry.height > viewportHeight) {
+        if (entry.width > contentWidth || entry.height > contentHeight) {
           throw const TerminalGlyphAtlasCapacityException(
             'visible glyph exceeds the Metal viewport extent',
           );
@@ -421,17 +437,30 @@ final class TerminalScreenMetalCompositor {
         shape: preedit == null ? model.cursorShape : TerminalCursorShape.bar,
         metrics: metrics,
         scale: scale,
-        viewportWidth: viewportWidth,
-        viewportHeight: viewportHeight,
+        viewportWidth: contentWidth,
+        viewportHeight: contentHeight,
       );
     }
-    final List<TerminalMetalInstance> instances = <TerminalMetalInstance>[
-      ...backgrounds,
-      ...overlays,
-      ...glyphInstances,
-      ...decorations,
-      ...cursors,
-    ];
+    final List<TerminalMetalInstance> contentInstances =
+        <TerminalMetalInstance>[
+          ...backgrounds,
+          ...overlays,
+          ...glyphInstances,
+          ...decorations,
+          ...cursors,
+        ];
+    final List<TerminalMetalInstance> instances =
+        contentOffsetX == 0 && contentOffsetY == 0
+        ? contentInstances
+        : contentInstances
+              .map(
+                (TerminalMetalInstance instance) => _translatedInstance(
+                  instance,
+                  offsetX: contentOffsetX,
+                  offsetY: contentOffsetY,
+                ),
+              )
+              .toList(growable: false);
     final TerminalMetalFrame frame = TerminalMetalFrameEncoder.encode(
       renderer: bridge.renderer,
       frameGeneration: frameGeneration,
@@ -454,6 +483,34 @@ final class TerminalScreenMetalCompositor {
       hyperlinkHoverCellCount: hyperlinkHoverCellCount,
     );
   }
+
+  static TerminalMetalInstance _translatedInstance(
+    TerminalMetalInstance instance, {
+    required int offsetX,
+    required int offsetY,
+  }) => instance.kind.isGlyph
+      ? TerminalMetalInstance.glyph(
+          format: instance.kind == TerminalMetalInstanceKind.alphaGlyph
+              ? TerminalMetalAtlasFormat.alpha8
+              : TerminalMetalAtlasFormat.rgba8Straight,
+          x: instance.x + offsetX,
+          y: instance.y + offsetY,
+          width: instance.width,
+          height: instance.height,
+          atlasX: instance.atlasX,
+          atlasY: instance.atlasY,
+          colorRgba: instance.colorRgba,
+          pageIndex: instance.pageIndex,
+          pageGeneration: instance.pageGeneration,
+        )
+      : TerminalMetalInstance.solid(
+          kind: instance.kind,
+          x: instance.x + offsetX,
+          y: instance.y + offsetY,
+          width: instance.width,
+          height: instance.height,
+          colorRgba: instance.colorRgba,
+        );
 
   void _addPreedit(
     TerminalPreeditLayout preedit, {

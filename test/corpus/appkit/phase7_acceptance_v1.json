@@ -37,7 +37,7 @@
         {
           "path": "test/terminal_native_hierarchy_test.dart",
           "entrypoint": "runTerminalNativeHierarchyTests",
-          "sha256": "c90338ac82796b185327968f06a88fc4f5d5b4be7a81952a6796d0ac9d9e3c09"
+          "sha256": "16063940da825945cd5f41b95e0314ad7e1cd5a7a554bf8b85a22a75182b64ad"
         }
       ],
       "ui_assertions": [
@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "67e6b00b60a306ab1cdb8e9d48496915eb6fdc6e06ead38b6a37132b52851d23"
+          "sha256": "b116d2f002739e15c3516eba8cb498c56f3cacfb8b00fd2ef762ad5653eedf70"
         },
         {
           "path": "lib/src/terminal_input/terminal_text_input_event_router.dart",
@@ -96,7 +96,7 @@
         {
           "path": "test/terminal_native_hierarchy_test.dart",
           "entrypoint": "runTerminalNativeHierarchyTests",
-          "sha256": "c90338ac82796b185327968f06a88fc4f5d5b4be7a81952a6796d0ac9d9e3c09"
+          "sha256": "16063940da825945cd5f41b95e0314ad7e1cd5a7a554bf8b85a22a75182b64ad"
         }
       ],
       "ui_assertions": [
@@ -151,7 +151,7 @@
         {
           "path": "test/terminal_native_hierarchy_test.dart",
           "entrypoint": "runTerminalNativeHierarchyTests",
-          "sha256": "c90338ac82796b185327968f06a88fc4f5d5b4be7a81952a6796d0ac9d9e3c09"
+          "sha256": "16063940da825945cd5f41b95e0314ad7e1cd5a7a554bf8b85a22a75182b64ad"
         }
       ],
       "ui_assertions": [
@@ -183,11 +183,11 @@
         },
         {
           "path": "lib/src/terminal_session.dart",
-          "sha256": "9945f05ceb08754cef14aaa56909bc7c6f2daca2d702629ffabf777223f31fba"
+          "sha256": "f9dad49c1f61c4ce257f0c2aaf2090a6ba99f0f359e080191175070b4e128188"
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "67e6b00b60a306ab1cdb8e9d48496915eb6fdc6e06ead38b6a37132b52851d23"
+          "sha256": "b116d2f002739e15c3516eba8cb498c56f3cacfb8b00fd2ef762ad5653eedf70"
         }
       ],
       "unit_tests": [
@@ -206,7 +206,7 @@
         {
           "path": "test/terminal_native_hierarchy_test.dart",
           "entrypoint": "runTerminalNativeHierarchyTests",
-          "sha256": "c90338ac82796b185327968f06a88fc4f5d5b4be7a81952a6796d0ac9d9e3c09"
+          "sha256": "16063940da825945cd5f41b95e0314ad7e1cd5a7a554bf8b85a22a75182b64ad"
         }
       ],
       "ui_assertions": [

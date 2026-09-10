@@ -11,10 +11,88 @@ import 'package:dart_terminal/src/terminal_appkit_policy.dart';
 Future<void> main() => runTerminalNativeHierarchyTests();
 
 Future<void> runTerminalNativeHierarchyTests() async {
+  await _testConfiguredWindowAndPaddingProjection();
   await _testRepeatedMultiWindowRestoredProjection();
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testConfiguredWindowAndPaddingProjection() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final TerminalProductConfiguration profile =
+      TerminalProductConfiguration.fromSnapshot(
+        TerminalConfigLoader().resolve(const <String>[
+          '--no-config',
+          '--window-width=1110',
+          '--window-height=710',
+          '--window-padding-horizontal=18',
+          '--window-padding-vertical=11',
+        ], environment: const <String, String>{}).snapshot,
+      );
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalWindowState logicalWindow = await state.createWindow(
+    TerminalPaneConfiguration(
+      sessionFactory: (
+        TerminalSessionId id, {
+        required void Function() onChanged,
+        required void Function() onTerminated,
+      }) => _HierarchyFakeSession(id),
+      onChanged: () {},
+      onExitRequested: () {},
+    ),
+  );
+  final List<TerminalPaneLayoutRect> layouts = <TerminalPaneLayoutRect>[];
+  final Rect frame = Rect.fromLTWH(
+    100,
+    90,
+    profile.windowWidth,
+    profile.windowHeight,
+  );
+  final TerminalNativeHierarchyAdapter adapter = TerminalNativeHierarchyAdapter(
+    state: state,
+    paneResourcesFactory: (TerminalPane pane) => TerminalNativePaneResources(
+      paneId: pane.id,
+      view: View(configuration: terminalBaseViewConfiguration),
+      onLayout: (TerminalPaneLayoutRect? rectangle, {required bool visible}) {
+        if (visible) layouts.add(rectangle!);
+      },
+    ),
+    windowFrame: frame,
+    cellSize: TerminalSplitLayoutSize(
+      width: 8 + profile.windowPaddingHorizontal * 2,
+      height: 16 + profile.windowPaddingVertical * 2,
+    ),
+    presentWindows: false,
+  );
+  try {
+    adapter.reconcile();
+    final TerminalTabState tab = logicalWindow.selectedTab;
+    final TerminalPaneLayoutRect layout = layouts.single;
+    final Window nativeWindow = adapter.windowForTab(tab.id)!;
+    _expect(
+      nativeWindow.frame == frame &&
+          layout.width == profile.windowWidth &&
+          layout.height == profile.windowHeight &&
+          layout.width - profile.windowPaddingHorizontal * 2 ==
+              profile.terminalContentWidth &&
+          layout.height - profile.windowPaddingVertical * 2 ==
+              profile.terminalContentHeight,
+      'configured window frame and padded terminal extent project through '
+      'fake AppKit',
+    );
+  } finally {
+    adapter.dispose();
+    await state.shutdown();
+    await application.terminate();
+    await rawEvents.close();
+  }
 }
 
 Future<void> _testRepeatedMultiWindowRestoredProjection() async {
