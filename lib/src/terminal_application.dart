@@ -105,6 +105,7 @@ final class TerminalOptions {
     this.runtimeNativeHierarchyTest = false,
     this.runtimeUserActionsTest = false,
     this.runtimeConfigurationTest = false,
+    this.runtimeThemeTest = false,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
@@ -147,6 +148,7 @@ final class TerminalOptions {
     var runtimeNativeHierarchyTest = false;
     var runtimeUserActionsTest = false;
     var runtimeConfigurationTest = false;
+    var runtimeThemeTest = false;
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
@@ -224,6 +226,15 @@ final class TerminalOptions {
           );
         }
         runtimeConfigurationTest = true;
+        continue;
+      }
+      if (argument == '--runtime-theme-test') {
+        if (runtimeThemeTest) {
+          throw const FormatException(
+            '--runtime-theme-test may only be supplied once',
+          );
+        }
+        runtimeThemeTest = true;
         continue;
       }
       if (argument == '--runtime-restoration-test') {
@@ -445,6 +456,29 @@ final class TerminalOptions {
         'configuration test cannot be combined with another runtime test',
       );
     }
+    if (runtimeThemeTest &&
+        selectedEnvironment['DT_RUNTIME_THEME_TEST'] != '1') {
+      throw const FormatException(
+        'theme test requires the integration-test gate',
+      );
+    }
+    if (runtimeThemeTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'theme test cannot be combined with another runtime test',
+      );
+    }
     if (runtimeNativeHierarchyTest &&
         (selectedScenario != RuntimeLifecycleScenario.normal ||
             autoCloseAfter != null ||
@@ -499,6 +533,7 @@ final class TerminalOptions {
       runtimeNativeHierarchyTest: runtimeNativeHierarchyTest,
       runtimeUserActionsTest: runtimeUserActionsTest,
       runtimeConfigurationTest: runtimeConfigurationTest,
+      runtimeThemeTest: runtimeThemeTest,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
@@ -530,6 +565,7 @@ final class TerminalOptions {
   final bool runtimeNativeHierarchyTest;
   final bool runtimeUserActionsTest;
   final bool runtimeConfigurationTest;
+  final bool runtimeThemeTest;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
@@ -597,6 +633,7 @@ final class TerminalApplication {
     }
     if (options.runtimeUserActionsTest ||
         options.runtimeConfigurationTest ||
+        options.runtimeThemeTest ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -614,6 +651,7 @@ final class TerminalApplication {
         configurationReloadController: options.configurationReloadController,
         runUserActionAcceptance: options.runtimeUserActionsTest,
         runConfigurationAcceptance: options.runtimeConfigurationTest,
+        runThemeAcceptance: options.runtimeThemeTest,
       );
       return;
     }
@@ -2079,6 +2117,7 @@ final class TerminalApplication {
       !options.runtimeClipboardTest &&
       !options.runtimeNativeHierarchyTest &&
       !options.runtimeConfigurationTest &&
+      !options.runtimeThemeTest &&
       !options.runtimeRestorationTest &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
@@ -2092,6 +2131,7 @@ final class TerminalApplication {
     TerminalConfigReloadController? configurationReloadController,
     bool runUserActionAcceptance = false,
     bool runConfigurationAcceptance = false,
+    bool runThemeAcceptance = false,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
     final Rect initialWindowFrame = Rect.fromLTWH(
@@ -2205,7 +2245,9 @@ final class TerminalApplication {
                 ptyBackend: ptyBackend,
                 initialWorkingDirectory: workingDirectory,
                 environment:
-                    runUserActionAcceptance || runConfigurationAcceptance
+                    runUserActionAcceptance ||
+                        runConfigurationAcceptance ||
+                        runThemeAcceptance
                     ? <String, String>{
                         ...terminfoEnvironment.environment,
                         'TERM': 'xterm-256color',
@@ -2215,7 +2257,9 @@ final class TerminalApplication {
                       }
                     : terminfoEnvironment.environment,
                 shellArguments:
-                    runUserActionAcceptance || runConfigurationAcceptance
+                    runUserActionAcceptance ||
+                        runConfigurationAcceptance ||
+                        runThemeAcceptance
                     ? const <String>['-f']
                     : const <String>[],
                 onChanged: onChanged,
@@ -2874,6 +2918,23 @@ final class TerminalApplication {
         application: application,
         onError: recordAsynchronousError,
       );
+      if (runThemeAcceptance) {
+        _expectLifecycle(
+          application.eventProtocolVersion == 7,
+          'theme acceptance requires AppKit event protocol v7',
+        );
+        _injectApplicationAppearanceEventForTesting(
+          application,
+          isDark: false,
+          monotonicNanoseconds: 11900000,
+        );
+        _expectLifecycle(
+          application.effectiveAppearance == AppKitAppearance.light &&
+              applicationThemeProjection.systemAppearance ==
+                  TerminalThemeBrightness.light,
+          'theme acceptance could not seed initial light appearance',
+        );
+      }
       application.defersTerminationRequests = true;
       final RuntimeLifecycleCoordinator createdLifecycle =
           RuntimeLifecycleCoordinator(
@@ -3202,7 +3263,23 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      if (runConfigurationAcceptance) {
+      if (runThemeAcceptance) {
+        await _exerciseThemeProduct(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          dispatcher: dispatcher,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          themeProjection: applicationThemeProjection,
+          configurationReloadController: configurationReloadController,
+          configurationAuthority: configurationAuthority,
+          paneConfigurations: paneConfigurations,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
+      } else if (runConfigurationAcceptance) {
         await _exerciseConfigurationProduct(
           application: application,
           state: state,
@@ -3268,6 +3345,368 @@ final class TerminalApplication {
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
     }
     stdout.writeln('Dart Terminal shut down cleanly.');
+  }
+
+  static Future<void> _exerciseThemeProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalActionDispatcher dispatcher,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required TerminalApplicationThemeProjection<PaneId> themeProjection,
+    required TerminalConfigReloadController? configurationReloadController,
+    required TerminalProductConfigurationAuthority configurationAuthority,
+    required Map<PaneId, TerminalProductConfiguration> paneConfigurations,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    const int customAnsiGreen = 0x8012ab34;
+    var eventTimestamp = 12000000;
+
+    Future<void> waitFor(
+      bool Function() predicate,
+      String message, {
+      Duration timeout = const Duration(seconds: 10),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (!predicate() && deadline.elapsed < timeout) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      _expectLifecycle(predicate(), message);
+    }
+
+    Future<void> dispatch(TerminalActionId id) async {
+      final TerminalActionDispatchResult result = await dispatcher.dispatch(id);
+      _expectLifecycle(
+        result.disposition == TerminalActionDispatchDisposition.executed,
+        'theme product action ${id.stableName} did not execute',
+      );
+    }
+
+    bool matchesTheme(TerminalScreenSet screens, TerminalBuiltInTheme theme) {
+      final TerminalPalette palette = screens.palette;
+      if (palette.defaultForeground != theme.foreground ||
+          palette.defaultBackground != theme.background ||
+          palette.cursorColor != theme.cursor ||
+          palette.colorAt(2) != customAnsiGreen) {
+        return false;
+      }
+      for (var index = 0; index < theme.ansiColors.length; index++) {
+        if (index != 2 && palette.colorAt(index) != theme.ansiColors[index]) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    Future<void> presentGreenMarker(
+      _TerminalHierarchyProductPane owner,
+      String suffix,
+    ) async {
+      final String marker = '__DT_THEME_${suffix}__';
+      owner.pane.insertText(
+        "printf '\\033[32m__DT_THEME_%s__\\033[0m\\n' $suffix",
+      );
+      await owner.pane.submit();
+      await _waitForAsciiMarkerPresented(
+        owner,
+        marker,
+        timeout: const Duration(seconds: 10),
+      );
+      final TerminalScreen screen =
+          owner.session.terminalScreenSet.activeScreen;
+      final _TerminalAsciiPosition position = _findAscii(screen, marker)!;
+      _expectLifecycle(
+        screen.palette.resolveToken(
+              screen.foregroundAt(position.row, position.column),
+              foreground: true,
+            ) ==
+            customAnsiGreen,
+        'theme custom ANSI color did not reach a presented Metal frame',
+      );
+    }
+
+    Future<TerminalLiveMetalSurfaceSnapshot> waitForStableSurface(
+      _TerminalHierarchyProductPane owner,
+    ) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      TerminalLiveMetalSurfaceSnapshot previous = owner.surface.snapshot();
+      var stableObservations = 0;
+      while (deadline.elapsed < const Duration(seconds: 5)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        final TerminalLiveMetalSurfaceSnapshot current = owner.surface
+            .snapshot();
+        if (!current.hasScheduledWork &&
+            current.pendingFrameCount == 0 &&
+            current.rendererGeneration == previous.rendererGeneration &&
+            current.atlasResourceGeneration ==
+                previous.atlasResourceGeneration &&
+            current.acceptedFrameCount == previous.acceptedFrameCount) {
+          stableObservations++;
+          if (stableObservations == 3) return current;
+        } else {
+          stableObservations = 0;
+        }
+        previous = current;
+      }
+      throw TimeoutException('theme Metal surface did not become idle');
+    }
+
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1 &&
+          hierarchy.paneResourceCount == 1 &&
+          themeProjection.systemAppearance == TerminalThemeBrightness.light &&
+          themeProjection.registeredPaneCount == 1,
+      'theme product did not start from a light ordinary 1/1/1 hierarchy',
+    );
+    final TerminalWindowState initialWindow = state.windows.single;
+    final TerminalTabState initialTab = initialWindow.selectedTab;
+    final PaneId initialPaneId = initialTab.focusedPaneId;
+    final TerminalSession initialSession = sessions[initialPaneId]!;
+    final _TerminalHierarchyProductPane initialOwner = owners[initialPaneId]!;
+    final TerminalScreenSet initialScreens = initialSession.terminalScreenSet;
+    final TerminalConfigReloadController reloadController =
+        configurationReloadController!;
+    final String configurationPath =
+        reloadController.effectiveSnapshot.rootPath!;
+    _expectLifecycle(
+      paneConfigurations[initialPaneId]!.theme ==
+              TerminalConfiguredTheme.system &&
+          matchesTheme(initialScreens, TerminalBuiltInTheme.dartLight) &&
+          !initialScreens.activeScreen.cursorBlinking,
+      'initial system pane did not capture light theme and custom overlay',
+    );
+    await _waitForAsciiMarker(initialSession, prompt);
+    await presentGreenMarker(initialOwner, 'INITIAL');
+
+    final TerminalSession initialSessionIdentity = initialSession;
+    final TerminalPane initialPaneIdentity = initialOwner.pane;
+    final _TerminalHierarchyProductPane initialOwnerIdentity = initialOwner;
+
+    File(configurationPath).writeAsStringSync(
+      'theme = light\npalette-2 = #12ab34\ncursor-blink = false\n',
+      flush: true,
+    );
+    await dispatch(TerminalActionId.reloadConfiguration);
+    _expectLifecycle(
+      reloadController.acceptedGeneration == 1 &&
+          configurationAuthority.acceptedGeneration == 1 &&
+          configurationAuthority.newSessionConfiguration.theme ==
+              TerminalConfiguredTheme.light &&
+          paneConfigurations[initialPaneId]!.theme ==
+              TerminalConfiguredTheme.system &&
+          identical(sessions[initialPaneId], initialSessionIdentity) &&
+          identical(owners[initialPaneId], initialOwnerIdentity),
+      'light reload changed an existing system pane or missed new-session policy',
+    );
+    await dispatch(TerminalActionId.splitPaneRight);
+    await waitFor(
+      () =>
+          state.paneCount == 2 &&
+          hierarchy.paneResourceCount == 2 &&
+          sessions.length == 2 &&
+          owners.length == 2,
+      'theme product did not create the fixed-light split pane',
+    );
+    final PaneId fixedPaneId = sessions.keys.singleWhere(
+      (PaneId paneId) => paneId != initialPaneId,
+    );
+    final TerminalSession fixedSession = sessions[fixedPaneId]!;
+    final _TerminalHierarchyProductPane fixedOwner = owners[fixedPaneId]!;
+    final TerminalScreenSet fixedScreens = fixedSession.terminalScreenSet;
+    await _waitForAsciiMarker(fixedSession, prompt);
+    await presentGreenMarker(fixedOwner, 'FIXED');
+    _expectLifecycle(
+      paneConfigurations[fixedPaneId]!.theme == TerminalConfiguredTheme.light &&
+          matchesTheme(fixedScreens, TerminalBuiltInTheme.dartLight) &&
+          themeProjection.registeredPaneCount == 2,
+      'new split pane did not capture fixed light theme and custom overlay',
+    );
+
+    final TerminalScreen primaryIdentity = initialScreens.primary;
+    final TerminalScreen alternateIdentity = initialScreens.alternate;
+    final TerminalPalette paletteIdentity = initialScreens.palette;
+    final TerminalStyleTable styleIdentity = initialScreens.styleTable;
+    final TerminalScrollback scrollbackIdentity = initialScreens.scrollback;
+    final TerminalLiveMetalSurface surfaceIdentity = initialOwner.surface;
+    final View viewIdentity = initialOwner.view;
+    await waitForStableSurface(fixedOwner);
+    final int fixedPaletteGeneration = fixedScreens.palette.generation;
+    final TerminalLiveMetalSurfaceSnapshot beforeDark =
+        await waitForStableSurface(initialOwner);
+    final int initialPaletteGeneration = initialScreens.palette.generation;
+    _injectApplicationAppearanceEventForTesting(
+      application,
+      isDark: true,
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(() {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = initialOwner.surface
+          .snapshot();
+      return themeProjection.systemAppearance == TerminalThemeBrightness.dark &&
+          initialScreens.palette.generation == initialPaletteGeneration + 1 &&
+          matchesTheme(initialScreens, TerminalBuiltInTheme.dartDark) &&
+          snapshot.lastAppliedDamageGeneration >
+              beforeDark.lastAppliedDamageGeneration &&
+          snapshot.acceptedFrameCount > beforeDark.acceptedFrameCount;
+    }, 'live dark appearance did not reach an accepted Metal frame');
+    final TerminalLiveMetalSurfaceSnapshot afterDark =
+        await waitForStableSurface(initialOwner);
+    _expectLifecycle(
+      matchesTheme(fixedScreens, TerminalBuiltInTheme.dartLight) &&
+          fixedScreens.palette.generation == fixedPaletteGeneration &&
+          identical(sessions[initialPaneId], initialSessionIdentity) &&
+          identical(initialOwner.pane, initialPaneIdentity) &&
+          identical(owners[initialPaneId], initialOwnerIdentity) &&
+          identical(initialScreens.primary, primaryIdentity) &&
+          identical(initialScreens.alternate, alternateIdentity) &&
+          identical(initialScreens.palette, paletteIdentity) &&
+          identical(initialScreens.styleTable, styleIdentity) &&
+          identical(initialScreens.scrollback, scrollbackIdentity) &&
+          identical(initialOwner.surface, surfaceIdentity) &&
+          identical(initialOwner.view, viewIdentity) &&
+          afterDark.rendererGeneration == beforeDark.rendererGeneration &&
+          afterDark.atlasResourceGeneration ==
+              beforeDark.atlasResourceGeneration,
+      'live dark appearance replaced resources or changed the fixed pane: '
+      'renderer=${beforeDark.rendererGeneration}/'
+      '${afterDark.rendererGeneration} atlas='
+      '${beforeDark.atlasResourceGeneration}/'
+      '${afterDark.atlasResourceGeneration} fixed_palette='
+      '$fixedPaletteGeneration/${fixedScreens.palette.generation}',
+    );
+
+    File(configurationPath).writeAsStringSync(
+      'theme = system\npalette-2 = #12ab34\ncursor-blink = false\n',
+      flush: true,
+    );
+    await dispatch(TerminalActionId.reloadConfiguration);
+    _expectLifecycle(
+      reloadController.acceptedGeneration == 2 &&
+          configurationAuthority.acceptedGeneration == 2 &&
+          configurationAuthority.newSessionConfiguration.theme ==
+              TerminalConfiguredTheme.system &&
+          paneConfigurations[fixedPaneId]!.theme ==
+              TerminalConfiguredTheme.light,
+      'system reload did not preserve the existing fixed-light pane boundary',
+    );
+    final Set<PaneId> existingPaneIds = sessions.keys.toSet();
+    await dispatch(TerminalActionId.newTab);
+    await waitFor(
+      () =>
+          state.tabCount == 2 &&
+          state.paneCount == 3 &&
+          hierarchy.paneResourceCount == 3 &&
+          sessions.length == 3 &&
+          owners.length == 3,
+      'theme product did not create the later system tab',
+    );
+    final PaneId laterSystemPaneId = sessions.keys.singleWhere(
+      (PaneId paneId) => !existingPaneIds.contains(paneId),
+    );
+    final TerminalSession laterSystemSession = sessions[laterSystemPaneId]!;
+    final _TerminalHierarchyProductPane laterSystemOwner =
+        owners[laterSystemPaneId]!;
+    final TerminalScreenSet laterSystemScreens =
+        laterSystemSession.terminalScreenSet;
+    await _waitForAsciiMarker(laterSystemSession, prompt);
+    await presentGreenMarker(laterSystemOwner, 'LATER');
+    _expectLifecycle(
+      paneConfigurations[laterSystemPaneId]!.theme ==
+              TerminalConfiguredTheme.system &&
+          matchesTheme(laterSystemScreens, TerminalBuiltInTheme.dartDark) &&
+          themeProjection.registeredPaneCount == 3,
+      'later system pane did not capture the current dark appearance',
+    );
+
+    final TerminalSession laterSessionIdentity = laterSystemSession;
+    final _TerminalHierarchyProductPane laterOwnerIdentity = laterSystemOwner;
+    final TerminalScreen laterPrimaryIdentity = laterSystemScreens.primary;
+    final TerminalScreen laterAlternateIdentity = laterSystemScreens.alternate;
+    final TerminalPalette laterPaletteIdentity = laterSystemScreens.palette;
+    final TerminalStyleTable laterStyleIdentity = laterSystemScreens.styleTable;
+    final TerminalScrollback laterScrollbackIdentity =
+        laterSystemScreens.scrollback;
+    final TerminalLiveMetalSurface laterSurfaceIdentity =
+        laterSystemOwner.surface;
+    final TerminalLiveMetalSurfaceSnapshot beforeLight =
+        await waitForStableSurface(laterSystemOwner);
+    final int laterPaletteGeneration = laterSystemScreens.palette.generation;
+    final int initialGenerationBeforeLight = initialScreens.palette.generation;
+    _injectApplicationAppearanceEventForTesting(
+      application,
+      isDark: false,
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(() {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = laterSystemOwner.surface
+          .snapshot();
+      return themeProjection.systemAppearance ==
+              TerminalThemeBrightness.light &&
+          laterSystemScreens.palette.generation == laterPaletteGeneration + 1 &&
+          matchesTheme(laterSystemScreens, TerminalBuiltInTheme.dartLight) &&
+          snapshot.lastAppliedDamageGeneration >
+              beforeLight.lastAppliedDamageGeneration &&
+          snapshot.acceptedFrameCount > beforeLight.acceptedFrameCount;
+    }, 'live light appearance did not reach the later accepted Metal frame');
+    final TerminalLiveMetalSurfaceSnapshot afterLight =
+        await waitForStableSurface(laterSystemOwner);
+    _expectLifecycle(
+      matchesTheme(initialScreens, TerminalBuiltInTheme.dartLight) &&
+          initialScreens.palette.generation ==
+              initialGenerationBeforeLight + 1 &&
+          matchesTheme(fixedScreens, TerminalBuiltInTheme.dartLight) &&
+          fixedScreens.palette.generation == fixedPaletteGeneration &&
+          identical(sessions[laterSystemPaneId], laterSessionIdentity) &&
+          identical(owners[laterSystemPaneId], laterOwnerIdentity) &&
+          identical(laterSystemScreens.primary, laterPrimaryIdentity) &&
+          identical(laterSystemScreens.alternate, laterAlternateIdentity) &&
+          identical(laterSystemScreens.palette, laterPaletteIdentity) &&
+          identical(laterSystemScreens.styleTable, laterStyleIdentity) &&
+          identical(laterSystemScreens.scrollback, laterScrollbackIdentity) &&
+          identical(laterSystemOwner.surface, laterSurfaceIdentity) &&
+          afterLight.rendererGeneration == beforeLight.rendererGeneration &&
+          afterLight.atlasResourceGeneration ==
+              beforeLight.atlasResourceGeneration,
+      'live light appearance replaced resources or changed fixed policy: '
+      'renderer=${beforeLight.rendererGeneration}/'
+      '${afterLight.rendererGeneration} atlas='
+      '${beforeLight.atlasResourceGeneration}/'
+      '${afterLight.atlasResourceGeneration} fixed_palette='
+      '$fixedPaletteGeneration/${fixedScreens.palette.generation}',
+    );
+
+    await dispatch(TerminalActionId.quitApplication);
+    if (!closed.isCompleted) {
+      await dispatch(TerminalActionId.quitApplication);
+    }
+    await closed.future.timeout(const Duration(seconds: 15));
+    await Future<void>.delayed(Duration.zero);
+    _expectLifecycle(
+      state.isDisposed &&
+          hierarchy.isDisposed &&
+          themeProjection.isDisposed &&
+          themeProjection.registeredPaneCount == 0 &&
+          allSessions.length == 3 &&
+          allSessions.every(
+            (TerminalSession session) =>
+                session.shutdownResult?.isClean == true,
+          ) &&
+          debugLiveTerminalTextInputClientCount() == 0 &&
+          application.debugLiveObjectCount == 0,
+      'theme product did not cleanly release all resources',
+    );
+    stdout.writeln(
+      'TERMINAL_THEME_TEST protocol=7 initial_light=true live_dark=true '
+      'live_light=true system_panes=2 fixed_panes=1 custom_override=true '
+      'metal=true resource_identity=true reload_boundary=true '
+      'event_cleanup=true sessions_clean=3 text_clients=0 native_handles=0',
+    );
   }
 
   static Future<void> _exerciseConfigurationProduct({
@@ -8541,7 +8980,7 @@ keybind = control+k=pane.focus-next
       'scroll product acceptance did not preserve bounded exclusive ownership',
     );
     stdout.writeln(
-      'TERMINAL_SCROLL_TEST protocol=6 precise=true momentum=true '
+      'TERMINAL_SCROLL_TEST protocol=7 precise=true momentum=true '
       'wheel=true mouse_report=true shift_override=true alternate=true '
       'app_cursor=true local=true metal=true exclusive=true '
       'reports=${observation.terminalReportCount} '
@@ -8777,6 +9216,22 @@ keybind = control+k=pane.focus-next
       monotonicNanoseconds,
       0,
       false,
+    ]);
+  }
+
+  static void _injectApplicationAppearanceEventForTesting(
+    AppKitApplication application, {
+    required bool isDark,
+    required int monotonicNanoseconds,
+  }) {
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      33,
+      0,
+      0,
+      monotonicNanoseconds,
+      0,
+      isDark,
     ]);
   }
 

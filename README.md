@@ -95,9 +95,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - PTY通知欠落時もpane ownerを閉じ、status 75でhost終了するclassified recovery
 - AppKit main-thread root と公式 Dart 子プロセス worker の bounded lifecycle
   （M1/arm64 Developer JIT / Release AOT）
-- native event protocol v6（source generation、nanosecond timestamp、operation
+- native event protocol v7（source generation、nanosecond timestamp、operation
   ID、focus/visibility/occlusion/backing scale/screen/frame/fullscreen state、
-  application/window lifecycle、menu action、precision/momentum scroll）と、旧 v1–v5
+  application/window lifecycle/appearance、menu action、precision/momentum scroll）と、旧 v1–v6
   endpoint との compatibility negotiation
 - generic/custom `View` 境界と、型を保った content-view attachment
 - `dart_terminal_renderer_macos` の公開 facadeからdependency-owned
@@ -242,6 +242,7 @@ make RUNTIME_ARCH=arm64 developer-jit-integration
 ```text
 include = shared.conf
 working-directory = "/Users/example/Terminal Work"
+theme = system
 font-family = "JetBrains Mono"
 font-size = 15
 palette-background = #101418
@@ -279,7 +280,15 @@ pane/PTY/native resourceを保持します。warning-onlyまたは正常な候�
 `macos-option-key`と`keybind`は既存paneの次のkey eventからlive適用され、それ以外の現在の
 optionは新しく作るsession/resource/windowだけに適用されます。既存palette/OSC state、cursor、
 scrollback、font、padding、window frameは書き換えません。自動file watchとSIGHUP reloadは
-現在の対象外です。light/dark theme catalogとshell integrationはPhase 8の後続タスクです。
+現在の対象外です。
+
+`theme` は `system`、`light`、`dark` を受理し、互換記法の `default` は `system` として扱います。
+組み込みの `Dart Light` / `Dart Dark` を基礎に、明示した foreground/background/cursor と
+ANSI palette 0–15 だけを上書きします。OSCによる実行中のpalette変更はさらに上位のlayerとして
+保持され、OSC reset時は現在のtheme値へ戻ります。`system` をcaptureした既存paneはmacOSの
+effective appearanceをlive追従し、固定`light`/`dark` paneは追従しません。reloadでthemeを
+変更しても既存paneのpolicyは変わらず、新しく作るwindow/tab/splitから反映されます。shell
+integrationはPhase 8の後続タスクです。
 
 設定値が実際の通常製品へ反映されることは、実設定ファイルから4 paneを生成し、表示色、
 font、window/padding、cursor、Option入力、scrollback上限、pane/application keybind、
@@ -430,11 +439,14 @@ make RUNTIME_ARCH=arm64 runtime-integration
 make RUNTIME_ARCH=arm64 runtime-terminal-display-integration
 make RUNTIME_ARCH=arm64 runtime-native-hierarchy-integration
 make RUNTIME_ARCH=arm64 runtime-user-actions-integration
+make RUNTIME_ARCH=arm64 runtime-configuration-integration
+make RUNTIME_ARCH=arm64 runtime-theme-integration
 make RUNTIME_ARCH=arm64 runtime-restoration-integration
 ```
 
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
 smoke、real-PTY live Metal display、native tab/4-pane hierarchy、通常製品のuser action、
+configuration reload、light/dark/system appearance、
 fullscreen/migration/restoration/reopen、lifecycle、bounded traffic、resource stress、
 shutdown fault suiteをまとめて実行します。display suiteは
 SGR除去、style、soft wrap、
@@ -455,6 +467,10 @@ user action suiteは通常起動と同じdispatcher、hierarchy、pane resource 
 Split Downを操作します。2 window/3 tab/5 paneの生成、各paneへのraw key/IME分離、
 1 paneを閉じた後の4-pane階層、5つのPTY世代と全Metal/text-input/native handleの回収を
 Developer JIT/Release AOTで要求します。
+theme suiteはv7 appearance eventを通常製品へ注入し、初期light、live dark/light、custom ANSI
+overlay、system/fixed pane、reloadのnew-session境界を実Metal frameで検査します。同じpaneの
+PTY、screen、palette/style/scrollback、surface、renderer/atlas resourceを維持し、3 session、
+text-input、event subscription、worker、native handleを両runtimeで完全回収することを要求します。
 同じsuiteは1 paneから正確に100 MiBを出力している間に別paneの入力を既存のtext-input
 routeからPTY、parser、Metal受理まで測り、同一launchのidle baselineの2倍以内、flood
 完了前の応答、schedulerのyield増加、pending/work/frame上限を両runtimeで要求します。

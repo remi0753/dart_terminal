@@ -1,6 +1,6 @@
 # Dart Terminal feature matrix
 
-最終更新: 2026-09-08<br>
+最終更新: 2026-09-10<br>
 比較基準: [`ghostty-org/ghostty@d4d8f62262cb1a974a7d2470d5f79f811fab15e4`](https://github.com/ghostty-org/ghostty/tree/d4d8f62262cb1a974a7d2470d5f79f811fab15e4)  
 対象: macOS 14 以降、Flutter 不使用<br>
 主要実機 baseline: Apple M1/arm64
@@ -53,7 +53,7 @@ Phase 6 の標準互換性判断は、固定した一次資料と製品コード
 
 現在の Dart Terminal は、M1/arm64 Developer JIT / Release AOT の未改変 AppKit
 main-thread root、manifest-declared Dart worker helper、dependency-owned
-`TerminalMetalView`、v6 native event、privacy-safeなlocal-run metadata、typed
+`TerminalMetalView`、v7 native event、privacy-safeなlocal-run metadata、typed
 pane/session ownerが保持するpersistent login zsh、Dart-only VT coreとlive
 CoreText/Metal表示までである。製品repositoryのnative sourceは削除済みである。
 下表の「現在」が `未実装` でも欠落ではなく、指定 Phase まで明示的に defer した
@@ -185,9 +185,9 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | --- | --- | --- | --- | --- | --- |
 | CFG-01 | typed schema と default/file/CLI priority。zero-config default | P0 | 8 | `G:src/config/Config.zig`, `G:src/config/file_load.zig` | immutable typed schema、winner provenance、default < include先 < include元 < CLIの決定的priorityを実装。zero-configは従来値を保ち、`working-directory`を最初のschema optionとして接続 |
 | CFG-02 | location/include、diagnostic file/line/column、invalid config で起動を破壊しない | P0 | 8 | `G:src/config/file_load.zig`, `ErrorList.zig` | XDG/macOS既定location、明示`--config`/`--no-config`、relative include、cycle/depth/file/byte/line/assignment/diagnostic上限を実装。UTF-8・構文・unknown key・不正値・read失敗をfile/line/column/code/修正案で報告し、最後の有効値またはdefaultで起動継続 |
-| CFG-03 | palette/font/padding/scrollback/cursor/shell/cwd/keybind の typed options | P0 | 8 | `G:src/config/Config.zig`, `G:src/config/file_load.zig`, `theme.zig`, `key.zig` | working-directory、bounded theme/default・ANSI 0–15 palette、font、window/padding、Option key、scrollback、cursor、per-occurrence provenance付きrepeatable keybindのimmutable new-session profileを通常階層へ投影。表示/input/history/keybind/invalid復旧/native menu優先/cleanupをM1 Developer JIT/Release AOTで受け入れ済み。shell integrationは後続 |
+| CFG-03 | palette/font/padding/scrollback/cursor/shell/cwd/keybind の typed options | P0 | 8 | `G:src/config/Config.zig`, `G:src/config/file_load.zig`, `theme.zig`, `key.zig` | working-directory、system/light/dark theme selector・ANSI 0–15 palette、font、window/padding、Option key、scrollback、cursor、per-occurrence provenance付きrepeatable keybindのimmutable new-session profileを通常階層へ投影。表示/input/history/keybind/invalid復旧/native menu優先/cleanupをM1 Developer JIT/Release AOTで受け入れ済み。shell integrationは後続 |
 | CFG-04 | reload と live/new-session/restart policy を option ごとに宣言 | P0 | 8 | `G:src/config/Config.zig`, macOS Config | 全34 optionにlive/new-session policyを宣言。明示Reload Configuration action、同一起動入力でのsingle-flight再解決、error候補の全体拒否とlast-known-good保持、既存paneのkeybind/Option live適用、後続pane/windowのnew-session適用を実装し、invalid→corrected reloadとresource identity/cleanupをM1 Developer JIT/Release AOTで受け入れ済み |
-| CFG-05 | light/dark pair、custom/built-in themes、system appearance | P1 | 8 | `G:src/config/theme.zig`, theme testdata | 未実装 |
+| CFG-05 | light/dark pair、custom/built-in themes、system appearance | P1 | 8 | `G:src/config/theme.zig`, theme testdata | stable `Dart Light`/`Dart Dark` catalog、`system`/fixed selectorと`default` alias、明示palette overlay、OSC ownership/reset layerを実装。AppKit protocol v7のeffective appearanceをpaneのcaptured policyへ投影し、system paneだけをresource再生成なしでlive更新する。初期light、dark/light切替、後続system/fixed pane、custom色の実Metal frameと3 PTY/text-input/event/worker/native handle回収をM1 Developer JIT/Release AOTで受け入れ済み |
 | CFG-06 | zsh/bash/fish/nushell integration、cwd/title/prompt mark/close hint | P1 | 8 | `G:src/shell-integration/`, `G:src/termio/shell_integration.zig` | 未実装 |
 | CFG-07 | deprecated migration warning、effective config/action docs の schema generation | P1 | 8 | `G:src/config/`, CLI config commands | physical key、pane/application action、default binding、native予約shortcutのdeterministic Markdown生成と通常freshness gateを完了。全optionのeffective config/help/settings生成とdeprecated migration warningは後続 |
 

@@ -1022,14 +1022,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] last-known-good reload transaction と single-flight 制御
   - [x] reload action と live/new-session product projection
   - [x] M1 両 runtime reload 受け入れと親項目完了判定
-- [ ] light/dark theme と system appearance
+- [x] light/dark theme と system appearance
   （分割と完了条件は
   [`docs/phase8/light-dark-system-appearance.md`](docs/phase8/light-dark-system-appearance.md)
   を参照して順に実施する）
   - [x] `dart_appkit` application appearance event protocol と typed cache
   - [x] built-in light/dark pair と layered palette/custom override
   - [x] system appearance の live product projection
-  - [ ] M1 両 runtime theme/appearance 受け入れと親項目完了判定
+  - [x] M1 両 runtime theme/appearance 受け入れと親項目完了判定
 - [ ] zsh/bash/fish/nushell integration
 - [ ] cwd/title/prompt mark/jump-to-prompt/close hint
 - [ ] settings UI と effective-config inspector

@@ -477,6 +477,18 @@ working-directory = /from-file
     runtimeConfiguration.runtimeConfigurationTest,
     'TerminalOptions admits the isolated configuration acceptance gate',
   );
+  final TerminalOptions runtimeTheme = TerminalOptions.parse(
+    const <String>['--no-config', '--runtime-theme-test'],
+    environment: const <String, String>{'DT_RUNTIME_THEME_TEST': '1'},
+    configFileSystem: files,
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    runtimeTheme.runtimeThemeTest,
+    'TerminalOptions admits the isolated theme acceptance gate',
+  );
   _expectThrows(
     () => TerminalOptions.parse(
       const <String>['--no-config', '--runtime-configuration-test'],
@@ -484,6 +496,14 @@ working-directory = /from-file
       configFileSystem: files,
     ),
     'configuration acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>['--no-config', '--runtime-theme-test'],
+      environment: const <String, String>{},
+      configFileSystem: files,
+    ),
+    'theme acceptance is unavailable without its environment gate',
   );
   _expectThrows(
     () => TerminalOptions.parse(
@@ -499,6 +519,21 @@ working-directory = /from-file
       configFileSystem: files,
     ),
     'configuration acceptance cannot be combined with another runtime test',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>[
+        '--no-config',
+        '--runtime-theme-test',
+        '--runtime-configuration-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_THEME_TEST': '1',
+        'DT_RUNTIME_CONFIGURATION_TEST': '1',
+      },
+      configFileSystem: files,
+    ),
+    'theme acceptance cannot be combined with another runtime test',
   );
   _expectThrows(
     () => TerminalOptions.parse(

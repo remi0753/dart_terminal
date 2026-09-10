@@ -912,6 +912,8 @@ void _testOptions() {
     'native hierarchy test defaults off',
   );
   _expect(!options.runtimeUserActionsTest, 'user actions test defaults off');
+  _expect(!options.runtimeConfigurationTest, 'configuration test defaults off');
+  _expect(!options.runtimeThemeTest, 'theme test defaults off');
   _expect(!options.runtimeRestorationTest, 'restoration test defaults off');
   _expect(
     options.runtimeRestorationPath == null,
@@ -1201,6 +1203,35 @@ void _testOptions() {
       },
     ),
     'user actions and native hierarchy tests are mutually exclusive',
+  );
+  final TerminalOptions themeTestOptions = _parseOptions(
+    const <String>['--runtime-theme-test'],
+    environment: const <String, String>{'DT_RUNTIME_THEME_TEST': '1'},
+  );
+  _expect(
+    themeTestOptions.runtimeThemeTest,
+    'gated ordinary-product theme test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-theme-test']),
+    'theme product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-theme-test', '--runtime-theme-test'],
+      environment: const <String, String>{'DT_RUNTIME_THEME_TEST': '1'},
+    ),
+    'duplicate theme product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-theme-test', '--runtime-user-actions-test'],
+      environment: const <String, String>{
+        'DT_RUNTIME_THEME_TEST': '1',
+        'DT_RUNTIME_USER_ACTIONS_TEST': '1',
+      },
+    ),
+    'theme and user actions tests are mutually exclusive',
   );
   final TerminalOptions restorationTestOptions = _parseOptions(
     const <String>['--runtime-restoration-test'],

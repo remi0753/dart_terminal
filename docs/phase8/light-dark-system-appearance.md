@@ -300,6 +300,128 @@ subtask がない。
   `DART_ONLY_SOURCE_AUDIT_PASS tracked=417 product_native_sources=0 reviewed_test_native_sources=1` で成功した。
   新しい projection は Dart application layer に留まり、native product source や internal native path を追加していない。
 
+### 2026-09-10 M1 両 runtime theme/appearance 受け入れ着手
+
+目的:
+
+- v7 raw application appearance event を packaged Developer JIT / Release AOT の通常製品へ注入し、
+  同一の light/dark、custom overlay、system/fixed policy、resource identity、cleanup contract を実
+  AppKit/Metal/PTY/worker 境界で受け入れる。
+
+背景と現在地:
+
+- commit `8c63b16` 完了後に README、ROADMAP、FEATURE_MATRIX、本メモ、ADR-001/002、repository 構成、
+  runtime smoke、option gate、config acceptance、Make target、working tree を再確認した。Dart Terminal と
+  adjacent `dart_appkit` は clean で、ROADMAP の最初の未完了項目は本サブタスクである。
+- 既存 runtime acceptance は test-only option と対応する環境変数の二重 gate を使い、通常 entrypoint、
+  packaged worker、実 PTY、実 `TerminalMetalView` を操作する。設定 reload acceptance には、marker が
+  screen damage から後続の accepted Metal frame まで到達したことを待つ再利用可能な helper がある。
+- `terminal_application.dart` は runtime-only raw AppKit event injection を既に testing facade 経由で行う。
+  appearance injection も同じ gated product process 内へ限定し、OS global preference は変更しない。
+- Phase 7 AppKit acceptance は reviewed application/test/runtime-smoke source の SHA-256 freshness を通常 gate に
+  含むため、本サブタスクの変更後は生成物を再生成し、hash 以外の予期しない差分がないことを確認する。
+
+範囲:
+
+- 独立した `--runtime-theme-test` / `DT_RUNTIME_THEME_TEST=1` suite と両 runtime Make target を追加する。
+- 初期 light system pane、reload 後の fixed light pane、dark 中に作る後続 system paneを実 product hierarchy で
+  構成する。custom ANSI overlay の実 frame color、live dark/light、固定 pane の非追従、new-session reload 境界を
+  検証する。
+- system pane の session/owner/screen/palette/style/scrollback/surface identity と renderer/atlas resource generation が
+  live appearance change で変わらないこと、全 session、text-input client、worker、native handle が終了時に回収される
+  ことを検証する。
+- README、FEATURE_MATRIX、reviewed source hash、本メモを更新し、full runtime gate と repository test を実行する。
+
+対象外:
+
+- macOS の system appearance 設定変更、view 単位 appearance、外部 named theme file、Phase 9 の terminal
+  light/dark notification、後続 shell integration と settings/effective-config UI。
+
+依存関係・リスク:
+
+- initial pane が確実に light policy を capture するよう、theme projection 構築後かつ最初の window 作成前に
+  gated v7 event を注入する。event protocol/type は dependency public testing API の定数を使う。
+- live dark 時は最初の tab が可視な間に actual frame acceptance を待つ。後続 system pane は dark 中に新しい tab で
+  作成して marker を提示する。最後の light event は policy/identity を検査し、非可視 pane の presentation を要求しない。
+- custom overlay は ANSI index 2 を `#12ab34` に固定し、全 pane で theme default より優先されることを screen token と
+  accepted frame の双方で確認する。
+- verification report の所在確認で、存在しない `docs/verification*` を引用しない zsh glob として渡したため
+  `no matches found` で終了した。変更は発生しておらず、本タスクの既存 verification report は本メモであることを
+  確認した。以後、任意 path の探索には glob ではなく `rg --files` の結果を使う。
+
+完了条件と検証方針:
+
+- Developer JIT / Release AOT が同じ versioned result marker を出し、初期 light、live dark/light、2 system pane、
+  1 fixed pane、custom overlay、Metal frame、resource identity、reload boundary、3 session cleanup、text client 0、
+  native handle 0 を報告する。
+- focused format/analyze/test と両 mode theme target、reviewed source freshness、
+  `CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64 runtime-verify`、
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` が成功した場合にだけ本サブタスクと親項目を完了する。
+
+実装・検証記録:
+
+- runtime option、product exercise、smoke suite、両 mode Make target、option test を追加した後の最初の
+  `dart format` は成功したが、同じ sandbox command の `dart analyze` は Dart telemetry session file
+  `/Users/remi/.dart-tool/dart-flutter-telemetry-session.json` の mtime 更新が許可されず終了した。source analysis の
+  結果ではないため、workspace 外の Dart cache 書き込みを許可した同じ analyzer を再実行する。
+- cache 書き込みを許可した `dart analyze` は `No issues found!`、focused
+  `terminal_config_test.dart` は exit 0。`test/run_tests.dart` は option assertion へ到達する前に、予想どおり
+  変更した application/runtime-smoke source の Phase 7 reviewed hash が stale として停止した。source/test failure
+  ではないため、生成対象の hash 差分をレビューして evidence を再生成後に再実行する。
+- `make phase7-appkit-acceptance` の生成差分は `terminal_application.dart` の同一 SHA-256 値2箇所だけで、
+  criterion、件数、test、UI evidence は変化していない。runtime smoke source は同 manifest の reviewed source
+  対象ではなかった。生成差分を受け入れ、freshness check を再実行する。
+- evidence 再生成後の `test/run_tests.dart` は `dart_terminal tests passed` で成功した。最初の
+  `make RUNTIME_ARCH=arm64 developer-jit-theme` は初期 light、1回目 reload、fixed-light split、live dark frame まで
+  進み、resource 不変 assertion で status 70 になった。2 session と worker は失敗時にも clean に回収された。
+  assertion は marker frame 直後の renderer/atlas generation を基準にしており、非同期 glyph upload がまだ安定して
+  いない可能性を区別できないため、surface idle を待って基準化し、診断値を assertion に含めて再実行する。
+- surface idle 待機後の2回目 Developer JIT は同じ箇所で停止したが、診断値は renderer `1/1`、atlas `35/35`、
+  fixed palette generation `1/1` で安定していた。調査すると initial primary/alternate screen identity を split 前に
+  capture しており、split layout resize が appearance 注入前に正当に screen object を交換していた。appearance 自体の
+  replacement ではないため、appearance 比較基準を split 完了後へ移し、session/owner は reload 前から保持する二つの
+  境界に分離した。
+- 記録追記の最初の patch は存在しない重複文脈を指定して適用されず、ファイル変更は発生しなかった。現在の末尾を
+  再読して正しい位置へ追記した。
+- 修正後の専用 runtime target は Developer JIT が
+  `RUNTIME_THEME_INTEGRATION_PASS ... panes=3 appearances=3 elapsed_ms=1992`、Release AOT が
+  `... elapsed_ms=1337` で成功した。両 mode とも protocol v7、初期 light、live dark/light、2 system pane、
+  1 fixed-light pane、custom ANSI overlay、2 accepted reload、実 Metal frame、renderer/atlas generation と
+  session/owner/screen/palette/style/scrollback/surface identity、3 session/text-input/event/native handle cleanup、
+  manifest worker の spawn/reap contract を同じ marker で満たした。
+- README は system/light/dark/default alias、built-in pair、custom/OSC layer、pane capture/reload policy と再実行 targetを
+  説明し、current native event protocol を v7へ更新した。FEATURE_MATRIX は CFG-03/05 と current baseline を実装済み
+  contractへ更新した。
+- 最初の full `make RUNTIME_ARCH=arm64 runtime-verify` は parser table/trace、keybind reference、Phase 7
+  AppKit evidence、compatibility regression replayまで成功し、compatibility regression coverage report の freshness で
+  停止した。README/FEATURE_MATRIX を含む reviewed documentation hash 更新によるものかを生成差分で確認し、意味上の
+  coverage変更がなければ証跡を再生成して full gate を先頭から再実行する。
+- coverage 再生成差分は `README.md` と `FEATURE_MATRIX.md` の SHA-256 各1件だけで、fix family、corpus、inventory、
+  differential/application coverage は変化していない。documentation freshness evidence として更新を受け入れた。
+- evidence 更新後の full gate は repository test、source audit（tracked 418 / product native source 0）、両 bundle auditまで
+  成功し、既存 Developer JIT smoke の「current native event wire」期待で停止した。dependency current protocol が v7に
+  上がった一方、smoke contract の期待が v6のまま残った可能性を調査し、appearance event を含む current/legacy wire
+  assertionへ更新する。
+- 調査で current window/state/menu/close wire と実 scroll injection はすべて negotiated v7 を出力していたが、runtime
+  smoke の正規表現と scroll summary だけが v6固定だった。current contract を v7へ更新した。source audit後の非特権
+  `dart format` は内容を正しく整形した後、既知の telemetry session mtime制限で終了したため、最終 format/analyze は
+  cache許可環境の aggregate gateで確認する。
+- focused Developer JIT smoke は `RUNTIME_INTEGRATION_PASS ... elapsed_ms=2574`、display は
+  `RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS ... elapsed_ms=2246` で成功し、v7 window/state/menu/close とscroll
+  expectationsが実 product outputに一致した。
+- 最終 full `CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64 runtime-verify` は exit 0。
+  generated/freshness/compatibility/differential/application/terminfo、223 Dart file format、analyze、全 Dart test、
+  source audit、両 bundle audit、smoke、display、hierarchy、user action、configuration、theme、restoration、clipboard、
+  lifecycle全scenario、traffic、1,000 resource iteration、shutdown/PTY deadline faultがすべて成功した。theme suite は
+  Developer JIT `elapsed_ms=1312`、Release AOT `elapsed_ms=882`。hierarchy flood ratio は JIT 0.666、AOT 0.667、
+  resource stress は両 modeで baseline 34 / peak 36、最終 fault suite も全 worker/native cleanupを満たした。
+- full gate後に独立して再実行した `CI=true DART_SUPPRESS_ANALYTICS=true make test` も exit 0。
+  全 freshness/compatibility/application gate、223 file format、analyze、全 Dart testが再び成功し、
+  `dart_terminal tests passed` を確認した。
+- 最終差分は本サブタスクの application/runtime smoke/options/tests/Make target、README/FEATURE_MATRIX、本メモ、
+  reviewed hash 2種だけである。`git diff --check` は成功し、build outputや秘密情報、無関係な変更はなく、adjacent
+  `dart_appkit` working treeも clean。全4サブタスクと親項目の完了条件を満たした。
+
 ## リスク・引き継ぎ
 
 - KVO observer の登録解除と event-port 再登録で stale callback を残さないことを native test で

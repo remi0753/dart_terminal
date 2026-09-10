@@ -27,6 +27,7 @@ enum _Suite {
   hierarchy,
   actions,
   configuration,
+  theme,
   restoration,
   clipboard,
   lifecycle,
@@ -150,7 +151,7 @@ _Options _parseOptions(List<String> arguments) {
       if (selected == null) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
-          'configuration, clipboard, lifecycle, traffic, resource, fault, '
+          'configuration, theme, clipboard, lifecycle, traffic, resource, fault, '
           'or all',
         );
       }
@@ -755,7 +756,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     );
   }
   final RegExp eventWire = RegExp(
-    r'^NATIVE_EVENT_WIRE negotiated=6 event=window-closed protocol=6 '
+    r'^NATIVE_EVENT_WIRE negotiated=7 event=window-closed protocol=7 '
     r'source_generation=[1-9][0-9]* operation_id=0 '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -764,9 +765,9 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     eventWire.hasMatch(observation.stdoutText),
     'missing current native event wire observation',
   );
-  final String statePrefix = r'^NATIVE_WINDOW_STATE negotiated=6 event=';
+  final String statePrefix = r'^NATIVE_WINDOW_STATE negotiated=7 event=';
   final String stateMetadata =
-      r' protocol=6 source_generation=[1-9][0-9]* operation_id=0 '
+      r' protocol=7 source_generation=[1-9][0-9]* operation_id=0 '
       r'timestamp_ns=[1-9][0-9]* ';
   RegExp stateEvent(String name, String payload) =>
       RegExp('$statePrefix$name$stateMetadata$payload', multiLine: true);
@@ -801,7 +802,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     );
   }
   final RegExp applicationState = RegExp(
-    r'^NATIVE_APPLICATION_STATE negotiated=6 active=(true|false)$',
+    r'^NATIVE_APPLICATION_STATE negotiated=7 active=(true|false)$',
     multiLine: true,
   );
   _expect(
@@ -828,7 +829,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     'missing or duplicate standard action-menu projection observation',
   );
   RegExp menuAction(String action) => RegExp(
-    '^NATIVE_MENU_ACTION negotiated=6 action=$action protocol=6 '
+    '^NATIVE_MENU_ACTION negotiated=7 action=$action protocol=7 '
     r'source_generation=[1-9][0-9]* operation_id=0 '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -854,7 +855,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     'missing or duplicate pasteboard snapshot observation',
   );
   final RegExp closeRequest = RegExp(
-    r'^NATIVE_WINDOW_CLOSE_REQUEST negotiated=6 protocol=6 '
+    r'^NATIVE_WINDOW_CLOSE_REQUEST negotiated=7 protocol=7 '
     r'source_generation=[1-9][0-9]* operation_id=[1-9][0-9]* '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -1148,7 +1149,7 @@ Future<void> _runTerminalDisplay(
     'terminal display launch omitted refused-close viewport acceptance',
   );
   final RegExp scrollAcceptance = RegExp(
-    r'^TERMINAL_SCROLL_TEST protocol=6 precise=true momentum=true '
+    r'^TERMINAL_SCROLL_TEST protocol=7 precise=true momentum=true '
     r'wheel=true mouse_report=true shift_override=true alternate=true '
     r'app_cursor=true local=true metal=true exclusive=true reports=1 '
     r'local=4 alternate_inputs=1 ignored=3 bytes=20 alternate_bytes=6$',
@@ -1611,6 +1612,90 @@ keybind = command+d=pane.focus-next
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
       'panes=4 keybinds=true reload=true '
       'elapsed_ms=${observation.elapsed.inMilliseconds}',
+    );
+  } finally {
+    await directory.delete(recursive: true);
+  }
+}
+
+Future<void> _runTheme(_Options options, _Invocation invocation) async {
+  final Directory directory = await Directory.systemTemp.createTemp(
+    'dart-terminal-runtime-theme-',
+  );
+  final String configurationPath = '${directory.path}/config';
+  try {
+    await File(configurationPath).writeAsString('''
+theme = system
+palette-2 = #12ab34
+cursor-blink = false
+''');
+    final _ProcessObservation observation = await _launch(
+      options,
+      invocation,
+      <String>['--config=$configurationPath', '--runtime-theme-test'],
+      environment: const <String, String>{'DT_RUNTIME_THEME_TEST': '1'},
+      timeout: const Duration(seconds: 60),
+    );
+    _expect(
+      observation.status == 0,
+      'theme application exited with status ${observation.status}; '
+      'stdout=${observation.stdoutText.trim()} '
+      'stderr=${observation.stderrText.trim()}',
+    );
+    _expect(
+      observation.stderrText.trim().isEmpty,
+      'theme application wrote unexpected stderr: '
+      '${observation.stderrText.trim()}',
+    );
+    _expect(
+      RegExp(
+            r'^TERMINAL_THEME_TEST protocol=7 initial_light=true '
+            r'live_dark=true live_light=true system_panes=2 fixed_panes=1 '
+            r'custom_override=true metal=true resource_identity=true '
+            r'reload_boundary=true event_cleanup=true sessions_clean=3 '
+            r'text_clients=0 native_handles=0$',
+            multiLine: true,
+          ).allMatches(observation.stdoutText).length ==
+          1,
+      'ordinary product omitted exact theme/appearance acceptance',
+    );
+    _expect(
+      RegExp(
+                r'^TERMINAL_CONFIG_RELOAD disposition=applied generation=[12] '
+                r'changes=1 live=0 new_session=1 diagnostics=0$',
+                multiLine: true,
+              ).allMatches(observation.stdoutText).length ==
+              2 &&
+          RegExp(
+                r'^TERMINAL_SESSION_SHUTDOWN pane=[1-3] session=[1-3]:1 '
+                r'process_id=[1-9][0-9]* disposition=clean '
+                r'termination_observed=true cleanup_completed=true$',
+                multiLine: true,
+              ).allMatches(observation.stdoutText).length ==
+              3 &&
+          RegExp(
+                r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=3 disposition=clean$',
+                multiLine: true,
+              ).allMatches(observation.stdoutText).length ==
+              1 &&
+          observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+      'theme product did not apply two reload boundaries and release three panes',
+    );
+    _expect(
+      !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
+          !observation.stdoutText.contains('HIERARCHY_MISMATCH'),
+      'theme product leaked or overflowed terminal input',
+    );
+    _expectWorkerProcessContract(
+      observation,
+      scenario: 'normal',
+      expectedCount: 1,
+    );
+    stdout.writeln(
+      'RUNTIME_THEME_INTEGRATION_PASS mode=${options.mode.name} '
+      'launch_architecture=${options.launchArchitecture ?? 'native'} '
+      'panes=3 appearances=3 elapsed_ms='
+      '${observation.elapsed.inMilliseconds}',
     );
   } finally {
     await directory.delete(recursive: true);
@@ -2666,6 +2751,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.configuration || options.suite == _Suite.all) {
       await _runConfiguration(options, invocation);
+    }
+    if (options.suite == _Suite.theme || options.suite == _Suite.all) {
+      await _runTheme(options, invocation);
     }
     if (options.suite == _Suite.restoration || options.suite == _Suite.all) {
       await _runRestoration(options, invocation);
