@@ -9,19 +9,19 @@
     },
     {
       "path": "compatibility/sequence_mode_inventory.json",
-      "sha256": "8221927ae46a80829402426c28caf5c48086f2e4e4e8e283bca29c8892240182"
+      "sha256": "2dff14532fb93753fee88778831a80f1759fb09cf9e8ed197a73404995acbac1"
     },
     {
       "path": "compatibility/implemented_sequence_manifest.json",
-      "sha256": "5af834d2defeebf22f52fdf548334250cbcad99071ca00cf33710b37dc3bedcf"
+      "sha256": "185385eef59435b5e643745645fabe92c4fcaad2fc211205f875e34d3ed18d8f"
     },
     {
       "path": "compatibility/application_matrix_acceptance.json",
-      "sha256": "5955698aa9d52563a013d7d8f401efdfe9508922e4d5a77aedc6d20e3c70da37"
+      "sha256": "867f44e82399ba03771f71921041a0084f437753d4b8827597956fc6fbff0a14"
     },
     {
       "path": "compatibility/differential_acceptance_report.json",
-      "sha256": "05040ac5f34e4f3fbf1fa154426972a0aac01d4d0a849764b016c6a4019e3532"
+      "sha256": "72892175aab57466caa18a5d8bc27a5cd68ffa02dc1383e5b4120ca502af6ffb"
     },
     {
       "path": "test/corpus/parser/sequence_trace_case_v1.json",
@@ -205,12 +205,12 @@
       "split_runs": 417
     },
     "inventory": {
-      "records": 260,
+      "records": 261,
       "implemented": 85,
-      "partial": 19,
+      "partial": 20,
       "safe_ignore": 9,
       "explicit_unsupported": 147,
-      "implementation_selectors": 82,
+      "implementation_selectors": 83,
       "implementation_modes": 22
     },
     "application_matrix": {

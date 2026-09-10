@@ -63,6 +63,11 @@ export 'src/terminal_core/terminal_screen_set.dart'
         TerminalSelectionUnit,
         TerminalViewport,
         TerminalViewportPosition;
+export 'src/terminal_core/terminal_semantic_prompt.dart'
+    show
+        TerminalSemanticPromptAction,
+        TerminalSemanticPromptModel,
+        TerminalSemanticShellState;
 export 'src/terminal_core/terminal_session_metadata.dart'
     show TerminalSessionMetadata;
 export 'src/terminal_core/terminal_snapshot.dart'

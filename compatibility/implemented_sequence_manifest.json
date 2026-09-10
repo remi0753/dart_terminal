@@ -608,6 +608,12 @@
       "kind": "osc",
       "command": 112,
       "handler": "execute"
+    },
+    {
+      "key": "osc:133",
+      "kind": "osc",
+      "command": 133,
+      "handler": "execute"
     }
   ],
   "modes": [

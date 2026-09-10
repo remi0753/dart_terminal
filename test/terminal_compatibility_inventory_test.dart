@@ -30,20 +30,20 @@ void _testCompletePinnedInventory() {
     inventory.version == 1 &&
         inventory.inventoryRevision == 2 &&
         inventory.scope == 'complete-baseline' &&
-        inventory.sourcePins.length == 4 &&
-        inventory.records.length == 260 &&
+        inventory.sourcePins.length == 5 &&
+        inventory.records.length == 261 &&
         kinds[TerminalCompatibilitySelectorKind.c0] == 10 &&
         kinds[TerminalCompatibilitySelectorKind.c1] == 9 &&
         kinds[TerminalCompatibilitySelectorKind.esc] == 35 &&
         kinds[TerminalCompatibilitySelectorKind.csi] == 101 &&
-        kinds[TerminalCompatibilitySelectorKind.osc] == 14 &&
+        kinds[TerminalCompatibilitySelectorKind.osc] == 15 &&
         kinds[TerminalCompatibilitySelectorKind.dcs] == 8 &&
         kinds[TerminalCompatibilitySelectorKind.sos] == 1 &&
         kinds[TerminalCompatibilitySelectorKind.pm] == 1 &&
         kinds[TerminalCompatibilitySelectorKind.apc] == 1 &&
         kinds[TerminalCompatibilitySelectorKind.mode] == 80 &&
         support[TerminalCompatibilitySupport.implemented] == 85 &&
-        support[TerminalCompatibilitySupport.partial] == 19 &&
+        support[TerminalCompatibilitySupport.partial] == 20 &&
         support[TerminalCompatibilitySupport.safeIgnore] == 9 &&
         support[TerminalCompatibilitySupport.unsupported] == 147,
     'complete baseline covers every selector kind with exact totals',
@@ -61,6 +61,11 @@ void _testCompletePinnedInventory() {
     (TerminalCompatibilitySourcePin pin) =>
         pin.id == 'iterm2-escape-codes-2026-09-07',
   );
+  final TerminalCompatibilitySourcePin ghostty = inventory.sourcePins
+      .singleWhere(
+        (TerminalCompatibilitySourcePin pin) =>
+            pin.id == 'ghostty-d4d8f62-semantic-prompt',
+      );
   _expect(
     ecma.artifactBytes == 1607865 &&
         ecma.artifactSha256 ==
@@ -68,6 +73,9 @@ void _testCompletePinnedInventory() {
         dec.artifactBytes == 3378497 &&
         dec.artifactSha256 ==
             '440bbee110eb75027a06b5b375683fbc87cb739edac32899005ad46981c7d514' &&
+        ghostty.artifactBytes == 42962 &&
+        ghostty.artifactSha256 ==
+            '04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff' &&
         iterm.artifactBytes == 31258 &&
         iterm.artifactSha256 ==
             'b297c4fcd7ea35908e145420d743fe98fc0ee5bbb5844ed4a1f35f2d547cac98' &&
@@ -77,7 +85,7 @@ void _testCompletePinnedInventory() {
             '69773380309da4c8b5d4ec9646eec703c47bc41db29a8efa5b94c30798c72349' &&
         inventory.machineLine() ==
             'TERMINAL_COMPATIBILITY_INVENTORY_CHECK version=1 revision=2 '
-                'sources=4 records=260 implemented=85 partial=19 '
+                'sources=5 records=261 implemented=85 partial=20 '
                 'safe_ignore=9 unsupported=147',
     'primary source pins and content-free summary remain exact',
   );
@@ -166,7 +174,7 @@ void _testImplementationSurfaceReconciliation() {
   final File manifest = File(defaultTerminalImplementationSurfacePath);
   _expect(
     inventory.reconcileImplementationSurface(manifest) ==
-        'TERMINAL_COMPATIBILITY_RECONCILIATION_PASS implementation=104 '
+        'TERMINAL_COMPATIBILITY_RECONCILIATION_PASS implementation=105 '
             'safe_ignore_families=4',
     'all product declarations and safe-ignore families reconcile exactly',
   );

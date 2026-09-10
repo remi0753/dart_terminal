@@ -6,6 +6,7 @@ import 'terminal_mouse_modes.dart';
 import 'terminal_reply.dart';
 import 'terminal_screen.dart';
 import 'terminal_screen_set.dart';
+import 'terminal_semantic_prompt.dart';
 import 'terminal_session_metadata.dart';
 import 'terminal_style.dart';
 import 'vt_parser.dart';
@@ -82,20 +83,30 @@ final class TerminalScreenParserSink
   @override
   void print(int scalar) {
     final TerminalScreen target = screen;
+    screenSet?.semanticPrompt.markCurrentRow(target);
+    final int row = target.cursorRow;
     target.printScalar(
       target.translateGlScalar(scalar),
       hyperlink: _currentHyperlinkId,
     );
+    if (target.cursorRow != row) {
+      screenSet?.semanticPrompt.markCurrentRow(target);
+    }
   }
 
   @override
   void printAscii(Uint8List bytes, int start, int end) {
     final TerminalScreen target = screen;
+    if (start < end) screenSet?.semanticPrompt.markCurrentRow(target);
     for (var index = start; index < end; index++) {
+      final int row = target.cursorRow;
       target.printScalar(
         target.translateGlScalar(bytes[index]),
         hyperlink: _currentHyperlinkId,
       );
+      if (target.cursorRow != row) {
+        screenSet?.semanticPrompt.markCurrentRow(target);
+      }
     }
   }
 
@@ -116,6 +127,7 @@ final class TerminalScreenParserSink
       case 0x0a:
       case 0x0b:
       case 0x0c:
+        screenSet?.semanticPrompt.markCurrentRow(screen);
         screen.lineFeed();
       case 0x0d:
         screen.carriageReturn();
@@ -379,10 +391,23 @@ final class TerminalScreenParserSink
         if (supported) {
           screen.resetCursorColor();
         }
+      case 133:
+        supported =
+            hasPayload && _applyOscSemanticPrompt(sequence, payloadStart);
     }
     if (!supported) {
       _unsupportedSequenceCount++;
     }
+  }
+
+  bool _applyOscSemanticPrompt(VtStringSequence sequence, int start) {
+    final TerminalScreenSet? screens = screenSet;
+    if (screens == null) return false;
+    final TerminalSemanticPromptAction? action =
+        TerminalSemanticPromptModel.parse(sequence, start);
+    if (action == null) return false;
+    screens.semanticPrompt.apply(action, screens.activeScreen);
+    return true;
   }
 
   bool _applyOscClipboardDenial(

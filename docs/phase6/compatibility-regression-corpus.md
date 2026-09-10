@@ -72,8 +72,8 @@ committed before the next unit starts.
 
 ## Dependencies and initial facts
 
-- The implementation manifest currently declares 104 selectors/modes against
-  a 260-record inventory: 85 implemented, 19 partial, 9 safe-ignore, and 147
+- The implementation manifest currently declares 105 selectors/modes against
+  a 261-record inventory: 85 implemented, 20 partial, 9 safe-ignore, and 147
   explicit unsupported records.
 - Current immutable application replay has 3 clean cells and 5 documented-gap
   cells, with 8 gaps, 12 variants, and 71 unsupported increments. All remaining
@@ -157,7 +157,7 @@ committed before the next unit starts.
   the source oracle.
 - 2026-09-07: the closure unit uses one generated version 1 report rather than
   treating the individual gate outputs as an implicit checklist. The report
-  pins the corpus, 260-record inventory, 104-declaration implementation
+  pins the corpus, 261-record inventory, 105-declaration implementation
   manifest, application and differential acceptance, parser trace case/result,
   README, FEATURE_MATRIX, and each distinct fix-family owner by SHA-256.
 - 2026-09-07: required family IDs, unique case IDs, and owner paths are code

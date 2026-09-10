@@ -184,9 +184,9 @@ String generateTerminalCompatibilityRegressionCoverage({
       )
       .length;
   _expect(
-    inventory.records.length == 260 &&
+    inventory.records.length == 261 &&
         support[TerminalCompatibilitySupport.implemented] == 85 &&
-        support[TerminalCompatibilitySupport.partial] == 19 &&
+        support[TerminalCompatibilitySupport.partial] == 20 &&
         support[TerminalCompatibilitySupport.safeIgnore] == 9 &&
         support[TerminalCompatibilitySupport.unsupported] == 147 &&
         safeIgnore == 9 &&
@@ -206,7 +206,7 @@ String generateTerminalCompatibilityRegressionCoverage({
     'implementation.modes',
   ).length;
   _expect(
-    selectors == 82 && modes == 22,
+    selectors == 83 && modes == 22,
     'reviewed implementation declaration totals differ',
   );
 

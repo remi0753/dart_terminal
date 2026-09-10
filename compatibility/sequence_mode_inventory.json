@@ -29,6 +29,18 @@
       "retrievedOn": "2026-09-06"
     },
     {
+      "id": "ghostty-d4d8f62-semantic-prompt",
+      "family": "ghostty",
+      "title": "Ghostty OSC semantic prompt parser",
+      "edition": "commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
+      "artifactUrl": "https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/osc/parsers/semantic_prompt.zig",
+      "artifactBytes": 42962,
+      "artifactSha256": "04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
+    },
+    {
       "id": "iterm2-escape-codes-2026-09-07",
       "family": "iterm2",
       "title": "iTerm2 Proprietary Escape Codes",
@@ -3282,6 +3294,30 @@
         "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
       "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
+    },
+    {
+      "id": "ghostty:osc:osc-133",
+      "mnemonic": "OSC-133",
+      "syntax": "OSC 133 ; Ps [; Pt] ST",
+      "selector": {
+        "kind": "osc",
+        "command": 133
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ghostty-d4d8f62-semantic-prompt",
+          "locator": "semantic_prompt.zig, OSC 133 semantic prompt parser"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "The bounded A/B/C/D/P lifecycle subset projects privacy-safe shell state and row flags; options are validated but never decoded or retained, and I/L/N extensions remain rejected."
     },
     {
       "id": "iterm2:osc:osc-7",

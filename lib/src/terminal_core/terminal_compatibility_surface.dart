@@ -99,6 +99,7 @@ abstract final class TerminalCompatibilitySurface {
     110,
     111,
     112,
+    133,
   ];
 
   static const List<int> dcsSelectors = <int>[0x012471, 0x012b71];

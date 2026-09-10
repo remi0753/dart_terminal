@@ -510,6 +510,14 @@ const Map<int, _Metadata> _oscMetadata = <int, _Metadata>{
     'OSC-112',
     'ctlseqs.ms, OSC 112—Reset cursor color',
   ),
+  133: _Metadata(
+    'ghostty',
+    'osc-133',
+    'OSC-133',
+    'semantic_prompt.zig, OSC 133 semantic prompt parser',
+    support: 'partial',
+    notes: 'The bounded A/B/C/D/P lifecycle subset projects privacy-safe shell state and row flags; options are validated but never decoded or retained, and I/L/N extensions remain rejected.',
+  ),
 };
 
 const Map<int, _Metadata> _ansiModeMetadata = <int, _Metadata>{
@@ -2060,6 +2068,19 @@ const List<Map<String, Object?>> _sourcePins = <Map<String, Object?>>[
     'retrievedOn': '2026-09-06',
   },
   <String, Object?>{
+    'id': 'ghostty-d4d8f62-semantic-prompt',
+    'family': 'ghostty',
+    'title': 'Ghostty OSC semantic prompt parser',
+    'edition': 'commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4',
+    'artifactUrl': 'https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/osc/parsers/semantic_prompt.zig',
+    'artifactBytes': 42962,
+    'artifactSha256':
+        '04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff',
+    'documentPath': null,
+    'documentSha256': null,
+    'retrievedOn': '2026-09-11',
+  },
+  <String, Object?>{
     'id': 'iterm2-escape-codes-2026-09-07',
     'family': 'iterm2',
     'title': 'iTerm2 Proprietary Escape Codes',
@@ -2217,7 +2238,11 @@ Map<String, Object?> _implementedOsc(int command, _Metadata metadata) =>
     _record(
       metadata: metadata,
       kind: 'osc',
-      syntax: command == 52 ? 'OSC 52 ; Pc ; Pd ST' : 'OSC $command ; Pt ST',
+      syntax: switch (command) {
+        52 => 'OSC 52 ; Pc ; Pd ST',
+        133 => 'OSC 133 ; Ps [; Pt] ST',
+        _ => 'OSC $command ; Pt ST',
+      },
       selector: <String, Object?>{'kind': 'osc', 'command': command},
     );
 
@@ -2349,6 +2374,7 @@ String _sourceId(String family) => switch (family) {
   'dec' => 'dec-vt510-rm-b01',
   'ecma48' => 'ecma-48-5e',
   'iterm2' => 'iterm2-escape-codes-2026-09-07',
+  'ghostty' => 'ghostty-d4d8f62-semantic-prompt',
   'xterm' => 'xterm-411',
   _ => throw StateError('unknown source family $family'),
 };

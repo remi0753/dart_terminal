@@ -20,6 +20,7 @@ Excluded from this bounded baseline are ECMA transmission controls and paged-med
 | --- | --- | --- | --- |
 | `dec-vt510-rm-b01` | `dec` | B01, August 1995, EK-VT510-RM | 3378497 bytes, `440bbee110eb75027a06b5b375683fbc87cb739edac32899005ad46981c7d514` |
 | `ecma-48-5e` | `ecma48` | ECMA-48, fifth edition, June 1991 | 1607865 bytes, `9577ad2514c411584b274ef7a4b3238c80aa93defbb349b18b8c78f78873f450` |
+| `ghostty-d4d8f62-semantic-prompt` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 42962 bytes, `04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff` |
 | `iterm2-escape-codes-2026-09-07` | `iterm2` | retrieved 2026-09-07 | 31258 bytes, `b297c4fcd7ea35908e145420d743fe98fc0ee5bbb5844ed4a1f35f2d547cac98` |
 | `xterm-411` | `xterm` | xterm Patch #411, 2026-08-24 | 1633400 bytes, `969be283670deadd66934865c4de6c5ab045e3a3facc2b228decf91a20d8c36c` |
 
@@ -30,10 +31,10 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | Support classification | Records |
 | --- | ---: |
 | `implemented` | 85 |
-| `partial` | 19 |
+| `partial` | 20 |
 | `safe-ignore` | 9 |
 | `unsupported` | 147 |
-| **Total** | **260** |
+| **Total** | **261** |
 
 | Selector kind | Records |
 | --- | ---: |
@@ -41,15 +42,15 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `c1` | 9 |
 | `esc` | 35 |
 | `csi` | 101 |
-| `osc` | 14 |
+| `osc` | 15 |
 | `dcs` | 8 |
 | `sos` | 1 |
 | `pm` | 1 |
 | `apc` | 1 |
 | `mode` | 80 |
-| **Total** | **260** |
+| **Total** | **261** |
 
-The 85 implemented plus 19 partial records reconcile exactly to all 104 product declarations (82 sequence selectors and 22 modes). The 9 safe-ignore records cover 6 concrete DCS forms and SOS/PM/APC; all 147 remaining records are explicitly unsupported/rejected.
+The 85 implemented plus 20 partial records reconcile exactly to all 105 product declarations (83 sequence selectors and 22 modes). The 9 safe-ignore records cover 6 concrete DCS forms and SOS/PM/APC; all 147 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 
@@ -66,6 +67,7 @@ The 85 implemented plus 19 partial records reconcile exactly to all 104 product 
 | `ecma48:csi:rm` | `CSI l` | The selector is implemented for the explicitly inventoried ANSI modes only. |
 | `ecma48:csi:sgr` | `CSI m` | Text attributes and ANSI/256/direct colors are implemented; the full ECMA/xterm rendition repertoire is not. |
 | `ecma48:csi:sm` | `CSI h` | The selector is implemented for the explicitly inventoried ANSI modes only. |
+| `ghostty:osc:osc-133` | `OSC 133 ; Ps [; Pt] ST` | The bounded A/B/C/D/P lifecycle subset projects privacy-safe shell state and row flags; options are validated but never decoded or retained, and I/L/N extensions remain rejected. |
 | `xterm:csi:ed` | `CSI J` | ECMA/VT modes 0–2 are implemented; xterm saved-lines mode 3 is not. |
 | `xterm:csi:xtwinops` | `CSI t` | Text-area reports 14/18 and bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported. |
 | `xterm:dcs:xtgettcap` | `DCS + q Pt ST` | Bounded requests receive an explicit unavailable reply. The audited database intentionally omits security-sensitive Ms/OSC 52 and no dynamic keyboard-capability service is advertised. |
