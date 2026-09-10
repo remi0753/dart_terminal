@@ -1517,6 +1517,11 @@ scrollback-lines = 8
 scrollback-bytes = 1MiB
 cursor-shape = bar
 cursor-blink = false
+keybind = control+e=terminal.send-end-of-file
+keybind = control+d=unbind
+keybind = command+k=passthrough
+keybind = control+k=pane.focus-next
+keybind = command+d=pane.focus-next
 ''');
     final _ProcessObservation observation = await _launch(
       options,
@@ -1531,16 +1536,25 @@ cursor-blink = false
       'stdout=${observation.stdoutText.trim()} '
       'stderr=${observation.stderrText.trim()}',
     );
+    final String diagnosticText = observation.stderrText.trim();
+    final RegExpMatch? diagnostic = RegExp(
+      r'^.+/config:[0-9]+:[0-9]+: error\[CFG_INVALID_VALUE\]: '
+      r'`keybind`: keybind chord `command\+d` is reserved by a native menu item\n'
+      r'  hint: choose a chord that is not listed as a reserved native shortcut$',
+    ).firstMatch(diagnosticText);
     _expect(
-      observation.stderrText.trim().isEmpty,
-      'configuration application wrote unexpected stderr: '
-      '${observation.stderrText.trim()}',
+      diagnostic != null && diagnostic.group(0) == diagnosticText,
+      'configuration application did not emit the exact recoverable reserved '
+      'keybind diagnostic: $diagnosticText',
     );
     _expect(
       RegExp(
             r'^TERMINAL_CONFIGURATION_TEST config_file=true palette=true '
             r'font=true window=true padding=true option_text=true '
-            r'scrollback=true cursor=true panes=4 independent=true '
+            r'scrollback=true cursor=true '
+            r'keybind_pane=true keybind_application=true unbind=true '
+            r'passthrough=true invalid_recovery=true native_menu_priority=true '
+            r'panes=4 independent=true '
             r'sessions_clean=4 text_clients=0 native_handles=0$',
             multiLine: true,
           ).allMatches(observation.stdoutText).length ==
@@ -1576,7 +1590,7 @@ cursor-blink = false
     stdout.writeln(
       'RUNTIME_CONFIGURATION_INTEGRATION_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
-      'panes=4 elapsed_ms=${observation.elapsed.inMilliseconds}',
+      'panes=4 keybinds=true elapsed_ms=${observation.elapsed.inMilliseconds}',
     );
   } finally {
     await directory.delete(recursive: true);

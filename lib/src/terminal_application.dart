@@ -2126,7 +2126,11 @@ final class TerminalApplication {
     final List<TerminalActionId> nativeActionInvocations = <TerminalActionId>[];
     final List<TerminalActionDispatchResult> actionDispatches =
         <TerminalActionDispatchResult>[];
+    final Map<PaneId, TerminalKeyRouteResult> lastKeyRoutes =
+        <PaneId, TerminalKeyRouteResult>{};
+    final Map<PaneId, int> keyRouteCounts = <PaneId, int>{};
     var terminalInputDeliveryCount = 0;
+    var configurationEndOfFileActionCount = 0;
     var lifecycleWasShutDown = false;
     var hierarchyReconciliationInProgress = false;
     Future<void>? productResourceDisposalFuture;
@@ -2181,6 +2185,11 @@ final class TerminalApplication {
                 onTerminated: onTerminated,
                 lifecycleObserver:
                     (TerminalSessionLifecycleObservation observation) {
+                      if (runConfigurationAcceptance &&
+                          observation.stage ==
+                              TerminalSessionLifecycleStage.eofRequested) {
+                        configurationEndOfFileActionCount++;
+                      }
                       stdout.writeln(observation.machineLine());
                     },
                 nativeObserver: (TerminalSessionNativeObservation observation) {
@@ -2302,10 +2311,20 @@ final class TerminalApplication {
           TerminalTextInputEventRouter(
             clientId: client.clientId,
             onRawKeyDown: (TerminalKeyEvent event) {
-              if (runUserActionAcceptance) terminalInputDeliveryCount++;
+              if (runUserActionAcceptance || runConfigurationAcceptance) {
+                terminalInputDeliveryCount++;
+              }
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
               reconcileRequest?.call();
-              keyRouter.handleTerminalKeyDown(event, pane);
+              lastKeyRoutes[pane.id] = keyRouter.handleTerminalKeyDown(
+                event,
+                pane,
+              );
+              keyRouteCounts.update(
+                pane.id,
+                (int count) => count + 1,
+                ifAbsent: () => 1,
+              );
             },
             onPreedit:
                 ({
@@ -2325,7 +2344,9 @@ final class TerminalApplication {
               surface.clearPreedit(generation: generation);
             },
             onCommit: (String text) {
-              if (runUserActionAcceptance) terminalInputDeliveryCount++;
+              if (runUserActionAcceptance || runConfigurationAcceptance) {
+                terminalInputDeliveryCount++;
+              }
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
               pane.insertText(text);
             },
@@ -2984,7 +3005,9 @@ final class TerminalApplication {
       keyBindingActionScheduler = TerminalActionDispatchScheduler(
         dispatcher: dispatcher,
         onDispatched: (TerminalActionDispatchResult result) {
-          if (runUserActionAcceptance) actionDispatches.add(result);
+          if (runUserActionAcceptance || runConfigurationAcceptance) {
+            actionDispatches.add(result);
+          }
           final TerminalAppKitMenuProjection? menu = menuProjection;
           if (menu != null && !menu.isDisposed) menu.refresh();
           final TerminalCommandPalettePresenter? palette = palettePresenter;
@@ -3025,10 +3048,14 @@ final class TerminalApplication {
         application: application,
         dispatcher: dispatcher,
         onNativeInvocation: (TerminalActionId id, MenuItemInvokedEvent event) {
-          if (runUserActionAcceptance) nativeActionInvocations.add(id);
+          if (runUserActionAcceptance || runConfigurationAcceptance) {
+            nativeActionInvocations.add(id);
+          }
         },
         onDispatched: (TerminalActionDispatchResult result) {
-          if (runUserActionAcceptance) actionDispatches.add(result);
+          if (runUserActionAcceptance || runConfigurationAcceptance) {
+            actionDispatches.add(result);
+          }
           installedPalette.refresh();
           if (result.disposition == TerminalActionDispatchDisposition.failed) {
             recordAsynchronousError(result.error!, result.stackTrace!);
@@ -3087,9 +3114,16 @@ final class TerminalApplication {
           state: state,
           hierarchy: createdHierarchy,
           dispatcher: dispatcher,
+          menu: menuProjection,
           sessions: sessions,
           allSessions: allSessions,
           owners: owners,
+          nativeActionInvocations: nativeActionInvocations,
+          actionDispatches: actionDispatches,
+          terminalInputDeliveryCount: () => terminalInputDeliveryCount,
+          lastKeyRoutes: lastKeyRoutes,
+          keyRouteCounts: keyRouteCounts,
+          endOfFileActionCount: () => configurationEndOfFileActionCount,
           closed: closed,
           prompt: acceptancePrompt.trimRight(),
         );
@@ -3142,9 +3176,16 @@ final class TerminalApplication {
     required TerminalApplicationState state,
     required TerminalNativeHierarchyAdapter hierarchy,
     required TerminalActionDispatcher dispatcher,
+    required TerminalAppKitMenuProjection menu,
     required Map<PaneId, TerminalSession> sessions,
     required List<TerminalSession> allSessions,
     required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required List<TerminalActionId> nativeActionInvocations,
+    required List<TerminalActionDispatchResult> actionDispatches,
+    required int Function() terminalInputDeliveryCount,
+    required Map<PaneId, TerminalKeyRouteResult> lastKeyRoutes,
+    required Map<PaneId, int> keyRouteCounts,
+    required int Function() endOfFileActionCount,
     required Completer<void> closed,
     required String prompt,
   }) async {
@@ -3178,6 +3219,37 @@ final class TerminalApplication {
         result.disposition == TerminalActionDispatchDisposition.executed,
         'configured product action ${id.stableName} did not execute',
       );
+    }
+
+    TerminalKeyRouteResult routeConfiguredKey(
+      _TerminalHierarchyProductPane owner, {
+      required int keyCode,
+      required int modifiers,
+      required String characters,
+      required String charactersIgnoringModifiers,
+    }) {
+      final PaneId paneId = owner.pane.id;
+      final int routeBaseline = keyRouteCounts[paneId] ?? 0;
+      final TerminalTextInputRouteResult textResult = owner.textRouter.route(
+        TerminalTextInputKeyEvent(
+          clientId: owner.client.clientId,
+          generation: owner.textRouter.lastGeneration + 1,
+          monotonicNanoseconds: eventTimestamp++,
+          kind: TerminalTextInputKeyKind.down,
+          keyCode: keyCode,
+          modifiers: ModifierKeys(modifiers),
+          isRepeat: false,
+          characters: characters,
+          charactersIgnoringModifiers: charactersIgnoringModifiers,
+        ),
+      );
+      _expectLifecycle(
+        textResult.disposition == TerminalTextInputRouteDisposition.rawKey &&
+            keyRouteCounts[paneId] == routeBaseline + 1 &&
+            lastKeyRoutes[paneId] != null,
+        'configured key did not cross the raw text-input/key router once',
+      );
+      return lastKeyRoutes[paneId]!;
     }
 
     _expectLifecycle(
@@ -3277,6 +3349,82 @@ final class TerminalApplication {
       'configured Option key did not use the raw terminal key route',
     );
 
+    const String paneActionReady = '__DT_KEY_PANE__';
+    const String paneActionMarker = '${paneActionReady}__END__';
+    initialOwner.pane.insertText(
+      "printf '__DT_KEY_%s__' PANE; "
+      "dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \\n'; "
+      "printf '__END__\\n'",
+    );
+    await initialOwner.pane.submit();
+    await _waitForAsciiMarker(initialSession, paneActionReady);
+    final int endOfFileBaseline = endOfFileActionCount();
+    final TerminalKeyRouteResult paneActionResult = routeConfiguredKey(
+      initialOwner,
+      keyCode: 14,
+      modifiers: ModifierKeys.controlBit,
+      characters: '\x05',
+      charactersIgnoringModifiers: 'e',
+    );
+    await _waitForAsciiMarker(
+      initialSession,
+      paneActionMarker,
+      timeout: const Duration(seconds: 8),
+    );
+    _expectLifecycle(
+      paneActionResult.disposition == TerminalKeyRouteDisposition.action &&
+          paneActionResult.action == TerminalKeyBindingAction.sendEndOfFile &&
+          paneActionResult.applicationAction == null &&
+          endOfFileActionCount() == endOfFileBaseline + 1,
+      'configured pane action did not execute exactly once',
+    );
+
+    const String unbindReady = '__DT_KEY_UNBIND__';
+    const String unbindMarker = '${unbindReady}__END__';
+    initialOwner.pane.insertText(
+      "printf '__DT_KEY_%s__' UNBIND; "
+      "dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \\n'; "
+      "printf '__END__\\n'",
+    );
+    await initialOwner.pane.submit();
+    await _waitForAsciiMarker(initialSession, unbindReady);
+    final TerminalKeyRouteResult unbindResult = routeConfiguredKey(
+      initialOwner,
+      keyCode: 2,
+      modifiers: ModifierKeys.controlBit,
+      characters: '\x04',
+      charactersIgnoringModifiers: 'd',
+    );
+    await _waitForAsciiMarker(
+      initialSession,
+      unbindMarker,
+      timeout: const Duration(seconds: 8),
+    );
+    _expectLifecycle(
+      unbindResult.disposition == TerminalKeyRouteDisposition.encoded &&
+          unbindResult.encodedByteCount == 1 &&
+          unbindResult.action == null &&
+          unbindResult.applicationAction == null &&
+          endOfFileActionCount() == endOfFileBaseline + 1,
+      'configured unbind did not restore ordinary encoded Control-D',
+    );
+
+    final TerminalKeyRouteResult passthroughResult = routeConfiguredKey(
+      initialOwner,
+      keyCode: 40,
+      modifiers: ModifierKeys.commandBit,
+      characters: 'k',
+      charactersIgnoringModifiers: 'k',
+    );
+    initialOwner.pane.deleteBackward();
+    _expectLifecycle(
+      passthroughResult.disposition == TerminalKeyRouteDisposition.encoded &&
+          passthroughResult.encodedByteCount == 1 &&
+          passthroughResult.action == null &&
+          passthroughResult.applicationAction == null,
+      'configured Command passthrough did not encode one terminal byte',
+    );
+
     final int initialRows = initialScreens.activeScreen.rows;
     initialOwner.pane.insertText(
       "i=0; while (( i < ${initialRows + 32} )); do "
@@ -3296,7 +3444,69 @@ final class TerminalApplication {
       'configured scrollback exceeded its line or byte cap',
     );
 
-    await dispatch(TerminalActionId.splitPaneRight);
+    final MenuItem splitRightItem = menu.itemForAction(
+      TerminalActionId.splitPaneRight,
+    );
+    _expectLifecycle(
+      splitRightItem.isEnabled &&
+          splitRightItem.keyEquivalent == 'd' &&
+          splitRightItem.modifiers.bits == ModifierKeys.commandBit,
+      'reserved Command-D native menu shortcut was not retained',
+    );
+    final int nativeSplitBaseline = nativeActionInvocations.length;
+    final int splitDispatchBaseline = actionDispatches.length;
+    final int splitInputBaseline = terminalInputDeliveryCount();
+    splitRightItem.performAction();
+    await waitFor(
+      () =>
+          state.paneCount == 2 &&
+          hierarchy.paneResourceCount == 2 &&
+          nativeActionInvocations.length == nativeSplitBaseline + 1 &&
+          actionDispatches.length == splitDispatchBaseline + 1,
+      'reserved native Command-D did not split exactly once',
+    );
+    _expectLifecycle(
+      nativeActionInvocations.last == TerminalActionId.splitPaneRight &&
+          actionDispatches.last.id == TerminalActionId.splitPaneRight &&
+          actionDispatches.last.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          terminalInputDeliveryCount() == splitInputBaseline,
+      'native menu priority leaked Command-D into terminal input',
+    );
+
+    final PaneId nextPaneId = initialTab.paneIds.singleWhere(
+      (PaneId paneId) => paneId != initialPaneId,
+    );
+    final int applicationDispatchBaseline = actionDispatches.length;
+    final int applicationNativeBaseline = nativeActionInvocations.length;
+    final int applicationInputBaseline = terminalInputDeliveryCount();
+    final TerminalKeyRouteResult applicationActionResult = routeConfiguredKey(
+      initialOwner,
+      keyCode: 40,
+      modifiers: ModifierKeys.controlBit,
+      characters: '\x0b',
+      charactersIgnoringModifiers: 'k',
+    );
+    await waitFor(
+      () =>
+          initialTab.focusedPaneId == nextPaneId &&
+          actionDispatches.length == applicationDispatchBaseline + 1,
+      'configured application action did not focus the next pane once',
+    );
+    _expectLifecycle(
+      applicationActionResult.disposition ==
+              TerminalKeyRouteDisposition.action &&
+          applicationActionResult.action == null &&
+          applicationActionResult.applicationAction ==
+              TerminalActionId.focusNextPane &&
+          actionDispatches.last.id == TerminalActionId.focusNextPane &&
+          actionDispatches.last.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          nativeActionInvocations.length == applicationNativeBaseline &&
+          terminalInputDeliveryCount() == applicationInputBaseline + 1,
+      'configured application action did not use one non-native dispatch',
+    );
+
     await dispatch(TerminalActionId.newTab);
     await dispatch(TerminalActionId.newWindow);
     _expectLifecycle(
@@ -3392,6 +3602,8 @@ final class TerminalApplication {
     stdout.writeln(
       'TERMINAL_CONFIGURATION_TEST config_file=true palette=true font=true '
       'window=true padding=true option_text=true scrollback=true cursor=true '
+      'keybind_pane=true keybind_application=true unbind=true '
+      'passthrough=true invalid_recovery=true native_menu_priority=true '
       'panes=4 independent=true sessions_clean=4 text_clients=0 '
       'native_handles=0',
     );

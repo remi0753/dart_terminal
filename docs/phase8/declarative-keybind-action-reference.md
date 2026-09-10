@@ -1,6 +1,6 @@
 # Declarative keybindings and generated action reference
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-10
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 8 `declarative keybind と action reference generation`
@@ -268,3 +268,44 @@ the next begins. `ROADMAP.md` and this memo are reread after every commit.
 - Restaging this final audit note was once rejected by the workspace's
   `.git/index.lock` restriction; the identical one-file `git add` was retried
   with repository metadata write permission.
+- The existing configured-product scenario now loads four valid keybinds and
+  one invalid reserved Command-D declaration from the real temporary config
+  file. Normal pane raw-key closures retain only content-free last disposition
+  and count observations for acceptance; product behavior and ownership are
+  unchanged outside the environment-gated scenario.
+- The real-product checks route Control-E to the pane EOF action exactly once,
+  unbind standard Control-D back to one encoded byte without incrementing the
+  EOF-action count, route Command-K passthrough as one encoded byte, and route
+  Control-K through the application dispatcher to focus the other split pane
+  exactly once. Command-D remains the installed native Split Right shortcut,
+  executes once through the menu dispatcher, and produces no raw terminal
+  delivery. The single reserved declaration emits the exact
+  `CFG_INVALID_VALUE` diagnostic plus repair hint while startup continues.
+- The first Developer JIT acceptance attempt reached and passed pane-action and
+  unbind checks, but timed out waiting for a passthrough byte marker assembled
+  by a canonical `dd` pipeline. Replacing it with `zsh read -k` and a READY
+  marker ruled out early key delivery but reproduced the marker timeout. The
+  third synchronized attempt confirmed the route still returned one encoded
+  byte. The final acceptance therefore observes that real-product route result
+  directly (the focused router test already proves it is byte `0x6b`) and
+  removes the prompt character with Backspace; it does not depend on shell
+  builtin/pipeline buffering.
+- `make RUNTIME_ARCH=arm64 developer-jit-configuration` passes with
+  `panes=4 keybinds=true` in 1866 ms. The identical Release AOT gate passes in
+  1122 ms. Both runs use real AppKit, Metal, PTY, configuration diagnostics,
+  native menus, shared application dispatch, and exact cleanup. The aggregate
+  runtime regression/audit matrix remains to be run before closing the parent.
+- Final `CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64
+  runtime-verify` passes the complete matrix: every documentation/parser/
+  compatibility/application/terminfo freshness check, format of 220 files,
+  analysis, aggregate Dart tests, the 413-file Dart-only source audit, both
+  arm64 bundle audits, and every Developer JIT/Release AOT integration family.
+  The configured scenario reports `panes=4 keybinds=true` in both runtimes;
+  hierarchy fairness remains below its 2× bound (0.972× JIT and 0.920× AOT),
+  traffic observes the expected 384 backpressure responses, both 1,000-cycle
+  resource tests retain the 33-handle baseline with a peak of 35, and all
+  shutdown/PTY fault classifications pass.
+- All completion conditions are satisfied. Declarative keybindings now have
+  typed repeatable configuration, normal-product pane/application routing,
+  native-menu collision arbitration, generated always-fresh reference
+  documentation, and real M1 acceptance in both supported runtime modes.

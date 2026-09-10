@@ -274,8 +274,10 @@ schema defaultへ復旧して起動を続けます。一方、command line自体
 fault optionのgate違反は従来どおりusage errorです。
 
 設定値が実際の通常製品へ反映されることは、実設定ファイルから4 paneを生成し、表示色、
-font、window/padding、cursor、Option入力、scrollback上限、独立resource、終了時cleanupを
-Developer JITとRelease AOTで確認します。両runtimeのgateは次で再実行できます。
+font、window/padding、cursor、Option入力、scrollback上限、pane/application keybind、
+unbind、Command passthrough、invalid reserved shortcutからの復旧、native menu優先、
+独立resource、終了時cleanupをDeveloper JITとRelease AOTで確認します。両runtimeのgateは
+次で再実行できます。
 
 ```shell
 make RUNTIME_ARCH=arm64 runtime-configuration-integration
