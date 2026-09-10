@@ -214,3 +214,67 @@ next begins. After each commit, reread `ROADMAP.md` and this memo.
 - `make runtime-source-check` passes with `tracked=416`,
   `product_native_sources=0`, and `reviewed_test_native_sources=1` after the new
   Dart files are staged.
+
+## Subtask 3 findings and decisions
+
+- `TerminalOptions.parse` now creates the reload controller from the exact
+  loader, copied arguments/environment, current directory, and initial snapshot
+  used at startup. Directly constructed test/fault options may omit the
+  controller; the shared action remains catalogued but unavailable there.
+- `TerminalProductConfigurationAuthority` publishes one coherent accepted
+  new-session profile and one private pair of immutable live key-binding/Option
+  encoder objects. New-session-only reloads preserve the identity and generation
+  of the live pair; rejected results cannot be applied.
+- Every ordinary hierarchy key router refers to the authority rather than
+  retaining its own startup resolver/encoder. Since routing and publication are
+  synchronous on the main isolate, one event observes either the complete old
+  pair or the complete new pair.
+- Each pane configuration captures the authority's accepted profile before its
+  session is constructed. The same captured object supplies its working
+  directory, palette, scrollback, cursor defaults, font, padding, and renderer
+  viewport. Existing panes retain their captured resource defaults while their
+  shared live input policy advances.
+- An explicit configured `working-directory` wins for later session creation;
+  when it is absent, the existing OSC 7/source-launch-directory inheritance
+  remains unchanged.
+- The native hierarchy now optionally captures a frame per newly encountered
+  logical window. Existing placements remain immutable across later reloads,
+  while a post-reload window receives the then-current configured dimensions.
+  Its default split extent derives from that captured placement rather than a
+  process-global startup frame.
+- `application.reload-configuration` is a shortcut-free Application-menu and
+  command-palette action. The ordinary dispatcher enables it only while the
+  controller and product are live and idle, prints bounded diagnostics and a
+  content-free machine result, and treats unexpected resolver failure as an
+  action failure. The generated action reference now contains 16 application
+  actions; reserved native shortcut count remains 9.
+- No adjacent `dart_appkit` change is needed: the existing menu projection,
+  invocation events, dynamic enablement, and exactly-once dispatcher boundary
+  already carry the new catalog action.
+- The first complete test attempt stopped at the expected Phase 7 reviewed
+  AppKit inventory freshness gate after application/native-hierarchy source
+  changes. Regenerating that inventory updated only the intended source/test
+  hashes.
+- The next aggregate attempt found a test-helper mismatch: the new constructor
+  conflict correctly threw `ArgumentError`, while the local helper defaulted to
+  expecting `FormatException`. Supplying the explicit expected type fixed the
+  test; no product behavior changed.
+
+## Subtask 3 verification
+
+- Focused formatting and analysis of all changed product, configuration,
+  action, hierarchy, and test sources complete with no issues.
+- Focused product-configuration, config-options, action-registry, and native
+  hierarchy tests pass. Coverage includes accepted/rejected authority
+  publication, live-object identity, an existing router's next-event keybind
+  and UTF-8 Option behavior, constructor conflict rejection, deterministic
+  Application-menu order, and distinct creation-time frames through fake
+  AppKit.
+- `make keybind-action-reference` regenerates the checked-in reference, and its
+  freshness check reports `application_actions=16`, `standard_bindings=1`, and
+  `reserved_shortcuts=9`.
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test` passes all freshness gates,
+  formats 222 files with zero changes, reports no analyzer issues, and completes
+  the aggregate Dart suite after the reviewed AppKit inventory refresh.
+- `make runtime-source-check` passes with `tracked=416`,
+  `product_native_sources=0`, and `reviewed_test_native_sources=1`.

@@ -1,6 +1,7 @@
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'terminal_config.dart';
+import 'terminal_config_reload.dart';
 import 'terminal_core/terminal_screen.dart';
 import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_encoder.dart';
@@ -30,6 +31,7 @@ final class TerminalProductPaletteConfiguration {
 /// Immutable new-session settings resolved from one typed config snapshot.
 final class TerminalProductConfiguration {
   TerminalProductConfiguration._({
+    required this.workingDirectory,
     required this.theme,
     required this.palette,
     required this.fontFamily,
@@ -52,6 +54,9 @@ final class TerminalProductConfiguration {
   factory TerminalProductConfiguration.fromSnapshot(
     TerminalConfigSnapshot snapshot,
   ) => TerminalProductConfiguration._(
+    workingDirectory: snapshot.value(
+      TerminalProductConfigSchema.workingDirectory,
+    ),
     theme: snapshot.value(TerminalProductConfigSchema.theme),
     palette: TerminalProductPaletteConfiguration(
       foreground: snapshot.value(TerminalProductConfigSchema.paletteForeground),
@@ -98,6 +103,7 @@ final class TerminalProductConfiguration {
         ], environment: const <String, String>{}).snapshot,
       );
 
+  final String? workingDirectory;
   final TerminalConfiguredTheme theme;
   final TerminalProductPaletteConfiguration palette;
   final String fontFamily;
@@ -159,4 +165,65 @@ final class TerminalProductConfiguration {
         TerminalConfiguredOptionKey.escape => TerminalOptionKeyBehavior.escape,
         TerminalConfiguredOptionKey.text => TerminalOptionKeyBehavior.text,
       };
+}
+
+final class _TerminalLiveInputConfiguration {
+  const _TerminalLiveInputConfiguration({
+    required this.keyBindingEngine,
+    required this.keyEncoder,
+  });
+
+  final TerminalKeyBindingEngine keyBindingEngine;
+  final TerminalKeyEncoder keyEncoder;
+}
+
+/// Application-owned accepted profile and atomically replaceable live input.
+final class TerminalProductConfigurationAuthority {
+  TerminalProductConfigurationAuthority(
+    TerminalProductConfiguration initialConfiguration,
+  ) : _newSessionConfiguration = initialConfiguration,
+      _liveInput = _createLiveInput(initialConfiguration);
+
+  TerminalProductConfiguration _newSessionConfiguration;
+  _TerminalLiveInputConfiguration _liveInput;
+  var _acceptedGeneration = 0;
+  var _liveGeneration = 0;
+
+  TerminalProductConfiguration get newSessionConfiguration =>
+      _newSessionConfiguration;
+  TerminalKeyBindingEngine get keyBindingEngine => _liveInput.keyBindingEngine;
+  TerminalKeyEncoder get keyEncoder => _liveInput.keyEncoder;
+  int get acceptedGeneration => _acceptedGeneration;
+  int get liveGeneration => _liveGeneration;
+
+  void applyReload(TerminalConfigReloadResult result) {
+    final TerminalConfigChangePlan? plan = result.changePlan;
+    if (!result.isAccepted || plan == null) {
+      throw ArgumentError.value(
+        result.disposition,
+        'result',
+        'must be an accepted reload result with a change plan',
+      );
+    }
+    final TerminalProductConfiguration next =
+        TerminalProductConfiguration.fromSnapshot(result.effectiveSnapshot);
+    final _TerminalLiveInputConfiguration? nextLive = plan.liveChanges.isEmpty
+        ? null
+        : _createLiveInput(next);
+    _newSessionConfiguration = next;
+    if (nextLive != null) {
+      _liveInput = nextLive;
+      _liveGeneration++;
+    }
+    _acceptedGeneration++;
+  }
+
+  static _TerminalLiveInputConfiguration _createLiveInput(
+    TerminalProductConfiguration configuration,
+  ) => _TerminalLiveInputConfiguration(
+    keyBindingEngine: configuration.createKeyBindingEngine(),
+    keyEncoder: TerminalKeyEncoder(
+      optionKeyBehavior: configuration.terminalOptionKeyBehavior,
+    ),
+  );
 }

@@ -14,6 +14,10 @@ typedef TerminalNativePaneLayoutCallback = void Function(
 typedef TerminalNativePaneResourcesFactory =
     TerminalNativePaneResources Function(TerminalPane pane);
 
+typedef TerminalNativeWindowFrameBuilder = Rect Function(
+  TerminalWindowState window,
+);
+
 typedef TerminalNativeTabTitleBuilder = String Function(
   TerminalWindowState window,
   TerminalTabState tab,
@@ -77,6 +81,7 @@ final class TerminalNativeHierarchyAdapter {
     required TerminalNativePaneResourcesFactory paneResourcesFactory,
     required Rect windowFrame,
     required TerminalSplitLayoutSize cellSize,
+    TerminalNativeWindowFrameBuilder? windowFrameBuilder,
     Map<TerminalWindowId, TerminalWindowPlacement> windowPlacements =
         const <TerminalWindowId, TerminalWindowPlacement>{},
     this.dividerThickness = 1,
@@ -88,6 +93,7 @@ final class TerminalNativeHierarchyAdapter {
   }) : _state = state,
        _paneResourcesFactory = paneResourcesFactory,
        _windowFrame = windowFrame,
+       _windowFrameBuilder = windowFrameBuilder,
        _cellSize = cellSize,
        _windowPlacements = Map<TerminalWindowId, TerminalWindowPlacement>.of(
          windowPlacements,
@@ -128,6 +134,7 @@ final class TerminalNativeHierarchyAdapter {
   final TerminalApplicationState _state;
   final TerminalNativePaneResourcesFactory _paneResourcesFactory;
   final Rect _windowFrame;
+  final TerminalNativeWindowFrameBuilder? _windowFrameBuilder;
   final TerminalSplitLayoutSize _cellSize;
   final Map<TerminalWindowId, TerminalWindowPlacement> _windowPlacements;
   final TerminalNativeTabPresentationBuilder _presentationBuilder;
@@ -183,7 +190,10 @@ final class TerminalNativeHierarchyAdapter {
     if (_state.windowForId(windowId) == null) {
       throw StateError('unknown terminal window $windowId');
     }
-    return _windowPlacements.putIfAbsent(windowId, _defaultPlacement);
+    return _windowPlacements.putIfAbsent(
+      windowId,
+      () => _defaultPlacement(_state.windowForId(windowId)!),
+    );
   }
 
   /// Requests fullscreen for the selected native tab of one logical window.
@@ -328,7 +338,10 @@ final class TerminalNativeHierarchyAdapter {
           <TerminalTabId, TerminalSplitLayout>{};
       final Set<PaneId> livePaneIds = <PaneId>{};
       for (final TerminalWindowState window in logicalWindows) {
-        _windowPlacements.putIfAbsent(window.id, _defaultPlacement);
+        final TerminalWindowPlacement placement = _windowPlacements.putIfAbsent(
+          window.id,
+          () => _defaultPlacement(window),
+        );
         for (final TerminalTabState tab in window.tabs) {
           logicalTabs[tab.id] = tab;
           tabOwners[tab.id] = window;
@@ -337,8 +350,8 @@ final class TerminalNativeHierarchyAdapter {
             availableSize:
                 _tabSizes[tab.id] ??
                 TerminalSplitLayoutSize(
-                  width: _windowFrame.width,
-                  height: _windowFrame.height,
+                  width: placement.windowedFrame.width,
+                  height: placement.windowedFrame.height,
                 ),
             cellSize: _cellSize,
             dividerThickness: dividerThickness,
@@ -667,11 +680,22 @@ final class TerminalNativeHierarchyAdapter {
     throw StateError('unknown terminal tab $tabId');
   }
 
-  TerminalWindowPlacement _defaultPlacement() => TerminalWindowPlacement(
-    windowedFrame: _terminalFrame(_windowFrame),
-    screen: null,
-    fullscreen: false,
-  );
+  TerminalWindowPlacement _defaultPlacement(TerminalWindowState window) {
+    final Rect frame = _windowFrameBuilder?.call(window) ?? _windowFrame;
+    if (!frame.left.isFinite ||
+        !frame.top.isFinite ||
+        !frame.width.isFinite ||
+        !frame.height.isFinite ||
+        frame.width <= 0 ||
+        frame.height <= 0) {
+      throw ArgumentError.value(frame, 'windowFrameBuilder', 'invalid frame');
+    }
+    return TerminalWindowPlacement(
+      windowedFrame: _terminalFrame(frame),
+      screen: null,
+      fullscreen: false,
+    );
+  }
 
   static Rect _appKitFrame(TerminalWindowFrame frame) =>
       Rect.fromLTWH(frame.left, frame.top, frame.width, frame.height);

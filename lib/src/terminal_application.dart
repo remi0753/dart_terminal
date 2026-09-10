@@ -18,6 +18,7 @@ import 'terminal_application_quit_coordinator.dart';
 import 'terminal_application_state.dart';
 import 'terminal_command_palette.dart';
 import 'terminal_config.dart';
+import 'terminal_config_reload.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
 import 'terminal_core/terminal_reply.dart';
@@ -111,6 +112,7 @@ final class TerminalOptions {
         const RuntimeLifecycleWorkerCommand.unconfigured(),
     this.effectiveConfiguration,
     this.configurationDiagnostics = const <TerminalConfigDiagnostic>[],
+    this.configurationReloadController,
   });
 
   factory TerminalOptions.parse(
@@ -120,12 +122,18 @@ final class TerminalOptions {
     TerminalConfigFileSystem? configFileSystem,
     String? currentDirectory,
   }) {
-    final TerminalConfigResolution configuration =
-        TerminalConfigLoader(fileSystem: configFileSystem).resolve(
-          arguments,
-          environment: environment,
-          currentDirectory: currentDirectory,
-        );
+    final TerminalConfigLoader configLoader = TerminalConfigLoader(
+      fileSystem: configFileSystem,
+    );
+    final Map<String, String> selectedEnvironment =
+        Map<String, String>.unmodifiable(environment ?? Platform.environment);
+    final String selectedCurrentDirectory =
+        currentDirectory ?? Directory.current.path;
+    final TerminalConfigResolution configuration = configLoader.resolve(
+      arguments,
+      environment: selectedEnvironment,
+      currentDirectory: selectedCurrentDirectory,
+    );
     final String? initialWorkingDirectory = configuration.snapshot.value(
       TerminalProductConfigSchema.workingDirectory,
     );
@@ -449,8 +457,6 @@ final class TerminalOptions {
         'native hierarchy test cannot be combined with another runtime test',
       );
     }
-    final Map<String, String> selectedEnvironment =
-        environment ?? Platform.environment;
     final String? runtimeRestorationPath = runtimeRestorationTest
         ? selectedEnvironment['DT_RUNTIME_RESTORATION_PATH']
         : null;
@@ -503,6 +509,13 @@ final class TerminalOptions {
           ),
       effectiveConfiguration: configuration.snapshot,
       configurationDiagnostics: configuration.snapshot.diagnostics,
+      configurationReloadController: TerminalConfigReloadController.fromStartup(
+        arguments: arguments,
+        initialSnapshot: configuration.snapshot,
+        loader: configLoader,
+        environment: selectedEnvironment,
+        currentDirectory: selectedCurrentDirectory,
+      ),
     );
   }
 
@@ -523,6 +536,7 @@ final class TerminalOptions {
   final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
   final TerminalConfigSnapshot? effectiveConfiguration;
   final List<TerminalConfigDiagnostic> configurationDiagnostics;
+  final TerminalConfigReloadController? configurationReloadController;
 }
 
 final class TerminalApplication {
@@ -596,6 +610,7 @@ final class TerminalApplication {
         options.runtimeWorkerCommand,
         options.initialWorkingDirectory,
         productConfiguration,
+        configurationReloadController: options.configurationReloadController,
         runUserActionAcceptance: options.runtimeUserActionsTest,
         runConfigurationAcceptance: options.runtimeConfigurationTest,
       );
@@ -2069,11 +2084,12 @@ final class TerminalApplication {
     RuntimeLifecycleWorkerCommand workerCommand,
     String? initialWorkingDirectory,
     TerminalProductConfiguration productConfiguration, {
+    TerminalConfigReloadController? configurationReloadController,
     bool runUserActionAcceptance = false,
     bool runConfigurationAcceptance = false,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
-    final Rect windowFrame = Rect.fromLTWH(
+    final Rect initialWindowFrame = Rect.fromLTWH(
       100,
       90,
       productConfiguration.windowWidth,
@@ -2083,6 +2099,8 @@ final class TerminalApplication {
     final Map<PaneId, TerminalSession> sessions = <PaneId, TerminalSession>{};
     final List<TerminalSession> allSessions = <TerminalSession>[];
     final Map<PaneId, String?> launchWorkingDirectories = <PaneId, String?>{};
+    final Map<PaneId, TerminalProductConfiguration> paneConfigurations =
+        <PaneId, TerminalProductConfiguration>{};
     final Map<PaneId, _TerminalHierarchyProductPane> owners =
         <PaneId, _TerminalHierarchyProductPane>{};
     final Map<PaneId, _TerminalSelectionProductOwner> selections =
@@ -2099,8 +2117,8 @@ final class TerminalApplication {
     windowSubscriptions = <TerminalTabId, StreamSubscription<WindowEvent>>{};
     final TerminalPaneWorkScheduler paneWorkScheduler =
         TerminalPaneWorkScheduler();
-    final TerminalKeyBindingEngine productKeyBindingEngine =
-        productConfiguration.createKeyBindingEngine();
+    final TerminalProductConfigurationAuthority configurationAuthority =
+        TerminalProductConfigurationAuthority(productConfiguration);
     final TerminalTabPresentationResolver presentationResolver =
         TerminalTabPresentationResolver(
           metadataForPane: (PaneId paneId) =>
@@ -2143,7 +2161,12 @@ final class TerminalApplication {
       if (!closed.isCompleted) closed.completeError(error, stackTrace);
     }
 
-    String? inheritedWorkingDirectory(PaneId? sourcePaneId) {
+    String? inheritedWorkingDirectory(
+      PaneId? sourcePaneId,
+      TerminalProductConfiguration configuration,
+    ) {
+      final String? configured = configuration.workingDirectory;
+      if (configured != null) return configured;
       if (sourcePaneId == null) return initialWorkingDirectory;
       return presentationResolver.inheritedWorkingDirectoryForPane(
             sourcePaneId,
@@ -2153,7 +2176,12 @@ final class TerminalApplication {
     }
 
     TerminalPaneConfiguration configuration(PaneId? sourcePaneId) {
-      final String? workingDirectory = inheritedWorkingDirectory(sourcePaneId);
+      final TerminalProductConfiguration capturedConfiguration =
+          configurationAuthority.newSessionConfiguration;
+      final String? workingDirectory = inheritedWorkingDirectory(
+        sourcePaneId,
+        capturedConfiguration,
+      );
       PaneId? paneId;
       return TerminalPaneConfiguration(
         sessionFactory:
@@ -2163,6 +2191,7 @@ final class TerminalApplication {
               required void Function() onTerminated,
             }) {
               paneId = id.paneId;
+              paneConfigurations[id.paneId] = capturedConfiguration;
               final TerminalSession session = TerminalSession(
                 id: id,
                 ptyBackend: ptyBackend,
@@ -2195,10 +2224,10 @@ final class TerminalApplication {
                 nativeObserver: (TerminalSessionNativeObservation observation) {
                   stdout.writeln(observation.machineLine());
                 },
-                palette: productConfiguration.createPalette(),
-                scrollback: productConfiguration.createScrollback(),
-                initialCursorShape: productConfiguration.terminalCursorShape,
-                initialCursorBlinking: productConfiguration.cursorBlink,
+                palette: capturedConfiguration.createPalette(),
+                scrollback: capturedConfiguration.createScrollback(),
+                initialCursorShape: capturedConfiguration.terminalCursorShape,
+                initialCursorBlinking: capturedConfiguration.cursorBlink,
               );
               sessions[id.paneId] = session;
               allSessions.add(session);
@@ -2251,6 +2280,8 @@ final class TerminalApplication {
         );
       }
       final TerminalSession session = sessions[pane.id]!;
+      final TerminalProductConfiguration paneConfiguration =
+          paneConfigurations[pane.id]!;
       final View view = TerminalRendererMacos.createView();
       if (runUserActionAcceptance) {
         stdout.writeln(
@@ -2272,16 +2303,16 @@ final class TerminalApplication {
         sessionId: pane.sessionId,
         screenSet: session.terminalScreenSet,
         view: view,
-        logicalWidth: windowFrame.width,
-        logicalHeight: windowFrame.height,
+        logicalWidth: paneConfiguration.windowWidth,
+        logicalHeight: paneConfiguration.windowHeight,
         isVisible: false,
         isOccluded: true,
         paneWorkScheduler: paneWorkScheduler,
-        fontFamily: productConfiguration.fontFamily,
-        fontPointSize: productConfiguration.fontSize,
-        syntheticStylePolicy: productConfiguration.terminalSyntheticStylePolicy,
-        horizontalPadding: productConfiguration.windowPaddingHorizontal,
-        verticalPadding: productConfiguration.windowPaddingVertical,
+        fontFamily: paneConfiguration.fontFamily,
+        fontPointSize: paneConfiguration.fontSize,
+        syntheticStylePolicy: paneConfiguration.terminalSyntheticStylePolicy,
+        horizontalPadding: paneConfiguration.windowPaddingHorizontal,
+        verticalPadding: paneConfiguration.windowPaddingVertical,
         onCaretGeometryChanged: (TerminalCaretRect rectangle) {
           client.publishCaretRect(
             x: rectangle.x,
@@ -2299,10 +2330,7 @@ final class TerminalApplication {
         );
       }
       final TerminalKeyEventRouter keyRouter = TerminalKeyEventRouter(
-        bindingEngine: productKeyBindingEngine,
-        encoder: TerminalKeyEncoder(
-          optionKeyBehavior: productConfiguration.terminalOptionKeyBehavior,
-        ),
+        configurationAuthority: configurationAuthority,
         onApplicationAction: (TerminalActionId action) {
           keyBindingActionScheduler?.schedule(action);
         },
@@ -2364,8 +2392,8 @@ final class TerminalApplication {
         client: client,
         surface: surface,
         textRouter: textRouter,
-        horizontalPadding: productConfiguration.windowPaddingHorizontal,
-        verticalPadding: productConfiguration.windowPaddingVertical,
+        horizontalPadding: paneConfiguration.windowPaddingHorizontal,
+        verticalPadding: paneConfiguration.windowPaddingVertical,
         onTextInputError: recordAsynchronousError,
       );
       owners[pane.id] = owner;
@@ -2429,6 +2457,7 @@ final class TerminalApplication {
           owners.remove(pane.id);
           sessions.remove(pane.id);
           launchWorkingDirectories.remove(pane.id);
+          paneConfigurations.remove(pane.id);
         },
       );
     }
@@ -2717,6 +2746,7 @@ final class TerminalApplication {
     };
 
     Future<void> disposeProductResourcesOnce() async {
+      configurationReloadController?.dispose();
       for (final StreamSubscription<WindowEvent> subscription
           in windowSubscriptions.values.toList(growable: false)) {
         await subscription.cancel();
@@ -2804,6 +2834,26 @@ final class TerminalApplication {
       await pane.paste(plan);
     }
 
+    Future<void> reloadConfiguration() async {
+      final TerminalConfigReloadController? controller =
+          configurationReloadController;
+      if (controller == null) return;
+      final TerminalConfigReloadResult result = await controller.reload();
+      for (final TerminalConfigDiagnostic diagnostic in result.diagnostics) {
+        stderr.writeln(diagnostic.format());
+      }
+      stdout.writeln(
+        result.machineLine(acceptedGeneration: controller.acceptedGeneration),
+      );
+      if (result.isAccepted) {
+        configurationAuthority.applyReload(result);
+        return;
+      }
+      if (result.disposition == TerminalConfigReloadDisposition.failed) {
+        Error.throwWithStackTrace(result.error!, result.stackTrace!);
+      }
+    }
+
     try {
       application.defersTerminationRequests = true;
       final RuntimeLifecycleCoordinator createdLifecycle =
@@ -2851,7 +2901,19 @@ final class TerminalApplication {
           TerminalNativeHierarchyAdapter(
             state: state,
             paneResourcesFactory: createResources,
-            windowFrame: windowFrame,
+            windowFrame: initialWindowFrame,
+            windowFrameBuilder: (TerminalWindowState window) {
+              final PaneId paneId = window.selectedTab.focusedPaneId;
+              final TerminalProductConfiguration configuration =
+                  paneConfigurations[paneId] ??
+                  configurationAuthority.newSessionConfiguration;
+              return Rect.fromLTWH(
+                initialWindowFrame.left,
+                initialWindowFrame.top,
+                configuration.windowWidth,
+                configuration.windowHeight,
+              );
+            },
             cellSize: TerminalSplitLayoutSize(
               width: 8 + productConfiguration.windowPaddingHorizontal * 2,
               height: 16 + productConfiguration.windowPaddingVertical * 2,
@@ -2952,6 +3014,16 @@ final class TerminalApplication {
             id: TerminalActionId.openCommandPalette,
             handler: () => installedPalette.open(),
           ),
+          if (configurationReloadController != null)
+            TerminalActionRegistration(
+              id: TerminalActionId.reloadConfiguration,
+              isAvailable: () =>
+                  !configurationReloadController.isDisposed &&
+                  !configurationReloadController.inProgress &&
+                  productResourceDisposalFuture == null &&
+                  !state.isDisposed,
+              handler: reloadConfiguration,
+            ),
           TerminalActionRegistration(
             id: TerminalActionId.quitApplication,
             isAvailable: () =>
@@ -9763,13 +9835,24 @@ final class TerminalKeyEventRouter {
   TerminalKeyEventRouter({
     TerminalKeyBindingEngine? bindingEngine,
     TerminalKeyEncoder? encoder,
+    TerminalProductConfigurationAuthority? configurationAuthority,
     void Function(TerminalActionId action)? onApplicationAction,
   }) : _bindingEngine = bindingEngine ?? TerminalKeyBindingEngine.standard(),
        _encoder = encoder ?? TerminalKeyEncoder(),
-       _onApplicationAction = onApplicationAction;
+       _configurationAuthority = configurationAuthority,
+       _onApplicationAction = onApplicationAction {
+    if (configurationAuthority != null &&
+        (bindingEngine != null || encoder != null)) {
+      throw ArgumentError(
+        'configurationAuthority cannot be combined with a fixed binding '
+        'engine or encoder',
+      );
+    }
+  }
 
   final TerminalKeyBindingEngine _bindingEngine;
   final TerminalKeyEncoder _encoder;
+  final TerminalProductConfigurationAuthority? _configurationAuthority;
   final void Function(TerminalActionId action)? _onApplicationAction;
 
   TerminalKeyRouteResult handleKeyDown(
@@ -9789,9 +9872,10 @@ final class TerminalKeyEventRouter {
     TerminalKeyEvent event,
     TerminalPane pane,
   ) {
-    final TerminalKeyBindingResolution resolution = _bindingEngine.resolve(
-      event,
-    );
+    final TerminalKeyBindingResolution resolution =
+        (_configurationAuthority?.keyBindingEngine ?? _bindingEngine).resolve(
+          event,
+        );
     switch (resolution.kind) {
       case TerminalKeyBindingResolutionKind.action:
         final TerminalActionId? applicationAction =
@@ -9811,7 +9895,8 @@ final class TerminalKeyEventRouter {
   }
 
   TerminalKeyRouteResult _encode(TerminalKeyEvent event, TerminalPane pane) {
-    final Uint8List bytes = _encoder.encode(event, modes: pane.keyboardModes);
+    final Uint8List bytes = (_configurationAuthority?.keyEncoder ?? _encoder)
+        .encode(event, modes: pane.keyboardModes);
     if (bytes.isEmpty) {
       return TerminalKeyRouteResult.ignored;
     }

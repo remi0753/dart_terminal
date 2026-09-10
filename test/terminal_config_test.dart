@@ -415,6 +415,11 @@ working-directory = /from-file
         identical(
           file.configurationDiagnostics,
           file.effectiveConfiguration!.diagnostics,
+        ) &&
+        file.configurationReloadController != null &&
+        identical(
+          file.configurationReloadController!.effectiveSnapshot,
+          file.effectiveConfiguration,
         ),
     'TerminalOptions starts with recovered typed file configuration',
   );

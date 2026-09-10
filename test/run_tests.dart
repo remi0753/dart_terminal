@@ -125,7 +125,7 @@ Future<void> main() async {
   runMetalPipelineTests();
   runMetalFailureRecoveryTests();
   await runTerminalPaneWorkSchedulerTests();
-  runTerminalProductConfigurationTests();
+  await runTerminalProductConfigurationTests();
   await runTerminalProductHierarchyActionTests();
   runPhase7AppKitAcceptanceTests();
   runReferenceRendererTests();
@@ -433,6 +433,89 @@ Future<void> _testModeAwareAppKitKeyRoute() async {
         applicationActions.single == TerminalActionId.focusNextPane &&
         session.inputWrites.length == writesBeforeApplicationAction,
     'configured application action routes once without a PTY write',
+  );
+
+  final TerminalConfigSnapshot liveInitialSnapshot = TerminalConfigLoader()
+      .resolve(const <String>[
+        '--no-config',
+        '--macos-option-key=escape',
+        '--keybind=shift+control+k=pane.focus-next',
+      ], environment: const <String, String>{})
+      .snapshot;
+  final TerminalConfigSnapshot liveCandidateSnapshot = TerminalConfigLoader()
+      .resolve(const <String>[
+        '--no-config',
+        '--macos-option-key=text',
+        '--keybind=shift+control+k=unbind',
+      ], environment: const <String, String>{})
+      .snapshot;
+  final TerminalProductConfigurationAuthority liveAuthority =
+      TerminalProductConfigurationAuthority(
+        TerminalProductConfiguration.fromSnapshot(liveInitialSnapshot),
+      );
+  final List<TerminalActionId> liveActions = <TerminalActionId>[];
+  final TerminalKeyEventRouter liveRouter = TerminalKeyEventRouter(
+    configurationAuthority: liveAuthority,
+    onApplicationAction: liveActions.add,
+  );
+  _expectThrows(
+    () => TerminalKeyEventRouter(
+      configurationAuthority: liveAuthority,
+      encoder: TerminalKeyEncoder(),
+    ),
+    'live configuration authority cannot be mixed with fixed input policy',
+    expectedType: ArgumentError,
+  );
+  final TerminalKeyRouteResult beforeLiveReload = liveRouter.handleKeyDown(
+    _appKitKeyEvent(
+      keyCode: 40,
+      characters: '\x0b',
+      unmodifiedCharacters: 'k',
+      modifierBits: ModifierKeys.shiftBit | ModifierKeys.controlBit,
+    ),
+    pane,
+  );
+  final TerminalConfigReloadController liveController =
+      TerminalConfigReloadController(
+        initialSnapshot: liveInitialSnapshot,
+        resolver: () => TerminalConfigResolution(
+          snapshot: liveCandidateSnapshot,
+          remainingArguments: const <String>[],
+        ),
+      );
+  liveAuthority.applyReload(await liveController.reload());
+  final int writesBeforeLiveReloadRoute = session.inputWrites.length;
+  final TerminalKeyRouteResult afterLiveReload = liveRouter.handleKeyDown(
+    _appKitKeyEvent(
+      keyCode: 40,
+      characters: '\x0b',
+      unmodifiedCharacters: 'k',
+      modifierBits: ModifierKeys.shiftBit | ModifierKeys.controlBit,
+    ),
+    pane,
+  );
+  final TerminalKeyRouteResult optionTextAfterLiveReload = liveRouter
+      .handleKeyDown(
+        _appKitKeyEvent(
+          keyCode: 0,
+          characters: 'å',
+          unmodifiedCharacters: 'a',
+          modifierBits: ModifierKeys.optionBit,
+        ),
+        pane,
+      );
+  _expect(
+    beforeLiveReload.applicationAction == TerminalActionId.focusNextPane &&
+        liveActions.single == TerminalActionId.focusNextPane &&
+        afterLiveReload.disposition == TerminalKeyRouteDisposition.encoded &&
+        afterLiveReload.encodedByteCount == 1 &&
+        session.inputWrites.length == writesBeforeLiveReloadRoute + 2 &&
+        _bytesEqual(session.inputWrites[writesBeforeLiveReloadRoute], <int>[
+          0x0b,
+        ]) &&
+        optionTextAfterLiveReload.encodedByteCount == 2 &&
+        _bytesEqual(session.inputWrites.last, <int>[0xc3, 0xa5]),
+    'one existing router observes accepted keybind and Option policy on its next events',
   );
 
   final TerminalKeyEventRouter unboundRouter = TerminalKeyEventRouter(

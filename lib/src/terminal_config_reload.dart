@@ -39,6 +39,15 @@ final class TerminalConfigReloadResult {
 
   List<TerminalConfigDiagnostic> get diagnostics =>
       candidateSnapshot?.diagnostics ?? const <TerminalConfigDiagnostic>[];
+
+  String machineLine({required int acceptedGeneration}) {
+    final TerminalConfigChangePlan? plan = changePlan;
+    return 'TERMINAL_CONFIG_RELOAD disposition=${disposition.name} '
+        'generation=$acceptedGeneration changes=${plan?.changes.length ?? 0} '
+        'live=${plan?.liveChanges.length ?? 0} '
+        'new_session=${plan?.newSessionChanges.length ?? 0} '
+        'diagnostics=${diagnostics.length}';
+  }
 }
 
 /// Owns last-known-good configuration and serializes explicit reload attempts.

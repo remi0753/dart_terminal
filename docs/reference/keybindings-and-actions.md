@@ -63,6 +63,7 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | Target ID | Title | Menu | Native shortcut |
 | --- | --- | --- | --- |
 | `application.open-command-palette` | Command Palette… | application | `shift+command+p` |
+| `application.reload-configuration` | Reload Configuration | application | — |
 | `application.quit` | Quit Dart Terminal | application | `command+q` |
 | `window.new` | New Window | file | `command+n` |
 | `window.close` | Close Window | file | `command+w` |

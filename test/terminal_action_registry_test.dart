@@ -128,6 +128,20 @@ void _testStableStandardCatalog() {
         ].join(','),
     'menu projection preserves catalog order',
   );
+  _expect(
+    catalog
+                .actionsForMenu(TerminalActionMenu.application)
+                .map((TerminalActionDefinition action) => action.id)
+                .join(',') ==
+            <TerminalActionId>[
+              TerminalActionId.openCommandPalette,
+              TerminalActionId.reloadConfiguration,
+              TerminalActionId.quitApplication,
+            ].join(',') &&
+        catalog.actionForId(TerminalActionId.reloadConfiguration)!.shortcut ==
+            null,
+    'reload is a discoverable application action without a reserved shortcut',
+  );
 }
 
 void _testCatalogValidationAndImmutability() {

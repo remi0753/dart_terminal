@@ -3,6 +3,7 @@ import 'dart:async';
 /// Stable product-level commands shared by menus and the command palette.
 enum TerminalActionId {
   openCommandPalette('application.open-command-palette'),
+  reloadConfiguration('application.reload-configuration'),
   quitApplication('application.quit'),
   newWindow('window.new'),
   closeWindow('window.close'),
@@ -232,6 +233,12 @@ final class TerminalActionCatalog {
         command: true,
       ),
       isVisibleInPalette: false,
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.reloadConfiguration,
+      title: 'Reload Configuration',
+      menu: TerminalActionMenu.application,
+      keywords: const <String>['config', 'settings', 'refresh'],
     ),
     TerminalActionDefinition(
       id: TerminalActionId.quitApplication,

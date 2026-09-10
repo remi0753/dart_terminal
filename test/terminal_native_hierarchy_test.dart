@@ -12,10 +12,62 @@ Future<void> main() => runTerminalNativeHierarchyTests();
 
 Future<void> runTerminalNativeHierarchyTests() async {
   await _testConfiguredWindowAndPaddingProjection();
+  await _testPerWindowCreationFrameProjection();
   await _testRepeatedMultiWindowRestoredProjection();
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testPerWindowCreationFrameProjection() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final TerminalApplicationState state = TerminalApplicationState();
+  TerminalPaneConfiguration configuration() => TerminalPaneConfiguration(
+    sessionFactory: (
+      TerminalSessionId id, {
+      required void Function() onChanged,
+      required void Function() onTerminated,
+    }) => _HierarchyFakeSession(id),
+    onChanged: () {},
+    onExitRequested: () {},
+  );
+  final TerminalWindowState first = await state.createWindow(configuration());
+  final TerminalWindowState second = await state.createWindow(configuration());
+  const Rect firstFrame = Rect.fromLTWH(100, 90, 700, 500);
+  const Rect secondFrame = Rect.fromLTWH(100, 90, 1100, 720);
+  final TerminalNativeHierarchyAdapter adapter = TerminalNativeHierarchyAdapter(
+    state: state,
+    paneResourcesFactory: (TerminalPane pane) => TerminalNativePaneResources(
+      paneId: pane.id,
+      view: View(configuration: terminalBaseViewConfiguration),
+    ),
+    windowFrame: firstFrame,
+    windowFrameBuilder: (TerminalWindowState window) =>
+        window.id == first.id ? firstFrame : secondFrame,
+    cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+    presentWindows: false,
+  );
+  try {
+    adapter.reconcile();
+    _expect(
+      adapter.windowForTab(first.selectedTabId)!.frame == firstFrame &&
+          adapter.windowForTab(second.selectedTabId)!.frame == secondFrame &&
+          adapter.placementForWindow(first.id).windowedFrame.width == 700 &&
+          adapter.placementForWindow(second.id).windowedFrame.width == 1100,
+      'new logical windows capture their creation-time frame provider value',
+    );
+  } finally {
+    adapter.dispose();
+    await state.shutdown();
+    await application.terminate();
+    await rawEvents.close();
+  }
 }
 
 Future<void> _testConfiguredWindowAndPaddingProjection() async {

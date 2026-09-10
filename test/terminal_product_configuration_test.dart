@@ -3,15 +3,110 @@ import 'dart:convert';
 import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
-void main() => runTerminalProductConfigurationTests();
+Future<void> main() => runTerminalProductConfigurationTests();
 
-void runTerminalProductConfigurationTests() {
+Future<void> runTerminalProductConfigurationTests() async {
   _testDefaultsAndSchemaInventory();
   _testCompleteFileProfile();
   _testInvalidValuesRecoverIndependently();
   _testCliPrecedenceAndCapacitySyntax();
   _testConsumerResourceFactoriesAndMappings();
   _testApplicationPoliciesAndSemanticChangePlan();
+  await _testAcceptedConfigurationAuthority();
+}
+
+Future<void> _testAcceptedConfigurationAuthority() async {
+  TerminalConfigSnapshot candidate = TerminalConfigLoader().resolve(
+    const <String>[
+      '--no-config',
+      '--font-size=18',
+      '--macos-option-key=text',
+      '--keybind=control+d=unbind',
+    ],
+    environment: const <String, String>{},
+  ).snapshot;
+  final TerminalConfigSnapshot initial = TerminalConfigLoader().resolve(
+    const <String>[
+      '--no-config',
+      '--font-size=14',
+      '--macos-option-key=escape',
+    ],
+    environment: const <String, String>{},
+  ).snapshot;
+  final TerminalConfigReloadController controller =
+      TerminalConfigReloadController(
+        initialSnapshot: initial,
+        resolver: () => TerminalConfigResolution(
+          snapshot: candidate,
+          remainingArguments: const <String>[],
+        ),
+      );
+  final TerminalProductConfigurationAuthority authority =
+      TerminalProductConfigurationAuthority(
+        TerminalProductConfiguration.fromSnapshot(initial),
+      );
+  final TerminalKeyBindingEngine initialBindings = authority.keyBindingEngine;
+  final TerminalKeyEncoder initialEncoder = authority.keyEncoder;
+  final TerminalConfigReloadResult mixed = await controller.reload();
+  authority.applyReload(mixed);
+  _expect(
+    authority.acceptedGeneration == 1 &&
+        authority.liveGeneration == 1 &&
+        authority.newSessionConfiguration.fontSize == 18 &&
+        !identical(authority.keyBindingEngine, initialBindings) &&
+        !identical(authority.keyEncoder, initialEncoder) &&
+        authority.keyBindingEngine
+                .resolve(
+                  const TerminalKeyEvent(
+                    physicalKey: TerminalPhysicalKey.keyD,
+                    modifiers: TerminalKeyModifiers(control: true),
+                  ),
+                )
+                .kind ==
+            TerminalKeyBindingResolutionKind.noMatch &&
+        authority.keyEncoder.optionKeyBehavior ==
+            TerminalOptionKeyBehavior.text,
+    'accepted mixed reload atomically publishes live input and new-session profile',
+  );
+
+  candidate = TerminalConfigLoader().resolve(const <String>[
+    '--no-config',
+    '--font-size=20',
+    '--macos-option-key=text',
+    '--keybind=control+d=unbind',
+  ], environment: const <String, String>{}).snapshot;
+  final TerminalKeyBindingEngine mixedBindings = authority.keyBindingEngine;
+  final TerminalKeyEncoder mixedEncoder = authority.keyEncoder;
+  final TerminalConfigReloadResult newSessionOnly = await controller.reload();
+  authority.applyReload(newSessionOnly);
+  _expect(
+    authority.acceptedGeneration == 2 &&
+        authority.liveGeneration == 1 &&
+        authority.newSessionConfiguration.fontSize == 20 &&
+        identical(authority.keyBindingEngine, mixedBindings) &&
+        identical(authority.keyEncoder, mixedEncoder),
+    'new-session-only reload preserves existing live input objects',
+  );
+
+  candidate =
+      TerminalConfigLoader(
+        fileSystem: _ProfileMemoryFileSystem(const <String, String>{
+          '/invalid-reload': 'font-size = huge\n',
+        }),
+      ).resolve(const <String>[
+        '--config=/invalid-reload',
+      ], environment: const <String, String>{}).snapshot;
+  final TerminalConfigReloadResult rejected = await controller.reload();
+  _expectThrows(
+    () => authority.applyReload(rejected),
+    'configuration authority rejects a non-accepted reload result',
+  );
+  _expect(
+    authority.acceptedGeneration == 2 &&
+        authority.newSessionConfiguration.fontSize == 20 &&
+        identical(authority.keyBindingEngine, mixedBindings),
+    'rejected reload cannot mutate the configuration authority',
+  );
 }
 
 void _testApplicationPoliciesAndSemanticChangePlan() {
@@ -124,7 +219,8 @@ void _testDefaultsAndSchemaInventory() {
     'product schema has 34 unique documented options',
   );
   _expect(
-    defaults.theme == TerminalConfiguredTheme.defaultTheme &&
+    defaults.workingDirectory == null &&
+        defaults.theme == TerminalConfiguredTheme.defaultTheme &&
         defaults.palette.foreground == 0x80e5e5e5 &&
         defaults.palette.background == 0x80000000 &&
         defaults.palette.cursor == 0x80e5e5e5 &&
@@ -168,6 +264,7 @@ void _testDefaultsAndSchemaInventory() {
 
 void _testCompleteFileProfile() {
   final StringBuffer config = StringBuffer()
+    ..writeln('working-directory = /configured/work')
     ..writeln('theme = default')
     ..writeln('palette-foreground = #112233 # configured foreground')
     ..writeln('palette-background = #010203')
@@ -203,7 +300,8 @@ void _testCompleteFileProfile() {
       TerminalProductConfiguration.fromSnapshot(snapshot);
   _expect(snapshot.diagnostics.isEmpty, 'complete profile has no diagnostics');
   _expect(
-    profile.palette.foreground == 0x80112233 &&
+    profile.workingDirectory == '/configured/work' &&
+        profile.palette.foreground == 0x80112233 &&
         profile.palette.background == 0x80010203 &&
         profile.palette.cursor == 0x80abcdef &&
         profile.palette.ansiColors[15] == 0x8000000f &&
