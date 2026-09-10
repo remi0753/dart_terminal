@@ -128,9 +128,11 @@ item = three
       TerminalConfigRepeatedOption<String>(
         name: 'item',
         description: 'bounded repeated test value',
+        valueSyntax: '<text>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         maximumOccurrences: 2,
         parser: TerminalConfigDecodeResult<String>.success,
+        formatter: (String value) => value,
       );
   final TerminalConfigSnapshot bounded =
       TerminalConfigLoader(
@@ -224,10 +226,12 @@ void _testSchemaAndZeroConfig() {
       TerminalConfigOption<String?>(
         name: 'include',
         description: 'reserved',
+        valueSyntax: '<path>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: null,
         parser: (String value) =>
             TerminalConfigDecodeResult<String?>.success(value),
+        formatter: (String? value) => value,
       ),
     ]),
     'schema reserves the include directive name',

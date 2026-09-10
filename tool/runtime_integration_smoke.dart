@@ -1517,7 +1517,7 @@ Future<void> _runConfiguration(_Options options, _Invocation invocation) async {
   final String configurationPath = '${directory.path}/config';
   try {
     await File(configurationPath).writeAsString('''
-theme = default
+theme = system
 palette-foreground = #d0d1d2
 palette-background = #111213
 palette-cursor = #f0e0d0

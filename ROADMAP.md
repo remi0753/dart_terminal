@@ -1047,6 +1047,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] conservative close-hint/process-snapshot composition
   - [x] M1 両 runtime semantic-shell 受け入れと親項目完了判定
 - [ ] settings UI と effective-config inspector
+  （[`docs/phase8/settings-effective-config-inspector.md`](docs/phase8/settings-effective-config-inspector.md)
+  を参照して順に実施する）
+  - [x] schema-owned canonical presentation と deprecated migration diagnostics
+  - [ ] `--help`/`--show-config` と generated configuration reference
+  - [ ] shared Settings action と searchable native effective-config inspector
+  - [ ] M1 両 runtime settings/effective-config 受け入れと Phase 8 完了判定
 
 終了条件:
 

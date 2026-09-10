@@ -4437,7 +4437,7 @@ final class TerminalApplication {
 
     File(configurationPath)
         .writeAsStringSync('''working-directory = $reloadedWorkingDirectory
-theme = default
+theme = system
 palette-foreground = #a0b0c0
 palette-background = #202122
 palette-cursor = #c0b0a0

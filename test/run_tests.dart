@@ -52,6 +52,7 @@ import 'terminal_differential_adapters_test.dart';
 import 'terminal_differential_corpus_test.dart';
 import 'terminal_differential_evidence_test.dart';
 import 'terminal_differential_harness_test.dart';
+import 'terminal_effective_config_test.dart';
 import 'terminal_focus_reporter_test.dart';
 import 'terminal_history_reflow_test.dart';
 import 'terminal_hyperlink_interaction_test.dart';
@@ -158,6 +159,7 @@ Future<void> main() async {
   await runTerminalCommandPaletteTests();
   runTerminalConfigTests();
   await runTerminalConfigReloadTests();
+  await runTerminalEffectiveConfigTests();
   runTerminalKeyBindingTests();
   runTerminalKeyEncoderTests();
   runTerminalMouseEncoderTests();

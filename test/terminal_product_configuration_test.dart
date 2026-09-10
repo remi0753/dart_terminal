@@ -232,9 +232,11 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
   final TerminalConfigOption<int> foreignOption = TerminalConfigOption<int>(
     name: 'foreign',
     description: 'foreign schema option',
+    valueSyntax: '<integer>',
     applicationPolicy: TerminalConfigApplicationPolicy.newSession,
     defaultValue: 0,
     parser: (String value) => TerminalConfigDecodeResult<int>.success(0),
+    formatter: (int value) => value.toString(),
   );
   final TerminalConfigSnapshot foreign =
       TerminalConfigLoader(
@@ -485,7 +487,7 @@ void _testCompleteFileProfile() {
     ..writeln('working-directory = /configured/work')
     ..writeln('shell = /opt/homebrew/bin/fish')
     ..writeln('shell-integration = fish')
-    ..writeln('theme = default')
+    ..writeln('theme = system')
     ..writeln('palette-foreground = #112233 # configured foreground')
     ..writeln('palette-background = #010203')
     ..writeln('palette-cursor = #abcdef');

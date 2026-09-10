@@ -8,6 +8,7 @@ import 'terminal_input/terminal_key_event.dart';
 typedef TerminalConfigValueParser<T> = TerminalConfigDecodeResult<T> Function(
   String value,
 );
+typedef TerminalConfigValueFormatter<T> = String? Function(T value);
 
 enum TerminalConfigDiagnosticSeverity { warning, error }
 
@@ -108,46 +109,76 @@ final class TerminalConfigDiagnostic {
 }
 
 final class TerminalConfigDecodeResult<T> {
-  const TerminalConfigDecodeResult.success(this.value)
+  const TerminalConfigDecodeResult.success(this.value, {this.warning})
     : message = null,
       hint = null;
 
   const TerminalConfigDecodeResult.failure(this.message, {this.hint})
-    : value = null;
+    : value = null,
+      warning = null;
 
   final T? value;
   final String? message;
   final String? hint;
+  final TerminalConfigDecodeWarning? warning;
 
   bool get isSuccess => message == null;
+}
+
+/// One non-fatal migration notice attached to an otherwise valid raw value.
+final class TerminalConfigDecodeWarning {
+  const TerminalConfigDecodeWarning({
+    required this.code,
+    required this.message,
+    required this.hint,
+  });
+
+  final String code;
+  final String message;
+  final String hint;
+}
+
+/// Hard schema-presentation bounds shared by CLI, reference, and Settings UI.
+abstract final class TerminalConfigPresentationLimits {
+  static const int maximumSyntaxCharacters = 128;
+  static const int maximumDescriptionCharacters = 512;
+  static const int maximumValueCharacters = 16 * 1024;
 }
 
 sealed class TerminalConfigOptionBase {
   String get name;
   String get description;
+  String get valueSyntax;
   TerminalConfigApplicationPolicy get applicationPolicy;
   bool get sourceKindAffectsSemantics;
   bool get isRepeatable;
   int? get maximumOccurrences;
   Object? get defaultValueObject;
   TerminalConfigDecodeResult<Object?> decodeObject(String value);
+  String? formatObject(Object? value);
 }
 
 final class TerminalConfigOption<T> extends TerminalConfigOptionBase {
   TerminalConfigOption({
     required this.name,
     required this.description,
+    required this.valueSyntax,
     required this.applicationPolicy,
     required this.defaultValue,
     this.sourceKindAffectsSemantics = false,
     required TerminalConfigValueParser<T> parser,
-  }) : _parser = parser;
+    required TerminalConfigValueFormatter<T> formatter,
+  }) : _parser = parser,
+       _formatter = formatter;
 
   @override
   final String name;
 
   @override
   final String description;
+
+  @override
+  final String valueSyntax;
 
   @override
   final TerminalConfigApplicationPolicy applicationPolicy;
@@ -163,11 +194,14 @@ final class TerminalConfigOption<T> extends TerminalConfigOptionBase {
 
   final T defaultValue;
   final TerminalConfigValueParser<T> _parser;
+  final TerminalConfigValueFormatter<T> _formatter;
 
   @override
   Object? get defaultValueObject => defaultValue;
 
   TerminalConfigDecodeResult<T> decode(String value) => _parser(value);
+
+  String? format(T value) => _validateFormattedValue(name, _formatter(value));
 
   @override
   TerminalConfigDecodeResult<Object?> decodeObject(String value) {
@@ -178,8 +212,14 @@ final class TerminalConfigOption<T> extends TerminalConfigOptionBase {
         hint: decoded.hint,
       );
     }
-    return TerminalConfigDecodeResult<Object?>.success(decoded.value);
+    return TerminalConfigDecodeResult<Object?>.success(
+      decoded.value,
+      warning: decoded.warning,
+    );
   }
+
+  @override
+  String? formatObject(Object? value) => format(value as T);
 }
 
 /// One schema option that preserves every valid occurrence in precedence order.
@@ -187,10 +227,13 @@ final class TerminalConfigRepeatedOption<T> extends TerminalConfigOptionBase {
   TerminalConfigRepeatedOption({
     required this.name,
     required this.description,
+    required this.valueSyntax,
     required this.applicationPolicy,
     required this.maximumOccurrences,
     required TerminalConfigValueParser<T> parser,
-  }) : _parser = parser {
+    required TerminalConfigValueFormatter<T> formatter,
+  }) : _parser = parser,
+       _formatter = formatter {
     if (maximumOccurrences <= 0 || maximumOccurrences > 4096) {
       throw ArgumentError.value(
         maximumOccurrences,
@@ -207,6 +250,9 @@ final class TerminalConfigRepeatedOption<T> extends TerminalConfigOptionBase {
   final String description;
 
   @override
+  final String valueSyntax;
+
+  @override
   final TerminalConfigApplicationPolicy applicationPolicy;
 
   @override
@@ -216,6 +262,7 @@ final class TerminalConfigRepeatedOption<T> extends TerminalConfigOptionBase {
   final int maximumOccurrences;
 
   final TerminalConfigValueParser<T> _parser;
+  final TerminalConfigValueFormatter<T> _formatter;
 
   @override
   bool get isRepeatable => true;
@@ -224,6 +271,14 @@ final class TerminalConfigRepeatedOption<T> extends TerminalConfigOptionBase {
   Object? get defaultValueObject => null;
 
   TerminalConfigDecodeResult<T> decode(String value) => _parser(value);
+
+  String format(T value) {
+    final String? formatted = _validateFormattedValue(name, _formatter(value));
+    if (formatted == null) {
+      throw StateError('repeatable option `$name` formatted a null value');
+    }
+    return formatted;
+  }
 
   @override
   TerminalConfigDecodeResult<Object?> decodeObject(String value) {
@@ -234,8 +289,14 @@ final class TerminalConfigRepeatedOption<T> extends TerminalConfigOptionBase {
         hint: decoded.hint,
       );
     }
-    return TerminalConfigDecodeResult<Object?>.success(decoded.value);
+    return TerminalConfigDecodeResult<Object?>.success(
+      decoded.value,
+      warning: decoded.warning,
+    );
   }
+
+  @override
+  String formatObject(Object? value) => format(value as T);
 }
 
 final class TerminalConfigSchema {
@@ -252,6 +313,19 @@ final class TerminalConfigSchema {
       }
       if (byName.containsKey(option.name)) {
         throw ArgumentError.value(option.name, 'options', 'duplicate name');
+      }
+      _validatePresentationText(
+        option.valueSyntax,
+        name: '${option.name}.valueSyntax',
+        maximum: TerminalConfigPresentationLimits.maximumSyntaxCharacters,
+      );
+      _validatePresentationText(
+        option.description,
+        name: '${option.name}.description',
+        maximum: TerminalConfigPresentationLimits.maximumDescriptionCharacters,
+      );
+      if (!option.isRepeatable) {
+        option.formatObject(option.defaultValueObject);
       }
       byName[option.name] = option;
     }
@@ -358,6 +432,35 @@ final class TerminalConfigSnapshot {
             ),
       ),
     );
+  }
+
+  /// Type-erased scalar access for schema-driven presentation consumers.
+  TerminalResolvedConfigValue<Object?> resolvedOption(
+    TerminalConfigOptionBase option,
+  ) {
+    if (option.isRepeatable) {
+      throw ArgumentError.value(option.name, 'option', 'is repeatable');
+    }
+    final TerminalResolvedConfigValue<Object?>? value = _values[option];
+    if (value == null) {
+      throw ArgumentError.value(option.name, 'option', 'not in schema');
+    }
+    return value;
+  }
+
+  /// Type-erased repeated access for schema-driven presentation consumers.
+  List<TerminalResolvedConfigValue<Object?>> occurrencesFor(
+    TerminalConfigOptionBase option,
+  ) {
+    if (!option.isRepeatable) {
+      throw ArgumentError.value(option.name, 'option', 'is not repeatable');
+    }
+    final List<TerminalResolvedConfigValue<Object?>>? values =
+        _repeatedValues[option];
+    if (values == null) {
+      throw ArgumentError.value(option.name, 'option', 'not in schema');
+    }
+    return values;
   }
 }
 
@@ -503,18 +606,22 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<String?>(
         name: 'working-directory',
         description: 'Initial command working directory.',
+        valueSyntax: '<path>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: null,
         parser: _parseNonEmptyPath,
+        formatter: _formatNullableString,
       );
 
   static final TerminalConfigOption<String> shell =
       TerminalConfigOption<String>(
         name: 'shell',
         description: 'Absolute executable path for new terminal sessions.',
+        valueSyntax: '<absolute-path>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: '/bin/zsh',
         parser: _parseShellExecutable,
+        formatter: _formatString,
       );
 
   static final TerminalConfigOption<TerminalConfiguredShellIntegration>
@@ -522,48 +629,58 @@ abstract final class TerminalProductConfigSchema {
     name: 'shell-integration',
     description:
         'Shell integration policy: detect, none, zsh, bash, fish, or nushell.',
+    valueSyntax: 'detect|none|zsh|bash|fish|nushell',
     applicationPolicy: TerminalConfigApplicationPolicy.newSession,
     defaultValue: TerminalConfiguredShellIntegration.detect,
     parser: _parseShellIntegration,
+    formatter: _formatShellIntegration,
   );
 
   static final TerminalConfigOption<TerminalConfiguredTheme> theme =
       TerminalConfigOption<TerminalConfiguredTheme>(
         name: 'theme',
         description: 'Base theme: system, light, or dark.',
+        valueSyntax: 'system|light|dark',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: TerminalConfiguredTheme.system,
         parser: _parseTheme,
+        formatter: _formatTheme,
       );
 
   static final TerminalConfigOption<int> paletteForeground =
       TerminalConfigOption<int>(
         name: 'palette-foreground',
         description: 'Default terminal foreground color.',
+        valueSyntax: '#RRGGBB',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0x80e5e5e5,
         sourceKindAffectsSemantics: true,
         parser: _parseColor,
+        formatter: _formatColor,
       );
 
   static final TerminalConfigOption<int> paletteBackground =
       TerminalConfigOption<int>(
         name: 'palette-background',
         description: 'Default terminal background color.',
+        valueSyntax: '#RRGGBB',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0x80000000,
         sourceKindAffectsSemantics: true,
         parser: _parseColor,
+        formatter: _formatColor,
       );
 
   static final TerminalConfigOption<int> paletteCursor =
       TerminalConfigOption<int>(
         name: 'palette-cursor',
         description: 'Terminal cursor color.',
+        valueSyntax: '#RRGGBB',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0x80e5e5e5,
         sourceKindAffectsSemantics: true,
         parser: _parseColor,
+        formatter: _formatColor,
       );
 
   static final List<TerminalConfigOption<int>> ansiPalette =
@@ -573,10 +690,12 @@ abstract final class TerminalProductConfigSchema {
           (int index) => TerminalConfigOption<int>(
             name: 'palette-$index',
             description: 'ANSI palette color $index.',
+            valueSyntax: '#RRGGBB',
             applicationPolicy: TerminalConfigApplicationPolicy.newSession,
             defaultValue: defaultAnsiColors[index],
             sourceKindAffectsSemantics: true,
             parser: _parseColor,
+            formatter: _formatColor,
           ),
           growable: false,
         ),
@@ -586,119 +705,145 @@ abstract final class TerminalProductConfigSchema {
       TerminalConfigOption<String>(
         name: 'font-family',
         description: 'Terminal monospace font family, or `system`.',
+        valueSyntax: 'system|<family>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: '',
         parser: _parseFontFamily,
+        formatter: _formatFontFamily,
       );
 
   static final TerminalConfigOption<double> fontSize =
       TerminalConfigOption<double>(
         name: 'font-size',
         description: 'Terminal font size in points.',
+        valueSyntax: '<4..128>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 14,
         parser: _parseFontSize,
+        formatter: _formatDouble,
       );
 
   static final TerminalConfigOption<TerminalConfiguredSyntheticStyle>
   fontSyntheticStyle = TerminalConfigOption<TerminalConfiguredSyntheticStyle>(
     name: 'font-synthetic-style',
     description: 'Whether missing bold and italic faces may be synthesized.',
+    valueSyntax: 'allow|deny',
     applicationPolicy: TerminalConfigApplicationPolicy.newSession,
     defaultValue: TerminalConfiguredSyntheticStyle.allow,
     parser: _parseSyntheticStyle,
+    formatter: _formatSyntheticStyle,
   );
 
   static final TerminalConfigOption<double> windowWidth =
       TerminalConfigOption<double>(
         name: 'window-width',
         description: 'Initial terminal window width in logical points.',
+        valueSyntax: '<480..8192>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 920,
         parser: _parseWindowWidth,
+        formatter: _formatDouble,
       );
 
   static final TerminalConfigOption<double> windowHeight =
       TerminalConfigOption<double>(
         name: 'window-height',
         description: 'Initial terminal window height in logical points.',
+        valueSyntax: '<320..8192>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 580,
         parser: _parseWindowHeight,
+        formatter: _formatDouble,
       );
 
   static final TerminalConfigOption<double> windowPaddingHorizontal =
       TerminalConfigOption<double>(
         name: 'window-padding-horizontal',
         description: 'Horizontal terminal content padding in logical points.',
+        valueSyntax: '<0..64>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0,
         parser: _parseWindowPadding,
+        formatter: _formatDouble,
       );
 
   static final TerminalConfigOption<double> windowPaddingVertical =
       TerminalConfigOption<double>(
         name: 'window-padding-vertical',
         description: 'Vertical terminal content padding in logical points.',
+        valueSyntax: '<0..64>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0,
         parser: _parseWindowPadding,
+        formatter: _formatDouble,
       );
 
   static final TerminalConfigOption<TerminalConfiguredOptionKey>
   macosOptionKey = TerminalConfigOption<TerminalConfiguredOptionKey>(
     name: 'macos-option-key',
     description: 'Treat the macOS Option key as `escape` or composed `text`.',
+    valueSyntax: 'escape|text',
     applicationPolicy: TerminalConfigApplicationPolicy.live,
     defaultValue: TerminalConfiguredOptionKey.escape,
     parser: _parseOptionKey,
+    formatter: _formatOptionKey,
   );
 
   static final TerminalConfigOption<int> scrollbackLines =
       TerminalConfigOption<int>(
         name: 'scrollback-lines',
         description: 'Maximum retained primary-screen history lines.',
+        valueSyntax: '<1..1000000>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 10000,
         parser: _parseScrollbackLines,
+        formatter: _formatInteger,
       );
 
   static final TerminalConfigOption<int> scrollbackBytes =
       TerminalConfigOption<int>(
         name: 'scrollback-bytes',
         description: 'Maximum retained primary-screen history bytes.',
+        valueSyntax: '<1..1073741824>[B|KiB|MiB|GiB]',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 64 * 1024 * 1024,
         parser: _parseScrollbackBytes,
+        formatter: _formatInteger,
       );
 
   static final TerminalConfigOption<TerminalConfiguredCursorShape> cursorShape =
       TerminalConfigOption<TerminalConfiguredCursorShape>(
         name: 'cursor-shape',
         description: 'Initial terminal cursor shape.',
+        valueSyntax: 'block|underline|bar',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: TerminalConfiguredCursorShape.block,
         parser: _parseCursorShape,
+        formatter: _formatCursorShape,
       );
 
   static final TerminalConfigOption<bool> cursorBlink =
       TerminalConfigOption<bool>(
         name: 'cursor-blink',
         description: 'Whether the initial terminal cursor blinks.',
+        valueSyntax: 'true|false',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: true,
         parser: _parseBoolean,
+        formatter: _formatBoolean,
       );
 
   static final TerminalConfigRepeatedOption<TerminalKeyBindingDefinition>
   keybind = TerminalConfigRepeatedOption<TerminalKeyBindingDefinition>(
     name: 'keybind',
     description: 'Exact physical-key chord and action override.',
+    valueSyntax: '<modifier+key=target>',
     applicationPolicy: TerminalConfigApplicationPolicy.live,
     maximumOccurrences:
         TerminalKeyBindingEngine.maximumDefinitionCount -
         TerminalKeyBindingEngine.standardDefinitionCount,
     parser: _parseKeyBinding,
+    formatter: _formatKeyBinding,
   );
 
   static final TerminalConfigSchema instance = TerminalConfigSchema(
@@ -971,6 +1116,7 @@ final class _TerminalConfigCollector {
         if (!decoded.isSuccess) {
           throw StateError('validated command-line value changed result');
         }
+        _addDecodeWarning(decoded, rawValue.source);
         final TerminalResolvedConfigValue<Object?> resolved =
             TerminalResolvedConfigValue<Object?>(
               value: decoded.value,
@@ -1228,6 +1374,15 @@ final class _TerminalConfigCollector {
           );
           continue;
         }
+        _addDecodeWarning(
+          decoded,
+          TerminalConfigSource(
+            kind: TerminalConfigSourceKind.file,
+            path: path,
+            line: directive.source.line,
+            column: directive.valueColumn,
+          ),
+        );
         final TerminalResolvedConfigValue<Object?> resolved =
             TerminalResolvedConfigValue<Object?>(
               value: decoded.value,
@@ -1389,6 +1544,23 @@ final class _TerminalConfigCollector {
     );
   }
 
+  void _addDecodeWarning(
+    TerminalConfigDecodeResult<Object?> decoded,
+    TerminalConfigSource source,
+  ) {
+    final TerminalConfigDecodeWarning? warning = decoded.warning;
+    if (warning == null) return;
+    _addDiagnostic(
+      TerminalConfigDiagnostic(
+        severity: TerminalConfigDiagnosticSeverity.warning,
+        code: warning.code,
+        message: warning.message,
+        source: source,
+        hint: warning.hint,
+      ),
+    );
+  }
+
   String? _unknownOptionHint(String name) {
     TerminalConfigOptionBase? closest;
     var distance = 4;
@@ -1406,6 +1578,87 @@ final class _TerminalConfigCollector {
   }
 }
 
+void _validatePresentationText(
+  String value, {
+  required String name,
+  required int maximum,
+}) {
+  if (value.isEmpty || value.length > maximum || _containsControl(value)) {
+    throw ArgumentError.value(
+      value,
+      name,
+      'must be control-free text within $maximum UTF-16 units',
+    );
+  }
+}
+
+String? _validateFormattedValue(String optionName, String? value) {
+  if (value == null) return null;
+  if (value.length > TerminalConfigPresentationLimits.maximumValueCharacters ||
+      _containsControl(value)) {
+    throw StateError(
+      'formatter for `$optionName` produced control characters or more than '
+      '${TerminalConfigPresentationLimits.maximumValueCharacters} UTF-16 units',
+    );
+  }
+  return value;
+}
+
+String? _formatNullableString(String? value) => value;
+
+String _formatString(String value) => value;
+
+String _formatShellIntegration(TerminalConfiguredShellIntegration value) =>
+    switch (value) {
+      TerminalConfiguredShellIntegration.detect => 'detect',
+      TerminalConfiguredShellIntegration.none => 'none',
+      TerminalConfiguredShellIntegration.zsh => 'zsh',
+      TerminalConfiguredShellIntegration.bash => 'bash',
+      TerminalConfiguredShellIntegration.fish => 'fish',
+      TerminalConfiguredShellIntegration.nushell => 'nushell',
+    };
+
+String _formatTheme(TerminalConfiguredTheme value) => switch (value) {
+  TerminalConfiguredTheme.system ||
+  TerminalConfiguredTheme.defaultTheme => 'system',
+  TerminalConfiguredTheme.light => 'light',
+  TerminalConfiguredTheme.dark => 'dark',
+};
+
+String _formatColor(int value) =>
+    '#${(value & 0x00ffffff).toRadixString(16).padLeft(6, '0')}';
+
+String _formatFontFamily(String value) => value.isEmpty ? 'system' : value;
+
+String _formatDouble(double value) => value == value.truncateToDouble()
+    ? value.toInt().toString()
+    : value.toString();
+
+String _formatSyntheticStyle(TerminalConfiguredSyntheticStyle value) =>
+    switch (value) {
+      TerminalConfiguredSyntheticStyle.allow => 'allow',
+      TerminalConfiguredSyntheticStyle.deny => 'deny',
+    };
+
+String _formatOptionKey(TerminalConfiguredOptionKey value) => switch (value) {
+  TerminalConfiguredOptionKey.escape => 'escape',
+  TerminalConfiguredOptionKey.text => 'text',
+};
+
+String _formatInteger(int value) => value.toString();
+
+String _formatCursorShape(TerminalConfiguredCursorShape value) =>
+    switch (value) {
+      TerminalConfiguredCursorShape.block => 'block',
+      TerminalConfiguredCursorShape.underline => 'underline',
+      TerminalConfiguredCursorShape.bar => 'bar',
+    };
+
+String _formatBoolean(bool value) => value ? 'true' : 'false';
+
+String _formatKeyBinding(TerminalKeyBindingDefinition value) =>
+    '${value.chord.configName}=${value.targetConfigName}';
+
 TerminalConfigDecodeResult<String?> _parseNonEmptyPath(String value) {
   if (value.isEmpty) {
     return const TerminalConfigDecodeResult<String?>.failure(
@@ -1413,10 +1666,10 @@ TerminalConfigDecodeResult<String?> _parseNonEmptyPath(String value) {
       hint: 'provide an absolute or relative filesystem path',
     );
   }
-  if (_containsControl(value)) {
+  if (_containsControl(value) || utf8.encode(value).length > 4096) {
     return const TerminalConfigDecodeResult<String?>.failure(
-      'path must not contain control characters',
-      hint: 'remove the control character',
+      'path must be control-free UTF-8 within 4096 bytes',
+      hint: 'remove control characters or shorten the path',
     );
   }
   return TerminalConfigDecodeResult<String?>.success(value);
@@ -1483,7 +1736,15 @@ _parseShellIntegration(String value) => switch (value) {
 TerminalConfigDecodeResult<TerminalConfiguredTheme> _parseTheme(
   String value,
 ) => switch (value) {
-  'default' ||
+  'default' =>
+    const TerminalConfigDecodeResult<TerminalConfiguredTheme>.success(
+      TerminalConfiguredTheme.system,
+      warning: TerminalConfigDecodeWarning(
+        code: 'CFG_DEPRECATED_VALUE',
+        message: '`theme = default` is deprecated',
+        hint: 'replace it with `theme = system`',
+      ),
+    ),
   'system' => const TerminalConfigDecodeResult<TerminalConfiguredTheme>.success(
     TerminalConfiguredTheme.system,
   ),
