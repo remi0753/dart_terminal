@@ -293,7 +293,10 @@ ANSI palette 0–15 だけを上書きします。OSCによる実行中のpalett
 effective appearanceをlive追従し、固定`light`/`dark` paneは追従しません。reloadでthemeを
 変更しても既存paneのpolicyは変わらず、新しく作るwindow/tab/splitから反映されます。
 shell設定と、無効・unsupported・resource欠落時に通常shellへ戻すbounded launch planは
-定義済みです。bundle resourceと通常起動への投影はPhase 8の同じ親タスク内で順に完成させます。
+定義済みです。zsh、bash、fish、nushell向けのversion 1 bootstrap resourceもbundleへ
+宣言し、固定path、size、SHA-256、UTF-8をまとめて検証できない場合は部分適用しない
+contractを設けています。現段階のresourceは実行確認用markerだけを提供し、通常起動への
+投影とprompt/cwd/title連携はPhase 8の同じ親タスク内で順に完成させます。
 
 設定値が実際の通常製品へ反映されることは、実設定ファイルから4 paneを生成し、表示色、
 font、window/padding、cursor、Option入力、scrollback上限、pane/application keybind、

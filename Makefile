@@ -29,6 +29,7 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check \
 	terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check \
 	terminal-terminfo terminal-terminfo-check \
+	terminal-shell-integration terminal-shell-integration-check \
 	product-parser-corpus product-parser-properties \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
 	terminal-parser-trace terminal-parser-trace-check \
@@ -68,6 +69,8 @@ help:
 	@echo "  make terminal-application-acceptance-check  Validate classified real-application results"
 	@echo "  make terminal-terminfo             Regenerate the pinned compiled terminfo entry"
 	@echo "  make terminal-terminfo-check       Reject stale or over-advertised terminfo resources"
+	@echo "  make terminal-shell-integration    Regenerate shell integration resource hashes"
+	@echo "  make terminal-shell-integration-check  Reject stale shell integration resources"
 	@echo "  make vt-parser-table              Regenerate the Dart VT transition table"
 	@echo "  make vt-parser-table-check        Reject a stale generated parser table"
 	@echo "  make terminal-parser-trace        Regenerate the bounded parser trace"
@@ -182,7 +185,13 @@ terminal-terminfo: dependencies
 terminal-terminfo-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_terminfo.dart --check
 
-test: dependencies vt-parser-table-check terminal-parser-trace-check keybind-action-reference-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check
+terminal-shell-integration: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_shell_integration.dart --generate
+
+terminal-shell-integration-check: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_shell_integration.dart --check
+
+test: dependencies vt-parser-table-check terminal-parser-trace-check keybind-action-reference-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart

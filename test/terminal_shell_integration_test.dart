@@ -161,6 +161,8 @@ void _testZshPlanPreservesStartupDirectory() {
     environment: const <String, String>{
       'ZDOTDIR': '/Users/test/.config/zsh',
       'KEEP': 'value',
+      'DART_TERMINAL_BASH_INJECT': 'stale',
+      'DART_TERMINAL_SHELL_INTEGRATION_XDG_DIR': '/stale',
     },
     policy: TerminalConfiguredShellIntegration.detect,
     resources: _resources(),
@@ -175,6 +177,10 @@ void _testZshPlanPreservesStartupDirectory() {
         plan.environment['DART_TERMINAL_ZDOTDIR_SET'] == '1' &&
         plan.environment['DART_TERMINAL_ZDOTDIR'] ==
             '/Users/test/.config/zsh' &&
+        !plan.environment.containsKey('DART_TERMINAL_BASH_INJECT') &&
+        !plan.environment.containsKey(
+          'DART_TERMINAL_SHELL_INTEGRATION_XDG_DIR',
+        ) &&
         plan.environment['KEEP'] == 'value',
     'zsh plan temporarily replaces and exactly preserves ZDOTDIR',
   );
@@ -214,6 +220,7 @@ void _testBashDetectionAndForcedPlan() {
         forced.arguments.length == 1 &&
         forced.arguments.single == '--posix' &&
         forced.environment['DART_TERMINAL_BASH_INJECT'] == '1' &&
+        forced.environment['DART_TERMINAL_BASH_HISTFILE_WAS_UNSET'] == '1' &&
         forced.environment['DART_TERMINAL_BASH_ENV_SET'] == '1' &&
         forced.environment['DART_TERMINAL_BASH_ENV'] == '/Users/test/.env' &&
         forced.environment['ENV'] ==

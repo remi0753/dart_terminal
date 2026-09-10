@@ -1035,7 +1035,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase8/shell-integration.md`](docs/phase8/shell-integration.md)
   を参照して順に実施する）
   - [x] typed shell selection/integration policy と immutable launch-plan boundary
-  - [ ] versioned four-shell resources と bundle/freshness contract
+  - [x] versioned four-shell resources と bundle/freshness contract
   - [ ] new-session projection と shell execution coverage
   - [ ] M1 両 runtime shell-integration 受け入れと親項目完了判定
 - [ ] cwd/title/prompt mark/jump-to-prompt/close hint

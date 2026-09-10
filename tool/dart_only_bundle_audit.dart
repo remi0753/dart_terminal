@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dart_terminal/dart_terminal.dart';
+
 import 'terminal_differential_sha256.dart';
 import 'terminal_terminfo.dart';
 
@@ -91,6 +93,12 @@ Future<void> main(List<String> arguments) async {
           File(defaultTerminalTerminfoContractPath),
         );
     final String terminfo = '$resources/${terminfoContract.compiledPath}';
+    final String shellContractPath =
+        '$resources/${TerminalShellIntegrationContract.relativePath}';
+    final TerminalShellIntegrationContract shellContract =
+        TerminalShellIntegrationContract.load(File(shellContractPath));
+    final TerminalShellIntegrationResources shellResources = shellContract
+        .validateResources(File(shellContractPath).parent);
     for (final String path in <String>[
       '$contents/Info.plist',
       executable,
@@ -101,6 +109,10 @@ Future<void> main(List<String> arguments) async {
       payload,
       '$resources/DART_SDK_LICENSE.txt',
       terminfo,
+      shellContractPath,
+      for (final TerminalShellIntegrationFileContract file
+          in shellContract.files)
+        '${shellResources.rootPath}/${file.relativePath}',
     ]) {
       final File file = File(path);
       _expect(await file.exists(), 'required bundle file is missing: $path');
@@ -110,6 +122,14 @@ Future<void> main(List<String> arguments) async {
       terminalDifferentialSha256(await File(terminfo).readAsBytes()) ==
           terminfoContract.compiledSha256,
       'bundled terminfo entry differs from the reviewed contract',
+    );
+    final File reviewedShellContract = File(
+      TerminalShellIntegrationContract.relativePath,
+    );
+    _expect(
+      terminalDifferentialSha256(await File(shellContractPath).readAsBytes()) ==
+          terminalDifferentialSha256(await reviewedShellContract.readAsBytes()),
+      'bundled shell integration contract differs from the reviewed contract',
     );
     _expect(
       (await File(helper).stat()).mode & 0x49 != 0,

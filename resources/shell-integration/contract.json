@@ -1,0 +1,39 @@
+{
+  "format": "dart-terminal-shell-integration-contract",
+  "version": 1,
+  "integration_version": 1,
+  "marker_environment": "DART_TERMINAL_SHELL_INTEGRATION",
+  "version_environment": "DART_TERMINAL_SHELL_INTEGRATION_VERSION",
+  "files": [
+    {
+      "shell": "zsh",
+      "path": "zsh/.zshenv",
+      "bytes": 791,
+      "sha256": "6c671347f238586b2c94c71f9475fba4bb3767c1c0bc5295597cfab2d57fe594"
+    },
+    {
+      "shell": "zsh",
+      "path": "zsh/dart-terminal-integration.zsh",
+      "bytes": 382,
+      "sha256": "af2ec9ccd02ba013e49439ae25cdcd90b54f6ee9d159cbe7135156921688d65a"
+    },
+    {
+      "shell": "bash",
+      "path": "bash/dart-terminal-integration.bash",
+      "bytes": 1605,
+      "sha256": "005407619de316b010cb8bddb9eff0602c8faaf12efc188dee28744358fc09c6"
+    },
+    {
+      "shell": "fish",
+      "path": "fish/vendor_conf.d/dart-terminal-integration.fish",
+      "bytes": 1202,
+      "sha256": "bed06fb18dda3a54a1fac55a4ba01e269ca1127fc7c6d4a88f6b7274a490c8e0"
+    },
+    {
+      "shell": "nushell",
+      "path": "nushell/vendor/autoload/dart_terminal.nu",
+      "bytes": 565,
+      "sha256": "d867b0ebe4363cbd35afc8630bf014b36fd8ff0f346ac8aec360abddd6a4718a"
+    }
+  ]
+}

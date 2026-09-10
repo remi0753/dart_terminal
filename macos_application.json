@@ -24,7 +24,15 @@
       "entrypoint": "bin/runtime_worker.dart"
     }
   ],
-  "resources": ["resources/terminfo/78/xterm-256color"],
+  "resources": [
+    "resources/terminfo/78/xterm-256color",
+    "resources/shell-integration/contract.json",
+    "resources/shell-integration/zsh/.zshenv",
+    "resources/shell-integration/zsh/dart-terminal-integration.zsh",
+    "resources/shell-integration/bash/dart-terminal-integration.bash",
+    "resources/shell-integration/fish/vendor_conf.d/dart-terminal-integration.fish",
+    "resources/shell-integration/nushell/vendor/autoload/dart_terminal.nu"
+  ],
   "nativeAssets": [
     {
       "id": "dart_pty_macos",

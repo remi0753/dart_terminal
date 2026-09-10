@@ -246,6 +246,56 @@ the next begins. After each commit, reread `ROADMAP.md` and this memo.
   passes with `tracked=421`, zero product native sources, and the one existing
   reviewed test-native fixture. `git diff --check` also passes for the complete
   staged candidate.
+- The second subtask adds five independently authored text resources: a zsh
+  bootstrap plus zsh integration, and one integration resource each for bash,
+  fish, and nushell. They publish only the stable execution marker, integration
+  version `1`, and shell identity; prompt, cwd, title, and close semantics remain
+  outside this task.
+- The resource contract has a 32 KiB manifest limit, 32 KiB per-file limit,
+  128 KiB aggregate limit, fixed paths/order, regular-file and UTF-8 policy,
+  byte lengths, and lowercase SHA-256 digests. Runtime validation returns a
+  resource set only after all five files and all four shell kinds pass, so a
+  partial or corrupt bundle cannot produce a partially integrated plan.
+- Resource authoring exposed two temporary-state edges in the earlier launch
+  plan: stale Dart Terminal bootstrap variables could cross a nested process,
+  and bash needs to know whether `HISTFILE` was originally absent while leaving
+  POSIX bootstrap mode. The planner now clears all private injection variables
+  before a successful plan and records the original bash history-file absence;
+  fallback plans still preserve the caller environment byte-for-byte.
+- The application manifest now declares the contract and every shell file in
+  addition to compiled terminfo. The freshness tool requires that exact bounded
+  resource set, and the JIT/AOT bundle audit validates the installed contract,
+  all installed hashes, and equality with the reviewed repository contract.
+- The first second-subtask validation attempt formatted all eight touched Dart
+  files without changes, then stopped before the freshness check because the
+  restricted sandbox denied Metal's attempt to write a Clang module cache under
+  `~/.cache/clang`. This is an environment failure from the package build hook,
+  not a contract or syntax failure; the same validation is rerun under the
+  repository's approved CI execution environment.
+- The approved rerun passes the resource freshness check with version `1`, four
+  shells, five files, and 4,545 total bytes. Focused analysis reports no issues;
+  the contract/parser/corruption/SHA tests, zsh and bash `-n` syntax checks, and
+  the existing launch-plan suite all pass. fish and nushell remain unavailable
+  on this host, so executable acceptance for them remains conditional while
+  their source text, path, module, marker, byte, and digest contracts are gated.
+- `make RUNTIME_ARCH=arm64 runtime-bundle-audit` builds and signs both Developer
+  JIT and Release AOT application bundles, then passes the Dart-only audit in
+  each mode. Both installed bundles contain the reviewed version-1 contract and
+  all five resources with valid size/digest/content policy, alongside the
+  existing arm64 executable/helper/engine/native assets and terminfo contract.
+- After regenerating compatibility coverage for the README/feature-matrix
+  changes, the complete `make test` gate passes: all freshness and evidence
+  checks are current, 228 Dart files require no formatting changes, analysis
+  reports no issues, and the aggregate runner reports all tests passed.
+- The first attempt to stage the reviewed task file list was denied when the
+  restricted sandbox could not create `.git/index.lock`. No index or worktree
+  content changed; the same explicit file list is staged under the approved Git
+  execution boundary before running the tracked-source audit.
+- The staged-candidate source audit passes with 430 tracked files, zero product
+  native sources, and the single existing reviewed test-native fixture.
+  `git diff --cached --check` is clean, and the staged name/status review contains
+  only the versioned resources, contract/runtime/tooling/tests, manifest/audit,
+  regenerated compatibility evidence, and this task's user/engineering docs.
 
 ## Resolved split questions
 

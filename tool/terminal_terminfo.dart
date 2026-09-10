@@ -552,8 +552,12 @@ void _validateManifest(Directory root, String compiledPath) {
     'application manifest resources',
   );
   _expect(
-    resources.length == 1 && resources.single == compiledPath,
-    'application manifest must contain exactly the compiled terminfo resource',
+    resources.contains(compiledPath) &&
+        resources
+                .where((Object? resource) => resource == compiledPath)
+                .length ==
+            1,
+    'application manifest must contain the compiled terminfo resource once',
   );
 }
 
