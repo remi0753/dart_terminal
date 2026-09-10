@@ -1050,7 +1050,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （[`docs/phase8/settings-effective-config-inspector.md`](docs/phase8/settings-effective-config-inspector.md)
   を参照して順に実施する）
   - [x] schema-owned canonical presentation と deprecated migration diagnostics
-  - [ ] `--help`/`--show-config` と generated configuration reference
+  - [x] `--help`/`--show-config` と generated configuration reference
   - [ ] shared Settings action と searchable native effective-config inspector
   - [ ] M1 両 runtime settings/effective-config 受け入れと Phase 8 完了判定
 

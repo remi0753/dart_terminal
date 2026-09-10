@@ -12,6 +12,14 @@ void main(List<String> arguments) {
   MacosRuntime.validateHost();
   MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStarting);
   try {
+    final TerminalEarlyExitResult? earlyExit = TerminalEarlyExitResolver()
+        .resolve(arguments);
+    if (earlyExit != null) {
+      stdout.write(earlyExit.standardOutput);
+      MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
+      MacosRuntime.requestTermination(exitCode: 0);
+      return;
+    }
     final TerminalOptions options = TerminalOptions.parse(arguments);
     for (final TerminalConfigDiagnostic diagnostic
         in options.configurationDiagnostics) {

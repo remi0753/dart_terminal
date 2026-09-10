@@ -33,6 +33,7 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	product-parser-corpus product-parser-properties \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
 	terminal-parser-trace terminal-parser-trace-check \
+	configuration-reference configuration-reference-check \
 	keybind-action-reference keybind-action-reference-check \
 	phase7-appkit-acceptance phase7-appkit-acceptance-check \
 	terminal-compatibility-regressions-check terminal-compatibility-regression-coverage terminal-compatibility-regression-coverage-check \
@@ -75,6 +76,8 @@ help:
 	@echo "  make vt-parser-table-check        Reject a stale generated parser table"
 	@echo "  make terminal-parser-trace        Regenerate the bounded parser trace"
 	@echo "  make terminal-parser-trace-check  Reject a stale parser trace fixture"
+	@echo "  make configuration-reference      Regenerate configuration/CLI documentation"
+	@echo "  make configuration-reference-check  Reject stale configuration/CLI documentation"
 	@echo "  make keybind-action-reference     Regenerate keybinding/action documentation"
 	@echo "  make keybind-action-reference-check  Reject stale keybinding/action documentation"
 	@echo "  make phase7-appkit-acceptance    Regenerate the Phase 7 AppKit test inventory"
@@ -119,6 +122,12 @@ terminal-parser-trace: dependencies
 
 terminal-parser-trace-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_parser_trace.dart --check
+
+configuration-reference: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_configuration_reference.dart --generate
+
+configuration-reference-check: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_configuration_reference.dart --check
 
 keybind-action-reference: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/generate_keybind_action_reference.dart --generate
@@ -192,7 +201,7 @@ terminal-shell-integration: dependencies
 terminal-shell-integration-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_shell_integration.dart --check
 
-test: dependencies vt-parser-table-check terminal-parser-trace-check keybind-action-reference-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
+test: dependencies vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart

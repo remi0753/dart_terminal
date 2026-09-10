@@ -20,6 +20,7 @@ import 'terminal_application_theme.dart';
 import 'terminal_command_palette.dart';
 import 'terminal_config.dart';
 import 'terminal_config_reload.dart';
+import 'terminal_configuration_reference.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
 import 'terminal_core/terminal_reply.dart';
@@ -58,15 +59,7 @@ import 'terminal_tab_metadata.dart';
 import 'terminal_tab_presentation.dart';
 import 'terminal_terminfo_environment.dart';
 
-const String terminalUsage = '''
-Usage: Dart Terminal [application-options]
-
-Application options:
-  --config=PATH              Read this configuration file.
-  --no-config                Do not read a configuration file.
-  --working-directory=PATH   Initial command working directory.
-  --auto-close-after=SECONDS Close automatically (for smoke testing).
-''';
+final String terminalUsage = TerminalConfigurationReference().generateUsage();
 
 const String _runtimeWorkerName = 'dart_terminal_runtime_worker';
 const int _runtimeSoftwareFailureExitCode = 70;

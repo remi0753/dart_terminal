@@ -237,6 +237,23 @@ make RUNTIME_ARCH=arm64 developer-jit-integration
 エラーにしません。別のファイルを使う場合は `--config=PATH`、設定ファイルを一切読まない
 場合は `--no-config` を指定します。
 
+`--help` は設定ファイルを読まず、typed schemaから生成した全optionの構文と適用policyを表示して
+終了します。`--show-config` は通常と同じfile/include/CLI priorityを解決し、application、PTY、
+renderer、worker、native windowを作らずに、全effective value、source、line/column、policy、
+repeat occurrence、diagnosticをversionedかつboundedな一行形式で表示して終了します。値とpathは
+JSON escapeされます。
+
+```shell
+make RUNTIME_ARCH=arm64 developer-jit-run RUNTIME_ARGUMENTS="--help"
+make RUNTIME_ARCH=arm64 developer-jit-run \
+  RUNTIME_ARGUMENTS="--show-config --config=/path/to/config"
+```
+
+全option、CLI構文、canonical default、live/new-session policy、上限、migrationは
+[Configuration and command-line reference](docs/reference/configuration-and-command-line.md)を
+参照してください。このreferenceと`--help`は同じschemaから生成され、通常の`make test`が
+古い生成物を拒否します。
+
 設定はUTF-8の`key = value`形式です。空行と`#`以降のコメントを使用でき、空白や`#`を含む
 値はdouble quoteで囲めます。`include`の相対pathは、それを記述した設定ファイルを基準に
 解決します。include先を先に適用し、include元、command lineの順に上書きします。
@@ -289,6 +306,8 @@ scrollback、font、padding、window frameは書き換えません。自動file 
 現在の対象外です。
 
 `theme` は `system`、`light`、`dark` を受理し、互換記法の `default` は `system` として扱います。
+`default`を使用すると`CFG_DEPRECATED_VALUE` warningと`theme = system`への修正案を表示し、
+canonical effective outputは常に`system`を使用します。
 組み込みの `Dart Light` / `Dart Dark` を基礎に、明示した foreground/background/cursor と
 ANSI palette 0–15 だけを上書きします。OSCによる実行中のpalette変更はさらに上位のlayerとして
 保持され、OSC reset時は現在のtheme値へ戻ります。`system` をcaptureした既存paneはmacOSの

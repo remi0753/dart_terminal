@@ -1,6 +1,6 @@
 # Settings UI and effective-configuration inspector
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-11 after commit `dc5603a`
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 8 `settings UI と effective-config inspector`
@@ -241,3 +241,135 @@ the next child.
   formatter, tests, canonicalized acceptance fixtures, refreshed evidence,
   roadmap, and memo changes. The adjacent `dart_appkit` worktree remained
   clean; no generic native capability was needed for this child.
+
+## Current subtask: CLI inspection and generated reference
+
+- Status: in progress
+- Started: 2026-09-11 after commit `631cff2`
+- Purpose: expose the schema and effective snapshot through ordinary bounded
+  process modes, and make the committed full configuration reference reject
+  drift from the same authority.
+- Background: `bin/main.dart` currently validates the runtime host, parses a
+  full `TerminalOptions`, prints startup diagnostics, and immediately creates
+  `TerminalApplication`. Its hand-written `terminalUsage` lists only four
+  options. The repository already has a proven generate/check/test/Makefile
+  pattern for the narrower keybinding/action reference.
+- Scope: schema-generated usage text; exclusive `--help` and `--show-config`
+  early-mode resolution; bounded stdout/stderr projections; an exact generated
+  Markdown configuration/CLI reference; freshness/completeness tests; Makefile
+  gates; README links and migration/output documentation.
+- Out of scope: new product actions, Settings/AppKit UI resources, writing
+  config, changing reload behavior, or runtime GUI acceptance. The discovered
+  generic clean-exit defect in `dart_appkit` is a separately committed runtime
+  dependency correction, not terminal UI scope.
+- Dependencies: the schema presentation contract, effective-config formatter,
+  loader precedence/diagnostics, existing runtime termination API, and the
+  keybinding/action reference for detailed key/action vocabulary.
+- Completion conditions: help and reference contain every schema option exactly
+  once; `--show-config` accepts normal config selectors/overrides and emits the
+  exact bounded effective document; both modes terminate before options,
+  application, PTY, renderer, worker, and native-window ownership; invalid mode
+  combinations remain usage errors; generated content is freshness-gated and
+  documented.
+- Validation: pure mode/output tests, actual entrypoint contract checks where
+  possible without launching AppKit, generator generate/check/freshness,
+  format, analysis, full `make test`, source audit, diff review, roadmap update,
+  and one task-scoped commit.
+
+### Initial findings and decisions
+
+- Early modes must be selected before `TerminalOptions.parse`, because normal
+  parsing creates a reload controller and resolves integration-only runtime
+  arguments. `--show-config` will call the config loader directly; `--help`
+  will not touch a config file, so a broken user config cannot prevent help.
+- Both early flags are single-use and mutually exclusive. `--help` is a
+  standalone discovery mode. `--show-config` may be combined only with
+  configuration selectors and schema overrides; unrelated runtime options are
+  rejected instead of being silently ignored.
+- The embedded host validation/diagnostic bootstrap may run before dispatch,
+  but early branches will request termination without constructing
+  `TerminalOptions` or `TerminalApplication`. This preserves the runtime host
+  lifecycle while keeping all AppKit/PTY/renderer/worker owners absent.
+- Generated usage and Markdown will consume `TerminalConfigSchema` directly.
+  The full reference will link to the independently generated
+  `keybindings-and-actions.md` authority rather than duplicating its physical
+  key and action tables.
+- The first generator run found an unescaped `$XDG_CONFIG_HOME` in a Dart
+  string and failed at compile time before creating the reference. Escaping the
+  documentation’s literal dollar sign fixes the source without changing the
+  intended generated text.
+- The first entrypoint-order test incorrectly rejected the type annotation in
+  the statement immediately after the early branch, even though the
+  `TerminalOptions.parse` call was correctly outside and after that branch.
+  Tightening the assertion to forbid the parse call itself preserves the
+  ownership contract without depending on substring boundaries around the
+  following declaration.
+
+### Runtime dependency correction
+
+- The first real Developer JIT `--help` run generated the complete help text
+  and took the early branch, but the embedded runner then failed with status 2
+  while requesting application termination. Inspection of adjacent
+  `dart_appkit` found that `dmr_runtime_request_termination` delegated every
+  result to the failure-only `RecordExitCode`, which intentionally rejects
+  zero. The public header likewise described only non-zero termination even
+  though clean process modes need an ordinary successful exit.
+- The user explicitly authorized correcting `dart_appkit` in this session.
+  The generic runtime API now accepts the full process-status range 0 through
+  255 on the main thread. Zero schedules idempotent application termination
+  without inventing a failure or replacing a previously recorded non-zero
+  result; non-zero behavior and the ABI signature are unchanged. Native tests
+  cover invalid, clean, worker-thread, and prior-failure preservation cases,
+  and the Dart facade documents the same contract. No ABI revision is needed
+  because this is a compatible behavioral expansion of the existing call.
+- The dependency correction was committed in adjacent `dart_appkit` as
+  `2b36186` (`Allow clean runtime termination requests`); its worktree was
+  clean after the commit.
+- `make runtime-lifecycle-test runtime-dart-test` passed after the correction.
+  The first aggregate adjacent-repository `make test` attempt later failed once
+  in the unrelated `dart_pty_macos` race case `live Dart child cannot steal
+  native PTY completion` with `Bad state: No element`. No PTY source was
+  changed. Its isolated 11-test suite passed immediately, and a complete
+  aggregate rerun passed all native, package, launcher, asset, and smoke tests.
+  After strengthening the lifecycle test with worker-thread and preserved
+  failure assertions, the focused lifecycle/runtime suites passed again.
+- With that runtime correction, the real Developer JIT `--help` process exited
+  successfully without pane, PTY, renderer, worker, or window lifecycle output.
+  A real `--show-config --no-config --theme=default --font-size=17.5` process
+  also exited successfully and emitted the versioned 36-entry document plus
+  one migration warning: `theme` was canonicalized to `system` at CLI argument
+  3, `font-size` retained `17.5` at argument 4, and the empty repeatable
+  `keybind` placeholder was present.
+
+### Validation log
+
+- `dart format` formatted 239 files with zero source changes, but its first
+  invocation returned failure only because sandboxing denied a Dart telemetry
+  timestamp write under the user home. Re-running with `CI=true` and
+  `DART_SUPPRESS_ANALYTICS=true` completed with zero changes.
+- The focused configuration-reference test passed. It covers exact one-row and
+  one-flag schema completeness for all 36 options, committed reference
+  freshness and stale rejection, help without filesystem access, canonical
+  effective values and provenance, warning/error recovery, early-mode
+  conflicts, entrypoint ownership order, and typed output bounds.
+- The generator check passed with 36 options, 2 live policies, 34 new-session
+  policies, and 1 repeatable option. `dart analyze` reported no issues.
+- The first aggregate `make test` correctly stopped at the Phase 7 AppKit
+  freshness gate after replacing the hand-written `terminalUsage`. Regenerating
+  its evidence changed only the two expected `terminal_application.dart`
+  hashes. The next aggregate run reached the compatibility coverage freshness
+  gate; regenerating that report changed only its tracked README hash at that
+  point. No acceptance expectation or compatibility classification changed.
+- After updating CFG-07 in `FEATURE_MATRIX.md`, the same coverage report was
+  regenerated once more so its tracked feature-matrix hash reflects the
+  completed CLI surface. The final aggregate gate passed generated-reference,
+  Phase 7, compatibility, application, terminfo, and shell-integration
+  freshness checks; formatted all 239 files with zero changes; reported no
+  analyzer issues; and completed `dart_terminal tests passed`.
+- `make runtime-source-check` passed with 439 tracked files, zero product native
+  sources, and the one reviewed test-only native source.
+- `git diff --check` passed. Final review found only the CLI resolver,
+  schema-generated presenters/reference, exact tests, docs/README/matrix,
+  Makefile freshness gate, exports/entrypoint integration, and automatically
+  refreshed source-hash evidence. Adjacent `dart_appkit` remained clean at
+  `2b36186`.
