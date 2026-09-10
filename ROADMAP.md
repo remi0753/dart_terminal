@@ -1007,6 +1007,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] session/screen/renderer/input/window への product projection
   - [x] M1 両 runtime 回帰受け入れと親項目完了判定
 - [ ] declarative keybind と action reference generation
+  （分割と完了条件は
+  [`docs/phase8/declarative-keybind-action-reference.md`](docs/phase8/declarative-keybind-action-reference.md)
+  を参照して順に実施する）
+  - [x] repeatable config occurrence と typed keybind grammar/profile
+  - [ ] pane/application action routing と native menu arbitration
+  - [ ] generated keybind/action reference と freshness gate
+  - [ ] M1 両 runtime 回帰受け入れと親項目完了判定
 - [ ] safe reload、per-option live/new-session policy
 - [ ] light/dark theme と system appearance
 - [ ] zsh/bash/fish/nushell integration

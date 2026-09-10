@@ -1,6 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'terminal_action_registry.dart';
+import 'terminal_input/terminal_key_binding.dart';
+import 'terminal_input/terminal_key_event.dart';
+
 typedef TerminalConfigValueParser<T> = TerminalConfigDecodeResult<T> Function(
   String value,
 );
@@ -101,6 +105,8 @@ final class TerminalConfigDecodeResult<T> {
 sealed class TerminalConfigOptionBase {
   String get name;
   String get description;
+  bool get isRepeatable;
+  int? get maximumOccurrences;
   Object? get defaultValueObject;
   TerminalConfigDecodeResult<Object?> decodeObject(String value);
 }
@@ -119,11 +125,66 @@ final class TerminalConfigOption<T> extends TerminalConfigOptionBase {
   @override
   final String description;
 
+  @override
+  bool get isRepeatable => false;
+
+  @override
+  int? get maximumOccurrences => null;
+
   final T defaultValue;
   final TerminalConfigValueParser<T> _parser;
 
   @override
   Object? get defaultValueObject => defaultValue;
+
+  TerminalConfigDecodeResult<T> decode(String value) => _parser(value);
+
+  @override
+  TerminalConfigDecodeResult<Object?> decodeObject(String value) {
+    final TerminalConfigDecodeResult<T> decoded = decode(value);
+    if (!decoded.isSuccess) {
+      return TerminalConfigDecodeResult<Object?>.failure(
+        decoded.message!,
+        hint: decoded.hint,
+      );
+    }
+    return TerminalConfigDecodeResult<Object?>.success(decoded.value);
+  }
+}
+
+/// One schema option that preserves every valid occurrence in precedence order.
+final class TerminalConfigRepeatedOption<T> extends TerminalConfigOptionBase {
+  TerminalConfigRepeatedOption({
+    required this.name,
+    required this.description,
+    required this.maximumOccurrences,
+    required TerminalConfigValueParser<T> parser,
+  }) : _parser = parser {
+    if (maximumOccurrences <= 0 || maximumOccurrences > 4096) {
+      throw ArgumentError.value(
+        maximumOccurrences,
+        'maximumOccurrences',
+        'must be in 1..4096',
+      );
+    }
+  }
+
+  @override
+  final String name;
+
+  @override
+  final String description;
+
+  @override
+  final int maximumOccurrences;
+
+  final TerminalConfigValueParser<T> _parser;
+
+  @override
+  bool get isRepeatable => true;
+
+  @override
+  Object? get defaultValueObject => null;
 
   TerminalConfigDecodeResult<T> decode(String value) => _parser(value);
 
@@ -182,6 +243,12 @@ final class TerminalConfigSnapshot {
   TerminalConfigSnapshot({
     required Map<TerminalConfigOptionBase, TerminalResolvedConfigValue<Object?>>
     values,
+    Map<TerminalConfigOptionBase, List<TerminalResolvedConfigValue<Object?>>>
+        repeatedValues =
+        const <
+          TerminalConfigOptionBase,
+          List<TerminalResolvedConfigValue<Object?>>
+        >{},
     required Iterable<TerminalConfigDiagnostic> diagnostics,
     required this.rootPath,
   }) : _values =
@@ -189,10 +256,36 @@ final class TerminalConfigSnapshot {
              TerminalConfigOptionBase,
              TerminalResolvedConfigValue<Object?>
            >.unmodifiable(values),
+       _repeatedValues =
+           Map<
+             TerminalConfigOptionBase,
+             List<TerminalResolvedConfigValue<Object?>>
+           >.unmodifiable(
+             repeatedValues.map(
+               (
+                 TerminalConfigOptionBase option,
+                 List<TerminalResolvedConfigValue<Object?>> values,
+               ) =>
+                   MapEntry<
+                     TerminalConfigOptionBase,
+                     List<TerminalResolvedConfigValue<Object?>>
+                   >(
+                     option,
+                     List<TerminalResolvedConfigValue<Object?>>.unmodifiable(
+                       values,
+                     ),
+                   ),
+             ),
+           ),
        diagnostics = List<TerminalConfigDiagnostic>.unmodifiable(diagnostics);
 
   final Map<TerminalConfigOptionBase, TerminalResolvedConfigValue<Object?>>
   _values;
+  final Map<
+    TerminalConfigOptionBase,
+    List<TerminalResolvedConfigValue<Object?>>
+  >
+  _repeatedValues;
   final List<TerminalConfigDiagnostic> diagnostics;
   final String? rootPath;
 
@@ -208,6 +301,25 @@ final class TerminalConfigSnapshot {
   }
 
   T value<T>(TerminalConfigOption<T> option) => resolved(option).value;
+
+  List<TerminalResolvedConfigValue<T>> occurrences<T>(
+    TerminalConfigRepeatedOption<T> option,
+  ) {
+    final List<TerminalResolvedConfigValue<Object?>>? values =
+        _repeatedValues[option];
+    if (values == null) {
+      throw ArgumentError.value(option.name, 'option', 'not in schema');
+    }
+    return List<TerminalResolvedConfigValue<T>>.unmodifiable(
+      values.map(
+        (TerminalResolvedConfigValue<Object?> value) =>
+            TerminalResolvedConfigValue<T>(
+              value: value.value as T,
+              source: value.source,
+            ),
+      ),
+    );
+  }
 }
 
 final class TerminalConfigResolution {
@@ -419,6 +531,16 @@ abstract final class TerminalProductConfigSchema {
         parser: _parseBoolean,
       );
 
+  static final TerminalConfigRepeatedOption<TerminalKeyBindingDefinition>
+  keybind = TerminalConfigRepeatedOption<TerminalKeyBindingDefinition>(
+    name: 'keybind',
+    description: 'Exact physical-key chord and action override.',
+    maximumOccurrences:
+        TerminalKeyBindingEngine.maximumDefinitionCount -
+        TerminalKeyBindingEngine.standardDefinitionCount,
+    parser: _parseKeyBinding,
+  );
+
   static final TerminalConfigSchema instance = TerminalConfigSchema(
     <TerminalConfigOptionBase>[
       workingDirectory,
@@ -439,6 +561,7 @@ abstract final class TerminalProductConfigSchema {
       scrollbackBytes,
       cursorShape,
       cursorBlink,
+      keybind,
     ],
   );
 }
@@ -510,8 +633,8 @@ final class TerminalConfigLoader {
   _TerminalConfigArguments _parseArguments(List<String> arguments) {
     String? configPath;
     var noConfig = false;
-    final Map<TerminalConfigOptionBase, _TerminalRawValue> values =
-        <TerminalConfigOptionBase, _TerminalRawValue>{};
+    final Map<TerminalConfigOptionBase, List<_TerminalRawValue>> values =
+        <TerminalConfigOptionBase, List<_TerminalRawValue>>{};
     final List<String> remaining = <String>[];
     for (var index = 0; index < arguments.length; index += 1) {
       final String argument = arguments[index];
@@ -557,7 +680,7 @@ final class TerminalConfigLoader {
         remaining.add(argument);
         continue;
       }
-      if (values.containsKey(matched)) {
+      if (!matched.isRepeatable && values.containsKey(matched)) {
         throw FormatException('--${matched.name} may only be supplied once');
       }
       final String prefix = '--${matched.name}=';
@@ -568,15 +691,19 @@ final class TerminalConfigLoader {
       if (!decoded.isSuccess) {
         throw FormatException('--${matched.name}: ${decoded.message}');
       }
-      values[matched] = _TerminalRawValue(
-        raw: raw,
-        source: TerminalConfigSource(
-          kind: TerminalConfigSourceKind.commandLine,
-          path: '<command-line>',
-          line: index + 1,
-          column: prefix.length + 1,
-        ),
-      );
+      values
+          .putIfAbsent(matched, () => <_TerminalRawValue>[])
+          .add(
+            _TerminalRawValue(
+              raw: raw,
+              source: TerminalConfigSource(
+                kind: TerminalConfigSourceKind.commandLine,
+                path: '<command-line>',
+                line: index + 1,
+                column: prefix.length + 1,
+              ),
+            ),
+          );
     }
     return _TerminalConfigArguments(
       configPath: configPath,
@@ -604,7 +731,7 @@ final class _TerminalConfigArguments {
 
   final String? configPath;
   final bool noConfig;
-  final Map<TerminalConfigOptionBase, _TerminalRawValue> values;
+  final Map<TerminalConfigOptionBase, List<_TerminalRawValue>> values;
   final List<String> remaining;
 }
 
@@ -636,10 +763,14 @@ final class _TerminalConfigCollector {
     required this.limits,
   }) {
     for (final TerminalConfigOptionBase option in schema.options) {
-      _values[option] = TerminalResolvedConfigValue<Object?>(
-        value: option.defaultValueObject,
-        source: const TerminalConfigSource.schemaDefault(),
-      );
+      if (option.isRepeatable) {
+        _repeatedValues[option] = <TerminalResolvedConfigValue<Object?>>[];
+      } else {
+        _values[option] = TerminalResolvedConfigValue<Object?>(
+          value: option.defaultValueObject,
+          source: const TerminalConfigSource.schemaDefault(),
+        );
+      }
     }
   }
 
@@ -648,9 +779,17 @@ final class _TerminalConfigCollector {
   final TerminalConfigLimits limits;
   final Map<TerminalConfigOptionBase, TerminalResolvedConfigValue<Object?>>
   _values = <TerminalConfigOptionBase, TerminalResolvedConfigValue<Object?>>{};
+  final Map<
+    TerminalConfigOptionBase,
+    List<TerminalResolvedConfigValue<Object?>>
+  >
+  _repeatedValues =
+      <TerminalConfigOptionBase, List<TerminalResolvedConfigValue<Object?>>>{};
   final List<TerminalConfigDiagnostic> _diagnostics =
       <TerminalConfigDiagnostic>[];
   final List<String> _includeStack = <String>[];
+  final Set<TerminalConfigOptionBase> _repeatLimitReported =
+      <TerminalConfigOptionBase>{};
   var _fileCount = 0;
   var _assignmentCount = 0;
   var _diagnosticLimitReported = false;
@@ -660,25 +799,34 @@ final class _TerminalConfigCollector {
   }
 
   void applyCommandLine(
-    Map<TerminalConfigOptionBase, _TerminalRawValue> values,
+    Map<TerminalConfigOptionBase, List<_TerminalRawValue>> values,
   ) {
-    for (final MapEntry<TerminalConfigOptionBase, _TerminalRawValue> entry
+    for (final MapEntry<TerminalConfigOptionBase, List<_TerminalRawValue>> entry
         in values.entries) {
-      final TerminalConfigDecodeResult<Object?> decoded = entry.key
-          .decodeObject(entry.value.raw);
-      if (!decoded.isSuccess) {
-        throw StateError('validated command-line value changed result');
+      for (final _TerminalRawValue rawValue in entry.value) {
+        final TerminalConfigDecodeResult<Object?> decoded = entry.key
+            .decodeObject(rawValue.raw);
+        if (!decoded.isSuccess) {
+          throw StateError('validated command-line value changed result');
+        }
+        final TerminalResolvedConfigValue<Object?> resolved =
+            TerminalResolvedConfigValue<Object?>(
+              value: decoded.value,
+              source: rawValue.source,
+            );
+        if (entry.key.isRepeatable) {
+          _appendRepeated(entry.key, resolved);
+        } else {
+          _values[entry.key] = resolved;
+        }
       }
-      _values[entry.key] = TerminalResolvedConfigValue<Object?>(
-        value: decoded.value,
-        source: entry.value.source,
-      );
     }
   }
 
   TerminalConfigSnapshot snapshot({required String? rootPath}) =>
       TerminalConfigSnapshot(
         values: _values,
+        repeatedValues: _repeatedValues,
         diagnostics: _diagnostics,
         rootPath: rootPath,
       );
@@ -884,7 +1032,7 @@ final class _TerminalConfigCollector {
           break;
         }
         _assignmentCount += 1;
-        if (!assigned.add(option)) {
+        if (!option.isRepeatable && !assigned.add(option)) {
           _addDiagnostic(
             TerminalConfigDiagnostic(
               severity: TerminalConfigDiagnosticSeverity.warning,
@@ -917,14 +1065,46 @@ final class _TerminalConfigCollector {
           );
           continue;
         }
-        _values[option] = TerminalResolvedConfigValue<Object?>(
-          value: decoded.value,
-          source: directive.source,
-        );
+        final TerminalResolvedConfigValue<Object?> resolved =
+            TerminalResolvedConfigValue<Object?>(
+              value: decoded.value,
+              source: directive.source,
+            );
+        if (option.isRepeatable) {
+          _appendRepeated(option, resolved);
+        } else {
+          _values[option] = resolved;
+        }
       }
     } finally {
       _includeStack.removeLast();
     }
+  }
+
+  void _appendRepeated(
+    TerminalConfigOptionBase option,
+    TerminalResolvedConfigValue<Object?> value,
+  ) {
+    final List<TerminalResolvedConfigValue<Object?>> values =
+        _repeatedValues[option]!;
+    final int maximum = option.maximumOccurrences!;
+    if (values.length >= maximum) {
+      values.removeAt(0);
+      if (_repeatLimitReported.add(option)) {
+        _addDiagnostic(
+          TerminalConfigDiagnostic(
+            severity: TerminalConfigDiagnosticSeverity.warning,
+            code: 'CFG_REPEAT_LIMIT',
+            message:
+                '`${option.name}` retains at most $maximum occurrences; '
+                'the earliest lower-precedence occurrence was discarded',
+            source: value.source,
+            hint: 'remove overridden or unnecessary declarations',
+          ),
+        );
+      }
+    }
+    values.add(value);
   }
 
   List<_TerminalDirective> _parseFile(String path, String text) {
@@ -1244,6 +1424,172 @@ TerminalConfigDecodeResult<TerminalConfiguredCursorShape> _parseCursorShape(
     hint: 'use `cursor-shape = block` for the default behavior',
   ),
 };
+
+TerminalConfigDecodeResult<TerminalKeyBindingDefinition> _parseKeyBinding(
+  String value,
+) {
+  if (value.isEmpty || value.length > 512 || _containsControl(value)) {
+    return const TerminalConfigDecodeResult<
+      TerminalKeyBindingDefinition
+    >.failure(
+      'keybind must be control-free text within 512 UTF-16 units',
+      hint: 'use `keybind = control+k=terminal.send-interrupt-signal`',
+    );
+  }
+  final int equals = value.indexOf('=');
+  if (equals <= 0 || equals != value.lastIndexOf('=')) {
+    return const TerminalConfigDecodeResult<
+      TerminalKeyBindingDefinition
+    >.failure(
+      'keybind must contain one `chord=target` separator',
+      hint: 'use `keybind = control+k=terminal.send-interrupt-signal`',
+    );
+  }
+  final String chordText = value.substring(0, equals).trim();
+  final String targetText = value.substring(equals + 1).trim();
+  if (chordText.isEmpty || targetText.isEmpty) {
+    return const TerminalConfigDecodeResult<
+      TerminalKeyBindingDefinition
+    >.failure(
+      'keybind chord and target must not be empty',
+      hint:
+          'provide one physical key and an action, `unbind`, or `passthrough`',
+    );
+  }
+  final List<String> tokens = chordText
+      .split('+')
+      .map((String token) => token.trim())
+      .toList(growable: false);
+  if (tokens.any((String token) => token.isEmpty) || tokens.length > 5) {
+    return const TerminalConfigDecodeResult<
+      TerminalKeyBindingDefinition
+    >.failure(
+      'keybind chord must contain one key and at most four modifiers',
+      hint: 'modifiers are `shift`, `control`, `option`, and `command`',
+    );
+  }
+  var shift = false;
+  var control = false;
+  var option = false;
+  var command = false;
+  TerminalPhysicalKey? physicalKey;
+  final Set<String> seenModifiers = <String>{};
+  for (final String token in tokens) {
+    if (_terminalKeyBindingModifiers.contains(token)) {
+      if (!seenModifiers.add(token)) {
+        return TerminalConfigDecodeResult<TerminalKeyBindingDefinition>.failure(
+          'keybind modifier `$token` is repeated',
+          hint: 'list each modifier at most once',
+        );
+      }
+      switch (token) {
+        case 'shift':
+          shift = true;
+        case 'control':
+          control = true;
+        case 'option':
+          option = true;
+        case 'command':
+          command = true;
+      }
+      continue;
+    }
+    final TerminalPhysicalKey? key =
+        TerminalKeyBindingVocabulary.keyFromConfigName(token);
+    if (key == null) {
+      return TerminalConfigDecodeResult<TerminalKeyBindingDefinition>.failure(
+        'unknown keybind key or modifier `$token`',
+        hint: 'consult the generated keybinding/action reference',
+      );
+    }
+    if (physicalKey != null) {
+      return const TerminalConfigDecodeResult<
+        TerminalKeyBindingDefinition
+      >.failure(
+        'keybind chord must contain exactly one physical key',
+        hint: 'remove the extra key name',
+      );
+    }
+    physicalKey = key;
+  }
+  if (physicalKey == null) {
+    return const TerminalConfigDecodeResult<
+      TerminalKeyBindingDefinition
+    >.failure(
+      'keybind chord is missing a physical key',
+      hint: 'add one key name after any modifiers',
+    );
+  }
+  final TerminalKeyBindingChord chord = TerminalKeyBindingChord(
+    physicalKey: physicalKey,
+    shift: shift,
+    control: control,
+    option: option,
+    command: command,
+  );
+  if (_reservedNativeMenuChords.contains(chord)) {
+    return TerminalConfigDecodeResult<TerminalKeyBindingDefinition>.failure(
+      'keybind chord `${chord.configName}` is reserved by a native menu item',
+      hint: 'choose a chord that is not listed as a reserved native shortcut',
+    );
+  }
+  if (targetText == 'unbind') {
+    return TerminalConfigDecodeResult<TerminalKeyBindingDefinition>.success(
+      TerminalKeyBindingDefinition.unbind(chord: chord),
+    );
+  }
+  if (targetText == 'passthrough') {
+    return TerminalConfigDecodeResult<TerminalKeyBindingDefinition>.success(
+      TerminalKeyBindingDefinition.passthrough(chord: chord),
+    );
+  }
+  final TerminalKeyBindingAction? paneAction =
+      TerminalKeyBindingAction.fromConfigName(targetText);
+  if (paneAction != null) {
+    return TerminalConfigDecodeResult<TerminalKeyBindingDefinition>.success(
+      TerminalKeyBindingDefinition.action(chord: chord, action: paneAction),
+    );
+  }
+  final TerminalActionId? applicationAction = TerminalActionId.fromStableName(
+    targetText,
+  );
+  if (applicationAction != null) {
+    return TerminalConfigDecodeResult<TerminalKeyBindingDefinition>.success(
+      TerminalKeyBindingDefinition.applicationAction(
+        chord: chord,
+        applicationAction: applicationAction,
+      ),
+    );
+  }
+  return TerminalConfigDecodeResult<TerminalKeyBindingDefinition>.failure(
+    'unknown keybind target `$targetText`',
+    hint: 'consult the generated keybinding/action reference',
+  );
+}
+
+const Set<String> _terminalKeyBindingModifiers = <String>{
+  'shift',
+  'control',
+  'option',
+  'command',
+};
+
+final Set<TerminalKeyBindingChord> _reservedNativeMenuChords =
+    Set<TerminalKeyBindingChord>.unmodifiable(
+      TerminalActionCatalog.standard().actions
+          .where((TerminalActionDefinition action) => action.shortcut != null)
+          .map((TerminalActionDefinition action) {
+            final TerminalActionShortcut shortcut = action.shortcut!;
+            final TerminalKeyBindingChord? chord =
+                TerminalKeyBindingVocabulary.chordForNativeShortcut(shortcut);
+            if (chord == null) {
+              throw StateError(
+                'native shortcut `${shortcut.identity}` has no physical key',
+              );
+            }
+            return chord;
+          }),
+    );
 
 TerminalConfigDecodeResult<bool> _parseBoolean(String value) => switch (value) {
   'true' => const TerminalConfigDecodeResult<bool>.success(true),

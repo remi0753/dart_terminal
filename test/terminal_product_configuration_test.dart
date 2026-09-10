@@ -17,12 +17,12 @@ void _testDefaultsAndSchemaInventory() {
   final TerminalProductConfiguration defaults =
       TerminalProductConfiguration.defaults;
   _expect(
-    TerminalProductConfigSchema.instance.options.length == 33 &&
+    TerminalProductConfigSchema.instance.options.length == 34 &&
         TerminalProductConfigSchema.instance.options
                 .map((TerminalConfigOptionBase option) => option.name)
                 .toSet()
                 .length ==
-            33 &&
+            34 &&
         TerminalProductConfigSchema.instance.options.every(
           (TerminalConfigOptionBase option) => option.description.isNotEmpty,
         ),
@@ -50,12 +50,24 @@ void _testDefaultsAndSchemaInventory() {
         defaults.scrollbackLines == 10000 &&
         defaults.scrollbackBytes == 64 * 1024 * 1024 &&
         defaults.cursorShape == TerminalConfiguredCursorShape.block &&
-        defaults.cursorBlink,
+        defaults.cursorBlink &&
+        defaults.keybindings.isEmpty,
     'zero-config profile exactly preserves existing product defaults',
   );
   _expectThrows(
     () => defaults.palette.ansiColors.add(0x80000000),
     'palette profile is immutable',
+  );
+  _expectThrows(
+    () => defaults.keybindings.add(
+      const TerminalKeyBindingDefinition.unbind(
+        chord: TerminalKeyBindingChord(
+          physicalKey: TerminalPhysicalKey.keyD,
+          control: true,
+        ),
+      ),
+    ),
+    'keybinding profile is immutable',
   );
 }
 
@@ -82,7 +94,9 @@ void _testCompleteFileProfile() {
     ..writeln('scrollback-lines = 50000')
     ..writeln('scrollback-bytes = 128MiB')
     ..writeln('cursor-shape = bar')
-    ..writeln('cursor-blink = false');
+    ..writeln('cursor-blink = false')
+    ..writeln('keybind = control+d=unbind')
+    ..writeln('keybind = shift+control+k=pane.focus-next');
   final _ProfileMemoryFileSystem files = _ProfileMemoryFileSystem(
     <String, String>{'/profile': config.toString()},
   );
@@ -111,7 +125,12 @@ void _testCompleteFileProfile() {
         profile.scrollbackLines == 50000 &&
         profile.scrollbackBytes == 128 * 1024 * 1024 &&
         profile.cursorShape == TerminalConfiguredCursorShape.bar &&
-        !profile.cursorBlink,
+        !profile.cursorBlink &&
+        profile.keybindings.length == 2 &&
+        profile.keybindings.first.directive ==
+            TerminalKeyBindingDirective.unbind &&
+        profile.keybindings.last.applicationAction ==
+            TerminalActionId.focusNextPane,
     'all option families resolve into one immutable typed profile',
   );
 }
@@ -228,6 +247,8 @@ void _testConsumerResourceFactoriesAndMappings() {
       '--scrollback-bytes=2MiB',
       '--cursor-shape=underline',
       '--cursor-blink=false',
+      '--keybind=control+d=unbind',
+      '--keybind=shift+control+k=pane.focus-next',
     ],
     environment: const <String, String>{},
   ).snapshot;
@@ -237,6 +258,7 @@ void _testConsumerResourceFactoriesAndMappings() {
   final TerminalPalette secondPalette = profile.createPalette();
   final TerminalScrollback firstScrollback = profile.createScrollback();
   final TerminalScrollback secondScrollback = profile.createScrollback();
+  final TerminalKeyBindingEngine keyBindings = profile.createKeyBindingEngine();
   _expect(
     !identical(firstPalette, secondPalette) &&
         firstPalette.defaultForeground == 0x80102030 &&
@@ -250,7 +272,25 @@ void _testConsumerResourceFactoriesAndMappings() {
         profile.terminalCursorShape == TerminalCursorShape.underline &&
         profile.terminalSyntheticStylePolicy ==
             TerminalSyntheticStylePolicy.reject &&
-        profile.terminalOptionKeyBehavior == TerminalOptionKeyBehavior.text,
+        profile.terminalOptionKeyBehavior == TerminalOptionKeyBehavior.text &&
+        keyBindings
+                .resolve(
+                  const TerminalKeyEvent(
+                    physicalKey: TerminalPhysicalKey.keyD,
+                    modifiers: TerminalKeyModifiers(control: true),
+                  ),
+                )
+                .kind ==
+            TerminalKeyBindingResolutionKind.noMatch &&
+        keyBindings
+                .resolve(
+                  const TerminalKeyEvent(
+                    physicalKey: TerminalPhysicalKey.keyK,
+                    modifiers: TerminalKeyModifiers(shift: true, control: true),
+                  ),
+                )
+                .applicationAction ==
+            TerminalActionId.focusNextPane,
     'profile creates independent bounded consumer resources and exact enums',
   );
 }

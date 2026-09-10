@@ -8,9 +8,144 @@ void main() => runTerminalConfigTests();
 void runTerminalConfigTests() {
   _testSchemaAndZeroConfig();
   _testDefaultLocationAndPrecedence();
+  _testRepeatableKeybindOccurrences();
   _testDiagnosticsAndRecovery();
   _testIncludeCycleAndBounds();
   _testTerminalOptionsIntegration();
+}
+
+void _testRepeatableKeybindOccurrences() {
+  final _MemoryConfigFileSystem files = _MemoryConfigFileSystem(
+    const <String, String>{
+      '/root': '''
+include = child
+keybind = shift+control+k=pane.focus-next
+''',
+      '/child': '''
+keybind = control+d=unbind
+''',
+      '/invalid': '''
+keybind = command+d=pane.focus-next
+keybind = control+not-a-key=passthrough
+keybind = control+x=application.not-real
+keybind = control+y=terminal.send-suspend-signal
+''',
+      '/bounded': '''
+item = one
+item = two
+item = three
+''',
+    },
+  );
+  final TerminalConfigSnapshot ordered = TerminalConfigLoader(fileSystem: files)
+      .resolve(const <String>[
+        '--config=/root',
+        '--keybind=option+j=terminal.send-quit-signal',
+        '--keybind=command+k=passthrough',
+      ], environment: const <String, String>{})
+      .snapshot;
+  final List<TerminalResolvedConfigValue<TerminalKeyBindingDefinition>>
+  occurrences = ordered.occurrences(TerminalProductConfigSchema.keybind);
+  _expect(
+    ordered.diagnostics.isEmpty &&
+        occurrences.length == 4 &&
+        occurrences[0].value.chord.configName == 'control+d' &&
+        occurrences[0].value.directive == TerminalKeyBindingDirective.unbind &&
+        occurrences[0].source.path == '/child' &&
+        occurrences[1].value.chord.configName == 'shift+control+k' &&
+        occurrences[1].value.applicationAction ==
+            TerminalActionId.focusNextPane &&
+        occurrences[1].source.path == '/root' &&
+        occurrences[2].value.action ==
+            TerminalKeyBindingAction.sendQuitSignal &&
+        occurrences[2].source.kind == TerminalConfigSourceKind.commandLine &&
+        occurrences[2].source.line == 2 &&
+        occurrences[3].value.directive ==
+            TerminalKeyBindingDirective.passthrough &&
+        occurrences[3].source.line == 3,
+    'repeatable keybinds retain include/root/CLI order and per-item provenance',
+  );
+  _expectThrows(
+    () => occurrences.add(occurrences.first),
+    'repeatable snapshot occurrences are immutable',
+  );
+
+  final List<String> targetNames = <String>[
+    ...TerminalKeyBindingAction.values.map(
+      (TerminalKeyBindingAction action) => action.configName,
+    ),
+    ...TerminalActionId.values.map(
+      (TerminalActionId action) => action.stableName,
+    ),
+  ];
+  final _MemoryConfigFileSystem actionFiles = _MemoryConfigFileSystem(
+    <String, String>{
+      '/actions': targetNames
+          .map((String target) => 'keybind = control+k=$target')
+          .join('\n'),
+    },
+  );
+  final List<TerminalResolvedConfigValue<TerminalKeyBindingDefinition>>
+  actionOccurrences = TerminalConfigLoader(fileSystem: actionFiles)
+      .resolve(const <String>[
+        '--config=/actions',
+      ], environment: const <String, String>{})
+      .snapshot
+      .occurrences(TerminalProductConfigSchema.keybind);
+  _expect(
+    actionOccurrences
+            .map(
+              (
+                TerminalResolvedConfigValue<TerminalKeyBindingDefinition> value,
+              ) => value.value.targetConfigName,
+            )
+            .join(',') ==
+        targetNames.join(','),
+    'every pane and application action ID is a typed keybind target',
+  );
+
+  final TerminalConfigSnapshot invalid = TerminalConfigLoader(fileSystem: files)
+      .resolve(const <String>[
+        '--config=/invalid',
+      ], environment: const <String, String>{})
+      .snapshot;
+  _expect(
+    invalid.diagnostics.length == 3 &&
+        invalid.diagnostics.every(
+          (TerminalConfigDiagnostic diagnostic) =>
+              diagnostic.code == 'CFG_INVALID_VALUE' && diagnostic.hint != null,
+        ) &&
+        invalid
+                .occurrences(TerminalProductConfigSchema.keybind)
+                .single
+                .value
+                .action ==
+            TerminalKeyBindingAction.sendSuspendSignal,
+    'invalid, reserved, and unknown keybinds recover independently',
+  );
+
+  final TerminalConfigRepeatedOption<String> item =
+      TerminalConfigRepeatedOption<String>(
+        name: 'item',
+        description: 'bounded repeated test value',
+        maximumOccurrences: 2,
+        parser: TerminalConfigDecodeResult<String>.success,
+      );
+  final TerminalConfigSnapshot bounded =
+      TerminalConfigLoader(
+        schema: TerminalConfigSchema(<TerminalConfigOptionBase>[item]),
+        fileSystem: files,
+      ).resolve(const <String>[
+        '--config=/bounded',
+      ], environment: const <String, String>{}).snapshot;
+  _expect(
+    bounded.occurrences(item).map((value) => value.value).join(',') ==
+            'two,three' &&
+        bounded.diagnostics.single.code == 'CFG_REPEAT_LIMIT' &&
+        bounded.diagnostics.single.severity ==
+            TerminalConfigDiagnosticSeverity.warning,
+    'repeatable options retain the newest bounded occurrences with one warning',
+  );
 }
 
 void _testSchemaAndZeroConfig() {

@@ -1,3 +1,4 @@
+import '../terminal_action_registry.dart';
 import 'terminal_key_event.dart';
 
 /// Stable action IDs accepted by the initial configurable binding engine.
@@ -66,6 +67,80 @@ final class TerminalKeyBindingChord {
     if (command) 'Command',
     physicalKey.name,
   ].join('+');
+
+  String get configName => <String>[
+    if (shift) 'shift',
+    if (control) 'control',
+    if (option) 'option',
+    if (command) 'command',
+    TerminalKeyBindingVocabulary.configNameForKey(physicalKey),
+  ].join('+');
+}
+
+/// Stable configuration names for the physical-key binding surface.
+abstract final class TerminalKeyBindingVocabulary {
+  static String configNameForKey(TerminalPhysicalKey key) {
+    if (key == TerminalPhysicalKey.unknown) {
+      throw ArgumentError.value(key, 'key', 'unknown has no config name');
+    }
+    final String name = key.name;
+    if (name.length == 4 && name.startsWith('key')) {
+      return name.substring(3).toLowerCase();
+    }
+    if (name.length == 6 && name.startsWith('digit')) {
+      return name.substring(5);
+    }
+    if (name.startsWith('arrow')) {
+      return _camelToKebab(name.substring(5));
+    }
+    if (name.startsWith('keypad')) {
+      return 'keypad-${_camelToKebab(name.substring(6))}';
+    }
+    if (name.startsWith('jis')) {
+      return 'jis-${_camelToKebab(name.substring(3))}';
+    }
+    return _camelToKebab(name);
+  }
+
+  static TerminalPhysicalKey? keyFromConfigName(String value) {
+    for (final TerminalPhysicalKey key in TerminalPhysicalKey.values) {
+      if (key != TerminalPhysicalKey.unknown &&
+          configNameForKey(key) == value) {
+        return key;
+      }
+    }
+    return null;
+  }
+
+  static TerminalKeyBindingChord? chordForNativeShortcut(
+    TerminalActionShortcut shortcut,
+  ) {
+    final TerminalPhysicalKey? key = keyFromConfigName(
+      shortcut.keyEquivalent.toLowerCase(),
+    );
+    if (key == null) return null;
+    return TerminalKeyBindingChord(
+      physicalKey: key,
+      shift: shortcut.shift,
+      control: shortcut.control,
+      option: shortcut.option,
+      command: shortcut.command,
+    );
+  }
+
+  static String _camelToKebab(String value) {
+    final StringBuffer result = StringBuffer();
+    for (var index = 0; index < value.length; index += 1) {
+      final int unit = value.codeUnitAt(index);
+      if (unit >= 0x41 && unit <= 0x5a) {
+        if (index > 0) result.write('-');
+        result.writeCharCode(unit + 0x20);
+      } else {
+        result.writeCharCode(unit);
+      }
+    }
+    return result.toString();
+  }
 }
 
 enum TerminalKeyBindingDirective { action, unbind, passthrough }
@@ -75,19 +150,36 @@ final class TerminalKeyBindingDefinition {
   const TerminalKeyBindingDefinition.action({
     required this.chord,
     required TerminalKeyBindingAction this.action,
-  }) : directive = TerminalKeyBindingDirective.action;
+  }) : directive = TerminalKeyBindingDirective.action,
+       applicationAction = null;
+
+  const TerminalKeyBindingDefinition.applicationAction({
+    required this.chord,
+    required TerminalActionId this.applicationAction,
+  }) : directive = TerminalKeyBindingDirective.action,
+       action = null;
 
   const TerminalKeyBindingDefinition.unbind({required this.chord})
     : directive = TerminalKeyBindingDirective.unbind,
-      action = null;
+      action = null,
+      applicationAction = null;
 
   const TerminalKeyBindingDefinition.passthrough({required this.chord})
     : directive = TerminalKeyBindingDirective.passthrough,
-      action = null;
+      action = null,
+      applicationAction = null;
 
   final TerminalKeyBindingChord chord;
   final TerminalKeyBindingDirective directive;
   final TerminalKeyBindingAction? action;
+  final TerminalActionId? applicationAction;
+
+  String get targetConfigName => switch (directive) {
+    TerminalKeyBindingDirective.unbind => 'unbind',
+    TerminalKeyBindingDirective.passthrough => 'passthrough',
+    TerminalKeyBindingDirective.action =>
+      action?.configName ?? applicationAction!.stableName,
+  };
 }
 
 enum TerminalKeyBindingLayer { defaults, overrides }
@@ -129,16 +221,22 @@ final class TerminalKeyBindingLimitException implements Exception {
 enum TerminalKeyBindingResolutionKind { noMatch, action, passthrough }
 
 final class TerminalKeyBindingResolution {
-  const TerminalKeyBindingResolution._(this.kind, this.action);
+  const TerminalKeyBindingResolution._(
+    this.kind,
+    this.action,
+    this.applicationAction,
+  );
 
   static const TerminalKeyBindingResolution noMatch =
       TerminalKeyBindingResolution._(
         TerminalKeyBindingResolutionKind.noMatch,
         null,
+        null,
       );
   static const TerminalKeyBindingResolution passthrough =
       TerminalKeyBindingResolution._(
         TerminalKeyBindingResolutionKind.passthrough,
+        null,
         null,
       );
 
@@ -147,10 +245,20 @@ final class TerminalKeyBindingResolution {
   ) => TerminalKeyBindingResolution._(
     TerminalKeyBindingResolutionKind.action,
     action,
+    null,
+  );
+
+  factory TerminalKeyBindingResolution.applicationAction(
+    TerminalActionId action,
+  ) => TerminalKeyBindingResolution._(
+    TerminalKeyBindingResolutionKind.action,
+    null,
+    action,
   );
 
   final TerminalKeyBindingResolutionKind kind;
   final TerminalKeyBindingAction? action;
+  final TerminalActionId? applicationAction;
 }
 
 /// Bounded immutable two-layer keybinding resolver.
@@ -195,21 +303,52 @@ final class TerminalKeyBindingEngine {
     Iterable<TerminalKeyBindingDefinition> overrides =
         const <TerminalKeyBindingDefinition>[],
   }) => TerminalKeyBindingEngine(
-    defaults: const <TerminalKeyBindingDefinition>[
-      TerminalKeyBindingDefinition.action(
-        chord: TerminalKeyBindingChord(
-          physicalKey: TerminalPhysicalKey.keyD,
-          control: true,
-        ),
-        action: TerminalKeyBindingAction.sendEndOfFile,
-      ),
-    ],
+    defaults: standardDefinitions,
     overrides: overrides,
   );
+
+  /// Applies ordered configuration declarations over the standard defaults.
+  ///
+  /// Unlike one programmatic layer, later declarations intentionally replace
+  /// earlier declarations for the same chord. This mirrors include/root/CLI
+  /// precedence while retaining the global definition bound.
+  factory TerminalKeyBindingEngine.standardWithOrderedOverrides(
+    Iterable<TerminalKeyBindingDefinition> declarations,
+  ) {
+    final List<TerminalKeyBindingDefinition> collected = _collectOrdered(
+      declarations,
+      consumedBefore: standardDefinitionCount,
+    );
+    final Map<TerminalKeyBindingChord, TerminalKeyBindingResolution> bindings =
+        <TerminalKeyBindingChord, TerminalKeyBindingResolution>{};
+    for (final TerminalKeyBindingDefinition definition in standardDefinitions) {
+      _apply(bindings, definition);
+    }
+    for (final TerminalKeyBindingDefinition definition in collected) {
+      _apply(bindings, definition);
+    }
+    return TerminalKeyBindingEngine._(
+      Map<TerminalKeyBindingChord, TerminalKeyBindingResolution>.unmodifiable(
+        bindings,
+      ),
+      standardDefinitionCount + collected.length,
+    );
+  }
 
   const TerminalKeyBindingEngine._(this._bindings, this.definitionCount);
 
   static const int maximumDefinitionCount = 1024;
+  static const int standardDefinitionCount = 1;
+  static const List<TerminalKeyBindingDefinition> standardDefinitions =
+      <TerminalKeyBindingDefinition>[
+        TerminalKeyBindingDefinition.action(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.keyD,
+            control: true,
+          ),
+          action: TerminalKeyBindingAction.sendEndOfFile,
+        ),
+      ];
 
   final Map<TerminalKeyBindingChord, TerminalKeyBindingResolution> _bindings;
   final int definitionCount;
@@ -262,15 +401,43 @@ final class TerminalKeyBindingEngine {
     return List<TerminalKeyBindingDefinition>.unmodifiable(result);
   }
 
+  static List<TerminalKeyBindingDefinition> _collectOrdered(
+    Iterable<TerminalKeyBindingDefinition> definitions, {
+    required int consumedBefore,
+  }) {
+    final List<TerminalKeyBindingDefinition> result =
+        <TerminalKeyBindingDefinition>[];
+    for (final TerminalKeyBindingDefinition definition in definitions) {
+      if (consumedBefore + result.length >= maximumDefinitionCount) {
+        throw TerminalKeyBindingLimitException(
+          actualDefinitions: consumedBefore + result.length + 1,
+          maximumDefinitions: maximumDefinitionCount,
+        );
+      }
+      if (definition.chord.physicalKey == TerminalPhysicalKey.unknown) {
+        throw ArgumentError.value(
+          definition.chord,
+          'declarations[${result.length}].chord',
+          'unknown physical keys cannot be bound',
+        );
+      }
+      result.add(definition);
+    }
+    return List<TerminalKeyBindingDefinition>.unmodifiable(result);
+  }
+
   static void _apply(
     Map<TerminalKeyBindingChord, TerminalKeyBindingResolution> bindings,
     TerminalKeyBindingDefinition definition,
   ) {
     switch (definition.directive) {
       case TerminalKeyBindingDirective.action:
-        bindings[definition.chord] = TerminalKeyBindingResolution.action(
-          definition.action!,
-        );
+        final TerminalKeyBindingAction? paneAction = definition.action;
+        bindings[definition.chord] = paneAction != null
+            ? TerminalKeyBindingResolution.action(paneAction)
+            : TerminalKeyBindingResolution.applicationAction(
+                definition.applicationAction!,
+              );
       case TerminalKeyBindingDirective.unbind:
         bindings.remove(definition.chord);
       case TerminalKeyBindingDirective.passthrough:

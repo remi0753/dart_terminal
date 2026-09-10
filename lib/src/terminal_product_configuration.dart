@@ -2,6 +2,7 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'terminal_config.dart';
 import 'terminal_core/terminal_screen.dart';
+import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_encoder.dart';
 
 final class TerminalProductPaletteConfiguration {
@@ -43,7 +44,10 @@ final class TerminalProductConfiguration {
     required this.scrollbackBytes,
     required this.cursorShape,
     required this.cursorBlink,
-  });
+    required Iterable<TerminalKeyBindingDefinition> keybindings,
+  }) : keybindings = List<TerminalKeyBindingDefinition>.unmodifiable(
+         keybindings,
+       );
 
   factory TerminalProductConfiguration.fromSnapshot(
     TerminalConfigSnapshot snapshot,
@@ -79,6 +83,12 @@ final class TerminalProductConfiguration {
     ),
     cursorShape: snapshot.value(TerminalProductConfigSchema.cursorShape),
     cursorBlink: snapshot.value(TerminalProductConfigSchema.cursorBlink),
+    keybindings: snapshot
+        .occurrences(TerminalProductConfigSchema.keybind)
+        .map(
+          (TerminalResolvedConfigValue<TerminalKeyBindingDefinition> value) =>
+              value.value,
+        ),
   );
 
   static final TerminalProductConfiguration defaults =
@@ -102,6 +112,7 @@ final class TerminalProductConfiguration {
   final int scrollbackBytes;
   final TerminalConfiguredCursorShape cursorShape;
   final bool cursorBlink;
+  final List<TerminalKeyBindingDefinition> keybindings;
 
   double get terminalContentWidth => windowWidth - windowPaddingHorizontal * 2;
 
@@ -125,6 +136,9 @@ final class TerminalProductConfiguration {
 
   TerminalScrollback createScrollback() =>
       TerminalScrollback(maxLines: scrollbackLines, maxBytes: scrollbackBytes);
+
+  TerminalKeyBindingEngine createKeyBindingEngine() =>
+      TerminalKeyBindingEngine.standardWithOrderedOverrides(keybindings);
 
   TerminalCursorShape get terminalCursorShape => switch (cursorShape) {
     TerminalConfiguredCursorShape.block => TerminalCursorShape.block,

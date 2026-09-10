@@ -4,10 +4,107 @@ void main() => runTerminalKeyBindingTests();
 
 void runTerminalKeyBindingTests() {
   _testStableActionRegistry();
+  _testStablePhysicalKeyVocabulary();
   _testStandardAndExactResolution();
   _testOverrideUnbindAndPassthrough();
+  _testOrderedConfigurationOverrides();
   _testConflictValidation();
   _testBoundAndImmutableConstruction();
+}
+
+void _testOrderedConfigurationOverrides() {
+  const TerminalKeyBindingChord controlD = TerminalKeyBindingChord(
+    physicalKey: TerminalPhysicalKey.keyD,
+    control: true,
+  );
+  const TerminalKeyBindingChord controlK = TerminalKeyBindingChord(
+    physicalKey: TerminalPhysicalKey.keyK,
+    control: true,
+  );
+  final TerminalKeyBindingEngine engine =
+      TerminalKeyBindingEngine.standardWithOrderedOverrides(
+        const <TerminalKeyBindingDefinition>[
+          TerminalKeyBindingDefinition.action(
+            chord: controlD,
+            action: TerminalKeyBindingAction.sendInterruptSignal,
+          ),
+          TerminalKeyBindingDefinition.unbind(chord: controlD),
+          TerminalKeyBindingDefinition.applicationAction(
+            chord: controlK,
+            applicationAction: TerminalActionId.focusPreviousPane,
+          ),
+          TerminalKeyBindingDefinition.action(
+            chord: controlK,
+            action: TerminalKeyBindingAction.sendSuspendSignal,
+          ),
+        ],
+      );
+  _expect(
+    engine.definitionCount == 5 &&
+        engine.resolve(_event(TerminalPhysicalKey.keyD, control: true)).kind ==
+            TerminalKeyBindingResolutionKind.noMatch &&
+        engine
+                .resolve(_event(TerminalPhysicalKey.keyK, control: true))
+                .action ==
+            TerminalKeyBindingAction.sendSuspendSignal,
+    'ordered config declarations replace earlier chords over the default',
+  );
+}
+
+void _testStablePhysicalKeyVocabulary() {
+  final List<TerminalPhysicalKey> keys = TerminalPhysicalKey.values
+      .where((TerminalPhysicalKey key) => key != TerminalPhysicalKey.unknown)
+      .toList(growable: false);
+  final Set<String> names = keys
+      .map(TerminalKeyBindingVocabulary.configNameForKey)
+      .toSet();
+  _expect(
+    names.length == keys.length &&
+        keys.every(
+          (TerminalPhysicalKey key) =>
+              TerminalKeyBindingVocabulary.keyFromConfigName(
+                TerminalKeyBindingVocabulary.configNameForKey(key),
+              ) ==
+              key,
+        ),
+    'every non-unknown physical key has one stable round-trip config name',
+  );
+  _expect(
+    TerminalKeyBindingVocabulary.configNameForKey(
+              TerminalPhysicalKey.leftBracket,
+            ) ==
+            'left-bracket' &&
+        TerminalKeyBindingVocabulary.configNameForKey(
+              TerminalPhysicalKey.keypadEnter,
+            ) ==
+            'keypad-enter' &&
+        TerminalKeyBindingVocabulary.configNameForKey(
+              TerminalPhysicalKey.jisUnderscore,
+            ) ==
+            'jis-underscore' &&
+        TerminalKeyBindingVocabulary.keyFromConfigName('unknown') == null,
+    'representative key families use readable stable names',
+  );
+  final List<TerminalActionShortcut> nativeShortcuts =
+      TerminalActionCatalog.standard().actions
+          .map((TerminalActionDefinition action) => action.shortcut)
+          .whereType<TerminalActionShortcut>()
+          .toList(growable: false);
+  _expect(
+    nativeShortcuts
+            .map(TerminalKeyBindingVocabulary.chordForNativeShortcut)
+            .whereType<TerminalKeyBindingChord>()
+            .toSet()
+            .length ==
+        nativeShortcuts.length,
+    'every native menu shortcut has one unique physical collision identity',
+  );
+  _expectThrowsArgument(
+    () => TerminalKeyBindingVocabulary.configNameForKey(
+      TerminalPhysicalKey.unknown,
+    ),
+    'unknown key has no configurable identity',
+  );
 }
 
 void _testStableActionRegistry() {
@@ -116,6 +213,29 @@ void _testOverrideUnbindAndPassthrough() {
     passthrough.resolve(_event(TerminalPhysicalKey.keyD, control: true)).kind ==
         TerminalKeyBindingResolutionKind.passthrough,
     'passthrough remains an explicit matched resolution',
+  );
+
+  final TerminalKeyBindingEngine applicationAction =
+      TerminalKeyBindingEngine.standard(
+        overrides: const <TerminalKeyBindingDefinition>[
+          TerminalKeyBindingDefinition.applicationAction(
+            chord: TerminalKeyBindingChord(
+              physicalKey: TerminalPhysicalKey.keyK,
+              control: true,
+              shift: true,
+            ),
+            applicationAction: TerminalActionId.focusNextPane,
+          ),
+        ],
+      );
+  final TerminalKeyBindingResolution applicationResolution = applicationAction
+      .resolve(_event(TerminalPhysicalKey.keyK, control: true, shift: true));
+  _expect(
+    applicationResolution.kind == TerminalKeyBindingResolutionKind.action &&
+        applicationResolution.action == null &&
+        applicationResolution.applicationAction ==
+            TerminalActionId.focusNextPane,
+    'application action targets retain the shared catalog identity',
   );
 }
 
