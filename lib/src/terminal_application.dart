@@ -54,6 +54,7 @@ import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_restoration.dart';
 import 'terminal_restoration_lifecycle.dart';
 import 'terminal_session.dart';
+import 'terminal_settings_inspector.dart';
 import 'terminal_shell_integration.dart';
 import 'terminal_tab_metadata.dart';
 import 'terminal_tab_presentation.dart';
@@ -2232,6 +2233,7 @@ final class TerminalApplication {
     TerminalProductHierarchyActionCoordinator? actionCoordinator;
     TerminalAppKitMenuProjection? menuProjection;
     TerminalCommandPalettePresenter? palettePresenter;
+    TerminalSettingsInspectorPresenter? settingsPresenter;
     TerminalActionDispatchScheduler? keyBindingActionScheduler;
     Future<void> Function(PaneId? paneId)? closePaneRequest;
     void Function()? reconcileRequest;
@@ -2881,6 +2883,8 @@ final class TerminalApplication {
     };
 
     Future<void> disposeProductResourcesOnce() async {
+      await settingsPresenter?.dispose();
+      settingsPresenter = null;
       configurationReloadController?.dispose();
       await applicationThemeProjection?.dispose();
       for (final StreamSubscription<WindowEvent> subscription
@@ -2984,8 +2988,8 @@ final class TerminalApplication {
       );
       if (result.isAccepted) {
         configurationAuthority.applyReload(result);
-        return;
       }
+      settingsPresenter?.refresh();
       if (result.disposition == TerminalConfigReloadDisposition.failed) {
         Error.throwWithStackTrace(result.error!, result.stackTrace!);
       }
@@ -3179,6 +3183,15 @@ final class TerminalApplication {
           ),
           if (configurationReloadController != null)
             TerminalActionRegistration(
+              id: TerminalActionId.openSettings,
+              isAvailable: () =>
+                  !configurationReloadController.isDisposed &&
+                  productResourceDisposalFuture == null &&
+                  !state.isDisposed,
+              handler: () => settingsPresenter!.open(),
+            ),
+          if (configurationReloadController != null)
+            TerminalActionRegistration(
               id: TerminalActionId.reloadConfiguration,
               isAvailable: () =>
                   !configurationReloadController.isDisposed &&
@@ -3254,6 +3267,30 @@ final class TerminalApplication {
         },
         onError: recordAsynchronousError,
       );
+      if (configurationReloadController != null) {
+        settingsPresenter = TerminalSettingsInspectorPresenter(
+          controller: configurationReloadController,
+          focusTarget: () {
+            final TerminalWindowState? activeWindow = state.activeWindow;
+            if (activeWindow == null) return null;
+            final TerminalTabState tab = activeWindow.selectedTab;
+            final Window? window = createdHierarchy.windowForTab(tab.id);
+            final TerminalNativePaneResources? resources = createdHierarchy
+                .resourcesForPane(tab.focusedPaneId);
+            if (window == null || resources == null) return null;
+            return TerminalSettingsInspectorFocusTarget(
+              window: window,
+              view: resources.view,
+            );
+          },
+          reload: () =>
+              dispatcher.dispatch(TerminalActionId.reloadConfiguration),
+          onReloaded: (TerminalActionDispatchResult result) {
+            if (runConfigurationAcceptance) actionDispatches.add(result);
+          },
+          onError: recordAsynchronousError,
+        );
+      }
       installedPalette = TerminalCommandPalettePresenter.withFocusTarget(
         dispatcher: dispatcher,
         focusTarget: () {

@@ -148,12 +148,21 @@ void _testStableStandardCatalog() {
                 .join(',') ==
             <TerminalActionId>[
               TerminalActionId.openCommandPalette,
+              TerminalActionId.openSettings,
               TerminalActionId.reloadConfiguration,
               TerminalActionId.quitApplication,
             ].join(',') &&
+        catalog
+                .actionForId(TerminalActionId.openSettings)!
+                .shortcut
+                ?.identity ==
+            'command+,' &&
+        !catalog
+            .actionForId(TerminalActionId.openSettings)!
+            .restoresTerminalFocusAfterInvocation &&
         catalog.actionForId(TerminalActionId.reloadConfiguration)!.shortcut ==
             null,
-    'reload is a discoverable application action without a reserved shortcut',
+    'Settings and reload have the expected shared application metadata',
   );
 }
 
@@ -373,6 +382,11 @@ void _testSearchOrderingAndBounds() {
           TerminalActionId.jumpToNextPrompt,
         ].join(','),
     'prompt actions are searchable in stable command-palette order',
+  );
+  _expect(
+    dispatcher.search('effective settings').single.definition.id ==
+        TerminalActionId.openSettings,
+    'Settings is discoverable through its shared palette metadata',
   );
   _expect(
     !dispatcher

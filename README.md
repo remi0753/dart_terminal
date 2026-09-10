@@ -39,7 +39,7 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 18個のstable application actionを共有するbounded searchable registry、動的な
+- 19個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
@@ -304,6 +304,12 @@ pane/PTY/native resourceを保持します。warning-onlyまたは正常な候�
 optionは新しく作るsession/resource/windowだけに適用されます。既存palette/OSC state、cursor、
 scrollback、font、padding、window frameは書き換えません。自動file watchとSIGHUP reloadは
 現在の対象外です。
+
+Applicationメニューの`Settings…`（Command-,）、command palette、または非予約chordへ設定した
+`application.open-settings` actionから、read-onlyのnative effective-config inspectorを開けます。
+文字入力で全effective entryを検索し、↑↓で選択するとcanonical value、source、line/column、
+live/new-session policy、repeat occurrenceと直近diagnosticを表示します。Command-Rは上記と同じ
+reload actionを実行し、Escはwindowを閉じてterminalのfirst responderを復元します。
 
 `theme` は `system`、`light`、`dark` を受理し、互換記法の `default` は `system` として扱います。
 `default`を使用すると`CFG_DEPRECATED_VALUE` warningと`theme = system`への修正案を表示し、

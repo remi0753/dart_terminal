@@ -296,15 +296,29 @@ final class TerminalCommandPalettePresenter {
       final TerminalCommandPaletteKeyResult result = await _keys.handle(event);
       final TerminalActionDispatchResult? dispatchResult =
           result.dispatchResult;
+      var restoreTerminalFocus = true;
       if (dispatchResult != null) {
         _lastDispatchResult = dispatchResult;
         _dispatchCount++;
         onDispatched?.call(dispatchResult);
+        final TerminalActionId? id = dispatchResult.id;
+        if (id != null &&
+            dispatchResult.disposition ==
+                TerminalActionDispatchDisposition.executed) {
+          restoreTerminalFocus =
+              dispatcher.catalog
+                  .actionForId(id)
+                  ?.restoresTerminalFocusAfterInvocation ??
+              true;
+        }
       }
       if (result.disposition ==
               TerminalCommandPaletteKeyDisposition.dismissed ||
           !state.isOpen) {
-        await _close(restoreTerminalFocus: true, closeWindow: true);
+        await _close(
+          restoreTerminalFocus: restoreTerminalFocus,
+          closeWindow: true,
+        );
       } else if (result.disposition !=
           TerminalCommandPaletteKeyDisposition.ignored) {
         _render();

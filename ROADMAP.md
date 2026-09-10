@@ -1051,7 +1051,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] schema-owned canonical presentation と deprecated migration diagnostics
   - [x] `--help`/`--show-config` と generated configuration reference
-  - [ ] shared Settings action と searchable native effective-config inspector
+  - [x] shared Settings action と searchable native effective-config inspector
   - [ ] M1 両 runtime settings/effective-config 受け入れと Phase 8 完了判定
 
 終了条件:

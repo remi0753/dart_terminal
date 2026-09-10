@@ -3,6 +3,7 @@ import 'dart:async';
 /// Stable product-level commands shared by menus and the command palette.
 enum TerminalActionId {
   openCommandPalette('application.open-command-palette'),
+  openSettings('application.open-settings'),
   reloadConfiguration('application.reload-configuration'),
   quitApplication('application.quit'),
   newWindow('window.new'),
@@ -72,6 +73,7 @@ final class TerminalActionDefinition {
     this.shortcut,
     this.separatorBefore = false,
     this.isVisibleInPalette = true,
+    this.restoresTerminalFocusAfterInvocation = true,
   }) : keywords = List<String>.unmodifiable(keywords) {
     if (title.isEmpty ||
         title.length > TerminalActionLimits.maximumTitleUnits) {
@@ -124,6 +126,7 @@ final class TerminalActionDefinition {
   final TerminalActionShortcut? shortcut;
   final bool separatorBefore;
   final bool isVisibleInPalette;
+  final bool restoresTerminalFocusAfterInvocation;
 }
 
 abstract final class TerminalActionLimits {
@@ -235,6 +238,20 @@ final class TerminalActionCatalog {
         command: true,
       ),
       isVisibleInPalette: false,
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.openSettings,
+      title: 'Settings…',
+      menu: TerminalActionMenu.application,
+      keywords: const <String>[
+        'config',
+        'preferences',
+        'effective',
+        'options',
+        'diagnostics',
+      ],
+      shortcut: const TerminalActionShortcut(keyEquivalent: ',', command: true),
+      restoresTerminalFocusAfterInvocation: false,
     ),
     TerminalActionDefinition(
       id: TerminalActionId.reloadConfiguration,

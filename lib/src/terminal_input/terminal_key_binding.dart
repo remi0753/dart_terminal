@@ -128,7 +128,7 @@ abstract final class TerminalKeyBindingVocabulary {
     TerminalActionShortcut shortcut,
   ) {
     final TerminalPhysicalKey? key = keyFromConfigName(
-      shortcut.keyEquivalent.toLowerCase(),
+      _configNameForNativeKeyEquivalent(shortcut.keyEquivalent.toLowerCase()),
     );
     if (key == null) return null;
     return TerminalKeyBindingChord(
@@ -139,6 +139,22 @@ abstract final class TerminalKeyBindingVocabulary {
       command: shortcut.command,
     );
   }
+
+  static String _configNameForNativeKeyEquivalent(String value) =>
+      switch (value) {
+        '`' => 'grave',
+        '-' => 'minus',
+        '=' => 'equal',
+        '[' => 'left-bracket',
+        ']' => 'right-bracket',
+        '\\' => 'backslash',
+        ';' => 'semicolon',
+        "'" => 'quote',
+        ',' => 'comma',
+        '.' => 'period',
+        '/' => 'slash',
+        _ => value,
+      };
 
   static String _camelToKebab(String value) {
     final StringBuffer result = StringBuffer();

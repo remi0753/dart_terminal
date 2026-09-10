@@ -30,6 +30,19 @@ const TextViewConfiguration terminalCommandPaletteTextViewConfiguration =
       backgroundColor: TextViewColor.windowBackground(),
     );
 
+/// Presentation used by the searchable effective-configuration inspector.
+const TextViewConfiguration terminalSettingsInspectorTextViewConfiguration =
+    TextViewConfiguration(
+      view: terminalBaseViewConfiguration,
+      font: TextViewFont.monospacedSystem(
+        size: 14,
+        weight: TextViewFontWeight.regular,
+      ),
+      padding: TextViewPadding.all(18),
+      foregroundColor: TextViewColor.label(),
+      backgroundColor: TextViewColor.windowBackground(),
+    );
+
 /// Terminal commands own enabled state; AppKit must not infer it.
 const MenuConfiguration terminalMenuConfiguration = MenuConfiguration(
   autoEnablesItems: false,

@@ -63,6 +63,7 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | Target ID | Title | Menu | Native shortcut |
 | --- | --- | --- | --- |
 | `application.open-command-palette` | Command Palette… | application | `shift+command+p` |
+| `application.open-settings` | Settings… | application | `command+comma` |
 | `application.reload-configuration` | Reload Configuration | application | — |
 | `application.quit` | Quit Dart Terminal | application | `command+q` |
 | `window.new` | New Window | file | `command+n` |
@@ -88,6 +89,7 @@ AppKit consumes these standard menu shortcuts before raw terminal key routing. A
 | Chord | Native action | Title |
 | --- | --- | --- |
 | `shift+command+p` | `application.open-command-palette` | Command Palette… |
+| `command+comma` | `application.open-settings` | Settings… |
 | `command+q` | `application.quit` | Quit Dart Terminal |
 | `command+n` | `window.new` | New Window |
 | `command+w` | `window.close` | Close Window |

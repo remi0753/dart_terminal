@@ -373,3 +373,122 @@ the next child.
   Makefile freshness gate, exports/entrypoint integration, and automatically
   refreshed source-hash evidence. Adjacent `dart_appkit` remained clean at
   `2b36186`.
+
+## Current subtask: shared Settings action and native inspector
+
+- Status: complete
+- Started: 2026-09-11 after commits `967ce02` and the progress-status
+  correction `950e0ed`
+- Purpose: expose the accepted typed configuration and its diagnostics through
+  a keyboard-searchable native product surface reached by the same shared
+  application-action path as menus, command palette, and keybindings.
+- Background: the command palette already provides bounded native keyboard
+  interaction and first-responder restoration, while reload owns the current
+  accepted snapshot and most recent diagnostics. The remaining work must join
+  those authorities without copying schema rows or creating a second reload
+  controller.
+- Scope: one catalogued Settings/effective-config action; native menu and
+  command-palette discovery; a Dart-owned bounded inspector presenter with
+  option search/selection, canonical value/provenance/policy/detail,
+  diagnostics, reload, and close interaction; product coordinator lifecycle;
+  fake-AppKit and focused product tests.
+- Out of scope: editing or writing configuration files, a general-purpose
+  preferences form, Phase 10 terminal/parser diagnostics, changing schema or
+  reload semantics, and M1 Developer JIT/Release AOT acceptance (the next
+  child).
+- Dependencies: `TerminalEffectiveConfigSnapshot`, the schema presentation
+  contract, `TerminalConfigReloadController`, shared application action
+  catalog/dispatch, native menu availability projection, command-palette
+  keyboard model, and generic `dart_appkit` Window/TextView/key-event APIs.
+- Completion conditions: the action is generated from the shared catalog and
+  reachable by menu/palette/keybind; a single inspector instance searches all
+  schema-derived entries, displays canonical source/policy/repetition plus
+  bounded diagnostic details, reloads through the existing controller without
+  pane/PTY replacement, restores focus and frees native handles on close, and
+  cannot create duplicate config or action authority.
+- Validation: source/ownership inspection, presenter/model unit tests,
+  fake-AppKit product interaction and cleanup tests, generated action-reference
+  refresh if required, format/analyze/full `make test`, source audit, diff
+  review, roadmap update, and one task-scoped commit.
+
+### Initial findings and decisions
+
+- `TerminalActionCatalog.standard()` is already the single authority for
+  native menu order, command-palette search, stable keybinding targets, and the
+  generated action reference. Settings will therefore be a new
+  `application.open-settings` ID in that catalog, with the conventional native
+  Command-comma shortcut; no side-channel menu item or direct key handler will
+  be added.
+- The ordinary interactive hierarchy already owns exactly one
+  `TerminalConfigReloadController` and applies accepted results through
+  `TerminalProductConfigurationAuthority`. The inspector will retain only a
+  reference to that controller and request reload through the existing shared
+  `application.reload-configuration` dispatcher registration.
+- `dart_appkit` already supplies all generic primitives required here:
+  configurable native `Window`, read-only `TextView`, Dart-only key routing,
+  deferred close events, and first-responder control. The inspector can follow
+  the command-palette lifecycle without another adjacent-repository change.
+- `TextView` is intentionally non-scrolling. The state will search the complete
+  bounded effective-entry collection but render only a small selected result
+  window, one full selected-entry detail, and a bounded diagnostic preview with
+  explicit remaining counts. Long fields are visibly clipped and total output
+  remains capped rather than creating an unbounded native string.
+- Opening Settings from the command palette reveals a focus edge: the palette
+  currently restores terminal focus after every executed action, which would
+  steal first responder from the newly opened inspector. Focus restoration
+  policy will be catalog metadata, defaulting to the existing behavior and
+  disabled only for actions that intentionally establish a new native focus
+  target.
+- Fake-AppKit coverage can reuse the repository’s existing in-memory
+  `NativeBindings` harness by adding its missing `TextView` calls. This permits
+  exact assertions for one settings window/view, rerendering, first responder,
+  close restoration, release order, and zero leaked handles without production
+  test hooks.
+- The first focused model-test invocation was blocked in the sandbox because
+  the existing renderer build hook could not write Clang’s user module cache;
+  rerunning outside that filesystem restriction reached the test. That run
+  exposed an incorrect fixture assumption: invalid CLI values are deliberate
+  usage errors and throw before producing a recoverable snapshot. The rejected
+  reload case now uses an invalid in-memory config file, matching the product’s
+  diagnostic-recovery contract without weakening CLI validation.
+- The first typed-config regression run rejected the new conventional native
+  `Command-,` shortcut because the collision checker previously assumed an
+  AppKit key equivalent was already a physical-key config name. Existing
+  shortcuts were letters, so the latent punctuation boundary was untested.
+  Native punctuation equivalents are now mapped to their stable physical names
+  before collision checks and generated keybinding documentation; the AppKit
+  menu continues to receive the literal punctuation character.
+
+### Validation log
+
+- The focused inspector model test passed with all 36 schema-derived effective
+  entries, deprecated startup diagnostics, canonical value/source/policy and
+  empty-repeatable projection, rejected last-known-good reload, accepted
+  generation update, keyboard ownership, Unicode-safe clipping, query limits,
+  and typed total-render bounds.
+- The fake-AppKit hierarchy test passed the complete native interaction:
+  command palette search and dispatch opened Settings without restoring focus
+  to the terminal, reopening reused the same window/view owners, native text
+  input searched `font-size`, Command-R dispatched the shared reload action and
+  refreshed generation/value, and Escape restored the terminal responder while
+  reducing the live handle count from four to the original two.
+- Focused action-registry, command-palette, config/keybinding, generated
+  keybinding-reference, and AppKit-policy tests passed. The generated authority
+  now reports 19 application actions and 10 reserved native shortcuts.
+- `dart format` checked all 241 Dart files with zero changes and `dart analyze`
+  reported no issues.
+- The first complete `make test` reached the Phase 7 AppKit freshness gate and
+  correctly rejected hashes affected by the product Settings integration and
+  fake-native acceptance. Regenerating
+  `test/corpus/appkit/phase7_acceptance_v1.json` changed only the expected
+  application and native-hierarchy source evidence. Regenerating the aggregate
+  compatibility report changed only the README and feature-matrix source
+  hashes.
+- The final `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed every
+  freshness gate, format and analysis, and the aggregate `dart_terminal tests
+  passed` run. `make runtime-source-check` also passed with 444 tracked files,
+  zero product native sources, and the one reviewed test-only native source.
+- `git diff --check` passed. Final review found only the inspector, shared
+  action/focus/key-equivalent integration, focused tests, generated evidence,
+  README/feature/roadmap progress, and this task record. The adjacent
+  `dart_appkit` worktree remained clean.

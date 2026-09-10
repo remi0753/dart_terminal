@@ -26,6 +26,10 @@ void runTerminalAppKitPolicyTests() {
         terminalBaseViewConfiguration == const ViewConfiguration() &&
         terminalCommandPaletteTextViewConfiguration ==
             const TextViewConfiguration() &&
+        terminalSettingsInspectorTextViewConfiguration.view ==
+            terminalBaseViewConfiguration &&
+        terminalSettingsInspectorTextViewConfiguration.font.size == 14 &&
+        terminalSettingsInspectorTextViewConfiguration.padding.top == 18 &&
         !terminalMenuConfiguration.autoEnablesItems,
     'application-owned native presentation policies preserve product behavior',
   );

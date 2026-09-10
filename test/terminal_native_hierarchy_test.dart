@@ -13,12 +13,192 @@ Future<void> main() => runTerminalNativeHierarchyTests();
 
 Future<void> runTerminalNativeHierarchyTests() async {
   await _testApplicationThemeProjectionLifecycle();
+  await _testSettingsInspectorPresenterLifecycle();
   await _testConfiguredWindowAndPaddingProjection();
   await _testPerWindowCreationFrameProjection();
   await _testRepeatedMultiWindowRestoredProjection();
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testSettingsInspectorPresenterLifecycle() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final TerminalConfigLoader loader = TerminalConfigLoader();
+  final TerminalConfigSnapshot initial = loader.resolve(const <String>[
+    '--no-config',
+    '--font-size=15',
+  ], environment: const <String, String>{}).snapshot;
+  final TerminalConfigSnapshot reloaded = loader.resolve(const <String>[
+    '--no-config',
+    '--font-size=19',
+  ], environment: const <String, String>{}).snapshot;
+  final TerminalConfigReloadController reloadController =
+      TerminalConfigReloadController(
+        initialSnapshot: initial,
+        resolver: () => TerminalConfigResolution(
+          snapshot: reloaded,
+          remainingArguments: const <String>[],
+        ),
+      );
+  final View terminalView = View(configuration: terminalBaseViewConfiguration);
+  final Window terminalWindow = Window(
+    frame: const Rect.fromLTWH(100, 90, 640, 480),
+    title: 'Terminal',
+    configuration: terminalWindowConfiguration,
+  )..contentView = terminalView;
+  terminalWindow
+    ..show()
+    ..makeFirstResponder(terminalView);
+  late final TerminalCommandPalettePresenter palette;
+  late final TerminalSettingsInspectorPresenter settings;
+  final TerminalActionCatalog catalog = TerminalActionCatalog.standard();
+  final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+    catalog: catalog,
+    registrations: <TerminalActionRegistration>[
+      TerminalActionRegistration(
+        id: TerminalActionId.openCommandPalette,
+        handler: () => palette.open(),
+      ),
+      TerminalActionRegistration(
+        id: TerminalActionId.openSettings,
+        handler: () => settings.open(),
+      ),
+      TerminalActionRegistration(
+        id: TerminalActionId.reloadConfiguration,
+        handler: () async {
+          final TerminalConfigReloadResult result = await reloadController
+              .reload();
+          if (result.disposition == TerminalConfigReloadDisposition.failed) {
+            Error.throwWithStackTrace(result.error!, result.stackTrace!);
+          }
+        },
+      ),
+    ],
+  );
+  palette = TerminalCommandPalettePresenter(
+    dispatcher: dispatcher,
+    terminalWindow: terminalWindow,
+    terminalView: terminalView,
+  );
+  settings = TerminalSettingsInspectorPresenter(
+    controller: reloadController,
+    focusTarget: () => TerminalSettingsInspectorFocusTarget(
+      window: terminalWindow,
+      view: terminalView,
+    ),
+    reload: () => dispatcher.dispatch(TerminalActionId.reloadConfiguration),
+  );
+  try {
+    _expect(
+      (await dispatcher.dispatch(TerminalActionId.openCommandPalette))
+              .disposition ==
+          TerminalActionDispatchDisposition.executed,
+      'shared command-palette action did not open under fake AppKit',
+    );
+    palette
+      ..refresh()
+      ..state.setQuery('settings')
+      ..refresh();
+    final Window paletteWindow = palette.activeWindow!;
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      bindings.handleFor(paletteWindow),
+      keyCode: 36,
+      characters: '\r',
+    );
+    await _waitForHierarchy(
+      () => settings.isOpen && !palette.isOpen,
+      'command palette did not transfer ownership to Settings',
+    );
+    final Window settingsWindow = settings.activeWindow!;
+    final TextView settingsView = settings.activeView!;
+    final int settingsWindowHandle = bindings.handleFor(settingsWindow);
+    _expect(
+      palette.terminalResponderRestoreCount == 0 &&
+          bindings.firstResponders[settingsWindowHandle] ==
+              bindings.handleFor(settingsView) &&
+          settings.renderedText!.contains('Matches: 36 of 36') &&
+          bindings.objects.length == 4,
+      'Settings did not retain native focus or exact window/view ownership',
+    );
+
+    final Window firstSettingsWindow = settingsWindow;
+    _expect(
+      (await dispatcher.dispatch(TerminalActionId.openSettings)).disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          identical(settings.activeWindow, firstSettingsWindow) &&
+          bindings.objects.length == 4,
+      'reopening Settings created a duplicate native owner',
+    );
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 3,
+      characters: 'font-size',
+    );
+    await _waitForHierarchy(
+      () => settings.state.query == 'font-size',
+      'Settings search key was not routed through its native window',
+    );
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 15,
+      characters: 'r',
+      modifiers: ModifierKeys.commandBit,
+    );
+    await _waitForHierarchy(
+      () =>
+          settings.reloadRequestCount == 1 &&
+          reloadController.acceptedGeneration == 1,
+      'Settings Command-R did not use the shared reload action',
+    );
+    _expect(
+      settings.lastReloadResult?.id == TerminalActionId.reloadConfiguration &&
+          settings.lastReloadResult?.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          settings.state.selectedEntry?.canonicalValue == '19' &&
+          settings.renderedText!.contains('Accepted generation: 1'),
+      'Settings did not refresh from the accepted controller snapshot',
+    );
+
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 53,
+      characters: '\u001b',
+    );
+    await _waitForHierarchy(
+      () => !settings.isOpen && bindings.objects.length == 2,
+      'Settings Escape did not release its native window and text view',
+    );
+    _expect(
+      settings.terminalResponderRestoreCount == 1 &&
+          bindings.firstResponders[bindings.handleFor(terminalWindow)] ==
+              bindings.handleFor(terminalView),
+      'closing Settings did not restore the live terminal first responder',
+    );
+  } finally {
+    await settings.dispose();
+    await palette.dispose();
+    reloadController.dispose();
+    if (!terminalWindow.isClosed) terminalWindow.close();
+    terminalWindow.dispose();
+    terminalView.dispose();
+    await application.terminate();
+    await rawEvents.close();
+  }
 }
 
 Future<void> _testApplicationThemeProjectionLifecycle() async {
@@ -1594,6 +1774,43 @@ final class _LifecycleMemoryStore implements TerminalRestorationStore {
   }
 }
 
+var _hierarchyEventNanoseconds = 200000;
+
+void _injectHierarchyKey(
+  StreamController<Object?> events,
+  AppKitApplication application,
+  int windowHandle, {
+  required int keyCode,
+  required String characters,
+  int modifiers = 0,
+}) {
+  _hierarchyEventNanoseconds += 1000;
+  events.add(<Object?>[
+    application.eventProtocolVersion,
+    20,
+    windowHandle,
+    windowHandle >> 32,
+    _hierarchyEventNanoseconds,
+    0,
+    keyCode,
+    modifiers,
+    false,
+    characters,
+    characters,
+  ]);
+}
+
+Future<void> _waitForHierarchy(
+  bool Function() predicate,
+  String description,
+) async {
+  final Stopwatch timeout = Stopwatch()..start();
+  while (!predicate() && timeout.elapsed < const Duration(seconds: 2)) {
+    await Future<void>.delayed(Duration.zero);
+  }
+  _expect(predicate(), description);
+}
+
 final class _HierarchyNativeBindings implements NativeBindings {
   int _nextHandle = (1 << 32) | 100;
   final Map<int, String> objects = <int, String>{};
@@ -1612,6 +1829,9 @@ final class _HierarchyNativeBindings implements NativeBindings {
       <int, List<double>>{};
   final Map<int, NativeViewConfiguration> viewConfigurations =
       <int, NativeViewConfiguration>{};
+  final Map<int, NativeTextViewConfiguration> textViewConfigurations =
+      <int, NativeTextViewConfiguration>{};
+  final Map<int, String> texts = <int, String>{};
   final Map<int, int> contentViews = <int, int>{};
   final Map<int, int> windowContentViewSetCounts = <int, int>{};
   final Map<int, int> firstResponders = <int, int>{};
@@ -1711,6 +1931,9 @@ final class _HierarchyNativeBindings implements NativeBindings {
     presentationCalls.add('show:$handle');
     return const NativeCallResult.success();
   }
+
+  @override
+  NativeCallResult windowClose(int handle) => const NativeCallResult.success();
 
   @override
   NativeCallResult windowSetTitle(int handle, String title) {
@@ -1842,6 +2065,23 @@ final class _HierarchyNativeBindings implements NativeBindings {
   }
 
   @override
+  NativeValueResult<int> textViewCreate(
+    NativeTextViewConfiguration configuration,
+  ) {
+    final NativeValueResult<int> result = _create('text-view');
+    viewConfigurations[result.value!] = configuration.view;
+    textViewConfigurations[result.value!] = configuration;
+    texts[result.value!] = '';
+    return result;
+  }
+
+  @override
+  NativeCallResult textViewSetText(int handle, String text) {
+    texts[handle] = text;
+    return const NativeCallResult.success();
+  }
+
+  @override
   NativeValueResult<int> splitViewCreate(int axis) {
     final NativeValueResult<int> result = _create('split');
     splitViewAxes[result.value!] = axis;
@@ -1905,6 +2145,8 @@ final class _HierarchyNativeBindings implements NativeBindings {
     windowTabAccessoryShapes.remove(handle);
     windowTabAccessoryExtents.remove(handle);
     viewConfigurations.remove(handle);
+    textViewConfigurations.remove(handle);
+    texts.remove(handle);
     contentViews.remove(handle);
     firstResponders.remove(handle);
     splitViewAxes.remove(handle);
