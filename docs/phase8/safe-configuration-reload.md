@@ -177,3 +177,40 @@ next begins. After each commit, reread `ROADMAP.md` and this memo.
 - `CI=true DART_SUPPRESS_ANALYTICS=true make test` passes all freshness gates,
   formats 220 files with zero changes, reports no analyzer issues, and completes
   the aggregate Dart suite.
+
+## Subtask 2 findings and decisions
+
+- `TerminalConfigReloadController.fromStartup` defensively copies the original
+  argument list and environment and fixes the current directory at creation.
+  Every reload therefore reuses the same file selection and CLI precedence even
+  if a caller later mutates its input collections or process state changes.
+- A request owns one asynchronous resolution slot. A second request observes
+  `busy` immediately and is not queued; an accepted candidate advances a
+  monotonic generation, including semantic no-ops whose provenance or warnings
+  may still matter to the later effective-config inspector.
+- Any error-severity candidate diagnostic yields `rejected`, publishes the
+  complete bounded candidate diagnostics, and leaves the effective snapshot
+  object unchanged. Warning-only candidates are accepted.
+- Unexpected resolver/schema failures are classified separately as `failed`
+  with their stack trace and retain active state. Disposal prevents new work
+  and also prevents an already-running resolver from publishing after product
+  teardown.
+- The controller is independent of AppKit, pane/session ownership, and the
+  product action catalog in this subtask. `dart_terminal.dart` exports the
+  transaction API for focused consumers and tests.
+
+## Subtask 2 verification
+
+- Focused formatting completed for the new controller/test and aggregate
+  registration files; focused analysis reported no issues.
+- `dart run test/terminal_config_reload_test.dart` passes. It covers mixed live
+  and new-session acceptance, located invalid-value rejection and complete
+  last-known-good retention, correction/no-op, warning acceptance, fixed CLI
+  precedence, copied input arguments, concurrent busy classification,
+  unexpected failure, post-disposal request, and disposal during resolution.
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test` passes all freshness gates,
+  formats 222 files with zero changes, reports no analyzer issues, and completes
+  the aggregate Dart suite.
+- `make runtime-source-check` passes with `tracked=416`,
+  `product_native_sources=0`, and `reviewed_test_native_sources=1` after the new
+  Dart files are staged.

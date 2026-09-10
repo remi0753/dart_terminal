@@ -41,6 +41,7 @@ import 'terminal_compatibility_inventory_test.dart';
 import 'terminal_compatibility_regression_coverage_test.dart';
 import 'terminal_compatibility_regressions_test.dart';
 import 'terminal_compatibility_surface_test.dart';
+import 'terminal_config_reload_test.dart';
 import 'terminal_config_test.dart';
 import 'terminal_core_test.dart';
 import 'terminal_damage_copy_test.dart';
@@ -150,6 +151,7 @@ Future<void> main() async {
   runTerminalCompatibilitySurfaceTests();
   await runTerminalCommandPaletteTests();
   runTerminalConfigTests();
+  await runTerminalConfigReloadTests();
   runTerminalKeyBindingTests();
   runTerminalKeyEncoderTests();
   runTerminalMouseEncoderTests();

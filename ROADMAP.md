@@ -1019,7 +1019,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase8/safe-configuration-reload.md`](docs/phase8/safe-configuration-reload.md)
   を参照して順に実施する）
   - [x] option application policy と typed snapshot diff/plan
-  - [ ] last-known-good reload transaction と single-flight 制御
+  - [x] last-known-good reload transaction と single-flight 制御
   - [ ] reload action と live/new-session product projection
   - [ ] M1 両 runtime reload 受け入れと親項目完了判定
 - [ ] light/dark theme と system appearance
