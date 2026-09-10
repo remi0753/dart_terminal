@@ -72,8 +72,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   非0・signal・終了監視失敗時は理由を表示した非live paneを保持する終了policy
 - ウィンドウサイズに追従する`TIOCSWINSZ`/`SIGWINCH`
 - typed pane/session ID、単一owner、live shellの再操作close確認、process内容を読まない
-  child/owning/foreground process-group snapshotと保守的close-risk分類、state層の
-  identity-bound per-pane確認transactionとsplit/tab/window collapse。全paneをvisual順に
+  child/owning/foreground process-group snapshotと、OSC 133のcontent-free command-output
+  hintを警告追加にだけ使う保守的close-risk分類、state層のidentity-bound per-pane確認
+  transactionとsplit/tab/window collapse。全paneをvisual順に
   固定するaggregate Quit transactionは、Closeとの相互排他、stale/cancel/retry、AppKit
   deferred terminationへのexactly-once reply、cleanup後のprogrammatic terminationを扱う
 - native handleと独立したmonotonic window/tab/split-node ID、64 paneまでのimmutable

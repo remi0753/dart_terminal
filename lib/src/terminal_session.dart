@@ -11,6 +11,7 @@ import 'terminal_core/terminal_reply.dart';
 import 'terminal_core/terminal_screen.dart';
 import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
+import 'terminal_core/terminal_semantic_prompt.dart';
 import 'terminal_core/vt_parser.dart';
 import 'terminal_input/terminal_hyperlink_interaction.dart';
 import 'terminal_input/terminal_key_event.dart';
@@ -359,6 +360,9 @@ final class TerminalSession implements TerminalPaneSession {
         childProcessId: childProcessId,
         owningProcessGroup: owningProcessGroup,
         foregroundProcessGroup: foregroundProcessGroup,
+        owningShellCommandActive:
+            terminalScreenSet.semanticPrompt.shellState ==
+            TerminalSemanticShellState.commandOutput,
       );
     } on Object {
       return TerminalPaneProcessSnapshot.unavailable(sessionId: id);

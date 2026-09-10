@@ -69,6 +69,7 @@ final class TerminalApplicationQuitPaneSnapshot {
   final int foregroundProcessGroupSystemError;
 
   bool get requiresConfirmation =>
+      processDisposition == TerminalPaneProcessDisposition.owningShellCommand ||
       processDisposition == TerminalPaneProcessDisposition.foregroundProcess ||
       processDisposition == TerminalPaneProcessDisposition.unavailable;
 
@@ -121,6 +122,7 @@ final class TerminalApplicationQuitSnapshot {
       'TERMINAL_APPLICATION_QUIT_SNAPSHOT panes=${panes.length} '
       'non_live=${count(TerminalPaneProcessDisposition.nonLive)} '
       'idle=${count(TerminalPaneProcessDisposition.idleShell)} '
+      'shell_command=${count(TerminalPaneProcessDisposition.owningShellCommand)} '
       'foreground=${count(TerminalPaneProcessDisposition.foregroundProcess)} '
       'unavailable=${count(TerminalPaneProcessDisposition.unavailable)} '
       'confirmation=$requiresConfirmation';

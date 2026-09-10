@@ -214,8 +214,101 @@ next subtask begins.
   formatting and analysis, generated-reference freshness, complete tests,
   source/bundle audit, diff review, roadmap update, and one independent commit.
 
+## Current subtask: conservative close-hint/process-snapshot composition
+
+- Status: complete
+- Started: 2026-09-11 after commit `a2b9344`
+- Completed: 2026-09-11
+- Purpose: cover shell builtins and functions that execute in the owning shell
+  without weakening the OS-backed foreground-process close policy.
+- Background: the existing pane and application close transactions classify a
+  content-free child/owning/foreground process-group snapshot. That detects a
+  distinct foreground job but can regard a builtin/function running in the
+  owning shell as idle; the bounded OSC 133 model now exposes only an
+  unknown/prompt/input/command-output lifecycle hint.
+- Scope: compose the focused pane's semantic shell state with its existing
+  process snapshot at the pane-owned close-decision boundary; add confirmation
+  for an otherwise idle owning shell in command-output state; retain all known
+  foreground and unavailable-evidence confirmations; project the same policy
+  through per-pane Close and aggregate Quit; cover stale/forged markers and
+  snapshot failure without retaining command content.
+- Out of scope: process names or command lines, exit status, new shell protocol
+  fields, prompt-navigation changes, confirmation UI redesign, final real-
+  product semantic-shell acceptance, settings UI, or any reduction of an
+  existing warning.
+- Dependencies: `TerminalSemanticShellState`, session-owned `TerminalScreenSet`,
+  the typed process snapshot/disposition model, pane close decision, aggregate
+  quit transaction, and existing exactly-once confirmation invalidation.
+- Completion conditions: known distinct foreground work and unavailable OS
+  evidence still require confirmation regardless of terminal bytes; idle
+  owning-shell command output additionally requires confirmation; prompt,
+  input, unknown, reset, and absent-session hints preserve existing decisions;
+  per-pane and aggregate callers use the same immutable classification without
+  reading process or terminal content.
+- Validation: focused semantic/pane/close/quit tests including forged-marker and
+  failure matrices, formatting and analysis, complete tests, source/bundle
+  audit, diff review, roadmap update, and one independent commit.
+
 ## Findings and decisions
 
+- The required post-`a2b9344` reread found both repositories clean and confirms
+  conservative close-hint composition as the first unchecked roadmap child.
+  The final dual-runtime semantic-shell scenario and settings remain ordered
+  later work.
+- `TerminalSession.processSnapshot()` is already the single shared capture
+  boundary used by both focused Close and aggregate Quit. Composing the current
+  bounded semantic state there avoids separate policy paths in AppKit, pane
+  close, and quit coordination; no `dart_appkit` change is needed.
+- The selected representation adds one content-free combined disposition,
+  `owningShellCommand`: the OS reports the owning shell process group in the
+  foreground and the bounded semantic state is `commandOutput`. Distinct
+  foreground and unavailable OS evidence take precedence, while non-live,
+  prompt, input, unknown, and reset retain their prior classifications.
+- The composition is monotonic relative to the existing policy. A forged `C`
+  can only add an unnecessary confirmation. A forged `D`, prompt marker, or
+  reset cannot turn a distinct foreground or unavailable snapshot into an idle
+  one because those OS classifications are evaluated first. No terminal text,
+  command, process name, option, or exit status enters the snapshot.
+- The first focused format pass changed only `test/run_tests.dart`; analysis
+  then stopped on one import-boundary error because importing the screen-set
+  library does not make `TerminalSemanticShellState` visible to another
+  library. `terminal_session.dart` now imports the semantic model explicitly;
+  no runtime test had started and no policy change was needed.
+- After the explicit import, focused analysis reports no issues. The first test
+  entrypoint then stopped in the renderer build hook because the workspace
+  sandbox again denied Clang's `~/.cache` module writes; the tests are rerun
+  unchanged with the established cache permission.
+- With that permission, the focused application-state Close/Quit test passes.
+  The following aggregate runner reaches and rejects stale Phase 7 AppKit
+  evidence because `terminal_application_state_test.dart` is a pinned unit-test
+  source. Its generated hash is refreshed and reviewed before rerunning.
+- Phase 7 evidence regeneration changes only the expected hashes for the pane
+  model, terminal session, and application-state test. Its semantic totals stay
+  fixed at 4 criteria, 13 source references, 10 unit tests, 4 integration tests,
+  and 8 UI assertions, and the dedicated freshness check passes.
+- The refreshed aggregate runner passes. Focused coverage now traverses
+  unknown, prompt, input, command-output, and RIS-reset semantic states against
+  an idle owning group, then proves distinct foreground remains authoritative
+  after a forged command-end marker. Pane Close separately converts a thrown
+  session snapshot to unavailable confirmation; aggregate Quit captures the
+  new disposition in stable visual order and includes only scalar counts in its
+  machine line.
+- README and PTY-08/CFG-06 evidence now describe the warning-only composition
+  and the version-two lifecycle resources without claiming final runtime
+  acceptance. Compatibility coverage regeneration changes only the expected
+  README/FEATURE_MATRIX pins and passes with the same 9 fix families, 417 split
+  runs, 8 owned gaps, and zero known P0 silent-corruption cases.
+- The final complete `make test` passes every generated freshness gate, formats
+  233 files without changes, reports no analyzer issues, and passes the
+  aggregate Dart runner. The source audit passes with 436 tracked files, zero
+  product-native sources, and one reviewed test-native source. Both arm64
+  Developer JIT and Release AOT bundles rebuild and pass audit with one helper,
+  one native asset, and one declared capability each.
+- Final review confirms the generated Phase 7 evidence changes only the pane,
+  session, and application-state-test hashes, while compatibility coverage
+  changes only README/FEATURE_MATRIX pins. The task contains no debug artifact
+  or unrelated file, `git diff --check` passes, and the authorized adjacent
+  `dart_appkit` worktree remains clean because no dependency change is needed.
 - The required post-`071fa18` reread found both repositories clean and confirms
   prompt navigation is the first unchecked roadmap child; close composition,
   final runtime acceptance, and settings remain ordered later work.

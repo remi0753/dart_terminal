@@ -55,10 +55,11 @@ enum TerminalPaneState {
 
 enum TerminalPaneCloseDecision { confirmationRequired, allow }
 
-/// Content-free classification of the process currently owned by one pane.
+/// Content-free close-risk classification for the process owned by one pane.
 enum TerminalPaneProcessDisposition {
   nonLive,
   idleShell,
+  owningShellCommand,
   foregroundProcess,
   unavailable,
 }
@@ -91,6 +92,7 @@ final class TerminalPaneProcessSnapshot {
     required int childProcessId,
     required int owningProcessGroup,
     required int foregroundProcessGroup,
+    bool owningShellCommandActive = false,
   }) {
     for (final MapEntry<String, int> identity in <String, int>{
       'childProcessId': childProcessId,
@@ -107,9 +109,11 @@ final class TerminalPaneProcessSnapshot {
     }
     return TerminalPaneProcessSnapshot._(
       sessionId: sessionId,
-      disposition: foregroundProcessGroup == owningProcessGroup
-          ? TerminalPaneProcessDisposition.idleShell
-          : TerminalPaneProcessDisposition.foregroundProcess,
+      disposition: foregroundProcessGroup != owningProcessGroup
+          ? TerminalPaneProcessDisposition.foregroundProcess
+          : owningShellCommandActive
+          ? TerminalPaneProcessDisposition.owningShellCommand
+          : TerminalPaneProcessDisposition.idleShell,
       childProcessId: childProcessId,
       owningProcessGroup: owningProcessGroup,
       foregroundProcessGroup: foregroundProcessGroup,
@@ -144,6 +148,7 @@ final class TerminalPaneProcessSnapshot {
   final int foregroundProcessGroupSystemError;
 
   bool get requiresConfirmation =>
+      disposition == TerminalPaneProcessDisposition.owningShellCommand ||
       disposition == TerminalPaneProcessDisposition.foregroundProcess ||
       disposition == TerminalPaneProcessDisposition.unavailable;
 
@@ -474,7 +479,16 @@ final class TerminalPane {
       _state == TerminalPaneState.confirmationPending;
   TerminalPaneSessionShutdownResult? get shutdownResult => _shutdownResult;
 
-  TerminalPaneProcessSnapshot processSnapshot() => _session.processSnapshot();
+  TerminalPaneProcessSnapshot processSnapshot() {
+    try {
+      final TerminalPaneProcessSnapshot snapshot = _session.processSnapshot();
+      return snapshot.sessionId == sessionId
+          ? snapshot
+          : TerminalPaneProcessSnapshot.unavailable(sessionId: sessionId);
+    } on Object {
+      return TerminalPaneProcessSnapshot.unavailable(sessionId: sessionId);
+    }
+  }
 
   Future<void> start() => _startFuture ??= _start();
 

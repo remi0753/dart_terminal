@@ -166,7 +166,8 @@ Future<void> _testApplicationQuitCoordinator() async {
   ]) {
     await pane.start();
   }
-  sessions[0].processDisposition = TerminalPaneProcessDisposition.idleShell;
+  sessions[0].processDisposition =
+      TerminalPaneProcessDisposition.owningShellCommand;
   sessions[1].processDisposition =
       TerminalPaneProcessDisposition.foregroundProcess;
   sessions[2].live = false;
@@ -221,11 +222,18 @@ Future<void> _testApplicationQuitCoordinator() async {
                 .map((TerminalApplicationQuitPaneSnapshot pane) => pane.paneId)
                 .join(',') ==
             '${first.id},${second.id},${third.id},${fourth.id}' &&
-        firstSnapshot.count(TerminalPaneProcessDisposition.idleShell) == 1 &&
+        firstSnapshot.count(TerminalPaneProcessDisposition.idleShell) == 0 &&
+        firstSnapshot.count(
+              TerminalPaneProcessDisposition.owningShellCommand,
+            ) ==
+            1 &&
         firstSnapshot.count(TerminalPaneProcessDisposition.foregroundProcess) ==
             1 &&
         firstSnapshot.count(TerminalPaneProcessDisposition.nonLive) == 1 &&
         firstSnapshot.count(TerminalPaneProcessDisposition.unavailable) == 1 &&
+        firstSnapshot.machineLine() ==
+            'TERMINAL_APPLICATION_QUIT_SNAPSHOT panes=4 non_live=1 idle=0 '
+                'shell_command=1 foreground=1 unavailable=1 confirmation=true' &&
         state.paneCount == 4 &&
         replies.isEmpty,
     'native Quit atomically snapshots mixed panes and cancels pane Close',
@@ -437,6 +445,20 @@ Future<void> _testPaneCloseCoordinator() async {
     'repeating the exact focused request confirms one nested split removal',
   );
 
+  sessions[1].processDisposition =
+      TerminalPaneProcessDisposition.owningShellCommand;
+  final TerminalPaneCloseResult shellCommandRequest = await coordinator
+      .requestClose(paneId: second.id);
+  _expect(
+    shellCommandRequest.disposition ==
+            TerminalPaneCloseDisposition.confirmationRequired &&
+        shellCommandRequest.confirmation!.processDisposition ==
+            TerminalPaneProcessDisposition.owningShellCommand &&
+        coordinator.cancelClose(shellCommandRequest.confirmation!) &&
+        state.paneCount == 4 &&
+        hierarchyChanges == 1,
+    'owning-shell semantic command requires cancellable pane confirmation',
+  );
   sessions[1].processDisposition = TerminalPaneProcessDisposition.idleShell;
   final TerminalPaneCloseResult idleRemoval = await coordinator.requestClose(
     paneId: second.id,
@@ -450,7 +472,21 @@ Future<void> _testPaneCloseCoordinator() async {
     'idle shell closes immediately and selects the structural neighbor',
   );
 
-  sessions[3].processDisposition = TerminalPaneProcessDisposition.unavailable;
+  sessions[3].failProcessSnapshot = true;
+  final TerminalPaneCloseResult failedSnapshotRequest = await coordinator
+      .requestClose(paneId: fourth.id);
+  _expect(
+    failedSnapshotRequest.disposition ==
+            TerminalPaneCloseDisposition.confirmationRequired &&
+        failedSnapshotRequest.confirmation!.processDisposition ==
+            TerminalPaneProcessDisposition.unavailable &&
+        coordinator.cancelClose(failedSnapshotRequest.confirmation!) &&
+        state.paneCount == 3,
+    'thrown pane snapshot is converted to conservative confirmation',
+  );
+  sessions[3]
+    ..failProcessSnapshot = false
+    ..processDisposition = TerminalPaneProcessDisposition.unavailable;
   final TerminalPaneCloseResult unavailableRequest = await coordinator
       .requestClose(paneId: fourth.id);
   _expect(
@@ -1443,6 +1479,9 @@ final class _StateFakeSession implements TerminalPaneSession {
                     TerminalPaneProcessDisposition.foregroundProcess
                 ? id.paneId.value + 1000
                 : id.paneId.value,
+            owningShellCommandActive:
+                processDisposition ==
+                TerminalPaneProcessDisposition.owningShellCommand,
           );
   }
 

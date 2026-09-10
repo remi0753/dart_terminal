@@ -29,6 +29,8 @@ final class TerminalPaneCloseConfirmation {
       throw ArgumentError('pane and session identity must match');
     }
     if (processDisposition !=
+            TerminalPaneProcessDisposition.owningShellCommand &&
+        processDisposition !=
             TerminalPaneProcessDisposition.foregroundProcess &&
         processDisposition != TerminalPaneProcessDisposition.unavailable) {
       throw ArgumentError.value(

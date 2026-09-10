@@ -1991,6 +1991,44 @@ Future<void> _testTerminalProcessSnapshotClassification() async {
         !idle.requiresConfirmation,
     'owning shell foreground group is classified as idle',
   );
+  process.emitOutput(utf8.encode('\x1b]133;A\x07'));
+  await _waitForSemanticShellState(session, TerminalSemanticShellState.prompt);
+  _expect(
+    session.processSnapshot().disposition ==
+        TerminalPaneProcessDisposition.idleShell,
+    'semantic prompt does not change an idle-shell decision',
+  );
+  process.emitOutput(utf8.encode('\x1b]133;B\x07'));
+  await _waitForSemanticShellState(session, TerminalSemanticShellState.input);
+  _expect(
+    session.processSnapshot().disposition ==
+        TerminalPaneProcessDisposition.idleShell,
+    'semantic input does not change an idle-shell decision',
+  );
+  process.emitOutput(utf8.encode('\x1b]133;C\x07'));
+  await _waitForSemanticShellState(
+    session,
+    TerminalSemanticShellState.commandOutput,
+  );
+  final TerminalPaneProcessSnapshot shellCommand = session.processSnapshot();
+  _expect(
+    shellCommand.disposition ==
+            TerminalPaneProcessDisposition.owningShellCommand &&
+        shellCommand.requiresConfirmation,
+    'semantic command output adds confirmation for owning-shell work',
+  );
+  process.emitOutput(utf8.encode('\x1bc'));
+  await _waitForSemanticShellState(session, TerminalSemanticShellState.unknown);
+  _expect(
+    session.processSnapshot().disposition ==
+        TerminalPaneProcessDisposition.idleShell,
+    'terminal reset restores the pre-integration idle-shell decision',
+  );
+  process.emitOutput(utf8.encode('\x1b]133;C\x07'));
+  await _waitForSemanticShellState(
+    session,
+    TerminalSemanticShellState.commandOutput,
+  );
   process.foregroundProcessGroup = process.pid + 10;
   final TerminalPaneProcessSnapshot foreground = session.processSnapshot();
   _expect(
@@ -1998,6 +2036,13 @@ Future<void> _testTerminalProcessSnapshotClassification() async {
             TerminalPaneProcessDisposition.foregroundProcess &&
         foreground.requiresConfirmation,
     'distinct foreground process group requires confirmation',
+  );
+  process.emitOutput(utf8.encode('\x1b]133;D\x07'));
+  await _waitForSemanticShellState(session, TerminalSemanticShellState.unknown);
+  _expect(
+    session.processSnapshot().disposition ==
+        TerminalPaneProcessDisposition.foregroundProcess,
+    'a forged semantic end cannot weaken distinct foreground evidence',
   );
   process.foregroundProcessGroupSystemError = 6;
   final TerminalPaneProcessSnapshot unavailable = session.processSnapshot();
@@ -2021,6 +2066,20 @@ Future<void> _testTerminalProcessSnapshotClassification() async {
     'terminated terminal session no longer requires process inspection',
   );
   await session.dispose();
+}
+
+Future<void> _waitForSemanticShellState(
+  TerminalSession session,
+  TerminalSemanticShellState expected,
+) async {
+  final Stopwatch timeout = Stopwatch()..start();
+  while (timeout.elapsed < const Duration(seconds: 3)) {
+    if (session.terminalScreenSet.semanticPrompt.shellState == expected) return;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  throw StateError(
+    'Timed out waiting for semantic shell state ${expected.name}',
+  );
 }
 
 Future<void> _testRepeatedControlDNaturalExit() async {
@@ -2530,6 +2589,9 @@ final class _FakePaneSession implements TerminalPaneSession {
                   TerminalPaneProcessDisposition.foregroundProcess
               ? id.paneId.value + 2000
               : id.paneId.value + 1000,
+          owningShellCommandActive:
+              processDisposition ==
+              TerminalPaneProcessDisposition.owningShellCommand,
         );
 
   @override
