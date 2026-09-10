@@ -2144,6 +2144,8 @@ final class TerminalApplication {
     final List<TerminalActionId> nativeActionInvocations = <TerminalActionId>[];
     final List<TerminalActionDispatchResult> actionDispatches =
         <TerminalActionDispatchResult>[];
+    final List<TerminalConfigReloadResult> configurationReloads =
+        <TerminalConfigReloadResult>[];
     final Map<PaneId, TerminalKeyRouteResult> lastKeyRoutes =
         <PaneId, TerminalKeyRouteResult>{};
     final Map<PaneId, int> keyRouteCounts = <PaneId, int>{};
@@ -2839,6 +2841,7 @@ final class TerminalApplication {
           configurationReloadController;
       if (controller == null) return;
       final TerminalConfigReloadResult result = await controller.reload();
+      if (runConfigurationAcceptance) configurationReloads.add(result);
       for (final TerminalConfigDiagnostic diagnostic in result.diagnostics) {
         stderr.writeln(diagnostic.format());
       }
@@ -3192,6 +3195,11 @@ final class TerminalApplication {
           owners: owners,
           nativeActionInvocations: nativeActionInvocations,
           actionDispatches: actionDispatches,
+          configurationReloads: configurationReloads,
+          configurationReloadController: configurationReloadController,
+          configurationAuthority: configurationAuthority,
+          paneConfigurations: paneConfigurations,
+          launchWorkingDirectories: launchWorkingDirectories,
           terminalInputDeliveryCount: () => terminalInputDeliveryCount,
           lastKeyRoutes: lastKeyRoutes,
           keyRouteCounts: keyRouteCounts,
@@ -3254,6 +3262,11 @@ final class TerminalApplication {
     required Map<PaneId, _TerminalHierarchyProductPane> owners,
     required List<TerminalActionId> nativeActionInvocations,
     required List<TerminalActionDispatchResult> actionDispatches,
+    required List<TerminalConfigReloadResult> configurationReloads,
+    required TerminalConfigReloadController? configurationReloadController,
+    required TerminalProductConfigurationAuthority configurationAuthority,
+    required Map<PaneId, TerminalProductConfiguration> paneConfigurations,
+    required Map<PaneId, String?> launchWorkingDirectories,
     required int Function() terminalInputDeliveryCount,
     required Map<PaneId, TerminalKeyRouteResult> lastKeyRoutes,
     required Map<PaneId, int> keyRouteCounts,
@@ -3271,6 +3284,17 @@ final class TerminalApplication {
     const double configuredVerticalPadding = 11;
     const int configuredScrollbackLines = 8;
     const int configuredScrollbackBytes = 1024 * 1024;
+    const int reloadedForeground = 0x80a0b0c0;
+    const int reloadedBackground = 0x80202122;
+    const int reloadedCursor = 0x80c0b0a0;
+    const int reloadedAnsiGreen = 0x8043ba21;
+    const double reloadedWindowWidth = 980;
+    const double reloadedWindowHeight = 640;
+    const double reloadedHorizontalPadding = 9;
+    const double reloadedVerticalPadding = 7;
+    const int reloadedScrollbackLines = 12;
+    const int reloadedScrollbackBytes = 2 * 1024 * 1024;
+    const String reloadedWorkingDirectory = '/tmp';
     var eventTimestamp = 13000000;
 
     Future<void> waitFor(
@@ -3339,6 +3363,10 @@ final class TerminalApplication {
     final _TerminalHierarchyProductPane initialOwner = owners[initialPaneId]!;
     final Window nativeWindow = hierarchy.windowForTab(initialTab.id)!;
     final TerminalScreenSet initialScreens = initialSession.terminalScreenSet;
+    final TerminalConfigReloadController reloadController =
+        configurationReloadController!;
+    final String configurationPath =
+        reloadController.effectiveSnapshot.rootPath!;
     _expectLifecycle(
       nativeWindow.frame.width == configuredWindowWidth &&
           nativeWindow.frame.height == configuredWindowHeight &&
@@ -3516,6 +3544,140 @@ final class TerminalApplication {
       'configured scrollback exceeded its line or byte cap',
     );
 
+    final MenuItem reloadItem = menu.itemForAction(
+      TerminalActionId.reloadConfiguration,
+    );
+    _expectLifecycle(
+      reloadItem.isEnabled &&
+          reloadItem.keyEquivalent.isEmpty &&
+          reloadController.acceptedGeneration == 0 &&
+          configurationAuthority.acceptedGeneration == 0,
+      'reload action was unavailable or incorrectly reserved a native shortcut',
+    );
+    final TerminalSession stableSession = initialSession;
+    final _TerminalHierarchyProductPane stableOwner = initialOwner;
+    final Window stableWindow = nativeWindow;
+    File(configurationPath).writeAsStringSync(
+      'font-size = enormous\nmacos-option-key = escape\n',
+      flush: true,
+    );
+    final int rejectedNativeBaseline = nativeActionInvocations.length;
+    final int rejectedDispatchBaseline = actionDispatches.length;
+    reloadItem.performAction();
+    await waitFor(
+      () =>
+          configurationReloads.length == 1 &&
+          actionDispatches.length == rejectedDispatchBaseline + 1,
+      'invalid native configuration reload did not complete exactly once',
+    );
+    final TerminalConfigReloadResult rejectedReload =
+        configurationReloads.single;
+    _expectLifecycle(
+      rejectedReload.disposition == TerminalConfigReloadDisposition.rejected &&
+          rejectedReload.diagnostics.single.code == 'CFG_INVALID_VALUE' &&
+          rejectedReload.diagnostics.single.source.path == configurationPath &&
+          rejectedReload.diagnostics.single.source.line == 1 &&
+          reloadController.acceptedGeneration == 0 &&
+          configurationAuthority.acceptedGeneration == 0 &&
+          nativeActionInvocations.length == rejectedNativeBaseline + 1 &&
+          nativeActionInvocations.last ==
+              TerminalActionId.reloadConfiguration &&
+          actionDispatches.last.id == TerminalActionId.reloadConfiguration &&
+          actionDispatches.last.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          identical(sessions[initialPaneId], stableSession) &&
+          identical(owners[initialPaneId], stableOwner) &&
+          identical(hierarchy.windowForTab(initialTab.id), stableWindow) &&
+          initialScreens.palette.defaultForeground == configuredForeground &&
+          initialOwner.surface.fontMetrics.pointSize == 18 &&
+          initialScreens.scrollback.maxLines == configuredScrollbackLines,
+      'invalid reload did not retain last-known-good resources and values',
+    );
+
+    File(configurationPath)
+        .writeAsStringSync('''working-directory = $reloadedWorkingDirectory
+theme = default
+palette-foreground = #a0b0c0
+palette-background = #202122
+palette-cursor = #c0b0a0
+palette-2 = #43ba21
+font-family = Menlo
+font-size = 20
+font-synthetic-style = deny
+window-width = 980
+window-height = 640
+window-padding-horizontal = 9
+window-padding-vertical = 7
+macos-option-key = escape
+scrollback-lines = 12
+scrollback-bytes = 2MiB
+cursor-shape = underline
+cursor-blink = true
+keybind = control+e=unbind
+keybind = control+d=terminal.send-end-of-file
+keybind = command+k=passthrough
+keybind = control+k=pane.focus-next
+''', flush: true);
+    final int appliedNativeBaseline = nativeActionInvocations.length;
+    final int appliedDispatchBaseline = actionDispatches.length;
+    reloadItem.performAction();
+    await waitFor(
+      () =>
+          configurationReloads.length == 2 &&
+          actionDispatches.length == appliedDispatchBaseline + 1,
+      'corrected native configuration reload did not complete exactly once',
+    );
+    final TerminalConfigReloadResult appliedReload = configurationReloads.last;
+    _expectLifecycle(
+      appliedReload.disposition == TerminalConfigReloadDisposition.applied &&
+          appliedReload.diagnostics.isEmpty &&
+          appliedReload.changePlan!.liveChanges.length == 2 &&
+          appliedReload.changePlan!.newSessionChanges.length == 14 &&
+          reloadController.acceptedGeneration == 1 &&
+          configurationAuthority.acceptedGeneration == 1 &&
+          configurationAuthority.liveGeneration == 1 &&
+          nativeActionInvocations.length == appliedNativeBaseline + 1 &&
+          nativeActionInvocations.last ==
+              TerminalActionId.reloadConfiguration &&
+          actionDispatches.last.id == TerminalActionId.reloadConfiguration &&
+          actionDispatches.last.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          identical(sessions[initialPaneId], stableSession) &&
+          identical(owners[initialPaneId], stableOwner) &&
+          identical(hierarchy.windowForTab(initialTab.id), stableWindow) &&
+          initialScreens.palette.defaultForeground == configuredForeground &&
+          initialOwner.surface.fontMetrics.pointSize == 18 &&
+          initialOwner.surface.horizontalPadding ==
+              configuredHorizontalPadding &&
+          initialScreens.scrollback.maxLines == configuredScrollbackLines &&
+          initialScreens.activeScreen.cursorShape == TerminalCursorShape.bar,
+      'accepted reload did not preserve existing new-session resources',
+    );
+    final int liveEofBaseline = endOfFileActionCount();
+    final TerminalKeyRouteResult liveUnbindResult = routeConfiguredKey(
+      initialOwner,
+      keyCode: 14,
+      modifiers: ModifierKeys.controlBit,
+      characters: '\x05',
+      charactersIgnoringModifiers: 'e',
+    );
+    final TerminalKeyRouteResult liveOptionResult = routeConfiguredKey(
+      initialOwner,
+      keyCode: 0,
+      modifiers: ModifierKeys.optionBit,
+      characters: 'å',
+      charactersIgnoringModifiers: 'a',
+    );
+    _expectLifecycle(
+      liveUnbindResult.disposition == TerminalKeyRouteDisposition.encoded &&
+          liveUnbindResult.encodedByteCount == 1 &&
+          liveUnbindResult.action == null &&
+          endOfFileActionCount() == liveEofBaseline &&
+          liveOptionResult.disposition == TerminalKeyRouteDisposition.encoded &&
+          liveOptionResult.encodedByteCount == 3,
+      'existing pane did not observe accepted live input policy',
+    );
+
     final MenuItem splitRightItem = menu.itemForAction(
       TerminalActionId.splitPaneRight,
     );
@@ -3599,39 +3761,66 @@ final class TerminalApplication {
     final List<_TerminalHierarchyProductPane> paneOwners = owners.values.toList(
       growable: false,
     );
-    final bool inherited =
-        screenSets.every(
-          (TerminalScreenSet screens) =>
-              screens.palette.defaultForeground == configuredForeground &&
-              screens.palette.defaultBackground == configuredBackground &&
-              screens.palette.cursorColor == configuredCursor &&
-              screens.palette.colorAt(2) == configuredAnsiGreen &&
-              screens.scrollback.maxLines == configuredScrollbackLines &&
-              screens.scrollback.maxBytes == configuredScrollbackBytes &&
-              screens.activeScreen.cursorShape == TerminalCursorShape.bar &&
-              !screens.activeScreen.cursorBlinking,
-        ) &&
-        paneOwners.every((_TerminalHierarchyProductPane owner) {
-          final TerminalLiveMetalSurfaceSnapshot snapshot = owner.surface
-              .snapshot();
-          return owner.surface.fontFamily == 'Menlo' &&
-              owner.surface.fontMetrics.pointSize == 18 &&
-              owner.surface.syntheticStylePolicy ==
-                  TerminalSyntheticStylePolicy.reject &&
-              owner.surface.horizontalPadding == configuredHorizontalPadding &&
-              owner.surface.verticalPadding == configuredVerticalPadding &&
-              snapshot.contentOffsetX > 0 &&
-              snapshot.contentOffsetY > 0 &&
-              snapshot.contentViewportWidth ==
-                  snapshot.viewportWidth - snapshot.contentOffsetX * 2 &&
-              snapshot.contentViewportHeight ==
-                  snapshot.viewportHeight - snapshot.contentOffsetY * 2;
+    final List<PaneId> reloadedPaneIds = sessions.keys
+        .where((PaneId paneId) => paneId != initialPaneId)
+        .toList(growable: false);
+    final bool initialResourcesRetained =
+        initialScreens.palette.defaultForeground == configuredForeground &&
+        initialScreens.palette.defaultBackground == configuredBackground &&
+        initialScreens.palette.cursorColor == configuredCursor &&
+        initialScreens.palette.colorAt(2) == configuredAnsiGreen &&
+        initialScreens.scrollback.maxLines == configuredScrollbackLines &&
+        initialScreens.scrollback.maxBytes == configuredScrollbackBytes &&
+        initialScreens.activeScreen.cursorShape == TerminalCursorShape.bar &&
+        !initialScreens.activeScreen.cursorBlinking &&
+        initialOwner.surface.fontMetrics.pointSize == 18 &&
+        initialOwner.surface.horizontalPadding == configuredHorizontalPadding &&
+        initialOwner.surface.verticalPadding == configuredVerticalPadding;
+    final bool reloadedResourcesProjected = reloadedPaneIds.every((
+      PaneId paneId,
+    ) {
+      final TerminalScreenSet screens = sessions[paneId]!.terminalScreenSet;
+      final _TerminalHierarchyProductPane owner = owners[paneId]!;
+      final TerminalProductConfiguration configuration =
+          paneConfigurations[paneId]!;
+      final TerminalLiveMetalSurfaceSnapshot snapshot = owner.surface
+          .snapshot();
+      return launchWorkingDirectories[paneId] == reloadedWorkingDirectory &&
+          configuration.workingDirectory == reloadedWorkingDirectory &&
+          screens.palette.defaultForeground == reloadedForeground &&
+          screens.palette.defaultBackground == reloadedBackground &&
+          screens.palette.cursorColor == reloadedCursor &&
+          screens.palette.colorAt(2) == reloadedAnsiGreen &&
+          screens.scrollback.maxLines == reloadedScrollbackLines &&
+          screens.scrollback.maxBytes == reloadedScrollbackBytes &&
+          screens.activeScreen.cursorShape == TerminalCursorShape.underline &&
+          screens.activeScreen.cursorBlinking &&
+          owner.surface.fontFamily == 'Menlo' &&
+          owner.surface.fontMetrics.pointSize == 20 &&
+          owner.surface.syntheticStylePolicy ==
+              TerminalSyntheticStylePolicy.reject &&
+          owner.surface.horizontalPadding == reloadedHorizontalPadding &&
+          owner.surface.verticalPadding == reloadedVerticalPadding &&
+          snapshot.contentOffsetX > 0 &&
+          snapshot.contentOffsetY > 0 &&
+          snapshot.contentViewportWidth ==
+              snapshot.viewportWidth - snapshot.contentOffsetX * 2 &&
+          snapshot.contentViewportHeight ==
+              snapshot.viewportHeight - snapshot.contentOffsetY * 2;
+    });
+    final TerminalWindowState reloadedWindow = state.windows.singleWhere(
+      (TerminalWindowState window) => window.id != initialWindow.id,
+    );
+    final bool windowPolicyProjected =
+        initialWindow.tabIds.every((TerminalTabId tabId) {
+          final Window window = hierarchy.windowForTab(tabId)!;
+          return window.frame.width == configuredWindowWidth &&
+              window.frame.height == configuredWindowHeight;
         }) &&
-        hierarchy.windows.values.every(
-          (Window window) =>
-              window.frame.width == configuredWindowWidth &&
-              window.frame.height == configuredWindowHeight,
-        );
+        hierarchy.windowForTab(reloadedWindow.selectedTabId)!.frame.width ==
+            reloadedWindowWidth &&
+        hierarchy.windowForTab(reloadedWindow.selectedTabId)!.frame.height ==
+            reloadedWindowHeight;
     final bool independent =
         screenSets
                 .map((TerminalScreenSet screens) => screens.palette)
@@ -3649,8 +3838,21 @@ final class TerminalApplication {
                 .length ==
             paneOwners.length;
     _expectLifecycle(
-      inherited && independent,
-      'new configured panes did not inherit independent product resources',
+      reloadedPaneIds.length == 3 &&
+          initialResourcesRetained &&
+          reloadedResourcesProjected &&
+          windowPolicyProjected &&
+          independent,
+      'reload did not retain existing resources or project independent '
+      'new-session resources',
+    );
+    _expectLifecycle(
+      paneOwners.every((_TerminalHierarchyProductPane owner) {
+        final TerminalLiveMetalSurfaceSnapshot snapshot = owner.surface
+            .snapshot();
+        return !snapshot.isDisposed;
+      }),
+      'reload unexpectedly disposed a live Metal surface',
     );
 
     await dispatch(TerminalActionId.quitApplication);
@@ -3676,7 +3878,8 @@ final class TerminalApplication {
       'window=true padding=true option_text=true scrollback=true cursor=true '
       'keybind_pane=true keybind_application=true unbind=true '
       'passthrough=true invalid_recovery=true native_menu_priority=true '
-      'panes=4 independent=true sessions_clean=4 text_clients=0 '
+      'reload_rejected=true reload_applied=true live_existing=true '
+      'new_session=true panes=4 independent=true sessions_clean=4 text_clients=0 '
       'native_handles=0',
     );
   }

@@ -1,7 +1,8 @@
 # Safe configuration reload and option application policy
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-10
+- Completed: 2026-09-10
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 8 `safe reload, per-option live/new-session policy`
 - Feature-matrix owner: CFG-04
@@ -278,3 +279,98 @@ next begins. After each commit, reread `ROADMAP.md` and this memo.
   the aggregate Dart suite after the reviewed AppKit inventory refresh.
 - `make runtime-source-check` passes with `tracked=416`,
   `product_native_sources=0`, and `reviewed_test_native_sources=1`.
+
+## Subtask 4 findings and verification
+
+- The configured-product fixture now rewrites one isolated real configuration
+  file to an invalid value and invokes the native Reload Configuration menu
+  item. It observes exactly one rejected transaction with the original
+  file/line diagnostic, generation zero, identical pane/session/owner/window
+  identities, and unchanged palette, font, scrollback, cursor, padding, and
+  frame resources.
+- The fixture then writes a corrected profile and invokes the same native menu
+  item. It observes one accepted plan with two live and fourteen new-session
+  changes. The existing pane immediately uses the new key bindings and
+  ESC-prefixed Option-key encoding while retaining all creation-time resources;
+  later split, tab, and window panes receive independent reloaded palette,
+  font, padding, cursor, scrollback, working-directory, and window-frame state.
+- Focused real arm64 acceptance passed independently in both required modes:
+  Developer JIT reported `panes=4 keybinds=true reload=true` in 1851 ms and
+  Release AOT reported the same contract in 1051 ms.
+- The first aggregate attempt correctly rejected stale Phase 7 reviewed-AppKit
+  inventory hashes after the fixture changed. Regeneration changed only the
+  intended source/test hashes. The next attempt correctly rejected stale Phase
+  6 compatibility coverage, which was regenerated. A later attempt exposed a
+  smoke-driver expectation still fixed at fifteen application actions; changing
+  it to the current generated catalog count of sixteen fixed that test and the
+  coverage report was regenerated once more.
+- The resulting aggregate gate passed the complete Dart test/analyzer/source
+  audit, both bundle audits, ordinary product smoke in both modes, terminal
+  display in both modes, the four-pane scheduling hierarchy in both modes,
+  user actions in both modes, and the new configuration reload acceptance in
+  both modes. It then stopped in the existing Developer JIT restoration suite,
+  before any later clipboard/lifecycle/traffic/resource/fault suite ran.
+
+## Resolved verification blocker
+
+- On 2026-09-10, the aggregate restoration failure and two focused Developer
+  JIT retries reached a visible real window on a concrete screen, printed
+  `TERMINAL_RESTORATION_FULLSCREEN stage=enter-requested active=false`, and
+  received no real fullscreen-completion event within eight seconds. Every
+  failure still closed its PTY, reaped its lifecycle worker, and disposed the
+  terminal hierarchy cleanly. This exactly matches the already documented
+  managed-desktop foreground condition in
+  `docs/phase7/fullscreen-runtime-acceptance-blocker.md`; it is not a reload,
+  PTY, or resource-ownership failure.
+- `System Events` can read the current foreground process and reports ChatGPT.
+  A PID-anchored request to make the real DartTerminal process frontmost was
+  accepted but remained `false`. Attempting to raise/select its real window
+  was rejected because `osascript` lacks Accessibility permission
+  (`-25211`). Increasing the timeout or injecting a fullscreen completion
+  would weaken the mandatory real-AppKit acceptance and is not an acceptable
+  workaround.
+- The adjacent `dart_appkit` host already contains the separately committed
+  idempotent activation-policy correction at `f892bb8`. The failing bundle
+  starts, creates and shows its real window, attaches a screen, and runs Dart;
+  no further host/bridge source defect is indicated by this failure. macOS must
+  grant the launched bundle genuine foreground ownership (for example, by the
+  user selecting its window) before the real fullscreen transition can
+  complete.
+- On the resumed run the user foregrounded each test window. Focused Developer
+  JIT restoration then passed in 4569 ms and focused Release AOT restoration
+  passed in 3865 ms, each with two generations, two logical windows, four tabs,
+  eight panes, real fullscreen enter/exit, migration, fresh ownership, and
+  complete cleanup. This confirms that no additional terminal or `dart_appkit`
+  source correction was needed for the external foreground condition.
+
+## Final aggregate verification
+
+- `CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64
+  runtime-verify` completed with exit status zero.
+- The command passed every generated/freshness and compatibility evidence gate,
+  formatted 222 Dart files with zero changes, reported no analyzer issues,
+  completed the aggregate Dart suite, and passed the Dart-only source audit at
+  `tracked=416`, `product_native_sources=0`, and
+  `reviewed_test_native_sources=1`.
+- Developer JIT and Release AOT bundle audits each reported one helper, one
+  native asset, and one capability. Ordinary product and Metal display smoke
+  passed in both modes.
+- Four-pane hierarchy scheduling passed at 0.856x in Developer JIT and 0.467x
+  in Release AOT. User-action acceptance passed in both modes.
+- The final configured-product runs passed the exact invalid/corrected reload
+  contract with four panes in 1314 ms for Developer JIT and 827 ms for Release
+  AOT. The following restoration runs passed in 3694 ms and 3297 ms,
+  respectively, and clipboard acceptance also passed in both modes.
+- All sixteen lifecycle scenarios passed in each runtime, including classified
+  startup, uncaught, timeout, replacement, and usage-error outcomes. Bounded
+  traffic passed with 384 backpressured requests in each mode.
+- The 1000-iteration resource suites preserved `baseline=34`, `peak=36`, and
+  returned to baseline in both runtimes. Shutdown-fault and PTY-deadline suites
+  passed with the expected clean and status-75 outcomes.
+- README, CFG-04 in the feature matrix, Phase 7 reviewed-AppKit hashes, and the
+  compatibility coverage hashes now describe the verified behavior. The final
+  child and its parent are complete.
+- After the final documentation and roadmap update,
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed every regenerated
+  freshness check, formatted 222 files with zero changes, reported no analyzer
+  issues, and completed the aggregate Dart suite again.

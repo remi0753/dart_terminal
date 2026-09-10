@@ -39,7 +39,7 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 15個のstable application actionを共有するbounded searchable registry、動的な
+- 16個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
@@ -266,17 +266,26 @@ ANSI palette 0–15、font family/size/synthetic style、初期window sizeとpad
 各paneへ適用され、既存paneのmutable resourceを共有しません。`keybind`は複数回指定でき、
 exact physical key chordをpane actionまたはapplication actionへ割り当てます。構文、全key名、
 action ID、`unbind`/`passthrough`、既定binding、予約済みnative shortcutは
-[Keybindings and actions](docs/reference/keybindings-and-actions.md)を参照してください。reload、
-light/dark theme catalog、shell integrationはPhase 8の後続タスクです。
+[Keybindings and actions](docs/reference/keybindings-and-actions.md)を参照してください。
 unknown key、不正な値、読めない明示ファイル、include cycle等はpath、line、column、安定した
 diagnostic code、可能な場合は修正案とともに標準エラーへ表示します。有効な最後の値または
 schema defaultへ復旧して起動を続けます。一方、command line自体の不正やintegration専用
 fault optionのgate違反は従来どおりusage errorです。
 
+Applicationメニューまたはcommand paletteの`Reload Configuration`、あるいは設定した
+`application.reload-configuration` keybindで、起動時と同じfile/include/CLI priorityを再解決
+できます。error diagnosticが1件でもあるreloadは全体を拒否し、現在のeffective configと
+pane/PTY/native resourceを保持します。warning-onlyまたは正常な候補はatomicに受理します。
+`macos-option-key`と`keybind`は既存paneの次のkey eventからlive適用され、それ以外の現在の
+optionは新しく作るsession/resource/windowだけに適用されます。既存palette/OSC state、cursor、
+scrollback、font、padding、window frameは書き換えません。自動file watchとSIGHUP reloadは
+現在の対象外です。light/dark theme catalogとshell integrationはPhase 8の後続タスクです。
+
 設定値が実際の通常製品へ反映されることは、実設定ファイルから4 paneを生成し、表示色、
 font、window/padding、cursor、Option入力、scrollback上限、pane/application keybind、
-unbind、Command passthrough、invalid reserved shortcutからの復旧、native menu優先、
-独立resource、終了時cleanupをDeveloper JITとRelease AOTで確認します。両runtimeのgateは
+unbind、Command passthrough、invalid reserved shortcutからの復旧、invalid/corrected reload、
+live/new-session policy、native menu優先、独立resource、終了時cleanupをDeveloper JITと
+Release AOTで確認します。両runtimeのgateは
 次で再実行できます。
 
 ```shell
