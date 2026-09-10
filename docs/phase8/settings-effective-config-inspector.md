@@ -1,6 +1,6 @@
 # Settings UI and effective-configuration inspector
 
-- Status: complete
+- Status: in progress
 - Started: 2026-09-11 after commit `dc5603a`
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 8 `settings UI と effective-config inspector`
@@ -244,7 +244,7 @@ the next child.
 
 ## Current subtask: CLI inspection and generated reference
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-11 after commit `631cff2`
 - Purpose: expose the schema and effective snapshot through ordinary bounded
   process modes, and make the committed full configuration reference reject
