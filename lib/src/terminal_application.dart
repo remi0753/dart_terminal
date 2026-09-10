@@ -26,6 +26,7 @@ import 'terminal_core/terminal_reply.dart';
 import 'terminal_core/terminal_screen.dart';
 import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
+import 'terminal_core/terminal_semantic_prompt.dart';
 import 'terminal_core/terminal_style.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_focus_reporter.dart';
@@ -3364,6 +3365,7 @@ final class TerminalApplication {
           owners: owners,
           shellIntegrationBundle: shellIntegrationBundle,
           paneConfigurations: paneConfigurations,
+          paneCloseCoordinator: createdPaneCloseCoordinator,
           closed: closed,
           prompt: acceptancePrompt.trimRight(),
         );
@@ -3461,6 +3463,7 @@ final class TerminalApplication {
     required Map<PaneId, _TerminalHierarchyProductPane> owners,
     required TerminalShellIntegrationBundle shellIntegrationBundle,
     required Map<PaneId, TerminalProductConfiguration> paneConfigurations,
+    required TerminalPaneCloseCoordinator paneCloseCoordinator,
     required Completer<void> closed,
     required String prompt,
   }) async {
@@ -3496,8 +3499,31 @@ final class TerminalApplication {
       prompt,
       timeout: const Duration(seconds: 10),
     );
+    if (expectsIntegration) {
+      await _waitForSemanticShellState(
+        session,
+        TerminalSemanticShellState.input,
+      );
+      _expectLifecycle(
+        session.terminalScreenSet.metadata.workingDirectory != null,
+        'integrated shell omitted initial cwd metadata',
+      );
+    } else {
+      _expectLifecycle(
+        session.terminalScreenSet.semanticPrompt.shellState ==
+                TerminalSemanticShellState.unknown &&
+            session.terminalScreenSet.metadata.windowTitle == null &&
+            session.terminalScreenSet.metadata.iconTitle == null &&
+            session.terminalScreenSet.metadata.workingDirectory == null &&
+            !dispatcher
+                .snapshot(TerminalActionId.jumpToPreviousPrompt)
+                .isEnabled &&
+            !dispatcher.snapshot(TerminalActionId.jumpToNextPrompt).isEnabled,
+        'disabled shell projected semantic state, metadata, or navigation',
+      );
+    }
     final String integrationCondition = expectsIntegration
-        ? r'[[ ${DART_TERMINAL_SHELL_INTEGRATION-} == 1 && ${DART_TERMINAL_SHELL_INTEGRATION_VERSION-} == 1 && ${DART_TERMINAL_SHELL_INTEGRATION_SHELL-} == zsh ]]'
+        ? r'[[ ${DART_TERMINAL_SHELL_INTEGRATION-} == 1 && ${DART_TERMINAL_SHELL_INTEGRATION_VERSION-} == 2 && ${DART_TERMINAL_SHELL_INTEGRATION_SHELL-} == zsh ]]'
         : r'[[ -z ${DART_TERMINAL_SHELL_INTEGRATION-} && -z ${DART_TERMINAL_SHELL_INTEGRATION_VERSION-} && -z ${DART_TERMINAL_SHELL_INTEGRATION_SHELL-} ]]';
     const String startupCondition =
         r'[[ ${DT_RUNTIME_ZSHENV_COUNT:-0} == 1 && ${DT_RUNTIME_ZSHRC_COUNT:-0} == 1 ]]';
@@ -3539,6 +3565,145 @@ final class TerminalApplication {
       );
     }
 
+    var semanticAccepted = false;
+    var metadataAccepted = false;
+    var promptNavigationAccepted = false;
+    var closeHintAccepted = false;
+    if (expectsIntegration) {
+      await _waitForSemanticShellState(
+        session,
+        TerminalSemanticShellState.input,
+      );
+      final String semanticCwdPath =
+          Platform.environment['DT_RUNTIME_SEMANTIC_CWD'] ?? '';
+      _expectLifecycle(
+        semanticCwdPath.isNotEmpty &&
+            Directory(semanticCwdPath).isAbsolute &&
+            Directory(semanticCwdPath).existsSync(),
+        'integrated shell acceptance requires an existing absolute cwd fixture',
+      );
+      final Uri semanticCwd = Uri(
+        scheme: 'file',
+        host: 'localhost',
+        path: semanticCwdPath,
+      );
+      final String semanticTitle = semanticCwdPath
+          .split(Platform.pathSeparator)
+          .last;
+      owner.pane.insertText(
+        r'builtin cd -- "$DT_RUNTIME_SEMANTIC_CWD"; '
+        r"printf '%s%s\n' '__DT_SEMANTIC_' 'CWD_DONE__'",
+      );
+      await owner.pane.submit();
+      await _waitForAsciiMarker(session, '__DT_SEMANTIC_CWD_DONE__');
+      await _waitForSemanticShellState(
+        session,
+        TerminalSemanticShellState.input,
+      );
+      await _waitForSessionMetadata(
+        session,
+        expectedTitle: semanticTitle,
+        expectedWorkingDirectory: semanticCwd,
+      );
+      metadataAccepted = true;
+
+      owner.pane.insertText(
+        r'i=0; while [[ $i -lt 96 ]]; do '
+        r"printf '__DT_SEMANTIC_ROW_%03d__\n' $i; (( i += 1 )); done; "
+        r"printf '%s%s\n' '__DT_SEMANTIC_' 'SCROLL_DONE__'",
+      );
+      await owner.pane.submit();
+      await _waitForAsciiMarker(session, '__DT_SEMANTIC_SCROLL_DONE__');
+      await _waitForSemanticShellState(
+        session,
+        TerminalSemanticShellState.input,
+      );
+      final int semanticFlags = _retainedSemanticRowFlags(
+        session.terminalScreenSet,
+      );
+      _expectLifecycle(
+        semanticFlags & TerminalRowFlags.prompt != 0 &&
+            semanticFlags & TerminalRowFlags.command != 0 &&
+            semanticFlags & TerminalRowFlags.output != 0 &&
+            session.terminalScreenSet.scrollback.length > 0,
+        'integrated shell did not retain prompt, command, and output rows',
+      );
+      semanticAccepted = true;
+
+      final TerminalViewport viewport = session.terminalScreenSet.viewport;
+      _expectLifecycle(
+        viewport.atBottom &&
+            dispatcher
+                .snapshot(TerminalActionId.jumpToPreviousPrompt)
+                .isEnabled &&
+            !dispatcher.snapshot(TerminalActionId.jumpToNextPrompt).isEnabled,
+        'integrated shell did not expose previous-prompt navigation',
+      );
+      await dispatch(TerminalActionId.jumpToPreviousPrompt);
+      _expectLifecycle(
+        viewport.offset > 0 &&
+            dispatcher.snapshot(TerminalActionId.jumpToNextPrompt).isEnabled,
+        'previous-prompt action did not move the focused viewport',
+      );
+      await dispatch(TerminalActionId.jumpToNextPrompt);
+      _expectLifecycle(
+        viewport.atBottom,
+        'next-prompt action did not return to the live grid',
+      );
+      promptNavigationAccepted = true;
+
+      owner.pane.insertText(r'read -r DT_RUNTIME_SEMANTIC_READ');
+      await owner.pane.submit();
+      await _waitForSemanticShellState(
+        session,
+        TerminalSemanticShellState.commandOutput,
+      );
+      final TerminalPaneProcessSnapshot blocking =
+          await _waitForPaneProcessDisposition(
+            owner.pane,
+            TerminalPaneProcessDisposition.owningShellCommand,
+          );
+      _expectLifecycle(
+        blocking.childProcessId != null &&
+            blocking.owningProcessGroup == blocking.foregroundProcessGroup,
+        'blocking shell builtin did not retain the owning process group',
+      );
+      await dispatch(TerminalActionId.closeWindow);
+      final TerminalPaneCloseConfirmation? confirmation =
+          paneCloseCoordinator.pendingConfirmation;
+      _expectLifecycle(
+        confirmation != null &&
+            confirmation.paneId == paneId &&
+            confirmation.processDisposition ==
+                TerminalPaneProcessDisposition.owningShellCommand &&
+            state.paneCount == 1 &&
+            owner.pane.state == TerminalPaneState.confirmationPending &&
+            paneCloseCoordinator.cancelClose(confirmation),
+        'owning-shell builtin did not produce a cancellable close warning',
+      );
+      _expectLifecycle(
+        paneCloseCoordinator.pendingConfirmation == null &&
+            owner.pane.state == TerminalPaneState.running,
+        'cancelled semantic close warning did not restore the live pane',
+      );
+      owner.pane.insertText('accepted');
+      await owner.pane.submit();
+      await _waitForSemanticShellState(
+        session,
+        TerminalSemanticShellState.input,
+      );
+      await _waitForPaneProcessDisposition(
+        owner.pane,
+        TerminalPaneProcessDisposition.idleShell,
+      );
+      closeHintAccepted = true;
+    } else {
+      await _waitForPaneProcessDisposition(
+        owner.pane,
+        TerminalPaneProcessDisposition.idleShell,
+      );
+    }
+
     await dispatch(TerminalActionId.quitApplication);
     if (!closed.isCompleted) {
       await dispatch(TerminalActionId.quitApplication);
@@ -3557,6 +3722,9 @@ final class TerminalApplication {
     stdout.writeln(
       'TERMINAL_SHELL_INTEGRATION_TEST policy=${policy.name} bundle=true '
       'shell=zsh integrated=$expectsIntegration marker_contract=true '
+      'semantic=$semanticAccepted metadata=$metadataAccepted '
+      'prompt_navigation=$promptNavigationAccepted '
+      'close_hint=$closeHintAccepted '
       'user_startup_once=true injection_cleanup=true hierarchy=true '
       'sessions_clean=1 text_clients=0 native_handles=0',
     );
@@ -9730,6 +9898,40 @@ keybind = control+k=pane.focus-next
     throw TimeoutException(
       'pane ${pane.id} did not reach process disposition ${expected.name}',
     );
+  }
+
+  static Future<void> _waitForSemanticShellState(
+    TerminalSession session,
+    TerminalSemanticShellState expected,
+  ) async {
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 5)) {
+      if (session.terminalScreenSet.semanticPrompt.shellState == expected) {
+        return;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'terminal session exited before semantic state ${expected.name}',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw TimeoutException(
+      'terminal session did not reach semantic state ${expected.name}',
+    );
+  }
+
+  static int _retainedSemanticRowFlags(TerminalScreenSet screens) {
+    var flags = 0;
+    for (var row = 0; row < screens.scrollback.length; row++) {
+      flags |= screens.scrollback.rowFlagsAt(row);
+    }
+    for (var row = 0; row < screens.primary.rows; row++) {
+      flags |= screens.primary.rowFlagsAt(row);
+    }
+    return flags &
+        (TerminalRowFlags.prompt |
+            TerminalRowFlags.command |
+            TerminalRowFlags.output);
   }
 
   static Future<void> _waitForSessionMetadata(

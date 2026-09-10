@@ -295,14 +295,17 @@ ANSI palette 0–15 だけを上書きします。OSCによる実行中のpalett
 effective appearanceをlive追従し、固定`light`/`dark` paneは追従しません。reloadでthemeを
 変更しても既存paneのpolicyは変わらず、新しく作るwindow/tab/splitから反映されます。
 shell設定と、無効・unsupported・resource欠落時に通常shellへ戻すbounded launch planは
-定義済みです。zsh、bash、fish、nushell向けのversion 1 bootstrap resourceもbundleへ
+定義済みです。zsh、bash、fish、nushell向けのversion 2 bootstrap resourceもbundleへ
 宣言し、固定path、size、SHA-256、UTF-8をまとめて検証できない場合は部分適用しない
-contractを設けています。現段階のresourceは実行確認用markerだけを提供し、通常起動への
-新しいpaneはcapture済みのshell executable/policyから検証済みlaunch planを生成します。
+contractを設けています。resourceはcommand/prompt本文を保持せず、OSC 133 lifecycleと
+local cwd/titleだけを投影します。通常起動への新しいpaneはcapture済みのshell
+executable/policyから検証済みlaunch planを生成します。
 macOS同梱の`/bin/bash`は`ENV` startupを無効化しているため、明示`bash` policyでも通常の
 login shellへ安全にfallbackします。bundle内のzsh統合と明示的な`none`は、隔離した通常の
 `.zshenv`/`.zshrc`を各1回実行する実AppKit/PTY製品としてDeveloper JITとRelease AOTの両方で
-検証します。prompt/cwd/title連携はPhase 8の次のタスクで扱います。
+検証します。detectではprompt/command/output row mark、cwd-basename title、履歴上の
+previous/next prompt action、同一process groupで動くblocking shell builtinへの追加close
+warningと、その取消後のidle Quitまでを検証し、`none`では全semantic projectionが無効です。
 
 ```shell
 make RUNTIME_ARCH=arm64 runtime-shell-integration

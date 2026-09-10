@@ -1727,9 +1727,13 @@ Future<void> _runShellIntegration(
   );
   final Directory home = Directory('${directory.path}/home');
   final Directory zdotdir = Directory('${directory.path}/zsh-user');
+  final Directory semanticDirectory = Directory(
+    '${directory.path}/semantic cwd',
+  );
   try {
     await home.create();
     await zdotdir.create();
+    await semanticDirectory.create();
     await File('${zdotdir.path}/.zshenv').writeAsString(r'''export DT_RUNTIME_ZSHENV_COUNT=$(( ${DT_RUNTIME_ZSHENV_COUNT:-0} + 1 ))
 ''');
     await File('${zdotdir.path}/.zshrc').writeAsString(
@@ -1746,6 +1750,7 @@ RPS1=''
       'DART_TERMINAL_ZDOTDIR',
       'DT_RUNTIME_ZSHENV_COUNT',
       'DT_RUNTIME_ZSHRC_COUNT',
+      'DT_RUNTIME_SEMANTIC_CWD',
     };
     final Map<String, String> environment = <String, String>{
       'DT_RUNTIME_SHELL_INTEGRATION_TEST': '1',
@@ -1753,6 +1758,7 @@ RPS1=''
       'ZDOTDIR': zdotdir.path,
       'TERM': 'xterm-256color',
       'LC_ALL': 'C',
+      'DT_RUNTIME_SEMANTIC_CWD': semanticDirectory.path,
     };
 
     Future<_ProcessObservation> runPolicy(String policy) async {
@@ -1787,7 +1793,7 @@ working-directory = ${directory.path}
       _expect(
         RegExp(
               r'^TERMINAL_SHELL_INTEGRATION_BUNDLE disposition=bundled '
-              r'version=1 shells=4 files=5$',
+              r'version=2 shells=4 files=5$',
               multiLine: true,
             ).allMatches(observation.stdoutText).length ==
             1,
@@ -1809,6 +1815,8 @@ working-directory = ${directory.path}
         RegExp(
               '^TERMINAL_SHELL_INTEGRATION_TEST policy=$policy bundle=true '
               'shell=zsh integrated=$integrated marker_contract=true '
+              'semantic=$integrated metadata=$integrated '
+              'prompt_navigation=$integrated close_hint=$integrated '
               r'user_startup_once=true injection_cleanup=true hierarchy=true '
               r'sessions_clean=1 text_clients=0 native_handles=0$',
               multiLine: true,
@@ -1852,6 +1860,7 @@ working-directory = ${directory.path}
       'RUNTIME_SHELL_INTEGRATION_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
       'bundle=true integrated=true disabled=true user_startup_once=true '
+      'semantic=true metadata=true prompt_navigation=true close_hint=true '
       'sessions_clean=2 elapsed_ms='
       '${integrated.elapsed.inMilliseconds + disabled.elapsed.inMilliseconds}',
     );

@@ -1,7 +1,8 @@
 # Cwd, title, prompt marks, jump-to-prompt, and close hints
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-11 after commit `d901085`
+- Completed: 2026-09-11
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 8 `cwd/title/prompt mark/jump-to-prompt/close hint`
 - Feature-matrix owner: CFG-06 (semantic metadata and actions portion)
@@ -248,6 +249,143 @@ next subtask begins.
 - Validation: focused semantic/pane/close/quit tests including forged-marker and
   failure matrices, formatting and analysis, complete tests, source/bundle
   audit, diff review, roadmap update, and one independent commit.
+
+## Current subtask: M1 dual-runtime semantic-shell acceptance and parent closure
+
+- Status: complete
+- Started: 2026-09-11 after commit `d3ac388`
+- Completed: 2026-09-11
+- Purpose: prove the complete shell semantic path in packaged Developer JIT and
+  Release AOT products, reconcile durable evidence, and close the parent only
+  if every preceding child and Phase 8 boundary remains satisfied.
+- Background: unit/fake/installed-shell coverage now owns the bounded parser,
+  version-two four-shell resources, cwd/title projection, prompt navigation,
+  and warning-only close hint. The existing gated shell-integration product
+  suite still checks only version-one marker/startup/cleanup behavior for zsh
+  plus explicit disablement and must be advanced transactionally.
+- Scope: extend the gated real-AppKit/PTY/Metal zsh scenario to verify version
+  two lifecycle markers, local cwd/title metadata, retained prompt marks,
+  previous/next shared-action navigation, an owning-shell blocking builtin
+  close confirmation, idle aggregate Quit, and full resource cleanup; keep an
+  explicit `none` run proving semantic disablement; update driver assertions,
+  README/feature evidence, and all generated pins; run both arm64 modes and the
+  complete repository audit matrix.
+- Out of scope: installing fish/nushell/new bash, changing user startup files,
+  command/prompt/process content in machine output, new protocol fields or
+  shortcuts, settings UI/effective-config inspector, x86_64/Rosetta/Universal,
+  or any Phase 9 capability.
+- Dependencies: the existing environment-gated shell integration CLI option,
+  normal hierarchy dispatcher/menu/close/quit ownership, bundled zsh resource,
+  session metadata and semantic model, viewport actions, runtime integration
+  driver, generated acceptance/coverage evidence, and M1 build toolchain.
+- Completion conditions: detect mode proves the complete semantic lifecycle and
+  one additive builtin warning without leaking content; none mode proves zero
+  semantic projection; both modes exit cleanly with one session each and zero
+  text/native owners; Developer JIT and Release AOT emit the same bounded
+  acceptance contract; complete tests, runtime-verify, source/bundle audits,
+  docs/evidence, and parent checks all pass.
+- Validation: focused application/driver tests, both shell-integration runtime
+  modes, full `make test`, `make RUNTIME_ARCH=arm64 runtime-verify`, source and
+  bundle audits, final diff/privacy review, roadmap parent/child update, and one
+  independent commit.
+
+### M1 semantic-shell acceptance implementation log
+
+- The existing gated product path can own the final proof without another CLI
+  option or test suite. It now receives the already-product-owned pane close
+  coordinator so the scenario can inspect and cancel the same confirmation
+  transaction used by native Close.
+- Detect mode is extended in one session from initial semantic input through
+  version-two environment validation, local cwd/title projection, bounded
+  retained row flags, shared previous/next prompt actions, and a blocking zsh
+  `read` builtin classified as `owningShellCommand`. The confirmation is
+  cancelled before input completes the builtin; the shell must return to idle
+  before aggregate Quit. None mode retains the same startup check while
+  requiring unknown semantic state, absent metadata, unavailable prompt
+  actions, and an idle owning shell.
+- The runtime driver creates an isolated directory whose basename contains a
+  space, passes it only through a dedicated acceptance environment variable,
+  and checks content-free boolean summaries. No cwd, command, prompt, or
+  process content is added to machine output.
+- The first `dart analyze` attempt on 2026-09-11 stopped before analysis because
+  the sandbox denied a modification-time write to
+  `~/.dart-tool/dart-flutter-telemetry-session.json`. This is an environment
+  boundary rather than a diagnostic; retry with `DART_SUPPRESS_ANALYTICS=true`
+  in the established approved execution boundary.
+- The telemetry-suppressed analyzer reports no issues. The first complete
+  semantic-shell runtime target passes without product changes in both arm64
+  modes: Developer JIT reports the two-policy contract in 2,106 ms and Release
+  AOT in 1,004 ms. Each mode proves detect and none, version-two bundle/startup
+  cleanup, semantic state and row flags, local metadata, shared prompt
+  navigation, the cancellable builtin close warning, idle Quit, two clean
+  sessions, and zero remaining text clients or native handles.
+- README and CFG-06 now describe the completed version-two semantic contract
+  and dual-runtime proof. Deterministic evidence regeneration changes only the
+  two expected `terminal_application.dart` hashes in Phase 7 AppKit acceptance
+  and the README/FEATURE_MATRIX hashes in compatibility coverage; the latter
+  retains 9 fix families, 9 cases, and 417 split runs. `git diff --check`
+  remains clean.
+- The complete `make test` gate passes every generated contract and evidence
+  freshness check, formats 233 Dart files without changes, reports no analyzer
+  issues, and completes the aggregate test runner with `dart_terminal tests
+  passed`.
+- The first full arm64 `runtime-verify` attempt passes the repeated complete
+  test gate, source audit (436 tracked, zero product-native, one reviewed
+  test-native source), both bundle audits, ordinary display/hierarchy/actions/
+  configuration/theme integrations, and the new semantic-shell integration in
+  both modes. It then stops in the unchanged Developer JIT restoration scenario:
+  fullscreen-enter completion does not arrive within its existing eight-second
+  timeout at `terminal_application.dart:5383`. The pane, worker, and native
+  resources still shut down cleanly. Run restoration alone next to distinguish
+  transient AppKit timing from a reproducible blocker; do not weaken its
+  acceptance condition.
+- The immediate focused `developer-jit-restoration` retry reproduces the same
+  external boundary: the native window is visible on a concrete screen but the
+  product reports `active=false`, and no real fullscreen-enter event arrives
+  within eight seconds. PTY, worker, pane, and AppKit-owned resources again
+  clean up successfully. This exactly matches the previously resolved and
+  documented managed-desktop condition in
+  [`../phase7/fullscreen-runtime-acceptance-blocker.md`](../phase7/fullscreen-runtime-acceptance-blocker.md),
+  whose safe recovery requires the launched DartTerminal test window to receive
+  genuine foreground ownership.
+- No timeout, injected fullscreen event, deprecated force-activation path, or
+  weakened assertion is accepted as a fix. The semantic-shell implementation,
+  focused dual-runtime acceptance, complete unit gate, and evidence updates are
+  retained uncommitted, while the final child and its parent remain unchecked.
+  On resume in a usable interactive desktop, rerun focused Developer JIT and
+  Release AOT restoration, then the complete arm64 `runtime-verify`; only a
+  clean matrix permits final review, roadmap completion, and the required
+  independent commit.
+- 2026-09-11 resume: the next focused Developer JIT restoration run receives
+  genuine foreground ownership and passes its real fullscreen enter/exit,
+  migration, reopen, two-generation 2-window/4-tab/8-pane contract, and clean
+  resource release in 4,968 ms. The external foreground blocker is cleared for
+  this resumed run; confirm the same Release AOT contract before repeating the
+  full matrix.
+- The focused Release AOT restoration contract also passes, including both
+  real fullscreen transitions and clean ownership across two generations, in
+  3,861 ms. Both modes are green at the previously blocked boundary; repeat the
+  complete arm64 matrix without omitting any suite.
+- The repeated full arm64 `runtime-verify` completes successfully. It repeats
+  all freshness, formatting, analysis, aggregate tests, the 436-file Dart-only
+  source audit, both bundle audits, and every Developer JIT/Release AOT runtime
+  suite through display, hierarchy, actions, configuration, theme,
+  semantic-shell, restoration, clipboard, lifecycle faults, traffic, 1,000
+  resource iterations, shutdown faults, and PTY deadlines. The hierarchy
+  latency ratios are 0.814x and 1.085x, both restoration modes observe real
+  fullscreen transitions, and both semantic-shell summaries report lifecycle,
+  metadata, prompt navigation, close hint, disablement, and clean ownership.
+- Final diff and privacy review finds only the gated application scenario,
+  runtime driver contract, README/feature reconciliation, deterministic hash
+  pins, and this memo/roadmap state. Success output contains booleans and counts
+  only; cwd, command, prompt, startup-file content, and environment values are
+  absent. `git diff --check` passes, generated build products are untracked by
+  Git, and the authorized adjacent `dart_appkit` worktree is clean. All five
+  ordered children and every parent completion condition are satisfied.
+- The first explicit eight-file staging attempt could not create
+  `.git/index.lock` inside the workspace sandbox and staged nothing. Retry the
+  identical task-scoped path list with repository-metadata permission before
+  the required independent commit.
 
 ## Findings and decisions
 
