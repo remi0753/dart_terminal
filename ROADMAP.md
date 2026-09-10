@@ -1028,7 +1028,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] `dart_appkit` application appearance event protocol と typed cache
   - [x] built-in light/dark pair と layered palette/custom override
-  - [ ] system appearance の live product projection
+  - [x] system appearance の live product projection
   - [ ] M1 両 runtime theme/appearance 受け入れと親項目完了判定
 - [ ] zsh/bash/fish/nushell integration
 - [ ] cwd/title/prompt mark/jump-to-prompt/close hint

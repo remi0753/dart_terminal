@@ -219,6 +219,87 @@ subtask がない。
 - 最初の staging は sandbox が `.git/index.lock` を作成できず失敗した。working tree は保持されており、
   repository metadata 書き込みを許可した同じ明示 path の `git add` で再実行する。
 
+### 2026-09-10 system appearance live product projection 着手
+
+目的:
+
+- `AppKitApplication.effectiveAppearance` の初期 cache と v7 live event を通常 hierarchy の
+  session palette へ接続し、system policy の pane だけを in-place 更新する。
+
+背景と確認済み境界:
+
+- `db51eb5` の完了直後に ROADMAP と本メモを再読し、Dart Terminal と adjacent `dart_appkit` の
+  working tree が clean、最初の未完了項目が本サブタスクであることを確認した。
+- 通常製品の `configuration()` は immutable な `newSessionConfiguration` を session 作成前に capture し、
+  `paneConfigurations` へ pane 単位で保持する。resource disposal は同 map と session/owner map を同時に除去する。
+- `AppKitApplication` は appearance event を application stream へ渡す前に `effectiveAppearance` cache を更新する。
+  したがって attach 後すでに届いた initial snapshot と、subscription 後に届く snapshot/change の双方を一つの
+  application-owned projection で race なく扱える。
+- palette mutation は両 screen を dirty にするが、live surface の frame scheduling は
+  `_TerminalHierarchyProductPane.notifyScreenChanged()` を明示的に呼ぶ既存経路を必要とする。
+- fake AppKit 調査の最初の `rg` は存在しない旧想定 path `packages/appkit/{lib,test}` を指定して exit 2 になった。
+  正しい `packages/dart_appkit/{lib,test}` で再実行し、test-only raw event injection と v7 cache-first routing を確認した。
+- ADR-001/002 を再確認し、AppKit observation は UI root の短い処理、theme/palette 意味論と damage policy は Dart
+  ownership のままにする。PTY、screen、font/atlas、Metal surface、window の再生成や worker 境界変更は行わない。
+
+範囲:
+
+- application-specific projection を追加し、current system brightness、pane key、captured configuration、既存 palette、
+  surface notification callback、appearance subscription を単一 owner として管理する。
+- pane 作成時はその時点の appearance で palette を生成し、live event は登録済み system pane の既存 palette に
+  atomic reset-default batch を適用する。fixed light/dark pane は無変更とする。
+- pane resource removal と application shutdown で登録/subscription を解除する。
+- fake AppKit raw v7 event を使い、initial light/dark、multi-pane、fixed 非追従、new-session reload 境界、
+  palette/screen identity、pane removal、projection disposal を自動検証する。
+
+対象外:
+
+- v7 raw event を packaged Developer JIT / Release AOT へ注入する実 Metal pixel acceptance、runtime manifest、
+  README/FEATURE_MATRIX の完了表記、親項目の完了判定。これらは次の順序付きサブタスクで行う。
+- config reload による既存 pane の theme policy 変更、OS global preference の変更、view 単位 appearance。
+
+依存関係・リスク:
+
+- initial snapshot が projection 作成前に届いた場合は cache を読み、作成後に届いた場合は owned subscription で扱う。
+  Dart の同一 UI isolate 上で constructor 内の cache read と subscription 設置の間に event callback は割り込まない。
+- pane 登録後かつ native resource 作成前に event が届いた場合、palette は更新済みとなり、後から attach する surface が
+  latest full state を読む。存在しない owner への通知 callback は no-op とする。
+- callback の再入で pane が除去されても stale target を続けて呼ばないよう、snapshot iteration と identity check を使う。
+
+完了条件と検証方針:
+
+- fake AppKit product test、focused format/analyze/test、source/reference freshness、aggregate `make test` が成功する。
+- appearance 更新後も各 registered palette/screen identity が同一で、system pane の visible change だけが一度 notify され、
+  removed/disposed/fixed pane は変化しない。
+- accepted reload 後も既存 pane は captured system policy を保持し、新規 pane だけが新しい fixed policy を capture する。
+
+実装・focused 検証:
+
+- `TerminalApplicationThemeProjection<Key>` を application layer に追加した。constructor は cache された
+  effective appearance を dark fallback 付きで取得してから typed appearance stream を購読し、pane key ごとに
+  creation-time configuration、既存 palette、surface notification callback を保持する。
+- pane factory は projection の current appearance から independent palette を生成・登録する。appearance event は
+  target snapshot と registration identity を確認しながら既存 palette の reset defaults を更新し、visible change が
+  あった system pane だけを一度 notify する。fixed pane、removed pane、disposed projection は変更しない。
+- product cleanup は theme subscription/target map を window、text input、surface teardown より先に停止する。個別 pane
+  resource removal も theme registration を先に除去し、teardown 中の late appearance から disposed surface を隔離する。
+- fake AppKit v7 record を cache seed と live update の両方に使用した。initial light、live dark、dark 中の later system pane、
+  accepted system→fixed-light reload、旧 system pane の追従、新 fixed pane の非追従、removed pane、両 screen damage、
+  palette/style/scrollback identity、重複 appearance の idempotence、projection disposal 後の無通知を同じ product
+  boundary test で確認した。
+- focused `dart format`、`dart analyze`、`dart run test/terminal_native_hierarchy_test.dart` は exit 0、analyzer は
+  `No issues found!`。最初の Phase 7 AppKit acceptance freshness check は、予想どおり変更した application source と
+  fake-AppKit test の reviewed hash が stale になったため停止した。生成差分を確認してから証跡を再生成する。
+- `make phase7-appkit-acceptance` の生成差分は `terminal_application.dart` の同一 source hash 2箇所と
+  `terminal_native_hierarchy_test.dart` の同一 test hash 4箇所だけであり、criterion、件数、entrypoint、UI evidence は
+  変化していない。再生成後の freshness check は aggregate gate 内で成功した。
+- 最終 `CI=true DART_SUPPRESS_ANALYTICS=true make test` は exit 0。全 generated reference/acceptance/
+  compatibility/differential/application/terminfo gate、223 Dart files の format、analyze、全 test が成功し、
+  `dart_terminal tests passed` を確認した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make runtime-source-check` は
+  `DART_ONLY_SOURCE_AUDIT_PASS tracked=417 product_native_sources=0 reviewed_test_native_sources=1` で成功した。
+  新しい projection は Dart application layer に留まり、native product source や internal native path を追加していない。
+
 ## リスク・引き継ぎ
 
 - KVO observer の登録解除と event-port 再登録で stale callback を残さないことを native test で

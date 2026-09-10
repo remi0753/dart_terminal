@@ -7,16 +7,197 @@ import 'package:dart_appkit/src/api.dart' show attachApplicationForTesting;
 import 'package:dart_appkit/src/native/native_bindings.dart';
 import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal/src/terminal_appkit_policy.dart';
+import 'package:dart_terminal/src/terminal_application_theme.dart';
 
 Future<void> main() => runTerminalNativeHierarchyTests();
 
 Future<void> runTerminalNativeHierarchyTests() async {
+  await _testApplicationThemeProjectionLifecycle();
   await _testConfiguredWindowAndPaddingProjection();
   await _testPerWindowCreationFrameProjection();
   await _testRepeatedMultiWindowRestoredProjection();
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testApplicationThemeProjectionLifecycle() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  TerminalApplicationThemeProjection<int>? projection;
+  TerminalConfigReloadController? reloadController;
+  try {
+    rawEvents.add(<Object?>[7, 33, 0, 0, 100000, 0, false]);
+    _expect(
+      application.effectiveAppearance == AppKitAppearance.light,
+      'fake AppKit initial light appearance was not cached',
+    );
+
+    final List<Object> errors = <Object>[];
+    projection = TerminalApplicationThemeProjection<int>(
+      application: application,
+      onError: (Object error, StackTrace _) => errors.add(error),
+    );
+    final TerminalConfigSnapshot systemSnapshot = TerminalConfigLoader()
+        .resolve(const <String>[
+          '--no-config',
+          '--theme=system',
+        ], environment: const <String, String>{})
+        .snapshot;
+    final TerminalConfigSnapshot fixedLightSnapshot = TerminalConfigLoader()
+        .resolve(const <String>[
+          '--no-config',
+          '--theme=light',
+        ], environment: const <String, String>{})
+        .snapshot;
+    final TerminalProductConfigurationAuthority authority =
+        TerminalProductConfigurationAuthority(
+          TerminalProductConfiguration.fromSnapshot(systemSnapshot),
+        );
+    reloadController = TerminalConfigReloadController(
+      initialSnapshot: systemSnapshot,
+      resolver: () => TerminalConfigResolution(
+        snapshot: fixedLightSnapshot,
+        remainingArguments: const <String>[],
+      ),
+    );
+
+    var systemNotifications = 0;
+    var removedNotifications = 0;
+    var fixedNotifications = 0;
+    final TerminalPalette systemPalette = projection.createPaletteForPane(
+      key: 1,
+      configuration: authority.newSessionConfiguration,
+      onChanged: () => systemNotifications++,
+    );
+    final TerminalPalette removedPalette = projection.createPaletteForPane(
+      key: 2,
+      configuration: authority.newSessionConfiguration,
+      onChanged: () => removedNotifications++,
+    );
+    final TerminalScreenSet systemScreens = TerminalScreenSet(
+      rows: 2,
+      columns: 2,
+      palette: systemPalette,
+    );
+    final TerminalScreenSet removedScreens = TerminalScreenSet(
+      rows: 2,
+      columns: 2,
+      palette: removedPalette,
+    );
+    systemScreens.primary.clearDamage();
+    systemScreens.alternate.clearDamage();
+    removedScreens.primary.clearDamage();
+    removedScreens.alternate.clearDamage();
+    final int systemScreenGeneration = systemScreens.primary.generation;
+    final int removedPaletteGeneration = removedPalette.generation;
+    _expect(
+      systemPalette.defaultBackground ==
+              TerminalBuiltInTheme.dartLight.background &&
+          removedPalette.defaultBackground ==
+              TerminalBuiltInTheme.dartLight.background &&
+          projection.systemAppearance == TerminalThemeBrightness.light &&
+          projection.registeredPaneCount == 2,
+      'system panes capture the cached initial light appearance',
+    );
+
+    final TerminalConfigReloadResult reload = await reloadController.reload();
+    authority.applyReload(reload);
+    final TerminalPalette fixedPalette = projection.createPaletteForPane(
+      key: 3,
+      configuration: authority.newSessionConfiguration,
+      onChanged: () => fixedNotifications++,
+    );
+    _expect(
+      reload.disposition == TerminalConfigReloadDisposition.applied &&
+          fixedPalette.defaultBackground ==
+              TerminalBuiltInTheme.dartLight.background &&
+          projection.removePane(2) &&
+          projection.registeredPaneCount == 2,
+      'accepted reload affects only later pane policy and removal unregisters',
+    );
+
+    final TerminalPalette systemPaletteIdentity = systemScreens.palette;
+    final TerminalStyleTable systemStyleIdentity = systemScreens.styleTable;
+    final TerminalScrollback systemScrollbackIdentity =
+        systemScreens.scrollback;
+    rawEvents.add(<Object?>[7, 33, 0, 0, 101000, 0, true]);
+    _expect(
+      application.effectiveAppearance == AppKitAppearance.dark &&
+          projection.systemAppearance == TerminalThemeBrightness.dark &&
+          systemPalette.defaultBackground ==
+              TerminalBuiltInTheme.dartDark.background &&
+          fixedPalette.defaultBackground ==
+              TerminalBuiltInTheme.dartLight.background &&
+          removedPalette.defaultBackground ==
+              TerminalBuiltInTheme.dartLight.background &&
+          systemNotifications == 1 &&
+          fixedNotifications == 0 &&
+          removedNotifications == 0 &&
+          systemScreens.primary.generation == systemScreenGeneration + 1 &&
+          systemScreens.primary.isRowDirty(0) &&
+          systemScreens.alternate.isRowDirty(0) &&
+          removedPalette.generation == removedPaletteGeneration &&
+          identical(systemScreens.palette, systemPaletteIdentity) &&
+          identical(systemScreens.styleTable, systemStyleIdentity) &&
+          identical(systemScreens.scrollback, systemScrollbackIdentity),
+      'live dark projection updates only registered system panes in place',
+    );
+    final int darkGeneration = systemPalette.generation;
+    rawEvents.add(<Object?>[7, 33, 0, 0, 101500, 0, true]);
+    _expect(
+      systemPalette.generation == darkGeneration &&
+          systemNotifications == 1 &&
+          fixedNotifications == 0,
+      'duplicate appearance is idempotent even if the native edge repeats',
+    );
+
+    final TerminalPalette laterSystemPalette = projection.createPaletteForPane(
+      key: 4,
+      configuration: TerminalProductConfiguration.fromSnapshot(systemSnapshot),
+      onChanged: () {},
+    );
+    _expect(
+      laterSystemPalette.defaultBackground ==
+              TerminalBuiltInTheme.dartDark.background &&
+          projection.registeredPaneCount == 3,
+      'a later system pane captures the current dark appearance',
+    );
+
+    await projection.dispose();
+    final int notificationsBeforeDisposedEvent = systemNotifications;
+    rawEvents.add(<Object?>[7, 33, 0, 0, 102000, 0, false]);
+    _expect(
+      projection.isDisposed &&
+          projection.registeredPaneCount == 0 &&
+          application.effectiveAppearance == AppKitAppearance.light &&
+          systemPalette.defaultBackground ==
+              TerminalBuiltInTheme.dartDark.background &&
+          laterSystemPalette.defaultBackground ==
+              TerminalBuiltInTheme.dartDark.background &&
+          systemNotifications == notificationsBeforeDisposedEvent &&
+          errors.isEmpty,
+      'disposed projection releases every target and ignores later AppKit events',
+    );
+    _expectThrows<StateError>(
+      () => projection!.createPaletteForPane(
+        key: 5,
+        configuration: authority.newSessionConfiguration,
+        onChanged: () {},
+      ),
+      'disposed projection rejects later pane registration',
+    );
+  } finally {
+    reloadController?.dispose();
+    await projection?.dispose();
+    await application.terminate();
+    await rawEvents.close();
+  }
 }
 
 Future<void> _testPerWindowCreationFrameProjection() async {

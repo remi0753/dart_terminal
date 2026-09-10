@@ -16,6 +16,7 @@ import 'terminal_action_registry.dart';
 import 'terminal_appkit_policy.dart';
 import 'terminal_application_quit_coordinator.dart';
 import 'terminal_application_state.dart';
+import 'terminal_application_theme.dart';
 import 'terminal_command_palette.dart';
 import 'terminal_config.dart';
 import 'terminal_config_reload.dart';
@@ -1328,8 +1329,8 @@ final class TerminalApplication {
                 );
               }
             case ApplicationAppearanceChangedEvent():
-              // Product projection is installed by the next ordered theme
-              // subtask. Decoding v7 must remain exhaustive in the meantime.
+              // Isolated legacy runtime fixtures retain their fixed palette;
+              // the ordinary hierarchy owns live theme projection.
               break;
             case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
               if (!hasVisibleWindows &&
@@ -2144,6 +2145,7 @@ final class TerminalApplication {
     void Function()? reconcileRequest;
     RuntimeLifecycleCoordinator? lifecycle;
     StreamSubscription<AppKitEvent>? applicationSubscription;
+    TerminalApplicationThemeProjection<PaneId>? applicationThemeProjection;
     final Set<PaneId> deferredExitPaneIds = <PaneId>{};
     final List<TerminalActionId> nativeActionInvocations = <TerminalActionId>[];
     final List<TerminalActionDispatchResult> actionDispatches =
@@ -2230,7 +2232,11 @@ final class TerminalApplication {
                 nativeObserver: (TerminalSessionNativeObservation observation) {
                   stdout.writeln(observation.machineLine());
                 },
-                palette: capturedConfiguration.createPalette(),
+                palette: applicationThemeProjection!.createPaletteForPane(
+                  key: id.paneId,
+                  configuration: capturedConfiguration,
+                  onChanged: () => owners[id.paneId]?.notifyScreenChanged(),
+                ),
                 scrollback: capturedConfiguration.createScrollback(),
                 initialCursorShape: capturedConfiguration.terminalCursorShape,
                 initialCursorBlinking: capturedConfiguration.cursorBlink,
@@ -2454,6 +2460,7 @@ final class TerminalApplication {
         view: view,
         onLayout: owner.applyLayout,
         onDisposeAdapters: () {
+          applicationThemeProjection?.removePane(pane.id);
           selections.remove(pane.id)?.dispose();
           mouseRouters.remove(pane.id);
           scrollRouters.remove(pane.id);
@@ -2753,6 +2760,7 @@ final class TerminalApplication {
 
     Future<void> disposeProductResourcesOnce() async {
       configurationReloadController?.dispose();
+      await applicationThemeProjection?.dispose();
       for (final StreamSubscription<WindowEvent> subscription
           in windowSubscriptions.values.toList(growable: false)) {
         await subscription.cancel();
@@ -2862,6 +2870,10 @@ final class TerminalApplication {
     }
 
     try {
+      applicationThemeProjection = TerminalApplicationThemeProjection<PaneId>(
+        application: application,
+        onError: recordAsynchronousError,
+      );
       application.defersTerminationRequests = true;
       final RuntimeLifecycleCoordinator createdLifecycle =
           RuntimeLifecycleCoordinator(
@@ -3149,8 +3161,7 @@ final class TerminalApplication {
           case ApplicationActiveChangedEvent():
             break;
           case ApplicationAppearanceChangedEvent():
-            // Product projection is installed by the next ordered theme
-            // subtask. Decoding v7 must remain exhaustive in the meantime.
+            // The dedicated theme projection owns palette application.
             break;
           case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
             if (hasVisibleWindows || state.isDisposed) break;
