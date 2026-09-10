@@ -1,6 +1,10 @@
 part of 'terminal_screen.dart';
 
-/// Mutable logical terminal palette with immutable reset defaults.
+/// Mutable logical terminal palette with replaceable reset defaults.
+///
+/// Terminal OSC mutations form an override layer above the reset defaults.
+/// Replacing theme defaults updates only values that OSC has not overridden;
+/// the matching OSC reset then reveals the latest theme value.
 final class TerminalPalette {
   factory TerminalPalette({
     List<int>? colors,
@@ -29,24 +33,30 @@ final class TerminalPalette {
     this._initialCursorColor,
   ) : _initialColors = initial,
       _colors = Uint32List.fromList(initial),
+      _colorOverrides = Uint8List(_overrideStorageBytes),
       _defaultForeground = _initialDefaultForeground,
       _defaultBackground = _initialDefaultBackground,
       _cursorColor = _initialCursorColor;
 
   static const int colorCount = 256;
   static const int maxBatchEntries = 256;
+  static const int _overrideStorageBytes = colorCount ~/ 8;
   static const int xtermDefaultForeground = 0x80e5e5e5;
   static const int xtermDefaultBackground = 0x80000000;
   static const int xtermDefaultCursorColor = xtermDefaultForeground;
 
   final Uint32List _initialColors;
   final Uint32List _colors;
-  final int _initialDefaultForeground;
-  final int _initialDefaultBackground;
-  final int _initialCursorColor;
+  final Uint8List _colorOverrides;
+  int _initialDefaultForeground;
+  int _initialDefaultBackground;
+  int _initialCursorColor;
   int _defaultForeground;
   int _defaultBackground;
   int _cursorColor;
+  bool _defaultForegroundOverridden = false;
+  bool _defaultBackgroundOverridden = false;
+  bool _cursorColorOverridden = false;
   int _generation = 1;
   final List<WeakReference<TerminalScreen>> _screens =
       <WeakReference<TerminalScreen>>[];
@@ -55,7 +65,7 @@ final class TerminalPalette {
   int get defaultForeground => _defaultForeground;
   int get defaultBackground => _defaultBackground;
   int get cursorColor => _cursorColor;
-  int get typedStorageBytes => colorCount * 4 * 2;
+  int get typedStorageBytes => colorCount * 4 * 2 + _overrideStorageBytes;
 
   int colorAt(int index) {
     RangeError.checkValueInInterval(index, 0, colorCount - 1, 'index');
@@ -88,11 +98,12 @@ final class TerminalPalette {
         changed = true;
       }
     }
-    if (!changed) {
-      return false;
-    }
     for (int item = 0; item < count; item++) {
       _colors[indices[item]] = colors[item];
+      _setColorOverridden(indices[item], true);
+    }
+    if (!changed) {
+      return false;
     }
     _didChange();
     return true;
@@ -107,12 +118,13 @@ final class TerminalPalette {
         changed = true;
       }
     }
-    if (!changed) {
-      return false;
-    }
     for (int item = 0; item < count; item++) {
       final int index = indices[item];
       _colors[index] = _initialColors[index];
+      _setColorOverridden(index, false);
+    }
+    if (!changed) {
+      return false;
     }
     _didChange();
     return true;
@@ -126,16 +138,18 @@ final class TerminalPalette {
         break;
       }
     }
+    _colors.setAll(0, _initialColors);
+    _colorOverrides.fillRange(0, _colorOverrides.length, 0);
     if (!changed) {
       return false;
     }
-    _colors.setAll(0, _initialColors);
     _didChange();
     return true;
   }
 
   bool _setDefaultForeground(int color) {
     _validateDirectColor(color, 'color');
+    _defaultForegroundOverridden = true;
     if (_defaultForeground == color) {
       return false;
     }
@@ -146,6 +160,7 @@ final class TerminalPalette {
 
   bool _setDefaultBackground(int color) {
     _validateDirectColor(color, 'color');
+    _defaultBackgroundOverridden = true;
     if (_defaultBackground == color) {
       return false;
     }
@@ -155,6 +170,7 @@ final class TerminalPalette {
   }
 
   bool _resetDefaultForeground() {
+    _defaultForegroundOverridden = false;
     if (_defaultForeground == _initialDefaultForeground) {
       return false;
     }
@@ -164,6 +180,7 @@ final class TerminalPalette {
   }
 
   bool _resetDefaultBackground() {
+    _defaultBackgroundOverridden = false;
     if (_defaultBackground == _initialDefaultBackground) {
       return false;
     }
@@ -174,6 +191,7 @@ final class TerminalPalette {
 
   bool _setCursorColor(int color) {
     _validateDirectColor(color, 'color');
+    _cursorColorOverridden = true;
     if (_cursorColor == color) {
       return false;
     }
@@ -183,12 +201,81 @@ final class TerminalPalette {
   }
 
   bool _resetCursorColor() {
+    _cursorColorOverridden = false;
     if (_cursorColor == _initialCursorColor) {
       return false;
     }
     _cursorColor = _initialCursorColor;
     _didChange(cursorOnly: true);
     return true;
+  }
+
+  /// Atomically replaces theme/config reset defaults below the OSC layer.
+  ///
+  /// Returns whether any visible color changed. A change advances the palette
+  /// generation exactly once and damages attached screens exactly once.
+  bool applyResetDefaults({
+    required List<int> colors,
+    required int defaultForeground,
+    required int defaultBackground,
+    required int cursorColor,
+  }) {
+    final Uint32List validatedColors = _validatedColorCopy(colors);
+    _validateDirectColor(defaultForeground, 'defaultForeground');
+    _validateDirectColor(defaultBackground, 'defaultBackground');
+    _validateDirectColor(cursorColor, 'cursorColor');
+
+    bool paletteChanged = false;
+    for (int index = 0; index < colorCount; index++) {
+      final int color = validatedColors[index];
+      if (!_isColorOverridden(index) && _colors[index] != color) {
+        _colors[index] = color;
+        paletteChanged = true;
+      }
+    }
+    _initialColors.setAll(0, validatedColors);
+
+    if (!_defaultForegroundOverridden &&
+        _defaultForeground != defaultForeground) {
+      _defaultForeground = defaultForeground;
+      paletteChanged = true;
+    }
+    if (!_defaultBackgroundOverridden &&
+        _defaultBackground != defaultBackground) {
+      _defaultBackground = defaultBackground;
+      paletteChanged = true;
+    }
+    _initialDefaultForeground = defaultForeground;
+    _initialDefaultBackground = defaultBackground;
+
+    var cursorChanged = false;
+    if (!_cursorColorOverridden && _cursorColor != cursorColor) {
+      _cursorColor = cursorColor;
+      cursorChanged = true;
+    }
+    _initialCursorColor = cursorColor;
+
+    if (paletteChanged) {
+      _didChange();
+    } else if (cursorChanged) {
+      _didChange(cursorOnly: true);
+    }
+    return paletteChanged || cursorChanged;
+  }
+
+  bool _isColorOverridden(int index) {
+    final int mask = 1 << (index & 7);
+    return (_colorOverrides[index >> 3] & mask) != 0;
+  }
+
+  void _setColorOverridden(int index, bool overridden) {
+    final int storageIndex = index >> 3;
+    final int mask = 1 << (index & 7);
+    if (overridden) {
+      _colorOverrides[storageIndex] |= mask;
+    } else {
+      _colorOverrides[storageIndex] &= 0xff ^ mask;
+    }
   }
 
   void _attach(TerminalScreen screen) {

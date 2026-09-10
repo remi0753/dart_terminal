@@ -169,6 +169,56 @@ subtask がない。
 - adjacent implementation/documentation は commit `16385ce` (`Expose application appearance changes`)
   として完了した。C ABI version 1 と v1–v6 record layout は維持されている。
 
+### 2026-09-10 built-in theme / layered palette focused 検証
+
+- 最初の sandbox 内 targeted Dart test は dependency build hook の Metal compiler が
+  `/Users/remi/.cache/clang/ModuleCache/...` へ module cache を作れず exit 255 になった。source や
+  assertion の失敗ではない。同じ command を workspace 外 cache 書き込みを許可した環境で再実行する。
+- cache 書き込みを許可した最初の再実行では、新しい sealed
+  `ApplicationAppearanceChangedEvent` により `terminal_application.dart` の既存2箇所の switch が
+  non-exhaustive として compile error になった。これは dependency protocol 拡張に必要な source
+  adaptation であるため、本サブタスクでは明示的 no-op case を追加する。live product projection は
+  次の順序付きサブタスクまで実装しない。
+- palette option は値だけでなく schema-default か明示値かが theme overlay の意味を変える。
+  例えば light theme で明示 `#e5e5e5` は schema default と scalar が同じでも foreground を固定する。
+  そのため option metadata に `sourceKindAffectsSemantics` を追加し、palette 19項目だけは
+  schema-default と explicit の境界変更も new-session change plan に含める。file と CLI の間の
+  同値移動、path/line だけの変更、他 option の provenance-only 変更は引き続き無視する。
+- source audit の最初の `rg` invocation は shell の double-quoted command 内に Markdown backtick を
+  含めたため、zsh が `default` を command substitution として解釈し `command not found` を出した。
+  ファイル変更は発生しておらず、pattern 全体を single quote した command で再実行して stale な
+  旧文言・旧 storage size がないことを確認した。今後の audit pattern は shell 展開されない quoting を使う。
+- generated reference の所在調査では最初に存在しない `tools/` も検索対象へ渡したため `rg` が exit 2 に
+  なった。正しい `tool/` で再実行し、現行 generator は keybinding/action reference のみで config option
+  reference はまだ存在しないこと、aggregate `make test` がその freshness check を含むことを確認した。
+- `TerminalBuiltInTheme` は既存 zero-config 色をそのまま `Dart Dark` とし、高 contrast の `Dart Light` と
+  合わせた順序固定の2件 catalog を提供する。両 theme の logical foreground/background contrast ratio は
+  7:1 以上を test で固定し、ANSI 16色は theme ごと、index 16–255 は既存 xterm table を共用する。
+- config の正規 selector は `system`、`light`、`dark` で、旧 `default` は `system` に normalize する。
+  programmatic caller 用 `defaultTheme` enum alias も system policy として扱う。zero-config は system policy
+  だが、live appearance 接続前の本サブタスクでは既存挙動維持のため palette factory の fallback を dark とした。
+- `TerminalProductPaletteConfiguration` は各 logical/ANSI color の explicit ownership を immutable に保持する。
+  theme 解決時は built-in defaults、明示 config overlay、terminal OSC override の順に合成する。OSC set は
+  同じ表示値でも ownership を獲得し、OSC reset は直近の theme/config reset default を表示する。
+- `TerminalPalette` は256色分32-byte bitmap と logical color の override state を保持し、typed array は
+  2048 bytes から bounded 2080 bytes になった。`applyResetDefaults` は全入力を先に検証し、OSC override を
+  保持して current/reset default を一括更新し、visible change ごとに palette generation と全 attached screen
+  damage を最大1回だけ進める。cursor-only change は既存 cursor-only damage を使う。
+- dependency v7 event に対する2箇所の application switch は本サブタスクでは明示 no-op とした。
+  system appearance cache/event を productへ接続する責務は次のサブタスクに残し、先行実装していない。
+- 最初の aggregate `make test` は `terminal_application.dart` の reviewed source hash 変更により既存 Phase 7
+  AppKit acceptance freshness check で停止した。`make phase7-appkit-acceptance` を実行し、生成差分が同ファイルの
+  2つの同一 SHA-256 値だけであることを確認して証跡を更新した。
+- 最終 focused verification は `dart format`、`dart analyze`、`terminal_config_test.dart`、
+  `terminal_product_configuration_test.dart`、`terminal_palette_test.dart` がすべて exit 0。system/default alias、
+  fixed selector、sparse config overlay、default↔explicit と file↔CLI provenance、same-value OSC override、
+  atomic invalid input、idempotence、screen damage、catalog contrast を検証した。
+- 最終 `CI=true DART_SUPPRESS_ANALYTICS=true make test` は exit 0。generated VT parser、parser trace、
+  keybinding/action reference、Phase 7 AppKit acceptance、compatibility/differential/application/terminfo gates、
+  format/analyze、全 Dart test が成功し、`dart_terminal tests passed` を確認した。
+- 最初の staging は sandbox が `.git/index.lock` を作成できず失敗した。working tree は保持されており、
+  repository metadata 書き込みを許可した同じ明示 path の `git add` で再実行する。
+
 ## リスク・引き継ぎ
 
 - KVO observer の登録解除と event-port 再登録で stale callback を残さないことを native test で

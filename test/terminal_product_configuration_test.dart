@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
@@ -7,6 +8,7 @@ Future<void> main() => runTerminalProductConfigurationTests();
 
 Future<void> runTerminalProductConfigurationTests() async {
   _testDefaultsAndSchemaInventory();
+  _testBuiltInThemePairAndCustomOverlay();
   _testCompleteFileProfile();
   _testInvalidValuesRecoverIndependently();
   _testCliPrecedenceAndCapacitySyntax();
@@ -184,6 +186,49 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
     'equal scalar and semantic repeated values produce an empty plan',
   );
 
+  final TerminalConfigSnapshot defaultPalette = TerminalConfigLoader().resolve(
+    const <String>['--no-config'],
+    environment: const <String, String>{},
+  ).snapshot;
+  final TerminalConfigSnapshot explicitEqualPalette = TerminalConfigLoader()
+      .resolve(const <String>[
+        '--no-config',
+        '--palette-foreground=#e5e5e5',
+      ], environment: const <String, String>{})
+      .snapshot;
+  final TerminalConfigChangePlan paletteOwnershipChange =
+      TerminalConfigChangePlan.between(defaultPalette, explicitEqualPalette);
+  _expect(
+    paletteOwnershipChange.newSessionChanges.single.option ==
+        TerminalProductConfigSchema.paletteForeground,
+    'palette schema-default to explicit ownership is a semantic change',
+  );
+  final TerminalConfigSnapshot explicitEqualPaletteFromFile =
+      TerminalConfigLoader(
+        fileSystem: _ProfileMemoryFileSystem(const <String, String>{
+          '/palette': 'palette-foreground = #e5e5e5\n',
+        }),
+      ).resolve(const <String>[
+        '--config=/palette',
+      ], environment: const <String, String>{}).snapshot;
+  _expect(
+    TerminalConfigChangePlan.between(
+      explicitEqualPaletteFromFile,
+      explicitEqualPalette,
+    ).isEmpty,
+    'equal explicit file and CLI palette ownership is not a semantic change',
+  );
+  final TerminalConfigSnapshot explicitEqualFont = TerminalConfigLoader()
+      .resolve(const <String>[
+        '--no-config',
+        '--font-size=14',
+      ], environment: const <String, String>{})
+      .snapshot;
+  _expect(
+    TerminalConfigChangePlan.between(defaultPalette, explicitEqualFont).isEmpty,
+    'ordinary provenance-only changes remain omitted from the plan',
+  );
+
   final TerminalConfigOption<int> foreignOption = TerminalConfigOption<int>(
     name: 'foreign',
     description: 'foreign schema option',
@@ -220,7 +265,7 @@ void _testDefaultsAndSchemaInventory() {
   );
   _expect(
     defaults.workingDirectory == null &&
-        defaults.theme == TerminalConfiguredTheme.defaultTheme &&
+        defaults.theme == TerminalConfiguredTheme.system &&
         defaults.palette.foreground == 0x80e5e5e5 &&
         defaults.palette.background == 0x80000000 &&
         defaults.palette.cursor == 0x80e5e5e5 &&
@@ -228,6 +273,10 @@ void _testDefaultsAndSchemaInventory() {
           defaults.palette.ansiColors,
           TerminalProductConfigSchema.defaultAnsiColors,
         ) &&
+        !defaults.palette.foregroundIsExplicit &&
+        !defaults.palette.backgroundIsExplicit &&
+        !defaults.palette.cursorIsExplicit &&
+        defaults.palette.ansiColorsExplicit.every((bool value) => !value) &&
         defaults.fontFamily.isEmpty &&
         defaults.fontSize == 14 &&
         defaults.fontSyntheticStyle == TerminalConfiguredSyntheticStyle.allow &&
@@ -250,6 +299,10 @@ void _testDefaultsAndSchemaInventory() {
     'palette profile is immutable',
   );
   _expectThrows(
+    () => defaults.palette.ansiColorsExplicit.add(true),
+    'palette provenance profile is immutable',
+  );
+  _expectThrows(
     () => defaults.keybindings.add(
       const TerminalKeyBindingDefinition.unbind(
         chord: TerminalKeyBindingChord(
@@ -259,6 +312,168 @@ void _testDefaultsAndSchemaInventory() {
       ),
     ),
     'keybinding profile is immutable',
+  );
+}
+
+void _testBuiltInThemePairAndCustomOverlay() {
+  _expect(
+    TerminalBuiltInTheme.catalog.length == 2 &&
+        TerminalBuiltInTheme.catalog[0].name == 'Dart Light' &&
+        TerminalBuiltInTheme.catalog[0].brightness ==
+            TerminalThemeBrightness.light &&
+        TerminalBuiltInTheme.catalog[1].name == 'Dart Dark' &&
+        TerminalBuiltInTheme.catalog[1].brightness ==
+            TerminalThemeBrightness.dark &&
+        TerminalBuiltInTheme.catalog.every(
+          (TerminalBuiltInTheme theme) => theme.ansiColors.length == 16,
+        ) &&
+        TerminalBuiltInTheme.catalog.every(
+          (TerminalBuiltInTheme theme) =>
+              _contrastRatio(theme.foreground, theme.background) >= 7,
+        ),
+    'built-in catalog exposes one stable high-contrast light/dark pair',
+  );
+  _expectThrows(
+    () => TerminalBuiltInTheme.catalog.add(TerminalBuiltInTheme.dartDark),
+    'built-in theme catalog is immutable',
+  );
+
+  TerminalProductConfiguration profile(List<String> arguments) =>
+      TerminalProductConfiguration.fromSnapshot(
+        TerminalConfigLoader().resolve(<String>[
+          '--no-config',
+          ...arguments,
+        ], environment: const <String, String>{}).snapshot,
+      );
+
+  final TerminalProductConfiguration system = profile(const <String>[]);
+  final TerminalProductConfiguration alias = profile(const <String>[
+    '--theme=default',
+  ]);
+  final TerminalProductConfiguration light = profile(const <String>[
+    '--theme=light',
+  ]);
+  final TerminalProductConfiguration dark = profile(const <String>[
+    '--theme=dark',
+  ]);
+  final TerminalPalette systemLight = system.createPalette(
+    systemAppearance: TerminalThemeBrightness.light,
+  );
+  final TerminalPalette systemDark = system.createPalette(
+    systemAppearance: TerminalThemeBrightness.dark,
+  );
+  final TerminalPalette fixedLight = light.createPalette(
+    systemAppearance: TerminalThemeBrightness.dark,
+  );
+  final TerminalPalette fixedDark = dark.createPalette(
+    systemAppearance: TerminalThemeBrightness.light,
+  );
+  _expect(
+    alias.theme == TerminalConfiguredTheme.system &&
+        system.followsSystemAppearance &&
+        alias.followsSystemAppearance &&
+        !light.followsSystemAppearance &&
+        !dark.followsSystemAppearance &&
+        light.resolveThemeBrightness(TerminalThemeBrightness.dark) ==
+            TerminalThemeBrightness.light &&
+        dark.resolveThemeBrightness(TerminalThemeBrightness.light) ==
+            TerminalThemeBrightness.dark,
+    'system/default alias and fixed selectors resolve deterministically',
+  );
+  _expect(
+    systemLight.defaultForeground ==
+            TerminalBuiltInTheme.dartLight.foreground &&
+        systemLight.defaultBackground ==
+            TerminalBuiltInTheme.dartLight.background &&
+        systemLight.cursorColor == TerminalBuiltInTheme.dartLight.cursor &&
+        systemLight.colorAt(0) ==
+            TerminalBuiltInTheme.dartLight.ansiColors[0] &&
+        fixedLight.defaultBackground ==
+            TerminalBuiltInTheme.dartLight.background &&
+        systemDark.defaultForeground ==
+            TerminalPalette.xtermDefaultForeground &&
+        systemDark.defaultBackground ==
+            TerminalPalette.xtermDefaultBackground &&
+        fixedDark.colorAt(15) ==
+            TerminalProductConfigSchema.defaultAnsiColors[15] &&
+        systemLight.colorAt(16) == systemDark.colorAt(16) &&
+        systemLight.colorAt(255) == systemDark.colorAt(255),
+    'built-in pair selects exact logical/ANSI colors and preserves xterm tail',
+  );
+
+  final TerminalProductConfiguration custom = profile(const <String>[
+    '--theme=system',
+    '--palette-background=#112233',
+    '--palette-3=#445566',
+  ]);
+  final TerminalPalette customPalette = custom.createPalette(
+    systemAppearance: TerminalThemeBrightness.light,
+  );
+  _expect(
+    !custom.palette.foregroundIsExplicit &&
+        custom.palette.backgroundIsExplicit &&
+        !custom.palette.cursorIsExplicit &&
+        custom.palette.ansiColorsExplicit[3] &&
+        custom.palette.ansiColorsExplicit.where((bool value) => value).length ==
+            1 &&
+        customPalette.defaultForeground ==
+            TerminalBuiltInTheme.dartLight.foreground &&
+        customPalette.defaultBackground == 0x80112233 &&
+        customPalette.colorAt(3) == 0x80445566,
+    'explicit palette provenance forms a sparse custom theme overlay',
+  );
+
+  final TerminalScreen screen = TerminalScreen(
+    rows: 1,
+    columns: 1,
+    palette: customPalette,
+  );
+  final int lightAnsiOne = customPalette.colorAt(1);
+  screen.setPaletteColor(1, lightAnsiOne);
+  screen.setDefaultForegroundColor(customPalette.defaultForeground);
+  final int generation = customPalette.generation;
+  _expect(
+    custom.applySystemAppearanceToPalette(
+          customPalette,
+          TerminalThemeBrightness.dark,
+        ) &&
+        customPalette.generation == generation + 1 &&
+        customPalette.colorAt(0) ==
+            TerminalBuiltInTheme.dartDark.ansiColors[0] &&
+        customPalette.colorAt(1) == lightAnsiOne &&
+        customPalette.colorAt(3) == 0x80445566 &&
+        customPalette.defaultForeground ==
+            TerminalBuiltInTheme.dartLight.foreground &&
+        customPalette.defaultBackground == 0x80112233,
+    'system switch preserves config and same-value OSC override layers',
+  );
+  screen.resetPaletteColor(1);
+  screen.resetDefaultForegroundColor();
+  _expect(
+    customPalette.colorAt(1) == TerminalBuiltInTheme.dartDark.ansiColors[1] &&
+        customPalette.defaultForeground ==
+            TerminalBuiltInTheme.dartDark.foreground &&
+        customPalette.defaultBackground == 0x80112233,
+    'OSC reset reveals the new dark theme beneath the custom overlay',
+  );
+  final int fixedGeneration = fixedLight.generation;
+  _expect(
+    !light.applySystemAppearanceToPalette(
+          fixedLight,
+          TerminalThemeBrightness.light,
+        ) &&
+        fixedLight.generation == fixedGeneration,
+    'fixed theme rejects system appearance projection',
+  );
+  _expectThrows(
+    () => TerminalProductPaletteConfiguration(
+      foreground: 0x80111111,
+      background: 0x80222222,
+      cursor: 0x80333333,
+      ansiColors: List<int>.filled(16, 0x80444444),
+      ansiColorsExplicit: const <bool>[true],
+    ),
+    'custom palette rejects mismatched provenance storage',
   );
 }
 
@@ -301,10 +516,15 @@ void _testCompleteFileProfile() {
   _expect(snapshot.diagnostics.isEmpty, 'complete profile has no diagnostics');
   _expect(
     profile.workingDirectory == '/configured/work' &&
+        profile.theme == TerminalConfiguredTheme.system &&
         profile.palette.foreground == 0x80112233 &&
         profile.palette.background == 0x80010203 &&
         profile.palette.cursor == 0x80abcdef &&
         profile.palette.ansiColors[15] == 0x8000000f &&
+        profile.palette.foregroundIsExplicit &&
+        profile.palette.backgroundIsExplicit &&
+        profile.palette.cursorIsExplicit &&
+        profile.palette.ansiColorsExplicit.every((bool value) => value) &&
         profile.fontFamily == 'JetBrains Mono' &&
         profile.fontSize == 17.5 &&
         profile.fontSyntheticStyle == TerminalConfiguredSyntheticStyle.deny &&
@@ -519,6 +739,25 @@ bool _listEquals(List<int> left, List<int> right) {
     if (left[index] != right[index]) return false;
   }
   return true;
+}
+
+double _contrastRatio(int first, int second) {
+  double luminance(int color) {
+    double channel(int shift) {
+      final double value = ((color >> shift) & 0xff) / 255;
+      return value <= 0.04045
+          ? value / 12.92
+          : math.pow((value + 0.055) / 1.055, 2.4).toDouble();
+    }
+
+    return 0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0);
+  }
+
+  final double firstLuminance = luminance(first);
+  final double secondLuminance = luminance(second);
+  final double lighter = math.max(firstLuminance, secondLuminance);
+  final double darker = math.min(firstLuminance, secondLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 void _expect(bool condition, String description) {

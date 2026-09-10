@@ -6,18 +6,100 @@ import 'terminal_core/terminal_screen.dart';
 import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_encoder.dart';
 
+enum TerminalThemeBrightness { light, dark }
+
+/// Stable built-in terminal theme catalog.
+final class TerminalBuiltInTheme {
+  const TerminalBuiltInTheme._({
+    required this.name,
+    required this.brightness,
+    required this.foreground,
+    required this.background,
+    required this.cursor,
+    required this.ansiColors,
+  });
+
+  static const TerminalBuiltInTheme dartDark = TerminalBuiltInTheme._(
+    name: 'Dart Dark',
+    brightness: TerminalThemeBrightness.dark,
+    foreground: 0x80e5e5e5,
+    background: 0x80000000,
+    cursor: 0x80e5e5e5,
+    ansiColors: TerminalProductConfigSchema.defaultAnsiColors,
+  );
+
+  static const TerminalBuiltInTheme dartLight = TerminalBuiltInTheme._(
+    name: 'Dart Light',
+    brightness: TerminalThemeBrightness.light,
+    foreground: 0x8024292f,
+    background: 0x80f6f8fa,
+    cursor: 0x800969da,
+    ansiColors: <int>[
+      0x801f2328,
+      0x80b42318,
+      0x801a7f37,
+      0x807d4e00,
+      0x800969da,
+      0x808250df,
+      0x800a7f83,
+      0x806e7781,
+      0x8057606a,
+      0x80cf222e,
+      0x80116329,
+      0x809a6700,
+      0x80218bff,
+      0x80a475f9,
+      0x800e7490,
+      0x8024292f,
+    ],
+  );
+
+  static const List<TerminalBuiltInTheme> catalog = <TerminalBuiltInTheme>[
+    dartLight,
+    dartDark,
+  ];
+
+  static TerminalBuiltInTheme forBrightness(
+    TerminalThemeBrightness brightness,
+  ) => switch (brightness) {
+    TerminalThemeBrightness.light => dartLight,
+    TerminalThemeBrightness.dark => dartDark,
+  };
+
+  final String name;
+  final TerminalThemeBrightness brightness;
+  final int foreground;
+  final int background;
+  final int cursor;
+  final List<int> ansiColors;
+}
+
 final class TerminalProductPaletteConfiguration {
   TerminalProductPaletteConfiguration({
     required this.foreground,
     required this.background,
     required this.cursor,
     required Iterable<int> ansiColors,
-  }) : ansiColors = List<int>.unmodifiable(ansiColors) {
+    this.foregroundIsExplicit = true,
+    this.backgroundIsExplicit = true,
+    this.cursorIsExplicit = true,
+    Iterable<bool>? ansiColorsExplicit,
+  }) : ansiColors = List<int>.unmodifiable(ansiColors),
+       ansiColorsExplicit = List<bool>.unmodifiable(
+         ansiColorsExplicit ?? List<bool>.filled(16, true, growable: false),
+       ) {
     if (this.ansiColors.length != 16) {
       throw ArgumentError.value(
         this.ansiColors.length,
         'ansiColors.length',
         'must contain exactly 16 colors',
+      );
+    }
+    if (this.ansiColorsExplicit.length != 16) {
+      throw ArgumentError.value(
+        this.ansiColorsExplicit.length,
+        'ansiColorsExplicit.length',
+        'must contain exactly 16 values',
       );
     }
   }
@@ -26,6 +108,10 @@ final class TerminalProductPaletteConfiguration {
   final int background;
   final int cursor;
   final List<int> ansiColors;
+  final bool foregroundIsExplicit;
+  final bool backgroundIsExplicit;
+  final bool cursorIsExplicit;
+  final List<bool> ansiColorsExplicit;
 }
 
 /// Immutable new-session settings resolved from one typed config snapshot.
@@ -58,14 +144,7 @@ final class TerminalProductConfiguration {
       TerminalProductConfigSchema.workingDirectory,
     ),
     theme: snapshot.value(TerminalProductConfigSchema.theme),
-    palette: TerminalProductPaletteConfiguration(
-      foreground: snapshot.value(TerminalProductConfigSchema.paletteForeground),
-      background: snapshot.value(TerminalProductConfigSchema.paletteBackground),
-      cursor: snapshot.value(TerminalProductConfigSchema.paletteCursor),
-      ansiColors: TerminalProductConfigSchema.ansiPalette.map(
-        snapshot.value<int>,
-      ),
-    ),
+    palette: _paletteConfigurationFromSnapshot(snapshot),
     fontFamily: snapshot.value(TerminalProductConfigSchema.fontFamily),
     fontSize: snapshot.value(TerminalProductConfigSchema.fontSize),
     fontSyntheticStyle: snapshot.value(
@@ -124,19 +203,76 @@ final class TerminalProductConfiguration {
 
   double get terminalContentHeight => windowHeight - windowPaddingVertical * 2;
 
-  TerminalPalette createPalette() {
+  bool get followsSystemAppearance =>
+      theme == TerminalConfiguredTheme.system ||
+      theme == TerminalConfiguredTheme.defaultTheme;
+
+  TerminalThemeBrightness resolveThemeBrightness(
+    TerminalThemeBrightness systemAppearance,
+  ) => switch (theme) {
+    TerminalConfiguredTheme.system ||
+    TerminalConfiguredTheme.defaultTheme => systemAppearance,
+    TerminalConfiguredTheme.light => TerminalThemeBrightness.light,
+    TerminalConfiguredTheme.dark => TerminalThemeBrightness.dark,
+  };
+
+  TerminalPalette createPalette({
+    TerminalThemeBrightness systemAppearance = TerminalThemeBrightness.dark,
+  }) {
+    final ({List<int> colors, int foreground, int background, int cursor})
+    resolved = _resolvedPalette(systemAppearance);
+    return TerminalPalette(
+      colors: resolved.colors,
+      defaultForeground: resolved.foreground,
+      defaultBackground: resolved.background,
+      cursorColor: resolved.cursor,
+    );
+  }
+
+  /// Applies a new OS appearance only when this profile follows the system.
+  bool applySystemAppearanceToPalette(
+    TerminalPalette target,
+    TerminalThemeBrightness systemAppearance,
+  ) {
+    if (!followsSystemAppearance) {
+      return false;
+    }
+    final ({List<int> colors, int foreground, int background, int cursor})
+    resolved = _resolvedPalette(systemAppearance);
+    return target.applyResetDefaults(
+      colors: resolved.colors,
+      defaultForeground: resolved.foreground,
+      defaultBackground: resolved.background,
+      cursorColor: resolved.cursor,
+    );
+  }
+
+  ({List<int> colors, int foreground, int background, int cursor})
+  _resolvedPalette(TerminalThemeBrightness systemAppearance) {
+    final TerminalBuiltInTheme selected = TerminalBuiltInTheme.forBrightness(
+      resolveThemeBrightness(systemAppearance),
+    );
     final TerminalPalette xterm = TerminalPalette();
     final List<int> colors = List<int>.generate(
       TerminalPalette.colorCount,
       xterm.colorAt,
       growable: false,
     );
-    colors.setRange(0, palette.ansiColors.length, palette.ansiColors);
-    return TerminalPalette(
+    colors.setRange(0, selected.ansiColors.length, selected.ansiColors);
+    for (int index = 0; index < palette.ansiColors.length; index++) {
+      if (palette.ansiColorsExplicit[index]) {
+        colors[index] = palette.ansiColors[index];
+      }
+    }
+    return (
       colors: colors,
-      defaultForeground: palette.foreground,
-      defaultBackground: palette.background,
-      cursorColor: palette.cursor,
+      foreground: palette.foregroundIsExplicit
+          ? palette.foreground
+          : selected.foreground,
+      background: palette.backgroundIsExplicit
+          ? palette.background
+          : selected.background,
+      cursor: palette.cursorIsExplicit ? palette.cursor : selected.cursor,
     );
   }
 
@@ -165,6 +301,42 @@ final class TerminalProductConfiguration {
         TerminalConfiguredOptionKey.escape => TerminalOptionKeyBehavior.escape,
         TerminalConfiguredOptionKey.text => TerminalOptionKeyBehavior.text,
       };
+}
+
+TerminalProductPaletteConfiguration _paletteConfigurationFromSnapshot(
+  TerminalConfigSnapshot snapshot,
+) {
+  final TerminalResolvedConfigValue<int> foreground = snapshot.resolved(
+    TerminalProductConfigSchema.paletteForeground,
+  );
+  final TerminalResolvedConfigValue<int> background = snapshot.resolved(
+    TerminalProductConfigSchema.paletteBackground,
+  );
+  final TerminalResolvedConfigValue<int> cursor = snapshot.resolved(
+    TerminalProductConfigSchema.paletteCursor,
+  );
+  final List<TerminalResolvedConfigValue<int>> ansi =
+      TerminalProductConfigSchema.ansiPalette
+          .map(snapshot.resolved<int>)
+          .toList(growable: false);
+  return TerminalProductPaletteConfiguration(
+    foreground: foreground.value,
+    background: background.value,
+    cursor: cursor.value,
+    ansiColors: ansi.map(
+      (TerminalResolvedConfigValue<int> value) => value.value,
+    ),
+    foregroundIsExplicit:
+        foreground.source.kind != TerminalConfigSourceKind.schemaDefault,
+    backgroundIsExplicit:
+        background.source.kind != TerminalConfigSourceKind.schemaDefault,
+    cursorIsExplicit:
+        cursor.source.kind != TerminalConfigSourceKind.schemaDefault,
+    ansiColorsExplicit: ansi.map(
+      (TerminalResolvedConfigValue<int> value) =>
+          value.source.kind != TerminalConfigSourceKind.schemaDefault,
+    ),
+  );
 }
 
 final class _TerminalLiveInputConfiguration {

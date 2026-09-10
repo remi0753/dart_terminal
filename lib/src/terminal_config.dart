@@ -16,7 +16,15 @@ enum TerminalConfigSourceKind { schemaDefault, file, commandLine }
 /// When an accepted reload may publish a changed option to product consumers.
 enum TerminalConfigApplicationPolicy { live, newSession }
 
-enum TerminalConfiguredTheme { defaultTheme }
+enum TerminalConfiguredTheme {
+  system,
+  light,
+  dark,
+
+  /// Source-compatibility alias for programmatic callers. Config text named
+  /// `default` is normalized to [system].
+  defaultTheme,
+}
 
 enum TerminalConfiguredSyntheticStyle { allow, deny }
 
@@ -109,6 +117,7 @@ sealed class TerminalConfigOptionBase {
   String get name;
   String get description;
   TerminalConfigApplicationPolicy get applicationPolicy;
+  bool get sourceKindAffectsSemantics;
   bool get isRepeatable;
   int? get maximumOccurrences;
   Object? get defaultValueObject;
@@ -121,6 +130,7 @@ final class TerminalConfigOption<T> extends TerminalConfigOptionBase {
     required this.description,
     required this.applicationPolicy,
     required this.defaultValue,
+    this.sourceKindAffectsSemantics = false,
     required TerminalConfigValueParser<T> parser,
   }) : _parser = parser;
 
@@ -132,6 +142,9 @@ final class TerminalConfigOption<T> extends TerminalConfigOptionBase {
 
   @override
   final TerminalConfigApplicationPolicy applicationPolicy;
+
+  @override
+  final bool sourceKindAffectsSemantics;
 
   @override
   bool get isRepeatable => false;
@@ -186,6 +199,9 @@ final class TerminalConfigRepeatedOption<T> extends TerminalConfigOptionBase {
 
   @override
   final TerminalConfigApplicationPolicy applicationPolicy;
+
+  @override
+  bool get sourceKindAffectsSemantics => false;
 
   @override
   final int maximumOccurrences;
@@ -348,7 +364,8 @@ final class TerminalConfigChange {
 
 /// Immutable, deterministic semantic difference between two typed snapshots.
 ///
-/// Provenance-only changes do not require application work and are omitted.
+/// Provenance-only changes are omitted unless an option declares that source
+/// ownership changes its effective semantics (for example palette overlays).
 final class TerminalConfigChangePlan {
   factory TerminalConfigChangePlan.between(
     TerminalConfigSnapshot previous,
@@ -366,7 +383,13 @@ final class TerminalConfigChangePlan {
               previous._repeatedValues[option],
               candidate._repeatedValues[option],
             )
-          : previous._values[option]?.value != candidate._values[option]?.value;
+          : previous._values[option]?.value !=
+                    candidate._values[option]?.value ||
+                (option.sourceKindAffectsSemantics &&
+                    (previous._values[option]?.source.kind ==
+                            TerminalConfigSourceKind.schemaDefault) !=
+                        (candidate._values[option]?.source.kind ==
+                            TerminalConfigSourceKind.schemaDefault));
       if (changed) changes.add(TerminalConfigChange(option));
     }
     return TerminalConfigChangePlan._(changes);
@@ -479,9 +502,9 @@ abstract final class TerminalProductConfigSchema {
   static final TerminalConfigOption<TerminalConfiguredTheme> theme =
       TerminalConfigOption<TerminalConfiguredTheme>(
         name: 'theme',
-        description: 'Base theme name.',
+        description: 'Base theme: system, light, or dark.',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
-        defaultValue: TerminalConfiguredTheme.defaultTheme,
+        defaultValue: TerminalConfiguredTheme.system,
         parser: _parseTheme,
       );
 
@@ -491,6 +514,7 @@ abstract final class TerminalProductConfigSchema {
         description: 'Default terminal foreground color.',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0x80e5e5e5,
+        sourceKindAffectsSemantics: true,
         parser: _parseColor,
       );
 
@@ -500,6 +524,7 @@ abstract final class TerminalProductConfigSchema {
         description: 'Default terminal background color.',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0x80000000,
+        sourceKindAffectsSemantics: true,
         parser: _parseColor,
       );
 
@@ -509,6 +534,7 @@ abstract final class TerminalProductConfigSchema {
         description: 'Terminal cursor color.',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: 0x80e5e5e5,
+        sourceKindAffectsSemantics: true,
         parser: _parseColor,
       );
 
@@ -521,6 +547,7 @@ abstract final class TerminalProductConfigSchema {
             description: 'ANSI palette color $index.',
             applicationPolicy: TerminalConfigApplicationPolicy.newSession,
             defaultValue: defaultAnsiColors[index],
+            sourceKindAffectsSemantics: true,
             parser: _parseColor,
           ),
           growable: false,
@@ -1365,17 +1392,24 @@ TerminalConfigDecodeResult<String?> _parseNonEmptyPath(String value) {
   return TerminalConfigDecodeResult<String?>.success(value);
 }
 
-TerminalConfigDecodeResult<TerminalConfiguredTheme> _parseTheme(String value) =>
-    switch (value) {
-      'default' =>
-        const TerminalConfigDecodeResult<TerminalConfiguredTheme>.success(
-          TerminalConfiguredTheme.defaultTheme,
-        ),
-      _ => const TerminalConfigDecodeResult<TerminalConfiguredTheme>.failure(
-        'theme must be `default`',
-        hint: 'use `theme = default`; additional themes are added later',
-      ),
-    };
+TerminalConfigDecodeResult<TerminalConfiguredTheme> _parseTheme(
+  String value,
+) => switch (value) {
+  'default' ||
+  'system' => const TerminalConfigDecodeResult<TerminalConfiguredTheme>.success(
+    TerminalConfiguredTheme.system,
+  ),
+  'light' => const TerminalConfigDecodeResult<TerminalConfiguredTheme>.success(
+    TerminalConfiguredTheme.light,
+  ),
+  'dark' => const TerminalConfigDecodeResult<TerminalConfiguredTheme>.success(
+    TerminalConfiguredTheme.dark,
+  ),
+  _ => const TerminalConfigDecodeResult<TerminalConfiguredTheme>.failure(
+    'theme must be `system`, `light`, or `dark`',
+    hint: 'use `theme = system`; `default` is an accepted system alias',
+  ),
+};
 
 TerminalConfigDecodeResult<int> _parseColor(String value) {
   if (!RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(value)) {

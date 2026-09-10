@@ -1327,6 +1327,10 @@ final class TerminalApplication {
                   'value=$isActive',
                 );
               }
+            case ApplicationAppearanceChangedEvent():
+              // Product projection is installed by the next ordered theme
+              // subtask. Decoding v7 must remain exhaustive in the meantime.
+              break;
             case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
               if (!hasVisibleWindows &&
                   !createdWindow.isClosed &&
@@ -3143,6 +3147,10 @@ final class TerminalApplication {
       applicationSubscription = application.events.listen((AppKitEvent event) {
         switch (event) {
           case ApplicationActiveChangedEvent():
+            break;
+          case ApplicationAppearanceChangedEvent():
+            // Product projection is installed by the next ordered theme
+            // subtask. Decoding v7 must remain exhaustive in the meantime.
             break;
           case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
             if (hasVisibleWindows || state.isDisposed) break;

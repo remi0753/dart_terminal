@@ -162,10 +162,40 @@ void _testSchemaAndZeroConfig() {
   _expect(
     result.snapshot.value(TerminalProductConfigSchema.workingDirectory) ==
             null &&
+        result.snapshot.value(TerminalProductConfigSchema.theme) ==
+            TerminalConfiguredTheme.system &&
         result.snapshot.rootPath == null &&
         result.snapshot.diagnostics.isEmpty &&
         result.remainingArguments.isEmpty,
     'zero-config resolution preserves schema defaults without diagnostics',
+  );
+  for (final MapEntry<String, TerminalConfiguredTheme> entry
+      in const <String, TerminalConfiguredTheme>{
+        'system': TerminalConfiguredTheme.system,
+        'default': TerminalConfiguredTheme.system,
+        'light': TerminalConfiguredTheme.light,
+        'dark': TerminalConfiguredTheme.dark,
+      }.entries) {
+    final TerminalResolvedConfigValue<TerminalConfiguredTheme> theme =
+        TerminalConfigLoader(fileSystem: files)
+            .resolve(<String>[
+              '--no-config',
+              '--theme=${entry.key}',
+            ], environment: const <String, String>{})
+            .snapshot
+            .resolved(TerminalProductConfigSchema.theme);
+    _expect(
+      theme.value == entry.value &&
+          theme.source.kind == TerminalConfigSourceKind.commandLine,
+      'theme selector ${entry.key} resolves to ${entry.value.name}',
+    );
+  }
+  _expectThrows(
+    () => TerminalConfigLoader(fileSystem: files).resolve(const <String>[
+      '--no-config',
+      '--theme=unknown',
+    ], environment: const <String, String>{}),
+    'unknown CLI theme is a usage failure',
   );
   _expect(
     TerminalConfigLoader.defaultConfigPath(const <String, String>{

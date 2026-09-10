@@ -8,6 +8,7 @@ void main() => runTerminalPaletteTests();
 void runTerminalPaletteTests() {
   _testXtermPaletteDefaultsAndResolution();
   _testPaletteMutationResetDamageAndAtomicity();
+  _testThemeResetDefaultsAndOscOverrideLayer();
   _testDefaultColorMutationAndReset();
   _testCursorColorMutationQueryResetAndDamage();
   _testOscColorMutationAndRejection();
@@ -34,7 +35,7 @@ void _testXtermPaletteDefaultsAndResolution() {
     0x8000ffff,
     0x80ffffff,
   ];
-  _expect(palette.typedStorageBytes == 2048, 'palette typed storage bytes');
+  _expect(palette.typedStorageBytes == 2080, 'palette typed storage bytes');
   _expect(palette.generation == 1, 'initial palette generation');
   for (int index = 0; index < base.length; index++) {
     _expect(palette.colorAt(index) == base[index], 'base color $index');
@@ -125,6 +126,106 @@ void _testXtermPaletteDefaultsAndResolution() {
   _expectThrowsArgumentError(
     () => TerminalPalette(cursorColor: 0x00ffffff),
     'configured palette rejects untagged cursor color',
+  );
+}
+
+void _testThemeResetDefaultsAndOscOverrideLayer() {
+  final List<int> darkColors = List<int>.generate(
+    TerminalPalette.colorCount,
+    TerminalPalette().colorAt,
+    growable: false,
+  );
+  final List<int> lightColors = List<int>.from(darkColors)
+    ..[0] = 0x801f2328
+    ..[1] = 0x80b42318
+    ..[2] = 0x801a7f37;
+  final TerminalPalette palette = TerminalPalette(
+    colors: darkColors,
+    defaultForeground: 0x80e5e5e5,
+    defaultBackground: 0x80000000,
+    cursorColor: 0x80e5e5e5,
+  );
+  final TerminalScreenSet screens = TerminalScreenSet(
+    rows: 2,
+    columns: 2,
+    palette: palette,
+  );
+  screens.primary.clearDamage();
+  screens.alternate.clearDamage();
+
+  // Setting an identical value still claims the OSC override layer.
+  screens.primary.setPaletteColor(1, darkColors[1]);
+  screens.primary.setDefaultForegroundColor(0x80e5e5e5);
+  screens.primary.setCursorColor(0x80e5e5e5);
+  final int generation = palette.generation;
+  final int primaryGeneration = screens.primary.generation;
+  final int alternateGeneration = screens.alternate.generation;
+  final bool changed = palette.applyResetDefaults(
+    colors: lightColors,
+    defaultForeground: 0x8024292f,
+    defaultBackground: 0x80f6f8fa,
+    cursorColor: 0x800969da,
+  );
+  _expect(
+    changed &&
+        palette.generation == generation + 1 &&
+        screens.primary.generation == primaryGeneration + 1 &&
+        screens.alternate.generation == alternateGeneration + 1,
+    'theme switch is one palette and one damage generation',
+  );
+  _expect(
+    palette.colorAt(0) == lightColors[0] &&
+        palette.colorAt(1) == darkColors[1] &&
+        palette.colorAt(2) == lightColors[2] &&
+        palette.colorAt(16) == darkColors[16] &&
+        palette.defaultForeground == 0x80e5e5e5 &&
+        palette.defaultBackground == 0x80f6f8fa &&
+        palette.cursorColor == 0x80e5e5e5,
+    'theme changes only non-overridden colors and preserves xterm tail',
+  );
+  _expect(
+    screens.primary.isRowDirty(0) &&
+        screens.primary.isRowDirty(1) &&
+        screens.alternate.isRowDirty(0) &&
+        screens.alternate.isRowDirty(1),
+    'theme switch damages every attached screen once',
+  );
+
+  screens.primary.resetPaletteColor(1);
+  screens.primary.resetDefaultForegroundColor();
+  screens.primary.resetCursorColor();
+  _expect(
+    palette.colorAt(1) == lightColors[1] &&
+        palette.defaultForeground == 0x8024292f &&
+        palette.cursorColor == 0x800969da,
+    'OSC resets reveal the current theme reset defaults',
+  );
+
+  final int stableGeneration = palette.generation;
+  _expect(
+    !palette.applyResetDefaults(
+          colors: lightColors,
+          defaultForeground: 0x8024292f,
+          defaultBackground: 0x80f6f8fa,
+          cursorColor: 0x800969da,
+        ) &&
+        palette.generation == stableGeneration,
+    'identical theme application is idempotent',
+  );
+  _expectThrowsArgumentError(
+    () => palette.applyResetDefaults(
+      colors: lightColors.sublist(0, 255),
+      defaultForeground: 0x80111111,
+      defaultBackground: 0x80222222,
+      cursorColor: 0x80333333,
+    ),
+    'invalid theme batch is rejected atomically',
+  );
+  _expect(
+    palette.defaultForeground == 0x8024292f &&
+        palette.defaultBackground == 0x80f6f8fa &&
+        palette.generation == stableGeneration,
+    'invalid theme batch retains visible values and generation',
   );
 }
 
