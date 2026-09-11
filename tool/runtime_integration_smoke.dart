@@ -840,7 +840,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
   );
   _expect(
     RegExp(
-          r'^NATIVE_ACTION_MENU installed=true sections=6 actions=19$',
+          r'^NATIVE_ACTION_MENU installed=true sections=6 actions=21$',
           multiLine: true,
         ).allMatches(observation.stdoutText).length ==
         1,

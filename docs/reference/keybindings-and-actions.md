@@ -70,6 +70,8 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `window.close` | Close Window | file | `command+w` |
 | `edit.copy` | Copy | edit | `command+c` |
 | `edit.paste` | Paste | edit | `command+v` |
+| `edit.allow-osc52-clipboard` | Allow OSC 52 Clipboard Request | edit | — |
+| `edit.deny-osc52-clipboard` | Deny OSC 52 Clipboard Request | edit | — |
 | `tab.new` | New Tab | shell | `command+t` |
 | `pane.split-right` | Split Pane Right | shell | `command+d` |
 | `pane.split-down` | Split Pane Down | shell | `shift+command+d` |

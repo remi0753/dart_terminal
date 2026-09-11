@@ -7,7 +7,9 @@ import 'package:dart_pty_macos/dart_pty_macos.dart';
 
 import 'runtime_lifecycle.dart';
 import 'terminal_buffer.dart';
+import 'terminal_config.dart';
 import 'terminal_core/terminal_keyboard_modes.dart';
+import 'terminal_core/terminal_osc52.dart';
 import 'terminal_core/terminal_reply.dart';
 import 'terminal_core/terminal_screen.dart';
 import 'terminal_core/terminal_screen_parser_sink.dart';
@@ -19,6 +21,7 @@ import 'terminal_input/terminal_hyperlink_interaction.dart';
 import 'terminal_input/terminal_key_event.dart';
 import 'terminal_input/terminal_paste.dart';
 import 'terminal_kitty_graphics_controller.dart';
+import 'terminal_osc52_projection.dart';
 import 'terminal_pane.dart';
 import 'terminal_shell_integration.dart';
 
@@ -167,6 +170,11 @@ final class TerminalSession implements TerminalPaneSession {
     TerminalColorScheme initialColorScheme = TerminalColorScheme.dark,
     RuntimeWorkerPayloadClient? graphicsWorker,
     TerminalDesktopSignalCoordinator? desktopSignalCoordinator,
+    TerminalOsc52Coordinator? osc52Coordinator,
+    TerminalConfiguredClipboardAccess clipboardReadPolicy =
+        TerminalConfiguredClipboardAccess.deny,
+    TerminalConfiguredClipboardAccess clipboardWritePolicy =
+        TerminalConfiguredClipboardAccess.deny,
   }) : _onChanged = onChanged,
        _onTerminated = onTerminated,
        _lifecycleObserver = lifecycleObserver,
@@ -238,10 +246,18 @@ final class TerminalSession implements TerminalPaneSession {
       onChanged: _notifyChanged,
       worker: graphicsWorker,
     );
+    _osc52Projection = osc52Coordinator?.registerSession(
+      sessionId: id,
+      readPolicy: clipboardReadPolicy,
+      writePolicy: clipboardWritePolicy,
+      onReply: kittyGraphicsController.enqueueOrdinaryReply,
+      resetGeneration: terminalScreenSet.resetGeneration,
+    );
     terminalParserSink = TerminalScreenParserSink.forScreenSet(
       terminalScreenSet,
       onReply: kittyGraphicsController.enqueueOrdinaryReply,
       onKittyGraphicsCommand: kittyGraphicsController.enqueueCommand,
+      onOsc52Request: _osc52Projection?.handle,
     );
     _terminalParser = VtParser(sink: terminalParserSink);
     _lastCompletedSize = _currentSize();
@@ -255,6 +271,7 @@ final class TerminalSession implements TerminalPaneSession {
   final TerminalSessionLifecycleObserver? _lifecycleObserver;
   final TerminalSessionNativeObserver? _nativeObserver;
   late final TerminalDesktopSignalSessionProjection? _desktopSignalProjection;
+  late final TerminalOsc52SessionProjection? _osc52Projection;
   final PtyBackend _ptyBackend;
   final Map<String, String> _environment;
   final String shellExecutable;
@@ -449,6 +466,7 @@ final class TerminalSession implements TerminalPaneSession {
             if (!_disposed && identical(_process, process)) {
               _terminalParser.parse(bytes);
               _desktopSignalProjection?.synchronize(terminalScreenSet);
+              _osc52Projection?.synchronize(terminalScreenSet.resetGeneration);
             }
             return bytes;
           })
@@ -816,6 +834,7 @@ final class TerminalSession implements TerminalPaneSession {
     terminalScreenSet.setColorSchemeReportingMode(false);
     terminalScreenSet.setInBandSizeReportingMode(false);
     _desktopSignalProjection?.close();
+    _osc52Projection?.close();
     _disposed = true;
     await kittyGraphicsController.dispose();
     _cancelPasteWrite();
@@ -1063,7 +1082,7 @@ final class TerminalSession implements TerminalPaneSession {
 
   bool _writeTerminalReplyDirect(Uint8List bytes) {
     if (bytes.isEmpty ||
-        bytes.length > TerminalReplyEncoder.maximumReplyBytes) {
+        bytes.length > TerminalOsc52Protocol.maximumReplyBytes) {
       return false;
     }
     if (_rejectConcurrentPasteInput()) return false;

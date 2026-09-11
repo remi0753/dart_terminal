@@ -14,6 +14,7 @@ Future<void> main() => runTerminalNativeHierarchyTests();
 
 Future<void> runTerminalNativeHierarchyTests() async {
   await _testApplicationThemeProjectionLifecycle();
+  await _testOsc52ConfirmationPresenterLifecycle();
   await _testSettingsInspectorPresenterLifecycle();
   await _testConfiguredWindowAndPaddingProjection();
   await _testPerWindowCreationFrameProjection();
@@ -22,6 +23,138 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testOsc52ConfirmationPresenterLifecycle() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final View terminalView = View(configuration: terminalBaseViewConfiguration);
+  final Window terminalWindow = Window(
+    frame: const Rect.fromLTWH(100, 90, 640, 480),
+    title: 'Terminal',
+    configuration: terminalWindowConfiguration,
+  )..contentView = terminalView;
+  terminalWindow
+    ..show()
+    ..makeFirstResponder(terminalView);
+  final _NativeOsc52Clipboard clipboard = _NativeOsc52Clipboard('seed');
+  final List<Uint8List> replies = <Uint8List>[];
+  late final TerminalOsc52ConfirmationPresenter presenter;
+  final TerminalOsc52Coordinator coordinator = TerminalOsc52Coordinator(
+    clipboard: clipboard,
+    applicationActive: true,
+    onPendingChanged: (TerminalOsc52PendingRequest? pending) {
+      unawaited(
+        pending == null ? presenter.dismiss() : presenter.show(pending),
+      );
+    },
+  );
+  const TerminalSessionId sessionId = TerminalSessionId(
+    paneId: PaneId(701),
+    generation: 1,
+  );
+  final TerminalOsc52SessionProjection projection = coordinator.registerSession(
+    sessionId: sessionId,
+    readPolicy: TerminalConfiguredClipboardAccess.ask,
+    writePolicy: TerminalConfiguredClipboardAccess.ask,
+    onReply: (Uint8List reply) {
+      replies.add(Uint8List.fromList(reply));
+      return true;
+    },
+  );
+  coordinator.focusSession(sessionId);
+  presenter = TerminalOsc52ConfirmationPresenter(
+    focusTarget: () => TerminalOsc52ConfirmationFocusTarget(
+      window: terminalWindow,
+      view: terminalView,
+    ),
+    approve: coordinator.approve,
+    deny: coordinator.deny,
+  );
+  final TerminalScreenParserSink sink = TerminalScreenParserSink(
+    TerminalScreen(rows: 1, columns: 1),
+    onOsc52Request: projection.handle,
+  );
+  final VtParser parser = VtParser(sink: sink);
+  try {
+    const String requestedText = 'line\n\u202e';
+    parser.parse(
+      _nativeOsc52('52;c;${base64Encode(utf8.encode(requestedText))}'),
+    );
+    await _waitForHierarchy(
+      () => presenter.isOpen && bindings.objects.length == 4,
+      'OSC 52 write confirmation did not acquire bounded native owners',
+    );
+    final String rendered = presenter.renderedText!;
+    _expect(
+      rendered.contains('Selection: "c"') &&
+          rendered.contains('Operation: Write clipboard') &&
+          rendered.contains('"line\\n\\u202e"') &&
+          !rendered.contains('\u202e'),
+      'OSC 52 confirmation did not render exact spoof-safe request text',
+    );
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      bindings.handleFor(presenter.activeWindow!),
+      keyCode: 36,
+      characters: '\r',
+    );
+    await _waitForHierarchy(
+      () =>
+          coordinator.pendingRequest == null &&
+          !presenter.isOpen &&
+          clipboard.text == requestedText &&
+          bindings.objects.length == 2,
+      'Return did not approve exactly one request and release native owners',
+    );
+    _expect(
+      presenter.terminalResponderRestoreCount == 1 &&
+          bindings.firstResponders[bindings.handleFor(terminalWindow)] ==
+              bindings.handleFor(terminalView),
+      'OSC 52 approval did not restore the live terminal responder',
+    );
+
+    parser.parse(_nativeOsc52('52;c;?'));
+    await _waitForHierarchy(
+      () => presenter.isOpen,
+      'OSC 52 read confirmation did not open',
+    );
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      bindings.handleFor(presenter.activeWindow!),
+      keyCode: 53,
+      characters: '\u001b',
+    );
+    await _waitForHierarchy(
+      () =>
+          coordinator.pendingRequest == null &&
+          !presenter.isOpen &&
+          replies.length == 1,
+      'Escape did not deny the exact read and release native owners',
+    );
+    _expect(
+      ascii.decode(replies.single) == '\x1b]52;c;\x07' &&
+          clipboard.readCount == 0 &&
+          presenter.terminalResponderRestoreCount == 2,
+      'OSC 52 read denial accessed data or omitted its unavailable reply',
+    );
+  } finally {
+    projection.close();
+    coordinator.dispose();
+    await presenter.dispose();
+    if (!terminalWindow.isClosed) terminalWindow.close();
+    terminalWindow.dispose();
+    terminalView.dispose();
+    await application.terminate();
+    await rawEvents.close();
+  }
 }
 
 Future<void> _testSettingsInspectorPresenterLifecycle() async {
@@ -2168,6 +2301,38 @@ final class _LifecycleMemoryStore implements TerminalRestorationStore {
 }
 
 var _hierarchyEventNanoseconds = 200000;
+
+Uint8List _nativeOsc52(String payload) =>
+    Uint8List.fromList(<int>[0x1b, 0x5d, ...ascii.encode(payload), 0x07]);
+
+final class _NativeOsc52Clipboard implements TerminalOsc52ClipboardPort {
+  _NativeOsc52Clipboard(this.text);
+
+  String? text;
+  int _changeCount = 1;
+  int readCount = 0;
+
+  @override
+  int get changeCount => _changeCount;
+
+  @override
+  TerminalOsc52ClipboardText readText() {
+    readCount++;
+    return TerminalOsc52ClipboardText(text: text, changeCount: _changeCount);
+  }
+
+  @override
+  int writeText(String value) {
+    text = value;
+    return ++_changeCount;
+  }
+
+  @override
+  int clear() {
+    text = null;
+    return ++_changeCount;
+  }
+}
 
 void _injectHierarchyKey(
   StreamController<Object?> events,

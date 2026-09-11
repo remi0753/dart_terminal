@@ -46,6 +46,8 @@ import 'terminal_input/terminal_selection_autoscroll.dart';
 import 'terminal_input/terminal_selection_gesture.dart';
 import 'terminal_input/terminal_text_input_event_router.dart';
 import 'terminal_native_hierarchy.dart';
+import 'terminal_osc52_confirmation.dart';
+import 'terminal_osc52_projection.dart';
 import 'terminal_pane.dart';
 import 'terminal_pane_close_coordinator.dart';
 import 'terminal_product_configuration.dart';
@@ -2297,6 +2299,7 @@ final class TerminalApplication {
     TerminalAppKitMenuProjection? menuProjection;
     TerminalCommandPalettePresenter? palettePresenter;
     TerminalSettingsInspectorPresenter? settingsPresenter;
+    TerminalOsc52ConfirmationPresenter? osc52Presenter;
     TerminalActionDispatchScheduler? keyBindingActionScheduler;
     Future<void> Function(PaneId? paneId)? closePaneRequest;
     void Function()? reconcileRequest;
@@ -2325,6 +2328,26 @@ final class TerminalApplication {
       asynchronousStackTrace ??= stackTrace;
       if (!closed.isCompleted) closed.completeError(error, stackTrace);
     }
+
+    final TerminalOsc52Coordinator osc52Coordinator = TerminalOsc52Coordinator(
+      clipboard: _AppKitTerminalOsc52Clipboard(application.generalPasteboard),
+      applicationActive: application.isActive,
+      onPendingChanged: (TerminalOsc52PendingRequest? pending) {
+        final TerminalOsc52ConfirmationPresenter? presenter = osc52Presenter;
+        if (presenter != null && !presenter.isDisposed) {
+          final Future<void> operation = pending == null
+              ? presenter.dismiss()
+              : presenter.show(pending);
+          unawaited(
+            operation.then<void>((_) {}, onError: recordAsynchronousError),
+          );
+        }
+        final TerminalAppKitMenuProjection? menu = menuProjection;
+        if (menu != null && !menu.isDisposed) menu.refresh();
+        final TerminalCommandPalettePresenter? palette = palettePresenter;
+        if (palette != null && !palette.isDisposed) palette.refresh();
+      },
+    );
 
     final _TerminalDesktopSignalAcceptanceNativePort?
     desktopSignalAcceptancePort = runDesktopSignalAcceptance
@@ -2449,6 +2472,9 @@ final class TerminalApplication {
                 initialColorScheme: _terminalColorScheme(renderedBrightness),
                 graphicsWorker: lifecycle,
                 desktopSignalCoordinator: desktopSignalCoordinator,
+                osc52Coordinator: osc52Coordinator,
+                clipboardReadPolicy: capturedConfiguration.clipboardRead,
+                clipboardWritePolicy: capturedConfiguration.clipboardWrite,
               );
               sessions[id.paneId] = session;
               allSessions.add(session);
@@ -2799,6 +2825,7 @@ final class TerminalApplication {
       final PaneId? focusedPaneId =
           state.activeWindow?.selectedTab.focusedPaneId;
       desktopSignalCoordinator.focusSession(sessions[focusedPaneId]?.id);
+      osc52Coordinator.focusSession(sessions[focusedPaneId]?.id);
     }
 
     reconcileRequest = reconcileInteractiveHierarchy;
@@ -2999,6 +3026,9 @@ final class TerminalApplication {
     };
 
     Future<void> disposeProductResourcesOnce() async {
+      await osc52Presenter?.dispose();
+      osc52Presenter = null;
+      osc52Coordinator.dispose();
       await settingsPresenter?.dispose();
       settingsPresenter = null;
       configurationReloadController?.dispose();
@@ -3214,6 +3244,29 @@ final class TerminalApplication {
       if (runUserActionAcceptance) {
         stdout.writeln('TERMINAL_USER_ACTIONS_STAGE stage=pane-started');
       }
+      osc52Presenter = TerminalOsc52ConfirmationPresenter(
+        focusTarget: () {
+          final TerminalWindowState? activeWindow = state.activeWindow;
+          if (activeWindow == null) return null;
+          final TerminalTabState tab = activeWindow.selectedTab;
+          final Window? window = createdHierarchy.windowForTab(tab.id);
+          final TerminalNativePaneResources? resources = createdHierarchy
+              .resourcesForPane(tab.focusedPaneId);
+          if (window == null || resources == null) return null;
+          return TerminalOsc52ConfirmationFocusTarget(
+            window: window,
+            view: resources.view,
+          );
+        },
+        approve: osc52Coordinator.approve,
+        deny: osc52Coordinator.deny,
+        onError: recordAsynchronousError,
+      );
+      final TerminalOsc52PendingRequest? startupPending =
+          osc52Coordinator.pendingRequest;
+      if (startupPending != null) {
+        await osc52Presenter!.show(startupPending);
+      }
 
       final TerminalPaneCloseCoordinator createdPaneCloseCoordinator =
           TerminalPaneCloseCoordinator(
@@ -3363,6 +3416,24 @@ final class TerminalApplication {
             },
             handler: paste,
           ),
+          TerminalActionRegistration(
+            id: TerminalActionId.allowOsc52Clipboard,
+            isAvailable: () => osc52Coordinator.pendingRequest != null,
+            handler: () {
+              final TerminalOsc52PendingRequest? pending =
+                  osc52Coordinator.pendingRequest;
+              if (pending != null) osc52Coordinator.approve(pending.id);
+            },
+          ),
+          TerminalActionRegistration(
+            id: TerminalActionId.denyOsc52Clipboard,
+            isAvailable: () => osc52Coordinator.pendingRequest != null,
+            handler: () {
+              final TerminalOsc52PendingRequest? pending =
+                  osc52Coordinator.pendingRequest;
+              if (pending != null) osc52Coordinator.deny(pending.id);
+            },
+          ),
           ...promptNavigationActions.registrations(),
           ...createdActions.registrations(),
         ],
@@ -3467,6 +3538,7 @@ final class TerminalApplication {
         switch (event) {
           case ApplicationActiveChangedEvent(:final isActive):
             desktopSignalCoordinator.setApplicationActive(isActive);
+            osc52Coordinator.setApplicationActive(isActive);
           case ApplicationAppearanceChangedEvent():
             // The dedicated theme projection owns palette application.
             break;
@@ -12445,6 +12517,31 @@ final class _AppKitTerminalClipboard implements _TerminalClipboard {
 
   @override
   int writeText(String text) => pasteboard.writeText(text);
+}
+
+final class _AppKitTerminalOsc52Clipboard
+    implements TerminalOsc52ClipboardPort {
+  const _AppKitTerminalOsc52Clipboard(this.pasteboard);
+
+  final Pasteboard pasteboard;
+
+  @override
+  int get changeCount => pasteboard.changeCount;
+
+  @override
+  TerminalOsc52ClipboardText readText() {
+    final PasteboardTextSnapshot snapshot = pasteboard.readText();
+    return TerminalOsc52ClipboardText(
+      text: snapshot.text,
+      changeCount: snapshot.changeCount,
+    );
+  }
+
+  @override
+  int writeText(String text) => pasteboard.writeText(text);
+
+  @override
+  int clear() => pasteboard.clear();
 }
 
 final class _MemoryTerminalClipboard implements _TerminalClipboard {

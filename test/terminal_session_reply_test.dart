@@ -13,7 +13,83 @@ Future<void> runTerminalSessionReplyTests() async {
   await _testReplyBackpressureAndUnavailableSession();
   await _testAppearanceProjectionAndBackpressure();
   await _testInBandReportsAfterCompletedResize();
+  await _testOsc52ProjectionUsesOrderedBoundedSessionReplies();
   await _testResizeValidationIsAtomic();
+}
+
+Future<void> _testOsc52ProjectionUsesOrderedBoundedSessionReplies() async {
+  final _Osc52SessionClipboard clipboard = _Osc52SessionClipboard(
+    'a' * TerminalOsc52Protocol.maximumClipboardTextUtf8Bytes,
+  );
+  final TerminalOsc52Coordinator coordinator = TerminalOsc52Coordinator(
+    clipboard: clipboard,
+    applicationActive: true,
+  );
+  final FakePtyBackend backend = FakePtyBackend(autoExitOnClose: false);
+  final TerminalSession session = _session(
+    pane: 206,
+    backend: backend,
+    writeCapacityBytes: 8192,
+    osc52Coordinator: coordinator,
+    clipboardReadPolicy: TerminalConfiguredClipboardAccess.allow,
+  );
+  coordinator.focusSession(session.id);
+  await session.start();
+  final FakePtyProcess process = backend.processes.single;
+  process.emitOutput(_bytes('\x1b]52;c;?\x1b\\'));
+  _expect(
+    process.writes.single.length > TerminalReplyEncoder.maximumReplyBytes &&
+        process.writes.single.length <=
+            TerminalOsc52Protocol.maximumReplyBytes &&
+        ascii.decode(process.writes.single).startsWith('\x1b]52;c;') &&
+        ascii.decode(process.writes.single).endsWith('\x1b\\') &&
+        session.terminalParserSink.acceptedClipboardReadCount == 1 &&
+        session.replyWriteBackpressureCount == 0,
+    'approved OSC 52 read did not use the ordered bounded session reply path',
+  );
+  process.drainWrites();
+  process.finish(exitCode: 0);
+  await session.waitForTermination();
+  await session.dispose();
+  coordinator.dispose();
+
+  final TerminalOsc52Coordinator askCoordinator = TerminalOsc52Coordinator(
+    clipboard: _Osc52SessionClipboard('private'),
+    applicationActive: true,
+  );
+  final FakePtyBackend askBackend = FakePtyBackend(autoExitOnClose: false);
+  final TerminalSession askSession = _session(
+    pane: 207,
+    backend: askBackend,
+    osc52Coordinator: askCoordinator,
+    clipboardReadPolicy: TerminalConfiguredClipboardAccess.ask,
+  );
+  askCoordinator.focusSession(askSession.id);
+  await askSession.start();
+  final FakePtyProcess askProcess = askBackend.processes.single;
+  askProcess.emitOutput(_bytes('\x1b]52;c;?\x07\x1bc'));
+  _expect(
+    askCoordinator.pendingRequest == null &&
+        askSession.terminalScreenSet.resetGeneration == 2 &&
+        ascii.decode(askProcess.writes.single) == '\x1b]52;c;\x07',
+    'RIS did not revoke pending OSC 52 read and complete it unavailable',
+  );
+  askProcess.drainWrites();
+  askProcess.emitOutput(_bytes('\x1b]52;c;?\x07'));
+  _expect(
+    askCoordinator.pendingRequest != null,
+    'post-reset OSC 52 request did not acquire a fresh identity',
+  );
+  final Future<void> disposed = askSession.dispose();
+  _expect(
+    askCoordinator.pendingRequest == null &&
+        askCoordinator.metrics.trackedSessionCount == 0 &&
+        ascii.decode(askProcess.writes.single) == '\x1b]52;c;\x07',
+    'session teardown retained a pending OSC 52 disclosure',
+  );
+  askProcess.finish(exitCode: 0);
+  await disposed;
+  askCoordinator.dispose();
 }
 
 Future<void> _testRawParserFeedReplyOrderingAndCompletion() async {
@@ -286,15 +362,49 @@ TerminalSession _session({
   required FakePtyBackend backend,
   int writeCapacityBytes = 1024 * 1024,
   TerminalColorScheme initialColorScheme = TerminalColorScheme.dark,
+  TerminalOsc52Coordinator? osc52Coordinator,
+  TerminalConfiguredClipboardAccess clipboardReadPolicy =
+      TerminalConfiguredClipboardAccess.deny,
+  TerminalConfiguredClipboardAccess clipboardWritePolicy =
+      TerminalConfiguredClipboardAccess.deny,
 }) => TerminalSession(
   id: TerminalSessionId(paneId: PaneId(pane), generation: 1),
   ptyBackend: backend,
   initialWorkingDirectory: Directory.systemTemp.path,
   writeCapacityBytes: writeCapacityBytes,
   initialColorScheme: initialColorScheme,
+  osc52Coordinator: osc52Coordinator,
+  clipboardReadPolicy: clipboardReadPolicy,
+  clipboardWritePolicy: clipboardWritePolicy,
   onChanged: () {},
   onTerminated: () {},
 );
+
+final class _Osc52SessionClipboard implements TerminalOsc52ClipboardPort {
+  _Osc52SessionClipboard(this.text);
+
+  String? text;
+  int _changeCount = 1;
+
+  @override
+  int get changeCount => _changeCount;
+
+  @override
+  TerminalOsc52ClipboardText readText() =>
+      TerminalOsc52ClipboardText(text: text, changeCount: _changeCount);
+
+  @override
+  int writeText(String value) {
+    text = value;
+    return ++_changeCount;
+  }
+
+  @override
+  int clear() {
+    text = null;
+    return ++_changeCount;
+  }
+}
 
 Uint8List _bytes(String value) => Uint8List.fromList(ascii.encode(value));
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'terminal_reply.dart';
@@ -34,6 +35,8 @@ abstract final class TerminalOsc52Protocol {
   static const int maximumStringPayloadBytes = 4096;
   static const int maximumSelectionBytes =
       TerminalReplyEncoder.maximumOsc52SelectionBytes;
+  static const int maximumClipboardTextUtf8Bytes = 3060;
+  static const int maximumReplyBytes = 4100;
 
   /// Parses one already-captured OSC 52 payload without retaining parser state.
   ///
@@ -94,6 +97,41 @@ abstract final class TerminalOsc52Protocol {
       encodedData: null,
       terminator: sequence.terminator,
     );
+  }
+
+  /// Encodes a successful bounded text read using the query's exact selector
+  /// and terminator.
+  static Uint8List encodeReadReply(TerminalOsc52Request request, String text) {
+    if (request.operation != TerminalOsc52Operation.read) {
+      throw ArgumentError.value(request.operation, 'request.operation');
+    }
+    final List<int> textBytes = utf8.encode(text);
+    if (textBytes.length > maximumClipboardTextUtf8Bytes) {
+      throw RangeError.range(
+        textBytes.length,
+        0,
+        maximumClipboardTextUtf8Bytes,
+        'text UTF-8 bytes',
+      );
+    }
+    final String encoded = base64Encode(textBytes);
+    final List<int> bytes = <int>[
+      0x1b,
+      0x5d,
+      0x35,
+      0x32,
+      0x3b,
+      ...request.selection.codeUnits,
+      0x3b,
+      ...encoded.codeUnits,
+      if (request.terminator == VtStringTerminator.bell)
+        0x07
+      else ...const <int>[0x1b, 0x5c],
+    ];
+    if (bytes.length > maximumReplyBytes) {
+      throw StateError('bounded OSC 52 reply exceeded its wire limit');
+    }
+    return Uint8List.fromList(bytes);
   }
 
   static int _findByte(VtStringSequence sequence, int start, int target) {

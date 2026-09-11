@@ -130,6 +130,19 @@ void _testStableStandardCatalog() {
   );
   _expect(
     catalog
+            .actionsForMenu(TerminalActionMenu.edit)
+            .map((TerminalActionDefinition action) => action.id)
+            .join(',') ==
+        <TerminalActionId>[
+          TerminalActionId.copy,
+          TerminalActionId.paste,
+          TerminalActionId.allowOsc52Clipboard,
+          TerminalActionId.denyOsc52Clipboard,
+        ].join(','),
+    'edit menu contains bounded OSC 52 decisions after copy and paste',
+  );
+  _expect(
+    catalog
             .actionsForMenu(TerminalActionMenu.view)
             .map((TerminalActionDefinition action) => action.id)
             .join(',') ==
@@ -355,7 +368,7 @@ void _testSearchOrderingAndBounds() {
     ],
   );
   _expect(
-    dispatcher.search('split down').single.definition.id ==
+    dispatcher.search('split down').first.definition.id ==
         TerminalActionId.splitPaneDown,
     'multi-token exact search finds the intended action',
   );
@@ -365,11 +378,15 @@ void _testSearchOrderingAndBounds() {
     'case-insensitive subsequence search is deterministic',
   );
   _expect(
-    dispatcher.search('clipboard').length == 2 &&
+    dispatcher.search('clipboard').length == 4 &&
         dispatcher.search('clipboard')[0].definition.id ==
             TerminalActionId.copy &&
         dispatcher.search('clipboard')[1].definition.id ==
-            TerminalActionId.paste,
+            TerminalActionId.paste &&
+        dispatcher.search('clipboard')[2].definition.id ==
+            TerminalActionId.allowOsc52Clipboard &&
+        dispatcher.search('clipboard')[3].definition.id ==
+            TerminalActionId.denyOsc52Clipboard,
     'equal keyword matches retain catalog order',
   );
   _expect(

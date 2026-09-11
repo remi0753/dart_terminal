@@ -234,3 +234,64 @@ and tests committed by the earlier child.
   Final `git diff --check` passed and a repository scan found no remaining stale
   36-option assertions outside unrelated protocol offsets/key codes and captured
   corpora. The first child therefore meets its completion conditions.
+- 2026-09-12: Post-commit reread after `11592e7` (`Define bounded OSC 52 policy
+  contracts`) confirmed the parent remains open and selects the exact
+  application confirmation/pasteboard child. The worktree was clean before this
+  child began; the later shipped-runtime child and protocol fuzz item remain
+  out of scope until this child is committed.
+- 2026-09-12: Application projection inventory found that `TerminalSession`
+  already has one ordered ordinary-reply FIFO shared with Kitty graphics and
+  parser reports, native transient surfaces use owned `Window`/`TextView`
+  lifecycles, the standard action catalog drives both native menus and the
+  command palette, and the interactive hierarchy has a single reconciliation
+  point for logical pane focus. These are the existing ownership seams used by
+  this child.
+- 2026-09-12: The application coordinator is bounded to 64 registered sessions
+  and one global pending request with a 30-second deadline. It accepts only the
+  general clipboard selector (`c`), strict UTF-8 text of at most 3,060 bytes,
+  and a focused session while the application is active. This text cap makes
+  the worst-case successful response exactly 4,100 wire bytes, including the
+  longest admitted 12-byte selector and ST terminator, while its OSC payload
+  remains within the parser's 4,096-byte bound.
+- 2026-09-12: `allow` executes immediately; `deny` stays unavailable; and `ask`
+  captures an exact immutable identity. Reads touch the pasteboard only on the
+  matching approval. Writes and clears capture pasteboard `changeCount` and
+  become stale if the user or another application changes it before approval.
+  Focus change, application deactivation, RIS generation change, session close,
+  coordinator disposal, explicit denial, and timeout all revoke the request;
+  revoked reads receive the established empty OSC 52 reply.
+- 2026-09-12: The native confirmation owns only a transient AppKit window and
+  read-only text view. Return approves and Escape/window close denies the exact
+  displayed request; matching Edit-menu and command-palette actions expose the
+  same coordinator decision. Exact write text is JSON-quoted, and invisible or
+  bidirectional-control scalars are additionally rendered as `\\uXXXX` escapes
+  so confirmation content cannot visually spoof the surrounding authority
+  labels.
+- 2026-09-12: Initial focused projection, session-reply, and native presenter
+  executables passed. The action-registry executable then exposed stale search
+  expectations: `clipboard` now intentionally returns four catalog actions,
+  and fuzzy matching can return lower-ranked candidates after the intended
+  split action. The assertions were corrected to verify stable ranking and the
+  exact four-action Edit order; this was a fixture update, not an authority
+  failure.
+- 2026-09-12: A first unprivileged `make keybind-action-reference` attempt
+  resolved dependencies but stopped when Dart tried to update the protected
+  telemetry-session mtime. The approved retry generated the 21-action
+  reference successfully. `make phase7-appkit-acceptance` then refreshed the
+  13-source AppKit inventory after the new coordinator, presenter, and native
+  lifecycle test were added.
+- 2026-09-12: Focused executables for OSC 52 projection, ordered session replies,
+  native confirmation ownership, and the action registry all pass. The native
+  fake proves exact write approval, spoof-safe preview text, Escape read denial
+  without pasteboard access, empty reply, responder restoration, and release of
+  every transient AppKit owner. Session tests prove the maximum 4,100-byte read
+  reply uses the existing ordered/backpressured PTY path and that RIS/teardown
+  revoke pending disclosure.
+- 2026-09-12: The exact repository gate
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passes: all generated-source,
+  configuration (38 options), action (21 actions), AppKit inventory,
+  compatibility/differential/application, terminfo, shell-integration, format
+  (268 files, zero changes), analyze (no issues), and Dart test checks completed
+  successfully. Final `git diff --check` passed; review found no temporary
+  logging, secrets, untracked build output, or unrelated edits. The exact
+  application confirmation/pasteboard child meets its completion conditions.

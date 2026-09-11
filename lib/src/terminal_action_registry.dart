@@ -20,7 +20,9 @@ enum TerminalActionId {
   togglePaneZoom('pane.toggle-zoom'),
   equalizeSplits('pane.equalize-splits'),
   copy('edit.copy'),
-  paste('edit.paste');
+  paste('edit.paste'),
+  allowOsc52Clipboard('edit.allow-osc52-clipboard'),
+  denyOsc52Clipboard('edit.deny-osc52-clipboard');
 
   const TerminalActionId(this.stableName);
 
@@ -296,6 +298,19 @@ final class TerminalActionCatalog {
       menu: TerminalActionMenu.edit,
       keywords: const <String>['clipboard', 'insert'],
       shortcut: const TerminalActionShortcut(keyEquivalent: 'v', command: true),
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.allowOsc52Clipboard,
+      title: 'Allow OSC 52 Clipboard Request',
+      menu: TerminalActionMenu.edit,
+      keywords: const <String>['clipboard', 'terminal', 'confirm', 'approve'],
+      separatorBefore: true,
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.denyOsc52Clipboard,
+      title: 'Deny OSC 52 Clipboard Request',
+      menu: TerminalActionMenu.edit,
+      keywords: const <String>['clipboard', 'terminal', 'confirm', 'reject'],
     ),
     TerminalActionDefinition(
       id: TerminalActionId.newTab,
