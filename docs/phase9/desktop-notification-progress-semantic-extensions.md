@@ -5,8 +5,8 @@
 - Phase: 9
 - Parent task: desktop notification, progress, and semantic prompt extensions
 - Started: 2026-09-11
-- State: in progress
-- Current subtask: rate-limited native projection and lifecycle integration
+- State: complete
+- Current subtask: complete
 
 ## Purpose
 
@@ -21,14 +21,14 @@ then project only policy-approved state through owned application boundaries.
 Phase 8 already supplies privacy-safe OSC 133 `A`/`B`/`C`/`D`/`P` lifecycle
 state, shell resources, prompt navigation, and conservative close hints. Phase 9
 already supplies bounded Kitty graphics resources and renderer scheduling. The
-compatibility inventory still classifies OSC 133 as partial and has no desktop
-notification or progress protocol records. `FEATURE_MATRIX.md` identifies all
-three surfaces as remaining CAP-12 work and explicitly requires notification
+compatibility inventory still classified OSC 133 as partial and had no desktop
+notification or progress protocol records. `FEATURE_MATRIX.md` identified all
+three surfaces as remaining CAP-12 work and explicitly required notification
 rate and memory limits.
 
-The exact protocol selection is being established from immutable primary-source
-pins before implementation. Existing title, cwd, palette, clipboard, graphics,
-PTY, and semantic row ownership must remain unchanged.
+At task start, the exact protocol selection had to be established from immutable
+primary-source pins before implementation. Existing title, cwd, palette,
+clipboard, graphics, PTY, and semantic row ownership remain unchanged.
 
 ## Scope
 
@@ -65,7 +65,8 @@ PTY, and semantic row ownership must remain unchanged.
   compatibility/source evidence.
 - `TerminalScreenSet` reset/alternate-screen ownership and Phase 8 semantic state.
 - Pane/session lifecycle, fake PTY harnesses, app controller/window ownership, and
-  `dart_appkit` notification/progress capabilities (to be confirmed by inventory).
+  the bounded `dart_appkit` notification/Dock capabilities supplied by its
+  independently verified dependency commit.
 - Phase 9 Developer JIT and Release AOT product acceptance harnesses.
 
 ## Risks and invariants
@@ -349,3 +350,127 @@ After each commit, `ROADMAP.md` and this memo are reread before continuing.
   all queues/maps have hard bounds, and the generated acceptance delta contains
   only the two intended source hashes. No later Phase 9 work, secrets, or
   unrelated generated artifacts are included.
+
+## Current subtask: real product acceptance and parent closure
+
+- Status: complete
+- Started: 2026-09-12
+- Predecessor commit: `c2d93f0` (`Project bounded terminal desktop signals`)
+- Purpose: prove the accepted wire protocols and application policy through a
+  real PTY and native AppKit boundary in both shipped runtime modes, reconcile
+  compatibility/public documentation, and close the parent only if every prior
+  invariant and Phase 9 audit remains valid.
+- Scope: a deterministic product acceptance scenario with negative, burst,
+  focus, progress, semantic, reset, close, and recovery observations; Developer
+  JIT and Release AOT execution; bundle/source/resource audits; compatibility and
+  feature documentation; exact full gate; parent completion review.
+- Out of scope: OSC 52 confirmation/policy UI, the following protocol-wide
+  fuzz/security/memory task, remote notification media/actions, and any Phase 10
+  work.
+- Dependencies: committed parser core `57b8526`, committed lifecycle projection
+  `c2d93f0`, committed AppKit primitive `0615817`, current runtime builder and
+  integration harnesses, and the already generated compatibility evidence.
+- Completion conditions: both runtime modes cross the real PTY and real native
+  notification-removal/Dock symbols without creating user-visible test
+  notifications;
+  all required negative/burst/reset/close/recovery states are machine-checked;
+  compatibility, README/FEATURE_MATRIX, source/resource/bundle evidence, focused
+  and exact gates, diff review, child/parent roadmap checks, and a standalone
+  commit pass.
+- Validation: inspect the existing runtime acceptance contracts first, add the
+  smallest dedicated scenario and machine-readable checks, run its focused
+  unit/tool tests, execute both native runtime modes, run audits and exact
+  `make test`, and record every result here before completion.
+- 2026-09-12: The existing interactive-product contract starts a split pane's
+  PTY before reconciling it, and pane removal closes the session-owned desktop
+  projection lease before shutdown completes. The acceptance therefore uses one
+  real shell per pane and covers focused suppression, a five-candidate
+  background burst, exact rate-window recovery, RIS cancellation, pane close,
+  and aggregate Quit without introducing a second lifecycle owner.
+- 2026-09-12: Native notification posting can request user authorization and is
+  unsuitable for an unattended acceptance. The dedicated acceptance port still
+  constructs the bounded AppKit notification value, but records the post in
+  memory. Notification removal and Dock badge set/clear continue through the
+  real `dart_appkit` native symbols; these operations do not request notification
+  permission. Production continues to use the unmodified real post path.
+- 2026-09-12: Added an environment-gated, mutually exclusive
+  `--runtime-desktop-signals-test` product scenario, Developer JIT/Release AOT
+  suite plumbing, and exact machine-line validation. Shell integration is
+  disabled only for this acceptance so its injected OSC 133 states cannot be
+  overwritten by prompt hooks.
+- 2026-09-12: The first focused formatting/analyzer command formatted all four
+  selected Dart files, then the Dart CLI failed while touching
+  `/Users/remi/.dart-tool/dart-flutter-telemetry-session.json` outside the
+  sandbox before analysis ran. This is an environment permission failure, not a
+  source failure; retry with analytics suppressed or the approved external
+  cache boundary is required.
+- 2026-09-12: The first focused analyzer retry reached source analysis and found
+  three undefined `TerminalProgressState` references in the new product
+  acceptance. The type is declared in `terminal_desktop_signals.dart`, while
+  the existing projection import does not re-export it. Added the missing direct
+  import; no runtime behavior or API contract changed. The CLI again emitted the
+  same telemetry-file permission error after reporting the diagnostics.
+- 2026-09-12: The approved-cache retry found only one directive-ordering info;
+  fixed the new imports alphabetically. The unified runner then correctly
+  rejected the generated Phase 7 AppKit acceptance evidence as stale because
+  `terminal_application.dart` changed. Regenerating that source hash is required
+  before the runner can exercise behavior.
+- 2026-09-12: Regenerated Phase 7 AppKit acceptance evidence; its only delta is
+  the reviewed `terminal_application.dart` hash in the two existing source lists.
+  Focused format changed zero files, focused analysis reported no issues, and the
+  unified runner completed with `dart_terminal tests passed`.
+- 2026-09-12: `make runtime-desktop-signals-integration` rebuilt and exercised
+  both shipped bundles successfully. Developer JIT reported
+  `RUNTIME_DESKTOP_SIGNALS_INTEGRATION_PASS` in 1,510 ms and Release AOT in 757
+  ms. Each run machine-checked two real zsh PTYs, focused suppression 1,
+  admitted/projected notifications 4, coalesced 1, rate-limited 2, RIS
+  cancellations 3, close cancellation 1, native removals 4, progress/semantic
+  isolation, exact ten-second recovery, Dock clear, two clean sessions, zero
+  text clients, and zero native handles. No stderr or native projection error was
+  observed, and the acceptance recorder made no user-visible notification post.
+- 2026-09-12: Compatibility reconciliation requires no support-status change.
+  OSC 9, OSC 99, and OSC 133 remain deliberately `partial`: the generated
+  inventory and `docs/phase6/sequence-mode-support.md` already name every
+  accepted subset and rejected media/action/query or unsupported ConEmu form.
+  README and CAP-12 now add the completed application policy, limits, native
+  lifecycle, and both-runtime evidence without overstating those wire subsets.
+- 2026-09-12: `make runtime-source-check runtime-bundle-audit` passed. The
+  source audit reported 487 tracked paths, zero product-native sources, and one
+  reviewed test-native source. Fresh Developer JIT and Release AOT bundles each
+  passed with one helper, one native asset set, and one declared capability;
+  both retained the stock Dart 3.13.2 / SDK revision
+  `60a57cd42d64dc03e9f07aa60a2e250755c1ef28` arm64 boundary.
+- 2026-09-12: The first exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`
+  passed parser-table, parser-trace, configuration/keybind references, Phase 7
+  AppKit acceptance, and all nine byte-level compatibility regressions. It then
+  correctly rejected the compatibility regression coverage report as stale
+  after this child changed the unified test runner. No behavioral assertion
+  failed; the generated coverage provenance must be refreshed and reviewed
+  before retrying the exact gate.
+- 2026-09-12: Compatibility regression coverage regeneration passed the same
+  nine cases, 390 input bytes, 417 split runs, and nine fix families. Review
+  confirms its only changes are the expected README and FEATURE_MATRIX hashes;
+  selector counts, fix-family coverage, acceptance data, and implementation
+  claims are unchanged.
+- 2026-09-12: The final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` retry passed every generated
+  source, nine-case compatibility regression/coverage, revision-6 inventory
+  (22 sources, 272 records, 119 reconciled implementation entries),
+  differential/application evidence, terminfo, shell-resource, formatting,
+  analysis, and unified behavior check. It formatted 264 Dart files with zero
+  changes, reported `No issues found!`, and ended with
+  `dart_terminal tests passed`.
+- 2026-09-12: Final manual review confirms the test-only port cannot post a
+  user-visible notification, while production still uses the real bounded post
+  primitive. Acceptance strings and terminal logical identifiers never become
+  native identifiers; all native calls remain on the AppKit root owner; the
+  deterministic clock is acceptance-only; parser, coordinator, session, and
+  native limits remain unchanged; RIS, pane close, Quit, and Dock clear are
+  explicit. `git diff --check` passes, generated deltas are limited to reviewed
+  source/document hashes, and no OSC 52, later fuzz/security work, secrets, or
+  unrelated artifacts are included. All three ordered children and the parent
+  satisfy their completion conditions.
+- 2026-09-12: The first staging attempt was denied because the workspace
+  sandbox exposes `.git` read-only and could not create `index.lock`; no path was
+  staged or altered by that failure. Retry requires the repository's established
+  Git-metadata permission, after which the staged diff must be checked again.

@@ -1151,13 +1151,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] animation protocol、worker decode、bounded frame state
   - [x] monotonic playback、CPU/Metal projection、scheduler/recovery
   - [x] deterministic resource eviction、product/compatibility closure、親項目完了判定
-- [ ] desktop notification、progress、semantic prompt extensions
+- [x] desktop notification、progress、semantic prompt extensions
   （分割、境界、完了条件は
   [`docs/phase9/desktop-notification-progress-semantic-extensions.md`](docs/phase9/desktop-notification-progress-semantic-extensions.md)
   を参照して順に実施する）
   - [x] immutable source pins、bounded notification/progress/semantic protocol core
   - [x] rate-limited native projection、progress/semantic lifecycle integration
-  - [ ] real PTY/native product acceptance、compatibility/documentation closure、親項目完了判定
+  - [x] real PTY/native product acceptance、compatibility/documentation closure、親項目完了判定
 - [ ] OSC 52 confirmation/policy UI
 - [ ] protocol-specific fuzz、security、memory tests
 

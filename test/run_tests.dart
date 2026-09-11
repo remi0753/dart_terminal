@@ -998,6 +998,10 @@ void _testOptions() {
     !options.runtimeShellIntegrationTest,
     'shell integration test defaults off',
   );
+  _expect(
+    !options.runtimeDesktopSignalsTest,
+    'desktop signals test defaults off',
+  );
   _expect(!options.runtimeRestorationTest, 'restoration test defaults off');
   _expect(
     options.runtimeRestorationPath == null,
@@ -1355,6 +1359,43 @@ void _testOptions() {
       },
     ),
     'shell integration and theme tests are mutually exclusive',
+  );
+  final TerminalOptions desktopSignalsTestOptions = _parseOptions(
+    const <String>['--runtime-desktop-signals-test'],
+    environment: const <String, String>{'DT_RUNTIME_DESKTOP_SIGNALS_TEST': '1'},
+  );
+  _expect(
+    desktopSignalsTestOptions.runtimeDesktopSignalsTest,
+    'gated ordinary-product desktop signals test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-desktop-signals-test']),
+    'desktop signals product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-desktop-signals-test',
+        '--runtime-desktop-signals-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_DESKTOP_SIGNALS_TEST': '1',
+      },
+    ),
+    'duplicate desktop signals product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-desktop-signals-test',
+        '--runtime-user-actions-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_DESKTOP_SIGNALS_TEST': '1',
+        'DT_RUNTIME_USER_ACTIONS_TEST': '1',
+      },
+    ),
+    'desktop signals and user actions tests are mutually exclusive',
   );
   final TerminalOptions restorationTestOptions = _parseOptions(
     const <String>['--runtime-restoration-test'],

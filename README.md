@@ -68,6 +68,14 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   cellへ配置し、全角文字の左右どちらからでも同じgraphemeを選択・コピーする
 - native Edit menuからのbounded plain-text Copy/Paste、wide CJKを含むexact Copy、
   bracketed paste、newline正規化、危険またはlarge pasteの再操作confirmation
+- terminal output由来のdesktop signalを、pane/session所有権とglobal policyの下で投影する。
+  legacy OSC 9 notificationとConEmu OSC 9;4 progress、Kitty OSC 99のplain UTF-8
+  title/body・bounded ID/chunk subset、OSC 133 A/B/C/D/I/L/N/Pのcontent-free semantic
+  stateを扱う。通知は全pane合計3件/10秒（hard maximum 8）、sessionごと8 live ID、最大64
+  sessionに制限し、同一IDをcoalesce、activeかつfocusedな出力を抑止する。attacker IDは
+  native IDに使わず、RIS/pane closeで通知を取消し、focused paneのprogressだけをDock badgeへ
+  投影する。2実PTYでのburst/reset/close/recoveryとnative removal/Dock cleanupを
+  Developer JIT/Release AOTの両方で検証
 - キー入力、Backspace/Delete、左右移動、Home/End、zsh自身の行編集とコマンド履歴
 - 1 paneにつき1つのTTY付きinteractive login zsh
 - 同じshell内での`cd`、環境変数、background job、`jobs`、`fg`/`bg`

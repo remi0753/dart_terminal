@@ -634,6 +634,26 @@ working-directory = /from-file
     runtimeShellIntegration.runtimeShellIntegrationTest,
     'TerminalOptions admits the isolated shell integration acceptance gate',
   );
+  final TerminalOptions runtimeDesktopSignals = TerminalOptions.parse(
+    const <String>[
+      '--no-config',
+      '--shell-integration=none',
+      '--runtime-desktop-signals-test',
+    ],
+    environment: const <String, String>{'DT_RUNTIME_DESKTOP_SIGNALS_TEST': '1'},
+    configFileSystem: files,
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    runtimeDesktopSignals.runtimeDesktopSignalsTest &&
+        runtimeDesktopSignals.effectiveConfiguration!.value(
+              TerminalProductConfigSchema.shellIntegration,
+            ) ==
+            TerminalConfiguredShellIntegration.none,
+    'TerminalOptions admits the isolated desktop signals acceptance gate',
+  );
   _expectThrows(
     () => TerminalOptions.parse(
       const <String>['--no-config', '--runtime-configuration-test'],
@@ -657,6 +677,14 @@ working-directory = /from-file
       configFileSystem: files,
     ),
     'shell integration acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>['--no-config', '--runtime-desktop-signals-test'],
+      environment: const <String, String>{},
+      configFileSystem: files,
+    ),
+    'desktop signals acceptance is unavailable without its environment gate',
   );
   _expectThrows(
     () => TerminalOptions.parse(
@@ -702,6 +730,21 @@ working-directory = /from-file
       configFileSystem: files,
     ),
     'shell integration acceptance cannot be combined with another runtime test',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>[
+        '--no-config',
+        '--runtime-desktop-signals-test',
+        '--runtime-configuration-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_DESKTOP_SIGNALS_TEST': '1',
+        'DT_RUNTIME_CONFIGURATION_TEST': '1',
+      },
+      configFileSystem: files,
+    ),
+    'desktop signals acceptance cannot be combined with another runtime test',
   );
   _expectThrows(
     () => TerminalOptions.parse(

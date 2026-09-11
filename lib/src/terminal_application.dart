@@ -21,6 +21,7 @@ import 'terminal_command_palette.dart';
 import 'terminal_config.dart';
 import 'terminal_config_reload.dart';
 import 'terminal_configuration_reference.dart';
+import 'terminal_core/terminal_desktop_signals.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
 import 'terminal_core/terminal_reply.dart';
@@ -107,6 +108,7 @@ final class TerminalOptions {
     this.runtimeConfigurationTest = false,
     this.runtimeThemeTest = false,
     this.runtimeShellIntegrationTest = false,
+    this.runtimeDesktopSignalsTest = false,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
@@ -154,6 +156,7 @@ final class TerminalOptions {
     var runtimeConfigurationTest = false;
     var runtimeThemeTest = false;
     var runtimeShellIntegrationTest = false;
+    var runtimeDesktopSignalsTest = false;
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
@@ -249,6 +252,15 @@ final class TerminalOptions {
           );
         }
         runtimeShellIntegrationTest = true;
+        continue;
+      }
+      if (argument == '--runtime-desktop-signals-test') {
+        if (runtimeDesktopSignalsTest) {
+          throw const FormatException(
+            '--runtime-desktop-signals-test may only be supplied once',
+          );
+        }
+        runtimeDesktopSignalsTest = true;
         continue;
       }
       if (argument == '--runtime-restoration-test') {
@@ -517,6 +529,31 @@ final class TerminalOptions {
         'shell integration test cannot be combined with another runtime test',
       );
     }
+    if (runtimeDesktopSignalsTest &&
+        selectedEnvironment['DT_RUNTIME_DESKTOP_SIGNALS_TEST'] != '1') {
+      throw const FormatException(
+        'desktop signals test requires the integration-test gate',
+      );
+    }
+    if (runtimeDesktopSignalsTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeShellIntegrationTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'desktop signals test cannot be combined with another runtime test',
+      );
+    }
     if (runtimeNativeHierarchyTest &&
         (selectedScenario != RuntimeLifecycleScenario.normal ||
             autoCloseAfter != null ||
@@ -573,6 +610,7 @@ final class TerminalOptions {
       runtimeConfigurationTest: runtimeConfigurationTest,
       runtimeThemeTest: runtimeThemeTest,
       runtimeShellIntegrationTest: runtimeShellIntegrationTest,
+      runtimeDesktopSignalsTest: runtimeDesktopSignalsTest,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
@@ -612,6 +650,7 @@ final class TerminalOptions {
   final bool runtimeConfigurationTest;
   final bool runtimeThemeTest;
   final bool runtimeShellIntegrationTest;
+  final bool runtimeDesktopSignalsTest;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
@@ -695,6 +734,7 @@ final class TerminalApplication {
         options.runtimeConfigurationTest ||
         options.runtimeThemeTest ||
         options.runtimeShellIntegrationTest ||
+        options.runtimeDesktopSignalsTest ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -716,6 +756,7 @@ final class TerminalApplication {
         runConfigurationAcceptance: options.runtimeConfigurationTest,
         runThemeAcceptance: options.runtimeThemeTest,
         runShellIntegrationAcceptance: options.runtimeShellIntegrationTest,
+        runDesktopSignalAcceptance: options.runtimeDesktopSignalsTest,
       );
       return;
     }
@@ -2188,6 +2229,7 @@ final class TerminalApplication {
       !options.runtimeConfigurationTest &&
       !options.runtimeThemeTest &&
       !options.runtimeShellIntegrationTest &&
+      !options.runtimeDesktopSignalsTest &&
       !options.runtimeRestorationTest &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
@@ -2205,6 +2247,7 @@ final class TerminalApplication {
     bool runConfigurationAcceptance = false,
     bool runThemeAcceptance = false,
     bool runShellIntegrationAcceptance = false,
+    bool runDesktopSignalAcceptance = false,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
     final Rect initialWindowFrame = Rect.fromLTWH(
@@ -2283,16 +2326,27 @@ final class TerminalApplication {
       if (!closed.isCompleted) closed.completeError(error, stackTrace);
     }
 
+    final _TerminalDesktopSignalAcceptanceNativePort?
+    desktopSignalAcceptancePort = runDesktopSignalAcceptance
+        ? _TerminalDesktopSignalAcceptanceNativePort(application)
+        : null;
+    final _TerminalDesktopSignalAcceptanceClock? desktopSignalAcceptanceClock =
+        runDesktopSignalAcceptance
+        ? _TerminalDesktopSignalAcceptanceClock()
+        : null;
     final TerminalDesktopSignalCoordinator desktopSignalCoordinator =
         TerminalDesktopSignalCoordinator(
-          nativePort: TerminalAppKitDesktopSignalPort(
-            application: application,
-            onError: (Object error, StackTrace _) {
-              stderr.writeln(
-                'TERMINAL_DESKTOP_SIGNAL_NATIVE_ERROR error=$error',
-              );
-            },
-          ),
+          nativePort:
+              desktopSignalAcceptancePort ??
+              TerminalAppKitDesktopSignalPort(
+                application: application,
+                onError: (Object error, StackTrace _) {
+                  stderr.writeln(
+                    'TERMINAL_DESKTOP_SIGNAL_NATIVE_ERROR error=$error',
+                  );
+                },
+              ),
+          monotonicMicros: desktopSignalAcceptanceClock?.call,
           applicationActive: application.isActive,
         );
 
@@ -2330,7 +2384,8 @@ final class TerminalApplication {
               final bool usesDeterministicShell =
                   runUserActionAcceptance ||
                   runConfigurationAcceptance ||
-                  runThemeAcceptance;
+                  runThemeAcceptance ||
+                  runDesktopSignalAcceptance;
               final Map<String, String> shellEnvironment =
                   usesDeterministicShell
                   ? <String, String>{
@@ -3454,7 +3509,24 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      if (runShellIntegrationAcceptance) {
+      if (runDesktopSignalAcceptance) {
+        await _exerciseDesktopSignalsProduct(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          dispatcher: dispatcher,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          paneCloseCoordinator: createdPaneCloseCoordinator,
+          desktopSignalCoordinator: desktopSignalCoordinator,
+          nativePort: desktopSignalAcceptancePort!,
+          clock: desktopSignalAcceptanceClock!,
+          reconcile: reconcileInteractiveHierarchy,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
+      } else if (runShellIntegrationAcceptance) {
         await _exerciseShellIntegrationProduct(
           application: application,
           state: state,
@@ -3554,6 +3626,231 @@ final class TerminalApplication {
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
     }
     stdout.writeln('Dart Terminal shut down cleanly.');
+  }
+
+  static Future<void> _exerciseDesktopSignalsProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalActionDispatcher dispatcher,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required TerminalPaneCloseCoordinator paneCloseCoordinator,
+    required TerminalDesktopSignalCoordinator desktopSignalCoordinator,
+    required _TerminalDesktopSignalAcceptanceNativePort nativePort,
+    required _TerminalDesktopSignalAcceptanceClock clock,
+    required void Function() reconcile,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    Future<void> waitFor(
+      bool Function() predicate,
+      String message, {
+      Duration timeout = const Duration(seconds: 10),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (!predicate() && deadline.elapsed < timeout) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      _expectLifecycle(predicate(), message);
+    }
+
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1 &&
+          hierarchy.paneResourceCount == 1 &&
+          sessions.length == 1 &&
+          owners.length == 1,
+      'desktop signals product did not start from a 1/1/1 hierarchy',
+    );
+    final TerminalWindowState window = state.windows.single;
+    final TerminalTabState tab = window.selectedTab;
+    final PaneId firstPaneId = tab.focusedPaneId;
+    final TerminalSession firstSession = sessions[firstPaneId]!;
+    final _TerminalHierarchyProductPane firstOwner = owners[firstPaneId]!;
+    await _waitForAsciiMarker(firstSession, prompt);
+
+    desktopSignalCoordinator.setApplicationActive(true);
+    firstOwner.pane.insertText(
+      "printf '\\033]9;focused-suppressed\\007"
+      "\\033]9;4;1;42\\007"
+      "\\033]133;B\\007"
+      "__DT_DESKTOP_FIRST__\\n'",
+    );
+    await firstOwner.pane.submit();
+    await waitFor(() {
+      final TerminalDesktopSignalSessionSnapshot? snapshot =
+          desktopSignalCoordinator.snapshotFor(firstSession.id);
+      return snapshot?.progress.state == TerminalProgressState.set &&
+          snapshot?.progress.percent == 42 &&
+          snapshot?.semanticShellState == TerminalSemanticShellState.input &&
+          desktopSignalCoordinator.metrics.focusSuppressedNotificationCount ==
+              1 &&
+          desktopSignalCoordinator.projectedDockBadgeLabel == '42%' &&
+          application.dockBadgeLabel == '42%';
+    }, 'focused notification suppression or initial progress did not project');
+
+    final TerminalActionDispatchResult split = await dispatcher.dispatch(
+      TerminalActionId.splitPaneRight,
+    );
+    await waitFor(
+      () =>
+          split.disposition == TerminalActionDispatchDisposition.executed &&
+          state.paneCount == 2 &&
+          hierarchy.paneResourceCount == 2 &&
+          sessions.length == 2 &&
+          owners.length == 2,
+      'desktop signals product did not create the second real PTY pane',
+    );
+    final PaneId secondPaneId = sessions.keys.singleWhere(
+      (PaneId paneId) => paneId != firstPaneId,
+    );
+    final TerminalSession secondSession = sessions[secondPaneId]!;
+    final _TerminalHierarchyProductPane secondOwner = owners[secondPaneId]!;
+    await _waitForAsciiMarker(secondSession, prompt);
+    state
+      ..activateWindow(window.id)
+      ..selectTab(window.id, tab.id)
+      ..focusPane(tab.id, firstPaneId);
+    reconcile();
+
+    secondOwner.pane.insertText(
+      "printf '\\033]99;i=job;ready\\007"
+      "\\033]99;i=job;ready\\007"
+      "\\033]9;legacy-1\\007"
+      "\\033]9;legacy-2\\007"
+      "\\033]9;legacy-3\\007"
+      "\\033]9;legacy-4\\007"
+      "\\033]9;4;2;55\\007"
+      "\\033]133;N\\007"
+      "__DT_DESKTOP_BURST__\\n'",
+    );
+    await secondOwner.pane.submit();
+    await waitFor(() {
+      final TerminalDesktopSignalSessionSnapshot? snapshot =
+          desktopSignalCoordinator.snapshotFor(secondSession.id);
+      final TerminalDesktopSignalMetrics metrics =
+          desktopSignalCoordinator.metrics;
+      return snapshot?.progress.state == TerminalProgressState.error &&
+          snapshot?.progress.percent == 55 &&
+          snapshot?.semanticShellState == TerminalSemanticShellState.prompt &&
+          snapshot?.liveNotificationCount == 3 &&
+          nativePort.posts.length == 3 &&
+          metrics.admittedNotificationCount == 3 &&
+          metrics.projectedNotificationCount == 3 &&
+          metrics.coalescedNotificationCount == 1 &&
+          metrics.rateLimitedNotificationCount == 2;
+    }, 'background notification burst did not obey the exact global budget');
+    _expectLifecycle(
+      nativePort.posts.every(
+        (AppKitUserNotification notification) =>
+            notification.identifier.startsWith('dt.p') &&
+            !notification.identifier.contains('job'),
+      ),
+      'terminal notification identity escaped into the native namespace',
+    );
+
+    state.focusPane(tab.id, secondPaneId);
+    reconcile();
+    _expectLifecycle(
+      desktopSignalCoordinator.projectedDockBadgeLabel == '55%!' &&
+          application.dockBadgeLabel == '55%!',
+      'focused error progress did not replace the native Dock badge',
+    );
+
+    final int secondResetGeneration =
+        secondSession.terminalScreenSet.resetGeneration;
+    secondOwner.pane.insertText("printf '\\033c__DT_DESKTOP_RESET__\\n'");
+    await secondOwner.pane.submit();
+    await waitFor(() {
+      final TerminalDesktopSignalSessionSnapshot? snapshot =
+          desktopSignalCoordinator.snapshotFor(secondSession.id);
+      return snapshot?.resetGeneration == secondResetGeneration + 1 &&
+          snapshot?.progress.state == TerminalProgressState.removed &&
+          snapshot?.semanticShellState == TerminalSemanticShellState.unknown &&
+          snapshot?.liveNotificationCount == 0 &&
+          nativePort.removedIdentifiers.length == 3 &&
+          desktopSignalCoordinator.projectedDockBadgeLabel == null &&
+          application.dockBadgeLabel == null;
+    }, 'RIS did not reset semantic/progress state and cancel notifications');
+
+    clock.advance(TerminalDesktopSignalCoordinator.defaultNotificationWindow);
+    state.focusPane(tab.id, firstPaneId);
+    reconcile();
+    secondOwner.pane.insertText(
+      "printf '\\033]9;after-window\\007"
+      "__DT_DESKTOP_RECOVERY__\\n'",
+    );
+    await secondOwner.pane.submit();
+    await waitFor(() {
+      final TerminalDesktopSignalSessionSnapshot? snapshot =
+          desktopSignalCoordinator.snapshotFor(secondSession.id);
+      return snapshot?.liveNotificationCount == 1 &&
+          nativePort.posts.length == 4 &&
+          desktopSignalCoordinator.metrics.admittedNotificationCount == 4 &&
+          desktopSignalCoordinator.metrics.projectedNotificationCount == 4;
+    }, 'sliding notification budget did not recover at its exact boundary');
+
+    final TerminalPaneCloseResult close = await paneCloseCoordinator
+        .requestClose(paneId: secondPaneId);
+    stdout.writeln(close.machineLine());
+    if (close.removal != null) {
+      stdout.writeln(close.removal!.shutdown.machineLine());
+    }
+    _expectLifecycle(
+      close.disposition == TerminalPaneCloseDisposition.removed &&
+          close.removal?.shutdown.isClean == true &&
+          state.paneForId(secondPaneId) == null &&
+          desktopSignalCoordinator.snapshotFor(secondSession.id) == null &&
+          nativePort.removedIdentifiers.length == 4 &&
+          desktopSignalCoordinator.metrics.cancelledNotificationCount == 4,
+      'pane close did not revoke and clean the exact desktop-signal session',
+    );
+
+    await dispatcher.dispatch(TerminalActionId.quitApplication);
+    if (!closed.isCompleted) {
+      await dispatcher.dispatch(TerminalActionId.quitApplication);
+    }
+    await closed.future.timeout(const Duration(seconds: 15));
+    await Future<void>.delayed(Duration.zero);
+    final TerminalDesktopSignalMetrics metrics =
+        desktopSignalCoordinator.metrics;
+    _expectLifecycle(
+      state.isDisposed &&
+          hierarchy.isDisposed &&
+          allSessions.length == 2 &&
+          allSessions.every(
+            (TerminalSession session) =>
+                session.shutdownResult?.isClean == true,
+          ) &&
+          metrics.admittedNotificationCount == 4 &&
+          metrics.projectedNotificationCount == 4 &&
+          metrics.coalescedNotificationCount == 1 &&
+          metrics.rateLimitedNotificationCount == 2 &&
+          metrics.focusSuppressedNotificationCount == 1 &&
+          metrics.cancelledNotificationCount == 4 &&
+          metrics.projectionFailureCount == 0 &&
+          metrics.trackedSessionCount == 0 &&
+          nativePort.nativeErrors.isEmpty &&
+          nativePort.badgeLabels.contains('42%') &&
+          nativePort.badgeLabels.contains('55%!') &&
+          nativePort.badgeLabels.last == null &&
+          application.dockBadgeLabel == null &&
+          debugLiveTerminalTextInputClientCount() == 0 &&
+          application.debugLiveObjectCount == 0,
+      'desktop signals product did not cleanly release all native resources',
+    );
+    stdout.writeln(
+      'TERMINAL_DESKTOP_SIGNALS_TEST real_pty=true '
+      'safe_post_recorder=true focused_suppressed=1 admitted=4 projected=4 '
+      'coalesced=1 rate_limited=2 reset_cancelled=3 close_cancelled=1 '
+      'native_removals=4 progress=true semantic=true reset=true '
+      'recovery=true sessions_clean=2 text_clients=0 native_handles=0 '
+      'badge_cleared=true',
+    );
   }
 
   static Future<void> _exerciseShellIntegrationProduct({
@@ -11946,6 +12243,66 @@ TerminalColorScheme _terminalColorScheme(TerminalThemeBrightness brightness) =>
       TerminalThemeBrightness.light => TerminalColorScheme.light,
       TerminalThemeBrightness.dark => TerminalColorScheme.dark,
     };
+
+final class _TerminalDesktopSignalAcceptanceClock {
+  int _micros = 0;
+
+  int call() => _micros;
+
+  void advance(Duration duration) {
+    _micros += duration.inMicroseconds;
+  }
+}
+
+/// Acceptance-only boundary that validates native values while suppressing the
+/// user-visible notification post. Removal and Dock projection still cross the
+/// real AppKit symbols, which do not request notification authorization.
+final class _TerminalDesktopSignalAcceptanceNativePort
+    implements TerminalDesktopSignalNativePort {
+  _TerminalDesktopSignalAcceptanceNativePort(AppKitApplication application)
+    : _application = application {
+    _nativePort = TerminalAppKitDesktopSignalPort(
+      application: application,
+      onError: (Object error, StackTrace _) => nativeErrors.add(error),
+    );
+  }
+
+  final AppKitApplication _application;
+  late final TerminalAppKitDesktopSignalPort _nativePort;
+  final List<AppKitUserNotification> posts = <AppKitUserNotification>[];
+  final List<String> removedIdentifiers = <String>[];
+  final List<String?> badgeLabels = <String?>[];
+  final List<Object> nativeErrors = <Object>[];
+
+  @override
+  bool postNotification({
+    required String identifier,
+    required String title,
+    required String body,
+  }) {
+    posts.add(
+      AppKitUserNotification(identifier: identifier, title: title, body: body),
+    );
+    return true;
+  }
+
+  @override
+  bool removeNotification(String identifier) {
+    final bool removed = _nativePort.removeNotification(identifier);
+    if (removed) removedIdentifiers.add(identifier);
+    return removed;
+  }
+
+  @override
+  bool setDockBadgeLabel(String? label) {
+    final bool projected = _nativePort.setDockBadgeLabel(label);
+    if (projected) {
+      badgeLabels.add(label);
+      if (_application.dockBadgeLabel != label) return false;
+    }
+    return projected;
+  }
+}
 
 final class _TerminalHierarchyProductPane {
   _TerminalHierarchyProductPane({

@@ -40,12 +40,12 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	product-damage-benchmark-build product-damage-benchmark \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
-	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-actions developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-restoration developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
+	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-actions developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-restoration developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
 	developer-jit-resource developer-jit-shutdown-fault \
 	release-aot-build release-aot-run release-aot-audit \
-	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
+	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
 	release-aot-resource release-aot-shutdown-fault runtime-bundle-audit \
-	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-user-actions-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-restoration-integration runtime-clipboard-integration runtime-lifecycle-integration \
+	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-user-actions-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-restoration-integration runtime-clipboard-integration runtime-lifecycle-integration \
 	runtime-traffic-integration runtime-resource-integration \
 	runtime-shutdown-fault-integration runtime-verify clean
 
@@ -95,6 +95,7 @@ help:
 	@echo "  make runtime-configuration-integration  Verify configured product projection in both modes"
 	@echo "  make runtime-theme-integration  Verify theme and system appearance in both modes"
 	@echo "  make runtime-shell-integration  Verify bundled zsh integration and disablement in both modes"
+	@echo "  make runtime-desktop-signals-integration  Verify bounded desktop signals in both modes"
 	@echo "  make runtime-restoration-integration  Verify fullscreen, migration, restoration, and reopen in both modes"
 	@echo "  make runtime-clipboard-integration  Verify bounded Copy/Paste in both modes"
 	@echo "  make runtime-verify                Audit and integration-test both modes"
@@ -271,6 +272,10 @@ developer-jit-shell-integration: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
 		--suite=shell-integration $(DEVELOPER_JIT_BUNDLE)
 
+developer-jit-desktop-signals: developer-jit-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
+		--suite=desktop-signals $(DEVELOPER_JIT_BUNDLE)
+
 developer-jit-restoration: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
 		--suite=restoration $(DEVELOPER_JIT_BUNDLE)
@@ -335,6 +340,10 @@ release-aot-shell-integration: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=shell-integration $(RELEASE_AOT_BUNDLE)
 
+release-aot-desktop-signals: release-aot-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
+		--suite=desktop-signals $(RELEASE_AOT_BUNDLE)
+
 release-aot-restoration: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=restoration $(RELEASE_AOT_BUNDLE)
@@ -380,6 +389,9 @@ runtime-theme-integration: developer-jit-theme release-aot-theme
 runtime-shell-integration: \
 	developer-jit-shell-integration release-aot-shell-integration
 
+runtime-desktop-signals-integration: \
+	developer-jit-desktop-signals release-aot-desktop-signals
+
 runtime-restoration-integration: \
 	developer-jit-restoration release-aot-restoration
 
@@ -402,6 +414,7 @@ runtime-verify: test runtime-source-check runtime-bundle-audit \
 	runtime-configuration-integration \
 	runtime-theme-integration \
 	runtime-shell-integration \
+	runtime-desktop-signals-integration \
 	runtime-restoration-integration \
 	runtime-clipboard-integration \
 	runtime-lifecycle-integration \

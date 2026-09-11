@@ -29,6 +29,7 @@ enum _Suite {
   configuration,
   theme,
   shellIntegration,
+  desktopSignals,
   restoration,
   clipboard,
   lifecycle,
@@ -39,6 +40,7 @@ enum _Suite {
 
   String get optionName => switch (this) {
     _Suite.shellIntegration => 'shell-integration',
+    _Suite.desktopSignals => 'desktop-signals',
     _ => name,
   };
 }
@@ -157,8 +159,8 @@ _Options _parseOptions(List<String> arguments) {
       if (selected == null) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
-          'configuration, theme, shell-integration, clipboard, lifecycle, '
-          'traffic, resource, fault, or all',
+          'configuration, theme, shell-integration, desktop-signals, '
+          'clipboard, lifecycle, traffic, resource, fault, or all',
         );
       }
       suite = selected;
@@ -1549,6 +1551,76 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'windows=2 tabs=3 panes=4 elapsed_ms='
     '${observation.elapsed.inMilliseconds}',
+  );
+}
+
+Future<void> _runDesktopSignals(
+  _Options options,
+  _Invocation invocation,
+) async {
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>[
+      '--no-config',
+      '--shell-integration=none',
+      '--runtime-desktop-signals-test',
+    ],
+    environment: const <String, String>{'DT_RUNTIME_DESKTOP_SIGNALS_TEST': '1'},
+    timeout: const Duration(seconds: 45),
+  );
+  _expect(
+    observation.status == 0,
+    'desktop signals application exited with status ${observation.status}; '
+    'stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'desktop signals application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_DESKTOP_SIGNALS_TEST real_pty=true '
+          r'safe_post_recorder=true focused_suppressed=1 admitted=4 '
+          r'projected=4 coalesced=1 rate_limited=2 reset_cancelled=3 '
+          r'close_cancelled=1 native_removals=4 progress=true semantic=true '
+          r'reset=true recovery=true sessions_clean=2 text_clients=0 '
+          r'native_handles=0 badge_cleared=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted exact desktop signal acceptance',
+  );
+  _expect(
+    RegExp(
+              r'^TERMINAL_SESSION_SHUTDOWN pane=[12] session=[12]:1 '
+              r'process_id=[1-9][0-9]* disposition=clean '
+              r'termination_observed=true cleanup_completed=true$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            2 &&
+        RegExp(
+              r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=1 disposition=clean$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1 &&
+        !observation.stdoutText.contains(
+          'TERMINAL_DESKTOP_SIGNAL_NATIVE_ERROR',
+        ) &&
+        observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+    'desktop signals product did not cleanly release two PTY sessions',
+  );
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
+  );
+  stdout.writeln(
+    'RUNTIME_DESKTOP_SIGNALS_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'notifications=4 removals=4 elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }
 
@@ -3062,6 +3134,9 @@ Future<void> main(List<String> arguments) async {
     if (options.suite == _Suite.shellIntegration ||
         options.suite == _Suite.all) {
       await _runShellIntegration(options, invocation);
+    }
+    if (options.suite == _Suite.desktopSignals || options.suite == _Suite.all) {
+      await _runDesktopSignals(options, invocation);
     }
     if (options.suite == _Suite.restoration || options.suite == _Suite.all) {
       await _runRestoration(options, invocation);
