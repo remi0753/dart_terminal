@@ -10,6 +10,7 @@ import '../terminal_core/terminal_screen_set.dart';
 import '../terminal_input/terminal_preedit.dart';
 import '../terminal_input/terminal_selection_gesture.dart';
 import '../terminal_pane.dart';
+import '../terminal_typography.dart';
 import 'frame_scheduler.dart';
 import 'glyph_atlas.dart';
 import 'metal_atlas_bridge.dart';
@@ -363,10 +364,10 @@ final class TerminalLiveMetalSurface {
   static const int minimumColumns = 20;
 
   /// Empty family delegates face selection to AppKit's system monospace API.
-  static const String defaultFontFamily = '';
+  static const String defaultFontFamily = TerminalDefaultTypography.fontFamily;
 
   /// Product-owned readable zero-config size for the macOS system monospace.
-  static const double defaultFontPointSize = 14;
+  static const double defaultFontPointSize = TerminalDefaultTypography.fontSize;
 
   final TerminalSessionId sessionId;
   final TerminalScreenSet screenSet;

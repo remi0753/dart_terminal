@@ -4,6 +4,7 @@ import 'dart:io';
 import 'terminal_action_registry.dart';
 import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_event.dart';
+import 'terminal_typography.dart';
 
 typedef TerminalConfigValueParser<T> = TerminalConfigDecodeResult<T> Function(
   String value,
@@ -728,7 +729,7 @@ abstract final class TerminalProductConfigSchema {
         description: 'Terminal monospace font family, or `system`.',
         valueSyntax: 'system|<family>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
-        defaultValue: '',
+        defaultValue: TerminalDefaultTypography.fontFamily,
         parser: _parseFontFamily,
         formatter: _formatFontFamily,
       );
@@ -739,7 +740,7 @@ abstract final class TerminalProductConfigSchema {
         description: 'Terminal font size in points.',
         valueSyntax: '<4..128>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
-        defaultValue: 14,
+        defaultValue: TerminalDefaultTypography.fontSize,
         parser: _parseFontSize,
         formatter: _formatDouble,
       );

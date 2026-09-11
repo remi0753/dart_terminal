@@ -1,6 +1,7 @@
 import 'package:dart_appkit/dart_appkit.dart';
 
 import 'terminal_tab_metadata.dart';
+import 'terminal_typography.dart';
 
 /// Native window styles intentionally selected by Dart Terminal.
 const WindowConfiguration terminalWindowConfiguration = WindowConfiguration(
@@ -35,7 +36,7 @@ const TextViewConfiguration terminalSettingsInspectorTextViewConfiguration =
     TextViewConfiguration(
       view: terminalBaseViewConfiguration,
       font: TextViewFont.monospacedSystem(
-        size: 14,
+        size: TerminalDefaultTypography.fontSize,
         weight: TextViewFontWeight.regular,
       ),
       padding: TextViewPadding.all(18),
@@ -70,7 +71,7 @@ final TextEditorConfiguration terminalSettingsEditorConfiguration =
     TextEditorConfiguration(
       view: terminalBaseViewConfiguration,
       font: const TextViewFont.monospacedSystem(
-        size: 14,
+        size: TerminalDefaultTypography.fontSize,
         weight: TextViewFontWeight.regular,
       ),
       padding: const TextViewPadding(top: 22, right: 20, bottom: 18, left: 24),

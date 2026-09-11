@@ -1068,6 +1068,9 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] loader availability validation と deterministic default recovery
   - [x] macOS font availability adapter と product/Settings integration
   - [x] M1 両 runtime unavailable-font 受け入れと Phase 8 再完了判定
+- [x] zero-config terminal と Settings editor の default typography 統一
+  （[`docs/phase8/shared-terminal-settings-typography.md`](docs/phase8/shared-terminal-settings-typography.md)
+  を参照して実施する）
 
 終了条件:
 

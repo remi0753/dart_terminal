@@ -237,6 +237,9 @@ make RUNTIME_ARCH=arm64 developer-jit-integration
 エラーにしません。別のファイルを使う場合は `--config=PATH`、設定ファイルを一切読まない
 場合は `--no-config` を指定します。
 
+zero-config terminal本文とSettingsの主編集面は、同じmacOS system monospace regular / 14ptを
+共有します。Settingsのstatus/detailは情報階層を保つため、補助的な小さい文字サイズのままです。
+
 `--help` は設定ファイルを読まず、typed schemaから生成した全optionの構文と適用policyを表示して
 終了します。`--show-config` は通常と同じfile/include/CLI priorityを解決し、application、PTY、
 renderer、worker、native windowを作らずに、全effective value、source、line/column、policy、

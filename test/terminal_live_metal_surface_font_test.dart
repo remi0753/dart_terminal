@@ -1,4 +1,5 @@
 import 'package:dart_terminal/dart_terminal.dart';
+import 'package:dart_terminal/src/terminal_typography.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 void main() => runTerminalLiveMetalSurfaceFontTests();
@@ -27,7 +28,9 @@ void _testDefaultFont() {
         .single;
     _expect(
       catalog.family.isEmpty &&
-          metrics.pointSize == 14 &&
+          TerminalLiveMetalSurface.defaultFontFamily ==
+              TerminalDefaultTypography.fontFamily &&
+          metrics.pointSize == TerminalDefaultTypography.fontSize &&
           latin.isMonospaced &&
           !latin.isFallback &&
           !latin.hasMissingGlyph &&

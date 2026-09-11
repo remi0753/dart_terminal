@@ -3,7 +3,10 @@ import 'dart:io';
 import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_macos_runtime/dart_macos_runtime.dart';
 import 'package:dart_terminal/src/terminal_appkit_policy.dart';
+import 'package:dart_terminal/src/terminal_config.dart';
+import 'package:dart_terminal/src/terminal_renderer/terminal_live_metal_surface.dart';
 import 'package:dart_terminal/src/terminal_tab_metadata.dart';
+import 'package:dart_terminal/src/terminal_typography.dart';
 
 void main() => runTerminalAppKitPolicyTests();
 
@@ -28,10 +31,34 @@ void runTerminalAppKitPolicyTests() {
             const TextViewConfiguration() &&
         terminalSettingsInspectorTextViewConfiguration.view ==
             terminalBaseViewConfiguration &&
-        terminalSettingsInspectorTextViewConfiguration.font.size == 14 &&
+        terminalSettingsInspectorTextViewConfiguration.font.size ==
+            TerminalDefaultTypography.fontSize &&
         terminalSettingsInspectorTextViewConfiguration.padding.top == 18 &&
         !terminalMenuConfiguration.autoEnablesItems,
     'application-owned native presentation policies preserve product behavior',
+  );
+
+  _expect(
+    TerminalProductConfigSchema.fontFamily.defaultValue ==
+            TerminalDefaultTypography.fontFamily &&
+        TerminalProductConfigSchema.fontSize.defaultValue ==
+            TerminalDefaultTypography.fontSize &&
+        TerminalLiveMetalSurface.defaultFontFamily ==
+            TerminalDefaultTypography.fontFamily &&
+        TerminalLiveMetalSurface.defaultFontPointSize ==
+            TerminalDefaultTypography.fontSize,
+    'zero-config schema and renderer share the product typography defaults',
+  );
+  _expect(
+    TerminalDefaultTypography.fontFamily.isEmpty &&
+        terminalSettingsEditorConfiguration.font.kind ==
+            TextViewFontKind.monospacedSystem &&
+        terminalSettingsEditorConfiguration.font.family == null &&
+        terminalSettingsEditorConfiguration.font.weight ==
+            TextViewFontWeight.regular &&
+        terminalSettingsEditorConfiguration.font.size ==
+            TerminalDefaultTypography.fontSize,
+    'Settings editor matches the zero-config terminal font and size',
   );
 
   final WindowTabAccessory accessory = terminalTabAccessory(
