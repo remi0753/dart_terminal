@@ -1076,6 +1076,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] `dart_terminal_renderer_macos` の CoreText raster scale と pixel regression
   - [x] product の native-scale/ink-size受け入れと Phase 8 再完了判定
+- [ ] Settings editor の disabled-line / cursor-line visual clarity
+  （[`docs/phase8/settings-editor-visual-clarity.md`](docs/phase8/settings-editor-visual-clarity.md)
+  を参照して順に実施する）
+  - [x] `dart_appkit` の attributed editor line-highlight API
+  - [ ] commented assignment と mode-invariant cursor line の product 投影・受け入れ
 
 終了条件:
 
