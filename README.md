@@ -188,8 +188,10 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - canonical screenを唯一の表示元とするlive Metal surface owner。SGR/DEC sequenceを
   cell stateとして描画し、terminal soft wrapとresize reflowで行を決め、履歴位置が
   bottomの間は大量出力後も最新prompt/cursorを最終表示行に保つ。zero-configでは
-  macOS system monospaceを読みやすい14ptで使用し、CoreText bitmapをtop-downでatlasへ
-  公開して非対称glyphも上下反転せず表示する。fallbackの自然字送りには依存せず、
+  macOS system monospaceを読みやすい14ptで使用し、native windowのRetina backing
+  scaleをCoreText rasterにも一度だけ適用する。bitmapはtop-downでatlasへ公開し、
+  1x/2xで同じ論理ink寸法を保って非対称glyphも上下反転せず表示する。fallbackの
+  自然字送りには依存せず、
   各CoreText clusterをcanonicalなnarrow/wide cell原点へ配置する
 - bounded immutable OSC 8 linkをscreen/history/reflowへ保持し、visible cellのhoverを
   Metal underlineで表示する。exact Command-primary-clickだけを再解決して所有し、
@@ -238,7 +240,8 @@ make RUNTIME_ARCH=arm64 developer-jit-integration
 場合は `--no-config` を指定します。
 
 zero-config terminal本文とSettingsの主編集面は、同じmacOS system monospace regular / 14ptを
-共有します。Settingsのstatus/detailは情報階層を保つため、補助的な小さい文字サイズのままです。
+共有し、Retina上でも同じ論理文字サイズで表示します。Settingsのstatus/detailは情報階層を
+保つため、補助的な小さい文字サイズのままです。
 
 `--help` は設定ファイルを読まず、typed schemaから生成した全optionの構文と適用policyを表示して
 終了します。`--show-config` は通常と同じfile/include/CLI priorityを解決し、application、PTY、

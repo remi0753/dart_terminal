@@ -1212,6 +1212,20 @@ Future<void> _runTerminalDisplay(
     accessibilityAcceptance.hasMatch(observation.stdoutText),
     'terminal display launch omitted native accessibility acceptance',
   );
+  final RegExp scaleAcceptance = RegExp(
+    r'^TERMINAL_DISPLAY_SCALE_TEST '
+    r'window_scale_16_16=([1-9][0-9]*) '
+    r'surface_scale_16_16=([1-9][0-9]*) synchronized=true$',
+    multiLine: true,
+  );
+  final RegExpMatch? scaleMatch = scaleAcceptance.firstMatch(
+    observation.stdoutText,
+  );
+  _expect(
+    scaleMatch != null && scaleMatch.group(1) == scaleMatch.group(2),
+    'terminal display launch did not synchronize the native window and '
+    'Metal surface backing-scale values',
+  );
   final RegExp acceptance = RegExp(
     r'^TERMINAL_DISPLAY_TEST sgr_stripped=true styled=true '
     r'wrapped_rows=([2-9]|[1-9][0-9]+) prompt_bottom=true '
@@ -1237,6 +1251,7 @@ Future<void> _runTerminalDisplay(
   stdout.writeln(
     'RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS mode=${options.mode.name} '
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'scale_16_16=${scaleMatch!.group(1)} '
     'elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }

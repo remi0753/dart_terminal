@@ -1,6 +1,6 @@
 # Retina terminal / Settings typography parity
 
-Status: in progress (2026-09-11)
+Status: complete (2026-09-11)
 
 ## 目的
 
@@ -116,3 +116,42 @@ scaleされるため、文字間隔に対してinkだけが小さいスクリー
 - 2026-09-11: dependency修正を`dart_appkit` commit
   `6e512a03063ed15196c3856c63cc07866eb1946f` (`Scale CoreText glyph rasters for Retina`)
   として独立コミットした。第一サブタスクに残存blockerはない。
+- 2026-09-11: product側の受け入れは二層にする。第一層は共有するsystem
+  monospace regular / 14pt catalogのLatin、CJK、color emojiを実際に1x/2x rasterizeし、
+  non-zero alphaの論理ink width/heightとcoverageを比較するpixel regressionとする。第二層は
+  実AppKit windowの`backingScaleFactor`を16.16 fixed pointにし、live Metal surfaceの
+  `scale16_16`と完全一致するまでbounded waitするruntime acceptanceとする。driverは両方の
+  具体値を別々取得して等値比較し、従来の「正の値である」だけではpassさせない。
+- 2026-09-11: runtimeのscale受け入れは2x固定にしない。1x外部displayでも正しいため、
+  window/surfaceの同期をportableな完了条件とし、現在のM1 Retina実行で得た具体値を
+  検証ログに残す。2xコードパス自体は第一層のpixel regressionで常に実行する。
+- 2026-09-11: productのpixel regressionは修正済みnative assetで成功した。Developer JITと
+  Release AOTの実display acceptanceもどちらもwindow/surface `scale16_16=131072`
+  (Retina 2x)で成功し、Settings/configuration acceptanceも両runtimeで成功した。
+- 2026-09-11: 初回の完全`make test`は、旧ラスタ出力を保持したchecked-in
+  `atlas-2x.dtgi`が座標`(37, 24)`で新出力と不一致となり停止した。これは正しく
+  大きくなった2x inkに対する想定済み証拠更新である。明示的な`--write-goldens`
+  経路でtext goldenのみを再生成し、1xがbyte-identicalで2xだけが変更することを確認する。
+- 2026-09-11: `dart run test/glyph_atlas_test.dart --write-goldens`で再生成した結果、
+  `atlas-1x.dtgi`は非変更でSHA-256
+  `d29670252e1e8885bc96082602752f5fb9fa6b7e6518c16124da124514014798`を維持し、
+  `atlas-2x.dtgi`だけがSHA-256
+  `c05c342c19c029834935caf80e5624ee597ddfdaa37c41e893960c6d332065d0`へ変更した。
+  focused atlas/golden testは更新後に成功した。
+- 2026-09-11: `make phase7-appkit-acceptance` と
+  `make terminal-compatibility-regression-coverage`で、runtime source hashとREADME/
+  feature matrix hashを持つ生成証拠を更新した。再実行した完全`make test`は246
+  Dart filesのformat `0 changed`、analyzer `No issues found`、全test成功で完了した。
+- 2026-09-11: `make RUNTIME_ARCH=arm64 runtime-source-check runtime-bundle-audit`は、
+  source audit (`tracked=455`, product native source `0`)、Developer JIT bundle audit、Release AOT
+  bundle auditのすべてで成功した。両bundleはrenderer native assetを新たにbuild/copyしている。
+
+## 完了判定
+
+- 原因は、Retina用に2x化したbitmap boundsへCoreTextの14pt glyphを1x CTMのまま描画して
+  いたことである。terminalとSettingsのfont family/point sizeは元から同じだったが、terminalの
+  glyph inkだけがdevice pixel寸法で半分になっていた。
+- dependency側でCoreText CTMを一度だけscaleし、product側で共有14ptの実ink parityと
+  native window/live surface scale同期の両方を回帰検査した。メタデータだけで同等と判定する
+  受け入れ漏れも解消した。
+- Phase 8の終了条件に反する失敗、未検証項目、または後続タスクは残っていない。

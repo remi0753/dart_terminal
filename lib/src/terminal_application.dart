@@ -7780,6 +7780,9 @@ keybind = control+k=pane.focus-next
     var promptBottom = false;
     var newestFrame = false;
     var frameBounded = false;
+    var scaleSynchronized = false;
+    var nativeWindowScale16_16 = 0;
+    var surfaceScale16_16 = baseline.scale16_16;
     var wrappedRows = 0;
     while (deadline.elapsed < const Duration(seconds: 8)) {
       final TerminalScreen screen = session.terminalScreenSet.activeScreen;
@@ -7811,12 +7814,21 @@ keybind = control+k=pane.focus-next
           snapshot.lastAcceptedModelRevision > 0;
       frameBounded =
           snapshot.pendingFrameCount <= 1 && snapshot.liveAtlasPinCount <= 3;
+      final double? nativeWindowScale = window.backingScaleFactor;
+      nativeWindowScale16_16 = nativeWindowScale == null
+          ? 0
+          : TerminalRasterBufferV1.scaleToFixed(nativeWindowScale);
+      surfaceScale16_16 = snapshot.scale16_16;
+      scaleSynchronized =
+          nativeWindowScale16_16 > 0 &&
+          surfaceScale16_16 == nativeWindowScale16_16;
       if (sgrStripped &&
           styled &&
           wrappedRows >= 2 &&
           promptBottom &&
           newestFrame &&
           frameBounded &&
+          scaleSynchronized &&
           systemFont &&
           terminfo &&
           modeKey &&
@@ -7837,6 +7849,12 @@ keybind = control+k=pane.focus-next
         _expectLifecycle(
           workerProcessId != null,
           'terminal display test lost its runtime worker',
+        );
+        stdout.writeln(
+          'TERMINAL_DISPLAY_SCALE_TEST '
+          'window_scale_16_16=$nativeWindowScale16_16 '
+          'surface_scale_16_16=$surfaceScale16_16 '
+          'synchronized=$scaleSynchronized',
         );
         stdout.writeln(
           'TERMINAL_DISPLAY_TEST sgr_stripped=$sgrStripped styled=$styled '
@@ -7871,7 +7889,9 @@ keybind = control+k=pane.focus-next
       'terminal display acceptance did not settle: '
       'sgr_stripped=$sgrStripped styled=$styled wrapped_rows=$wrappedRows '
       'prompt_bottom=$promptBottom newest_frame=$newestFrame '
-      'frame_bounded=$frameBounded system_font=$systemFont '
+      'frame_bounded=$frameBounded scale_synchronized=$scaleSynchronized '
+      'window_scale_16_16=$nativeWindowScale16_16 '
+      'surface_scale_16_16=$surfaceScale16_16 system_font=$systemFont '
       'mode_key=$modeKey text_input=$textInput '
       'input_matrix=$inputMatrix decrqss=$decrqss '
       'query_reports=$queryReports '

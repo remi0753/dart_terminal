@@ -1071,11 +1071,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [x] zero-config terminal と Settings editor の default typography 統一
   （[`docs/phase8/shared-terminal-settings-typography.md`](docs/phase8/shared-terminal-settings-typography.md)
   を参照して実施する）
-- [ ] Retina 実表示での terminal / Settings typography parity
+- [x] Retina 実表示での terminal / Settings typography parity
   （[`docs/phase8/retina-font-rendering-parity.md`](docs/phase8/retina-font-rendering-parity.md)
   を参照して順に実施する）
   - [x] `dart_terminal_renderer_macos` の CoreText raster scale と pixel regression
-  - [ ] product の native-scale/ink-size受け入れと Phase 8 再完了判定
+  - [x] product の native-scale/ink-size受け入れと Phase 8 再完了判定
 
 終了条件:
 
