@@ -252,7 +252,7 @@ selector and no longer appears as a matrix gap.
 | SGR pixel mouse | lazygit | mode 1016、native physical-pixel geometry、wheel、Shift-local routing、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
 | highlight mouse | mosh | captureはmode 1001 resetのみ。stateful enable/handshakeを実装せず明示的非対応 | evidence-driven future decision |
 | XTVERSION and window-size report | Emacs, lazygit, tmux | fixed identity、logical text-area pixels、rows/columns、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
-| Kitty query, XTMODKEYS, XTQMODKEYS, application escape | lazygit, Neovim, tmux | bounded control state/replies implemented; key-event encoding remains in the active Phase 9 task | Phase 9 Kitty keyboard task |
+| Kitty query, XTMODKEYS, XTQMODKEYS, application escape | lazygit, Neovim, tmux | bounded control state/repliesとcanonical key encodingを完了。immutable captureのcontrol replayに加え、実PTYでquery・画面分離・release byteを両runtime検証 | Phase 9 Kitty keyboard task（完了） |
 | synchronized output | fzf, lazygit | presentation atomicity; explicit unsupported | Phase 9 synchronized-output task |
 | theme report/update | tmux | query/notification fallback; explicit unsupported | Phase 9 light/dark reports task |
 
@@ -315,12 +315,19 @@ immutable PTY bytes rather than by rewriting their provenance.
 
 ## Investigation log
 
+- 2026-09-11: the enclosing Kitty keyboard task completed canonical text,
+  functional, and keypad encoding plus press/repeat/release routing without
+  changing the immutable application capture. The control replay remains 63
+  increments, 6 variants, and 4 unrelated owned gaps. A separate exact product
+  PTY handshake now validates primary/alternate query replies, per-screen flag
+  isolation, one Control-D release event, restoration/reset, and the preceding
+  legacy DECCKM bytes in both M1 Developer JIT and Release AOT.
 - 2026-09-11: the Phase 9 keyboard-control closure retained the same 57,737
   immutable PTY bytes and 32 snapshots. Kitty query, XTMODKEYS, XTQMODKEYS,
   and application-Escape set/reset no longer increment the parser rejection
   counter. Current replay totals are 63 increments, 6 variants, and 4 owned
   gaps; Neovim becomes the fourth clean agreement. Canonical key-event output
-  remains required before the enclosing Kitty keyboard task can complete.
+  was subsequently closed by the separate product acceptance above.
 - 2026-09-07: XTVERSION/XTWINOPS closure retained the same 57,737 immutable PTY
   bytes and resize offsets. Emacs 1→0, lazygit 33→30, and tmux 9→6 current
   unsupported counts produce 71 increments, 12 variants, and 8 owned gaps.
@@ -507,6 +514,9 @@ immutable PTY bytes rather than by rewriting their provenance.
   increments, 6 variants, and 4 owned gaps; Neovim is now clean. The remaining
   gaps are highlight mouse, synchronized output, theme report, and theme
   updates.
+- Phase 9 Kitty product acceptance: passed exact primary and alternate query
+  replies, independent flags, canonical release bytes, state reset, and legacy
+  cursor bytes in the M1 Developer JIT and Release AOT display suites.
 - `git diff --check`, staged-scope review, and final worktree review are run
   immediately before the completion commit.
 - Remaining work is not hidden: the 4 gap owners are pinned in the acceptance

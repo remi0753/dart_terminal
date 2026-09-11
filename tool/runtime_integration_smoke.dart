@@ -1108,6 +1108,14 @@ Future<void> _runTerminalDisplay(
   );
   _expect(
     observation.stdoutText.contains(
+      'TERMINAL_KITTY_KEYBOARD_TEST primary_query=true '
+      'alternate_query=true screens=true release=true legacy=true '
+      'exact=true bytes=21',
+    ),
+    'terminal display launch omitted exact Kitty keyboard PTY acceptance',
+  );
+  _expect(
+    observation.stdoutText.contains(
       'TERMINAL_DECRQSS_TEST selector=sgr default=true xterm=true '
       'exact=true bytes=9',
     ),

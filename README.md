@@ -25,7 +25,7 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 ## 現在できること
 
 - AppKit のネイティブウィンドウを Dart から表示
-- AppKitのphysical key、produced/unmodified text、7種のmodifier、repeatを分離し、
+- AppKitのphysical key、produced/unmodified text、7種のmodifier、press/repeat/releaseを分離し、
   menu優先後にfirst responderのtext-input clientから1回だけterminalへ配送するrouting
 - 実`NSTextInputClient`のmarked text、UTF-16 selection/replacement metadata、commit、
   cancel、candidate rect。preeditはcanonical screenを変えず、Unicode 17の折り返し、
@@ -34,7 +34,11 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   initial/repeated navigationを、実native text clientから実PTYまでexact byteで検証する
   versioned matrix。system input sourceを変更しない実機確認票も提供
 - DECCKM/DECPAMを反映するbounded legacy xterm encoder（UTF-8、Control/Option、
-  navigation、F1–F20、keypad）
+  navigation、F1–F20、keypad）に加え、主/代替画面ごとの16段stack、query/set/push/pop、
+  flags 1/2/4/8/16、canonical text/functional/keypad、alternate/base-layout、associated text、
+  press/repeat/releaseを扱うKitty keyboard protocol。既定flags=0ではlegacy byteを維持し、
+  xterm modifyOtherKeys 1–3とapplication Escapeも独立して処理する。query reply、画面分離、
+  Control-D releaseのexact byteは実PTY/AppKit経路をDeveloper JIT/Release AOTの両方で検証
 - stable action、exact chord、conflict検出、override、unbound、passthroughを備えた
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは

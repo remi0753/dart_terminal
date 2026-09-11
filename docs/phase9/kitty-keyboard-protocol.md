@@ -4,7 +4,7 @@
 
 - Date started: 2026-09-11
 - Scope: first Phase 9 roadmap item
-- Status: subtasks 1–2 complete; parent in progress
+- Status: complete
 
 ## Purpose and background
 
@@ -122,6 +122,11 @@ in ROADMAP, and committed before the next one begins.
 
 ## Investigation log
 
+- 2026-09-11: after committing subtask 2 as `dd92d5e` (`Implement progressive
+  Kitty key event encoding`), ROADMAP and this memo were reread from a clean
+  worktree. The next ordered target is product acceptance and compatibility
+  closure. No later Phase 9 protocol is in scope until this parent item is
+  accepted and committed.
 - 2026-09-11: ROADMAP, README, FEATURE_MATRIX, repository layout, current
   worktree, Phase 6 application evidence, keyboard state/encoder/router, parser
   compatibility surface, generators, and normal test gate were inspected. The
@@ -236,6 +241,53 @@ in ROADMAP, and committed before the next one begins.
   level 2 includes all modified ordinary keys (including the shifted keysym),
   and level 3 includes unmodified ordinary keys. Kitty state wins if both are
   active. The 256-byte product limit is enforced after every new encoding path.
+- 2026-09-11: product acceptance first proves the unchanged legacy DECCKM Up
+  bytes, then drives a real raw-mode PTY through Kitty state set/query on the
+  primary and alternate screens. The child observes exact replies `CSI ? 1 u`
+  and `CSI ? 10 u`; alternate-screen Control-D key-up reaches the PTY exactly as
+  `CSI 100;5:3 u`, bypassing the matching key-down application action. Leaving
+  the alternate screen restores the primary flags, and a final reset restores
+  the zero-flag legacy policy. The complete asserted protocol exchange is 21
+  bytes.
+- 2026-09-11: the established product input injection boundary calls the same
+  AppKit event router used by the native adapter, while focused native
+  text-input tests separately prove key-up preservation at the C-ABI boundary.
+  The product run therefore covers AppKit routing, parser-to-pane state,
+  screen isolation, PTY ordering, and exact child-visible bytes without adding
+  test-only encoder access.
+- 2026-09-11: README and FEATURE_MATRIX now describe the completed progressive
+  input surface. The Phase 6 compatibility matrix records the closure while
+  retaining the immutable 57,737-byte, 32-snapshot application evidence.
+  Replay remains at 63 unsupported increments, 6 variants, and 4 unrelated
+  owned gaps; Neovim is clean. Regeneration changed only the README and
+  FEATURE_MATRIX source hashes in the regression report, and only the product
+  application source hash in the AppKit acceptance ledger.
+- 2026-09-11: the first full normal gate stopped at its expected regression
+  coverage freshness check after README/FEATURE_MATRIX changed. Running
+  `make terminal-compatibility-regression-coverage` regenerated the derived
+  report, after which the complete gate passed. A direct sandboxed formatter
+  invocation also formatted successfully before Dart telemetry failed to touch
+  its external cache timestamp; the normal gate's formatter completed with
+  246 files unchanged and is the authoritative formatting result.
+
+## Subtask 3 verification
+
+- `CI=true DART_SUPPRESS_ANALYTICS=true make developer-jit-display`: passed on
+  Apple M1/arm64 with the real AppKit/Metal/PTY product bundle, exact Kitty
+  exchange marker, clean shutdown, 2x backing scale, and 3,010 ms elapsed.
+- `CI=true DART_SUPPRESS_ANALYTICS=true make release-aot-display`: passed the
+  same product assertions with the stock release AOT host and 2,206 ms elapsed.
+- Final `CI=true DART_SUPPRESS_ANALYTICS=true make test`: passed every generated
+  artifact and compatibility freshness check; regression replay covered 9
+  cases, 390 bytes, and 417 split runs; the compatibility inventory retained
+  266 records and 112 implementation declarations; differential acceptance
+  retained 12 accepted cases, 8 agreements, zero owned gaps, and 4 unavailable
+  external cases; application evidence retained 8 cells and 4 documented gap
+  cells; formatting reported 246 unchanged files; analysis reported no issues;
+  and the complete Dart test runner passed.
+- `git diff --check`: passed before the final documentation and ROADMAP update.
+  Generated artifacts and the final staged scope are reviewed immediately
+  before the completion commit.
 
 ## Subtask 2 verification
 

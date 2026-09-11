@@ -10560,22 +10560,109 @@ keybind = control+k=pane.focus-next
           route.encodedByteCount == 3,
       'display-test application cursor event was not encoded once',
     );
+    await _waitForAsciiMarker(session, expectedMarker);
+    return _exerciseKittyKeyboardInput(session, pane, keyEventRouter);
+  }
 
-    final Stopwatch markerDeadline = Stopwatch()..start();
-    while (markerDeadline.elapsed < const Duration(seconds: 5)) {
-      final TerminalScreen screen = session.terminalScreenSet.activeScreen;
-      if (_findAscii(screen, expectedMarker) != null) {
-        return true;
+  static Future<bool> _exerciseKittyKeyboardInput(
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalKeyEventRouter keyEventRouter,
+  ) async {
+    const String alternateReady = '__DT_KITTY_ALT_READY__';
+    const String primaryReady = '__DT_KITTY_PRIMARY_READY__';
+    const String expectedMarker =
+        '__DT_KITTY_1b5b3f3175_1b5b3f313075_1b5b3130303b353a3375__';
+    pane.insertText(
+      "stty raw -echo; printf '\\033[=1u\\033[?u'; "
+      "primary=\$(dd bs=1 count=5 2>/dev/null | od -An -tx1 | tr -d ' \\n'); "
+      "printf '\\033[?1049h\\033[=10u\\033[?u'; "
+      "alternate=\$(dd bs=1 count=6 2>/dev/null | od -An -tx1 | tr -d ' \\n'); "
+      "printf '$alternateReady'; "
+      "key=\$(dd bs=1 count=10 2>/dev/null | od -An -tx1 | tr -d ' \\n'); "
+      "printf '\\033[?1049l$primaryReady'; "
+      "dd bs=1 count=1 >/dev/null 2>&1; printf '\\033[=0u'; stty sane; "
+      "printf '\\r\\n__DT_KITTY_%s_%s_%s__\\r\\n' "
+      '"\$primary" "\$alternate" "\$key"',
+    );
+    await pane.submit();
+
+    final Stopwatch alternateDeadline = Stopwatch()..start();
+    var alternateIsolated = false;
+    while (alternateDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalScreenSet screens = session.terminalScreenSet;
+      alternateIsolated =
+          screens.usingAlternate &&
+          screens.keyboardModes.kittyKeyboardFlags == 10 &&
+          _findAscii(screens.activeScreen, alternateReady) != null;
+      if (alternateIsolated) {
+        break;
       }
       _expectLifecycle(
         session.isLive,
-        'display-test zsh exited before reporting encoded key bytes',
+        'display-test zsh exited before alternate Kitty mode was ready',
       );
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
-    throw TimeoutException(
-      'display-test did not receive application cursor bytes $expectedMarker',
+    _expectLifecycle(
+      alternateIsolated,
+      'display-test did not isolate alternate Kitty keyboard flags',
     );
+
+    final TerminalKeyRouteResult release = keyEventRouter.handleKeyEvent(
+      const AppKitKeyEvent(
+        windowHandle: 1,
+        monotonicMicros: 2,
+        kind: AppKitKeyEventKind.up,
+        keyCode: 2,
+        modifiers: ModifierKeys(ModifierKeys.controlBit),
+        isRepeat: false,
+        characters: '\u0004',
+        charactersIgnoringModifiers: 'd',
+      ),
+      pane,
+    );
+    _expectLifecycle(
+      release.disposition == TerminalKeyRouteDisposition.encoded &&
+          release.encodedByteCount == 10,
+      'display-test Kitty release was not encoded exactly once',
+    );
+
+    final Stopwatch primaryDeadline = Stopwatch()..start();
+    var primaryRestored = false;
+    while (primaryDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalScreenSet screens = session.terminalScreenSet;
+      primaryRestored =
+          !screens.usingAlternate &&
+          screens.keyboardModes.kittyKeyboardFlags == 1 &&
+          _findAscii(screens.activeScreen, primaryReady) != null;
+      if (primaryRestored) {
+        break;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before primary Kitty mode was restored',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      primaryRestored,
+      'display-test did not restore independent primary Kitty flags',
+    );
+
+    pane.insertText('x');
+    await _waitForAsciiMarker(session, expectedMarker);
+    final TerminalScreenSet screens = session.terminalScreenSet;
+    _expectLifecycle(
+      !screens.usingAlternate && screens.keyboardModes.kittyKeyboardFlags == 0,
+      'display-test Kitty keyboard state did not reset after exact capture',
+    );
+    stdout.writeln(
+      'TERMINAL_KITTY_KEYBOARD_TEST primary_query=true '
+      'alternate_query=true screens=true release=true legacy=true '
+      'exact=true bytes=21',
+    );
+    return true;
   }
 
   static Future<void> _waitForTerminalDisplayPrompt(
