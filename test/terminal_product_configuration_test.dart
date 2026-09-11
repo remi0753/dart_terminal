@@ -179,7 +179,7 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
   _expect(
     live.map((TerminalConfigOptionBase option) => option.name).join(',') ==
             'macos-option-key,keybind' &&
-        schema.options.length == 36 &&
+        schema.options.length == 38 &&
         schema.options.every(
           (TerminalConfigOptionBase option) =>
               option.applicationPolicy ==
@@ -311,16 +311,16 @@ void _testDefaultsAndSchemaInventory() {
   final TerminalProductConfiguration defaults =
       TerminalProductConfiguration.defaults;
   _expect(
-    TerminalProductConfigSchema.instance.options.length == 36 &&
+    TerminalProductConfigSchema.instance.options.length == 38 &&
         TerminalProductConfigSchema.instance.options
                 .map((TerminalConfigOptionBase option) => option.name)
                 .toSet()
                 .length ==
-            36 &&
+            38 &&
         TerminalProductConfigSchema.instance.options.every(
           (TerminalConfigOptionBase option) => option.description.isNotEmpty,
         ),
-    'product schema has 36 unique documented options',
+    'product schema has 38 unique documented options',
   );
   _expect(
     defaults.workingDirectory == null &&
@@ -346,6 +346,8 @@ void _testDefaultsAndSchemaInventory() {
         defaults.windowHeight == 580 &&
         defaults.windowPaddingHorizontal == 0 &&
         defaults.windowPaddingVertical == 0 &&
+        defaults.clipboardRead == TerminalConfiguredClipboardAccess.deny &&
+        defaults.clipboardWrite == TerminalConfiguredClipboardAccess.deny &&
         defaults.terminalContentWidth == 920 &&
         defaults.terminalContentHeight == 580 &&
         defaults.macosOptionKey == TerminalConfiguredOptionKey.escape &&
@@ -566,6 +568,8 @@ void _testCompleteFileProfile() {
     ..writeln('scrollback-bytes = 128MiB')
     ..writeln('cursor-shape = bar')
     ..writeln('cursor-blink = false')
+    ..writeln('clipboard-read = ask')
+    ..writeln('clipboard-write = allow')
     ..writeln('keybind = control+d=unbind')
     ..writeln('keybind = shift+control+k=pane.focus-next');
   final _ProfileMemoryFileSystem files = _ProfileMemoryFileSystem(
@@ -605,6 +609,8 @@ void _testCompleteFileProfile() {
         profile.scrollbackBytes == 128 * 1024 * 1024 &&
         profile.cursorShape == TerminalConfiguredCursorShape.bar &&
         !profile.cursorBlink &&
+        profile.clipboardRead == TerminalConfiguredClipboardAccess.ask &&
+        profile.clipboardWrite == TerminalConfiguredClipboardAccess.allow &&
         profile.keybindings.length == 2 &&
         profile.keybindings.first.directive ==
             TerminalKeyBindingDirective.unbind &&
@@ -635,6 +641,8 @@ scrollback-lines = 0
 scrollback-bytes = 2GiB
 cursor-shape = beam
 cursor-blink = yes
+clipboard-read = prompt
+clipboard-write = enabled
 ''',
     },
   );
@@ -645,7 +653,7 @@ cursor-blink = yes
   final TerminalProductConfiguration recovered =
       TerminalProductConfiguration.fromSnapshot(snapshot);
   _expect(
-    snapshot.diagnostics.length == 17 &&
+    snapshot.diagnostics.length == 19 &&
         snapshot.diagnostics.every(
           (TerminalConfigDiagnostic diagnostic) =>
               diagnostic.code == 'CFG_INVALID_VALUE' &&
@@ -668,7 +676,9 @@ cursor-blink = yes
         recovered.scrollbackBytes ==
             TerminalProductConfiguration.defaults.scrollbackBytes &&
         recovered.cursorShape ==
-            TerminalProductConfiguration.defaults.cursorShape,
+            TerminalProductConfiguration.defaults.cursorShape &&
+        recovered.clipboardRead == TerminalConfiguredClipboardAccess.deny &&
+        recovered.clipboardWrite == TerminalConfiguredClipboardAccess.deny,
     'invalid values independently recover to their schema defaults',
   );
 }

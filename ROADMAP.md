@@ -1159,6 +1159,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] rate-limited native projection、progress/semantic lifecycle integration
   - [x] real PTY/native product acceptance、compatibility/documentation closure、親項目完了判定
 - [ ] OSC 52 confirmation/policy UI
+  （分割、境界、完了条件は
+  [`docs/phase9/osc52-confirmation-policy-ui.md`](docs/phase9/osc52-confirmation-policy-ui.md)
+  を参照して順に実施する）
+  - [x] bounded OSC 52 protocol/configuration core
+  - [ ] exact application confirmation and pasteboard projection
+  - [ ] shipped-runtime acceptance、compatibility/documentation closure、親項目完了判定
 - [ ] protocol-specific fuzz、security、memory tests
 
 終了条件:

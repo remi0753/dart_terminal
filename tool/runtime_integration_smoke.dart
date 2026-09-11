@@ -1690,8 +1690,8 @@ keybind = command+d=pane.focus-next
           effectiveObservation.stderrText.isEmpty &&
           effectiveObservation.workerProcesses.isEmpty &&
           effectiveLines.first ==
-              'dart-terminal-effective-config version=1 options=36 '
-                  'entries=39 diagnostics=3' &&
+              'dart-terminal-effective-config version=1 options=38 '
+                  'entries=41 diagnostics=3' &&
           effectiveLines[1] == 'root path=${jsonEncode(configurationPath)}' &&
           effectiveTheme.contains('value="system"') &&
           effectiveTheme.contains('policy=new-session') &&

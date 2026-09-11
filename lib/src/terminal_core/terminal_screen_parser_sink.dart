@@ -5,6 +5,7 @@ import 'terminal_compatibility_surface.dart';
 import 'terminal_desktop_signals.dart';
 import 'terminal_kitty_graphics.dart';
 import 'terminal_mouse_modes.dart';
+import 'terminal_osc52.dart';
 import 'terminal_reply.dart';
 import 'terminal_screen.dart';
 import 'terminal_screen_set.dart';
@@ -29,24 +30,29 @@ final class TerminalScreenParserSink
     TerminalScreen screen, {
     TerminalReplyHandler? onReply,
     TerminalKittyGraphicsCommandHandler? onKittyGraphicsCommand,
+    TerminalOsc52RequestHandler? onOsc52Request,
   }) : _screen = screen,
        screenSet = null,
        _onReply = onReply,
-       _onKittyGraphicsCommand = onKittyGraphicsCommand;
+       _onKittyGraphicsCommand = onKittyGraphicsCommand,
+       _onOsc52Request = onOsc52Request;
 
   TerminalScreenParserSink.forScreenSet(
     TerminalScreenSet screens, {
     TerminalReplyHandler? onReply,
     TerminalKittyGraphicsCommandHandler? onKittyGraphicsCommand,
+    TerminalOsc52RequestHandler? onOsc52Request,
   }) : _screen = null,
        screenSet = screens,
        _onReply = onReply,
-       _onKittyGraphicsCommand = onKittyGraphicsCommand;
+       _onKittyGraphicsCommand = onKittyGraphicsCommand,
+       _onOsc52Request = onOsc52Request;
 
   final TerminalScreen? _screen;
   final TerminalScreenSet? screenSet;
   final TerminalReplyHandler? _onReply;
   final TerminalKittyGraphicsCommandHandler? _onKittyGraphicsCommand;
+  final TerminalOsc52RequestHandler? _onOsc52Request;
 
   TerminalScreen get screen => screenSet?.activeScreen ?? _screen!;
 
@@ -64,6 +70,9 @@ final class TerminalScreenParserSink
   int _deniedClipboardWriteCount = 0;
   int _deniedClipboardClearCount = 0;
   int _rejectedClipboardRequestCount = 0;
+  int _acceptedClipboardReadCount = 0;
+  int _acceptedClipboardWriteCount = 0;
+  int _acceptedClipboardClearCount = 0;
   int _acceptedKittyGraphicsCommandCount = 0;
   int _rejectedKittyGraphicsCommandCount = 0;
   int _acceptedDesktopNotificationCount = 0;
@@ -93,6 +102,9 @@ final class TerminalScreenParserSink
   int get deniedClipboardWriteCount => _deniedClipboardWriteCount;
   int get deniedClipboardClearCount => _deniedClipboardClearCount;
   int get rejectedClipboardRequestCount => _rejectedClipboardRequestCount;
+  int get acceptedClipboardReadCount => _acceptedClipboardReadCount;
+  int get acceptedClipboardWriteCount => _acceptedClipboardWriteCount;
+  int get acceptedClipboardClearCount => _acceptedClipboardClearCount;
   int get acceptedKittyGraphicsCommandCount =>
       _acceptedKittyGraphicsCommandCount;
   int get rejectedKittyGraphicsCommandCount =>
@@ -421,7 +433,7 @@ final class TerminalScreenParserSink
             hasPayload &&
             _applyOscDynamicColor(sequence, payloadStart, command: command);
       case 52:
-        supported = _applyOscClipboardDenial(
+        supported = _applyOscClipboardPolicy(
           sequence,
           payloadStart,
           hasPayload: hasPayload,
@@ -499,84 +511,55 @@ final class TerminalScreenParserSink
     return true;
   }
 
-  bool _applyOscClipboardDenial(
+  bool _applyOscClipboardPolicy(
     VtStringSequence sequence,
     int start, {
     required bool hasPayload,
   }) {
-    if (!hasPayload) {
+    final TerminalOsc52Request? request = TerminalOsc52Protocol.parse(
+      sequence,
+      start,
+      hasPayload: hasPayload,
+    );
+    if (request == null) {
       _rejectedClipboardRequestCount++;
       return false;
     }
-    final int selectionEnd = _findPayloadByte(sequence, start, 0x3b);
-    final int selectionLength = selectionEnd - start;
-    if (selectionEnd >= sequence.payloadLength ||
-        selectionLength > TerminalReplyEncoder.maximumOsc52SelectionBytes) {
-      _rejectedClipboardRequestCount++;
-      return false;
-    }
-    final Uint8List selection = Uint8List(selectionLength);
-    for (int index = 0; index < selectionLength; index++) {
-      final int value = sequence.payloadByteAt(start + index);
-      if (!_isOsc52SelectionByte(value)) {
-        _rejectedClipboardRequestCount++;
-        return false;
+    final TerminalOsc52RequestHandler? handler = _onOsc52Request;
+    var admitted = false;
+    if (handler != null) {
+      try {
+        admitted = handler(request);
+      } on Object {
+        admitted = false;
       }
-      selection[index] = value;
     }
-
-    final int dataStart = selectionEnd + 1;
-    final int dataLength = sequence.payloadLength - dataStart;
-    if (dataLength == 1 && sequence.payloadByteAt(dataStart) == 0x3f) {
-      _deniedClipboardReadCount++;
-      _emitReply(
-        TerminalReplyEncoder.clipboardUnavailable(
-          selection: selection,
-          terminator: sequence.terminator,
-        ),
-      );
-    } else if (dataLength > 0 &&
-        _isValidOsc52Base64(sequence, dataStart, dataLength)) {
-      _deniedClipboardWriteCount++;
-    } else {
-      _deniedClipboardClearCount++;
+    if (admitted) {
+      switch (request.operation) {
+        case TerminalOsc52Operation.read:
+          _acceptedClipboardReadCount++;
+        case TerminalOsc52Operation.write:
+          _acceptedClipboardWriteCount++;
+        case TerminalOsc52Operation.clear:
+          _acceptedClipboardClearCount++;
+      }
+      return true;
+    }
+    switch (request.operation) {
+      case TerminalOsc52Operation.read:
+        _deniedClipboardReadCount++;
+        _emitReply(
+          TerminalReplyEncoder.clipboardUnavailable(
+            selection: request.selection.codeUnits,
+            terminator: request.terminator,
+          ),
+        );
+      case TerminalOsc52Operation.write:
+        _deniedClipboardWriteCount++;
+      case TerminalOsc52Operation.clear:
+        _deniedClipboardClearCount++;
     }
     return true;
-  }
-
-  static bool _isOsc52SelectionByte(int value) =>
-      value == 0x63 ||
-      value == 0x70 ||
-      value == 0x71 ||
-      value == 0x73 ||
-      (value >= 0x30 && value <= 0x37);
-
-  bool _isValidOsc52Base64(VtStringSequence sequence, int start, int length) {
-    if (length == 0 || length % 4 != 0) return false;
-    var padding = 0;
-    if (sequence.payloadByteAt(start + length - 1) == 0x3d) padding++;
-    if (length > 1 && sequence.payloadByteAt(start + length - 2) == 0x3d) {
-      padding++;
-    }
-    final int unpaddedEnd = start + length - padding;
-    for (int index = start; index < unpaddedEnd; index++) {
-      final int value = sequence.payloadByteAt(index);
-      final bool alphabet =
-          (value >= 0x41 && value <= 0x5a) ||
-          (value >= 0x61 && value <= 0x7a) ||
-          (value >= 0x30 && value <= 0x39) ||
-          value == 0x2b ||
-          value == 0x2f;
-      if (!alphabet) return false;
-    }
-    for (int index = unpaddedEnd; index < start + length; index++) {
-      if (sequence.payloadByteAt(index) != 0x3d) return false;
-    }
-    if (padding == 0) return true;
-    if (unpaddedEnd == start) return false;
-    return padding == 1
-        ? (length >= 4 && (unpaddedEnd - start) % 4 == 3)
-        : (length >= 4 && (unpaddedEnd - start) % 4 == 2);
   }
 
   bool _applyTitleStack(VtSequenceHeader sequence) {

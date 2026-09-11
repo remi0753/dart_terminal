@@ -170,6 +170,8 @@ final class TerminalProductConfiguration {
     required this.scrollbackBytes,
     required this.cursorShape,
     required this.cursorBlink,
+    required this.clipboardRead,
+    required this.clipboardWrite,
     required Iterable<TerminalKeyBindingDefinition> keybindings,
   }) : keybindings = List<TerminalKeyBindingDefinition>.unmodifiable(
          keybindings,
@@ -209,6 +211,8 @@ final class TerminalProductConfiguration {
     ),
     cursorShape: snapshot.value(TerminalProductConfigSchema.cursorShape),
     cursorBlink: snapshot.value(TerminalProductConfigSchema.cursorBlink),
+    clipboardRead: snapshot.value(TerminalProductConfigSchema.clipboardRead),
+    clipboardWrite: snapshot.value(TerminalProductConfigSchema.clipboardWrite),
     keybindings: snapshot
         .occurrences(TerminalProductConfigSchema.keybind)
         .map(
@@ -241,6 +245,8 @@ final class TerminalProductConfiguration {
   final int scrollbackBytes;
   final TerminalConfiguredCursorShape cursorShape;
   final bool cursorBlink;
+  final TerminalConfiguredClipboardAccess clipboardRead;
+  final TerminalConfiguredClipboardAccess clipboardWrite;
   final List<TerminalKeyBindingDefinition> keybindings;
 
   double get terminalContentWidth => windowWidth - windowPaddingHorizontal * 2;

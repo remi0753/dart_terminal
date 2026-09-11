@@ -57,6 +57,8 @@ Resolution is bounded to 32 files, include depth 8, 1048576 bytes per file, 1638
 | <code>scrollback-bytes</code> | <code>--scrollback-bytes=VALUE</code> | <code>&lt;1..1073741824&gt;[B|KiB|MiB|GiB]</code> | <code>67108864</code> | new-session | once | Maximum retained primary-screen history bytes. |
 | <code>cursor-shape</code> | <code>--cursor-shape=VALUE</code> | <code>block|underline|bar</code> | <code>block</code> | new-session | once | Initial terminal cursor shape. |
 | <code>cursor-blink</code> | <code>--cursor-blink=VALUE</code> | <code>true|false</code> | <code>true</code> | new-session | once | Whether the initial terminal cursor blinks. |
+| <code>clipboard-read</code> | <code>--clipboard-read=VALUE</code> | <code>deny|ask|allow</code> | <code>deny</code> | new-session | once | OSC 52 clipboard read policy: deny, ask, or allow. |
+| <code>clipboard-write</code> | <code>--clipboard-write=VALUE</code> | <code>deny|ask|allow</code> | <code>deny</code> | new-session | once | OSC 52 clipboard write and clear policy: deny, ask, or allow. |
 | <code>keybind</code> | <code>--keybind=VALUE</code> | <code>&lt;modifier+key=target&gt;</code> | <code>&lt;none&gt;</code> | live | ordered, max 1023 | Exact physical-key chord and action override. |
 
 ## Diagnostics and migration

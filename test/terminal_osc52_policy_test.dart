@@ -7,9 +7,119 @@ void main() => runTerminalOsc52PolicyTests();
 
 void runTerminalOsc52PolicyTests() {
   _testDenyPolicyClassifiesWithoutClipboardAuthority();
+  _testAdmissionReceivesImmutableBoundedRequests();
+  _testAdmissionFailureFallsBackToDeny();
   _testMalformedRequestsRejectAtomically();
   _testChunkingAndPayloadLimitAreDeterministic();
+  _testRequestModelRetainsItsOwnPayloadBound();
   _testUnavailableReplyEncoderIsBounded();
+}
+
+void _testRequestModelRetainsItsOwnPayloadBound() {
+  var calls = 0;
+  final TerminalScreenParserSink sink = TerminalScreenParserSink(
+    TerminalScreen(rows: 1, columns: 1),
+    onOsc52Request: (TerminalOsc52Request request) {
+      calls++;
+      return true;
+    },
+  );
+  final VtParser parser = VtParser(
+    sink: sink,
+    limits: const VtParserLimits(maxSequenceBytes: 16384, maxStringBytes: 8192),
+  );
+  parser.parse(_osc('52;c;${'A' * 4092}'));
+  parser.finish();
+  _expect(
+    calls == 0 &&
+        sink.rejectedClipboardRequestCount == 1 &&
+        sink.unsupportedSequenceCount == 1,
+    'request admission cannot retain a payload above its independent bound',
+  );
+}
+
+void _testAdmissionReceivesImmutableBoundedRequests() {
+  final List<TerminalOsc52Request> requests = <TerminalOsc52Request>[];
+  final List<Uint8List> replies = <Uint8List>[];
+  final TerminalScreenParserSink sink = TerminalScreenParserSink(
+    TerminalScreen(rows: 1, columns: 1),
+    onReply: (Uint8List reply) {
+      replies.add(Uint8List.fromList(reply));
+      return true;
+    },
+    onOsc52Request: (TerminalOsc52Request request) {
+      requests.add(request);
+      return true;
+    },
+  );
+  final VtParser parser = VtParser(sink: sink);
+  parser.parse(
+    Uint8List.fromList(<int>[
+      ..._osc('52;c;?'),
+      ..._osc('52;pc;c2FmZQ==', bell: false),
+      ..._osc('52;c;!'),
+    ]),
+  );
+  parser.finish();
+  _expect(
+    requests.length == 3 &&
+        requests[0].operation == TerminalOsc52Operation.read &&
+        requests[0].selection == 'c' &&
+        requests[0].encodedData == null &&
+        requests[0].targetsClipboard &&
+        requests[0].terminator == VtStringTerminator.bell &&
+        requests[1].operation == TerminalOsc52Operation.write &&
+        requests[1].selection == 'pc' &&
+        requests[1].encodedData == 'c2FmZQ==' &&
+        requests[1].targetsClipboard &&
+        requests[1].terminator == VtStringTerminator.stringTerminator &&
+        requests[2].operation == TerminalOsc52Operation.clear &&
+        sink.acceptedClipboardReadCount == 1 &&
+        sink.acceptedClipboardWriteCount == 1 &&
+        sink.acceptedClipboardClearCount == 1 &&
+        sink.deniedClipboardReadCount == 0 &&
+        sink.deniedClipboardWriteCount == 0 &&
+        sink.deniedClipboardClearCount == 0 &&
+        replies.isEmpty,
+    'admission receives exact bounded protocol values without implicit replies',
+  );
+}
+
+void _testAdmissionFailureFallsBackToDeny() {
+  var calls = 0;
+  final List<Uint8List> replies = <Uint8List>[];
+  final TerminalScreenParserSink sink = TerminalScreenParserSink(
+    TerminalScreen(rows: 1, columns: 1),
+    onReply: (Uint8List reply) {
+      replies.add(Uint8List.fromList(reply));
+      return true;
+    },
+    onOsc52Request: (TerminalOsc52Request request) {
+      calls++;
+      if (calls == 1) throw StateError('fixture admission failure');
+      return false;
+    },
+  );
+  final VtParser parser = VtParser(sink: sink);
+  parser.parse(
+    Uint8List.fromList(<int>[
+      ..._osc('52;c;?'),
+      ..._osc('52;c;YQ=='),
+      ..._osc('52;c;'),
+    ]),
+  );
+  parser.finish();
+  _expect(
+    calls == 3 &&
+        sink.deniedClipboardReadCount == 1 &&
+        sink.deniedClipboardWriteCount == 1 &&
+        sink.deniedClipboardClearCount == 1 &&
+        sink.acceptedClipboardReadCount == 0 &&
+        sink.acceptedClipboardWriteCount == 0 &&
+        sink.acceptedClipboardClearCount == 0 &&
+        ascii.decode(replies.single) == '\x1b]52;c;\x07',
+    'false or throwing admission remains fail-closed',
+  );
 }
 
 void _testDenyPolicyClassifiesWithoutClipboardAuthority() {

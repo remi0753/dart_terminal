@@ -58,6 +58,12 @@ export 'src/terminal_core/terminal_kitty_graphics.dart'
         TerminalKittyGraphicsResponseEncoder,
         TerminalKittyGraphicsTransmission;
 export 'src/terminal_core/terminal_mouse_modes.dart';
+export 'src/terminal_core/terminal_osc52.dart'
+    show
+        TerminalOsc52Operation,
+        TerminalOsc52Protocol,
+        TerminalOsc52Request,
+        TerminalOsc52RequestHandler;
 export 'src/terminal_core/terminal_reply.dart'
     show
         TerminalColorScheme,

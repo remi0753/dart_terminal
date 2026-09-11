@@ -42,7 +42,7 @@ void _testCompleteMissingAndSparseDocuments() {
         missingDocument.text.startsWith(
           '${TerminalSettingsDocumentComposer.generatedHeader}\n',
         ) &&
-        _representedSchemaNames(missingDocument.text).length == 36 &&
+        _representedSchemaNames(missingDocument.text).length == 38 &&
         missingDocument.text.contains('shell = /bin/zsh\n') &&
         missingDocument.text.contains('# working-directory = <path>\n') &&
         missingDocument.text.contains('# keybind = <modifier+key=target>\n') &&
@@ -172,7 +172,7 @@ void _testUnavailableAndInvalidUtf8() {
   final TerminalSettingsDocument document = session.open(snapshot);
   _expect(
     !document.canPersist &&
-        _representedSchemaNames(document.text).length == 36 &&
+        _representedSchemaNames(document.text).length == 38 &&
         session.save(document.text).disposition ==
             TerminalSettingsDocumentSaveDisposition.unavailable &&
         files.atomicWriteCount == 0,

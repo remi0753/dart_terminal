@@ -34,6 +34,8 @@ enum TerminalConfiguredOptionKey { escape, text }
 
 enum TerminalConfiguredCursorShape { block, underline, bar }
 
+enum TerminalConfiguredClipboardAccess { deny, ask, allow }
+
 enum TerminalConfiguredShellIntegration {
   detect,
   none,
@@ -855,6 +857,29 @@ abstract final class TerminalProductConfigSchema {
         formatter: _formatBoolean,
       );
 
+  static final TerminalConfigOption<TerminalConfiguredClipboardAccess>
+  clipboardRead = TerminalConfigOption<TerminalConfiguredClipboardAccess>(
+    name: 'clipboard-read',
+    description: 'OSC 52 clipboard read policy: deny, ask, or allow.',
+    valueSyntax: 'deny|ask|allow',
+    applicationPolicy: TerminalConfigApplicationPolicy.newSession,
+    defaultValue: TerminalConfiguredClipboardAccess.deny,
+    parser: _parseClipboardAccess,
+    formatter: _formatClipboardAccess,
+  );
+
+  static final TerminalConfigOption<TerminalConfiguredClipboardAccess>
+  clipboardWrite = TerminalConfigOption<TerminalConfiguredClipboardAccess>(
+    name: 'clipboard-write',
+    description:
+        'OSC 52 clipboard write and clear policy: deny, ask, or allow.',
+    valueSyntax: 'deny|ask|allow',
+    applicationPolicy: TerminalConfigApplicationPolicy.newSession,
+    defaultValue: TerminalConfiguredClipboardAccess.deny,
+    parser: _parseClipboardAccess,
+    formatter: _formatClipboardAccess,
+  );
+
   static final TerminalConfigRepeatedOption<TerminalKeyBindingDefinition>
   keybind = TerminalConfigRepeatedOption<TerminalKeyBindingDefinition>(
     name: 'keybind',
@@ -890,6 +915,8 @@ abstract final class TerminalProductConfigSchema {
       scrollbackBytes,
       cursorShape,
       cursorBlink,
+      clipboardRead,
+      clipboardWrite,
       keybind,
     ],
   );
@@ -1712,6 +1739,13 @@ String _formatCursorShape(TerminalConfiguredCursorShape value) =>
       TerminalConfiguredCursorShape.bar => 'bar',
     };
 
+String _formatClipboardAccess(TerminalConfiguredClipboardAccess value) =>
+    switch (value) {
+      TerminalConfiguredClipboardAccess.deny => 'deny',
+      TerminalConfiguredClipboardAccess.ask => 'ask',
+      TerminalConfiguredClipboardAccess.allow => 'allow',
+    };
+
 String _formatBoolean(bool value) => value ? 'true' : 'false';
 
 String _formatKeyBinding(TerminalKeyBindingDefinition value) =>
@@ -1970,6 +2004,27 @@ TerminalConfigDecodeResult<TerminalConfiguredCursorShape> _parseCursorShape(
     'cursor shape must be `block`, `underline`, or `bar`',
     hint: 'use `cursor-shape = block` for the default behavior',
   ),
+};
+
+TerminalConfigDecodeResult<TerminalConfiguredClipboardAccess>
+_parseClipboardAccess(String value) => switch (value) {
+  'deny' =>
+    const TerminalConfigDecodeResult<TerminalConfiguredClipboardAccess>.success(
+      TerminalConfiguredClipboardAccess.deny,
+    ),
+  'ask' =>
+    const TerminalConfigDecodeResult<TerminalConfiguredClipboardAccess>.success(
+      TerminalConfiguredClipboardAccess.ask,
+    ),
+  'allow' =>
+    const TerminalConfigDecodeResult<TerminalConfiguredClipboardAccess>.success(
+      TerminalConfiguredClipboardAccess.allow,
+    ),
+  _ =>
+    const TerminalConfigDecodeResult<TerminalConfiguredClipboardAccess>.failure(
+      'clipboard access must be `deny`, `ask`, or `allow`',
+      hint: 'use `deny` unless OSC 52 clipboard access is explicitly wanted',
+    ),
 };
 
 TerminalConfigDecodeResult<TerminalKeyBindingDefinition> _parseKeyBinding(

@@ -127,7 +127,7 @@ void _testEarlyShowConfigUsesTheTypedSnapshot() {
   _expect(
     result.mode == TerminalEarlyExitMode.showConfig &&
         result.standardOutput.startsWith(
-          'dart-terminal-effective-config version=1 options=36 entries=36 '
+          'dart-terminal-effective-config version=1 options=38 entries=38 '
           'diagnostics=1\nroot path="/config"\n',
         ) &&
         theme.contains('value="system"') &&
