@@ -6,7 +6,7 @@
 - Parent task: desktop notification, progress, and semantic prompt extensions
 - Started: 2026-09-11
 - State: in progress
-- Current subtask: immutable source pins and bounded protocol core (complete)
+- Current subtask: rate-limited native projection and lifecycle integration
 
 ## Purpose
 
@@ -247,3 +247,105 @@ After each commit, `ROADMAP.md` and this memo are reread before continuing.
   to the intended source/selector totals, new partial-support records, and
   manifest/inventory provenance hashes; the pre-existing screen observations,
   application cells, and acceptance outcomes are unchanged.
+
+## Current subtask: native projection and lifecycle integration
+
+- Status: complete
+- Started: 2026-09-11
+- Predecessor commit: `57b8526` (`Parse bounded desktop terminal signals`)
+- Purpose: consume the bounded protocol state through a deterministic admission
+  layer, project only admitted notifications/progress to an owned application
+  boundary, and make pane/session/reset/close behavior explicit and testable.
+- Scope: deterministic rate budget and coalescing, fake-observable native
+  notification and progress ports, application/pane integration, semantic-state
+  lifecycle integration required by the accepted extensions, teardown/reset
+  cancellation, metrics, and focused unit/integration tests.
+- Out of scope: real PTY/native Developer JIT and Release AOT acceptance,
+  compatibility/public-documentation closure, OSC 52 UI, and protocol-wide
+  fuzz/security/memory suites.
+- Dependencies: the committed bounded OSC 9/99 and OSC 133 models, existing
+  pane/session work scheduling and lifecycle ownership, and the audited AppKit
+  bridge surface. Any missing native primitive must be added only through its
+  owning package with an independently verified dependency commit.
+- Completion conditions: bursts cannot exceed the configured admission budget;
+  equivalent pending work coalesces deterministically; stale generations cannot
+  project after reset/close; progress and semantic state remain pane-local;
+  fake/native boundaries are observable; focused format, analysis, tests, exact
+  `make test`, diff review, roadmap update, and an independent commit pass.
+- Validation: pure admission tests with an injected monotonic clock, fake port
+  integration over multiple pane/session/reset/close cases, existing lifecycle
+  regression, formatting, analysis, and the exact repository gate.
+
+## Native projection findings and decisions
+
+- 2026-09-12: The audited `dart_appkit` surface had no user-notification or
+  Dock-progress mechanism. The adjacent package now exposes bounded, additive,
+  main-thread-only notification post/remove and Dock badge primitives without
+  product rate, focus, pane, or progress-state policy. Its warning-clean focused
+  gate and complete `make test` passed, and the dependency change is committed as
+  `0615817` (`Expose bounded application notifications`).
+- 2026-09-12: The product admission layer will own one application-global
+  sliding notification budget, an injected monotonic clock, per-sync logical-ID
+  coalescing, content duplicate suppression, internal native identifiers, and a
+  bounded set of live identifiers per session. This prevents adding panes or
+  reusing an attacker-supplied identifier from multiplying native alerts beyond
+  the same configured budget.
+- 2026-09-12: `TerminalScreenSet` needs an explicit reset generation. Existing
+  notification queue generations also advance when a consumer drains work, so
+  they cannot distinguish RIS after all queued work has already been projected.
+  A reset-only generation lets the coordinator cancel delivered/pending native
+  identities without coupling cancellation to unrelated resize/screen changes.
+- 2026-09-12: Progress remains terminal-session state, matching the selected
+  OSC 9;4 surface semantics. Only the logically focused session projects its
+  state to the application-global Dock badge; switching focus recomputes the
+  badge from the target session. Semantic state is retained only as the existing
+  content-free enum in the per-session projection snapshot, and reset/close
+  removes that snapshot rather than adding command or prompt text retention.
+- 2026-09-12: Focused format check, `dart analyze`, and the standalone desktop
+  signal projection test pass. The first unified `dart run test/run_tests.dart`
+  stopped at the Phase 7 AppKit acceptance freshness gate because integration
+  changed the audited `terminal_application.dart` and `terminal_session.dart`
+  sources. No behavioral test failed. The dedicated generator changed only the
+  expected hashes for those two files; acceptance cases and claims are
+  unchanged.
+- 2026-09-12: The first passing coordinator design still accepted synchronization
+  by raw session ID after `removeSession`. Although `TerminalSession` serialized
+  close and output callbacks safely, that API shape could let a stale external
+  caller recreate closed state. It was replaced with a bounded revocable
+  `TerminalDesktopSignalSessionProjection` lease. Close removes all native
+  identities and state; later synchronization through that old lease drains and
+  counts queued requests without a native side effect or an unbounded tombstone.
+- 2026-09-12: The final admission policy is application-global: three native
+  posts per sliding ten-second window by default, with a hard maximum budget of
+  eight. One parser turn coalesces matching logical Kitty IDs to the last value,
+  already-live identical content is suppressed by a content-free fingerprint,
+  and active/focused output is dropped rather than deferred. At most eight live
+  native identities are retained per each of the at-most-64 live sessions.
+  Native identifiers contain only internal pane/session/serial values.
+- 2026-09-12: Focused progress maps remove/set/error/indeterminate/paused to
+  null, percentage, percentage-plus-error, ellipsis, and bounded paused labels.
+  Focus changes recompute the one application Dock badge from the selected
+  session. Projection snapshots contain only progress, the privacy-safe semantic
+  enum, reset generation, and live identity count; no notification text,
+  command, prompt, or history content is exposed there.
+- 2026-09-12: Focused formatting, clean `dart analyze`, direct coordinator tests,
+  and fake-PTY `TerminalSession` integration pass. They cover same-turn logical
+  coalescing, exact sliding-window recovery, active/focused suppression,
+  cross-pane global budgeting, native-ID isolation, per-session live eviction,
+  focused progress switching, semantic isolation, RIS cancellation, native
+  failure metrics, revoked-lease rejection, and session shutdown cleanup.
+- 2026-09-12: After the dedicated Phase 7 AppKit acceptance generator refreshed
+  only the reviewed hashes of `terminal_application.dart` and
+  `terminal_session.dart`, the unified Dart runner passed with
+  `dart_terminal tests passed`.
+- 2026-09-12: The exact final gate
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed every generated-source,
+  compatibility, differential, application, terminfo, shell-resource, format,
+  analysis, and unified behavior check. It reported 264 formatted Dart files
+  with zero changes, `No issues found!`, and `dart_terminal tests passed`.
+- 2026-09-12: Final `git diff --check` passed. Manual review confirms all native
+  calls flow through the main-isolate AppKit application boundary, port failures
+  are metrics/log events rather than parser failures, reset/close are explicit,
+  all queues/maps have hard bounds, and the generated acceptance delta contains
+  only the two intended source hashes. No later Phase 9 work, secrets, or
+  unrelated generated artifacts are included.

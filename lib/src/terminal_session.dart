@@ -14,6 +14,7 @@ import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_core/terminal_semantic_prompt.dart';
 import 'terminal_core/vt_parser.dart';
+import 'terminal_desktop_signal_projection.dart';
 import 'terminal_input/terminal_hyperlink_interaction.dart';
 import 'terminal_input/terminal_key_event.dart';
 import 'terminal_input/terminal_paste.dart';
@@ -165,6 +166,7 @@ final class TerminalSession implements TerminalPaneSession {
     bool initialCursorBlinking = true,
     TerminalColorScheme initialColorScheme = TerminalColorScheme.dark,
     RuntimeWorkerPayloadClient? graphicsWorker,
+    TerminalDesktopSignalCoordinator? desktopSignalCoordinator,
   }) : _onChanged = onChanged,
        _onTerminated = onTerminated,
        _lifecycleObserver = lifecycleObserver,
@@ -243,6 +245,7 @@ final class TerminalSession implements TerminalPaneSession {
     );
     _terminalParser = VtParser(sink: terminalParserSink);
     _lastCompletedSize = _currentSize();
+    _desktopSignalProjection = desktopSignalCoordinator?.registerSession(id);
   }
 
   @override
@@ -251,6 +254,7 @@ final class TerminalSession implements TerminalPaneSession {
   final void Function() _onTerminated;
   final TerminalSessionLifecycleObserver? _lifecycleObserver;
   final TerminalSessionNativeObserver? _nativeObserver;
+  late final TerminalDesktopSignalSessionProjection? _desktopSignalProjection;
   final PtyBackend _ptyBackend;
   final Map<String, String> _environment;
   final String shellExecutable;
@@ -444,6 +448,7 @@ final class TerminalSession implements TerminalPaneSession {
           .map<List<int>>((Uint8List bytes) {
             if (!_disposed && identical(_process, process)) {
               _terminalParser.parse(bytes);
+              _desktopSignalProjection?.synchronize(terminalScreenSet);
             }
             return bytes;
           })
@@ -810,6 +815,7 @@ final class TerminalSession implements TerminalPaneSession {
   Future<TerminalSessionShutdownResult> _shutdown() async {
     terminalScreenSet.setColorSchemeReportingMode(false);
     terminalScreenSet.setInBandSizeReportingMode(false);
+    _desktopSignalProjection?.close();
     _disposed = true;
     await kittyGraphicsController.dispose();
     _cancelPasteWrite();

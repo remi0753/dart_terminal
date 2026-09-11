@@ -29,6 +29,7 @@ import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_core/terminal_semantic_prompt.dart';
 import 'terminal_core/terminal_style.dart';
+import 'terminal_desktop_signal_projection.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_focus_reporter.dart';
 import 'terminal_input/terminal_hyperlink_interaction.dart';
@@ -2282,6 +2283,19 @@ final class TerminalApplication {
       if (!closed.isCompleted) closed.completeError(error, stackTrace);
     }
 
+    final TerminalDesktopSignalCoordinator desktopSignalCoordinator =
+        TerminalDesktopSignalCoordinator(
+          nativePort: TerminalAppKitDesktopSignalPort(
+            application: application,
+            onError: (Object error, StackTrace _) {
+              stderr.writeln(
+                'TERMINAL_DESKTOP_SIGNAL_NATIVE_ERROR error=$error',
+              );
+            },
+          ),
+          applicationActive: application.isActive,
+        );
+
     String? inheritedWorkingDirectory(
       PaneId? sourcePaneId,
       TerminalProductConfiguration configuration,
@@ -2379,6 +2393,7 @@ final class TerminalApplication {
                 initialCursorBlinking: capturedConfiguration.cursorBlink,
                 initialColorScheme: _terminalColorScheme(renderedBrightness),
                 graphicsWorker: lifecycle,
+                desktopSignalCoordinator: desktopSignalCoordinator,
               );
               sessions[id.paneId] = session;
               allSessions.add(session);
@@ -2607,7 +2622,10 @@ final class TerminalApplication {
           hyperlinkControllers.remove(pane.id)?.cancelPress();
           owner.disposeAdapters();
           owners.remove(pane.id);
-          sessions.remove(pane.id);
+          final TerminalSession? removedSession = sessions.remove(pane.id);
+          if (removedSession != null) {
+            desktopSignalCoordinator.removeSession(removedSession.id);
+          }
           launchWorkingDirectories.remove(pane.id);
           paneConfigurations.remove(pane.id);
         },
@@ -2723,6 +2741,9 @@ final class TerminalApplication {
         hierarchyReconciliationInProgress = false;
       }
       synchronizeWindowSubscriptions();
+      final PaneId? focusedPaneId =
+          state.activeWindow?.selectedTab.focusedPaneId;
+      desktopSignalCoordinator.focusSession(sessions[focusedPaneId]?.id);
     }
 
     reconcileRequest = reconcileInteractiveHierarchy;
@@ -3389,8 +3410,8 @@ final class TerminalApplication {
       }
       applicationSubscription = application.events.listen((AppKitEvent event) {
         switch (event) {
-          case ApplicationActiveChangedEvent():
-            break;
+          case ApplicationActiveChangedEvent(:final isActive):
+            desktopSignalCoordinator.setApplicationActive(isActive);
           case ApplicationAppearanceChangedEvent():
             // The dedicated theme projection owns palette application.
             break;
@@ -3522,6 +3543,7 @@ final class TerminalApplication {
         stdout.writeln(session.machineLine());
       }
       stdout.writeln(shutdown.machineLine());
+      desktopSignalCoordinator.dispose();
       final Object? error = asynchronousError;
       if (error != null && !closed.isCompleted) {
         Error.throwWithStackTrace(error, asynchronousStackTrace!);

@@ -1156,7 +1156,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase9/desktop-notification-progress-semantic-extensions.md`](docs/phase9/desktop-notification-progress-semantic-extensions.md)
   を参照して順に実施する）
   - [x] immutable source pins、bounded notification/progress/semantic protocol core
-  - [ ] rate-limited native projection、progress/semantic lifecycle integration
+  - [x] rate-limited native projection、progress/semantic lifecycle integration
   - [ ] real PTY/native product acceptance、compatibility/documentation closure、親項目完了判定
 - [ ] OSC 52 confirmation/policy UI
 - [ ] protocol-specific fuzz、security、memory tests

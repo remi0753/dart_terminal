@@ -153,6 +153,7 @@ final class TerminalScreenSet {
   TerminalMouseCoordinateEncoding _mouseEncoding =
       TerminalMouseCoordinateEncoding.legacy;
   int _transitionGeneration = 1;
+  int _resetGeneration = 1;
 
   TerminalScreen get primary => _primary;
   TerminalScreen get alternate => _alternate;
@@ -195,6 +196,7 @@ final class TerminalScreenSet {
   TerminalMouseModes get mouseModes =>
       TerminalMouseModes(tracking: _mouseTracking, encoding: _mouseEncoding);
   int get transitionGeneration => _transitionGeneration;
+  int get resetGeneration => _resetGeneration;
   int get kittyKeyboardStackDepth => _activeKittyKeyboard.depth;
   TerminalViewport get viewport => _viewport;
   TerminalKittyViewportSnapshot captureKittyImageViewport() =>
@@ -541,6 +543,7 @@ final class TerminalScreenSet {
     desktopNotifications.reset();
     progress.reset();
     semanticPrompt.reset();
+    _resetGeneration++;
     primary.synchronizeVisualBellGeneration(visualBellGeneration);
     primary.requestFullSnapshot();
     _transitionGeneration++;

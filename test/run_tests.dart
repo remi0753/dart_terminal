@@ -49,6 +49,7 @@ import 'terminal_core_test.dart';
 import 'terminal_damage_copy_test.dart';
 import 'terminal_damage_test.dart';
 import 'terminal_damage_transfer_test.dart';
+import 'terminal_desktop_signal_projection_test.dart';
 import 'terminal_desktop_signals_test.dart';
 import 'terminal_differential_acceptance_test.dart';
 import 'terminal_differential_adapters_test.dart';
@@ -195,6 +196,7 @@ Future<void> main() async {
   runTerminalScreenTests();
   runTerminalScreenSetTests();
   runTerminalSemanticPromptTests();
+  await runTerminalDesktopSignalProjectionTests();
   runTerminalDesktopSignalsTests();
   await runTerminalSettingsInspectorTests();
   runTerminalSettingsDocumentTests();

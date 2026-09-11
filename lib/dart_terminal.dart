@@ -151,6 +151,7 @@ export 'src/terminal_core/vt_parser_trace.dart'
         VtParserTraceExportLimits,
         VtParserTraceLimitException,
         VtParserTraceLimitKind;
+export 'src/terminal_desktop_signal_projection.dart';
 export 'src/terminal_effective_config.dart';
 export 'src/terminal_input/terminal_appkit_key_adapter.dart'
     show TerminalAppKitKeyAdapter;
