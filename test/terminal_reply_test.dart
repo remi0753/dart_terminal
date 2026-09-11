@@ -38,7 +38,8 @@ void _testKeyboardProtocolControlsAndReports() {
       '\x1b[?47h\x1b[>8u\x1b[?u'
       '\x1b[?47l\x1b[?u\x1b[<u\x1b[?u'
       '\x1b[>4;2m\x1b[?4m\x1b[>4m\x1b[?4m'
-      '\x1b[?7727\x24p\x1b[?7727h\x1b[?7727\x24p\x1b[?7727l',
+      '\x1b[?7727\x24p\x1b[?7727h\x1b[?7727\x24p\x1b[?7727l'
+      '\x1b[?2026\x24p\x1b[?2026h\x1b[?2026\x24p\x1b[?2026l',
     ),
   );
   _expectStrings(replies, const <String>[
@@ -51,6 +52,8 @@ void _testKeyboardProtocolControlsAndReports() {
     '\x1b[>4;0m',
     '\x1b[?7727;2\x24y',
     '\x1b[?7727;1\x24y',
+    '\x1b[?2026;2\x24y',
+    '\x1b[?2026;1\x24y',
   ], 'Kitty, XTMODKEYS, and application-Escape reports reflect state');
   _expect(
     screens.keyboardModes == const TerminalKeyboardModes() &&
@@ -89,7 +92,8 @@ void _testKeyboardProtocolControlsAndReports() {
 void _testKeyboardProtocolChunkIndependence() {
   final Uint8List input = _bytes(
     '\x1b[>1u\x1b[=2;2u\x1b[?u\x1b[<u'
-    '\x1b[>4;2m\x1b[?4m\x1b[?7727h\x1b[?7727\x24p',
+    '\x1b[>4;2m\x1b[?4m\x1b[?7727h\x1b[?7727\x24p'
+    '\x1b[?2026h\x1b[?2026\x24p\x1b[?2026l',
   );
   for (int split = 0; split <= input.length; split++) {
     final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 1);
@@ -117,6 +121,7 @@ void _testKeyboardProtocolChunkIndependence() {
             '\x1b[?3u',
             '\x1b[>4;2m',
             '\x1b[?7727;1\x24y',
+            '\x1b[?2026;1\x24y',
           ]),
       'keyboard protocol controls are chunk-independent at split $split',
     );

@@ -4,19 +4,19 @@
   "evidence_index_path": "compatibility/application_matrix_evidence.json",
   "evidence_index_sha256": "b2422e4a6a3c6073306f2c615ec9b85d49621440f06998c3435871949caa554e",
   "implementation_manifest_path": "compatibility/implemented_sequence_manifest.json",
-  "implementation_manifest_sha256": "69392b881d60384c5967c97218b29d9c36c5b36edae28d2d72e036f8447b201e",
+  "implementation_manifest_sha256": "f6033355015b8258bb5cc5ba137272ae2e91188ca887e643c876f84a0ae0fec4",
   "trace_tool_path": "tool/terminal_application_unsupported_trace.dart",
   "trace_tool_sha256": "ad3e13c69703151b26b4a2728a04f93ab7f2a46ebad3e917b4d574cb642ee5bc",
   "status": "accepted-with-owned-gaps",
   "totals": {
     "cells": 8,
-    "clean_agreements": 4,
-    "documented_gap_cells": 4,
-    "unique_sequences": 6,
-    "unsupported_increments": 63,
-    "gaps": 4,
+    "clean_agreements": 6,
+    "documented_gap_cells": 2,
+    "unique_sequences": 4,
+    "unsupported_increments": 7,
+    "gaps": 3,
     "safe_ignore_gaps": 0,
-    "explicit_unsupported_gaps": 4
+    "explicit_unsupported_gaps": 3
   },
   "cells": [
     {
@@ -31,24 +31,20 @@
     {
       "application_id": "fzf",
       "scenario_id": "fzf-filter-selection",
-      "classification": "documented-gap",
+      "classification": "clean-agreement",
       "accepted": true,
       "captured_unsupported_sequences": 28,
-      "replayed_unsupported_sequences": 28,
-      "gap_ids": [
-        "synchronized-output"
-      ]
+      "replayed_unsupported_sequences": 0,
+      "gap_ids": []
     },
     {
       "application_id": "lazygit",
       "scenario_id": "lazygit-repository-ui",
-      "classification": "documented-gap",
+      "classification": "clean-agreement",
       "accepted": true,
       "captured_unsupported_sequences": 42,
-      "replayed_unsupported_sequences": 28,
-      "gap_ids": [
-        "synchronized-output"
-      ]
+      "replayed_unsupported_sequences": 0,
+      "gap_ids": []
     },
     {
       "application_id": "mosh",
@@ -113,20 +109,6 @@
       "minimal_hex": "1b5b3f313030316c",
       "variants": [
         "1b5b3f313030316c"
-      ],
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
-      "id": "synchronized-output",
-      "disposition": "explicit-unsupported",
-      "impact": "presentation-atomicity",
-      "inventory_ids": [],
-      "owner": "ROADMAP.md#phase-9-synchronized-output-rendering",
-      "minimal_hex": "1b5b3f3230323668",
-      "variants": [
-        "1b5b3f3230323668",
-        "1b5b3f323032366c"
       ],
       "screen_mutation": false,
       "matrix_blocker": false

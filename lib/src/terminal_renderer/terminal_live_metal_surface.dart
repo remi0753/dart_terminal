@@ -88,6 +88,10 @@ final class TerminalLiveMetalSurfaceSnapshot {
     required this.pendingFrameCount,
     required this.liveAtlasPinCount,
     required this.hasScheduledWork,
+    required this.synchronizedOutputMode,
+    required this.synchronizedOutputHeld,
+    required this.synchronizedOutputReleaseCount,
+    required this.synchronizedOutputTimeoutCount,
     required this.accessibilityGeneration,
     required this.accessibilityUtf16Length,
     required this.accessibilityHasVisibleSelection,
@@ -126,6 +130,10 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int pendingFrameCount;
   final int liveAtlasPinCount;
   final bool hasScheduledWork;
+  final bool synchronizedOutputMode;
+  final bool synchronizedOutputHeld;
+  final int synchronizedOutputReleaseCount;
+  final int synchronizedOutputTimeoutCount;
   final int accessibilityGeneration;
   final int accessibilityUtf16Length;
   final bool accessibilityHasVisibleSelection;
@@ -354,7 +362,9 @@ final class TerminalLiveMetalSurface {
     _scheduler = scheduler;
     _recovery = recovery;
     _needsDrain = true;
-    _publishCaretGeometry(force: true);
+    if (!screenSet.synchronizedOutputMode) {
+      _publishCaretGeometry(force: true);
+    }
     _paneWorkScheduler?.register(sessionId, _runScheduled);
     _scheduleImmediate();
   }
@@ -384,6 +394,8 @@ final class TerminalLiveMetalSurface {
   final Stopwatch _clock = Stopwatch()..start();
   final TerminalDamageOutbox _outbox;
   final TerminalPreeditModel _preeditModel = TerminalPreeditModel();
+  final TerminalSynchronizedPresentationGate _synchronizedPresentationGate =
+      TerminalSynchronizedPresentationGate();
   late final TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>
   _scheduler;
   late final TerminalMetalFailureRecoveryCoordinator<
@@ -429,6 +441,8 @@ final class TerminalLiveMetalSurface {
   bool _accessibilityHasCursor = false;
   int _accessibilityCursorRow = -1;
   int _accessibilityCursorColumn = -1;
+  int _synchronizedOutputReleaseCount = 0;
+  int _synchronizedOutputTimeoutCount = 0;
   double _publishedAccessibilityCellWidth = 0;
   double _publishedAccessibilityCellHeight = 0;
   TerminalAccessibilitySnapshot? _lastAccessibilitySnapshot;
@@ -502,7 +516,7 @@ final class TerminalLiveMetalSurface {
   void notifyViewportChanged() {
     _requireLive();
     _needsDrain = true;
-    _publishCaretGeometry();
+    _publishCaretGeometryIfPresentationOpen();
     _scheduleImmediate();
   }
 
@@ -522,7 +536,7 @@ final class TerminalLiveMetalSurface {
     if (!changed) return false;
     if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
     _needsDrain = true;
-    _publishCaretGeometry();
+    _publishCaretGeometryIfPresentationOpen();
     _scheduleImmediate();
     return true;
   }
@@ -533,7 +547,7 @@ final class TerminalLiveMetalSurface {
     if (!changed) return false;
     if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
     _needsDrain = true;
-    _publishCaretGeometry();
+    _publishCaretGeometryIfPresentationOpen();
     _scheduleImmediate();
     return true;
   }
@@ -596,7 +610,7 @@ final class TerminalLiveMetalSurface {
       _logicalHeight = logicalHeight;
       _updatePixelViewport();
       _needsDrain = true;
-      _publishCaretGeometry();
+      _publishCaretGeometryIfPresentationOpen();
       _scheduleImmediate();
     }
     return size;
@@ -627,7 +641,7 @@ final class TerminalLiveMetalSurface {
   void notifyScreenChanged() {
     _requireLive();
     _needsDrain = true;
-    _publishCaretGeometry();
+    _publishCaretGeometryIfPresentationOpen();
     _scheduleImmediate();
   }
 
@@ -649,6 +663,12 @@ final class TerminalLiveMetalSurface {
     _retryRequested = false;
     try {
       _publishWindowState(now);
+      final bool synchronizedOutputReleased = _synchronizeSynchronizedOutput(
+        now,
+      );
+      if (synchronizedOutputReleased) {
+        _releaseSynchronizedOutputPresentation();
+      }
       if (!_retireAndRecover()) {
         _retryRequested = true;
         return;
@@ -657,7 +677,12 @@ final class TerminalLiveMetalSurface {
         _retryRequested = true;
         return;
       }
+      if (_synchronizedPresentationGate.isHolding) {
+        _needsDrain = true;
+        return;
+      }
       _rebindCurrentScreen();
+      _publishCaretGeometry();
       _applyNewestDamage(now);
       _refreshViewportPresentation();
       _refreshAccessibilityPresentation();
@@ -704,6 +729,10 @@ final class TerminalLiveMetalSurface {
       liveAtlasPinCount: atlas.livePinCount,
       hasScheduledWork:
           _timer != null || (_paneWorkScheduler?.isPending(sessionId) ?? false),
+      synchronizedOutputMode: screenSet.synchronizedOutputMode,
+      synchronizedOutputHeld: _synchronizedPresentationGate.isHolding,
+      synchronizedOutputReleaseCount: _synchronizedOutputReleaseCount,
+      synchronizedOutputTimeoutCount: _synchronizedOutputTimeoutCount,
       accessibilityGeneration: _accessibilityGeneration,
       accessibilityUtf16Length: _accessibilityUtf16Length,
       accessibilityHasVisibleSelection: _accessibilityHasVisibleSelection,
@@ -796,6 +825,39 @@ final class TerminalLiveMetalSurface {
     _boundScreen.requestFullSnapshot();
     _scheduler.requestFullRedraw();
     return true;
+  }
+
+  bool _synchronizeSynchronizedOutput(int now) {
+    TerminalSynchronizedPresentationDisposition disposition =
+        _synchronizedPresentationGate.synchronize(
+          enabled: screenSet.synchronizedOutputMode,
+          modeGeneration: screenSet.synchronizedOutputGeneration,
+          monotonicMicros: now,
+        );
+    if (_synchronizedPresentationGate.deadlineReached(monotonicMicros: now)) {
+      final bool expired = screenSet.expireSynchronizedOutputMode(
+        _synchronizedPresentationGate.observedModeGeneration,
+      );
+      if (expired) {
+        _synchronizedOutputTimeoutCount++;
+        disposition = _synchronizedPresentationGate.synchronize(
+          enabled: screenSet.synchronizedOutputMode,
+          modeGeneration: screenSet.synchronizedOutputGeneration,
+          monotonicMicros: now,
+        );
+      }
+    }
+    _scheduler.updateSynchronizedOutput(
+      isHeld: _synchronizedPresentationGate.isHolding,
+    );
+    return disposition == TerminalSynchronizedPresentationDisposition.released;
+  }
+
+  void _releaseSynchronizedOutputPresentation() {
+    screenSet.activeScreen.requestFullSnapshot();
+    if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
+    _synchronizedOutputReleaseCount++;
+    _needsDrain = true;
   }
 
   void _rebindCurrentScreen() {
@@ -971,6 +1033,7 @@ final class TerminalLiveMetalSurface {
       switch (result.disposition) {
         case TerminalFrameAttemptDisposition.idle:
         case TerminalFrameAttemptDisposition.paused:
+        case TerminalFrameAttemptDisposition.synchronized:
         case TerminalFrameAttemptDisposition.accepted:
           return;
         case TerminalFrameAttemptDisposition.stale:
@@ -1089,6 +1152,14 @@ final class TerminalLiveMetalSurface {
     _lastPublishedCaretRect = rectangle;
   }
 
+  void _publishCaretGeometryIfPresentationOpen() {
+    if (screenSet.synchronizedOutputMode ||
+        _synchronizedPresentationGate.isHolding) {
+      return;
+    }
+    _publishCaretGeometry();
+  }
+
   void _scheduleImmediate() {
     if (!automaticScheduling || _disposed || _processing) return;
     final TerminalPaneWorkScheduler? paneScheduler = _paneWorkScheduler;
@@ -1105,15 +1176,18 @@ final class TerminalLiveMetalSurface {
   void _scheduleNext(int now) {
     if (!automaticScheduling || _disposed) return;
     Duration? delay;
+    final bool synchronizedOutputHeld = _synchronizedPresentationGate.isHolding;
     if (_retryRequested ||
-        _needsDrain ||
-        _scheduler.hasPendingFrame ||
+        (!synchronizedOutputHeld && _needsDrain) ||
+        (!synchronizedOutputHeld && _scheduler.hasPendingFrame) ||
         atlas.livePinCount != 0 ||
         _recovery.hasPendingRecovery ||
         _publishedScale != _desiredScale) {
       delay = retryInterval;
     }
-    final int? deadline = _scheduler.nextPresentationDeadlineMicros;
+    final int? deadline = synchronizedOutputHeld
+        ? _synchronizedPresentationGate.nextDeadlineMicros
+        : _scheduler.nextPresentationDeadlineMicros;
     if (deadline != null) {
       final Duration animationDelay = Duration(
         microseconds: math.max(0, deadline - now),

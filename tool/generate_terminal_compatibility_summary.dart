@@ -68,7 +68,8 @@ String generateTerminalCompatibilitySummary(
     )
     ..writeln(
       '- Kitty keyboard flag controls, xterm modifyOtherKeys controls, and '
-      'mintty application-Escape mode required by captured applications.',
+      'mintty application-Escape mode required by captured applications; and '
+      'Contour synchronized-output mode 2026.',
     )
     ..writeln()
     ..writeln(

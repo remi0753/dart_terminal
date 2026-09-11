@@ -14,8 +14,56 @@ void runTerminalScreenSetTests() {
   _testMode1049ClearSaveRestoreAndIdempotence();
   _testScreenSetReset();
   _testKeyboardModesAcrossScreensAndReset();
+  _testSynchronizedOutputStateAndDeadlineOwnership();
   _testParserScreenModeDispatch();
   _testParserScreenSetChunkIndependence();
+}
+
+void _testSynchronizedOutputStateAndDeadlineOwnership() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 1);
+  final int initialGeneration = screens.synchronizedOutputGeneration;
+  screens.setSynchronizedOutputMode(true);
+  final int firstGeneration = screens.synchronizedOutputGeneration;
+  _expect(
+    screens.synchronizedOutputMode && firstGeneration > initialGeneration,
+    'mode 2026 enable publishes a new deadline owner',
+  );
+  screens.activeScreen
+    ..acknowledgeFullSnapshot()
+    ..clearDamage();
+  for (int mutation = 0; mutation < 100000; mutation++) {
+    screens.activeScreen.setNarrowCell(0, 0, mutation.isEven ? 0x41 : 0x42);
+  }
+  _expect(
+    !screens.activeScreen.fullSnapshotRequired &&
+        screens.activeScreen.dirtyStartAt(0) == 0 &&
+        screens.activeScreen.dirtyEndAt(0) == 1,
+    '100,000 held mutations remain one bounded canonical dirty interval',
+  );
+  screens.setAlternateMode47(true);
+  screens.setSynchronizedOutputMode(true);
+  final int restartedGeneration = screens.synchronizedOutputGeneration;
+  _expect(
+    screens.synchronizedOutputMode && restartedGeneration > firstGeneration,
+    'repeated mode 2026 enable restarts one session-wide deadline',
+  );
+  _expect(
+    !screens.expireSynchronizedOutputMode(firstGeneration) &&
+        screens.synchronizedOutputMode,
+    'a stale deadline cannot release a newer synchronized update',
+  );
+  _expect(
+    screens.expireSynchronizedOutputMode(restartedGeneration) &&
+        !screens.synchronizedOutputMode,
+    'the exact deadline owner releases synchronized output',
+  );
+  screens.setSynchronizedOutputMode(true);
+  screens.reset();
+  _expect(
+    !screens.synchronizedOutputMode &&
+        screens.synchronizedOutputGeneration > restartedGeneration,
+    'RIS clears synchronized output and invalidates its deadline',
+  );
 }
 
 void _testKeyboardModesAcrossScreensAndReset() {

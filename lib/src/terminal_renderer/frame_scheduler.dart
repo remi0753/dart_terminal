@@ -76,6 +76,7 @@ final class TerminalFrameSubmissionOutcome {
 enum TerminalFrameAttemptDisposition {
   idle,
   paused,
+  synchronized,
   accepted,
   stale,
   backpressured,
@@ -94,6 +95,111 @@ final class TerminalFramePresentation {
   final bool cursorDrawn;
   final bool visualBellActive;
   final bool requiresFullRedraw;
+}
+
+enum TerminalSynchronizedPresentationDisposition {
+  unchanged,
+  started,
+  restarted,
+  released,
+}
+
+/// Constant-space monotonic presentation gate for DEC private mode 2026.
+///
+/// The terminal core owns the mode and its generation. This render-domain
+/// projection owns only one deadline and never retains screen or frame data.
+final class TerminalSynchronizedPresentationGate {
+  TerminalSynchronizedPresentationGate({
+    this.holdDuration = const Duration(milliseconds: 1000),
+  }) {
+    _validateDuration(holdDuration, 'holdDuration');
+  }
+
+  static const Duration maximumHoldDuration = Duration(seconds: 10);
+
+  final Duration holdDuration;
+  bool _isHolding = false;
+  int _observedModeGeneration = 0;
+  int _lastMonotonicMicros = 0;
+  bool _hasObservedTime = false;
+  int? _deadlineMicros;
+
+  bool get isHolding => _isHolding;
+  int get observedModeGeneration => _observedModeGeneration;
+  int? get nextDeadlineMicros => _isHolding ? _deadlineMicros : null;
+
+  TerminalSynchronizedPresentationDisposition synchronize({
+    required bool enabled,
+    required int modeGeneration,
+    required int monotonicMicros,
+  }) {
+    RangeError.checkValueInInterval(
+      modeGeneration,
+      1,
+      _maximumSignedGeneration,
+      'modeGeneration',
+    );
+    _observeTime(monotonicMicros);
+    if (modeGeneration < _observedModeGeneration) {
+      throw StateError('synchronized-output mode generation regressed');
+    }
+    if (modeGeneration == _observedModeGeneration) {
+      if (enabled != _isHolding) {
+        throw StateError(
+          'synchronized-output state changed without a new generation',
+        );
+      }
+      return TerminalSynchronizedPresentationDisposition.unchanged;
+    }
+
+    final bool wasHolding = _isHolding;
+    _observedModeGeneration = modeGeneration;
+    _isHolding = enabled;
+    if (!enabled) {
+      _deadlineMicros = null;
+      return wasHolding
+          ? TerminalSynchronizedPresentationDisposition.released
+          : TerminalSynchronizedPresentationDisposition.unchanged;
+    }
+    _deadlineMicros = _boundedDeadline(
+      monotonicMicros,
+      holdDuration.inMicroseconds,
+    );
+    return wasHolding
+        ? TerminalSynchronizedPresentationDisposition.restarted
+        : TerminalSynchronizedPresentationDisposition.started;
+  }
+
+  bool deadlineReached({required int monotonicMicros}) {
+    _observeTime(monotonicMicros);
+    final int? deadline = _deadlineMicros;
+    return _isHolding && deadline != null && monotonicMicros >= deadline;
+  }
+
+  void _observeTime(int monotonicMicros) {
+    RangeError.checkValueInInterval(
+      monotonicMicros,
+      0,
+      _maximumSignedGeneration,
+      'monotonicMicros',
+    );
+    if (_hasObservedTime && monotonicMicros < _lastMonotonicMicros) {
+      throw StateError('synchronized-output monotonic time regressed');
+    }
+    _lastMonotonicMicros = monotonicMicros;
+    _hasObservedTime = true;
+  }
+
+  static int _boundedDeadline(int now, int duration) =>
+      now > _maximumSignedGeneration - duration
+      ? _maximumSignedGeneration
+      : now + duration;
+
+  static void _validateDuration(Duration duration, String name) {
+    if (duration <= Duration.zero || duration > maximumHoldDuration) {
+      throw ArgumentError.value(duration, name, 'must be in (0, 10 seconds]');
+    }
+  }
 }
 
 /// One deadline per animation kind, driven by an injected monotonic clock.
@@ -432,6 +538,7 @@ final class TerminalNewestFrameScheduler<Frame> {
   int _lastAcceptedPresentationRevision = 0;
   bool _isWindowVisible = true;
   bool _isWindowOccluded = false;
+  bool _isSynchronizedOutputHeld = false;
   Object? _fullRedrawMarker;
   bool _pending = false;
   bool _attempting = false;
@@ -455,6 +562,7 @@ final class TerminalNewestFrameScheduler<Frame> {
   bool get isWindowVisible => _isWindowVisible;
   bool get isWindowOccluded => _isWindowOccluded;
   bool get isPresentationActive => _isWindowVisible && !_isWindowOccluded;
+  bool get isSynchronizedOutputHeld => _isSynchronizedOutputHeld;
   int? get nextPresentationDeadlineMicros =>
       isPresentationActive ? presentationClock.nextDeadlineMicros : null;
   bool get hasPendingFrame => _pending;
@@ -556,6 +664,18 @@ final class TerminalNewestFrameScheduler<Frame> {
     return true;
   }
 
+  /// Adds a scheduler-level guard against building or submitting while mode
+  /// 2026 is held. Releasing retains exactly one full-redraw marker.
+  bool updateSynchronizedOutput({required bool isHeld}) {
+    if (_isSynchronizedOutputHeld == isHeld) return false;
+    _isSynchronizedOutputHeld = isHeld;
+    if (!isHeld && model.isInitialized) {
+      _fullRedrawMarker = Object();
+      _pending = true;
+    }
+    return true;
+  }
+
   TerminalFrameAttemptResult submitNewest() {
     if (_attempting) {
       throw StateError('frame submission attempt is already active');
@@ -568,6 +688,16 @@ final class TerminalNewestFrameScheduler<Frame> {
         frameGeneration: 0,
         submissionToken: 0,
         requiresFullRedraw: false,
+      );
+    }
+    if (_isSynchronizedOutputHeld) {
+      return TerminalFrameAttemptResult(
+        disposition: TerminalFrameAttemptDisposition.synchronized,
+        modelRevision: _newestModelRevision,
+        presentationRevision: presentationClock.revision,
+        frameGeneration: 0,
+        submissionToken: 0,
+        requiresFullRedraw: _fullRedrawMarker != null,
       );
     }
     if (!isPresentationActive) {

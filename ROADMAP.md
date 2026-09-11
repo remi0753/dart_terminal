@@ -1118,6 +1118,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] product acceptance、compatibility closure、親項目完了判定
 - [ ] synchronized output/rendering
   （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のsynchronized-output gapを参照して実施）
+  （分割と完了条件は
+  [`docs/phase9/synchronized-output-rendering.md`](docs/phase9/synchronized-output-rendering.md)
+  を参照して順に実施する）
+  - [x] bounded parser-to-presentation hold、timeout、compatibility closure
+  - [ ] real PTY/Metal product acceptance、親項目完了判定
 - [ ] light/dark notification と extended reports
   （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のtheme report/update gapを参照して実施）
 - [ ] Kitty graphics parse/storage/placement/render

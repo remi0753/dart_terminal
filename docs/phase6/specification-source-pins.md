@@ -6,6 +6,7 @@ copyrighted standards. Retrieval dates are recorded per source.
 
 | Source ID | Baseline | Exact artifact | Bytes | SHA-256 |
 | --- | --- | --- | ---: | --- |
+| `contour-vt-extensions-05050a1-synchronized-output` | Synchronized Output, commit `05050a11e793c8f4362bf4e34a59ed3f7e5105fe` | [pinned upstream source](https://raw.githubusercontent.com/contour-terminal/vt-extensions/05050a11e793c8f4362bf4e34a59ed3f7e5105fe/synchronized-output.md) | 5,967 | `7cb1e9bc9fad9b56d81ebd7d0e8dad423c1b865ce1089d99f2f175239b9dde89` |
 | `ecma-48-5e` | ECMA-48, fifth edition, June 1991 | [ECMA official PDF](https://ecma-international.org/wp-content/uploads/ECMA-48_5th_edition_june_1991.pdf) | 1,607,865 | `9577ad2514c411584b274ef7a4b3238c80aa93defbb349b18b8c78f78873f450` |
 | `dec-vt510-rm-b01` | VT510 Video Terminal Programmer Information, B01, `EK-VT510-RM` | [archived DEC manual PDF](https://vt100.net/mirror/mds-199909/cd3/term/vt510rmb.pdf) | 3,378,497 | `440bbee110eb75027a06b5b375683fbc87cb739edac32899005ad46981c7d514` |
 | `ghostty-d4d8f62-semantic-prompt` | Ghostty OSC semantic prompt parser, commit `d4d8f62262cb1a974a7d2470d5f79f811fab15e4` | [pinned upstream source](https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/osc/parsers/semantic_prompt.zig) | 42,962 | `04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff` |
@@ -36,6 +37,9 @@ can change when a later patch is published.
 - Kitty records cite the progressive-enhancement control forms in the pinned
   v0.48.2 `keyboard-protocol.rst`. mintty mode 7727 cites its pinned historical
   control-sequence page rather than treating the mode as a DEC assignment.
+- Contour records cite the fixed synchronized-output extension proposal for
+  mode 2026. Its protocol leaves timeout policy to implementations; the
+  product's 1,000 ms recovery deadline is therefore implementation policy.
 - Ghostty records cite the exact semantic-prompt parser commit used to establish
   the accepted OSC 133 subset.
 - When more than one source specifies a control, the record has one stable ID
@@ -49,8 +53,9 @@ Record IDs are ASCII and deterministic:
 <primary-family>:<selector-kind>:<lowercase-name>
 ```
 
-Families are `ecma48`, `dec`, `ghostty`, `iterm2`, `kitty`, `mintty`, and
-`xterm`. Selector kinds are `c0`, `c1`, `esc`, `csi`, `osc`, `dcs`, `sos`,
+Families are `contour`, `dec`, `ecma48`, `ghostty`, `iterm2`, `kitty`,
+`mintty`, and `xterm`. Selector kinds are `c0`, `c1`, `esc`, `csi`, `osc`,
+`dcs`, `sos`,
 `pm`, `apc`, and `mode`. Mode names
 include `private-` when their selector uses the DEC private marker. The typed
 selector, not the human-readable syntax, is the uniqueness key.

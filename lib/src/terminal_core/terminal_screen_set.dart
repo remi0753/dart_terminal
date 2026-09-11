@@ -114,6 +114,8 @@ final class TerminalScreenSet {
   bool _bracketedPaste = false;
   bool _focusReporting = false;
   int _focusReportingGeneration = 1;
+  bool _synchronizedOutput = false;
+  int _synchronizedOutputGeneration = 1;
   int? _logicalViewportWidth;
   int? _logicalViewportHeight;
   TerminalMouseTrackingMode _mouseTracking = TerminalMouseTrackingMode.none;
@@ -133,6 +135,8 @@ final class TerminalScreenSet {
   bool get bracketedPasteMode => _bracketedPaste;
   bool get focusReportingMode => _focusReporting;
   int get focusReportingGeneration => _focusReportingGeneration;
+  bool get synchronizedOutputMode => _synchronizedOutput;
+  int get synchronizedOutputGeneration => _synchronizedOutputGeneration;
   TerminalKeyboardModes get keyboardModes => TerminalKeyboardModes(
     applicationCursorKeys: _applicationCursorKeys,
     applicationKeypad: _applicationKeypad,
@@ -316,6 +320,35 @@ final class TerminalScreenSet {
     _transitionGeneration++;
   }
 
+  /// Sets DEC private mode 2026.
+  ///
+  /// Repeated enable controls advance the generation so the presentation owner
+  /// can restart its bounded safety deadline without introducing nesting.
+  void setSynchronizedOutputMode(bool enabled) {
+    if (_synchronizedOutput == enabled) {
+      if (enabled) {
+        _synchronizedOutputGeneration++;
+        _transitionGeneration++;
+      }
+      return;
+    }
+    _synchronizedOutput = enabled;
+    _synchronizedOutputGeneration++;
+    _transitionGeneration++;
+  }
+
+  /// Releases mode 2026 only if [expectedGeneration] still owns its deadline.
+  bool expireSynchronizedOutputMode(int expectedGeneration) {
+    if (!_synchronizedOutput ||
+        expectedGeneration != _synchronizedOutputGeneration) {
+      return false;
+    }
+    _synchronizedOutput = false;
+    _synchronizedOutputGeneration++;
+    _transitionGeneration++;
+    return true;
+  }
+
   void setMouseTrackingMode(TerminalMouseTrackingMode mode, bool enabled) {
     if (mode == TerminalMouseTrackingMode.none) {
       throw ArgumentError.value(mode, 'mode', 'must be a DEC tracking mode');
@@ -393,6 +426,10 @@ final class TerminalScreenSet {
     _primaryKittyKeyboard.reset();
     _alternateKittyKeyboard.reset();
     _bracketedPaste = false;
+    if (_synchronizedOutput) {
+      _synchronizedOutput = false;
+      _synchronizedOutputGeneration++;
+    }
     if (_focusReporting) {
       _focusReporting = false;
       _focusReportingGeneration++;

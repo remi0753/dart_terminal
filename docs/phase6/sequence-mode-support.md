@@ -1,6 +1,6 @@
 # Terminal sequence and mode support baseline
 
-Generated from `compatibility/sequence_mode_inventory.json` revision 3. Do not edit this summary by hand.
+Generated from `compatibility/sequence_mode_inventory.json` revision 4. Do not edit this summary by hand.
 
 ## Reviewed boundary
 
@@ -11,7 +11,7 @@ This is a host-to-terminal compatibility baseline, not a claim to implement ever
 - DEC VT100–VT510 controls relevant to screen/cursor/margin/mode, character-set, rectangle, locator, and status behavior;
 - every DEC-private mode number listed by xterm Patch #411, plus its high-use CSI, DCS, OSC, mouse, title, palette, and clipboard families;
 - iTerm2 OSC 7 current-directory and OSC 8 hyperlink extensions because they are part of the current/later product contract.
-- Kitty keyboard flag controls, xterm modifyOtherKeys controls, and mintty application-Escape mode required by captured applications.
+- Kitty keyboard flag controls, xterm modifyOtherKeys controls, and mintty application-Escape mode required by captured applications; and Contour synchronized-output mode 2026.
 
 Excluded from this bounded baseline are ECMA transmission controls and paged-media/typesetting functions without modern terminal application meaning; exhaustive ISO-2022 national replacement-set final-byte variants beyond ASCII and DEC line drawing; physical printer/modem parameter variants; Tektronix command details; terminal-to-host keyboard output beyond the declared keyboard modes; Kitty graphics; and other Ghostty-only protocols assigned to later roadmap tasks. An exclusion is not silently supported.
 
@@ -19,6 +19,7 @@ Excluded from this bounded baseline are ECMA transmission controls and paged-med
 
 | Source | Family | Edition | Exact artifact |
 | --- | --- | --- | --- |
+| `contour-vt-extensions-05050a1-synchronized-output` | `contour` | commit 05050a11e793c8f4362bf4e34a59ed3f7e5105fe | 5967 bytes, `7cb1e9bc9fad9b56d81ebd7d0e8dad423c1b865ce1089d99f2f175239b9dde89` |
 | `dec-vt510-rm-b01` | `dec` | B01, August 1995, EK-VT510-RM | 3378497 bytes, `440bbee110eb75027a06b5b375683fbc87cb739edac32899005ad46981c7d514` |
 | `ecma-48-5e` | `ecma48` | ECMA-48, fifth edition, June 1991 | 1607865 bytes, `9577ad2514c411584b274ef7a4b3238c80aa93defbb349b18b8c78f78873f450` |
 | `ghostty-d4d8f62-semantic-prompt` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 42962 bytes, `04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff` |
@@ -33,11 +34,11 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 
 | Support classification | Records |
 | --- | ---: |
-| `implemented` | 92 |
+| `implemented` | 93 |
 | `partial` | 20 |
 | `safe-ignore` | 9 |
 | `unsupported` | 145 |
-| **Total** | **266** |
+| **Total** | **267** |
 
 | Selector kind | Records |
 | --- | ---: |
@@ -50,10 +51,10 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `sos` | 1 |
 | `pm` | 1 |
 | `apc` | 1 |
-| `mode` | 81 |
-| **Total** | **266** |
+| `mode` | 82 |
+| **Total** | **267** |
 
-The 92 implemented plus 20 partial records reconcile exactly to all 112 product declarations (89 sequence selectors and 23 modes). The 9 safe-ignore records cover 6 concrete DCS forms and SOS/PM/APC; all 145 remaining records are explicitly unsupported/rejected.
+The 93 implemented plus 20 partial records reconcile exactly to all 113 product declarations (89 sequence selectors and 24 modes). The 9 safe-ignore records cover 6 concrete DCS forms and SOS/PM/APC; all 145 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 

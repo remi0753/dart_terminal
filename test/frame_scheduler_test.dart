@@ -8,11 +8,152 @@ void runFrameSchedulerTests() {
   _testBackpressureRetainsOneMarkerAndRebuilds();
   _testPreparedWorkSupersededDuringBuild();
   _testAppliedRevisionStressHasNoFrameQueue();
+  _testSynchronizedPresentationGate();
+  _testSynchronizedOutputBlocksBuildAndRetainsNewest();
   _testBoundedCursorAndBellClock();
   _testVisibilityOcclusionPauseAndResume();
   _testOcclusionDuringBuildSupersedesBeforeSubmit();
   _testPresentationRevisionExhaustionDoesNotWrap();
   _testFrameGenerationExhaustionDoesNotWrap();
+}
+
+void _testSynchronizedOutputBlocksBuildAndRetainsNewest() {
+  final _DamageSequence sequence = _DamageSequence(rows: 1, columns: 1);
+  final List<int> builtRevisions = <int>[];
+  var backpressureNext = false;
+  final TerminalNewestFrameScheduler<_FakeFrame> scheduler =
+      TerminalNewestFrameScheduler<_FakeFrame>(
+        model: TerminalDamageRenderModel(),
+        buildFrame:
+            (
+              TerminalDamageRenderModel model, {
+              required int modelRevision,
+              required int frameGeneration,
+              required TerminalFramePresentation presentation,
+            }) {
+              builtRevisions.add(modelRevision);
+              return _FakeFrame(
+                modelRevision,
+                frameGeneration,
+                model.contentAt(0, 0),
+                presentation,
+              );
+            },
+        submitFrame:
+            (
+              _FakeFrame frame, {
+              required int modelRevision,
+              required int frameGeneration,
+            }) {
+              if (backpressureNext) {
+                backpressureNext = false;
+                return TerminalFrameSubmissionOutcome.backpressured;
+              }
+              return TerminalFrameSubmissionOutcome.accepted(
+                frameGeneration: frameGeneration,
+                submissionToken: frameGeneration,
+              );
+            },
+      );
+  scheduler.applyDamage(
+    sequence.captureFull(),
+    availableResourceGeneration: 1,
+    monotonicMicros: 0,
+  );
+  _expect(
+    scheduler.submitNewest().isAccepted &&
+        scheduler.updateSynchronizedOutput(isHeld: true) &&
+        scheduler.isSynchronizedOutputHeld,
+    'an accepted baseline is frozen by the synchronized-output guard',
+  );
+  for (int revision = 2; revision <= 1025; revision++) {
+    scheduler.applyDamage(
+      sequence.mutateAndCapture(0, 0, revision.isEven ? 0x41 : 0x42),
+      availableResourceGeneration: 1,
+      monotonicMicros: revision,
+    );
+    _expect(
+      scheduler.submitNewest().disposition ==
+              TerminalFrameAttemptDisposition.synchronized &&
+          scheduler.pendingFrameCount == 1 &&
+          builtRevisions.length == 1,
+      'held revision $revision never builds or queues an intermediate frame',
+    );
+  }
+  backpressureNext = true;
+  _expect(
+    scheduler.updateWindowState(isOccluded: true, monotonicMicros: 1026) &&
+        scheduler.updateSynchronizedOutput(isHeld: false) &&
+        !scheduler.isSynchronizedOutputHeld &&
+        scheduler.submitNewest().disposition ==
+            TerminalFrameAttemptDisposition.paused &&
+        scheduler.pendingFrameCount == 1 &&
+        scheduler.updateWindowState(isOccluded: false, monotonicMicros: 1027) &&
+        scheduler.submitNewest().disposition ==
+            TerminalFrameAttemptDisposition.backpressured &&
+        scheduler.pendingFrameCount == 1 &&
+        scheduler.submitNewest().isAccepted &&
+        scheduler.pendingFrameCount == 0 &&
+        builtRevisions.length == 3 &&
+        builtRevisions.last == 1025,
+    'occluded release remains pending, survives one native backpressure '
+    'result, and accepts only newest',
+  );
+}
+
+void _testSynchronizedPresentationGate() {
+  _expectArgument(
+    () => TerminalSynchronizedPresentationGate(holdDuration: Duration.zero),
+    'zero synchronized-output duration is rejected',
+  );
+  final TerminalSynchronizedPresentationGate gate =
+      TerminalSynchronizedPresentationGate(
+        holdDuration: const Duration(microseconds: 1000),
+      );
+  _expect(
+    gate.synchronize(enabled: false, modeGeneration: 1, monotonicMicros: 10) ==
+        TerminalSynchronizedPresentationDisposition.unchanged,
+    'initial reset mode leaves presentation open',
+  );
+  _expect(
+    gate.synchronize(enabled: true, modeGeneration: 2, monotonicMicros: 20) ==
+            TerminalSynchronizedPresentationDisposition.started &&
+        gate.isHolding &&
+        gate.nextDeadlineMicros == 1020 &&
+        !gate.deadlineReached(monotonicMicros: 500),
+    'begin owns one exact monotonic deadline',
+  );
+  _expect(
+    gate.synchronize(enabled: true, modeGeneration: 3, monotonicMicros: 900) ==
+            TerminalSynchronizedPresentationDisposition.restarted &&
+        gate.nextDeadlineMicros == 1900 &&
+        !gate.deadlineReached(monotonicMicros: 1020) &&
+        gate.deadlineReached(monotonicMicros: 1900),
+    'repeated begin replaces rather than stacks its deadline',
+  );
+  _expect(
+    gate.synchronize(
+              enabled: false,
+              modeGeneration: 4,
+              monotonicMicros: 1900,
+            ) ==
+            TerminalSynchronizedPresentationDisposition.released &&
+        !gate.isHolding &&
+        gate.nextDeadlineMicros == null,
+    'reset releases the hold and clears its deadline',
+  );
+  _expectState(
+    () => gate.synchronize(
+      enabled: true,
+      modeGeneration: 3,
+      monotonicMicros: 1901,
+    ),
+    'mode generation regression is rejected',
+  );
+  _expectState(
+    () => gate.deadlineReached(monotonicMicros: 1899),
+    'monotonic time regression is rejected',
+  );
 }
 
 void _testExactFrameTimingMetrics() {

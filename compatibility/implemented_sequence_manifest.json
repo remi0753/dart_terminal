@@ -798,6 +798,12 @@
       "handler": "execute"
     },
     {
+      "key": "mode:1:2026",
+      "private": true,
+      "number": 2026,
+      "handler": "execute"
+    },
+    {
       "key": "mode:1:7727",
       "private": true,
       "number": 7727,

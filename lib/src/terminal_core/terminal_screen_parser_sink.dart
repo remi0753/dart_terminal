@@ -951,6 +951,7 @@ final class TerminalScreenParserSink
         1004 => screenSet?.focusReportingMode,
         1049 => screenSet?.mode1049Active,
         2004 => screenSet?.bracketedPasteMode,
+        2026 => screenSet?.synchronizedOutputMode,
         7727 => screenSet?.keyboardModes.applicationEscape,
         _ => screenSet?.mouseModes.decPrivateModeState(mode),
       };
@@ -1725,6 +1726,13 @@ final class TerminalScreenParserSink
             _unsupportedSequenceCount++;
           } else {
             screens.setBracketedPasteMode(enabled);
+          }
+        case 2026:
+          final TerminalScreenSet? screens = screenSet;
+          if (screens == null) {
+            _unsupportedSequenceCount++;
+          } else {
+            screens.setSynchronizedOutputMode(enabled);
           }
         case 7727:
           final TerminalScreenSet? screens = screenSet;

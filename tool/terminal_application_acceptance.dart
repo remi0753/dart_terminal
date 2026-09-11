@@ -263,11 +263,11 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
   );
   _expect(
     cells.length == 8 &&
-        cleanAgreements == 4 &&
-        documentedGapCells == 4 &&
-        gaps.length == 4 &&
-        uniqueSequences.length == 6 &&
-        unsupportedIncrements == 63 &&
+        cleanAgreements == 6 &&
+        documentedGapCells == 2 &&
+        gaps.length == 3 &&
+        uniqueSequences.length == 4 &&
+        unsupportedIncrements == 7 &&
         safeIgnoreGaps == 0,
     'reviewed acceptance baseline differs',
   );
@@ -293,8 +293,6 @@ List<_AcceptanceGap> _parseGaps(
     'ROADMAP.md#phase-6-focus-mouse-query':
         'focus/mouse/bracketed paste/query reports',
     'ROADMAP.md#phase-9-kitty-keyboard-protocol': 'Kitty keyboard protocol',
-    'ROADMAP.md#phase-9-synchronized-output-rendering':
-        'synchronized output/rendering',
     'ROADMAP.md#phase-9-light-dark-notification-reports':
         'light/dark notification と extended reports',
   };

@@ -19,15 +19,15 @@ void _testReviewedAcceptance() {
       runTerminalApplicationAcceptanceChecks();
   _expect(
     result.acceptedCells == 8 &&
-        result.cleanAgreements == 4 &&
-        result.documentedGapCells == 4 &&
-        result.gaps == 4 &&
-        result.uniqueSequences == 6 &&
-        result.unsupportedIncrements == 63 &&
+        result.cleanAgreements == 6 &&
+        result.documentedGapCells == 2 &&
+        result.gaps == 3 &&
+        result.uniqueSequences == 4 &&
+        result.unsupportedIncrements == 7 &&
         result.machineLine() ==
-            'TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=4 '
-                'documented_gap_cells=4 gaps=4 unique_sequences=6 '
-                'unsupported_increments=63',
+            'TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=6 '
+                'documented_gap_cells=2 gaps=3 unique_sequences=4 '
+                'unsupported_increments=7',
     'reviewed acceptance has exact replay-derived totals',
   );
 }
@@ -49,9 +49,9 @@ void _testFreshnessFailure() {
 
 void _testUnownedSequenceFailure() {
   final Map<String, Object?> report = _report();
-  final Map<String, Object?> gap = _gap(report, 'synchronized-output');
-  gap['variants'] = <String>['1b5b3f3230323668'];
-  _expectFailure(report, 'fzf-filter-selection has unowned sequence');
+  final Map<String, Object?> gap = _gap(report, 'theme-updates');
+  gap['variants'] = <String>['1b5b3f3230333168'];
+  _expectFailure(report, 'tmux-session-resize has unowned sequence');
 }
 
 void _testScreenMutationFailure() {
@@ -62,11 +62,8 @@ void _testScreenMutationFailure() {
 
 void _testOwnerFailure() {
   final Map<String, Object?> report = _report();
-  _gap(report, 'synchronized-output')['owner'] = 'ROADMAP.md#missing';
-  _expectFailure(
-    report,
-    'synchronized-output owner is not a reviewed ROADMAP owner',
-  );
+  _gap(report, 'theme-updates')['owner'] = 'ROADMAP.md#missing';
+  _expectFailure(report, 'theme-updates owner is not a reviewed ROADMAP owner');
 }
 
 Map<String, Object?> _report() => Map<String, Object?>.from(

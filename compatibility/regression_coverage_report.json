@@ -9,19 +9,19 @@
     },
     {
       "path": "compatibility/sequence_mode_inventory.json",
-      "sha256": "8df6df35b71cab7f75c98136b4428ed2f22f1fa323266136790836995e73d550"
+      "sha256": "1a8a0f83ba5c3f19c0647ad826b04b7cc260347fe8e8df49c55ce7ff825f7176"
     },
     {
       "path": "compatibility/implemented_sequence_manifest.json",
-      "sha256": "69392b881d60384c5967c97218b29d9c36c5b36edae28d2d72e036f8447b201e"
+      "sha256": "f6033355015b8258bb5cc5ba137272ae2e91188ca887e643c876f84a0ae0fec4"
     },
     {
       "path": "compatibility/application_matrix_acceptance.json",
-      "sha256": "d139f6d122bc96603504ab307ca05ac14c9d9d473865e9454bd22cde6b364905"
+      "sha256": "5834a61faa29c77e8afc0508848f609fabdfc50a5e7b370035a055f98d73c436"
     },
     {
       "path": "compatibility/differential_acceptance_report.json",
-      "sha256": "74f3a02816e8a88e20fc2ddb7756cf195bbcb175f04325ca8885e3522775e2ec"
+      "sha256": "aab08024ae40c69425bdc8c4bddba8f21041f4b4d70889c4f8a5c59d71ef87a6"
     },
     {
       "path": "test/corpus/parser/sequence_trace_case_v1.json",
@@ -37,7 +37,7 @@
     },
     {
       "path": "FEATURE_MATRIX.md",
-      "sha256": "711a92890f95277e2162ce2ebf5e555d4478c5258fc45d0b672caac9b76a8c31"
+      "sha256": "aecd195472544746cf8bf606d7939ba5c4141b7cf6efd4314f8b7e31197f5fe3"
     }
   ],
   "fix_families": [
@@ -134,15 +134,6 @@
       "matrix_blocker": false
     },
     {
-      "id": "synchronized-output",
-      "disposition": "explicit-unsupported",
-      "impact": "presentation-atomicity",
-      "owner": "ROADMAP.md#phase-9-synchronized-output-rendering",
-      "variants": 2,
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
       "id": "theme-report",
       "disposition": "explicit-unsupported",
       "impact": "query-fallback",
@@ -169,21 +160,21 @@
       "split_runs": 417
     },
     "inventory": {
-      "records": 266,
-      "implemented": 92,
+      "records": 267,
+      "implemented": 93,
       "partial": 20,
       "safe_ignore": 9,
       "explicit_unsupported": 145,
       "implementation_selectors": 89,
-      "implementation_modes": 23
+      "implementation_modes": 24
     },
     "application_matrix": {
       "cells": 8,
-      "clean_agreements": 4,
-      "documented_gap_cells": 4,
-      "gaps": 4,
-      "unique_sequences": 6,
-      "unsupported_increments": 63
+      "clean_agreements": 6,
+      "documented_gap_cells": 2,
+      "gaps": 3,
+      "unique_sequences": 4,
+      "unsupported_increments": 7
     },
     "differential": {
       "accepted": 12,

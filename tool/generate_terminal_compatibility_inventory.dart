@@ -689,6 +689,16 @@ const Map<int, _Metadata> _decModeMetadata = <int, _Metadata>{
     'BRACKETED-PASTE',
     'ctlseqs.ms, DEC private mode 2004',
   ),
+  2026: _Metadata(
+    'contour',
+    'synchronized-output',
+    'SYNCHRONIZED-OUTPUT',
+    'synchronized-output.md, Protocol—DEC private mode 2026',
+    notes:
+        'Canonical terminal state continues updating while Metal presentation '
+        'is held; reset or the product-owned 1,000 ms safety timeout releases '
+        'one newest full presentation.',
+  ),
   7727: _Metadata(
     'mintty',
     'application-escape',
@@ -2058,6 +2068,19 @@ const List<_Gap> _dcsAndStringRecords = <_Gap>[
 
 const List<Map<String, Object?>> _sourcePins = <Map<String, Object?>>[
   <String, Object?>{
+    'id': 'contour-vt-extensions-05050a1-synchronized-output',
+    'family': 'contour',
+    'title': 'Synchronized Output',
+    'edition': 'commit 05050a11e793c8f4362bf4e34a59ed3f7e5105fe',
+    'artifactUrl': 'https://raw.githubusercontent.com/contour-terminal/vt-extensions/05050a11e793c8f4362bf4e34a59ed3f7e5105fe/synchronized-output.md',
+    'artifactBytes': 5967,
+    'artifactSha256':
+        '7cb1e9bc9fad9b56d81ebd7d0e8dad423c1b865ce1089d99f2f175239b9dde89',
+    'documentPath': null,
+    'documentSha256': null,
+    'retrievedOn': '2026-09-11',
+  },
+  <String, Object?>{
     'id': 'dec-vt510-rm-b01',
     'family': 'dec',
     'title': 'VT510 Video Terminal Programmer Information',
@@ -2217,7 +2240,7 @@ String generateTerminalCompatibilityInventorySource() {
   final Map<String, Object?> root = <String, Object?>{
     'format': 'dart-terminal-sequence-mode-inventory',
     'version': 1,
-    'inventoryRevision': 3,
+    'inventoryRevision': 4,
     'scope': 'complete-baseline',
     'sourcePins': _sourcePins,
     'records': records,
@@ -2413,6 +2436,7 @@ Map<String, Object?> _unsupportedMode(
 }
 
 String _sourceId(String family) => switch (family) {
+  'contour' => 'contour-vt-extensions-05050a1-synchronized-output',
   'dec' => 'dec-vt510-rm-b01',
   'ecma48' => 'ecma-48-5e',
   'iterm2' => 'iterm2-escape-codes-2026-09-07',

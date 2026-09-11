@@ -7,6 +7,7 @@ const String defaultTerminalImplementationSurfacePath =
     'compatibility/implemented_sequence_manifest.json';
 
 enum TerminalCompatibilitySourceFamily {
+  contour,
   dec,
   ecma48,
   ghostty,
@@ -567,7 +568,7 @@ final class TerminalCompatibilityInventory {
     final String id = _boundedText(map['id'], '$context.id', 96);
     _expect(
       RegExp(
-        r'^(dec|ecma48|ghostty|iterm2|kitty|mintty|xterm):(c0|c1|esc|csi|osc|dcs|sos|pm|apc|mode):[a-z0-9]+(?:-[a-z0-9]+)*$',
+        r'^(contour|dec|ecma48|ghostty|iterm2|kitty|mintty|xterm):(c0|c1|esc|csi|osc|dcs|sos|pm|apc|mode):[a-z0-9]+(?:-[a-z0-9]+)*$',
       ).hasMatch(id),
       '$context.id is invalid',
     );
@@ -911,6 +912,7 @@ final class TerminalCompatibilityInventory {
     String value,
     String context,
   ) => switch (value) {
+    'contour' => TerminalCompatibilitySourceFamily.contour,
     'dec' => TerminalCompatibilitySourceFamily.dec,
     'ecma48' => TerminalCompatibilitySourceFamily.ecma48,
     'ghostty' => TerminalCompatibilitySourceFamily.ghostty,

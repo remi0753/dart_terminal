@@ -1,9 +1,21 @@
 {
   "format": "dart-terminal-sequence-mode-inventory",
   "version": 1,
-  "inventoryRevision": 3,
+  "inventoryRevision": 4,
   "scope": "complete-baseline",
   "sourcePins": [
+    {
+      "id": "contour-vt-extensions-05050a1-synchronized-output",
+      "family": "contour",
+      "title": "Synchronized Output",
+      "edition": "commit 05050a11e793c8f4362bf4e34a59ed3f7e5105fe",
+      "artifactUrl": "https://raw.githubusercontent.com/contour-terminal/vt-extensions/05050a11e793c8f4362bf4e34a59ed3f7e5105fe/synchronized-output.md",
+      "artifactBytes": 5967,
+      "artifactSha256": "7cb1e9bc9fad9b56d81ebd7d0e8dad423c1b865ce1089d99f2f175239b9dde89",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
+    },
     {
       "id": "dec-vt510-rm-b01",
       "family": "dec",
@@ -90,6 +102,31 @@
     }
   ],
   "records": [
+    {
+      "id": "contour:mode:synchronized-output",
+      "mnemonic": "SYNCHRONIZED-OUTPUT",
+      "syntax": "CSI ? 2026 h / CSI ? 2026 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 2026
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "contour-vt-extensions-05050a1-synchronized-output",
+          "locator": "synchronized-output.md, Protocol—DEC private mode 2026"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Canonical terminal state continues updating while Metal presentation is held; reset or the product-owned 1,000 ms safety timeout releases one newest full presentation."
+    },
     {
       "id": "dec:c1:ind",
       "mnemonic": "IND",
