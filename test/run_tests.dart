@@ -1004,6 +1004,7 @@ void _testOptions() {
     !options.runtimeDesktopSignalsTest,
     'desktop signals test defaults off',
   );
+  _expect(!options.runtimeOsc52Test, 'OSC 52 test defaults off');
   _expect(!options.runtimeRestorationTest, 'restoration test defaults off');
   _expect(
     options.runtimeRestorationPath == null,
@@ -1398,6 +1399,35 @@ void _testOptions() {
       },
     ),
     'desktop signals and user actions tests are mutually exclusive',
+  );
+  final TerminalOptions osc52TestOptions = _parseOptions(
+    const <String>['--runtime-osc52-test'],
+    environment: const <String, String>{'DT_RUNTIME_OSC52_TEST': '1'},
+  );
+  _expect(
+    osc52TestOptions.runtimeOsc52Test,
+    'gated ordinary-product OSC 52 test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-osc52-test']),
+    'OSC 52 product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-osc52-test', '--runtime-osc52-test'],
+      environment: const <String, String>{'DT_RUNTIME_OSC52_TEST': '1'},
+    ),
+    'duplicate OSC 52 product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-osc52-test', '--runtime-desktop-signals-test'],
+      environment: const <String, String>{
+        'DT_RUNTIME_OSC52_TEST': '1',
+        'DT_RUNTIME_DESKTOP_SIGNALS_TEST': '1',
+      },
+    ),
+    'OSC 52 and desktop signals tests are mutually exclusive',
   );
   final TerminalOptions restorationTestOptions = _parseOptions(
     const <String>['--runtime-restoration-test'],

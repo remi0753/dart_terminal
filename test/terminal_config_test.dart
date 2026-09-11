@@ -654,6 +654,31 @@ working-directory = /from-file
             TerminalConfiguredShellIntegration.none,
     'TerminalOptions admits the isolated desktop signals acceptance gate',
   );
+  final TerminalOptions runtimeOsc52 = TerminalOptions.parse(
+    const <String>[
+      '--no-config',
+      '--clipboard-read=ask',
+      '--clipboard-write=ask',
+      '--runtime-osc52-test',
+    ],
+    environment: const <String, String>{'DT_RUNTIME_OSC52_TEST': '1'},
+    configFileSystem: files,
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    runtimeOsc52.runtimeOsc52Test &&
+        runtimeOsc52.effectiveConfiguration!.value(
+              TerminalProductConfigSchema.clipboardRead,
+            ) ==
+            TerminalConfiguredClipboardAccess.ask &&
+        runtimeOsc52.effectiveConfiguration!.value(
+              TerminalProductConfigSchema.clipboardWrite,
+            ) ==
+            TerminalConfiguredClipboardAccess.ask,
+    'TerminalOptions admits the isolated OSC 52 acceptance gate',
+  );
   _expectThrows(
     () => TerminalOptions.parse(
       const <String>['--no-config', '--runtime-configuration-test'],
@@ -685,6 +710,14 @@ working-directory = /from-file
       configFileSystem: files,
     ),
     'desktop signals acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>['--no-config', '--runtime-osc52-test'],
+      environment: const <String, String>{},
+      configFileSystem: files,
+    ),
+    'OSC 52 acceptance is unavailable without its environment gate',
   );
   _expectThrows(
     () => TerminalOptions.parse(

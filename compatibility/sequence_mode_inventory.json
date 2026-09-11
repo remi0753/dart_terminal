@@ -6720,7 +6720,7 @@
         "kind": "osc",
         "command": 52
       },
-      "support": "partial",
+      "support": "implemented",
       "disposition": "reply",
       "sourceRefs": [
         {
@@ -6729,12 +6729,20 @@
         }
       ],
       "implementationEvidence": [
-        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch",
+        "lib/src/terminal_core/terminal_osc52.dart#bounded-protocol",
+        "lib/src/terminal_osc52_projection.dart#application-policy",
+        "lib/src/terminal_osc52_confirmation.dart#native-confirmation",
+        "lib/src/terminal_session.dart#ordered-pty-reply"
       ],
       "testEvidence": [
-        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation",
+        "test/terminal_osc52_policy_test.dart#parser-policy",
+        "test/terminal_osc52_projection_test.dart#application-policy",
+        "test/terminal_native_hierarchy_test.dart#native-confirmation",
+        "tool/runtime_integration_smoke.dart#osc52-product-acceptance"
       ],
-      "notes": "Bounded selector/data parsing is implemented with a deny-by-default policy: queries return empty data and writes/clears have no clipboard authority. Opt-in access remains deferred."
+      "notes": "Bounded OSC 52 read, write, and clear are implemented for selections containing the macOS general clipboard selector c. Independent default-deny read/write policies support ask or allow; clear follows write. Strict UTF-8 text is capped at 3,060 bytes, confirmation is focused and identity-bound, and other selection stores remain unavailable. Ms is intentionally not advertised."
     }
   ]
 }

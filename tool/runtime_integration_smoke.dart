@@ -30,6 +30,7 @@ enum _Suite {
   theme,
   shellIntegration,
   desktopSignals,
+  osc52,
   restoration,
   clipboard,
   lifecycle,
@@ -41,6 +42,7 @@ enum _Suite {
   String get optionName => switch (this) {
     _Suite.shellIntegration => 'shell-integration',
     _Suite.desktopSignals => 'desktop-signals',
+    _Suite.osc52 => 'osc52',
     _ => name,
   };
 }
@@ -160,7 +162,7 @@ _Options _parseOptions(List<String> arguments) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
           'configuration, theme, shell-integration, desktop-signals, '
-          'clipboard, lifecycle, traffic, resource, fault, or all',
+          'osc52, clipboard, lifecycle, traffic, resource, fault, or all',
         );
       }
       suite = selected;
@@ -1621,6 +1623,72 @@ Future<void> _runDesktopSignals(
     'RUNTIME_DESKTOP_SIGNALS_INTEGRATION_PASS mode=${options.mode.name} '
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'notifications=4 removals=4 elapsed_ms=${observation.elapsed.inMilliseconds}',
+  );
+}
+
+Future<void> _runOsc52(_Options options, _Invocation invocation) async {
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>[
+      '--no-config',
+      '--shell-integration=none',
+      '--clipboard-read=ask',
+      '--clipboard-write=ask',
+      '--runtime-osc52-test',
+    ],
+    environment: const <String, String>{'DT_RUNTIME_OSC52_TEST': '1'},
+    timeout: const Duration(seconds: 45),
+  );
+  _expect(
+    observation.status == 0,
+    'OSC 52 application exited with status ${observation.status}; '
+    'stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'OSC 52 application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_OSC52_TEST real_pty=true safe_memory_adapter=true '
+          r'ask_write_menu_allow=true ask_read_palette_allow=true '
+          r'ask_clear_menu_deny=true exact_reply=true preapproval_zero=true '
+          r'pending=3 approved=2 denied=1 clipboard_reads=1 '
+          r'clipboard_writes=1 clipboard_clears=0 responder_restores=3 '
+          r'sessions_clean=1 text_clients=0 native_handles=0$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted exact OSC 52 acceptance',
+  );
+  _expect(
+    RegExp(
+              r'^TERMINAL_SESSION_SHUTDOWN pane=1 session=1:1 '
+              r'process_id=[1-9][0-9]* disposition=clean '
+              r'termination_observed=true cleanup_completed=true$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1 &&
+        RegExp(
+              r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=1 disposition=clean$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1 &&
+        observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+    'OSC 52 product did not cleanly release its PTY session',
+  );
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
+  );
+  stdout.writeln(
+    'RUNTIME_OSC52_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'requests=3 elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }
 
@@ -3137,6 +3205,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.desktopSignals || options.suite == _Suite.all) {
       await _runDesktopSignals(options, invocation);
+    }
+    if (options.suite == _Suite.osc52 || options.suite == _Suite.all) {
+      await _runOsc52(options, invocation);
     }
     if (options.suite == _Suite.restoration || options.suite == _Suite.all) {
       await _runRestoration(options, invocation);

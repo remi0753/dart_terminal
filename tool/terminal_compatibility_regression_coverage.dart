@@ -185,8 +185,8 @@ String generateTerminalCompatibilityRegressionCoverage({
       .length;
   _expect(
     inventory.records.length == 272 &&
-        support[TerminalCompatibilitySupport.implemented] == 96 &&
-        support[TerminalCompatibilitySupport.partial] == 23 &&
+        support[TerminalCompatibilitySupport.implemented] == 97 &&
+        support[TerminalCompatibilitySupport.partial] == 22 &&
         support[TerminalCompatibilitySupport.safeIgnore] == 8 &&
         support[TerminalCompatibilitySupport.unsupported] == 145 &&
         safeIgnore == 8 &&

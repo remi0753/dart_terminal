@@ -9,7 +9,7 @@
     },
     {
       "path": "compatibility/sequence_mode_inventory.json",
-      "sha256": "097f58fd5e7c72181f579320daff7690882bf5d46815995426a1b6cdc2f6bd1f"
+      "sha256": "9be82246a100aa4b5ca4f9104627e00d46c19901e7b1c682cf34a59c77db264e"
     },
     {
       "path": "compatibility/implemented_sequence_manifest.json",
@@ -33,11 +33,11 @@
     },
     {
       "path": "README.md",
-      "sha256": "d21e88fd208456d66fe4216d24622e1607b5ea7cc02fcfd18413543e0dd803dd"
+      "sha256": "671648800f91e215ecd0a6f5dc8ba12a98f2833ed01a5dfed7bb6005a3167363"
     },
     {
       "path": "FEATURE_MATRIX.md",
-      "sha256": "09a888415b96d1d9efb2725424d15d94808c2913f06fd61e023fd3d3a39f08da"
+      "sha256": "38fb1841813c0dc943e9652b42b0c3403df9d5e11b8742d78b48af0ad0c46d71"
     }
   ],
   "fix_families": [
@@ -143,8 +143,8 @@
     },
     "inventory": {
       "records": 272,
-      "implemented": 96,
-      "partial": 23,
+      "implemented": 97,
+      "partial": 22,
       "safe_ignore": 8,
       "explicit_unsupported": 145,
       "implementation_selectors": 92,

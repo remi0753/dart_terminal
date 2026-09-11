@@ -5,8 +5,8 @@
 - Phase: 9
 - Task: OSC 52 confirmation/policy UI
 - Started: 2026-09-12
-- State: in progress
-- Current subtask: exact application confirmation and pasteboard projection
+- State: complete
+- Current subtask: shipped-runtime acceptance and closure (complete)
 
 ## Purpose
 
@@ -295,3 +295,74 @@ and tests committed by the earlier child.
   successfully. Final `git diff --check` passed; review found no temporary
   logging, secrets, untracked build output, or unrelated edits. The exact
   application confirmation/pasteboard child meets its completion conditions.
+- 2026-09-12: Commit `7c32e24` (`Confirm exact OSC 52 clipboard requests`)
+  completed the second child. The post-commit worktree is clean; rereading the
+  ROADMAP and this memo selects shipped-runtime acceptance and closure as the
+  final child. Its scope is one gated real-PTY/AppKit scenario, Developer JIT
+  and Release AOT execution, compatibility/public documentation, generated
+  evidence, source/bundle audits, and the exact repository gate. The later
+  protocol-specific fuzz/security/memory task remains out of scope.
+- 2026-09-12: Runtime inventory shows the ordinary interactive hierarchy is the
+  required product path: it owns real PTYs, `TerminalMetalView`, native menus,
+  command palette, confirmation presenter, and application cleanup. The new
+  suite will inject only an application-local memory implementation of the OSC
+  52 clipboard port; standard Copy/Paste is not invoked, and the suite never
+  reads, clears, or writes `NSPasteboard`. It will exercise ask-write approval
+  through the native Edit menu, ask-read approval through the shared command
+  palette, ask-clear denial, exact PTY reply bytes, transient-window owner
+  bounds, responder restoration, counters, and complete teardown.
+- 2026-09-12: Compatibility closure will promote the bounded OSC 52 selector
+  from partial to implemented while documenting its deliberate subset: only
+  selections containing `c` map to the macOS general clipboard, text is strict
+  UTF-8 and capped at 3,060 bytes, read/write are independent default-deny
+  policies, clear follows write, and `Ms` remains unadvertised. Other xterm
+  selection stores and non-text representations remain explicitly unavailable.
+- 2026-09-12: The first focused analysis of the runtime harness found three
+  missing `TerminalOsc52Operation` references in the product acceptance method.
+  The application already imported the coordinator but not the protocol-core
+  enum; adding the explicit core import fixes the compile boundary without
+  changing behavior.
+- 2026-09-12: Compatibility inventory and summary regeneration successfully
+  promoted OSC 52 to 97 implemented and 22 partial records. The first coverage
+  reconciliation then stopped before writing because its checked dependency
+  correctly detected that `compatibility/differential_baseline_report.json`
+  still contained the previous inventory hash. The reviewed corpus generator
+  uses its no-argument mode to refresh that deterministic report and its four
+  in-process observations; it must run before retrying coverage generation.
+  This is a stale generated dependency, not a parser or runtime failure.
+- 2026-09-12: The Developer JIT OSC 52 acceptance passed on the native arm64
+  product bundle. One real zsh PTY produced three requests: a native Edit-menu
+  allow wrote only to the injected memory port, a command-palette allow read
+  that port exactly once and returned the exact encoded bytes through the PTY,
+  and a native Edit-menu deny left clear authority unused. The harness observed
+  one clean session and worker, three responder restorations, zero pre-approval
+  access, and zero surviving native handles; it never constructed or invoked
+  the AppKit pasteboard adapter.
+- 2026-09-12: The identical native arm64 Release AOT acceptance also passed
+  with all three requests and the exact same authority, reply, ownership, and
+  clean-shutdown observations. The measured harness elapsed times were 1,522 ms
+  for Developer JIT and 800 ms for Release AOT; these are observations rather
+  than performance gates.
+- 2026-09-12: The source audit passed with 492 tracked files, zero product
+  native-language sources, and the one reviewed test-only native fixture.
+  Developer JIT and Release AOT bundle audits both passed for arm64 with one
+  declared helper, one native-asset set, and one capability set. The runtime
+  test flag and safe adapter introduce no undeclared resource or native binary.
+- 2026-09-12: The exact repository gate
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed all generated-source,
+  configuration (38 options), action (21 actions), AppKit, compatibility
+  (97 implemented/22 partial), differential, application, terminfo, shell
+  integration, format (268 files, zero changes), analyze (no issues), and Dart
+  tests. Final `git diff --check` passed, and a stale-wording scan found no
+  current README, feature-matrix, generated compatibility, test, tool, or
+  product source that still claims 19 actions, 36 options, the previous 96/23
+  compatibility totals, or deferred OSC 52 opt-in authority. Historical task
+  memos retain their point-in-time counts intentionally.
+- 2026-09-12: Final review confirms the hidden runtime option is environment
+  gated and mutually exclusive with every other acceptance scenario, the test
+  port is injected only for that option, both menu actions produce successful
+  dispatch observations, and the public compatibility text preserves the
+  deliberate `c`-only/plain-text/no-`Ms` subset. All three ordered children and
+  the OSC 52 parent therefore meet their completion conditions with no deferred
+  work; protocol-wide fuzz/security/memory testing remains the next ROADMAP
+  item and has not been implemented early.

@@ -24,6 +24,7 @@ import 'terminal_configuration_reference.dart';
 import 'terminal_core/terminal_desktop_signals.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
+import 'terminal_core/terminal_osc52.dart';
 import 'terminal_core/terminal_reply.dart';
 import 'terminal_core/terminal_screen.dart';
 import 'terminal_core/terminal_screen_parser_sink.dart';
@@ -111,6 +112,7 @@ final class TerminalOptions {
     this.runtimeThemeTest = false,
     this.runtimeShellIntegrationTest = false,
     this.runtimeDesktopSignalsTest = false,
+    this.runtimeOsc52Test = false,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
@@ -159,6 +161,7 @@ final class TerminalOptions {
     var runtimeThemeTest = false;
     var runtimeShellIntegrationTest = false;
     var runtimeDesktopSignalsTest = false;
+    var runtimeOsc52Test = false;
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
@@ -263,6 +266,15 @@ final class TerminalOptions {
           );
         }
         runtimeDesktopSignalsTest = true;
+        continue;
+      }
+      if (argument == '--runtime-osc52-test') {
+        if (runtimeOsc52Test) {
+          throw const FormatException(
+            '--runtime-osc52-test may only be supplied once',
+          );
+        }
+        runtimeOsc52Test = true;
         continue;
       }
       if (argument == '--runtime-restoration-test') {
@@ -556,6 +568,32 @@ final class TerminalOptions {
         'desktop signals test cannot be combined with another runtime test',
       );
     }
+    if (runtimeOsc52Test &&
+        selectedEnvironment['DT_RUNTIME_OSC52_TEST'] != '1') {
+      throw const FormatException(
+        'OSC 52 test requires the integration-test gate',
+      );
+    }
+    if (runtimeOsc52Test &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeShellIntegrationTest ||
+            runtimeDesktopSignalsTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'OSC 52 test cannot be combined with another runtime test',
+      );
+    }
     if (runtimeNativeHierarchyTest &&
         (selectedScenario != RuntimeLifecycleScenario.normal ||
             autoCloseAfter != null ||
@@ -613,6 +651,7 @@ final class TerminalOptions {
       runtimeThemeTest: runtimeThemeTest,
       runtimeShellIntegrationTest: runtimeShellIntegrationTest,
       runtimeDesktopSignalsTest: runtimeDesktopSignalsTest,
+      runtimeOsc52Test: runtimeOsc52Test,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
@@ -653,6 +692,7 @@ final class TerminalOptions {
   final bool runtimeThemeTest;
   final bool runtimeShellIntegrationTest;
   final bool runtimeDesktopSignalsTest;
+  final bool runtimeOsc52Test;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
@@ -737,6 +777,7 @@ final class TerminalApplication {
         options.runtimeThemeTest ||
         options.runtimeShellIntegrationTest ||
         options.runtimeDesktopSignalsTest ||
+        options.runtimeOsc52Test ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -759,6 +800,10 @@ final class TerminalApplication {
         runThemeAcceptance: options.runtimeThemeTest,
         runShellIntegrationAcceptance: options.runtimeShellIntegrationTest,
         runDesktopSignalAcceptance: options.runtimeDesktopSignalsTest,
+        runOsc52Acceptance: options.runtimeOsc52Test,
+        osc52Clipboard: options.runtimeOsc52Test
+            ? _MemoryTerminalOsc52Clipboard()
+            : null,
       );
       return;
     }
@@ -2232,6 +2277,7 @@ final class TerminalApplication {
       !options.runtimeThemeTest &&
       !options.runtimeShellIntegrationTest &&
       !options.runtimeDesktopSignalsTest &&
+      !options.runtimeOsc52Test &&
       !options.runtimeRestorationTest &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
@@ -2250,6 +2296,8 @@ final class TerminalApplication {
     bool runThemeAcceptance = false,
     bool runShellIntegrationAcceptance = false,
     bool runDesktopSignalAcceptance = false,
+    bool runOsc52Acceptance = false,
+    TerminalOsc52ClipboardPort? osc52Clipboard,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
     final Rect initialWindowFrame = Rect.fromLTWH(
@@ -2330,7 +2378,9 @@ final class TerminalApplication {
     }
 
     final TerminalOsc52Coordinator osc52Coordinator = TerminalOsc52Coordinator(
-      clipboard: _AppKitTerminalOsc52Clipboard(application.generalPasteboard),
+      clipboard:
+          osc52Clipboard ??
+          _AppKitTerminalOsc52Clipboard(application.generalPasteboard),
       applicationActive: application.isActive,
       onPendingChanged: (TerminalOsc52PendingRequest? pending) {
         final TerminalOsc52ConfirmationPresenter? presenter = osc52Presenter;
@@ -2408,7 +2458,8 @@ final class TerminalApplication {
                   runUserActionAcceptance ||
                   runConfigurationAcceptance ||
                   runThemeAcceptance ||
-                  runDesktopSignalAcceptance;
+                  runDesktopSignalAcceptance ||
+                  runOsc52Acceptance;
               final Map<String, String> shellEnvironment =
                   usesDeterministicShell
                   ? <String, String>{
@@ -2586,7 +2637,9 @@ final class TerminalApplication {
           TerminalTextInputEventRouter(
             clientId: client.clientId,
             onRawKeyDown: (TerminalKeyEvent event) {
-              if (runUserActionAcceptance || runConfigurationAcceptance) {
+              if (runUserActionAcceptance ||
+                  runConfigurationAcceptance ||
+                  runOsc52Acceptance) {
                 terminalInputDeliveryCount++;
               }
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
@@ -2619,7 +2672,9 @@ final class TerminalApplication {
               surface.clearPreedit(generation: generation);
             },
             onCommit: (String text) {
-              if (runUserActionAcceptance || runConfigurationAcceptance) {
+              if (runUserActionAcceptance ||
+                  runConfigurationAcceptance ||
+                  runOsc52Acceptance) {
                 terminalInputDeliveryCount++;
               }
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
@@ -3441,7 +3496,9 @@ final class TerminalApplication {
       keyBindingActionScheduler = TerminalActionDispatchScheduler(
         dispatcher: dispatcher,
         onDispatched: (TerminalActionDispatchResult result) {
-          if (runUserActionAcceptance || runConfigurationAcceptance) {
+          if (runUserActionAcceptance ||
+              runConfigurationAcceptance ||
+              runOsc52Acceptance) {
             actionDispatches.add(result);
           }
           final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -3501,7 +3558,9 @@ final class TerminalApplication {
           );
         },
         onDispatched: (TerminalActionDispatchResult result) {
-          if (runUserActionAcceptance || runConfigurationAcceptance) {
+          if (runUserActionAcceptance ||
+              runConfigurationAcceptance ||
+              runOsc52Acceptance) {
             actionDispatches.add(result);
           }
           final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -3517,12 +3576,16 @@ final class TerminalApplication {
         application: application,
         dispatcher: dispatcher,
         onNativeInvocation: (TerminalActionId id, MenuItemInvokedEvent event) {
-          if (runUserActionAcceptance || runConfigurationAcceptance) {
+          if (runUserActionAcceptance ||
+              runConfigurationAcceptance ||
+              runOsc52Acceptance) {
             nativeActionInvocations.add(id);
           }
         },
         onDispatched: (TerminalActionDispatchResult result) {
-          if (runUserActionAcceptance || runConfigurationAcceptance) {
+          if (runUserActionAcceptance ||
+              runConfigurationAcceptance ||
+              runOsc52Acceptance) {
             actionDispatches.add(result);
           }
           installedPalette.refresh();
@@ -3581,7 +3644,26 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      if (runDesktopSignalAcceptance) {
+      if (runOsc52Acceptance) {
+        await _exerciseOsc52Product(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          dispatcher: dispatcher,
+          menu: menuProjection,
+          palette: installedPalette,
+          confirmation: osc52Presenter!,
+          coordinator: osc52Coordinator,
+          clipboard: osc52Clipboard! as _MemoryTerminalOsc52Clipboard,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          nativeActionInvocations: nativeActionInvocations,
+          actionDispatches: actionDispatches,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
+      } else if (runDesktopSignalAcceptance) {
         await _exerciseDesktopSignalsProduct(
           application: application,
           state: state,
@@ -3698,6 +3780,252 @@ final class TerminalApplication {
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
     }
     stdout.writeln('Dart Terminal shut down cleanly.');
+  }
+
+  static Future<void> _exerciseOsc52Product({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalActionDispatcher dispatcher,
+    required TerminalAppKitMenuProjection menu,
+    required TerminalCommandPalettePresenter palette,
+    required TerminalOsc52ConfirmationPresenter confirmation,
+    required TerminalOsc52Coordinator coordinator,
+    required _MemoryTerminalOsc52Clipboard clipboard,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required List<TerminalActionId> nativeActionInvocations,
+    required List<TerminalActionDispatchResult> actionDispatches,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    Future<void> waitFor(
+      bool Function() predicate,
+      String message, {
+      Duration timeout = const Duration(seconds: 10),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (!predicate() && deadline.elapsed < timeout) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      _expectLifecycle(predicate(), message);
+    }
+
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1 &&
+          hierarchy.paneResourceCount == 1 &&
+          sessions.length == 1 &&
+          owners.length == 1,
+      'OSC 52 product did not start from a 1/1/1 hierarchy',
+    );
+    final PaneId paneId = state.windows.single.selectedTab.focusedPaneId;
+    final TerminalSession session = sessions[paneId]!;
+    final _TerminalHierarchyProductPane owner = owners[paneId]!;
+    await _waitForAsciiMarker(session, prompt);
+    coordinator.setApplicationActive(true);
+    final int nativeBaseline = application.debugLiveObjectCount;
+    final TerminalScreenParserSink sink = session.terminalParserSink;
+    final int acceptedReads = sink.acceptedClipboardReadCount;
+    final int acceptedWrites = sink.acceptedClipboardWriteCount;
+    final int acceptedClears = sink.acceptedClipboardClearCount;
+    const String writeText = 'runtime-write';
+    clipboard.seed('runtime-sentinel');
+    final int preWriteChangeCount = clipboard.changeCount;
+    final String writeEncoded = base64Encode(ascii.encode(writeText));
+
+    owner.pane.insertText("printf '\\033]52;c;$writeEncoded\\007'");
+    await owner.pane.submit();
+    await waitFor(
+      () =>
+          coordinator.pendingRequest?.request.operation ==
+              TerminalOsc52Operation.write &&
+          confirmation.isOpen &&
+          application.debugLiveObjectCount == nativeBaseline + 2,
+      'real PTY write did not open one bounded native confirmation',
+    );
+    final TerminalOsc52PendingRequest writePending =
+        coordinator.pendingRequest!;
+    final MenuItem allowItem = menu.itemForAction(
+      TerminalActionId.allowOsc52Clipboard,
+    );
+    _expectLifecycle(
+      writePending.writeText == writeText &&
+          writePending.pasteboardChangeCount == preWriteChangeCount &&
+          confirmation.renderedText!.contains('"runtime-write"') &&
+          allowItem.isEnabled &&
+          dispatcher.snapshot(TerminalActionId.allowOsc52Clipboard).isEnabled &&
+          clipboard.text == 'runtime-sentinel' &&
+          clipboard.writeCount == 0,
+      'write confirmation did not retain exact text and zero pre-approval authority',
+    );
+    allowItem.performAction();
+    await waitFor(
+      () =>
+          coordinator.pendingRequest == null &&
+          !confirmation.isOpen &&
+          clipboard.text == writeText &&
+          clipboard.writeCount == 1 &&
+          application.debugLiveObjectCount == nativeBaseline,
+      'native Edit action did not approve and release the exact write request',
+    );
+
+    const String readText = 'runtime-read';
+    clipboard.seed(readText);
+    final String readEncoded = base64Encode(ascii.encode(readText));
+    const String readExact = '__DT_OSC52_READ_EXACT__';
+    const String readMismatch = '__DT_OSC52_READ_MISMATCH__';
+    owner.pane.insertText(
+      "stty -echo -icanon min 1 time 0; "
+      "printf '\\033]52;c;?\\007'; "
+      "/usr/bin/perl -e 'binmode STDIN; my \$want=\"\\e]52;c;$readEncoded\\a\"; "
+      "my \$got=\"\"; while (length(\$got) < length(\$want)) { "
+      "my \$n=sysread(STDIN, my \$b, length(\$want)-length(\$got)); "
+      "exit 42 unless defined(\$n) && \$n > 0; \$got .= \$b; } "
+      "exit(\$got eq \$want ? 0 : 43);'; result=\$?; "
+      "stty echo icanon; if [ \$result -eq 0 ]; then "
+      "printf '\\r\\n%s%s\\r\\n' '__DT_OSC52_READ_' 'EXACT__'; else "
+      "printf '\\r\\n%s%s\\r\\n' '__DT_OSC52_READ_' 'MISMATCH__'; fi",
+    );
+    await owner.pane.submit();
+    await waitFor(
+      () =>
+          coordinator.pendingRequest?.request.operation ==
+              TerminalOsc52Operation.read &&
+          confirmation.isOpen &&
+          clipboard.readCount == 0,
+      'real PTY read did not stop before pasteboard access',
+    );
+    await palette.open();
+    palette
+      ..refresh()
+      ..state.setQuery('allow osc 52 clipboard')
+      ..refresh();
+    _expectLifecycle(
+      palette.state.selectedAction?.definition.id ==
+              TerminalActionId.allowOsc52Clipboard &&
+          palette.state.selectedAction!.isEnabled &&
+          application.debugLiveObjectCount == nativeBaseline + 4,
+      'command palette did not expose the exact pending OSC 52 approval',
+    );
+    final TerminalActionDispatchResult readApproval = await palette.state
+        .invokeSelected();
+    await palette.dismiss();
+    await waitFor(
+      () =>
+          readApproval.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          coordinator.pendingRequest == null &&
+          !confirmation.isOpen &&
+          !palette.isOpen &&
+          clipboard.readCount == 1 &&
+          application.debugLiveObjectCount == nativeBaseline,
+      'command palette did not approve one read and release transient owners',
+    );
+    await _waitForAsciiMarker(session, readExact);
+    _expectLifecycle(
+      _findAscii(session.terminalScreenSet.activeScreen, readMismatch) == null,
+      'real PTY did not receive the exact approved OSC 52 read reply',
+    );
+
+    owner.pane.insertText("printf '\\033]52;c;!\\007'");
+    await owner.pane.submit();
+    await waitFor(
+      () =>
+          coordinator.pendingRequest?.request.operation ==
+              TerminalOsc52Operation.clear &&
+          confirmation.isOpen,
+      'real PTY clear did not open an exact confirmation',
+    );
+    final MenuItem denyItem = menu.itemForAction(
+      TerminalActionId.denyOsc52Clipboard,
+    );
+    _expectLifecycle(
+      denyItem.isEnabled && clipboard.clearCount == 0,
+      'clear denial action was unavailable or mutated before invocation',
+    );
+    denyItem.performAction();
+    await waitFor(
+      () =>
+          coordinator.pendingRequest == null &&
+          !confirmation.isOpen &&
+          clipboard.clearCount == 0 &&
+          clipboard.text == readText &&
+          application.debugLiveObjectCount == nativeBaseline,
+      'native Edit action did not deny clear without pasteboard mutation',
+    );
+
+    final TerminalOsc52ProjectionMetrics beforeShutdown = coordinator.metrics;
+    final List<TerminalActionDispatchResult> osc52ActionDispatches =
+        actionDispatches
+            .where((TerminalActionDispatchResult result) {
+              return result.id == TerminalActionId.allowOsc52Clipboard ||
+                  result.id == TerminalActionId.denyOsc52Clipboard;
+            })
+            .toList(growable: false);
+    _expectLifecycle(
+      sink.acceptedClipboardReadCount == acceptedReads + 1 &&
+          sink.acceptedClipboardWriteCount == acceptedWrites + 1 &&
+          sink.acceptedClipboardClearCount == acceptedClears + 1 &&
+          beforeShutdown.pendingRequestCount == 3 &&
+          beforeShutdown.approvedRequestCount == 2 &&
+          beforeShutdown.deniedRequestCount == 1 &&
+          beforeShutdown.busyRequestCount == 0 &&
+          beforeShutdown.staleRequestCount == 0 &&
+          beforeShutdown.invalidTextRequestCount == 0 &&
+          beforeShutdown.clipboardFailureCount == 0 &&
+          beforeShutdown.replyFailureCount == 0 &&
+          beforeShutdown.trackedSessionCount == 1 &&
+          nativeActionInvocations
+                  .where((TerminalActionId id) {
+                    return id == TerminalActionId.allowOsc52Clipboard ||
+                        id == TerminalActionId.denyOsc52Clipboard;
+                  })
+                  .join(',') ==
+              <TerminalActionId>[
+                TerminalActionId.allowOsc52Clipboard,
+                TerminalActionId.denyOsc52Clipboard,
+              ].join(',') &&
+          osc52ActionDispatches.length == 2 &&
+          osc52ActionDispatches.every(
+            (TerminalActionDispatchResult result) =>
+                result.disposition ==
+                TerminalActionDispatchDisposition.executed,
+          ) &&
+          confirmation.terminalResponderRestoreCount == 3,
+      'OSC 52 runtime policy, action, or ownership counters differ',
+    );
+
+    await dispatcher.dispatch(TerminalActionId.quitApplication);
+    if (!closed.isCompleted) {
+      await dispatcher.dispatch(TerminalActionId.quitApplication);
+    }
+    await closed.future.timeout(const Duration(seconds: 15));
+    await Future<void>.delayed(Duration.zero);
+    final TerminalOsc52ProjectionMetrics afterShutdown = coordinator.metrics;
+    _expectLifecycle(
+      state.isDisposed &&
+          hierarchy.isDisposed &&
+          coordinator.isDisposed &&
+          confirmation.isDisposed &&
+          afterShutdown.trackedSessionCount == 0 &&
+          allSessions.length == 1 &&
+          allSessions.single.shutdownResult?.isClean == true &&
+          debugLiveTerminalTextInputClientCount() == 0 &&
+          application.debugLiveObjectCount == 0,
+      'OSC 52 product did not release PTY, coordinator, or native owners',
+    );
+    stdout.writeln(
+      'TERMINAL_OSC52_TEST real_pty=true safe_memory_adapter=true '
+      'ask_write_menu_allow=true ask_read_palette_allow=true '
+      'ask_clear_menu_deny=true exact_reply=true preapproval_zero=true '
+      'pending=3 approved=2 denied=1 clipboard_reads=1 '
+      'clipboard_writes=1 clipboard_clears=0 responder_restores=3 '
+      'sessions_clean=1 text_clients=0 native_handles=0',
+    );
   }
 
   static Future<void> _exerciseDesktopSignalsProduct({
@@ -12542,6 +12870,48 @@ final class _AppKitTerminalOsc52Clipboard
 
   @override
   int clear() => pasteboard.clear();
+}
+
+final class _MemoryTerminalOsc52Clipboard
+    implements TerminalOsc52ClipboardPort {
+  String? _text;
+  var _changeCount = 0;
+  var _readCount = 0;
+  var _writeCount = 0;
+  var _clearCount = 0;
+
+  String? get text => _text;
+  int get readCount => _readCount;
+  int get writeCount => _writeCount;
+  int get clearCount => _clearCount;
+
+  void seed(String text) {
+    _text = text;
+    _changeCount++;
+  }
+
+  @override
+  int get changeCount => _changeCount;
+
+  @override
+  TerminalOsc52ClipboardText readText() {
+    _readCount++;
+    return TerminalOsc52ClipboardText(text: _text, changeCount: _changeCount);
+  }
+
+  @override
+  int writeText(String text) {
+    _writeCount++;
+    seed(text);
+    return _changeCount;
+  }
+
+  @override
+  int clear() {
+    _clearCount++;
+    _text = null;
+    return ++_changeCount;
+  }
 }
 
 final class _MemoryTerminalClipboard implements _TerminalClipboard {

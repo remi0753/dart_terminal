@@ -49,8 +49,8 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 
 | Support classification | Records |
 | --- | ---: |
-| `implemented` | 96 |
-| `partial` | 23 |
+| `implemented` | 97 |
+| `partial` | 22 |
 | `safe-ignore` | 8 |
 | `unsupported` | 145 |
 | **Total** | **272** |
@@ -69,7 +69,7 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `mode` | 85 |
 | **Total** | **272** |
 
-The 96 implemented plus 23 partial records reconcile exactly to all 119 product declarations (92 sequence selectors and 27 modes). The 8 safe-ignore records cover 6 concrete DCS forms and SOS/PM; all 145 remaining records are explicitly unsupported/rejected.
+The 97 implemented plus 22 partial records reconcile exactly to all 119 product declarations (92 sequence selectors and 27 modes). The 8 safe-ignore records cover 6 concrete DCS forms and SOS/PM; all 145 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 
@@ -97,7 +97,6 @@ The 96 implemented plus 23 partial records reconcile exactly to all 119 product 
 | `xterm:osc:osc-11` | `OSC 11 ; Pt ST` | Single bounded background mutation/query is implemented; chained dynamic-color parameters are not. |
 | `xterm:osc:osc-12` | `OSC 12 ; Pt ST` | Single bounded cursor-color mutation/query is implemented independently of text foreground; chained dynamic-color parameters are not. |
 | `xterm:osc:osc-4` | `OSC 4 ; Pt ST` | Bounded indexed RGB mutation/query is implemented; xterm color names and every XParseColor form are not. |
-| `xterm:osc:osc-52` | `OSC 52 ; Pc ; Pd ST` | Bounded selector/data parsing is implemented with a deny-by-default policy: queries return empty data and writes/clears have no clipboard authority. Opt-in access remains deferred. |
 
 ## Bounded safe-ignore controls
 

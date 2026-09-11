@@ -43,7 +43,7 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 19個のstable application actionを共有するbounded searchable registry、動的な
+- 21個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
@@ -139,8 +139,12 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - typed xterm-256 palette、logical default foreground/background、独立cursor color、
   bounded OSC 4/10/11/12/104/110/111/112 color mutation/query/reset、
   palette-aware row damageとcursor-only presentation damage
-- bounded OSC 52 selector/data分類とdeny-by-default clipboard境界。queryは
-  clipboard dataを含まない空応答だけを返し、write/clearはAppKit pasteboardへ到達しない
+- bounded OSC 52 selector/data分類、read/write別の`deny|ask|allow` new-session policy
+  （既定は両方`deny`）、clearのwrite-policy追従。`c` clipboardだけをstrict UTF-8/
+  3,060 byte上限で扱い、askはfocused sessionのexact requestをnative window、Edit menu、
+  command paletteで確認する。確認待ちは全appで1件/30秒、pasteboard世代、RIS、focus、
+  pane closeで失効し、read replyは既存のordered bounded PTY FIFOを使う。Developer JIT/
+  Release AOTの実PTY/AppKit gateはユーザーのpasteboardに触れないmemory adapterで検証
 - session-ownedなbounded title/icon/OSC 7 file-URI metadata、OSC 0/1/2、
   10段title stack、strict UTF-8/control/bidi境界、OSC 0/2からAppKit window titleへの
   root-isolate同期とRIS後のproduct title復帰
@@ -356,7 +360,7 @@ scrollback、font、padding、window frameは書き換えません。自動file 
 
 Applicationメニューの`Settings…`（Command-,）、command palette、または非予約chordへ設定した
 `application.open-settings` actionから、root設定ファイルを編集するnative modal editorを開けます。
-最初のkey入力を待たず、新規・空・疎なファイルでも全36 optionを同じdocument内へ補完して表示し、
+最初のkey入力を待たず、新規・空・疎なファイルでも全38 optionを同じdocument内へ補完して表示し、
 右のcontext panelはcaret位置の
 current/draft value、構文、説明と、保存後に既存terminalへ即時反映されるか新規terminalから使われるかを
 表示します。line/source行や別のvalue入力欄は持たず、panelを閉じても右端の細いrailが残ります。
@@ -396,6 +400,16 @@ warningと、その取消後のidle Quitまでを検証し、`none`では全sema
 
 ```shell
 make RUNTIME_ARCH=arm64 runtime-shell-integration
+```
+
+OSC 52 suiteは通常hierarchyと実zsh PTYを使い、`ask` writeをnative Edit menuで
+allow、`ask` readをcommand paletteでallow、`ask` clearをmenuでdenyします。
+application-local memory adapterだけを注入するため、検証中に利用者のpasteboardを
+読み書きしません。exact reply、承認前のzero authority、transient confirmation window、
+first responder、PTY/worker/native handleの回収を両runtimeで確認します。
+
+```shell
+make RUNTIME_ARCH=arm64 runtime-osc52-integration
 ```
 
 設定値が実際の通常製品へ反映されることは、実設定ファイルから4 paneを生成し、表示色、
@@ -555,6 +569,7 @@ make RUNTIME_ARCH=arm64 runtime-native-hierarchy-integration
 make RUNTIME_ARCH=arm64 runtime-user-actions-integration
 make RUNTIME_ARCH=arm64 runtime-configuration-integration
 make RUNTIME_ARCH=arm64 runtime-theme-integration
+make RUNTIME_ARCH=arm64 runtime-osc52-integration
 make RUNTIME_ARCH=arm64 runtime-restoration-integration
 ```
 

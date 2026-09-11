@@ -29,6 +29,8 @@ final class _Metadata {
     this.reply = false,
     this.sourceId,
     this.additionalSourceRefs = const <_SourceReference>[],
+    this.additionalImplementationEvidence = const <String>[],
+    this.additionalTestEvidence = const <String>[],
   });
 
   final String family;
@@ -40,6 +42,8 @@ final class _Metadata {
   final bool reply;
   final String? sourceId;
   final List<_SourceReference> additionalSourceRefs;
+  final List<String> additionalImplementationEvidence;
+  final List<String> additionalTestEvidence;
 }
 
 final class _SourceReference {
@@ -572,9 +576,26 @@ const Map<int, _Metadata> _oscMetadata = <int, _Metadata>{
     'osc-52',
     'OSC-52',
     'ctlseqs.ms, OSC 52—Manipulate Selection Data',
-    support: 'partial',
-    notes: 'Bounded selector/data parsing is implemented with a deny-by-default policy: queries return empty data and writes/clears have no clipboard authority. Opt-in access remains deferred.',
+    notes:
+        'Bounded OSC 52 read, write, and clear are implemented for selections '
+        'containing the macOS general clipboard selector c. Independent '
+        'default-deny read/write policies support ask or allow; clear follows '
+        'write. Strict UTF-8 text is capped at 3,060 bytes, confirmation is '
+        'focused and identity-bound, and other selection stores remain '
+        'unavailable. Ms is intentionally not advertised.',
     reply: true,
+    additionalImplementationEvidence: <String>[
+      'lib/src/terminal_core/terminal_osc52.dart#bounded-protocol',
+      'lib/src/terminal_osc52_projection.dart#application-policy',
+      'lib/src/terminal_osc52_confirmation.dart#native-confirmation',
+      'lib/src/terminal_session.dart#ordered-pty-reply',
+    ],
+    additionalTestEvidence: <String>[
+      'test/terminal_osc52_policy_test.dart#parser-policy',
+      'test/terminal_osc52_projection_test.dart#application-policy',
+      'test/terminal_native_hierarchy_test.dart#native-confirmation',
+      'tool/runtime_integration_smoke.dart#osc52-product-acceptance',
+    ],
   ),
   99: _Metadata(
     'kitty',
@@ -2651,8 +2672,14 @@ Map<String, Object?> _record({
         'locator': reference.locator,
       },
   ],
-  'implementationEvidence': <String>[_implementationEvidence],
-  'testEvidence': <String>[_implementationTestEvidence],
+  'implementationEvidence': <String>[
+    _implementationEvidence,
+    ...metadata.additionalImplementationEvidence,
+  ],
+  'testEvidence': <String>[
+    _implementationTestEvidence,
+    ...metadata.additionalTestEvidence,
+  ],
   'notes': metadata.notes,
 };
 
