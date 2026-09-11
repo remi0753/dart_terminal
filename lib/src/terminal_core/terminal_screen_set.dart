@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'terminal_hyperlink.dart';
 import 'terminal_keyboard_modes.dart';
 import 'terminal_mouse_modes.dart';
+import 'terminal_reply.dart';
 import 'terminal_screen.dart';
 import 'terminal_semantic_prompt.dart';
 import 'terminal_session_metadata.dart';
@@ -30,6 +31,7 @@ final class TerminalScreenSet {
     TerminalSessionMetadata? metadata,
     TerminalCursorShape initialCursorShape = TerminalCursorShape.block,
     bool initialCursorBlinking = true,
+    TerminalColorScheme initialColorScheme = TerminalColorScheme.dark,
   }) {
     final TerminalStyleTable sharedStyles = styleTable ?? TerminalStyleTable();
     final TerminalPalette sharedPalette = palette ?? TerminalPalette();
@@ -71,6 +73,7 @@ final class TerminalScreenSet {
       scrollbackAttachment: scrollbackAttachment,
       metadata: metadata ?? TerminalSessionMetadata(),
       semanticPrompt: TerminalSemanticPromptModel(),
+      initialColorScheme: initialColorScheme,
     );
     result._viewport = TerminalViewport._(result);
     return result;
@@ -87,9 +90,11 @@ final class TerminalScreenSet {
     required TerminalScrollbackAttachment scrollbackAttachment,
     required this.metadata,
     required this.semanticPrompt,
+    required TerminalColorScheme initialColorScheme,
   }) : _primary = primary,
        _alternate = alternate,
-       _scrollbackAttachment = scrollbackAttachment;
+       _scrollbackAttachment = scrollbackAttachment,
+       _colorScheme = initialColorScheme;
 
   TerminalScreen _primary;
   TerminalScreen _alternate;
@@ -116,8 +121,13 @@ final class TerminalScreenSet {
   int _focusReportingGeneration = 1;
   bool _synchronizedOutput = false;
   int _synchronizedOutputGeneration = 1;
+  bool _colorSchemeReporting = false;
+  bool _inBandSizeReporting = false;
+  TerminalColorScheme _colorScheme;
   int? _logicalViewportWidth;
   int? _logicalViewportHeight;
+  int? _logicalCellWidth;
+  int? _logicalCellHeight;
   TerminalMouseTrackingMode _mouseTracking = TerminalMouseTrackingMode.none;
   TerminalMouseCoordinateEncoding _mouseEncoding =
       TerminalMouseCoordinateEncoding.legacy;
@@ -137,6 +147,9 @@ final class TerminalScreenSet {
   int get focusReportingGeneration => _focusReportingGeneration;
   bool get synchronizedOutputMode => _synchronizedOutput;
   int get synchronizedOutputGeneration => _synchronizedOutputGeneration;
+  bool get colorSchemeReportingMode => _colorSchemeReporting;
+  bool get inBandSizeReportingMode => _inBandSizeReporting;
+  TerminalColorScheme get colorScheme => _colorScheme;
   TerminalKeyboardModes get keyboardModes => TerminalKeyboardModes(
     applicationCursorKeys: _applicationCursorKeys,
     applicationKeypad: _applicationKeypad,
@@ -152,6 +165,14 @@ final class TerminalScreenSet {
   ({int width, int height})? get logicalViewportSize {
     final int? width = _logicalViewportWidth;
     final int? height = _logicalViewportHeight;
+    return width == null || height == null
+        ? null
+        : (width: width, height: height);
+  }
+
+  ({int width, int height})? get logicalCellSize {
+    final int? width = _logicalCellWidth;
+    final int? height = _logicalCellHeight;
     return width == null || height == null
         ? null
         : (width: width, height: height);
@@ -178,6 +199,42 @@ final class TerminalScreenSet {
     _logicalViewportWidth = width.ceil();
     _logicalViewportHeight = height.ceil();
     return true;
+  }
+
+  /// Publishes one terminal cell's padding-free logical pixel dimensions.
+  bool updateLogicalCellSize({required double width, required double height}) {
+    if (!width.isFinite ||
+        !height.isFinite ||
+        width <= 0 ||
+        height <= 0 ||
+        width > maximumLogicalViewportExtent ||
+        height > maximumLogicalViewportExtent) {
+      _logicalCellWidth = null;
+      _logicalCellHeight = null;
+      return false;
+    }
+    _logicalCellWidth = width.ceil();
+    _logicalCellHeight = height.ceil();
+    return true;
+  }
+
+  bool updateColorScheme(TerminalColorScheme scheme) {
+    if (_colorScheme == scheme) return false;
+    _colorScheme = scheme;
+    _transitionGeneration++;
+    return true;
+  }
+
+  void setColorSchemeReportingMode(bool enabled) {
+    if (_colorSchemeReporting == enabled) return;
+    _colorSchemeReporting = enabled;
+    _transitionGeneration++;
+  }
+
+  void setInBandSizeReportingMode(bool enabled) {
+    if (_inBandSizeReporting == enabled) return;
+    _inBandSizeReporting = enabled;
+    _transitionGeneration++;
   }
 
   /// Atomically replaces both fixed-size grids after visible-line reflow.
@@ -430,6 +487,8 @@ final class TerminalScreenSet {
       _synchronizedOutput = false;
       _synchronizedOutputGeneration++;
     }
+    _colorSchemeReporting = false;
+    _inBandSizeReporting = false;
     if (_focusReporting) {
       _focusReporting = false;
       _focusReportingGeneration++;

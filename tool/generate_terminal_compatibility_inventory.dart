@@ -27,6 +27,8 @@ final class _Metadata {
     this.support = 'implemented',
     this.notes = '',
     this.reply = false,
+    this.sourceId,
+    this.additionalSourceRefs = const <_SourceReference>[],
   });
 
   final String family;
@@ -36,6 +38,15 @@ final class _Metadata {
   final String support;
   final String notes;
   final bool reply;
+  final String? sourceId;
+  final List<_SourceReference> additionalSourceRefs;
+}
+
+final class _SourceReference {
+  const _SourceReference(this.source, this.locator);
+
+  final String source;
+  final String locator;
 }
 
 final class _Gap {
@@ -334,8 +345,20 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
     'DSR',
     'clause 8.3.35, DSR—Device Status Report',
     support: 'partial',
-    notes: 'Status and cursor-position requests are implemented; other DSR parameters are rejected.',
+    notes:
+        'Status, cursor-position, and private color-scheme request 996 are '
+        'implemented; other DSR parameters are rejected.',
     reply: true,
+    additionalSourceRefs: <_SourceReference>[
+      _SourceReference(
+        'contour-0ad6bdb-color-palette-notifications',
+        'color-palette-update-notifications.md, Query the current theme mode?',
+      ),
+      _SourceReference(
+        'ghostty-d4d8f62-device-status',
+        'device_status.zig, color_scheme query and reply encoder',
+      ),
+    ],
   ),
   0x72: _Metadata(
     'dec',
@@ -355,7 +378,17 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
     'XTWINOPS',
     'ctlseqs.ms, XTWINOPS',
     support: 'partial',
-    notes: 'Text-area reports 14/18 and bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported.',
+    notes:
+        'Text-area reports 14/16/18, mode-2048 in-band response 48, and '
+        'bounded title save/restore operations 22/23 with selectors 0–2 and '
+        'stack access 0 are implemented; other window operations and direct '
+        'stack slots remain explicit unsupported.',
+    additionalSourceRefs: <_SourceReference>[
+      _SourceReference(
+        'ghostty-d4d8f62-size-report',
+        'size_report.zig, mode_2048 and csi_16_t encoders',
+      ),
+    ],
   ),
   0x75: _Metadata(
     'xterm',
@@ -698,6 +731,36 @@ const Map<int, _Metadata> _decModeMetadata = <int, _Metadata>{
         'Canonical terminal state continues updating while Metal presentation '
         'is held; reset or the product-owned 1,000 ms safety timeout releases '
         'one newest full presentation.',
+  ),
+  2027: _Metadata(
+    'contour',
+    'unicode-core',
+    'UNICODE-CORE',
+    'spec/terminal-unicode-core.tex, terminal Unicode mode 2027',
+    sourceId: 'contour-terminal-unicode-core-64f5385',
+    notes:
+        'The Unicode 17 grapheme and width contract is always active; DECRQM '
+        'reports this mode permanently set and set/reset are recognized no-ops.',
+  ),
+  2031: _Metadata(
+    'contour',
+    'color-scheme-notifications',
+    'COLOR-SCHEME-NOTIFICATIONS',
+    'color-palette-update-notifications.md, Request unsolicited DSR on color palette updates',
+    sourceId: 'contour-0ad6bdb-color-palette-notifications',
+    notes:
+        'Enables reports on actual rendered light/dark palette transitions; '
+        'initial state remains available through private DSR request 996.',
+  ),
+  2048: _Metadata(
+    'ghostty',
+    'in-band-size-reports',
+    'IN-BAND-SIZE-REPORTS',
+    'size_report.zig, mode_2048 encoder',
+    sourceId: 'ghostty-d4d8f62-size-report',
+    notes:
+        'Every enable emits a bounded CSI 48 row/column/pixel report; the '
+        'product emits later reports only after completed resizes.',
   ),
   7727: _Metadata(
     'mintty',
@@ -2068,6 +2131,32 @@ const List<_Gap> _dcsAndStringRecords = <_Gap>[
 
 const List<Map<String, Object?>> _sourcePins = <Map<String, Object?>>[
   <String, Object?>{
+    'id': 'contour-0ad6bdb-color-palette-notifications',
+    'family': 'contour',
+    'title': 'Dark and Light Mode detection',
+    'edition': 'commit 0ad6bdbee55979ba33d6432159cd3822936a6dff',
+    'artifactUrl': 'https://raw.githubusercontent.com/contour-terminal/contour/0ad6bdbee55979ba33d6432159cd3822936a6dff/docs/vt-extensions/color-palette-update-notifications.md',
+    'artifactBytes': 4845,
+    'artifactSha256':
+        '6ba512529226511adcfee5a4d0f99a9689293e73b3e2d4d5c21afb67f45ba832',
+    'documentPath': null,
+    'documentSha256': null,
+    'retrievedOn': '2026-09-11',
+  },
+  <String, Object?>{
+    'id': 'contour-terminal-unicode-core-64f5385',
+    'family': 'contour',
+    'title': 'Unicode in Terminals',
+    'edition': 'commit 64f53851ceab9a3cf08db4939bcaef75a0899573',
+    'artifactUrl': 'https://raw.githubusercontent.com/contour-terminal/terminal-unicode-core/64f53851ceab9a3cf08db4939bcaef75a0899573/spec/terminal-unicode-core.tex',
+    'artifactBytes': 7232,
+    'artifactSha256':
+        'f23237de5dd88ec8fee0c8059a6c979ca2eecc3e4c8fdf8ce4c4d86b7a2e47af',
+    'documentPath': null,
+    'documentSha256': null,
+    'retrievedOn': '2026-09-11',
+  },
+  <String, Object?>{
     'id': 'contour-vt-extensions-05050a1-synchronized-output',
     'family': 'contour',
     'title': 'Synchronized Output',
@@ -2107,6 +2196,19 @@ const List<Map<String, Object?>> _sourcePins = <Map<String, Object?>>[
     'retrievedOn': '2026-09-06',
   },
   <String, Object?>{
+    'id': 'ghostty-d4d8f62-device-status',
+    'family': 'ghostty',
+    'title': 'Ghostty device-status reports',
+    'edition': 'commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4',
+    'artifactUrl': 'https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/device_status.zig',
+    'artifactBytes': 4808,
+    'artifactSha256':
+        '244a5aa349845a7780dfff4cd2cda2efa574153774d0655727bf4d22d12f579f',
+    'documentPath': null,
+    'documentSha256': null,
+    'retrievedOn': '2026-09-11',
+  },
+  <String, Object?>{
     'id': 'ghostty-d4d8f62-semantic-prompt',
     'family': 'ghostty',
     'title': 'Ghostty OSC semantic prompt parser',
@@ -2115,6 +2217,19 @@ const List<Map<String, Object?>> _sourcePins = <Map<String, Object?>>[
     'artifactBytes': 42962,
     'artifactSha256':
         '04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff',
+    'documentPath': null,
+    'documentSha256': null,
+    'retrievedOn': '2026-09-11',
+  },
+  <String, Object?>{
+    'id': 'ghostty-d4d8f62-size-report',
+    'family': 'ghostty',
+    'title': 'Ghostty terminal size reports',
+    'edition': 'commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4',
+    'artifactUrl': 'https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/size_report.zig',
+    'artifactBytes': 4250,
+    'artifactSha256':
+        '806a5932dd0f6c877902e884b72cc171e27d6d3d1991e97d3dd28217ad61f3ae',
     'documentPath': null,
     'documentSha256': null,
     'retrievedOn': '2026-09-11',
@@ -2240,7 +2355,7 @@ String generateTerminalCompatibilityInventorySource() {
   final Map<String, Object?> root = <String, Object?>{
     'format': 'dart-terminal-sequence-mode-inventory',
     'version': 1,
-    'inventoryRevision': 4,
+    'inventoryRevision': 5,
     'scope': 'complete-baseline',
     'sourcePins': _sourcePins,
     'records': records,
@@ -2359,9 +2474,14 @@ Map<String, Object?> _record({
   'disposition': metadata.reply ? 'reply' : 'execute',
   'sourceRefs': <Map<String, Object?>>[
     <String, Object?>{
-      'source': _sourceId(metadata.family),
+      'source': metadata.sourceId ?? _sourceId(metadata.family),
       'locator': metadata.locator,
     },
+    for (final _SourceReference reference in metadata.additionalSourceRefs)
+      <String, Object?>{
+        'source': reference.source,
+        'locator': reference.locator,
+      },
   ],
   'implementationEvidence': <String>[_implementationEvidence],
   'testEvidence': <String>[_implementationTestEvidence],

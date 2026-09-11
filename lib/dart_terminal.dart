@@ -32,7 +32,11 @@ export 'src/terminal_core/terminal_keyboard_modes.dart'
     show TerminalKeyboardModes;
 export 'src/terminal_core/terminal_mouse_modes.dart';
 export 'src/terminal_core/terminal_reply.dart'
-    show TerminalModeReportStatus, TerminalReplyEncoder, TerminalReplyHandler;
+    show
+        TerminalColorScheme,
+        TerminalModeReportStatus,
+        TerminalReplyEncoder,
+        TerminalReplyHandler;
 export 'src/terminal_core/terminal_screen.dart'
     show
         TerminalCellFlags,

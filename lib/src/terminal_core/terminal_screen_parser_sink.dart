@@ -850,6 +850,19 @@ final class TerminalScreenParserSink
           );
         }
         return true;
+      case 16:
+        final ({int width, int height})? size = screenSet?.logicalCellSize;
+        if (size == null) {
+          _unsupportedSequenceCount++;
+        } else {
+          _emitReply(
+            TerminalReplyEncoder.textAreaCellSizePixels(
+              height: size.height,
+              width: size.width,
+            ),
+          );
+        }
+        return true;
       case 18:
         _emitReply(
           TerminalReplyEncoder.textAreaSizeCharacters(
@@ -888,6 +901,15 @@ final class TerminalScreenParserSink
       return;
     }
     final int? parameter = sequence.parameters.valueAt(0);
+    if (sequence.privateMarker == 0x3f && parameter == 996) {
+      final TerminalScreenSet? screens = screenSet;
+      if (screens == null) {
+        _unsupportedSequenceCount++;
+      } else {
+        _emitReply(TerminalReplyEncoder.colorScheme(screens.colorScheme));
+      }
+      return;
+    }
     if (sequence.privateMarker == null && parameter == 5) {
       _emitReply(TerminalReplyEncoder.terminalStatusOk());
       return;
@@ -952,12 +974,18 @@ final class TerminalScreenParserSink
         1049 => screenSet?.mode1049Active,
         2004 => screenSet?.bracketedPasteMode,
         2026 => screenSet?.synchronizedOutputMode,
+        2027 => true,
+        2031 => screenSet?.colorSchemeReportingMode,
+        2048 => screenSet?.inBandSizeReportingMode,
         7727 => screenSet?.keyboardModes.applicationEscape,
         _ => screenSet?.mouseModes.decPrivateModeState(mode),
       };
     }
     if (enabled == null) {
       return TerminalModeReportStatus.notRecognized;
+    }
+    if (decPrivate && mode == 2027) {
+      return TerminalModeReportStatus.permanentlySet;
     }
     return enabled
         ? TerminalModeReportStatus.set
@@ -1734,6 +1762,25 @@ final class TerminalScreenParserSink
           } else {
             screens.setSynchronizedOutputMode(enabled);
           }
+        case 2027:
+          // Unicode Core is an immutable product contract. Its mode is
+          // recognized, permanently set, and cannot be weakened by output.
+          continue;
+        case 2031:
+          final TerminalScreenSet? screens = screenSet;
+          if (screens == null) {
+            _unsupportedSequenceCount++;
+          } else {
+            screens.setColorSchemeReportingMode(enabled);
+          }
+        case 2048:
+          final TerminalScreenSet? screens = screenSet;
+          if (screens == null) {
+            _unsupportedSequenceCount++;
+          } else {
+            screens.setInBandSizeReportingMode(enabled);
+            if (enabled) _emitInBandSizeReport(screens);
+          }
         case 7727:
           final TerminalScreenSet? screens = screenSet;
           if (screens == null) {
@@ -1745,6 +1792,18 @@ final class TerminalScreenParserSink
           _unsupportedSequenceCount++;
       }
     }
+  }
+
+  void _emitInBandSizeReport(TerminalScreenSet screens) {
+    final ({int width, int height})? viewport = screens.logicalViewportSize;
+    _emitReply(
+      TerminalReplyEncoder.inBandSizeReport(
+        rows: screens.activeScreen.rows,
+        columns: screens.activeScreen.columns,
+        heightPixels: viewport?.height ?? 0,
+        widthPixels: viewport?.width ?? 0,
+      ),
+    );
   }
 
   void _setMouseTrackingMode(TerminalMouseTrackingMode mode, bool enabled) {

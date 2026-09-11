@@ -135,6 +135,9 @@ abstract final class TerminalCompatibilitySurface {
     1049,
     2004,
     2026,
+    2027,
+    2031,
+    2048,
     7727,
   ];
 

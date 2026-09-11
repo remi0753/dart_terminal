@@ -69,7 +69,8 @@ String generateTerminalCompatibilitySummary(
     ..writeln(
       '- Kitty keyboard flag controls, xterm modifyOtherKeys controls, and '
       'mintty application-Escape mode required by captured applications; and '
-      'Contour synchronized-output mode 2026.',
+      'Contour synchronized-output, Unicode Core, light/dark reporting, and '
+      'Ghostty in-band size modes 2026–2048.',
     )
     ..writeln()
     ..writeln(
@@ -166,7 +167,9 @@ String generateTerminalCompatibilitySummary(
     ..writeln(
       '- The focus/mouse/query task has implemented focus mode 1004, SGR pixel '
       'mouse 1016, bounded DECRQSS SGR, XTVERSION, and text-area size reports '
-      '14/18. Other report operations remain evidence-driven.',
+      '14/16/18. Color-scheme query 996, notification mode 2031, always-on '
+      'Unicode Core mode 2027, and in-band size mode 2048 are also bounded '
+      'product declarations. Other report operations remain evidence-driven.',
     )
     ..writeln(
       '- The OSC policy task has implemented title commands 0/1/2, cwd '

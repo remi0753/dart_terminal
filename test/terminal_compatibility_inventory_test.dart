@@ -28,10 +28,10 @@ void _testCompletePinnedInventory() {
       inventory.supportCounts;
   _expect(
     inventory.version == 1 &&
-        inventory.inventoryRevision == 4 &&
+        inventory.inventoryRevision == 5 &&
         inventory.scope == 'complete-baseline' &&
-        inventory.sourcePins.length == 8 &&
-        inventory.records.length == 267 &&
+        inventory.sourcePins.length == 12 &&
+        inventory.records.length == 270 &&
         kinds[TerminalCompatibilitySelectorKind.c0] == 10 &&
         kinds[TerminalCompatibilitySelectorKind.c1] == 9 &&
         kinds[TerminalCompatibilitySelectorKind.esc] == 35 &&
@@ -41,8 +41,8 @@ void _testCompletePinnedInventory() {
         kinds[TerminalCompatibilitySelectorKind.sos] == 1 &&
         kinds[TerminalCompatibilitySelectorKind.pm] == 1 &&
         kinds[TerminalCompatibilitySelectorKind.apc] == 1 &&
-        kinds[TerminalCompatibilitySelectorKind.mode] == 82 &&
-        support[TerminalCompatibilitySupport.implemented] == 93 &&
+        kinds[TerminalCompatibilitySelectorKind.mode] == 85 &&
+        support[TerminalCompatibilitySupport.implemented] == 96 &&
         support[TerminalCompatibilitySupport.partial] == 20 &&
         support[TerminalCompatibilitySupport.safeIgnore] == 9 &&
         support[TerminalCompatibilitySupport.unsupported] == 145,
@@ -55,6 +55,16 @@ void _testCompletePinnedInventory() {
       .singleWhere(
         (TerminalCompatibilitySourcePin pin) =>
             pin.id == 'contour-vt-extensions-05050a1-synchronized-output',
+      );
+  final TerminalCompatibilitySourcePin contourColor = inventory.sourcePins
+      .singleWhere(
+        (TerminalCompatibilitySourcePin pin) =>
+            pin.id == 'contour-0ad6bdb-color-palette-notifications',
+      );
+  final TerminalCompatibilitySourcePin contourUnicode = inventory.sourcePins
+      .singleWhere(
+        (TerminalCompatibilitySourcePin pin) =>
+            pin.id == 'contour-terminal-unicode-core-64f5385',
       );
   final TerminalCompatibilitySourcePin dec = inventory.sourcePins.singleWhere(
     (TerminalCompatibilitySourcePin pin) => pin.id == 'dec-vt510-rm-b01',
@@ -71,6 +81,16 @@ void _testCompletePinnedInventory() {
         (TerminalCompatibilitySourcePin pin) =>
             pin.id == 'ghostty-d4d8f62-semantic-prompt',
       );
+  final TerminalCompatibilitySourcePin ghosttyDevice = inventory.sourcePins
+      .singleWhere(
+        (TerminalCompatibilitySourcePin pin) =>
+            pin.id == 'ghostty-d4d8f62-device-status',
+      );
+  final TerminalCompatibilitySourcePin ghosttySize = inventory.sourcePins
+      .singleWhere(
+        (TerminalCompatibilitySourcePin pin) =>
+            pin.id == 'ghostty-d4d8f62-size-report',
+      );
   final TerminalCompatibilitySourcePin kitty = inventory.sourcePins.singleWhere(
     (TerminalCompatibilitySourcePin pin) =>
         pin.id == 'kitty-0-48-2-keyboard-protocol',
@@ -81,7 +101,13 @@ void _testCompletePinnedInventory() {
             pin.id == 'mintty-ctrlseqs-25c73c7',
       );
   _expect(
-    contour.artifactBytes == 5967 &&
+    contourColor.artifactBytes == 4845 &&
+        contourColor.artifactSha256 ==
+            '6ba512529226511adcfee5a4d0f99a9689293e73b3e2d4d5c21afb67f45ba832' &&
+        contourUnicode.artifactBytes == 7232 &&
+        contourUnicode.artifactSha256 ==
+            'f23237de5dd88ec8fee0c8059a6c979ca2eecc3e4c8fdf8ce4c4d86b7a2e47af' &&
+        contour.artifactBytes == 5967 &&
         contour.artifactSha256 ==
             '7cb1e9bc9fad9b56d81ebd7d0e8dad423c1b865ce1089d99f2f175239b9dde89' &&
         ecma.artifactBytes == 1607865 &&
@@ -93,6 +119,12 @@ void _testCompletePinnedInventory() {
         ghostty.artifactBytes == 42962 &&
         ghostty.artifactSha256 ==
             '04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff' &&
+        ghosttyDevice.artifactBytes == 4808 &&
+        ghosttyDevice.artifactSha256 ==
+            '244a5aa349845a7780dfff4cd2cda2efa574153774d0655727bf4d22d12f579f' &&
+        ghosttySize.artifactBytes == 4250 &&
+        ghosttySize.artifactSha256 ==
+            '806a5932dd0f6c877902e884b72cc171e27d6d3d1991e97d3dd28217ad61f3ae' &&
         iterm.artifactBytes == 31258 &&
         iterm.artifactSha256 ==
             'b297c4fcd7ea35908e145420d743fe98fc0ee5bbb5844ed4a1f35f2d547cac98' &&
@@ -107,8 +139,8 @@ void _testCompletePinnedInventory() {
         xterm.documentSha256 ==
             '69773380309da4c8b5d4ec9646eec703c47bc41db29a8efa5b94c30798c72349' &&
         inventory.machineLine() ==
-            'TERMINAL_COMPATIBILITY_INVENTORY_CHECK version=1 revision=4 '
-                'sources=8 records=267 implemented=93 partial=20 '
+            'TERMINAL_COMPATIBILITY_INVENTORY_CHECK version=1 revision=5 '
+                'sources=12 records=270 implemented=96 partial=20 '
                 'safe_ignore=9 unsupported=145',
     'primary source pins and content-free summary remain exact',
   );
@@ -197,7 +229,7 @@ void _testImplementationSurfaceReconciliation() {
   final File manifest = File(defaultTerminalImplementationSurfacePath);
   _expect(
     inventory.reconcileImplementationSurface(manifest) ==
-        'TERMINAL_COMPATIBILITY_RECONCILIATION_PASS implementation=113 '
+        'TERMINAL_COMPATIBILITY_RECONCILIATION_PASS implementation=116 '
             'safe_ignore_families=4',
     'all product declarations and safe-ignore families reconcile exactly',
   );

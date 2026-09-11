@@ -6,6 +6,8 @@ import 'vt_parser.dart';
 
 typedef TerminalReplyHandler = bool Function(Uint8List reply);
 
+enum TerminalColorScheme { dark, light }
+
 enum TerminalModeReportStatus {
   notRecognized(0),
   set(1),
@@ -62,6 +64,72 @@ abstract final class TerminalReplyEncoder {
     required int rows,
     required int columns,
   }) => _textAreaSizeReport(code: 8, height: rows, width: columns);
+
+  static Uint8List textAreaCellSizePixels({
+    required int height,
+    required int width,
+  }) => _textAreaSizeReport(code: 6, height: height, width: width);
+
+  static Uint8List inBandSizeReport({
+    required int rows,
+    required int columns,
+    required int heightPixels,
+    required int widthPixels,
+  }) {
+    RangeError.checkValueInInterval(rows, 1, maximumCoordinate, 'rows');
+    RangeError.checkValueInInterval(columns, 1, maximumCoordinate, 'columns');
+    RangeError.checkValueInInterval(
+      heightPixels,
+      0,
+      maximumCoordinate,
+      'heightPixels',
+    );
+    RangeError.checkValueInInterval(
+      widthPixels,
+      0,
+      maximumCoordinate,
+      'widthPixels',
+    );
+    final _TerminalReplyBuilder builder = _TerminalReplyBuilder()
+      ..csi(null)
+      ..decimal(48)
+      ..byte(0x3b)
+      ..decimal(rows)
+      ..byte(0x3b)
+      ..decimal(columns)
+      ..byte(0x3b)
+      ..decimal(heightPixels)
+      ..byte(0x3b)
+      ..decimal(widthPixels)
+      ..byte(0x74);
+    return builder.finish();
+  }
+
+  static Uint8List colorScheme(TerminalColorScheme scheme) =>
+      Uint8List.fromList(switch (scheme) {
+        TerminalColorScheme.dark => const <int>[
+          0x1b,
+          0x5b,
+          0x3f,
+          0x39,
+          0x39,
+          0x37,
+          0x3b,
+          0x31,
+          0x6e,
+        ],
+        TerminalColorScheme.light => const <int>[
+          0x1b,
+          0x5b,
+          0x3f,
+          0x39,
+          0x39,
+          0x37,
+          0x3b,
+          0x32,
+          0x6e,
+        ],
+      });
 
   static Uint8List xtgettcapNotFound() =>
       Uint8List.fromList(const <int>[0x1b, 0x50, 0x30, 0x2b, 0x72, 0x1b, 0x5c]);

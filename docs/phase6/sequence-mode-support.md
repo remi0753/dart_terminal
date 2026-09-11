@@ -1,6 +1,6 @@
 # Terminal sequence and mode support baseline
 
-Generated from `compatibility/sequence_mode_inventory.json` revision 4. Do not edit this summary by hand.
+Generated from `compatibility/sequence_mode_inventory.json` revision 5. Do not edit this summary by hand.
 
 ## Reviewed boundary
 
@@ -11,7 +11,7 @@ This is a host-to-terminal compatibility baseline, not a claim to implement ever
 - DEC VT100–VT510 controls relevant to screen/cursor/margin/mode, character-set, rectangle, locator, and status behavior;
 - every DEC-private mode number listed by xterm Patch #411, plus its high-use CSI, DCS, OSC, mouse, title, palette, and clipboard families;
 - iTerm2 OSC 7 current-directory and OSC 8 hyperlink extensions because they are part of the current/later product contract.
-- Kitty keyboard flag controls, xterm modifyOtherKeys controls, and mintty application-Escape mode required by captured applications; and Contour synchronized-output mode 2026.
+- Kitty keyboard flag controls, xterm modifyOtherKeys controls, and mintty application-Escape mode required by captured applications; and Contour synchronized-output, Unicode Core, light/dark reporting, and Ghostty in-band size modes 2026–2048.
 
 Excluded from this bounded baseline are ECMA transmission controls and paged-media/typesetting functions without modern terminal application meaning; exhaustive ISO-2022 national replacement-set final-byte variants beyond ASCII and DEC line drawing; physical printer/modem parameter variants; Tektronix command details; terminal-to-host keyboard output beyond the declared keyboard modes; Kitty graphics; and other Ghostty-only protocols assigned to later roadmap tasks. An exclusion is not silently supported.
 
@@ -19,10 +19,14 @@ Excluded from this bounded baseline are ECMA transmission controls and paged-med
 
 | Source | Family | Edition | Exact artifact |
 | --- | --- | --- | --- |
+| `contour-0ad6bdb-color-palette-notifications` | `contour` | commit 0ad6bdbee55979ba33d6432159cd3822936a6dff | 4845 bytes, `6ba512529226511adcfee5a4d0f99a9689293e73b3e2d4d5c21afb67f45ba832` |
+| `contour-terminal-unicode-core-64f5385` | `contour` | commit 64f53851ceab9a3cf08db4939bcaef75a0899573 | 7232 bytes, `f23237de5dd88ec8fee0c8059a6c979ca2eecc3e4c8fdf8ce4c4d86b7a2e47af` |
 | `contour-vt-extensions-05050a1-synchronized-output` | `contour` | commit 05050a11e793c8f4362bf4e34a59ed3f7e5105fe | 5967 bytes, `7cb1e9bc9fad9b56d81ebd7d0e8dad423c1b865ce1089d99f2f175239b9dde89` |
 | `dec-vt510-rm-b01` | `dec` | B01, August 1995, EK-VT510-RM | 3378497 bytes, `440bbee110eb75027a06b5b375683fbc87cb739edac32899005ad46981c7d514` |
 | `ecma-48-5e` | `ecma48` | ECMA-48, fifth edition, June 1991 | 1607865 bytes, `9577ad2514c411584b274ef7a4b3238c80aa93defbb349b18b8c78f78873f450` |
+| `ghostty-d4d8f62-device-status` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 4808 bytes, `244a5aa349845a7780dfff4cd2cda2efa574153774d0655727bf4d22d12f579f` |
 | `ghostty-d4d8f62-semantic-prompt` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 42962 bytes, `04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff` |
+| `ghostty-d4d8f62-size-report` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 4250 bytes, `806a5932dd0f6c877902e884b72cc171e27d6d3d1991e97d3dd28217ad61f3ae` |
 | `iterm2-escape-codes-2026-09-07` | `iterm2` | retrieved 2026-09-07 | 31258 bytes, `b297c4fcd7ea35908e145420d743fe98fc0ee5bbb5844ed4a1f35f2d547cac98` |
 | `kitty-0-48-2-keyboard-protocol` | `kitty` | kitty v0.48.2 | 36641 bytes, `cd452d4f1b5070752499233f8d76455c854d0ec5f2318e38309f835baf2410ce` |
 | `mintty-ctrlseqs-25c73c7` | `mintty` | wiki revision 25c73c77961243934d790e632f1f9decaae82ee8 | 264856 bytes, `4144a9212fdc412088d5a094a09d827d729082239c8fbb7ef7b163d13d5d9d0e` |
@@ -34,11 +38,11 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 
 | Support classification | Records |
 | --- | ---: |
-| `implemented` | 93 |
+| `implemented` | 96 |
 | `partial` | 20 |
 | `safe-ignore` | 9 |
 | `unsupported` | 145 |
-| **Total** | **267** |
+| **Total** | **270** |
 
 | Selector kind | Records |
 | --- | ---: |
@@ -51,10 +55,10 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `sos` | 1 |
 | `pm` | 1 |
 | `apc` | 1 |
-| `mode` | 82 |
-| **Total** | **267** |
+| `mode` | 85 |
+| **Total** | **270** |
 
-The 93 implemented plus 20 partial records reconcile exactly to all 113 product declarations (89 sequence selectors and 24 modes). The 9 safe-ignore records cover 6 concrete DCS forms and SOS/PM/APC; all 145 remaining records are explicitly unsupported/rejected.
+The 96 implemented plus 20 partial records reconcile exactly to all 116 product declarations (89 sequence selectors and 27 modes). The 9 safe-ignore records cover 6 concrete DCS forms and SOS/PM/APC; all 145 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 
@@ -67,13 +71,13 @@ The 93 implemented plus 20 partial records reconcile exactly to all 113 product 
 | `dec:dcs:decrqss` | `DCS $ q Pt ST` | The complete SGR request payload m receives the current rendition in a bounded pinned-xterm form. Other status-string selectors remain explicit bounded unsupported. |
 | `ecma48:c0:ff` | `FF (0x0C)` | Handled as line feed, matching xterm rather than paged-media form feed. |
 | `ecma48:c0:vt` | `VT (0x0B)` | Handled as line feed, matching xterm rather than ECMA line-tab semantics. |
-| `ecma48:csi:dsr` | `CSI n` | Status and cursor-position requests are implemented; other DSR parameters are rejected. |
+| `ecma48:csi:dsr` | `CSI n` | Status, cursor-position, and private color-scheme request 996 are implemented; other DSR parameters are rejected. |
 | `ecma48:csi:rm` | `CSI l` | The selector is implemented for the explicitly inventoried ANSI modes only. |
 | `ecma48:csi:sgr` | `CSI m` | Text attributes and ANSI/256/direct colors are implemented; the full ECMA/xterm rendition repertoire is not. |
 | `ecma48:csi:sm` | `CSI h` | The selector is implemented for the explicitly inventoried ANSI modes only. |
 | `ghostty:osc:osc-133` | `OSC 133 ; Ps [; Pt] ST` | The bounded A/B/C/D/P lifecycle subset projects privacy-safe shell state and row flags; options are validated but never decoded or retained, and I/L/N extensions remain rejected. |
 | `xterm:csi:ed` | `CSI J` | ECMA/VT modes 0–2 are implemented; xterm saved-lines mode 3 is not. |
-| `xterm:csi:xtwinops` | `CSI t` | Text-area reports 14/18 and bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported. |
+| `xterm:csi:xtwinops` | `CSI t` | Text-area reports 14/16/18, mode-2048 in-band response 48, and bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported. |
 | `xterm:dcs:xtgettcap` | `DCS + q Pt ST` | Bounded requests receive an explicit unavailable reply. The audited database intentionally omits security-sensitive Ms/OSC 52 and no dynamic keyboard-capability service is advertised. |
 | `xterm:osc:osc-10` | `OSC 10 ; Pt ST` | Single bounded foreground mutation/query is implemented; chained dynamic-color parameters are not. |
 | `xterm:osc:osc-11` | `OSC 11 ; Pt ST` | Single bounded background mutation/query is implemented; chained dynamic-color parameters are not. |
@@ -98,7 +102,7 @@ The 93 implemented plus 20 partial records reconcile exactly to all 113 product 
 ## Gap ownership
 
 - The next black-box differential and real-application matrix tasks decide which generic ECMA/DEC/xterm gaps become implementation work.
-- The focus/mouse/query task has implemented focus mode 1004, SGR pixel mouse 1016, bounded DECRQSS SGR, XTVERSION, and text-area size reports 14/18. Other report operations remain evidence-driven.
+- The focus/mouse/query task has implemented focus mode 1004, SGR pixel mouse 1016, bounded DECRQSS SGR, XTVERSION, and text-area size reports 14/16/18. Color-scheme query 996, notification mode 2031, always-on Unicode Core mode 2027, and in-band size mode 2048 are also bounded product declarations. Other report operations remain evidence-driven.
 - The OSC policy task has implemented title commands 0/1/2, cwd command 7, cursor color 12/112, and the security-sensitive OSC 52 deny-by-default boundary. Opt-in clipboard access remains deferred.
 - The terminfo task owns remaining XTSETTCAP decisions; the existing `v1 保留` feature-matrix decision continues to own Sixel.
 - Unsupported extended character-set, rectangular-editing, locator, printer, and terminal-local xterm resource controls stay rejected until differential/application evidence justifies a new ordered task.
