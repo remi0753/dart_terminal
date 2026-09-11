@@ -1170,7 +1170,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase9/protocol-fuzz-security-memory.md`](docs/phase9/protocol-fuzz-security-memory.md)
   を参照して順に実施する）
   - [x] deterministic Phase 9 parser/state properties
-  - [ ] authority/retained-resource state-machine stress
+  - [x] authority/retained-resource state-machine stress
   - [ ] shipped-runtime/resource acceptance、Phase 9 closure、親項目完了判定
 
 終了条件:

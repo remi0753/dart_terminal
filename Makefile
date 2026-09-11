@@ -30,7 +30,7 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check \
 	terminal-terminfo terminal-terminfo-check \
 	terminal-shell-integration terminal-shell-integration-check \
-	product-parser-corpus product-parser-properties phase9-protocol-properties \
+	product-parser-corpus product-parser-properties phase9-protocol-properties phase9-security-stress \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
 	terminal-parser-trace terminal-parser-trace-check \
 	configuration-reference configuration-reference-check \
@@ -55,6 +55,7 @@ help:
 	@echo "  make product-parser-corpus        Replay reviewed product parser fixtures"
 	@echo "  make product-parser-properties    Run deterministic property and fuzz cases"
 	@echo "  make phase9-protocol-properties   Run deterministic modern-protocol properties"
+	@echo "  make phase9-security-stress       Stress modern authority and resource bounds"
 	@echo "  make product-parser-benchmark     Run the Release AOT 100 MiB/s parser gate"
 	@echo "  make product-damage-benchmark     Run the Release AOT 100,000-cell damage gate"
 	@echo "  make compatibility-inventory      Regenerate sequence inventory and summary"
@@ -217,6 +218,9 @@ product-parser-properties: dependencies
 
 phase9-protocol-properties: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_phase9_protocol_property_test.dart
+
+phase9-security-stress: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_phase9_security_stress_test.dart
 
 product-parser-benchmark-build: dependencies
 	@mkdir -p $(PRODUCT_PARSER_BENCHMARK_DIR)

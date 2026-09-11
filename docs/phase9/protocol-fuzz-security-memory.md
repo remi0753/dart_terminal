@@ -6,7 +6,7 @@
 - Task: protocol-specific fuzz, security, and memory tests
 - Started: 2026-09-12
 - State: in progress
-- Current subtask: deterministic protocol parser and state properties (complete)
+- Current subtask: authority and retained-resource state-machine stress (complete)
 
 ## Purpose
 
@@ -204,3 +204,56 @@ add that cross-protocol adversarial layer without replacing the focused tests.
   compatibility/differential/application, terminfo, shell integration, format
   (269 files, zero changes), analysis (no issues), and Dart test stage passed.
   The deterministic parser/state property child meets its completion conditions.
+- 2026-09-12: Commit `99bfb0e` (`Fuzz modern terminal protocol state`) recorded
+  the first child. The required post-commit ROADMAP and task-memo reread found a
+  clean worktree, confirmed the authority/resource stress child as the next
+  ordered item, and left shipped-runtime closure as its only successor.
+- 2026-09-12: The second child will reuse public owner diagnostics rather than
+  infer memory from process RSS: OSC 52 pending/tracked-session metrics, desktop
+  queued/live/tracked counts, image-worker pending transfer bytes, Kitty
+  controller FIFO bytes/jobs, and image-store retained RGBA bytes. Fake native
+  ports will require an explicit application-side call scope so any projection
+  attempted directly by parser input is counted as an unauthorized call.
+- 2026-09-12: The first scoped formatting command mistakenly included the
+  Makefile and Markdown task memo in the `dart format` arguments. Dart correctly
+  rejected those non-Dart inputs while formatting the two Dart files (one
+  changed); this was a command-selection error, not a source failure. Subsequent
+  formatting and validation commands are restricted to Dart source paths.
+- 2026-09-12: The initial stress implementation formatted successfully. Scoped
+  analysis reported only an unnecessary duplicate import and the test runner's
+  use of `print`. The first fixed-seed execution then stopped at OSC 52 operation
+  155 on the combined authority/cap assertion. The seed and operation remain
+  fixed; bounded counter diagnostics are being added to distinguish fake-port
+  authorization, tracked ownership, and reply-length causes before changing any
+  model or expectation.
+- 2026-09-12: Bounded diagnostics identified the operation-155 failure as one
+  unauthorized generation observation. This was a harness bug: the periodic
+  invalid-UTF-8 condition intended only for writes also suppressed the ask-time
+  generation grant for a valid clear. Restricting that condition to write
+  operations retained the same seed and operation counts; the complete stress
+  suite then passed with 1,024 OSC 52 transitions, 1,024 desktop transitions,
+  1,024 image-worker transitions, and 2,048 image-store transitions.
+- 2026-09-12: The new suite covers eight mixed OSC 52 policy sessions, explicit
+  content/generation capabilities, approval/denial/stale/focus/inactive/reset/
+  timeout transitions, the one-pending-request invariant, bounded replies, and
+  the exact 64-session rejection boundary. It also covers eight desktop sessions,
+  parser-only no-native-call assertions, internal-only native identities, queue
+  and four-live-ID caps, sliding-budget/focus/reset cleanup, and its exact
+  64-session boundary. Both fake ports finished with zero unauthorized calls and
+  zero retained registrations/native identities.
+- 2026-09-12: Resource stress covers injected image-worker caps of four pending
+  transfers and 32 encoded bytes, a gated Kitty controller FIFO capped at eight
+  jobs/64 bytes with rejection and forward progress, and a store capped at four
+  images/eight placements/eight extra frames/128 exact retained bytes. The
+  product-boundary case retained exactly sixteen 1 MiB RGBA images, evicted the
+  oldest on the seventeenth admission, and cleared to zero. Scoped analysis had
+  no issues; the OSC 52, desktop projection, image worker, Kitty controller, and
+  dedicated Make target all passed.
+- 2026-09-12: The exact child completion gate
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed. All generated-source,
+  configuration, compatibility, differential/application, terminfo, and shell
+  integration freshness checks passed; formatting covered 270 Dart files with
+  zero changes, analysis reported no issues, and the full Dart suite (including
+  the 4,096-operation security/resource stress runner) passed. Diff whitespace
+  review also passed. The authority/resource child meets its completion
+  conditions with no product defect or residual child work.
