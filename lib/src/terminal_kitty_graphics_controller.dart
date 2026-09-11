@@ -251,13 +251,25 @@ final class TerminalKittyGraphicsController {
       _emitError(command, 'EINVAL', 'image identifiers must be positive');
       return;
     }
+    if ((command.action == TerminalKittyGraphicsAction.controlAnimation ||
+            command.action == TerminalKittyGraphicsAction.composeAnimation) &&
+        command.transmission.imageId == 0 &&
+        command.transmission.imageNumber == 0) {
+      await _abortPendingTransfer();
+      _emitError(command, 'EINVAL', 'image id or number is required');
+      return;
+    }
     switch (command.action) {
       case TerminalKittyGraphicsAction.controlAnimation:
-      case TerminalKittyGraphicsAction.composeAnimation:
-      case TerminalKittyGraphicsAction.transmitAnimationFrame:
         await _abortPendingTransfer();
-        _emitError(command, 'ENOTSUP', 'image animation is not supported');
+        _controlAnimation(command, context);
         return;
+      case TerminalKittyGraphicsAction.composeAnimation:
+        await _abortPendingTransfer();
+        _composeAnimation(command, context);
+        return;
+      case TerminalKittyGraphicsAction.transmitAnimationFrame:
+        break;
       case TerminalKittyGraphicsAction.place:
         await _abortPendingTransfer();
         _placeImage(command, identitySource: command, context: context);
@@ -294,7 +306,7 @@ final class TerminalKittyGraphicsController {
 
     final _TerminalKittyPendingTransfer? pending = _pendingTransfer;
     if (pending != null) {
-      if (!command.isMultipartContinuationCompatible) {
+      if (!command.isMultipartContinuationFor(pending.command.action)) {
         await _abortPendingTransfer();
         _emitError(
           command,
@@ -318,11 +330,26 @@ final class TerminalKittyGraphicsController {
       return;
     }
     final int transferGeneration = _takeTransferGeneration();
+    final TerminalKittyImageStore contextStore = screenSet.kittyImagesFor(
+      context.screenKind,
+    );
+    final TerminalKittyImage? frameTarget =
+        command.action == TerminalKittyGraphicsAction.transmitAnimationFrame
+        ? command.transmission.imageId != 0
+              ? contextStore.imageById(command.transmission.imageId)
+              : contextStore.newestImageByNumber(
+                  command.transmission.imageNumber,
+                )
+        : null;
+    if (command.action == TerminalKittyGraphicsAction.transmitAnimationFrame &&
+        frameTarget == null) {
+      _emitError(command, 'ENOENT', 'image not found');
+      return;
+    }
     if (command.action != TerminalKittyGraphicsAction.query &&
+        command.action != TerminalKittyGraphicsAction.transmitAnimationFrame &&
         command.transmission.imageId != 0 &&
-        screenSet.activeKittyImages.removePlacementsForImage(
-              command.transmission.imageId,
-            ) !=
+        contextStore.removePlacementsForImage(command.transmission.imageId) !=
             0) {
       _notifyChanged();
     }
@@ -331,6 +358,7 @@ final class TerminalKittyGraphicsController {
           command: command,
           context: context,
           transferGeneration: transferGeneration,
+          targetImageResourceGeneration: frameTarget?.resourceGeneration,
         );
     _pendingTransfer = transfer;
     await _sendChunk(command, transfer, start: true);
@@ -483,6 +511,77 @@ final class TerminalKittyGraphicsController {
     final TerminalKittyImageStore store = screenSet.kittyImagesFor(
       transfer.context.screenKind,
     );
+    if (initial.action == TerminalKittyGraphicsAction.transmitAnimationFrame) {
+      final TerminalKittyAnimationMutationResult result = store
+          .storeAnimationFrame(
+            imageId: initial.transmission.imageId,
+            imageNumber: initial.transmission.imageNumber,
+            expectedResourceGeneration: transfer.targetImageResourceGeneration!,
+            width: response.width,
+            height: response.height,
+            x: initial.frameTransmission.x,
+            y: initial.frameTransmission.y,
+            baseFrame: initial.frameTransmission.baseFrame,
+            editFrame: initial.frameTransmission.editFrame,
+            gapMilliseconds: initial.frameTransmission.gapMilliseconds,
+            overwrite: initial.frameTransmission.overwrite,
+            backgroundRgba: initial.frameTransmission.backgroundRgba,
+            transient: initial.transmission.usage & 1 != 0,
+            rgba: response.copyRgba(),
+          );
+      switch (result.disposition) {
+        case TerminalKittyAnimationMutationDisposition.stored:
+          _notifyChanged();
+          _emitSuccess(
+            finalCommand,
+            identitySource: initial,
+            resolvedImageId: result.image!.id,
+            resolvedFrameNumber: result.frameNumber,
+          );
+          return;
+        case TerminalKittyAnimationMutationDisposition.imageMissing:
+          _emitError(
+            finalCommand,
+            'ENOENT',
+            'image not found',
+            identitySource: initial,
+            frameNumber: initial.frameTransmission.editFrame,
+          );
+          return;
+        case TerminalKittyAnimationMutationDisposition.baseFrameMissing:
+          _emitError(
+            finalCommand,
+            'EINVAL',
+            'base frame not found',
+            identitySource: initial,
+            frameNumber: result.frameNumber,
+          );
+          return;
+        case TerminalKittyAnimationMutationDisposition.sourceFrameMissing:
+        case TerminalKittyAnimationMutationDisposition.destinationFrameMissing:
+          throw StateError(
+            'frame composition result returned for transmission',
+          );
+        case TerminalKittyAnimationMutationDisposition.invalidRectangle:
+          _emitError(
+            finalCommand,
+            'EINVAL',
+            'frame dimensions exceed image',
+            identitySource: initial,
+            frameNumber: initial.frameTransmission.editFrame,
+          );
+          return;
+        case TerminalKittyAnimationMutationDisposition.resourceLimit:
+          _emitError(
+            finalCommand,
+            'ENOSPC',
+            'animation frame storage full',
+            identitySource: initial,
+            frameNumber: result.frameNumber,
+          );
+          return;
+      }
+    }
     final TerminalKittyImageStoreResult stored = store.store(
       imageId: initial.transmission.imageId,
       imageNumber: initial.transmission.imageNumber,
@@ -646,6 +745,70 @@ final class TerminalKittyGraphicsController {
     );
   }
 
+  void _controlAnimation(
+    TerminalKittyGraphicsCommand command,
+    _TerminalKittyCommandContext context,
+  ) {
+    final TerminalKittyImageStore store = screenSet.kittyImagesFor(
+      context.screenKind,
+    );
+    final int before = store.stateGeneration;
+    final TerminalKittyAnimationControlResult result = store.controlAnimation(
+      imageId: command.transmission.imageId,
+      imageNumber: command.transmission.imageNumber,
+      control: command.animationControl,
+    );
+    if (result.disposition ==
+        TerminalKittyAnimationControlDisposition.imageMissing) {
+      _emitError(command, 'ENOENT', 'image not found');
+      return;
+    }
+    if (store.stateGeneration != before) _notifyChanged();
+    // Kitty animation-control success is deliberately reply-free.
+  }
+
+  void _composeAnimation(
+    TerminalKittyGraphicsCommand command,
+    _TerminalKittyCommandContext context,
+  ) {
+    final TerminalKittyImageStore store = screenSet.kittyImagesFor(
+      context.screenKind,
+    );
+    final TerminalKittyAnimationMutationResult result = store
+        .composeAnimationFrames(
+          imageId: command.transmission.imageId,
+          imageNumber: command.transmission.imageNumber,
+          composition: command.frameComposition,
+        );
+    switch (result.disposition) {
+      case TerminalKittyAnimationMutationDisposition.stored:
+        _notifyChanged();
+        _emitSuccess(
+          command,
+          identitySource: command,
+          resolvedImageId: result.image!.id,
+        );
+        return;
+      case TerminalKittyAnimationMutationDisposition.imageMissing:
+        _emitError(command, 'ENOENT', 'image not found');
+        return;
+      case TerminalKittyAnimationMutationDisposition.baseFrameMissing:
+        throw StateError('frame transmission result returned for composition');
+      case TerminalKittyAnimationMutationDisposition.sourceFrameMissing:
+        _emitError(command, 'ENOENT', 'source frame not found');
+        return;
+      case TerminalKittyAnimationMutationDisposition.destinationFrameMissing:
+        _emitError(command, 'ENOENT', 'destination frame not found');
+        return;
+      case TerminalKittyAnimationMutationDisposition.invalidRectangle:
+        _emitError(command, 'EINVAL', 'invalid animation rectangle');
+        return;
+      case TerminalKittyAnimationMutationDisposition.resourceLimit:
+        _emitError(command, 'ENOSPC', 'animation frame storage full');
+        return;
+    }
+  }
+
   void _moveCursorAfterPlacement(
     TerminalScreen screen,
     TerminalKittyImagePlacementGeometry geometry,
@@ -681,11 +844,12 @@ final class TerminalKittyGraphicsController {
     if (selector == TerminalKittyGraphicsDeleteSelector.animationFrames ||
         selector ==
             TerminalKittyGraphicsDeleteSelector.animationFramesAndData) {
-      _emitError(
-        command,
-        'ENOTSUP',
-        'animation frame deletion is not supported',
+      final TerminalKittyImageStore store = screenSet.kittyImagesFor(
+        context.screenKind,
       );
+      final int before = store.stateGeneration;
+      store.deleteAnimationFrame(command.deletion);
+      if (store.stateGeneration != before) _notifyChanged();
       return;
     }
     final TerminalScreenKind kind = context.screenKind;
@@ -779,12 +943,14 @@ final class TerminalKittyGraphicsController {
     TerminalKittyGraphicsCommand command, {
     required TerminalKittyGraphicsCommand identitySource,
     int? resolvedImageId,
+    int resolvedFrameNumber = 0,
   }) {
     final Uint8List? reply = TerminalKittyGraphicsResponseEncoder.success(
       quiet: command.quiet,
       imageId: resolvedImageId ?? identitySource.transmission.imageId,
       imageNumber: identitySource.transmission.imageNumber,
       placementId: identitySource.transmission.placementId,
+      frameNumber: resolvedFrameNumber,
     );
     _emitGraphicsReply(reply);
   }
@@ -794,8 +960,14 @@ final class TerminalKittyGraphicsController {
     String code,
     String description, {
     TerminalKittyGraphicsCommand? identitySource,
+    int frameNumber = 0,
   }) {
     final TerminalKittyGraphicsCommand identity = identitySource ?? command;
+    final int responseFrameNumber = frameNumber != 0
+        ? frameNumber
+        : identity.action == TerminalKittyGraphicsAction.transmitAnimationFrame
+        ? identity.frameTransmission.editFrame
+        : 0;
     final Uint8List? reply = TerminalKittyGraphicsResponseEncoder.error(
       quiet: command.quiet,
       code: code,
@@ -803,6 +975,7 @@ final class TerminalKittyGraphicsController {
       imageId: identity.transmission.imageId,
       imageNumber: identity.transmission.imageNumber,
       placementId: identity.transmission.placementId,
+      frameNumber: responseFrameNumber,
     );
     _emitGraphicsReply(reply);
   }
@@ -882,11 +1055,13 @@ final class _TerminalKittyPendingTransfer {
     required this.command,
     required this.context,
     required this.transferGeneration,
+    required this.targetImageResourceGeneration,
   });
 
   final TerminalKittyGraphicsCommand command;
   final _TerminalKittyCommandContext context;
   final int transferGeneration;
+  final int? targetImageResourceGeneration;
 }
 
 final class _TerminalKittyCommandContext {

@@ -9,11 +9,66 @@ void runTerminalKittyGraphicsTests() {
   _testDefaultsAndImmutableData();
   _testCompleteStaticControlValues();
   _testActionsAndSelectors();
+  _testAnimationControls();
   _testIntegerBoundariesAndRepeatedKeys();
   _testMalformedAndBoundedCommands();
   _testOuterParserEverySplitAndRecovery();
   _testDistinctApcAndGenericStringLimits();
   _testResponseEncodingAndQuietPolicy();
+}
+
+void _testAnimationControls() {
+  final TerminalKittyGraphicsCommand frame = _parse(
+    'Ga=f,i=7,f=32,s=2,v=3,x=4,y=5,c=6,r=7,z=-8,X=1,'
+    'Y=4278190335,N=1,m=1;AAAA',
+  );
+  _expect(
+    frame.frameTransmission.x == 4 &&
+        frame.frameTransmission.y == 5 &&
+        frame.frameTransmission.baseFrame == 6 &&
+        frame.frameTransmission.editFrame == 7 &&
+        frame.frameTransmission.gapMilliseconds == -8 &&
+        frame.frameTransmission.overwrite &&
+        frame.frameTransmission.backgroundRgba == 0xff0000ff &&
+        frame.isAnimationMultipartContinuationCompatible == false &&
+        _parse('Ga=f,m=0,q=1').isAnimationMultipartContinuationCompatible &&
+        !_parse('Gm=0,q=1').isAnimationMultipartContinuationCompatible &&
+        _parse('Gm=0,q=1').isMultipartContinuationCompatible,
+    'frame transmission retains composition fields and exact continuation form',
+  );
+
+  final TerminalKittyGraphicsCommand control = _parse(
+    'Ga=a,i=7,s=3,r=2,z=40,c=3,v=4',
+  );
+  final TerminalKittyGraphicsCommand ignoredControl = _parse('Ga=a,i=7,s=99');
+  _expect(
+    control.animationControl.state ==
+            TerminalKittyGraphicsAnimationState.running &&
+        control.animationControl.frameNumber == 2 &&
+        control.animationControl.gapMilliseconds == 40 &&
+        control.animationControl.currentFrame == 3 &&
+        control.animationControl.loops == 4 &&
+        ignoredControl.animationControl.state ==
+            TerminalKittyGraphicsAnimationState.unchanged,
+    'animation control preserves valid fields and ignores unknown states',
+  );
+
+  final TerminalKittyGraphicsFrameComposition composition = _parse(
+    'Ga=c,I=9,r=2,c=3,x=4,y=5,w=6,h=7,X=8,Y=9,C=2',
+  ).frameComposition;
+  _expect(
+    composition.sourceFrame == 2 &&
+        composition.destinationFrame == 3 &&
+        composition.destinationX == 4 &&
+        composition.destinationY == 5 &&
+        composition.width == 6 &&
+        composition.height == 7 &&
+        composition.sourceX == 8 &&
+        composition.sourceY == 9 &&
+        composition.overwrite &&
+        _parse('Ga=d,d=f,i=7,r=3').deletion.frameNumber == 3,
+    'frame composition and animation deletion retain protocol frame numbers',
+  );
 }
 
 void _testDefaultsAndImmutableData() {
@@ -210,6 +265,37 @@ void _testOuterParserEverySplitAndRecovery() {
   bytewise.finish();
   _expect(bytewiseSink.commands.length == 1, 'Kitty APC parses bytewise');
 
+  final Uint8List animationBytes = _bytes(
+    '\x1b_Ga=f,i=31,f=32,s=1,v=1,c=1,r=2,z=-1;AAAA\x1b\\',
+  );
+  for (int split = 0; split <= animationBytes.length; split++) {
+    final _KittySink sink = _KittySink();
+    final VtParser parser = VtParser(sink: sink);
+    parser.parse(animationBytes, 0, split);
+    parser.parse(animationBytes, split, animationBytes.length);
+    parser.finish();
+    _expect(
+      parser.isGround &&
+          sink.commands.length == 1 &&
+          sink.commands.single.action ==
+              TerminalKittyGraphicsAction.transmitAnimationFrame &&
+          sink.commands.single.frameTransmission.baseFrame == 1 &&
+          sink.commands.single.frameTransmission.editFrame == 2 &&
+          sink.commands.single.frameTransmission.gapMilliseconds == -1,
+      'Kitty animation APC parses identically at split $split',
+    );
+  }
+  final _KittySink animationBytewiseSink = _KittySink();
+  final VtParser animationBytewise = VtParser(sink: animationBytewiseSink);
+  for (int index = 0; index < animationBytes.length; index++) {
+    animationBytewise.parse(animationBytes, index, index + 1);
+  }
+  animationBytewise.finish();
+  _expect(
+    animationBytewiseSink.commands.length == 1,
+    'Kitty animation APC parses bytewise',
+  );
+
   final _KittySink cancelledSink = _KittySink();
   final VtParser cancelled = VtParser(sink: cancelledSink);
   cancelled.parse(_bytes('\x1b_Gi=7;AAAA\x18X'));
@@ -280,9 +366,10 @@ void _testResponseEncodingAndQuietPolicy() {
       imageId: 31,
       imageNumber: 9,
       placementId: 7,
+      frameNumber: 4,
     ),
-    '\x1b_Gi=31,I=9,p=7;OK\x1b\\',
-    'success response encodes exact identifiers and terminator',
+    '\x1b_Gi=31,I=9,p=7,r=4;OK\x1b\\',
+    'success response encodes exact identifiers, frame, and terminator',
   );
   _expectBytes(
     TerminalKittyGraphicsResponseEncoder.error(

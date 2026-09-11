@@ -30,7 +30,7 @@ void _testCompletePinnedInventory() {
     inventory.version == 1 &&
         inventory.inventoryRevision == 5 &&
         inventory.scope == 'complete-baseline' &&
-        inventory.sourcePins.length == 19 &&
+        inventory.sourcePins.length == 20 &&
         inventory.records.length == 270 &&
         kinds[TerminalCompatibilitySelectorKind.c0] == 10 &&
         kinds[TerminalCompatibilitySelectorKind.c1] == 9 &&
@@ -101,6 +101,8 @@ void _testCompletePinnedInventory() {
             pin.id == 'kitty-0-48-2-graphics-protocol',
       );
   const Map<String, String> graphicsParityPins = <String, String>{
+    'ghostty-d4d8f62-graphics-animation':
+        'd798431b96e977009cc46b5d43b67b7f623a7b1ec62bf8bfe00c80ac4304cecf',
     'ghostty-d4d8f62-graphics-command':
         '72d96e07ff675af5b77651a6718571688604e089525694979c797420ada19051',
     'ghostty-d4d8f62-graphics-exec':
@@ -169,7 +171,7 @@ void _testCompletePinnedInventory() {
             '69773380309da4c8b5d4ec9646eec703c47bc41db29a8efa5b94c30798c72349' &&
         inventory.machineLine() ==
             'TERMINAL_COMPATIBILITY_INVENTORY_CHECK version=1 revision=5 '
-                'sources=19 records=270 implemented=96 partial=21 '
+                'sources=20 records=270 implemented=96 partial=21 '
                 'safe_ignore=8 unsupported=145',
     'primary source pins and content-free summary remain exact',
   );

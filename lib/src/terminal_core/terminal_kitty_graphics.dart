@@ -50,6 +50,13 @@ enum TerminalKittyGraphicsCompression {
 /// q=0 emits replies, q=1 suppresses success, and q=2 suppresses all replies.
 enum TerminalKittyGraphicsQuiet { replies, errorsOnly, none }
 
+enum TerminalKittyGraphicsAnimationState {
+  unchanged,
+  stopped,
+  loading,
+  running,
+}
+
 enum TerminalKittyGraphicsDeleteSelector {
   all('a'),
   allAndData('A'),
@@ -161,6 +168,7 @@ final class TerminalKittyGraphicsDeletion {
     required this.x,
     required this.y,
     required this.z,
+    required this.frameNumber,
   });
 
   final TerminalKittyGraphicsDeleteSelector selector;
@@ -170,6 +178,67 @@ final class TerminalKittyGraphicsDeletion {
   final int x;
   final int y;
   final int z;
+  final int frameNumber;
+}
+
+final class TerminalKittyGraphicsFrameTransmission {
+  const TerminalKittyGraphicsFrameTransmission({
+    required this.x,
+    required this.y,
+    required this.baseFrame,
+    required this.editFrame,
+    required this.gapMilliseconds,
+    required this.overwrite,
+    required this.backgroundRgba,
+  });
+
+  final int x;
+  final int y;
+  final int baseFrame;
+  final int editFrame;
+  final int gapMilliseconds;
+  final bool overwrite;
+  final int backgroundRgba;
+}
+
+final class TerminalKittyGraphicsAnimationControl {
+  const TerminalKittyGraphicsAnimationControl({
+    required this.state,
+    required this.frameNumber,
+    required this.gapMilliseconds,
+    required this.currentFrame,
+    required this.loops,
+  });
+
+  final TerminalKittyGraphicsAnimationState state;
+  final int frameNumber;
+  final int gapMilliseconds;
+  final int currentFrame;
+  final int loops;
+}
+
+final class TerminalKittyGraphicsFrameComposition {
+  const TerminalKittyGraphicsFrameComposition({
+    required this.sourceFrame,
+    required this.destinationFrame,
+    required this.destinationX,
+    required this.destinationY,
+    required this.width,
+    required this.height,
+    required this.sourceX,
+    required this.sourceY,
+    required this.overwrite,
+  });
+
+  final int sourceFrame;
+  final int destinationFrame;
+  final int destinationX;
+  final int destinationY;
+  final int width;
+  final int height;
+  final int sourceX;
+  final int sourceY;
+  final bool overwrite;
 }
 
 /// An immutable, syntax-validated Kitty graphics command.
@@ -180,10 +249,14 @@ final class TerminalKittyGraphicsCommand {
     required this.transmission,
     required this.placement,
     required this.deletion,
+    required this.frameTransmission,
+    required this.animationControl,
+    required this.frameComposition,
     required this.hasImageIdKey,
     required this.hasImageNumberKey,
     required this.hasMoreChunksKey,
     required this.isMultipartContinuationCompatible,
+    required this.isAnimationMultipartContinuationCompatible,
     required Uint8List data,
   }) : _data = Uint8List.fromList(data);
 
@@ -192,6 +265,9 @@ final class TerminalKittyGraphicsCommand {
   final TerminalKittyGraphicsTransmission transmission;
   final TerminalKittyGraphicsPlacement placement;
   final TerminalKittyGraphicsDeletion deletion;
+  final TerminalKittyGraphicsFrameTransmission frameTransmission;
+  final TerminalKittyGraphicsAnimationControl animationControl;
+  final TerminalKittyGraphicsFrameComposition frameComposition;
   final bool hasImageIdKey;
   final bool hasImageNumberKey;
   final bool hasMoreChunksKey;
@@ -199,11 +275,17 @@ final class TerminalKittyGraphicsCommand {
   /// Whether the command carries only the `m` and optional `q` controls that
   /// Kitty permits after the first direct multipart chunk.
   final bool isMultipartContinuationCompatible;
+  final bool isAnimationMultipartContinuationCompatible;
   final Uint8List _data;
 
   int get dataLength => _data.length;
 
   Uint8List copyData() => Uint8List.fromList(_data);
+
+  bool isMultipartContinuationFor(TerminalKittyGraphicsAction initialAction) =>
+      initialAction == TerminalKittyGraphicsAction.transmitAnimationFrame
+      ? isAnimationMultipartContinuationCompatible
+      : isMultipartContinuationCompatible;
 }
 
 final class TerminalKittyGraphicsParseException implements Exception {
@@ -342,6 +424,34 @@ abstract final class TerminalKittyGraphicsCommandParser {
         x: _unsigned(values, 0x78),
         y: _unsigned(values, 0x79),
         z: _signed(values, 0x7a),
+        frameNumber: _unsigned(values, 0x72),
+      ),
+      frameTransmission: TerminalKittyGraphicsFrameTransmission(
+        x: _unsigned(values, 0x78),
+        y: _unsigned(values, 0x79),
+        baseFrame: _unsigned(values, 0x63),
+        editFrame: _unsigned(values, 0x72),
+        gapMilliseconds: _signed(values, 0x7a),
+        overwrite: _unsigned(values, 0x58) == 1,
+        backgroundRgba: _unsigned(values, 0x59),
+      ),
+      animationControl: TerminalKittyGraphicsAnimationControl(
+        state: _animationState(_unsigned(values, 0x73)),
+        frameNumber: _unsigned(values, 0x72),
+        gapMilliseconds: _signed(values, 0x7a),
+        currentFrame: _unsigned(values, 0x63),
+        loops: _unsigned(values, 0x76),
+      ),
+      frameComposition: TerminalKittyGraphicsFrameComposition(
+        sourceFrame: _unsigned(values, 0x72),
+        destinationFrame: _unsigned(values, 0x63),
+        destinationX: _unsigned(values, 0x78),
+        destinationY: _unsigned(values, 0x79),
+        width: _unsigned(values, 0x77),
+        height: _unsigned(values, 0x68),
+        sourceX: _unsigned(values, 0x58),
+        sourceY: _unsigned(values, 0x59),
+        overwrite: _unsigned(values, 0x43) != 0,
       ),
       hasImageIdKey: values.containsKey(0x69),
       hasImageNumberKey: values.containsKey(0x49),
@@ -349,6 +459,11 @@ abstract final class TerminalKittyGraphicsCommandParser {
       isMultipartContinuationCompatible: values.keys.every(
         (int key) => key == 0x6d || key == 0x71,
       ),
+      isAnimationMultipartContinuationCompatible:
+          action == TerminalKittyGraphicsAction.transmitAnimationFrame &&
+          values.keys.every(
+            (int key) => key == 0x61 || key == 0x6d || key == 0x71,
+          ),
       data: Uint8List.sublistView(payload, dataStart),
     );
   }
@@ -508,6 +623,14 @@ abstract final class TerminalKittyGraphicsCommandParser {
     ),
   };
 
+  static TerminalKittyGraphicsAnimationState _animationState(int value) =>
+      switch (value) {
+        1 => TerminalKittyGraphicsAnimationState.stopped,
+        2 => TerminalKittyGraphicsAnimationState.loading,
+        3 => TerminalKittyGraphicsAnimationState.running,
+        _ => TerminalKittyGraphicsAnimationState.unchanged,
+      };
+
   static int _unsigned(
     Map<int, Object> values,
     int key, {
@@ -581,12 +704,14 @@ abstract final class TerminalKittyGraphicsResponseEncoder {
     int imageId = 0,
     int imageNumber = 0,
     int placementId = 0,
+    int frameNumber = 0,
   }) {
     if (quiet != TerminalKittyGraphicsQuiet.replies) return null;
     return _encode(
       imageId: imageId,
       imageNumber: imageNumber,
       placementId: placementId,
+      frameNumber: frameNumber,
       message: 'OK',
     );
   }
@@ -598,6 +723,7 @@ abstract final class TerminalKittyGraphicsResponseEncoder {
     int imageId = 0,
     int imageNumber = 0,
     int placementId = 0,
+    int frameNumber = 0,
   }) {
     if (quiet == TerminalKittyGraphicsQuiet.none) return null;
     _validateErrorText(code, description);
@@ -605,6 +731,7 @@ abstract final class TerminalKittyGraphicsResponseEncoder {
       imageId: imageId,
       imageNumber: imageNumber,
       placementId: placementId,
+      frameNumber: frameNumber,
       message: '$code:$description',
     );
   }
@@ -613,11 +740,13 @@ abstract final class TerminalKittyGraphicsResponseEncoder {
     required int imageId,
     required int imageNumber,
     required int placementId,
+    required int frameNumber,
     required String message,
   }) {
     _validateIdentifier(imageId, 'imageId');
     _validateIdentifier(imageNumber, 'imageNumber');
     _validateIdentifier(placementId, 'placementId');
+    _validateIdentifier(frameNumber, 'frameNumber');
     if (imageId == 0 && imageNumber == 0) return null;
     final StringBuffer buffer = StringBuffer('\x1b_G');
     var prior = false;
@@ -633,6 +762,11 @@ abstract final class TerminalKittyGraphicsResponseEncoder {
     if (placementId != 0) {
       if (prior) buffer.write(',');
       buffer.write('p=$placementId');
+      prior = true;
+    }
+    if (frameNumber != 0) {
+      if (prior) buffer.write(',');
+      buffer.write('r=$frameNumber');
     }
     buffer.write(';$message\x1b\\');
     final Uint8List result = Uint8List.fromList(buffer.toString().codeUnits);

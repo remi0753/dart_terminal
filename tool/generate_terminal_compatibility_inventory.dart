@@ -2209,6 +2209,19 @@ const List<Map<String, Object?>> _sourcePins = <Map<String, Object?>>[
     'retrievedOn': '2026-09-11',
   },
   <String, Object?>{
+    'id': 'ghostty-d4d8f62-graphics-animation',
+    'family': 'ghostty',
+    'title': 'Ghostty Kitty graphics animation state',
+    'edition': 'commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4',
+    'artifactUrl': 'https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/kitty/graphics_animation.zig',
+    'artifactBytes': 5810,
+    'artifactSha256':
+        'd798431b96e977009cc46b5d43b67b7f623a7b1ec62bf8bfe00c80ac4304cecf',
+    'documentPath': null,
+    'documentSha256': null,
+    'retrievedOn': '2026-09-11',
+  },
+  <String, Object?>{
     'id': 'ghostty-d4d8f62-graphics-command',
     'family': 'ghostty',
     'title': 'Ghostty Kitty graphics command parser',
@@ -2628,6 +2641,10 @@ Map<String, Object?> _partialKittyApcRecord(_Gap gap) => <String, Object?>{
           'direct transfer, multipart, query, IDs, and response sections',
     },
     <String, Object?>{
+      'source': 'ghostty-d4d8f62-graphics-animation',
+      'locator': 'bounded full-frame state, gaps, loops, and playback modes',
+    },
+    <String, Object?>{
       'source': 'ghostty-d4d8f62-graphics-command',
       'locator': 'bounded Kitty command parser and control union',
     },
@@ -2663,9 +2680,13 @@ Map<String, Object?> _partialKittyApcRecord(_Gap gap) => <String, Object?>{
       'teardown; plus bounded static placement identity, crop/grid geometry, '
       'cursor movement, supported z order, delete selectors, scroll/clear/reflow '
       'projection, and deterministic CPU/Metal rendering through the ordinary '
-      'bounded color-atlas frame path. Non-Kitty APC remains bounded safe-ignore. '
-      'File/shared-memory transport, virtual and relative placement, extreme '
-      'negative z, animation, and resource eviction are explicitly rejected or '
+      'bounded color-atlas frame path. Animation frame transmit/edit, control, '
+      'composition, and frame deletion use the same worker FIFO with 64 total '
+      'frames per image, 256 extra frames and 16 MiB per screen, atomic '
+      'generation checks, exact replies, and eager full-frame RGBA state. '
+      'Non-Kitty APC remains bounded safe-ignore. File/shared-memory transport, '
+      'virtual and relative placement, extreme negative z, automatic animation '
+      'playback/projection, and resource eviction are explicitly rejected or '
       'deferred pending their ordered roadmap work.',
 };
 

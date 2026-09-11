@@ -151,10 +151,12 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - Kitty graphicsのbounded APC grammar、process-worker direct RGB/RGBA/PNG+zlib decode、
   multipart/FIFO reply、主/代替画面別のbounded image/placement store、ID/number replacement、
   static put/transmit-and-place/delete、通常negative/positive z、scrollback/margin clip/erase/
-  reflow/alternate/RIS lifecycle、immutable viewport projection。CPU oracleと通常の
+  reflow/alternate/RIS lifecycle、animation frame transmit/edit/control/compose/delete、
+  imageごと64 total frame・画面ごと256 extra frame/16 MiBのgeneration-safe state、
+  immutable viewport projection。CPU oracleと通常の
   color-atlas/Metal frame pathは同じnearest-neighbor tile、layer order、1x/2x pixel結果を使い、
   実zsh PTYからDeveloper JIT/Release AOTの両方で受け入れる。file/shared-memory transport、
-  virtual/relative/extreme-negative z、animation、resource evictionは未実装
+  virtual/relative/extreme-negative z、animation playback/projection、resource evictionは未実装
 - Unicode 17 grapheme境界・幅判定、bounded grapheme intern、wide/continuation
   invariantとprimary historyを含むatomic resize/reflow
 - fixed-page SoA scrollback、独立line/byte cap、O(1) page eviction、primary

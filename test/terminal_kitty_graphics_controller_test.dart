@@ -19,16 +19,315 @@ Future<void> main() => runTerminalKittyGraphicsControllerTests();
 
 Future<void> runTerminalKittyGraphicsControllerTests() async {
   _testStoreIdentityCopiesReplacementAndCaps();
+  _testAnimationFrameStateCompositionAndCaps();
   _testPlacementStoreGeometryIdentityAndDeletion();
   _testEveryStaticDeleteSelector();
   _testPlacementScrollLifecycleAndViewportProjection();
   _testPlacementMarginsEraseReflowAlternateAndReset();
   await _testControllerQueryStorageMultipartAndRejection();
+  await _testControllerAnimationProtocolAndStaleTarget();
   await _testControllerStorageCapQueueCapAndStaleWorker();
   await _testControllerPlacementActionsAndDelete();
   await _testControllerFailureReplyAndPendingTeardown();
   await _testSessionParserAndReplyFifo();
   await _testRealWorkerSessionRoundTripAndTeardown();
+}
+
+void _testAnimationFrameStateCompositionAndCaps() {
+  final TerminalKittyImageStore store = TerminalKittyImageStore(
+    maximumImages: 2,
+    maximumAnimationFrames: 2,
+    maximumRetainedBytes: 32,
+  );
+  final TerminalKittyImage root = store
+      .store(
+        imageId: 7,
+        imageNumber: 0,
+        width: 2,
+        height: 1,
+        transient: false,
+        rgba: Uint8List.fromList(const <int>[255, 0, 0, 255, 0, 0, 0, 0]),
+      )
+      .image!;
+  final TerminalKittyAnimationMutationResult created = store
+      .storeAnimationFrame(
+        imageId: 7,
+        imageNumber: 0,
+        expectedResourceGeneration: root.resourceGeneration,
+        width: 1,
+        height: 1,
+        x: 1,
+        y: 0,
+        baseFrame: 1,
+        editFrame: 0,
+        gapMilliseconds: 0,
+        overwrite: true,
+        backgroundRgba: 0,
+        transient: true,
+        rgba: Uint8List.fromList(const <int>[0, 255, 0, 255]),
+      );
+  _expect(
+    created.disposition == TerminalKittyAnimationMutationDisposition.stored &&
+        created.frameNumber == 2 &&
+        root.frameCount == 2 &&
+        root.frameGapMilliseconds(2) == 40 &&
+        root.frameIsTransient(2) &&
+        _sameBytes(root.copyFrameRgba(2), const <int>[
+          255,
+          0,
+          0,
+          255,
+          0,
+          255,
+          0,
+          255,
+        ]) &&
+        store.retainedBytes == 16 &&
+        store.animationFrameCount == 1,
+    'partial frame creation composes onto a prior frame with bounded accounting',
+  );
+
+  final int beforeEditContentGeneration = root.contentGeneration;
+  final TerminalKittyAnimationMutationResult edited = store.storeAnimationFrame(
+    imageId: 7,
+    imageNumber: 0,
+    expectedResourceGeneration: root.resourceGeneration,
+    width: 1,
+    height: 1,
+    x: 0,
+    y: 0,
+    baseFrame: 0,
+    editFrame: 2,
+    gapMilliseconds: 60,
+    overwrite: true,
+    backgroundRgba: 0,
+    transient: false,
+    rgba: Uint8List.fromList(const <int>[0, 0, 255, 255]),
+  );
+  _expect(
+    edited.disposition == TerminalKittyAnimationMutationDisposition.stored &&
+        root.frameGapMilliseconds(2) == 60 &&
+        root.contentGeneration == beforeEditContentGeneration &&
+        store.retainedBytes == 16 &&
+        _sameBytes(root.copyFrameRgba(2), const <int>[
+          0,
+          0,
+          255,
+          255,
+          0,
+          255,
+          0,
+          255,
+        ]),
+    'editing a non-current frame is in-place and does not change retained bytes',
+  );
+
+  final TerminalKittyGraphicsAnimationControl control =
+      TerminalKittyGraphicsCommandParser.parse(
+        Uint8List.fromList('Ga=a,i=7,r=1,z=10,c=2,s=3,v=3'.codeUnits),
+      ).animationControl;
+  final TerminalKittyAnimationControlResult controlled = store.controlAnimation(
+    imageId: 7,
+    imageNumber: 0,
+    control: control,
+  );
+  _expect(
+    controlled.disposition ==
+            TerminalKittyAnimationControlDisposition.applied &&
+        root.currentFrameNumber == 2 &&
+        root.animationState == TerminalKittyImageAnimationState.running &&
+        root.maximumLoops == 2 &&
+        root.frameGapMilliseconds(1) == 10 &&
+        root.contentGeneration > beforeEditContentGeneration,
+    'animation control changes current frame, timing, state, and loop budget atomically',
+  );
+
+  final TerminalKittyGraphicsFrameComposition composition =
+      TerminalKittyGraphicsCommandParser.parse(
+        Uint8List.fromList(
+          'Ga=c,i=7,r=2,c=1,X=1,Y=0,x=0,y=0,w=1,h=1,C=1'.codeUnits,
+        ),
+      ).frameComposition;
+  final TerminalKittyAnimationMutationResult composed = store
+      .composeAnimationFrames(
+        imageId: 7,
+        imageNumber: 0,
+        composition: composition,
+      );
+  _expect(
+    composed.disposition == TerminalKittyAnimationMutationDisposition.stored &&
+        _sameBytes(root.copyFrameRgba(1), const <int>[
+          0,
+          255,
+          0,
+          255,
+          0,
+          0,
+          0,
+          0,
+        ]),
+    'frame composition uses r as source, c as destination, and X/Y as source offset',
+  );
+  final TerminalKittyGraphicsFrameComposition overlap =
+      TerminalKittyGraphicsCommandParser.parse(
+        Uint8List.fromList('Ga=c,i=7,r=1,c=1,x=0,y=0,w=1,h=1'.codeUnits),
+      ).frameComposition;
+  _expect(
+    store
+            .composeAnimationFrames(
+              imageId: 7,
+              imageNumber: 0,
+              composition: overlap,
+            )
+            .disposition ==
+        TerminalKittyAnimationMutationDisposition.invalidRectangle,
+    'same-frame overlapping composition is rejected without mutation',
+  );
+
+  store.deleteAnimationFrame(
+    TerminalKittyGraphicsCommandParser.parse(
+      Uint8List.fromList('Ga=d,d=f,i=7,r=0'.codeUnits),
+    ).deletion,
+  );
+  _expect(
+    root.frameCount == 1 &&
+        root.currentFrameNumber == 1 &&
+        store.animationFrameCount == 0 &&
+        store.retainedBytes == 8 &&
+        _sameBytes(root.copyRgba(), const <int>[
+          0,
+          0,
+          255,
+          255,
+          0,
+          255,
+          0,
+          255,
+        ]),
+    'deleting the root promotes frame two and preserves the displayed pixels',
+  );
+  store.place(
+    imageId: 7,
+    imageNumber: 0,
+    placementId: 1,
+    logicalLineId: 1,
+    logicalLineEpoch: 1,
+    logicalCellOffset: 0,
+    sourceX: 0,
+    sourceY: 0,
+    sourceWidth: 0,
+    sourceHeight: 0,
+    cellOffsetX: 0,
+    cellOffsetY: 0,
+    columns: 1,
+    rows: 1,
+    z: 0,
+  );
+  final TerminalKittyImageDeleteResult removed = store.deleteAnimationFrame(
+    TerminalKittyGraphicsCommandParser.parse(
+      Uint8List.fromList('Ga=d,d=F,i=7'.codeUnits),
+    ).deletion,
+  );
+  _expect(
+    removed.deletedImages == 1 &&
+        removed.deletedPlacements == 1 &&
+        store.isEmpty &&
+        store.retainedBytes == 0,
+    'uppercase frame deletion removes a one-frame image and its placements',
+  );
+
+  final TerminalKittyImageStore capped = TerminalKittyImageStore(
+    maximumImages: 1,
+    maximumAnimationFrames: 1,
+    maximumRetainedBytes: 8,
+  );
+  final TerminalKittyImage cappedRoot = capped
+      .store(
+        imageId: 1,
+        imageNumber: 0,
+        width: 1,
+        height: 1,
+        transient: false,
+        rgba: Uint8List.fromList(const <int>[0, 0, 0, 0]),
+      )
+      .image!;
+  TerminalKittyAnimationMutationResult addFrame() => capped.storeAnimationFrame(
+    imageId: 1,
+    imageNumber: 0,
+    expectedResourceGeneration: cappedRoot.resourceGeneration,
+    width: 1,
+    height: 1,
+    x: 0,
+    y: 0,
+    baseFrame: 0,
+    editFrame: 0,
+    gapMilliseconds: 40,
+    overwrite: true,
+    backgroundRgba: 0,
+    transient: false,
+    rgba: Uint8List.fromList(const <int>[1, 2, 3, 4]),
+  );
+  _expect(
+    addFrame().disposition ==
+            TerminalKittyAnimationMutationDisposition.stored &&
+        addFrame().disposition ==
+            TerminalKittyAnimationMutationDisposition.resourceLimit &&
+        capped.retainedBytes == 8 &&
+        capped.animationFrameCount == 1,
+    'frame count and aggregate byte caps reject without evicting this child',
+  );
+
+  final TerminalKittyImageStore perImage = TerminalKittyImageStore(
+    maximumImages: 1,
+    maximumAnimationFrames: 64,
+    maximumRetainedBytes: 256,
+  );
+  final TerminalKittyImage perImageRoot = perImage
+      .store(
+        imageId: 2,
+        imageNumber: 0,
+        width: 1,
+        height: 1,
+        transient: false,
+        rgba: Uint8List(4),
+      )
+      .image!;
+  TerminalKittyAnimationMutationResult appendPerImageFrame() =>
+      perImage.storeAnimationFrame(
+        imageId: 2,
+        imageNumber: 0,
+        expectedResourceGeneration: perImageRoot.resourceGeneration,
+        width: 1,
+        height: 1,
+        x: 0,
+        y: 0,
+        baseFrame: 0,
+        editFrame: 0,
+        gapMilliseconds: 1,
+        overwrite: true,
+        backgroundRgba: 0,
+        transient: false,
+        rgba: Uint8List(4),
+      );
+  for (
+    var frame = 1;
+    frame < TerminalKittyImageStoreLimits.maximumFramesPerImage;
+    frame++
+  ) {
+    _expect(
+      appendPerImageFrame().disposition ==
+          TerminalKittyAnimationMutationDisposition.stored,
+      'per-image frame $frame reaches the exact bound',
+    );
+  }
+  _expect(
+    perImageRoot.frameCount ==
+            TerminalKittyImageStoreLimits.maximumFramesPerImage &&
+        appendPerImageFrame().disposition ==
+            TerminalKittyAnimationMutationDisposition.resourceLimit &&
+        perImage.retainedBytes == 256,
+    'the sixty-fifth total frame is rejected without changing exact accounting',
+  );
 }
 
 void _testPlacementScrollLifecycleAndViewportProjection() {
@@ -762,9 +1061,9 @@ Future<void> _testControllerQueryStorageMultipartAndRejection() async {
         replies.any(
           (String value) => value.contains('local image transport'),
         ) &&
-        replies.any((String value) => value.contains('image animation')) &&
+        replies.any((String value) => value.contains('image not found')) &&
         replies.any((String value) => value.contains('mutually exclusive')),
-    'local media, animation, and conflicting identities fail before decode',
+    'local media, missing frame targets, and conflicting identities fail before decode',
   );
 
   final int replyCount = replies.length;
@@ -774,6 +1073,168 @@ Future<void> _testControllerQueryStorageMultipartAndRejection() async {
     replies.length == replyCount,
     'quiet level two suppresses a worker decode failure reply',
   );
+  await controller.dispose();
+  worker.dispose();
+}
+
+Future<void> _testControllerAnimationProtocolAndStaleTarget() async {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 2, columns: 2);
+  final _InProcessImageWorker worker = _InProcessImageWorker();
+  final List<String> replies = <String>[];
+  var changeCount = 0;
+  final TerminalKittyGraphicsController controller =
+      TerminalKittyGraphicsController(
+        screenSet: screens,
+        paneId: 19,
+        sessionGeneration: 1,
+        worker: worker,
+        onReply: (Uint8List bytes) {
+          replies.add(ascii.decode(bytes));
+          return true;
+        },
+        onChanged: () => changeCount++,
+      );
+
+  controller.enqueueCommand(_command('Gi=40,f=32,s=1,v=1;AQIDBA=='));
+  await controller.waitForIdle();
+  final int changesAfterRoot = changeCount;
+
+  worker.forcedStatus = RuntimeLifecycleRequestStatus.backpressured;
+  controller.enqueueCommand(_command('Ga=f,i=40,r=8,f=32,s=1,v=1;BQYHCA=='));
+  await controller.waitForIdle();
+  _expect(
+    replies.last ==
+        '\x1b_Gi=40,r=8;EBUSY:image worker did not accept the request\x1b\\',
+    'frame worker backpressure fails closed with the requested frame identity',
+  );
+  worker.forcedStatus = RuntimeLifecycleRequestStatus.response;
+
+  controller.enqueueCommand(_command('Ga=f,i=40,f=32,s=1,v=1,m=1;AQID'));
+  await controller.waitForIdle();
+  _expect(
+    controller.hasPendingTransfer,
+    'animation multipart state is pending',
+  );
+  controller.enqueueCommand(_command('Gm=0;BA=='));
+  await controller.waitForIdle();
+  _expect(
+    !controller.hasPendingTransfer &&
+        worker.service.pendingTransferCount == 0 &&
+        replies.last.contains(
+          'multipart continuation contains forbidden controls',
+        ),
+    'animation multipart continuation must repeat a=f and aborts atomically',
+  );
+
+  controller.enqueueCommand(
+    _command('Ga=f,i=40,f=32,s=1,v=1,r=99,z=-1,m=1;CQoL'),
+  );
+  controller.enqueueCommand(_command('Ga=f,m=0;DA=='));
+  await controller.waitForIdle();
+  final TerminalKittyImage image = screens.primaryKittyImages.imageById(40)!;
+  _expect(
+    image.frameCount == 2,
+    'multipart frame creates frame two '
+    '(count=${image.frameCount}, reply=${replies.last})',
+  );
+  _expect(image.frameGapMilliseconds(2) == 0, 'negative gap is gapless');
+  _expect(
+    _sameBytes(image.copyFrameRgba(2), const <int>[9, 10, 11, 12]),
+    'multipart frame publishes decoded pixels',
+  );
+  _expect(
+    replies.last == '\x1b_Gi=40,r=2;OK\x1b\\',
+    'multipart frame reports its assigned frame',
+  );
+  _expect(
+    changeCount == changesAfterRoot + 1,
+    'multipart frame emits one change notification',
+  );
+
+  final int repliesBeforeControl = replies.length;
+  controller.enqueueCommand(_command('Ga=a,i=40,c=2,s=3,v=2'));
+  await controller.waitForIdle();
+  _expect(
+    replies.length == repliesBeforeControl &&
+        image.currentFrameNumber == 2 &&
+        image.animationState == TerminalKittyImageAnimationState.running &&
+        image.maximumLoops == 1 &&
+        _sameBytes(image.copyCurrentRgba(), const <int>[9, 10, 11, 12]),
+    'animation control changes bounded state without a success reply',
+  );
+
+  controller.enqueueCommand(_command('Ga=c,i=40,r=3,c=2,w=1,h=1'));
+  controller.enqueueCommand(_command('Ga=c,i=40,r=1,c=3,w=1,h=1'));
+  await controller.waitForIdle();
+  _expect(
+    replies[replies.length - 2] ==
+            '\x1b_Gi=40;ENOENT:source frame not found\x1b\\' &&
+        replies.last == '\x1b_Gi=40;ENOENT:destination frame not found\x1b\\',
+    'frame composition distinguishes missing source and destination frames',
+  );
+
+  controller.enqueueCommand(_command('Ga=c,i=40,r=1,c=2,w=1,h=1,C=1'));
+  await controller.waitForIdle();
+  _expect(
+    replies.last == '\x1b_Gi=40;OK\x1b\\' &&
+        _sameBytes(image.copyCurrentRgba(), const <int>[1, 2, 3, 4]),
+    'frame composition mutates the current frame and emits one exact reply',
+  );
+
+  final int repliesBeforeDelete = replies.length;
+  controller.enqueueCommand(_command('Ga=d,d=f,i=40,r=2'));
+  await controller.waitForIdle();
+  _expect(
+    replies.length == repliesBeforeDelete && image.frameCount == 1,
+    'animation frame deletion is reply-free and retains the root image',
+  );
+
+  controller.enqueueCommand(_command('Ga=f,i=40,c=99,f=32,s=1,v=1;BQYHCA=='));
+  await controller.waitForIdle();
+  _expect(
+    image.frameCount == 1 &&
+        replies.last == '\x1b_Gi=40,r=2;EINVAL:base frame not found\x1b\\',
+    'a missing base frame rejects atomically and reports the assigned frame',
+  );
+
+  final int repliesBeforeQuiet = replies.length;
+  controller.enqueueCommand(_command('Ga=f,i=40,q=1,f=32,s=1,v=1;BQYHCA=='));
+  controller.enqueueCommand(
+    _command('Ga=f,i=999,q=2,r=3,f=32,s=1,v=1;BQYHCA=='),
+  );
+  await controller.waitForIdle();
+  _expect(
+    image.frameCount == 2 && replies.length == repliesBeforeQuiet,
+    'q=1 suppresses frame success and q=2 suppresses missing-target errors',
+  );
+  controller.enqueueCommand(_command('Ga=d,d=f,i=40,r=2'));
+  await controller.waitForIdle();
+
+  final Completer<void> gate = Completer<void>();
+  worker.gate = gate;
+  controller.enqueueCommand(_command('Ga=f,i=40,f=32,s=1,v=1;BQYHCA=='));
+  await Future<void>.delayed(Duration.zero);
+  screens.primaryKittyImages.store(
+    imageId: 40,
+    imageNumber: 0,
+    width: 1,
+    height: 1,
+    transient: false,
+    rgba: Uint8List.fromList(const <int>[13, 14, 15, 16]),
+  );
+  gate.complete();
+  await controller.waitForIdle();
+  worker.gate = null;
+  final TerminalKittyImage replacement = screens.primaryKittyImages.imageById(
+    40,
+  )!;
+  _expect(
+    replacement.frameCount == 1 &&
+        _sameBytes(replacement.copyRgba(), const <int>[13, 14, 15, 16]) &&
+        replies.last == '\x1b_Gi=40;ENOENT:image not found\x1b\\',
+    'a late worker frame cannot attach to a replacement image generation',
+  );
+
   await controller.dispose();
   worker.dispose();
 }
@@ -998,6 +1459,7 @@ Future<void> _testControllerPlacementActionsAndDelete() async {
   );
 
   final int beforeErrors = screens.primaryKittyImages.placementCount;
+  final int repliesBeforeErrors = replies.length;
   controller.enqueueCommand(_command('Ga=p,i=999,C=1'));
   controller.enqueueCommand(_command('Ga=p,i=70,U=2,C=1'));
   controller.enqueueCommand(_command('Ga=p,i=70,P=70,Q=3,C=1'));
@@ -1018,8 +1480,9 @@ Future<void> _testControllerPlacementActionsAndDelete() async {
         ) &&
         replies.any((String value) => value.contains('extreme negative')) &&
         replies.any((String value) => value.contains('cursor movement')) &&
-        replies.any((String value) => value.contains('frame deletion')),
-    'unsupported placement and animation-delete forms fail without mutation',
+        replies.length == repliesBeforeErrors + 5 &&
+        screens.primaryKittyImages.imageById(70)?.frameCount == 1,
+    'unsupported placement forms fail while lowercase frame delete is a silent no-op',
   );
 
   final int repliesBeforeLowerDelete = replies.length;
@@ -1403,6 +1866,14 @@ void _expectInts(List<int> actual, List<int> expected, String description) {
   for (var index = 0; index < expected.length; index++) {
     _expect(actual[index] == expected[index], '$description byte $index');
   }
+}
+
+bool _sameBytes(List<int> actual, List<int> expected) {
+  if (actual.length != expected.length) return false;
+  for (var index = 0; index < expected.length; index++) {
+    if (actual[index] != expected[index]) return false;
+  }
+  return true;
 }
 
 void _expect(bool condition, String message) {

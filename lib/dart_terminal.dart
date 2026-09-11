@@ -33,11 +33,15 @@ export 'src/terminal_core/terminal_keyboard_modes.dart'
 export 'src/terminal_core/terminal_kitty_graphics.dart'
     show
         TerminalKittyGraphicsAction,
+        TerminalKittyGraphicsAnimationControl,
+        TerminalKittyGraphicsAnimationState,
         TerminalKittyGraphicsCommand,
         TerminalKittyGraphicsCommandParser,
         TerminalKittyGraphicsCompression,
         TerminalKittyGraphicsDeleteSelector,
         TerminalKittyGraphicsDeletion,
+        TerminalKittyGraphicsFrameComposition,
+        TerminalKittyGraphicsFrameTransmission,
         TerminalKittyGraphicsLimits,
         TerminalKittyGraphicsMedium,
         TerminalKittyGraphicsParseException,
