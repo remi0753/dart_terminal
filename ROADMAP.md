@@ -1060,7 +1060,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] NORMAL/INSERT/search/detail state と mode-invariant syntax projection
   - [x] `dart_appkit` の汎用 attributed editable text surface
   - [x] native editor/detail composition、save/reload、focus/cleanup lifecycle
-  - [ ] M1 両 runtime editable Settings 受け入れと Phase 8 再完了判定
+  - [x] M1 両 runtime editable Settings 受け入れ
+  - [ ] existing root permission bits retention と Phase 8 再完了判定
 
 終了条件:
 

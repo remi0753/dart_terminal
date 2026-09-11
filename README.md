@@ -306,10 +306,19 @@ scrollback、font、padding、window frameは書き換えません。自動file 
 現在の対象外です。
 
 Applicationメニューの`Settings…`（Command-,）、command palette、または非予約chordへ設定した
-`application.open-settings` actionから、read-onlyのnative effective-config inspectorを開けます。
-文字入力で全effective entryを検索し、↑↓で選択するとcanonical value、source、line/column、
-live/new-session policy、repeat occurrenceと直近diagnosticを表示します。Command-Rは上記と同じ
-reload actionを実行し、Escはwindowを閉じてterminalのfirst responderを復元します。
+`application.open-settings` actionから、root設定ファイルを編集するnative modal editorを開けます。
+新規・空・疎なファイルでも全36 optionを同じdocument内へ補完し、右のcontext panelはcaret位置の
+current/draft value、構文、説明と、保存後に既存terminalへ即時反映されるか新規terminalから使われるかを
+表示します。line/source行や別のvalue入力欄は持たず、panelを閉じても右端の細いrailが残ります。
+
+起動時は`NORMAL`で、`i`または`a`が同じsyntax-highlight済みsurfaceを`INSERT`へ切り替え、
+`Esc`が`NORMAL`へ戻します。両modeのdocument、font、色、syntax styleは同一です。`/`だけが
+明示的に`SEARCH`を開始し、`↑`/`↓`で候補を移動、`]`でcontext panelを開閉します。
+Command-Sはroot全体を既存schemaで事前検証します。invalid draftはeditorとlast-known-good設定を保持し、
+該当箇所を下線表示してファイルもreload controllerも変更しません。valid draftだけを同一directoryで
+atomic保存し、上記のshared reload actionを1回実行します。NORMALの`Esc`またはwindow closeは全native
+editor ownerを解放してterminalのfirst responderを復元します。canonical provenance、include/CLI priority、
+全diagnosticの機械可読表示には引き続き`--show-config`を使用できます。
 
 `theme` は `system`、`light`、`dark` を受理し、互換記法の `default` は `system` として扱います。
 `default`を使用すると`CFG_DEPRECATED_VALUE` warningと`theme = system`への修正案を表示し、
@@ -340,8 +349,9 @@ make RUNTIME_ARCH=arm64 runtime-shell-integration
 font、window/padding、cursor、Option入力、scrollback上限、pane/application keybind、
 unbind、Command passthrough、invalid reserved shortcutからの復旧、invalid/corrected reload、
 live/new-session policy、native menu優先、独立resourceに加え、worker/AppKit所有を作らない
-`--show-config`、Settingsのnative menu/command palette/shared action、canonical valueと
-diagnostic検索、Settings内reload、focus/handle cleanupをDeveloper JITとRelease AOTで確認します。
+`--show-config`、Settingsのnative menu/command palette/shared action、全option document、明示検索、
+同一syntax表示のNORMAL/INSERT、invalid saveの非永続化、valid atomic saveからの1回のreload、
+context diagnostic、focus/handle cleanupをDeveloper JITとRelease AOTで確認します。
 両runtimeのgateは
 次で再実行できます。
 

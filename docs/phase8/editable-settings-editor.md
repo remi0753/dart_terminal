@@ -505,3 +505,100 @@ otherwise make the document look visually different.
   issues; and the aggregate ended with `dart_terminal tests passed`.
 - `git diff --check` and the final task-scoped diff review passed. The adjacent
   `dart_appkit` worktree remains clean at the previously accepted editor commit.
+
+### 2026-09-11 — M1 dual-runtime acceptance start
+
+- Purpose: run the packaged Developer JIT and Release AOT configuration product
+  on the Apple M1 baseline, prove the editable Settings workflow against real
+  AppKit/Metal/PTY ownership, reconcile user-facing evidence, and then
+  re-evaluate every Phase 8 exit condition.
+- Scope: the existing isolated configuration runtime suite; exact native menu
+  and command-palette entry; explicit `/` search; same-surface INSERT;
+  invalid Command-S draft retained with no file write or reload; corrected
+  atomic save followed by exactly one shared reload; live/new-session resource
+  boundaries; focus and handle cleanup; README, UI-09, CFG-07, task/parent
+  roadmap state, generated evidence, source/bundle gates, and the complete test
+  suite.
+- Out of scope: a new runtime suite, additional editor features, Phase 9, Intel
+  or Universal acceptance, or weakening the real native-event/owner checks.
+- Dependencies: committed product integration `2d08a9d`, adjacent generic
+  editor `3b92fa1`, the existing developer/release bundle builders and audits,
+  the configuration smoke driver, and the M1 host's real AppKit session.
+- Completion conditions: both packaged modes satisfy the same editable
+  Settings contract and exit cleanly with four sessions, zero text clients,
+  and zero native handles; all repository gates and documentation agree; no
+  Phase 8 child remains unchecked.
+- The existing smoke-driver expectations still describe the retired
+  Command-R inspector flow: they require one rejected reload transaction and
+  label the summary as `settings_reload`. The product now intentionally rejects
+  invalid text before persistence/reload and emits only the later accepted
+  reload. These exact expectations must be reconciled to the stronger editable
+  save contract before the final dual-runtime result can pass; the scenario and
+  target remain unchanged.
+- The first Developer JIT product run built and launched the real arm64 bundle,
+  opened the ordinary PTY/AppKit hierarchy, and stopped at the new initial
+  Settings assertion. Cleanup still reaped the worker and PTY and returned all
+  owners. The assertion had incorrectly required exactly 36 assignment
+  occurrences and the canonical value `system` in the editable draft. The
+  fixture intentionally contains five repeatable `keybind` lines (therefore 40
+  occurrences covering 36 distinct schema options), and preserves the user's
+  deprecated spelling `theme = default` while the accepted effective value is
+  `system`. The assertion now checks 36 distinct schema options plus both
+  draft/effective values, preserving rather than weakening the intended
+  contract.
+- The second Developer JIT run passed the corrected product assertion and
+  completed its real Settings/PTY lifecycle. The outer smoke driver then
+  rejected the expected stderr difference: only the two startup diagnostics
+  were emitted, because the invalid `font-size` draft remained inside the
+  editor and never reached the shared reload logger. The driver now requires
+  zero rejected reload records, one accepted reload, and exactly those two
+  startup diagnostics. Product and driver evidence names now distinguish
+  `save_rejected`, `save_applied`, `reload_applied`, `settings_edit`, and
+  `settings_style_stable` instead of describing every operation as reload.
+- The reconciled Developer JIT configuration acceptance passed on the real M1
+  bundle in 1,660 ms. Release AOT then passed the identical contract in
+  1,077 ms. Each mode exercised the owner-free `--show-config` early exit and
+  the ordinary four-pane AppKit/Metal/PTY product; Settings was reached through
+  both menu and command palette, retained the initial file during invalid save,
+  atomically installed the corrected file, dispatched one accepted reload,
+  preserved existing pane resources, projected new-session state to later
+  panes, restored focus, and finished with four clean sessions, zero text
+  clients, and zero native handles.
+- README now documents the complete modal document, explicit `/` search,
+  same-style NORMAL/INSERT transition, contextual rail, invalid-save behavior,
+  atomic Command-S/reload, and `--show-config` provenance boundary. Feature
+  owners UI-09 and CFG-07 now describe the same accepted behavior rather than
+  the retired read-only inspector/Command-R workflow.
+
+### Verification for ordered subtask 5
+
+- `make RUNTIME_ARCH=arm64 runtime-configuration-integration`: passed on the
+  final source. Developer JIT reported
+  `RUNTIME_CONFIGURATION_INTEGRATION_PASS` in 1,608 ms and Release AOT reported
+  the same contract in 1,115 ms. Both were native arm64 launches with four
+  panes, keybind, save, reload, editable Settings, and owner-free effective
+  configuration checks enabled.
+- The first final `make test` correctly rejected the README/FEATURE_MATRIX
+  hashes in `compatibility/regression_coverage_report.json` as stale.
+  `make terminal-compatibility-regression-coverage` changed only those two
+  reviewed SHA-256 entries. The Phase 7 AppKit evidence regeneration likewise
+  changed only the two `terminal_application.dart` hashes.
+- Final full `make test`: passed. All schema/action generation, AppKit evidence,
+  compatibility, differential, application-matrix, terminfo, shell-resource,
+  formatting (245 files, 0 changes), analysis, and aggregate tests passed with
+  `dart_terminal tests passed`.
+- `make runtime-source-check`: passed with 451 tracked files, zero product
+  native sources, and the one already reviewed test-native source.
+- `make RUNTIME_ARCH=arm64 runtime-bundle-audit`: passed for both Developer JIT
+  and Release AOT, each with one helper, one native-asset set, and one declared
+  capability. The adjacent `dart_appkit` worktree remained clean at `3b92fa1`.
+- All runtime-facing Phase 8 exit conditions were re-evaluated as satisfied:
+  invalid startup
+  configuration remains recoverable with file/line/hint diagnostics; invalid
+  editor drafts do not reach disk or reload; accepted reload retains existing
+  pane/PTY resources; generated schema/help/settings/action evidence is fresh;
+  and the previously accepted disabled-shell path remains an ordinary terminal
+  under the unchanged full gate. Final source review then found that the local
+  atomic writer does not yet retain an existing root file's permission bits,
+  despite that explicit storage completion condition. A final ordered child
+  now tracks that fix and Phase 8 remains open; Phase 9 was not started.

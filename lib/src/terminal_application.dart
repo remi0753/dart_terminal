@@ -4358,8 +4358,19 @@ final class TerminalApplication {
               TerminalActionDispatchDisposition.executed &&
           application.debugLiveObjectCount == nativeHandleBaseline + 6 &&
           reloadController.effectiveSnapshot.schema.options.length == 36 &&
-          settings.state.occurrences.length == 36 &&
-          initialTheme.draftValue(settings.state.text) == 'system' &&
+          settings.state.occurrences
+                  .map(
+                    (TerminalSettingsOptionOccurrence occurrence) =>
+                        occurrence.option.name,
+                  )
+                  .toSet()
+                  .length ==
+              36 &&
+          initialTheme.draftValue(settings.state.text) == 'default' &&
+          reloadController.effectiveSnapshot.value(
+                TerminalProductConfigSchema.theme,
+              ) ==
+              TerminalConfiguredTheme.system &&
           initialTheme.lineIndex == 0 &&
           initialTheme.option.applicationPolicy ==
               TerminalConfigApplicationPolicy.newSession &&
@@ -5092,9 +5103,11 @@ keybind = control+k=pane.focus-next
       'window=true padding=true option_text=true scrollback=true cursor=true '
       'keybind_pane=true keybind_application=true unbind=true '
       'passthrough=true invalid_recovery=true native_menu_priority=true '
-      'reload_rejected=true reload_applied=true live_existing=true '
+      'save_rejected=true save_applied=true reload_applied=true '
+      'live_existing=true '
       'new_session=true settings_menu=true settings_palette=true '
-      'settings_singleton=true settings_search=true settings_diagnostics=true '
+      'settings_singleton=true settings_search=true settings_edit=true '
+      'settings_style_stable=true settings_diagnostics=true '
       'settings_reload=true settings_focus=true panes=4 independent=true '
       'sessions_clean=4 text_clients=0 native_handles=0',
     );

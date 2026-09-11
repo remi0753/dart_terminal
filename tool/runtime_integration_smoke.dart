@@ -1616,10 +1616,7 @@ keybind = command+d=pane.focus-next
       r'  hint: replace it with `theme = system`\n'
       r'.+/config:[0-9]+:[0-9]+: error\[CFG_INVALID_VALUE\]: '
       r'`keybind`: keybind chord `command\+d` is reserved by a native menu item\n'
-      r'  hint: choose a chord that is not listed as a reserved native shortcut\n'
-      r'.+/config:1:13: error\[CFG_INVALID_VALUE\]: `font-size`: '
-      r'font size must be a finite number from 4\.0 to 128\.0\n'
-      r'  hint: choose a value within the supported range$',
+      r'  hint: choose a chord that is not listed as a reserved native shortcut$',
     ).firstMatch(diagnosticText);
     _expect(
       diagnostic != null && diagnostic.group(0) == diagnosticText,
@@ -1632,14 +1629,15 @@ keybind = command+d=pane.focus-next
                 r'changes=0 live=0 new_session=0 diagnostics=1$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
-              1 &&
+              0 &&
           RegExp(
                 r'^TERMINAL_CONFIG_RELOAD disposition=applied generation=1 '
                 r'changes=16 live=2 new_session=14 diagnostics=0$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
               1,
-      'configured product omitted exact rejected/applied reload transactions',
+      'configured product did not suppress invalid-save reload or omitted the '
+      'one accepted reload transaction',
     );
     _expect(
       RegExp(
@@ -1648,9 +1646,11 @@ keybind = command+d=pane.focus-next
             r'scrollback=true cursor=true '
             r'keybind_pane=true keybind_application=true unbind=true '
             r'passthrough=true invalid_recovery=true native_menu_priority=true '
-            r'reload_rejected=true reload_applied=true live_existing=true '
+            r'save_rejected=true save_applied=true reload_applied=true '
+            r'live_existing=true '
             r'new_session=true settings_menu=true settings_palette=true '
-            r'settings_singleton=true settings_search=true '
+            r'settings_singleton=true settings_search=true settings_edit=true '
+            r'settings_style_stable=true '
             r'settings_diagnostics=true settings_reload=true '
             r'settings_focus=true panes=4 independent=true '
             r'sessions_clean=4 text_clients=0 native_handles=0$',
@@ -1688,7 +1688,8 @@ keybind = command+d=pane.focus-next
     stdout.writeln(
       'RUNTIME_CONFIGURATION_INTEGRATION_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
-      'panes=4 keybinds=true reload=true settings=true effective_config=true '
+      'panes=4 keybinds=true save=true reload=true settings_editor=true '
+      'effective_config=true '
       'elapsed_ms=${observation.elapsed.inMilliseconds}',
     );
   } finally {
