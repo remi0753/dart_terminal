@@ -20,11 +20,13 @@ enum TerminalKittyImageAnimationState { stopped, loading, running }
 final class _TerminalKittyImageFrame {
   _TerminalKittyImageFrame({
     required Uint8List rgba,
+    required this.contentGeneration,
     required this.gapMilliseconds,
     required this.transient,
   }) : rgba = Uint8List.fromList(rgba);
 
   final Uint8List rgba;
+  int contentGeneration;
   int gapMilliseconds;
   bool transient;
 }
@@ -40,7 +42,7 @@ final class TerminalKittyImage {
     required int contentGeneration,
     required this.transient,
     required Uint8List rgba,
-  }) : _contentGeneration = contentGeneration,
+  }) : _rootContentGeneration = contentGeneration,
        _rgba = Uint8List.fromList(rgba);
 
   final int id;
@@ -51,14 +53,14 @@ final class TerminalKittyImage {
   bool transient;
   Uint8List _rgba;
   final List<_TerminalKittyImageFrame> _frames = <_TerminalKittyImageFrame>[];
-  int _contentGeneration;
+  int _rootContentGeneration;
   int _rootGapMilliseconds = 0;
   int _currentFrameIndex = 0;
   TerminalKittyImageAnimationState _animationState =
       TerminalKittyImageAnimationState.stopped;
   int _maximumLoops = 0;
   int _completedLoops = 0;
-  int? _frameShownAtMilliseconds;
+  int? _frameShownAtMicros;
 
   int get byteLength => _rgba.length;
   int get animationByteLength => _frames.fold(
@@ -68,11 +70,11 @@ final class TerminalKittyImage {
   int get storageByteLength => byteLength + animationByteLength;
   int get frameCount => _frames.length + 1;
   int get currentFrameNumber => _currentFrameIndex + 1;
-  int get contentGeneration => _contentGeneration;
+  int get contentGeneration => frameContentGeneration(currentFrameNumber);
   TerminalKittyImageAnimationState get animationState => _animationState;
   int get maximumLoops => _maximumLoops;
   int get completedLoops => _completedLoops;
-  int? get frameShownAtMilliseconds => _frameShownAtMilliseconds;
+  int? get frameShownAtMicros => _frameShownAtMicros;
 
   Uint8List copyRgba() => Uint8List.fromList(_rgba);
 
@@ -90,6 +92,11 @@ final class TerminalKittyImage {
   bool frameIsTransient(int frameNumber) => frameNumber == 1
       ? transient
       : _extraFrame(frameNumber)?.transient ??
+            (throw RangeError.range(frameNumber, 1, frameCount, 'frameNumber'));
+
+  int frameContentGeneration(int frameNumber) => frameNumber == 1
+      ? _rootContentGeneration
+      : _extraFrame(frameNumber)?.contentGeneration ??
             (throw RangeError.range(frameNumber, 1, frameCount, 'frameNumber'));
 
   _TerminalKittyImageFrame? _extraFrame(int frameNumber) {
@@ -393,7 +400,19 @@ final class TerminalKittyAnimationControlResult {
   final TerminalKittyImage? image;
 }
 
-/// Per-screen, reject-on-cap storage for static Kitty image data.
+final class TerminalKittyAnimationTickResult {
+  const TerminalKittyAnimationTickResult({
+    required this.changedImageCount,
+    required this.nextDeadlineMicros,
+  });
+
+  final int changedImageCount;
+  final int? nextDeadlineMicros;
+
+  bool get changed => changedImageCount != 0;
+}
+
+/// Per-screen bounded storage for static and animated Kitty image data.
 final class TerminalKittyImageStore {
   TerminalKittyImageStore({
     this.maximumImages = TerminalKittyImageStoreLimits.maximumImages,
@@ -591,6 +610,7 @@ final class TerminalKittyImageStore {
       image._frames.add(
         _TerminalKittyImageFrame(
           rgba: canvas,
+          contentGeneration: _takeResourceGeneration(),
           gapMilliseconds: gapMilliseconds > 0
               ? gapMilliseconds
               : gapMilliseconds < 0
@@ -611,6 +631,7 @@ final class TerminalKittyImageStore {
       );
     }
 
+    final int contentGeneration = _takeResourceGeneration();
     final Uint8List destination = image._frameRgba(frameNumber);
     _composeRect(
       destination: destination,
@@ -636,11 +657,10 @@ final class TerminalKittyImageStore {
       image.frameIsTransient(frameNumber) || transient,
     );
     if (frameNumber == image.currentFrameNumber) {
-      image._frameShownAtMilliseconds = null;
-      _markImageContentChanged(image);
-    } else {
-      _stateGeneration++;
+      image._frameShownAtMicros = null;
     }
+    _setFrameContentGeneration(image, frameNumber, contentGeneration);
+    _stateGeneration++;
     return TerminalKittyAnimationMutationResult(
       TerminalKittyAnimationMutationDisposition.stored,
       image: image,
@@ -663,7 +683,6 @@ final class TerminalKittyImageStore {
       );
     }
     var mutated = false;
-    var contentChanged = false;
     if (control.frameNumber > 0 &&
         control.frameNumber <= image.frameCount &&
         control.gapMilliseconds != 0) {
@@ -678,9 +697,8 @@ final class TerminalKittyImageStore {
         control.currentFrame <= image.frameCount &&
         control.currentFrame != image.currentFrameNumber) {
       image._currentFrameIndex = control.currentFrame - 1;
-      image._frameShownAtMilliseconds = null;
+      image._frameShownAtMicros = null;
       mutated = true;
-      contentChanged = true;
     }
     final TerminalKittyImageAnimationState? nextState = switch (control.state) {
       TerminalKittyGraphicsAnimationState.unchanged => null,
@@ -696,7 +714,7 @@ final class TerminalKittyImageStore {
       image._animationState = nextState;
       if (oldState == TerminalKittyImageAnimationState.stopped &&
           nextState != TerminalKittyImageAnimationState.stopped) {
-        image._frameShownAtMilliseconds = null;
+        image._frameShownAtMicros = null;
       }
       image._completedLoops = 0;
       mutated = true;
@@ -705,15 +723,95 @@ final class TerminalKittyImageStore {
       image._maximumLoops = control.loops - 1;
       mutated = true;
     }
-    if (contentChanged) {
-      _markImageContentChanged(image);
-    } else if (mutated) {
-      _stateGeneration++;
-    }
+    if (mutated) _stateGeneration++;
     return TerminalKittyAnimationControlResult(
       TerminalKittyAnimationControlDisposition.applied,
       image: image,
     );
+  }
+
+  /// Advances each visible running image by at most one displayable frame.
+  ///
+  /// Missed deadlines are never replayed. Gapless frames are skipped in one
+  /// traversal bounded by [TerminalKittyImageStoreLimits.maximumFramesPerImage].
+  TerminalKittyAnimationTickResult advanceAnimations({
+    required int monotonicMicros,
+    required Set<int> visibleImageIds,
+  }) {
+    RangeError.checkValueInInterval(
+      monotonicMicros,
+      0,
+      0x7fffffffffffffff,
+      'monotonicMicros',
+    );
+    var changedImageCount = 0;
+    int? nextDeadlineMicros;
+    for (final TerminalKittyImage image in _byId.values) {
+      if (image._animationState == TerminalKittyImageAnimationState.stopped ||
+          image._frames.isEmpty ||
+          !visibleImageIds.contains(image.id) ||
+          _animationDurationMicros(image) == 0 ||
+          image._maximumLoops > 0 &&
+              image._completedLoops >= image._maximumLoops) {
+        continue;
+      }
+
+      int shownAt = image._frameShownAtMicros ?? monotonicMicros;
+      if (shownAt > monotonicMicros) shownAt = monotonicMicros;
+      image._frameShownAtMicros = shownAt;
+      int nextAt = _boundedAnimationDeadline(
+        shownAt,
+        image.frameGapMilliseconds(image.currentFrameNumber) * 1000,
+      );
+      if (monotonicMicros >= nextAt) {
+        final int count = image.frameCount;
+        var nextIndex = image._currentFrameIndex;
+        var parked = false;
+        for (var visited = 0; visited < count; visited++) {
+          final int candidate = (nextIndex + 1) % count;
+          if (candidate == 0) {
+            if (image._animationState ==
+                TerminalKittyImageAnimationState.loading) {
+              parked = true;
+              break;
+            }
+            image._completedLoops++;
+            if (image._maximumLoops > 0 &&
+                image._completedLoops >= image._maximumLoops) {
+              parked = true;
+              break;
+            }
+          }
+          nextIndex = candidate;
+          if (image.frameGapMilliseconds(nextIndex + 1) != 0) break;
+        }
+        if (!parked) {
+          image._currentFrameIndex = nextIndex;
+          image._frameShownAtMicros = monotonicMicros;
+          _stateGeneration++;
+          changedImageCount++;
+          nextAt = _boundedAnimationDeadline(
+            monotonicMicros,
+            image.frameGapMilliseconds(nextIndex + 1) * 1000,
+          );
+        }
+      }
+      if (nextAt > monotonicMicros &&
+          (nextDeadlineMicros == null || nextAt < nextDeadlineMicros)) {
+        nextDeadlineMicros = nextAt;
+      }
+    }
+    return TerminalKittyAnimationTickResult(
+      changedImageCount: changedImageCount,
+      nextDeadlineMicros: nextDeadlineMicros,
+    );
+  }
+
+  /// Drops timing anchors without changing protocol animation state or pixels.
+  void pauseAnimationPlayback() {
+    for (final TerminalKittyImage image in _byId.values) {
+      image._frameShownAtMicros = null;
+    }
   }
 
   TerminalKittyAnimationMutationResult composeAnimationFrames({
@@ -770,6 +868,7 @@ final class TerminalKittyImageStore {
         image: image,
       );
     }
+    final int contentGeneration = _takeResourceGeneration();
     final Uint8List source = image._frameRgba(composition.sourceFrame);
     final Uint8List destination = image._frameRgba(
       composition.destinationFrame,
@@ -793,10 +892,14 @@ final class TerminalKittyImageStore {
           image.frameIsTransient(composition.sourceFrame),
     );
     if (composition.destinationFrame == image.currentFrameNumber) {
-      _markImageContentChanged(image);
-    } else {
-      _stateGeneration++;
+      image._frameShownAtMicros = null;
     }
+    _setFrameContentGeneration(
+      image,
+      composition.destinationFrame,
+      contentGeneration,
+    );
+    _stateGeneration++;
     return TerminalKittyAnimationMutationResult(
       TerminalKittyAnimationMutationDisposition.stored,
       image: image,
@@ -843,6 +946,7 @@ final class TerminalKittyImageStore {
       final _TerminalKittyImageFrame promoted = image._frames.removeAt(0);
       _retainedBytes -= image._rgba.length;
       image._rgba = promoted.rgba;
+      image._rootContentGeneration = promoted.contentGeneration;
       image._rootGapMilliseconds = promoted.gapMilliseconds;
       image.transient = promoted.transient;
       _animationFrameCount--;
@@ -863,11 +967,9 @@ final class TerminalKittyImageStore {
       image._currentFrameIndex--;
     }
     if (contentChanged) {
-      image._frameShownAtMilliseconds = null;
-      _markImageContentChanged(image);
-    } else {
-      _stateGeneration++;
+      image._frameShownAtMicros = null;
     }
+    _stateGeneration++;
     return const TerminalKittyImageDeleteResult(
       deletedPlacements: 0,
       deletedImages: 0,
@@ -1358,9 +1460,29 @@ final class TerminalKittyImageStore {
     return true;
   }
 
-  void _markImageContentChanged(TerminalKittyImage image) {
-    image._contentGeneration = _takeResourceGeneration();
-    _stateGeneration++;
+  static void _setFrameContentGeneration(
+    TerminalKittyImage image,
+    int frameNumber,
+    int generation,
+  ) {
+    if (frameNumber == 1) {
+      image._rootContentGeneration = generation;
+    } else {
+      image._extraFrame(frameNumber)!.contentGeneration = generation;
+    }
+  }
+
+  static int _animationDurationMicros(TerminalKittyImage image) {
+    var result = image._rootGapMilliseconds * 1000;
+    for (final _TerminalKittyImageFrame frame in image._frames) {
+      result += frame.gapMilliseconds * 1000;
+    }
+    return result;
+  }
+
+  static int _boundedAnimationDeadline(int now, int delay) {
+    const int maximum = 0x7fffffffffffffff;
+    return now > maximum - delay ? maximum : now + delay;
   }
 
   static void _setFrameGap(

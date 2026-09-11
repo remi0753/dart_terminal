@@ -124,6 +124,59 @@ TerminalReferenceImage createKittyReferenceGoldenFixture({required int scale}) {
   );
 }
 
+TerminalReferenceImage createKittyAnimationReferenceGoldenFixture({
+  required int scale,
+  int currentFrame = 2,
+}) {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 3);
+  screens.updateLogicalCellSize(width: 1, height: 1);
+  _storeImage(
+    screens,
+    imageId: 201,
+    width: 2,
+    height: 1,
+    rgba: const <int>[255, 0, 0, 255, 0, 255, 0, 255],
+  );
+  final image = screens.primaryKittyImages.imageById(201)!;
+  screens.primaryKittyImages.storeAnimationFrame(
+    imageId: 201,
+    imageNumber: 0,
+    expectedResourceGeneration: image.resourceGeneration,
+    width: 2,
+    height: 1,
+    x: 0,
+    y: 0,
+    baseFrame: 0,
+    editFrame: 0,
+    gapMilliseconds: 40,
+    overwrite: true,
+    backgroundRgba: 0,
+    transient: false,
+    rgba: Uint8List.fromList(const <int>[0, 0, 255, 255, 255, 255, 0, 255]),
+  );
+  screens.primaryKittyImages.controlAnimation(
+    imageId: 201,
+    imageNumber: 0,
+    control: TerminalKittyGraphicsCommandParser.parse(
+      Uint8List.fromList('Ga=a,i=201,c=$currentFrame,s=1'.codeUnits),
+    ).animationControl,
+  );
+  _placeImage(
+    screens,
+    imageId: 201,
+    row: 0,
+    column: 0,
+    columns: 2,
+    rows: 1,
+    z: 0,
+  );
+  return TerminalKittyReferenceCompositor.render(
+    snapshot: screens.captureKittyImageViewport(),
+    scale: scale,
+    background: const TerminalReferenceColor(0x101820ff),
+  );
+}
+
 void _storeImage(
   TerminalScreenSet screens, {
   required int imageId,

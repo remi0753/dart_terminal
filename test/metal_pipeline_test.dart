@@ -23,16 +23,16 @@ void _testKittyImageTileSurvivesRendererReplacement() {
       pageHeight: 8,
       maximumAlphaPages: 1,
       maximumColorPages: 1,
-      maximumEntries: 1,
+      maximumEntries: 2,
       maximumRetainedBytes: 8 * 8 * 4,
       gutter: 0,
     ),
   );
-  final TerminalGlyphAtlasEntry image = atlas.ingestKittyImageTile(
+  atlas.ingestKittyImageTile(
     key: const TerminalKittyImageAtlasKey(
       screenKindIndex: 0,
       imageId: 1,
-      imageResourceGeneration: 1,
+      imageContentGeneration: 1,
       placementGeneration: 1,
       sourceX: 0,
       sourceY: 0,
@@ -49,6 +49,28 @@ void _testKittyImageTileSurvivesRendererReplacement() {
       scale16_16: 1 << 16,
     ),
     rgba: Uint8List.fromList(const <int>[0x20, 0x40, 0x80, 0xff]),
+  );
+  final TerminalGlyphAtlasEntry animated = atlas.ingestKittyImageTile(
+    key: const TerminalKittyImageAtlasKey(
+      screenKindIndex: 0,
+      imageId: 1,
+      imageContentGeneration: 2,
+      placementGeneration: 1,
+      sourceX: 0,
+      sourceY: 0,
+      sourceWidth: 1,
+      sourceHeight: 1,
+      destinationX: 0,
+      destinationY: 0,
+      destinationWidth: 1,
+      destinationHeight: 1,
+      tileX: 0,
+      tileY: 0,
+      tileWidth: 1,
+      tileHeight: 1,
+      scale16_16: 1 << 16,
+    ),
+    rgba: Uint8List.fromList(const <int>[0x80, 0x40, 0x20, 0xff]),
   );
   final TerminalMetalRenderer first = _openSinglePixelRenderer();
   try {
@@ -76,7 +98,7 @@ void _testKittyImageTileSurvivesRendererReplacement() {
       'replacement renderer receives a complete Kitty image atlas snapshot',
     );
     final TerminalMetalInstance instance = bridge.glyphInstance(
-      image,
+      animated,
       x: 0,
       y: 0,
     )!;
@@ -93,11 +115,11 @@ void _testKittyImageTileSurvivesRendererReplacement() {
     final Uint8List pixels = replacement.renderRgba(frame);
     _expect(
       pixels.length == 4 &&
-          pixels[0] == 0x20 &&
+          pixels[0] == 0x80 &&
           pixels[1] == 0x40 &&
-          pixels[2] == 0x80 &&
+          pixels[2] == 0x20 &&
           pixels[3] == 0xff,
-      'replacement renderer draws the retained Kitty image tile',
+      'replacement renderer draws the retained current animation tile',
     );
   } finally {
     replacement.dispose();

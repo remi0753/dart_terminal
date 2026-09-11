@@ -1,0 +1,10 @@
+dart-terminal-golden-image
+version=1
+width=6
+height=2
+scale=2
+pixel-format=rgba8-srgb-straight
+row-stride=24
+payload-length=48
+checksum=fnv1a32:616ce04f
+pixels=AAD//wAA/////wD///8A/xAYIP8QGCD/AAD//wAA/////wD///8A/xAYIP8QGCD/

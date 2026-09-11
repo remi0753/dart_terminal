@@ -9,7 +9,45 @@ void main() => runTerminalKittyReferenceCompositorTests();
 
 void runTerminalKittyReferenceCompositorTests() {
   _testLayeringSamplingClippingAndGolden();
+  _testAnimationFrameSelectionAndGolden();
   _testMissingGeometryFailsClosed();
+}
+
+void _testAnimationFrameSelectionAndGolden() {
+  for (final int scale in <int>[1, 2]) {
+    final TerminalReferenceImage rendered =
+        createKittyAnimationReferenceGoldenFixture(scale: scale);
+    _expect(
+      rendered.pixelAt(0, 0) == 0x0000ffff &&
+          rendered.pixelAt(scale, 0) == 0xffff00ff,
+      'the CPU oracle projects the selected animation frame at ${scale}x',
+    );
+    final TerminalReferenceImage root =
+        createKittyAnimationReferenceGoldenFixture(
+          scale: scale,
+          currentFrame: 1,
+        );
+    _expect(
+      root.pixelAt(0, 0) == 0xff0000ff && root.pixelAt(scale, 0) == 0x00ff00ff,
+      'switching to the root restores its immutable pixels at ${scale}x',
+    );
+    final File fixture = File(
+      'test/goldens/kitty/animation-frame-${scale}x.dtgi',
+    );
+    _expect(
+      fixture.existsSync(),
+      'checked-in ${scale}x Kitty animation golden exists',
+    );
+    final Uint8List expectedBytes = fixture.readAsBytesSync();
+    _expect(
+      _bytesEqual(expectedBytes, TerminalGoldenImageCodec.encode(rendered)),
+      'checked-in ${scale}x Kitty animation golden is byte exact',
+    );
+    TerminalGoldenImageComparator.compare(
+      TerminalGoldenImageCodec.decode(expectedBytes),
+      rendered,
+    ).requireMatch('Kitty animation frame ${scale}x golden');
+  }
 }
 
 void _testLayeringSamplingClippingAndGolden() {

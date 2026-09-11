@@ -634,7 +634,7 @@ final class TerminalScreenMetalCompositor {
               TerminalKittyImageAtlasKey(
                 screenKindIndex: snapshot.screenKind.index,
                 imageId: placement.imageId,
-                imageResourceGeneration: placement.imageResourceGeneration,
+                imageContentGeneration: image.contentGeneration,
                 placementGeneration: placement.placementGeneration,
                 sourceX: placement.source.x,
                 sourceY: placement.source.y,

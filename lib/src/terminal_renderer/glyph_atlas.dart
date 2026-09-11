@@ -48,7 +48,7 @@ final class TerminalKittyImageAtlasKey {
   const TerminalKittyImageAtlasKey({
     required this.screenKindIndex,
     required this.imageId,
-    required this.imageResourceGeneration,
+    required this.imageContentGeneration,
     required this.placementGeneration,
     required this.sourceX,
     required this.sourceY,
@@ -67,7 +67,7 @@ final class TerminalKittyImageAtlasKey {
 
   final int screenKindIndex;
   final int imageId;
-  final int imageResourceGeneration;
+  final int imageContentGeneration;
   final int placementGeneration;
   final int sourceX;
   final int sourceY;
@@ -87,7 +87,7 @@ final class TerminalKittyImageAtlasKey {
   int get hashCode => Object.hashAll(<int>[
     screenKindIndex,
     imageId,
-    imageResourceGeneration,
+    imageContentGeneration,
     placementGeneration,
     sourceX,
     sourceY,
@@ -109,7 +109,7 @@ final class TerminalKittyImageAtlasKey {
       other is TerminalKittyImageAtlasKey &&
       screenKindIndex == other.screenKindIndex &&
       imageId == other.imageId &&
-      imageResourceGeneration == other.imageResourceGeneration &&
+      imageContentGeneration == other.imageContentGeneration &&
       placementGeneration == other.placementGeneration &&
       sourceX == other.sourceX &&
       sourceY == other.sourceY &&

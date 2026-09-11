@@ -5,7 +5,7 @@
 - Date started: 2026-09-11
 - Scope: fifth Phase 9 roadmap item
 - Feature-matrix owners: CAP-11, SEC-01
-- Status: first child verified; completion commit pending
+- Status: first child committed; second child verified, completion commit pending
 - Predecessor: `docs/phase9/kitty-graphics.md`
 
 ## Purpose and background
@@ -240,3 +240,95 @@ The parent remains incomplete until all three children pass independently.
   completed the unified suite with `dart_terminal tests passed`. `git diff
   --check` also passed. The first child meets its acceptance conditions; the
   playback/projection child has not started.
+- 2026-09-11: the first child was committed as `4c7a5a3 Add bounded Kitty
+  animation frame state`. Immediately afterward ROADMAP, README,
+  FEATURE_MATRIX, repository structure, recent history, and the clean worktree
+  were reread. The second child is now the first unchecked item; deterministic
+  eviction and every later Phase 9 feature remain out of scope until it passes.
+- 2026-09-11: the existing live surface already owns the only product `Timer`
+  and derives its next wakeup from `TerminalNewestFrameScheduler`. Animation
+  playback is therefore exposed as a bounded scheduler driver with one optional
+  deadline, not as a store-owned timer. The scheduler pauses that driver while
+  hidden, occluded, or synchronized-output-held; the live surface will also
+  pause it while renderer recovery or scale publication prevents rendering.
+- 2026-09-11: the pinned Ghostty animation loop advances at most one displayed
+  frame on a late tick, skips at most the retained count of zero-gap frames,
+  parks on a loading or exhausted finite animation, and reanchors a future
+  timestamp instead of replaying time. The Dart store mirrors those bounds and
+  accepts only the visible image-ID set projected from the active viewport, so
+  unplaced, history-only, alternate-screen, and clipped images schedule no work.
+- 2026-09-11: stable image resource identity cannot also identify mutable frame
+  pixels: reusing it as the color-atlas key would collide with existing tiles.
+  Each retained frame therefore owns a monotonic content generation. Viewport
+  image/placement association continues to use the stable resource generation,
+  while CPU pixels select the current immutable frame and Metal tile keys use
+  its content generation. Returning to an unchanged earlier frame reuses its
+  atlas entries; editing that frame allocates a fresh generation.
+- 2026-09-11: the first focused analyzer pass found two integration-only
+  boundary errors: the live driver referenced a nonexistent convenience getter
+  for the inactive store and named a result type imported privately by the
+  screen-set library. It now selects the inactive primary/alternate store from
+  the public `usingAlternate` state and lets the public method result be inferred;
+  no new export or wider API surface is required.
+- 2026-09-11: CPU 1x/2x animation goldens were generated, and focused store/
+  controller, CPU golden, atlas, native Metal readback, and renderer-replacement
+  tests passed. Starting six native-assets-backed test entry points in parallel
+  made one scheduler-only process race on `.dart_tool/lib/libdart_pty_macos.dylib`;
+  `install_name_tool` observed the shared destination before its copy completed.
+  This is a build-hook concurrency artifact rather than a product assertion;
+  all further native-backed runs are serialized and the affected test is rerun
+  alone.
+- 2026-09-11: the first serialized scheduler test exposed an error in its fake
+  animation driver: an early poll incorrectly moved the fake deadline forward,
+  so the exact original deadline could not become due. The fake now retains an
+  unelapsed deadline and schedules from `now` only after an actual change,
+  matching the production store contract.
+- 2026-09-11: frame edits and compositions reserve their next content
+  generation before changing pixels, gaps, transient state, or playback timing.
+  Generation exhaustion therefore fails before mutation instead of leaving new
+  bytes under an old atlas identity; creation already reserved before insertion.
+- 2026-09-11: one serialized focused command accidentally passed this Markdown
+  memo to `dart format`; the formatter rejected it before any file change and
+  `&&` prevented every following test from running. The corrected command limits
+  formatting to Dart source before rerunning the same tests.
+- 2026-09-11: the corrected serialized focused suite passed: store/controller
+  timing and visibility, scheduler fake-clock/backpressure/pause cleanup, CPU
+  1x/2x checked-in goldens, color-atlas content generations and pins, native
+  Metal 1x/2x frame readback, and full atlas republish to a replacement
+  renderer. Repository-wide `dart analyze` also reports no issues.
+- 2026-09-11: the first exact `make test` passed dependency resolution, VT
+  parser table, parser trace, configuration reference, and keybinding reference,
+  then stopped because the Phase 7 AppKit acceptance inventory was stale after
+  the intentional live-surface edit. The canonical generation target must
+  refresh and review that derived evidence before retrying the full gate.
+- 2026-09-11: after the first successful full gate, public capability text was
+  reviewed and found to still call playback/projection unimplemented. README,
+  FEATURE_MATRIX, and the generated compatibility source now distinguish the
+  completed scheduler/CPU/Metal work from deferred eviction and final product
+  acceptance. The first inventory regeneration then correctly rejected the
+  expanded note for exceeding its 1,024-character bound; the canonical note was
+  condensed without dropping limits, pause semantics, evidence, or exclusions
+  before regeneration.
+- 2026-09-11: the bounded inventory and summary then regenerated successfully.
+  The next full gate correctly found its dependent reviewed differential
+  baseline stale because that report pins the inventory and implementation-
+  manifest hashes. Regeneration follows the established dependency order:
+  implementation manifest, reviewed baseline, then regression coverage.
+- 2026-09-11: the implementation manifest, reviewed differential baseline
+  (4 cases, 202 input bytes, 210 split runs), and compatibility regression
+  coverage (9 cases, 390 input bytes, 417 split runs) regenerated in dependency
+  order. The final exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed
+  every freshness check, formatted 260 Dart files with zero changes, reported
+  no analyzer issues, and completed the unified suite with
+  `dart_terminal tests passed`. `git diff --check` passed as well. The second
+  child meets its scheduler, projection, recovery, and cleanup conditions; only
+  deterministic resource eviction and final product closure remain in the
+  parent item.
+- 2026-09-11: README was finally clarified so its existing two-runtime claim
+  applies only to the already accepted static graphics path. After refreshing
+  the dependent coverage hash, the exact full gate passed again with all
+  freshness, format, analysis, and unified-test results unchanged.
+- 2026-09-11: the first explicit `git add` was denied because the default
+  filesystem sandbox cannot create `.git/index.lock`; no path was staged or
+  changed. The same enumerated task-only path list is retried through the
+  approved repository Git-write boundary before staged review.

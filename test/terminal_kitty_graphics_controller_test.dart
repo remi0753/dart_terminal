@@ -20,6 +20,7 @@ Future<void> main() => runTerminalKittyGraphicsControllerTests();
 Future<void> runTerminalKittyGraphicsControllerTests() async {
   _testStoreIdentityCopiesReplacementAndCaps();
   _testAnimationFrameStateCompositionAndCaps();
+  _testAnimationMonotonicPlayback();
   _testPlacementStoreGeometryIdentityAndDeletion();
   _testEveryStaticDeleteSelector();
   _testPlacementScrollLifecycleAndViewportProjection();
@@ -86,6 +87,7 @@ void _testAnimationFrameStateCompositionAndCaps() {
         store.animationFrameCount == 1,
     'partial frame creation composes onto a prior frame with bounded accounting',
   );
+  final int createdFrameGeneration = root.frameContentGeneration(2);
 
   final int beforeEditContentGeneration = root.contentGeneration;
   final TerminalKittyAnimationMutationResult edited = store.storeAnimationFrame(
@@ -108,6 +110,7 @@ void _testAnimationFrameStateCompositionAndCaps() {
     edited.disposition == TerminalKittyAnimationMutationDisposition.stored &&
         root.frameGapMilliseconds(2) == 60 &&
         root.contentGeneration == beforeEditContentGeneration &&
+        root.frameContentGeneration(2) > createdFrameGeneration &&
         store.retainedBytes == 16 &&
         _sameBytes(root.copyFrameRgba(2), const <int>[
           0,
@@ -138,6 +141,7 @@ void _testAnimationFrameStateCompositionAndCaps() {
         root.animationState == TerminalKittyImageAnimationState.running &&
         root.maximumLoops == 2 &&
         root.frameGapMilliseconds(1) == 10 &&
+        root.contentGeneration == root.frameContentGeneration(2) &&
         root.contentGeneration > beforeEditContentGeneration,
     'animation control changes current frame, timing, state, and loop budget atomically',
   );
@@ -330,6 +334,266 @@ void _testAnimationFrameStateCompositionAndCaps() {
   );
 }
 
+void _testAnimationMonotonicPlayback() {
+  final TerminalKittyImageStore store = TerminalKittyImageStore(
+    maximumImages: 3,
+    maximumAnimationFrames: 8,
+    maximumRetainedBytes: 64,
+  );
+  final TerminalKittyImage image = store
+      .store(
+        imageId: 1,
+        imageNumber: 0,
+        width: 1,
+        height: 1,
+        transient: false,
+        rgba: Uint8List.fromList(const <int>[255, 0, 0, 255]),
+      )
+      .image!;
+  void appendFrame(List<int> rgba, int gapMilliseconds) {
+    final TerminalKittyAnimationMutationResult result = store
+        .storeAnimationFrame(
+          imageId: image.id,
+          imageNumber: 0,
+          expectedResourceGeneration: image.resourceGeneration,
+          width: 1,
+          height: 1,
+          x: 0,
+          y: 0,
+          baseFrame: 0,
+          editFrame: 0,
+          gapMilliseconds: gapMilliseconds,
+          overwrite: true,
+          backgroundRgba: 0,
+          transient: false,
+          rgba: Uint8List.fromList(rgba),
+        );
+    _expect(
+      result.disposition == TerminalKittyAnimationMutationDisposition.stored,
+      'animation playback fixture appends a bounded frame',
+    );
+  }
+
+  appendFrame(const <int>[0, 255, 0, 255], 10);
+  appendFrame(const <int>[0, 0, 255, 255], -1);
+  store.controlAnimation(
+    imageId: image.id,
+    imageNumber: 0,
+    control: TerminalKittyGraphicsCommandParser.parse(
+      Uint8List.fromList('Ga=a,i=1,r=1,z=10,s=3,v=1'.codeUnits),
+    ).animationControl,
+  );
+  final TerminalKittyAnimationTickResult anchored = store.advanceAnimations(
+    monotonicMicros: 100,
+    visibleImageIds: const <int>{1},
+  );
+  _expect(
+    !anchored.changed &&
+        anchored.nextDeadlineMicros == 10100 &&
+        image.currentFrameNumber == 1,
+    'first visible tick anchors the current frame to monotonic now',
+  );
+  _expect(
+    !store
+            .advanceAnimations(
+              monotonicMicros: 10099,
+              visibleImageIds: const <int>{1},
+            )
+            .changed &&
+        store
+                .advanceAnimations(
+                  monotonicMicros: 10100,
+                  visibleImageIds: const <int>{1},
+                )
+                .changedImageCount ==
+            1 &&
+        image.currentFrameNumber == 2 &&
+        image.frameShownAtMicros == 10100,
+    'early polls do nothing and the exact deadline advances one frame',
+  );
+  final TerminalKittyAnimationTickResult late = store.advanceAnimations(
+    monotonicMicros: 1000000,
+    visibleImageIds: const <int>{1},
+  );
+  _expect(
+    late.changedImageCount == 1 &&
+        image.currentFrameNumber == 1 &&
+        image.completedLoops == 1 &&
+        late.nextDeadlineMicros == 1010000,
+    'a late poll skips the gapless frame but never replays missed loops',
+  );
+
+  store.controlAnimation(
+    imageId: image.id,
+    imageNumber: 0,
+    control: TerminalKittyGraphicsCommandParser.parse(
+      Uint8List.fromList('Ga=a,i=1,c=1,s=3,v=2'.codeUnits),
+    ).animationControl,
+  );
+  store.advanceAnimations(
+    monotonicMicros: 2000000,
+    visibleImageIds: const <int>{1},
+  );
+  store.advanceAnimations(
+    monotonicMicros: 2010000,
+    visibleImageIds: const <int>{1},
+  );
+  final TerminalKittyAnimationTickResult finite = store.advanceAnimations(
+    monotonicMicros: 2020000,
+    visibleImageIds: const <int>{1},
+  );
+  _expect(
+    !finite.changed &&
+        finite.nextDeadlineMicros == null &&
+        image.currentFrameNumber == 2 &&
+        image.completedLoops == 1,
+    'finite playback parks on the last displayable frame at its loop budget',
+  );
+
+  store.controlAnimation(
+    imageId: image.id,
+    imageNumber: 0,
+    control: TerminalKittyGraphicsCommandParser.parse(
+      Uint8List.fromList('Ga=a,i=1,c=1,s=2'.codeUnits),
+    ).animationControl,
+  );
+  store.advanceAnimations(
+    monotonicMicros: 3000000,
+    visibleImageIds: const <int>{1},
+  );
+  store.advanceAnimations(
+    monotonicMicros: 3010000,
+    visibleImageIds: const <int>{1},
+  );
+  final TerminalKittyAnimationTickResult loading = store.advanceAnimations(
+    monotonicMicros: 3020000,
+    visibleImageIds: const <int>{1},
+  );
+  _expect(
+    !loading.changed &&
+        loading.nextDeadlineMicros == null &&
+        image.currentFrameNumber == 2,
+    'loading playback parks before wrapping to the root',
+  );
+  appendFrame(const <int>[255, 255, 0, 255], 10);
+  _expect(
+    store
+            .advanceAnimations(
+              monotonicMicros: 4000000,
+              visibleImageIds: const <int>{1},
+            )
+            .changed &&
+        image.currentFrameNumber == 4,
+    'a newly appended frame wakes loading playback past gapless predecessors',
+  );
+
+  final TerminalKittyImage invisible = store
+      .store(
+        imageId: 2,
+        imageNumber: 0,
+        width: 1,
+        height: 1,
+        transient: false,
+        rgba: Uint8List.fromList(const <int>[1, 2, 3, 255]),
+      )
+      .image!;
+  store.storeAnimationFrame(
+    imageId: invisible.id,
+    imageNumber: 0,
+    expectedResourceGeneration: invisible.resourceGeneration,
+    width: 1,
+    height: 1,
+    x: 0,
+    y: 0,
+    baseFrame: 0,
+    editFrame: 0,
+    gapMilliseconds: 10,
+    overwrite: true,
+    backgroundRgba: 0,
+    transient: false,
+    rgba: Uint8List.fromList(const <int>[4, 5, 6, 255]),
+  );
+  store.controlAnimation(
+    imageId: invisible.id,
+    imageNumber: 0,
+    control: TerminalKittyGraphicsCommandParser.parse(
+      Uint8List.fromList('Ga=a,i=2,r=1,z=10,s=3,v=1'.codeUnits),
+    ).animationControl,
+  );
+  store.advanceAnimations(
+    monotonicMicros: 5000000,
+    visibleImageIds: const <int>{1},
+  );
+  _expect(
+    invisible.frameShownAtMicros == null && invisible.currentFrameNumber == 1,
+    'an unplaced or clipped image owns no playback clock or hidden work',
+  );
+  _expect(
+    store
+            .advanceAnimations(
+              monotonicMicros: 6000000,
+              visibleImageIds: const <int>{2},
+            )
+            .nextDeadlineMicros ==
+        6010000,
+    'becoming visible anchors playback without replaying hidden time',
+  );
+  store.pauseAnimationPlayback();
+  _expect(
+    invisible.frameShownAtMicros == null &&
+        store
+                .advanceAnimations(
+                  monotonicMicros: 100,
+                  visibleImageIds: const <int>{2},
+                )
+                .nextDeadlineMicros ==
+            10100,
+    'pause and a restarted monotonic clock reanchor without stale deadlines',
+  );
+
+  final TerminalKittyImage gapless = store
+      .store(
+        imageId: 3,
+        imageNumber: 0,
+        width: 1,
+        height: 1,
+        transient: false,
+        rgba: Uint8List(4),
+      )
+      .image!;
+  store.storeAnimationFrame(
+    imageId: gapless.id,
+    imageNumber: 0,
+    expectedResourceGeneration: gapless.resourceGeneration,
+    width: 1,
+    height: 1,
+    x: 0,
+    y: 0,
+    baseFrame: 0,
+    editFrame: 0,
+    gapMilliseconds: -1,
+    overwrite: true,
+    backgroundRgba: 0,
+    transient: false,
+    rgba: Uint8List(4),
+  );
+  store.controlAnimation(
+    imageId: gapless.id,
+    imageNumber: 0,
+    control: TerminalKittyGraphicsCommandParser.parse(
+      Uint8List.fromList('Ga=a,i=3,s=3,v=1'.codeUnits),
+    ).animationControl,
+  );
+  final TerminalKittyAnimationTickResult allGapless = store.advanceAnimations(
+    monotonicMicros: 1000,
+    visibleImageIds: const <int>{3},
+  );
+  _expect(
+    !allGapless.changed && allGapless.nextDeadlineMicros == null,
+    'an all-gapless animation schedules no spin loop',
+  );
+}
+
 void _testPlacementScrollLifecycleAndViewportProjection() {
   final TerminalScreenSet screens = TerminalScreenSet(
     rows: 2,
@@ -350,6 +614,11 @@ void _testPlacementScrollLifecycleAndViewportProjection() {
         initial.viewportHeight == 20,
     'viewport projection copies resources and sorts placement z-order',
   );
+  _expect(
+    screens.captureVisibleKittyImageIds().containsAll(const <int>{1, 2}) &&
+        screens.captureVisibleKittyImageIds().length == 2,
+    'visible animation scheduling projects the same initial placements',
+  );
   final Uint8List copied = initial.images.first.copyRgba()..[0] = 99;
   _expect(
     copied[0] == 99 && initial.images.first.copyRgba()[0] != 99,
@@ -359,7 +628,9 @@ void _testPlacementScrollLifecycleAndViewportProjection() {
   screens.primary.scrollUp(1);
   _expect(
     screens.primaryKittyImages.placementCount == 2 &&
-        screens.captureKittyImageViewport().placements.length == 1,
+        screens.captureKittyImageViewport().placements.length == 1 &&
+        screens.captureVisibleKittyImageIds().length == 1 &&
+        screens.captureVisibleKittyImageIds().contains(2),
     'full-screen scroll retains history-attached placement off the live view',
   );
   screens.viewport.scrollByRows(1);
@@ -367,6 +638,7 @@ void _testPlacementScrollLifecycleAndViewportProjection() {
       .captureKittyImageViewport();
   _expect(
     history.placements.length == 2 &&
+        screens.captureVisibleKittyImageIds().containsAll(const <int>{1, 2}) &&
         history.placements.any(
           (TerminalKittyViewportPlacement placement) =>
               placement.imageId == 1 && placement.destinationY == 0,

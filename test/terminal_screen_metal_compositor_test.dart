@@ -19,6 +19,119 @@ void runTerminalScreenMetalCompositorTests() {
   _testPreeditRespectsRendererInstanceLimit();
   _testContentRectangleOffsetsEveryLayer();
   _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder();
+  _testKittyAnimationFrameUsesContentGenerationAndNativePixels();
+}
+
+void _testKittyAnimationFrameUsesContentGenerationAndNativePixels() {
+  for (final double scale in <double>[1, 2]) {
+    final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 2);
+    _parse(screens, ascii.encode('A'));
+    _storeKittyImage(
+      screens,
+      imageId: 9,
+      rgba: const <int>[255, 0, 0, 255],
+      width: 1,
+      height: 1,
+    );
+    final image = screens.primaryKittyImages.imageById(9)!;
+    final int rootContentGeneration = image.contentGeneration;
+    screens.primaryKittyImages.storeAnimationFrame(
+      imageId: 9,
+      imageNumber: 0,
+      expectedResourceGeneration: image.resourceGeneration,
+      width: 1,
+      height: 1,
+      x: 0,
+      y: 0,
+      baseFrame: 0,
+      editFrame: 0,
+      gapMilliseconds: 40,
+      overwrite: true,
+      backgroundRgba: 0,
+      transient: false,
+      rgba: Uint8List.fromList(const <int>[0, 0, 255, 255]),
+    );
+    final int animatedContentGeneration = image.frameContentGeneration(2);
+    screens.primaryKittyImages.controlAnimation(
+      imageId: 9,
+      imageNumber: 0,
+      control: TerminalKittyGraphicsCommandParser.parse(
+        Uint8List.fromList('Ga=a,i=9,c=2,s=1'.codeUnits),
+      ).animationControl,
+    );
+    _placeKittyImage(screens, imageId: 9, column: 0, z: 0);
+
+    final _CompositionFixture animated = _compose(
+      screens,
+      scale: scale,
+      includeKittyImages: true,
+    );
+    try {
+      final TerminalGlyphAtlasEntry entry = animated
+          .composition
+          .scheduledFrame
+          .glyphEntries
+          .singleWhere((TerminalGlyphAtlasEntry entry) => entry.isKittyImage);
+      final Uint8List rendered = animated.renderer.renderRgba(
+        animated.composition.scheduledFrame.frame,
+      );
+      final int sampleX = (animated.catalog.metrics.cellWidth * scale / 2)
+          .floor();
+      final int sampleY = (animated.catalog.metrics.cellHeight * scale / 2)
+          .floor();
+      final int offset = (sampleY * animated.viewportWidth + sampleX) * 4;
+      _expect(
+        entry.kittyImageKey!.imageContentGeneration ==
+                animatedContentGeneration &&
+            animatedContentGeneration != rootContentGeneration &&
+            rendered[offset] == 0 &&
+            rendered[offset + 1] == 0 &&
+            rendered[offset + 2] == 255 &&
+            rendered[offset + 3] == 255,
+        'the selected frame owns its atlas identity and native blue pixels at '
+        '${scale}x',
+      );
+    } finally {
+      animated.dispose();
+    }
+
+    screens.primaryKittyImages.controlAnimation(
+      imageId: 9,
+      imageNumber: 0,
+      control: TerminalKittyGraphicsCommandParser.parse(
+        Uint8List.fromList('Ga=a,i=9,c=1,s=1'.codeUnits),
+      ).animationControl,
+    );
+    final _CompositionFixture root = _compose(
+      screens,
+      scale: scale,
+      includeKittyImages: true,
+    );
+    try {
+      final TerminalGlyphAtlasEntry entry = root
+          .composition
+          .scheduledFrame
+          .glyphEntries
+          .singleWhere((TerminalGlyphAtlasEntry entry) => entry.isKittyImage);
+      final Uint8List rendered = root.renderer.renderRgba(
+        root.composition.scheduledFrame.frame,
+      );
+      final int sampleX = (root.catalog.metrics.cellWidth * scale / 2).floor();
+      final int sampleY = (root.catalog.metrics.cellHeight * scale / 2).floor();
+      final int offset = (sampleY * root.viewportWidth + sampleX) * 4;
+      _expect(
+        entry.kittyImageKey!.imageContentGeneration == rootContentGeneration &&
+            rendered[offset] == 255 &&
+            rendered[offset + 1] == 0 &&
+            rendered[offset + 2] == 0 &&
+            rendered[offset + 3] == 255,
+        'returning to the root restores its stable atlas identity and native '
+        'red pixels at ${scale}x',
+      );
+    } finally {
+      root.dispose();
+    }
+  }
 }
 
 void _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder() {

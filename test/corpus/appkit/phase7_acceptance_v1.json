@@ -199,7 +199,7 @@
         {
           "path": "test/frame_scheduler_test.dart",
           "entrypoint": "runFrameSchedulerTests",
-          "sha256": "f5c1692a669e72e6e5debe3d18e78e434fe5a7658e5ff801c17c5c4a14d3a980"
+          "sha256": "53d285a4f7c8b6fe23d620b5c947635b2918c4296471d0490a76cc284515fe47"
         }
       ],
       "integration_tests": [

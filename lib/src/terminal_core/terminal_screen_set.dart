@@ -189,6 +189,8 @@ final class TerminalScreenSet {
   TerminalViewport get viewport => _viewport;
   TerminalKittyViewportSnapshot captureKittyImageViewport() =>
       TerminalKittyViewportSnapshot.capture(this);
+  Set<int> captureVisibleKittyImageIds() =>
+      TerminalKittyViewportSnapshot.captureVisibleImageIds(this);
   ({int width, int height})? get logicalViewportSize {
     final int? width = _logicalViewportWidth;
     final int? height = _logicalViewportHeight;

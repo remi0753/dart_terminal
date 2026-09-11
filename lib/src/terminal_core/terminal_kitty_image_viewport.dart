@@ -5,6 +5,7 @@ final class TerminalKittyViewportImage {
   TerminalKittyViewportImage._({
     required this.imageId,
     required this.resourceGeneration,
+    required this.contentGeneration,
     required this.width,
     required this.height,
     required Uint8List rgba,
@@ -12,6 +13,7 @@ final class TerminalKittyViewportImage {
 
   final int imageId;
   final int resourceGeneration;
+  final int contentGeneration;
   final int width;
   final int height;
   final Uint8List _rgba;
@@ -88,6 +90,51 @@ final class TerminalKittyViewportSnapshot {
   final List<TerminalKittyViewportImage> images;
   final List<TerminalKittyViewportPlacement> placements;
 
+  /// Captures only the IDs with a placement intersecting the current viewport.
+  /// No image pixel buffer is copied for this animation scheduling query.
+  static Set<int> captureVisibleImageIds(TerminalScreenSet screens) {
+    final TerminalViewport viewport = screens.viewport;
+    final int viewportGeneration = viewport.generation;
+    final TerminalScreenKind kind = screens.activeKind;
+    final TerminalScreen screen = screens.activeScreen;
+    final TerminalKittyImageStore store = screens.activeKittyImages;
+    final int storeGeneration = store.stateGeneration;
+    final ({int width, int height})? cell = screens.logicalCellSize;
+    if (cell == null) return const <int>{};
+    final int viewportWidth = screen.columns * cell.width;
+    final int viewportHeight = screen.rows * cell.height;
+    final Set<int> result = <int>{};
+    for (final TerminalKittyImagePlacement placement
+        in store.placementSnapshot()) {
+      final TerminalKittyImage? image = store.imageById(placement.imageId);
+      if (image == null ||
+          image.resourceGeneration != placement.imageResourceGeneration) {
+        continue;
+      }
+      final _TerminalKittyProjectedPlacement? projected =
+          _projectKittyPlacement(
+            viewport: viewport,
+            kind: kind,
+            image: image,
+            placement: placement,
+            cellWidth: cell.width,
+            cellHeight: cell.height,
+            viewportWidth: viewportWidth,
+            viewportHeight: viewportHeight,
+          );
+      if (projected != null) result.add(image.id);
+    }
+    _requireUnchanged(
+      screens: screens,
+      store: store,
+      viewport: viewport,
+      kind: kind,
+      storeGeneration: storeGeneration,
+      viewportGeneration: viewportGeneration,
+    );
+    return Set<int>.unmodifiable(result);
+  }
+
   factory TerminalKittyViewportSnapshot.capture(TerminalScreenSet screens) {
     final TerminalViewport viewport = screens.viewport;
     final int viewportGeneration = viewport.generation;
@@ -122,43 +169,27 @@ final class TerminalKittyViewportSnapshot {
           image.resourceGeneration != placement.imageResourceGeneration) {
         continue;
       }
-      final TerminalViewportPosition? position = viewport
-          .projectedCellPositionOf(
-            TerminalLogicalAnchor(
-              screenKind: kind,
-              logicalLineId: placement.logicalLineId,
-              logicalLineEpoch: placement.logicalLineEpoch,
-              cellOffset: placement.logicalCellOffset,
-            ),
+      final _TerminalKittyProjectedPlacement? projected =
+          _projectKittyPlacement(
+            viewport: viewport,
+            kind: kind,
+            image: image,
+            placement: placement,
+            cellWidth: cell.width,
+            cellHeight: cell.height,
+            viewportWidth: viewportWidth,
+            viewportHeight: viewportHeight,
           );
-      if (position == null) continue;
-      final TerminalKittyImagePlacementGeometry geometry = placement.geometry(
-        image: image,
-        cellWidth: cell.width,
-        cellHeight: cell.height,
-      );
-      final int destinationX =
-          position.column * cell.width + geometry.cellOffsetX;
-      final int destinationY =
-          position.row * cell.height + geometry.cellOffsetY;
-      if (geometry.source.width <= 0 ||
-          geometry.source.height <= 0 ||
-          geometry.pixelWidth <= 0 ||
-          geometry.pixelHeight <= 0 ||
-          destinationX >= viewportWidth ||
-          destinationX + geometry.pixelWidth <= 0 ||
-          destinationY >= viewportHeight ||
-          destinationY + geometry.pixelHeight <= 0) {
-        continue;
-      }
+      if (projected == null) continue;
       images.putIfAbsent(
         image.id,
         () => TerminalKittyViewportImage._(
           imageId: image.id,
           resourceGeneration: image.resourceGeneration,
+          contentGeneration: image.contentGeneration,
           width: image.width,
           height: image.height,
-          rgba: image.copyRgba(),
+          rgba: image.copyCurrentRgba(),
         ),
       );
       placements.add(
@@ -167,19 +198,19 @@ final class TerminalKittyViewportSnapshot {
           imageId: image.id,
           imageResourceGeneration: image.resourceGeneration,
           placementId: placement.placementId,
-          gridColumn: position.column,
-          gridRow: position.row,
-          cellOffsetX: geometry.cellOffsetX,
-          cellOffsetY: geometry.cellOffsetY,
+          gridColumn: projected.position.column,
+          gridRow: projected.position.row,
+          cellOffsetX: projected.geometry.cellOffsetX,
+          cellOffsetY: projected.geometry.cellOffsetY,
           requestedColumns: placement.requestedColumns,
           requestedRows: placement.requestedRows,
           fixedPixelWidth: placement.fixedPixelWidth,
           fixedPixelHeight: placement.fixedPixelHeight,
-          source: geometry.source,
-          destinationX: destinationX,
-          destinationY: destinationY,
-          destinationWidth: geometry.pixelWidth,
-          destinationHeight: geometry.pixelHeight,
+          source: projected.geometry.source,
+          destinationX: projected.destinationX,
+          destinationY: projected.destinationY,
+          destinationWidth: projected.geometry.pixelWidth,
+          destinationHeight: projected.geometry.pixelHeight,
           z: placement.z,
         ),
       );
@@ -198,11 +229,14 @@ final class TerminalKittyViewportSnapshot {
           (TerminalKittyViewportImage left, TerminalKittyViewportImage right) =>
               left.imageId.compareTo(right.imageId),
         );
-    if (store.stateGeneration != storeGeneration ||
-        viewport.generation != viewportGeneration ||
-        screens.activeKind != kind) {
-      throw StateError('Kitty viewport state changed during capture');
-    }
+    _requireUnchanged(
+      screens: screens,
+      store: store,
+      viewport: viewport,
+      kind: kind,
+      storeGeneration: storeGeneration,
+      viewportGeneration: viewportGeneration,
+    );
     return TerminalKittyViewportSnapshot._(
       screenKind: kind,
       viewportGeneration: viewportGeneration,
@@ -215,4 +249,77 @@ final class TerminalKittyViewportSnapshot {
       placements: List<TerminalKittyViewportPlacement>.unmodifiable(placements),
     );
   }
+
+  static void _requireUnchanged({
+    required TerminalScreenSet screens,
+    required TerminalKittyImageStore store,
+    required TerminalViewport viewport,
+    required TerminalScreenKind kind,
+    required int storeGeneration,
+    required int viewportGeneration,
+  }) {
+    if (store.stateGeneration != storeGeneration ||
+        viewport.generation != viewportGeneration ||
+        screens.activeKind != kind) {
+      throw StateError('Kitty viewport state changed during capture');
+    }
+  }
+}
+
+final class _TerminalKittyProjectedPlacement {
+  const _TerminalKittyProjectedPlacement({
+    required this.position,
+    required this.geometry,
+    required this.destinationX,
+    required this.destinationY,
+  });
+
+  final TerminalViewportPosition position;
+  final TerminalKittyImagePlacementGeometry geometry;
+  final int destinationX;
+  final int destinationY;
+}
+
+_TerminalKittyProjectedPlacement? _projectKittyPlacement({
+  required TerminalViewport viewport,
+  required TerminalScreenKind kind,
+  required TerminalKittyImage image,
+  required TerminalKittyImagePlacement placement,
+  required int cellWidth,
+  required int cellHeight,
+  required int viewportWidth,
+  required int viewportHeight,
+}) {
+  final TerminalViewportPosition? position = viewport.projectedCellPositionOf(
+    TerminalLogicalAnchor(
+      screenKind: kind,
+      logicalLineId: placement.logicalLineId,
+      logicalLineEpoch: placement.logicalLineEpoch,
+      cellOffset: placement.logicalCellOffset,
+    ),
+  );
+  if (position == null) return null;
+  final TerminalKittyImagePlacementGeometry geometry = placement.geometry(
+    image: image,
+    cellWidth: cellWidth,
+    cellHeight: cellHeight,
+  );
+  final int destinationX = position.column * cellWidth + geometry.cellOffsetX;
+  final int destinationY = position.row * cellHeight + geometry.cellOffsetY;
+  if (geometry.source.width <= 0 ||
+      geometry.source.height <= 0 ||
+      geometry.pixelWidth <= 0 ||
+      geometry.pixelHeight <= 0 ||
+      destinationX >= viewportWidth ||
+      destinationX + geometry.pixelWidth <= 0 ||
+      destinationY >= viewportHeight ||
+      destinationY + geometry.pixelHeight <= 0) {
+    return null;
+  }
+  return _TerminalKittyProjectedPlacement(
+    position: position,
+    geometry: geometry,
+    destinationX: destinationX,
+    destinationY: destinationY,
+  );
 }

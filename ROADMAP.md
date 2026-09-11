@@ -1149,7 +1149,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase9/kitty-image-animation-resource-eviction.md`](docs/phase9/kitty-image-animation-resource-eviction.md)
   を参照して順に実施する）
   - [x] animation protocol、worker decode、bounded frame state
-  - [ ] monotonic playback、CPU/Metal projection、scheduler/recovery
+  - [x] monotonic playback、CPU/Metal projection、scheduler/recovery
   - [ ] deterministic resource eviction、product/compatibility closure、親項目完了判定
 - [ ] desktop notification、progress、semantic prompt extensions
 - [ ] OSC 52 confirmation/policy UI

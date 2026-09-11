@@ -20,6 +20,25 @@ typedef TerminalFrameSubmitter<Frame> = TerminalFrameSubmissionOutcome Function(
 
 typedef TerminalFrameTimingClock = int Function();
 
+final class TerminalFrameAnimationTick {
+  const TerminalFrameAnimationTick({
+    required this.changed,
+    required this.nextDeadlineMicros,
+  });
+
+  final bool changed;
+  final int? nextDeadlineMicros;
+}
+
+/// Bounded auxiliary animation source driven by the frame scheduler's clock.
+abstract interface class TerminalFrameAnimationDriver {
+  int? get nextDeadlineMicros;
+
+  TerminalFrameAnimationTick advance({required int monotonicMicros});
+
+  void pause();
+}
+
 enum TerminalFrameSubmissionDisposition { accepted, stale, backpressured }
 
 final class TerminalFrameSubmissionOutcome {
@@ -510,6 +529,7 @@ final class TerminalNewestFrameScheduler<Frame> {
     required TerminalFrameBuilder<Frame> buildFrame,
     required TerminalFrameSubmitter<Frame> submitFrame,
     TerminalPresentationClock? presentationClock,
+    this.animationDriver,
     TerminalFrameTimingClock? timingClock,
     int initialFrameGeneration = 0,
   }) : _buildFrame = buildFrame,
@@ -527,6 +547,7 @@ final class TerminalNewestFrameScheduler<Frame> {
 
   final TerminalDamageRenderModel model;
   final TerminalPresentationClock presentationClock;
+  final TerminalFrameAnimationDriver? animationDriver;
   final TerminalFrameBuilder<Frame> _buildFrame;
   final TerminalFrameSubmitter<Frame> _submitFrame;
   final TerminalFrameTimingClock _timingClock;
@@ -563,8 +584,15 @@ final class TerminalNewestFrameScheduler<Frame> {
   bool get isWindowOccluded => _isWindowOccluded;
   bool get isPresentationActive => _isWindowVisible && !_isWindowOccluded;
   bool get isSynchronizedOutputHeld => _isSynchronizedOutputHeld;
-  int? get nextPresentationDeadlineMicros =>
-      isPresentationActive ? presentationClock.nextDeadlineMicros : null;
+  int? get nextPresentationDeadlineMicros {
+    if (!isPresentationActive || _isSynchronizedOutputHeld) return null;
+    final int? presentation = presentationClock.nextDeadlineMicros;
+    final int? animation = animationDriver?.nextDeadlineMicros;
+    if (presentation == null) return animation;
+    if (animation == null) return presentation;
+    return presentation < animation ? presentation : animation;
+  }
+
   bool get hasPendingFrame => _pending;
   int get pendingFrameCount => _pending ? 1 : 0;
   bool get isAttempting => _attempting;
@@ -609,12 +637,23 @@ final class TerminalNewestFrameScheduler<Frame> {
   }
 
   bool advancePresentation({required int monotonicMicros}) {
-    final bool changed = presentationClock.advance(
-      monotonicMicros: monotonicMicros,
-    );
+    var changed = presentationClock.advance(monotonicMicros: monotonicMicros);
+    final TerminalFrameAnimationDriver? driver = animationDriver;
+    if (driver != null && isPresentationActive && !_isSynchronizedOutputHeld) {
+      final TerminalFrameAnimationTick tick = driver.advance(
+        monotonicMicros: monotonicMicros,
+      );
+      final int? deadline = tick.nextDeadlineMicros;
+      if (deadline != null && deadline < monotonicMicros) {
+        throw StateError('animation driver returned an elapsed deadline');
+      }
+      changed = changed || tick.changed;
+    }
     if (changed && model.isInitialized) _pending = true;
     return changed;
   }
+
+  void pauseAnimation() => animationDriver?.pause();
 
   /// Applies immutable AppKit visibility/occlusion observations.
   ///
@@ -636,6 +675,7 @@ final class TerminalNewestFrameScheduler<Frame> {
     final bool becomesActive = nextVisible && !nextOccluded;
     if (wasActive && !becomesActive) {
       presentationClock.pause(monotonicMicros: monotonicMicros);
+      animationDriver?.pause();
     } else if (!wasActive && becomesActive) {
       presentationClock.resume(
         model.isInitialized ? model : null,
@@ -669,6 +709,7 @@ final class TerminalNewestFrameScheduler<Frame> {
   bool updateSynchronizedOutput({required bool isHeld}) {
     if (_isSynchronizedOutputHeld == isHeld) return false;
     _isSynchronizedOutputHeld = isHeld;
+    if (isHeld) animationDriver?.pause();
     if (!isHeld && model.isInitialized) {
       _fullRedrawMarker = Object();
       _pending = true;

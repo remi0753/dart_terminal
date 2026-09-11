@@ -17,5 +17,17 @@ void main() {
       flush: true,
     );
     stdout.writeln('KITTY_REFERENCE_GOLDEN_GENERATED path=${output.path}');
+    final File animationOutput = File(
+      '${directory.path}/animation-frame-${scale}x.dtgi',
+    );
+    animationOutput.writeAsBytesSync(
+      TerminalGoldenImageCodec.encode(
+        createKittyAnimationReferenceGoldenFixture(scale: scale),
+      ),
+      flush: true,
+    );
+    stdout.writeln(
+      'KITTY_REFERENCE_GOLDEN_GENERATED path=${animationOutput.path}',
+    );
   }
 }

@@ -307,8 +307,11 @@ final class TerminalLiveMetalSurface {
     recovery;
     late final TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>
     scheduler;
+    final _TerminalKittyFrameAnimationDriver kittyAnimationDriver =
+        _TerminalKittyFrameAnimationDriver(screenSet);
     scheduler = TerminalNewestFrameScheduler<TerminalScheduledMetalFrame>(
       model: TerminalDamageRenderModel(),
+      animationDriver: kittyAnimationDriver,
       buildFrame:
           (
             TerminalDamageRenderModel model, {
@@ -691,10 +694,12 @@ final class TerminalLiveMetalSurface {
         _releaseSynchronizedOutputPresentation();
       }
       if (!_retireAndRecover()) {
+        _scheduler.pauseAnimation();
         _retryRequested = true;
         return;
       }
       if (!_publishScaleIfReady()) {
+        _scheduler.pauseAnimation();
         _retryRequested = true;
         return;
       }
@@ -705,15 +710,16 @@ final class TerminalLiveMetalSurface {
       _rebindCurrentScreen();
       _publishCaretGeometry();
       _applyNewestDamage(now);
+      _scheduler.advancePresentation(monotonicMicros: now);
       _refreshViewportPresentation();
       _refreshAccessibilityPresentation();
       _refreshHyperlinkHover();
-      _scheduler.advancePresentation(monotonicMicros: now);
       _submitNewest();
       _needsDrain = _outbox.hasPendingDamage;
     } on TerminalMetalCompositionBackpressureException {
       _retryRequested = true;
     } on TerminalMetalRendererException catch (error, stackTrace) {
+      _scheduler.pauseAnimation();
       _requestRecovery(error, stackTrace);
     } finally {
       _processing = false;
@@ -785,6 +791,7 @@ final class TerminalLiveMetalSurface {
     if (_disposed) return;
     _disposed = true;
     _hyperlinkHover = null;
+    _scheduler.pauseAnimation();
     _timer?.cancel();
     _timer = null;
     _paneWorkScheduler?.unregister(sessionId);
@@ -1272,6 +1279,43 @@ final class TerminalLiveMetalSurface {
 
   static double _effectivePadding(double extent, double configured) =>
       math.min(configured, math.max(0, (extent - 1) / 2));
+}
+
+/// Projects active-screen Kitty animation state into the ordinary frame clock.
+final class _TerminalKittyFrameAnimationDriver
+    implements TerminalFrameAnimationDriver {
+  _TerminalKittyFrameAnimationDriver(this._screens);
+
+  final TerminalScreenSet _screens;
+  int? _nextDeadlineMicros;
+
+  @override
+  int? get nextDeadlineMicros => _nextDeadlineMicros;
+
+  @override
+  TerminalFrameAnimationTick advance({required int monotonicMicros}) {
+    if (_screens.usingAlternate) {
+      _screens.primaryKittyImages.pauseAnimationPlayback();
+    } else {
+      _screens.alternateKittyImages.pauseAnimationPlayback();
+    }
+    final result = _screens.activeKittyImages.advanceAnimations(
+      monotonicMicros: monotonicMicros,
+      visibleImageIds: _screens.captureVisibleKittyImageIds(),
+    );
+    _nextDeadlineMicros = result.nextDeadlineMicros;
+    return TerminalFrameAnimationTick(
+      changed: result.changed,
+      nextDeadlineMicros: result.nextDeadlineMicros,
+    );
+  }
+
+  @override
+  void pause() {
+    _screens.primaryKittyImages.pauseAnimationPlayback();
+    _screens.alternateKittyImages.pauseAnimationPlayback();
+    _nextDeadlineMicros = null;
+  }
 }
 
 bool _sameAccessibilitySnapshot(

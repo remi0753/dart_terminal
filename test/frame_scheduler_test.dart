@@ -11,10 +11,100 @@ void runFrameSchedulerTests() {
   _testSynchronizedPresentationGate();
   _testSynchronizedOutputBlocksBuildAndRetainsNewest();
   _testBoundedCursorAndBellClock();
+  _testKittyAnimationUsesNewestOnlySchedulerClock();
   _testVisibilityOcclusionPauseAndResume();
   _testOcclusionDuringBuildSupersedesBeforeSubmit();
   _testPresentationRevisionExhaustionDoesNotWrap();
   _testFrameGenerationExhaustionDoesNotWrap();
+}
+
+void _testKittyAnimationUsesNewestOnlySchedulerClock() {
+  final _DamageSequence sequence = _DamageSequence(rows: 1, columns: 1);
+  final _FakeAnimationDriver animation = _FakeAnimationDriver();
+  var submissionCount = 0;
+  final TerminalNewestFrameScheduler<_FakeFrame> scheduler =
+      TerminalNewestFrameScheduler<_FakeFrame>(
+        model: TerminalDamageRenderModel(),
+        animationDriver: animation,
+        buildFrame: (
+          TerminalDamageRenderModel model, {
+          required int modelRevision,
+          required int frameGeneration,
+          required TerminalFramePresentation presentation,
+        }) => _FakeFrame(modelRevision, frameGeneration, 0, presentation),
+        submitFrame:
+            (
+              _FakeFrame frame, {
+              required int modelRevision,
+              required int frameGeneration,
+            }) {
+              submissionCount++;
+              if (submissionCount == 2) {
+                return TerminalFrameSubmissionOutcome.backpressured;
+              }
+              return TerminalFrameSubmissionOutcome.accepted(
+                frameGeneration: frameGeneration,
+                submissionToken: frameGeneration,
+              );
+            },
+      );
+  scheduler.applyDamage(
+    sequence.captureFull(),
+    availableResourceGeneration: 1,
+    monotonicMicros: 0,
+  );
+  _expect(
+    scheduler.submitNewest().isAccepted &&
+        !scheduler.advancePresentation(monotonicMicros: 0) &&
+        animation.advanceTimes.length == 1 &&
+        scheduler.nextPresentationDeadlineMicros == 10,
+    'the auxiliary animation anchors one deadline in the ordinary scheduler',
+  );
+  _expect(
+    !scheduler.advancePresentation(monotonicMicros: 9) &&
+        scheduler.advancePresentation(monotonicMicros: 10) &&
+        scheduler.pendingFrameCount == 1 &&
+        scheduler.nextPresentationDeadlineMicros == 20 &&
+        scheduler.submitNewest().disposition ==
+            TerminalFrameAttemptDisposition.backpressured,
+    'an exact animation tick retains one newest marker through backpressure',
+  );
+  _expect(
+    scheduler.advancePresentation(monotonicMicros: 100) &&
+        scheduler.pendingFrameCount == 1 &&
+        animation.changeCount == 2 &&
+        scheduler.nextPresentationDeadlineMicros == 110 &&
+        scheduler.submitNewest().isAccepted &&
+        scheduler.pendingFrameCount == 0,
+    'a late tick advances once and replaces rather than queues missed frames',
+  );
+
+  final int beforePauseAdvances = animation.advanceTimes.length;
+  _expect(
+    scheduler.updateWindowState(isOccluded: true, monotonicMicros: 101) &&
+        animation.pauseCount == 1 &&
+        scheduler.nextPresentationDeadlineMicros == null &&
+        !scheduler.advancePresentation(monotonicMicros: 500) &&
+        animation.advanceTimes.length == beforePauseAdvances,
+    'occlusion clears the animation deadline and performs no hidden tick',
+  );
+  _expect(
+    scheduler.updateWindowState(isOccluded: false, monotonicMicros: 501) &&
+        !scheduler.advancePresentation(monotonicMicros: 501) &&
+        animation.nextDeadlineMicros == 511 &&
+        scheduler.updateSynchronizedOutput(isHeld: true) &&
+        animation.pauseCount == 2 &&
+        scheduler.nextPresentationDeadlineMicros == null &&
+        scheduler.updateSynchronizedOutput(isHeld: false) &&
+        !scheduler.advancePresentation(monotonicMicros: 900) &&
+        animation.nextDeadlineMicros == 910,
+    'resume and synchronized release reanchor from now without replaying time',
+  );
+  scheduler.pauseAnimation();
+  _expect(
+    animation.pauseCount == 3 && animation.nextDeadlineMicros == null,
+    'explicit recovery or disposal cleanup leaves no animation deadline',
+  );
 }
 
 void _testSynchronizedOutputBlocksBuildAndRetainsNewest() {
@@ -1134,6 +1224,37 @@ final class _FakeTimingClock {
       throw StateError('frame timing clock was read too often');
     }
     return _values[readCount++];
+  }
+}
+
+final class _FakeAnimationDriver implements TerminalFrameAnimationDriver {
+  int? _nextDeadlineMicros;
+  int pauseCount = 0;
+  int changeCount = 0;
+  final List<int> advanceTimes = <int>[];
+
+  @override
+  int? get nextDeadlineMicros => _nextDeadlineMicros;
+
+  @override
+  TerminalFrameAnimationTick advance({required int monotonicMicros}) {
+    advanceTimes.add(monotonicMicros);
+    final int? deadline = _nextDeadlineMicros;
+    final bool changed = deadline != null && monotonicMicros >= deadline;
+    if (changed) changeCount++;
+    if (deadline == null || changed) {
+      _nextDeadlineMicros = monotonicMicros + 10;
+    }
+    return TerminalFrameAnimationTick(
+      changed: changed,
+      nextDeadlineMicros: _nextDeadlineMicros,
+    );
+  }
+
+  @override
+  void pause() {
+    pauseCount++;
+    _nextDeadlineMicros = null;
   }
 }
 
