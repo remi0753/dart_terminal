@@ -826,6 +826,13 @@ final class TerminalSettingsInspectorPresenter {
 
     final bool editable = state.mode == TerminalSettingsEditorMode.insert;
     if (snapshot.isEditable != editable) editor.isEditable = editable;
+    final TextEditorLineHighlight lineHighlight = TextEditorLineHighlight(
+      location: state.selection.start,
+      color: terminalSettingsCurrentLineColor,
+    );
+    if (editor.lineHighlight != lineHighlight) {
+      editor.setLineHighlight(lineHighlight);
+    }
     window.keyEventRouting = editable
         ? KeyEventRouting.dartAndAppKit
         : KeyEventRouting.dartOnly;

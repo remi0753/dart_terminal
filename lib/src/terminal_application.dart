@@ -4340,6 +4340,36 @@ final class TerminalApplication {
       'native Settings menu action did not open exactly once',
     );
     final Window initialSettingsWindow = settings.activeWindow!;
+    final TerminalSettingsOptionOccurrence disabledWorkingDirectory = settings
+        .state
+        .occurrences
+        .singleWhere(
+          (TerminalSettingsOptionOccurrence occurrence) =>
+              occurrence.option.name == 'working-directory',
+        );
+    final List<TerminalSettingsSyntaxSpan> disabledWorkingDirectorySpans =
+        settings.state.syntaxSpans
+            .where(
+              (TerminalSettingsSyntaxSpan span) =>
+                  span.start < disabledWorkingDirectory.lineEnd &&
+                  span.end > disabledWorkingDirectory.lineStart,
+            )
+            .toList(growable: false);
+    _expectLifecycle(
+      disabledWorkingDirectory.isCommented &&
+          disabledWorkingDirectorySpans.length == 1 &&
+          disabledWorkingDirectorySpans.single.kind ==
+              TerminalSettingsSyntaxKind.comment &&
+          disabledWorkingDirectorySpans.single.start ==
+              disabledWorkingDirectory.lineStart &&
+          disabledWorkingDirectorySpans.single.end ==
+              disabledWorkingDirectory.lineEnd &&
+          settings.activeView!.lineHighlight?.location ==
+              settings.state.selection.start &&
+          settings.activeView!.lineHighlight?.color ==
+              terminalSettingsCurrentLineColor,
+      'Settings did not project disabled assignments and the NORMAL cursor line',
+    );
     _injectKeyEventForTesting(
       application,
       initialSettingsWindow,
@@ -4361,7 +4391,9 @@ final class TerminalApplication {
     await waitFor(
       () =>
           settings.state.query == 'font-family' &&
-          settings.state.selectedOccurrence?.option.name == 'font-family',
+          settings.state.selectedOccurrence?.option.name == 'font-family' &&
+          settings.activeView!.lineHighlight?.location ==
+              settings.state.selection.start,
       'native Settings search did not select the unavailable font option',
     );
     _injectKeyEventForTesting(
@@ -4726,7 +4758,9 @@ final class TerminalApplication {
     await waitFor(
       () =>
           settings.state.query == 'font-size' &&
-          settings.state.selectedOccurrence?.option.name == 'font-size',
+          settings.state.selectedOccurrence?.option.name == 'font-size' &&
+          settings.activeView!.lineHighlight?.location ==
+              settings.state.selection.start,
       'Settings did not search the accepted font-size entry',
     );
     _expectLifecycle(
@@ -4768,7 +4802,9 @@ final class TerminalApplication {
     await waitFor(
       () =>
           settings.state.mode == TerminalSettingsEditorMode.insert &&
-          settings.activeView!.snapshot.isEditable,
+          settings.activeView!.snapshot.isEditable &&
+          settings.activeView!.lineHighlight?.location ==
+              settings.state.selection.start,
       'Settings did not enter INSERT on the same native editor',
     );
     _expectLifecycle(
@@ -4794,6 +4830,10 @@ final class TerminalApplication {
       ),
     );
     settings.synchronizeNativeEditor();
+    _expectLifecycle(
+      settings.activeView!.lineHighlight?.location == invalidCaret,
+      'native INSERT caret did not update the current-line highlight',
+    );
     final int rejectedDispatchBaseline = actionDispatches.length;
     _injectKeyEventForTesting(
       application,
@@ -4867,6 +4907,10 @@ keybind = control+k=pane.focus-next
       ),
     );
     settings.synchronizeNativeEditor();
+    _expectLifecycle(
+      settings.activeView!.lineHighlight?.location == correctedCaret,
+      'corrected INSERT caret did not update the current-line highlight',
+    );
     final int appliedDispatchBaseline = actionDispatches.length;
     _injectKeyEventForTesting(
       application,
@@ -4930,7 +4974,9 @@ keybind = control+k=pane.focus-next
     await waitFor(
       () =>
           settings.state.mode == TerminalSettingsEditorMode.normal &&
-          !settings.activeView!.snapshot.isEditable,
+          !settings.activeView!.snapshot.isEditable &&
+          settings.activeView!.lineHighlight?.location ==
+              settings.state.selection.start,
       'Settings Escape did not leave INSERT without changing surfaces',
     );
     _injectKeyEventForTesting(
@@ -5182,7 +5228,8 @@ keybind = control+k=pane.focus-next
       'live_existing=true '
       'new_session=true settings_menu=true settings_palette=true '
       'settings_singleton=true settings_search=true settings_edit=true '
-      'settings_style_stable=true settings_diagnostics=true '
+      'settings_style_stable=true settings_disabled_lines=true '
+      'settings_cursor_line=true settings_diagnostics=true '
       'settings_reload=true settings_focus=true panes=4 independent=true '
       'sessions_clean=4 text_clients=0 native_handles=0',
     );

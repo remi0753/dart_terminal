@@ -60,6 +60,11 @@ final TextViewColor terminalSettingsSecondaryTextColor = TextViewColor.sRgb(
   green: 0.62,
   blue: 0.7,
 );
+final TextViewColor terminalSettingsCurrentLineColor = TextViewColor.sRgb(
+  red: 0.09,
+  green: 0.12,
+  blue: 0.17,
+);
 const ViewConfiguration _terminalSettingsPassiveViewConfiguration =
     ViewConfiguration(
       acceptsFirstResponder: false,

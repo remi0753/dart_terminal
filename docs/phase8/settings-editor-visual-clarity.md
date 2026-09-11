@@ -1,6 +1,6 @@
 # Settings editor disabled-line / cursor-line visual clarity
 
-Status: in progress (2026-09-11)
+Status: complete (2026-09-11)
 
 ## 目的
 
@@ -109,3 +109,38 @@ Dart navigation、SEARCH result移動、INSERTのnative caret/mouse同期のす�
   (`Add full-width text editor line highlights`)として独立コミットした。ROADMAP再確認時点の現在地は
   本親項目の第2サブタスクで、次はcommented assignmentの全行comment投影とNORMAL/SEARCH/INSERTを
   またぐselection追従line highlightである。
+- 2026-09-11: product analyzerは行頭の最初のnon-whitespaceが`#`であるassignmentを、schema
+  occurrence/value rangeとして解析し続けながら、行頭から行末まで単一のcomment spanとして投影する
+  よう変更した。active assignmentのunquoted inline commentとhex color判定は従来経路のまま維持した。
+- 2026-09-11: Settings専用の淡いblue-gray current-line色をproduct policyとして追加し、presenterが
+  `state.selection.start`を`TextEditorLineHighlight`へ投影する。native document交換はhighlightをclear
+  するため、presenter独自のstale cacheではなくpublic editor stateと比較し、NORMAL navigation、SEARCH、
+  INSERT native同期、test/runtimeが行うdocument交換のすべてで再投影できる構成にした。
+- 2026-09-11: 最初のproduct formatterは対象7ファイルを整形し、1ファイルを変更した後、sandbox外の
+  Dart telemetry timestamp更新だけをpermission errorとして報告した。source formatting自体は完了して
+  いるため、最終checkは許可済みの同じformatterをsandbox外で再実行してexit statusも確認する。
+- 2026-09-11: 最初のfocused testはnative-asset hookがsandbox外のClang module cacheへ書けず停止した。
+  同じcommandを許可済み環境で再実行し、Settings editor state test、fake AppKit hierarchy test、
+  `dart analyze`がすべて成功した。実装・テスト失敗ではなくbuild cache権限だけが原因だった。
+- 2026-09-11: `make phase7-appkit-acceptance terminal-compatibility-regression-coverage`を再生成し、
+  前者は変更した`terminal_application.dart`のhash 2箇所と`terminal_native_hierarchy_test.dart`のhash
+  4箇所、後者はREADME/FEATURE_MATRIXのhashだけを更新した。criterion、case、fix family、UI marker
+  の件数や意味は変更していない。
+- 2026-09-11: 最終formatter checkは対象7 Dart fileすべて0変更、focused editor/hierarchy testと
+  `dart analyze`は成功した。続く完全`CI=true DART_SUPPRESS_ANALYTICS=true make test`も、246 Dart
+  fileのformat check、analyzer、全unit/native/integration freshness gateを含めて成功した。
+- 2026-09-11: `make runtime-source-check runtime-bundle-audit`は
+  `DART_ONLY_SOURCE_AUDIT_PASS tracked=456 product_native_sources=0 reviewed_test_native_sources=1`、
+  Developer JIT / Release AOT双方で
+  `DART_ONLY_BUNDLE_AUDIT_PASS ... architecture=arm64 helpers=1 assets=1 capabilities=1`となった。
+- 2026-09-11: `make runtime-configuration-integration`は実native Settings windowを用い、Developer
+  JIT（1487 ms）とRelease AOT（905 ms）の双方で`settings_visuals=true`を含む
+  `RUNTIME_CONFIGURATION_INTEGRATION_PASS`となった。disabled assignmentの単一全行comment span、
+  NORMAL/SEARCH/INSERTとnative document同期をまたぐ全幅current-line追従、syntax style不変、終了時の
+  native handle cleanupを受け入れた。
+- 2026-09-11: 実装、test、generated evidence、README/FEATURE_MATRIXの差分を見直し、debug用変更、
+  無関係な変更、未追跡の残作業がないことを確認した。本追補の完了によりPhase 8を再完了とし、Phase 9へ
+  先行せず停止する。
+- 2026-09-11: 最初のproduct commitはsandboxが`.git/index.lock`の作成を許可せず停止した。staged
+  contentは保持されており、実装上の失敗ではないため、同じcommitをrepository metadataへの書き込みを
+  許可した環境で再実行する。

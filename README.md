@@ -322,6 +322,8 @@ Applicationメニューの`Settings…`（Command-,）、command palette、ま�
 新規・空・疎なファイルでも全36 optionを同じdocument内へ補完し、右のcontext panelはcaret位置の
 current/draft value、構文、説明と、保存後に既存terminalへ即時反映されるか新規terminalから使われるかを
 表示します。line/source行や別のvalue入力欄は持たず、panelを閉じても右端の細いrailが残ります。
+コメントアウトされたoptionは行全体をdisabled色で表示し、現在のcaret行はNORMAL、`/`検索、INSERTの
+すべてで淡い全幅背景として追従します。行背景はsyntax色や診断下線を変更しません。
 
 起動時は`NORMAL`で、`i`または`a`が同じsyntax-highlight済みsurfaceを`INSERT`へ切り替え、
 `Esc`が`NORMAL`へ戻します。両modeのdocument、font、色、syntax styleは同一です。`/`だけが
@@ -364,7 +366,8 @@ unbind、Command passthrough、invalid reserved shortcutからの復旧、invali
 独立resourceに加え、worker/AppKit所有を作らない
 `--show-config`、Settingsのnative menu/command palette/shared action、全option document、明示検索、
 同一syntax表示のNORMAL/INSERT、invalid saveの非永続化、valid atomic saveからの1回のreload、
-context diagnostic、focus/handle cleanupをDeveloper JITとRelease AOTで確認します。
+commented optionの全行disabled表示、modeをまたぐ全幅current-line表示、context diagnostic、
+focus/handle cleanupをDeveloper JITとRelease AOTで確認します。
 両runtimeのgateは
 次で再実行できます。
 

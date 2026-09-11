@@ -143,6 +143,21 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
         List<NativeTextEditorStyleRun>.from(
           bindings.textEditorStyleRuns[settingsViewHandle]!,
         );
+    final TerminalSettingsOptionOccurrence disabled = settings.state.occurrences
+        .singleWhere(
+          (TerminalSettingsOptionOccurrence occurrence) =>
+              occurrence.option.name == 'working-directory',
+        );
+    final List<TerminalSettingsSyntaxSpan> disabledSpans = settings
+        .state
+        .syntaxSpans
+        .where(
+          (TerminalSettingsSyntaxSpan span) =>
+              span.start < disabled.lineEnd && span.end > disabled.lineStart,
+        )
+        .toList(growable: false);
+    final NativeTextEditorLineHighlight? initialLineHighlight =
+        bindings.textEditorLineHighlights[settingsViewHandle];
     _expect(
       palette.terminalResponderRestoreCount == 0 &&
           bindings.firstResponders[settingsWindowHandle] ==
@@ -165,13 +180,39 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
               false &&
           settings.state.occurrences.length == 36 &&
           settings.state.syntaxSpans.isNotEmpty &&
+          disabled.isCommented &&
+          disabledSpans.length == 1 &&
+          disabledSpans.single.kind == TerminalSettingsSyntaxKind.comment &&
+          disabledSpans.single.start == disabled.lineStart &&
+          disabledSpans.single.end == disabled.lineEnd &&
           normalStyles.isNotEmpty &&
+          initialLineHighlight?.location == settings.state.selection.start &&
+          initialLineHighlight?.red == terminalSettingsCurrentLineColor.red &&
+          initialLineHighlight?.green ==
+              terminalSettingsCurrentLineColor.green &&
+          initialLineHighlight?.blue == terminalSettingsCurrentLineColor.blue &&
           settings.activeStatusView!.text.contains('NORMAL') &&
           settings.activeDetailView!.text.contains('Current value') &&
           !settings.renderedText!.contains('Config Lens') &&
           !settings.renderedText!.contains('SOURCE') &&
           bindings.objects.length == 8,
       'Settings did not compose and focus the native editor/detail hierarchy',
+    );
+
+    final int initialCaret = settings.state.selection.start;
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 125,
+      characters: '',
+    );
+    await _waitForHierarchy(
+      () =>
+          settings.state.selection.start != initialCaret &&
+          bindings.textEditorLineHighlights[settingsViewHandle]?.location ==
+              settings.state.selection.start,
+      'NORMAL navigation did not move the full-width current-line highlight',
     );
 
     final Window firstSettingsWindow = settingsWindow;
@@ -199,7 +240,9 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
     await _waitForHierarchy(
       () =>
           settings.state.query == 'font-size' &&
-          settings.state.selectedOccurrence?.option.name == 'font-size',
+          settings.state.selectedOccurrence?.option.name == 'font-size' &&
+          bindings.textEditorLineHighlights[settingsViewHandle]?.location ==
+              settings.state.selection.start,
       'explicit Settings search was not routed through its native window',
     );
     _injectHierarchyKey(
@@ -234,8 +277,10 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
           _sameNativeTextEditorStyles(
             normalStyles,
             bindings.textEditorStyleRuns[settingsViewHandle]!,
-          ),
-      'NORMAL to INSERT changed the syntax-color projection',
+          ) &&
+          bindings.textEditorLineHighlights[settingsViewHandle]?.location ==
+              settings.state.selection.start,
+      'NORMAL to INSERT changed syntax colors or the current-line highlight',
     );
 
     final String invalidText = bindings.texts[settingsViewHandle]!.replaceFirst(
@@ -255,7 +300,10 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
       characters: 'x',
     );
     await _waitForHierarchy(
-      () => settings.state.text == invalidText,
+      () =>
+          settings.state.text == invalidText &&
+          bindings.textEditorLineHighlights[settingsViewHandle]?.location ==
+              invalidCaret,
       'native INSERT text was not synchronized into the Settings draft',
     );
     _injectHierarchyKey(
@@ -2090,6 +2138,8 @@ final class _HierarchyNativeBindings
       <int, NativeTextEditorConfiguration>{};
   final Map<int, List<NativeTextEditorStyleRun>> textEditorStyleRuns =
       <int, List<NativeTextEditorStyleRun>>{};
+  final Map<int, NativeTextEditorLineHighlight?> textEditorLineHighlights =
+      <int, NativeTextEditorLineHighlight?>{};
   final Map<int, int> textEditorSelectionStarts = <int, int>{};
   final Map<int, int> textEditorSelectionLengths = <int, int>{};
   final Map<int, bool> textEditorEditable = <int, bool>{};
@@ -2356,6 +2406,7 @@ final class _HierarchyNativeBindings
     viewConfigurations[handle] = configuration.presentation.view;
     textEditorConfigurations[handle] = configuration;
     textEditorStyleRuns[handle] = const <NativeTextEditorStyleRun>[];
+    textEditorLineHighlights[handle] = null;
     textEditorSelectionStarts[handle] = 0;
     textEditorSelectionLengths[handle] = 0;
     textEditorEditable[handle] = configuration.initiallyEditable;
@@ -2375,6 +2426,7 @@ final class _HierarchyNativeBindings
     textEditorStyleRuns[handle] = List<NativeTextEditorStyleRun>.unmodifiable(
       document.styleRuns,
     );
+    textEditorLineHighlights[handle] = null;
     return const NativeCallResult.success();
   }
 
@@ -2386,6 +2438,15 @@ final class _HierarchyNativeBindings
     textEditorStyleRuns[handle] = List<NativeTextEditorStyleRun>.unmodifiable(
       styleRuns,
     );
+    return const NativeCallResult.success();
+  }
+
+  @override
+  NativeCallResult textEditorSetLineHighlight(
+    int handle,
+    NativeTextEditorLineHighlight? highlight,
+  ) {
+    textEditorLineHighlights[handle] = highlight;
     return const NativeCallResult.success();
   }
 
@@ -2485,6 +2546,7 @@ final class _HierarchyNativeBindings
     textViewConfigurations.remove(handle);
     textEditorConfigurations.remove(handle);
     textEditorStyleRuns.remove(handle);
+    textEditorLineHighlights.remove(handle);
     textEditorSelectionStarts.remove(handle);
     textEditorSelectionLengths.remove(handle);
     textEditorEditable.remove(handle);

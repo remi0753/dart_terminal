@@ -963,25 +963,17 @@ abstract final class _TerminalSettingsDocumentAnalyzer {
     var commented = false;
     if (text.codeUnitAt(cursor) == 35) {
       commented = true;
-      final int prefixStart = cursor;
       cursor = _skipWhitespace(text, cursor + 1, end);
-      if (!_looksLikeAssignment(text, cursor, end)) {
-        spans.add(
-          TerminalSettingsSyntaxSpan(
-            start: prefixStart,
-            length: end - prefixStart,
-            kind: TerminalSettingsSyntaxKind.comment,
-          ),
-        );
-        return;
-      }
       spans.add(
         TerminalSettingsSyntaxSpan(
-          start: prefixStart,
-          length: cursor - prefixStart,
+          start: start,
+          length: end - start,
           kind: TerminalSettingsSyntaxKind.comment,
         ),
       );
+      if (!_looksLikeAssignment(text, cursor, end)) {
+        return;
+      }
     }
 
     final int nameStart = cursor;
@@ -1009,21 +1001,25 @@ abstract final class _TerminalSettingsDocumentAnalyzer {
         : name == 'include'
         ? TerminalSettingsSyntaxKind.directive
         : TerminalSettingsSyntaxKind.unknownOption;
-    spans.add(
-      TerminalSettingsSyntaxSpan(
-        start: nameStart,
-        length: nameEnd - nameStart,
-        kind: nameKind,
-      ),
-    );
+    if (!commented) {
+      spans.add(
+        TerminalSettingsSyntaxSpan(
+          start: nameStart,
+          length: nameEnd - nameStart,
+          kind: nameKind,
+        ),
+      );
+    }
     final int equals = cursor;
-    spans.add(
-      TerminalSettingsSyntaxSpan(
-        start: equals,
-        length: 1,
-        kind: TerminalSettingsSyntaxKind.operatorToken,
-      ),
-    );
+    if (!commented) {
+      spans.add(
+        TerminalSettingsSyntaxSpan(
+          start: equals,
+          length: 1,
+          kind: TerminalSettingsSyntaxKind.operatorToken,
+        ),
+      );
+    }
     final int valueStart = _skipWhitespace(text, equals + 1, end);
     final int commentStart = _commentStart(text, valueStart, end);
     var valueEnd = commentStart;
@@ -1031,7 +1027,7 @@ abstract final class _TerminalSettingsDocumentAnalyzer {
         _isWhitespace(text.codeUnitAt(valueEnd - 1))) {
       valueEnd--;
     }
-    if (valueEnd > valueStart) {
+    if (!commented && valueEnd > valueStart) {
       spans.add(
         TerminalSettingsSyntaxSpan(
           start: valueStart,
@@ -1040,7 +1036,7 @@ abstract final class _TerminalSettingsDocumentAnalyzer {
         ),
       );
     }
-    if (commentStart < end) {
+    if (!commented && commentStart < end) {
       spans.add(
         TerminalSettingsSyntaxSpan(
           start: commentStart,

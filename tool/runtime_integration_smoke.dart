@@ -1689,7 +1689,8 @@ keybind = command+d=pane.focus-next
             r'live_existing=true '
             r'new_session=true settings_menu=true settings_palette=true '
             r'settings_singleton=true settings_search=true settings_edit=true '
-            r'settings_style_stable=true '
+            r'settings_style_stable=true settings_disabled_lines=true '
+            r'settings_cursor_line=true '
             r'settings_diagnostics=true settings_reload=true '
             r'settings_focus=true panes=4 independent=true '
             r'sessions_clean=4 text_clients=0 native_handles=0$',
@@ -1728,7 +1729,7 @@ keybind = command+d=pane.focus-next
       'RUNTIME_CONFIGURATION_INTEGRATION_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
       'panes=4 keybinds=true save=true permissions=true reload=true '
-      'settings_editor=true font_fallback=true '
+      'settings_editor=true settings_visuals=true font_fallback=true '
       'effective_config=true '
       'elapsed_ms=${observation.elapsed.inMilliseconds}',
     );

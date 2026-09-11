@@ -7,9 +7,90 @@ void main() => runTerminalSettingsEditorTests();
 
 void runTerminalSettingsEditorTests() {
   _testExplicitSearchAndModalKeys();
+  _testDisabledAssignmentSyntax();
   _testModeInvariantSyntaxAndWholeDocumentSynchronization();
   _testContextDetailOutcomesAndDiagnostics();
   _testSelectionAndBounds();
+}
+
+void _testDisabledAssignmentSyntax() {
+  final _EditorFixture fixture = _EditorFixture.create();
+  final TerminalSettingsEditorState state = fixture.state..open();
+  try {
+    final TerminalSettingsOptionOccurrence disabled = state.occurrences
+        .singleWhere(
+          (TerminalSettingsOptionOccurrence occurrence) =>
+              occurrence.option.name == 'working-directory',
+        );
+    final List<TerminalSettingsSyntaxSpan> disabledSpans = state.syntaxSpans
+        .where(
+          (TerminalSettingsSyntaxSpan span) =>
+              span.start < disabled.lineEnd && span.end > disabled.lineStart,
+        )
+        .toList(growable: false);
+    state.setSelection(
+      TerminalSettingsTextSelection(start: disabled.nameStart),
+    );
+    _expect(
+      disabled.isCommented &&
+          disabled.draftValue(state.text) == '<path>' &&
+          state.selectedOccurrence == disabled &&
+          state.renderDetail().contains('Draft (disabled)') &&
+          disabledSpans.length == 1 &&
+          disabledSpans.single.kind == TerminalSettingsSyntaxKind.comment &&
+          disabledSpans.single.start == disabled.lineStart &&
+          disabledSpans.single.end == disabled.lineEnd,
+      'commented assignment was not retained as one disabled full-line span',
+    );
+
+    state.enterInsert(append: false);
+    final String inlineComment = state.text.replaceFirst(
+      'font-size = 14',
+      'font-size = 14 # active setting',
+    );
+    state.synchronizeNativeDocument(
+      text: inlineComment,
+      selection: TerminalSettingsTextSelection(
+        start: inlineComment.indexOf('font-size'),
+      ),
+    );
+    final TerminalSettingsOptionOccurrence active = state.occurrences
+        .singleWhere(
+          (TerminalSettingsOptionOccurrence occurrence) =>
+              occurrence.option.name == 'font-size',
+        );
+    final List<TerminalSettingsSyntaxSpan> activeSpans = state.syntaxSpans
+        .where(
+          (TerminalSettingsSyntaxSpan span) =>
+              span.start < active.lineEnd && span.end > active.lineStart,
+        )
+        .toList(growable: false);
+    final int inlineStart = inlineComment.indexOf('# active setting');
+    _expect(
+      !active.isCommented &&
+          activeSpans.any(
+            (TerminalSettingsSyntaxSpan span) =>
+                span.kind == TerminalSettingsSyntaxKind.optionName &&
+                span.start == active.nameStart,
+          ) &&
+          activeSpans.any(
+            (TerminalSettingsSyntaxSpan span) =>
+                span.kind == TerminalSettingsSyntaxKind.value &&
+                inlineComment.substring(span.start, span.end) == '14',
+          ) &&
+          activeSpans.any(
+            (TerminalSettingsSyntaxSpan span) =>
+                span.kind == TerminalSettingsSyntaxKind.comment &&
+                span.start == inlineStart &&
+                span.end == active.lineEnd,
+          ),
+      'active assignment did not retain token colors before its inline comment',
+    );
+  } finally {
+    state.enterNormal();
+    state.dismiss();
+    fixture.dispose();
+  }
 }
 
 void _testExplicitSearchAndModalKeys() {
