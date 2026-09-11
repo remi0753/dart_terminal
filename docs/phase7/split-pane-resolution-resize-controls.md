@@ -95,6 +95,10 @@ movement available as stable application actions with Command+arrow defaults.
    gestures, mirror the observed fraction into `TerminalApplicationState`, and
    reconcile every affected pane's logical/pixel viewport, grid, and PTY size
    while font metrics remain unchanged.
+   - Implement and commit the reusable `dart_appkit` query first, including
+     Dart/fake/native bridge coverage.
+   - Then implement and commit terminal gesture detection, model persistence,
+     complete relayout, and mouse-input isolation.
 3. Add four stable directional divider actions and Command+arrow shortcuts,
    move the nearest matching-axis split by one cell with minimum clamping, add
    menu/palette/config-reference and product acceptance coverage, reconcile
@@ -156,6 +160,80 @@ the next begins. After every commit, reread `ROADMAP.md` and this memo.
   `NSSplitView` handling has updated the divider, so the query observes the
   authoritative constrained value. A divider hit/drag token prevents ordinary
   terminal mouse/selection routing during the gesture.
+- 2026-09-12: after completing the Retina child, reread the roadmap and this
+  memo. Split the drag child into a dependency query commit and a terminal
+  integration commit because they are independently testable changes in two
+  repositories; the parent drag child remains incomplete until both pass.
+- 2026-09-12: implemented the dependency half as an optional
+  `NativeSplitViewPositionBindings` surface and
+  `TwoPaneSplitView.refreshFraction()`. The additive C symbol validates the
+  output pointer, AppKit-main thread, handle kind, and a finite native value in
+  `[0, 1]`; older bridges fail explicitly with unsupported status 8. The Dart
+  object updates its cached fraction only after a successful query, preserving
+  the last known value on failure. Fake/API and Objective-C++ tests cover a
+  native drag mutation, failure retention, null output, wrong handle, and
+  wrong-thread access.
+- 2026-09-12: Dart formatting completed for all five changed dependency Dart
+  files and changed only the FFI binding layout. The first native formatting
+  attempt resolved `clang-format` to the Chromium `depot_tools` wrapper, which
+  refused to run outside a Chromium checkout. No native source was rewritten;
+  use the repository's available non-wrapper formatter or verify the existing
+  style with its build/test gate.
+- 2026-09-12: Xcode's direct `clang-format` binary formatted the three native
+  files successfully. The first focused dependency run passed every native
+  bridge test, then static analysis rejected the new Dart API before Dart test
+  execution: `AppKitNativeException` requires named arguments and interface
+  type promotion does not expose the optional method through a local declared
+  as `NativeBindings`. Correct the exception construction and use the same
+  explicit optional-interface cast pattern as `TextEditor`.
+- 2026-09-12: after that correction, the focused dependency gate
+  `DART_SUPPRESS_ANALYTICS=true make native-test dart-test` completed with exit
+  0: all native bridge tests passed, static analysis reported no issues, all
+  Dart API tests passed, and all launcher tests passed.
+- 2026-09-12: the dependency's complete
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate completed with exit 0,
+  including native bridge/runner/runtime/renderer/PTY contracts, static
+  analysis for every package, Dart API and launcher suites, the hello-window
+  build, current FFI smoke, and legacy-event fallback smoke.
+- 2026-09-12: review found that Xcode's formatter version had rewritten 519
+  lines in `AppKitBridge.mm`, 617 lines in `BridgeTests.mm`, and unrelated
+  header declarations despite the semantic change being small. Because the
+  dependency was verified clean at task start and every current edit was made
+  by this task, restored exactly those native files to `HEAD` with explicit
+  approval, then reapplied only the 7-line declaration, 27-line bridge
+  implementation, and 24-line test addition. The resulting dependency diff is
+  175 insertions and 3 deletions across nine in-scope files, with no whitespace
+  errors or unrelated native formatting churn.
+- 2026-09-12: reran the complete dependency gate on that final minimal diff;
+  it completed with exit 0 and the same full native/package/FFI coverage. The
+  terminal repository's exact full gate was then rerun against the final path
+  dependency and also completed with exit 0: freshness gates, formatting,
+  static analysis, Phase 9 stress, and the entire Dart suite passed.
+- 2026-09-12: after commit `ba9cd0f` in the dependency, reread the roadmap and
+  task memo and implemented terminal integration. The hierarchy now retains
+  its last successful immutable layout, hit-tests the deepest visible divider
+  with a three-point native interaction slop, and reads only that split's
+  current native fraction. A changed open-interval fraction is persisted
+  through `TerminalApplicationState.resizeSplit`; ordinary reconciliation then
+  applies both pane rectangles to `TerminalLiveMetalSurface.resizeViewport`
+  and `TerminalPane.resize`, keeping fixed font/cell metrics while updating
+  renderer pixels, terminal rows/columns, and PTY winsize.
+- 2026-09-12: added a bounded per-tab divider gesture controller. Only a
+  primary-button down inside a divider starts a gesture; its drag and final up
+  are consumed and synchronized, while off-divider down, hover, and drags
+  without an active token remain ordinary terminal input. Window close,
+  resize, focus loss, visibility loss, tab subscription removal, and product
+  disposal cancel stale tokens.
+- 2026-09-12: the focused hierarchy test completed with exit 0. It starts a
+  divider gesture, substitutes native fractions of 0.75 and 0.70, proves each
+  is persisted with exactly one reconciliation, verifies both pane widths
+  change while their heights stay fixed, confirms mouse-up ends the gesture,
+  and confirms later/off-divider mouse events are not consumed.
+- 2026-09-12: regenerated the deterministic Phase 7 AppKit acceptance report;
+  the reviewed totals remained unchanged. The exact full terminal gate then
+  completed with exit 0: all freshness, compatibility, application, terminfo,
+  and shell-integration checks passed; formatting changed zero files; static
+  analysis found no issues; Phase 9 stress and the complete Dart suite passed.
 
 ## Verification log
 

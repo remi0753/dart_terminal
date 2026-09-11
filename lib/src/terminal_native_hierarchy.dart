@@ -94,6 +94,63 @@ final class TerminalNativePaneResources {
   }
 }
 
+/// Mirrors an AppKit-owned divider gesture into the authoritative split tree.
+///
+/// A consumed gesture never reaches terminal mouse reporting or selection.
+final class TerminalNativeSplitDividerGestureController {
+  TerminalNativeSplitDividerGestureController({
+    required this.hierarchy,
+    required void Function() reconcile,
+  }) : _reconcile = reconcile;
+
+  final TerminalNativeHierarchyAdapter hierarchy;
+  final void Function() _reconcile;
+  final Map<TerminalTabId, TerminalSplitNodeId> _activeDividers =
+      <TerminalTabId, TerminalSplitNodeId>{};
+
+  bool get hasActiveGesture => _activeDividers.isNotEmpty;
+
+  bool route(TerminalTabId tabId, AppKitMouseEvent event) {
+    switch (event.kind) {
+      case AppKitMouseEventKind.down:
+        _activeDividers.remove(tabId);
+        if (event.button != 0) return false;
+        final TerminalSplitNodeId? divider = hierarchy.dividerAt(
+          tabId,
+          x: event.x,
+          y: event.y,
+        );
+        if (divider == null) return false;
+        _activeDividers[tabId] = divider;
+        return true;
+      case AppKitMouseEventKind.dragged:
+        final TerminalSplitNodeId? divider = _activeDividers[tabId];
+        if (divider == null || event.button != 0) return false;
+        if (hierarchy.synchronizeNativeSplitFraction(tabId, divider)) {
+          _reconcile();
+        }
+        return true;
+      case AppKitMouseEventKind.up:
+        final TerminalSplitNodeId? divider = _activeDividers.remove(tabId);
+        if (divider == null || event.button != 0) return false;
+        if (hierarchy.synchronizeNativeSplitFraction(tabId, divider)) {
+          _reconcile();
+        }
+        return true;
+      case AppKitMouseEventKind.moved:
+        return false;
+    }
+  }
+
+  void cancel(TerminalTabId tabId) {
+    _activeDividers.remove(tabId);
+  }
+
+  void dispose() {
+    _activeDividers.clear();
+  }
+}
+
 /// Projects logical terminal hierarchy identities onto owned AppKit resources.
 final class TerminalNativeHierarchyAdapter {
   TerminalNativeHierarchyAdapter({
@@ -170,6 +227,8 @@ final class TerminalNativeHierarchyAdapter {
       <PaneId, TerminalNativePaneResources>{};
   final Map<TerminalTabId, TerminalSplitLayoutSize> _tabSizes =
       <TerminalTabId, TerminalSplitLayoutSize>{};
+  final Map<TerminalTabId, TerminalSplitLayout> _layouts =
+      <TerminalTabId, TerminalSplitLayout>{};
   final Set<TerminalTabId> _explicitTabSizeReconciliations = <TerminalTabId>{};
   final Map<TerminalWindowId, TerminalTabId> _selectedTabs =
       <TerminalWindowId, TerminalTabId>{};
@@ -205,6 +264,82 @@ final class TerminalNativeHierarchyAdapter {
 
   TerminalNativePaneResources? resourcesForPane(PaneId paneId) =>
       _paneResources[paneId];
+
+  /// Returns the deepest visible divider whose native hit area contains a
+  /// window-content point.
+  TerminalSplitNodeId? dividerAt(
+    TerminalTabId tabId, {
+    required double x,
+    required double y,
+    double hitSlop = 3,
+  }) {
+    _ensureAlive();
+    if (!x.isFinite || !y.isFinite) {
+      throw ArgumentError('divider point must be finite');
+    }
+    if (!hitSlop.isFinite || hitSlop < 0) {
+      throw ArgumentError.value(
+        hitSlop,
+        'hitSlop',
+        'must be finite and non-negative',
+      );
+    }
+    final TerminalTabState? tab = _state.tabForId(tabId);
+    if (tab == null) throw StateError('unknown terminal tab $tabId');
+    final TerminalSplitLayout? layout = _layouts[tabId];
+    if (layout == null || layout.branches.isEmpty) return null;
+    final List<TerminalSplitNodeId> candidates = layout.branches.keys
+        .toList(growable: false)
+        .reversed
+        .toList(growable: false);
+    for (final TerminalSplitNodeId nodeId in candidates) {
+      final TerminalSplitNode node = tab.splitTree.nodeForId(nodeId)!;
+      final TerminalSplitBranchLayout geometry = layout.branches[nodeId]!;
+      final TerminalPaneLayoutRect? bounds = _nodeBounds(node, layout);
+      if (bounds == null) continue;
+      final bool horizontal = geometry.axis == TerminalSplitAxis.horizontal;
+      final double dividerStart = horizontal
+          ? bounds.left + geometry.dividerOffset
+          : bounds.top + geometry.dividerOffset;
+      final double axisPoint = horizontal ? x : y;
+      final double crossPoint = horizontal ? y : x;
+      final double crossStart = horizontal ? bounds.top : bounds.left;
+      final double crossEnd =
+          crossStart + (horizontal ? bounds.height : bounds.width);
+      if (axisPoint >= dividerStart - hitSlop &&
+          axisPoint <= dividerStart + dividerThickness + hitSlop &&
+          crossPoint >= crossStart &&
+          crossPoint <= crossEnd) {
+        return nodeId;
+      }
+    }
+    return null;
+  }
+
+  /// Reads one native drag result into the application-owned branch fraction.
+  bool synchronizeNativeSplitFraction(
+    TerminalTabId tabId,
+    TerminalSplitNodeId nodeId,
+  ) {
+    _ensureCanReconcile();
+    final TerminalTabState? tab = _state.tabForId(tabId);
+    if (tab == null) throw StateError('unknown terminal tab $tabId');
+    final TerminalSplitNode? node = tab.splitTree.nodeForId(nodeId);
+    if (node is! TerminalSplitBranch) {
+      throw StateError('split node $nodeId is not a branch in tab $tabId');
+    }
+    final TwoPaneSplitView? split = _splitViews[nodeId];
+    if (split == null || split.isDisposed) {
+      throw StateError('split node $nodeId is not projected');
+    }
+    final double fraction = split.refreshFraction();
+    if (!fraction.isFinite || fraction <= 0 || fraction >= 1) {
+      throw StateError('native split fraction must remain strictly bounded');
+    }
+    if ((fraction - node.fraction).abs() <= 1e-9) return false;
+    _state.resizeSplit(tabId, nodeId, fraction);
+    return true;
+  }
 
   TerminalWindowPlacement placementForWindow(TerminalWindowId windowId) {
     _ensureAlive();
@@ -582,6 +717,9 @@ final class TerminalNativeHierarchyAdapter {
         (TerminalTabId tabId, TerminalSplitLayoutSize _) =>
             !logicalTabs.containsKey(tabId),
       );
+      _layouts
+        ..clear()
+        ..addAll(layouts);
       _windowPlacements.removeWhere(
         (TerminalWindowId windowId, TerminalWindowPlacement _) =>
             _state.windowForId(windowId) == null,
@@ -636,6 +774,7 @@ final class TerminalNativeHierarchyAdapter {
     _splitViews.clear();
     _windows.clear();
     _tabSizes.clear();
+    _layouts.clear();
     _explicitTabSizeReconciliations.clear();
     _selectedTabs.clear();
     _focusedPanes.clear();
@@ -883,6 +1022,37 @@ final class TerminalNativeHierarchyAdapter {
           _containsPane(node.first, paneId) ||
               _containsPane(node.second, paneId),
       };
+
+  static TerminalPaneLayoutRect? _nodeBounds(
+    TerminalSplitNode node,
+    TerminalSplitLayout layout,
+  ) {
+    switch (node) {
+      case TerminalSplitLeaf():
+        return layout.panes[node.paneId];
+      case TerminalSplitBranch():
+        final TerminalPaneLayoutRect? first = _nodeBounds(node.first, layout);
+        final TerminalPaneLayoutRect? second = _nodeBounds(node.second, layout);
+        if (first == null) return second;
+        if (second == null) return first;
+        final double left = first.left < second.left ? first.left : second.left;
+        final double top = first.top < second.top ? first.top : second.top;
+        final double right =
+            first.left + first.width > second.left + second.width
+            ? first.left + first.width
+            : second.left + second.width;
+        final double bottom =
+            first.top + first.height > second.top + second.height
+            ? first.top + first.height
+            : second.top + second.height;
+        return TerminalPaneLayoutRect(
+          left: left,
+          top: top,
+          width: right - left,
+          height: bottom - top,
+        );
+    }
+  }
 
   _TerminalNativeMinimumSize _minimumSize(TerminalSplitNode node) =>
       switch (node) {

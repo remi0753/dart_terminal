@@ -20,11 +20,147 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testPerWindowCreationFrameProjection();
   await _testInitialNativeContentLayoutProjection();
   await _testNewSplitInheritsNativeBackingScale();
+  await _testNativeDividerGestureSynchronizesLayout();
   await _testRepeatedMultiWindowRestoredProjection();
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
 }
+
+Future<void> _testNativeDividerGestureSynchronizesLayout() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalPaneConfiguration configuration = TerminalPaneConfiguration(
+    sessionFactory: (
+      TerminalSessionId id, {
+      required void Function() onChanged,
+      required void Function() onTerminated,
+    }) => _HierarchyFakeSession(id),
+    onChanged: () {},
+    onExitRequested: () {},
+  );
+  final TerminalWindowState window = await state.createWindow(configuration);
+  final TerminalTabId tabId = window.selectedTabId;
+  await state.splitPane(
+    window.selectedTab.focusedPaneId,
+    configuration,
+    axis: TerminalSplitAxis.horizontal,
+  );
+  final Map<PaneId, TerminalPaneLayoutRect> layouts =
+      <PaneId, TerminalPaneLayoutRect>{};
+  final TerminalNativeHierarchyAdapter adapter = TerminalNativeHierarchyAdapter(
+    state: state,
+    paneResourcesFactory: (TerminalPane pane) => TerminalNativePaneResources(
+      paneId: pane.id,
+      view: View(configuration: terminalBaseViewConfiguration),
+      onLayout: (TerminalPaneLayoutRect? rectangle, {required bool visible}) {
+        if (visible) layouts[pane.id] = rectangle!;
+      },
+    ),
+    windowFrame: const Rect.fromLTWH(100, 90, 801, 480),
+    cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+    presentWindows: false,
+  );
+  var reconciliations = 0;
+  final TerminalNativeSplitDividerGestureController gestures =
+      TerminalNativeSplitDividerGestureController(
+        hierarchy: adapter,
+        reconcile: () {
+          reconciliations++;
+          adapter.reconcile();
+        },
+      );
+  try {
+    adapter.reconcile();
+    final TerminalSplitNodeId rootId = window.selectedTab.splitTree.root.id;
+    final TwoPaneSplitView split = adapter.splitViewForNode(rootId)!;
+    final int splitHandle = bindings.handleFor(split);
+    final PaneId firstPane = window.selectedTab.paneIds.first;
+    final PaneId secondPane = window.selectedTab.paneIds.last;
+    final TerminalPaneLayoutRect initialFirst = layouts[firstPane]!;
+    final TerminalPaneLayoutRect initialSecond = layouts[secondPane]!;
+    final double dividerX = initialFirst.left + initialFirst.width;
+
+    _expect(
+      gestures.route(
+        tabId,
+        _hierarchyMouse(AppKitMouseEventKind.down, x: dividerX, y: 20),
+      ),
+      'left mouse down on the native divider was not consumed',
+    );
+    bindings.splitViewFractions[splitHandle] = 0.75;
+    _expect(
+      gestures.route(
+        tabId,
+        _hierarchyMouse(AppKitMouseEventKind.dragged, x: 600, y: 20),
+      ),
+      'active native divider drag was not consumed',
+    );
+    final TerminalSplitBranch resized =
+        window.selectedTab.splitTree.root as TerminalSplitBranch;
+    _expect(
+      resized.fraction == 0.75 &&
+          reconciliations == 1 &&
+          layouts[firstPane]!.width > initialFirst.width &&
+          layouts[secondPane]!.width < initialSecond.width &&
+          layouts[firstPane]!.height == initialFirst.height &&
+          layouts[secondPane]!.height == initialSecond.height,
+      'native drag fraction did not persist and relayout both panes without '
+      'changing the orthogonal cell geometry',
+    );
+
+    bindings.splitViewFractions[splitHandle] = 0.7;
+    _expect(
+      gestures.route(
+            tabId,
+            _hierarchyMouse(AppKitMouseEventKind.up, x: 560, y: 20),
+          ) &&
+          reconciliations == 2 &&
+          !gestures.hasActiveGesture &&
+          (window.selectedTab.splitTree.root as TerminalSplitBranch).fraction ==
+              0.7,
+      'mouse up did not commit the final constrained fraction and end drag',
+    );
+    _expect(
+      !gestures.route(
+            tabId,
+            _hierarchyMouse(AppKitMouseEventKind.dragged, x: 400, y: 20),
+          ) &&
+          !gestures.route(
+            tabId,
+            _hierarchyMouse(AppKitMouseEventKind.down, x: 20, y: 20),
+          ),
+      'ordinary terminal mouse events were mistaken for divider gestures',
+    );
+  } finally {
+    gestures.dispose();
+    adapter.dispose();
+    await state.shutdown();
+    await application.terminate();
+    await rawEvents.close();
+  }
+}
+
+AppKitMouseEvent _hierarchyMouse(
+  AppKitMouseEventKind kind, {
+  required double x,
+  required double y,
+}) => AppKitMouseEvent(
+  windowHandle: 1,
+  monotonicMicros: 1,
+  kind: kind,
+  x: x,
+  y: y,
+  button: 0,
+  modifiers: const ModifierKeys(0),
+  clickCount: 1,
+);
 
 Future<void> _testNewSplitInheritsNativeBackingScale() async {
   final StreamController<Object?> rawEvents =
@@ -2499,7 +2635,10 @@ bool _sameNativeTextEditorStyles(
 }
 
 final class _HierarchyNativeBindings
-    implements NativeBindings, NativeTextEditorBindings {
+    implements
+        NativeBindings,
+        NativeTextEditorBindings,
+        NativeSplitViewPositionBindings {
   int _nextHandle = (1 << 32) | 100;
   final Map<int, String> objects = <int, String>{};
   final Map<Object, int> _handles = Map<Object, int>.identity();
@@ -2931,6 +3070,18 @@ final class _HierarchyNativeBindings
   }) {
     splitViewFractions[handle] = fraction;
     return const NativeCallResult.success();
+  }
+
+  @override
+  NativeValueResult<double> splitViewGetFraction(int handle) {
+    final double? fraction = splitViewFractions[handle];
+    if (fraction == null) {
+      return const NativeValueResult<double>.failure(
+        3,
+        'split view handle is invalid',
+      );
+    }
+    return NativeValueResult<double>.success(fraction);
   }
 
   @override

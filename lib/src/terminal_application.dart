@@ -2343,6 +2343,7 @@ final class TerminalApplication {
     final Stopwatch pasteClock = Stopwatch()..start();
     final Completer<void> closed = Completer<void>();
     TerminalNativeHierarchyAdapter? hierarchy;
+    TerminalNativeSplitDividerGestureController? dividerGestureController;
     TerminalProductHierarchyActionCoordinator? actionCoordinator;
     TerminalAppKitMenuProjection? menuProjection;
     TerminalCommandPalettePresenter? palettePresenter;
@@ -2894,6 +2895,7 @@ final class TerminalApplication {
       if (nativeHierarchy == null || nativeHierarchy.isDisposed) return;
       switch (event) {
         case WindowClosedEvent():
+          dividerGestureController?.cancel(tabId);
           final Future<void> Function(PaneId? paneId)? request =
               closePaneRequest;
           if (request != null) {
@@ -2919,6 +2921,7 @@ final class TerminalApplication {
             );
           }
         case WindowResizedEvent(:final width, :final height):
+          dividerGestureController?.cancel(tabId);
           cancelHyperlinkInteraction(tab);
           if (hierarchyReconciliationInProgress) return;
           hierarchyReconciliationInProgress = true;
@@ -2937,6 +2940,7 @@ final class TerminalApplication {
               ..selectTab(logicalWindow.id, tabId);
             reconcileInteractiveHierarchy();
           } else {
+            dividerGestureController?.cancel(tabId);
             cancelHyperlinkInteraction(tab);
           }
           final PaneId focusedPaneId = tab.focusedPaneId;
@@ -2952,7 +2956,10 @@ final class TerminalApplication {
           final TerminalCommandPalettePresenter? palette = palettePresenter;
           if (palette != null && !palette.isDisposed) palette.refresh();
         case WindowVisibilityChangedEvent(:final isVisible):
-          if (!isVisible) cancelHyperlinkInteraction(tab);
+          if (!isVisible) {
+            dividerGestureController?.cancel(tabId);
+            cancelHyperlinkInteraction(tab);
+          }
           for (final PaneId paneId in tab.paneIds) {
             final _TerminalHierarchyProductPane? owner = owners[paneId];
             owner?.surface.updateWindowState(
@@ -2978,6 +2985,12 @@ final class TerminalApplication {
           cancelHyperlinkInteraction(tab);
           nativeHierarchy.handleWindowEvent(tabId, event);
         case AppKitMouseEvent():
+          final TerminalNativeSplitDividerGestureController? gestures =
+              dividerGestureController;
+          if (gestures != null && gestures.route(tabId, event)) {
+            cancelHyperlinkInteraction(tab);
+            return;
+          }
           PaneId paneId = paneAt(tab, event.x, event.y) ?? tab.focusedPaneId;
           final _TerminalHierarchyProductPane? owner = owners[paneId];
           final TerminalPaneLayoutRect? rectangle = owner?.layout;
@@ -3067,6 +3080,7 @@ final class TerminalApplication {
           in windowSubscriptions.keys
               .where((TerminalTabId tabId) => !liveTabIds.contains(tabId))
               .toList(growable: false)) {
+        dividerGestureController?.cancel(tabId);
         unawaited(windowSubscriptions.remove(tabId)!.cancel());
       }
       for (final MapEntry<TerminalTabId, Window> entry
@@ -3097,6 +3111,8 @@ final class TerminalApplication {
       await palettePresenter?.dispose();
       await menuProjection?.dispose();
       actionCoordinator?.dispose();
+      dividerGestureController?.dispose();
+      dividerGestureController = null;
       for (final _TerminalHierarchyProductPane owner in owners.values.toList(
         growable: false,
       )) {
@@ -3292,6 +3308,10 @@ final class TerminalApplication {
                     ),
           );
       hierarchy = createdHierarchy;
+      dividerGestureController = TerminalNativeSplitDividerGestureController(
+        hierarchy: createdHierarchy,
+        reconcile: reconcileInteractiveHierarchy,
+      );
       reconcileInteractiveHierarchy();
       if (runUserActionAcceptance) {
         stdout.writeln('TERMINAL_USER_ACTIONS_STAGE stage=hierarchy-projected');
