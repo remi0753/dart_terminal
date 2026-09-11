@@ -5,7 +5,7 @@
 - Date started: 2026-09-11
 - Scope: third Phase 9 roadmap item
 - Feature-matrix owner: CAP-10
-- Status: protocol core and product projection complete; real acceptance next
+- Status: complete; protocol, product projection, and both M1 runtime gates pass
 - Predecessor: `docs/phase9/synchronized-output-rendering.md`
 
 ## Purpose and background
@@ -17,9 +17,10 @@ size/Unicode reports named by the feature matrix. Reports must use terminal-
 core reply ownership, while host appearance remains an AppKit/product input;
 the parser must never call AppKit or infer a theme from palette colors.
 
-The current application acceptance has three owned gaps and seven unsupported
-increments. Only the theme-report and theme-update variants from tmux belong to
-this task; the evidence-backed highlight-mouse non-adoption remains unchanged.
+At task start, application acceptance had three owned gaps and seven
+unsupported increments. Only the theme-report and theme-update variants from
+tmux belonged to this task; the evidence-backed highlight-mouse non-adoption
+remains unchanged.
 
 ## Scope
 
@@ -202,6 +203,108 @@ this task; the evidence-backed highlight-mouse non-adoption remains unchanged.
   argument and exited with the usage message before validation. The command was
   corrected and the actual application acceptance check passed; no artifact or
   acceptance rule changed because of the invocation error.
+- 2026-09-11: commit `781733e` (`Project appearance and resize reports to
+  sessions`) completed the product-projection child. ROADMAP, README,
+  FEATURE_MATRIX, this task memo, and the clean worktree were reread. The next
+  and final child of this parent is the M1 Developer JIT/Release AOT real
+  PTY/Metal acceptance; no Kitty graphics work starts before it closes.
+- 2026-09-11: the existing ordinary-product theme gate already owns a real
+  three-pane AppKit hierarchy, live system/fixed appearance policy, real zsh
+  PTYs, and accepted Metal frames. The final acceptance will extend that gate
+  rather than create a synthetic route: zsh will issue each query/mode control
+  in raw mode and consume the exact reply bytes, native appearance injection
+  will unblock opted-in reads, and native window resize will drive hierarchy
+  layout, surface geometry, screen/PTY resize, and the in-band report.
+- 2026-09-11: the first extended Developer JIT run proved the initial light
+  query, XTWINOPS 16 reply, opted-in dark notification, and accepted dark Metal
+  frame, then timed out in a diagnostic that combined mode-2031 disable, RIS,
+  two DECRQM queries, and a color query in one raw shell transaction. The
+  already-tested DECRQM replies are not a product-projection acceptance
+  requirement. The real gate was simplified to send disable and RIS through
+  the PTY separately and assert parser-owned typed state after each marker;
+  exact bytes remain required for the 996/997, XTWINOPS 16, and mode-2048
+  reports. Both sessions and the runtime worker were cleanly reclaimed after
+  the failed run.
+- 2026-09-11: the second Developer JIT run passed the simplified appearance
+  disable/RIS boundary and reached native window resizing, where it exposed an
+  existing application reentrancy hole. `WindowResizedEvent` called hierarchy
+  reconciliation directly; its synchronous session resize notification then
+  called `refreshPresentation` while the hierarchy still held its reconciliation
+  guard. The route now brackets native resize reconciliation with the existing
+  application-level guard, matching every other interactive reconciliation
+  path. This is required for mode-2048 product acceptance and prevents ordinary
+  native resizes from terminating the application. Both PTYs and the worker
+  were again reclaimed after the failed run; the local-run diagnostic retained
+  the expected failure status even though its last completed phase preceded
+  root shutdown.
+- 2026-09-11: after guarding reconciliation, the third Developer JIT run no
+  longer crashed and reached the resize acceptance, but its combined predicate
+  did not distinguish a missing grid/viewport change from a missing accepted
+  Metal frame. The fixture now shrinks the real native window by known cell
+  extents (avoiding possible screen-edge growth constraints), waits for typed
+  geometry first, and then independently requires a newer stable Metal frame.
+  Failure cleanup again reclaimed both live PTYs and the runtime worker.
+- 2026-09-11: the separated fourth run proved the Metal condition was not the
+  issue: typed viewport geometry never changed. `resizeTab(size)` stored the
+  native resize-event dimensions, but `_contentLayoutSize` immediately queried
+  the still-stale AppKit content rect during the same synchronous event and
+  replaced them. Explicit tab sizes now own exactly the reconciliation that
+  received them; ordinary reconciliations continue to refresh from AppKit.
+  A fake-AppKit regression holds the native content rect at 920×511 while a
+  640.5×360.25 resize event must produce the latter pane layout without a
+  second native query. The failed run again reclaimed both PTYs and its worker.
+- 2026-09-11: the fifth Developer JIT run retained the stale-layout fix but
+  still saw no lasting geometry change. Directly setting the test window frame
+  conflicts with hierarchy placement ownership: reconciliation restores the
+  recorded frame, so a transient resize can return before the polling boundary.
+  The acceptance now injects ordered protocol-v7 frame-changed and resized
+  events through `dart_appkit`'s real event decoder, exactly like its native
+  appearance events. Frame state/placement is updated first and the following
+  content dimensions then drive real hierarchy, zsh PTY, and Metal resources;
+  a second ordered pair restores the original geometry. Failed-run cleanup
+  again reclaimed both PTYs and the worker.
+- 2026-09-11: the sixth Developer JIT run passed native geometry, a newer
+  accepted Metal frame, and exact mode-2048 immediate/resize replies, but the
+  post-capture disable assertion observed the mode before the shell transaction
+  completed. The new long command contained its complete success marker as
+  source text, so normal PTY echo could satisfy the screen-marker wait before
+  execution reached its final control. All new acceptance markers now follow
+  the established `%s` split pattern: command echo contains only an incomplete
+  prefix, while the fully joined marker is emitted solely at its intended
+  readiness/completion boundary. Failure cleanup remained clean.
+- 2026-09-11: the first final `make test` invocation reached the reviewed
+  application acceptance with the current `8/7/1/1/4` totals, then exposed
+  stale exact totals and removed `theme-updates` gap IDs in
+  `terminal_application_acceptance_test.dart`. The acceptance artifact itself
+  was current: tmux is clean and mosh's four highlight-mouse resets are the
+  sole remaining documented gap. The fixture now asserts the current totals
+  and exercises unowned-sequence and owner failures by mutating that remaining
+  gap. No product behavior or acceptance policy was weakened.
+- 2026-09-11: the first rewritten unowned-sequence fixture changed only the
+  remaining gap's variants, so validation correctly stopped earlier because
+  its unchanged minimal sequence was absent. The fixture now changes both the
+  minimal and variants from the observed highlight-mouse reset to the bounded,
+  unobserved highlight-mouse set form. Gap schema validation succeeds first,
+  then immutable replay reaches the intended `mosh-local-session has unowned
+  sequence` boundary. The focused acceptance test passes.
+- 2026-09-11: the final combined M1 product gate passed the exact protocol-v7
+  contract in Developer JIT (`panes=3 appearances=3 elapsed_ms=2188`) and
+  Release AOT (`panes=3 appearances=3 elapsed_ms=1390`). Real zsh PTYs consumed
+  exact 997 light/dark, XTWINOPS 16, and mode-2048 immediate/resize bytes;
+  native geometry produced a newer accepted Metal frame; disable/RIS and all
+  three-session teardown checks left both reporting modes off with zero text
+  clients or native handles.
+- 2026-09-11: final evidence review found the Phase 7 acceptance artifact
+  changed only source hashes for the application, session, native hierarchy,
+  and hierarchy regression test; its four criteria, ten unit tests, four
+  integration tests, and eight UI assertions were unchanged. Compatibility
+  regression coverage changed only README/FEATURE_MATRIX hashes and retained
+  nine fix families, nine cases, 390 input bytes, 417 split runs, one owned
+  application gap, and zero known P0 silent-corruption failures.
+- 2026-09-11: sandboxed `dart format` reported zero file changes but could not
+  update the SDK telemetry session timestamp. Re-running the same four-file
+  format in the approved host environment completed cleanly with zero changes;
+  this was an environment-side warning and did not affect repository files.
 
 ## Ordered subtasks
 
@@ -262,5 +365,24 @@ is implemented in parallel.
     families, 9 cases, 417 split runs, one owned application gap, and zero known
     P0 silent-corruption failures.
   - `dart analyze`: passed with no issues.
-- Real product acceptance, complete gate, and parent closure remain pending in
-  ordered subtask 3.
+- Real product acceptance and parent closure subtask:
+  - `dart run test/terminal_native_hierarchy_test.dart`: passed, including the
+    explicit 640.5×360.25 resize ownership regression against a stale 920×511
+    native content rect.
+  - `dart run test/terminal_application_acceptance_test.dart`: passed current
+    `8/7/1/1/4` totals plus freshness, ownership, mutation, and gap-policy
+    failure injection.
+  - `make phase7-appkit-acceptance`: passed 4 criteria, 13 source references,
+    10 unit tests, 4 integration tests, and 8 UI assertions.
+  - compatibility regression generation and freshness: passed 9 cases, 390
+    bytes, and 417 split runs; reviewed generated diffs were hash-only.
+  - `CI=true DART_SUPPRESS_ANALYTICS=true make test`: passed the complete
+    repository gate after updating the stale exact acceptance fixture; all 246
+    Dart files were already formatted and analyzer reported no issues.
+  - `make RUNTIME_ARCH=arm64 runtime-source-check runtime-bundle-audit`: passed
+    with 462 tracked files, zero product native sources, one reviewed test-only
+    native source, and one helper/asset/capability set in each runtime bundle.
+  - `make RUNTIME_ARCH=arm64 runtime-theme-integration`: passed real PTY/Metal
+    acceptance in Developer JIT (2,188 ms) and Release AOT (1,390 ms).
+  - explicit four-file `dart format`: zero changes; `dart analyze`: no issues;
+    `git diff --check`: passed before final ROADMAP/staged-scope review.

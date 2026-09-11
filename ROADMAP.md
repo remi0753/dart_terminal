@@ -1123,14 +1123,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] bounded parser-to-presentation hold、timeout、compatibility closure
   - [x] real PTY/Metal product acceptance、親項目完了判定
-- [ ] light/dark notification と extended reports
+- [x] light/dark notification と extended reports
   （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のtheme report/update gapを参照して実施）
   （目的、境界、完了条件は
   [`docs/phase9/light-dark-notification-extended-reports.md`](docs/phase9/light-dark-notification-extended-reports.md)
   を参照して順に実施する）
   - [x] immutable source pins、appearance/size/Unicode protocol core
   - [x] product appearance/resize projection、compatibility closure
-  - [ ] M1 real PTY/Metal acceptance、親項目完了判定
+  - [x] M1 real PTY/Metal acceptance、親項目完了判定
 - [ ] Kitty graphics parse/storage/placement/render
 - [ ] image animation と resource eviction
 - [ ] desktop notification、progress、semantic prompt extensions

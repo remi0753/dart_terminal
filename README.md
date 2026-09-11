@@ -142,6 +142,12 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   継続しながら最後のaccepted Metal frameとcaret/accessibility projectionを保持し、
   end/RISまたは1,000 ms monotonic timeoutでnewest full frameだけを公開する
   constant-space presentation gate
+- private DSR 996への997 dark/light応答と、DEC mode 2031でopt-inした実際の
+  system appearance遷移だけを通知するbounded light/dark contract。固定theme paneと
+  重複appearance eventは通知せず、RIS/session teardownでsubscriptionを解除する。
+  XTWINOPS 16はlogical cell寸法、mode 2048は有効化直後と完了したresize後に
+  rows/columnsとpadding-free logical viewport pixel寸法を返す。Unicode 17の
+  narrow-ambiguous grapheme/width contractはmode 2027をpermanently setとして公開する
 - Unicode 17 grapheme境界・幅判定、bounded grapheme intern、wide/continuation
   invariantとprimary historyを含むatomic resize/reflow
 - fixed-page SoA scrollback、独立line/byte cap、O(1) page eviction、primary
@@ -149,7 +155,8 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - end-exclusive cell/word/logical-line selection、soft/hard wrap準拠のbounded
   text extraction、cell-aligned exact scalarのforward/backward bounded search
 - 最大64 byteのreply encoderと、DA/DA2、DSR/CPR、DECRQM、DECRQSS SGR、
-  XTVERSION、XTWINOPS 14/18、OSC palette/default color queryのterminal-core dispatch
+  XTVERSION、XTWINOPS 14/16/18、light/dark、in-band size、
+  OSC palette/default color queryのterminal-core dispatch
 - ncurses 6.6で固定生成・能力監査した`xterm-256color` terminfoを両runtime bundleへ同梱し、
   起動時にheader/name/layoutを検証してlocal `TERMINFO`へ接続する環境contract。欠落・破損時と
   SSHのremote PTYでは私有pathを送らず標準`TERM=xterm-256color`へfallback。G0/G1、SO/SI、
@@ -552,8 +559,10 @@ user action suiteは通常起動と同じdispatcher、hierarchy、pane resource 
 Split Downを操作します。2 window/3 tab/5 paneの生成、各paneへのraw key/IME分離、
 1 paneを閉じた後の4-pane階層、5つのPTY世代と全Metal/text-input/native handleの回収を
 Developer JIT/Release AOTで要求します。
-theme suiteはv7 appearance eventを通常製品へ注入し、初期light、live dark/light、custom ANSI
-overlay、system/fixed pane、reloadのnew-session境界を実Metal frameで検査します。同じpaneの
+theme suiteはv7 appearance/geometry eventを通常製品へ注入し、初期light、live dark/light、
+custom ANSI overlay、system/fixed pane、reloadのnew-session境界を実Metal frameで検査します。
+実zshは996/997、XTWINOPS 16、mode 2048の即時/resize応答をPTYからexact byteで読み、2031の
+disable/RIS、2048 disableとsession teardown後のsubscription解除も検査します。同じpaneの
 PTY、screen、palette/style/scrollback、surface、renderer/atlas resourceを維持し、3 session、
 text-input、event subscription、worker、native handleを両runtimeで完全回収することを要求します。
 同じsuiteは1 paneから正確に100 MiBを出力している間に別paneの入力を既存のtext-input

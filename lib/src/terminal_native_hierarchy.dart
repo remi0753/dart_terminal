@@ -150,6 +150,7 @@ final class TerminalNativeHierarchyAdapter {
       <PaneId, TerminalNativePaneResources>{};
   final Map<TerminalTabId, TerminalSplitLayoutSize> _tabSizes =
       <TerminalTabId, TerminalSplitLayoutSize>{};
+  final Set<TerminalTabId> _explicitTabSizeReconciliations = <TerminalTabId>{};
   final Map<TerminalWindowId, TerminalTabId> _selectedTabs =
       <TerminalWindowId, TerminalTabId>{};
   final Map<TerminalTabId, PaneId> _focusedPanes = <TerminalTabId, PaneId>{};
@@ -284,8 +285,7 @@ final class TerminalNativeHierarchyAdapter {
     if (_state.tabForId(tabId) == null) {
       throw StateError('unknown terminal tab $tabId');
     }
-    _tabSizes[tabId] = size;
-    reconcile();
+    reconcile(tabSizes: <TerminalTabId, TerminalSplitLayoutSize>{tabId: size});
   }
 
   /// Refreshes retained native title, tab color, and represented URL only.
@@ -318,6 +318,10 @@ final class TerminalNativeHierarchyAdapter {
   void reconcile({Map<TerminalTabId, TerminalSplitLayoutSize>? tabSizes}) {
     _ensureCanReconcile();
     _reconciling = true;
+    final Set<TerminalTabId> explicitTabSizeIds = tabSizes == null
+        ? const <TerminalTabId>{}
+        : tabSizes.keys.toSet();
+    _explicitTabSizeReconciliations.addAll(explicitTabSizeIds);
     try {
       if (tabSizes != null) {
         for (final MapEntry<TerminalTabId, TerminalSplitLayoutSize> entry
@@ -568,6 +572,7 @@ final class TerminalNativeHierarchyAdapter {
             _state.windowForId(windowId) == null,
       );
     } finally {
+      _explicitTabSizeReconciliations.removeAll(explicitTabSizeIds);
       _reconciling = false;
     }
   }
@@ -608,6 +613,7 @@ final class TerminalNativeHierarchyAdapter {
     _splitViews.clear();
     _windows.clear();
     _tabSizes.clear();
+    _explicitTabSizeReconciliations.clear();
     _selectedTabs.clear();
     _focusedPanes.clear();
     _windowPlacements.clear();
@@ -726,6 +732,9 @@ final class TerminalNativeHierarchyAdapter {
     Window window,
     TerminalWindowPlacement placement,
   ) {
+    if (_explicitTabSizeReconciliations.contains(tabId)) {
+      return _tabSizes[tabId]!;
+    }
     try {
       final Rect content = window.contentLayoutRect;
       if (!content.width.isFinite ||

@@ -2755,10 +2755,16 @@ final class TerminalApplication {
           }
         case WindowResizedEvent(:final width, :final height):
           cancelHyperlinkInteraction(tab);
-          nativeHierarchy.resizeTab(
-            tabId,
-            TerminalSplitLayoutSize(width: width, height: height),
-          );
+          if (hierarchyReconciliationInProgress) return;
+          hierarchyReconciliationInProgress = true;
+          try {
+            nativeHierarchy.resizeTab(
+              tabId,
+              TerminalSplitLayoutSize(width: width, height: height),
+            );
+          } finally {
+            hierarchyReconciliationInProgress = false;
+          }
         case WindowFocusChangedEvent(:final isFocused):
           if (isFocused) {
             state
@@ -3817,6 +3823,9 @@ final class TerminalApplication {
     const int customAnsiGreen = 0x8012ab34;
     var eventTimestamp = 12000000;
 
+    String hex(Uint8List bytes) =>
+        bytes.map((int byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+
     Future<void> waitFor(
       bool Function() predicate,
       String message, {
@@ -3936,6 +3945,52 @@ final class TerminalApplication {
     await _waitForAsciiMarker(initialSession, prompt);
     await presentGreenMarker(initialOwner, 'INITIAL');
 
+    const String darkReportReady = '__DT_THEME_DARK_REPORT_READY__';
+    const String darkReportExact = '__DT_THEME_DARK_REPORT_EXACT__';
+    final ({int width, int height})? initialCellSize =
+        initialScreens.logicalCellSize;
+    _expectLifecycle(
+      initialCellSize != null,
+      'initial theme pane omitted logical cell geometry',
+    );
+    final Uint8List initialCellReply =
+        TerminalReplyEncoder.textAreaCellSizePixels(
+          height: initialCellSize!.height,
+          width: initialCellSize.width,
+        );
+    final Uint8List lightSchemeReply = TerminalReplyEncoder.colorScheme(
+      TerminalColorScheme.light,
+    );
+    final Uint8List darkSchemeReply = TerminalReplyEncoder.colorScheme(
+      TerminalColorScheme.dark,
+    );
+    final String initialCellHex = hex(initialCellReply);
+    final String lightSchemeHex = hex(lightSchemeReply);
+    final String darkSchemeHex = hex(darkSchemeReply);
+    initialOwner.pane.insertText(
+      "stty raw -echo; printf "
+      "'\\033[16t\\033[?996n\\033[?2031h"
+      "\\r\\n__DT_THEME_DARK_REPORT_%s__\\r\\n' 'READY'; "
+      "cell=\$(dd bs=1 count=${initialCellReply.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "initial=\$(dd bs=1 count=${lightSchemeReply.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "changed=\$(dd bs=1 count=${darkSchemeReply.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); stty sane; "
+      "if [ \"\$cell\" = '$initialCellHex' ] && "
+      "[ \"\$initial\" = '$lightSchemeHex' ] && "
+      "[ \"\$changed\" = '$darkSchemeHex' ]; then "
+      "printf '\\r\\n__DT_THEME_DARK_REPORT_%s__\\r\\n' 'EXACT'; else "
+      "printf '\\r\\n__DT_THEME_DARK_REPORT_%s__\\r\\n' 'MISMATCH'; fi",
+    );
+    await initialOwner.pane.submit();
+    await _waitForAsciiMarker(initialSession, darkReportReady);
+    _expectLifecycle(
+      initialScreens.colorScheme == TerminalColorScheme.light &&
+          initialScreens.colorSchemeReportingMode,
+      'initial light query did not establish opted-in appearance reporting',
+    );
+
     final TerminalSession initialSessionIdentity = initialSession;
     final TerminalPane initialPaneIdentity = initialOwner.pane;
     final _TerminalHierarchyProductPane initialOwnerIdentity = initialOwner;
@@ -4032,6 +4087,164 @@ final class TerminalApplication {
       '${afterDark.atlasResourceGeneration} fixed_palette='
       '$fixedPaletteGeneration/${fixedScreens.palette.generation}',
     );
+    await _waitForAsciiMarker(initialSession, darkReportExact);
+    _expectLifecycle(
+      initialScreens.colorScheme == TerminalColorScheme.dark &&
+          initialScreens.colorSchemeReportingMode,
+      'native dark appearance did not preserve the opted-in typed state',
+    );
+
+    const String appearanceDisableExact = '__DT_THEME_DISABLE_EXACT__';
+    const String appearanceResetExact = '__DT_THEME_RESET_EXACT__';
+    initialOwner.pane.insertText(
+      "printf '\\033[?2031l\\r\\n__DT_THEME_DISABLE_%s__\\r\\n' 'EXACT'",
+    );
+    await initialOwner.pane.submit();
+    await _waitForAsciiMarker(initialSession, appearanceDisableExact);
+    _expectLifecycle(
+      !initialScreens.colorSchemeReportingMode &&
+          initialScreens.colorScheme == TerminalColorScheme.dark,
+      'real PTY disable did not reset mode 2031 or retain appearance',
+    );
+    initialOwner.pane.insertText(
+      "printf '\\033[?2031h\\033c\\r\\n__DT_THEME_RESET_%s__\\r\\n' 'EXACT'",
+    );
+    await initialOwner.pane.submit();
+    await _waitForAsciiMarker(initialSession, appearanceResetExact);
+    _expectLifecycle(
+      !initialScreens.colorSchemeReportingMode &&
+          initialScreens.colorScheme == TerminalColorScheme.dark,
+      'real PTY RIS did not reset mode 2031 and retain appearance',
+    );
+
+    final Window themeWindow = hierarchy.windowForTab(initialTab.id)!;
+    final Rect originalFrame = themeWindow.frame;
+    final TerminalPaneLayoutRect initialLayout = initialOwner.layout!;
+    final TerminalPaneLayoutRect fixedLayout = fixedOwner.layout!;
+    final double originalContentWidth = math.max(
+      initialLayout.left + initialLayout.width,
+      fixedLayout.left + fixedLayout.width,
+    );
+    final double originalContentHeight = math.max(
+      initialLayout.top + initialLayout.height,
+      fixedLayout.top + fixedLayout.height,
+    );
+    final ({int width, int height})? originalViewport =
+        fixedScreens.logicalViewportSize;
+    final ({int width, int height})? fixedCellSize =
+        fixedScreens.logicalCellSize;
+    _expectLifecycle(
+      originalViewport != null && fixedCellSize != null,
+      'fixed theme pane omitted logical viewport or cell geometry',
+    );
+    final int originalRows = fixedScreens.activeScreen.rows;
+    final int originalColumns = fixedScreens.activeScreen.columns;
+    final Uint8List originalSizeReply = TerminalReplyEncoder.inBandSizeReport(
+      rows: originalRows,
+      columns: originalColumns,
+      heightPixels: originalViewport!.height,
+      widthPixels: originalViewport.width,
+    );
+    final TerminalLiveMetalSurfaceSnapshot beforeForwardResize =
+        await waitForStableSurface(fixedOwner);
+    final double widthDelta = fixedCellSize!.width * 4;
+    final double heightDelta = fixedCellSize.height * 2;
+    _injectWindowGeometryEventsForTesting(
+      application,
+      themeWindow,
+      frame: Rect.fromLTWH(
+        originalFrame.left,
+        originalFrame.top,
+        originalFrame.width - widthDelta,
+        originalFrame.height - heightDelta,
+      ),
+      contentWidth: originalContentWidth - widthDelta,
+      contentHeight: originalContentHeight - heightDelta,
+      monotonicNanoseconds: eventTimestamp,
+    );
+    eventTimestamp += 2;
+    await waitFor(() {
+      final ({int width, int height})? viewport =
+          fixedScreens.logicalViewportSize;
+      return viewport != null && viewport != originalViewport;
+    }, 'native theme-window resize did not reach screen geometry');
+    final TerminalLiveMetalSurfaceSnapshot forwardResizeSurface =
+        await waitForStableSurface(fixedOwner);
+    _expectLifecycle(
+      forwardResizeSurface.acceptedFrameCount >
+          beforeForwardResize.acceptedFrameCount,
+      'native theme-window resize did not reach an accepted Metal frame: '
+      'frames=${beforeForwardResize.acceptedFrameCount}/'
+      '${forwardResizeSurface.acceptedFrameCount}',
+    );
+    final ({int width, int height}) forwardViewport =
+        fixedScreens.logicalViewportSize!;
+    final Uint8List forwardSizeReply = TerminalReplyEncoder.inBandSizeReport(
+      rows: fixedScreens.activeScreen.rows,
+      columns: fixedScreens.activeScreen.columns,
+      heightPixels: forwardViewport.height,
+      widthPixels: forwardViewport.width,
+    );
+    final Uint8List fixedCellReply =
+        TerminalReplyEncoder.textAreaCellSizePixels(
+          height: fixedCellSize.height,
+          width: fixedCellSize.width,
+        );
+    final String fixedCellHex = hex(fixedCellReply);
+    final String forwardSizeHex = hex(forwardSizeReply);
+    final String originalSizeHex = hex(originalSizeReply);
+    const String resizeReportReady = '__DT_THEME_RESIZE_REPORT_READY__';
+    const String resizeReportExact = '__DT_THEME_RESIZE_REPORT_EXACT__';
+    fixedOwner.pane.insertText(
+      "stty raw -echo; printf "
+      "'\\033[?996n\\033[16t\\033[?2048h"
+      "\\r\\n__DT_THEME_RESIZE_REPORT_%s__\\r\\n' 'READY'; "
+      "scheme=\$(dd bs=1 count=${lightSchemeReply.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "cell=\$(dd bs=1 count=${fixedCellReply.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "immediate=\$(dd bs=1 count=${forwardSizeReply.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "resized=\$(dd bs=1 count=${originalSizeReply.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "printf '\\033[?2048l'; stty sane; "
+      "if [ \"\$scheme\" = '$lightSchemeHex' ] && "
+      "[ \"\$cell\" = '$fixedCellHex' ] && "
+      "[ \"\$immediate\" = '$forwardSizeHex' ] && "
+      "[ \"\$resized\" = '$originalSizeHex' ]; then "
+      "printf '\\r\\n__DT_THEME_RESIZE_REPORT_%s__\\r\\n' 'EXACT'; else "
+      "printf '\\r\\n__DT_THEME_RESIZE_REPORT_%s__\\r\\n' 'MISMATCH'; fi",
+    );
+    await fixedOwner.pane.submit();
+    await _waitForAsciiMarker(fixedSession, resizeReportReady);
+    _expectLifecycle(
+      fixedScreens.inBandSizeReportingMode,
+      'real PTY did not enable in-band resize reporting',
+    );
+    _injectWindowGeometryEventsForTesting(
+      application,
+      themeWindow,
+      frame: originalFrame,
+      contentWidth: originalContentWidth,
+      contentHeight: originalContentHeight,
+      monotonicNanoseconds: eventTimestamp,
+    );
+    eventTimestamp += 2;
+    await waitFor(() {
+      final ({int width, int height})? viewport =
+          fixedScreens.logicalViewportSize;
+      final TerminalLiveMetalSurfaceSnapshot snapshot = fixedOwner.surface
+          .snapshot();
+      return viewport == originalViewport &&
+          fixedScreens.activeScreen.rows == originalRows &&
+          fixedScreens.activeScreen.columns == originalColumns &&
+          snapshot.acceptedFrameCount > forwardResizeSurface.acceptedFrameCount;
+    }, 'native window restore did not complete reported PTY/Metal resize');
+    await _waitForAsciiMarker(fixedSession, resizeReportExact);
+    _expectLifecycle(
+      !fixedScreens.inBandSizeReportingMode,
+      'real PTY disable did not reset mode 2048 after exact resize capture',
+    );
 
     File(configurationPath).writeAsStringSync(
       'theme = system\npalette-2 = #12ab34\ncursor-blink = false\n',
@@ -4076,6 +4289,30 @@ final class TerminalApplication {
       'later system pane did not capture the current dark appearance',
     );
 
+    const String lightReportReady = '__DT_THEME_LIGHT_REPORT_READY__';
+    const String lightReportExact = '__DT_THEME_LIGHT_REPORT_EXACT__';
+    laterSystemOwner.pane.insertText(
+      "stty raw -echo; printf "
+      "'\\033[?996n\\033[?2031h"
+      "\\r\\n__DT_THEME_LIGHT_REPORT_%s__\\r\\n' 'READY'; "
+      "initial=\$(dd bs=1 count=${darkSchemeReply.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "changed=\$(dd bs=1 count=${lightSchemeReply.length} 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "printf '\\033[?2031l\\033[?2031h\\033c'; stty sane; "
+      "if [ \"\$initial\" = '$darkSchemeHex' ] && "
+      "[ \"\$changed\" = '$lightSchemeHex' ]; then "
+      "printf '\\r\\n__DT_THEME_LIGHT_REPORT_%s__\\r\\n' 'EXACT'; else "
+      "printf '\\r\\n__DT_THEME_LIGHT_REPORT_%s__\\r\\n' 'MISMATCH'; fi",
+    );
+    await laterSystemOwner.pane.submit();
+    await _waitForAsciiMarker(laterSystemSession, lightReportReady);
+    _expectLifecycle(
+      laterSystemScreens.colorScheme == TerminalColorScheme.dark &&
+          laterSystemScreens.colorSchemeReportingMode,
+      'later dark pane did not establish opted-in appearance reporting',
+    );
+
     final TerminalSession laterSessionIdentity = laterSystemSession;
     final _TerminalHierarchyProductPane laterOwnerIdentity = laterSystemOwner;
     final TerminalScreen laterPrimaryIdentity = laterSystemScreens.primary;
@@ -4106,6 +4343,12 @@ final class TerminalApplication {
               beforeLight.lastAppliedDamageGeneration &&
           snapshot.acceptedFrameCount > beforeLight.acceptedFrameCount;
     }, 'live light appearance did not reach the later accepted Metal frame');
+    await _waitForAsciiMarker(laterSystemSession, lightReportExact);
+    _expectLifecycle(
+      laterSystemScreens.colorScheme == TerminalColorScheme.light &&
+          !laterSystemScreens.colorSchemeReportingMode,
+      'real PTY light notification did not complete disable/RIS cleanup',
+    );
     final TerminalLiveMetalSurfaceSnapshot afterLight =
         await waitForStableSurface(laterSystemOwner);
     _expectLifecycle(
@@ -4147,7 +4390,9 @@ final class TerminalApplication {
           allSessions.length == 3 &&
           allSessions.every(
             (TerminalSession session) =>
-                session.shutdownResult?.isClean == true,
+                session.shutdownResult?.isClean == true &&
+                !session.terminalScreenSet.colorSchemeReportingMode &&
+                !session.terminalScreenSet.inBandSizeReportingMode,
           ) &&
           debugLiveTerminalTextInputClientCount() == 0 &&
           application.debugLiveObjectCount == 0,
@@ -4155,7 +4400,10 @@ final class TerminalApplication {
     );
     stdout.writeln(
       'TERMINAL_THEME_TEST protocol=7 initial_light=true live_dark=true '
-      'live_light=true system_panes=2 fixed_panes=1 custom_override=true '
+      'live_light=true appearance_query=true appearance_notifications=2 '
+      'appearance_disable=true appearance_reset=true cell_report=true '
+      'in_band_size=true native_resize=true exact=true '
+      'system_panes=2 fixed_panes=1 custom_override=true '
       'metal=true resource_identity=true reload_boundary=true '
       'event_cleanup=true sessions_clean=3 text_clients=0 native_handles=0',
     );
@@ -10188,6 +10436,39 @@ keybind = control+k=pane.focus-next
       monotonicNanoseconds,
       0,
       isDark,
+    ]);
+  }
+
+  static void _injectWindowGeometryEventsForTesting(
+    AppKitApplication application,
+    Window window, {
+    required Rect frame,
+    required double contentWidth,
+    required double contentHeight,
+    required int monotonicNanoseconds,
+  }) {
+    final int handle = appkit_testing.nativeWindowHandleForTesting(window);
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      9,
+      handle,
+      handle >> 32,
+      monotonicNanoseconds,
+      0,
+      frame.left,
+      frame.top,
+      frame.width,
+      frame.height,
+    ]);
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      2,
+      handle,
+      handle >> 32,
+      monotonicNanoseconds + 1,
+      0,
+      contentWidth,
+      contentHeight,
     ]);
   }
 

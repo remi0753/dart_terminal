@@ -796,6 +796,26 @@ Future<void> _testInitialNativeContentLayoutProjection() async {
           ),
       'initial tab layouts use native content height before any resize event',
     );
+    final TerminalTabId resizedTabId = logicalWindow.selectedTabId;
+    final PaneId resizedPaneId = logicalWindow.selectedTab.focusedPaneId;
+    final int resizedWindowHandle = bindings.handleFor(
+      adapter.windowForTab(resizedTabId)!,
+    );
+    adapter.resizeTab(
+      resizedTabId,
+      TerminalSplitLayoutSize(width: 640.5, height: 360.25),
+    );
+    _expect(
+      layouts[resizedPaneId]!.width == 640.5 &&
+          layouts[resizedPaneId]!.height == 360.25 &&
+          bindings.windowContentLayoutRects[resizedWindowHandle]!.width ==
+              920 &&
+          bindings.windowContentLayoutRects[resizedWindowHandle]!.height ==
+              511 &&
+          bindings.windowContentLayoutQueryCounts[resizedWindowHandle] == 1,
+      'an explicit resize event owns one reconciliation even while the native '
+      'content-layout query is stale',
+    );
   } finally {
     adapter.dispose();
     await state.shutdown();

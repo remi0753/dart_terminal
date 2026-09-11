@@ -1790,7 +1790,10 @@ cursor-blink = false
     _expect(
       RegExp(
             r'^TERMINAL_THEME_TEST protocol=7 initial_light=true '
-            r'live_dark=true live_light=true system_panes=2 fixed_panes=1 '
+            r'live_dark=true live_light=true appearance_query=true '
+            r'appearance_notifications=2 appearance_disable=true '
+            r'appearance_reset=true cell_report=true in_band_size=true '
+            r'native_resize=true exact=true system_panes=2 fixed_panes=1 '
             r'custom_override=true metal=true resource_identity=true '
             r'reload_boundary=true event_cleanup=true sessions_clean=3 '
             r'text_clients=0 native_handles=0$',

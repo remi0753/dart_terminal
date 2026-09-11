@@ -251,10 +251,10 @@ tmux theme controls no longer appear as matrix gaps.
 | focus reporting | Emacs, lazygit, mosh, Neovim, tmux | DEC 1004 state、native focus routing、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
 | SGR pixel mouse | lazygit | mode 1016、native physical-pixel geometry、wheel、Shift-local routing、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
 | highlight mouse | mosh | captureはmode 1001 resetのみ。stateful enable/handshakeを実装せず明示的非対応 | evidence-driven future decision |
-| XTVERSION and window-size report | Emacs, lazygit, tmux | fixed identity、logical text-area pixels、rows/columns、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
+| XTVERSION and window-size report | Emacs, lazygit, tmux | fixed identity、XTWINOPS 14/16/18のlogical text-area/cell pixelsとrows/columns、mode 2048の即時/resize report、実PTY受け入れを完了 | Phase 6 focus/mouse/query task、Phase 9 light/dark reports task（完了） |
 | Kitty query, XTMODKEYS, XTQMODKEYS, application escape | lazygit, Neovim, tmux | bounded control state/repliesとcanonical key encodingを完了。immutable captureのcontrol replayに加え、実PTYでquery・画面分離・release byteを両runtime検証 | Phase 9 Kitty keyboard task（完了） |
 | synchronized output | fzf, lazygit | mode 2026 parser state、timeout、Metal presentation atomicity、実PTY受け入れを完了 | Phase 9 synchronized-output task（完了） |
-| theme report/update | tmux | 996/997 query、mode 2031、typed AppKit projection、bounded replyを完了。実PTY受け入れは同じPhase 9親タスクの次サブタスク | Phase 9 light/dark reports task |
+| theme report/update | tmux | 996/997 query、mode 2031、typed AppKit projection、bounded reply、両runtime実PTY/Metal受け入れを完了 | Phase 9 light/dark reports task（完了） |
 
 Character-set designation was a visible rather than safe-ignore gap: ignoring
 `ESC ( 0` left following ACS bytes with the wrong glyph meaning. The terminfo
@@ -536,6 +536,12 @@ immutable PTY bytes rather than by rewriting their provenance.
   explicit end, one newest frame on the 1,000 ms timeout, immediate legacy
   presentation afterward, bounded pending/atlas state, and clean teardown in
   the M1 Developer JIT and Release AOT display suites.
+- Phase 9 light/dark and extended-report product acceptance: passed exact
+  initial light/dark queries, two opted-in native appearance notifications,
+  mode-2031 disable/RIS, XTWINOPS 16 logical cell size, mode-2048 immediate and
+  completed native-resize reports, Metal presentation, and three-session mode/
+  PTY/text-input/event/worker/native-handle cleanup in M1 Developer JIT and
+  Release AOT.
 - `git diff --check`, staged-scope review, and final worktree review are run
   immediately before the completion commit.
 - Remaining work is not hidden: the sole gap owner is pinned in the acceptance
