@@ -4370,6 +4370,25 @@ final class TerminalApplication {
               terminalSettingsCurrentLineColor,
       'Settings did not project disabled assignments and the NORMAL cursor line',
     );
+    final int lastSettingsLocation = settings.state.occurrences.last.nameStart;
+    for (var step = 0; step < 64; step++) {
+      _injectKeyEventForTesting(
+        application,
+        initialSettingsWindow,
+        keyCode: 125,
+        modifiers: 0,
+        characters: '',
+        charactersIgnoringModifiers: '',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+    }
+    await waitFor(
+      () =>
+          settings.state.selection.start >= lastSettingsLocation &&
+          settings.activeView!.lineHighlight?.location ==
+              settings.state.selection.start,
+      'native Settings NORMAL navigation did not reveal the final option',
+    );
     _injectKeyEventForTesting(
       application,
       initialSettingsWindow,
@@ -5229,7 +5248,8 @@ keybind = control+k=pane.focus-next
       'new_session=true settings_menu=true settings_palette=true '
       'settings_singleton=true settings_search=true settings_edit=true '
       'settings_style_stable=true settings_disabled_lines=true '
-      'settings_cursor_line=true settings_diagnostics=true '
+      'settings_cursor_line=true settings_viewport_follow=true '
+      'settings_diagnostics=true '
       'settings_reload=true settings_focus=true panes=4 independent=true '
       'sessions_clean=4 text_clients=0 native_handles=0',
     );

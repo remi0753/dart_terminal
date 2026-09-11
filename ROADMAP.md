@@ -1081,11 +1081,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] `dart_appkit` の attributed editor line-highlight API
   - [x] commented assignment と mode-invariant cursor line の product 投影・受け入れ
-- [ ] Settings editor の NORMAL/SEARCH selection viewport follow
+- [x] Settings editor の NORMAL/SEARCH selection viewport follow
   （[`docs/phase8/settings-editor-selection-viewport-follow.md`](docs/phase8/settings-editor-selection-viewport-follow.md)
   を参照して順に実施する）
   - [x] `dart_appkit` の explicit selection reveal API
-  - [ ] product navigation投影と M1 両runtime受け入れ
+  - [x] product navigation投影と M1 両runtime受け入れ
 
 終了条件:
 

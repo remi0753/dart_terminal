@@ -191,6 +191,7 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
           initialLineHighlight?.green ==
               terminalSettingsCurrentLineColor.green &&
           initialLineHighlight?.blue == terminalSettingsCurrentLineColor.blue &&
+          bindings.textEditorSelectionRevealCounts[settingsViewHandle] == 1 &&
           settings.activeStatusView!.text.contains('NORMAL') &&
           settings.activeDetailView!.text.contains('Current value') &&
           !settings.renderedText!.contains('Config Lens') &&
@@ -200,6 +201,8 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
     );
 
     final int initialCaret = settings.state.selection.start;
+    final int initialRevealCount =
+        bindings.textEditorSelectionRevealCounts[settingsViewHandle]!;
     _injectHierarchyKey(
       rawEvents,
       application,
@@ -211,8 +214,10 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
       () =>
           settings.state.selection.start != initialCaret &&
           bindings.textEditorLineHighlights[settingsViewHandle]?.location ==
-              settings.state.selection.start,
-      'NORMAL navigation did not move the full-width current-line highlight',
+              settings.state.selection.start &&
+          bindings.textEditorSelectionRevealCounts[settingsViewHandle] ==
+              initialRevealCount + 1,
+      'NORMAL navigation did not move and reveal the current-line highlight',
     );
 
     final Window firstSettingsWindow = settingsWindow;
@@ -230,6 +235,8 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
       keyCode: 44,
       characters: '/',
     );
+    final int beforeSearchRevealCount =
+        bindings.textEditorSelectionRevealCounts[settingsViewHandle]!;
     _injectHierarchyKey(
       rawEvents,
       application,
@@ -242,7 +249,9 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
           settings.state.query == 'font-size' &&
           settings.state.selectedOccurrence?.option.name == 'font-size' &&
           bindings.textEditorLineHighlights[settingsViewHandle]?.location ==
-              settings.state.selection.start,
+              settings.state.selection.start &&
+          bindings.textEditorSelectionRevealCounts[settingsViewHandle]! >
+              beforeSearchRevealCount,
       'explicit Settings search was not routed through its native window',
     );
     _injectHierarchyKey(
@@ -258,6 +267,8 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
     );
     final List<TerminalSettingsSyntaxSpan> normalSyntax =
         settings.state.syntaxSpans;
+    final int normalRevealCount =
+        bindings.textEditorSelectionRevealCounts[settingsViewHandle]!;
     _injectHierarchyKey(
       rawEvents,
       application,
@@ -279,8 +290,10 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
             bindings.textEditorStyleRuns[settingsViewHandle]!,
           ) &&
           bindings.textEditorLineHighlights[settingsViewHandle]?.location ==
-              settings.state.selection.start,
-      'NORMAL to INSERT changed syntax colors or the current-line highlight',
+              settings.state.selection.start &&
+          bindings.textEditorSelectionRevealCounts[settingsViewHandle] ==
+              normalRevealCount,
+      'NORMAL to INSERT changed styles/highlight or requested native reveal',
     );
 
     final String invalidText = bindings.texts[settingsViewHandle]!.replaceFirst(
@@ -303,7 +316,9 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
       () =>
           settings.state.text == invalidText &&
           bindings.textEditorLineHighlights[settingsViewHandle]?.location ==
-              invalidCaret,
+              invalidCaret &&
+          bindings.textEditorSelectionRevealCounts[settingsViewHandle] ==
+              normalRevealCount,
       'native INSERT text was not synchronized into the Settings draft',
     );
     _injectHierarchyKey(
@@ -2144,6 +2159,7 @@ final class _HierarchyNativeBindings
   final Map<int, int> textEditorSelectionLengths = <int, int>{};
   final Map<int, bool> textEditorEditable = <int, bool>{};
   final Map<int, bool> textEditorHasMarkedText = <int, bool>{};
+  final Map<int, int> textEditorSelectionRevealCounts = <int, int>{};
   final Map<int, String> texts = <int, String>{};
   final Map<int, int> contentViews = <int, int>{};
   final Map<int, int> windowContentViewSetCounts = <int, int>{};
@@ -2411,6 +2427,7 @@ final class _HierarchyNativeBindings
     textEditorSelectionLengths[handle] = 0;
     textEditorEditable[handle] = configuration.initiallyEditable;
     textEditorHasMarkedText[handle] = false;
+    textEditorSelectionRevealCounts[handle] = 0;
     texts[handle] = '';
     return result;
   }
@@ -2464,6 +2481,13 @@ final class _HierarchyNativeBindings
   }) {
     textEditorSelectionStarts[handle] = start;
     textEditorSelectionLengths[handle] = length;
+    return const NativeCallResult.success();
+  }
+
+  @override
+  NativeCallResult textEditorScrollSelectionToVisible(int handle) {
+    textEditorSelectionRevealCounts[handle] =
+        textEditorSelectionRevealCounts[handle]! + 1;
     return const NativeCallResult.success();
   }
 
@@ -2551,6 +2575,7 @@ final class _HierarchyNativeBindings
     textEditorSelectionLengths.remove(handle);
     textEditorEditable.remove(handle);
     textEditorHasMarkedText.remove(handle);
+    textEditorSelectionRevealCounts.remove(handle);
     texts.remove(handle);
     contentViews.remove(handle);
     firstResponders.remove(handle);

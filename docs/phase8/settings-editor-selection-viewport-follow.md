@@ -107,3 +107,43 @@ native-owned navigationには追加投影せず、marked text中のdocument/sele
   `6051a7af8f987562d7486823b834539d46eba3a5`（`Reveal programmatic text editor selections`）
   として独立コミットした。ROADMAP再確認後の現在地は第2サブタスクで、次はSettings presenterの
   Dart-owned selection更新直後へrevealを投影し、両runtimeで受け入れることである。
+- 2026-09-11: product formatterは対象2 fileを0変更と確認した後、sandbox外のDart telemetry
+  timestamp更新だけをpermission errorとして報告した。source formattingの失敗ではないがexit statusを
+  確定するため、同じformat checkを許可済み環境で再実行する。
+- 2026-09-11: presenterはdocument/selectionをDartからnativeへ実際にpublishしたかをrender内で
+  追跡し、NORMAL/SEARCHのときだけ`scrollSelectionToVisible`を呼ぶようにした。同じselectionの
+  再render、detail開閉、INSERT移行、native caret同期ではrevealせず、手動scrollとnative editingの
+  所有権を維持する。current-line highlightはreveal前に同じstate selectionへ更新する。
+- 2026-09-11: fake AppKit bindingにeditorごとのreveal countを追加し、初期Dart document、NORMAL
+  navigation、SEARCH selectionで要求され、INSERT移行とnative INSERT同期では増えないことを
+  hierarchy testで固定した。focused testと`dart analyze`は成功し、最終formatter checkも4 file 0変更と
+  なった。
+- 2026-09-11: product configuration exerciseはNORMALで64行下へ移動して最後のschema optionまで
+  到達し、同じselectionへcurrent-line highlightが同期した後に検索・編集・保存を継続する。実native
+  reveal symbolまたはviewport処理の失敗をconfiguration suiteが検出できるよう、exact markerへ
+  `settings_viewport_follow=true`を追加した。
+- 2026-09-11: `make phase7-appkit-acceptance terminal-compatibility-regression-coverage`は成功した。
+  AppKit acceptance corpusは変更したhierarchy testとruntime application sourceのSHA-256だけ、
+  compatibility reportはREADMEとFEATURE_MATRIXのSHA-256だけを更新し、case数やfix familyに意図しない
+  変化がないことを差分で確認した。
+- 2026-09-11: 最終focused testのsandbox内再実行はMetal compilerが
+  `/Users/remi/.cache/clang/ModuleCache`へ書けず終了し、analyzerは`No issues found!`まで成功した後に
+  Dart telemetry sessionのmtime更新権限だけでexit 1となった。いずれもsource failureではないが、成功
+  statusを確定するため通常の開発環境権限で同じ検証を再実行する。
+- 2026-09-11: 通常の開発環境権限でfocused hierarchy testと`dart analyze`を再実行し、いずれも
+  exit 0となった。`CI=true DART_SUPPRESS_ANALYTICS=true make test`はformatter 246 files / 0 changed、
+  analyzer `No issues found!`を含めて`dart_terminal tests passed`となった。
+- 2026-09-11: `make runtime-source-check runtime-bundle-audit`はsource auditとDeveloper JIT / Release
+  AOT両bundle auditをすべてPASSした。M1の`make runtime-configuration-integration`は両runtimeで
+  `settings_viewport_follow=true`を含むexact markerを返し、Developer JIT 1917 ms、Release AOT
+  1109 msで成功した。
+
+## 完了状態
+
+complete。NORMAL/SEARCHのDart-owned selection変更時だけnative viewportを追従させ、INSERTの
+native-owned navigation、selection、syntax attributes、diagnostic underline、current-line highlightを
+維持した。Phase 8の本追補に残作業はなく、Phase 9には着手しない。
+
+- 2026-09-11: 最初のproduct commit試行はsandboxが`.git/index.lock`を作成できず失敗した。staged
+  diffは保持されており、sourceや検証の失敗ではない。メモをstageへ戻した上でrepository書き込み権限を
+  用いて同じcommitを再実行する。
