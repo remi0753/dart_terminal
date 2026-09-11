@@ -112,7 +112,10 @@ Map<String, Object?> _csiRecord(int key) {
       count == 1 &&
           firstIntermediate == 0x24 &&
           finalByte == 0x70 &&
-          (privateMarker == null || privateMarker == 0x3f);
+          (privateMarker == null || privateMarker == 0x3f) ||
+      count == 0 &&
+          privateMarker == 0x3f &&
+          (finalByte == 0x6d || finalByte == 0x75);
   return <String, Object?>{
     'key': 'csi:${privateMarker ?? -1}:$count:$firstIntermediate:$finalByte',
     'kind': 'csi',

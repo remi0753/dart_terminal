@@ -234,6 +234,9 @@ final class TerminalScreenParserSink
       _applySgr(sequence);
       return;
     }
+    if (_dispatchKeyboardProtocol(sequence)) {
+      return;
+    }
     if (_hasSubparameters(sequence)) {
       _unsupportedSequenceCount++;
       return;
@@ -706,6 +709,121 @@ final class TerminalScreenParserSink
     return false;
   }
 
+  bool _dispatchKeyboardProtocol(VtSequenceHeader sequence) {
+    if (sequence.intermediateCount != 0) return false;
+    final bool keyboardSelector = switch ((
+      sequence.privateMarker,
+      sequence.finalByte,
+    )) {
+      (0x3c, 0x75) ||
+      (0x3d, 0x75) ||
+      (0x3e, 0x6d) ||
+      (0x3e, 0x75) ||
+      (0x3f, 0x6d) ||
+      (0x3f, 0x75) => true,
+      _ => false,
+    };
+    if (!keyboardSelector) return false;
+    if (_hasSubparameters(sequence)) {
+      _unsupportedSequenceCount++;
+      return true;
+    }
+    final TerminalScreenSet? screens = screenSet;
+    switch ((sequence.privateMarker, sequence.finalByte)) {
+      case (0x3c, 0x75):
+        if (screens == null || sequence.parameters.length > 1) {
+          _unsupportedSequenceCount++;
+          return true;
+        }
+        final int count = sequence.parameters.length == 0
+            ? 1
+            : sequence.parameters.valueAt(0) ?? 1;
+        if (count <= 0) {
+          _unsupportedSequenceCount++;
+        } else {
+          screens.popKittyKeyboardFlags(count);
+        }
+        return true;
+      case (0x3d, 0x75):
+        if (screens == null || sequence.parameters.length > 2) {
+          _unsupportedSequenceCount++;
+          return true;
+        }
+        final int flags = sequence.parameters.length == 0
+            ? 0
+            : sequence.parameters.valueAt(0) ?? 0;
+        final int mode = sequence.parameters.length < 2
+            ? 1
+            : sequence.parameters.valueAt(1) ?? 1;
+        if (mode < 1 || mode > 3) {
+          _unsupportedSequenceCount++;
+        } else {
+          screens.setKittyKeyboardFlags(flags, mode);
+        }
+        return true;
+      case (0x3e, 0x75):
+        if (screens == null || sequence.parameters.length > 1) {
+          _unsupportedSequenceCount++;
+          return true;
+        }
+        final int flags = sequence.parameters.length == 0
+            ? 0
+            : sequence.parameters.valueAt(0) ?? 0;
+        screens.pushKittyKeyboardFlags(flags);
+        return true;
+      case (0x3f, 0x75):
+        if (screens == null || sequence.parameters.length != 0) {
+          _unsupportedSequenceCount++;
+        } else {
+          _emitReply(
+            TerminalReplyEncoder.kittyKeyboardFlags(
+              screens.keyboardModes.kittyKeyboardFlags,
+            ),
+          );
+        }
+        return true;
+      case (0x3e, 0x6d):
+        if (screens == null || !_setModifyOtherKeys(sequence, screens)) {
+          _unsupportedSequenceCount++;
+        }
+        return true;
+      case (0x3f, 0x6d):
+        if (screens == null ||
+            sequence.parameters.length != 1 ||
+            sequence.parameters.valueAt(0) != 4) {
+          _unsupportedSequenceCount++;
+        } else {
+          _emitReply(
+            TerminalReplyEncoder.xtermModifyOtherKeys(
+              screens.keyboardModes.modifyOtherKeys,
+            ),
+          );
+        }
+        return true;
+      default:
+        throw StateError('unreachable keyboard selector');
+    }
+  }
+
+  static bool _setModifyOtherKeys(
+    VtSequenceHeader sequence,
+    TerminalScreenSet screens,
+  ) {
+    if (sequence.parameters.length == 0) {
+      screens.setModifyOtherKeys(0);
+      return true;
+    }
+    if (sequence.parameters.valueAt(0) != 4 || sequence.parameters.length > 2) {
+      return false;
+    }
+    final int value = sequence.parameters.length == 1
+        ? 0
+        : sequence.parameters.valueAt(1) ?? 0;
+    if (value < 0 || value > 3) return false;
+    screens.setModifyOtherKeys(value);
+    return true;
+  }
+
   void _reportXtermVersion(VtSequenceHeader sequence) {
     if (sequence.parameters.length > 1 ||
         (sequence.parameters.length == 1 &&
@@ -833,6 +951,7 @@ final class TerminalScreenParserSink
         1004 => screenSet?.focusReportingMode,
         1049 => screenSet?.mode1049Active,
         2004 => screenSet?.bracketedPasteMode,
+        7727 => screenSet?.keyboardModes.applicationEscape,
         _ => screenSet?.mouseModes.decPrivateModeState(mode),
       };
     }
@@ -1606,6 +1725,13 @@ final class TerminalScreenParserSink
             _unsupportedSequenceCount++;
           } else {
             screens.setBracketedPasteMode(enabled);
+          }
+        case 7727:
+          final TerminalScreenSet? screens = screenSet;
+          if (screens == null) {
+            _unsupportedSequenceCount++;
+          } else {
+            screens.setApplicationEscape(enabled);
           }
         default:
           _unsupportedSequenceCount++;

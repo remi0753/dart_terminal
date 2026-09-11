@@ -107,6 +107,10 @@ final class TerminalScreenSet {
   bool _mode1049Active = false;
   bool _applicationCursorKeys = false;
   bool _applicationKeypad = false;
+  bool _applicationEscape = false;
+  int _modifyOtherKeys = 0;
+  final _KittyKeyboardState _primaryKittyKeyboard = _KittyKeyboardState();
+  final _KittyKeyboardState _alternateKittyKeyboard = _KittyKeyboardState();
   bool _bracketedPaste = false;
   bool _focusReporting = false;
   int _focusReportingGeneration = 1;
@@ -132,10 +136,14 @@ final class TerminalScreenSet {
   TerminalKeyboardModes get keyboardModes => TerminalKeyboardModes(
     applicationCursorKeys: _applicationCursorKeys,
     applicationKeypad: _applicationKeypad,
+    applicationEscape: _applicationEscape,
+    modifyOtherKeys: _modifyOtherKeys,
+    kittyKeyboardFlags: _activeKittyKeyboard.flags,
   );
   TerminalMouseModes get mouseModes =>
       TerminalMouseModes(tracking: _mouseTracking, encoding: _mouseEncoding);
   int get transitionGeneration => _transitionGeneration;
+  int get kittyKeyboardStackDepth => _activeKittyKeyboard.depth;
   TerminalViewport get viewport => _viewport;
   ({int width, int height})? get logicalViewportSize {
     final int? width = _logicalViewportWidth;
@@ -257,6 +265,40 @@ final class TerminalScreenSet {
     _transitionGeneration++;
   }
 
+  void setApplicationEscape(bool enabled) {
+    if (_applicationEscape == enabled) {
+      return;
+    }
+    _applicationEscape = enabled;
+    _transitionGeneration++;
+  }
+
+  void setModifyOtherKeys(int value) {
+    RangeError.checkValueInInterval(value, 0, 3, 'value');
+    if (_modifyOtherKeys == value) {
+      return;
+    }
+    _modifyOtherKeys = value;
+    _transitionGeneration++;
+  }
+
+  void setKittyKeyboardFlags(int flags, int mode) {
+    if (_activeKittyKeyboard.setFlags(flags, mode)) {
+      _transitionGeneration++;
+    }
+  }
+
+  void pushKittyKeyboardFlags(int flags) {
+    _activeKittyKeyboard.push(flags);
+    _transitionGeneration++;
+  }
+
+  void popKittyKeyboardFlags(int count) {
+    if (_activeKittyKeyboard.pop(count)) {
+      _transitionGeneration++;
+    }
+  }
+
   void setBracketedPasteMode(bool enabled) {
     if (_bracketedPaste == enabled) {
       return;
@@ -346,6 +388,10 @@ final class TerminalScreenSet {
     _mode1049Active = false;
     _applicationCursorKeys = false;
     _applicationKeypad = false;
+    _applicationEscape = false;
+    _modifyOtherKeys = 0;
+    _primaryKittyKeyboard.reset();
+    _alternateKittyKeyboard.reset();
     _bracketedPaste = false;
     if (_focusReporting) {
       _focusReporting = false;
@@ -371,5 +417,68 @@ final class TerminalScreenSet {
     activeScreen.synchronizeVisualBellGeneration(visualBellGeneration);
     activeScreen.requestFullSnapshot();
     return true;
+  }
+
+  _KittyKeyboardState get _activeKittyKeyboard => switch (_activeKind) {
+    TerminalScreenKind.primary => _primaryKittyKeyboard,
+    TerminalScreenKind.alternate => _alternateKittyKeyboard,
+  };
+}
+
+final class _KittyKeyboardState {
+  static const int maximumStackDepth = 16;
+
+  final Uint8List _stack = Uint8List(maximumStackDepth);
+  int flags = 0;
+  int depth = 0;
+
+  bool setFlags(int requestedFlags, int mode) {
+    final int known = requestedFlags & TerminalKeyboardModes.kittyKnownFlags;
+    final int next = switch (mode) {
+      1 => known,
+      2 => flags | known,
+      3 => flags & ~known,
+      _ => throw ArgumentError.value(mode, 'mode', 'must be 1, 2, or 3'),
+    };
+    if (next == flags) return false;
+    flags = next;
+    return true;
+  }
+
+  void push(int requestedFlags) {
+    if (depth == maximumStackDepth) {
+      for (int index = 1; index < maximumStackDepth; index++) {
+        _stack[index - 1] = _stack[index];
+      }
+      depth--;
+    }
+    _stack[depth++] = flags;
+    flags = requestedFlags & TerminalKeyboardModes.kittyKnownFlags;
+  }
+
+  bool pop(int count) {
+    if (count <= 0) {
+      throw ArgumentError.value(count, 'count', 'must be positive');
+    }
+    if (depth == 0) {
+      if (flags == 0) return false;
+      flags = 0;
+      return true;
+    }
+    if (count >= depth) {
+      final int next = count == depth ? _stack[0] : 0;
+      final bool changed = flags != next || depth != 0;
+      flags = next;
+      depth = 0;
+      return changed;
+    }
+    depth -= count;
+    flags = _stack[depth];
+    return true;
+  }
+
+  void reset() {
+    flags = 0;
+    depth = 0;
   }
 }

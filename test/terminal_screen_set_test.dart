@@ -13,8 +13,41 @@ void runTerminalScreenSetTests() {
   _testMode1048SaveAndRestore();
   _testMode1049ClearSaveRestoreAndIdempotence();
   _testScreenSetReset();
+  _testKeyboardModesAcrossScreensAndReset();
   _testParserScreenModeDispatch();
   _testParserScreenSetChunkIndependence();
+}
+
+void _testKeyboardModesAcrossScreensAndReset() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 1);
+  screens
+    ..setApplicationEscape(true)
+    ..setModifyOtherKeys(2)
+    ..pushKittyKeyboardFlags(3)
+    ..setAlternateMode47(true)
+    ..pushKittyKeyboardFlags(8);
+  _expect(
+    screens.keyboardModes ==
+            const TerminalKeyboardModes(
+              applicationEscape: true,
+              modifyOtherKeys: 2,
+              kittyKeyboardFlags: 8,
+            ) &&
+        screens.kittyKeyboardStackDepth == 1,
+    'alternate screen owns an independent Kitty keyboard stack',
+  );
+  screens.setAlternateMode47(false);
+  _expect(
+    screens.keyboardModes.kittyKeyboardFlags == 3 &&
+        screens.kittyKeyboardStackDepth == 1,
+    'primary Kitty keyboard state survives an alternate-screen round trip',
+  );
+  screens.reset();
+  _expect(
+    screens.keyboardModes == const TerminalKeyboardModes() &&
+        screens.kittyKeyboardStackDepth == 0,
+    'RIS resets global and per-screen keyboard protocol state',
+  );
 }
 
 void _testCharacterSetIsolationAcrossScreenSwitches() {

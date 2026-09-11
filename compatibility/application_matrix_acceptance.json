@@ -4,19 +4,19 @@
   "evidence_index_path": "compatibility/application_matrix_evidence.json",
   "evidence_index_sha256": "b2422e4a6a3c6073306f2c615ec9b85d49621440f06998c3435871949caa554e",
   "implementation_manifest_path": "compatibility/implemented_sequence_manifest.json",
-  "implementation_manifest_sha256": "185385eef59435b5e643745645fabe92c4fcaad2fc211205f875e34d3ed18d8f",
+  "implementation_manifest_sha256": "69392b881d60384c5967c97218b29d9c36c5b36edae28d2d72e036f8447b201e",
   "trace_tool_path": "tool/terminal_application_unsupported_trace.dart",
   "trace_tool_sha256": "ad3e13c69703151b26b4a2728a04f93ab7f2a46ebad3e917b4d574cb642ee5bc",
   "status": "accepted-with-owned-gaps",
   "totals": {
     "cells": 8,
-    "clean_agreements": 3,
-    "documented_gap_cells": 5,
-    "unique_sequences": 12,
-    "unsupported_increments": 71,
-    "gaps": 8,
+    "clean_agreements": 4,
+    "documented_gap_cells": 4,
+    "unique_sequences": 6,
+    "unsupported_increments": 63,
+    "gaps": 4,
     "safe_ignore_gaps": 0,
-    "explicit_unsupported_gaps": 8
+    "explicit_unsupported_gaps": 4
   },
   "cells": [
     {
@@ -45,11 +45,9 @@
       "classification": "documented-gap",
       "accepted": true,
       "captured_unsupported_sequences": 42,
-      "replayed_unsupported_sequences": 30,
+      "replayed_unsupported_sequences": 28,
       "gap_ids": [
-        "kitty-keyboard-query",
-        "synchronized-output",
-        "xtqmodkeys"
+        "synchronized-output"
       ]
     },
     {
@@ -75,14 +73,11 @@
     {
       "application_id": "neovim",
       "scenario_id": "neovim-editing-ui",
-      "classification": "documented-gap",
+      "classification": "clean-agreement",
       "accepted": true,
       "captured_unsupported_sequences": 124,
-      "replayed_unsupported_sequences": 3,
-      "gap_ids": [
-        "kitty-keyboard-query",
-        "xtmodkeys"
-      ]
+      "replayed_unsupported_sequences": 0,
+      "gap_ids": []
     },
     {
       "application_id": "ssh",
@@ -99,29 +94,14 @@
       "classification": "documented-gap",
       "accepted": true,
       "captured_unsupported_sequences": 25,
-      "replayed_unsupported_sequences": 6,
+      "replayed_unsupported_sequences": 3,
       "gap_ids": [
-        "application-escape-mode",
         "theme-report",
         "theme-updates"
       ]
     }
   ],
   "gaps": [
-    {
-      "id": "application-escape-mode",
-      "disposition": "explicit-unsupported",
-      "impact": "input-semantics",
-      "inventory_ids": [],
-      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
-      "minimal_hex": "1b5b3f3737323768",
-      "variants": [
-        "1b5b3f3737323768",
-        "1b5b3f373732376c"
-      ],
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
     {
       "id": "hilite-mouse",
       "disposition": "explicit-unsupported",
@@ -133,19 +113,6 @@
       "minimal_hex": "1b5b3f313030316c",
       "variants": [
         "1b5b3f313030316c"
-      ],
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
-      "id": "kitty-keyboard-query",
-      "disposition": "explicit-unsupported",
-      "impact": "input-protocol",
-      "inventory_ids": [],
-      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
-      "minimal_hex": "1b5b3f75",
-      "variants": [
-        "1b5b3f75"
       ],
       "screen_mutation": false,
       "matrix_blocker": false
@@ -187,37 +154,6 @@
       "variants": [
         "1b5b3f3230333168",
         "1b5b3f323033316c"
-      ],
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
-      "id": "xtmodkeys",
-      "disposition": "explicit-unsupported",
-      "impact": "input-protocol",
-      "inventory_ids": [
-        "xterm:csi:xtmodkeys"
-      ],
-      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
-      "minimal_hex": "1b5b3e343b306d",
-      "variants": [
-        "1b5b3e343b306d",
-        "1b5b3e343b326d"
-      ],
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
-      "id": "xtqmodkeys",
-      "disposition": "explicit-unsupported",
-      "impact": "query-fallback",
-      "inventory_ids": [
-        "xterm:csi:xtqmodkeys"
-      ],
-      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
-      "minimal_hex": "1b5b3f346d",
-      "variants": [
-        "1b5b3f346d"
       ],
       "screen_mutation": false,
       "matrix_blocker": false

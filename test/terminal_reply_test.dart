@@ -8,6 +8,8 @@ void main() => runTerminalReplyTests();
 void runTerminalReplyTests() {
   _testBoundedSemanticEncoder();
   _testDeviceStatusAndModeQueries();
+  _testKeyboardProtocolControlsAndReports();
+  _testKeyboardProtocolChunkIndependence();
   _testXtermVersionAndWindowSizeReports();
   _testOriginRelativeCursorReports();
   _testOscColorQueriesAndTerminators();
@@ -15,6 +17,110 @@ void runTerminalReplyTests() {
   _testDecrqssSgrStateAndBounds();
   _testReplyRejectionAndMalformedRecovery();
   _testQueryChunkIndependence();
+}
+
+void _testKeyboardProtocolControlsAndReports() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 2, columns: 2);
+  final List<Uint8List> replies = <Uint8List>[];
+  final TerminalScreenParserSink sink = TerminalScreenParserSink.forScreenSet(
+    screens,
+    onReply: (Uint8List reply) {
+      replies.add(Uint8List.fromList(reply));
+      return true;
+    },
+  );
+  final VtParser parser = VtParser(sink: sink);
+
+  parser.parse(
+    _bytes(
+      '\x1b[?u'
+      '\x1b[>1u\x1b[=2;2u\x1b[?u'
+      '\x1b[?47h\x1b[>8u\x1b[?u'
+      '\x1b[?47l\x1b[?u\x1b[<u\x1b[?u'
+      '\x1b[>4;2m\x1b[?4m\x1b[>4m\x1b[?4m'
+      '\x1b[?7727\x24p\x1b[?7727h\x1b[?7727\x24p\x1b[?7727l',
+    ),
+  );
+  _expectStrings(replies, const <String>[
+    '\x1b[?0u',
+    '\x1b[?3u',
+    '\x1b[?8u',
+    '\x1b[?3u',
+    '\x1b[?0u',
+    '\x1b[>4;2m',
+    '\x1b[>4;0m',
+    '\x1b[?7727;2\x24y',
+    '\x1b[?7727;1\x24y',
+  ], 'Kitty, XTMODKEYS, and application-Escape reports reflect state');
+  _expect(
+    screens.keyboardModes == const TerminalKeyboardModes() &&
+        sink.unsupportedSequenceCount == 0 &&
+        sink.acceptedReplyCount == replies.length,
+    'keyboard protocol controls restore their default state without gaps',
+  );
+
+  parser.parse(
+    _bytes(
+      '\x1b[=1;4u\x1b[>1;2u\x1b[<0u\x1b[?1u'
+      '\x1b[>5;2m\x1b[?5m\x1b[=1:2u',
+    ),
+  );
+  _expect(
+    sink.unsupportedSequenceCount == 7 &&
+        screens.keyboardModes == const TerminalKeyboardModes(),
+    'malformed keyboard controls fail closed without changing state',
+  );
+
+  for (int index = 0; index < 20; index++) {
+    screens.pushKittyKeyboardFlags(index);
+  }
+  _expect(
+    screens.kittyKeyboardStackDepth == 16,
+    'Kitty keyboard stack evicts the oldest entry at its fixed bound',
+  );
+  screens.popKittyKeyboardFlags(17);
+  _expect(
+    screens.kittyKeyboardStackDepth == 0 &&
+        screens.keyboardModes.kittyKeyboardFlags == 0,
+    'over-popping a bounded Kitty stack resets its flags',
+  );
+}
+
+void _testKeyboardProtocolChunkIndependence() {
+  final Uint8List input = _bytes(
+    '\x1b[>1u\x1b[=2;2u\x1b[?u\x1b[<u'
+    '\x1b[>4;2m\x1b[?4m\x1b[?7727h\x1b[?7727\x24p',
+  );
+  for (int split = 0; split <= input.length; split++) {
+    final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 1);
+    final List<String> replies = <String>[];
+    final TerminalScreenParserSink sink = TerminalScreenParserSink.forScreenSet(
+      screens,
+      onReply: (Uint8List reply) {
+        replies.add(ascii.decode(reply));
+        return true;
+      },
+    );
+    final VtParser parser = VtParser(sink: sink);
+    parser
+      ..parse(Uint8List.sublistView(input, 0, split))
+      ..parse(Uint8List.sublistView(input, split))
+      ..finish();
+    _expect(
+      sink.unsupportedSequenceCount == 0 &&
+          screens.keyboardModes ==
+              const TerminalKeyboardModes(
+                applicationEscape: true,
+                modifyOtherKeys: 2,
+              ) &&
+          _listsEqual(replies, const <String>[
+            '\x1b[?3u',
+            '\x1b[>4;2m',
+            '\x1b[?7727;1\x24y',
+          ]),
+      'keyboard protocol controls are chunk-independent at split $split',
+    );
+  }
 }
 
 void _testBoundedSemanticEncoder() {
@@ -128,6 +234,16 @@ void _testBoundedSemanticEncoder() {
     ),
     RangeError,
     'oversized mode',
+  );
+  _expectThrows(
+    () => TerminalReplyEncoder.kittyKeyboardFlags(32),
+    RangeError,
+    'oversized Kitty keyboard flags',
+  );
+  _expectThrows(
+    () => TerminalReplyEncoder.xtermModifyOtherKeys(4),
+    RangeError,
+    'oversized modifyOtherKeys value',
   );
   _expectThrows(
     () => TerminalReplyEncoder.textAreaSizePixels(height: 0, width: 1),

@@ -233,15 +233,16 @@ tool-only `VtParserSink` delegate records an action only when the product sink's
 unsupported counter increases, then reconstructs the equivalent 7-bit bytes
 from the typed parser action. The capture-time surface accounted for all 526
 unsupported increments as 28 unique observed variants; the completed
-focus/mouse/query closure replay accounts for 71 increments as 12 variants. It does not infer
-bytes from documentation or scan arbitrary escape-looking text inside
-printable payloads.
+focus/mouse/query closure replay accounted for 71 increments as 12 variants.
+The Phase 9 keyboard-control closure now accounts for 63 increments as 6
+variants. It does not infer bytes from documentation or scan arbitrary
+escape-looking text inside printable payloads.
 
 `compatibility/application_matrix_acceptance.json` groups those variants into
-8 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
+4 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
 present in evidence. Replaying each minimal sequence produces exactly one
 bounded reject, no cancel/limit/malformed/incomplete result, and no standalone
-screen-state mutation. All 8 remain explicit unsupported rather than being
+screen-state mutation. All 4 remain explicit unsupported rather than being
 silently normalized into success; DECRQSS SGR is now a supported partial DCS
 selector and no longer appears as a matrix gap.
 
@@ -251,7 +252,7 @@ selector and no longer appears as a matrix gap.
 | SGR pixel mouse | lazygit | mode 1016、native physical-pixel geometry、wheel、Shift-local routing、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
 | highlight mouse | mosh | captureはmode 1001 resetのみ。stateful enable/handshakeを実装せず明示的非対応 | evidence-driven future decision |
 | XTVERSION and window-size report | Emacs, lazygit, tmux | fixed identity、logical text-area pixels、rows/columns、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
-| Kitty query, XTMODKEYS, XTQMODKEYS, application escape | lazygit, Neovim, tmux | input protocol; explicit unsupported | Phase 9 Kitty keyboard task |
+| Kitty query, XTMODKEYS, XTQMODKEYS, application escape | lazygit, Neovim, tmux | bounded control state/replies implemented; key-event encoding remains in the active Phase 9 task | Phase 9 Kitty keyboard task |
 | synchronized output | fzf, lazygit | presentation atomicity; explicit unsupported | Phase 9 synchronized-output task |
 | theme report/update | tmux | query/notification fallback; explicit unsupported | Phase 9 light/dark reports task |
 
@@ -291,16 +292,21 @@ current rejects fall from 4 to 3, leaving 78 increments, 16 variants, and 10
 owned gaps; the former safe-ignore gap is closed. The fourth child then adds
 both XTVERSION forms and XTWINOPS reports 14/18. Emacs becomes a clean
 agreement; lazygit falls from 33 to 30 current rejects and tmux from 9 to 6.
-The complete replay now has 71 increments, 12 variants, and 8 owned gaps.
+The complete replay then had 71 increments, 12 variants, and 8 owned gaps. The
+Phase 9 keyboard-control child adds Kitty query/set/push/pop, XTMODKEYS,
+XTQMODKEYS, and application-Escape mode. Their six observed variants disappear
+without rewriting the captures; lazygit falls from 30 to 28 current rejects,
+Neovim from 3 to 0, and tmux from 6 to 3. The current replay has 63 increments,
+6 variants, and 4 owned gaps.
 
-The cell outcome is three clean agreements (Emacs, ncurses, and SSH) and five accepted documented-gap
-cells. “Accepted” means the captured workflow completed, every non-parser
+The cell outcome is four clean agreements (Emacs, ncurses, Neovim, and SSH)
+and four accepted documented-gap cells. “Accepted” means the captured workflow completed, every non-parser
 semantic check passed, all rejected bytes are explicit and owned, and no
 matrix-level crash/corruption/unbounded-resource blocker remains. It does not
 turn any false `parser-clean` check into true. The normal gate reports
-`TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=3
-documented_gap_cells=5 gaps=8 unique_sequences=12
-unsupported_increments=71`.
+`TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=4
+documented_gap_cells=4 gaps=4 unique_sequences=6
+unsupported_increments=63`.
 
 The version-2 acceptance report pins the current product implementation
 manifest. It retains the original capture counters per cell while recording
@@ -309,6 +315,12 @@ immutable PTY bytes rather than by rewriting their provenance.
 
 ## Investigation log
 
+- 2026-09-11: the Phase 9 keyboard-control closure retained the same 57,737
+  immutable PTY bytes and 32 snapshots. Kitty query, XTMODKEYS, XTQMODKEYS,
+  and application-Escape set/reset no longer increment the parser rejection
+  counter. Current replay totals are 63 increments, 6 variants, and 4 owned
+  gaps; Neovim becomes the fourth clean agreement. Canonical key-event output
+  remains required before the enclosing Kitty keyboard task can complete.
 - 2026-09-07: XTVERSION/XTWINOPS closure retained the same 57,737 immutable PTY
   bytes and resize offsets. Emacs 1→0, lazygit 33→30, and tmux 9→6 current
   unsupported counts produce 71 increments, 12 variants, and 8 owned gaps.
@@ -491,14 +503,18 @@ immutable PTY bytes rather than by rewriting their provenance.
   increments, 12 variants, and 8 owned gaps; Emacs, ncurses, and SSH are clean
   agreements and all five remaining gap cells have explicit later owners or a
   reviewed non-adoption decision.
+- Phase 9 keyboard-control replay: passed with 63 current unsupported
+  increments, 6 variants, and 4 owned gaps; Neovim is now clean. The remaining
+  gaps are highlight mouse, synchronized output, theme report, and theme
+  updates.
 - `git diff --check`, staged-scope review, and final worktree review are run
   immediately before the completion commit.
-- Remaining work is not hidden: the 8 gap owners are pinned in the acceptance
+- Remaining work is not hidden: the 4 gap owners are pinned in the acceptance
   report and linked from ROADMAP. Character-set, XTGETTCAP, XTVERSION, and
   window-size gaps are closed; later Phase 9 owners retain input, presentation,
   and theme gaps, while highlight mode has an evidence-backed non-adoption.
-- Phase closure imports the accepted 3 clean/5 documented-gap cells, 8 owned
-  explicit-unsupported gaps, 12 variants, and 71 unsupported increments into
+- Current coverage imports the accepted 4 clean/4 documented-gap cells, 4 owned
+  explicit-unsupported gaps, 6 variants, and 63 unsupported increments into
   the deterministic regression coverage report. Every remaining minimal gap
   has `screen_mutation=false` and `matrix_blocker=false`; none is accepted as a
   silent screen-state change.

@@ -1,7 +1,7 @@
 {
   "format": "dart-terminal-sequence-mode-inventory",
   "version": 1,
-  "inventoryRevision": 2,
+  "inventoryRevision": 3,
   "scope": "complete-baseline",
   "sourcePins": [
     {
@@ -51,6 +51,30 @@
       "documentPath": null,
       "documentSha256": null,
       "retrievedOn": "2026-09-07"
+    },
+    {
+      "id": "kitty-0-48-2-keyboard-protocol",
+      "family": "kitty",
+      "title": "Comprehensive keyboard handling in terminals",
+      "edition": "kitty v0.48.2",
+      "artifactUrl": "https://raw.githubusercontent.com/kovidgoyal/kitty/v0.48.2/docs/keyboard-protocol.rst",
+      "artifactBytes": 36641,
+      "artifactSha256": "cd452d4f1b5070752499233f8d76455c854d0ec5f2318e38309f835baf2410ce",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
+    },
+    {
+      "id": "mintty-ctrlseqs-25c73c7",
+      "family": "mintty",
+      "title": "mintty Control Sequences",
+      "edition": "wiki revision 25c73c77961243934d790e632f1f9decaae82ee8",
+      "artifactUrl": "https://github.com/mintty/mintty/wiki/CtrlSeqs/25c73c77961243934d790e632f1f9decaae82ee8",
+      "artifactBytes": 264856,
+      "artifactSha256": "4144a9212fdc412088d5a094a09d827d729082239c8fbb7ef7b163d13d5d9d0e",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
     },
     {
       "id": "xterm-411",
@@ -3368,6 +3392,135 @@
       "notes": ""
     },
     {
+      "id": "kitty:csi:pop-keyboard-flags",
+      "mnemonic": "KITTY-POP-KEYBOARD-FLAGS",
+      "syntax": "CSI < u",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 60,
+        "intermediates": [],
+        "finalByte": 117
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "kitty-0-48-2-keyboard-protocol",
+          "locator": "keyboard-protocol.rst, Progressive enhancement—pop flags"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "kitty:csi:push-keyboard-flags",
+      "mnemonic": "KITTY-PUSH-KEYBOARD-FLAGS",
+      "syntax": "CSI > u",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 62,
+        "intermediates": [],
+        "finalByte": 117
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "kitty-0-48-2-keyboard-protocol",
+          "locator": "keyboard-protocol.rst, Progressive enhancement—push flags"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "kitty:csi:query-keyboard-flags",
+      "mnemonic": "KITTY-QUERY-KEYBOARD-FLAGS",
+      "syntax": "CSI ? u",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 63,
+        "intermediates": [],
+        "finalByte": 117
+      },
+      "support": "implemented",
+      "disposition": "reply",
+      "sourceRefs": [
+        {
+          "source": "kitty-0-48-2-keyboard-protocol",
+          "locator": "keyboard-protocol.rst, Progressive enhancement—query flags"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "kitty:csi:set-keyboard-flags",
+      "mnemonic": "KITTY-SET-KEYBOARD-FLAGS",
+      "syntax": "CSI = u",
+      "selector": {
+        "kind": "csi",
+        "privateMarker": 61,
+        "intermediates": [],
+        "finalByte": 117
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "kitty-0-48-2-keyboard-protocol",
+          "locator": "keyboard-protocol.rst, Progressive enhancement—set flags"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "mintty:mode:application-escape",
+      "mnemonic": "APPLICATION-ESCAPE",
+      "syntax": "CSI ? 7727 h / CSI ? 7727 l",
+      "selector": {
+        "kind": "mode",
+        "private": true,
+        "number": 7727
+      },
+      "support": "implemented",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "mintty-ctrlseqs-25c73c7",
+          "locator": "CtrlSeqs, Escape keycode—application escape key mode"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
+    },
+    {
       "id": "xterm:c0:enq",
       "mnemonic": "ENQ",
       "syntax": "ENQ (0x05)",
@@ -3608,24 +3761,28 @@
     {
       "id": "xterm:csi:xtmodkeys",
       "mnemonic": "XTMODKEYS",
-      "syntax": "CSI > Pp ; Pv m",
+      "syntax": "CSI > m",
       "selector": {
         "kind": "csi",
         "privateMarker": 62,
         "intermediates": [],
         "finalByte": 109
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "xterm-411",
           "locator": "ctlseqs.ms, XTMODKEYS"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
     },
     {
       "id": "xterm:csi:xtpopcolors",
@@ -3796,24 +3953,28 @@
     {
       "id": "xterm:csi:xtqmodkeys",
       "mnemonic": "XTQMODKEYS",
-      "syntax": "CSI ? Pp m",
+      "syntax": "CSI ? m",
       "selector": {
         "kind": "csi",
         "privateMarker": 63,
         "intermediates": [],
         "finalByte": 109
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "reply",
       "sourceRefs": [
         {
           "source": "xterm-411",
           "locator": "ctlseqs.ms, XTQMODKEYS"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": ""
     },
     {
       "id": "xterm:csi:xtreportcolors",

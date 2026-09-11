@@ -28,24 +28,24 @@ void _testCompletePinnedInventory() {
       inventory.supportCounts;
   _expect(
     inventory.version == 1 &&
-        inventory.inventoryRevision == 2 &&
+        inventory.inventoryRevision == 3 &&
         inventory.scope == 'complete-baseline' &&
-        inventory.sourcePins.length == 5 &&
-        inventory.records.length == 261 &&
+        inventory.sourcePins.length == 7 &&
+        inventory.records.length == 266 &&
         kinds[TerminalCompatibilitySelectorKind.c0] == 10 &&
         kinds[TerminalCompatibilitySelectorKind.c1] == 9 &&
         kinds[TerminalCompatibilitySelectorKind.esc] == 35 &&
-        kinds[TerminalCompatibilitySelectorKind.csi] == 101 &&
+        kinds[TerminalCompatibilitySelectorKind.csi] == 105 &&
         kinds[TerminalCompatibilitySelectorKind.osc] == 15 &&
         kinds[TerminalCompatibilitySelectorKind.dcs] == 8 &&
         kinds[TerminalCompatibilitySelectorKind.sos] == 1 &&
         kinds[TerminalCompatibilitySelectorKind.pm] == 1 &&
         kinds[TerminalCompatibilitySelectorKind.apc] == 1 &&
-        kinds[TerminalCompatibilitySelectorKind.mode] == 80 &&
-        support[TerminalCompatibilitySupport.implemented] == 85 &&
+        kinds[TerminalCompatibilitySelectorKind.mode] == 81 &&
+        support[TerminalCompatibilitySupport.implemented] == 92 &&
         support[TerminalCompatibilitySupport.partial] == 20 &&
         support[TerminalCompatibilitySupport.safeIgnore] == 9 &&
-        support[TerminalCompatibilitySupport.unsupported] == 147,
+        support[TerminalCompatibilitySupport.unsupported] == 145,
     'complete baseline covers every selector kind with exact totals',
   );
   final TerminalCompatibilitySourcePin ecma = inventory.sourcePins.singleWhere(
@@ -66,6 +66,15 @@ void _testCompletePinnedInventory() {
         (TerminalCompatibilitySourcePin pin) =>
             pin.id == 'ghostty-d4d8f62-semantic-prompt',
       );
+  final TerminalCompatibilitySourcePin kitty = inventory.sourcePins.singleWhere(
+    (TerminalCompatibilitySourcePin pin) =>
+        pin.id == 'kitty-0-48-2-keyboard-protocol',
+  );
+  final TerminalCompatibilitySourcePin mintty = inventory.sourcePins
+      .singleWhere(
+        (TerminalCompatibilitySourcePin pin) =>
+            pin.id == 'mintty-ctrlseqs-25c73c7',
+      );
   _expect(
     ecma.artifactBytes == 1607865 &&
         ecma.artifactSha256 ==
@@ -79,14 +88,20 @@ void _testCompletePinnedInventory() {
         iterm.artifactBytes == 31258 &&
         iterm.artifactSha256 ==
             'b297c4fcd7ea35908e145420d743fe98fc0ee5bbb5844ed4a1f35f2d547cac98' &&
+        kitty.artifactBytes == 36641 &&
+        kitty.artifactSha256 ==
+            'cd452d4f1b5070752499233f8d76455c854d0ec5f2318e38309f835baf2410ce' &&
+        mintty.artifactBytes == 264856 &&
+        mintty.artifactSha256 ==
+            '4144a9212fdc412088d5a094a09d827d729082239c8fbb7ef7b163d13d5d9d0e' &&
         xterm.artifactBytes == 1633400 &&
         xterm.documentPath == 'xterm-411/ctlseqs.ms' &&
         xterm.documentSha256 ==
             '69773380309da4c8b5d4ec9646eec703c47bc41db29a8efa5b94c30798c72349' &&
         inventory.machineLine() ==
-            'TERMINAL_COMPATIBILITY_INVENTORY_CHECK version=1 revision=2 '
-                'sources=5 records=261 implemented=85 partial=20 '
-                'safe_ignore=9 unsupported=147',
+            'TERMINAL_COMPATIBILITY_INVENTORY_CHECK version=1 revision=3 '
+                'sources=7 records=266 implemented=92 partial=20 '
+                'safe_ignore=9 unsupported=145',
     'primary source pins and content-free summary remain exact',
   );
   _expectThrows<UnsupportedError>(
@@ -174,7 +189,7 @@ void _testImplementationSurfaceReconciliation() {
   final File manifest = File(defaultTerminalImplementationSurfacePath);
   _expect(
     inventory.reconcileImplementationSurface(manifest) ==
-        'TERMINAL_COMPATIBILITY_RECONCILIATION_PASS implementation=105 '
+        'TERMINAL_COMPATIBILITY_RECONCILIATION_PASS implementation=112 '
             'safe_ignore_families=4',
     'all product declarations and safe-ignore families reconcile exactly',
   );

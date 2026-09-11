@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'terminal_keyboard_modes.dart';
 import 'terminal_style.dart';
 import 'vt_parser.dart';
 
@@ -168,6 +169,31 @@ abstract final class TerminalReplyEncoder {
       ..decimal(status.protocolValue)
       ..byte(0x24)
       ..byte(0x79);
+    return builder.finish();
+  }
+
+  static Uint8List kittyKeyboardFlags(int flags) {
+    RangeError.checkValueInInterval(
+      flags,
+      0,
+      TerminalKeyboardModes.kittyKnownFlags,
+      'flags',
+    );
+    final _TerminalReplyBuilder builder = _TerminalReplyBuilder()
+      ..csi(0x3f)
+      ..decimal(flags)
+      ..byte(0x75);
+    return builder.finish();
+  }
+
+  static Uint8List xtermModifyOtherKeys(int value) {
+    RangeError.checkValueInInterval(value, 0, 3, 'value');
+    final _TerminalReplyBuilder builder = _TerminalReplyBuilder()
+      ..csi(0x3e)
+      ..decimal(4)
+      ..byte(0x3b)
+      ..decimal(value)
+      ..byte(0x6d);
     return builder.finish();
   }
 

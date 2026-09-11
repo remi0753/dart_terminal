@@ -76,11 +76,17 @@ abstract final class TerminalCompatibilitySurface {
     0x75,
     0x012071,
     0x012470,
+    0x3c000075,
+    0x3d000075,
     0x3e000063,
+    0x3e00006d,
     0x3e000071,
+    0x3e000075,
     0x3f000068,
     0x3f00006c,
+    0x3f00006d,
     0x3f00006e,
+    0x3f000075,
     0x3f012470,
   ];
 
@@ -128,6 +134,7 @@ abstract final class TerminalCompatibilitySurface {
     1048,
     1049,
     2004,
+    7727,
   ];
 
   static const bool dcsIsBoundedUnsupported = true;

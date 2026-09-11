@@ -9,19 +9,19 @@
     },
     {
       "path": "compatibility/sequence_mode_inventory.json",
-      "sha256": "2dff14532fb93753fee88778831a80f1759fb09cf9e8ed197a73404995acbac1"
+      "sha256": "8df6df35b71cab7f75c98136b4428ed2f22f1fa323266136790836995e73d550"
     },
     {
       "path": "compatibility/implemented_sequence_manifest.json",
-      "sha256": "185385eef59435b5e643745645fabe92c4fcaad2fc211205f875e34d3ed18d8f"
+      "sha256": "69392b881d60384c5967c97218b29d9c36c5b36edae28d2d72e036f8447b201e"
     },
     {
       "path": "compatibility/application_matrix_acceptance.json",
-      "sha256": "867f44e82399ba03771f71921041a0084f437753d4b8827597956fc6fbff0a14"
+      "sha256": "d139f6d122bc96603504ab307ca05ac14c9d9d473865e9454bd22cde6b364905"
     },
     {
       "path": "compatibility/differential_acceptance_report.json",
-      "sha256": "72892175aab57466caa18a5d8bc27a5cd68ffa02dc1383e5b4120ca502af6ffb"
+      "sha256": "74f3a02816e8a88e20fc2ddb7756cf195bbcb175f04325ca8885e3522775e2ec"
     },
     {
       "path": "test/corpus/parser/sequence_trace_case_v1.json",
@@ -33,11 +33,11 @@
     },
     {
       "path": "README.md",
-      "sha256": "98332720a44429b3e071e730e58169bb57247a0ea34ddae1f9f3d1b2cc6e0377"
+      "sha256": "d150f7e6cdf731ea04fbc63a0a247d37dcb6c581dcc11853ab4f27057d7f9cfb"
     },
     {
       "path": "FEATURE_MATRIX.md",
-      "sha256": "45be17c8d80646f8ee6bae3a8431c8add68cefa911712adfa6f0837cbdb6e120"
+      "sha256": "69051421e45ac28844988501b99be0f9e9d4ed6c4ac0bb34cd6233c226e32069"
     }
   ],
   "fix_families": [
@@ -125,28 +125,10 @@
   ],
   "owned_application_gaps": [
     {
-      "id": "application-escape-mode",
-      "disposition": "explicit-unsupported",
-      "impact": "input-semantics",
-      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
-      "variants": 2,
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
       "id": "hilite-mouse",
       "disposition": "explicit-unsupported",
       "impact": "input-events",
       "owner": "ROADMAP.md#phase-6-focus-mouse-query",
-      "variants": 1,
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
-      "id": "kitty-keyboard-query",
-      "disposition": "explicit-unsupported",
-      "impact": "input-protocol",
-      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
       "variants": 1,
       "screen_mutation": false,
       "matrix_blocker": false
@@ -177,24 +159,6 @@
       "variants": 2,
       "screen_mutation": false,
       "matrix_blocker": false
-    },
-    {
-      "id": "xtmodkeys",
-      "disposition": "explicit-unsupported",
-      "impact": "input-protocol",
-      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
-      "variants": 2,
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
-      "id": "xtqmodkeys",
-      "disposition": "explicit-unsupported",
-      "impact": "query-fallback",
-      "owner": "ROADMAP.md#phase-9-kitty-keyboard-protocol",
-      "variants": 1,
-      "screen_mutation": false,
-      "matrix_blocker": false
     }
   ],
   "acceptance": {
@@ -205,21 +169,21 @@
       "split_runs": 417
     },
     "inventory": {
-      "records": 261,
-      "implemented": 85,
+      "records": 266,
+      "implemented": 92,
       "partial": 20,
       "safe_ignore": 9,
-      "explicit_unsupported": 147,
-      "implementation_selectors": 83,
-      "implementation_modes": 22
+      "explicit_unsupported": 145,
+      "implementation_selectors": 89,
+      "implementation_modes": 23
     },
     "application_matrix": {
       "cells": 8,
-      "clean_agreements": 3,
-      "documented_gap_cells": 5,
-      "gaps": 8,
-      "unique_sequences": 12,
-      "unsupported_increments": 71
+      "clean_agreements": 4,
+      "documented_gap_cells": 4,
+      "gaps": 4,
+      "unique_sequences": 6,
+      "unsupported_increments": 63
     },
     "differential": {
       "accepted": 12,

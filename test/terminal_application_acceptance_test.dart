@@ -19,15 +19,15 @@ void _testReviewedAcceptance() {
       runTerminalApplicationAcceptanceChecks();
   _expect(
     result.acceptedCells == 8 &&
-        result.cleanAgreements == 3 &&
-        result.documentedGapCells == 5 &&
-        result.gaps == 8 &&
-        result.uniqueSequences == 12 &&
-        result.unsupportedIncrements == 71 &&
+        result.cleanAgreements == 4 &&
+        result.documentedGapCells == 4 &&
+        result.gaps == 4 &&
+        result.uniqueSequences == 6 &&
+        result.unsupportedIncrements == 63 &&
         result.machineLine() ==
-            'TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=3 '
-                'documented_gap_cells=5 gaps=8 unique_sequences=12 '
-                'unsupported_increments=71',
+            'TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=4 '
+                'documented_gap_cells=4 gaps=4 unique_sequences=6 '
+                'unsupported_increments=63',
     'reviewed acceptance has exact replay-derived totals',
   );
 }
@@ -49,9 +49,9 @@ void _testFreshnessFailure() {
 
 void _testUnownedSequenceFailure() {
   final Map<String, Object?> report = _report();
-  final Map<String, Object?> gap = _gap(report, 'application-escape-mode');
-  gap['variants'] = <String>['1b5b3f3737323768'];
-  _expectFailure(report, 'tmux-session-resize has unowned sequence');
+  final Map<String, Object?> gap = _gap(report, 'synchronized-output');
+  gap['variants'] = <String>['1b5b3f3230323668'];
+  _expectFailure(report, 'fzf-filter-selection has unowned sequence');
 }
 
 void _testScreenMutationFailure() {

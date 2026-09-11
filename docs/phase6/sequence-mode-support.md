@@ -1,6 +1,6 @@
 # Terminal sequence and mode support baseline
 
-Generated from `compatibility/sequence_mode_inventory.json` revision 2. Do not edit this summary by hand.
+Generated from `compatibility/sequence_mode_inventory.json` revision 3. Do not edit this summary by hand.
 
 ## Reviewed boundary
 
@@ -11,8 +11,9 @@ This is a host-to-terminal compatibility baseline, not a claim to implement ever
 - DEC VT100–VT510 controls relevant to screen/cursor/margin/mode, character-set, rectangle, locator, and status behavior;
 - every DEC-private mode number listed by xterm Patch #411, plus its high-use CSI, DCS, OSC, mouse, title, palette, and clipboard families;
 - iTerm2 OSC 7 current-directory and OSC 8 hyperlink extensions because they are part of the current/later product contract.
+- Kitty keyboard flag controls, xterm modifyOtherKeys controls, and mintty application-Escape mode required by captured applications.
 
-Excluded from this bounded baseline are ECMA transmission controls and paged-media/typesetting functions without modern terminal application meaning; exhaustive ISO-2022 national replacement-set final-byte variants beyond ASCII and DEC line drawing; physical printer/modem parameter variants; Tektronix command details; terminal-to-host keyboard output; and Kitty/Ghostty-only protocols assigned to later roadmap tasks. An exclusion is not silently supported.
+Excluded from this bounded baseline are ECMA transmission controls and paged-media/typesetting functions without modern terminal application meaning; exhaustive ISO-2022 national replacement-set final-byte variants beyond ASCII and DEC line drawing; physical printer/modem parameter variants; Tektronix command details; terminal-to-host keyboard output beyond the declared keyboard modes; Kitty graphics; and other Ghostty-only protocols assigned to later roadmap tasks. An exclusion is not silently supported.
 
 ## Pinned sources
 
@@ -22,6 +23,8 @@ Excluded from this bounded baseline are ECMA transmission controls and paged-med
 | `ecma-48-5e` | `ecma48` | ECMA-48, fifth edition, June 1991 | 1607865 bytes, `9577ad2514c411584b274ef7a4b3238c80aa93defbb349b18b8c78f78873f450` |
 | `ghostty-d4d8f62-semantic-prompt` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 42962 bytes, `04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff` |
 | `iterm2-escape-codes-2026-09-07` | `iterm2` | retrieved 2026-09-07 | 31258 bytes, `b297c4fcd7ea35908e145420d743fe98fc0ee5bbb5844ed4a1f35f2d547cac98` |
+| `kitty-0-48-2-keyboard-protocol` | `kitty` | kitty v0.48.2 | 36641 bytes, `cd452d4f1b5070752499233f8d76455c854d0ec5f2318e38309f835baf2410ce` |
+| `mintty-ctrlseqs-25c73c7` | `mintty` | wiki revision 25c73c77961243934d790e632f1f9decaae82ee8 | 264856 bytes, `4144a9212fdc412088d5a094a09d827d729082239c8fbb7ef7b163d13d5d9d0e` |
 | `xterm-411` | `xterm` | xterm Patch #411, 2026-08-24 | 1633400 bytes, `969be283670deadd66934865c4de6c5ab045e3a3facc2b228decf91a20d8c36c` |
 
 Full URLs, inner-document hashes, and citation rules are in [`specification-source-pins.md`](specification-source-pins.md).
@@ -30,27 +33,27 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 
 | Support classification | Records |
 | --- | ---: |
-| `implemented` | 85 |
+| `implemented` | 92 |
 | `partial` | 20 |
 | `safe-ignore` | 9 |
-| `unsupported` | 147 |
-| **Total** | **261** |
+| `unsupported` | 145 |
+| **Total** | **266** |
 
 | Selector kind | Records |
 | --- | ---: |
 | `c0` | 10 |
 | `c1` | 9 |
 | `esc` | 35 |
-| `csi` | 101 |
+| `csi` | 105 |
 | `osc` | 15 |
 | `dcs` | 8 |
 | `sos` | 1 |
 | `pm` | 1 |
 | `apc` | 1 |
-| `mode` | 80 |
-| **Total** | **261** |
+| `mode` | 81 |
+| **Total** | **266** |
 
-The 85 implemented plus 20 partial records reconcile exactly to all 105 product declarations (83 sequence selectors and 22 modes). The 9 safe-ignore records cover 6 concrete DCS forms and SOS/PM/APC; all 147 remaining records are explicitly unsupported/rejected.
+The 92 implemented plus 20 partial records reconcile exactly to all 112 product declarations (89 sequence selectors and 23 modes). The 9 safe-ignore records cover 6 concrete DCS forms and SOS/PM/APC; all 145 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 

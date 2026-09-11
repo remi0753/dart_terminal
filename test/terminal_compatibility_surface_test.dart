@@ -35,8 +35,8 @@ void _testGeneratedManifestIsDeterministicAndFresh() {
   _expect(
     root['format'] == 'dart-terminal-implementation-surface' &&
         root['version'] == 1 &&
-        selectors.length == 83 &&
-        modes.length == 22 &&
+        selectors.length == 89 &&
+        modes.length == 23 &&
         _listsEqual(ignored, const <String>['dcs', 'sos', 'pm', 'apc']),
     'manifest has the reviewed selector, mode, and policy totals',
   );
@@ -187,6 +187,17 @@ List<int> _csiProbe(int key) {
     parameters = '22;2';
   } else if (privateMarker == 0x3e && count == 0 && finalByte == 0x71) {
     parameters = '0';
+  } else if (privateMarker == 0x3f && count == 0 && finalByte == 0x6d) {
+    parameters = '4';
+  } else if (privateMarker == 0x3e && count == 0 && finalByte == 0x6d) {
+    parameters = '';
+  } else if ((privateMarker == 0x3c ||
+          privateMarker == 0x3d ||
+          privateMarker == 0x3e ||
+          privateMarker == 0x3f) &&
+      count == 0 &&
+      finalByte == 0x75) {
+    parameters = '';
   } else {
     parameters = switch (finalByte) {
       0x63 => '0',

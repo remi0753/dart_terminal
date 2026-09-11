@@ -378,12 +378,30 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
     'Part II chapter 5, DECRQM—Request Mode',
     reply: true,
   ),
+  0x3c000075: _Metadata(
+    'kitty',
+    'pop-keyboard-flags',
+    'KITTY-POP-KEYBOARD-FLAGS',
+    'keyboard-protocol.rst, Progressive enhancement—pop flags',
+  ),
+  0x3d000075: _Metadata(
+    'kitty',
+    'set-keyboard-flags',
+    'KITTY-SET-KEYBOARD-FLAGS',
+    'keyboard-protocol.rst, Progressive enhancement—set flags',
+  ),
   0x3e000063: _Metadata(
     'xterm',
     'secondary-da',
     'SECONDARY-DA',
     'ctlseqs.ms, CSI > Ps c—Secondary Device Attributes',
     reply: true,
+  ),
+  0x3e00006d: _Metadata(
+    'xterm',
+    'xtmodkeys',
+    'XTMODKEYS',
+    'ctlseqs.ms, XTMODKEYS',
   ),
   0x3e000071: _Metadata(
     'xterm',
@@ -392,6 +410,12 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
     'ctlseqs.ms, XTVERSION',
     notes: 'The empty and explicit-zero requests return the fixed bounded DartTerminal(1) protocol identity.',
     reply: true,
+  ),
+  0x3e000075: _Metadata(
+    'kitty',
+    'push-keyboard-flags',
+    'KITTY-PUSH-KEYBOARD-FLAGS',
+    'keyboard-protocol.rst, Progressive enhancement—push flags',
   ),
   0x3f000068: _Metadata(
     'dec',
@@ -409,6 +433,13 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
     support: 'partial',
     notes: 'The selector is implemented for the explicitly inventoried DEC private modes only.',
   ),
+  0x3f00006d: _Metadata(
+    'xterm',
+    'xtqmodkeys',
+    'XTQMODKEYS',
+    'ctlseqs.ms, XTQMODKEYS',
+    reply: true,
+  ),
   0x3f00006e: _Metadata(
     'dec',
     'dec-dsr',
@@ -416,6 +447,13 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
     'Part II chapter 5, DEC DSR—Device Status Report',
     support: 'partial',
     notes: 'DEC cursor-position reporting is implemented; printer, UDK, locator, and integrity reports are not.',
+    reply: true,
+  ),
+  0x3f000075: _Metadata(
+    'kitty',
+    'query-keyboard-flags',
+    'KITTY-QUERY-KEYBOARD-FLAGS',
+    'keyboard-protocol.rst, Progressive enhancement—query flags',
     reply: true,
   ),
   0x3f012470: _Metadata(
@@ -650,6 +688,12 @@ const Map<int, _Metadata> _decModeMetadata = <int, _Metadata>{
     'bracketed-paste',
     'BRACKETED-PASTE',
     'ctlseqs.ms, DEC private mode 2004',
+  ),
+  7727: _Metadata(
+    'mintty',
+    'application-escape',
+    'APPLICATION-ESCAPE',
+    'CtrlSeqs, Escape keycode—application escape key mode',
   ),
 };
 
@@ -1259,34 +1303,6 @@ const List<_Gap> _gaps = <_Gap>[
       'finalByte': 105,
     },
     locator: 'Part II chapter 5, DEC Media Copy',
-  ),
-  _Gap(
-    family: 'xterm',
-    kind: 'csi',
-    name: 'xtmodkeys',
-    mnemonic: 'XTMODKEYS',
-    syntax: 'CSI > Pp ; Pv m',
-    selector: <String, Object?>{
-      'kind': 'csi',
-      'privateMarker': 62,
-      'intermediates': <int>[],
-      'finalByte': 109,
-    },
-    locator: 'ctlseqs.ms, XTMODKEYS',
-  ),
-  _Gap(
-    family: 'xterm',
-    kind: 'csi',
-    name: 'xtqmodkeys',
-    mnemonic: 'XTQMODKEYS',
-    syntax: 'CSI ? Pp m',
-    selector: <String, Object?>{
-      'kind': 'csi',
-      'privateMarker': 63,
-      'intermediates': <int>[],
-      'finalByte': 109,
-    },
-    locator: 'ctlseqs.ms, XTQMODKEYS',
   ),
   _Gap(
     family: 'xterm',
@@ -2094,6 +2110,32 @@ const List<Map<String, Object?>> _sourcePins = <Map<String, Object?>>[
     'retrievedOn': '2026-09-07',
   },
   <String, Object?>{
+    'id': 'kitty-0-48-2-keyboard-protocol',
+    'family': 'kitty',
+    'title': 'Comprehensive keyboard handling in terminals',
+    'edition': 'kitty v0.48.2',
+    'artifactUrl': 'https://raw.githubusercontent.com/kovidgoyal/kitty/v0.48.2/docs/keyboard-protocol.rst',
+    'artifactBytes': 36641,
+    'artifactSha256':
+        'cd452d4f1b5070752499233f8d76455c854d0ec5f2318e38309f835baf2410ce',
+    'documentPath': null,
+    'documentSha256': null,
+    'retrievedOn': '2026-09-11',
+  },
+  <String, Object?>{
+    'id': 'mintty-ctrlseqs-25c73c7',
+    'family': 'mintty',
+    'title': 'mintty Control Sequences',
+    'edition': 'wiki revision 25c73c77961243934d790e632f1f9decaae82ee8',
+    'artifactUrl': 'https://github.com/mintty/mintty/wiki/CtrlSeqs/25c73c77961243934d790e632f1f9decaae82ee8',
+    'artifactBytes': 264856,
+    'artifactSha256':
+        '4144a9212fdc412088d5a094a09d827d729082239c8fbb7ef7b163d13d5d9d0e',
+    'documentPath': null,
+    'documentSha256': null,
+    'retrievedOn': '2026-09-11',
+  },
+  <String, Object?>{
     'id': 'xterm-411',
     'family': 'xterm',
     'title': 'XTerm Control Sequences',
@@ -2175,7 +2217,7 @@ String generateTerminalCompatibilityInventorySource() {
   final Map<String, Object?> root = <String, Object?>{
     'format': 'dart-terminal-sequence-mode-inventory',
     'version': 1,
-    'inventoryRevision': 2,
+    'inventoryRevision': 3,
     'scope': 'complete-baseline',
     'sourcePins': _sourcePins,
     'records': records,
@@ -2375,6 +2417,8 @@ String _sourceId(String family) => switch (family) {
   'ecma48' => 'ecma-48-5e',
   'iterm2' => 'iterm2-escape-codes-2026-09-07',
   'ghostty' => 'ghostty-d4d8f62-semantic-prompt',
+  'kitty' => 'kitty-0-48-2-keyboard-protocol',
+  'mintty' => 'mintty-ctrlseqs-25c73c7',
   'xterm' => 'xterm-411',
   _ => throw StateError('unknown source family $family'),
 };

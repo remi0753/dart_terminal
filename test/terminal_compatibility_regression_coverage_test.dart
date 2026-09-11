@@ -23,7 +23,7 @@ void runTerminalCompatibilityRegressionCoverageTests() {
       report['phase_exit']! as Map<String, Object?>;
   _expect(
     (report['fix_families']! as List<Object?>).length == 9 &&
-        (report['owned_application_gaps']! as List<Object?>).length == 8 &&
+        (report['owned_application_gaps']! as List<Object?>).length == 4 &&
         corpus['cases'] == 9 &&
         corpus['split_runs'] == 417 &&
         phaseExit['known_p0_silent_corruption'] == 0 &&

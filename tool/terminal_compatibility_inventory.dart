@@ -6,7 +6,15 @@ const String defaultTerminalCompatibilityInventoryPath =
 const String defaultTerminalImplementationSurfacePath =
     'compatibility/implemented_sequence_manifest.json';
 
-enum TerminalCompatibilitySourceFamily { dec, ecma48, ghostty, iterm2, xterm }
+enum TerminalCompatibilitySourceFamily {
+  dec,
+  ecma48,
+  ghostty,
+  iterm2,
+  kitty,
+  mintty,
+  xterm,
+}
 
 enum TerminalCompatibilitySelectorKind {
   c0,
@@ -384,7 +392,7 @@ final class TerminalCompatibilityInventory {
     }
     _expect(
       sourceFamilies.length == TerminalCompatibilitySourceFamily.values.length,
-      'source pins must include ecma48, dec, ghostty, iterm2, and xterm',
+      'source pins must include every supported source family',
     );
 
     final Map<String, TerminalCompatibilitySourcePin> pinsById =
@@ -559,7 +567,7 @@ final class TerminalCompatibilityInventory {
     final String id = _boundedText(map['id'], '$context.id', 96);
     _expect(
       RegExp(
-        r'^(dec|ecma48|ghostty|iterm2|xterm):(c0|c1|esc|csi|osc|dcs|sos|pm|apc|mode):[a-z0-9]+(?:-[a-z0-9]+)*$',
+        r'^(dec|ecma48|ghostty|iterm2|kitty|mintty|xterm):(c0|c1|esc|csi|osc|dcs|sos|pm|apc|mode):[a-z0-9]+(?:-[a-z0-9]+)*$',
       ).hasMatch(id),
       '$context.id is invalid',
     );
@@ -907,6 +915,8 @@ final class TerminalCompatibilityInventory {
     'ecma48' => TerminalCompatibilitySourceFamily.ecma48,
     'ghostty' => TerminalCompatibilitySourceFamily.ghostty,
     'iterm2' => TerminalCompatibilitySourceFamily.iterm2,
+    'kitty' => TerminalCompatibilitySourceFamily.kitty,
+    'mintty' => TerminalCompatibilitySourceFamily.mintty,
     'xterm' => TerminalCompatibilitySourceFamily.xterm,
     _ => throw TerminalCompatibilityInventoryException(
       '$context has unknown source family $value',

@@ -66,6 +66,10 @@ String generateTerminalCompatibilitySummary(
       '- iTerm2 OSC 7 current-directory and OSC 8 hyperlink extensions because '
       'they are part of the current/later product contract.',
     )
+    ..writeln(
+      '- Kitty keyboard flag controls, xterm modifyOtherKeys controls, and '
+      'mintty application-Escape mode required by captured applications.',
+    )
     ..writeln()
     ..writeln(
       'Excluded from this bounded baseline are ECMA transmission controls and '
@@ -73,8 +77,9 @@ String generateTerminalCompatibilitySummary(
       'meaning; exhaustive ISO-2022 national replacement-set final-byte '
       'variants beyond ASCII and DEC line drawing; physical printer/modem '
       'parameter variants; Tektronix command details; terminal-to-host keyboard '
-      'output; and Kitty/Ghostty-only protocols assigned to later roadmap '
-      'tasks. An exclusion is not silently supported.',
+      'output beyond the declared keyboard modes; Kitty graphics; and other '
+      'Ghostty-only protocols assigned to later roadmap tasks. An exclusion '
+      'is not silently supported.',
     )
     ..writeln()
     ..writeln('## Pinned sources')

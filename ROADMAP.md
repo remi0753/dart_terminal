@@ -1110,6 +1110,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 - [ ] Kitty keyboard protocol
   （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のinput protocol gapを参照して実施）
+  （分割と完了条件は
+  [`docs/phase9/kitty-keyboard-protocol.md`](docs/phase9/kitty-keyboard-protocol.md)
+  を参照して順に実施する）
+  - [x] protocol state、controls、bounded per-screen stack、reply
+  - [ ] canonical key-event encoding と press/repeat/release routing
+  - [ ] product acceptance、compatibility closure、親項目完了判定
 - [ ] synchronized output/rendering
   （[`docs/phase6/real-application-compatibility-matrix.md`](docs/phase6/real-application-compatibility-matrix.md) のsynchronized-output gapを参照して実施）
 - [ ] light/dark notification と extended reports

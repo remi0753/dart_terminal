@@ -184,13 +184,13 @@ String generateTerminalCompatibilityRegressionCoverage({
       )
       .length;
   _expect(
-    inventory.records.length == 261 &&
-        support[TerminalCompatibilitySupport.implemented] == 85 &&
+    inventory.records.length == 266 &&
+        support[TerminalCompatibilitySupport.implemented] == 92 &&
         support[TerminalCompatibilitySupport.partial] == 20 &&
         support[TerminalCompatibilitySupport.safeIgnore] == 9 &&
-        support[TerminalCompatibilitySupport.unsupported] == 147 &&
+        support[TerminalCompatibilitySupport.unsupported] == 145 &&
         safeIgnore == 9 &&
-        explicitUnsupported == 147,
+        explicitUnsupported == 145,
     'reviewed inventory boundary differs',
   );
   final Map<String, Object?> implementation = _jsonObject(
@@ -206,7 +206,7 @@ String generateTerminalCompatibilityRegressionCoverage({
     'implementation.modes',
   ).length;
   _expect(
-    selectors == 83 && modes == 22,
+    selectors == 89 && modes == 23,
     'reviewed implementation declaration totals differ',
   );
 
@@ -245,12 +245,12 @@ String generateTerminalCompatibilityRegressionCoverage({
   }
   _expect(
     application.acceptedCells == 8 &&
-        application.cleanAgreements == 3 &&
-        application.documentedGapCells == 5 &&
-        application.gaps == 8 &&
-        application.uniqueSequences == 12 &&
-        application.unsupportedIncrements == 71 &&
-        ownedGaps.length == 8,
+        application.cleanAgreements == 4 &&
+        application.documentedGapCells == 4 &&
+        application.gaps == 4 &&
+        application.uniqueSequences == 6 &&
+        application.unsupportedIncrements == 63 &&
+        ownedGaps.length == 4,
     'reviewed application acceptance totals differ',
   );
 
