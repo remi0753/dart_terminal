@@ -1086,6 +1086,9 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] `dart_appkit` の explicit selection reveal API
   - [x] product navigation投影と M1 両runtime受け入れ
+- [x] Settings editor の initial document presentation
+  （[`docs/phase8/settings-editor-initial-document-presentation.md`](docs/phase8/settings-editor-initial-document-presentation.md)
+  を参照して実施する）
 
 終了条件:
 

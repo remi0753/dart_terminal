@@ -185,19 +185,22 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
           disabledSpans.single.kind == TerminalSettingsSyntaxKind.comment &&
           disabledSpans.single.start == disabled.lineStart &&
           disabledSpans.single.end == disabled.lineEnd &&
+          bindings.texts[settingsViewHandle] == settings.state.text &&
+          bindings.textEditorSelectionStarts[settingsViewHandle] ==
+              settings.state.selection.start &&
           normalStyles.isNotEmpty &&
           initialLineHighlight?.location == settings.state.selection.start &&
           initialLineHighlight?.red == terminalSettingsCurrentLineColor.red &&
           initialLineHighlight?.green ==
               terminalSettingsCurrentLineColor.green &&
           initialLineHighlight?.blue == terminalSettingsCurrentLineColor.blue &&
-          bindings.textEditorSelectionRevealCounts[settingsViewHandle] == 1 &&
+          bindings.textEditorSelectionRevealCounts[settingsViewHandle] == 0 &&
           settings.activeStatusView!.text.contains('NORMAL') &&
           settings.activeDetailView!.text.contains('Current value') &&
           !settings.renderedText!.contains('Config Lens') &&
           !settings.renderedText!.contains('SOURCE') &&
           bindings.objects.length == 8,
-      'Settings did not compose and focus the native editor/detail hierarchy',
+      'Settings did not publish the initial document before key input',
     );
 
     final int initialCaret = settings.state.selection.start;

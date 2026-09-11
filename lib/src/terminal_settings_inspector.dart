@@ -799,7 +799,7 @@ final class TerminalSettingsInspectorPresenter {
     }
 
     TextEditorSnapshot snapshot = editorSnapshot ?? editor.snapshot;
-    var selectionPublishedByDart = false;
+    var selectionMovedByDart = false;
     final List<TextEditorStyleRun> styles = _projectStyleRuns(state);
     if (snapshot.text != state.text) {
       editor.setDocument(
@@ -811,14 +811,13 @@ final class TerminalSettingsInspectorPresenter {
       );
       _publishedStyleRuns = styles;
       snapshot = editor.snapshot;
-      selectionPublishedByDart = true;
     } else {
       final TextEditorSelection desiredSelection = _editorSelection(
         state.selection,
       );
       if (!snapshot.hasMarkedText && snapshot.selection != desiredSelection) {
         editor.setSelection(desiredSelection);
-        selectionPublishedByDart = true;
+        selectionMovedByDart = true;
       }
       if (!snapshot.hasMarkedText &&
           !_sameStyleRuns(_publishedStyleRuns, styles)) {
@@ -836,7 +835,7 @@ final class TerminalSettingsInspectorPresenter {
     if (editor.lineHighlight != lineHighlight) {
       editor.setLineHighlight(lineHighlight);
     }
-    if (selectionPublishedByDart && !editable) {
+    if (selectionMovedByDart && !editable) {
       editor.scrollSelectionToVisible();
     }
     window.keyEventRouting = editable

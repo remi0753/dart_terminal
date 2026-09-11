@@ -319,7 +319,8 @@ scrollback、font、padding、window frameは書き換えません。自動file 
 
 Applicationメニューの`Settings…`（Command-,）、command palette、または非予約chordへ設定した
 `application.open-settings` actionから、root設定ファイルを編集するnative modal editorを開けます。
-新規・空・疎なファイルでも全36 optionを同じdocument内へ補完し、右のcontext panelはcaret位置の
+最初のkey入力を待たず、新規・空・疎なファイルでも全36 optionを同じdocument内へ補完して表示し、
+右のcontext panelはcaret位置の
 current/draft value、構文、説明と、保存後に既存terminalへ即時反映されるか新規terminalから使われるかを
 表示します。line/source行や別のvalue入力欄は持たず、panelを閉じても右端の細いrailが残ります。
 コメントアウトされたoptionは行全体をdisabled色で表示し、現在のcaret行はNORMAL、`/`検索、INSERTの
@@ -368,7 +369,8 @@ unbind、Command passthrough、invalid reserved shortcutからの復旧、invali
 `--show-config`、Settingsのnative menu/command palette/shared action、全option document、明示検索、
 同一syntax表示のNORMAL/INSERT、invalid saveの非永続化、valid atomic saveからの1回のreload、
 commented optionの全行disabled表示、modeをまたぐ全幅current-line表示、context diagnostic、
-NORMAL/検索selectionのviewport追従、focus/handle cleanupをDeveloper JITとRelease AOTで確認します。
+key入力前のinitial document表示、NORMAL/検索selectionのviewport追従、focus/handle cleanupを
+Developer JITとRelease AOTで確認します。
 両runtimeのgateは
 次で再実行できます。
 
