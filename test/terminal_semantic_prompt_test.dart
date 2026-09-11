@@ -7,10 +7,75 @@ void main() => runTerminalSemanticPromptTests();
 
 void runTerminalSemanticPromptTests() {
   _testLifecycleProjectsPrivacySafeRowFlags();
+  _testFreshLineAndNewCommandExtensions();
+  _testInputUntilLineEndExtension();
   _testMalformedAndExcludedActionsFailClosed();
   _testWrappingScrollbackAndReflowRetainMarks();
   _testAlternateScreenAndResetOwnership();
   _testChunkAndTerminatorIndependence();
+}
+
+void _testFreshLineAndNewCommandExtensions() {
+  final _Harness harness = _Harness(rows: 4, columns: 8);
+  harness.parse('output');
+  harness.parse(_osc('L'));
+  _expect(
+    harness.screens.primary.cursorRow == 1 &&
+        harness.screens.primary.cursorColumn == 0 &&
+        harness.screens.semanticPrompt.shellState ==
+            TerminalSemanticShellState.unknown,
+    'L moves a non-left-edge cursor to a fresh line without changing state',
+  );
+  harness.parse(_osc('L'));
+  _expect(
+    harness.screens.primary.cursorRow == 1,
+    'L at the left edge is a no-op',
+  );
+  harness.parse('old');
+  harness.parse(_osc('N;aid=ignored;cmdline=not-retained'));
+  harness.parse(r'$ ');
+  _expect(
+    harness.screens.primary.cursorRow == 2 &&
+        harness.screens.primary.cursorColumn == 2 &&
+        harness.screens.semanticPrompt.shellState ==
+            TerminalSemanticShellState.prompt &&
+        harness.screens.primary.rowFlagsAt(2) & TerminalRowFlags.prompt != 0,
+    'N composes fresh-line and prompt start without retaining options',
+  );
+}
+
+void _testInputUntilLineEndExtension() {
+  final _Harness harness = _Harness(rows: 4, columns: 8);
+  harness.parse(_osc('A'));
+  harness.parse(r'$ ');
+  harness.parse(_osc('I;unknown=value'));
+  harness.parse('echo');
+  harness.parse('\r\n');
+  _expect(
+    harness.screens.semanticPrompt.shellState ==
+            TerminalSemanticShellState.commandOutput &&
+        harness.screens.primary.rowFlagsAt(0) & TerminalRowFlags.command != 0,
+    'I marks input and changes to output at the next explicit line feed',
+  );
+  harness.parse('result');
+  _expect(
+    harness.screens.primary.rowFlagsAt(1) & TerminalRowFlags.output != 0,
+    'content after the I line feed is classified as output',
+  );
+
+  final _Harness nel = _Harness(rows: 3, columns: 8);
+  nel.parse(_osc('I'));
+  nel.parse(
+    'input\x1b'
+    'Eoutput',
+  );
+  _expect(
+    nel.screens.semanticPrompt.shellState ==
+            TerminalSemanticShellState.commandOutput &&
+        nel.screens.primary.rowFlagsAt(0) & TerminalRowFlags.command != 0 &&
+        nel.screens.primary.rowFlagsAt(1) & TerminalRowFlags.output != 0,
+    'I also terminates on the supported 7-bit NEL line boundary',
+  );
 }
 
 void _testLifecycleProjectsPrivacySafeRowFlags() {
@@ -64,13 +129,13 @@ void _testMalformedAndExcludedActionsFailClosed() {
   final _Harness harness = _Harness(rows: 2, columns: 8);
   harness.parse(_osc('A'));
   final int generation = harness.screens.semanticPrompt.generation;
-  for (final String payload in <String>['I', 'L', 'N', 'Aextra', 'X', '']) {
+  for (final String payload in <String>['L;option=bad', 'Aextra', 'X', '']) {
     harness.parse(_osc(payload));
   }
   harness.parseBytes(<int>[0x1b, 0x5d, ...ascii.encode('133;A;'), 0x80, 0x07]);
   harness.parse(_osc('A;${List<String>.filled(255, 'x').join()}'));
   _expect(
-    harness.sink.unsupportedSequenceCount == 8 &&
+    harness.sink.unsupportedSequenceCount == 6 &&
         harness.screens.semanticPrompt.shellState ==
             TerminalSemanticShellState.prompt &&
         harness.screens.semanticPrompt.generation == generation,

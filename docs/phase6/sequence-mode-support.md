@@ -1,6 +1,6 @@
 # Terminal sequence and mode support baseline
 
-Generated from `compatibility/sequence_mode_inventory.json` revision 5. Do not edit this summary by hand.
+Generated from `compatibility/sequence_mode_inventory.json` revision 6. Do not edit this summary by hand.
 
 ## Reviewed boundary
 
@@ -32,10 +32,12 @@ Excluded from this bounded baseline are ECMA transmission controls and paged-med
 | `ghostty-d4d8f62-graphics-image` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 62395 bytes, `b8c2071d24ca11fa077b5e3eb6bf09990257424428ce61a3d6c0d12e958d7d84` |
 | `ghostty-d4d8f62-graphics-root` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 1446 bytes, `4a8853a61c8e03b4832802d5f79bd75d8704dd6d7775c88e42ab7b7240bc249d` |
 | `ghostty-d4d8f62-graphics-storage` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 183116 bytes, `a2c29c02531f00b939485a9e45eeb8198d55648f116282c31e37bed84677328d` |
+| `ghostty-d4d8f62-osc9` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 34996 bytes, `bd53e0d4bd049fa00c0177049a0dd9ab33d52959d12d0c1f6321719f878fb6c7` |
 | `ghostty-d4d8f62-renderer-image` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 55221 bytes, `96562bf9b0a6a4fd2104586076768a7d15db34957cffbb0417b78371658fb3ad` |
 | `ghostty-d4d8f62-semantic-prompt` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 42962 bytes, `04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff` |
 | `ghostty-d4d8f62-size-report` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 4250 bytes, `806a5932dd0f6c877902e884b72cc171e27d6d3d1991e97d3dd28217ad61f3ae` |
 | `iterm2-escape-codes-2026-09-07` | `iterm2` | retrieved 2026-09-07 | 31258 bytes, `b297c4fcd7ea35908e145420d743fe98fc0ee5bbb5844ed4a1f35f2d547cac98` |
+| `kitty-0-48-2-desktop-notifications` | `kitty` | kitty v0.48.2 | 26196 bytes, `57188360fc9466f4e2324457ca38f7d25de5383eeedd6b982bbea8af9fc60b51` |
 | `kitty-0-48-2-graphics-protocol` | `kitty` | kitty v0.48.2 | 59715 bytes, `f575c1644fd4242a10e8c0d4d784f8cc8d8445f1bad3f3a87e6c3f51ad56e364` |
 | `kitty-0-48-2-keyboard-protocol` | `kitty` | kitty v0.48.2 | 36641 bytes, `cd452d4f1b5070752499233f8d76455c854d0ec5f2318e38309f835baf2410ce` |
 | `mintty-ctrlseqs-25c73c7` | `mintty` | wiki revision 25c73c77961243934d790e632f1f9decaae82ee8 | 264856 bytes, `4144a9212fdc412088d5a094a09d827d729082239c8fbb7ef7b163d13d5d9d0e` |
@@ -48,10 +50,10 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | Support classification | Records |
 | --- | ---: |
 | `implemented` | 96 |
-| `partial` | 21 |
+| `partial` | 23 |
 | `safe-ignore` | 8 |
 | `unsupported` | 145 |
-| **Total** | **270** |
+| **Total** | **272** |
 
 | Selector kind | Records |
 | --- | ---: |
@@ -59,15 +61,15 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `c1` | 9 |
 | `esc` | 35 |
 | `csi` | 105 |
-| `osc` | 15 |
+| `osc` | 17 |
 | `dcs` | 8 |
 | `sos` | 1 |
 | `pm` | 1 |
 | `apc` | 1 |
 | `mode` | 85 |
-| **Total** | **270** |
+| **Total** | **272** |
 
-The 96 implemented plus 21 partial records reconcile exactly to all 117 product declarations (90 sequence selectors and 27 modes). The 8 safe-ignore records cover 6 concrete DCS forms and SOS/PM; all 145 remaining records are explicitly unsupported/rejected.
+The 96 implemented plus 23 partial records reconcile exactly to all 119 product declarations (92 sequence selectors and 27 modes). The 8 safe-ignore records cover 6 concrete DCS forms and SOS/PM; all 145 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 
@@ -85,7 +87,9 @@ The 96 implemented plus 21 partial records reconcile exactly to all 117 product 
 | `ecma48:csi:rm` | `CSI l` | The selector is implemented for the explicitly inventoried ANSI modes only. |
 | `ecma48:csi:sgr` | `CSI m` | Text attributes and ANSI/256/direct colors are implemented; the full ECMA/xterm rendition repertoire is not. |
 | `ecma48:csi:sm` | `CSI h` | The selector is implemented for the explicitly inventoried ANSI modes only. |
-| `ghostty:osc:osc-133` | `OSC 133 ; Ps [; Pt] ST` | The bounded A/B/C/D/P lifecycle subset projects privacy-safe shell state and row flags; options are validated but never decoded or retained, and I/L/N extensions remain rejected. |
+| `ghostty:osc:osc-133` | `OSC 133 ; Ps [; Pt] ST` | The bounded A/B/C/D/I/L/N/P lifecycle projects privacy-safe shell state and row flags; I is line-feed scoped, L/N follow fresh-line semantics, and options are validated but never decoded or retained. |
+| `ghostty:osc:osc-9` | `OSC 9 ; Pt ST / OSC 9 ; 4 ; Ps [; Pp] ST` | Bounded plain-text legacy notifications and ConEmu 9;4 remove/set/error/indeterminate/pause state are implemented. Other ConEmu OSC 9 commands remain rejected, and malformed reserved 9;4 forms never fall back to a notification. |
+| `kitty:osc:osc-99` | `OSC 99 ; metadata ; payload ST` | Plain safe UTF-8 title/body payloads, bounded identifiers, and bounded i/d chunk concatenation are implemented. Base64, icons, buttons, sounds, actions, close/alive/query, occasion, urgency, and expiry controls remain rejected. |
 | `xterm:csi:ed` | `CSI J` | ECMA/VT modes 0–2 are implemented; xterm saved-lines mode 3 is not. |
 | `xterm:csi:xtwinops` | `CSI t` | Text-area reports 14/16/18, mode-2048 in-band response 48, and bounded title save/restore operations 22/23 with selectors 0–2 and stack access 0 are implemented; other window operations and direct stack slots remain explicit unsupported. |
 | `xterm:dcs:xtgettcap` | `DCS + q Pt ST` | Bounded requests receive an explicit unavailable reply. The audited database intentionally omits security-sensitive Ms/OSC 52 and no dynamic keyboard-capability service is advertised. |

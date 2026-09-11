@@ -1,7 +1,7 @@
 {
   "format": "dart-terminal-sequence-mode-inventory",
   "version": 1,
-  "inventoryRevision": 5,
+  "inventoryRevision": 6,
   "scope": "complete-baseline",
   "sourcePins": [
     {
@@ -149,6 +149,18 @@
       "retrievedOn": "2026-09-11"
     },
     {
+      "id": "ghostty-d4d8f62-osc9",
+      "family": "ghostty",
+      "title": "Ghostty OSC 9 notification and progress parser",
+      "edition": "commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
+      "artifactUrl": "https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/osc/parsers/osc9.zig",
+      "artifactBytes": 34996,
+      "artifactSha256": "bd53e0d4bd049fa00c0177049a0dd9ab33d52959d12d0c1f6321719f878fb6c7",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
+    },
+    {
       "id": "ghostty-d4d8f62-renderer-image",
       "family": "ghostty",
       "title": "Ghostty renderer image projection",
@@ -195,6 +207,18 @@
       "documentPath": null,
       "documentSha256": null,
       "retrievedOn": "2026-09-07"
+    },
+    {
+      "id": "kitty-0-48-2-desktop-notifications",
+      "family": "kitty",
+      "title": "Desktop notifications",
+      "edition": "kitty v0.48.2",
+      "artifactUrl": "https://raw.githubusercontent.com/kovidgoyal/kitty/v0.48.2/docs/desktop-notifications.rst",
+      "artifactBytes": 26196,
+      "artifactSha256": "57188360fc9466f4e2324457ca38f7d25de5383eeedd6b982bbea8af9fc60b51",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
     },
     {
       "id": "kitty-0-48-2-graphics-protocol",
@@ -3638,7 +3662,35 @@
       "testEvidence": [
         "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
-      "notes": "The bounded A/B/C/D/P lifecycle subset projects privacy-safe shell state and row flags; options are validated but never decoded or retained, and I/L/N extensions remain rejected."
+      "notes": "The bounded A/B/C/D/I/L/N/P lifecycle projects privacy-safe shell state and row flags; I is line-feed scoped, L/N follow fresh-line semantics, and options are validated but never decoded or retained."
+    },
+    {
+      "id": "ghostty:osc:osc-9",
+      "mnemonic": "OSC-9",
+      "syntax": "OSC 9 ; Pt ST / OSC 9 ; 4 ; Ps [; Pp] ST",
+      "selector": {
+        "kind": "osc",
+        "command": 9
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "ghostty-d4d8f62-osc9",
+          "locator": "osc9.zig, legacy notification and OSC 9;4 progress parser"
+        },
+        {
+          "source": "iterm2-escape-codes-2026-09-07",
+          "locator": "Post a notification (OSC 9)"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Bounded plain-text legacy notifications and ConEmu 9;4 remove/set/error/indeterminate/pause state are implemented. Other ConEmu OSC 9 commands remain rejected, and malformed reserved 9;4 forms never fall back to a notification."
     },
     {
       "id": "iterm2:osc:osc-7",
@@ -3791,6 +3843,30 @@
         "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
       "notes": ""
+    },
+    {
+      "id": "kitty:osc:osc-99",
+      "mnemonic": "OSC-99",
+      "syntax": "OSC 99 ; metadata ; payload ST",
+      "selector": {
+        "kind": "osc",
+        "command": 99
+      },
+      "support": "partial",
+      "disposition": "execute",
+      "sourceRefs": [
+        {
+          "source": "kitty-0-48-2-desktop-notifications",
+          "locator": "desktop-notifications.rst, OSC 99 metadata and payload protocol"
+        }
+      ],
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Plain safe UTF-8 title/body payloads, bounded identifiers, and bounded i/d chunk concatenation are implemented. Base64, icons, buttons, sounds, actions, close/alive/query, occasion, urgency, and expiry controls remain rejected."
     },
     {
       "id": "mintty:mode:application-escape",

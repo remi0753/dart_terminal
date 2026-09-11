@@ -23,6 +23,14 @@ export 'src/terminal_config_reload.dart';
 export 'src/terminal_configuration_reference.dart';
 export 'src/terminal_core/streaming_utf8_decoder.dart'
     show StreamingUtf8Decoder, Utf8ScalarSink;
+export 'src/terminal_core/terminal_desktop_signals.dart'
+    show
+        TerminalDesktopNotificationModel,
+        TerminalDesktopNotificationProtocol,
+        TerminalDesktopNotificationRequest,
+        TerminalProgressModel,
+        TerminalProgressState,
+        TerminalProgressUpdate;
 export 'src/terminal_core/terminal_hyperlink.dart'
     show
         TerminalHyperlinkDefinition,

@@ -523,6 +523,25 @@ const Map<int, _Metadata> _oscMetadata = <int, _Metadata>{
     notes: 'Strict bounded file-URI session metadata is implemented without process cwd or filesystem mutation.',
   ),
   8: _Metadata('iterm2', 'osc-8', 'OSC-8', 'Anchor (OSC 8)'),
+  9: _Metadata(
+    'ghostty',
+    'osc-9',
+    'OSC-9',
+    'osc9.zig, legacy notification and OSC 9;4 progress parser',
+    support: 'partial',
+    notes:
+        'Bounded plain-text legacy notifications and ConEmu 9;4 '
+        'remove/set/error/indeterminate/pause state are implemented. Other '
+        'ConEmu OSC 9 commands remain rejected, and malformed reserved 9;4 '
+        'forms never fall back to a notification.',
+    sourceId: 'ghostty-d4d8f62-osc9',
+    additionalSourceRefs: <_SourceReference>[
+      _SourceReference(
+        'iterm2-escape-codes-2026-09-07',
+        'Post a notification (OSC 9)',
+      ),
+    ],
+  ),
   10: _Metadata(
     'xterm',
     'osc-10',
@@ -557,6 +576,19 @@ const Map<int, _Metadata> _oscMetadata = <int, _Metadata>{
     notes: 'Bounded selector/data parsing is implemented with a deny-by-default policy: queries return empty data and writes/clears have no clipboard authority. Opt-in access remains deferred.',
     reply: true,
   ),
+  99: _Metadata(
+    'kitty',
+    'osc-99',
+    'OSC-99',
+    'desktop-notifications.rst, OSC 99 metadata and payload protocol',
+    support: 'partial',
+    notes:
+        'Plain safe UTF-8 title/body payloads, bounded identifiers, and '
+        'bounded i/d chunk concatenation are implemented. Base64, icons, '
+        'buttons, sounds, actions, close/alive/query, occasion, urgency, and '
+        'expiry controls remain rejected.',
+    sourceId: 'kitty-0-48-2-desktop-notifications',
+  ),
   104: _Metadata(
     'xterm',
     'osc-104',
@@ -587,7 +619,7 @@ const Map<int, _Metadata> _oscMetadata = <int, _Metadata>{
     'OSC-133',
     'semantic_prompt.zig, OSC 133 semantic prompt parser',
     support: 'partial',
-    notes: 'The bounded A/B/C/D/P lifecycle subset projects privacy-safe shell state and row flags; options are validated but never decoded or retained, and I/L/N extensions remain rejected.',
+    notes: 'The bounded A/B/C/D/I/L/N/P lifecycle projects privacy-safe shell state and row flags; I is line-feed scoped, L/N follow fresh-line semantics, and options are validated but never decoded or retained.',
   ),
 };
 
@@ -2287,6 +2319,19 @@ const List<Map<String, Object?>> _sourcePins = <Map<String, Object?>>[
     'retrievedOn': '2026-09-11',
   },
   <String, Object?>{
+    'id': 'ghostty-d4d8f62-osc9',
+    'family': 'ghostty',
+    'title': 'Ghostty OSC 9 notification and progress parser',
+    'edition': 'commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4',
+    'artifactUrl': 'https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/osc/parsers/osc9.zig',
+    'artifactBytes': 34996,
+    'artifactSha256':
+        'bd53e0d4bd049fa00c0177049a0dd9ab33d52959d12d0c1f6321719f878fb6c7',
+    'documentPath': null,
+    'documentSha256': null,
+    'retrievedOn': '2026-09-11',
+  },
+  <String, Object?>{
     'id': 'ghostty-d4d8f62-renderer-image',
     'family': 'ghostty',
     'title': 'Ghostty renderer image projection',
@@ -2337,6 +2382,19 @@ const List<Map<String, Object?>> _sourcePins = <Map<String, Object?>>[
     'documentPath': null,
     'documentSha256': null,
     'retrievedOn': '2026-09-07',
+  },
+  <String, Object?>{
+    'id': 'kitty-0-48-2-desktop-notifications',
+    'family': 'kitty',
+    'title': 'Desktop notifications',
+    'edition': 'kitty v0.48.2',
+    'artifactUrl': 'https://raw.githubusercontent.com/kovidgoyal/kitty/v0.48.2/docs/desktop-notifications.rst',
+    'artifactBytes': 26196,
+    'artifactSha256':
+        '57188360fc9466f4e2324457ca38f7d25de5383eeedd6b982bbea8af9fc60b51',
+    'documentPath': null,
+    'documentSha256': null,
+    'retrievedOn': '2026-09-11',
   },
   <String, Object?>{
     'id': 'kitty-0-48-2-graphics-protocol',
@@ -2463,7 +2521,7 @@ String generateTerminalCompatibilityInventorySource() {
   final Map<String, Object?> root = <String, Object?>{
     'format': 'dart-terminal-sequence-mode-inventory',
     'version': 1,
-    'inventoryRevision': 5,
+    'inventoryRevision': 6,
     'scope': 'complete-baseline',
     'sourcePins': _sourcePins,
     'records': records,
@@ -2527,7 +2585,9 @@ Map<String, Object?> _implementedOsc(int command, _Metadata metadata) =>
       metadata: metadata,
       kind: 'osc',
       syntax: switch (command) {
+        9 => 'OSC 9 ; Pt ST / OSC 9 ; 4 ; Ps [; Pp] ST',
         52 => 'OSC 52 ; Pc ; Pd ST',
+        99 => 'OSC 99 ; metadata ; payload ST',
         133 => 'OSC 133 ; Ps [; Pt] ST',
         _ => 'OSC $command ; Pt ST',
       },

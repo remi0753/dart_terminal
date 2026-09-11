@@ -28,7 +28,14 @@ final class TerminalSessionMetadata {
       List<String?>.unmodifiable(_iconTitleStack);
 
   static bool isSafeTitle(String value) =>
-      _utf8LengthWithin(value, maximumTitleUtf8Bytes) &&
+      isSafeDisplayText(value, maximumUtf8Bytes: maximumTitleUtf8Bytes);
+
+  static bool isSafeDisplayText(
+    String value, {
+    required int maximumUtf8Bytes,
+  }) =>
+      maximumUtf8Bytes >= 0 &&
+      _utf8LengthWithin(value, maximumUtf8Bytes) &&
       !_containsUnsafeDisplayScalar(value);
 
   static bool isSafeWorkingDirectory(Uri value) {

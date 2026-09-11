@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'terminal_desktop_signals.dart';
 import 'terminal_hyperlink.dart';
 import 'terminal_keyboard_modes.dart';
 import 'terminal_kitty_image_store.dart';
@@ -31,6 +32,8 @@ final class TerminalScreenSet {
     TerminalHyperlinkTable? hyperlinkTable,
     TerminalScrollback? scrollback,
     TerminalSessionMetadata? metadata,
+    TerminalDesktopNotificationModel? desktopNotifications,
+    TerminalProgressModel? progress,
     TerminalKittyImageStore? primaryKittyImages,
     TerminalKittyImageStore? alternateKittyImages,
     TerminalCursorShape initialCursorShape = TerminalCursorShape.block,
@@ -76,6 +79,9 @@ final class TerminalScreenSet {
       scrollback: sharedScrollback,
       scrollbackAttachment: scrollbackAttachment,
       metadata: metadata ?? TerminalSessionMetadata(),
+      desktopNotifications:
+          desktopNotifications ?? TerminalDesktopNotificationModel(),
+      progress: progress ?? TerminalProgressModel(),
       semanticPrompt: TerminalSemanticPromptModel(),
       primaryKittyImages: primaryKittyImages ?? TerminalKittyImageStore(),
       alternateKittyImages: alternateKittyImages ?? TerminalKittyImageStore(),
@@ -96,6 +102,8 @@ final class TerminalScreenSet {
     required this.scrollback,
     required TerminalScrollbackAttachment scrollbackAttachment,
     required this.metadata,
+    required this.desktopNotifications,
+    required this.progress,
     required this.semanticPrompt,
     required this.primaryKittyImages,
     required this.alternateKittyImages,
@@ -113,6 +121,8 @@ final class TerminalScreenSet {
   final TerminalHyperlinkTable hyperlinkTable;
   final TerminalScrollback scrollback;
   final TerminalSessionMetadata metadata;
+  final TerminalDesktopNotificationModel desktopNotifications;
+  final TerminalProgressModel progress;
   final TerminalSemanticPromptModel semanticPrompt;
   final TerminalKittyImageStore primaryKittyImages;
   final TerminalKittyImageStore alternateKittyImages;
@@ -528,6 +538,8 @@ final class TerminalScreenSet {
     _mouseTracking = TerminalMouseTrackingMode.none;
     _mouseEncoding = TerminalMouseCoordinateEncoding.legacy;
     metadata.reset();
+    desktopNotifications.reset();
+    progress.reset();
     semanticPrompt.reset();
     primary.synchronizeVisualBellGeneration(visualBellGeneration);
     primary.requestFullSnapshot();

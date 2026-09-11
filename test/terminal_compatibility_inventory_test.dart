@@ -28,22 +28,22 @@ void _testCompletePinnedInventory() {
       inventory.supportCounts;
   _expect(
     inventory.version == 1 &&
-        inventory.inventoryRevision == 5 &&
+        inventory.inventoryRevision == 6 &&
         inventory.scope == 'complete-baseline' &&
-        inventory.sourcePins.length == 20 &&
-        inventory.records.length == 270 &&
+        inventory.sourcePins.length == 22 &&
+        inventory.records.length == 272 &&
         kinds[TerminalCompatibilitySelectorKind.c0] == 10 &&
         kinds[TerminalCompatibilitySelectorKind.c1] == 9 &&
         kinds[TerminalCompatibilitySelectorKind.esc] == 35 &&
         kinds[TerminalCompatibilitySelectorKind.csi] == 105 &&
-        kinds[TerminalCompatibilitySelectorKind.osc] == 15 &&
+        kinds[TerminalCompatibilitySelectorKind.osc] == 17 &&
         kinds[TerminalCompatibilitySelectorKind.dcs] == 8 &&
         kinds[TerminalCompatibilitySelectorKind.sos] == 1 &&
         kinds[TerminalCompatibilitySelectorKind.pm] == 1 &&
         kinds[TerminalCompatibilitySelectorKind.apc] == 1 &&
         kinds[TerminalCompatibilitySelectorKind.mode] == 85 &&
         support[TerminalCompatibilitySupport.implemented] == 96 &&
-        support[TerminalCompatibilitySupport.partial] == 21 &&
+        support[TerminalCompatibilitySupport.partial] == 23 &&
         support[TerminalCompatibilitySupport.safeIgnore] == 8 &&
         support[TerminalCompatibilitySupport.unsupported] == 145,
     'complete baseline covers every selector kind with exact totals',
@@ -86,6 +86,11 @@ void _testCompletePinnedInventory() {
         (TerminalCompatibilitySourcePin pin) =>
             pin.id == 'ghostty-d4d8f62-device-status',
       );
+  final TerminalCompatibilitySourcePin ghosttyOsc9 = inventory.sourcePins
+      .singleWhere(
+        (TerminalCompatibilitySourcePin pin) =>
+            pin.id == 'ghostty-d4d8f62-osc9',
+      );
   final TerminalCompatibilitySourcePin ghosttySize = inventory.sourcePins
       .singleWhere(
         (TerminalCompatibilitySourcePin pin) =>
@@ -99,6 +104,11 @@ void _testCompletePinnedInventory() {
       .singleWhere(
         (TerminalCompatibilitySourcePin pin) =>
             pin.id == 'kitty-0-48-2-graphics-protocol',
+      );
+  final TerminalCompatibilitySourcePin kittyNotifications = inventory.sourcePins
+      .singleWhere(
+        (TerminalCompatibilitySourcePin pin) =>
+            pin.id == 'kitty-0-48-2-desktop-notifications',
       );
   const Map<String, String> graphicsParityPins = <String, String>{
     'ghostty-d4d8f62-graphics-animation':
@@ -149,6 +159,9 @@ void _testCompletePinnedInventory() {
         ghosttyDevice.artifactBytes == 4808 &&
         ghosttyDevice.artifactSha256 ==
             '244a5aa349845a7780dfff4cd2cda2efa574153774d0655727bf4d22d12f579f' &&
+        ghosttyOsc9.artifactBytes == 34996 &&
+        ghosttyOsc9.artifactSha256 ==
+            'bd53e0d4bd049fa00c0177049a0dd9ab33d52959d12d0c1f6321719f878fb6c7' &&
         ghosttySize.artifactBytes == 4250 &&
         ghosttySize.artifactSha256 ==
             '806a5932dd0f6c877902e884b72cc171e27d6d3d1991e97d3dd28217ad61f3ae' &&
@@ -158,6 +171,9 @@ void _testCompletePinnedInventory() {
         kitty.artifactBytes == 36641 &&
         kitty.artifactSha256 ==
             'cd452d4f1b5070752499233f8d76455c854d0ec5f2318e38309f835baf2410ce' &&
+        kittyNotifications.artifactBytes == 26196 &&
+        kittyNotifications.artifactSha256 ==
+            '57188360fc9466f4e2324457ca38f7d25de5383eeedd6b982bbea8af9fc60b51' &&
         kittyGraphics.artifactBytes == 59715 &&
         kittyGraphics.artifactSha256 ==
             'f575c1644fd4242a10e8c0d4d784f8cc8d8445f1bad3f3a87e6c3f51ad56e364' &&
@@ -170,8 +186,8 @@ void _testCompletePinnedInventory() {
         xterm.documentSha256 ==
             '69773380309da4c8b5d4ec9646eec703c47bc41db29a8efa5b94c30798c72349' &&
         inventory.machineLine() ==
-            'TERMINAL_COMPATIBILITY_INVENTORY_CHECK version=1 revision=5 '
-                'sources=20 records=270 implemented=96 partial=21 '
+            'TERMINAL_COMPATIBILITY_INVENTORY_CHECK version=1 revision=6 '
+                'sources=22 records=272 implemented=96 partial=23 '
                 'safe_ignore=8 unsupported=145',
     'primary source pins and content-free summary remain exact',
   );
@@ -260,7 +276,7 @@ void _testImplementationSurfaceReconciliation() {
   final File manifest = File(defaultTerminalImplementationSurfacePath);
   _expect(
     inventory.reconcileImplementationSurface(manifest) ==
-        'TERMINAL_COMPATIBILITY_RECONCILIATION_PASS implementation=117 '
+        'TERMINAL_COMPATIBILITY_RECONCILIATION_PASS implementation=119 '
             'safe_ignore_families=3',
     'all product declarations and safe-ignore families reconcile exactly',
   );

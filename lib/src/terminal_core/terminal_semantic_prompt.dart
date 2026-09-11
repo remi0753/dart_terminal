@@ -3,10 +3,13 @@ import 'vt_parser.dart';
 
 /// Privacy-safe subset of OSC 133 semantic prompt actions.
 enum TerminalSemanticPromptAction {
+  freshLine,
   promptStart,
   inputStart,
+  inputStartUntilLineEnd,
   outputStart,
   commandEnd,
+  newCommand,
   secondaryPrompt,
 }
 
@@ -21,6 +24,7 @@ final class TerminalSemanticPromptModel {
   static const int maximumPayloadBytes = 256;
 
   TerminalSemanticShellState _shellState = TerminalSemanticShellState.unknown;
+  bool _inputEndsAtLineFeed = false;
   int _generation = 1;
 
   TerminalSemanticShellState get shellState => _shellState;
@@ -40,11 +44,15 @@ final class TerminalSemanticPromptModel {
       0x42 => TerminalSemanticPromptAction.inputStart,
       0x43 => TerminalSemanticPromptAction.outputStart,
       0x44 => TerminalSemanticPromptAction.commandEnd,
+      0x49 => TerminalSemanticPromptAction.inputStartUntilLineEnd,
+      0x4c => TerminalSemanticPromptAction.freshLine,
+      0x4e => TerminalSemanticPromptAction.newCommand,
       0x50 => TerminalSemanticPromptAction.secondaryPrompt,
       _ => null,
     };
     if (action == null) return null;
     if (length == 1) return action;
+    if (action == TerminalSemanticPromptAction.freshLine) return null;
     if (sequence.payloadByteAt(start + 1) != 0x3b) return null;
     for (int index = start + 2; index < sequence.payloadLength; index++) {
       final int byte = sequence.payloadByteAt(index);
@@ -54,25 +62,48 @@ final class TerminalSemanticPromptModel {
   }
 
   void apply(TerminalSemanticPromptAction action, TerminalScreen screen) {
+    if (action == TerminalSemanticPromptAction.freshLine) {
+      _moveToFreshLine(screen);
+      return;
+    }
+    if (action == TerminalSemanticPromptAction.promptStart ||
+        action == TerminalSemanticPromptAction.newCommand) {
+      _moveToFreshLine(screen);
+    }
     final TerminalSemanticShellState next = switch (action) {
+      TerminalSemanticPromptAction.freshLine => _shellState,
       TerminalSemanticPromptAction.promptStart ||
+      TerminalSemanticPromptAction.newCommand ||
       TerminalSemanticPromptAction.secondaryPrompt =>
         TerminalSemanticShellState.prompt,
-      TerminalSemanticPromptAction.inputStart =>
+      TerminalSemanticPromptAction.inputStart ||
+      TerminalSemanticPromptAction.inputStartUntilLineEnd =>
         TerminalSemanticShellState.input,
       TerminalSemanticPromptAction.outputStart =>
         TerminalSemanticShellState.commandOutput,
       TerminalSemanticPromptAction.commandEnd =>
         TerminalSemanticShellState.unknown,
     };
-    if (_shellState != next) {
+    final bool nextInputEndsAtLineFeed =
+        action == TerminalSemanticPromptAction.inputStartUntilLineEnd;
+    if (_shellState != next ||
+        _inputEndsAtLineFeed != nextInputEndsAtLineFeed) {
       _shellState = next;
+      _inputEndsAtLineFeed = nextInputEndsAtLineFeed;
       _generation++;
     }
     if (action != TerminalSemanticPromptAction.outputStart &&
         action != TerminalSemanticPromptAction.commandEnd) {
       markCurrentRow(screen);
     }
+  }
+
+  /// Applies the `I` extension's end-of-line transition after LF/VT/FF/NEL.
+  void completeLineFeed() {
+    if (!_inputEndsAtLineFeed) return;
+    _inputEndsAtLineFeed = false;
+    _shellState = TerminalSemanticShellState.commandOutput;
+    _generation++;
   }
 
   /// Adds the active semantic class before content or a hard break is applied.
@@ -89,8 +120,18 @@ final class TerminalSemanticPromptModel {
   }
 
   void reset() {
-    if (_shellState == TerminalSemanticShellState.unknown) return;
+    if (_shellState == TerminalSemanticShellState.unknown &&
+        !_inputEndsAtLineFeed) {
+      return;
+    }
     _shellState = TerminalSemanticShellState.unknown;
+    _inputEndsAtLineFeed = false;
     _generation++;
+  }
+
+  static void _moveToFreshLine(TerminalScreen screen) {
+    final int previousColumn = screen.cursorColumn;
+    screen.carriageReturn();
+    if (screen.cursorColumn != previousColumn) screen.index();
   }
 }

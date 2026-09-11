@@ -36,7 +36,7 @@ void _testGeneratedManifestIsDeterministicAndFresh() {
   _expect(
     root['format'] == 'dart-terminal-implementation-surface' &&
         root['version'] == 1 &&
-        selectors.length == 90 &&
+        selectors.length == 92 &&
         modes.length == 27 &&
         _listsEqual(ignored, const <String>['dcs', 'sos', 'pm']),
     'manifest has the reviewed selector, mode, and policy totals',
@@ -251,10 +251,12 @@ List<int> _oscProbe(int command) {
     4 => '4;1;#010203',
     7 => '7;file:///tmp/project',
     8 => '8;;https://example.invalid/',
+    9 => '9;notification',
     10 => '10;#102030',
     11 => '11;#405060',
     12 => '12;#708090',
     52 => '52;c;?',
+    99 => '99;;notification',
     104 => '104',
     110 => '110',
     111 => '111',

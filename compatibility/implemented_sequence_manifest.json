@@ -610,6 +610,12 @@
       "handler": "execute"
     },
     {
+      "key": "osc:9",
+      "kind": "osc",
+      "command": 9,
+      "handler": "execute"
+    },
+    {
       "key": "osc:10",
       "kind": "osc",
       "command": 10,
@@ -632,6 +638,12 @@
       "kind": "osc",
       "command": 52,
       "handler": "execute-or-reply"
+    },
+    {
+      "key": "osc:99",
+      "kind": "osc",
+      "command": 99,
+      "handler": "execute"
     },
     {
       "key": "osc:104",

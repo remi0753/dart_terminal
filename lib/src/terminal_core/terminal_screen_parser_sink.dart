@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'terminal_compatibility_surface.dart';
+import 'terminal_desktop_signals.dart';
 import 'terminal_kitty_graphics.dart';
 import 'terminal_mouse_modes.dart';
 import 'terminal_reply.dart';
@@ -65,6 +66,8 @@ final class TerminalScreenParserSink
   int _rejectedClipboardRequestCount = 0;
   int _acceptedKittyGraphicsCommandCount = 0;
   int _rejectedKittyGraphicsCommandCount = 0;
+  int _acceptedDesktopNotificationCount = 0;
+  int _acceptedProgressUpdateCount = 0;
   int _currentHyperlinkId = 0;
   final Uint16List _oscPaletteIndices = Uint16List(
     TerminalPalette.maxBatchEntries,
@@ -94,6 +97,8 @@ final class TerminalScreenParserSink
       _acceptedKittyGraphicsCommandCount;
   int get rejectedKittyGraphicsCommandCount =>
       _rejectedKittyGraphicsCommandCount;
+  int get acceptedDesktopNotificationCount => _acceptedDesktopNotificationCount;
+  int get acceptedProgressUpdateCount => _acceptedProgressUpdateCount;
   int get currentHyperlinkId => _currentHyperlinkId;
 
   /// Applies the product's rendered appearance and emits one opted-in report
@@ -166,6 +171,7 @@ final class TerminalScreenParserSink
       case 0x0c:
         screenSet?.semanticPrompt.markCurrentRow(screen);
         screen.lineFeed();
+        screenSet?.semanticPrompt.completeLineFeed();
       case 0x0d:
         screen.carriageReturn();
       case 0x0e:
@@ -175,7 +181,9 @@ final class TerminalScreenParserSink
       case 0x84:
         screen.index();
       case 0x85:
+        screenSet?.semanticPrompt.markCurrentRow(screen);
         screen.nextLine();
+        screenSet?.semanticPrompt.completeLineFeed();
       case 0x88:
         screen.setTabStop(screen.cursorColumn);
       case 0x8d:
@@ -233,7 +241,9 @@ final class TerminalScreenParserSink
       case 0x44:
         screen.index();
       case 0x45:
+        screenSet?.semanticPrompt.markCurrentRow(screen);
         screen.nextLine();
+        screenSet?.semanticPrompt.completeLineFeed();
       case 0x48:
         screen.setTabStop(screen.cursorColumn);
       case 0x4d:
@@ -396,6 +406,8 @@ final class TerminalScreenParserSink
             hasPayload && _applyOscWorkingDirectory(sequence, payloadStart);
       case 8:
         supported = hasPayload && _applyOscHyperlink(sequence, payloadStart);
+      case 9:
+        supported = hasPayload && _applyOsc9(sequence, payloadStart);
       case 10:
         supported =
             hasPayload &&
@@ -414,6 +426,8 @@ final class TerminalScreenParserSink
           payloadStart,
           hasPayload: hasPayload,
         );
+      case 99:
+        supported = hasPayload && _applyOsc99(sequence, payloadStart);
       case 104:
         supported = _applyOscPaletteReset(sequence, payloadStart, hasPayload);
       case 110:
@@ -438,6 +452,41 @@ final class TerminalScreenParserSink
     if (!supported) {
       _unsupportedSequenceCount++;
     }
+  }
+
+  bool _applyOsc9(VtStringSequence sequence, int start) {
+    final TerminalScreenSet? screens = screenSet;
+    if (screens == null) return false;
+    final int length = sequence.payloadLength - start;
+    if (length >= 2 &&
+        sequence.payloadByteAt(start) == 0x34 &&
+        sequence.payloadByteAt(start + 1) == 0x3b) {
+      final TerminalProgressUpdate? update = TerminalProgressModel.parseOsc9(
+        sequence,
+        start,
+      );
+      if (update == null) return false;
+      screens.progress.apply(update);
+      _acceptedProgressUpdateCount++;
+      return true;
+    }
+    final bool accepted = screens.desktopNotifications.applyLegacyOsc9(
+      sequence,
+      start,
+    );
+    if (accepted) _acceptedDesktopNotificationCount++;
+    return accepted;
+  }
+
+  bool _applyOsc99(VtStringSequence sequence, int start) {
+    final TerminalScreenSet? screens = screenSet;
+    if (screens == null) return false;
+    final bool accepted = screens.desktopNotifications.applyKittyOsc99(
+      sequence,
+      start,
+    );
+    if (accepted) _acceptedDesktopNotificationCount++;
+    return accepted;
   }
 
   bool _applyOscSemanticPrompt(VtStringSequence sequence, int start) {
