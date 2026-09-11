@@ -63,6 +63,8 @@ Resolution is bounded to 32 files, include depth 8, 1048576 bytes per file, 1638
 
 File diagnostics retain severity, stable code, path, line, column, and a repair hint when available. Error-bearing startup snapshots recover to the last valid value or schema default. Error-bearing reload candidates are rejected atomically; warning-only candidates are accepted.
 
+A syntactically valid file value that is unavailable to the current application also reports `CFG_UNAVAILABLE_VALUE` and uses that option’s schema default for startup. For example, an unavailable `font-family` starts with `system`. The original file text remains available in Settings for correction. Explicit command-line values are not silently changed.
+
 The compatibility spelling `theme = default` resolves to `system` but emits `CFG_DEPRECATED_VALUE`; replace it with `theme = system`. Canonical effective output always reports `system`.
 
 ## Keybindings and actions

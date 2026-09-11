@@ -12,9 +12,12 @@ enum TerminalThemeBrightness { light, dark }
 /// process-visible macOS resources.
 final class TerminalMacosConfigValueAvailabilityValidator
     implements TerminalConfigValueAvailabilityValidator {
-  const TerminalMacosConfigValueAvailabilityValidator();
+  const TerminalMacosConfigValueAvailabilityValidator({
+    this.fontCatalogInitializer,
+  });
 
   static const int _fontCatalogNotFoundStatus = 3;
+  final void Function()? fontCatalogInitializer;
 
   @override
   TerminalConfigValueAvailabilityIssue? validate(
@@ -24,6 +27,7 @@ final class TerminalMacosConfigValueAvailabilityValidator
     if (!identical(option, TerminalProductConfigSchema.fontFamily)) return null;
     final String family = value as String;
     if (family.isEmpty) return null;
+    fontCatalogInitializer?.call();
     TerminalFontCatalog? catalog;
     try {
       catalog = TerminalFontCatalog.open(family: family);

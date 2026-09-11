@@ -296,6 +296,12 @@ diagnostic code、可能な場合は修正案とともに標準エラーへ表�
 schema defaultへ復旧して起動を続けます。一方、command line自体の不正やintegration専用
 fault optionのgate違反は従来どおりusage errorです。
 
+構文として正しくても現在のアプリケーションから利用できないファイル設定値は、
+`CFG_UNAVAILABLE_VALUE`と修正案を表示し、その項目だけschema defaultへ戻して起動します。
+たとえばmacOSで解決できない`font-family`は`system`として起動し、他の有効な設定は維持します。
+元の記述はSettings editorに残るため、その場でインストール済みfontへ修正できます。
+明示的なcommand line値はこの自動復旧の対象にせず、暗黙に別の値へ変更しません。
+
 Applicationメニューまたはcommand paletteの`Reload Configuration`、あるいは設定した
 `application.reload-configuration` keybindで、起動時と同じfile/include/CLI priorityを再解決
 できます。error diagnosticが1件でもあるreloadは全体を拒否し、現在のeffective configと
@@ -348,7 +354,8 @@ make RUNTIME_ARCH=arm64 runtime-shell-integration
 設定値が実際の通常製品へ反映されることは、実設定ファイルから4 paneを生成し、表示色、
 font、window/padding、cursor、Option入力、scrollback上限、pane/application keybind、
 unbind、Command passthrough、invalid reserved shortcutからの復旧、invalid/corrected reload、
-live/new-session policy、native menu優先、独立resourceに加え、worker/AppKit所有を作らない
+利用不能なfontの`system`復旧と修正前reload/save拒否、live/new-session policy、native menu優先、
+独立resourceに加え、worker/AppKit所有を作らない
 `--show-config`、Settingsのnative menu/command palette/shared action、全option document、明示検索、
 同一syntax表示のNORMAL/INSERT、invalid saveの非永続化、valid atomic saveからの1回のreload、
 context diagnostic、focus/handle cleanupをDeveloper JITとRelease AOTで確認します。

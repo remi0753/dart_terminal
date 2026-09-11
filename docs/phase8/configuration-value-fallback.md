@@ -1,7 +1,8 @@
 # Configuration value availability fallback
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-11 after commit `f5d3b16`
+- Completed: 2026-09-11
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 8 `unavailable file option の default fallback と startup recovery`
 - Feature-matrix owners: CFG-03, CFG-04, and CFG-07
@@ -239,3 +240,67 @@ repair the file.
   no issues, and the aggregate ended with `dart_terminal tests passed`.
 - `git diff --check` passes. No adjacent `dart_appkit` modification is needed
   for this subtask.
+
+### 2026-09-11 — packaged unavailable-font acceptance
+
+- The real configuration fixture now uses the reported
+  `font-family = SF Mono Terminal`, not a synthetic spelling. Packaged
+  `--show-config` proves that only this option becomes `system` with default
+  provenance and `CFG_UNAVAILABLE_VALUE`, while theme migration, reserved
+  keybind, command-line font-size precedence, and all unrelated file values
+  remain visible.
+- The ordinary product creates its first Metal surface with the empty/system
+  family at 18 points, retains that surface across a rejected explicit reload,
+  and opens Settings with `SF Mono Terminal` as the draft, `system` as the
+  current value, and the contextual unavailable diagnostic and repair hint.
+  Saving the uncorrected document is rejected without changing the 0600 file,
+  accepted generation, pane, PTY, window, or native owners.
+- The fixture then changes the family to `Menlo` and the size to 20 along with
+  the existing corrected profile. The atomic save performs one accepted reload;
+  the original pane retains system/18 while three later split/tab/window panes
+  use Menlo/20 and the complete new-session profile. Four sessions, text input
+  clients, the worker, and all native handles are cleanly released.
+- The first packaged Developer JIT attempt stopped at `root-starting` with exit
+  70 before `--show-config`: native-asset FFI could not resolve
+  `dtr_font_catalog_create`. The availability probe now ran before the existing
+  `TerminalApplication.run()` call to `TerminalRendererMacos.initialize()`.
+  Moving unconditional initialization into the entrypoint would also load the
+  renderer for `--help` and `system`, so the validator instead accepts a
+  packaged-runtime initializer callback and invokes it only before an explicit
+  family probe. The callback uses the existing idempotent capability loader;
+  focused coverage confirms `system` skips it and the valid/missing probes call
+  it exactly once each. Both packaged modes passed after this correction.
+- The schema-generated reference now documents `CFG_UNAVAILABLE_VALUE`,
+  startup default recovery, Settings source preservation, and the explicit CLI
+  boundary. README and CFG-03/04/07 evidence describe the same behavior.
+  Regeneration changed only the reference paragraph, the reviewed
+  README/feature-matrix hashes, and the two expected
+  `terminal_application.dart` AppKit evidence hashes.
+
+### Final verification for ordered subtask 3
+
+- Host: Apple M1/arm64 (`uname -m` reported `arm64`).
+- Focused CoreText/product configuration test: passed after the packaged
+  initializer correction.
+- Final `make test`: passed. All freshness and evidence checks passed, all 245
+  Dart files were formatted without changes, analysis reported no issues, and
+  the aggregate ended with `dart_terminal tests passed`.
+- `make RUNTIME_ARCH=arm64 runtime-source-check`: passed with 452 tracked
+  sources, zero product native sources, and one reviewed test native source.
+- `make RUNTIME_ARCH=arm64 runtime-bundle-audit`: Developer JIT and Release AOT
+  both passed as arm64 bundles with one helper, one native asset, and one native
+  capability.
+- `make RUNTIME_ARCH=arm64 runtime-configuration-integration`: both modes
+  passed the exact unavailable-font scenario. Developer JIT reported 1856 ms
+  and Release AOT 1190 ms for the product exercise.
+- Final `git diff --check` passes. No `dart_appkit` source change or untracked
+  generated artifact is required.
+
+## Result
+
+A syntactically valid but unavailable file-backed font no longer aborts the
+root. Dart Terminal emits a source-specific repair diagnostic, starts with the
+system font and every unrelated valid setting, preserves the original text for
+repair, rejects error-bearing saves/reloads atomically, and accepts a corrected
+installed family for later sessions. Phase 8 completion conditions are again
+satisfied in both supported arm64 runtime modes.

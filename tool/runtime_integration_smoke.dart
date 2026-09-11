@@ -1522,7 +1522,7 @@ palette-foreground = #d0d1d2
 palette-background = #111213
 palette-cursor = #f0e0d0
 palette-2 = #12ab34
-font-family = Menlo
+font-family = SF Mono Terminal
 font-size = 18
 font-synthetic-style = deny
 window-width = 1110
@@ -1568,13 +1568,16 @@ keybind = command+d=pane.focus-next
     final String effectiveFontSize = effectiveLines.singleWhere(
       (String line) => line.contains('name="font-size"'),
     );
+    final String effectiveFontFamily = effectiveLines.singleWhere(
+      (String line) => line.contains('name="font-family"'),
+    );
     _expect(
       effectiveObservation.status == 0 &&
           effectiveObservation.stderrText.isEmpty &&
           effectiveObservation.workerProcesses.isEmpty &&
           effectiveLines.first ==
               'dart-terminal-effective-config version=1 options=36 '
-                  'entries=39 diagnostics=2' &&
+                  'entries=39 diagnostics=3' &&
           effectiveLines[1] == 'root path=${jsonEncode(configurationPath)}' &&
           effectiveTheme.contains('value="system"') &&
           effectiveTheme.contains('policy=new-session') &&
@@ -1584,15 +1587,21 @@ keybind = command+d=pane.focus-next
           effectiveFontSize.contains('policy=new-session') &&
           effectiveFontSize.contains('source=command-line') &&
           effectiveFontSize.contains('line=3 column=13') &&
+          effectiveFontFamily.contains('value="system"') &&
+          effectiveFontFamily.contains('policy=new-session') &&
+          effectiveFontFamily.contains('source=default') &&
           effectiveLines
                   .where((String line) => line.startsWith('diagnostic '))
                   .length ==
-              2 &&
+              3 &&
           effectiveObservation.stdoutText.contains(
             'diagnostic severity=warning code="CFG_DEPRECATED_VALUE"',
           ) &&
           effectiveObservation.stdoutText.contains(
             'diagnostic severity=error code="CFG_INVALID_VALUE"',
+          ) &&
+          effectiveObservation.stdoutText.contains(
+            'diagnostic severity=error code="CFG_UNAVAILABLE_VALUE"',
           ) &&
           effectiveLines.last == 'end' &&
           !effectiveObservation.stdoutText.contains(
@@ -1626,7 +1635,10 @@ keybind = command+d=pane.focus-next
       r'  hint: replace it with `theme = system`\n'
       r'.+/config:[0-9]+:[0-9]+: error\[CFG_INVALID_VALUE\]: '
       r'`keybind`: keybind chord `command\+d` is reserved by a native menu item\n'
-      r'  hint: choose a chord that is not listed as a reserved native shortcut$',
+      r'  hint: choose a chord that is not listed as a reserved native shortcut\n'
+      r'.+/config:6:1: error\[CFG_UNAVAILABLE_VALUE\]: '
+      r'`font-family`: font family is not available to this application\n'
+      r'  hint: use `font-family = system` or choose an installed font family$',
     ).firstMatch(diagnosticText);
     _expect(
       diagnostic != null && diagnostic.group(0) == diagnosticText,
@@ -1642,7 +1654,7 @@ keybind = command+d=pane.focus-next
               0 &&
           RegExp(
                 r'^TERMINAL_CONFIG_RELOAD disposition=applied generation=1 '
-                r'changes=16 live=2 new_session=14 diagnostics=0$',
+                r'changes=17 live=2 new_session=15 diagnostics=0$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
               1,
@@ -1656,8 +1668,9 @@ keybind = command+d=pane.focus-next
             r'scrollback=true cursor=true '
             r'keybind_pane=true keybind_application=true unbind=true '
             r'passthrough=true invalid_recovery=true native_menu_priority=true '
-            r'save_rejected=true save_applied=true permissions=true '
-            r'reload_applied=true '
+            r'unavailable_fallback=true reload_rejected=true '
+            r'save_unavailable_rejected=true save_rejected=true '
+            r'save_applied=true permissions=true reload_applied=true '
             r'live_existing=true '
             r'new_session=true settings_menu=true settings_palette=true '
             r'settings_singleton=true settings_search=true settings_edit=true '
@@ -1700,7 +1713,7 @@ keybind = command+d=pane.focus-next
       'RUNTIME_CONFIGURATION_INTEGRATION_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
       'panes=4 keybinds=true save=true permissions=true reload=true '
-      'settings_editor=true '
+      'settings_editor=true font_fallback=true '
       'effective_config=true '
       'elapsed_ms=${observation.elapsed.inMilliseconds}',
     );

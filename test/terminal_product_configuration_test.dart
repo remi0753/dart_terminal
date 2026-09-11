@@ -19,8 +19,11 @@ Future<void> runTerminalProductConfigurationTests() async {
 }
 
 void _testMacosFontAvailabilityFallback() {
-  const TerminalMacosConfigValueAvailabilityValidator validator =
-      TerminalMacosConfigValueAvailabilityValidator();
+  var initializerCalls = 0;
+  final TerminalMacosConfigValueAvailabilityValidator validator =
+      TerminalMacosConfigValueAvailabilityValidator(
+        fontCatalogInitializer: () => initializerCalls++,
+      );
   final _ProfileMemoryFileSystem files = _ProfileMemoryFileSystem(
     const <String, String>{
       '/system': 'font-family = system\nfont-size = 17\n',
@@ -54,6 +57,7 @@ void _testMacosFontAvailabilityFallback() {
   final TerminalConfigDiagnostic diagnostic = missing.diagnostics.single;
   _expect(
     system.diagnostics.isEmpty &&
+        initializerCalls == 2 &&
         system.value(TerminalProductConfigSchema.fontFamily).isEmpty &&
         valid.diagnostics.isEmpty &&
         valid.value(TerminalProductConfigSchema.fontFamily) == 'Menlo' &&

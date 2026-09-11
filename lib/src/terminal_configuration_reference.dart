@@ -198,6 +198,15 @@ final class TerminalConfigurationReference {
       )
       ..line()
       ..line(
+        'A syntactically valid file value that is unavailable to the current '
+        'application also reports `CFG_UNAVAILABLE_VALUE` and uses that '
+        'option’s schema default for startup. For example, an unavailable '
+        '`font-family` starts with `system`. The original file text remains '
+        'available in Settings for correction. Explicit command-line values '
+        'are not silently changed.',
+      )
+      ..line()
+      ..line(
         'The compatibility spelling `theme = default` resolves to `system` '
         'but emits `CFG_DEPRECATED_VALUE`; replace it with '
         '`theme = system`. Canonical effective output always reports `system`.',

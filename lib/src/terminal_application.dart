@@ -4273,6 +4273,30 @@ final class TerminalApplication {
     final int nativeHandleBaseline = application.debugLiveObjectCount;
     final int settingsResponderBaseline =
         settings.terminalResponderRestoreCount;
+    final TerminalConfigSnapshot recoveredStartupSnapshot =
+        reloadController.effectiveSnapshot;
+    final TerminalConfigReloadResult unavailableReload = await reloadController
+        .reload();
+    _expectLifecycle(
+      unavailableReload.disposition ==
+              TerminalConfigReloadDisposition.rejected &&
+          identical(
+            unavailableReload.effectiveSnapshot,
+            recoveredStartupSnapshot,
+          ) &&
+          reloadController.acceptedGeneration == 0 &&
+          unavailableReload.candidateSnapshot!
+              .value(TerminalProductConfigSchema.fontFamily)
+              .isEmpty &&
+          unavailableReload.diagnostics.any(
+            (TerminalConfigDiagnostic diagnostic) =>
+                diagnostic.code == 'CFG_UNAVAILABLE_VALUE',
+          ) &&
+          identical(sessions[initialPaneId], stableSession) &&
+          identical(owners[initialPaneId], stableOwner) &&
+          identical(hierarchy.windowForTab(initialTab.id), stableWindow),
+      'unavailable-font reload did not retain the recovered startup state',
+    );
     _expectLifecycle(
       nativeWindow.frame.width == configuredWindowWidth &&
           nativeWindow.frame.height == configuredWindowHeight &&
@@ -4284,7 +4308,7 @@ final class TerminalApplication {
           initialScreens.scrollback.maxBytes == configuredScrollbackBytes &&
           initialScreens.activeScreen.cursorShape == TerminalCursorShape.bar &&
           !initialScreens.activeScreen.cursorBlinking &&
-          initialOwner.surface.fontFamily == 'Menlo' &&
+          initialOwner.surface.fontFamily.isEmpty &&
           initialOwner.surface.fontMetrics.pointSize == 18 &&
           initialOwner.surface.syntheticStylePolicy ==
               TerminalSyntheticStylePolicy.reject &&
@@ -4330,15 +4354,15 @@ final class TerminalApplication {
       initialSettingsWindow,
       keyCode: 17,
       modifiers: 0,
-      characters: 'theme',
-      charactersIgnoringModifiers: 'theme',
+      characters: 'font-family',
+      charactersIgnoringModifiers: 'font-family',
       monotonicNanoseconds: eventTimestamp++,
     );
     await waitFor(
       () =>
-          settings.state.query == 'theme' &&
-          settings.state.selectedOccurrence?.option.name == 'theme',
-      'native Settings search did not select the theme option',
+          settings.state.query == 'font-family' &&
+          settings.state.selectedOccurrence?.option.name == 'font-family',
+      'native Settings search did not select the unavailable font option',
     );
     _injectKeyEventForTesting(
       application,
@@ -4353,8 +4377,9 @@ final class TerminalApplication {
       () => settings.state.mode == TerminalSettingsEditorMode.normal,
       'native Settings search did not return to NORMAL mode',
     );
-    final TerminalSettingsOptionOccurrence initialTheme =
+    final TerminalSettingsOptionOccurrence initialFont =
         settings.state.selectedOccurrence!;
+    final String initialFontDetail = settings.state.renderDetail();
     _expectLifecycle(
       nativeActionInvocations.last == TerminalActionId.openSettings &&
           actionDispatches.last.id == TerminalActionId.openSettings &&
@@ -4370,16 +4395,23 @@ final class TerminalApplication {
                   .toSet()
                   .length ==
               36 &&
-          initialTheme.draftValue(settings.state.text) == 'default' &&
+          initialFont.draftValue(settings.state.text) == 'SF Mono Terminal' &&
           reloadController.effectiveSnapshot.value(
                 TerminalProductConfigSchema.theme,
               ) ==
               TerminalConfiguredTheme.system &&
-          initialTheme.lineIndex == 0 &&
-          initialTheme.option.applicationPolicy ==
+          reloadController.effectiveSnapshot
+              .value(TerminalProductConfigSchema.fontFamily)
+              .isEmpty &&
+          initialFont.lineIndex == 5 &&
+          initialFont.option.applicationPolicy ==
               TerminalConfigApplicationPolicy.newSession &&
-          settings.state.diagnostics.length == 2 &&
-          (settings.renderedText ?? '').contains('CFG_DEPRECATED_VALUE') &&
+          settings.state.diagnostics.length == 3 &&
+          initialFontDetail.contains('Current value\n  system\n') &&
+          initialFontDetail.contains('Draft\n  SF Mono Terminal\n') &&
+          initialFontDetail.contains('ERROR CFG_UNAVAILABLE_VALUE') &&
+          initialFontDetail.contains('font-family = system') &&
+          (settings.renderedText ?? '').contains('CFG_UNAVAILABLE_VALUE') &&
           !(settings.renderedText ?? '').contains('CFG_INVALID_VALUE') &&
           !(settings.renderedText ?? '').contains('Config Lens') &&
           !(settings.renderedText ?? '').contains('SOURCE') &&
@@ -4389,6 +4421,40 @@ final class TerminalApplication {
           identical(hierarchy.windowForTab(initialTab.id), stableWindow),
       'Settings did not expose canonical startup state and diagnostics '
       'without replacing terminal owners',
+    );
+    final int unavailableSaveDispatchBaseline = actionDispatches.length;
+    _injectKeyEventForTesting(
+      application,
+      initialSettingsWindow,
+      keyCode: 1,
+      modifiers: ModifierKeys.commandBit,
+      characters: 's',
+      charactersIgnoringModifiers: 's',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          settings.saveRequestCount == 1 &&
+          settings.state.saveState == TerminalSettingsSaveState.invalid,
+      'unavailable font draft was not rejected before persistence',
+    );
+    _expectLifecycle(
+      settings.lastSaveResult?.disposition ==
+              TerminalSettingsDocumentSaveDisposition.rejected &&
+          settings.lastSaveResult!.diagnostics.any(
+            (TerminalConfigDiagnostic diagnostic) =>
+                diagnostic.code == 'CFG_UNAVAILABLE_VALUE',
+          ) &&
+          File(configurationPath)
+              .readAsStringSync()
+              .contains('font-family = SF Mono Terminal') &&
+          reloadController.acceptedGeneration == 0 &&
+          configurationAuthority.acceptedGeneration == 0 &&
+          settings.reloadRequestCount == 0 &&
+          actionDispatches.length == unavailableSaveDispatchBaseline &&
+          identical(sessions[initialPaneId], stableSession) &&
+          identical(owners[initialPaneId], stableOwner),
+      'unavailable Settings save changed the file, config, or terminal owners',
     );
     final TerminalActionDispatchResult singletonDispatch = await dispatcher
         .dispatch(TerminalActionId.openSettings);
@@ -4740,7 +4806,7 @@ final class TerminalApplication {
     );
     await waitFor(
       () =>
-          settings.saveRequestCount == 1 &&
+          settings.saveRequestCount == 2 &&
           settings.state.saveState == TerminalSettingsSaveState.invalid,
       'invalid native Settings save did not complete exactly once',
     );
@@ -4814,7 +4880,7 @@ keybind = control+k=pane.focus-next
     await waitFor(
       () =>
           configurationReloads.length == 1 &&
-          settings.saveRequestCount == 2 &&
+          settings.saveRequestCount == 3 &&
           actionDispatches.length == appliedDispatchBaseline + 1,
       'corrected native Settings save/reload did not complete exactly once',
     );
@@ -4823,14 +4889,14 @@ keybind = control+k=pane.focus-next
       appliedReload.disposition == TerminalConfigReloadDisposition.applied &&
           appliedReload.diagnostics.isEmpty &&
           appliedReload.changePlan!.liveChanges.length == 2 &&
-          appliedReload.changePlan!.newSessionChanges.length == 14 &&
+          appliedReload.changePlan!.newSessionChanges.length == 15 &&
           reloadController.acceptedGeneration == 1 &&
           configurationAuthority.acceptedGeneration == 1 &&
           configurationAuthority.liveGeneration == 1 &&
           actionDispatches.last.id == TerminalActionId.reloadConfiguration &&
           actionDispatches.last.disposition ==
               TerminalActionDispatchDisposition.executed &&
-          settings.saveRequestCount == 2 &&
+          settings.saveRequestCount == 3 &&
           settings.reloadRequestCount == 1 &&
           settings.lastSaveResult?.isSaved == true &&
           reloadController.effectiveSnapshot.value(
@@ -5004,6 +5070,7 @@ keybind = control+k=pane.focus-next
         initialScreens.scrollback.maxBytes == configuredScrollbackBytes &&
         initialScreens.activeScreen.cursorShape == TerminalCursorShape.bar &&
         !initialScreens.activeScreen.cursorBlinking &&
+        initialOwner.surface.fontFamily.isEmpty &&
         initialOwner.surface.fontMetrics.pointSize == 18 &&
         initialOwner.surface.horizontalPadding == configuredHorizontalPadding &&
         initialOwner.surface.verticalPadding == configuredVerticalPadding;
@@ -5109,8 +5176,9 @@ keybind = control+k=pane.focus-next
       'window=true padding=true option_text=true scrollback=true cursor=true '
       'keybind_pane=true keybind_application=true unbind=true '
       'passthrough=true invalid_recovery=true native_menu_priority=true '
-      'save_rejected=true save_applied=true permissions=true '
-      'reload_applied=true '
+      'unavailable_fallback=true reload_rejected=true '
+      'save_unavailable_rejected=true save_rejected=true save_applied=true '
+      'permissions=true reload_applied=true '
       'live_existing=true '
       'new_session=true settings_menu=true settings_palette=true '
       'settings_singleton=true settings_search=true settings_edit=true '

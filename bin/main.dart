@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dart_macos_runtime/dart_macos_runtime.dart';
 import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal/src/runtime_lifecycle.dart';
+import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 const int _runtimeUsageExitCode = 64;
 
@@ -12,8 +13,10 @@ void main(List<String> arguments) {
   MacosRuntime.validateHost();
   MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStarting);
   try {
-    const valueAvailabilityValidator =
-        TerminalMacosConfigValueAvailabilityValidator();
+    final valueAvailabilityValidator =
+        TerminalMacosConfigValueAvailabilityValidator(
+          fontCatalogInitializer: TerminalRendererMacos.initialize,
+        );
     final TerminalEarlyExitResult? earlyExit = TerminalEarlyExitResolver(
       valueAvailabilityValidator: valueAvailabilityValidator,
     ).resolve(arguments);
