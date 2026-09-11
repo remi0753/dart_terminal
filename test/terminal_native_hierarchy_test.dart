@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -30,21 +31,24 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
     bindings: bindings,
     events: rawEvents.stream,
   );
-  final TerminalConfigLoader loader = TerminalConfigLoader();
-  final TerminalConfigSnapshot initial = loader.resolve(const <String>[
-    '--no-config',
-    '--font-size=15',
-  ], environment: const <String, String>{}).snapshot;
-  final TerminalConfigSnapshot reloaded = loader.resolve(const <String>[
-    '--no-config',
-    '--font-size=19',
-  ], environment: const <String, String>{}).snapshot;
+  final _SettingsMemoryFileSystem fileSystem = _SettingsMemoryFileSystem(
+    const <String, String>{'/settings.conf': 'font-size = 15\n'},
+  );
+  final TerminalConfigLoader loader = TerminalConfigLoader(
+    fileSystem: fileSystem,
+  );
+  const List<String> configurationArguments = <String>[
+    '--config=/settings.conf',
+  ];
+  final TerminalConfigSnapshot initial = loader
+      .resolve(configurationArguments, environment: const <String, String>{})
+      .snapshot;
   final TerminalConfigReloadController reloadController =
       TerminalConfigReloadController(
         initialSnapshot: initial,
-        resolver: () => TerminalConfigResolution(
-          snapshot: reloaded,
-          remainingArguments: const <String>[],
+        resolver: () => loader.resolve(
+          configurationArguments,
+          environment: const <String, String>{},
         ),
       );
   final View terminalView = View(configuration: terminalBaseViewConfiguration);
@@ -89,6 +93,12 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
   );
   settings = TerminalSettingsInspectorPresenter(
     controller: reloadController,
+    documentSession: TerminalSettingsDocumentSession(
+      loader: loader,
+      arguments: configurationArguments,
+      environment: const <String, String>{},
+      writer: fileSystem,
+    ),
     focusTarget: () => TerminalSettingsInspectorFocusTarget(
       window: terminalWindow,
       view: terminalView,
@@ -119,15 +129,49 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
       'command palette did not transfer ownership to Settings',
     );
     final Window settingsWindow = settings.activeWindow!;
-    final TextView settingsView = settings.activeView!;
+    final TextEditor settingsView = settings.activeView!;
+    final TwoPaneSplitView rootSplit = settings.activeRootSplit!;
+    final TwoPaneSplitView editorStatusSplit =
+        settings.activeEditorStatusSplit!;
     final int settingsWindowHandle = bindings.handleFor(settingsWindow);
+    final int settingsViewHandle = bindings.handleFor(settingsView);
+    final int statusViewHandle = bindings.handleFor(settings.activeStatusView!);
+    final int detailViewHandle = bindings.handleFor(settings.activeDetailView!);
+    final int rootSplitHandle = bindings.handleFor(rootSplit);
+    final int editorStatusSplitHandle = bindings.handleFor(editorStatusSplit);
+    final List<NativeTextEditorStyleRun> normalStyles =
+        List<NativeTextEditorStyleRun>.from(
+          bindings.textEditorStyleRuns[settingsViewHandle]!,
+        );
     _expect(
       palette.terminalResponderRestoreCount == 0 &&
           bindings.firstResponders[settingsWindowHandle] ==
-              bindings.handleFor(settingsView) &&
-          settings.renderedText!.contains('Matches: 36 of 36') &&
-          bindings.objects.length == 4,
-      'Settings did not retain native focus or exact window/view ownership',
+              settingsViewHandle &&
+          bindings.windowTitles[settingsWindowHandle] == 'settings.conf' &&
+          bindings.contentViews[settingsWindowHandle] == rootSplitHandle &&
+          bindings.splitViewAxes[rootSplitHandle] == 0 &&
+          bindings.splitViewAxes[editorStatusSplitHandle] == 1 &&
+          bindings.splitViewChildren[rootSplitHandle]!.first ==
+              editorStatusSplitHandle &&
+          bindings
+                  .textViewConfigurations[statusViewHandle]!
+                  .view
+                  .acceptsFirstResponder ==
+              false &&
+          bindings
+                  .textViewConfigurations[detailViewHandle]!
+                  .view
+                  .acceptsFirstResponder ==
+              false &&
+          settings.state.occurrences.length == 36 &&
+          settings.state.syntaxSpans.isNotEmpty &&
+          normalStyles.isNotEmpty &&
+          settings.activeStatusView!.text.contains('NORMAL') &&
+          settings.activeDetailView!.text.contains('Current value') &&
+          !settings.renderedText!.contains('Config Lens') &&
+          !settings.renderedText!.contains('SOURCE') &&
+          bindings.objects.length == 8,
+      'Settings did not compose and focus the native editor/detail hierarchy',
     );
 
     final Window firstSettingsWindow = settingsWindow;
@@ -135,8 +179,15 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
       (await dispatcher.dispatch(TerminalActionId.openSettings)).disposition ==
               TerminalActionDispatchDisposition.executed &&
           identical(settings.activeWindow, firstSettingsWindow) &&
-          bindings.objects.length == 4,
+          bindings.objects.length == 8,
       'reopening Settings created a duplicate native owner',
+    );
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 44,
+      characters: '/',
     );
     _injectHierarchyKey(
       rawEvents,
@@ -146,30 +197,142 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
       characters: 'font-size',
     );
     await _waitForHierarchy(
-      () => settings.state.query == 'font-size',
-      'Settings search key was not routed through its native window',
+      () =>
+          settings.state.query == 'font-size' &&
+          settings.state.selectedOccurrence?.option.name == 'font-size',
+      'explicit Settings search was not routed through its native window',
     );
     _injectHierarchyKey(
       rawEvents,
       application,
       settingsWindowHandle,
-      keyCode: 15,
-      characters: 'r',
+      keyCode: 36,
+      characters: '\r',
+    );
+    await _waitForHierarchy(
+      () => settings.state.mode == TerminalSettingsEditorMode.normal,
+      'Settings search did not commit back to NORMAL',
+    );
+    final List<TerminalSettingsSyntaxSpan> normalSyntax =
+        settings.state.syntaxSpans;
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 34,
+      characters: 'i',
+    );
+    await _waitForHierarchy(
+      () =>
+          settings.state.mode == TerminalSettingsEditorMode.insert &&
+          bindings.textEditorEditable[settingsViewHandle] == true &&
+          bindings.windowKeyEventRoutings[settingsWindowHandle] == 0,
+      'Settings did not enter native INSERT routing on the same surface',
+    );
+    _expect(
+      identical(normalSyntax, settings.state.syntaxSpans) &&
+          _sameNativeTextEditorStyles(
+            normalStyles,
+            bindings.textEditorStyleRuns[settingsViewHandle]!,
+          ),
+      'NORMAL to INSERT changed the syntax-color projection',
+    );
+
+    final String invalidText = bindings.texts[settingsViewHandle]!.replaceFirst(
+      'font-size = 15',
+      'font-size = enormous',
+    );
+    final int invalidCaret = invalidText.indexOf('enormous');
+    bindings
+      ..texts[settingsViewHandle] = invalidText
+      ..textEditorSelectionStarts[settingsViewHandle] = invalidCaret
+      ..textEditorSelectionLengths[settingsViewHandle] = 0;
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 7,
+      characters: 'x',
+    );
+    await _waitForHierarchy(
+      () => settings.state.text == invalidText,
+      'native INSERT text was not synchronized into the Settings draft',
+    );
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 1,
+      characters: 's',
       modifiers: ModifierKeys.commandBit,
     );
     await _waitForHierarchy(
       () =>
+          settings.saveRequestCount == 1 &&
+          settings.state.saveState == TerminalSettingsSaveState.invalid,
+      'invalid Settings Command-S did not finish validation once',
+    );
+    _expect(
+      settings.lastSaveResult?.disposition ==
+              TerminalSettingsDocumentSaveDisposition.rejected &&
+          settings.reloadRequestCount == 0 &&
+          reloadController.acceptedGeneration == 0 &&
+          fileSystem.readText('/settings.conf') == 'font-size = 15\n' &&
+          bindings.textEditorStyleRuns[settingsViewHandle]!.any(
+            (NativeTextEditorStyleRun run) => run.underlineStyle == 1,
+          ) &&
+          settings.activeDetailView!.text.contains('Fix:'),
+      'invalid Settings draft was not underlined or was persisted/reloaded',
+    );
+
+    final String editedText = bindings.texts[settingsViewHandle]!.replaceFirst(
+      'font-size = enormous',
+      'font-size = 19',
+    );
+    final int editedCaret = editedText.indexOf('19');
+    bindings
+      ..texts[settingsViewHandle] = editedText
+      ..textEditorSelectionStarts[settingsViewHandle] = editedCaret
+      ..textEditorSelectionLengths[settingsViewHandle] = 0;
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 7,
+      characters: 'x',
+    );
+    await _waitForHierarchy(
+      () => settings.state.text == editedText,
+      'corrected native INSERT text was not synchronized into the draft',
+    );
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 1,
+      characters: 's',
+      modifiers: ModifierKeys.commandBit,
+    );
+    await _waitForHierarchy(
+      () =>
+          settings.saveRequestCount == 2 &&
           settings.reloadRequestCount == 1 &&
           reloadController.acceptedGeneration == 1,
-      'Settings Command-R did not use the shared reload action',
+      'corrected Settings Command-S did not persist and reload once',
     );
     _expect(
       settings.lastReloadResult?.id == TerminalActionId.reloadConfiguration &&
           settings.lastReloadResult?.disposition ==
               TerminalActionDispatchDisposition.executed &&
-          settings.state.selectedEntry?.canonicalValue == '19' &&
-          settings.renderedText!.contains('Accepted generation: 1'),
-      'Settings did not refresh from the accepted controller snapshot',
+          settings.lastSaveResult?.isSaved == true &&
+          fileSystem.readText('/settings.conf').contains('font-size = 19') &&
+          reloadController.effectiveSnapshot.value(
+                TerminalProductConfigSchema.fontSize,
+              ) ==
+              19 &&
+          settings.state.saveState == TerminalSettingsSaveState.saved &&
+          settings.activeDetailView!.text.contains('19'),
+      'Settings did not persist and refresh the accepted controller snapshot',
     );
 
     _injectHierarchyKey(
@@ -180,8 +343,40 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
       characters: '\u001b',
     );
     await _waitForHierarchy(
+      () =>
+          settings.state.mode == TerminalSettingsEditorMode.normal &&
+          bindings.textEditorEditable[settingsViewHandle] == false &&
+          bindings.windowKeyEventRoutings[settingsWindowHandle] == 1,
+      'Settings Escape did not return INSERT to NORMAL',
+    );
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 30,
+      characters: ']',
+    );
+    await _waitForHierarchy(
+      () =>
+          !settings.state.detailsExpanded &&
+          bindings.splitViewFractions[rootSplitHandle] == 0.965,
+      'Settings did not collapse detail into its visible edge rail',
+    );
+    _expect(
+      settings.activeDetailView!.text.startsWith('›') &&
+          settings.activeDetailView!.text.contains('D\nE\nT\nA\nI\nL'),
+      'collapsed Settings detail did not retain a discoverable rail',
+    );
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 53,
+      characters: '\u001b',
+    );
+    await _waitForHierarchy(
       () => !settings.isOpen && bindings.objects.length == 2,
-      'Settings Escape did not release its native window and text view',
+      'Settings Escape did not release every native editor/detail owner',
     );
     _expect(
       settings.terminalResponderRestoreCount == 1 &&
@@ -1811,7 +2006,67 @@ Future<void> _waitForHierarchy(
   _expect(predicate(), description);
 }
 
-final class _HierarchyNativeBindings implements NativeBindings {
+final class _SettingsMemoryFileSystem
+    implements TerminalConfigFileSystem, TerminalSettingsDocumentWriter {
+  _SettingsMemoryFileSystem(Map<String, String> files)
+    : _files = <String, List<int>>{
+        for (final MapEntry<String, String> entry in files.entries)
+          entry.key: utf8.encode(entry.value),
+      };
+
+  final Map<String, List<int>> _files;
+
+  String readText(String path) => utf8.decode(_files[path]!);
+
+  @override
+  String absolutePath(String path) => path.startsWith('/') ? path : '/$path';
+
+  @override
+  bool exists(String path) => _files.containsKey(absolutePath(path));
+
+  @override
+  List<int> readBytes(String path) =>
+      List<int>.from(_files[absolutePath(path)]!);
+
+  @override
+  String resolvePath(String containingFile, String includedPath) =>
+      includedPath.startsWith('/') ? includedPath : '/$includedPath';
+
+  @override
+  void writeAtomically(String path, List<int> bytes) {
+    _files[absolutePath(path)] = List<int>.from(bytes);
+  }
+}
+
+bool _sameNativeTextEditorStyles(
+  List<NativeTextEditorStyleRun> left,
+  List<NativeTextEditorStyleRun> right,
+) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    final NativeTextEditorStyleRun a = left[index];
+    final NativeTextEditorStyleRun b = right[index];
+    if (a.start != b.start ||
+        a.length != b.length ||
+        a.foregroundColorKind != b.foregroundColorKind ||
+        a.foregroundRed != b.foregroundRed ||
+        a.foregroundGreen != b.foregroundGreen ||
+        a.foregroundBlue != b.foregroundBlue ||
+        a.foregroundAlpha != b.foregroundAlpha ||
+        a.underlineStyle != b.underlineStyle ||
+        a.underlineColorKind != b.underlineColorKind ||
+        a.underlineRed != b.underlineRed ||
+        a.underlineGreen != b.underlineGreen ||
+        a.underlineBlue != b.underlineBlue ||
+        a.underlineAlpha != b.underlineAlpha) {
+      return false;
+    }
+  }
+  return true;
+}
+
+final class _HierarchyNativeBindings
+    implements NativeBindings, NativeTextEditorBindings {
   int _nextHandle = (1 << 32) | 100;
   final Map<int, String> objects = <int, String>{};
   final Map<Object, int> _handles = Map<Object, int>.identity();
@@ -1831,10 +2086,19 @@ final class _HierarchyNativeBindings implements NativeBindings {
       <int, NativeViewConfiguration>{};
   final Map<int, NativeTextViewConfiguration> textViewConfigurations =
       <int, NativeTextViewConfiguration>{};
+  final Map<int, NativeTextEditorConfiguration> textEditorConfigurations =
+      <int, NativeTextEditorConfiguration>{};
+  final Map<int, List<NativeTextEditorStyleRun>> textEditorStyleRuns =
+      <int, List<NativeTextEditorStyleRun>>{};
+  final Map<int, int> textEditorSelectionStarts = <int, int>{};
+  final Map<int, int> textEditorSelectionLengths = <int, int>{};
+  final Map<int, bool> textEditorEditable = <int, bool>{};
+  final Map<int, bool> textEditorHasMarkedText = <int, bool>{};
   final Map<int, String> texts = <int, String>{};
   final Map<int, int> contentViews = <int, int>{};
   final Map<int, int> windowContentViewSetCounts = <int, int>{};
   final Map<int, int> firstResponders = <int, int>{};
+  final Map<int, int> windowKeyEventRoutings = <int, int>{};
   final List<String> presentationCalls = <String>[];
   final List<List<int>> windowTabGroups = <List<int>>[];
   final Map<int, int> selectedTabWindows = <int, int>{};
@@ -1984,8 +2248,10 @@ final class _HierarchyNativeBindings implements NativeBindings {
   }
 
   @override
-  NativeCallResult windowSetKeyEventRouting(int handle, int routing) =>
-      const NativeCallResult.success();
+  NativeCallResult windowSetKeyEventRouting(int handle, int routing) {
+    windowKeyEventRoutings[handle] = routing;
+    return const NativeCallResult.success();
+  }
 
   @override
   NativeCallResult windowSetCloseRequestDeferral(int handle, bool enabled) =>
@@ -2082,6 +2348,77 @@ final class _HierarchyNativeBindings implements NativeBindings {
   }
 
   @override
+  NativeValueResult<int> textEditorCreate(
+    NativeTextEditorConfiguration configuration,
+  ) {
+    final NativeValueResult<int> result = _create('text-editor');
+    final int handle = result.value!;
+    viewConfigurations[handle] = configuration.presentation.view;
+    textEditorConfigurations[handle] = configuration;
+    textEditorStyleRuns[handle] = const <NativeTextEditorStyleRun>[];
+    textEditorSelectionStarts[handle] = 0;
+    textEditorSelectionLengths[handle] = 0;
+    textEditorEditable[handle] = configuration.initiallyEditable;
+    textEditorHasMarkedText[handle] = false;
+    texts[handle] = '';
+    return result;
+  }
+
+  @override
+  NativeCallResult textEditorSetDocument(
+    int handle,
+    NativeTextEditorDocument document,
+  ) {
+    texts[handle] = document.text;
+    textEditorSelectionStarts[handle] = document.selectionStart;
+    textEditorSelectionLengths[handle] = document.selectionLength;
+    textEditorStyleRuns[handle] = List<NativeTextEditorStyleRun>.unmodifiable(
+      document.styleRuns,
+    );
+    return const NativeCallResult.success();
+  }
+
+  @override
+  NativeCallResult textEditorSetStyleRuns(
+    int handle,
+    List<NativeTextEditorStyleRun> styleRuns,
+  ) {
+    textEditorStyleRuns[handle] = List<NativeTextEditorStyleRun>.unmodifiable(
+      styleRuns,
+    );
+    return const NativeCallResult.success();
+  }
+
+  @override
+  NativeCallResult textEditorSetEditable(int handle, bool editable) {
+    textEditorEditable[handle] = editable;
+    return const NativeCallResult.success();
+  }
+
+  @override
+  NativeCallResult textEditorSetSelection(
+    int handle, {
+    required int start,
+    required int length,
+  }) {
+    textEditorSelectionStarts[handle] = start;
+    textEditorSelectionLengths[handle] = length;
+    return const NativeCallResult.success();
+  }
+
+  @override
+  NativeValueResult<NativeTextEditorSnapshot> textEditorSnapshot(int handle) =>
+      NativeValueResult<NativeTextEditorSnapshot>.success(
+        NativeTextEditorSnapshot(
+          text: texts[handle]!,
+          selectionStart: textEditorSelectionStarts[handle]!,
+          selectionLength: textEditorSelectionLengths[handle]!,
+          isEditable: textEditorEditable[handle]!,
+          hasMarkedText: textEditorHasMarkedText[handle]!,
+        ),
+      );
+
+  @override
   NativeValueResult<int> splitViewCreate(int axis) {
     final NativeValueResult<int> result = _create('split');
     splitViewAxes[result.value!] = axis;
@@ -2146,9 +2483,16 @@ final class _HierarchyNativeBindings implements NativeBindings {
     windowTabAccessoryExtents.remove(handle);
     viewConfigurations.remove(handle);
     textViewConfigurations.remove(handle);
+    textEditorConfigurations.remove(handle);
+    textEditorStyleRuns.remove(handle);
+    textEditorSelectionStarts.remove(handle);
+    textEditorSelectionLengths.remove(handle);
+    textEditorEditable.remove(handle);
+    textEditorHasMarkedText.remove(handle);
     texts.remove(handle);
     contentViews.remove(handle);
     firstResponders.remove(handle);
+    windowKeyEventRoutings.remove(handle);
     splitViewAxes.remove(handle);
     splitViewChildren.remove(handle);
     splitViewFractions.remove(handle);

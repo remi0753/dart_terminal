@@ -37,7 +37,7 @@
         {
           "path": "test/terminal_native_hierarchy_test.dart",
           "entrypoint": "runTerminalNativeHierarchyTests",
-          "sha256": "8d78a5226219da79c1090a2cc9c37042baff3bc0072c3365b7f7a59dcf06ec87"
+          "sha256": "1f4f836a452366bb06b865c8156729a8a276ed2df50dc9c07569eb762eb83c1e"
         }
       ],
       "ui_assertions": [
@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "cb0df35d4f9100feeeaaf173cc377bc6704809ec26c1b3609908e44b9cec8ed1"
+          "sha256": "d68e9788cabfcfa0c3fa19fea7f5f8b0a92b9a2d478655a77f814feff1a84edf"
         },
         {
           "path": "lib/src/terminal_input/terminal_text_input_event_router.dart",
@@ -96,7 +96,7 @@
         {
           "path": "test/terminal_native_hierarchy_test.dart",
           "entrypoint": "runTerminalNativeHierarchyTests",
-          "sha256": "8d78a5226219da79c1090a2cc9c37042baff3bc0072c3365b7f7a59dcf06ec87"
+          "sha256": "1f4f836a452366bb06b865c8156729a8a276ed2df50dc9c07569eb762eb83c1e"
         }
       ],
       "ui_assertions": [
@@ -151,7 +151,7 @@
         {
           "path": "test/terminal_native_hierarchy_test.dart",
           "entrypoint": "runTerminalNativeHierarchyTests",
-          "sha256": "8d78a5226219da79c1090a2cc9c37042baff3bc0072c3365b7f7a59dcf06ec87"
+          "sha256": "1f4f836a452366bb06b865c8156729a8a276ed2df50dc9c07569eb762eb83c1e"
         }
       ],
       "ui_assertions": [
@@ -187,7 +187,7 @@
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "cb0df35d4f9100feeeaaf173cc377bc6704809ec26c1b3609908e44b9cec8ed1"
+          "sha256": "d68e9788cabfcfa0c3fa19fea7f5f8b0a92b9a2d478655a77f814feff1a84edf"
         }
       ],
       "unit_tests": [
@@ -206,7 +206,7 @@
         {
           "path": "test/terminal_native_hierarchy_test.dart",
           "entrypoint": "runTerminalNativeHierarchyTests",
-          "sha256": "8d78a5226219da79c1090a2cc9c37042baff3bc0072c3365b7f7a59dcf06ec87"
+          "sha256": "1f4f836a452366bb06b865c8156729a8a276ed2df50dc9c07569eb762eb83c1e"
         }
       ],
       "ui_assertions": [

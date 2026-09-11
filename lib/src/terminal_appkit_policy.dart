@@ -43,6 +43,65 @@ const TextViewConfiguration terminalSettingsInspectorTextViewConfiguration =
       backgroundColor: TextViewColor.windowBackground(),
     );
 
+/// Quiet, editor-first presentation shared by every Settings mode.
+final TextViewColor terminalSettingsSurfaceColor = TextViewColor.sRgb(
+  red: 0.055,
+  green: 0.063,
+  blue: 0.078,
+);
+final TextViewColor terminalSettingsPrimaryTextColor = TextViewColor.sRgb(
+  red: 0.82,
+  green: 0.85,
+  blue: 0.9,
+);
+final TextViewColor terminalSettingsSecondaryTextColor = TextViewColor.sRgb(
+  red: 0.57,
+  green: 0.62,
+  blue: 0.7,
+);
+const ViewConfiguration _terminalSettingsPassiveViewConfiguration =
+    ViewConfiguration(
+      acceptsFirstResponder: false,
+      autoresizesWidth: true,
+      autoresizesHeight: true,
+    );
+
+final TextEditorConfiguration terminalSettingsEditorConfiguration =
+    TextEditorConfiguration(
+      view: terminalBaseViewConfiguration,
+      font: const TextViewFont.monospacedSystem(
+        size: 14,
+        weight: TextViewFontWeight.regular,
+      ),
+      padding: const TextViewPadding(top: 22, right: 20, bottom: 18, left: 24),
+      foregroundColor: terminalSettingsPrimaryTextColor,
+      backgroundColor: terminalSettingsSurfaceColor,
+    );
+
+final TextViewConfiguration terminalSettingsStatusConfiguration =
+    TextViewConfiguration(
+      view: _terminalSettingsPassiveViewConfiguration,
+      font: const TextViewFont.monospacedSystem(
+        size: 12,
+        weight: TextViewFontWeight.medium,
+      ),
+      padding: const TextViewPadding(top: 10, right: 18, bottom: 10, left: 24),
+      foregroundColor: terminalSettingsSecondaryTextColor,
+      backgroundColor: terminalSettingsSurfaceColor,
+    );
+
+final TextViewConfiguration terminalSettingsDetailConfiguration =
+    TextViewConfiguration(
+      view: _terminalSettingsPassiveViewConfiguration,
+      font: const TextViewFont.monospacedSystem(
+        size: 13,
+        weight: TextViewFontWeight.regular,
+      ),
+      padding: const TextViewPadding(top: 24, right: 18, bottom: 18, left: 18),
+      foregroundColor: terminalSettingsPrimaryTextColor,
+      backgroundColor: terminalSettingsSurfaceColor,
+    );
+
 /// Terminal commands own enabled state; AppKit must not infer it.
 const MenuConfiguration terminalMenuConfiguration = MenuConfiguration(
   autoEnablesItems: false,

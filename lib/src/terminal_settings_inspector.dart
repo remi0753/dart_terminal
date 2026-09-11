@@ -9,6 +9,8 @@ import 'terminal_config_reload.dart';
 import 'terminal_effective_config.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_key_event.dart';
+import 'terminal_settings_document.dart';
+import 'terminal_settings_editor.dart';
 
 enum TerminalSettingsInspectorLimitKind { query, renderedOutput }
 
@@ -469,37 +471,49 @@ typedef TerminalSettingsInspectorErrorObserver = void Function(
   StackTrace stackTrace,
 );
 
-/// Product-owned native Settings window backed by one reload controller.
+/// Product-owned modal Settings editor backed by one reload controller.
 final class TerminalSettingsInspectorPresenter {
   TerminalSettingsInspectorPresenter({
     required TerminalConfigReloadController controller,
+    required TerminalSettingsDocumentSession documentSession,
     required TerminalSettingsInspectorFocusTargetProvider focusTarget,
     required TerminalSettingsInspectorReload reload,
-    TerminalSettingsInspectorLimits limits =
-        const TerminalSettingsInspectorLimits(),
+    TerminalSettingsEditorLimits limits = const TerminalSettingsEditorLimits(),
     this.onReloaded,
     this.onError,
   }) : _focusTarget = focusTarget,
        _reload = reload,
-       state = TerminalSettingsInspectorState(
+       state = TerminalSettingsEditorState(
          controller: controller,
+         documentSession: documentSession,
          limits: limits,
        ) {
-    _keys = TerminalSettingsInspectorKeyController(state);
+    _keys = TerminalSettingsEditorKeyController(state);
   }
 
   final TerminalSettingsInspectorFocusTargetProvider _focusTarget;
   final TerminalSettingsInspectorReload _reload;
   final TerminalSettingsInspectorReloadObserver? onReloaded;
   final TerminalSettingsInspectorErrorObserver? onError;
-  final TerminalSettingsInspectorState state;
+  final TerminalSettingsEditorState state;
 
-  late final TerminalSettingsInspectorKeyController _keys;
+  late final TerminalSettingsEditorKeyController _keys;
   Window? _window;
-  TextView? _view;
+  TextEditor? _editor;
+  TextView? _statusView;
+  TextView? _detailView;
+  TwoPaneSplitView? _editorStatusSplit;
+  TwoPaneSplitView? _rootSplit;
   StreamSubscription<WindowEvent>? _subscription;
   Future<void>? _closingFuture;
   TerminalActionDispatchResult? _lastReloadResult;
+  TerminalSettingsDocumentSaveResult? _lastSaveResult;
+  List<TextEditorStyleRun> _publishedStyleRuns = const <TextEditorStyleRun>[];
+  bool? _publishedDetailsExpanded;
+  var _nativeSynchronizationEpoch = 0;
+  var _nativeSynchronizationScheduled = false;
+  var _saveInProgress = false;
+  var _saveRequestCount = 0;
   var _reloadRequestCount = 0;
   var _terminalResponderRestoreCount = 0;
   var _isDisposed = false;
@@ -507,9 +521,21 @@ final class TerminalSettingsInspectorPresenter {
   bool get isOpen => state.isOpen && _window != null;
   bool get isDisposed => _isDisposed;
   Window? get activeWindow => _window;
-  TextView? get activeView => _view;
-  String? get renderedText => _view?.text;
+  TextEditor? get activeView => _editor;
+  TextView? get activeStatusView => _statusView;
+  TextView? get activeDetailView => _detailView;
+  TwoPaneSplitView? get activeEditorStatusSplit => _editorStatusSplit;
+  TwoPaneSplitView? get activeRootSplit => _rootSplit;
+  String? get renderedText {
+    final TextView? status = _statusView;
+    final TextView? detail = _detailView;
+    if (status == null || detail == null) return null;
+    return '${status.text}\n${detail.text}';
+  }
+
   TerminalActionDispatchResult? get lastReloadResult => _lastReloadResult;
+  TerminalSettingsDocumentSaveResult? get lastSaveResult => _lastSaveResult;
+  int get saveRequestCount => _saveRequestCount;
   int get reloadRequestCount => _reloadRequestCount;
   int get terminalResponderRestoreCount => _terminalResponderRestoreCount;
 
@@ -519,26 +545,45 @@ final class TerminalSettingsInspectorPresenter {
     if (_isDisposed)
       throw StateError('settings inspector presenter is disposed');
     final Window? existing = _window;
-    final TextView? existingView = _view;
-    if (existing != null && existingView != null) {
-      state.refresh();
+    final TextEditor? existingEditor = _editor;
+    if (existing != null && existingEditor != null) {
+      state.refreshEffectiveConfiguration();
       _render();
       existing.show();
-      existing.makeFirstResponder(existingView);
+      existing.makeFirstResponder(existingEditor);
       return;
     }
 
-    final TextView view = TextView(
-      configuration: terminalSettingsInspectorTextViewConfiguration,
-    );
+    TextEditor? editor;
+    TextView? statusView;
+    TextView? detailView;
+    TwoPaneSplitView? editorStatusSplit;
+    TwoPaneSplitView? rootSplit;
     Window? window;
     StreamSubscription<WindowEvent>? subscription;
     try {
-      window = Window(
-        frame: const Rect.fromLTWH(140, 100, 760, 680),
-        title: 'Settings — Effective Configuration',
-        configuration: terminalWindowConfiguration,
-      )..contentView = view;
+      state.open();
+      editor = TextEditor(configuration: terminalSettingsEditorConfiguration);
+      statusView = TextView(configuration: terminalSettingsStatusConfiguration);
+      detailView = TextView(configuration: terminalSettingsDetailConfiguration);
+      editorStatusSplit = TwoPaneSplitView(axis: SplitViewAxis.vertical)
+        ..setChildren(first: editor, second: statusView)
+        ..setPosition(
+          fraction: 0.93,
+          firstMinimumExtent: 260,
+          secondMinimumExtent: 38,
+        );
+      rootSplit = TwoPaneSplitView(axis: SplitViewAxis.horizontal)
+        ..setChildren(first: editorStatusSplit, second: detailView);
+      window =
+          Window(
+              frame: const Rect.fromLTWH(110, 80, 1040, 720),
+              title: _fileName(state.documentSession.currentDocument?.rootPath),
+              configuration: terminalWindowConfiguration,
+            )
+            ..representedFilePath =
+                state.documentSession.currentDocument?.rootPath
+            ..contentView = rootSplit;
       window
         ..keyEventRouting = KeyEventRouting.dartOnly
         ..defersCloseRequests = true;
@@ -548,22 +593,36 @@ final class TerminalSettingsInspectorPresenter {
           onError?.call(error, stackTrace);
         },
       );
-      _view = view;
+      _editor = editor;
+      _statusView = statusView;
+      _detailView = detailView;
+      _editorStatusSplit = editorStatusSplit;
+      _rootSplit = rootSplit;
       _window = window;
       _subscription = subscription;
-      state.open();
+      _publishedStyleRuns = const <TextEditorStyleRun>[];
+      _publishedDetailsExpanded = null;
+      _nativeSynchronizationEpoch++;
       _render();
       window
         ..show()
-        ..makeFirstResponder(view);
+        ..makeFirstResponder(editor);
     } on Object {
       unawaited(subscription?.cancel());
       if (window != null && !window.isDisposed) {
         if (!window.isClosed) window.close();
         window.dispose();
       }
-      if (!view.isDisposed) view.dispose();
-      _view = null;
+      _disposeView(rootSplit);
+      _disposeView(editorStatusSplit);
+      _disposeView(detailView);
+      _disposeView(statusView);
+      _disposeView(editor);
+      _editor = null;
+      _statusView = null;
+      _detailView = null;
+      _editorStatusSplit = null;
+      _rootSplit = null;
       _window = null;
       _subscription = null;
       if (state.isOpen) state.dismiss();
@@ -573,7 +632,7 @@ final class TerminalSettingsInspectorPresenter {
 
   void refresh() {
     if (_isDisposed || !state.isOpen) return;
-    state.refresh();
+    state.refreshEffectiveConfiguration();
     _render();
   }
 
@@ -611,49 +670,177 @@ final class TerminalSettingsInspectorPresenter {
           WindowScreenChangedEvent() ||
           WindowFrameChangedEvent() ||
           WindowFullscreenChangedEvent() ||
-          AppKitMouseEvent() ||
           AppKitScrollEvent():
         break;
+      case AppKitMouseEvent():
+        _scheduleNativeSynchronization();
     }
   }
 
   Future<void> _handleKey(AppKitKeyEvent event) async {
     try {
-      final TerminalSettingsInspectorKeyDisposition disposition = _keys.handle(
+      final TerminalSettingsEditorKeyDisposition disposition = _keys.handle(
         event,
       );
-      if (disposition == TerminalSettingsInspectorKeyDisposition.dismissed ||
+      if (disposition == TerminalSettingsEditorKeyDisposition.dismissed ||
           !state.isOpen) {
         await _close(restoreTerminalFocus: true, closeWindow: true);
         return;
       }
-      if (disposition ==
-          TerminalSettingsInspectorKeyDisposition.reloadRequested) {
-        _reloadRequestCount++;
-        final TerminalActionDispatchResult result = await _reload();
-        _lastReloadResult = result;
-        onReloaded?.call(result);
-        if (!state.isOpen) return;
-        state.refresh();
-        _render();
-        final Object? error = result.error;
-        final StackTrace? stackTrace = result.stackTrace;
-        if (error != null && stackTrace != null)
-          onError?.call(error, stackTrace);
-        return;
-      }
-      if (disposition != TerminalSettingsInspectorKeyDisposition.ignored) {
-        _render();
+      switch (disposition) {
+        case TerminalSettingsEditorKeyDisposition.saveRequested:
+          await _saveAndReload();
+        case TerminalSettingsEditorKeyDisposition.nativeEditing:
+          _scheduleNativeSynchronization();
+        case TerminalSettingsEditorKeyDisposition.updated ||
+            TerminalSettingsEditorKeyDisposition.overflow:
+          _render();
+        case TerminalSettingsEditorKeyDisposition.dismissed ||
+            TerminalSettingsEditorKeyDisposition.ignored:
+          break;
       }
     } on Object catch (error, stackTrace) {
       onError?.call(error, stackTrace);
     }
   }
 
-  void _render() {
-    final TextView? view = _view;
-    if (view == null || view.isDisposed || !state.isOpen) return;
-    view.text = state.render();
+  void _scheduleNativeSynchronization() {
+    if (_nativeSynchronizationScheduled || !state.isOpen) return;
+    _nativeSynchronizationScheduled = true;
+    final int epoch = _nativeSynchronizationEpoch;
+    Future<void>.delayed(Duration.zero).then((_) {
+      _nativeSynchronizationScheduled = false;
+      if (epoch != _nativeSynchronizationEpoch || !state.isOpen) return;
+      try {
+        synchronizeNativeEditor();
+      } on Object catch (error, stackTrace) {
+        onError?.call(error, stackTrace);
+      }
+    });
+  }
+
+  /// Pulls native text and selection into the validated product draft.
+  void synchronizeNativeEditor() {
+    final TextEditor? editor = _editor;
+    if (editor == null || editor.isDisposed || !state.isOpen) return;
+    final TextEditorSnapshot snapshot = editor.snapshot;
+    try {
+      state.synchronizeNativeDocument(
+        text: snapshot.text,
+        selection: TerminalSettingsTextSelection(
+          start: snapshot.selection.start,
+          length: snapshot.selection.length,
+        ),
+      );
+    } on TerminalSettingsEditorLimitException {
+      if (!snapshot.hasMarkedText) {
+        editor.setDocument(_documentForState());
+      }
+      rethrow;
+    }
+    _render(editorSnapshot: snapshot);
+  }
+
+  Future<void> _saveAndReload() async {
+    if (_saveInProgress || !state.isOpen) return;
+    _saveInProgress = true;
+    final Window? expectedWindow = _window;
+    try {
+      synchronizeNativeEditor();
+      _saveRequestCount++;
+      final TerminalSettingsDocumentSaveResult saved = state.saveDraft();
+      _lastSaveResult = saved;
+      _render();
+      if (!saved.isSaved) {
+        final Object? error = saved.error;
+        final StackTrace? stackTrace = saved.stackTrace;
+        if (error != null && stackTrace != null) {
+          onError?.call(error, stackTrace);
+        }
+        return;
+      }
+      _reloadRequestCount++;
+      final TerminalActionDispatchResult result = await _reload();
+      _lastReloadResult = result;
+      onReloaded?.call(result);
+      if (identical(_window, expectedWindow) && state.isOpen) {
+        state.refreshEffectiveConfiguration();
+        _render();
+      }
+      final Object? error = result.error;
+      final StackTrace? stackTrace = result.stackTrace;
+      if (error != null && stackTrace != null) {
+        onError?.call(error, stackTrace);
+      }
+    } on Object catch (error, stackTrace) {
+      onError?.call(error, stackTrace);
+    } finally {
+      _saveInProgress = false;
+    }
+  }
+
+  void _render({TextEditorSnapshot? editorSnapshot}) {
+    final TextEditor? editor = _editor;
+    final TextView? statusView = _statusView;
+    final TextView? detailView = _detailView;
+    final TwoPaneSplitView? rootSplit = _rootSplit;
+    final Window? window = _window;
+    if (editor == null ||
+        statusView == null ||
+        detailView == null ||
+        rootSplit == null ||
+        window == null ||
+        editor.isDisposed ||
+        statusView.isDisposed ||
+        detailView.isDisposed ||
+        rootSplit.isDisposed ||
+        !state.isOpen) {
+      return;
+    }
+
+    TextEditorSnapshot snapshot = editorSnapshot ?? editor.snapshot;
+    final List<TextEditorStyleRun> styles = _projectStyleRuns(state);
+    if (snapshot.text != state.text) {
+      editor.setDocument(
+        TextEditorDocument(
+          text: state.text,
+          selection: _editorSelection(state.selection),
+          styleRuns: styles,
+        ),
+      );
+      _publishedStyleRuns = styles;
+      snapshot = editor.snapshot;
+    } else {
+      final TextEditorSelection desiredSelection = _editorSelection(
+        state.selection,
+      );
+      if (!snapshot.hasMarkedText && snapshot.selection != desiredSelection) {
+        editor.setSelection(desiredSelection);
+      }
+      if (!snapshot.hasMarkedText &&
+          !_sameStyleRuns(_publishedStyleRuns, styles)) {
+        editor.setStyleRuns(styles);
+        _publishedStyleRuns = styles;
+      }
+    }
+
+    final bool editable = state.mode == TerminalSettingsEditorMode.insert;
+    if (snapshot.isEditable != editable) editor.isEditable = editable;
+    window.keyEventRouting = editable
+        ? KeyEventRouting.dartAndAppKit
+        : KeyEventRouting.dartOnly;
+    statusView.text = state.renderStatus();
+    detailView.text = state.detailsExpanded
+        ? state.renderDetail()
+        : '›\n\nD\nE\nT\nA\nI\nL';
+    if (_publishedDetailsExpanded != state.detailsExpanded) {
+      rootSplit.setPosition(
+        fraction: state.detailsExpanded ? 0.7 : 0.965,
+        firstMinimumExtent: 360,
+        secondMinimumExtent: state.detailsExpanded ? 260 : 30,
+      );
+      _publishedDetailsExpanded = state.detailsExpanded;
+    }
   }
 
   Future<void> _close({
@@ -670,14 +857,30 @@ final class TerminalSettingsInspectorPresenter {
         _subscription = null;
         await subscription?.cancel();
         final Window? window = _window;
-        final TextView? view = _view;
+        final TextEditor? editor = _editor;
+        final TextView? statusView = _statusView;
+        final TextView? detailView = _detailView;
+        final TwoPaneSplitView? editorStatusSplit = _editorStatusSplit;
+        final TwoPaneSplitView? rootSplit = _rootSplit;
         _window = null;
-        _view = null;
+        _editor = null;
+        _statusView = null;
+        _detailView = null;
+        _editorStatusSplit = null;
+        _rootSplit = null;
+        _nativeSynchronizationEpoch++;
+        _nativeSynchronizationScheduled = false;
+        _publishedStyleRuns = const <TextEditorStyleRun>[];
+        _publishedDetailsExpanded = null;
         if (window != null && !window.isDisposed) {
           if (closeWindow && !window.isClosed) window.close();
           window.dispose();
         }
-        if (view != null && !view.isDisposed) view.dispose();
+        _disposeView(rootSplit);
+        _disposeView(editorStatusSplit);
+        _disposeView(detailView);
+        _disposeView(statusView);
+        _disposeView(editor);
         if (restoreTerminalFocus) {
           final TerminalSettingsInspectorFocusTarget? target = _focusTarget();
           if (target != null &&
@@ -699,6 +902,286 @@ final class TerminalSettingsInspectorPresenter {
     }();
     return completion.future;
   }
+
+  TextEditorDocument _documentForState() => TextEditorDocument(
+    text: state.text,
+    selection: _editorSelection(state.selection),
+    styleRuns: _projectStyleRuns(state),
+  );
+
+  static TextEditorSelection _editorSelection(
+    TerminalSettingsTextSelection selection,
+  ) => TextEditorSelection(start: selection.start, length: selection.length);
+
+  static String _fileName(String? path) {
+    if (path == null || path.isEmpty) return 'Settings';
+    final List<String> components = path.split(RegExp(r'[/\\]'));
+    return components.lastWhere(
+      (String component) => component.isNotEmpty,
+      orElse: () => 'Settings',
+    );
+  }
+
+  static void _disposeView(View? view) {
+    if (view != null && !view.isDisposed) view.dispose();
+  }
+}
+
+final TextViewColor _settingsCommentColor = TextViewColor.sRgb(
+  red: 0.42,
+  green: 0.47,
+  blue: 0.55,
+);
+final TextViewColor _settingsOptionColor = TextViewColor.sRgb(
+  red: 0.39,
+  green: 0.69,
+  blue: 0.98,
+);
+final TextViewColor _settingsDirectiveColor = TextViewColor.sRgb(
+  red: 0.75,
+  green: 0.56,
+  blue: 0.96,
+);
+final TextViewColor _settingsOperatorColor = TextViewColor.sRgb(
+  red: 0.5,
+  green: 0.55,
+  blue: 0.63,
+);
+final TextViewColor _settingsValueColor = TextViewColor.sRgb(
+  red: 0.59,
+  green: 0.83,
+  blue: 0.65,
+);
+final TextViewColor _settingsUnknownColor = TextViewColor.sRgb(
+  red: 0.98,
+  green: 0.43,
+  blue: 0.48,
+);
+final TextViewColor _settingsErrorColor = TextViewColor.sRgb(
+  red: 1,
+  green: 0.35,
+  blue: 0.4,
+);
+final TextViewColor _settingsWarningColor = TextViewColor.sRgb(
+  red: 0.96,
+  green: 0.7,
+  blue: 0.3,
+);
+
+final class _TerminalSettingsStyleEvent {
+  const _TerminalSettingsStyleEvent.syntax({
+    required this.offset,
+    required this.starts,
+    required TerminalSettingsSyntaxKind kind,
+  }) : syntaxKind = kind,
+       severity = null;
+
+  const _TerminalSettingsStyleEvent.diagnostic({
+    required this.offset,
+    required this.starts,
+    required TerminalConfigDiagnosticSeverity severity,
+  }) : syntaxKind = null,
+       severity = severity;
+
+  final int offset;
+  final bool starts;
+  final TerminalSettingsSyntaxKind? syntaxKind;
+  final TerminalConfigDiagnosticSeverity? severity;
+}
+
+List<TextEditorStyleRun> _projectStyleRuns(TerminalSettingsEditorState state) {
+  final String text = state.text;
+  final List<_TerminalSettingsStyleEvent> events =
+      <_TerminalSettingsStyleEvent>[];
+  for (final TerminalSettingsSyntaxSpan span in state.syntaxSpans) {
+    final int start = _styleBoundary(text, span.start, towardEnd: false);
+    final int end = _styleBoundary(text, span.end, towardEnd: true);
+    if (start >= end) continue;
+    events
+      ..add(
+        _TerminalSettingsStyleEvent.syntax(
+          offset: start,
+          starts: true,
+          kind: span.kind,
+        ),
+      )
+      ..add(
+        _TerminalSettingsStyleEvent.syntax(
+          offset: end,
+          starts: false,
+          kind: span.kind,
+        ),
+      );
+  }
+  for (final TerminalSettingsDiagnosticSpan span in state.diagnosticSpans) {
+    final int start = _styleBoundary(text, span.start, towardEnd: false);
+    final int end = _styleBoundary(text, span.end, towardEnd: true);
+    if (start >= end) continue;
+    events
+      ..add(
+        _TerminalSettingsStyleEvent.diagnostic(
+          offset: start,
+          starts: true,
+          severity: span.severity,
+        ),
+      )
+      ..add(
+        _TerminalSettingsStyleEvent.diagnostic(
+          offset: end,
+          starts: false,
+          severity: span.severity,
+        ),
+      );
+  }
+  if (events.isEmpty) return const <TextEditorStyleRun>[];
+  events.sort(
+    (_TerminalSettingsStyleEvent left, _TerminalSettingsStyleEvent right) =>
+        left.offset.compareTo(right.offset),
+  );
+
+  final List<TextEditorStyleRun> runs = <TextEditorStyleRun>[];
+  TerminalSettingsSyntaxKind? syntaxKind;
+  var errorCount = 0;
+  var warningCount = 0;
+  var cursor = events.first.offset;
+  var index = 0;
+  while (index < events.length) {
+    final int offset = events[index].offset;
+    if (offset > cursor &&
+        (syntaxKind != null || errorCount > 0 || warningCount > 0)) {
+      final TerminalConfigDiagnosticSeverity? severity = errorCount > 0
+          ? TerminalConfigDiagnosticSeverity.error
+          : warningCount > 0
+          ? TerminalConfigDiagnosticSeverity.warning
+          : null;
+      _appendProjectedRun(
+        runs,
+        start: cursor,
+        end: offset,
+        foreground: _syntaxColor(syntaxKind),
+        severity: severity,
+      );
+    }
+
+    final int groupStart = index;
+    while (index < events.length && events[index].offset == offset) {
+      index++;
+    }
+    for (var eventIndex = groupStart; eventIndex < index; eventIndex++) {
+      final _TerminalSettingsStyleEvent event = events[eventIndex];
+      if (event.starts) continue;
+      final TerminalSettingsSyntaxKind? endedSyntax = event.syntaxKind;
+      if (endedSyntax != null && syntaxKind == endedSyntax) syntaxKind = null;
+      switch (event.severity) {
+        case TerminalConfigDiagnosticSeverity.error:
+          errorCount--;
+        case TerminalConfigDiagnosticSeverity.warning:
+          warningCount--;
+        case null:
+          break;
+      }
+    }
+    for (var eventIndex = groupStart; eventIndex < index; eventIndex++) {
+      final _TerminalSettingsStyleEvent event = events[eventIndex];
+      if (!event.starts) continue;
+      final TerminalSettingsSyntaxKind? startedSyntax = event.syntaxKind;
+      if (startedSyntax != null) syntaxKind = startedSyntax;
+      switch (event.severity) {
+        case TerminalConfigDiagnosticSeverity.error:
+          errorCount++;
+        case TerminalConfigDiagnosticSeverity.warning:
+          warningCount++;
+        case null:
+          break;
+      }
+    }
+    cursor = offset;
+  }
+  return List<TextEditorStyleRun>.unmodifiable(runs);
+}
+
+void _appendProjectedRun(
+  List<TextEditorStyleRun> runs, {
+  required int start,
+  required int end,
+  required TextViewColor foreground,
+  required TerminalConfigDiagnosticSeverity? severity,
+}) {
+  final TextEditorUnderlineStyle underline = severity == null
+      ? TextEditorUnderlineStyle.none
+      : TextEditorUnderlineStyle.single;
+  final TextViewColor underlineColor = switch (severity) {
+    TerminalConfigDiagnosticSeverity.error => _settingsErrorColor,
+    TerminalConfigDiagnosticSeverity.warning => _settingsWarningColor,
+    null => terminalSettingsPrimaryTextColor,
+  };
+  if (runs.isNotEmpty) {
+    final TextEditorStyleRun previous = runs.last;
+    if (previous.end == start &&
+        previous.foregroundColor == foreground &&
+        previous.underlineStyle == underline &&
+        previous.underlineColor == underlineColor) {
+      runs[runs.length - 1] = TextEditorStyleRun(
+        start: previous.start,
+        length: end - previous.start,
+        foregroundColor: foreground,
+        underlineStyle: underline,
+        underlineColor: underlineColor,
+      );
+      return;
+    }
+  }
+  if (runs.length >= TextEditorLimits.maximumStyleRuns) {
+    throw TerminalSettingsEditorLimitException(
+      kind: TerminalSettingsEditorLimitKind.syntaxSpans,
+      actual: runs.length + 1,
+      maximum: TextEditorLimits.maximumStyleRuns,
+    );
+  }
+  runs.add(
+    TextEditorStyleRun(
+      start: start,
+      length: end - start,
+      foregroundColor: foreground,
+      underlineStyle: underline,
+      underlineColor: underlineColor,
+    ),
+  );
+}
+
+TextViewColor _syntaxColor(TerminalSettingsSyntaxKind? kind) => switch (kind) {
+  TerminalSettingsSyntaxKind.comment => _settingsCommentColor,
+  TerminalSettingsSyntaxKind.optionName => _settingsOptionColor,
+  TerminalSettingsSyntaxKind.directive => _settingsDirectiveColor,
+  TerminalSettingsSyntaxKind.operatorToken => _settingsOperatorColor,
+  TerminalSettingsSyntaxKind.value => _settingsValueColor,
+  TerminalSettingsSyntaxKind.unknownOption => _settingsUnknownColor,
+  null => terminalSettingsPrimaryTextColor,
+};
+
+int _styleBoundary(String text, int offset, {required bool towardEnd}) {
+  final int bounded = offset.clamp(0, text.length);
+  if (bounded <= 0 || bounded >= text.length) return bounded;
+  final int before = text.codeUnitAt(bounded - 1);
+  final int after = text.codeUnitAt(bounded);
+  final bool splitsSurrogate =
+      before >= 0xd800 &&
+      before <= 0xdbff &&
+      after >= 0xdc00 &&
+      after <= 0xdfff;
+  if (!splitsSurrogate) return bounded;
+  return towardEnd ? bounded + 1 : bounded - 1;
+}
+
+bool _sameStyleRuns(
+  List<TextEditorStyleRun> left,
+  List<TextEditorStyleRun> right,
+) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
 }
 
 final class _TerminalSettingsWriter {

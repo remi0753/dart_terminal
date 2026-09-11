@@ -54,6 +54,8 @@ import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_restoration.dart';
 import 'terminal_restoration_lifecycle.dart';
 import 'terminal_session.dart';
+import 'terminal_settings_document.dart';
+import 'terminal_settings_editor.dart';
 import 'terminal_settings_inspector.dart';
 import 'terminal_shell_integration.dart';
 import 'terminal_tab_metadata.dart';
@@ -113,6 +115,7 @@ final class TerminalOptions {
     this.effectiveConfiguration,
     this.configurationDiagnostics = const <TerminalConfigDiagnostic>[],
     this.configurationReloadController,
+    this.settingsDocumentSession,
   });
 
   factory TerminalOptions.parse(
@@ -585,6 +588,12 @@ final class TerminalOptions {
         environment: selectedEnvironment,
         currentDirectory: selectedCurrentDirectory,
       ),
+      settingsDocumentSession: TerminalSettingsDocumentSession(
+        loader: configLoader,
+        arguments: arguments,
+        environment: selectedEnvironment,
+        currentDirectory: selectedCurrentDirectory,
+      ),
     );
   }
 
@@ -608,6 +617,7 @@ final class TerminalOptions {
   final TerminalConfigSnapshot? effectiveConfiguration;
   final List<TerminalConfigDiagnostic> configurationDiagnostics;
   final TerminalConfigReloadController? configurationReloadController;
+  final TerminalSettingsDocumentSession? settingsDocumentSession;
 }
 
 final class TerminalApplication {
@@ -698,6 +708,7 @@ final class TerminalApplication {
         options.initialWorkingDirectory,
         productConfiguration,
         configurationReloadController: options.configurationReloadController,
+        settingsDocumentSession: options.settingsDocumentSession,
         runUserActionAcceptance: options.runtimeUserActionsTest,
         runConfigurationAcceptance: options.runtimeConfigurationTest,
         runThemeAcceptance: options.runtimeThemeTest,
@@ -2181,6 +2192,7 @@ final class TerminalApplication {
     String? initialWorkingDirectory,
     TerminalProductConfiguration productConfiguration, {
     TerminalConfigReloadController? configurationReloadController,
+    TerminalSettingsDocumentSession? settingsDocumentSession,
     bool runUserActionAcceptance = false,
     bool runConfigurationAcceptance = false,
     bool runThemeAcceptance = false,
@@ -3268,8 +3280,15 @@ final class TerminalApplication {
         onError: recordAsynchronousError,
       );
       if (configurationReloadController != null) {
+        final TerminalSettingsDocumentSession documentSession =
+            settingsDocumentSession ??
+            (throw StateError(
+              'configuration reload requires a matching Settings document '
+              'session',
+            ));
         settingsPresenter = TerminalSettingsInspectorPresenter(
           controller: configurationReloadController,
+          documentSession: documentSession,
           focusTarget: () {
             final TerminalWindowState? activeWindow = state.activeWindow;
             if (activeWindow == null) return null;
@@ -4296,6 +4315,15 @@ final class TerminalApplication {
     _injectKeyEventForTesting(
       application,
       initialSettingsWindow,
+      keyCode: 44,
+      modifiers: 0,
+      characters: '/',
+      charactersIgnoringModifiers: '/',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    _injectKeyEventForTesting(
+      application,
+      initialSettingsWindow,
       keyCode: 17,
       modifiers: 0,
       characters: 'theme',
@@ -4305,26 +4333,42 @@ final class TerminalApplication {
     await waitFor(
       () =>
           settings.state.query == 'theme' &&
-          settings.state.selectedEntry?.option.name == 'theme',
+          settings.state.selectedOccurrence?.option.name == 'theme',
       'native Settings search did not select the theme option',
     );
-    final initialTheme = settings.state.selectedEntry!;
+    _injectKeyEventForTesting(
+      application,
+      initialSettingsWindow,
+      keyCode: 36,
+      modifiers: 0,
+      characters: '\r',
+      charactersIgnoringModifiers: '\r',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () => settings.state.mode == TerminalSettingsEditorMode.normal,
+      'native Settings search did not return to NORMAL mode',
+    );
+    final TerminalSettingsOptionOccurrence initialTheme =
+        settings.state.selectedOccurrence!;
     _expectLifecycle(
       nativeActionInvocations.last == TerminalActionId.openSettings &&
           actionDispatches.last.id == TerminalActionId.openSettings &&
           actionDispatches.last.disposition ==
               TerminalActionDispatchDisposition.executed &&
-          application.debugLiveObjectCount == nativeHandleBaseline + 2 &&
-          settings.state.effectiveSnapshot.schema.options.length == 36 &&
-          initialTheme.canonicalValue == 'system' &&
-          initialTheme.source.kind == TerminalConfigSourceKind.file &&
-          initialTheme.source.path == configurationPath &&
-          initialTheme.source.line == 1 &&
+          application.debugLiveObjectCount == nativeHandleBaseline + 6 &&
+          reloadController.effectiveSnapshot.schema.options.length == 36 &&
+          settings.state.occurrences.length == 36 &&
+          initialTheme.draftValue(settings.state.text) == 'system' &&
+          initialTheme.lineIndex == 0 &&
           initialTheme.option.applicationPolicy ==
               TerminalConfigApplicationPolicy.newSession &&
           settings.state.diagnostics.length == 2 &&
           (settings.renderedText ?? '').contains('CFG_DEPRECATED_VALUE') &&
-          (settings.renderedText ?? '').contains('CFG_INVALID_VALUE') &&
+          !(settings.renderedText ?? '').contains('CFG_INVALID_VALUE') &&
+          !(settings.renderedText ?? '').contains('Config Lens') &&
+          !(settings.renderedText ?? '').contains('SOURCE') &&
+          !(settings.renderedText ?? '').contains('APPLIES') &&
           identical(sessions[initialPaneId], stableSession) &&
           identical(owners[initialPaneId], stableOwner) &&
           identical(hierarchy.windowForTab(initialTab.id), stableWindow),
@@ -4337,7 +4381,7 @@ final class TerminalApplication {
       singletonDispatch.disposition ==
               TerminalActionDispatchDisposition.executed &&
           identical(settings.activeWindow, initialSettingsWindow) &&
-          application.debugLiveObjectCount == nativeHandleBaseline + 2,
+          application.debugLiveObjectCount == nativeHandleBaseline + 6,
       'shared Settings redispatch created duplicate native owners',
     );
     _injectKeyEventForTesting(
@@ -4568,7 +4612,7 @@ final class TerminalApplication {
           !palette.isOpen &&
           settings.isOpen &&
           actionDispatches.length == paletteDispatchBaseline + 2 &&
-          application.debugLiveObjectCount == nativeHandleBaseline + 2,
+          application.debugLiveObjectCount == nativeHandleBaseline + 6,
       'command palette did not transfer native ownership to Settings',
     );
     _expectLifecycle(
@@ -4583,6 +4627,15 @@ final class TerminalApplication {
     _injectKeyEventForTesting(
       application,
       reloadSettingsWindow,
+      keyCode: 44,
+      modifiers: 0,
+      characters: '/',
+      charactersIgnoringModifiers: '/',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    _injectKeyEventForTesting(
+      application,
+      reloadSettingsWindow,
       keyCode: 3,
       modifiers: 0,
       characters: 'font-size',
@@ -4592,54 +4645,105 @@ final class TerminalApplication {
     await waitFor(
       () =>
           settings.state.query == 'font-size' &&
-          settings.state.selectedEntry?.option.name == 'font-size',
+          settings.state.selectedOccurrence?.option.name == 'font-size',
       'Settings did not search the accepted font-size entry',
     );
     _expectLifecycle(
-      settings.state.selectedEntry?.canonicalValue == '18' &&
-          settings.state.selectedEntry?.source.path == configurationPath &&
-          (settings.renderedText ?? '').contains('Policy: new-session'),
-      'Settings lost accepted font-size provenance or policy',
+      reloadController.effectiveSnapshot.value(
+                TerminalProductConfigSchema.fontSize,
+              ) ==
+              18 &&
+          settings.state.selectedOccurrence?.option.applicationPolicy ==
+              TerminalConfigApplicationPolicy.newSession &&
+          (settings.renderedText ?? '').contains('After save') &&
+          (settings.renderedText ?? '').contains('New terminals') &&
+          !(settings.renderedText ?? '').contains('SOURCE'),
+      'Settings lost accepted font-size value or contextual save behavior',
     );
-    File(configurationPath).writeAsStringSync(
-      'font-size = enormous\nmacos-option-key = escape\n',
-      flush: true,
-    );
-    final int rejectedDispatchBaseline = actionDispatches.length;
     _injectKeyEventForTesting(
       application,
       reloadSettingsWindow,
-      keyCode: 15,
-      modifiers: ModifierKeys.commandBit,
-      characters: 'r',
-      charactersIgnoringModifiers: 'r',
+      keyCode: 36,
+      modifiers: 0,
+      characters: '\r',
+      charactersIgnoringModifiers: '\r',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () => settings.state.mode == TerminalSettingsEditorMode.normal,
+      'Settings search did not return to NORMAL before editing',
+    );
+    final List<TerminalSettingsSyntaxSpan> normalSyntax =
+        settings.state.syntaxSpans;
+    _injectKeyEventForTesting(
+      application,
+      reloadSettingsWindow,
+      keyCode: 34,
+      modifiers: 0,
+      characters: 'i',
+      charactersIgnoringModifiers: 'i',
       monotonicNanoseconds: eventTimestamp++,
     );
     await waitFor(
       () =>
-          configurationReloads.length == 1 &&
-          actionDispatches.length == rejectedDispatchBaseline + 1,
-      'invalid native configuration reload did not complete exactly once',
+          settings.state.mode == TerminalSettingsEditorMode.insert &&
+          settings.activeView!.snapshot.isEditable,
+      'Settings did not enter INSERT on the same native editor',
     );
-    final TerminalConfigReloadResult rejectedReload =
-        configurationReloads.single;
     _expectLifecycle(
-      rejectedReload.disposition == TerminalConfigReloadDisposition.rejected &&
-          rejectedReload.diagnostics.single.code == 'CFG_INVALID_VALUE' &&
-          rejectedReload.diagnostics.single.source.path == configurationPath &&
-          rejectedReload.diagnostics.single.source.line == 1 &&
+      identical(normalSyntax, settings.state.syntaxSpans),
+      'entering INSERT recomputed the syntax projection',
+    );
+
+    final String originalConfiguration = File(configurationPath)
+        .readAsStringSync();
+    final String invalidDraft = settings.state.text.replaceFirst(
+      'font-size = 18',
+      'font-size = enormous',
+    );
+    _expectLifecycle(
+      invalidDraft != settings.state.text,
+      'configuration acceptance could not locate the font-size draft',
+    );
+    final int invalidCaret = invalidDraft.indexOf('enormous');
+    settings.activeView!.setDocument(
+      TextEditorDocument(
+        text: invalidDraft,
+        selection: TextEditorSelection(start: invalidCaret),
+      ),
+    );
+    settings.synchronizeNativeEditor();
+    final int rejectedDispatchBaseline = actionDispatches.length;
+    _injectKeyEventForTesting(
+      application,
+      reloadSettingsWindow,
+      keyCode: 1,
+      modifiers: ModifierKeys.commandBit,
+      characters: 's',
+      charactersIgnoringModifiers: 's',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          settings.saveRequestCount == 1 &&
+          settings.state.saveState == TerminalSettingsSaveState.invalid,
+      'invalid native Settings save did not complete exactly once',
+    );
+    _expectLifecycle(
+      settings.lastSaveResult?.disposition ==
+              TerminalSettingsDocumentSaveDisposition.rejected &&
+          settings.state.diagnostics.any(
+            (TerminalConfigDiagnostic diagnostic) =>
+                diagnostic.code == 'CFG_INVALID_VALUE',
+          ) &&
+          settings.state.diagnosticSpans.isNotEmpty &&
           reloadController.acceptedGeneration == 0 &&
           configurationAuthority.acceptedGeneration == 0 &&
-          actionDispatches.last.id == TerminalActionId.reloadConfiguration &&
-          actionDispatches.last.disposition ==
-              TerminalActionDispatchDisposition.executed &&
-          settings.reloadRequestCount == 1 &&
-          settings.lastReloadResult?.id ==
-              TerminalActionId.reloadConfiguration &&
-          settings.state.acceptedGeneration == 0 &&
-          settings.state.selectedEntry?.canonicalValue == '18' &&
-          settings.state.diagnosticContext == 'latest reload attempt' &&
-          settings.state.diagnostics.single.code == 'CFG_INVALID_VALUE' &&
+          configurationReloads.isEmpty &&
+          actionDispatches.length == rejectedDispatchBaseline &&
+          settings.reloadRequestCount == 0 &&
+          settings.lastReloadResult == null &&
+          File(configurationPath).readAsStringSync() == originalConfiguration &&
           (settings.renderedText ?? '').contains('Fix:') &&
           identical(sessions[initialPaneId], stableSession) &&
           identical(owners[initialPaneId], stableOwner) &&
@@ -4647,11 +4751,11 @@ final class TerminalApplication {
           initialScreens.palette.defaultForeground == configuredForeground &&
           initialOwner.surface.fontMetrics.pointSize == 18 &&
           initialScreens.scrollback.maxLines == configuredScrollbackLines,
-      'invalid reload did not retain last-known-good resources and values',
+      'invalid save did not retain the file and last-known-good resources',
     );
 
-    File(configurationPath)
-        .writeAsStringSync('''working-directory = $reloadedWorkingDirectory
+    final String correctedDraft =
+        '''working-directory = $reloadedWorkingDirectory
 theme = system
 palette-foreground = #a0b0c0
 palette-background = #202122
@@ -4673,22 +4777,31 @@ keybind = control+e=unbind
 keybind = control+d=terminal.send-end-of-file
 keybind = command+k=passthrough
 keybind = control+k=pane.focus-next
-''', flush: true);
+''';
+    final int correctedCaret = correctedDraft.indexOf('font-size = 20');
+    settings.activeView!.setDocument(
+      TextEditorDocument(
+        text: correctedDraft,
+        selection: TextEditorSelection(start: correctedCaret),
+      ),
+    );
+    settings.synchronizeNativeEditor();
     final int appliedDispatchBaseline = actionDispatches.length;
     _injectKeyEventForTesting(
       application,
       reloadSettingsWindow,
-      keyCode: 15,
+      keyCode: 1,
       modifiers: ModifierKeys.commandBit,
-      characters: 'r',
-      charactersIgnoringModifiers: 'r',
+      characters: 's',
+      charactersIgnoringModifiers: 's',
       monotonicNanoseconds: eventTimestamp++,
     );
     await waitFor(
       () =>
-          configurationReloads.length == 2 &&
+          configurationReloads.length == 1 &&
+          settings.saveRequestCount == 2 &&
           actionDispatches.length == appliedDispatchBaseline + 1,
-      'corrected native configuration reload did not complete exactly once',
+      'corrected native Settings save/reload did not complete exactly once',
     );
     final TerminalConfigReloadResult appliedReload = configurationReloads.last;
     _expectLifecycle(
@@ -4702,9 +4815,14 @@ keybind = control+k=pane.focus-next
           actionDispatches.last.id == TerminalActionId.reloadConfiguration &&
           actionDispatches.last.disposition ==
               TerminalActionDispatchDisposition.executed &&
-          settings.reloadRequestCount == 2 &&
-          settings.state.acceptedGeneration == 1 &&
-          settings.state.selectedEntry?.canonicalValue == '20' &&
+          settings.saveRequestCount == 2 &&
+          settings.reloadRequestCount == 1 &&
+          settings.lastSaveResult?.isSaved == true &&
+          reloadController.effectiveSnapshot.value(
+                TerminalProductConfigSchema.fontSize,
+              ) ==
+              20 &&
+          File(configurationPath).readAsStringSync() == correctedDraft &&
           settings.state.diagnostics.isEmpty &&
           identical(sessions[initialPaneId], stableSession) &&
           identical(owners[initialPaneId], stableOwner) &&
@@ -4716,6 +4834,21 @@ keybind = control+k=pane.focus-next
           initialScreens.scrollback.maxLines == configuredScrollbackLines &&
           initialScreens.activeScreen.cursorShape == TerminalCursorShape.bar,
       'accepted reload did not preserve existing new-session resources',
+    );
+    _injectKeyEventForTesting(
+      application,
+      reloadSettingsWindow,
+      keyCode: 53,
+      modifiers: 0,
+      characters: '\u001b',
+      charactersIgnoringModifiers: '\u001b',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          settings.state.mode == TerminalSettingsEditorMode.normal &&
+          !settings.activeView!.snapshot.isEditable,
+      'Settings Escape did not leave INSERT without changing surfaces',
     );
     _injectKeyEventForTesting(
       application,

@@ -418,3 +418,90 @@ otherwise make the document look visually different.
 - Terminal `git diff --check`: passed before progress recording. No product UI
   code was advanced early; native composition remains the next ordered
   subtask.
+
+### 2026-09-11 — native editor, contextual detail, and save lifecycle
+
+- `TerminalSettingsInspectorPresenter` now retains its existing product/action
+  boundary but presents one dominant `TextEditor`, one compact status strip,
+  and one contextual detail surface in two nested `TwoPaneSplitView`s. The
+  window title is only the root configuration filename and also carries the
+  represented-file path; the editor does not repeat that filename. The right
+  panel has no `Config Lens`, line, source, or `APPLIES` labels. Collapsing it
+  leaves a narrow `DETAIL` edge rail in the same right-side region rather than
+  hiding discovery behind a top button.
+- The status/detail views are passive and cannot become first responder. The
+  one attributed editor remains first responder for the window lifetime.
+  NORMAL and SEARCH use `dartOnly` key routing; `i` or `a` changes that same
+  native handle to editable `dartAndAppKit` routing, and `Esc` changes only
+  editability/routing back to NORMAL. `/` is the sole entry into SEARCH.
+- The product projects the schema scanner into a restrained dark syntax
+  palette and merges independent diagnostic underlines into checked,
+  non-overlapping AppKit style runs. Published runs are structurally cached.
+  Since changing NORMAL/INSERT does not change text, syntax spans, or
+  diagnostics, the transition performs no style publication at all; fake
+  native acceptance compares every range, foreground component, underline
+  style, and underline color before and after the transition and finds them
+  identical.
+- Native text and UTF-16 selection are pulled back after INSERT key/mouse
+  handling. A zero-delay coalescing boundary lets AppKit finish responder
+  dispatch first. Marked text is reflected in draft state without restyling
+  live composition; styling resumes after marked text commits. Oversized or
+  invalid-boundary snapshots fail through the typed editor limit and restore
+  the last accepted product document when it is safe to do so.
+- `TerminalOptions.parse` now retains a `TerminalSettingsDocumentSession`
+  built from the exact loader, arguments, environment, and current directory
+  used for startup/reload. This preserves schema identity and all precedence
+  semantics for draft validation. The interactive product rejects a reload
+  controller without its matching document session instead of inventing a
+  different validation context.
+- Command-S first synchronizes the native document, validates it through the
+  document session, and records the typed result. Invalid, conflicted,
+  unavailable, and failed saves do not write or dispatch reload. Only a
+  successful atomic save invokes the existing shared reload action, after
+  which current/detail values refresh without replacing terminal panes or the
+  Settings editor. Duplicate save requests are suppressed while that sequence
+  is in progress.
+- Close requests and NORMAL Escape cancel the event subscription, close the
+  window, dispose both split views and all three child surfaces, invalidate
+  queued native synchronizations, then restore the live terminal responder.
+  Reopening an already-open editor reuses every owner; opening after a close
+  creates one fresh complete document revision.
+- The fake AppKit hierarchy test now implements only the optional
+  `NativeTextEditorBindings` capability needed by this product. It pins nested
+  axes/children, passive supporting views, filename title, all 36 occurrences,
+  exact first responder, singleton reopen, explicit search, identical
+  NORMAL/INSERT styling, native whole-buffer synchronization, invalid-save
+  underline/no-write/no-reload behavior, corrected atomic save/shared reload,
+  detail rail, focus restoration, and return to the exact native object
+  baseline.
+- The M1 configuration acceptance flow was updated from external file writes
+  plus Command-R to the actual editor contract: explicit `/` search, INSERT on
+  the native surface, rejected Command-S draft, corrected Command-S save, and
+  the one ensuing shared reload. Its two-runtime execution remains the final
+  ordered acceptance subtask.
+
+### Verification for ordered subtask 4
+
+- Targeted `dart analyze` for the presenter, product wiring, policy, and native
+  hierarchy test: passed with no issues.
+- `dart run test/terminal_native_hierarchy_test.dart`: passed after adding the
+  invalid-save integration assertions.
+- `dart run test/terminal_settings_editor_test.dart`,
+  `terminal_settings_document_test.dart`, and
+  `terminal_settings_inspector_test.dart`: passed.
+- The first parallel focused invocations were blocked before test execution
+  because the Metal build hook could not write Clang's user module cache from
+  the workspace sandbox. Re-running the native hierarchy test with the
+  required cache access populated the ordinary build cache; all focused reruns
+  then passed. This was an environment restriction, not a product failure.
+- The first full `make test` reached the intended Phase 7 AppKit freshness gate
+  and rejected the changed product/application sources as stale. Running
+  `make phase7-appkit-acceptance` updated only the reviewed SHA-256 entries for
+  `terminal_application.dart` and `terminal_native_hierarchy_test.dart`; no
+  acceptance criteria or assertions were regenerated away.
+- Full `make test` then passed. All generated-reference, AppKit-evidence,
+  compatibility, differential, application-matrix, terminfo, and shell-resource
+  gates passed; all 245 Dart files were already formatted; analysis reported no
+  issues; and the aggregate ended with `dart_terminal tests passed`.
+- `git diff --check` and the final task-scoped diff review passed. The adjacent
+  `dart_appkit` worktree remains clean at the previously accepted editor commit.
