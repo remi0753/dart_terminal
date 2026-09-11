@@ -1,6 +1,6 @@
 # Split pane resolution, resize, and controls
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-12
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 7 follow-up `split paneのRetina表示、drag resize同期、keyboard divider操作`
@@ -234,6 +234,61 @@ the next begins. After every commit, reread `ROADMAP.md` and this memo.
   completed with exit 0: all freshness, compatibility, application, terminfo,
   and shell-integration checks passed; formatting changed zero files; static
   analysis found no issues; Phase 9 stress and the complete Dart suite passed.
+- 2026-09-12: after commit `77ea375`, reread the roadmap and this memo. For the
+  final child, selected four stable application actions in the View menu with
+  AppKit function-key equivalents U+F700..U+F703 and exact Command modifiers.
+  The configurable-keybinding collision vocabulary will translate those
+  native equivalents to `arrow-up`, `arrow-down`, `arrow-left`, and
+  `arrow-right`, so menu reservation, command-palette discovery, and config
+  validation share one physical-key identity.
+- 2026-09-12: divider direction describes movement of the divider itself,
+  independent of which child contains focus. The hierarchy adapter will find
+  the nearest focused-pane ancestor whose axis matches the command, derive one
+  movement step from the configured logical cell width or height, clamp the
+  first-child extent to the existing descendant minima, persist the resulting
+  fraction through application state, and run the ordinary reconciliation
+  path. A zoomed, unprojected, absent, or already-clamped matching divider is
+  unavailable rather than falling through to terminal input.
+- 2026-09-12: the initial focused test compile found that a nullable branch
+  local was not promoted through a conditional map lookup; replaced it with
+  an explicit null return before accessing the branch ID. The next action
+  registry run exposed an intentional search-overlap: the old abbreviated
+  query `SPLTRGHT` now matches both “Split Pane Right” and “Move Split Divider
+  Right”. Updated the assertion to verify deterministic catalog-first ordering
+  and added an exact divider-action query instead of assuming one result.
+- 2026-09-12: the first Developer JIT product acceptance reached and executed
+  Command+Right, but the new assertion required both panes' integer column
+  counts to change after one integer-point cell step. Native pane extents and
+  renderer viewports are measured in points/pixels while the resolved system
+  font cell width is fractional, so a valid relayout can leave one side in the
+  same integer column bucket. Retained the strict opposite viewport movement,
+  unchanged row/font/scale checks, and required both column counts to be
+  monotonic with at least one changing. This verifies recomputation without
+  assuming an invalid symmetric rounding result.
+- 2026-09-12: a diagnostic rerun measured the immediate post-command
+  snapshots as left viewport `919 -> 935` pixels and right viewport
+  `919 -> 903` pixels at unchanged 2x scale, while both snapshots still
+  reported their prior 62 columns. This confirmed that native/model/renderer
+  geometry was already correct and that the assertion raced the asynchronous
+  terminal/PTY resize path. Added a bounded wait for monotonic column
+  convergence before evaluating the final fixed-metric invariant; retained
+  the numeric failure context for future diagnosis.
+- 2026-09-12: the corrected M1/arm64 Developer JIT product acceptance passed
+  in 1,732 ms and the Release AOT acceptance passed in 1,058 ms. Both used the
+  ordinary native menu dispatcher and real PTY/Metal hierarchy, verified the
+  new pane reached 2x scale, invoked Command+Right exactly once without a
+  terminal write, observed opposite viewport/grid resizing after bounded PTY
+  convergence, kept both font catalogs' point/cell metrics and raster scale
+  unchanged, exercised the existing palette/window/tab/split/input-isolation
+  path, and cleanly released all five created sessions plus native owners.
+- 2026-09-12: added the four stable IDs
+  `pane.move-divider-left|right|up|down`. They are dynamically available only
+  when the focused pane has a visible matching-axis divider that can move,
+  appear in the View menu and command palette, accept additional non-reserved
+  configured chords through the existing `keybind` option, and reserve the
+  native Command+arrow defaults. Updated the generated action/keybinding
+  reference, README product summary, and `FEATURE_MATRIX.md` UI/input/render
+  evidence; no new Settings option or Settings-screen control is introduced.
 
 ## Verification log
 
@@ -262,3 +317,30 @@ the next begins. After every commit, reread `ROADMAP.md` and this memo.
   formatting changed zero files, static analysis reported no issues, the
   Phase 9 stress gate passed, and the complete suite ended with
   `dart_terminal tests passed`.
+- 2026-09-12: final-child focused action registry, key vocabulary, hierarchy
+  coordinator, and fake-AppKit hierarchy tests all completed with exit 0 after
+  the recorded assertion corrections. The fake hierarchy constructs nested
+  horizontal/vertical/horizontal branches, proves nearest-axis selection and
+  exact 8-point/16-point cell steps, clamps both horizontal ends, and disables
+  all divider commands while zoom hides the split tree.
+- 2026-09-12: final M1 product acceptance commands:
+  `CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64 developer-jit-actions`
+  and the corresponding `release-aot-actions`; both completed with exit 0 and
+  emitted `RUNTIME_USER_ACTIONS_INTEGRATION_PASS`.
+- 2026-09-12: the first final full gate passed the key/action reference
+  (`application_actions=25`, `reserved_shortcuts=14`), Phase 7 AppKit evidence,
+  and preceding freshness checks, then stopped at the Phase 6 compatibility
+  coverage freshness check. That derived report hashes shared runtime sources
+  and README/FEATURE evidence, so this follow-up's in-scope changes require its
+  normal regeneration; no compatibility behavior assertion failed.
+- 2026-09-12: regenerated
+  `compatibility/regression_coverage_report.json` from the final shared source
+  and documentation hashes. The exact final gate
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` then completed with exit 0:
+  all generated/reference/Phase 7/compatibility/application/terminfo/shell
+  freshness gates passed, Dart formatting covered 270 files with zero changes,
+  static analysis found no issues, Phase 9 security stress passed at seed
+  `0x509a1171`, and the full suite ended with `dart_terminal tests passed`.
+- 2026-09-12: all three requested outcomes and all six completion criteria are
+  satisfied. The follow-up has no remaining task or blocker; Phase 10 remains
+  untouched and is the next roadmap phase after this session stops.

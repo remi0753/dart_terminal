@@ -1182,7 +1182,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### Phase 7 follow-up — split pane表示とdivider操作
 
-- [ ] split paneのRetina表示、drag resize同期、keyboard divider操作
+- [x] split paneのRetina表示、drag resize同期、keyboard divider操作
   （分割、境界、完了条件は
   [`docs/phase7/split-pane-resolution-resize-controls.md`](docs/phase7/split-pane-resolution-resize-controls.md)
   を参照して順に実施する）
@@ -1190,7 +1190,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] native divider dragを論理layout/viewport/gridへ同期して表示倍率を固定する
     - [x] `dart_appkit` にboundedなnative split fraction queryを追加する
     - [x] divider gestureをmodel/layout/renderer/PTYへ同期してmouse漏洩を防ぐ
-  - [ ] 方向別divider action、Command+矢印、製品受け入れ、親項目完了判定
+  - [x] 方向別divider action、Command+矢印、製品受け入れ、親項目完了判定
 
 ### Phase 10 — macOS native polish と accessibility（10–16 person-weeks）
 

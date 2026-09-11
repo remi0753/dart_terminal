@@ -19,6 +19,10 @@ enum TerminalActionId {
   jumpToNextPrompt('pane.jump-to-next-prompt'),
   togglePaneZoom('pane.toggle-zoom'),
   equalizeSplits('pane.equalize-splits'),
+  moveDividerLeft('pane.move-divider-left'),
+  moveDividerRight('pane.move-divider-right'),
+  moveDividerUp('pane.move-divider-up'),
+  moveDividerDown('pane.move-divider-down'),
   copy('edit.copy'),
   paste('edit.paste'),
   allowOsc52Clipboard('edit.allow-osc52-clipboard'),
@@ -348,6 +352,47 @@ final class TerminalActionCatalog {
       title: 'Equalize Splits',
       menu: TerminalActionMenu.view,
       keywords: const <String>['balance', 'resize', 'panes'],
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.moveDividerLeft,
+      title: 'Move Split Divider Left',
+      menu: TerminalActionMenu.view,
+      keywords: const <String>['resize', 'pane', 'horizontal'],
+      shortcut: const TerminalActionShortcut(
+        keyEquivalent: '\uF702',
+        command: true,
+      ),
+      separatorBefore: true,
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.moveDividerRight,
+      title: 'Move Split Divider Right',
+      menu: TerminalActionMenu.view,
+      keywords: const <String>['resize', 'pane', 'horizontal'],
+      shortcut: const TerminalActionShortcut(
+        keyEquivalent: '\uF703',
+        command: true,
+      ),
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.moveDividerUp,
+      title: 'Move Split Divider Up',
+      menu: TerminalActionMenu.view,
+      keywords: const <String>['resize', 'pane', 'vertical'],
+      shortcut: const TerminalActionShortcut(
+        keyEquivalent: '\uF700',
+        command: true,
+      ),
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.moveDividerDown,
+      title: 'Move Split Divider Down',
+      menu: TerminalActionMenu.view,
+      keywords: const <String>['resize', 'pane', 'vertical'],
+      shortcut: const TerminalActionShortcut(
+        keyEquivalent: '\uF701',
+        command: true,
+      ),
     ),
     TerminalActionDefinition(
       id: TerminalActionId.jumpToPreviousPrompt,

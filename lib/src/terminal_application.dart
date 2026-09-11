@@ -3363,6 +3363,8 @@ final class TerminalApplication {
             state: state,
             configurationFactory: configuration,
             reconcile: reconcileInteractiveHierarchy,
+            canMoveDivider: createdHierarchy.canMoveFocusedDivider,
+            moveDivider: createdHierarchy.moveFocusedDivider,
             canMutate: () =>
                 !createdPaneCloseCoordinator.removalInProgress &&
                 !createdPaneCloseCoordinator.applicationQuitInProgress,
@@ -6352,6 +6354,86 @@ keybind = control+k=pane.focus-next
           hierarchy.paneResourceCount == 2 &&
           hierarchy.splitViewCount == 1,
     );
+    final TerminalTabState resizedTab = state.activeWindow!.selectedTab;
+    final TerminalSplitBranch resizedRoot =
+        resizedTab.splitTree.root as TerminalSplitBranch;
+    final PaneId leftPaneId = resizedTab.paneIds.first;
+    final PaneId rightPaneId = resizedTab.paneIds.last;
+    final _TerminalHierarchyProductPane leftOwner = owners[leftPaneId]!;
+    final _TerminalHierarchyProductPane rightOwner = owners[rightPaneId]!;
+    await waitFor(
+      () =>
+          leftOwner.surface.snapshot().scale16_16 == 2 * 65536 &&
+          rightOwner.surface.snapshot().scale16_16 == 2 * 65536,
+      'new split did not publish the original pane Retina raster scale',
+    );
+    final TerminalLiveMetalSurfaceSnapshot leftBefore = leftOwner.surface
+        .snapshot();
+    final TerminalLiveMetalSurfaceSnapshot rightBefore = rightOwner.surface
+        .snapshot();
+    final TerminalFontCatalogMetrics leftMetricsBefore =
+        leftOwner.surface.fontMetrics;
+    final TerminalFontCatalogMetrics rightMetricsBefore =
+        rightOwner.surface.fontMetrics;
+    _expectLifecycle(
+      rightBefore.scale16_16 == leftBefore.scale16_16,
+      'new split did not inherit the original pane Retina raster scale',
+    );
+    await performMenuAction(
+      TerminalActionId.moveDividerRight,
+      keyEquivalent: '\uF703',
+      modifiers: ModifierKeys.commandBit,
+      completed: () =>
+          (resizedTab.splitTree.root as TerminalSplitBranch).fraction >
+          resizedRoot.fraction,
+    );
+    await waitFor(() {
+      final TerminalLiveMetalSurfaceSnapshot left = leftOwner.surface
+          .snapshot();
+      final TerminalLiveMetalSurfaceSnapshot right = rightOwner.surface
+          .snapshot();
+      return left.columns >= leftBefore.columns &&
+          right.columns <= rightBefore.columns &&
+          (left.columns > leftBefore.columns ||
+              right.columns < rightBefore.columns);
+    }, 'Command+Right terminal grids did not settle after viewport resize');
+    final TerminalLiveMetalSurfaceSnapshot leftAfter = leftOwner.surface
+        .snapshot();
+    final TerminalLiveMetalSurfaceSnapshot rightAfter = rightOwner.surface
+        .snapshot();
+    _expectLifecycle(
+      leftOwner.surface.fontMetrics.cellWidth == leftMetricsBefore.cellWidth &&
+          leftOwner.surface.fontMetrics.cellHeight ==
+              leftMetricsBefore.cellHeight &&
+          leftOwner.surface.fontMetrics.pointSize ==
+              leftMetricsBefore.pointSize &&
+          rightOwner.surface.fontMetrics.cellWidth ==
+              rightMetricsBefore.cellWidth &&
+          rightOwner.surface.fontMetrics.cellHeight ==
+              rightMetricsBefore.cellHeight &&
+          rightOwner.surface.fontMetrics.pointSize ==
+              rightMetricsBefore.pointSize &&
+          leftAfter.viewportWidth > leftBefore.viewportWidth &&
+          rightAfter.viewportWidth < rightBefore.viewportWidth &&
+          leftAfter.rows == leftBefore.rows &&
+          rightAfter.rows == rightBefore.rows &&
+          leftAfter.columns >= leftBefore.columns &&
+          rightAfter.columns <= rightBefore.columns &&
+          (leftAfter.columns > leftBefore.columns ||
+              rightAfter.columns < rightBefore.columns) &&
+          leftAfter.scale16_16 == leftBefore.scale16_16 &&
+          rightAfter.scale16_16 == rightBefore.scale16_16,
+      'Command+Right did not resize terminal grids with bounded cell '
+      'quantization at fixed font and Retina scale: '
+      'left=${leftBefore.viewportWidth}/${leftBefore.rows}x'
+      '${leftBefore.columns}->${leftAfter.viewportWidth}/'
+      '${leftAfter.rows}x${leftAfter.columns} '
+      'right=${rightBefore.viewportWidth}/${rightBefore.rows}x'
+      '${rightBefore.columns}->${rightAfter.viewportWidth}/'
+      '${rightAfter.rows}x${rightAfter.columns} '
+      'scales=${leftBefore.scale16_16},${rightBefore.scale16_16}->'
+      '${leftAfter.scale16_16},${rightAfter.scale16_16}',
+    );
 
     final MenuItem paletteItem = menu.itemForAction(
       TerminalActionId.openCommandPalette,
@@ -6570,6 +6652,8 @@ keybind = control+k=pane.focus-next
       'TERMINAL_USER_ACTIONS_TEST windows=2 tabs=3 panes=4 '
       'created_panes=5 split_right=true split_down=true new_tab=true '
       'new_window=true palette=true command_availability=true '
+      'retina_scale=true divider_command=true fixed_cell_metrics=true '
+      'grid_resize=true '
       'menu_zero_write=true input_isolated=true close=true quit=true '
       'sessions_clean=5 text_clients=0 native_handles=0',
     );

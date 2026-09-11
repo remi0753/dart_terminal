@@ -43,15 +43,17 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 21個のstable application actionを共有するbounded searchable registry、動的な
+- 25個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
   漏らさない。通常起動ではCommand-N/T/D、Shift-Command-DからNew Window、New Tab、
-  Split Pane Right/Downを使用でき、focus traversal、tab selection、equalize、zoom、
-  semantic promptへのprevious/next jumpも文脈に応じて有効になる。実製品gateではmenuと
-  paletteから2 window/3 tab/5 paneを生成し、
-  terminal write 0と各paneの入力分離を両runtimeで検証する
+  Split Pane Right/Downを使用できる。Command+矢印はfocused paneに最も近い同方向の
+  split dividerを1 cellずつ動かし、descendantの最小寸法で停止する。focus traversal、
+  tab selection、equalize、zoom、semantic promptへのprevious/next jumpも文脈に応じて
+  有効になる。実製品gateではmenuとpaletteから2 window/3 tab/5 paneを生成し、Retina
+  scale継承、divider command後の固定font metricsとgrid resize、terminal write 0、
+  各paneの入力分離を両runtimeで検証する
 - DECSET 9/1000/1002/1003と1005/1006/1015/1016を追跡し、X10/default、UTF-8、
   URXVT、SGRのcell座標とSGR physical-pixel座標をbounded mouse reportとして実PTYへ
   送る製品routing。native logical pointへbacking scaleを一度だけ適用し、通常shellと
@@ -92,7 +94,9 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - native handleと独立したmonotonic window/tab/split-node ID、64 paneまでのimmutable
   binary split topology、selected tab/focused pane/reverse index、collapseとordered teardownを
   持つapplication-owned state model。AppKit adapterはnative tab group、再帰split view、
-  first responder、resize/equalize/zoomに加え、focused session title、bounded tab rename/
+  first responder、resize/equalize/zoomに加え、native divider dragをmodel/layout/Metal
+  viewport/terminal grid/PTY winsizeへ同期し、drag gestureをterminal mouse入力から分離する。
+  新規splitは最初のlayout前にwindowのRetina backing scaleを受け取る。focused session title、bounded tab rename/
   color、local OSC 7 cwdのproxy iconを投影する。新しいtab/splitは信頼済みlocal cwdを
   継承する。zero-configの通常起動もこの階層を使い、menu/paletteからwindow/tab/splitを
   追加できる。2 tab/4 live paneの実製品gateで実zsh cwd、key/IME分離と

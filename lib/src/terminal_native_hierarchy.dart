@@ -341,6 +341,86 @@ final class TerminalNativeHierarchyAdapter {
     return true;
   }
 
+  /// Whether the nearest focused-pane divider on [direction]'s axis can move.
+  bool canMoveFocusedDivider(TerminalSplitDividerDirection direction) =>
+      _focusedDividerMove(direction) != null;
+
+  /// Moves the nearest matching focused-pane divider by one logical cell.
+  ///
+  /// The caller reconciles after a successful mutation so native frames,
+  /// renderer viewports, terminal grids, and PTY winsizes advance together.
+  bool moveFocusedDivider(TerminalSplitDividerDirection direction) {
+    _ensureCanReconcile();
+    final _TerminalFocusedDividerMove? movement = _focusedDividerMove(
+      direction,
+    );
+    if (movement == null) return false;
+    _state.resizeSplit(movement.tabId, movement.nodeId, movement.fraction);
+    return true;
+  }
+
+  _TerminalFocusedDividerMove? _focusedDividerMove(
+    TerminalSplitDividerDirection direction,
+  ) {
+    if (_disposed || _reconciling || _state.isDisposed) return null;
+    final TerminalTabState? tab = _state.activeWindow?.selectedTab;
+    if (tab == null || tab.isZoomed) return null;
+    final TerminalSplitAxis axis = switch (direction) {
+      TerminalSplitDividerDirection.left ||
+      TerminalSplitDividerDirection.right => TerminalSplitAxis.horizontal,
+      TerminalSplitDividerDirection.up ||
+      TerminalSplitDividerDirection.down => TerminalSplitAxis.vertical,
+    };
+    final TerminalSplitBranch? branch = _nearestMatchingBranch(
+      tab.splitTree.root,
+      tab.focusedPaneId,
+      axis,
+    );
+    if (branch == null) return null;
+    final TerminalSplitBranchLayout? geometry =
+        _layouts[tab.id]?.branches[branch.id];
+    if (geometry == null) return null;
+    final double usableExtent = geometry.firstExtent + geometry.secondExtent;
+    if (!usableExtent.isFinite || usableExtent <= 0) return null;
+    final bool negative =
+        direction == TerminalSplitDividerDirection.left ||
+        direction == TerminalSplitDividerDirection.up;
+    final double step = axis == TerminalSplitAxis.horizontal
+        ? _cellSize.width
+        : _cellSize.height;
+    final double nextFirstExtent =
+        (geometry.firstExtent + (negative ? -step : step))
+            .clamp(
+              geometry.firstMinimumExtent,
+              usableExtent - geometry.secondMinimumExtent,
+            )
+            .toDouble();
+    if ((nextFirstExtent - geometry.firstExtent).abs() <= 1e-9) {
+      return null;
+    }
+    return _TerminalFocusedDividerMove(
+      tabId: tab.id,
+      nodeId: branch.id,
+      fraction: nextFirstExtent / usableExtent,
+    );
+  }
+
+  static TerminalSplitBranch? _nearestMatchingBranch(
+    TerminalSplitNode node,
+    PaneId paneId,
+    TerminalSplitAxis axis,
+  ) {
+    if (node is! TerminalSplitBranch) return null;
+    final TerminalSplitNode? child = _containsPane(node.first, paneId)
+        ? node.first
+        : _containsPane(node.second, paneId)
+        ? node.second
+        : null;
+    if (child == null) return null;
+    return _nearestMatchingBranch(child, paneId, axis) ??
+        (node.axis == axis ? node : null);
+  }
+
   TerminalWindowPlacement placementForWindow(TerminalWindowId windowId) {
     _ensureAlive();
     if (_state.windowForId(windowId) == null) {
@@ -1090,6 +1170,18 @@ final class TerminalNativeHierarchyAdapter {
     color: null,
     representedFilePath: null,
   );
+}
+
+final class _TerminalFocusedDividerMove {
+  const _TerminalFocusedDividerMove({
+    required this.tabId,
+    required this.nodeId,
+    required this.fraction,
+  });
+
+  final TerminalTabId tabId;
+  final TerminalSplitNodeId nodeId;
+  final double fraction;
 }
 
 final class _TerminalNativeMinimumSize {

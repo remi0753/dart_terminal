@@ -21,10 +21,131 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testInitialNativeContentLayoutProjection();
   await _testNewSplitInheritsNativeBackingScale();
   await _testNativeDividerGestureSynchronizesLayout();
+  await _testFocusedDividerCommandsUseCellGeometry();
   await _testRepeatedMultiWindowRestoredProjection();
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testFocusedDividerCommandsUseCellGeometry() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalPaneConfiguration configuration = TerminalPaneConfiguration(
+    sessionFactory: (
+      TerminalSessionId id, {
+      required void Function() onChanged,
+      required void Function() onTerminated,
+    }) => _HierarchyFakeSession(id),
+    onChanged: () {},
+    onExitRequested: () {},
+  );
+  final TerminalWindowState window = await state.createWindow(configuration);
+  final TerminalTabState tab = window.selectedTab;
+  final PaneId firstPane = tab.focusedPaneId;
+  final TerminalPane second = await state.splitPane(
+    firstPane,
+    configuration,
+    axis: TerminalSplitAxis.horizontal,
+  );
+  final TerminalPane third = await state.splitPane(
+    second.id,
+    configuration,
+    axis: TerminalSplitAxis.vertical,
+  );
+  final TerminalPane fourth = await state.splitPane(
+    third.id,
+    configuration,
+    axis: TerminalSplitAxis.horizontal,
+  );
+  final TerminalSplitBranch root = tab.splitTree.root as TerminalSplitBranch;
+  final TerminalSplitBranch vertical = root.second as TerminalSplitBranch;
+  final TerminalSplitBranch inner = vertical.second as TerminalSplitBranch;
+  final Map<PaneId, TerminalPaneLayoutRect> layouts =
+      <PaneId, TerminalPaneLayoutRect>{};
+  final TerminalNativeHierarchyAdapter adapter = TerminalNativeHierarchyAdapter(
+    state: state,
+    paneResourcesFactory: (TerminalPane pane) => TerminalNativePaneResources(
+      paneId: pane.id,
+      view: View(configuration: terminalBaseViewConfiguration),
+      onLayout: (TerminalPaneLayoutRect? rectangle, {required bool visible}) {
+        if (visible) layouts[pane.id] = rectangle!;
+      },
+    ),
+    windowFrame: const Rect.fromLTWH(100, 90, 801, 481),
+    cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+    presentWindows: false,
+  );
+  try {
+    adapter.reconcile();
+    final double initialFirstWidth = layouts[firstPane]!.width;
+    final double initialThirdWidth = layouts[third.id]!.width;
+    final double initialFourthWidth = layouts[fourth.id]!.width;
+    _expect(
+      adapter.canMoveFocusedDivider(TerminalSplitDividerDirection.right) &&
+          adapter.moveFocusedDivider(TerminalSplitDividerDirection.right),
+      'focused pane did not expose its nearest horizontal divider',
+    );
+    adapter.reconcile();
+    _expect(
+      layouts[firstPane]!.width == initialFirstWidth &&
+          layouts[third.id]!.width == initialThirdWidth + 8 &&
+          layouts[fourth.id]!.width == initialFourthWidth - 8,
+      'right command did not move only the nearest horizontal divider by '
+      'one cell',
+    );
+
+    final double initialSecondHeight = layouts[second.id]!.height;
+    final double initialThirdHeight = layouts[third.id]!.height;
+    _expect(
+      adapter.canMoveFocusedDivider(TerminalSplitDividerDirection.down) &&
+          adapter.moveFocusedDivider(TerminalSplitDividerDirection.down),
+      'focused pane did not expose its nearest vertical divider',
+    );
+    adapter.reconcile();
+    _expect(
+      layouts[second.id]!.height == initialSecondHeight + 16 &&
+          layouts[third.id]!.height == initialThirdHeight - 16 &&
+          layouts[fourth.id]!.height == initialThirdHeight - 16,
+      'down command did not move the nearest vertical divider by one cell',
+    );
+
+    state.resizeSplit(tab.id, inner.id, 0.000001);
+    adapter.reconcile();
+    _expect(
+      !adapter.canMoveFocusedDivider(TerminalSplitDividerDirection.left) &&
+          !adapter.moveFocusedDivider(TerminalSplitDividerDirection.left) &&
+          adapter.canMoveFocusedDivider(TerminalSplitDividerDirection.right),
+      'horizontal command did not stop at the descendant minimum extent',
+    );
+    state.resizeSplit(tab.id, inner.id, 0.999999);
+    adapter.reconcile();
+    _expect(
+      !adapter.canMoveFocusedDivider(TerminalSplitDividerDirection.right) &&
+          adapter.canMoveFocusedDivider(TerminalSplitDividerDirection.left),
+      'horizontal command did not clamp at the opposite descendant minimum',
+    );
+    state.setPaneZoom(tab.id, fourth.id);
+    adapter.reconcile();
+    _expect(
+      TerminalSplitDividerDirection.values.every(
+        (TerminalSplitDividerDirection direction) =>
+            !adapter.canMoveFocusedDivider(direction),
+      ),
+      'divider commands remained available while split dividers were hidden',
+    );
+  } finally {
+    adapter.dispose();
+    await state.shutdown();
+    await application.terminate();
+    await rawEvents.close();
+  }
 }
 
 Future<void> _testNativeDividerGestureSynchronizesLayout() async {

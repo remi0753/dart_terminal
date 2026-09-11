@@ -1515,6 +1515,8 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
           r'^TERMINAL_USER_ACTIONS_TEST windows=2 tabs=3 panes=4 '
           r'created_panes=5 split_right=true split_down=true new_tab=true '
           r'new_window=true palette=true command_availability=true '
+          r'retina_scale=true divider_command=true fixed_cell_metrics=true '
+          r'grid_resize=true '
           r'menu_zero_write=true input_isolated=true close=true quit=true '
           r'sessions_clean=5 text_clients=0 native_handles=0$',
           multiLine: true,

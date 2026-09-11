@@ -149,10 +149,34 @@ void _testStableStandardCatalog() {
         <TerminalActionId>[
           TerminalActionId.togglePaneZoom,
           TerminalActionId.equalizeSplits,
+          TerminalActionId.moveDividerLeft,
+          TerminalActionId.moveDividerRight,
+          TerminalActionId.moveDividerUp,
+          TerminalActionId.moveDividerDown,
           TerminalActionId.jumpToPreviousPrompt,
           TerminalActionId.jumpToNextPrompt,
         ].join(','),
     'view menu contains stable prompt navigation actions in catalog order',
+  );
+  _expect(
+    catalog.actionForId(TerminalActionId.moveDividerLeft)!.shortcut!.identity ==
+            'command+\uF702' &&
+        catalog
+                .actionForId(TerminalActionId.moveDividerRight)!
+                .shortcut!
+                .identity ==
+            'command+\uF703' &&
+        catalog
+                .actionForId(TerminalActionId.moveDividerUp)!
+                .shortcut!
+                .identity ==
+            'command+\uF700' &&
+        catalog
+                .actionForId(TerminalActionId.moveDividerDown)!
+                .shortcut!
+                .identity ==
+            'command+\uF701',
+    'divider movement uses the four native Command+arrow equivalents',
   );
   _expect(
     catalog
@@ -373,9 +397,12 @@ void _testSearchOrderingAndBounds() {
     'multi-token exact search finds the intended action',
   );
   _expect(
-    dispatcher.search('SPLTRGHT').single.definition.id ==
-        TerminalActionId.splitPaneRight,
-    'case-insensitive subsequence search is deterministic',
+    dispatcher.search('SPLTRGHT').first.definition.id ==
+            TerminalActionId.splitPaneRight &&
+        dispatcher.search('move divider right').first.definition.id ==
+            TerminalActionId.moveDividerRight,
+    'case-insensitive search keeps split creation and divider movement '
+    'deterministic',
   );
   _expect(
     dispatcher.search('clipboard').length == 4 &&
@@ -392,6 +419,12 @@ void _testSearchOrderingAndBounds() {
   _expect(
     dispatcher
             .search('prompt')
+            .where(
+              (TerminalActionSnapshot snapshot) =>
+                  snapshot.definition.id ==
+                      TerminalActionId.jumpToPreviousPrompt ||
+                  snapshot.definition.id == TerminalActionId.jumpToNextPrompt,
+            )
             .map((snapshot) => snapshot.definition.id)
             .join(',') ==
         <TerminalActionId>[

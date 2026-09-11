@@ -153,6 +153,10 @@ abstract final class TerminalKeyBindingVocabulary {
         ',' => 'comma',
         '.' => 'period',
         '/' => 'slash',
+        '\uF700' => 'up',
+        '\uF701' => 'down',
+        '\uF702' => 'left',
+        '\uF703' => 'right',
         _ => value,
       };
 

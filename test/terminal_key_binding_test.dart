@@ -82,8 +82,18 @@ void _testStablePhysicalKeyVocabulary() {
               TerminalPhysicalKey.jisUnderscore,
             ) ==
             'jis-underscore' &&
+        TerminalKeyBindingVocabulary.chordForNativeShortcut(
+              const TerminalActionShortcut(
+                keyEquivalent: '\uF703',
+                command: true,
+              ),
+            ) ==
+            const TerminalKeyBindingChord(
+              physicalKey: TerminalPhysicalKey.arrowRight,
+              command: true,
+            ) &&
         TerminalKeyBindingVocabulary.keyFromConfigName('unknown') == null,
-    'representative key families use readable stable names',
+    'representative key families and native arrows use stable names',
   );
   final List<TerminalActionShortcut> nativeShortcuts =
       TerminalActionCatalog.standard().actions

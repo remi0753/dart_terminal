@@ -6,6 +6,12 @@ typedef TerminalProductPaneConfigurationFactory =
     TerminalPaneConfiguration Function(PaneId? inheritanceSourcePaneId);
 typedef TerminalProductHierarchyReconciler = void Function();
 typedef TerminalProductHierarchyMutationAdmission = bool Function();
+typedef TerminalProductDividerMovementAvailability = bool Function(
+  TerminalSplitDividerDirection direction,
+);
+typedef TerminalProductDividerMover = bool Function(
+  TerminalSplitDividerDirection direction,
+);
 
 /// Terminal-owned user actions over the logical and native hierarchy.
 ///
@@ -17,16 +23,22 @@ final class TerminalProductHierarchyActionCoordinator {
     required this.state,
     required TerminalProductPaneConfigurationFactory configurationFactory,
     required TerminalProductHierarchyReconciler reconcile,
+    required TerminalProductDividerMovementAvailability canMoveDivider,
+    required TerminalProductDividerMover moveDivider,
     TerminalProductHierarchyMutationAdmission? canMutate,
     void Function()? onChanged,
   }) : _configurationFactory = configurationFactory,
        _reconcile = reconcile,
+       _canMoveDivider = canMoveDivider,
+       _moveDivider = moveDivider,
        _canMutate = canMutate,
        _onChanged = onChanged;
 
   final TerminalApplicationState state;
   final TerminalProductPaneConfigurationFactory _configurationFactory;
   final TerminalProductHierarchyReconciler _reconcile;
+  final TerminalProductDividerMovementAvailability _canMoveDivider;
+  final TerminalProductDividerMover _moveDivider;
   final TerminalProductHierarchyMutationAdmission? _canMutate;
   final void Function()? _onChanged;
   bool _disposed = false;
@@ -64,6 +76,30 @@ final class TerminalProductHierarchyActionCoordinator {
           id: TerminalActionId.equalizeSplits,
           isAvailable: _hasSplitPane,
           handler: _equalizeSplits,
+        ),
+        TerminalActionRegistration(
+          id: TerminalActionId.moveDividerLeft,
+          isAvailable: () =>
+              _canMoveSplitDivider(TerminalSplitDividerDirection.left),
+          handler: () => _moveSplitDivider(TerminalSplitDividerDirection.left),
+        ),
+        TerminalActionRegistration(
+          id: TerminalActionId.moveDividerRight,
+          isAvailable: () =>
+              _canMoveSplitDivider(TerminalSplitDividerDirection.right),
+          handler: () => _moveSplitDivider(TerminalSplitDividerDirection.right),
+        ),
+        TerminalActionRegistration(
+          id: TerminalActionId.moveDividerUp,
+          isAvailable: () =>
+              _canMoveSplitDivider(TerminalSplitDividerDirection.up),
+          handler: () => _moveSplitDivider(TerminalSplitDividerDirection.up),
+        ),
+        TerminalActionRegistration(
+          id: TerminalActionId.moveDividerDown,
+          isAvailable: () =>
+              _canMoveSplitDivider(TerminalSplitDividerDirection.down),
+          handler: () => _moveSplitDivider(TerminalSplitDividerDirection.down),
         ),
         TerminalActionRegistration(
           id: TerminalActionId.focusPreviousPane,
@@ -116,6 +152,9 @@ final class TerminalProductHierarchyActionCoordinator {
 
   bool _hasMultipleTabs() =>
       _isMutable && (_activeWindow?.tabs.length ?? 0) > 1;
+
+  bool _canMoveSplitDivider(TerminalSplitDividerDirection direction) =>
+      _isMutable && _canMoveDivider(direction);
 
   bool get _isMutable =>
       !_disposed && !state.isDisposed && (_canMutate?.call() ?? true);
@@ -177,6 +216,13 @@ final class TerminalProductHierarchyActionCoordinator {
   void _equalizeSplits() {
     final TerminalTabState tab = _requireActiveTab();
     state.equalizeSplits(tab.id);
+    _project();
+  }
+
+  void _moveSplitDivider(TerminalSplitDividerDirection direction) {
+    if (!_moveDivider(direction)) {
+      throw StateError('split divider is no longer movable');
+    }
     _project();
   }
 

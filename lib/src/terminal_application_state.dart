@@ -65,6 +65,8 @@ enum TerminalSplitAxis { horizontal, vertical }
 
 enum TerminalSplitPlacement { before, after }
 
+enum TerminalSplitDividerDirection { left, right, up, down }
+
 enum TerminalPaneFocusTraversal { previous, next }
 
 /// Positive logical-point dimensions used to project a split tree.

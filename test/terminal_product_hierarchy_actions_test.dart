@@ -21,6 +21,7 @@ Future<void> _testCreationAndExistingMutations() async {
   _expectEnabled(dispatcher, TerminalActionId.newTab, true);
   _expectEnabled(dispatcher, TerminalActionId.splitPaneRight, true);
   _expectEnabled(dispatcher, TerminalActionId.togglePaneZoom, false);
+  _expectEnabled(dispatcher, TerminalActionId.moveDividerRight, false);
   _expectEnabled(dispatcher, TerminalActionId.focusNextPane, false);
   _expectEnabled(dispatcher, TerminalActionId.selectNextTab, false);
 
@@ -36,6 +37,16 @@ Future<void> _testCreationAndExistingMutations() async {
         harness.configurationSources.last == firstPane &&
         harness.reconcileCount == 1,
     'right split starts one inherited pane and reconciles once',
+  );
+
+  harness.movableDividerDirections.add(TerminalSplitDividerDirection.right);
+  _expectEnabled(dispatcher, TerminalActionId.moveDividerLeft, false);
+  _expectEnabled(dispatcher, TerminalActionId.moveDividerRight, true);
+  await _expectExecuted(dispatcher, TerminalActionId.moveDividerRight);
+  _expect(
+    harness.movedDividerDirections.join(',') ==
+        TerminalSplitDividerDirection.right.toString(),
+    'directional divider action invokes the matching geometry mutation once',
   );
 
   harness.state.resizeSplit(firstTab.id, firstTab.splitTree.root.id, 0.3);
@@ -89,7 +100,7 @@ Future<void> _testCreationAndExistingMutations() async {
     'new window starts one inherited pane and activates its window',
   );
   _expect(
-    harness.reconcileCount == 10 && harness.changedCount == 10,
+    harness.reconcileCount == 11 && harness.changedCount == 11,
     'every successful action projects and publishes exactly once',
   );
   await harness.state.shutdown();
@@ -187,6 +198,11 @@ final class _Harness {
         state: state,
         configurationFactory: configuration,
         reconcile: () => reconcileCount++,
+        canMoveDivider: movableDividerDirections.contains,
+        moveDivider: (TerminalSplitDividerDirection direction) {
+          movedDividerDirections.add(direction);
+          return true;
+        },
         canMutate: () => mutationAllowed,
         onChanged: () => changedCount++,
       );
@@ -195,6 +211,10 @@ final class _Harness {
   Completer<void>? nextStartBarrier;
   bool failNextStart = false;
   bool mutationAllowed = true;
+  final Set<TerminalSplitDividerDirection> movableDividerDirections =
+      <TerminalSplitDividerDirection>{};
+  final List<TerminalSplitDividerDirection> movedDividerDirections =
+      <TerminalSplitDividerDirection>[];
 
   Future<TerminalWindowState> createInitialWindow() async {
     final TerminalWindowState window = await state.createWindow(
