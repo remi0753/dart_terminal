@@ -19,10 +19,80 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testConfiguredWindowAndPaddingProjection();
   await _testPerWindowCreationFrameProjection();
   await _testInitialNativeContentLayoutProjection();
+  await _testNewSplitInheritsNativeBackingScale();
   await _testRepeatedMultiWindowRestoredProjection();
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testNewSplitInheritsNativeBackingScale() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final TerminalApplicationState state = TerminalApplicationState();
+  late final TerminalPaneConfiguration configuration;
+  configuration = TerminalPaneConfiguration(
+    sessionFactory: (
+      TerminalSessionId id, {
+      required void Function() onChanged,
+      required void Function() onTerminated,
+    }) => _HierarchyFakeSession(id),
+    onChanged: () {},
+    onExitRequested: () {},
+  );
+  final TerminalWindowState logicalWindow = await state.createWindow(
+    configuration,
+  );
+  final Map<PaneId, List<double>> scales = <PaneId, List<double>>{};
+  final TerminalNativeHierarchyAdapter adapter = TerminalNativeHierarchyAdapter(
+    state: state,
+    paneResourcesFactory: (TerminalPane pane) => TerminalNativePaneResources(
+      paneId: pane.id,
+      view: View(configuration: terminalBaseViewConfiguration),
+      onBackingScale: (double scale) {
+        scales.putIfAbsent(pane.id, () => <double>[]).add(scale);
+      },
+    ),
+    windowFrame: const Rect.fromLTWH(100, 90, 920, 580),
+    cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+    presentWindows: false,
+  );
+  try {
+    adapter.reconcile();
+    final TerminalTabId tabId = logicalWindow.selectedTabId;
+    final Window nativeWindow = adapter.windowForTab(tabId)!;
+    final int handle = bindings.handleFor(nativeWindow);
+    rawEvents.add(<Object?>[3, 6, handle, handle >> 32, 300000, 0, 2.0]);
+    _expect(
+      nativeWindow.backingScaleFactor == 2,
+      'native window did not cache the injected Retina scale',
+    );
+
+    final TerminalPane added = await state.splitPane(
+      logicalWindow.selectedTab.focusedPaneId,
+      configuration,
+      axis: TerminalSplitAxis.horizontal,
+    );
+    adapter.reconcile();
+    final PaneId retained = logicalWindow.selectedTab.paneIds.first;
+    _expect(
+      scales[retained]!.last == 2 &&
+          scales[added.id]!.length == 1 &&
+          scales[added.id]!.single == 2,
+      'new split did not receive the owning window Retina scale on its first '
+      'layout',
+    );
+  } finally {
+    adapter.dispose();
+    await state.shutdown();
+    await application.terminate();
+    await rawEvents.close();
+  }
 }
 
 Future<void> _testOsc52ConfirmationPresenterLifecycle() async {

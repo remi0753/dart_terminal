@@ -1180,6 +1180,16 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - synchronized rendering が途切れた場合に timeout で表示を復旧する。
 - Kitty keyboard を使う Neovim 等と legacy app の両方が regression しない。
 
+### Phase 7 follow-up — split pane表示とdivider操作
+
+- [ ] split paneのRetina表示、drag resize同期、keyboard divider操作
+  （分割、境界、完了条件は
+  [`docs/phase7/split-pane-resolution-resize-controls.md`](docs/phase7/split-pane-resolution-resize-controls.md)
+  を参照して順に実施する）
+  - [x] 新規splitへ既存windowのbacking scaleを投影する
+  - [ ] native divider dragを論理layout/viewport/gridへ同期して表示倍率を固定する
+  - [ ] 方向別divider action、Command+矢印、製品受け入れ、親項目完了判定
+
 ### Phase 10 — macOS native polish と accessibility（10–16 person-weeks）
 
 目的: macOS 専用アプリとしての完成度を上げる。

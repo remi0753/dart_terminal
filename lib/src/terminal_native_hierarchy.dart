@@ -11,6 +11,10 @@ typedef TerminalNativePaneLayoutCallback = void Function(
   required bool visible,
 });
 
+typedef TerminalNativePaneBackingScaleCallback = void Function(
+  double backingScaleFactor,
+);
+
 typedef TerminalNativePaneResourcesFactory =
     TerminalNativePaneResources Function(TerminalPane pane);
 
@@ -34,12 +38,14 @@ final class TerminalNativePaneResources {
     required this.paneId,
     required this.view,
     this.onLayout,
+    this.onBackingScale,
     this.onDisposeAdapters,
   });
 
   final PaneId paneId;
   final View view;
   final TerminalNativePaneLayoutCallback? onLayout;
+  final TerminalNativePaneBackingScaleCallback? onBackingScale;
 
   /// Disposes input-client, renderer, and other view adapters, but not [view].
   final void Function()? onDisposeAdapters;
@@ -54,6 +60,20 @@ final class TerminalNativePaneResources {
       throw StateError('native resources for pane $paneId are disposed');
     }
     onLayout?.call(rectangle, visible: visible);
+  }
+
+  void applyBackingScale(double backingScaleFactor) {
+    if (_adaptersDisposed || _viewDisposed) {
+      throw StateError('native resources for pane $paneId are disposed');
+    }
+    if (!backingScaleFactor.isFinite || backingScaleFactor <= 0) {
+      throw ArgumentError.value(
+        backingScaleFactor,
+        'backingScaleFactor',
+        'must be finite and positive',
+      );
+    }
+    onBackingScale?.call(backingScaleFactor);
   }
 
   void _disposeAdapters() {
@@ -478,8 +498,11 @@ final class TerminalNativeHierarchyAdapter {
 
       for (final TerminalTabState tab in logicalTabs.values) {
         final TerminalSplitLayout layout = layouts[tab.id]!;
+        final double backingScaleFactor =
+            nextWindows[tab.id]!.backingScaleFactor ?? 1;
         for (final PaneId paneId in tab.paneIds) {
           final TerminalPaneLayoutRect? rectangle = layout.panes[paneId];
+          nextPaneResources[paneId]!.applyBackingScale(backingScaleFactor);
           nextPaneResources[paneId]!.applyLayout(
             rectangle,
             visible: rectangle != null,

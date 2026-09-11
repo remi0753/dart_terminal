@@ -2749,6 +2749,7 @@ final class TerminalApplication {
         paneId: pane.id,
         view: view,
         onLayout: owner.applyLayout,
+        onBackingScale: owner.updateBackingScale,
         onDisposeAdapters: () {
           applicationThemeProjection?.removePane(pane.id);
           selections.remove(pane.id)?.dispose();
@@ -2968,7 +2969,7 @@ final class TerminalApplication {
             final _TerminalHierarchyProductPane? owner = owners[paneId];
             final TerminalPaneLayoutRect? rectangle = owner?.layout;
             if (owner == null || rectangle == null) continue;
-            owner.surface.updateBackingScale(backingScaleFactor);
+            owner.updateBackingScale(backingScaleFactor);
             owner.applyLayout(rectangle, visible: owner.isVisible);
           }
         case WindowScreenChangedEvent() ||
@@ -12759,6 +12760,10 @@ final class _TerminalHierarchyProductPane {
 
   void notifyScreenChanged() {
     if (!surface.isDisposed) surface.notifyScreenChanged();
+  }
+
+  void updateBackingScale(double backingScaleFactor) {
+    if (!surface.isDisposed) surface.updateBackingScale(backingScaleFactor);
   }
 
   void applyLayout(TerminalPaneLayoutRect? rectangle, {required bool visible}) {
