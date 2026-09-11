@@ -30,7 +30,7 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check \
 	terminal-terminfo terminal-terminfo-check \
 	terminal-shell-integration terminal-shell-integration-check \
-	product-parser-corpus product-parser-properties \
+	product-parser-corpus product-parser-properties phase9-protocol-properties \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
 	terminal-parser-trace terminal-parser-trace-check \
 	configuration-reference configuration-reference-check \
@@ -54,6 +54,7 @@ help:
 	@echo "  make test                         Format, analyze, and unit-test Dart source"
 	@echo "  make product-parser-corpus        Replay reviewed product parser fixtures"
 	@echo "  make product-parser-properties    Run deterministic property and fuzz cases"
+	@echo "  make phase9-protocol-properties   Run deterministic modern-protocol properties"
 	@echo "  make product-parser-benchmark     Run the Release AOT 100 MiB/s parser gate"
 	@echo "  make product-damage-benchmark     Run the Release AOT 100,000-cell damage gate"
 	@echo "  make compatibility-inventory      Regenerate sequence inventory and summary"
@@ -213,6 +214,9 @@ product-parser-corpus: dependencies
 
 product-parser-properties: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_property_fuzz_test.dart
+
+phase9-protocol-properties: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_phase9_protocol_property_test.dart
 
 product-parser-benchmark-build: dependencies
 	@mkdir -p $(PRODUCT_PARSER_BENCHMARK_DIR)

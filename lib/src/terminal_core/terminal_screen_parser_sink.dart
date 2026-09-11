@@ -138,14 +138,14 @@ final class TerminalScreenParserSink
   void print(int scalar) {
     final TerminalScreen target = screen;
     screenSet?.semanticPrompt.markCurrentRow(target);
-    final int row = target.cursorRow;
     target.printScalar(
       target.translateGlScalar(scalar),
       hyperlink: _currentHyperlinkId,
     );
-    if (target.cursorRow != row) {
-      screenSet?.semanticPrompt.markCurrentRow(target);
-    }
+    // A bottom-margin autowrap can scroll while leaving cursorRow unchanged.
+    // Marking the destination unconditionally keeps scalar and ASCII chunking
+    // semantically identical; the row flag write itself is idempotent.
+    screenSet?.semanticPrompt.markCurrentRow(target);
   }
 
   @override
@@ -162,6 +162,9 @@ final class TerminalScreenParserSink
         screenSet?.semanticPrompt.markCurrentRow(target);
       }
     }
+    // The final scalar may wrap and scroll at the bottom margin without a row
+    // index change. A later parser chunk must not be what adds its row mark.
+    if (start < end) screenSet?.semanticPrompt.markCurrentRow(target);
   }
 
   @override

@@ -75,6 +75,7 @@ import 'terminal_osc52_policy_test.dart';
 import 'terminal_osc52_projection_test.dart';
 import 'terminal_palette_test.dart';
 import 'terminal_paste_test.dart';
+import 'terminal_phase9_protocol_property_test.dart';
 import 'terminal_preedit_test.dart';
 import 'terminal_product_configuration_test.dart';
 import 'terminal_product_hierarchy_actions_test.dart';
@@ -183,6 +184,7 @@ Future<void> main() async {
   runTerminalMouseRouterTests();
   runTerminalOsc52PolicyTests();
   runTerminalOsc52ProjectionTests();
+  runTerminalPhase9ProtocolPropertyTests();
   runTerminalSelectionAutoscrollTests();
   runTerminalSelectionGestureTests();
   runTerminalLiveMetalSurfaceFontTests();

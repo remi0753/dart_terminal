@@ -11,6 +11,7 @@ void runTerminalSemanticPromptTests() {
   _testInputUntilLineEndExtension();
   _testMalformedAndExcludedActionsFailClosed();
   _testWrappingScrollbackAndReflowRetainMarks();
+  _testBottomScrollMarkIsChunkIndependent();
   _testAlternateScreenAndResetOwnership();
   _testChunkAndTerminatorIndependence();
 }
@@ -178,6 +179,25 @@ void _testWrappingScrollbackAndReflowRetainMarks() {
         harness.screens.primary.rowFlagsAt(row) & TerminalRowFlags.prompt != 0;
   }
   _expect(retainedPrompt, 'resize/reflow retains a parsed prompt mark');
+}
+
+void _testBottomScrollMarkIsChunkIndependent() {
+  final _Harness whole = _Harness(rows: 2, columns: 4);
+  whole.parse(_osc('B'));
+  whole.parse('abcdefghij');
+  final _Harness chunked = _Harness(rows: 2, columns: 4);
+  chunked.parse(_osc('B'));
+  chunked.parse('abcdefghi');
+  chunked.parse('j');
+
+  _expect(
+    whole.screens.primary.rowFlagsAt(1) & TerminalRowFlags.command != 0 &&
+        whole.screens.primary.rowFlagsAt(1) ==
+            chunked.screens.primary.rowFlagsAt(1) &&
+        whole.screens.scrollback.rowFlagsAt(0) ==
+            chunked.screens.scrollback.rowFlagsAt(0),
+    'bottom-margin autowrap marks do not depend on an ASCII chunk boundary',
+  );
 }
 
 void _testAlternateScreenAndResetOwnership() {
