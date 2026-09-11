@@ -7,10 +7,81 @@ void main() => runReferenceRendererTests();
 void runReferenceRendererTests() {
   _testLayerAndSameLayerOrder();
   _testMaskAndBitmapBlending();
+  _testSharedSampledBitmapScaling();
   _testClippingAndScale();
   _testTransparentSourceOver();
   _testInputAndOutputOwnership();
   _testBoundsAndValidation();
+}
+
+void _testSharedSampledBitmapScaling() {
+  final TerminalReferenceBitmapSource source = TerminalReferenceBitmapSource(
+    width: 2,
+    height: 1,
+    rowStride: 8,
+    rgba: const <int>[255, 0, 0, 255, 0, 0, 255, 255],
+  );
+  final TerminalReferenceImage image = TerminalReferenceRenderer.render(
+    width: 5,
+    height: 1,
+    primitives: <TerminalReferencePrimitive>[
+      TerminalReferenceSampledBitmap(
+        layer: TerminalReferenceLayer.imageBelowText,
+        x: 0,
+        y: 0,
+        width: 4,
+        height: 1,
+        source: source,
+        sourceX: 0,
+        sourceY: 0,
+        sourceWidth: 2,
+        sourceHeight: 1,
+      ),
+      TerminalReferenceSampledBitmap(
+        layer: TerminalReferenceLayer.imageAboveText,
+        x: 4,
+        y: 0,
+        width: 1,
+        height: 1,
+        source: source,
+        sourceX: 1,
+        sourceY: 0,
+        sourceWidth: 1,
+        sourceHeight: 1,
+      ),
+    ],
+    limits: const TerminalReferenceRenderLimits(maximumSourceBytes: 8),
+  );
+  _expect(
+    image.pixelAt(0, 0) == 0xff0000ff &&
+        image.pixelAt(1, 0) == 0xff0000ff &&
+        image.pixelAt(2, 0) == 0x0000ffff &&
+        image.pixelAt(3, 0) == 0x0000ffff &&
+        image.pixelAt(4, 0) == 0x0000ffff,
+    'nearest-neighbor sampling scales and crops deterministically',
+  );
+  _expectThrows(
+    () => TerminalReferenceRenderer.render(
+      width: 1,
+      height: 1,
+      primitives: <TerminalReferencePrimitive>[
+        TerminalReferenceSampledBitmap(
+          layer: TerminalReferenceLayer.imageAboveText,
+          x: 0,
+          y: 0,
+          width: 1,
+          height: 1,
+          source: source,
+          sourceX: 0,
+          sourceY: 0,
+          sourceWidth: 1,
+          sourceHeight: 1,
+        ),
+      ],
+      limits: const TerminalReferenceRenderLimits(maximumSourceBytes: 7),
+    ),
+    'a shared sampled source is still charged once against the byte limit',
+  );
 }
 
 void _testLayerAndSameLayerOrder() {

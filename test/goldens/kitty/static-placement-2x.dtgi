@@ -1,0 +1,10 @@
+dart-terminal-golden-image
+version=1
+width=8
+height=6
+scale=2
+pixel-format=rgba8-srgb-straight
+row-stride=32
+payload-length=192
+checksum=fnv1a32:dde16fa0
+pixels=AAD//wAA/////////////yAoMP8gKDD/ICgw/yAoMP8AAP//AAD/////////////ICgw/yAoMP8gKDD/ICgw//+AAP//gAD///////////8A/wD/AP8A/wD/AP8A/wD//4AA//+AAP///////////wD/AP8A/wD/AP8A/wD/AP8A////AP//////AP///wD///8A////AP+QFJj/kBSY/wD///8A//////8A////AP///wD///8A/5AUmP+QFJj/

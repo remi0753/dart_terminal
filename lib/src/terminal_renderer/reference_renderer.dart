@@ -4,9 +4,11 @@ import 'dart:typed_data';
 /// renderer contract.
 enum TerminalReferenceLayer {
   cellBackground,
+  imageBelowText,
   selection,
   glyph,
   decoration,
+  imageAboveText,
   cursor,
 }
 
@@ -136,6 +138,63 @@ final class TerminalReferenceBitmap extends TerminalReferencePrimitive {
   int get sourceByteCount => _rgba.length;
 }
 
+/// One immutable bitmap that can be shared by multiple sampled primitives.
+final class TerminalReferenceBitmapSource {
+  TerminalReferenceBitmapSource({
+    required this.width,
+    required this.height,
+    required this.rowStride,
+    required List<int> rgba,
+  }) : _rgba = _copyUint8List(rgba, 'rgba') {
+    _validateSourceShape(width, height, rowStride, _rgba.length, 4);
+  }
+
+  final int width;
+  final int height;
+  final int rowStride;
+  final Uint8List _rgba;
+
+  int get byteLength => _rgba.length;
+}
+
+/// A nearest-neighbor source rectangle scaled into a logical destination.
+final class TerminalReferenceSampledBitmap extends TerminalReferencePrimitive {
+  TerminalReferenceSampledBitmap({
+    required super.layer,
+    required super.x,
+    required super.y,
+    required super.width,
+    required super.height,
+    required this.source,
+    required this.sourceX,
+    required this.sourceY,
+    required this.sourceWidth,
+    required this.sourceHeight,
+    this.opacity = 255,
+  }) {
+    RangeError.checkValueInInterval(opacity, 0, 255, 'opacity');
+    if (sourceX < 0 ||
+        sourceY < 0 ||
+        sourceWidth <= 0 ||
+        sourceHeight <= 0 ||
+        sourceX + sourceWidth > source.width ||
+        sourceY + sourceHeight > source.height) {
+      throw RangeError('sampled bitmap source rectangle is out of bounds');
+    }
+  }
+
+  final TerminalReferenceBitmapSource source;
+  final int sourceX;
+  final int sourceY;
+  final int sourceWidth;
+  final int sourceHeight;
+  final int opacity;
+
+  /// Shared source bytes are accounted once by the renderer.
+  @override
+  int get sourceByteCount => 0;
+}
+
 /// Owned, tightly packed straight-alpha RGBA8 sRGB image.
 final class TerminalReferenceImage {
   factory TerminalReferenceImage.fromRgba({
@@ -243,6 +302,8 @@ abstract final class TerminalReferenceRenderer {
 
     final List<TerminalReferencePrimitive> retained =
         <TerminalReferencePrimitive>[];
+    final Set<TerminalReferenceBitmapSource> retainedBitmapSources =
+        Set<TerminalReferenceBitmapSource>.identity();
     var sourceBytes = 0;
     for (final TerminalReferencePrimitive primitive in primitives) {
       if (retained.length == limits.maximumPrimitiveCount) {
@@ -252,7 +313,13 @@ abstract final class TerminalReferenceRenderer {
         );
       }
       _validatePrimitive(primitive, width, height, limits);
-      sourceBytes += primitive.sourceByteCount;
+      sourceBytes += switch (primitive) {
+        TerminalReferenceSampledBitmap() =>
+          retainedBitmapSources.add(primitive.source)
+              ? primitive.source.byteLength
+              : 0,
+        _ => primitive.sourceByteCount,
+      };
       if (sourceBytes > limits.maximumSourceBytes) {
         throw StateError(
           'reference source-byte limit exceeded: $sourceBytes > '
@@ -273,6 +340,14 @@ abstract final class TerminalReferenceRenderer {
             _drawMask(pixels, pixelWidth, pixelHeight, scale, primitive);
           case TerminalReferenceBitmap():
             _drawBitmap(pixels, pixelWidth, pixelHeight, scale, primitive);
+          case TerminalReferenceSampledBitmap():
+            _drawSampledBitmap(
+              pixels,
+              pixelWidth,
+              pixelHeight,
+              scale,
+              primitive,
+            );
         }
       }
     }
@@ -369,6 +444,46 @@ abstract final class TerminalReferenceRenderer {
                 (primitive._rgba[sourceOffset + 1] << 16) |
                 (primitive._rgba[sourceOffset + 2] << 8) |
                 primitive._rgba[sourceOffset + 3],
+          ),
+          primitive.opacity,
+        );
+      },
+    );
+  }
+
+  static void _drawSampledBitmap(
+    Uint8List pixels,
+    int pixelWidth,
+    int pixelHeight,
+    int scale,
+    TerminalReferenceSampledBitmap primitive,
+  ) {
+    _forEachScaledSourcePixel(
+      x: primitive.x,
+      y: primitive.y,
+      width: primitive.width,
+      height: primitive.height,
+      scale: scale,
+      pixelWidth: pixelWidth,
+      pixelHeight: pixelHeight,
+      visit: (int destinationX, int destinationY, int deviceX, int deviceY) {
+        final int sourceX =
+            primitive.sourceX +
+            destinationX * primitive.sourceWidth ~/ primitive.width;
+        final int sourceY =
+            primitive.sourceY +
+            destinationY * primitive.sourceHeight ~/ primitive.height;
+        final int sourceOffset =
+            sourceY * primitive.source.rowStride + sourceX * 4;
+        final Uint8List rgba = primitive.source._rgba;
+        _blend(
+          pixels,
+          (deviceY * pixelWidth + deviceX) * 4,
+          TerminalReferenceColor(
+            (rgba[sourceOffset] << 24) |
+                (rgba[sourceOffset + 1] << 16) |
+                (rgba[sourceOffset + 2] << 8) |
+                rgba[sourceOffset + 3],
           ),
           primitive.opacity,
         );
@@ -537,6 +652,8 @@ void _validatePrimitive(
     case TerminalReferenceMask():
       _validateColor(primitive.color, 'primitive.color');
     case TerminalReferenceBitmap():
+      break;
+    case TerminalReferenceSampledBitmap():
       break;
   }
 }

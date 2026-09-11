@@ -210,6 +210,7 @@ export 'src/terminal_renderer/pane_work_scheduler.dart';
 export 'src/terminal_renderer/reference_renderer.dart'
     show
         TerminalReferenceBitmap,
+        TerminalReferenceBitmapSource,
         TerminalReferenceColor,
         TerminalReferenceImage,
         TerminalReferenceLayer,
@@ -217,12 +218,14 @@ export 'src/terminal_renderer/reference_renderer.dart'
         TerminalReferencePrimitive,
         TerminalReferenceRenderLimits,
         TerminalReferenceRenderer,
+        TerminalReferenceSampledBitmap,
         TerminalReferenceSolid;
 export 'src/terminal_renderer/render_rebuild_coordinator.dart';
 export 'src/terminal_renderer/render_resource_rebuilder.dart';
 export 'src/terminal_renderer/renderer_metrics.dart';
 export 'src/terminal_renderer/terminal_damage.dart';
 export 'src/terminal_renderer/terminal_damage_transfer.dart';
+export 'src/terminal_renderer/terminal_kitty_reference_compositor.dart';
 export 'src/terminal_renderer/terminal_live_metal_surface.dart';
 export 'src/terminal_renderer/terminal_render_model.dart';
 export 'src/terminal_renderer/terminal_screen_metal_compositor.dart';

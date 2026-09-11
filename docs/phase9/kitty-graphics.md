@@ -5,8 +5,8 @@
 - Date started: 2026-09-11
 - Scope: fourth Phase 9 roadmap item
 - Feature-matrix owner: CAP-11
-- Status: grammar, process-worker storage, and bounded placement-action children
-  complete; lifecycle/projection child in progress
+- Status: grammar, process-worker storage, placement-action, and lifecycle/
+  projection children complete; CPU reference compositor child in progress
 - Predecessor: `docs/phase9/light-dark-notification-extended-reports.md`
 
 ## Purpose and background
@@ -731,3 +731,54 @@ after this parent is committed.
   `dart_terminal tests passed`. Final scope review confirms no compositor,
   Metal, animation, or eviction policy was implemented in this child, and
   `git diff --check` passes.
+- 2026-09-11: lifecycle/projection completed in commit `129179c` (`Preserve
+  Kitty images across screen mutations`). ROADMAP, README, FEATURE_MATRIX, this
+  memo, recent commits, and the clean worktree were reread immediately after
+  the commit. The first unchecked item is the CPU reference compositor/golden
+  and placement-parent completion decision. The existing reference renderer
+  already owns straight-alpha sRGB source-over, device-scale expansion,
+  clipping, source-byte/primitive/pixel ceilings, and deterministic golden
+  encoding; this child will extend that oracle with shared bitmap resources,
+  nearest-neighbor source-rectangle scaling, and explicit below/above-text
+  layers rather than duplicate blending code. Metal remains the next child.
+- 2026-09-11: the reference renderer now has explicit `imageBelowText` and
+  `imageAboveText` layers. The accepted z band maps negative images after cell
+  backgrounds but before selection/text, and zero/positive images after text
+  decorations but before the cursor. A shared immutable bitmap source is
+  charged once against the source-byte ceiling even when referenced by
+  multiple placements; each sampled placement validates its source rectangle
+  and uses integer nearest-neighbor mapping before the existing straight-alpha
+  sRGB source-over path. Render target, scaled pixel count, resource count,
+  placement count, primitive count, and unique source bytes all fail before
+  unbounded traversal or allocation.
+- 2026-09-11: `TerminalKittyReferenceCompositor` converts one generation-pinned
+  viewport snapshot into shared sources and sampled primitives, rejects absent
+  resource generations and missing logical cell geometry, and lets the common
+  renderer own viewport clipping and device-scale expansion. Its deterministic
+  fixture covers a placement entering history above the viewport, right-edge
+  clipping, 2-to-4 and 2-to-3 nearest scaling, opaque and half-alpha RGBA,
+  negative z under a glyph, nonnegative z over a glyph, selection ordering,
+  and cursor precedence.
+- 2026-09-11: checked-in golden artifacts are 225 bytes at
+  `test/goldens/kitty/static-placement-1x.dtgi` (SHA-256
+  `19491de7707f6b61c7071ec6e0a029b202fd7a74147fc1b0d7af77d8de11bd9e`)
+  and 418 bytes at `test/goldens/kitty/static-placement-2x.dtgi` (SHA-256
+  `37361d055b97a4ea833315884f49e0da947d395b81076203742ab6614dffbd92`).
+  A dedicated generator owns only these two paths; tests encode and compare
+  without rewriting them. Scoped analysis and the reference-renderer, Kitty
+  compositor, and existing golden-image focused programs pass.
+- 2026-09-11: the first complete gate stopped at the expected regression-
+  coverage freshness boundary after CAP-11 changed. Regeneration advanced only
+  the FEATURE_MATRIX SHA-256 and preserved all nine fix families, nine cases,
+  417 split runs, one owned gap, and zero known P0 silent-corruption count. The
+  next full run reached `dart_terminal tests passed` but reported one analyzer
+  info for the new public export ordering. Sorting the directive removed the
+  finding; focused analysis then reported no issues.
+- 2026-09-11: the final `CI=true DART_SUPPRESS_ANALYTICS=true make test` rerun
+  passed every repository stage, formatted 260 Dart files with zero changes,
+  reported no analyzer issues, and ended with `dart_terminal tests passed`.
+  Review confirms the CPU compositor uses only immutable snapshot copies,
+  bounds all source/placement/target work, retains exact 1x/2x golden evidence,
+  and adds no native or animation behavior. `git diff --check` passes. The
+  placement/reference-projection parent is complete; Metal product acceptance
+  is now the first unchecked Kitty graphics child.
