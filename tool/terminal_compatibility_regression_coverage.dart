@@ -186,10 +186,10 @@ String generateTerminalCompatibilityRegressionCoverage({
   _expect(
     inventory.records.length == 270 &&
         support[TerminalCompatibilitySupport.implemented] == 96 &&
-        support[TerminalCompatibilitySupport.partial] == 20 &&
-        support[TerminalCompatibilitySupport.safeIgnore] == 9 &&
+        support[TerminalCompatibilitySupport.partial] == 21 &&
+        support[TerminalCompatibilitySupport.safeIgnore] == 8 &&
         support[TerminalCompatibilitySupport.unsupported] == 145 &&
-        safeIgnore == 9 &&
+        safeIgnore == 8 &&
         explicitUnsupported == 145,
     'reviewed inventory boundary differs',
   );
@@ -206,7 +206,7 @@ String generateTerminalCompatibilityRegressionCoverage({
     'implementation.modes',
   ).length;
   _expect(
-    selectors == 89 && modes == 27,
+    selectors == 90 && modes == 27,
     'reviewed implementation declaration totals differ',
   );
 

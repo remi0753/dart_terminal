@@ -662,6 +662,11 @@
       "kind": "osc",
       "command": 133,
       "handler": "execute"
+    },
+    {
+      "key": "apc",
+      "kind": "apc",
+      "handler": "execute-or-reply"
     }
   ],
   "modes": [
@@ -831,7 +836,6 @@
   "boundedUnsupportedFamilies": [
     "dcs",
     "sos",
-    "pm",
-    "apc"
+    "pm"
   ]
 }

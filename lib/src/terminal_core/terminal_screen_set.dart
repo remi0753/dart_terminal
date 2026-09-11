@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'terminal_hyperlink.dart';
 import 'terminal_keyboard_modes.dart';
+import 'terminal_kitty_image_store.dart';
 import 'terminal_mouse_modes.dart';
 import 'terminal_reply.dart';
 import 'terminal_screen.dart';
@@ -29,6 +30,8 @@ final class TerminalScreenSet {
     TerminalHyperlinkTable? hyperlinkTable,
     TerminalScrollback? scrollback,
     TerminalSessionMetadata? metadata,
+    TerminalKittyImageStore? primaryKittyImages,
+    TerminalKittyImageStore? alternateKittyImages,
     TerminalCursorShape initialCursorShape = TerminalCursorShape.block,
     bool initialCursorBlinking = true,
     TerminalColorScheme initialColorScheme = TerminalColorScheme.dark,
@@ -73,6 +76,8 @@ final class TerminalScreenSet {
       scrollbackAttachment: scrollbackAttachment,
       metadata: metadata ?? TerminalSessionMetadata(),
       semanticPrompt: TerminalSemanticPromptModel(),
+      primaryKittyImages: primaryKittyImages ?? TerminalKittyImageStore(),
+      alternateKittyImages: alternateKittyImages ?? TerminalKittyImageStore(),
       initialColorScheme: initialColorScheme,
     );
     result._viewport = TerminalViewport._(result);
@@ -90,6 +95,8 @@ final class TerminalScreenSet {
     required TerminalScrollbackAttachment scrollbackAttachment,
     required this.metadata,
     required this.semanticPrompt,
+    required this.primaryKittyImages,
+    required this.alternateKittyImages,
     required TerminalColorScheme initialColorScheme,
   }) : _primary = primary,
        _alternate = alternate,
@@ -105,6 +112,8 @@ final class TerminalScreenSet {
   final TerminalScrollback scrollback;
   final TerminalSessionMetadata metadata;
   final TerminalSemanticPromptModel semanticPrompt;
+  final TerminalKittyImageStore primaryKittyImages;
+  final TerminalKittyImageStore alternateKittyImages;
   final TerminalScrollbackAttachment _scrollbackAttachment;
   late final TerminalViewport _viewport;
 
@@ -140,6 +149,16 @@ final class TerminalScreenSet {
     TerminalScreenKind.primary => primary,
     TerminalScreenKind.alternate => alternate,
   };
+  TerminalKittyImageStore get activeKittyImages => switch (_activeKind) {
+    TerminalScreenKind.primary => primaryKittyImages,
+    TerminalScreenKind.alternate => alternateKittyImages,
+  };
+
+  TerminalKittyImageStore kittyImagesFor(TerminalScreenKind kind) =>
+      switch (kind) {
+        TerminalScreenKind.primary => primaryKittyImages,
+        TerminalScreenKind.alternate => alternateKittyImages,
+      };
   bool get usingAlternate => _activeKind == TerminalScreenKind.alternate;
   bool get mode1049Active => _mode1049Active;
   bool get bracketedPasteMode => _bracketedPaste;

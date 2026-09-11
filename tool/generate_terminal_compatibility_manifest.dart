@@ -38,6 +38,19 @@ String generateTerminalImplementationManifestSource() {
             ? 'execute-or-reply'
             : 'execute',
       },
+    for (final VtStringKind kind
+        in TerminalCompatibilitySurface.supportedStringKinds)
+      <String, Object?>{
+        'key': kind.name == 'applicationProgramCommand' ? 'apc' : kind.name,
+        'kind': switch (kind) {
+          VtStringKind.startOfString => 'sos',
+          VtStringKind.privacyMessage => 'pm',
+          VtStringKind.applicationProgramCommand => 'apc',
+          VtStringKind.operatingSystemCommand => 'osc',
+          VtStringKind.deviceControlString => 'dcs',
+        },
+        'handler': 'execute-or-reply',
+      },
   ];
   final List<Map<String, Object?>> modes = <Map<String, Object?>>[
     for (final int mode in TerminalCompatibilitySurface.ansiModes)
@@ -64,13 +77,14 @@ String generateTerminalImplementationManifestSource() {
       if (TerminalCompatibilitySurface.dcsIsBoundedUnsupported) 'dcs',
       for (final VtStringKind kind
           in TerminalCompatibilitySurface.boundedUnsupportedStringKinds)
-        switch (kind) {
-          VtStringKind.startOfString => 'sos',
-          VtStringKind.privacyMessage => 'pm',
-          VtStringKind.applicationProgramCommand => 'apc',
-          VtStringKind.operatingSystemCommand => 'osc',
-          VtStringKind.deviceControlString => 'dcs',
-        },
+        if (!TerminalCompatibilitySurface.supportedStringKinds.contains(kind))
+          switch (kind) {
+            VtStringKind.startOfString => 'sos',
+            VtStringKind.privacyMessage => 'pm',
+            VtStringKind.applicationProgramCommand => 'apc',
+            VtStringKind.operatingSystemCommand => 'osc',
+            VtStringKind.deviceControlString => 'dcs',
+          },
     ],
   };
   return '${const JsonEncoder.withIndent('  ').convert(manifest)}\n';

@@ -14,6 +14,7 @@ void runTerminalCompatibilitySurfaceTests() {
   _testGeneratedManifestIsDeterministicAndFresh();
   _testEveryDeclaredSelectorReachesSemanticDispatch();
   _testEveryDeclaredModeReachesSemanticDispatch();
+  _testSupportedKittyApcReachesSemanticDispatch();
   _testBoundedUnsupportedFamiliesAndNegativeSelectors();
 }
 
@@ -35,9 +36,9 @@ void _testGeneratedManifestIsDeterministicAndFresh() {
   _expect(
     root['format'] == 'dart-terminal-implementation-surface' &&
         root['version'] == 1 &&
-        selectors.length == 89 &&
+        selectors.length == 90 &&
         modes.length == 27 &&
-        _listsEqual(ignored, const <String>['dcs', 'sos', 'pm', 'apc']),
+        _listsEqual(ignored, const <String>['dcs', 'sos', 'pm']),
     'manifest has the reviewed selector, mode, and policy totals',
   );
 
@@ -170,6 +171,29 @@ void _testBoundedUnsupportedFamiliesAndNegativeSelectors() {
         unknownOsc.sink.unsupportedSequenceCount == 1 &&
         unknownMode.sink.unsupportedSequenceCount == 1,
     'selectors outside the declarations remain explicitly unsupported',
+  );
+}
+
+void _testSupportedKittyApcReachesSemanticDispatch() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 2, columns: 2);
+  final TerminalScreenParserSink sink = TerminalScreenParserSink.forScreenSet(
+    screens,
+    onReply: (_) => true,
+    onKittyGraphicsCommand: (TerminalKittyGraphicsCommand command) =>
+        command.action == TerminalKittyGraphicsAction.query,
+  );
+  final VtParser parser = VtParser(sink: sink);
+  parser.parse(
+    Uint8List.fromList(
+      ascii.encode('\x1b_Ga=q,i=1,f=32,s=1,v=1;AQIDBA==\x1b\\'),
+    ),
+  );
+  parser.finish();
+  _expect(
+    sink.acceptedKittyGraphicsCommandCount == 1 &&
+        sink.rejectedKittyGraphicsCommandCount == 0 &&
+        sink.unsupportedSequenceCount == 0,
+    'declared Kitty APC reaches its bounded semantic handler',
   );
 }
 

@@ -72,6 +72,10 @@ String generateTerminalCompatibilitySummary(
       'Contour synchronized-output, Unicode Core, light/dark reporting, and '
       'Ghostty in-band size modes 2026–2048.',
     )
+    ..writeln(
+      '- the bounded leading-G Kitty APC subset for direct static image '
+      'transmit/query, worker decode, per-screen storage, and replies.',
+    )
     ..writeln()
     ..writeln(
       'Excluded from this bounded baseline are ECMA transmission controls and '
@@ -79,8 +83,9 @@ String generateTerminalCompatibilitySummary(
       'meaning; exhaustive ISO-2022 national replacement-set final-byte '
       'variants beyond ASCII and DEC line drawing; physical printer/modem '
       'parameter variants; Tektronix command details; terminal-to-host keyboard '
-      'output beyond the declared keyboard modes; Kitty graphics; and other '
-      'Ghostty-only protocols assigned to later roadmap tasks. An exclusion '
+      'output beyond the declared keyboard modes; Kitty image placement, '
+      'rendering, local transport, and animation; and other Ghostty-only '
+      'protocols assigned to later roadmap tasks. An exclusion '
       'is not silently supported.',
     )
     ..writeln()
@@ -127,7 +132,7 @@ String generateTerminalCompatibilitySummary(
       'reconcile exactly to all $productRecords product declarations '
       '($productSelectors sequence selectors and $productModes modes). The '
       '${support[TerminalCompatibilitySupport.safeIgnore]} safe-ignore records '
-      'cover $safeIgnoreDcs concrete DCS forms and SOS/PM/APC; all '
+      'cover $safeIgnoreDcs concrete DCS forms and SOS/PM; all '
       '${support[TerminalCompatibilitySupport.unsupported]} remaining records '
       'are explicitly unsupported/rejected.',
     )

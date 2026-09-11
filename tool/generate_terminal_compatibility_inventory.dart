@@ -2438,7 +2438,11 @@ String generateTerminalCompatibilityInventorySource() {
           _unsupportedMode(gap.key, false, gap.value),
         for (final MapEntry<int, String> gap in _decModeGaps.entries)
           _unsupportedMode(gap.key, true, gap.value),
-        for (final _Gap gap in _dcsAndStringRecords) _safeIgnoreRecord(gap),
+        for (final _Gap gap in _dcsAndStringRecords)
+          if (gap.kind == 'apc')
+            _partialKittyApcRecord(gap)
+          else
+            _safeIgnoreRecord(gap),
       ]..sort(
         (Map<String, Object?> a, Map<String, Object?> b) =>
             (a['id']! as String).compareTo(b['id']! as String),
@@ -2607,6 +2611,51 @@ Map<String, Object?> _safeIgnoreRecord(_Gap gap) => <String, Object?>{
   'implementationEvidence': <String>[_implementationEvidence],
   'testEvidence': <String>[_implementationTestEvidence],
   'notes': gap.notes,
+};
+
+Map<String, Object?> _partialKittyApcRecord(_Gap gap) => <String, Object?>{
+  'id': '${gap.family}:${gap.kind}:${gap.name}',
+  'mnemonic': gap.mnemonic,
+  'syntax': gap.syntax,
+  'selector': gap.selector,
+  'support': 'partial',
+  'disposition': 'reply',
+  'sourceRefs': <Map<String, Object?>>[
+    <String, Object?>{'source': _sourceId(gap.family), 'locator': gap.locator},
+    <String, Object?>{
+      'source': 'kitty-0-48-2-graphics-protocol',
+      'locator':
+          'direct transfer, multipart, query, IDs, and response sections',
+    },
+    <String, Object?>{
+      'source': 'ghostty-d4d8f62-graphics-command',
+      'locator': 'bounded Kitty command parser and control union',
+    },
+    <String, Object?>{
+      'source': 'ghostty-d4d8f62-graphics-exec',
+      'locator': 'transmit/query execution and response ordering',
+    },
+    <String, Object?>{
+      'source': 'ghostty-d4d8f62-graphics-storage',
+      'locator': 'image ID, number, replacement, and storage ownership',
+    },
+  ],
+  'implementationEvidence': <String>[
+    _implementationEvidence,
+    'lib/src/terminal_kitty_graphics_controller.dart#session-fifo',
+    'lib/src/terminal_core/terminal_kitty_image_store.dart#bounded-storage',
+  ],
+  'testEvidence': <String>[
+    _implementationTestEvidence,
+    'test/terminal_kitty_graphics_controller_test.dart#storage-and-fifo',
+  ],
+  'notes':
+      'A leading-G APC supports bounded direct static RGB/RGBA/PNG transmit, '
+      'multipart worker decode, query, explicit ID replacement, image-number '
+      'allocation, per-screen reject-on-cap storage, exact quiet replies, and '
+      'teardown. Non-Kitty APC remains bounded safe-ignore. File/shared-memory '
+      'transport, placement/deletion effects, animation, projection, and render '
+      'are explicitly rejected pending their ordered roadmap work.',
 };
 
 Map<String, Object?> _unsupportedMode(

@@ -1136,9 +1136,9 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase9/kitty-graphics.md`](docs/phase9/kitty-graphics.md)
   を参照して順に実施する）
   - [x] immutable source pins、bounded APC command grammar、reply contract
-  - [ ] process-worker direct decode と bounded static image storage
+  - [x] process-worker direct decode と bounded static image storage
     - [x] typed generation-safe base64/zlib/PNG/RGB(A) worker decode
-    - [ ] per-screen storage、multipart/FIFO replies、failure/teardown semantics
+    - [x] per-screen storage、multipart/FIFO replies、failure/teardown semantics
   - [ ] placement/delete/z-index/scroll/screen semantics と reference projection
   - [ ] Metal product acceptance、compatibility/documentation closure、親項目完了判定
 - [ ] image animation と resource eviction

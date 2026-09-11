@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:dart_pty_macos/dart_pty_macos.dart';
 
+import 'runtime_lifecycle.dart';
 import 'terminal_buffer.dart';
 import 'terminal_core/terminal_keyboard_modes.dart';
 import 'terminal_core/terminal_reply.dart';
@@ -16,6 +17,7 @@ import 'terminal_core/vt_parser.dart';
 import 'terminal_input/terminal_hyperlink_interaction.dart';
 import 'terminal_input/terminal_key_event.dart';
 import 'terminal_input/terminal_paste.dart';
+import 'terminal_kitty_graphics_controller.dart';
 import 'terminal_pane.dart';
 import 'terminal_shell_integration.dart';
 
@@ -162,6 +164,7 @@ final class TerminalSession implements TerminalPaneSession {
     TerminalCursorShape initialCursorShape = TerminalCursorShape.block,
     bool initialCursorBlinking = true,
     TerminalColorScheme initialColorScheme = TerminalColorScheme.dark,
+    RuntimeWorkerPayloadClient? graphicsWorker,
   }) : _onChanged = onChanged,
        _onTerminated = onTerminated,
        _lifecycleObserver = lifecycleObserver,
@@ -225,9 +228,17 @@ final class TerminalSession implements TerminalPaneSession {
       initialCursorBlinking: initialCursorBlinking,
       initialColorScheme: initialColorScheme,
     );
+    kittyGraphicsController = TerminalKittyGraphicsController(
+      screenSet: terminalScreenSet,
+      paneId: id.paneId.value,
+      sessionGeneration: id.generation,
+      onReply: _writeTerminalReplyDirect,
+      worker: graphicsWorker,
+    );
     terminalParserSink = TerminalScreenParserSink.forScreenSet(
       terminalScreenSet,
-      onReply: _writeTerminalReply,
+      onReply: kittyGraphicsController.enqueueOrdinaryReply,
+      onKittyGraphicsCommand: kittyGraphicsController.enqueueCommand,
     );
     _terminalParser = VtParser(sink: terminalParserSink);
     _lastCompletedSize = _currentSize();
@@ -257,6 +268,7 @@ final class TerminalSession implements TerminalPaneSession {
   final TerminalBuffer buffer = TerminalBuffer();
   late final TerminalScreenSet terminalScreenSet;
   late final TerminalScreenParserSink terminalParserSink;
+  late final TerminalKittyGraphicsController kittyGraphicsController;
   late final VtParser _terminalParser;
   final Completer<void> _terminated = Completer<void>();
   final String _workingDirectory;
@@ -332,6 +344,9 @@ final class TerminalSession implements TerminalPaneSession {
     if (_disposed) return false;
     return terminalParserSink.projectColorScheme(scheme);
   }
+
+  bool attachGraphicsWorker(RuntimeWorkerPayloadClient worker) =>
+      kittyGraphicsController.attachWorker(worker);
 
   @override
   TerminalPaneProcessSnapshot processSnapshot() {
@@ -795,6 +810,7 @@ final class TerminalSession implements TerminalPaneSession {
     terminalScreenSet.setColorSchemeReportingMode(false);
     terminalScreenSet.setInBandSizeReportingMode(false);
     _disposed = true;
+    await kittyGraphicsController.dispose();
     _cancelPasteWrite();
     _observeLifecycle(TerminalSessionLifecycleStage.disposeStarted);
     final PtyProcess? process = _process;
@@ -1038,7 +1054,7 @@ final class TerminalSession implements TerminalPaneSession {
     return receipt;
   }
 
-  bool _writeTerminalReply(Uint8List bytes) {
+  bool _writeTerminalReplyDirect(Uint8List bytes) {
     if (bytes.isEmpty ||
         bytes.length > TerminalReplyEncoder.maximumReplyBytes) {
       return false;

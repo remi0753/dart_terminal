@@ -12,8 +12,9 @@ This is a host-to-terminal compatibility baseline, not a claim to implement ever
 - every DEC-private mode number listed by xterm Patch #411, plus its high-use CSI, DCS, OSC, mouse, title, palette, and clipboard families;
 - iTerm2 OSC 7 current-directory and OSC 8 hyperlink extensions because they are part of the current/later product contract.
 - Kitty keyboard flag controls, xterm modifyOtherKeys controls, and mintty application-Escape mode required by captured applications; and Contour synchronized-output, Unicode Core, light/dark reporting, and Ghostty in-band size modes 2026–2048.
+- the bounded leading-G Kitty APC subset for direct static image transmit/query, worker decode, per-screen storage, and replies.
 
-Excluded from this bounded baseline are ECMA transmission controls and paged-media/typesetting functions without modern terminal application meaning; exhaustive ISO-2022 national replacement-set final-byte variants beyond ASCII and DEC line drawing; physical printer/modem parameter variants; Tektronix command details; terminal-to-host keyboard output beyond the declared keyboard modes; Kitty graphics; and other Ghostty-only protocols assigned to later roadmap tasks. An exclusion is not silently supported.
+Excluded from this bounded baseline are ECMA transmission controls and paged-media/typesetting functions without modern terminal application meaning; exhaustive ISO-2022 national replacement-set final-byte variants beyond ASCII and DEC line drawing; physical printer/modem parameter variants; Tektronix command details; terminal-to-host keyboard output beyond the declared keyboard modes; Kitty image placement, rendering, local transport, and animation; and other Ghostty-only protocols assigned to later roadmap tasks. An exclusion is not silently supported.
 
 ## Pinned sources
 
@@ -46,8 +47,8 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | Support classification | Records |
 | --- | ---: |
 | `implemented` | 96 |
-| `partial` | 20 |
-| `safe-ignore` | 9 |
+| `partial` | 21 |
+| `safe-ignore` | 8 |
 | `unsupported` | 145 |
 | **Total** | **270** |
 
@@ -65,7 +66,7 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `mode` | 85 |
 | **Total** | **270** |
 
-The 96 implemented plus 20 partial records reconcile exactly to all 116 product declarations (89 sequence selectors and 27 modes). The 9 safe-ignore records cover 6 concrete DCS forms and SOS/PM/APC; all 145 remaining records are explicitly unsupported/rejected.
+The 96 implemented plus 21 partial records reconcile exactly to all 117 product declarations (90 sequence selectors and 27 modes). The 8 safe-ignore records cover 6 concrete DCS forms and SOS/PM; all 145 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 
@@ -76,6 +77,7 @@ The 96 implemented plus 20 partial records reconcile exactly to all 116 product 
 | `dec:csi:decscusr` | `CSI SP q` | Cursor styles 0–6 are implemented; xterm resource-reset value 7 is rejected. |
 | `dec:csi:decset` | `CSI ? h` | The selector is implemented for the explicitly inventoried DEC private modes only. |
 | `dec:dcs:decrqss` | `DCS $ q Pt ST` | The complete SGR request payload m receives the current rendition in a bounded pinned-xterm form. Other status-string selectors remain explicit bounded unsupported. |
+| `ecma48:apc:apc` | `APC Pt ST` | A leading-G APC supports bounded direct static RGB/RGBA/PNG transmit, multipart worker decode, query, explicit ID replacement, image-number allocation, per-screen reject-on-cap storage, exact quiet replies, and teardown. Non-Kitty APC remains bounded safe-ignore. File/shared-memory transport, placement/deletion effects, animation, projection, and render are explicitly rejected pending their ordered roadmap work. |
 | `ecma48:c0:ff` | `FF (0x0C)` | Handled as line feed, matching xterm rather than paged-media form feed. |
 | `ecma48:c0:vt` | `VT (0x0B)` | Handled as line feed, matching xterm rather than ECMA line-tab semantics. |
 | `ecma48:csi:dsr` | `CSI n` | Status, cursor-position, and private color-scheme request 996 are implemented; other DSR parameters are rejected. |
@@ -99,7 +101,6 @@ The 96 implemented plus 20 partial records reconcile exactly to all 116 product 
 | `dec:dcs:decaupss` | `DCS Ps ! u Pt ST` |
 | `dec:dcs:decrsps` | `DCS Ps $ t Pt ST` |
 | `dec:dcs:decudk` | `DCS Ps ; Ps \| Pt ST` |
-| `ecma48:apc:apc` | `APC Pt ST` |
 | `ecma48:pm:pm` | `PM Pt ST` |
 | `ecma48:sos:sos` | `SOS Pt ST` |
 | `xterm:dcs:sixel` | `DCS Ps q Pt ST` |

@@ -62,6 +62,7 @@ import 'terminal_hyperlink_test.dart';
 import 'terminal_input_matrix_test.dart';
 import 'terminal_key_binding_test.dart';
 import 'terminal_key_encoder_test.dart';
+import 'terminal_kitty_graphics_controller_test.dart';
 import 'terminal_kitty_graphics_test.dart';
 import 'terminal_live_metal_surface_font_test.dart';
 import 'terminal_mouse_encoder_test.dart';
@@ -170,6 +171,9 @@ Future<void> main() async {
   runTerminalKeyBindingTests();
   runTerminalKeyEncoderTests();
   runTerminalKittyGraphicsTests();
+  await runTerminalKittyGraphicsControllerTests().timeout(
+    const Duration(seconds: 30),
+  );
   runTerminalMouseEncoderTests();
   runTerminalMouseRouterTests();
   runTerminalOsc52PolicyTests();

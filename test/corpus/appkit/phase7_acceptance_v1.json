@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "c417b1b2d2db0428cbf908a8d1d6f29b9621dc0449360806e2616037a63bd939"
+          "sha256": "b42c67e262b5df99741ab3fa0bffaf0882715a5fc6313f6edb412f0fee6d609a"
         },
         {
           "path": "lib/src/terminal_input/terminal_text_input_event_router.dart",
@@ -132,7 +132,7 @@
         },
         {
           "path": "lib/src/runtime_lifecycle.dart",
-          "sha256": "040b55a6915fc2b1dff529115a1575f976bdba6081c9a92b2ce011dd6125abe1"
+          "sha256": "0b8696f7093801decee984d946861033aea6fc03bc1e9b1fdd6f51de5b0283c7"
         }
       ],
       "unit_tests": [
@@ -183,11 +183,11 @@
         },
         {
           "path": "lib/src/terminal_session.dart",
-          "sha256": "c1e6f2bb075b3a79d10afe010cea95be5c2b83c5c53c5f37f4c95f29233d94f3"
+          "sha256": "fac635ddf02d8884c56a86dfba564752b9cebf1ae4f34386114555a61e7bf777"
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "c417b1b2d2db0428cbf908a8d1d6f29b9621dc0449360806e2616037a63bd939"
+          "sha256": "b42c67e262b5df99741ab3fa0bffaf0882715a5fc6313f6edb412f0fee6d609a"
         }
       ],
       "unit_tests": [

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'terminal_compatibility_surface.dart';
+import 'terminal_kitty_graphics.dart';
 import 'terminal_mouse_modes.dart';
 import 'terminal_reply.dart';
 import 'terminal_screen.dart';
@@ -11,6 +12,10 @@ import 'terminal_session_metadata.dart';
 import 'terminal_style.dart';
 import 'vt_parser.dart';
 import 'vt_parser_table.dart';
+
+typedef TerminalKittyGraphicsCommandHandler = bool Function(
+  TerminalKittyGraphicsCommand command,
+);
 
 /// Applies the currently supported VT screen actions to a [TerminalScreen].
 ///
@@ -22,20 +27,25 @@ final class TerminalScreenParserSink
   TerminalScreenParserSink(
     TerminalScreen screen, {
     TerminalReplyHandler? onReply,
+    TerminalKittyGraphicsCommandHandler? onKittyGraphicsCommand,
   }) : _screen = screen,
        screenSet = null,
-       _onReply = onReply;
+       _onReply = onReply,
+       _onKittyGraphicsCommand = onKittyGraphicsCommand;
 
   TerminalScreenParserSink.forScreenSet(
     TerminalScreenSet screens, {
     TerminalReplyHandler? onReply,
+    TerminalKittyGraphicsCommandHandler? onKittyGraphicsCommand,
   }) : _screen = null,
        screenSet = screens,
-       _onReply = onReply;
+       _onReply = onReply,
+       _onKittyGraphicsCommand = onKittyGraphicsCommand;
 
   final TerminalScreen? _screen;
   final TerminalScreenSet? screenSet;
   final TerminalReplyHandler? _onReply;
+  final TerminalKittyGraphicsCommandHandler? _onKittyGraphicsCommand;
 
   TerminalScreen get screen => screenSet?.activeScreen ?? _screen!;
 
@@ -53,6 +63,8 @@ final class TerminalScreenParserSink
   int _deniedClipboardWriteCount = 0;
   int _deniedClipboardClearCount = 0;
   int _rejectedClipboardRequestCount = 0;
+  int _acceptedKittyGraphicsCommandCount = 0;
+  int _rejectedKittyGraphicsCommandCount = 0;
   int _currentHyperlinkId = 0;
   final Uint16List _oscPaletteIndices = Uint16List(
     TerminalPalette.maxBatchEntries,
@@ -78,6 +90,10 @@ final class TerminalScreenParserSink
   int get deniedClipboardWriteCount => _deniedClipboardWriteCount;
   int get deniedClipboardClearCount => _deniedClipboardClearCount;
   int get rejectedClipboardRequestCount => _rejectedClipboardRequestCount;
+  int get acceptedKittyGraphicsCommandCount =>
+      _acceptedKittyGraphicsCommandCount;
+  int get rejectedKittyGraphicsCommandCount =>
+      _rejectedKittyGraphicsCommandCount;
   int get currentHyperlinkId => _currentHyperlinkId;
 
   /// Applies the product's rendered appearance and emits one opted-in report
@@ -649,6 +665,27 @@ final class TerminalScreenParserSink
   @override
   void dispatchString(VtStringSequence sequence) {
     screen.breakGraphemeSequence();
+    final TerminalKittyGraphicsCommandHandler? handler =
+        _onKittyGraphicsCommand;
+    if (handler != null &&
+        sequence.kind == VtStringKind.applicationProgramCommand &&
+        sequence.payloadLength > 0 &&
+        sequence.payloadByteAt(0) == 0x47) {
+      try {
+        final TerminalKittyGraphicsCommand command =
+            TerminalKittyGraphicsCommandParser.parse(sequence.copyPayload());
+        if (handler(command)) {
+          _acceptedKittyGraphicsCommandCount++;
+        } else {
+          _rejectedKittyGraphicsCommandCount++;
+        }
+      } on TerminalKittyGraphicsParseException {
+        _rejectedKittyGraphicsCommandCount++;
+      } on Object {
+        _rejectedKittyGraphicsCommandCount++;
+      }
+      return;
+    }
     assert(
       TerminalCompatibilitySurface.boundedUnsupportedStringKinds.contains(
         sequence.kind,

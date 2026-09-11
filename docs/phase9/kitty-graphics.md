@@ -405,3 +405,135 @@ after this parent is committed.
   The typed worker-decode child therefore meets its isolated completion
   conditions; per-screen identity/storage and FIFO session replies remain the
   next ordered child and are deliberately not marked complete.
+- 2026-09-11: typed worker decode completed in commit `d5df4c0` (`Decode
+  bounded Kitty images in the runtime worker`). ROADMAP, README,
+  FEATURE_MATRIX, this memo, and the clean worktree were reread. The first
+  unchecked item is session storage and FIFO semantics. Its scope is
+  per-screen image identity/bytes, direct multipart dispatch, strict command
+  ordering, exact replies, local-media/animation rejection, stale/failure
+  handling, and teardown. Placement, viewport projection, scrolling, and Metal
+  remain the following roadmap child.
+- 2026-09-11: the fixed Kitty specification requires direct chunks no larger
+  than 4,096 bytes, all non-final chunks aligned to four base64 bytes, and only
+  `m` plus optional `q` on continuation commands. A client must finish one
+  multipart image before another graphics command; a query decodes and replies
+  without replacing or storing data. Re-transmitting an explicit image ID
+  replaces the old data (and, in the later placement child, its placements).
+  Image numbers are non-unique: each transmission creates a new terminal-owned
+  ID, replies with both values, and later number lookup selects the newest.
+  Supplying both `i` and `I` is an error. Any delete command aborts an incomplete
+  upload. These rules were rechecked against immutable Kitty v0.48.2 lines
+  348–410, 451–456, 687–705, and 725–750 before fixing session state.
+- 2026-09-11: the existing parser sink synchronously writes ordinary replies
+  directly to the PTY and treats all APC as bounded safe-ignore. A Kitty decode
+  is asynchronous, so a later ordinary reply can otherwise overtake it. The
+  storage child therefore needs one session-owned bounded FIFO containing
+  graphics commands and any ordinary replies that arrive behind them; ordinary
+  replies retain the existing synchronous fast path when no graphics work is
+  pending. The parser will recognize only a leading-`G` APC when this handler is
+  installed; SOS, PM, non-Kitty APC, and parser-only sinks retain safe-ignore.
+- 2026-09-11: `TerminalScreenSet` already owns independent primary/alternate
+  state, but no image resource storage. Each screen will receive a bounded
+  reject-on-cap image store with copied immutable RGBA, explicit-ID atomic
+  replacement, monotonically generated IDs for image numbers, and newest-number
+  lookup. Upload screen kind is captured on the first chunk. This child does not
+  add placements, scroll anchors, or renderer projection. The shared runtime
+  worker may be attached after session construction, replaced, or unavailable;
+  controller epochs must ignore its stale completions and session teardown must
+  clear both stores and best-effort abort the helper transfer.
+- 2026-09-11: the first scoped analyzer pass over the new storage/controller
+  skeleton found one nullable field-promotion error in the private queue-job
+  initializer and one import-order lint in `terminal_session.dart`. Both are
+  local compile/style corrections; no behavior test has run for this child yet.
+- 2026-09-11: after adding the focused store/controller/session tests, the
+  second scoped analyzer pass had no source errors and reported only one
+  alphabetic import-order lint in the aggregate test runner. The runner import
+  is reordered before executing the new behavior suite.
+- 2026-09-11: the first focused storage suite passed all in-process store,
+  protocol, queue, stale-worker, and fake-PTY checks, then failed while locating
+  the real helper because `Platform.packageConfig` is null under this direct
+  `dart run` entrypoint. No product assertion failed. Reuse the repository's
+  established package-config discovery from the worker lifecycle tests instead
+  of null-asserting that optional runtime value.
+- 2026-09-11: the first ordered compatibility regeneration attempt used a
+  uniform `--generate` flag, but these older generators do not share one CLI:
+  the manifest tool interpreted that token as an output filename and the
+  inventory tool rejected it with usage status 64. The accidental workspace
+  file is removed, no reviewed artifact from this attempt is accepted, and the
+  Makefile-defined targets/arguments are used for the retry.
+- 2026-09-11: the ordered retry regenerated the implementation manifest,
+  sequence/mode inventory, and generated support summary with their native
+  no-argument interfaces. Independent `--check` runs for all three now pass.
+  The compatibility model treats APC as a partially implemented family: a
+  bounded leading-`G` Kitty command uses the execute/reply handler while every
+  other APC remains bounded safe-ignore. DCS, SOS, and PM remain the three
+  wholly unsupported bounded string families.
+- 2026-09-11: failure coverage is extended before the complete gate to make
+  the storage child's recovery contract explicit. Worker backpressure maps to
+  an identified `EBUSY` reply, worker request exceptions map to `EIO`, rejected
+  PTY writes are counted without publishing query data, and dispose during a
+  blocked first chunk invalidates its completion, clears both screen stores,
+  and sends a best-effort helper abort. A malformed leading-`G` APC is also
+  rejected without poisoning the following valid command.
+- 2026-09-11: the focused compatibility surface test passed. The first focused
+  inventory test then found one stale exact-count assertion at the top-level
+  baseline check: generated data correctly moved APC from safe-ignore to
+  partial, but this assertion still expected the old 20 partial / 9 safe-ignore
+  totals. It is updated to 21 / 8; selector and overall record counts do not
+  change.
+- 2026-09-11: the first complete gate for session storage passed its parser,
+  trace, and generated configuration/keybinding checks, then stopped at the
+  Phase 7 AppKit acceptance freshness check. The storage child necessarily
+  changes `terminal_session.dart`, its tests, and application lifecycle wiring,
+  all of which are hashed by that reviewed artifact. This is an expected stale
+  evidence result rather than a behavioral failure; regenerate it using the
+  Makefile-prescribed tool, review that only evidence hashes/inventory changed,
+  then restart the full gate.
+- 2026-09-11: Phase 7 acceptance regeneration changed only SHA-256 evidence for
+  `terminal_application.dart`, `runtime_lifecycle.dart`, and
+  `terminal_session.dart`. Criteria, evidence paths, status, and test inventory
+  remain unchanged, so the reviewed artifact is accepted for the next gate.
+- 2026-09-11: the second complete gate passed Phase 7 acceptance and the nine
+  compatibility regression cases, then correctly rejected the regression-
+  coverage report because its embedded implementation-manifest hash predates
+  the new APC selector. Coverage also embeds the reviewed differential report,
+  which in turn embeds inventory and implementation hashes, so regeneration
+  must follow the established dependency order: local reviewed differential
+  baseline/report first, regression coverage second. Observation semantics are
+  reviewed before accepting either generated delta.
+- 2026-09-11: differential baseline regeneration changed the embedded inventory
+  and implementation hashes, and each of four local observation files changed
+  only its provenance implementation revision; screen, cursor, mode, and reply
+  observations are byte-for-byte unchanged. The first coverage regeneration
+  attempt then exposed an earlier dependency: the reviewed application-matrix
+  acceptance also pins the implementation manifest. Its single manifest hash
+  is advanced without changing any cell, gap, status, or acceptance total. The
+  differential acceptance report is regenerated from the reviewed captures
+  before coverage is retried because it pins local baseline hashes.
+- 2026-09-11: application acceptance revalidation passed with 8 accepted cells
+  and its unchanged owned gap. Differential acceptance regeneration changed
+  only the eight references to the four local baseline hashes; external probe
+  hashes, classifications, differences, and acceptance totals remain unchanged
+  (12 accepted, 8 agreements, 4 unavailable). Regression coverage then
+  regenerated successfully, changing prerequisite hashes plus the reviewed
+  inventory totals from 20/9 partial/safe-ignore and 89 selectors to 21/8 and
+  90 selectors. Fix-family, case, split-run, gap, and corruption totals did not
+  drift.
+- 2026-09-11: the final complete `CI=true DART_SUPPRESS_ANALYTICS=true make
+  test` passed every generated freshness, Phase 7 acceptance, compatibility,
+  differential, application-matrix, terminfo, shell-integration, formatting,
+  analyzer, native-hook, and Dart test stage. It formatted 255 Dart files with
+  zero changes, reported no analyzer issues, and ended with
+  `dart_terminal tests passed`. The focused storage/controller suite, focused
+  compatibility surface/inventory suites, and independent generator checks
+  also pass.
+- 2026-09-11: commit review confirmed the controller retains no decoded or
+  encoded mutable caller buffer, caps FIFO jobs/bytes independently of helper
+  decode/storage caps, captures screen ownership on the first chunk, and
+  invalidates worker replacement/dispose completions before publication. The
+  application attaches every product session to the supervised worker either
+  at construction or immediately after worker readiness. Generated changes are
+  confined to the declared APC partial-support transition and evidence hashes.
+  `git diff --check` passed. The session-storage/FIFO child and its
+  process-worker parent are therefore complete; placement/projection remains
+  the first unchecked Kitty graphics child.

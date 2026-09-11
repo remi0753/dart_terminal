@@ -143,6 +143,10 @@ abstract final class TerminalCompatibilitySurface {
 
   static const bool dcsIsBoundedUnsupported = true;
 
+  static const List<VtStringKind> supportedStringKinds = <VtStringKind>[
+    VtStringKind.applicationProgramCommand,
+  ];
+
   static const List<VtStringKind> boundedUnsupportedStringKinds =
       <VtStringKind>[
         VtStringKind.startOfString,

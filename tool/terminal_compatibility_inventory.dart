@@ -291,9 +291,9 @@ final class TerminalCompatibilityInventory {
     };
     _expect(
       families.length == familyValues.length &&
-          families.length == 4 &&
-          families.containsAll(const <String>{'dcs', 'sos', 'pm', 'apc'}),
-      'bounded unsupported families must be dcs, sos, pm, and apc',
+          families.length == 3 &&
+          families.containsAll(const <String>{'dcs', 'sos', 'pm'}),
+      'bounded unsupported families must be dcs, sos, and pm',
     );
     for (final String family in families) {
       _expect(

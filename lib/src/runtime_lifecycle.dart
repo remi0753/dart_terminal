@@ -226,7 +226,14 @@ enum _ShutdownSignal { stopAcknowledged, workerExited }
 
 enum _CoordinatorState { idle, starting, running, stopping, stopped }
 
-final class RuntimeLifecycleCoordinator {
+abstract interface class RuntimeWorkerPayloadClient {
+  Future<RuntimeLifecyclePayloadRequestResult> requestPayload(
+    Uint8List payload, {
+    bool expectsInt64Response = false,
+  });
+}
+
+final class RuntimeLifecycleCoordinator implements RuntimeWorkerPayloadClient {
   RuntimeLifecycleCoordinator({
     required this.scenario,
     required this.observer,

@@ -177,6 +177,10 @@ final class TerminalKittyGraphicsCommand {
     required this.transmission,
     required this.placement,
     required this.deletion,
+    required this.hasImageIdKey,
+    required this.hasImageNumberKey,
+    required this.hasMoreChunksKey,
+    required this.isMultipartContinuationCompatible,
     required Uint8List data,
   }) : _data = Uint8List.fromList(data);
 
@@ -185,6 +189,13 @@ final class TerminalKittyGraphicsCommand {
   final TerminalKittyGraphicsTransmission transmission;
   final TerminalKittyGraphicsPlacement placement;
   final TerminalKittyGraphicsDeletion deletion;
+  final bool hasImageIdKey;
+  final bool hasImageNumberKey;
+  final bool hasMoreChunksKey;
+
+  /// Whether the command carries only the `m` and optional `q` controls that
+  /// Kitty permits after the first direct multipart chunk.
+  final bool isMultipartContinuationCompatible;
   final Uint8List _data;
 
   int get dataLength => _data.length;
@@ -328,6 +339,12 @@ abstract final class TerminalKittyGraphicsCommandParser {
         x: _unsigned(values, 0x78),
         y: _unsigned(values, 0x79),
         z: _signed(values, 0x7a),
+      ),
+      hasImageIdKey: values.containsKey(0x69),
+      hasImageNumberKey: values.containsKey(0x49),
+      hasMoreChunksKey: values.containsKey(0x6d),
+      isMultipartContinuationCompatible: values.keys.every(
+        (int key) => key == 0x6d || key == 0x71,
       ),
       data: Uint8List.sublistView(payload, dataStart),
     );

@@ -9,19 +9,19 @@
     },
     {
       "path": "compatibility/sequence_mode_inventory.json",
-      "sha256": "2eef25ff6420781d6e34c5a42c824b5902d5ffa5cf553264b86c698e4ae4b440"
+      "sha256": "026fcc3f473b00652637f35c01baf815ed3bc66bbb105825b634b826e4575725"
     },
     {
       "path": "compatibility/implemented_sequence_manifest.json",
-      "sha256": "f634f32970422d06de8aceba92cc6bd6732387017008c05a32745b49eb9c2dd7"
+      "sha256": "41c0463a0362cdb065b95719b6621f2cb76c3cdbda134da778df71d0932249c1"
     },
     {
       "path": "compatibility/application_matrix_acceptance.json",
-      "sha256": "0ff2a310957b6e8b56dcd38bf2e108e24c4ff2e2d948748d1995ac24887accce"
+      "sha256": "c811a7ac28ad5133b9cecb3928c53a34564e53bc9ffc7f8ed56239d6d756edd6"
     },
     {
       "path": "compatibility/differential_acceptance_report.json",
-      "sha256": "801a53713e4a639a1845f172a2f6630aa942c0bd0abaa06c942de3df14ac8cce"
+      "sha256": "63631628ad8c54a4d2a1bf9e16dc47d5bd472a68a6e410dfd64945a156e03356"
     },
     {
       "path": "test/corpus/parser/sequence_trace_case_v1.json",
@@ -144,10 +144,10 @@
     "inventory": {
       "records": 270,
       "implemented": 96,
-      "partial": 20,
-      "safe_ignore": 9,
+      "partial": 21,
+      "safe_ignore": 8,
       "explicit_unsupported": 145,
-      "implementation_selectors": 89,
+      "implementation_selectors": 90,
       "implementation_modes": 27
     },
     "application_matrix": {

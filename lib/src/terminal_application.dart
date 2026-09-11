@@ -858,6 +858,7 @@ final class TerminalApplication {
                   clipboardObservation?.recordNative(observation.event);
                   stdout.writeln(observation.machineLine());
                 },
+                graphicsWorker: lifecycle,
               );
               terminalSession = createdSession;
               return createdSession;
@@ -1821,6 +1822,9 @@ final class TerminalApplication {
       lifecycle = createdLifecycle;
       final RuntimeLifecycleStartStatus startStatus = await createdLifecycle
           .start();
+      if (startStatus == RuntimeLifecycleStartStatus.ready) {
+        terminalSession?.attachGraphicsWorker(createdLifecycle);
+      }
       if (scenario == RuntimeLifecycleScenario.workerStartupFailure) {
         _expectLifecycle(
           startStatus == RuntimeLifecycleStartStatus.startupFailure,
@@ -1995,6 +1999,7 @@ final class TerminalApplication {
             await replacement.start() == RuntimeLifecycleStartStatus.ready,
             'replacement worker did not become ready',
           );
+          terminalSession?.attachGraphicsWorker(replacement);
           _expectLifecycle(
             replacement.workerPid != failedProcessId,
             'replacement worker reused the failed process',
@@ -2373,6 +2378,7 @@ final class TerminalApplication {
                 initialCursorShape: capturedConfiguration.terminalCursorShape,
                 initialCursorBlinking: capturedConfiguration.cursorBlink,
                 initialColorScheme: _terminalColorScheme(renderedBrightness),
+                graphicsWorker: lifecycle,
               );
               sessions[id.paneId] = session;
               allSessions.add(session);
@@ -5911,6 +5917,7 @@ keybind = control+k=pane.focus-next
                 nativeObserver: (TerminalSessionNativeObservation observation) {
                   stdout.writeln(observation.machineLine());
                 },
+                graphicsWorker: lifecycle,
               );
               sessions[id.paneId] = session;
               launchWorkingDirectories[id.paneId] = saved.workingDirectory;
@@ -6115,6 +6122,9 @@ keybind = control+k=pane.focus-next
         await createdLifecycle.start() == RuntimeLifecycleStartStatus.ready,
         'restoration acceptance runtime worker did not become ready',
       );
+      for (final TerminalSession session in sessions.values) {
+        session.attachGraphicsWorker(createdLifecycle);
+      }
       _writeLifecycleEvent(
         RuntimeLifecycleScenario.normal,
         'root-ready',
@@ -6697,6 +6707,7 @@ keybind = control+k=pane.focus-next
                 nativeObserver: (TerminalSessionNativeObservation observation) {
                   stdout.writeln(observation.machineLine());
                 },
+                graphicsWorker: lifecycle,
               );
               sessions[id.paneId] = session;
               launchWorkingDirectories[id.paneId] = workingDirectory;
@@ -7031,6 +7042,9 @@ keybind = control+k=pane.focus-next
         await createdLifecycle.start() == RuntimeLifecycleStartStatus.ready,
         'hierarchy acceptance runtime worker did not become ready',
       );
+      for (final TerminalSession session in sessions.values) {
+        session.attachGraphicsWorker(createdLifecycle);
+      }
       _writeLifecycleEvent(
         RuntimeLifecycleScenario.normal,
         'root-ready',

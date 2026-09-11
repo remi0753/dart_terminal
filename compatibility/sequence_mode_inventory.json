@@ -2154,21 +2154,40 @@
       "selector": {
         "kind": "apc"
       },
-      "support": "safe-ignore",
-      "disposition": "ignore",
+      "support": "partial",
+      "disposition": "reply",
       "sourceRefs": [
         {
           "source": "ecma-48-5e",
           "locator": "clause 8.3.2, APC—Application Program Command"
+        },
+        {
+          "source": "kitty-0-48-2-graphics-protocol",
+          "locator": "direct transfer, multipart, query, IDs, and response sections"
+        },
+        {
+          "source": "ghostty-d4d8f62-graphics-command",
+          "locator": "bounded Kitty command parser and control union"
+        },
+        {
+          "source": "ghostty-d4d8f62-graphics-exec",
+          "locator": "transmit/query execution and response ordering"
+        },
+        {
+          "source": "ghostty-d4d8f62-graphics-storage",
+          "locator": "image ID, number, replacement, and storage ownership"
         }
       ],
       "implementationEvidence": [
-        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch",
+        "lib/src/terminal_kitty_graphics_controller.dart#session-fifo",
+        "lib/src/terminal_core/terminal_kitty_image_store.dart#bounded-storage"
       ],
       "testEvidence": [
-        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation",
+        "test/terminal_kitty_graphics_controller_test.dart#storage-and-fifo"
       ],
-      "notes": "The bounded parser consumes this complete control string through its terminator; the semantic sink deliberately ignores it and records one unsupported sequence without mutating terminal state."
+      "notes": "A leading-G APC supports bounded direct static RGB/RGBA/PNG transmit, multipart worker decode, query, explicit ID replacement, image-number allocation, per-screen reject-on-cap storage, exact quiet replies, and teardown. Non-Kitty APC remains bounded safe-ignore. File/shared-memory transport, placement/deletion effects, animation, projection, and render are explicitly rejected pending their ordered roadmap work."
     },
     {
       "id": "ecma48:c0:bel",
