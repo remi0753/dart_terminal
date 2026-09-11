@@ -220,6 +220,47 @@ void _testLocalAtomicWriter() {
           siblings.single.path == path,
       'local atomic writer left a sibling temporary artifact',
     );
+
+    final ProcessResult chmod = Process.runSync('/bin/chmod', <String>[
+      '0600',
+      path,
+    ]);
+    _expect(chmod.exitCode == 0, 'test could not set a distinctive file mode');
+    const LocalTerminalSettingsDocumentWriter().writeAtomically(
+      path,
+      utf8.encode('font-size = 22\n'),
+    );
+    final int permissionBits = FileStat.statSync(path).mode & 0xFFF;
+    final List<FileSystemEntity> replacedSiblings = Directory(
+      '${root.path}/nested',
+    ).listSync();
+    _expect(
+      File(path).readAsStringSync() == 'font-size = 22\n' &&
+          permissionBits == 0x180 &&
+          replacedSiblings.length == 1 &&
+          replacedSiblings.single.path == path,
+      'atomic replacement changed existing 0600 permission bits or leaked temp',
+    );
+
+    _expectThrows<StateError>(
+      () => LocalTerminalSettingsDocumentWriter(
+        permissionBitsApplier:
+            (String temporaryPath, String targetPath, int permissionBits) {
+              throw StateError('injected permission failure');
+            },
+      ).writeAtomically(path, utf8.encode('font-size = 23\n')),
+      'permission failure did not abort atomic replacement',
+    );
+    final List<FileSystemEntity> failedSiblings = Directory(
+      '${root.path}/nested',
+    ).listSync();
+    _expect(
+      File(path).readAsStringSync() == 'font-size = 22\n' &&
+          (FileStat.statSync(path).mode & 0xFFF) == 0x180 &&
+          failedSiblings.length == 1 &&
+          failedSiblings.single.path == path,
+      'permission failure replaced the target or left a temporary sibling',
+    );
   } finally {
     root.deleteSync(recursive: true);
   }

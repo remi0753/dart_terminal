@@ -185,12 +185,22 @@ abstract interface class TerminalSettingsDocumentWriter {
   void writeAtomically(String path, List<int> bytes);
 }
 
+typedef TerminalSettingsPermissionBitsApplier = void Function(
+  String temporaryPath,
+  String targetPath,
+  int permissionBits,
+);
+
 /// Same-directory temporary-file replacement for the local macOS product.
 final class LocalTerminalSettingsDocumentWriter
     implements TerminalSettingsDocumentWriter {
-  const LocalTerminalSettingsDocumentWriter();
+  const LocalTerminalSettingsDocumentWriter({
+    TerminalSettingsPermissionBitsApplier permissionBitsApplier =
+        _applyLocalPermissionBits,
+  }) : _permissionBitsApplier = permissionBitsApplier;
 
   static int _nextTemporaryId = 0;
+  final TerminalSettingsPermissionBitsApplier _permissionBitsApplier;
 
   @override
   void writeAtomically(String path, List<int> bytes) {
@@ -202,13 +212,13 @@ final class LocalTerminalSettingsDocumentWriter
       path,
       followLinks: false,
     );
-    if (type == FileSystemEntityType.directory ||
-        type == FileSystemEntityType.link) {
-      throw FileSystemException(
-        'refusing to replace a directory or symbolic link',
-        path,
-      );
+    if (type != FileSystemEntityType.notFound &&
+        type != FileSystemEntityType.file) {
+      throw FileSystemException('refusing to replace a non-regular file', path);
     }
+    final int? permissionBits = type == FileSystemEntityType.file
+        ? FileStat.statSync(path).mode & 0xFFF
+        : null;
     target.parent.createSync(recursive: true);
 
     File? temporary;
@@ -240,6 +250,9 @@ final class LocalTerminalSettingsDocumentWriter
       } finally {
         output.closeSync();
       }
+      if (permissionBits != null) {
+        _permissionBitsApplier(selected.path, path, permissionBits);
+      }
       selected.renameSync(path);
       temporary = null;
     } finally {
@@ -248,6 +261,24 @@ final class LocalTerminalSettingsDocumentWriter
         leftover.deleteSync();
       }
     }
+  }
+}
+
+void _applyLocalPermissionBits(
+  String temporaryPath,
+  String targetPath,
+  int permissionBits,
+) {
+  final String mode = permissionBits.toRadixString(8).padLeft(4, '0');
+  final ProcessResult result = Process.runSync('/bin/chmod', <String>[
+    mode,
+    temporaryPath,
+  ]);
+  if (result.exitCode != 0) {
+    throw FileSystemException(
+      'could not preserve existing configuration permissions',
+      targetPath,
+    );
   }
 }
 

@@ -1540,6 +1540,15 @@ keybind = command+k=passthrough
 keybind = control+k=pane.focus-next
 keybind = command+d=pane.focus-next
 ''');
+    final ProcessResult chmod = await Process.run('/bin/chmod', <String>[
+      '0600',
+      configurationPath,
+    ]);
+    _expect(
+      chmod.exitCode == 0 &&
+          ((await File(configurationPath).stat()).mode & 0xFFF) == 0x180,
+      'configuration fixture could not establish mode 0600',
+    );
     final _ProcessObservation effectiveObservation = await _launch(
       options,
       invocation,
@@ -1604,7 +1613,8 @@ keybind = command+d=pane.focus-next
       timeout: const Duration(seconds: 60),
     );
     _expect(
-      observation.status == 0,
+      observation.status == 0 &&
+          ((await File(configurationPath).stat()).mode & 0xFFF) == 0x180,
       'configuration application exited with status ${observation.status}; '
       'stdout=${observation.stdoutText.trim()} '
       'stderr=${observation.stderrText.trim()}',
@@ -1646,7 +1656,8 @@ keybind = command+d=pane.focus-next
             r'scrollback=true cursor=true '
             r'keybind_pane=true keybind_application=true unbind=true '
             r'passthrough=true invalid_recovery=true native_menu_priority=true '
-            r'save_rejected=true save_applied=true reload_applied=true '
+            r'save_rejected=true save_applied=true permissions=true '
+            r'reload_applied=true '
             r'live_existing=true '
             r'new_session=true settings_menu=true settings_palette=true '
             r'settings_singleton=true settings_search=true settings_edit=true '
@@ -1688,7 +1699,8 @@ keybind = command+d=pane.focus-next
     stdout.writeln(
       'RUNTIME_CONFIGURATION_INTEGRATION_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
-      'panes=4 keybinds=true save=true reload=true settings_editor=true '
+      'panes=4 keybinds=true save=true permissions=true reload=true '
+      'settings_editor=true '
       'effective_config=true '
       'elapsed_ms=${observation.elapsed.inMilliseconds}',
     );

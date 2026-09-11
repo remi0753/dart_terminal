@@ -1,6 +1,6 @@
 # Editable modal Settings editor
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-11 after commit `e215e14`
 - Primary environment: macOS 14 or later on Apple M1/arm64
 - Roadmap item: Phase 8 `schema-complete modal settings editor と contextual detail panel`
@@ -181,8 +181,10 @@ otherwise make the document look visually different.
    failure cleanup; replace the read-only presenter tests and product exercise.
 5. Run the full generated/configuration/source/bundle regression gates and the
    M1 Developer JIT/Release AOT product acceptance. Reconcile user-facing docs
-   and feature evidence, mark the child and parent complete, commit, reread the
-   roadmap, and stop before Phase 9.
+   and feature evidence and perform the Phase 8 completion review.
+6. Preserve an existing root file's permission bits across atomic replacement,
+   prove failure cleanup and both packaged-runtime saves, then mark the child
+   and parent complete, commit, reread the roadmap, and stop before Phase 9.
 
 ## Validation plan
 
@@ -602,3 +604,88 @@ otherwise make the document look visually different.
   atomic writer does not yet retain an existing root file's permission bits,
   despite that explicit storage completion condition. A final ordered child
   now tracks that fix and Phase 8 remains open; Phase 9 was not started.
+
+### 2026-09-11 — existing-root permission retention start
+
+- Purpose: preserve the POSIX permission bits of an existing root config across
+  the same-directory atomic replacement, verify the failure-safe behavior, and
+  perform the final Phase 8 completion review.
+- Scope: `LocalTerminalSettingsDocumentWriter`, its real-filesystem focused
+  test, task evidence, final full gate, and parent/child roadmap state.
+- Out of scope: ownership/ACL/xattr cloning, changing the mode chosen by the OS
+  for a newly created config, a different save protocol, generic filesystem
+  APIs in `dart_appkit`, or any Phase 9 work.
+- Dependencies: the existing symlink/directory refusal, exclusive sibling temp
+  reservation, flushed write, same-directory rename, and session-level
+  baseline/conflict check.
+- Completion conditions: an existing file with a non-default mode retains all
+  low 12 POSIX permission/special bits after replacement; a new file keeps the
+  platform/umask default; permission-copy failure aborts before rename and the
+  temporary sibling is removed; focused and complete gates pass.
+- Validation: a real temporary-directory test sets an existing root to mode
+  `0600`, replaces it, checks both new bytes and `(FileStat.mode & 0xFFF)`, and
+  confirms there is still only the target sibling; format/analyze, full
+  `make test`, source/diff review, and Phase 8 exit-condition reconciliation.
+- Considered alternatives: truncating the target in place naturally preserves
+  mode but gives up atomic publication; copying the target over the reserved
+  temp has undocumented metadata behavior and `File.copySync` removes an
+  existing destination; adding a package/native FFI chmod surface expands the
+  dependency/ABI boundary for one macOS-local operation. The selected approach
+  snapshots `FileStat.mode & 0xFFF` and invokes the fixed `/bin/chmod` executable
+  with an argument list on the completed temp before rename. It uses no shell
+  interpolation, leaves new-file behavior unchanged, and treats any nonzero
+  chmod result as a failed atomic save whose temp is cleaned by the existing
+  `finally` path.
+
+### 2026-09-11 — existing-root permission retention implementation
+
+- `LocalTerminalSettingsDocumentWriter` now refuses every existing
+  non-regular target, snapshots all low 12 POSIX permission/special bits from
+  an existing regular target, applies them to the completely flushed temporary
+  sibling, and only then performs the same-directory rename. A newly created
+  root skips that step and therefore retains the platform/umask-selected mode.
+- The permission operation uses a fixed `/bin/chmod` executable and separate
+  arguments. A nonzero result, process-launch failure, or injected callback
+  failure propagates before publication and reaches the existing `finally`
+  cleanup. The writer never truncates or partially rewrites the old target.
+- The focused real-filesystem test establishes mode `0600`, verifies the
+  replacement bytes and mode, and injects a permission-copy failure to prove
+  that both the prior file and its mode survive without a temporary sibling.
+- The packaged configuration acceptance fixture also establishes `0600` and
+  now requires both Developer JIT and Release AOT Settings saves to retain it;
+  the machine-readable product result exposes `permissions=true`.
+- Touched-file format reported 0 changes, targeted analysis reported no issues,
+  and `dart run test/terminal_settings_document_test.dart` exited successfully.
+- The first sandboxed Phase 7 evidence regeneration reached the native build
+  hook but the Metal compiler could not write its module cache under
+  `~/.cache/clang`. Repeating the same gate with the required filesystem access
+  succeeded. The only evidence changes are the two expected hashes for
+  `lib/src/terminal_application.dart`; `git diff --check` passed.
+
+### Verification for ordered subtask 6 and Phase 8 completion
+
+- Final `make test`: passed. All generated schema/action, AppKit evidence,
+  compatibility, differential, application-matrix, terminfo, shell-resource,
+  formatting (245 files, 0 changes), analysis, and aggregate tests completed
+  with `dart_terminal tests passed`.
+- `make runtime-source-check`: passed with 451 tracked files, zero product
+  native sources, and one previously reviewed test-native source.
+- `make RUNTIME_ARCH=arm64 runtime-bundle-audit`: passed for Developer JIT and
+  Release AOT; each packaged bundle reported one helper, one native-asset set,
+  and one declared capability.
+- `make RUNTIME_ARCH=arm64 runtime-configuration-integration`: passed on the M1
+  baseline. Developer JIT completed in 1,769 ms and Release AOT in 1,062 ms;
+  both reported four panes, editable Settings save/reload, owner-free effective
+  config, clean lifecycle, and `permissions=true` after replacing the `0600`
+  fixture.
+- Final source review and `git diff --check` passed. The adjacent `dart_appkit`
+  worktree remains clean at `3b92fa1`; no additional generic UI change was
+  needed for permission retention.
+- All six editor completion conditions and the four Phase 8 exit conditions
+  are satisfied on final source: schema-complete drafts and diagnostics remain
+  recoverable, invalid saves do not publish, accepted saves are atomic and
+  retain root permissions, reload keeps existing pane/PTY/native identities,
+  NORMAL/INSERT style runs are identical, Settings lifecycle cleanup is clean,
+  schema/help/settings/action evidence agrees, and disabled shell integration
+  remains covered by the unchanged full gate. Phase 8 is complete; Phase 9 was
+  deliberately not started.

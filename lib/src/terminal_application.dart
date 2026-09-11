@@ -4263,6 +4263,8 @@ final class TerminalApplication {
         configurationReloadController!;
     final String configurationPath =
         reloadController.effectiveSnapshot.rootPath!;
+    final int configurationPermissionBits =
+        FileStat.statSync(configurationPath).mode & 0xFFF;
     final TerminalSession stableSession = initialSession;
     final _TerminalHierarchyProductPane stableOwner = initialOwner;
     final Window stableWindow = nativeWindow;
@@ -4834,6 +4836,8 @@ keybind = control+k=pane.focus-next
               ) ==
               20 &&
           File(configurationPath).readAsStringSync() == correctedDraft &&
+          (FileStat.statSync(configurationPath).mode & 0xFFF) ==
+              configurationPermissionBits &&
           settings.state.diagnostics.isEmpty &&
           identical(sessions[initialPaneId], stableSession) &&
           identical(owners[initialPaneId], stableOwner) &&
@@ -5103,7 +5107,8 @@ keybind = control+k=pane.focus-next
       'window=true padding=true option_text=true scrollback=true cursor=true '
       'keybind_pane=true keybind_application=true unbind=true '
       'passthrough=true invalid_recovery=true native_menu_priority=true '
-      'save_rejected=true save_applied=true reload_applied=true '
+      'save_rejected=true save_applied=true permissions=true '
+      'reload_applied=true '
       'live_existing=true '
       'new_session=true settings_menu=true settings_palette=true '
       'settings_singleton=true settings_search=true settings_edit=true '

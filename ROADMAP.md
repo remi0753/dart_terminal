@@ -1053,7 +1053,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] `--help`/`--show-config` と generated configuration reference
   - [x] shared Settings action と searchable native effective-config inspector
   - [x] M1 両 runtime settings/effective-config 受け入れと Phase 8 完了判定
-- [ ] schema-complete modal settings editor と contextual detail panel
+- [x] schema-complete modal settings editor と contextual detail panel
   （[`docs/phase8/editable-settings-editor.md`](docs/phase8/editable-settings-editor.md)
   を参照して順に実施する）
   - [x] complete configuration document、draft validation、atomic persistence
@@ -1061,7 +1061,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] `dart_appkit` の汎用 attributed editable text surface
   - [x] native editor/detail composition、save/reload、focus/cleanup lifecycle
   - [x] M1 両 runtime editable Settings 受け入れ
-  - [ ] existing root permission bits retention と Phase 8 再完了判定
+  - [x] existing root permission bits retention と Phase 8 再完了判定
 
 終了条件:
 
