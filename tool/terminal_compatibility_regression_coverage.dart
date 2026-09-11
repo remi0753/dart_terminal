@@ -245,12 +245,12 @@ String generateTerminalCompatibilityRegressionCoverage({
   }
   _expect(
     application.acceptedCells == 8 &&
-        application.cleanAgreements == 6 &&
-        application.documentedGapCells == 2 &&
-        application.gaps == 3 &&
-        application.uniqueSequences == 4 &&
-        application.unsupportedIncrements == 7 &&
-        ownedGaps.length == 3,
+        application.cleanAgreements == 7 &&
+        application.documentedGapCells == 1 &&
+        application.gaps == 1 &&
+        application.uniqueSequences == 1 &&
+        application.unsupportedIncrements == 4 &&
+        ownedGaps.length == 1,
     'reviewed application acceptance totals differ',
   );
 

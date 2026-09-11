@@ -2332,6 +2332,23 @@ final class TerminalApplication {
                     policy: capturedConfiguration.shellIntegration,
                   );
               stdout.writeln(shellLaunchPlan.machineLine());
+              final TerminalApplicationThemeProjection<PaneId> themeProjection =
+                  applicationThemeProjection!;
+              final TerminalThemeBrightness renderedBrightness =
+                  capturedConfiguration.resolveThemeBrightness(
+                    themeProjection.systemAppearance,
+                  );
+              final TerminalPalette palette = themeProjection
+                  .createPaletteForPane(
+                    key: id.paneId,
+                    configuration: capturedConfiguration,
+                    onChanged: () => owners[id.paneId]?.notifyScreenChanged(),
+                    onAppearanceChanged: (TerminalThemeBrightness brightness) {
+                      sessions[id.paneId]?.projectColorScheme(
+                        _terminalColorScheme(brightness),
+                      );
+                    },
+                  );
               final TerminalSession session = TerminalSession(
                 id: id,
                 ptyBackend: ptyBackend,
@@ -2351,14 +2368,11 @@ final class TerminalApplication {
                 nativeObserver: (TerminalSessionNativeObservation observation) {
                   stdout.writeln(observation.machineLine());
                 },
-                palette: applicationThemeProjection!.createPaletteForPane(
-                  key: id.paneId,
-                  configuration: capturedConfiguration,
-                  onChanged: () => owners[id.paneId]?.notifyScreenChanged(),
-                ),
+                palette: palette,
                 scrollback: capturedConfiguration.createScrollback(),
                 initialCursorShape: capturedConfiguration.terminalCursorShape,
                 initialCursorBlinking: capturedConfiguration.cursorBlink,
+                initialColorScheme: _terminalColorScheme(renderedBrightness),
               );
               sessions[id.paneId] = session;
               allSessions.add(session);
@@ -11216,6 +11230,12 @@ bool _containsPoint(TerminalPaneLayoutRect rectangle, double x, double y) =>
     x < rectangle.left + rectangle.width &&
     y >= rectangle.top &&
     y < rectangle.top + rectangle.height;
+
+TerminalColorScheme _terminalColorScheme(TerminalThemeBrightness brightness) =>
+    switch (brightness) {
+      TerminalThemeBrightness.light => TerminalColorScheme.light,
+      TerminalThemeBrightness.dark => TerminalColorScheme.dark,
+    };
 
 final class _TerminalHierarchyProductPane {
   _TerminalHierarchyProductPane({

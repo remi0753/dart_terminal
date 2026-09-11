@@ -44,6 +44,7 @@ final class TerminalApplicationThemeProjection<Key extends Object> {
     required Key key,
     required TerminalProductConfiguration configuration,
     required void Function() onChanged,
+    void Function(TerminalThemeBrightness brightness)? onAppearanceChanged,
   }) {
     _ensureRunning();
     if (_targets.containsKey(key)) {
@@ -56,6 +57,7 @@ final class TerminalApplicationThemeProjection<Key extends Object> {
       configuration: configuration,
       palette: palette,
       onChanged: onChanged,
+      onAppearanceChanged: onAppearanceChanged,
     );
     return palette;
   }
@@ -72,16 +74,31 @@ final class TerminalApplicationThemeProjection<Key extends Object> {
 
   void _handleAppearanceChanged(ApplicationAppearanceChangedEvent event) {
     if (_disposed) return;
-    _systemAppearance = _brightness(event.appearance);
+    final TerminalThemeBrightness previousSystemAppearance = _systemAppearance;
+    final TerminalThemeBrightness nextSystemAppearance = _brightness(
+      event.appearance,
+    );
+    _systemAppearance = nextSystemAppearance;
     for (final MapEntry<Key, _TerminalApplicationThemeTarget> entry
         in _targets.entries.toList(growable: false)) {
       if (_disposed) break;
       if (!identical(_targets[entry.key], entry.value)) continue;
       try {
-        if (entry.value.configuration.applySystemAppearanceToPalette(
-          entry.value.palette,
-          _systemAppearance,
-        )) {
+        final TerminalThemeBrightness previousRendered = entry
+            .value
+            .configuration
+            .resolveThemeBrightness(previousSystemAppearance);
+        final TerminalThemeBrightness nextRendered = entry.value.configuration
+            .resolveThemeBrightness(nextSystemAppearance);
+        final bool paletteChanged = entry.value.configuration
+            .applySystemAppearanceToPalette(
+              entry.value.palette,
+              nextSystemAppearance,
+            );
+        if (previousRendered != nextRendered) {
+          entry.value.onAppearanceChanged?.call(nextRendered);
+        }
+        if (paletteChanged) {
           entry.value.onChanged();
         }
       } on Object catch (error, stackTrace) {
@@ -108,9 +125,11 @@ final class _TerminalApplicationThemeTarget {
     required this.configuration,
     required this.palette,
     required this.onChanged,
+    required this.onAppearanceChanged,
   });
 
   final TerminalProductConfiguration configuration;
   final TerminalPalette palette;
   final void Function() onChanged;
+  final void Function(TerminalThemeBrightness brightness)? onAppearanceChanged;
 }

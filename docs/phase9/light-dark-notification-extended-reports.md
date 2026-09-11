@@ -5,7 +5,7 @@
 - Date started: 2026-09-11
 - Scope: third Phase 9 roadmap item
 - Feature-matrix owner: CAP-10
-- Status: protocol core complete; product projection in progress
+- Status: protocol core and product projection complete; real acceptance next
 - Predecessor: `docs/phase9/synchronized-output-rendering.md`
 
 ## Purpose and background
@@ -161,6 +161,47 @@ this task; the evidence-backed highlight-mouse non-adoption remains unchanged.
   repository despite analytics suppression. The same test was rerun with the
   already scoped `dart run` permission and passed; this was an environment
   restriction, not a product failure.
+- 2026-09-11: product appearance ownership is now explicit rather than inferred
+  from colors. A new session is seeded from its immutable system/fixed theme
+  policy. The existing `TerminalApplicationThemeProjection` compares the old
+  and new rendered brightness for each pane, updates its palette, and projects
+  only a real rendered light/dark transition into that pane's session. A system
+  pane therefore reports native changes even when explicit palette colors do
+  not change; fixed-light/fixed-dark panes remain silent. Duplicate AppKit
+  events are idempotent.
+- 2026-09-11: the parser sink exposes two typed host-side operations while
+  retaining reply ownership: update color-scheme state and, when mode 2031 is
+  enabled, enqueue one 997 reply; or emit the current mode-2048 size after a
+  completed resize. Both use the existing bounded reply queue. A rejected
+  appearance notification still commits the new typed state and is not retried
+  by a duplicate event, which prevents stale notification reordering under
+  pressure.
+- 2026-09-11: `TerminalSession` snapshots rows, columns, and optional logical
+  viewport pixels after construction. It reports a resize only after both the
+  bounded screen resize and PTY resize calls complete and only when that
+  snapshot changes. The live Metal surface publishes catalog cell width/height
+  in logical points at attachment, while its existing viewport publication
+  remains padding-free. Neither path applies the native backing scale, so
+  XTWINOPS 16 and mode 2048 cannot double-scale Retina geometry.
+- 2026-09-11: immutable replay removed tmux's 996 and 2031 variants without
+  changing the capture. tmux now has zero current rejects and becomes a clean
+  agreement. The application matrix is 7 clean/1 documented-gap cell, one
+  owned variant, and 4 unsupported increments; the sole remaining gap is the
+  evidence-backed mosh highlight-mouse reset.
+- 2026-09-11: the first acceptance JSON edit accidentally changed mosh's cell
+  classification while removing the trailing theme gaps. The scenario-specific
+  classification was corrected so only tmux changes from documented-gap to
+  clean; replay and the acceptance validator now prove the exact cell set.
+- 2026-09-11: the first regression-coverage regeneration correctly refused a
+  stale differential baseline after the inventory and implementation-manifest
+  hashes changed. The baseline observations/report and differential acceptance
+  report were refreshed in dependency order; their screen observations stayed
+  identical and only product provenance/hash pins changed. Coverage generation
+  and its freshness test then passed.
+- 2026-09-11: one manual acceptance invocation omitted its required `--check`
+  argument and exited with the usage message before validation. The command was
+  corrected and the actual application acceptance check passed; no artifact or
+  acceptance rule changed because of the invocation error.
 
 ## Ordered subtasks
 
@@ -200,5 +241,26 @@ is implemented in parallel.
   - inventory, implementation manifest, and human summary `--check`: passed.
   - `dart analyze`: passed with no issues.
   - `dart format` and `git diff --check`: passed.
-- Product projection, immutable application replay, real product acceptance,
-  complete gate, and parent closure remain pending in ordered subtasks 2–3.
+- Product projection and compatibility closure subtask:
+  - `dart run test/terminal_session_reply_test.dart`: passed initial appearance,
+    change/deduplication, disabled and teardown behavior, rejected-reply
+    accounting, XTWINOPS 16, immediate mode-2048 reporting, completed resize,
+    viewport-only change, duplicate resize, and disable/reset cases.
+  - `dart run test/terminal_native_hierarchy_test.dart`: passed typed system
+    appearance fan-out, fixed-theme silence, duplicate-event idempotence, and
+    exact 997 reply bytes.
+  - `dart run tool/terminal_application_unsupported_trace.dart`: passed exact
+    immutable replay; tmux has zero current rejects and only mosh's four
+    highlight-mouse resets remain.
+  - application acceptance: passed `accepted=8 clean=7
+    documented_gap_cells=1 gaps=1 unique_sequences=1
+    unsupported_increments=4`.
+  - differential corpus/baseline and acceptance regeneration/checks: passed
+    12 accepted cases, 8 agreements, zero owned differential gaps, and 4
+    unavailable external cells.
+  - compatibility regression coverage generation/check/test: passed 9 fix
+    families, 9 cases, 417 split runs, one owned application gap, and zero known
+    P0 silent-corruption failures.
+  - `dart analyze`: passed with no issues.
+- Real product acceptance, complete gate, and parent closure remain pending in
+  ordered subtask 3.

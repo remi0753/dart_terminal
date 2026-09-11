@@ -238,13 +238,13 @@ The Phase 9 keyboard-control closure now accounts for 63 increments as 6
 variants. It does not infer bytes from documentation or scan arbitrary
 escape-looking text inside printable payloads.
 
-`compatibility/application_matrix_acceptance.json` groups those variants into
-4 minimized, owned gaps. Each `minimal_hex` is the shortest variant actually
-present in evidence. Replaying each minimal sequence produces exactly one
-bounded reject, no cancel/limit/malformed/incomplete result, and no standalone
-screen-state mutation. All 4 remain explicit unsupported rather than being
-silently normalized into success; DECRQSS SGR is now a supported partial DCS
-selector and no longer appears as a matrix gap.
+`compatibility/application_matrix_acceptance.json` now retains one minimized,
+owned gap. Its `minimal_hex` is the shortest variant actually present in
+evidence. Replaying it produces exactly one bounded reject, no
+cancel/limit/malformed/incomplete result, and no standalone screen-state
+mutation. Highlight mouse remains explicit unsupported rather than being
+silently normalized into success; DECRQSS SGR, synchronized output, and the
+tmux theme controls no longer appear as matrix gaps.
 
 | Compatibility area | Observed applications | Current impact/disposition | Ordered owner |
 | --- | --- | --- | --- |
@@ -253,8 +253,8 @@ selector and no longer appears as a matrix gap.
 | highlight mouse | mosh | captureはmode 1001 resetのみ。stateful enable/handshakeを実装せず明示的非対応 | evidence-driven future decision |
 | XTVERSION and window-size report | Emacs, lazygit, tmux | fixed identity、logical text-area pixels、rows/columns、実PTY受け入れを完了 | Phase 6 focus/mouse/query task |
 | Kitty query, XTMODKEYS, XTQMODKEYS, application escape | lazygit, Neovim, tmux | bounded control state/repliesとcanonical key encodingを完了。immutable captureのcontrol replayに加え、実PTYでquery・画面分離・release byteを両runtime検証 | Phase 9 Kitty keyboard task（完了） |
-| synchronized output | fzf, lazygit | presentation atomicity; explicit unsupported | Phase 9 synchronized-output task |
-| theme report/update | tmux | query/notification fallback; explicit unsupported | Phase 9 light/dark reports task |
+| synchronized output | fzf, lazygit | mode 2026 parser state、timeout、Metal presentation atomicity、実PTY受け入れを完了 | Phase 9 synchronized-output task（完了） |
+| theme report/update | tmux | 996/997 query、mode 2031、typed AppKit projection、bounded replyを完了。実PTY受け入れは同じPhase 9親タスクの次サブタスク | Phase 9 light/dark reports task |
 
 Character-set designation was a visible rather than safe-ignore gap: ignoring
 `ESC ( 0` left following ACS bytes with the wrong glyph meaning. The terminfo
@@ -299,14 +299,21 @@ without rewriting the captures; lazygit falls from 30 to 28 current rejects,
 Neovim from 3 to 0, and tmux from 6 to 3. The current replay has 63 increments,
 6 variants, and 4 owned gaps.
 
-The cell outcome is four clean agreements (Emacs, ncurses, Neovim, and SSH)
-and four accepted documented-gap cells. “Accepted” means the captured workflow completed, every non-parser
+The synchronized-output closure then removes the observed fzf/lazygit mode
+2026 variants, leaving 7 increments, 4 variants, and 3 owned gaps. The
+light/dark report core and product projection subsequently implement tmux's
+996 query and 2031 set/reset variants. tmux becomes a clean agreement with
+zero current rejects. The current replay therefore has 4 increments, one
+variant, and one owned gap: mosh's evidence-backed highlight-mouse reset.
+
+The cell outcome is seven clean agreements and one accepted documented-gap
+cell (mosh). “Accepted” means the captured workflow completed, every non-parser
 semantic check passed, all rejected bytes are explicit and owned, and no
 matrix-level crash/corruption/unbounded-resource blocker remains. It does not
 turn any false `parser-clean` check into true. The normal gate reports
-`TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=4
-documented_gap_cells=4 gaps=4 unique_sequences=6
-unsupported_increments=63`.
+`TERMINAL_APPLICATION_ACCEPTANCE_PASS accepted=8 clean=7
+documented_gap_cells=1 gaps=1 unique_sequences=1
+unsupported_increments=4`.
 
 The version-2 acceptance report pins the current product implementation
 manifest. It retains the original capture counters per cell while recording
@@ -518,6 +525,9 @@ immutable PTY bytes rather than by rewriting their provenance.
   unsupported increments, 4 variants, and 3 owned gaps. fzf and lazygit are
   clean agreements; mode 2026 now has an immutable Contour source pin and is
   removed from the application-gap set.
+- Phase 9 light/dark report replay: passed with 4 current unsupported
+  increments, one variant, and one owned gap. tmux is now a clean agreement;
+  query 996 and mode 2031 disappeared without changing immutable evidence.
 - Phase 9 Kitty product acceptance: passed exact primary and alternate query
   replies, independent flags, canonical release bytes, state reset, and legacy
   cursor bytes in the M1 Developer JIT and Release AOT display suites.
@@ -528,12 +538,12 @@ immutable PTY bytes rather than by rewriting their provenance.
   the M1 Developer JIT and Release AOT display suites.
 - `git diff --check`, staged-scope review, and final worktree review are run
   immediately before the completion commit.
-- Remaining work is not hidden: the 3 gap owners are pinned in the acceptance
-  report and linked from ROADMAP. Character-set, XTGETTCAP, XTVERSION, and
-  window-size gaps are closed; later Phase 9 owners retain theme gaps, while
-  highlight mode has an evidence-backed non-adoption.
-- Current coverage imports the accepted 6 clean/2 documented-gap cells, 3 owned
-  explicit-unsupported gaps, 4 variants, and 7 unsupported increments into
+- Remaining work is not hidden: the sole gap owner is pinned in the acceptance
+  report. Character-set, XTGETTCAP, XTVERSION, window-size, synchronized-output,
+  and theme gaps are closed; highlight mode retains its evidence-backed
+  non-adoption.
+- Current coverage imports the accepted 7 clean/1 documented-gap cells, one
+  owned explicit-unsupported gap, one variant, and 4 unsupported increments into
   the deterministic regression coverage report. Every remaining minimal gap
   has `screen_mutation=false` and `matrix_blocker=false`; none is accepted as a
   silent screen-state change.

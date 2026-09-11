@@ -9,19 +9,19 @@
     },
     {
       "path": "compatibility/sequence_mode_inventory.json",
-      "sha256": "1a8a0f83ba5c3f19c0647ad826b04b7cc260347fe8e8df49c55ce7ff825f7176"
+      "sha256": "f331b66c244fdebb9d085909910089d640452be6bce836edfa6d5d0dd25e85a3"
     },
     {
       "path": "compatibility/implemented_sequence_manifest.json",
-      "sha256": "f6033355015b8258bb5cc5ba137272ae2e91188ca887e643c876f84a0ae0fec4"
+      "sha256": "f634f32970422d06de8aceba92cc6bd6732387017008c05a32745b49eb9c2dd7"
     },
     {
       "path": "compatibility/application_matrix_acceptance.json",
-      "sha256": "5834a61faa29c77e8afc0508848f609fabdfc50a5e7b370035a055f98d73c436"
+      "sha256": "0ff2a310957b6e8b56dcd38bf2e108e24c4ff2e2d948748d1995ac24887accce"
     },
     {
       "path": "compatibility/differential_acceptance_report.json",
-      "sha256": "aab08024ae40c69425bdc8c4bddba8f21041f4b4d70889c4f8a5c59d71ef87a6"
+      "sha256": "801a53713e4a639a1845f172a2f6630aa942c0bd0abaa06c942de3df14ac8cce"
     },
     {
       "path": "test/corpus/parser/sequence_trace_case_v1.json",
@@ -132,24 +132,6 @@
       "variants": 1,
       "screen_mutation": false,
       "matrix_blocker": false
-    },
-    {
-      "id": "theme-report",
-      "disposition": "explicit-unsupported",
-      "impact": "query-fallback",
-      "owner": "ROADMAP.md#phase-9-light-dark-notification-reports",
-      "variants": 1,
-      "screen_mutation": false,
-      "matrix_blocker": false
-    },
-    {
-      "id": "theme-updates",
-      "disposition": "explicit-unsupported",
-      "impact": "theme-notification",
-      "owner": "ROADMAP.md#phase-9-light-dark-notification-reports",
-      "variants": 2,
-      "screen_mutation": false,
-      "matrix_blocker": false
     }
   ],
   "acceptance": {
@@ -160,21 +142,21 @@
       "split_runs": 417
     },
     "inventory": {
-      "records": 267,
-      "implemented": 93,
+      "records": 270,
+      "implemented": 96,
       "partial": 20,
       "safe_ignore": 9,
       "explicit_unsupported": 145,
       "implementation_selectors": 89,
-      "implementation_modes": 24
+      "implementation_modes": 27
     },
     "application_matrix": {
       "cells": 8,
-      "clean_agreements": 6,
-      "documented_gap_cells": 2,
-      "gaps": 3,
-      "unique_sequences": 4,
-      "unsupported_increments": 7
+      "clean_agreements": 7,
+      "documented_gap_cells": 1,
+      "gaps": 1,
+      "unique_sequences": 1,
+      "unsupported_increments": 4
     },
     "differential": {
       "accepted": 12,

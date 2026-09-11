@@ -289,6 +289,10 @@ final class TerminalLiveMetalSurface {
       width: _contentLogicalWidth,
       height: _contentLogicalHeight,
     );
+    screenSet.updateLogicalCellSize(
+      width: _catalog.metrics.cellWidth,
+      height: _catalog.metrics.cellHeight,
+    );
     late final TerminalMetalFailureRecoveryCoordinator<
       TerminalMetalRendererRecoveryDomain
     >

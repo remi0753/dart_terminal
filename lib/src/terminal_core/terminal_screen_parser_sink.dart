@@ -80,6 +80,27 @@ final class TerminalScreenParserSink
   int get rejectedClipboardRequestCount => _rejectedClipboardRequestCount;
   int get currentHyperlinkId => _currentHyperlinkId;
 
+  /// Applies the product's rendered appearance and emits one opted-in report
+  /// only when that typed appearance actually changes.
+  bool projectColorScheme(TerminalColorScheme scheme) {
+    final TerminalScreenSet? screens = screenSet;
+    if (screens == null) return false;
+    final bool changed = screens.updateColorScheme(scheme);
+    if (changed && screens.colorSchemeReportingMode) {
+      _emitReply(TerminalReplyEncoder.colorScheme(scheme));
+    }
+    return changed;
+  }
+
+  /// Emits the current in-band dimensions after the product completes a
+  /// geometry transition. The mutable mode remains parser-owned.
+  bool reportInBandSizeAfterResize() {
+    final TerminalScreenSet? screens = screenSet;
+    if (screens == null || !screens.inBandSizeReportingMode) return false;
+    _emitInBandSizeReport(screens);
+    return true;
+  }
+
   @override
   void print(int scalar) {
     final TerminalScreen target = screen;

@@ -512,10 +512,23 @@ Future<void> _testApplicationThemeProjectionLifecycle() async {
     var systemNotifications = 0;
     var removedNotifications = 0;
     var fixedNotifications = 0;
+    var systemAppearanceNotifications = 0;
+    var fixedAppearanceNotifications = 0;
+    late final TerminalScreenParserSink systemSink;
+    late final TerminalScreenParserSink fixedSink;
+    final List<String> systemReplies = <String>[];
+    final List<String> fixedReplies = <String>[];
     final TerminalPalette systemPalette = projection.createPaletteForPane(
       key: 1,
       configuration: authority.newSessionConfiguration,
       onChanged: () => systemNotifications++,
+      onAppearanceChanged: (TerminalThemeBrightness brightness) {
+        systemAppearanceNotifications++;
+        systemSink.projectColorScheme(switch (brightness) {
+          TerminalThemeBrightness.light => TerminalColorScheme.light,
+          TerminalThemeBrightness.dark => TerminalColorScheme.dark,
+        });
+      },
     );
     final TerminalPalette removedPalette = projection.createPaletteForPane(
       key: 2,
@@ -526,12 +539,22 @@ Future<void> _testApplicationThemeProjectionLifecycle() async {
       rows: 2,
       columns: 2,
       palette: systemPalette,
+      initialColorScheme: TerminalColorScheme.light,
     );
     final TerminalScreenSet removedScreens = TerminalScreenSet(
       rows: 2,
       columns: 2,
       palette: removedPalette,
+      initialColorScheme: TerminalColorScheme.light,
     );
+    systemSink = TerminalScreenParserSink.forScreenSet(
+      systemScreens,
+      onReply: (Uint8List bytes) {
+        systemReplies.add(ascii.decode(bytes));
+        return true;
+      },
+    );
+    VtParser(sink: systemSink).parse(ascii.encode('\x1b[?2031h'));
     systemScreens.primary.clearDamage();
     systemScreens.alternate.clearDamage();
     removedScreens.primary.clearDamage();
@@ -554,7 +577,28 @@ Future<void> _testApplicationThemeProjectionLifecycle() async {
       key: 3,
       configuration: authority.newSessionConfiguration,
       onChanged: () => fixedNotifications++,
+      onAppearanceChanged: (TerminalThemeBrightness brightness) {
+        fixedAppearanceNotifications++;
+        fixedSink.projectColorScheme(switch (brightness) {
+          TerminalThemeBrightness.light => TerminalColorScheme.light,
+          TerminalThemeBrightness.dark => TerminalColorScheme.dark,
+        });
+      },
     );
+    final TerminalScreenSet fixedScreens = TerminalScreenSet(
+      rows: 2,
+      columns: 2,
+      palette: fixedPalette,
+      initialColorScheme: TerminalColorScheme.light,
+    );
+    fixedSink = TerminalScreenParserSink.forScreenSet(
+      fixedScreens,
+      onReply: (Uint8List bytes) {
+        fixedReplies.add(ascii.decode(bytes));
+        return true;
+      },
+    );
+    VtParser(sink: fixedSink).parse(ascii.encode('\x1b[?2031h'));
     _expect(
       reload.disposition == TerminalConfigReloadDisposition.applied &&
           fixedPalette.defaultBackground ==
@@ -579,8 +623,15 @@ Future<void> _testApplicationThemeProjectionLifecycle() async {
           removedPalette.defaultBackground ==
               TerminalBuiltInTheme.dartLight.background &&
           systemNotifications == 1 &&
+          systemAppearanceNotifications == 1 &&
           fixedNotifications == 0 &&
+          fixedAppearanceNotifications == 0 &&
           removedNotifications == 0 &&
+          systemScreens.colorScheme == TerminalColorScheme.dark &&
+          fixedScreens.colorScheme == TerminalColorScheme.light &&
+          systemReplies.length == 1 &&
+          systemReplies.single == '\x1b[?997;1n' &&
+          fixedReplies.isEmpty &&
           systemScreens.primary.generation == systemScreenGeneration + 1 &&
           systemScreens.primary.isRowDirty(0) &&
           systemScreens.alternate.isRowDirty(0) &&
@@ -595,6 +646,7 @@ Future<void> _testApplicationThemeProjectionLifecycle() async {
     _expect(
       systemPalette.generation == darkGeneration &&
           systemNotifications == 1 &&
+          systemAppearanceNotifications == 1 &&
           fixedNotifications == 0,
       'duplicate appearance is idempotent even if the native edge repeats',
     );

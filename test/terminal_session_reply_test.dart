@@ -11,6 +11,8 @@ Future<void> main() => runTerminalSessionReplyTests();
 Future<void> runTerminalSessionReplyTests() async {
   await _testRawParserFeedReplyOrderingAndCompletion();
   await _testReplyBackpressureAndUnavailableSession();
+  await _testAppearanceProjectionAndBackpressure();
+  await _testInBandReportsAfterCompletedResize();
   await _testResizeValidationIsAtomic();
 }
 
@@ -177,15 +179,119 @@ Future<void> _testResizeValidationIsAtomic() async {
   await session.dispose();
 }
 
+Future<void> _testAppearanceProjectionAndBackpressure() async {
+  final FakePtyBackend backend = FakePtyBackend();
+  final TerminalSession session = _session(
+    pane: 204,
+    backend: backend,
+    writeCapacityBytes: 9,
+    initialColorScheme: TerminalColorScheme.dark,
+  );
+  await session.start();
+  final FakePtyProcess process = backend.processes.single;
+  process.emitOutput(_bytes('\x1b[?996n\x1b[?2031h'));
+  _expectWrites(process.writes, const <String>['\x1b[?997;1n']);
+
+  _expect(
+    session.projectColorScheme(TerminalColorScheme.light) &&
+        session.terminalScreenSet.colorScheme == TerminalColorScheme.light &&
+        session.terminalParserSink.rejectedReplyCount == 1 &&
+        session.replyWriteBackpressureCount == 1,
+    'a real appearance transition updates state and fails closed on pressure',
+  );
+  _expect(
+    !session.projectColorScheme(TerminalColorScheme.light) &&
+        session.terminalParserSink.rejectedReplyCount == 1,
+    'a duplicate appearance neither writes nor retries a rejected report',
+  );
+
+  process.drainWrites();
+  _expect(
+    session.projectColorScheme(TerminalColorScheme.dark),
+    'a later appearance transition is accepted after pressure clears',
+  );
+  _expectWrites(process.writes, const <String>['\x1b[?997;1n', '\x1b[?997;1n']);
+  process.drainWrites();
+  process.emitOutput(_bytes('\x1b[?2031l'));
+  _expect(
+    session.projectColorScheme(TerminalColorScheme.light) &&
+        process.writes.length == 2,
+    'a disabled notification mode tracks appearance without writing',
+  );
+
+  await session.dispose();
+  _expect(
+    !session.terminalScreenSet.colorSchemeReportingMode &&
+        !session.projectColorScheme(TerminalColorScheme.dark),
+    'session teardown clears the subscription and rejects later projection',
+  );
+}
+
+Future<void> _testInBandReportsAfterCompletedResize() async {
+  final FakePtyBackend backend = FakePtyBackend();
+  final TerminalSession session = _session(pane: 205, backend: backend);
+  session.terminalScreenSet
+    ..updateLogicalViewportSize(width: 800, height: 400)
+    ..updateLogicalCellSize(width: 10, height: 20);
+  session.resize(rows: 20, columns: 80);
+  await session.start();
+  final FakePtyProcess process = backend.processes.single;
+  process.emitOutput(_bytes('\x1b[16t\x1b[?2048h'));
+  _expectWrites(process.writes, const <String>[
+    '\x1b[6;20;10t',
+    '\x1b[48;20;80;400;800t',
+  ]);
+
+  session.terminalScreenSet.updateLogicalViewportSize(width: 900, height: 450);
+  session.resize(rows: 22, columns: 90);
+  session.resize(rows: 22, columns: 90);
+  _expectWrites(process.writes, const <String>[
+    '\x1b[6;20;10t',
+    '\x1b[48;20;80;400;800t',
+    '\x1b[48;22;90;450;900t',
+  ]);
+  _expect(
+    process.sizes.last.rows == 22 &&
+        process.sizes.last.columns == 90 &&
+        session.terminalScreenSet.primary.rows == 22 &&
+        session.terminalScreenSet.primary.columns == 90,
+    'in-band report follows completed terminal-core and PTY resize updates',
+  );
+
+  session.terminalScreenSet.updateLogicalViewportSize(width: 901, height: 451);
+  session.resize(rows: 22, columns: 90);
+  _expectWrites(process.writes, const <String>[
+    '\x1b[6;20;10t',
+    '\x1b[48;20;80;400;800t',
+    '\x1b[48;22;90;450;900t',
+    '\x1b[48;22;90;451;901t',
+  ]);
+  process.emitOutput(_bytes('\x1b[?2048l'));
+  session.terminalScreenSet.updateLogicalViewportSize(width: 902, height: 452);
+  session.resize(rows: 23, columns: 91);
+  _expect(
+    process.writes.length == 4,
+    'disabled in-band reporting is silent across later resizes',
+  );
+
+  await session.dispose();
+  _expect(
+    !session.terminalScreenSet.inBandSizeReportingMode,
+    'session teardown cannot retain in-band reporting',
+  );
+}
+
 TerminalSession _session({
   required int pane,
   required FakePtyBackend backend,
   int writeCapacityBytes = 1024 * 1024,
+  TerminalColorScheme initialColorScheme = TerminalColorScheme.dark,
 }) => TerminalSession(
   id: TerminalSessionId(paneId: PaneId(pane), generation: 1),
   ptyBackend: backend,
   initialWorkingDirectory: Directory.systemTemp.path,
   writeCapacityBytes: writeCapacityBytes,
+  initialColorScheme: initialColorScheme,
   onChanged: () {},
   onTerminated: () {},
 );

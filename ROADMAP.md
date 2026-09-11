@@ -1129,7 +1129,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase9/light-dark-notification-extended-reports.md`](docs/phase9/light-dark-notification-extended-reports.md)
   を参照して順に実施する）
   - [x] immutable source pins、appearance/size/Unicode protocol core
-  - [ ] product appearance/resize projection、compatibility closure
+  - [x] product appearance/resize projection、compatibility closure
   - [ ] M1 real PTY/Metal acceptance、親項目完了判定
 - [ ] Kitty graphics parse/storage/placement/render
 - [ ] image animation と resource eviction

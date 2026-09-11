@@ -161,6 +161,7 @@ final class TerminalSession implements TerminalPaneSession {
     TerminalScrollback? scrollback,
     TerminalCursorShape initialCursorShape = TerminalCursorShape.block,
     bool initialCursorBlinking = true,
+    TerminalColorScheme initialColorScheme = TerminalColorScheme.dark,
   }) : _onChanged = onChanged,
        _onTerminated = onTerminated,
        _lifecycleObserver = lifecycleObserver,
@@ -222,12 +223,14 @@ final class TerminalSession implements TerminalPaneSession {
       scrollback: scrollback,
       initialCursorShape: initialCursorShape,
       initialCursorBlinking: initialCursorBlinking,
+      initialColorScheme: initialColorScheme,
     );
     terminalParserSink = TerminalScreenParserSink.forScreenSet(
       terminalScreenSet,
       onReply: _writeTerminalReply,
     );
     _terminalParser = VtParser(sink: terminalParserSink);
+    _lastCompletedSize = _currentSize();
   }
 
   @override
@@ -287,6 +290,7 @@ final class TerminalSession implements TerminalPaneSession {
   var _columns = 100;
   var _writeBackpressureCount = 0;
   var _replyWriteBackpressureCount = 0;
+  late ({int rows, int columns, int? width, int? height}) _lastCompletedSize;
 
   @override
   bool get isLive => _live;
@@ -323,6 +327,11 @@ final class TerminalSession implements TerminalPaneSession {
   int get pasteConcurrentInputRejectionCount =>
       _pasteConcurrentInputRejectionCount;
   TerminalSessionShutdownResult? get shutdownResult => _shutdownResult;
+
+  bool projectColorScheme(TerminalColorScheme scheme) {
+    if (_disposed) return false;
+    return terminalParserSink.projectColorScheme(scheme);
+  }
 
   @override
   TerminalPaneProcessSnapshot processSnapshot() {
@@ -704,6 +713,12 @@ final class TerminalSession implements TerminalPaneSession {
         // The exit callback will publish the terminal state.
       }
     }
+    final ({int rows, int columns, int? width, int? height}) next =
+        _currentSize();
+    if (next != _lastCompletedSize) {
+      _lastCompletedSize = next;
+      terminalParserSink.reportInBandSizeAfterResize();
+    }
     _notifyChanged();
   }
 
@@ -777,6 +792,8 @@ final class TerminalSession implements TerminalPaneSession {
   }
 
   Future<TerminalSessionShutdownResult> _shutdown() async {
+    terminalScreenSet.setColorSchemeReportingMode(false);
+    terminalScreenSet.setInBandSizeReportingMode(false);
     _disposed = true;
     _cancelPasteWrite();
     _observeLifecycle(TerminalSessionLifecycleStage.disposeStarted);
@@ -1046,6 +1063,17 @@ final class TerminalSession implements TerminalPaneSession {
     }
     _replyWriteBackpressured = false;
     return true;
+  }
+
+  ({int rows, int columns, int? width, int? height}) _currentSize() {
+    final ({int width, int height})? viewport =
+        terminalScreenSet.logicalViewportSize;
+    return (
+      rows: terminalScreenSet.activeScreen.rows,
+      columns: terminalScreenSet.activeScreen.columns,
+      width: viewport?.width,
+      height: viewport?.height,
+    );
   }
 
   void _observeNativeDiagnostic(PtyDiagnosticEvent event) {

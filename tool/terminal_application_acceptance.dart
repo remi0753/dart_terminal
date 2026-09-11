@@ -263,11 +263,11 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
   );
   _expect(
     cells.length == 8 &&
-        cleanAgreements == 6 &&
-        documentedGapCells == 2 &&
-        gaps.length == 3 &&
-        uniqueSequences.length == 4 &&
-        unsupportedIncrements == 7 &&
+        cleanAgreements == 7 &&
+        documentedGapCells == 1 &&
+        gaps.length == 1 &&
+        uniqueSequences.length == 1 &&
+        unsupportedIncrements == 4 &&
         safeIgnoreGaps == 0,
     'reviewed acceptance baseline differs',
   );

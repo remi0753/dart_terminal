@@ -86,7 +86,7 @@
       ],
       "difference_fields": [],
       "gap_owner": null,
-      "baseline_sha256": "6655e268d80bbb1f4c0d4cb1c1b7ae009f739801d3ed4ad10224c7dca104c133",
+      "baseline_sha256": "af4339a504edf35aa294f6a49579dab79666abd617faba76ad56dcdbf29f87df",
       "probe_path": "test/corpus/differential/external/kitty-0-48-2-macos-arm64/editing-character-operations.probe.json",
       "probe_sha256": "9edb35097be9df69aa65ee8992ea384f3080744ebd72f95014a0bb8de898a9f0"
     },
@@ -105,7 +105,7 @@
       ],
       "difference_fields": [],
       "gap_owner": null,
-      "baseline_sha256": "5a3e4793f2b3aaaf6eab33e49b8684e407ea9f93db83367738a40850d003da89",
+      "baseline_sha256": "58176bf1e2669e58c6e4a9d630c40e659a45807145143e8bb312b01a400e3c94",
       "probe_path": "test/corpus/differential/external/kitty-0-48-2-macos-arm64/mode-private-transitions.probe.json",
       "probe_sha256": "60f996d481649bee0677f8272919e4b85aa1e8b7e9d15bf1c9f87925709898a0"
     },
@@ -124,7 +124,7 @@
       ],
       "difference_fields": [],
       "gap_owner": null,
-      "baseline_sha256": "d45fa88e91ec573cf1b5052a8888dbd116a857ce8ec1ac9414f917a9a31a4f63",
+      "baseline_sha256": "ec79240d2a791d0d4502e58a66c1cd1db98bbd6733edf2db9db2b974656329c3",
       "probe_path": "test/corpus/differential/external/kitty-0-48-2-macos-arm64/query-status-and-modes.probe.json",
       "probe_sha256": "6658dea678b37e818dfe36e10c753f5bb9b3bee8916e2a9b392bf1c0c7e6a599"
     },
@@ -148,7 +148,7 @@
         "replies"
       ],
       "gap_owner": null,
-      "baseline_sha256": "6e998169ac71d0bd95186f24ab525baaf0989555ef54ae297d77038feaa47e44",
+      "baseline_sha256": "0859f782e2faadf244b85990fee442a09b5915ac915f62a90a5758736f4679d9",
       "probe_path": "test/corpus/differential/external/kitty-0-48-2-macos-arm64/rendition-attributes-colors.probe.json",
       "probe_sha256": "961d7f55ef456ad76bbeacbf193efe6c33a90db5add07d18332f1462c12e74d0"
     },
@@ -168,7 +168,7 @@
       ],
       "difference_fields": [],
       "gap_owner": null,
-      "baseline_sha256": "6655e268d80bbb1f4c0d4cb1c1b7ae009f739801d3ed4ad10224c7dca104c133",
+      "baseline_sha256": "af4339a504edf35aa294f6a49579dab79666abd617faba76ad56dcdbf29f87df",
       "probe_path": "test/corpus/differential/external/xterm-411-linux-aarch64/editing-character-operations.probe.json",
       "probe_sha256": "4ad811f1406efd36647a30725cb105354fa624759b9f33802a5fe6e3ecfcff5b"
     },
@@ -187,7 +187,7 @@
       ],
       "difference_fields": [],
       "gap_owner": null,
-      "baseline_sha256": "5a3e4793f2b3aaaf6eab33e49b8684e407ea9f93db83367738a40850d003da89",
+      "baseline_sha256": "58176bf1e2669e58c6e4a9d630c40e659a45807145143e8bb312b01a400e3c94",
       "probe_path": "test/corpus/differential/external/xterm-411-linux-aarch64/mode-private-transitions.probe.json",
       "probe_sha256": "72616965e8008dfa2b08d55d11f2eb7c666f2b2e4571a4bf1c448c3969c7021c"
     },
@@ -206,7 +206,7 @@
       ],
       "difference_fields": [],
       "gap_owner": null,
-      "baseline_sha256": "d45fa88e91ec573cf1b5052a8888dbd116a857ce8ec1ac9414f917a9a31a4f63",
+      "baseline_sha256": "ec79240d2a791d0d4502e58a66c1cd1db98bbd6733edf2db9db2b974656329c3",
       "probe_path": "test/corpus/differential/external/xterm-411-linux-aarch64/query-status-and-modes.probe.json",
       "probe_sha256": "e03955cca8ce55c516bf21e88131fea590e91ff421d6f7b4015d1ce6c26e1d56"
     },
@@ -228,7 +228,7 @@
       ],
       "difference_fields": [],
       "gap_owner": null,
-      "baseline_sha256": "6e998169ac71d0bd95186f24ab525baaf0989555ef54ae297d77038feaa47e44",
+      "baseline_sha256": "0859f782e2faadf244b85990fee442a09b5915ac915f62a90a5758736f4679d9",
       "probe_path": "test/corpus/differential/external/xterm-411-linux-aarch64/rendition-attributes-colors.probe.json",
       "probe_sha256": "d414efdc914abd4d7b5aa7d15e6bdcace4824b245122acf24c04cd71300ad8ef"
     }
