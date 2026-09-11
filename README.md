@@ -195,6 +195,11 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - 厳密検証するbyte-exact product parser corpus manifest、shell/less/top/vimの
   review済み記録snapshotをwhole・全single split・bytewiseで再生する非書換えharness、
   固定seedのproperty testと境界別fuzz seed/mutation corpus
+- Phase 9の全modern protocolを対象に、8 anchor、64 bit mutation、64 generated
+  programをwhole/generated-chunk/bytewise/repeat/recoveryで比較する固定seed property
+  suite（680 execution、731,150 parse byte）。OSC 52とdesktop signalの8 session authority、
+  image worker/storeを合計5,120 operationでstressし、Kitty controller FIFOの圧力も加えて、
+  fake native callの無権限実行0、queue/session/retained byte capとdispose後0を通常`make test`で検証する
 - DEC文字セット、XTGETTCAP、OSC metadata/color/clipboard、focus/mouse、DECRQSS、
   XTVERSION/XTWINOPSの9修正familyを390 input byte・417 chunk planで固定するversion 1
   compatibility regression corpus。inventory、differential、実アプリの所有者付きgap、
@@ -559,6 +564,8 @@ M1/arm64 の主要受け入れ手順には含めません。この follow-up の
 ```shell
 make product-parser-corpus
 make product-parser-properties
+make phase9-protocol-properties
+make phase9-security-stress
 make product-parser-benchmark
 make runtime-source-check
 make test
@@ -576,8 +583,9 @@ make RUNTIME_ARCH=arm64 runtime-restoration-integration
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
 smoke、real-PTY live Metal display、native tab/4-pane hierarchy、通常製品のuser action、
 effective-config early exit/Settings/configuration reload、light/dark/system appearance、
-fullscreen/migration/restoration/reopen、lifecycle、bounded traffic、resource stress、
-shutdown fault suiteをまとめて実行します。display suiteは
+shell/semantic、desktop notification/progress、OSC 52 confirmation、
+fullscreen/migration/restoration/reopen、clipboard、lifecycle、bounded traffic、
+resource stress、shutdown fault suiteをまとめて実行します。display suiteは
 SGR除去、style、soft wrap、
 bottom prompt、newest-only frame boundに加え、PTY由来のvisible text、local selection、
 cursor、native accessibility selector/geometry/focus/notificationをDeveloper JIT/

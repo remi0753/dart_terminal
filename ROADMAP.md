@@ -1165,13 +1165,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] bounded OSC 52 protocol/configuration core
   - [x] exact application confirmation and pasteboard projection
   - [x] shipped-runtime acceptance、compatibility/documentation closure、親項目完了判定
-- [ ] protocol-specific fuzz、security、memory tests
+- [x] protocol-specific fuzz、security、memory tests
   （分割、境界、完了条件は
   [`docs/phase9/protocol-fuzz-security-memory.md`](docs/phase9/protocol-fuzz-security-memory.md)
   を参照して順に実施する）
   - [x] deterministic Phase 9 parser/state properties
   - [x] authority/retained-resource state-machine stress
-  - [ ] shipped-runtime/resource acceptance、Phase 9 closure、親項目完了判定
+  - [x] shipped-runtime/resource acceptance、Phase 9 closure、親項目完了判定
 
 終了条件:
 

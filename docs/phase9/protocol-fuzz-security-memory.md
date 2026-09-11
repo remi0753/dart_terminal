@@ -5,8 +5,8 @@
 - Phase: 9
 - Task: protocol-specific fuzz, security, and memory tests
 - Started: 2026-09-12
-- State: in progress
-- Current subtask: authority and retained-resource state-machine stress (complete)
+- State: complete
+- Current subtask: shipped-runtime/resource acceptance and Phase 9 closure (complete)
 
 ## Purpose
 
@@ -119,6 +119,23 @@ add that cross-protocol adversarial layer without replacing the focused tests.
   ownership rather than adding a second hidden AppKit path.
 - Run focused format/analyze/tests for each child, the exact full gate before
   every child completion, and runtime/audit gates for the closure child.
+
+## Security and retained-resource contract
+
+| Owner | Product bound | Deterministic evidence |
+| --- | --- | --- |
+| Phase 9 parser/state | parser string/header/value limits; Kitty keyboard stack 16 per screen | 8 protocol anchors, 64 bit mutations, 64 generated programs, 680 whole/chunk/bytewise/repeat/recovery executions and 731,150 parsed bytes |
+| OSC 52 coordinator | 64 tracked sessions, one app-global pending request, 3,060 UTF-8 text bytes, 4,100 reply bytes | 8 mixed-policy sessions and 1,024 transitions plus exact 65th-session rejection; explicit generation/read/write/clear capabilities; zero unauthorized fake calls and zero owners after teardown |
+| Desktop signal parser/coordinator | 8 pending and 8 queued parser requests, 64 tracked sessions, 8 live native IDs per session, 8 maximum global admissions/window | 8 sessions and 1,024 parser/focus/active/reset/projection transitions at an injected four-live cap plus exact 65th-session rejection; parser-only native call count stays zero and every native ID is application-generated |
+| Kitty image worker/controller | worker 64 pending transfers and 8 MiB pending encoding; controller 64 jobs and 256 KiB | 1,024 worker transitions at four transfers/32 bytes and a gated controller at eight jobs/64 bytes prove rejection, forward progress, abort, and zero-after-dispose |
+| Kitty image store | 64 images, 1 MiB per image, 16 MiB per screen, 256 placements, 256 extra frames | 2,048 transitions at four images/eight placements/eight frames/128 bytes plus the product 16 × 1 MiB boundary and deterministic oldest eviction on the seventeenth image |
+| Synchronized presentation | one newest pending presentation and 1,000 ms timeout | focused 100,000-mutation/1,024-revision tests and Developer JIT/Release AOT live-display acceptance prove end, RIS, timeout, newest-only release, and cleanup |
+
+These are exact owner-visible counts and bytes, not allocator RSS estimates.
+The real runtime matrix complements them with exact native handle baselines,
+worker PID reaping, PTY cleanup, and a 100 MiB cross-pane fairness flood. Long
+duration soak, sanitizer campaigns, and system memory-pressure behavior remain
+explicit Phase 11 work and are not claimed by Phase 9.
 
 ## Ordered subtasks
 
@@ -254,6 +271,98 @@ add that cross-protocol adversarial layer without replacing the focused tests.
   configuration, compatibility, differential/application, terminfo, and shell
   integration freshness checks passed; formatting covered 270 Dart files with
   zero changes, analysis reported no issues, and the full Dart suite (including
-  the 4,096-operation security/resource stress runner) passed. Diff whitespace
+  the 5,120-operation security/resource stress runner) passed. Diff whitespace
   review also passed. The authority/resource child meets its completion
   conditions with no product defect or residual child work.
+- 2026-09-12: Commit `c71f2fd` (`Stress terminal authority and resource bounds`)
+  recorded the second child. The mandatory post-commit reread found a clean
+  worktree, both earlier children checked, and only shipped-runtime/resource
+  acceptance plus Phase 9 parent closure remaining. README, ROADMAP,
+  FEATURE_MATRIX, this memo, the runtime Make graph, and integration-suite
+  routing were reread before final-child work. `runtime-verify` is the smallest
+  existing aggregate that covers both shipped modes, source/bundle audits, all
+  relevant Phase 9 display/desktop/OSC 52/resource behavior, and lifecycle
+  cleanup. Phase 10 remains explicitly out of scope, and this session stops once
+  the Phase 9 exit conditions and final parent are closed.
+- 2026-09-12: The first final-child
+  `CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64 runtime-verify`
+  attempt passed the exact unit/freshness gate, source audit, both bundle builds
+  and audits, both smoke suites, and both live-display suites. It then failed in
+  Developer JIT native hierarchy with status 70 because the terminal did not
+  present `__DT_FAIRNESS_FLOOD_COMPLETE__` before the bounded wait expired.
+  Command-palette/menu checks and four-pane PTY/worker/native teardown still
+  completed cleanly. This is an unresolved acceptance failure, not a Phase 9
+  pass; the roadmap remains unchecked while timeout ownership and reproducibility
+  are investigated. The large raw lifecycle log is intentionally not retained.
+- 2026-09-12: Inspection confirms the failed marker wait is an existing
+  90-second inner bound inside a 120-second hierarchy driver. It follows the
+  already-passed cross-pane input probe and precedes the semantic fairness
+  summary, so no latency or scheduler assertion was available from this run.
+  Prior Phase 7 records require a focused reproduction followed by another full
+  matrix; a focused-only pass cannot close the task. A sandboxed `ps` diagnostic
+  was denied by the host and provided no process evidence; the application's own
+  teardown lines already prove all four sessions and the worker were reaped.
+- 2026-09-12: The immediate focused Developer JIT hierarchy rerun passed without
+  a source change. It completed the exact 100 MiB flood in 60,315 ms, measured
+  28,384 microseconds idle versus 31,638 under flood (1.115x, within the 2x
+  bound), advanced scheduler yields to 26, and passed all four-pane cleanup.
+  The first timeout is provisionally classified as a non-reproduced environmental
+  timing event, not accepted evidence; the complete aggregate matrix is rerun
+  from the start as required by the established Phase 7 acceptance contract.
+- 2026-09-12: The complete aggregate rerun passed without a source change. It
+  repeated all unit/freshness checks, formatting of 270 files with zero changes,
+  analysis with no issues, the 5,120-operation stress runner, a 495-file
+  Dart-only source audit, and both arm64 bundle audits. Developer JIT and Release
+  AOT both passed smoke, live display, hierarchy, user actions, configuration,
+  theme/reports, shell/semantic, desktop signals, OSC 52, restoration, clipboard,
+  all lifecycle/failure modes, bounded traffic, native resources, and shutdown
+  faults.
+- 2026-09-12: In the successful full matrix, hierarchy fairness measured
+  28,801/29,229 microseconds (1.015x) in Developer JIT and 24,679/10,024
+  microseconds (0.407x) in Release AOT while scheduler yields advanced to 583
+  and 363. Desktop suites projected/removed four notifications per mode; OSC 52
+  suites handled three exact requests per mode. Both native-resource suites ran
+  1,000 cycles at baseline 40, peak 42, returned to baseline, and all recorded
+  worker/PTY/native owners were reaped. The earlier marker timeout did not recur
+  in the focused or complete rerun and is retained here as non-gating diagnostic
+  history rather than hidden.
+- 2026-09-12: The first exact post-documentation `make test` stopped at the
+  compatibility-regression coverage freshness check because the report became
+  stale after README/FEATURE_MATRIX/task-evidence edits. All earlier freshness
+  checks passed. This is an expected generated-evidence dependency, not a reason
+  to weaken the check; the canonical coverage generator is run and its bounded
+  diff reviewed before retrying the exact gate.
+- 2026-09-12: The canonical coverage generator passed all nine compatibility
+  regression families and rewrote only the expected README.md and
+  FEATURE_MATRIX.md SHA-256 values in
+  `compatibility/regression_coverage_report.json`. The semantic report contents,
+  fix-family counts, and owned-gap classification did not change.
+- 2026-09-12: After generated evidence and public documentation were current,
+  the exact final `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed every
+  freshness gate, formatting of 270 files with zero changes, whole-project
+  analysis with no issues, and the aggregate Dart suite. `git diff --check`
+  passed before this gate.
+- 2026-09-12: All Phase 9 exit conditions are now evidenced. Protocol-origin
+  behavior and documented cases are pinned by each feature memo plus the
+  compatibility/differential/application gates; image/OSC floods stay within
+  exact configured owner caps; synchronized rendering recovers on end, RIS, or
+  its 1,000 ms timeout in both shipped modes; and Kitty keyboard plus default
+  legacy input pass the same real-PTY display acceptance. No Phase 9 residual,
+  blocker, new protocol scope, or untracked follow-up remains. The final child
+  and parent can be checked; Phase 10 must not begin in this session.
+- 2026-09-12: Final evidence review corrected an arithmetic-only documentation
+  error: 1,024 OSC 52 + 1,024 desktop + 1,024 worker + 2,048 store operations is
+  5,120, not 4,096. Test loops, output, assertions, and runtime results were
+  already exact and unchanged. Because README changed, its generated coverage
+  hash is refreshed once more before the final gate and commit.
+- 2026-09-12: The refreshed coverage report again changed only the expected
+  README hash. The final post-correction exact `make test` passed all freshness
+  checks, formatting of 270 files with zero changes, no analysis issues, and the
+  complete Dart suite including the fixed-seed Phase 9 properties and 5,120
+  authority/resource operations. This is the commit-ready validation state.
+- 2026-09-12: A final wording review separated the 3,072 seeded worker/store
+  transitions from the controller's deterministic gated-FIFO pressure so the
+  public evidence does not imply the controller uses the random generator.
+  README and FEATURE_MATRIX hashes were regenerated, `git diff --check` passed,
+  and the combined generator plus exact `make test` command passed again. No
+  implementation, test count, acceptance result, or task scope changed.
