@@ -13,6 +13,7 @@ import 'terminal_unicode.dart';
 
 part 'terminal_selection.dart';
 part 'terminal_accessibility.dart';
+part 'terminal_kitty_image_viewport.dart';
 part 'terminal_viewport.dart';
 
 enum TerminalScreenKind { primary, alternate }
@@ -81,6 +82,7 @@ final class TerminalScreenSet {
       initialColorScheme: initialColorScheme,
     );
     result._viewport = TerminalViewport._(result);
+    result._attachKittyImageObservers();
     return result;
   }
 
@@ -185,6 +187,8 @@ final class TerminalScreenSet {
   int get transitionGeneration => _transitionGeneration;
   int get kittyKeyboardStackDepth => _activeKittyKeyboard.depth;
   TerminalViewport get viewport => _viewport;
+  TerminalKittyViewportSnapshot captureKittyImageViewport() =>
+      TerminalKittyViewportSnapshot.capture(this);
   ({int width, int height})? get logicalViewportSize {
     final int? width = _logicalViewportWidth;
     final int? height = _logicalViewportHeight;
@@ -287,11 +291,14 @@ final class TerminalScreenSet {
     _scrollbackAttachment.activate(nextPrimary);
     _primary = nextPrimary;
     _alternate = nextAlternate;
+    _attachKittyImageObservers();
     _transitionGeneration++;
     viewport.restorePrimaryReflowPosition(
       viewportPosition.anchor,
       wasAtBottom: viewportPosition.atBottom,
     );
+    _pruneKittyPlacements(TerminalScreenKind.primary);
+    _pruneKittyPlacements(TerminalScreenKind.alternate);
   }
 
   /// DEC private mode 47: switch buffers without clearing either buffer.
@@ -538,10 +545,251 @@ final class TerminalScreenSet {
     return true;
   }
 
+  void _attachKittyImageObservers() {
+    primary.attachMutationObserver(
+      _TerminalKittyScreenMutationObserver(this, TerminalScreenKind.primary),
+    );
+    alternate.attachMutationObserver(
+      _TerminalKittyScreenMutationObserver(this, TerminalScreenKind.alternate),
+    );
+  }
+
+  bool _pruneKittyPlacements(TerminalScreenKind kind) {
+    final TerminalKittyImageStore store = kittyImagesFor(kind);
+    return store.removeUnresolvedPlacements(
+          (TerminalKittyImagePlacement placement) =>
+              _kittyPlacementScreenPosition(kind, placement),
+        ) !=
+        0;
+  }
+
+  TerminalKittyImagePlacementPosition? _kittyPlacementScreenPosition(
+    TerminalScreenKind kind,
+    TerminalKittyImagePlacement placement,
+  ) {
+    final TerminalViewportPosition? position = viewport.screenCellPositionOf(
+      kind,
+      TerminalLogicalAnchor(
+        screenKind: kind,
+        logicalLineId: placement.logicalLineId,
+        logicalLineEpoch: placement.logicalLineEpoch,
+        cellOffset: placement.logicalCellOffset,
+      ),
+    );
+    return position == null
+        ? null
+        : TerminalKittyImagePlacementPosition(
+            row: position.row,
+            column: position.column,
+          );
+  }
+
   _KittyKeyboardState get _activeKittyKeyboard => switch (_activeKind) {
     TerminalScreenKind.primary => _primaryKittyKeyboard,
     TerminalScreenKind.alternate => _alternateKittyKeyboard,
   };
+}
+
+final class _TerminalKittyScreenMutationObserver
+    implements TerminalScreenMutationObserver {
+  _TerminalKittyScreenMutationObserver(this._screens, this._kind);
+
+  final TerminalScreenSet _screens;
+  final TerminalScreenKind _kind;
+  List<_KittyPlacementBeforeScroll> _beforeScroll =
+      const <_KittyPlacementBeforeScroll>[];
+
+  @override
+  void willScroll(
+    TerminalScreen screen,
+    TerminalScreenScrollMutation mutation,
+  ) {
+    final ({int width, int height})? cell = _screens.logicalCellSize;
+    if (cell == null) {
+      _beforeScroll = const <_KittyPlacementBeforeScroll>[];
+      return;
+    }
+    final TerminalKittyImageStore store = _screens.kittyImagesFor(_kind);
+    final List<_KittyPlacementBeforeScroll> captured =
+        <_KittyPlacementBeforeScroll>[];
+    for (final TerminalKittyImagePlacement placement
+        in store.placementSnapshot()) {
+      final TerminalKittyImage? image = store.imageById(placement.imageId);
+      final TerminalKittyImagePlacementPosition? position = _screens
+          ._kittyPlacementScreenPosition(_kind, placement);
+      if (image == null ||
+          image.resourceGeneration != placement.imageResourceGeneration ||
+          position == null) {
+        continue;
+      }
+      final TerminalKittyImagePlacementGeometry geometry = placement.geometry(
+        image: image,
+        cellWidth: cell.width,
+        cellHeight: cell.height,
+      );
+      captured.add(
+        _KittyPlacementBeforeScroll(
+          placement: placement,
+          position: position,
+          geometry: geometry,
+        ),
+      );
+    }
+    _beforeScroll = List<_KittyPlacementBeforeScroll>.unmodifiable(captured);
+  }
+
+  @override
+  void didScroll(TerminalScreen screen, TerminalScreenScrollMutation mutation) {
+    final TerminalKittyImageStore store = _screens.kittyImagesFor(_kind);
+    final int beforeGeneration = store.stateGeneration;
+    final ({int width, int height})? cell = _screens.logicalCellSize;
+    final bool retainedFullScreenScroll =
+        mutation.direction == TerminalScreenScrollDirection.up &&
+        mutation.capturesScrollback &&
+        mutation.top == 0 &&
+        mutation.bottom == screen.rows - 1 &&
+        mutation.left == 0 &&
+        mutation.right == screen.columns - 1;
+    if (cell != null && !retainedFullScreenScroll) {
+      for (final _KittyPlacementBeforeScroll captured in _beforeScroll) {
+        _reconcileAfterScroll(store, screen, mutation, cell, captured);
+      }
+    }
+    _beforeScroll = const <_KittyPlacementBeforeScroll>[];
+    _screens._pruneKittyPlacements(_kind);
+    if (store.stateGeneration != beforeGeneration) {
+      _screens._transitionGeneration++;
+    }
+  }
+
+  void _reconcileAfterScroll(
+    TerminalKittyImageStore store,
+    TerminalScreen screen,
+    TerminalScreenScrollMutation mutation,
+    ({int width, int height}) cell,
+    _KittyPlacementBeforeScroll captured,
+  ) {
+    final TerminalKittyImagePlacementPosition position = captured.position;
+    final TerminalKittyImagePlacementGeometry geometry = captured.geometry;
+    if (geometry.columns <= 0 || geometry.rows <= 0) return;
+    final bool whollyInside =
+        position.row >= mutation.top &&
+        position.row + geometry.rows - 1 <= mutation.bottom &&
+        position.column >= mutation.left &&
+        position.column + geometry.columns - 1 <= mutation.right;
+    int targetRow = position.row;
+    var clipTopPixels = 0;
+    var clipBottomPixels = 0;
+    var targetOffsetY = geometry.cellOffsetY;
+    if (whollyInside) {
+      targetRow += mutation.direction == TerminalScreenScrollDirection.up
+          ? -mutation.amount
+          : mutation.amount;
+      final int targetTopPixel = targetRow * cell.height + geometry.cellOffsetY;
+      final int regionTopPixel = mutation.top * cell.height;
+      final int regionBottomPixel = (mutation.bottom + 1) * cell.height;
+      clipTopPixels = (regionTopPixel - targetTopPixel).clamp(
+        0,
+        geometry.pixelHeight,
+      );
+      clipBottomPixels =
+          (targetTopPixel + geometry.pixelHeight - regionBottomPixel).clamp(
+            0,
+            geometry.pixelHeight,
+          );
+      if (clipTopPixels + clipBottomPixels >= geometry.pixelHeight) {
+        store.removePlacement(captured.placement.placementGeneration);
+        return;
+      }
+      final int visibleTopPixel = targetTopPixel + clipTopPixels;
+      targetRow = visibleTopPixel ~/ cell.height;
+      targetOffsetY = visibleTopPixel % cell.height;
+    }
+    if (targetRow < 0 ||
+        targetRow >= screen.rows ||
+        position.column < 0 ||
+        position.column >= screen.columns) {
+      if (whollyInside) {
+        store.removePlacement(captured.placement.placementGeneration);
+      }
+      return;
+    }
+    final TerminalLogicalAnchor anchor = _screens.viewport.anchorAtScreenCell(
+      _kind,
+      targetRow,
+      position.column,
+    );
+    store.reconcilePlacement(
+      placementGeneration: captured.placement.placementGeneration,
+      logicalLineId: anchor.logicalLineId,
+      logicalLineEpoch: anchor.logicalLineEpoch,
+      logicalCellOffset: anchor.cellOffset,
+      cellOffsetX: geometry.cellOffsetX,
+      cellOffsetY: targetOffsetY,
+      cellWidth: cell.width,
+      cellHeight: cell.height,
+      clipTopPixels: clipTopPixels,
+      clipBottomPixels: clipBottomPixels,
+    );
+  }
+
+  @override
+  void didEraseInDisplay(TerminalScreen screen, int mode) {
+    if (mode != 2) return;
+    final TerminalKittyImageStore store = _screens.kittyImagesFor(_kind);
+    final int beforeGeneration = store.stateGeneration;
+    final ({int width, int height})? cell = _screens.logicalCellSize;
+    store.removePlacementsWhere(
+      predicate: (TerminalKittyImagePlacement placement) {
+        final TerminalKittyImagePlacementPosition? position = _screens
+            ._kittyPlacementScreenPosition(_kind, placement);
+        if (position == null) return false;
+        if (cell == null) {
+          return position.row >= 0 && position.row < screen.rows;
+        }
+        final TerminalKittyImage? image = store.imageById(placement.imageId);
+        if (image == null ||
+            image.resourceGeneration != placement.imageResourceGeneration) {
+          return true;
+        }
+        final TerminalKittyImagePlacementGeometry geometry = placement.geometry(
+          image: image,
+          cellWidth: cell.width,
+          cellHeight: cell.height,
+        );
+        return position.row < screen.rows &&
+            position.row + geometry.rows > 0 &&
+            position.column < screen.columns &&
+            position.column + geometry.columns > 0;
+      },
+      reclaimUnusedData: true,
+    );
+    if (store.stateGeneration != beforeGeneration) {
+      _screens._transitionGeneration++;
+    }
+  }
+
+  @override
+  void didResetScreen(TerminalScreen screen) {
+    final TerminalKittyImageStore store = _screens.kittyImagesFor(_kind);
+    final int beforeGeneration = store.stateGeneration;
+    store.clear();
+    if (store.stateGeneration != beforeGeneration) {
+      _screens._transitionGeneration++;
+    }
+  }
+}
+
+final class _KittyPlacementBeforeScroll {
+  const _KittyPlacementBeforeScroll({
+    required this.placement,
+    required this.position,
+    required this.geometry,
+  });
+
+  final TerminalKittyImagePlacement placement;
+  final TerminalKittyImagePlacementPosition position;
+  final TerminalKittyImagePlacementGeometry geometry;
 }
 
 final class _KittyKeyboardState {

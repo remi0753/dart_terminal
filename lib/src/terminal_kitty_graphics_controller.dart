@@ -550,8 +550,18 @@ final class TerminalKittyGraphicsController {
       );
       return;
     }
+    final ({int width, int height})? cell = screenSet.logicalCellSize;
+    if (cell == null) {
+      _emitError(
+        replyCommand,
+        'EAGAIN',
+        'logical cell metrics are unavailable',
+        identitySource: identitySource,
+      );
+      return;
+    }
     final TerminalScreen screen = screenSet.screenFor(screenKind);
-    final TerminalLogicalAnchor anchor = screenSet.viewport.anchorAtScreen(
+    final TerminalLogicalAnchor anchor = screenSet.viewport.anchorAtScreenCell(
       screenKind,
       screen.cursorRow,
       screen.cursorColumn,
@@ -607,11 +617,10 @@ final class TerminalKittyGraphicsController {
     }
     final TerminalKittyImage image = result.image!;
     final TerminalKittyImagePlacement placement = result.placement!;
-    final ({int width, int height})? cell = screenSet.logicalCellSize;
     final TerminalKittyImagePlacementGeometry geometry = placement.geometry(
       image: image,
-      cellWidth: cell?.width ?? 0,
-      cellHeight: cell?.height ?? 0,
+      cellWidth: cell.width,
+      cellHeight: cell.height,
     );
     if (!request.suppressCursorMovement) {
       _moveCursorAfterPlacement(screen, geometry);
@@ -677,7 +686,8 @@ final class TerminalKittyGraphicsController {
       cellHeight: cell?.height ?? 0,
       resolvePosition: (TerminalKittyImagePlacement placement) {
         final TerminalViewportPosition? position = screenSet.viewport
-            .activeScreenPositionOf(
+            .screenCellPositionOf(
+              kind,
               TerminalLogicalAnchor(
                 screenKind: kind,
                 logicalLineId: placement.logicalLineId,

@@ -5,8 +5,8 @@
 - Date started: 2026-09-11
 - Scope: fourth Phase 9 roadmap item
 - Feature-matrix owner: CAP-11
-- Status: grammar and process-worker storage children complete; placement
-  state/action child in progress
+- Status: grammar, process-worker storage, and bounded placement-action children
+  complete; lifecycle/projection child in progress
 - Predecessor: `docs/phase9/light-dark-notification-extended-reports.md`
 
 ## Purpose and background
@@ -661,3 +661,73 @@ after this parent is committed.
   screen, and no renderer/lifecycle behavior from the next subtask was added.
   `git diff --check` passed; the bounded placement state/action subtask meets
   its completion conditions and is marked complete.
+- 2026-09-11: bounded placement state/action completed in commit `b2d0e93`
+  (`Place and delete bounded Kitty images`). ROADMAP, README, FEATURE_MATRIX,
+  this memo, recent commits, and the clean worktree were reread immediately
+  after the commit. The first unchecked item is now scroll/erase/reflow/
+  alternate/RIS lifecycle semantics and immutable viewport projection. The CPU
+  reference compositor remains the next ordered child and is not part of this
+  change.
+- 2026-09-11: lifecycle design must observe mutations inside `TerminalScreen`,
+  not only parser dispatch, because scrolling also occurs through print/index,
+  direct screen APIs, cursor movement, and resize paths. Stable logical anchors
+  already carry placements through full-width scrolling and primary reflow;
+  explicit reconciliation is required for margin scrolling, clipping, history
+  eviction, clear-screen, alternate reset, and RIS. Projection will copy each
+  retained RGBA resource once into an immutable snapshot, keep placements as
+  generation-pinned records, and order them deterministically before any
+  renderer consumes the state.
+- 2026-09-11: a screen-set-owned mutation observer now brackets every internal
+  up/down region scroll and observes ED/reset after mutation. A full-width,
+  full-screen upward scroll with scrollback capture leaves logical anchors
+  untouched, so placements enter history with their text. Other scrolls
+  snapshot at most 256 placements, move only rectangles wholly contained by
+  the active page region, hold intersecting/outside rectangles at their
+  physical cells, and permanently clip source/destination pixels at a crossed
+  top or bottom boundary. The work remains bounded by the placement ceiling;
+  evicted/unresolvable anchors are pruned without prematurely reclaiming their
+  reusable decoded image data.
+- 2026-09-11: ED modes 0/1 and every line/character erase continue to affect
+  text only. ED 2 removes placements intersecting the live screen and reclaims
+  only image data made unused by that clear. A screen reset clears its entire
+  store, which gives mode 1049 (and the existing mode 1047 clear-on-return)
+  alternate-only cleanup; RIS clears both stores. Mode 47 switching keeps the
+  independent stores. Resize reattaches observers to replacement grids,
+  resolves primary placements through reflowed logical content, and prunes
+  anchors lost by resize/history bounds.
+- 2026-09-11: the first margin regression failed before the partial-width
+  assertion because the selection-oriented logical anchor intentionally
+  collapses trailing blank columns to the logical line end. Kitty placement
+  instead needs the exact cursor cell even when blank. Dedicated grid-exact
+  capture/resolution APIs now preserve those trailing cells while all existing
+  selection/search anchor APIs retain their original normalization. The
+  controller uses the exact form for place and delete, and product placement
+  fails deterministically with `EAGAIN` until authoritative logical cell
+  metrics exist; this prevents pre-surface margin/clipping behavior from being
+  guessed from image pixels.
+- 2026-09-11: `TerminalKittyViewportSnapshot` copies each visible referenced
+  RGBA resource once, pins image/store/viewport generations, publishes only
+  immutable lists and copy-on-access bytes, projects placements in logical
+  viewport pixels (including history navigation), rejects stale resource
+  generations, and sorts by z then placement generation. Clipping against the
+  viewport and blending are intentionally left to the next CPU reference
+  compositor child.
+- 2026-09-11: scoped analysis reports no issues. The focused Kitty suite passes
+  full-screen history attachment, history navigation, eviction invalidation,
+  z ordering, RGBA copy isolation, vertical-margin source clipping,
+  partial-width movement, partial/full display erasure, reflow, modes 47/1049,
+  RIS, and missing-cell-metrics rejection. Independent viewport,
+  history-reflow, reflow, screen-set, and screen regression programs also pass.
+- 2026-09-11: the first complete gate stopped at the regression-coverage
+  freshness check because the CAP-11 text change advanced the FEATURE_MATRIX
+  hash. The prescribed generator changed only that embedded SHA-256; all nine
+  fix families, nine cases, 417 split runs, the one owned gap, and zero known
+  P0 silent-corruption count remained unchanged. Its independent check passes.
+- 2026-09-11: after the evidence refresh,
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed every freshness,
+  compatibility, differential, application, terminfo, shell, formatting,
+  analyzer, native-hook, and Dart test stage. It formatted 256 Dart files with
+  zero changes, reported no analyzer issues, and ended with
+  `dart_terminal tests passed`. Final scope review confirms no compositor,
+  Metal, animation, or eviction policy was implemented in this child, and
+  `git diff --check` passes.

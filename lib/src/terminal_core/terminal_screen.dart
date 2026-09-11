@@ -41,6 +41,40 @@ enum TerminalCursorShape { block, underline, bar }
 
 enum TerminalCharacterSet { ascii, decSpecialGraphics }
 
+enum TerminalScreenScrollDirection { up, down }
+
+/// One already-clamped grid scroll observed around a screen mutation.
+final class TerminalScreenScrollMutation {
+  const TerminalScreenScrollMutation({
+    required this.direction,
+    required this.top,
+    required this.bottom,
+    required this.left,
+    required this.right,
+    required this.amount,
+    required this.capturesScrollback,
+  });
+
+  final TerminalScreenScrollDirection direction;
+  final int top;
+  final int bottom;
+  final int left;
+  final int right;
+  final int amount;
+  final bool capturesScrollback;
+}
+
+/// Package-level mutation observer used by screen-attached resources.
+abstract interface class TerminalScreenMutationObserver {
+  void willScroll(TerminalScreen screen, TerminalScreenScrollMutation mutation);
+
+  void didScroll(TerminalScreen screen, TerminalScreenScrollMutation mutation);
+
+  void didEraseInDisplay(TerminalScreen screen, int mode);
+
+  void didResetScreen(TerminalScreen screen);
+}
+
 /// Validates a package-level replacement request before ownership changes.
 void validateTerminalScreenDimensions(int rows, int columns) =>
     TerminalScreen._validateDimensions(rows, columns);
@@ -159,6 +193,7 @@ final class TerminalScreen {
   final TerminalCursorShape initialCursorShape;
   final bool initialCursorBlinking;
   final TerminalScrollbackAttachment? _scrollbackAttachment;
+  TerminalScreenMutationObserver? _mutationObserver;
 
   final Uint32List _content;
   final Uint32List _foreground;
@@ -248,6 +283,15 @@ final class TerminalScreen {
   int get fullSnapshotRequestEpoch => _fullSnapshotRequestEpoch;
   bool get presentationDamageRequired => _presentationDamageRequired;
   int get visualBellGeneration => _visualBellGeneration;
+
+  /// Installs the screen-set-owned resource observer on this grid.
+  void attachMutationObserver(TerminalScreenMutationObserver observer) {
+    if (_mutationObserver != null && !identical(_mutationObserver, observer)) {
+      throw StateError('terminal screen already has a mutation observer');
+    }
+    _mutationObserver = observer;
+  }
+
   int get topMargin => _topMargin;
   int get bottomMargin => _bottomMargin;
   int get leftMargin => _leftMargin;
@@ -1475,6 +1519,7 @@ final class TerminalScreen {
     if (changed) {
       _incrementGeneration();
     }
+    _mutationObserver?.didEraseInDisplay(this, mode);
   }
 
   void insertLines(int count) {
@@ -1542,6 +1587,7 @@ final class TerminalScreen {
     _advanceFullSnapshotRequestEpoch();
     _fullSnapshotRequired = true;
     _incrementGeneration();
+    _mutationObserver?.didResetScreen(this);
   }
 
   /// Returns a fixed-resource replacement reflowed from retained visible rows.
@@ -2237,6 +2283,16 @@ final class TerminalScreen {
   }) {
     _wrapPending = false;
     final int amount = count.clamp(1, bottom - top + 1);
+    final TerminalScreenScrollMutation mutation = TerminalScreenScrollMutation(
+      direction: TerminalScreenScrollDirection.up,
+      top: top,
+      bottom: bottom,
+      left: left,
+      right: right,
+      amount: amount,
+      capturesScrollback: captureScrollback,
+    );
+    _mutationObserver?.willScroll(this, mutation);
     if (top == 0 && bottom == rows - 1 && left == 0 && right == columns - 1) {
       final int nextFirstLogicalOffset = amount < rows
           ? logicalCellOffsetAt(amount)
@@ -2255,6 +2311,7 @@ final class TerminalScreen {
       }
       _markEveryRowDirty();
       _incrementGeneration();
+      _mutationObserver?.didScroll(this, mutation);
       return;
     }
 
@@ -2286,11 +2343,22 @@ final class TerminalScreen {
     }
     _markRegionDirty(top, bottom, left, right + 1);
     _incrementGeneration();
+    _mutationObserver?.didScroll(this, mutation);
   }
 
   void _scrollDownRegion(int top, int bottom, int left, int right, int count) {
     _wrapPending = false;
     final int amount = count.clamp(1, bottom - top + 1);
+    final TerminalScreenScrollMutation mutation = TerminalScreenScrollMutation(
+      direction: TerminalScreenScrollDirection.down,
+      top: top,
+      bottom: bottom,
+      left: left,
+      right: right,
+      amount: amount,
+      capturesScrollback: false,
+    );
+    _mutationObserver?.willScroll(this, mutation);
     if (top == 0 && bottom == rows - 1 && left == 0 && right == columns - 1) {
       _firstPhysicalRow = (_firstPhysicalRow - amount) % rows;
       _firstLogicalCellOffset = 0;
@@ -2303,6 +2371,7 @@ final class TerminalScreen {
       }
       _markEveryRowDirty();
       _incrementGeneration();
+      _mutationObserver?.didScroll(this, mutation);
       return;
     }
 
@@ -2331,6 +2400,7 @@ final class TerminalScreen {
     }
     _markRegionDirty(top, bottom, left, right + 1);
     _incrementGeneration();
+    _mutationObserver?.didScroll(this, mutation);
   }
 
   void _markRegionDirty(int top, int bottom, int start, int end) {

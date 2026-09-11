@@ -93,6 +93,8 @@ final class TerminalKittyImagePlacement {
     required this.requestedColumns,
     required this.requestedRows,
     required this.z,
+    required this.fixedPixelWidth,
+    required this.fixedPixelHeight,
   });
 
   final int placementGeneration;
@@ -111,6 +113,8 @@ final class TerminalKittyImagePlacement {
   final int requestedColumns;
   final int requestedRows;
   final int z;
+  final int? fixedPixelWidth;
+  final int? fixedPixelHeight;
 
   TerminalKittyImageSourceRect sourceRect(TerminalKittyImage image) {
     _requireImageGeneration(image);
@@ -146,25 +150,47 @@ final class TerminalKittyImagePlacement {
     final int offsetY = cellHeight == 0
         ? 0
         : cellOffsetY.clamp(0, cellHeight - 1);
-    late final int pixelWidth;
-    late final int pixelHeight;
+    late final int naturalPixelWidth;
+    late final int naturalPixelHeight;
     if (requestedColumns == 0 && requestedRows == 0) {
-      pixelWidth = source.width;
-      pixelHeight = source.height;
+      naturalPixelWidth = source.width;
+      naturalPixelHeight = source.height;
     } else if (requestedColumns != 0 && requestedRows != 0) {
-      pixelWidth = (_saturatingProduct(cellWidth, requestedColumns) - offsetX)
-          .clamp(0, 0xffffffff);
-      pixelHeight = (_saturatingProduct(cellHeight, requestedRows) - offsetY)
-          .clamp(0, 0xffffffff);
+      naturalPixelWidth =
+          (_saturatingProduct(cellWidth, requestedColumns) - offsetX).clamp(
+            0,
+            0xffffffff,
+          );
+      naturalPixelHeight =
+          (_saturatingProduct(cellHeight, requestedRows) - offsetY).clamp(
+            0,
+            0xffffffff,
+          );
     } else if (requestedColumns != 0) {
-      pixelWidth = (_saturatingProduct(cellWidth, requestedColumns) - offsetX)
-          .clamp(0, 0xffffffff);
-      pixelHeight = _scaleDimension(pixelWidth, source.height, source.width);
+      naturalPixelWidth =
+          (_saturatingProduct(cellWidth, requestedColumns) - offsetX).clamp(
+            0,
+            0xffffffff,
+          );
+      naturalPixelHeight = _scaleDimension(
+        naturalPixelWidth,
+        source.height,
+        source.width,
+      );
     } else {
-      pixelHeight = (_saturatingProduct(cellHeight, requestedRows) - offsetY)
-          .clamp(0, 0xffffffff);
-      pixelWidth = _scaleDimension(pixelHeight, source.width, source.height);
+      naturalPixelHeight =
+          (_saturatingProduct(cellHeight, requestedRows) - offsetY).clamp(
+            0,
+            0xffffffff,
+          );
+      naturalPixelWidth = _scaleDimension(
+        naturalPixelHeight,
+        source.width,
+        source.height,
+      );
     }
+    final int pixelWidth = fixedPixelWidth ?? naturalPixelWidth;
+    final int pixelHeight = fixedPixelHeight ?? naturalPixelHeight;
     final int columns = requestedColumns != 0 && requestedRows != 0
         ? requestedColumns
         : _ceilDivide(pixelWidth + offsetX, cellWidth);
@@ -216,6 +242,15 @@ final class TerminalKittyImagePlacementPosition {
 
   final int row;
   final int column;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalKittyImagePlacementPosition &&
+      other.row == row &&
+      other.column == column;
+
+  @override
+  int get hashCode => Object.hash(row, column);
 }
 
 typedef TerminalKittyImagePlacementPositionResolver =
@@ -434,6 +469,8 @@ final class TerminalKittyImageStore {
       requestedColumns: columns,
       requestedRows: rows,
       z: z,
+      fixedPixelWidth: null,
+      fixedPixelHeight: null,
     );
     _placements[placementGeneration] = placement;
     _stateGeneration++;
@@ -444,10 +481,150 @@ final class TerminalKittyImageStore {
     );
   }
 
+  /// Reanchors one retained placement after a screen scroll and optionally
+  /// clips whole destination pixels from its top or bottom edge.
+  bool reconcilePlacement({
+    required int placementGeneration,
+    required int logicalLineId,
+    required int logicalLineEpoch,
+    required int logicalCellOffset,
+    required int cellOffsetX,
+    required int cellOffsetY,
+    required int cellWidth,
+    required int cellHeight,
+    int clipTopPixels = 0,
+    int clipBottomPixels = 0,
+  }) {
+    final TerminalKittyImagePlacement? placement =
+        _placements[placementGeneration];
+    if (placement == null) return false;
+    final TerminalKittyImage? image = _byId[placement.imageId];
+    if (image == null ||
+        image.resourceGeneration != placement.imageResourceGeneration) {
+      _placements.remove(placementGeneration);
+      _stateGeneration++;
+      return true;
+    }
+    if (cellWidth <= 0 ||
+        cellHeight <= 0 ||
+        clipTopPixels < 0 ||
+        clipBottomPixels < 0) {
+      throw ArgumentError('invalid Kitty placement reconciliation geometry');
+    }
+    final TerminalKittyImagePlacementGeometry geometry = placement.geometry(
+      image: image,
+      cellWidth: cellWidth,
+      cellHeight: cellHeight,
+    );
+    if (geometry.pixelWidth <= 0 ||
+        geometry.pixelHeight <= 0 ||
+        geometry.source.width <= 0 ||
+        geometry.source.height <= 0 ||
+        clipTopPixels + clipBottomPixels >= geometry.pixelHeight) {
+      _placements.remove(placementGeneration);
+      _stateGeneration++;
+      return true;
+    }
+    final TerminalKittyImageSourceRect source = geometry.source;
+    final int retainedPixelHeight =
+        geometry.pixelHeight - clipTopPixels - clipBottomPixels;
+    final int sourceTop =
+        source.y + clipTopPixels * source.height ~/ geometry.pixelHeight;
+    final int sourceBottom =
+        source.y +
+        _ceilDivide(
+          (geometry.pixelHeight - clipBottomPixels) * source.height,
+          geometry.pixelHeight,
+        );
+    final int clippedSourceBottom = sourceBottom.clamp(
+      sourceTop + 1,
+      source.y + source.height,
+    );
+    _validatePlacement(
+      placementId: placement.placementId,
+      logicalLineId: logicalLineId,
+      logicalLineEpoch: logicalLineEpoch,
+      logicalCellOffset: logicalCellOffset,
+      sourceX: source.x,
+      sourceY: sourceTop,
+      sourceWidth: source.width,
+      sourceHeight: clippedSourceBottom - sourceTop,
+      cellOffsetX: cellOffsetX,
+      cellOffsetY: cellOffsetY,
+      columns: placement.requestedColumns,
+      rows: placement.requestedRows,
+      z: placement.z,
+    );
+    final TerminalKittyImagePlacement next = TerminalKittyImagePlacement._(
+      placementGeneration: placement.placementGeneration,
+      imageId: placement.imageId,
+      imageResourceGeneration: placement.imageResourceGeneration,
+      placementId: placement.placementId,
+      logicalLineId: logicalLineId,
+      logicalLineEpoch: logicalLineEpoch,
+      logicalCellOffset: logicalCellOffset,
+      sourceX: source.x,
+      sourceY: sourceTop,
+      sourceWidth: source.width,
+      sourceHeight: clippedSourceBottom - sourceTop,
+      cellOffsetX: cellOffsetX,
+      cellOffsetY: cellOffsetY,
+      requestedColumns: placement.requestedColumns,
+      requestedRows: placement.requestedRows,
+      z: placement.z,
+      fixedPixelWidth: geometry.pixelWidth,
+      fixedPixelHeight: retainedPixelHeight,
+    );
+    if (_samePlacementState(placement, next)) return false;
+    _placements[placementGeneration] = next;
+    _stateGeneration++;
+    return true;
+  }
+
+  /// Drops placement records whose logical anchors are no longer retained.
+  int removeUnresolvedPlacements(
+    TerminalKittyImagePlacementPositionResolver resolvePosition,
+  ) => _removePlacementsWhere(
+    (TerminalKittyImagePlacement placement) =>
+        resolvePosition(placement) == null,
+  );
+
   int removePlacementsForImage(int imageId) {
     if (imageId <= 0 || imageId > 0xffffffff) return 0;
     return _removePlacementsWhere(
       (TerminalKittyImagePlacement placement) => placement.imageId == imageId,
+    );
+  }
+
+  bool removePlacement(int placementGeneration) {
+    if (_placements.remove(placementGeneration) == null) return false;
+    _stateGeneration++;
+    return true;
+  }
+
+  TerminalKittyImageDeleteResult removePlacementsWhere({
+    required bool Function(TerminalKittyImagePlacement placement) predicate,
+    required bool reclaimUnusedData,
+  }) {
+    final Set<int> imageCandidates = <int>{};
+    final int beforePlacements = _placements.length;
+    _removePlacementsWhere((TerminalKittyImagePlacement placement) {
+      if (!predicate(placement)) return false;
+      imageCandidates.add(placement.imageId);
+      return true;
+    }, bumpGeneration: false);
+    final int beforeImages = _byId.length;
+    if (reclaimUnusedData) {
+      for (final int imageId in imageCandidates) {
+        _removeImageIfUnused(imageId);
+      }
+    }
+    final int deletedPlacements = beforePlacements - _placements.length;
+    final int deletedImages = beforeImages - _byId.length;
+    if (deletedPlacements != 0 || deletedImages != 0) _stateGeneration++;
+    return TerminalKittyImageDeleteResult(
+      deletedPlacements: deletedPlacements,
+      deletedImages: deletedImages,
     );
   }
 
@@ -698,6 +875,25 @@ final class TerminalKittyImageStore {
     _retainedBytes -= removed.byteLength;
     return true;
   }
+
+  static bool _samePlacementState(
+    TerminalKittyImagePlacement left,
+    TerminalKittyImagePlacement right,
+  ) =>
+      left.logicalLineId == right.logicalLineId &&
+      left.logicalLineEpoch == right.logicalLineEpoch &&
+      left.logicalCellOffset == right.logicalCellOffset &&
+      left.sourceX == right.sourceX &&
+      left.sourceY == right.sourceY &&
+      left.sourceWidth == right.sourceWidth &&
+      left.sourceHeight == right.sourceHeight &&
+      left.cellOffsetX == right.cellOffsetX &&
+      left.cellOffsetY == right.cellOffsetY &&
+      left.fixedPixelWidth == right.fixedPixelWidth &&
+      left.fixedPixelHeight == right.fixedPixelHeight;
+
+  static int _ceilDivide(int value, int divisor) =>
+      value == 0 ? 0 : (value + divisor - 1) ~/ divisor;
 
   int _placementColumns(
     TerminalKittyImagePlacement placement,

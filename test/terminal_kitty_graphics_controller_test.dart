@@ -9,6 +9,7 @@ import 'package:dart_terminal/src/runtime_image_worker_protocol.dart';
 import 'package:dart_terminal/src/runtime_lifecycle.dart';
 import 'package:dart_terminal/src/terminal_core/terminal_kitty_graphics.dart';
 import 'package:dart_terminal/src/terminal_core/terminal_kitty_image_store.dart';
+import 'package:dart_terminal/src/terminal_core/terminal_screen.dart';
 import 'package:dart_terminal/src/terminal_core/terminal_screen_set.dart';
 import 'package:dart_terminal/src/terminal_kitty_graphics_controller.dart';
 import 'package:dart_terminal/src/terminal_pane.dart';
@@ -20,12 +21,192 @@ Future<void> runTerminalKittyGraphicsControllerTests() async {
   _testStoreIdentityCopiesReplacementAndCaps();
   _testPlacementStoreGeometryIdentityAndDeletion();
   _testEveryStaticDeleteSelector();
+  _testPlacementScrollLifecycleAndViewportProjection();
+  _testPlacementMarginsEraseReflowAlternateAndReset();
   await _testControllerQueryStorageMultipartAndRejection();
   await _testControllerStorageCapQueueCapAndStaleWorker();
   await _testControllerPlacementActionsAndDelete();
   await _testControllerFailureReplyAndPendingTeardown();
   await _testSessionParserAndReplyFifo();
   await _testRealWorkerSessionRoundTripAndTeardown();
+}
+
+void _testPlacementScrollLifecycleAndViewportProjection() {
+  final TerminalScreenSet screens = TerminalScreenSet(
+    rows: 2,
+    columns: 3,
+    scrollback: TerminalScrollback(maxLines: 1, maxBytes: 10000, pageRows: 1),
+  );
+  screens.updateLogicalCellSize(width: 10, height: 10);
+  _storeAndPlace(screens, imageId: 1, row: 0, column: 0, z: 2);
+  _storeAndPlace(screens, imageId: 2, row: 1, column: 1, z: -1);
+  final TerminalKittyViewportSnapshot initial = screens
+      .captureKittyImageViewport();
+  _expect(
+    initial.images.length == 2 &&
+        initial.placements.length == 2 &&
+        initial.placements.first.imageId == 2 &&
+        initial.placements.last.imageId == 1 &&
+        initial.viewportWidth == 30 &&
+        initial.viewportHeight == 20,
+    'viewport projection copies resources and sorts placement z-order',
+  );
+  final Uint8List copied = initial.images.first.copyRgba()..[0] = 99;
+  _expect(
+    copied[0] == 99 && initial.images.first.copyRgba()[0] != 99,
+    'viewport image bytes remain immutable to consumers',
+  );
+
+  screens.primary.scrollUp(1);
+  _expect(
+    screens.primaryKittyImages.placementCount == 2 &&
+        screens.captureKittyImageViewport().placements.length == 1,
+    'full-screen scroll retains history-attached placement off the live view',
+  );
+  screens.viewport.scrollByRows(1);
+  final TerminalKittyViewportSnapshot history = screens
+      .captureKittyImageViewport();
+  _expect(
+    history.placements.length == 2 &&
+        history.placements.any(
+          (TerminalKittyViewportPlacement placement) =>
+              placement.imageId == 1 && placement.destinationY == 0,
+        ),
+    'history navigation projects a retained placement at its logical row',
+  );
+  screens.viewport.scrollToBottom();
+  screens.primary.scrollUp(1);
+  _expect(
+    screens.primaryKittyImages.placementCount == 1 &&
+        screens.primaryKittyImages.length == 2,
+    'scrollback eviction invalidates only the unreachable placement record',
+  );
+}
+
+void _testPlacementMarginsEraseReflowAlternateAndReset() {
+  final TerminalScreenSet margins = TerminalScreenSet(rows: 4, columns: 4);
+  margins.updateLogicalCellSize(width: 10, height: 10);
+  _storeAndPlace(
+    margins,
+    imageId: 10,
+    imageWidth: 1,
+    imageHeight: 2,
+    row: 1,
+    column: 1,
+    rows: 2,
+  );
+  _storeAndPlace(margins, imageId: 11, row: 0, column: 0);
+  margins.primary.setVerticalMargins(1, 2);
+  margins.primary.scrollUp(1);
+  final TerminalKittyImagePlacement clipped = margins.primaryKittyImages
+      .placementSnapshot()
+      .firstWhere(
+        (TerminalKittyImagePlacement placement) => placement.imageId == 10,
+      );
+  final TerminalKittyImagePlacementPosition clippedPosition = margins
+      ._positionOfForTest(clipped)!;
+  final TerminalKittyImagePlacementGeometry clippedGeometry = clipped.geometry(
+    image: margins.primaryKittyImages.imageById(10)!,
+    cellWidth: 10,
+    cellHeight: 10,
+  );
+  _expect(
+    clippedPosition.row == 1 &&
+        clippedGeometry.source.y == 1 &&
+        clippedGeometry.source.height == 1 &&
+        clippedGeometry.pixelHeight == 10 &&
+        margins._positionOfForTest(
+              margins.primaryKittyImages.placementSnapshot().firstWhere(
+                (TerminalKittyImagePlacement placement) =>
+                    placement.imageId == 11,
+              ),
+            ) ==
+            const TerminalKittyImagePlacementPosition(row: 0, column: 0),
+    'vertical-margin scroll clips only wholly-contained placements',
+  );
+
+  final TerminalScreenSet rectangle = TerminalScreenSet(rows: 4, columns: 4);
+  rectangle.updateLogicalCellSize(width: 10, height: 10);
+  _storeAndPlace(rectangle, imageId: 12, row: 2, column: 1);
+  rectangle.primary.setHorizontalMargins(1, 2);
+  rectangle.primary.setMode(TerminalScreenMode.horizontalMargins, true);
+  rectangle.primary.scrollUp(1);
+  _expect(
+    rectangle._positionOfForTest(
+          rectangle.primaryKittyImages.placementSnapshot().single,
+        ) ==
+        const TerminalKittyImagePlacementPosition(row: 1, column: 1),
+    'partial-width scroll explicitly reanchors a contained placement',
+  );
+
+  final TerminalScreenSet erase = TerminalScreenSet(rows: 2, columns: 3);
+  erase.updateLogicalCellSize(width: 10, height: 10);
+  _storeAndPlace(erase, imageId: 20, row: 0, column: 0);
+  erase.primary.scrollUp(1);
+  _storeAndPlace(erase, imageId: 21, row: 0, column: 0);
+  erase.primary.eraseInDisplay(0);
+  _expect(
+    erase.primaryKittyImages.placementCount == 2,
+    'partial text erasure leaves graphics untouched',
+  );
+  erase.primary.eraseInDisplay(2);
+  _expect(
+    erase.primaryKittyImages.placementCount == 1 &&
+        erase.primaryKittyImages.imageById(20) != null &&
+        erase.primaryKittyImages.imageById(21) == null,
+    'clear-screen removes visible placement and its now-unused image data',
+  );
+  erase.primary.resetScreen();
+  _expect(
+    erase.primaryKittyImages.isEmpty,
+    'screen reset clears retained graphics including history resources',
+  );
+
+  final TerminalScreenSet reflow = TerminalScreenSet(rows: 2, columns: 4);
+  reflow.updateLogicalCellSize(width: 10, height: 10);
+  for (final int scalar in 'ABCDEFG'.runes) {
+    reflow.primary.printScalar(scalar);
+  }
+  _storeAndPlace(reflow, imageId: 30, row: 0, column: 2);
+  reflow.resize(rows: 4, columns: 2);
+  final TerminalKittyViewportPlacement reflowed = reflow
+      .captureKittyImageViewport()
+      .placements
+      .single;
+  _expect(
+    reflowed.destinationX == 0 && reflowed.destinationY == 10,
+    'primary reflow preserves the logical placement boundary',
+  );
+
+  _storeAndPlace(reflow, imageId: 31, row: 0, column: 0);
+  reflow.setAlternateMode47(true);
+  _storeAndPlace(
+    reflow,
+    kind: TerminalScreenKind.alternate,
+    imageId: 40,
+    row: 0,
+    column: 0,
+  );
+  reflow.setAlternateMode47(false);
+  _expect(
+    reflow.alternateKittyImages.placementCount == 1 &&
+        reflow.primaryKittyImages.placementCount == 2,
+    'mode 47 switching preserves independent screen image stores',
+  );
+  reflow.setAlternateMode1049(true);
+  _expect(
+    reflow.alternateKittyImages.isEmpty &&
+        reflow.primaryKittyImages.placementCount == 2,
+    'mode 1049 entry clears only alternate-screen graphics',
+  );
+  reflow.setAlternateMode1049(false);
+  reflow.reset();
+  _expect(
+    reflow.primaryKittyImages.isEmpty &&
+        reflow.alternateKittyImages.isEmpty &&
+        !reflow.usingAlternate,
+    'RIS clears both image stores and restores primary ownership',
+  );
 }
 
 void _testStoreIdentityCopiesReplacementAndCaps() {
@@ -710,7 +891,6 @@ Future<void> _testControllerStorageCapQueueCapAndStaleWorker() async {
 
 Future<void> _testControllerPlacementActionsAndDelete() async {
   final TerminalScreenSet screens = TerminalScreenSet(rows: 4, columns: 6);
-  screens.updateLogicalCellSize(width: 10, height: 20);
   final _InProcessImageWorker worker = _InProcessImageWorker();
   final List<String> replies = <String>[];
   var changeCount = 0;
@@ -728,6 +908,14 @@ Future<void> _testControllerPlacementActionsAndDelete() async {
       );
   controller.enqueueCommand(_command('Gi=70,f=32,s=1,v=1;AQIDBA=='));
   await controller.waitForIdle();
+  controller.enqueueCommand(_command('Ga=p,i=70,C=1'));
+  await controller.waitForIdle();
+  _expect(
+    screens.primaryKittyImages.placementCount == 0 &&
+        replies.last.contains('EAGAIN:logical cell metrics are unavailable'),
+    'placement waits for authoritative logical cell metrics',
+  );
+  screens.updateLogicalCellSize(width: 10, height: 20);
   screens.activeScreen.setCursorPosition(1, 1);
   controller.enqueueCommand(_command('Ga=p,i=70,p=3,c=2,r=2,C=1,z=-1,x=0,y=0'));
   await controller.waitForIdle();
@@ -1084,6 +1272,81 @@ final class _InProcessImageWorker implements RuntimeWorkerPayloadClient {
 
 TerminalKittyGraphicsCommand _command(String payload) =>
     TerminalKittyGraphicsCommandParser.parse(_bytes(payload));
+
+TerminalKittyImagePlacement _storeAndPlace(
+  TerminalScreenSet screens, {
+  TerminalScreenKind kind = TerminalScreenKind.primary,
+  required int imageId,
+  required int row,
+  required int column,
+  int imageWidth = 1,
+  int imageHeight = 1,
+  int columns = 1,
+  int rows = 1,
+  int z = 0,
+}) {
+  final TerminalKittyImageStore store = screens.kittyImagesFor(kind);
+  store.store(
+    imageId: imageId,
+    imageNumber: 0,
+    width: imageWidth,
+    height: imageHeight,
+    transient: false,
+    rgba: Uint8List.fromList(
+      List<int>.generate(
+        imageWidth * imageHeight * 4,
+        (int index) => (imageId + index) & 0xff,
+      ),
+    ),
+  );
+  final TerminalLogicalAnchor anchor = screens.viewport.anchorAtScreenCell(
+    kind,
+    row,
+    column,
+  );
+  return store
+      .place(
+        imageId: imageId,
+        imageNumber: 0,
+        placementId: imageId,
+        logicalLineId: anchor.logicalLineId,
+        logicalLineEpoch: anchor.logicalLineEpoch,
+        logicalCellOffset: anchor.cellOffset,
+        sourceX: 0,
+        sourceY: 0,
+        sourceWidth: 0,
+        sourceHeight: 0,
+        cellOffsetX: 0,
+        cellOffsetY: 0,
+        columns: columns,
+        rows: rows,
+        z: z,
+      )
+      .placement!;
+}
+
+extension on TerminalScreenSet {
+  TerminalKittyImagePlacementPosition? _positionOfForTest(
+    TerminalKittyImagePlacement placement, {
+    TerminalScreenKind kind = TerminalScreenKind.primary,
+  }) {
+    final TerminalViewportPosition? position = viewport.screenCellPositionOf(
+      kind,
+      TerminalLogicalAnchor(
+        screenKind: kind,
+        logicalLineId: placement.logicalLineId,
+        logicalLineEpoch: placement.logicalLineEpoch,
+        cellOffset: placement.logicalCellOffset,
+      ),
+    );
+    return position == null
+        ? null
+        : TerminalKittyImagePlacementPosition(
+            row: position.row,
+            column: position.column,
+          );
+  }
+}
 
 RuntimeLifecycleWorkerCommand _workerCommand() {
   return RuntimeLifecycleWorkerCommand(

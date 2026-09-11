@@ -380,14 +380,61 @@ final class TerminalViewport {
     return _anchorAtCombined(kind, combinedRow, column);
   }
 
+  /// Captures a grid-exact anchor for resources placed in trailing blank cells.
+  TerminalLogicalAnchor anchorAtScreenCell(
+    TerminalScreenKind kind,
+    int row,
+    int column,
+  ) {
+    _sync();
+    final TerminalScreen screen = _screens.screenFor(kind);
+    if (row < 0 || row >= screen.rows) {
+      throw RangeError.range(row, 0, screen.rows - 1, 'row');
+    }
+    final int combinedRow = kind == TerminalScreenKind.primary
+        ? _screens.scrollback.length + row
+        : row;
+    return _anchorAtCombined(
+      kind,
+      combinedRow,
+      column,
+      preserveTrailingCells: true,
+    );
+  }
+
   /// Resolves an anchor relative to the active live grid, not the navigated
   /// viewport. A negative row identifies retained primary scrollback.
   TerminalViewportPosition? activeScreenPositionOf(
     TerminalLogicalAnchor anchor,
+  ) => screenPositionOf(_screens.activeKind, anchor);
+
+  /// Resolves an anchor relative to either live grid. A negative primary row
+  /// identifies retained scrollback.
+  TerminalViewportPosition? screenPositionOf(
+    TerminalScreenKind kind,
+    TerminalLogicalAnchor anchor,
   ) {
     _sync();
-    if (anchor.screenKind != _screens.activeKind) return null;
+    if (anchor.screenKind != kind) return null;
     final _CombinedPosition? position = _resolveCombined(anchor);
+    if (position == null) return null;
+    final int row = anchor.screenKind == TerminalScreenKind.primary
+        ? position.row - _screens.scrollback.length
+        : position.row;
+    return TerminalViewportPosition(row: row, column: position.column);
+  }
+
+  /// Resolves a grid-exact resource anchor relative to either live grid.
+  TerminalViewportPosition? screenCellPositionOf(
+    TerminalScreenKind kind,
+    TerminalLogicalAnchor anchor,
+  ) {
+    _sync();
+    if (anchor.screenKind != kind) return null;
+    final _CombinedPosition? position = _resolveCombined(
+      anchor,
+      preserveTrailingCells: true,
+    );
     if (position == null) return null;
     final int row = anchor.screenKind == TerminalScreenKind.primary
         ? position.row - _screens.scrollback.length
@@ -462,6 +509,18 @@ final class TerminalViewport {
   );
 
   TerminalViewportPosition? positionOf(TerminalLogicalAnchor anchor) {
+    final TerminalViewportPosition? projected = projectedPositionOf(anchor);
+    if (projected == null ||
+        projected.row < 0 ||
+        projected.row >= _screens.activeScreen.rows) {
+      return null;
+    }
+    return projected;
+  }
+
+  /// Resolves an active-screen anchor relative to the navigated viewport,
+  /// retaining negative/off-bottom rows for rectangular intersection tests.
+  TerminalViewportPosition? projectedPositionOf(TerminalLogicalAnchor anchor) {
     _sync();
     if (anchor.screenKind != _screens.activeKind) {
       return null;
@@ -474,10 +533,27 @@ final class TerminalViewport {
         ? _screens.scrollback.length - _primaryOffset
         : 0;
     final int viewportRow = position.row - start;
-    if (viewportRow < 0 || viewportRow >= _screens.activeScreen.rows) {
-      return null;
-    }
     return TerminalViewportPosition(row: viewportRow, column: position.column);
+  }
+
+  /// Resolves a grid-exact resource anchor relative to viewport navigation.
+  TerminalViewportPosition? projectedCellPositionOf(
+    TerminalLogicalAnchor anchor,
+  ) {
+    _sync();
+    if (anchor.screenKind != _screens.activeKind) return null;
+    final _CombinedPosition? position = _resolveCombined(
+      anchor,
+      preserveTrailingCells: true,
+    );
+    if (position == null) return null;
+    final int start = anchor.screenKind == TerminalScreenKind.primary
+        ? _screens.scrollback.length - _primaryOffset
+        : 0;
+    return TerminalViewportPosition(
+      row: position.row - start,
+      column: position.column,
+    );
   }
 
   _ViewportLocation _locate(int viewportRow) {
@@ -591,6 +667,7 @@ final class TerminalViewport {
     int row,
     int column, {
     bool after = false,
+    bool preserveTrailingCells = false,
   }) {
     final int columns = _combinedColumnsAt(kind, row);
     if (column < 0 || column >= columns) {
@@ -605,7 +682,7 @@ final class TerminalViewport {
         : column;
     final int extent = _combinedRowExtent(kind, row);
     final int cellCount = _combinedLogicalCellCount(kind, row);
-    int cellOffset = normalized < extent
+    int cellOffset = preserveTrailingCells || normalized < extent
         ? _combinedLogicalCellIndex(kind, row, normalized)
         : cellCount;
     if (after && normalized < extent) {
@@ -619,7 +696,10 @@ final class TerminalViewport {
     );
   }
 
-  _CombinedPosition? _resolveCombined(TerminalLogicalAnchor anchor) {
+  _CombinedPosition? _resolveCombined(
+    TerminalLogicalAnchor anchor, {
+    bool preserveTrailingCells = false,
+  }) {
     final int rowCount = _combinedRowCount(anchor.screenKind);
     for (int row = 0; row < rowCount; row++) {
       if (_combinedLogicalLineIdAt(anchor.screenKind, row) !=
@@ -641,6 +721,20 @@ final class TerminalViewport {
       if (anchor.cellOffset > end) {
         if (joinsNext) {
           continue;
+        }
+        if (preserveTrailingCells) {
+          final int gridCellCount = _combinedLogicalCellIndex(
+            anchor.screenKind,
+            row,
+            _combinedColumnsAt(anchor.screenKind, row),
+          );
+          final int targetCell = anchor.cellOffset - base;
+          if (targetCell >= 0 && targetCell < gridCellCount) {
+            return _CombinedPosition(
+              row,
+              _combinedColumnForLogicalCell(anchor.screenKind, row, targetCell),
+            );
+          }
         }
         return null;
       }
