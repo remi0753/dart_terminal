@@ -95,10 +95,12 @@ void _testEarlyShowConfigUsesTheTypedSnapshot() {
     const <String, String>{
       '/config': 'theme = default\nfont-size = 15\n',
       '/invalid': 'font-size = enormous\n',
+      '/unavailable': 'font-family = Unavailable Family\n',
     },
   );
   final TerminalEarlyExitResolver resolver = TerminalEarlyExitResolver(
     fileSystem: files,
+    valueAvailabilityValidator: _ReferenceAvailabilityValidator(),
   );
   final TerminalEarlyExitResult result = resolver.resolve(
     const <String>[
@@ -153,6 +155,22 @@ void _testEarlyShowConfigUsesTheTypedSnapshot() {
         ),
     'show-config does not expose a recovered invalid snapshot',
   );
+
+  final TerminalEarlyExitResult unavailable = resolver.resolve(const <String>[
+    '--config=/unavailable',
+    '--show-config',
+  ], environment: const <String, String>{})!;
+  final String unavailableFont = const LineSplitter()
+      .convert(unavailable.standardOutput)
+      .singleWhere((String line) => line.contains('name="font-family"'));
+  _expect(
+    unavailableFont.contains('value="system"') &&
+        unavailableFont.contains('source=default') &&
+        unavailable.standardOutput.contains(
+          'diagnostic severity=error code="CFG_UNAVAILABLE_VALUE"',
+        ),
+    'show-config did not share file-value availability recovery',
+  );
 }
 
 void _testEarlyModeConflictsFailAsUsageErrors() {
@@ -174,9 +192,9 @@ void _testEarlyModeConflictsFailAsUsageErrors() {
 
 void _testEntrypointReturnsBeforeApplicationOwnership() {
   final String source = File('bin/main.dart').readAsStringSync();
-  final int earlyResolver = source.indexOf('TerminalEarlyExitResolver()');
+  final int earlyResolver = source.indexOf('TerminalEarlyExitResolver(');
   final int earlyBranch = source.indexOf('if (earlyExit != null)');
-  final int options = source.indexOf('TerminalOptions.parse(arguments)');
+  final int options = source.indexOf('TerminalOptions.parse(');
   final int application = source.indexOf(
     'TerminalApplication(options: options)',
   );
@@ -273,6 +291,22 @@ final class _ReferenceMemoryFileSystem implements TerminalConfigFileSystem {
   @override
   String resolvePath(String containingFile, String includedPath) =>
       includedPath.startsWith('/') ? includedPath : '/$includedPath';
+}
+
+final class _ReferenceAvailabilityValidator
+    implements TerminalConfigValueAvailabilityValidator {
+  @override
+  TerminalConfigValueAvailabilityIssue? validate(
+    TerminalConfigOptionBase option,
+    Object? value,
+  ) =>
+      identical(option, TerminalProductConfigSchema.fontFamily) &&
+          value == 'Unavailable Family'
+      ? const TerminalConfigValueAvailabilityIssue(
+          message: 'font unavailable in reference test',
+          hint: 'use `font-family = system`',
+        )
+      : null;
 }
 
 void _expect(bool condition, String message) {

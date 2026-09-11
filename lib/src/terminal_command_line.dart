@@ -19,15 +19,18 @@ final class TerminalEarlyExitResolver {
   TerminalEarlyExitResolver({
     TerminalConfigSchema? schema,
     TerminalConfigFileSystem? fileSystem,
+    TerminalConfigValueAvailabilityValidator? valueAvailabilityValidator,
     TerminalConfigurationReference? reference,
     TerminalEffectiveConfigFormatter? effectiveFormatter,
   }) : schema = schema ?? TerminalProductConfigSchema.instance,
        fileSystem = fileSystem,
+       valueAvailabilityValidator = valueAvailabilityValidator,
        _reference = reference,
        _effectiveFormatter = effectiveFormatter;
 
   final TerminalConfigSchema schema;
   final TerminalConfigFileSystem? fileSystem;
+  final TerminalConfigValueAvailabilityValidator? valueAvailabilityValidator;
   final TerminalConfigurationReference? _reference;
   final TerminalEffectiveConfigFormatter? _effectiveFormatter;
 
@@ -65,7 +68,11 @@ final class TerminalEarlyExitResolver {
     }
 
     final TerminalConfigResolution resolution =
-        TerminalConfigLoader(schema: schema, fileSystem: fileSystem).resolve(
+        TerminalConfigLoader(
+          schema: schema,
+          fileSystem: fileSystem,
+          valueAvailabilityValidator: valueAvailabilityValidator,
+        ).resolve(
           arguments,
           environment: environment,
           currentDirectory: currentDirectory,

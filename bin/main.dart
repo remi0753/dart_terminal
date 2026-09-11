@@ -12,15 +12,21 @@ void main(List<String> arguments) {
   MacosRuntime.validateHost();
   MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStarting);
   try {
-    final TerminalEarlyExitResult? earlyExit = TerminalEarlyExitResolver()
-        .resolve(arguments);
+    const valueAvailabilityValidator =
+        TerminalMacosConfigValueAvailabilityValidator();
+    final TerminalEarlyExitResult? earlyExit = TerminalEarlyExitResolver(
+      valueAvailabilityValidator: valueAvailabilityValidator,
+    ).resolve(arguments);
     if (earlyExit != null) {
       stdout.write(earlyExit.standardOutput);
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
       MacosRuntime.requestTermination(exitCode: 0);
       return;
     }
-    final TerminalOptions options = TerminalOptions.parse(arguments);
+    final TerminalOptions options = TerminalOptions.parse(
+      arguments,
+      configValueAvailabilityValidator: valueAvailabilityValidator,
+    );
     for (final TerminalConfigDiagnostic diagnostic
         in options.configurationDiagnostics) {
       stderr.writeln(diagnostic.format());

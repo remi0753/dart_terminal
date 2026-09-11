@@ -11,10 +11,63 @@ Future<void> runTerminalProductConfigurationTests() async {
   _testBuiltInThemePairAndCustomOverlay();
   _testCompleteFileProfile();
   _testInvalidValuesRecoverIndependently();
+  _testMacosFontAvailabilityFallback();
   _testCliPrecedenceAndCapacitySyntax();
   _testConsumerResourceFactoriesAndMappings();
   _testApplicationPoliciesAndSemanticChangePlan();
   await _testAcceptedConfigurationAuthority();
+}
+
+void _testMacosFontAvailabilityFallback() {
+  const TerminalMacosConfigValueAvailabilityValidator validator =
+      TerminalMacosConfigValueAvailabilityValidator();
+  final _ProfileMemoryFileSystem files = _ProfileMemoryFileSystem(
+    const <String, String>{
+      '/system': 'font-family = system\nfont-size = 17\n',
+      '/valid': 'font-family = Menlo\nfont-size = 18\n',
+      '/missing':
+          'font-family = Dart Terminal Definitely Missing Font 0753\n'
+          'font-size = 19\n',
+    },
+  );
+  final TerminalConfigSnapshot system =
+      TerminalConfigLoader(
+        fileSystem: files,
+        valueAvailabilityValidator: validator,
+      ).resolve(const <String>[
+        '--config=/system',
+      ], environment: const <String, String>{}).snapshot;
+  final TerminalConfigSnapshot valid =
+      TerminalConfigLoader(
+        fileSystem: files,
+        valueAvailabilityValidator: validator,
+      ).resolve(const <String>[
+        '--config=/valid',
+      ], environment: const <String, String>{}).snapshot;
+  final TerminalConfigSnapshot missing =
+      TerminalConfigLoader(
+        fileSystem: files,
+        valueAvailabilityValidator: validator,
+      ).resolve(const <String>[
+        '--config=/missing',
+      ], environment: const <String, String>{}).snapshot;
+  final TerminalConfigDiagnostic diagnostic = missing.diagnostics.single;
+  _expect(
+    system.diagnostics.isEmpty &&
+        system.value(TerminalProductConfigSchema.fontFamily).isEmpty &&
+        valid.diagnostics.isEmpty &&
+        valid.value(TerminalProductConfigSchema.fontFamily) == 'Menlo' &&
+        missing.value(TerminalProductConfigSchema.fontFamily).isEmpty &&
+        missing.value(TerminalProductConfigSchema.fontSize) == 19 &&
+        diagnostic.code == 'CFG_UNAVAILABLE_VALUE' &&
+        diagnostic.source.path == '/missing' &&
+        diagnostic.source.line == 1 &&
+        diagnostic.message ==
+            '`font-family`: font family is not available to this application' &&
+        diagnostic.hint ==
+            'use `font-family = system` or choose an installed font family',
+    'macOS font availability did not preserve system/valid or recover missing',
+  );
 }
 
 Future<void> _testAcceptedConfigurationAuthority() async {

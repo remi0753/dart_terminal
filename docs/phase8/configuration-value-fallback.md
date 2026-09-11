@@ -195,3 +195,47 @@ repair the file.
   reported no issues, and the aggregate ended with `dart_terminal tests passed`.
 - `git diff --check` is included in the commit review. No adjacent
   `dart_appkit` change is required by this generic subtask.
+
+### 2026-09-11 — macOS font availability integration
+
+- Added `TerminalMacosConfigValueAvailabilityValidator` at the product/native
+  boundary. It skips the empty `system` sentinel, opens and immediately
+  disposes a catalog for an explicit family, converts only renderer status 3
+  (`DTR_STATUS_NOT_FOUND`) into an availability issue, and rethrows every other
+  `TerminalFontCatalogException`. This keeps GPU, allocation, ABI, and internal
+  failures observable instead of misclassifying them as bad configuration.
+- The root entrypoint constructs one validator and supplies it to both early
+  `--show-config` resolution and ordinary `TerminalOptions` resolution. The
+  resulting loader is retained by the reload controller and Settings document
+  session, so all four paths use the same policy and recovered snapshot.
+- The first Settings integration assertion exposed that draft validation made
+  a fresh overlay loader without copying the availability validator. The
+  overlay loader now inherits it. Consequently an unavailable draft is
+  rejected before an atomic write, while the editor continues to show the
+  original file text and the running product keeps its recovered effective
+  value.
+- Real CoreText coverage accepts `system` and `Menlo`, while a unique missing
+  family recovers only `font-family` to `system`, retains an unrelated
+  `font-size`, and reports the exact file source, diagnostic code, message, and
+  correction hint. Fake-boundary tests additionally prove startup/reload
+  authority identity, Settings source preservation and save rejection, and
+  matching `--show-config` output.
+
+### Verification for ordered subtask 2
+
+- Focused tests passed:
+  `test/terminal_config_test.dart`,
+  `test/terminal_configuration_reference_test.dart`, and
+  `test/terminal_product_configuration_test.dart`.
+- Touched-file analysis reported no issues. The initial sandboxed formatter
+  and test attempts could not update Dart telemetry and Clang Metal module
+  caches; the authorized cache-capable reruns reached the implementation. The
+  only functional failure was the Settings overlay dependency omission above,
+  and its rerun passed after the fix.
+- `make phase7-appkit-acceptance` refreshed only the two reviewed occurrences
+  of the `terminal_application.dart` source hash.
+- Full `make test`: passed. All generated-reference and evidence freshness
+  checks passed, 245 Dart files were formatted without changes, analysis found
+  no issues, and the aggregate ended with `dart_terminal tests passed`.
+- `git diff --check` passes. No adjacent `dart_appkit` modification is needed
+  for this subtask.

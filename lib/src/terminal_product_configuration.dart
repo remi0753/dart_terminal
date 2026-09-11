@@ -8,6 +8,38 @@ import 'terminal_input/terminal_key_encoder.dart';
 
 enum TerminalThemeBrightness { light, dark }
 
+/// Product-side availability checks for values whose validity depends on
+/// process-visible macOS resources.
+final class TerminalMacosConfigValueAvailabilityValidator
+    implements TerminalConfigValueAvailabilityValidator {
+  const TerminalMacosConfigValueAvailabilityValidator();
+
+  static const int _fontCatalogNotFoundStatus = 3;
+
+  @override
+  TerminalConfigValueAvailabilityIssue? validate(
+    TerminalConfigOptionBase option,
+    Object? value,
+  ) {
+    if (!identical(option, TerminalProductConfigSchema.fontFamily)) return null;
+    final String family = value as String;
+    if (family.isEmpty) return null;
+    TerminalFontCatalog? catalog;
+    try {
+      catalog = TerminalFontCatalog.open(family: family);
+      return null;
+    } on TerminalFontCatalogException catch (error) {
+      if (error.status != _fontCatalogNotFoundStatus) rethrow;
+      return const TerminalConfigValueAvailabilityIssue(
+        message: 'font family is not available to this application',
+        hint: 'use `font-family = system` or choose an installed font family',
+      );
+    } finally {
+      catalog?.dispose();
+    }
+  }
+}
+
 /// Stable built-in terminal theme catalog.
 final class TerminalBuiltInTheme {
   const TerminalBuiltInTheme._({

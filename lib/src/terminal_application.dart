@@ -123,10 +123,12 @@ final class TerminalOptions {
     Map<String, String>? environment,
     RuntimeLifecycleWorkerCommand? runtimeWorkerCommand,
     TerminalConfigFileSystem? configFileSystem,
+    TerminalConfigValueAvailabilityValidator? configValueAvailabilityValidator,
     String? currentDirectory,
   }) {
     final TerminalConfigLoader configLoader = TerminalConfigLoader(
       fileSystem: configFileSystem,
+      valueAvailabilityValidator: configValueAvailabilityValidator,
     );
     final Map<String, String> selectedEnvironment =
         Map<String, String>.unmodifiable(environment ?? Platform.environment);

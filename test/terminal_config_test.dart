@@ -522,6 +522,7 @@ void _testTerminalOptionsIntegration() {
 working-diretory = /typo
 working-directory = /from-file
 ''',
+      '/font': 'font-family = Unavailable Family\nfont-size = 18\n',
     },
   );
   final TerminalOptions file = TerminalOptions.parse(
@@ -559,6 +560,41 @@ working-directory = /from-file
   _expect(
     overridden.initialWorkingDirectory == '/from-cli',
     'TerminalOptions applies the schema CLI winner',
+  );
+  final _RecordingAvailabilityValidator availabilityValidator =
+      _RecordingAvailabilityValidator();
+  final TerminalOptions recoveredFont = TerminalOptions.parse(
+    const <String>['--config=/font'],
+    environment: const <String, String>{},
+    configFileSystem: files,
+    configValueAvailabilityValidator: availabilityValidator,
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  final TerminalSettingsDocument recoveredDocument = recoveredFont
+      .settingsDocumentSession!
+      .open(recoveredFont.effectiveConfiguration!);
+  final TerminalSettingsDocumentSaveResult unavailableSave = recoveredFont
+      .settingsDocumentSession!
+      .save(recoveredDocument.text);
+  _expect(
+    recoveredFont.effectiveConfiguration!
+            .value(TerminalProductConfigSchema.fontFamily)
+            .isEmpty &&
+        recoveredFont.configurationDiagnostics.single.code ==
+            'CFG_UNAVAILABLE_VALUE' &&
+        identical(
+          recoveredFont.configurationReloadController!.effectiveSnapshot,
+          recoveredFont.effectiveConfiguration,
+        ) &&
+        recoveredDocument.text.startsWith(
+          'font-family = Unavailable Family\nfont-size = 18\n',
+        ) &&
+        unavailableSave.disposition ==
+            TerminalSettingsDocumentSaveDisposition.rejected &&
+        unavailableSave.diagnostics.single.code == 'CFG_UNAVAILABLE_VALUE',
+    'TerminalOptions did not share availability recovery with Settings',
   );
   final TerminalOptions runtimeConfiguration = TerminalOptions.parse(
     const <String>['--no-config', '--runtime-configuration-test'],

@@ -446,6 +446,7 @@ final class TerminalSettingsDocumentSession {
                 schema: _loader.schema,
                 fileSystem: overlay,
                 limits: _loader.limits,
+                valueAvailabilityValidator: _loader.valueAvailabilityValidator,
               )
               .resolve(
                 _arguments,
