@@ -1,6 +1,6 @@
 # Settings editor initial document presentation
 
-Status: in progress (reopened 2026-09-11)
+Status: complete after corrected initial-paint investigation (2026-09-11)
 
 ## 目的
 
@@ -159,3 +159,44 @@ INSERTと手動scrollの所有権は変更しない。Phase 8の本追補に残�
   `/private/tmp/dart-terminal-settings-native-only-before-input.png`でも全文syntax glyphとcurrent-line背景の
   同時表示を確認した。依存側の初回paint順序は確定し、次はproductのM1 Developer JIT / Release AOTを
   現行sourceで受け入れる。
+- product subtask着手時に`make phase7-appkit-acceptance terminal-compatibility-regression-coverage`を再生成し、
+  両generatorは成功した。tracked evidenceに差分はなく、現行README/FEATURE_MATRIX/source/testのhashと
+  acceptance inventoryは既に整合している。
+- formatter checkはsandbox内で246 files / 0 changedまで完了した後、repository外のDart telemetry session
+  timestamp更新が拒否されstack traceを出した。source formatting failureではないが正常終了の証拠を明確に
+  するため、同じ`dart format --output=none --set-exit-if-changed bin lib test tool`を許可済み環境で再実行し、
+  246 files / 0 changed、stack traceなしで成功した。
+- focused `CI=true DART_SUPPRESS_ANALYTICS=true dart run test/terminal_native_hierarchy_test.dart`は、最初の
+  sandbox実行でMetal build hookが`~/.cache/clang/ModuleCache`へ書けず停止した。同じtestを通常のbuild
+  cache権限で再実行するとexit 0となり、初期reveal 0、key入力前のdocument/style/highlight、最初のNORMAL
+  navigationからのrevealを含むhierarchy contractがPASSした。続く`dart analyze`も`No issues found!`だった。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`はexit 0となった。generated schema/action/AppKit/
+  compatibility/differential/application/terminfo/shell evidenceのfreshness、246-file formatter、analyzer、
+  build hooks、および全`dart_terminal` testがPASSし、tracked fileに副作用はない。
+- `make RUNTIME_ARCH=arm64 runtime-source-check runtime-bundle-audit`はexit 0となった。tracked 458 fileの
+  Dart-only source境界、およびarm64 Developer JIT / Release AOT bundleのhelper 1、asset 1、capability 1と
+  architecture/signature構成がすべてPASSした。両bundleはcommit済み`dart_appkit` prepaint sourceから再buildした。
+- `make RUNTIME_ARCH=arm64 runtime-configuration-integration`はDeveloper JIT（1677 ms）とRelease AOT
+  （1038 ms）の双方でPASSした。両方とも`settings_initial_document=true settings_viewport_follow=true`を含む
+  exact marker、4 paneのclean shutdown、text client/native handle 0を確認した。このmarkerはnative state投影の
+  証拠であり、実pixelは別途key入力前screenshotと`dart_appkit`初回draw regressionで確認する。
+- 指定された`make RUNTIME_ARCH=arm64 developer-jit-run`の通常起動では、Settings open直後かつkey入力前の
+  `/private/tmp/dart-terminal-settings-native-only-before-input.png`を再確認し、左editorの全設定本文、syntax色、
+  disabled comment、current-line背景が同じ初回表示に存在することを直接確認した。
+- `make RUNTIME_ARCH=arm64 release-aot-run`も通常GUIとして起動し、Command-commaの後はkeyを送らず
+  `/private/tmp/dart-terminal-settings-release-aot-before-input.png`をcaptureした。Developer JITと同じく初回から
+  全文とhighlightが表示され、Command-Q後はworkerをreapし、1 paneのPTY termination、owner shutdown、
+  `Dart Terminal shut down cleanly.`まで完了した。
+
+## 完了判定（2026-09-11）
+
+- 原因はproductのdocument publication欠落ではなく、`dart_appkit`がline-highlightのbackground draw中に
+  glyph layoutを初めて確定していた描画順序だった。`0255d07`でlayoutを`super drawRect:`より前へ移し、
+  key/selection/revealなしのnative draw-order + bitmap regressionで旧実装との差を固定した。
+- productは既存の初回document/style/highlight投影と初期reveal 0を維持し、失敗したshow後same-selection
+  reveal workaroundを含まない。NORMAL/SEARCHの実selection移動時だけviewport revealする境界も維持した。
+- formatter、focused hierarchy、analyzer、完全test、generated evidence、source/bundle audit、自動M1両runtime
+  configuration、手動M1両runtime initial-pixel確認がすべて成功した。READMEとFEATURE_MATRIXの既存記述は
+  現行contractと整合し、generated evidenceにも差分はない。
+- 本追補とPhase 8の全taskに残作業はない。ROADMAPの次はPhase 9だが、Phase完了条件に従い本sessionでは
+  着手せず停止する。
