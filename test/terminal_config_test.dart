@@ -10,6 +10,7 @@ void runTerminalConfigTests() {
   _testDefaultLocationAndPrecedence();
   _testRepeatableKeybindOccurrences();
   _testDiagnosticsAndRecovery();
+  _testResolvedFileValueAvailabilityFallback();
   _testIncludeCycleAndBounds();
   _testTerminalOptionsIntegration();
 }
@@ -376,6 +377,96 @@ quoted = "unterminated
   );
 }
 
+void _testResolvedFileValueAvailabilityFallback() {
+  final _MemoryConfigFileSystem files = _MemoryConfigFileSystem(
+    const <String, String>{
+      '/config': '''font-family = Unavailable Family
+font-size = 18
+''',
+      '/repeatable': 'item = one\n',
+    },
+  );
+  final _RecordingAvailabilityValidator validator =
+      _RecordingAvailabilityValidator();
+  final TerminalConfigSnapshot recovered =
+      TerminalConfigLoader(
+        fileSystem: files,
+        valueAvailabilityValidator: validator,
+      ).resolve(const <String>[
+        '--config=/config',
+      ], environment: const <String, String>{}).snapshot;
+  final TerminalConfigDiagnostic diagnostic = recovered.diagnostics.single;
+  _expect(
+    recovered.value(TerminalProductConfigSchema.fontFamily).isEmpty &&
+        recovered
+                .resolved(TerminalProductConfigSchema.fontFamily)
+                .source
+                .kind ==
+            TerminalConfigSourceKind.schemaDefault &&
+        recovered.value(TerminalProductConfigSchema.fontSize) == 18 &&
+        recovered.resolved(TerminalProductConfigSchema.fontSize).source.path ==
+            '/config' &&
+        diagnostic.code == 'CFG_UNAVAILABLE_VALUE' &&
+        diagnostic.source.path == '/config' &&
+        diagnostic.source.line == 1 &&
+        diagnostic.source.column == 1 &&
+        diagnostic.message ==
+            '`font-family`: configured value is unavailable' &&
+        diagnostic.hint == 'use the schema default' &&
+        validator.optionNames.join(',') == 'font-family,font-size',
+    'unavailable file winner did not recover exactly one item to its default',
+  );
+
+  final _RecordingAvailabilityValidator commandLineValidator =
+      _RecordingAvailabilityValidator();
+  final TerminalConfigSnapshot commandLine =
+      TerminalConfigLoader(
+        fileSystem: files,
+        valueAvailabilityValidator: commandLineValidator,
+      ).resolve(const <String>[
+        '--config=/config',
+        '--font-family=Unavailable Family',
+      ], environment: const <String, String>{}).snapshot;
+  _expect(
+    commandLine.value(TerminalProductConfigSchema.fontFamily) ==
+            'Unavailable Family' &&
+        commandLine
+                .resolved(TerminalProductConfigSchema.fontFamily)
+                .source
+                .kind ==
+            TerminalConfigSourceKind.commandLine &&
+        commandLine.diagnostics.isEmpty &&
+        commandLineValidator.optionNames.join(',') == 'font-size',
+    'availability fallback incorrectly intercepted an explicit CLI winner',
+  );
+
+  final TerminalConfigRepeatedOption<String> item =
+      TerminalConfigRepeatedOption<String>(
+        name: 'item',
+        description: 'availability test repeated value',
+        valueSyntax: '<text>',
+        applicationPolicy: TerminalConfigApplicationPolicy.live,
+        maximumOccurrences: 2,
+        parser: TerminalConfigDecodeResult<String>.success,
+        formatter: (String value) => value,
+      );
+  final _RecordingAvailabilityValidator repeatedValidator =
+      _RecordingAvailabilityValidator();
+  final TerminalConfigSnapshot repeated =
+      TerminalConfigLoader(
+        schema: TerminalConfigSchema(<TerminalConfigOptionBase>[item]),
+        fileSystem: files,
+        valueAvailabilityValidator: repeatedValidator,
+      ).resolve(const <String>[
+        '--config=/repeatable',
+      ], environment: const <String, String>{}).snapshot;
+  _expect(
+    repeated.occurrences(item).single.value == 'one' &&
+        repeatedValidator.optionNames.isEmpty,
+    'availability validation probed a repeated value',
+  );
+}
+
 void _testIncludeCycleAndBounds() {
   final _MemoryConfigFileSystem cycleFiles = _MemoryConfigFileSystem(
     const <String, String>{
@@ -615,6 +706,27 @@ final class _MemoryConfigFileSystem implements TerminalConfigFileSystem {
     final String normalized = _normalize(containingFile);
     final int slash = normalized.lastIndexOf('/');
     return _normalize('${normalized.substring(0, slash)}/$includedPath');
+  }
+}
+
+final class _RecordingAvailabilityValidator
+    implements TerminalConfigValueAvailabilityValidator {
+  final List<String> optionNames = <String>[];
+
+  @override
+  TerminalConfigValueAvailabilityIssue? validate(
+    TerminalConfigOptionBase option,
+    Object? value,
+  ) {
+    optionNames.add(option.name);
+    if (identical(option, TerminalProductConfigSchema.fontFamily) &&
+        value == 'Unavailable Family') {
+      return const TerminalConfigValueAvailabilityIssue(
+        message: 'configured value is unavailable',
+        hint: 'use the schema default',
+      );
+    }
+    return null;
   }
 }
 

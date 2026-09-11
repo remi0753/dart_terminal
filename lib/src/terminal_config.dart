@@ -138,6 +138,27 @@ final class TerminalConfigDecodeWarning {
   final String hint;
 }
 
+/// A platform/resource reason why one otherwise valid file value cannot be
+/// used by this process.
+final class TerminalConfigValueAvailabilityIssue {
+  const TerminalConfigValueAvailabilityIssue({
+    required this.message,
+    required this.hint,
+  });
+
+  final String message;
+  final String hint;
+}
+
+/// Optional product boundary for availability checks that cannot belong to
+/// the portable configuration grammar.
+abstract interface class TerminalConfigValueAvailabilityValidator {
+  TerminalConfigValueAvailabilityIssue? validate(
+    TerminalConfigOptionBase option,
+    Object? value,
+  );
+}
+
 /// Hard schema-presentation bounds shared by CLI, reference, and Settings UI.
 abstract final class TerminalConfigPresentationLimits {
   static const int maximumSyntaxCharacters = 128;
@@ -878,12 +899,14 @@ final class TerminalConfigLoader {
     TerminalConfigSchema? schema,
     TerminalConfigFileSystem? fileSystem,
     this.limits = const TerminalConfigLimits(),
+    this.valueAvailabilityValidator,
   }) : schema = schema ?? TerminalProductConfigSchema.instance,
        fileSystem = fileSystem ?? const LocalTerminalConfigFileSystem();
 
   final TerminalConfigSchema schema;
   final TerminalConfigFileSystem fileSystem;
   final TerminalConfigLimits limits;
+  final TerminalConfigValueAvailabilityValidator? valueAvailabilityValidator;
 
   TerminalConfigResolution resolve(
     List<String> arguments, {
@@ -914,6 +937,7 @@ final class TerminalConfigLoader {
       schema: schema,
       fileSystem: fileSystem,
       limits: limits,
+      valueAvailabilityValidator: valueAvailabilityValidator,
     );
     if (rootPath != null) {
       collector.loadRoot(rootPath, required: explicitRoot);
@@ -1068,6 +1092,7 @@ final class _TerminalConfigCollector {
     required this.schema,
     required this.fileSystem,
     required this.limits,
+    required this.valueAvailabilityValidator,
   }) {
     for (final TerminalConfigOptionBase option in schema.options) {
       if (option.isRepeatable) {
@@ -1084,6 +1109,7 @@ final class _TerminalConfigCollector {
   final TerminalConfigSchema schema;
   final TerminalConfigFileSystem fileSystem;
   final TerminalConfigLimits limits;
+  final TerminalConfigValueAvailabilityValidator? valueAvailabilityValidator;
   final Map<TerminalConfigOptionBase, TerminalResolvedConfigValue<Object?>>
   _values = <TerminalConfigOptionBase, TerminalResolvedConfigValue<Object?>>{};
   final Map<
@@ -1131,14 +1157,45 @@ final class _TerminalConfigCollector {
     }
   }
 
-  TerminalConfigSnapshot snapshot({required String? rootPath}) =>
-      TerminalConfigSnapshot(
-        schema: schema,
-        values: _values,
-        repeatedValues: _repeatedValues,
-        diagnostics: _diagnostics,
-        rootPath: rootPath,
+  TerminalConfigSnapshot snapshot({required String? rootPath}) {
+    _applyAvailabilityFallbacks();
+    return TerminalConfigSnapshot(
+      schema: schema,
+      values: _values,
+      repeatedValues: _repeatedValues,
+      diagnostics: _diagnostics,
+      rootPath: rootPath,
+    );
+  }
+
+  void _applyAvailabilityFallbacks() {
+    final TerminalConfigValueAvailabilityValidator? validator =
+        valueAvailabilityValidator;
+    if (validator == null) return;
+    for (final TerminalConfigOptionBase option in schema.options) {
+      if (option.isRepeatable) continue;
+      final TerminalResolvedConfigValue<Object?> resolved = _values[option]!;
+      if (resolved.source.kind != TerminalConfigSourceKind.file) continue;
+      final TerminalConfigValueAvailabilityIssue? issue = validator.validate(
+        option,
+        resolved.value,
       );
+      if (issue == null) continue;
+      _addDiagnostic(
+        TerminalConfigDiagnostic(
+          severity: TerminalConfigDiagnosticSeverity.error,
+          code: 'CFG_UNAVAILABLE_VALUE',
+          message: '`${option.name}`: ${issue.message}',
+          source: resolved.source,
+          hint: issue.hint,
+        ),
+      );
+      _values[option] = TerminalResolvedConfigValue<Object?>(
+        value: option.defaultValueObject,
+        source: const TerminalConfigSource.schemaDefault(),
+      );
+    }
+  }
 
   void _loadFile(
     String path, {

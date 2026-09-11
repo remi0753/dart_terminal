@@ -1062,6 +1062,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] native editor/detail composition、save/reload、focus/cleanup lifecycle
   - [x] M1 両 runtime editable Settings 受け入れ
   - [x] existing root permission bits retention と Phase 8 再完了判定
+- [ ] unavailable file option の default fallback と startup recovery
+  （[`docs/phase8/configuration-value-fallback.md`](docs/phase8/configuration-value-fallback.md)
+  を参照して順に実施する）
+  - [x] loader availability validation と deterministic default recovery
+  - [ ] macOS font availability adapter と product/Settings integration
+  - [ ] M1 両 runtime unavailable-font 受け入れと Phase 8 再完了判定
 
 終了条件:
 
