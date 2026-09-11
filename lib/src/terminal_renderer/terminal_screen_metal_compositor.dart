@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
@@ -33,6 +34,9 @@ final class TerminalScreenMetalComposition {
     required this.renderedCellCount,
     required this.preeditCellCount,
     required this.hyperlinkHoverCellCount,
+    required this.kittyImageCount,
+    required this.kittyPlacementCount,
+    required this.kittyTileCount,
   }) : instances = List<TerminalMetalInstance>.unmodifiable(instances);
 
   final TerminalScheduledMetalFrame scheduledFrame;
@@ -41,6 +45,9 @@ final class TerminalScreenMetalComposition {
   final int renderedCellCount;
   final int preeditCellCount;
   final int hyperlinkHoverCellCount;
+  final int kittyImageCount;
+  final int kittyPlacementCount;
+  final int kittyTileCount;
 }
 
 /// Canonical screen-grid to Metal composition boundary.
@@ -82,6 +89,7 @@ final class TerminalScreenMetalCompositor {
     required TerminalFramePresentation presentation,
     TerminalPreeditLayout? preedit,
     TerminalSelectionProjection? selection,
+    TerminalKittyViewportSnapshot? kittyImages,
     int hoveredHyperlinkId = 0,
     int contentOffsetX = 0,
     int contentOffsetY = 0,
@@ -124,6 +132,10 @@ final class TerminalScreenMetalCompositor {
     final List<TerminalMetalInstance> backgrounds = <TerminalMetalInstance>[];
     final List<TerminalMetalInstance> overlays = <TerminalMetalInstance>[];
     final List<TerminalMetalInstance> glyphInstances =
+        <TerminalMetalInstance>[];
+    final List<TerminalMetalInstance> kittyImagesBelowText =
+        <TerminalMetalInstance>[];
+    final List<TerminalMetalInstance> kittyImagesAboveText =
         <TerminalMetalInstance>[];
     final List<TerminalMetalInstance> decorations = <TerminalMetalInstance>[];
     final List<TerminalMetalInstance> cursors = <TerminalMetalInstance>[];
@@ -373,115 +385,420 @@ final class TerminalScreenMetalCompositor {
       throw const TerminalMetalCompositionBackpressureException();
     }
 
-    final List<TerminalGlyphAtlasEntry> retainedGlyphs =
+    final TerminalGlyphAtlasBuildLease buildLease = atlas.beginBuildLease();
+    final List<TerminalGlyphAtlasEntry> retainedEntries =
         <TerminalGlyphAtlasEntry>[];
-    for (final _TerminalShapedRun shapedRun in shapedRuns) {
-      final int baseline =
-          ((shapedRun.run.row * metrics.cellHeight + metrics.baseline) * scale)
-              .round();
-      for (
-        int glyphIndex = 0;
-        glyphIndex < shapedRun.shaped.glyphs.length;
-        glyphIndex++
-      ) {
-        final TerminalShapedGlyph glyph = shapedRun.shaped.glyphs[glyphIndex];
-        final TerminalGlyphAtlasKey key = TerminalGlyphAtlasKey(
-          catalogGeneration: catalog.generation,
-          faceId: glyph.faceId,
-          glyphId: glyph.glyphId,
-          scale16_16: atlas.scale16_16,
-        );
-        final TerminalGlyphAtlasEntry? entry = atlas.lookup(key);
-        if (entry == null) {
-          throw const TerminalGlyphAtlasCapacityException(
-            'visible glyph was evicted before frame encoding',
+    try {
+      final List<_TerminalPositionedGlyph> positionedGlyphs =
+          <_TerminalPositionedGlyph>[];
+      for (final _TerminalShapedRun shapedRun in shapedRuns) {
+        final int baseline =
+            ((shapedRun.run.row * metrics.cellHeight + metrics.baseline) *
+                    scale)
+                .round();
+        for (
+          int glyphIndex = 0;
+          glyphIndex < shapedRun.shaped.glyphs.length;
+          glyphIndex++
+        ) {
+          final TerminalShapedGlyph glyph = shapedRun.shaped.glyphs[glyphIndex];
+          final TerminalGlyphAtlasKey key = TerminalGlyphAtlasKey(
+            catalogGeneration: catalog.generation,
+            faceId: glyph.faceId,
+            glyphId: glyph.glyphId,
+            scale16_16: atlas.scale16_16,
+          );
+          final TerminalGlyphAtlasEntry? entry = atlas.lookup(key);
+          if (entry == null) {
+            throw const TerminalGlyphAtlasCapacityException(
+              'visible glyph was evicted before frame encoding',
+            );
+          }
+          // CoreText advances describe font/fallback typography.
+          // Inter-grapheme placement remains owned by the terminal grid.
+          final int x =
+              (shapedRun.gridPositionX(glyphIndex, metrics.cellWidth) * scale)
+                  .round() +
+              entry.originX;
+          final int y = baseline - entry.originY;
+          if (entry.isEmpty ||
+              x >= contentWidth ||
+              y >= contentHeight ||
+              x + entry.width <= 0 ||
+              y + entry.height <= 0) {
+            continue;
+          }
+          if (entry.width > contentWidth || entry.height > contentHeight) {
+            throw const TerminalGlyphAtlasCapacityException(
+              'visible glyph exceeds the Metal viewport extent',
+            );
+          }
+          buildLease.retain(entry);
+          retainedEntries.add(entry);
+          positionedGlyphs.add(
+            _TerminalPositionedGlyph(
+              entry: entry,
+              x: x,
+              y: y,
+              colorRgba: shapedRun.run.colorRgba,
+            ),
           );
         }
-        // CoreText advances describe font/fallback typography. Inter-grapheme
-        // placement remains owned by the canonical terminal cell grid.
-        final int x =
-            (shapedRun.gridPositionX(glyphIndex, metrics.cellWidth) * scale)
-                .round() +
-            entry.originX;
-        final int y = baseline - entry.originY;
-        if (entry.isEmpty ||
-            x >= contentWidth ||
-            y >= contentHeight ||
-            x + entry.width <= 0 ||
-            y + entry.height <= 0) {
-          continue;
-        }
-        if (entry.width > contentWidth || entry.height > contentHeight) {
-          throw const TerminalGlyphAtlasCapacityException(
-            'visible glyph exceeds the Metal viewport extent',
-          );
-        }
+      }
+
+      final List<_TerminalKittyPositionedTile> kittyTiles = kittyImages == null
+          ? const <_TerminalKittyPositionedTile>[]
+          : _prepareKittyImageTiles(
+              kittyImages,
+              metrics: metrics,
+              scale: scale,
+              viewportWidth: contentWidth,
+              viewportHeight: contentHeight,
+              buildLease: buildLease,
+              retainedEntries: retainedEntries,
+            );
+      if (bridge.synchronize() ==
+          TerminalGlyphAtlasSyncDisposition.backpressured) {
+        throw const TerminalMetalCompositionBackpressureException();
+      }
+      for (final _TerminalPositionedGlyph glyph in positionedGlyphs) {
         final TerminalMetalInstance? instance = bridge.glyphInstance(
-          entry,
-          x: x,
-          y: y,
-          maskColor: TerminalReferenceColor(shapedRun.run.colorRgba),
+          glyph.entry,
+          x: glyph.x,
+          y: glyph.y,
+          maskColor: TerminalReferenceColor(glyph.colorRgba),
         );
-        if (instance != null) {
-          glyphInstances.add(instance);
-          retainedGlyphs.add(entry);
+        if (instance != null) glyphInstances.add(instance);
+      }
+      for (final _TerminalKittyPositionedTile tile in kittyTiles) {
+        final TerminalMetalInstance? instance = bridge.glyphInstance(
+          tile.entry,
+          x: tile.x,
+          y: tile.y,
+        );
+        if (instance == null) continue;
+        (tile.aboveText ? kittyImagesAboveText : kittyImagesBelowText).add(
+          instance,
+        );
+      }
+
+      if (presentation.cursorDrawn && model.cursorVisible) {
+        _addCursorAt(
+          cursors,
+          row: preedit?.caretRow ?? model.cursorRow,
+          column: preedit?.caretColumn ?? model.cursorColumn,
+          shape: preedit == null ? model.cursorShape : TerminalCursorShape.bar,
+          metrics: metrics,
+          scale: scale,
+          viewportWidth: contentWidth,
+          viewportHeight: contentHeight,
+        );
+      }
+      final List<TerminalMetalInstance> contentInstances =
+          <TerminalMetalInstance>[
+            ...backgrounds,
+            ...overlays,
+            ...kittyImagesBelowText,
+            ...glyphInstances,
+            ...kittyImagesAboveText,
+            ...decorations,
+            ...cursors,
+          ];
+      final List<TerminalMetalInstance> instances =
+          contentOffsetX == 0 && contentOffsetY == 0
+          ? contentInstances
+          : contentInstances
+                .map(
+                  (TerminalMetalInstance instance) => _translatedInstance(
+                    instance,
+                    offsetX: contentOffsetX,
+                    offsetY: contentOffsetY,
+                  ),
+                )
+                .toList(growable: false);
+      final TerminalMetalFrame frame = TerminalMetalFrameEncoder.encode(
+        renderer: bridge.renderer,
+        frameGeneration: frameGeneration,
+        atlasGeneration: bridge.nativeAtlasGeneration,
+        viewportWidth: viewportWidth,
+        viewportHeight: viewportHeight,
+        scale16_16: atlas.scale16_16,
+        backgroundRgba: defaultBackground,
+        instances: instances,
+      );
+      return TerminalScreenMetalComposition(
+        scheduledFrame: TerminalScheduledMetalFrame(
+          frame: frame,
+          glyphEntries: retainedEntries,
+        ),
+        instances: instances,
+        shapedRunCount: shapedRuns.length,
+        renderedCellCount: renderedCellCount,
+        preeditCellCount: preedit?.cells.length ?? 0,
+        hyperlinkHoverCellCount: hyperlinkHoverCellCount,
+        kittyImageCount: kittyImages?.images.length ?? 0,
+        kittyPlacementCount: kittyImages?.placements.length ?? 0,
+        kittyTileCount: kittyTiles.length,
+      );
+    } finally {
+      buildLease.close();
+    }
+  }
+
+  List<_TerminalKittyPositionedTile> _prepareKittyImageTiles(
+    TerminalKittyViewportSnapshot snapshot, {
+    required TerminalFontCatalogMetrics metrics,
+    required double scale,
+    required int viewportWidth,
+    required int viewportHeight,
+    required TerminalGlyphAtlasBuildLease buildLease,
+    required List<TerminalGlyphAtlasEntry> retainedEntries,
+  }) {
+    if (snapshot.images.length > 64 || snapshot.placements.length > 256) {
+      throw const TerminalGlyphAtlasCapacityException(
+        'Kitty viewport exceeds bounded product image limits',
+      );
+    }
+    if (snapshot.cellWidth <= 0 || snapshot.cellHeight <= 0) {
+      if (snapshot.images.isEmpty && snapshot.placements.isEmpty) {
+        return const <_TerminalKittyPositionedTile>[];
+      }
+      throw StateError('Kitty viewport has no authoritative cell geometry');
+    }
+    final Map<(int, int), TerminalKittyViewportImage> images =
+        <(int, int), TerminalKittyViewportImage>{};
+    for (final TerminalKittyViewportImage image in snapshot.images) {
+      final (int, int) key = (image.imageId, image.resourceGeneration);
+      if (images.containsKey(key) ||
+          image.width <= 0 ||
+          image.height <= 0 ||
+          image.byteLength != image.width * image.height * 4) {
+        throw StateError('Kitty viewport contains an invalid image resource');
+      }
+      images[key] = image;
+    }
+    final int maximumTileWidth =
+        atlas.limits.pageWidth - atlas.limits.gutter * 2;
+    final int maximumTileHeight =
+        atlas.limits.pageHeight - atlas.limits.gutter * 2;
+    final List<_TerminalKittyPositionedTile> tiles =
+        <_TerminalKittyPositionedTile>[];
+    final Map<(int, int), Uint8List> sourcePixels = <(int, int), Uint8List>{};
+    for (final TerminalKittyViewportPlacement placement
+        in snapshot.placements) {
+      final (int, int) imageKey = (
+        placement.imageId,
+        placement.imageResourceGeneration,
+      );
+      final TerminalKittyViewportImage? image = images[imageKey];
+      if (image == null) {
+        throw StateError('Kitty placement refers to an absent image resource');
+      }
+      final _TerminalKittyDeviceRect destination = _kittyDeviceRect(
+        placement,
+        metrics: metrics,
+        scale: scale,
+      );
+      if (destination.width <= 0 || destination.height <= 0) continue;
+      final int visibleLeft = destination.x.clamp(0, viewportWidth);
+      final int visibleTop = destination.y.clamp(0, viewportHeight);
+      final int visibleRight = (destination.x + destination.width).clamp(
+        0,
+        viewportWidth,
+      );
+      final int visibleBottom = (destination.y + destination.height).clamp(
+        0,
+        viewportHeight,
+      );
+      if (visibleLeft >= visibleRight || visibleTop >= visibleBottom) continue;
+      final Uint8List rgba = sourcePixels.putIfAbsent(imageKey, image.copyRgba);
+      for (
+        int tileY = visibleTop;
+        tileY < visibleBottom;
+        tileY += maximumTileHeight
+      ) {
+        final int tileHeight = math.min(
+          maximumTileHeight,
+          visibleBottom - tileY,
+        );
+        for (
+          int tileX = visibleLeft;
+          tileX < visibleRight;
+          tileX += maximumTileWidth
+        ) {
+          final int tileWidth = math.min(
+            maximumTileWidth,
+            visibleRight - tileX,
+          );
+          final TerminalKittyImageAtlasKey atlasKey =
+              TerminalKittyImageAtlasKey(
+                screenKindIndex: snapshot.screenKind.index,
+                imageId: placement.imageId,
+                imageResourceGeneration: placement.imageResourceGeneration,
+                placementGeneration: placement.placementGeneration,
+                sourceX: placement.source.x,
+                sourceY: placement.source.y,
+                sourceWidth: placement.source.width,
+                sourceHeight: placement.source.height,
+                destinationX: destination.x,
+                destinationY: destination.y,
+                destinationWidth: destination.width,
+                destinationHeight: destination.height,
+                tileX: tileX,
+                tileY: tileY,
+                tileWidth: tileWidth,
+                tileHeight: tileHeight,
+                scale16_16: atlas.scale16_16,
+              );
+          final TerminalGlyphAtlasEntry entry = atlas.ingestKittyImageTile(
+            key: atlasKey,
+            rgba: _sampleKittyTile(
+              rgba,
+              imageWidth: image.width,
+              placement: placement,
+              destination: destination,
+              tileX: tileX,
+              tileY: tileY,
+              tileWidth: tileWidth,
+              tileHeight: tileHeight,
+            ),
+          );
+          buildLease.retain(entry);
+          retainedEntries.add(entry);
+          tiles.add(
+            _TerminalKittyPositionedTile(
+              entry: entry,
+              x: tileX,
+              y: tileY,
+              aboveText: placement.z >= 0,
+            ),
+          );
         }
       }
     }
+    return tiles;
+  }
 
-    if (presentation.cursorDrawn && model.cursorVisible) {
-      _addCursorAt(
-        cursors,
-        row: preedit?.caretRow ?? model.cursorRow,
-        column: preedit?.caretColumn ?? model.cursorColumn,
-        shape: preedit == null ? model.cursorShape : TerminalCursorShape.bar,
-        metrics: metrics,
-        scale: scale,
-        viewportWidth: contentWidth,
-        viewportHeight: contentHeight,
+  static _TerminalKittyDeviceRect _kittyDeviceRect(
+    TerminalKittyViewportPlacement placement, {
+    required TerminalFontCatalogMetrics metrics,
+    required double scale,
+  }) {
+    final int left =
+        ((placement.gridColumn * metrics.cellWidth + placement.cellOffsetX) *
+                scale)
+            .round();
+    final int top =
+        ((placement.gridRow * metrics.cellHeight + placement.cellOffsetY) *
+                scale)
+            .round();
+    final int? fixedWidth = placement.fixedPixelWidth;
+    final int? fixedHeight = placement.fixedPixelHeight;
+    if ((fixedWidth == null) != (fixedHeight == null)) {
+      throw StateError('Kitty fixed placement geometry is incomplete');
+    }
+    if (fixedWidth != null && fixedHeight != null) {
+      return _TerminalKittyDeviceRect(
+        x: left,
+        y: top,
+        width: (fixedWidth * scale).round(),
+        height: (fixedHeight * scale).round(),
       );
     }
-    final List<TerminalMetalInstance> contentInstances =
-        <TerminalMetalInstance>[
-          ...backgrounds,
-          ...overlays,
-          ...glyphInstances,
-          ...decorations,
-          ...cursors,
-        ];
-    final List<TerminalMetalInstance> instances =
-        contentOffsetX == 0 && contentOffsetY == 0
-        ? contentInstances
-        : contentInstances
-              .map(
-                (TerminalMetalInstance instance) => _translatedInstance(
-                  instance,
-                  offsetX: contentOffsetX,
-                  offsetY: contentOffsetY,
-                ),
-              )
-              .toList(growable: false);
-    final TerminalMetalFrame frame = TerminalMetalFrameEncoder.encode(
-      renderer: bridge.renderer,
-      frameGeneration: frameGeneration,
-      atlasGeneration: bridge.nativeAtlasGeneration,
-      viewportWidth: viewportWidth,
-      viewportHeight: viewportHeight,
-      scale16_16: atlas.scale16_16,
-      backgroundRgba: defaultBackground,
-      instances: instances,
+    final int columns = placement.requestedColumns;
+    final int rows = placement.requestedRows;
+    if (columns != 0 && rows != 0) {
+      return _TerminalKittyDeviceRect(
+        x: left,
+        y: top,
+        width:
+            (((placement.gridColumn + columns) * metrics.cellWidth) * scale)
+                .round() -
+            left,
+        height:
+            (((placement.gridRow + rows) * metrics.cellHeight) * scale)
+                .round() -
+            top,
+      );
+    }
+    if (columns != 0) {
+      final int width =
+          (((placement.gridColumn + columns) * metrics.cellWidth) * scale)
+              .round() -
+          left;
+      return _TerminalKittyDeviceRect(
+        x: left,
+        y: top,
+        width: width,
+        height: _roundedRatio(
+          width,
+          placement.source.height,
+          placement.source.width,
+        ),
+      );
+    }
+    if (rows != 0) {
+      final int height =
+          (((placement.gridRow + rows) * metrics.cellHeight) * scale).round() -
+          top;
+      return _TerminalKittyDeviceRect(
+        x: left,
+        y: top,
+        width: _roundedRatio(
+          height,
+          placement.source.width,
+          placement.source.height,
+        ),
+        height: height,
+      );
+    }
+    return _TerminalKittyDeviceRect(
+      x: left,
+      y: top,
+      width: (placement.source.width * scale).round(),
+      height: (placement.source.height * scale).round(),
     );
-    return TerminalScreenMetalComposition(
-      scheduledFrame: TerminalScheduledMetalFrame(
-        frame: frame,
-        glyphEntries: retainedGlyphs,
-      ),
-      instances: instances,
-      shapedRunCount: shapedRuns.length,
-      renderedCellCount: renderedCellCount,
-      preeditCellCount: preedit?.cells.length ?? 0,
-      hyperlinkHoverCellCount: hyperlinkHoverCellCount,
-    );
+  }
+
+  static int _roundedRatio(int value, int numerator, int denominator) =>
+      denominator <= 0
+      ? 0
+      : (value * numerator + denominator ~/ 2) ~/ denominator;
+
+  static Uint8List _sampleKittyTile(
+    Uint8List source, {
+    required int imageWidth,
+    required TerminalKittyViewportPlacement placement,
+    required _TerminalKittyDeviceRect destination,
+    required int tileX,
+    required int tileY,
+    required int tileWidth,
+    required int tileHeight,
+  }) {
+    final Uint8List result = Uint8List(tileWidth * tileHeight * 4);
+    for (int y = 0; y < tileHeight; y++) {
+      final int sourceY =
+          placement.source.y +
+          (tileY + y - destination.y) *
+              placement.source.height ~/
+              destination.height;
+      for (int x = 0; x < tileWidth; x++) {
+        final int sourceX =
+            placement.source.x +
+            (tileX + x - destination.x) *
+                placement.source.width ~/
+                destination.width;
+        final int sourceOffset = (sourceY * imageWidth + sourceX) * 4;
+        final int destinationOffset = (y * tileWidth + x) * 4;
+        result.setRange(
+          destinationOffset,
+          destinationOffset + 4,
+          source,
+          sourceOffset,
+        );
+      }
+    }
+    return result;
   }
 
   static TerminalMetalInstance _translatedInstance(
@@ -802,6 +1119,48 @@ final class TerminalScreenMetalCompositor {
       ),
     );
   }
+}
+
+final class _TerminalPositionedGlyph {
+  const _TerminalPositionedGlyph({
+    required this.entry,
+    required this.x,
+    required this.y,
+    required this.colorRgba,
+  });
+
+  final TerminalGlyphAtlasEntry entry;
+  final int x;
+  final int y;
+  final int colorRgba;
+}
+
+final class _TerminalKittyPositionedTile {
+  const _TerminalKittyPositionedTile({
+    required this.entry,
+    required this.x,
+    required this.y,
+    required this.aboveText,
+  });
+
+  final TerminalGlyphAtlasEntry entry;
+  final int x;
+  final int y;
+  final bool aboveText;
+}
+
+final class _TerminalKittyDeviceRect {
+  const _TerminalKittyDeviceRect({
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+  });
+
+  final int x;
+  final int y;
+  final int width;
+  final int height;
 }
 
 final class _TerminalTextRun {

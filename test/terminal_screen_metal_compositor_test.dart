@@ -18,6 +18,88 @@ void runTerminalScreenMetalCompositorTests() {
   _testHyperlinkHoverUsesDecorationLayer();
   _testPreeditRespectsRendererInstanceLimit();
   _testContentRectangleOffsetsEveryLayer();
+  _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder();
+}
+
+void _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder() {
+  for (final double scale in <double>[1, 2]) {
+    final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 3);
+    _parse(screens, ascii.encode('A'));
+    _storeKittyImage(
+      screens,
+      imageId: 1,
+      rgba: const <int>[255, 0, 0, 255, 0, 255, 0, 255],
+      width: 2,
+      height: 1,
+    );
+    _placeKittyImage(screens, imageId: 1, column: 0, z: -1);
+    _storeKittyImage(
+      screens,
+      imageId: 2,
+      rgba: const <int>[0, 0, 255, 255],
+      width: 1,
+      height: 1,
+    );
+    _placeKittyImage(screens, imageId: 2, column: 0, z: 0);
+
+    final _CompositionFixture fixture = _compose(
+      screens,
+      scale: scale,
+      includeKittyImages: true,
+    );
+    try {
+      final List<TerminalMetalInstanceKind> contentKinds = fixture
+          .composition
+          .instances
+          .where((TerminalMetalInstance instance) => instance.kind.isGlyph)
+          .map((TerminalMetalInstance instance) => instance.kind)
+          .toList();
+      final List<TerminalGlyphAtlasEntry> kittyEntries = fixture
+          .composition
+          .scheduledFrame
+          .glyphEntries
+          .where((TerminalGlyphAtlasEntry entry) => entry.isKittyImage)
+          .toList();
+      _expect(
+        contentKinds.length == 3 &&
+            contentKinds[0] == TerminalMetalInstanceKind.colorGlyph &&
+            contentKinds[1] == TerminalMetalInstanceKind.alphaGlyph &&
+            contentKinds[2] == TerminalMetalInstanceKind.colorGlyph,
+        'negative and nonnegative Kitty tiles bracket text in the shared '
+        'Metal glyph layer at ${scale}x',
+      );
+      _expect(
+        fixture.composition.kittyImageCount == 2 &&
+            fixture.composition.kittyPlacementCount == 2 &&
+            fixture.composition.kittyTileCount == 2 &&
+            fixture.atlas.kittyImageEntryCount == 2 &&
+            kittyEntries.length == 2 &&
+            kittyEntries.every(
+              (TerminalGlyphAtlasEntry entry) =>
+                  entry.width > 0 && entry.height > 0,
+            ),
+        'static Kitty placements become bounded, retained color-atlas tiles',
+      );
+      final Uint8List rendered = fixture.renderer.renderRgba(
+        fixture.composition.scheduledFrame.frame,
+      );
+      final int sampleX = (fixture.catalog.metrics.cellWidth * scale / 2)
+          .floor();
+      final int sampleY = (fixture.catalog.metrics.cellHeight * scale / 2)
+          .floor();
+      final int sampleOffset = (sampleY * fixture.viewportWidth + sampleX) * 4;
+      _expect(
+        rendered[sampleOffset] == 0 &&
+            rendered[sampleOffset + 1] == 0 &&
+            rendered[sampleOffset + 2] == 255 &&
+            rendered[sampleOffset + 3] == 255,
+        'the accepted native frame shows the opaque above-text image at '
+        '${scale}x',
+      );
+    } finally {
+      fixture.dispose();
+    }
+  }
 }
 
 void _testContentRectangleOffsetsEveryLayer() {
@@ -553,11 +635,16 @@ _CompositionFixture _compose(
       const TerminalMetalRendererConfig(),
   int contentOffsetX = 0,
   int contentOffsetY = 0,
+  bool includeKittyImages = false,
 }) {
   final TerminalFontCatalog catalog = TerminalFontCatalog.open(
     family: fontFamily,
   );
   final TerminalShapingCache shapingCache = TerminalShapingCache(catalog);
+  screens.updateLogicalCellSize(
+    width: catalog.metrics.cellWidth,
+    height: catalog.metrics.cellHeight,
+  );
   final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
     catalogGeneration: catalog.generation,
     scale: scale,
@@ -618,6 +705,9 @@ _CompositionFixture _compose(
           ),
           preedit: preedit,
           selection: selection,
+          kittyImages: includeKittyImages
+              ? screens.captureKittyImageViewport()
+              : null,
           hoveredHyperlinkId: hoveredHyperlinkId,
         );
     return _CompositionFixture(
@@ -637,6 +727,58 @@ _CompositionFixture _compose(
     catalog.dispose();
     rethrow;
   }
+}
+
+void _storeKittyImage(
+  TerminalScreenSet screens, {
+  required int imageId,
+  required int width,
+  required int height,
+  required List<int> rgba,
+}) {
+  final stored = screens.primaryKittyImages.store(
+    imageId: imageId,
+    imageNumber: 0,
+    width: width,
+    height: height,
+    transient: false,
+    rgba: Uint8List.fromList(rgba),
+  );
+  _expect(stored.image != null, 'Kitty Metal fixture stores image $imageId');
+}
+
+void _placeKittyImage(
+  TerminalScreenSet screens, {
+  required int imageId,
+  required int column,
+  required int z,
+}) {
+  final TerminalLogicalAnchor anchor = screens.viewport.anchorAtScreenCell(
+    TerminalScreenKind.primary,
+    0,
+    column,
+  );
+  final placed = screens.primaryKittyImages.place(
+    imageId: imageId,
+    imageNumber: 0,
+    placementId: imageId,
+    logicalLineId: anchor.logicalLineId,
+    logicalLineEpoch: anchor.logicalLineEpoch,
+    logicalCellOffset: anchor.cellOffset,
+    sourceX: 0,
+    sourceY: 0,
+    sourceWidth: 0,
+    sourceHeight: 0,
+    cellOffsetX: 0,
+    cellOffsetY: 0,
+    columns: 1,
+    rows: 1,
+    z: z,
+  );
+  _expect(
+    placed.placement != null,
+    'Kitty Metal fixture places image $imageId',
+  );
 }
 
 List<int> _screenContent(TerminalScreen screen) => <int>[

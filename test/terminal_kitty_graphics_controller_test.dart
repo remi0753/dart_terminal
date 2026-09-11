@@ -943,11 +943,41 @@ Future<void> _testControllerPlacementActionsAndDelete() async {
     'the same explicit image/placement pair moves atomically',
   );
 
+  final Completer<void> orderingGate = Completer<void>();
+  worker.gate = orderingGate;
+  controller.enqueueCommand(_command('Gi=72,f=32,s=1,v=1;AQIDBA=='));
+  screens.activeScreen.setCursorPosition(3, 4);
+  controller.enqueueCommand(_command('Ga=p,i=70,p=9,c=1,r=1,C=1'));
+  screens.activeScreen.setCursorPosition(0, 0);
+  orderingGate.complete();
+  await controller.waitForIdle();
+  worker.gate = null;
+  final TerminalKittyImagePlacement orderedPlacement = screens
+      .primaryKittyImages
+      .placementSnapshot()
+      .singleWhere(
+        (TerminalKittyImagePlacement placement) => placement.placementId == 9,
+      );
+  final TerminalViewportPosition? orderedPosition = screens.viewport
+      .screenCellPositionOf(
+        TerminalScreenKind.primary,
+        TerminalLogicalAnchor(
+          screenKind: TerminalScreenKind.primary,
+          logicalLineId: orderedPlacement.logicalLineId,
+          logicalLineEpoch: orderedPlacement.logicalLineEpoch,
+          cellOffset: orderedPlacement.logicalCellOffset,
+        ),
+      );
+  _expect(
+    orderedPosition?.row == 3 && orderedPosition?.column == 4,
+    'queued placement retains its parser-time screen and cursor anchor',
+  );
+
   screens.activeScreen.setCursorPosition(0, 0);
   controller.enqueueCommand(_command('Ga=p,i=70,c=2,r=2'));
   await controller.waitForIdle();
   _expect(
-    screens.primaryKittyImages.placementCount == 2 &&
+    screens.primaryKittyImages.placementCount == 3 &&
         screens.activeScreen.cursorRow == 1 &&
         screens.activeScreen.cursorColumn == 2,
     'anonymous placement remains distinct and applies bounded cursor movement',

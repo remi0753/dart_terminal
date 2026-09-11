@@ -2644,21 +2644,29 @@ Map<String, Object?> _partialKittyApcRecord(_Gap gap) => <String, Object?>{
     _implementationEvidence,
     'lib/src/terminal_kitty_graphics_controller.dart#session-fifo',
     'lib/src/terminal_core/terminal_kitty_image_store.dart#bounded-storage',
+    'lib/src/terminal_core/terminal_kitty_image_viewport.dart#immutable-projection',
+    'lib/src/terminal_renderer/terminal_screen_metal_compositor.dart#kitty-image-tiles',
+    'lib/src/terminal_renderer/terminal_live_metal_surface.dart#product-frame-path',
   ],
   'testEvidence': <String>[
     _implementationTestEvidence,
     'test/terminal_kitty_graphics_controller_test.dart#storage-and-fifo',
+    'test/terminal_screen_metal_compositor_test.dart#kitty-layer-order-and-tiles',
+    'test/terminal_kitty_reference_compositor_test.dart#static-pixel-goldens',
+    'test/metal_pipeline_test.dart#kitty-renderer-replacement',
+    'tool/runtime_integration_smoke.dart#kitty-graphics-product-acceptance',
   ],
   'notes':
       'A leading-G APC supports bounded direct static RGB/RGBA/PNG transmit, '
       'multipart worker decode, query, explicit ID replacement, image-number '
       'allocation, per-screen reject-on-cap storage, exact quiet replies, and '
       'teardown; plus bounded static placement identity, crop/grid geometry, '
-      'cursor movement, supported z order, and delete selectors. Non-Kitty APC '
-      'remains bounded safe-ignore. File/shared-memory transport, virtual and '
-      'relative placement, extreme negative z, animation, scroll/clear/reflow '
-      'projection, and render are explicitly rejected or deferred pending their '
-      'ordered roadmap work.',
+      'cursor movement, supported z order, delete selectors, scroll/clear/reflow '
+      'projection, and deterministic CPU/Metal rendering through the ordinary '
+      'bounded color-atlas frame path. Non-Kitty APC remains bounded safe-ignore. '
+      'File/shared-memory transport, virtual and relative placement, extreme '
+      'negative z, animation, and resource eviction are explicitly rejected or '
+      'deferred pending their ordered roadmap work.',
 };
 
 Map<String, Object?> _unsupportedMode(

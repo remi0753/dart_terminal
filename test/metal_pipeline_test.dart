@@ -11,8 +11,110 @@ void runMetalPipelineTests() {
     _testGpuAgainstReferenceGolden(scale);
   }
   _testEmptySameDomainResetSynchronization();
+  _testKittyImageTileSurvivesRendererReplacement();
   _testBridgeLimitValidation();
 }
+
+void _testKittyImageTileSurvivesRendererReplacement() {
+  final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
+    catalogGeneration: 1,
+    limits: const TerminalGlyphAtlasLimits(
+      pageWidth: 8,
+      pageHeight: 8,
+      maximumAlphaPages: 1,
+      maximumColorPages: 1,
+      maximumEntries: 1,
+      maximumRetainedBytes: 8 * 8 * 4,
+      gutter: 0,
+    ),
+  );
+  final TerminalGlyphAtlasEntry image = atlas.ingestKittyImageTile(
+    key: const TerminalKittyImageAtlasKey(
+      screenKindIndex: 0,
+      imageId: 1,
+      imageResourceGeneration: 1,
+      placementGeneration: 1,
+      sourceX: 0,
+      sourceY: 0,
+      sourceWidth: 1,
+      sourceHeight: 1,
+      destinationX: 0,
+      destinationY: 0,
+      destinationWidth: 1,
+      destinationHeight: 1,
+      tileX: 0,
+      tileY: 0,
+      tileWidth: 1,
+      tileHeight: 1,
+      scale16_16: 1 << 16,
+    ),
+    rgba: Uint8List.fromList(const <int>[0x20, 0x40, 0x80, 0xff]),
+  );
+  final TerminalMetalRenderer first = _openSinglePixelRenderer();
+  try {
+    final TerminalGlyphAtlasMetalBridge bridge = TerminalGlyphAtlasMetalBridge(
+      atlas: atlas,
+      renderer: first,
+    );
+    _expect(
+      bridge.synchronize() == TerminalGlyphAtlasSyncDisposition.synchronized,
+      'first renderer accepts the Kitty image atlas page',
+    );
+    bridge.abandonRenderer();
+  } finally {
+    first.dispose();
+  }
+
+  final TerminalMetalRenderer replacement = _openSinglePixelRenderer();
+  try {
+    final TerminalGlyphAtlasMetalBridge bridge = TerminalGlyphAtlasMetalBridge(
+      atlas: atlas,
+      renderer: replacement,
+    );
+    _expect(
+      bridge.synchronize() == TerminalGlyphAtlasSyncDisposition.synchronized,
+      'replacement renderer receives a complete Kitty image atlas snapshot',
+    );
+    final TerminalMetalInstance instance = bridge.glyphInstance(
+      image,
+      x: 0,
+      y: 0,
+    )!;
+    final TerminalMetalFrame frame = TerminalMetalFrameEncoder.encode(
+      renderer: replacement,
+      frameGeneration: 1,
+      atlasGeneration: bridge.nativeAtlasGeneration,
+      viewportWidth: 1,
+      viewportHeight: 1,
+      scale16_16: 1 << 16,
+      backgroundRgba: 0x000000ff,
+      instances: <TerminalMetalInstance>[instance],
+    );
+    final Uint8List pixels = replacement.renderRgba(frame);
+    _expect(
+      pixels.length == 4 &&
+          pixels[0] == 0x20 &&
+          pixels[1] == 0x40 &&
+          pixels[2] == 0x80 &&
+          pixels[3] == 0xff,
+      'replacement renderer draws the retained Kitty image tile',
+    );
+  } finally {
+    replacement.dispose();
+  }
+}
+
+TerminalMetalRenderer _openSinglePixelRenderer() => TerminalMetalRenderer.open(
+  config: const TerminalMetalRendererConfig(
+    maximumViewportWidth: 1,
+    maximumViewportHeight: 1,
+    maximumInstances: 1,
+    atlasWidth: 8,
+    atlasHeight: 8,
+    maximumAlphaPages: 1,
+    maximumColorPages: 1,
+  ),
+);
 
 void _testEmptySameDomainResetSynchronization() {
   final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(

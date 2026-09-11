@@ -8041,6 +8041,11 @@ keybind = control+k=pane.focus-next
       pane,
       surface,
     );
+    final bool kittyGraphics = await _exerciseKittyGraphics(
+      session,
+      pane,
+      surface,
+    );
     final bool focus = await _exerciseFocusReporting(
       application,
       session,
@@ -8192,6 +8197,7 @@ keybind = control+k=pane.focus-next
           decrqss &&
           queryReports &&
           synchronizedOutput &&
+          kittyGraphics &&
           focus &&
           mouse &&
           selection &&
@@ -8220,6 +8226,7 @@ keybind = control+k=pane.focus-next
           'mode_key=$modeKey text_input=$textInput '
           'input_matrix=$inputMatrix decrqss=$decrqss '
           'query_reports=$queryReports synchronized_output=$synchronizedOutput '
+          'kitty_graphics=$kittyGraphics '
           'focus=$focus mouse=$mouse '
           'selection=$selection '
           'close_scroll=$closeScroll '
@@ -8251,6 +8258,7 @@ keybind = control+k=pane.focus-next
       'mode_key=$modeKey text_input=$textInput '
       'input_matrix=$inputMatrix decrqss=$decrqss '
       'query_reports=$queryReports synchronized_output=$synchronizedOutput '
+      'kitty_graphics=$kittyGraphics '
       'focus=$focus mouse=$mouse '
       'selection=$selection '
       'close_scroll=$closeScroll '
@@ -11186,6 +11194,256 @@ keybind = control+k=pane.focus-next
       'TERMINAL_SYNCHRONIZED_OUTPUT_TEST query_set=true query_reset=true '
       'hold=true intermediate_frames=0 release_frames=1 timeout=true '
       'timeout_frames=1 legacy=true bounded=true',
+    );
+    return true;
+  }
+
+  static Future<bool> _exerciseKittyGraphics(
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+  ) async {
+    const String queryMarker =
+        '__DT_KITTY_GRAPHICS_QUERY_1b5f47693d39303b4f4b1b5c__';
+    const String scrollMarker = '__DT_KITTY_GRAPHICS_SCROLL__';
+    const String erasedMarker = '__DT_KITTY_GRAPHICS_ERASED__';
+    const String deletedMarker = '__DT_KITTY_GRAPHICS_DELETED__';
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
+    pane.insertText(
+      "stty raw -echo; printf '\\033[H'; "
+      "printf '\\033_Ga=q,i=90,f=32,s=1,v=1;AQIDBA==\\033\\\\'; "
+      "query=\$(dd bs=1 count=12 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "printf '\\033_Gi=91,q=2,f=32,s=1,v=1,m=1;AQID\\033\\\\'; "
+      "printf '\\033_Gm=0,q=2;BA==\\033\\\\'; "
+      "printf '\\033_Ga=p,i=91,p=1,c=1,r=1,C=1,z=-1,q=2\\033\\\\'; "
+      "printf '\\033_Gi=92,q=2,f=100,m=1;"
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAA\\033\\\\'; "
+      "printf '\\033_Gm=0,q=2;"
+      "DUlEQVR4nGNgYPj/HwADAgH/5ncLrgAAAABJRU5ErkJggg==\\033\\\\'; "
+      "printf '\\033_Ga=p,i=92,p=2,c=1,r=1,C=1,z=1,q=2\\033\\\\'; "
+      "stty sane; printf '\\r\\n__DT_KITTY_GRAPHICS_QUERY_%s__\\r\\n' "
+      '"\$query"',
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, queryMarker);
+    await session.kittyGraphicsController.waitForIdle();
+
+    TerminalLiveMetalSurfaceSnapshot? rendered;
+    final Stopwatch renderDeadline = Stopwatch()..start();
+    while (renderDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      final TerminalScreenSet screens = session.terminalScreenSet;
+      if (screens.primaryKittyImages.imageById(91) != null &&
+          screens.primaryKittyImages.imageById(92) != null &&
+          screens.primaryKittyImages.placementCount == 2 &&
+          snapshot.kittyImageCount == 2 &&
+          snapshot.kittyPlacementCount == 2 &&
+          snapshot.kittyTileCount == 2 &&
+          snapshot.kittyAtlasEntryCount >= 2 &&
+          snapshot.acceptedFrameCount > baseline.acceptedFrameCount) {
+        rendered = snapshot;
+        break;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before Kitty graphics reached Metal',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      rendered != null &&
+          rendered.pendingFrameCount <= 1 &&
+          rendered.liveAtlasPinCount <= 3,
+      'Kitty query/multipart placements did not reach one bounded Metal frame '
+      '(images=${session.terminalScreenSet.primaryKittyImages.length}, '
+      'placements='
+      '${session.terminalScreenSet.primaryKittyImages.placementCount}, '
+      'surface_images=${surface.snapshot().kittyImageCount}, '
+      'surface_placements=${surface.snapshot().kittyPlacementCount}, '
+      'surface_tiles=${surface.snapshot().kittyTileCount}, '
+      'atlas_tiles=${surface.snapshot().kittyAtlasEntryCount}, '
+      'accepted=${surface.snapshot().acceptedFrameCount}, '
+      'baseline=${baseline.acceptedFrameCount})',
+    );
+    final int renderedFrameCount = rendered!.acceptedFrameCount;
+
+    pane.insertText(
+      "printf '\\033[999;1H\\033D'; "
+      "printf '__DT_KITTY_GRAPHICS_%s__\\r\\n' 'SCROLL'",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, scrollMarker);
+    TerminalLiveMetalSurfaceSnapshot? scrolled;
+    final Stopwatch scrollDeadline = Stopwatch()..start();
+    while (scrollDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      if (session.terminalScreenSet.primaryKittyImages.placementCount == 2 &&
+          session.terminalScreenSet
+              .captureKittyImageViewport()
+              .placements
+              .isEmpty &&
+          snapshot.kittyPlacementCount == 0 &&
+          snapshot.acceptedFrameCount > renderedFrameCount) {
+        scrolled = snapshot;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      scrolled != null,
+      'Kitty placements did not follow full-screen scroll into history',
+    );
+    final TerminalScreenSet screens = session.terminalScreenSet;
+    var historyPlacementCount = 0;
+    for (
+      var offset = 1;
+      offset <= 8 && offset <= screens.viewport.maximumOffset;
+      offset++
+    ) {
+      screens.viewport.scrollByRows(1);
+      historyPlacementCount = screens
+          .captureKittyImageViewport()
+          .placements
+          .length;
+      if (historyPlacementCount == 2) break;
+    }
+    surface.notifyViewportChanged();
+    final Stopwatch historyDeadline = Stopwatch()..start();
+    var historyVisible = false;
+    while (historyDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      if (screens.captureKittyImageViewport().placements.length == 2 &&
+          snapshot.kittyPlacementCount == 2 &&
+          snapshot.acceptedFrameCount > scrolled!.acceptedFrameCount) {
+        historyVisible = true;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      historyVisible,
+      'Kitty history placements were not reprojected through Metal '
+      '(offset=${screens.viewport.offset}, '
+      'maximum=${screens.viewport.maximumOffset}, '
+      'placements=$historyPlacementCount, '
+      'surface=${surface.snapshot().kittyPlacementCount})',
+    );
+    screens.viewport.scrollToBottom();
+    surface.notifyViewportChanged();
+
+    final int acceptedBeforeErasePlacement =
+        session.kittyGraphicsController.acceptedCommandCount;
+    pane.insertText(
+      "stty raw -echo; "
+      "printf '\\033[10;1H\\033_Ga=T,i=93,f=32,s=1,v=1,c=1,r=1,"
+      "C=1;BQYHCA==\\033\\\\'; "
+      "dd bs=1 count=12 >/dev/null 2>&1; stty sane",
+    );
+    await pane.submit();
+    final Stopwatch eraseReadyDeadline = Stopwatch()..start();
+    var eraseReady = false;
+    while (eraseReadyDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      if (session.kittyGraphicsController.acceptedCommandCount ==
+              acceptedBeforeErasePlacement + 1 &&
+          session.kittyGraphicsController.pendingJobCount == 0 &&
+          screens.primaryKittyImages.imageById(93) != null &&
+          screens.primaryKittyImages.placementCount == 3 &&
+          snapshot.kittyPlacementCount == 1 &&
+          snapshot.kittyTileCount == 1) {
+        eraseReady = true;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    final String placementPositions = screens.primaryKittyImages
+        .placementSnapshot()
+        .map((placement) {
+          final TerminalViewportPosition? position = screens.viewport
+              .screenCellPositionOf(
+                TerminalScreenKind.primary,
+                TerminalLogicalAnchor(
+                  screenKind: TerminalScreenKind.primary,
+                  logicalLineId: placement.logicalLineId,
+                  logicalLineEpoch: placement.logicalLineEpoch,
+                  cellOffset: placement.logicalCellOffset,
+                ),
+              );
+          return '${placement.imageId}:${position?.row}:${position?.column}';
+        })
+        .join(',');
+    _expectLifecycle(
+      eraseReady,
+      'Kitty transmit-and-place did not become visible before erase '
+      '(images=${screens.primaryKittyImages.length}, '
+      'placements=${screens.primaryKittyImages.placementCount}, '
+      'viewport=${screens.captureKittyImageViewport().placements.length}, '
+      'surface=${surface.snapshot().kittyPlacementCount}, '
+      'tiles=${surface.snapshot().kittyTileCount}, '
+      'offset=${screens.viewport.offset}, positions=$placementPositions)',
+    );
+
+    pane.insertText(
+      "printf '\\033[2J\\033[H'; "
+      "printf '__DT_KITTY_GRAPHICS_%s__\\r\\n' 'ERASED'",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, erasedMarker);
+    final Stopwatch erasedDeadline = Stopwatch()..start();
+    var erased = false;
+    while (erasedDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      if (screens.primaryKittyImages.imageById(93) == null &&
+          screens.primaryKittyImages.length == 2 &&
+          screens.primaryKittyImages.placementCount == 2 &&
+          snapshot.kittyPlacementCount == 0) {
+        erased = true;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(erased, 'ED 2 did not clear only the visible Kitty image');
+
+    pane.insertText(
+      "printf '\\033_Ga=d,d=R,x=91,y=92,q=2\\033\\\\'; "
+      "printf '__DT_KITTY_GRAPHICS_%s__\\r\\n' 'DELETED'",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, deletedMarker);
+    await session.kittyGraphicsController.waitForIdle();
+    final Stopwatch deleteDeadline = Stopwatch()..start();
+    var deleted = false;
+    while (deleteDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      if (screens.primaryKittyImages.isEmpty &&
+          snapshot.kittyImageCount == 0 &&
+          snapshot.kittyPlacementCount == 0 &&
+          snapshot.kittyTileCount == 0 &&
+          snapshot.pendingFrameCount <= 1 &&
+          snapshot.liveAtlasPinCount <= 3) {
+        deleted = true;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      deleted,
+      'Kitty uppercase delete did not reclaim product image state '
+      '(images=${screens.primaryKittyImages.length}, '
+      'placements=${screens.primaryKittyImages.placementCount}, '
+      'surface_images=${surface.snapshot().kittyImageCount}, '
+      'surface_placements=${surface.snapshot().kittyPlacementCount}, '
+      'surface_tiles=${surface.snapshot().kittyTileCount}, '
+      'pending=${session.kittyGraphicsController.pendingJobCount}, '
+      'accepted=${session.kittyGraphicsController.acceptedCommandCount})',
+    );
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    stdout.writeln(
+      'TERMINAL_KITTY_GRAPHICS_TEST query=true multipart_rgba=true '
+      'multipart_png=true placement=true z_order=true scroll=true '
+      'history=true erase=true delete=true metal=true bounded=true',
     );
     return true;
   }

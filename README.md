@@ -148,6 +148,13 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   XTWINOPS 16はlogical cell寸法、mode 2048は有効化直後と完了したresize後に
   rows/columnsとpadding-free logical viewport pixel寸法を返す。Unicode 17の
   narrow-ambiguous grapheme/width contractはmode 2027をpermanently setとして公開する
+- Kitty graphicsのbounded APC grammar、process-worker direct RGB/RGBA/PNG+zlib decode、
+  multipart/FIFO reply、主/代替画面別のbounded image/placement store、ID/number replacement、
+  static put/transmit-and-place/delete、通常negative/positive z、scrollback/margin clip/erase/
+  reflow/alternate/RIS lifecycle、immutable viewport projection。CPU oracleと通常の
+  color-atlas/Metal frame pathは同じnearest-neighbor tile、layer order、1x/2x pixel結果を使い、
+  実zsh PTYからDeveloper JIT/Release AOTの両方で受け入れる。file/shared-memory transport、
+  virtual/relative/extreme-negative z、animation、resource evictionは未実装
 - Unicode 17 grapheme境界・幅判定、bounded grapheme intern、wide/continuation
   invariantとprimary historyを含むatomic resize/reflow
 - fixed-page SoA scrollback、独立line/byte cap、O(1) page eviction、primary

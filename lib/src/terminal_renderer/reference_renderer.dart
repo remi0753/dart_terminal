@@ -4,11 +4,11 @@ import 'dart:typed_data';
 /// renderer contract.
 enum TerminalReferenceLayer {
   cellBackground,
-  imageBelowText,
   selection,
+  imageBelowText,
   glyph,
-  decoration,
   imageAboveText,
+  decoration,
   cursor,
 }
 

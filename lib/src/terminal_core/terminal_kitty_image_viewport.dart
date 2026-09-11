@@ -28,6 +28,14 @@ final class TerminalKittyViewportPlacement {
     required this.imageId,
     required this.imageResourceGeneration,
     required this.placementId,
+    required this.gridColumn,
+    required this.gridRow,
+    required this.cellOffsetX,
+    required this.cellOffsetY,
+    required this.requestedColumns,
+    required this.requestedRows,
+    required this.fixedPixelWidth,
+    required this.fixedPixelHeight,
     required this.source,
     required this.destinationX,
     required this.destinationY,
@@ -40,6 +48,14 @@ final class TerminalKittyViewportPlacement {
   final int imageId;
   final int imageResourceGeneration;
   final int placementId;
+  final int gridColumn;
+  final int gridRow;
+  final int cellOffsetX;
+  final int cellOffsetY;
+  final int requestedColumns;
+  final int requestedRows;
+  final int? fixedPixelWidth;
+  final int? fixedPixelHeight;
   final TerminalKittyImageSourceRect source;
   final int destinationX;
   final int destinationY;
@@ -151,6 +167,14 @@ final class TerminalKittyViewportSnapshot {
           imageId: image.id,
           imageResourceGeneration: image.resourceGeneration,
           placementId: placement.placementId,
+          gridColumn: position.column,
+          gridRow: position.row,
+          cellOffsetX: geometry.cellOffsetX,
+          cellOffsetY: geometry.cellOffsetY,
+          requestedColumns: placement.requestedColumns,
+          requestedRows: placement.requestedRows,
+          fixedPixelWidth: placement.fixedPixelWidth,
+          fixedPixelHeight: placement.fixedPixelHeight,
           source: geometry.source,
           destinationX: destinationX,
           destinationY: destinationY,

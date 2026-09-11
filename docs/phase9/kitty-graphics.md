@@ -5,8 +5,9 @@
 - Date started: 2026-09-11
 - Scope: fourth Phase 9 roadmap item
 - Feature-matrix owner: CAP-11
-- Status: grammar, process-worker storage, placement-action, and lifecycle/
-  projection children complete; CPU reference compositor child in progress
+- Status: grammar, process-worker storage, placement, lifecycle/projection, and
+  CPU reference-compositor children complete; Metal product-acceptance child in
+  progress
 - Predecessor: `docs/phase9/light-dark-notification-extended-reports.md`
 
 ## Purpose and background
@@ -782,3 +783,130 @@ after this parent is committed.
   and adds no native or animation behavior. `git diff --check` passes. The
   placement/reference-projection parent is complete; Metal product acceptance
   is now the first unchecked Kitty graphics child.
+- 2026-09-11: CPU reference compositing completed in commit `73c9609` (`Add a
+  Kitty graphics reference compositor`). ROADMAP, README, FEATURE_MATRIX, this
+  memo, recent commits, and the clean worktree were reread immediately after
+  the commit. The only unchecked child of the static Kitty graphics parent is
+  Metal product acceptance and compatibility/documentation closure. Animation
+  and resource eviction remain the next roadmap item and are not part of this
+  change.
+- 2026-09-11: the repository-owned Metal ABI accepts only fixed-size alpha or
+  straight-RGBA atlas glyph instances: destination width and height must equal
+  the atlas rectangle. Static placements therefore require deterministic CPU
+  nearest-neighbor expansion into device-pixel color-atlas tiles before the
+  ordinary upload/frame path. The current default color atlas is four bounded
+  512-by-512 pages shared with color glyphs; tiles must respect the one-pixel
+  gutter, entry/page/retained-byte limits, resource generation, submission
+  pins, and newest-frame backpressure already owned by `TerminalGlyphAtlas`.
+- 2026-09-11: native layer order is fixed as background, selection, alpha/color
+  glyph, decoration, cursor, with alpha and color glyphs sharing one stable
+  input-order layer. Negative-z image tiles can therefore precede text glyphs
+  and nonnegative tiles can follow them, while terminal-local selection,
+  decorations, and cursor retain their established UI layer authority. The CPU
+  oracle will be aligned with this exact product ordering so Metal and golden
+  expectations cannot silently diverge. No adjacent `dart_appkit` source or
+  native ABI change is required.
+- 2026-09-11: the first scoped formatting command accidentally included this
+  Markdown task memo in the Dart formatter arguments. The four Dart paths were
+  parsed and formatted successfully, while the formatter reported only the
+  expected Markdown parse errors; the memo and repository content were not
+  rewritten by that failed input. Subsequent formatter invocations are limited
+  to Dart sources.
+- 2026-09-11: scoped analysis initially found four test-only references to
+  image-store result types that are intentionally not exported by the public
+  package barrel. The fixture now uses inferred result values and checks their
+  public `image`/`placement` payloads; scoped analysis passes without expanding
+  the product API.
+- 2026-09-11: focused Atlas, screen-to-Metal compositor, Kitty reference
+  golden, and native Metal pipeline tests pass at 1x and 2x. The reference
+  layer order is now identical to the native ABI: selection remains a local
+  overlay below content, negative-z images precede text glyphs, nonnegative-z
+  images follow text glyphs, and decorations/cursor remain local overlays.
+  Regenerated Kitty golden SHA-256 values are
+  `3100291cab1f8de254e37d9e346a5ecbe30458ff12be66126c7d564db4e11619`
+  (1x) and
+  `dc354dd2d850419f10b8943de7422adddb04cf641cc5042603be43035a6fdc8c`
+  (2x).
+- 2026-09-11: the first Developer JIT product run completed the exact Kitty
+  query and all five worker requests for multipart RGBA/PNG, then failed the
+  first combined state/Metal readiness assertion. Cleanup still gracefully
+  reaped the real zsh PTY and runtime worker. The assertion did not expose which
+  subcondition lagged, so content-free image/store/surface/atlas/frame counters
+  are added to its failure message before repeating the same acceptance; no
+  condition is weakened.
+- 2026-09-11: the diagnostic rerun proved both resources and placements were
+  retained, but only one was visible because worker completion had anchored
+  queued placements to the later shell-marker cursor. Graphics queue jobs now
+  capture the active screen, exact logical cursor anchor, and cursor row/column
+  at parser admission; standalone/transmit-and-place and cursor-relative delete
+  consume that immutable context. A deliberately blocked-worker regression
+  moves the live cursor after enqueue and proves the placement still resolves
+  to its parser-time cell. The focused controller suite passes. Its first rerun
+  needed one expected-count update because the new regression intentionally
+  leaves an additional placement in the shared fixture; the correction changed
+  no product assertion.
+- 2026-09-11: the next Developer JIT run passed query, both multipart decodes,
+  dual placement, and bounded accepted Metal-frame checks. It then stopped at
+  the history re-projection assertion: the shell's scroll marker and following
+  prompt can add more than the single row assumed by the harness. The product
+  had retained both placements and cleanup remained clean. The acceptance now
+  searches at most eight adjacent history offsets, then requires both retained
+  placements in a newer Metal frame; the product behavior is unchanged and the
+  bound remains explicit.
+- 2026-09-11: the following Developer JIT attempt exposed a harness-only compile
+  error because a diagnostic closure named the private `TerminalKittyImagePlacement`
+  type without importing its internal library. Type inference now preserves the
+  same content-free placement diagnostics without expanding product exports;
+  scoped analysis passes.
+- 2026-09-11: the first exact transmit-and-place/erase fixture allowed the live
+  zsh prompt and echoed control bytes to scroll the target row before the
+  assertion. The fixture now enters raw no-echo mode, uses bounded row 10, reads
+  the exact success reply before emitting later shell output, and restores tty
+  state during cleanup. This changes only test observation timing.
+- 2026-09-11: the next cleanup assertion found one history-retained image after
+  `d=A`; the fixed Kitty specification defines that selector as visible
+  placements only. Product acceptance now sends the bounded uppercase ID range
+  selector `d=R,x=91,y=92`, which is the specified visible-and-history cleanup,
+  and still requires a zero-resource terminal/surface/atlas snapshot.
+- 2026-09-11: the complete ordinary-display product acceptance passes for both
+  runtimes on Apple M1/arm64. Developer JIT reports
+  `RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS mode=developer-jit`
+  (`elapsed_ms=6895`); Release AOT reports the same product marker with
+  `mode=release-aot` (`elapsed_ms=5990`). Each run uses a real zsh PTY and the
+  ordinary Metal surface to verify exact query reply, multipart RGBA and PNG,
+  below/above-text z order, accepted frame/resource/tile bounds, scrollback
+  re-projection, transmit-and-place reply FIFO, ED2 visible erase, range deletion,
+  and complete session/worker/native resource cleanup.
+- 2026-09-11: a focused native recovery regression attaches a retained Kitty
+  RGBA tile to one Metal renderer, abandons that renderer, attaches a replacement,
+  synchronizes a complete atlas snapshot, and reads back the exact pixel. It
+  passes along with scoped analysis. Image tiles therefore inherit the existing
+  bounded upload backpressure, resource-generation validation, submission pin
+  release, renderer retry, and full-atlas recovery contract rather than adding
+  a second unbounded native path.
+- 2026-09-11: public compatibility closure now records static Kitty graphics in
+  README, CAP-11, SEC-01, and the generated sequence/mode inventory. The remaining
+  partial boundary is explicit: file/shared-memory transport, virtual/relative
+  placement, extreme-negative z, animation, and resource eviction are not claimed.
+- 2026-09-11: compatibility inventory and generated support summary were
+  regenerated from their canonical Dart source. Full `dart analyze` reports no
+  issues. Focused glyph-atlas, screen-to-Metal, live-Metal/font, graphics
+  controller, CPU reference/golden, grammar, and native Metal pipeline programs
+  all exit successfully, including 1x/2x rendering and renderer replacement.
+- 2026-09-11: the first aggregate `make test` stopped at the expected Phase 7
+  AppKit acceptance freshness boundary after the covered application source
+  changed. Regenerating that ledger changed only its two application-source
+  hashes. The first compatibility-coverage regeneration then correctly rejected
+  the differential baseline's stale inventory hash; the reviewed four-case/210-
+  run baseline was regenerated without observation changes, followed by the
+  implementation manifest and coverage report. Coverage changed only the
+  inventory, README, and FEATURE_MATRIX source hashes.
+- 2026-09-11: after freshness regeneration, the exact aggregate gate
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passes through every generated
+  inventory/corpus check, formatting, full analysis, native tests, and both
+  product runtimes, ending with `dart_terminal tests passed`. `git diff --check`
+  also passes. Static Kitty parse, worker/storage, placement/lifecycle,
+  CPU oracle/golden, ordinary Metal presentation/backpressure/recovery, real-PTY
+  acceptance, resource cleanup, and compatibility documentation now satisfy all
+  acceptance criteria. The parent task is complete; animation and resource
+  eviction remain the next ordered roadmap item.

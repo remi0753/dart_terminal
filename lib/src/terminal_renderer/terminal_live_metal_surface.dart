@@ -87,6 +87,10 @@ final class TerminalLiveMetalSurfaceSnapshot {
     required this.acceptedFrameCount,
     required this.pendingFrameCount,
     required this.liveAtlasPinCount,
+    required this.kittyAtlasEntryCount,
+    required this.kittyImageCount,
+    required this.kittyPlacementCount,
+    required this.kittyTileCount,
     required this.hasScheduledWork,
     required this.synchronizedOutputMode,
     required this.synchronizedOutputHeld,
@@ -129,6 +133,10 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int acceptedFrameCount;
   final int pendingFrameCount;
   final int liveAtlasPinCount;
+  final int kittyAtlasEntryCount;
+  final int kittyImageCount;
+  final int kittyPlacementCount;
+  final int kittyTileCount;
   final bool hasScheduledWork;
   final bool synchronizedOutputMode;
   final bool synchronizedOutputHeld;
@@ -307,33 +315,38 @@ final class TerminalLiveMetalSurface {
             required int modelRevision,
             required int frameGeneration,
             required TerminalFramePresentation presentation,
-          }) =>
-              TerminalScreenMetalCompositor(
-                    catalog: _catalog,
-                    shapingCache: _shapingCache,
-                    atlas: atlas,
-                    bridge: recovery.currentDomain.bridge,
-                    styleTable: screenSet.styleTable,
-                    palette: screenSet.palette,
-                    graphemeTable: screenSet.graphemeTable,
-                  )
-                  .compose(
-                    _visibleRenderModel(model),
-                    frameGeneration: frameGeneration,
-                    viewportWidth: _viewportWidth,
-                    viewportHeight: _viewportHeight,
-                    contentOffsetX: _contentOffsetX,
-                    contentOffsetY: _contentOffsetY,
-                    contentViewportWidth: _contentViewportWidth,
-                    contentViewportHeight: _contentViewportHeight,
-                    presentation: presentation,
-                    preedit: _viewportRenderModel == null
-                        ? _preeditLayoutForModel(model)
-                        : null,
-                    selection: _selectionProjection,
-                    hoveredHyperlinkId: _hyperlinkHover?.hyperlinkId ?? 0,
-                  )
-                  .scheduledFrame,
+          }) {
+            final TerminalScreenMetalComposition composition =
+                TerminalScreenMetalCompositor(
+                  catalog: _catalog,
+                  shapingCache: _shapingCache,
+                  atlas: atlas,
+                  bridge: recovery.currentDomain.bridge,
+                  styleTable: screenSet.styleTable,
+                  palette: screenSet.palette,
+                  graphemeTable: screenSet.graphemeTable,
+                ).compose(
+                  _visibleRenderModel(model),
+                  frameGeneration: frameGeneration,
+                  viewportWidth: _viewportWidth,
+                  viewportHeight: _viewportHeight,
+                  contentOffsetX: _contentOffsetX,
+                  contentOffsetY: _contentOffsetY,
+                  contentViewportWidth: _contentViewportWidth,
+                  contentViewportHeight: _contentViewportHeight,
+                  presentation: presentation,
+                  preedit: _viewportRenderModel == null
+                      ? _preeditLayoutForModel(model)
+                      : null,
+                  selection: _selectionProjection,
+                  kittyImages: screenSet.captureKittyImageViewport(),
+                  hoveredHyperlinkId: _hyperlinkHover?.hyperlinkId ?? 0,
+                );
+            _lastKittyImageCount = composition.kittyImageCount;
+            _lastKittyPlacementCount = composition.kittyPlacementCount;
+            _lastKittyTileCount = composition.kittyTileCount;
+            return composition.scheduledFrame;
+          },
       submitFrame:
           (
             TerminalScheduledMetalFrame frame, {
@@ -436,6 +449,7 @@ final class TerminalLiveMetalSurface {
   int _publishedViewportGeneration = 0;
   int _publishedSelectionGeneration = -1;
   int _publishedProjectionResourceGeneration = 0;
+  int _publishedKittyStoreGeneration = 0;
   int _seenAccessibilityViewportGeneration = 0;
   int _seenAccessibilitySelectionGeneration = -1;
   int _accessibilityGeneration = 0;
@@ -447,6 +461,9 @@ final class TerminalLiveMetalSurface {
   int _accessibilityCursorColumn = -1;
   int _synchronizedOutputReleaseCount = 0;
   int _synchronizedOutputTimeoutCount = 0;
+  int _lastKittyImageCount = 0;
+  int _lastKittyPlacementCount = 0;
+  int _lastKittyTileCount = 0;
   double _publishedAccessibilityCellWidth = 0;
   double _publishedAccessibilityCellHeight = 0;
   TerminalAccessibilitySnapshot? _lastAccessibilitySnapshot;
@@ -731,6 +748,10 @@ final class TerminalLiveMetalSurface {
       acceptedFrameCount: _scheduler.metrics.acceptedCount,
       pendingFrameCount: _scheduler.pendingFrameCount,
       liveAtlasPinCount: atlas.livePinCount,
+      kittyAtlasEntryCount: atlas.kittyImageEntryCount,
+      kittyImageCount: _lastKittyImageCount,
+      kittyPlacementCount: _lastKittyPlacementCount,
+      kittyTileCount: _lastKittyTileCount,
       hasScheduledWork:
           _timer != null || (_paneWorkScheduler?.isPending(sessionId) ?? false),
       synchronizedOutputMode: screenSet.synchronizedOutputMode,
@@ -878,9 +899,12 @@ final class TerminalLiveMetalSurface {
     final int viewportGeneration = viewport.generation;
     final int selectionGeneration = _selectionSnapshot?.generation ?? 0;
     final int resourceGeneration = atlas.resourceGeneration;
+    final int kittyStoreGeneration =
+        screenSet.activeKittyImages.stateGeneration;
     if (viewportGeneration == _publishedViewportGeneration &&
         selectionGeneration == _publishedSelectionGeneration &&
-        resourceGeneration == _publishedProjectionResourceGeneration) {
+        resourceGeneration == _publishedProjectionResourceGeneration &&
+        kittyStoreGeneration == _publishedKittyStoreGeneration) {
       return;
     }
     _viewportRenderModel = viewport.atBottom
@@ -897,6 +921,7 @@ final class TerminalLiveMetalSurface {
     _publishedViewportGeneration = viewportGeneration;
     _publishedSelectionGeneration = selectionGeneration;
     _publishedProjectionResourceGeneration = resourceGeneration;
+    _publishedKittyStoreGeneration = kittyStoreGeneration;
     if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
   }
 

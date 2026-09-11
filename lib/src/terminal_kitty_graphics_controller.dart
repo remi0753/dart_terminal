@@ -109,7 +109,23 @@ final class TerminalKittyGraphicsController {
       return false;
     }
     _acceptedCommandCount++;
-    _queue.addLast(_TerminalKittyQueueJob.command(command));
+    final TerminalScreenKind screenKind = screenSet.activeKind;
+    final TerminalScreen screen = screenSet.activeScreen;
+    _queue.addLast(
+      _TerminalKittyQueueJob.command(
+        command,
+        _TerminalKittyCommandContext(
+          screenKind: screenKind,
+          cursorAnchor: screenSet.viewport.anchorAtScreenCell(
+            screenKind,
+            screen.cursorRow,
+            screen.cursorColumn,
+          ),
+          cursorRow: screen.cursorRow,
+          cursorColumn: screen.cursorColumn,
+        ),
+      ),
+    );
     _startDrain();
     return true;
   }
@@ -185,7 +201,7 @@ final class TerminalKittyGraphicsController {
           if (!_disposed) {
             final TerminalKittyGraphicsCommand? command = job.command;
             if (command != null) {
-              await _executeCommand(command);
+              await _executeCommand(command, job.context!);
             } else if (!_callReply(job.copyReply()!)) {
               _deferredReplyWriteFailureCount++;
             }
@@ -216,7 +232,10 @@ final class TerminalKittyGraphicsController {
     }
   }
 
-  Future<void> _executeCommand(TerminalKittyGraphicsCommand command) async {
+  Future<void> _executeCommand(
+    TerminalKittyGraphicsCommand command,
+    _TerminalKittyCommandContext context,
+  ) async {
     if (command.hasImageIdKey && command.hasImageNumberKey) {
       await _abortPendingTransfer();
       _emitError(
@@ -241,17 +260,13 @@ final class TerminalKittyGraphicsController {
         return;
       case TerminalKittyGraphicsAction.place:
         await _abortPendingTransfer();
-        _placeImage(
-          command,
-          identitySource: command,
-          screenKind: screenSet.activeKind,
-        );
+        _placeImage(command, identitySource: command, context: context);
         return;
       case TerminalKittyGraphicsAction.transmitAndPlace:
         break;
       case TerminalKittyGraphicsAction.delete:
         await _abortPendingTransfer();
-        _delete(command);
+        _delete(command, context);
         return;
       case TerminalKittyGraphicsAction.query:
       case TerminalKittyGraphicsAction.transmit:
@@ -314,7 +329,7 @@ final class TerminalKittyGraphicsController {
     final _TerminalKittyPendingTransfer transfer =
         _TerminalKittyPendingTransfer(
           command: command,
-          screenKind: screenSet.activeKind,
+          context: context,
           transferGeneration: transferGeneration,
         );
     _pendingTransfer = transfer;
@@ -466,7 +481,7 @@ final class TerminalKittyGraphicsController {
       return;
     }
     final TerminalKittyImageStore store = screenSet.kittyImagesFor(
-      transfer.screenKind,
+      transfer.context.screenKind,
     );
     final TerminalKittyImageStoreResult stored = store.store(
       imageId: initial.transmission.imageId,
@@ -491,7 +506,7 @@ final class TerminalKittyGraphicsController {
       _placeImage(
         finalCommand,
         identitySource: initial,
-        screenKind: transfer.screenKind,
+        context: transfer.context,
         resolvedImageId: image.id,
       );
       return;
@@ -507,7 +522,7 @@ final class TerminalKittyGraphicsController {
   void _placeImage(
     TerminalKittyGraphicsCommand replyCommand, {
     required TerminalKittyGraphicsCommand identitySource,
-    required TerminalScreenKind screenKind,
+    required _TerminalKittyCommandContext context,
     int? resolvedImageId,
   }) {
     final TerminalKittyGraphicsPlacement request = identitySource.placement;
@@ -560,13 +575,11 @@ final class TerminalKittyGraphicsController {
       );
       return;
     }
-    final TerminalScreen screen = screenSet.screenFor(screenKind);
-    final TerminalLogicalAnchor anchor = screenSet.viewport.anchorAtScreenCell(
-      screenKind,
-      screen.cursorRow,
-      screen.cursorColumn,
+    final TerminalScreen screen = screenSet.screenFor(context.screenKind);
+    final TerminalLogicalAnchor anchor = context.cursorAnchor;
+    final TerminalKittyImageStore store = screenSet.kittyImagesFor(
+      context.screenKind,
     );
-    final TerminalKittyImageStore store = screenSet.kittyImagesFor(screenKind);
     late final TerminalKittyImagePlacementResult result;
     try {
       result = store.place(
@@ -659,7 +672,10 @@ final class TerminalKittyGraphicsController {
     screen.setCursorPosition(screen.cursorRow, wraps ? 0 : targetColumn);
   }
 
-  void _delete(TerminalKittyGraphicsCommand command) {
+  void _delete(
+    TerminalKittyGraphicsCommand command,
+    _TerminalKittyCommandContext context,
+  ) {
     final TerminalKittyGraphicsDeleteSelector selector =
         command.deletion.selector;
     if (selector == TerminalKittyGraphicsDeleteSelector.animationFrames ||
@@ -672,14 +688,14 @@ final class TerminalKittyGraphicsController {
       );
       return;
     }
-    final TerminalScreenKind kind = screenSet.activeKind;
-    final TerminalScreen screen = screenSet.activeScreen;
-    final TerminalKittyImageStore store = screenSet.activeKittyImages;
+    final TerminalScreenKind kind = context.screenKind;
+    final TerminalScreen screen = screenSet.screenFor(kind);
+    final TerminalKittyImageStore store = screenSet.kittyImagesFor(kind);
     final ({int width, int height})? cell = screenSet.logicalCellSize;
     final TerminalKittyImageDeleteResult deleted = store.delete(
       deletion: command.deletion,
-      cursorRow: screen.cursorRow,
-      cursorColumn: screen.cursorColumn,
+      cursorRow: context.cursorRow,
+      cursorColumn: context.cursorColumn,
       screenRows: screen.rows,
       screenColumns: screen.columns,
       cellWidth: cell?.width ?? 0,
@@ -864,27 +880,46 @@ final class TerminalKittyGraphicsController {
 final class _TerminalKittyPendingTransfer {
   const _TerminalKittyPendingTransfer({
     required this.command,
-    required this.screenKind,
+    required this.context,
     required this.transferGeneration,
   });
 
   final TerminalKittyGraphicsCommand command;
-  final TerminalScreenKind screenKind;
+  final _TerminalKittyCommandContext context;
   final int transferGeneration;
 }
 
+final class _TerminalKittyCommandContext {
+  const _TerminalKittyCommandContext({
+    required this.screenKind,
+    required this.cursorAnchor,
+    required this.cursorRow,
+    required this.cursorColumn,
+  });
+
+  final TerminalScreenKind screenKind;
+  final TerminalLogicalAnchor cursorAnchor;
+  final int cursorRow;
+  final int cursorColumn;
+}
+
 final class _TerminalKittyQueueJob {
-  _TerminalKittyQueueJob.command(TerminalKittyGraphicsCommand value)
-    : command = value,
+  _TerminalKittyQueueJob.command(
+    TerminalKittyGraphicsCommand value,
+    _TerminalKittyCommandContext valueContext,
+  ) : command = value,
+      context = valueContext,
       _reply = null,
       byteCost = value.dataLength;
 
   _TerminalKittyQueueJob.reply(Uint8List reply)
     : command = null,
+      context = null,
       _reply = Uint8List.fromList(reply),
       byteCost = reply.length;
 
   final TerminalKittyGraphicsCommand? command;
+  final _TerminalKittyCommandContext? context;
   final Uint8List? _reply;
   final int byteCost;
 

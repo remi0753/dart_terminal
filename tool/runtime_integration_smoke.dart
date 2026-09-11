@@ -1124,6 +1124,14 @@ Future<void> _runTerminalDisplay(
   );
   _expect(
     observation.stdoutText.contains(
+      'TERMINAL_KITTY_GRAPHICS_TEST query=true multipart_rgba=true '
+      'multipart_png=true placement=true z_order=true scroll=true '
+      'history=true erase=true delete=true metal=true bounded=true',
+    ),
+    'terminal display launch omitted static Kitty graphics acceptance',
+  );
+  _expect(
+    observation.stdoutText.contains(
       'TERMINAL_DECRQSS_TEST selector=sgr default=true xterm=true '
       'exact=true bytes=9',
     ),
@@ -1248,6 +1256,7 @@ Future<void> _runTerminalDisplay(
     r'metal_default=true newest_frame=true frame_bounded=true '
     r'system_font=true mode_key=true text_input=true input_matrix=true '
     r'decrqss=true query_reports=true synchronized_output=true '
+    r'kitty_graphics=true '
     r'focus=true mouse=true selection=true '
     r'close_scroll=true scroll=true '
     r'hyperlink=true '

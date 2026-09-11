@@ -43,6 +43,89 @@ final class TerminalGlyphAtlasKey {
       scale16_16 == other.scale16_16;
 }
 
+/// Stable identity for one device-pixel Kitty image tile in the color atlas.
+final class TerminalKittyImageAtlasKey {
+  const TerminalKittyImageAtlasKey({
+    required this.screenKindIndex,
+    required this.imageId,
+    required this.imageResourceGeneration,
+    required this.placementGeneration,
+    required this.sourceX,
+    required this.sourceY,
+    required this.sourceWidth,
+    required this.sourceHeight,
+    required this.destinationX,
+    required this.destinationY,
+    required this.destinationWidth,
+    required this.destinationHeight,
+    required this.tileX,
+    required this.tileY,
+    required this.tileWidth,
+    required this.tileHeight,
+    required this.scale16_16,
+  });
+
+  final int screenKindIndex;
+  final int imageId;
+  final int imageResourceGeneration;
+  final int placementGeneration;
+  final int sourceX;
+  final int sourceY;
+  final int sourceWidth;
+  final int sourceHeight;
+  final int destinationX;
+  final int destinationY;
+  final int destinationWidth;
+  final int destinationHeight;
+  final int tileX;
+  final int tileY;
+  final int tileWidth;
+  final int tileHeight;
+  final int scale16_16;
+
+  @override
+  int get hashCode => Object.hashAll(<int>[
+    screenKindIndex,
+    imageId,
+    imageResourceGeneration,
+    placementGeneration,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    destinationX,
+    destinationY,
+    destinationWidth,
+    destinationHeight,
+    tileX,
+    tileY,
+    tileWidth,
+    tileHeight,
+    scale16_16,
+  ]);
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalKittyImageAtlasKey &&
+      screenKindIndex == other.screenKindIndex &&
+      imageId == other.imageId &&
+      imageResourceGeneration == other.imageResourceGeneration &&
+      placementGeneration == other.placementGeneration &&
+      sourceX == other.sourceX &&
+      sourceY == other.sourceY &&
+      sourceWidth == other.sourceWidth &&
+      sourceHeight == other.sourceHeight &&
+      destinationX == other.destinationX &&
+      destinationY == other.destinationY &&
+      destinationWidth == other.destinationWidth &&
+      destinationHeight == other.destinationHeight &&
+      tileX == other.tileX &&
+      tileY == other.tileY &&
+      tileWidth == other.tileWidth &&
+      tileHeight == other.tileHeight &&
+      scale16_16 == other.scale16_16;
+}
+
 final class TerminalGlyphAtlasLimits {
   const TerminalGlyphAtlasLimits({
     this.pageWidth = 512,
@@ -114,6 +197,7 @@ final class TerminalGlyphAtlasEntry {
     required Object owner,
     required this.entryId,
     required this.key,
+    this.kittyImageKey,
     required this.format,
     required this.pageId,
     required this.pageGeneration,
@@ -133,6 +217,7 @@ final class TerminalGlyphAtlasEntry {
   final Object _owner;
   final int entryId;
   final TerminalGlyphAtlasKey key;
+  final TerminalKittyImageAtlasKey? kittyImageKey;
   final TerminalGlyphAtlasFormat format;
   final int pageId;
   final int pageGeneration;
@@ -148,8 +233,42 @@ final class TerminalGlyphAtlasEntry {
   int _pinCount = 0;
 
   bool get isEmpty => width == 0;
+  bool get isKittyImage => kittyImageKey != null;
   bool get isPinned => _pinCount != 0;
   int get pinCount => _pinCount;
+}
+
+/// Short-lived pins used while one frame is assembled before native submit.
+final class TerminalGlyphAtlasBuildLease {
+  TerminalGlyphAtlasBuildLease._(this._atlas);
+
+  final TerminalGlyphAtlas _atlas;
+  final LinkedHashSet<TerminalGlyphAtlasEntry> _entries = LinkedHashSet();
+  bool _isClosed = false;
+
+  bool get isClosed => _isClosed;
+
+  void retain(TerminalGlyphAtlasEntry entry) {
+    if (_isClosed) throw StateError('atlas build lease is closed');
+    _atlas._validateEntry(entry);
+    if (_entries.add(entry)) {
+      entry._pinCount++;
+      _atlas._touch(entry);
+    }
+  }
+
+  void close() {
+    if (_isClosed) return;
+    for (final TerminalGlyphAtlasEntry entry in _entries) {
+      if (entry._pinCount <= 0) {
+        throw StateError('atlas build pin accounting is corrupt');
+      }
+      entry._pinCount--;
+    }
+    _entries.clear();
+    _isClosed = true;
+    _atlas._activeBuildLeaseCount--;
+  }
 }
 
 final class TerminalGlyphAtlasPageDescriptor {
@@ -259,6 +378,8 @@ final class TerminalGlyphAtlas {
   final TerminalGlyphAtlasLimits limits;
   final Object _owner = Object();
   final Map<TerminalGlyphAtlasKey, TerminalGlyphAtlasEntry> _entries = {};
+  final Map<TerminalKittyImageAtlasKey, TerminalGlyphAtlasEntry>
+  _kittyImageEntries = <TerminalKittyImageAtlasKey, TerminalGlyphAtlasEntry>{};
   final List<_AtlasPage> _pages = [];
   final Map<int, _AtlasRect> _dirtyPageRects = {};
   final Map<int, List<TerminalGlyphAtlasEntry>> _pins = {};
@@ -268,6 +389,7 @@ final class TerminalGlyphAtlas {
   int _resourceGeneration = 1;
   int _resetEpoch = 0;
   int _nextEntryId = 1;
+  int _nextKittySyntheticGlyphId = -1;
   int _nextPageId = 1;
   int _nextPageGeneration = 1;
   int _useClock = 1;
@@ -275,6 +397,7 @@ final class TerminalGlyphAtlas {
   int _evictionCount = 0;
   int _hitCount = 0;
   int _missCount = 0;
+  int _activeBuildLeaseCount = 0;
 
   int get catalogGeneration => _catalogGeneration;
   int get scale16_16 => _scale16_16;
@@ -282,6 +405,7 @@ final class TerminalGlyphAtlas {
   int get resourceGeneration => _resourceGeneration;
   int get resetEpoch => _resetEpoch;
   int get entryCount => _entries.length;
+  int get kittyImageEntryCount => _kittyImageEntries.length;
   int get pageCount => _pages.length;
   int get alphaPageCount => _pages
       .where(
@@ -302,6 +426,11 @@ final class TerminalGlyphAtlas {
   int get pendingUploadPageCount => _dirtyPageRects.length;
   TerminalGlyphAtlasMetrics get metrics =>
       TerminalGlyphAtlasMetrics(hitCount: _hitCount, missCount: _missCount);
+
+  TerminalGlyphAtlasBuildLease beginBuildLease() {
+    _activeBuildLeaseCount++;
+    return TerminalGlyphAtlasBuildLease._(this);
+  }
 
   TerminalGlyphAtlasEntry? lookup(TerminalGlyphAtlasKey key) {
     _validateKeyDomain(key);
@@ -336,6 +465,48 @@ final class TerminalGlyphAtlas {
       }
     }
     return List.unmodifiable(result);
+  }
+
+  TerminalGlyphAtlasEntry? lookupKittyImage(TerminalKittyImageAtlasKey key) {
+    _validateKittyImageKeyDomain(key);
+    final TerminalGlyphAtlasEntry? entry = _kittyImageEntries[key];
+    if (entry == null) {
+      _missCount = _saturatingAtlasIncrement(_missCount);
+      return null;
+    }
+    _hitCount = _saturatingAtlasIncrement(_hitCount);
+    _touch(entry);
+    return entry;
+  }
+
+  TerminalGlyphAtlasEntry ingestKittyImageTile({
+    required TerminalKittyImageAtlasKey key,
+    required Uint8List rgba,
+  }) {
+    _validateKittyImageKeyDomain(key);
+    final int width = key.tileWidth;
+    final int height = key.tileHeight;
+    if (width <= 0 ||
+        height <= 0 ||
+        width > limits.pageWidth - limits.gutter * 2 ||
+        height > limits.pageHeight - limits.gutter * 2 ||
+        rgba.length != width * height * 4) {
+      throw const TerminalGlyphAtlasCapacityException(
+        'Kitty image tile does not fit a color atlas page',
+      );
+    }
+    final TerminalGlyphAtlasEntry? existing = _kittyImageEntries[key];
+    if (existing != null) {
+      if (existing.width != width ||
+          existing.height != height ||
+          existing.rowStride != width * 4 ||
+          !_bytesEqual(copyEntryPixels(existing), rgba)) {
+        throw StateError('existing Kitty atlas key has different pixel bytes');
+      }
+      _touch(existing);
+      return existing;
+    }
+    return _insertKittyImageTile(key, rgba);
   }
 
   void pinForSubmission(
@@ -534,7 +705,7 @@ final class TerminalGlyphAtlas {
   }
 
   void reset({required int catalogGeneration, required double scale}) {
-    if (_pins.isNotEmpty) {
+    if (_pins.isNotEmpty || _activeBuildLeaseCount != 0) {
       throw StateError('cannot reset an atlas with pinned submissions');
     }
     if (catalogGeneration <= 0) {
@@ -549,6 +720,7 @@ final class TerminalGlyphAtlas {
     _catalogGeneration = catalogGeneration;
     _scale16_16 = scale16_16;
     _entries.clear();
+    _kittyImageEntries.clear();
     _pages.clear();
     _dirtyPageRects.clear();
     _retainedBytes = 0;
@@ -625,6 +797,81 @@ final class TerminalGlyphAtlas {
       _markDirty(page, _AtlasRect(entry.x, entry.y, entry.width, entry.height));
     }
     _entries[key] = entry;
+    _incrementResourceGeneration();
+    return entry;
+  }
+
+  TerminalGlyphAtlasEntry _insertKittyImageTile(
+    TerminalKittyImageAtlasKey imageKey,
+    Uint8List rgba,
+  ) {
+    const TerminalGlyphAtlasFormat format =
+        TerminalGlyphAtlasFormat.rgba8Straight;
+    final int width = imageKey.tileWidth;
+    final int height = imageKey.tileHeight;
+    _ensureEntryCapacity(format);
+    final int allocationWidth = width + limits.gutter * 2;
+    final int allocationHeight = height + limits.gutter * 2;
+    late final _AtlasPage page;
+    late final _AtlasRect allocation;
+    while (true) {
+      final _AtlasPlacement? placement = _findPlacement(
+        format,
+        allocationWidth,
+        allocationHeight,
+      );
+      if (placement != null) {
+        page = placement.page;
+        allocation = placement.rect;
+        break;
+      }
+      if (_canCreatePage(format)) {
+        page = _createPage(format);
+        final _AtlasRect? created = page.allocate(
+          allocationWidth,
+          allocationHeight,
+        );
+        if (created == null) {
+          throw StateError('new atlas page rejected a prevalidated image tile');
+        }
+        allocation = created;
+        break;
+      }
+      if (!_evictForPlacement(format)) {
+        throw const TerminalGlyphAtlasCapacityException(
+          'all atlas eviction candidates are pinned',
+        );
+      }
+    }
+    final TerminalGlyphAtlasKey syntheticKey = TerminalGlyphAtlasKey(
+      catalogGeneration: _catalogGeneration,
+      faceId: -1,
+      glyphId: _takeKittySyntheticGlyphId(),
+      scale16_16: _scale16_16,
+    );
+    final TerminalGlyphAtlasEntry entry = TerminalGlyphAtlasEntry._(
+      owner: _owner,
+      entryId: _takeEntryId(),
+      key: syntheticKey,
+      kittyImageKey: imageKey,
+      format: format,
+      pageId: page.pageId,
+      pageGeneration: page.pageGeneration,
+      x: allocation.x + limits.gutter,
+      y: allocation.y + limits.gutter,
+      width: width,
+      height: height,
+      rowStride: width * 4,
+      originX: 0,
+      originY: 0,
+      allocation: allocation,
+      lastUse: _takeUseClock(),
+    );
+    _copyRasterIntoPage(page, entry, rgba);
+    page.entryIds.add(entry.entryId);
+    _markDirty(page, _AtlasRect(entry.x, entry.y, width, height));
+    _entries[syntheticKey] = entry;
+    _kittyImageEntries[imageKey] = entry;
     _incrementResourceGeneration();
     return entry;
   }
@@ -726,6 +973,8 @@ final class TerminalGlyphAtlas {
     _validateEntry(entry);
     if (entry.isPinned) throw StateError('cannot evict a pinned atlas entry');
     _entries.remove(entry.key);
+    final TerminalKittyImageAtlasKey? imageKey = entry.kittyImageKey;
+    if (imageKey != null) _kittyImageEntries.remove(imageKey);
     if (!entry.isEmpty) {
       final _AtlasPage page = _pageForEntry(entry);
       final _AtlasRect allocation = entry._allocation!;
@@ -806,9 +1055,17 @@ final class TerminalGlyphAtlas {
     }
   }
 
+  void _validateKittyImageKeyDomain(TerminalKittyImageAtlasKey key) {
+    if (key.scale16_16 != _scale16_16) {
+      throw StateError('Kitty image key belongs to another atlas domain');
+    }
+  }
+
   void _validateEntry(TerminalGlyphAtlasEntry entry) {
     if (!identical(entry._owner, _owner) ||
-        !identical(_entries[entry.key], entry)) {
+        !identical(_entries[entry.key], entry) ||
+        (entry.kittyImageKey != null &&
+            !identical(_kittyImageEntries[entry.kittyImageKey], entry))) {
       throw StateError('atlas entry is stale or belongs to another atlas');
     }
     _validateKeyDomain(entry.key);
@@ -826,6 +1083,16 @@ final class TerminalGlyphAtlas {
   }
 
   int _takeEntryId() => _takeCounter(() => _nextEntryId++, 'entry ID');
+  int _takeKittySyntheticGlyphId() {
+    final int value = _nextKittySyntheticGlyphId--;
+    if (value <= -0x7fffffffffffffff) {
+      throw const TerminalGlyphAtlasCapacityException(
+        'Kitty image atlas identity exhausted',
+      );
+    }
+    return value;
+  }
+
   int _takePageId() => _takeCounter(() => _nextPageId++, 'page ID');
   int _takePageGeneration() =>
       _takeCounter(() => _nextPageGeneration++, 'page generation');

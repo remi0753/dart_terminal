@@ -22,7 +22,83 @@ void runGlyphAtlasTests() {
   _testEntryLruAndPins();
   _testPageAndBytePressure();
   _testResetAndValidation();
+  _testKittyImageTilesShareAtlasLimitsAndPins();
   _testTextGoldens();
+}
+
+void _testKittyImageTilesShareAtlasLimitsAndPins() {
+  final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
+    catalogGeneration: 1,
+    limits: const TerminalGlyphAtlasLimits(
+      pageWidth: 8,
+      pageHeight: 8,
+      maximumAlphaPages: 1,
+      maximumColorPages: 1,
+      maximumEntries: 1,
+      maximumRetainedBytes: 8 * 8 * 4,
+      gutter: 1,
+    ),
+  );
+  TerminalKittyImageAtlasKey key(int placement) => TerminalKittyImageAtlasKey(
+    screenKindIndex: 0,
+    imageId: placement,
+    imageResourceGeneration: 1,
+    placementGeneration: placement,
+    sourceX: 0,
+    sourceY: 0,
+    sourceWidth: 1,
+    sourceHeight: 1,
+    destinationX: placement,
+    destinationY: 0,
+    destinationWidth: 2,
+    destinationHeight: 2,
+    tileX: placement,
+    tileY: 0,
+    tileWidth: 2,
+    tileHeight: 2,
+    scale16_16: 1 << 16,
+  );
+  final Uint8List red = Uint8List.fromList(<int>[
+    for (int index = 0; index < 4; index++) ...<int>[255, 0, 0, 255],
+  ]);
+  final Uint8List blue = Uint8List.fromList(<int>[
+    for (int index = 0; index < 4; index++) ...<int>[0, 0, 255, 255],
+  ]);
+  final TerminalGlyphAtlasEntry first = atlas.ingestKittyImageTile(
+    key: key(1),
+    rgba: red,
+  );
+  final TerminalGlyphAtlasEntry duplicate = atlas.ingestKittyImageTile(
+    key: key(1),
+    rgba: Uint8List.fromList(red),
+  );
+  _expect(
+    identical(first, duplicate) &&
+        first.isKittyImage &&
+        atlas.entryCount == 1 &&
+        atlas.kittyImageEntryCount == 1 &&
+        _bytesEqual(atlas.copyEntryPixels(first), red),
+    'Kitty tiles are keyed separately and reuse exact color pixels',
+  );
+  final TerminalGlyphAtlasBuildLease lease = atlas.beginBuildLease();
+  lease.retain(first);
+  _expectThrows<TerminalGlyphAtlasCapacityException>(
+    () => atlas.ingestKittyImageTile(key: key(2), rgba: blue),
+    'frame-build pins prevent a visible Kitty tile from being evicted',
+  );
+  lease.close();
+  final TerminalGlyphAtlasEntry second = atlas.ingestKittyImageTile(
+    key: key(2),
+    rgba: blue,
+  );
+  _expect(
+    atlas.lookupKittyImage(key(1)) == null &&
+        identical(atlas.lookupKittyImage(key(2)), second) &&
+        atlas.entryCount == 1 &&
+        atlas.kittyImageEntryCount == 1 &&
+        atlas.evictionCount == 1,
+    'unpinned Kitty tiles obey the common bounded LRU entry ceiling',
+  );
 }
 
 void _testIncrementalUploadRectangles() {
