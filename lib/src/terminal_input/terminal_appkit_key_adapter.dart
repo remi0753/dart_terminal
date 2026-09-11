@@ -8,6 +8,9 @@ abstract final class TerminalAppKitKeyAdapter {
     keyCode: event.keyCode,
     modifiers: event.modifiers,
     isRepeat: event.isRepeat,
+    eventType: event.kind == AppKitKeyEventKind.up
+        ? TerminalKeyEventType.release
+        : TerminalKeyEventType.press,
     characters: event.characters,
     charactersIgnoringModifiers: event.charactersIgnoringModifiers,
   );
@@ -16,6 +19,7 @@ abstract final class TerminalAppKitKeyAdapter {
     required int keyCode,
     required ModifierKeys modifiers,
     required bool isRepeat,
+    TerminalKeyEventType eventType = TerminalKeyEventType.press,
     required String characters,
     required String charactersIgnoringModifiers,
   }) => TerminalKeyEvent(
@@ -31,7 +35,7 @@ abstract final class TerminalAppKitKeyAdapter {
       numericPad: modifiers.numericPad,
       function: modifiers.function,
     ),
-    isRepeat: isRepeat,
+    eventType: isRepeat ? TerminalKeyEventType.repeat : eventType,
   );
 
   /// Maps macOS virtual key codes to layout-independent physical positions.

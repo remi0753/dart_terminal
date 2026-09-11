@@ -12,6 +12,11 @@ void runTerminalKeyEncoderTests() {
   _testFunctionAndKeypadFamilies();
   _testBasicKeysAndRepeat();
   _testOptionTextBehavior();
+  _testApplicationEscapeAndModifyOtherKeys();
+  _testKittyDisambiguationAndAlternates();
+  _testKittyFunctionalAndKeypadMap();
+  _testKittyEventTypes();
+  _testKittyAllKeysAssociatedTextAndBounds();
 }
 
 void _testKeyboardModeParsingAndReset() {
@@ -331,18 +336,469 @@ void _testBasicKeysAndRepeat() {
   );
 }
 
+void _testApplicationEscapeAndModifyOtherKeys() {
+  final TerminalKeyEncoder encoder = TerminalKeyEncoder();
+  _expectBytes(
+    encoder.encode(
+      _event(TerminalPhysicalKey.escape),
+      modes: const TerminalKeyboardModes(applicationEscape: true),
+    ),
+    '\x1bO[',
+    'application Escape mode emits the unambiguous mintty keycode',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.tab,
+        unmodifiedText: '\t',
+        modifiers: const TerminalKeyModifiers(option: true),
+      ),
+      modes: const TerminalKeyboardModes(modifyOtherKeys: 1),
+    ),
+    '\x1b[27;3;9~',
+    'modifyOtherKeys level 1 encodes Alt-Tab',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.period,
+        text: '.',
+        unmodifiedText: '.',
+        modifiers: const TerminalKeyModifiers(control: true),
+      ),
+      modes: const TerminalKeyboardModes(modifyOtherKeys: 1),
+    ),
+    '\x1b[27;5;46~',
+    'modifyOtherKeys level 1 encodes Control keys without a legacy mapping',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyA,
+        text: '\x01',
+        unmodifiedText: 'a',
+        modifiers: const TerminalKeyModifiers(control: true),
+      ),
+      modes: const TerminalKeyboardModes(modifyOtherKeys: 1),
+    ),
+    '\x01',
+    'modifyOtherKeys level 1 retains well-known Control mappings',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.tab,
+        unmodifiedText: '\t',
+        modifiers: const TerminalKeyModifiers(shift: true),
+      ),
+      modes: const TerminalKeyboardModes(modifyOtherKeys: 2),
+    ),
+    '\x1b[27;2;9~',
+    'modifyOtherKeys level 2 includes Shift-Tab',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyA,
+        text: 'A',
+        unmodifiedText: 'a',
+        modifiers: const TerminalKeyModifiers(shift: true),
+      ),
+      modes: const TerminalKeyboardModes(modifyOtherKeys: 2),
+    ),
+    '\x1b[27;2;65~',
+    'modifyOtherKeys carries the shifted keysym codepoint',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(TerminalPhysicalKey.keyA, text: 'a', unmodifiedText: 'a'),
+      modes: const TerminalKeyboardModes(modifyOtherKeys: 3),
+    ),
+    '\x1b[27;1;97~',
+    'modifyOtherKeys level 3 includes unmodified ordinary keys',
+  );
+}
+
+void _testKittyDisambiguationAndAlternates() {
+  final TerminalKeyEncoder encoder = TerminalKeyEncoder();
+  const TerminalKeyboardModes disambiguate = TerminalKeyboardModes(
+    kittyKeyboardFlags: TerminalKeyboardModes.kittyDisambiguateEscapeCodes,
+  );
+  _expectBytes(
+    encoder.encode(_event(TerminalPhysicalKey.escape), modes: disambiguate),
+    '\x1b[27u',
+    'Kitty disambiguates Escape',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyI,
+        text: '\t',
+        unmodifiedText: 'i',
+        modifiers: const TerminalKeyModifiers(shift: true, control: true),
+      ),
+      modes: const TerminalKeyboardModes(
+        kittyKeyboardFlags:
+            TerminalKeyboardModes.kittyDisambiguateEscapeCodes |
+            TerminalKeyboardModes.kittyReportAlternateKeys,
+      ),
+    ),
+    '\x1b[105:73;6u',
+    'Kitty uses the unshifted key and reports a distinct shifted alternate',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyC,
+        text: 'с',
+        unmodifiedText: 'с',
+        modifiers: const TerminalKeyModifiers(control: true),
+      ),
+      modes: const TerminalKeyboardModes(
+        kittyKeyboardFlags:
+            TerminalKeyboardModes.kittyDisambiguateEscapeCodes |
+            TerminalKeyboardModes.kittyReportAlternateKeys,
+      ),
+    ),
+    '\x1b[1089::99;5u',
+    'Kitty reports a distinct PC-101 base-layout key',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyA,
+        text: 'a',
+        unmodifiedText: 'a',
+        modifiers: const TerminalKeyModifiers(command: true),
+      ),
+      modes: disambiguate,
+    ),
+    '\x1b[97;9u',
+    'Kitty maps an unconsumed macOS Command event to Super',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyA,
+        text: '\x01',
+        unmodifiedText: 'a',
+        modifiers: const TerminalKeyModifiers(capsLock: true, control: true),
+      ),
+      modes: disambiguate,
+    ),
+    '\x1b[97;5u',
+    'Kitty omits lock modifiers from disambiguated text keys',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyA,
+        text: '\x01',
+        unmodifiedText: 'a',
+        modifiers: const TerminalKeyModifiers(control: true),
+      ),
+      modes: const TerminalKeyboardModes(
+        modifyOtherKeys: 2,
+        kittyKeyboardFlags: TerminalKeyboardModes.kittyDisambiguateEscapeCodes,
+      ),
+    ),
+    '\x1b[97;5u',
+    'Kitty progressive mode takes precedence over modifyOtherKeys',
+  );
+  _expectBytes(
+    encoder.encode(_event(TerminalPhysicalKey.enter), modes: disambiguate),
+    '\r',
+    'Enter retains its recovery-safe legacy press encoding',
+  );
+}
+
+void _testKittyFunctionalAndKeypadMap() {
+  final TerminalKeyEncoder encoder = TerminalKeyEncoder();
+  const TerminalKeyboardModes modes = TerminalKeyboardModes(
+    applicationCursorKeys: true,
+    applicationKeypad: true,
+    kittyKeyboardFlags: TerminalKeyboardModes.kittyDisambiguateEscapeCodes,
+  );
+  final Map<TerminalPhysicalKey, String> expected =
+      <TerminalPhysicalKey, String>{
+        TerminalPhysicalKey.insert: '\x1b[2~',
+        TerminalPhysicalKey.deleteForward: '\x1b[3~',
+        TerminalPhysicalKey.pageUp: '\x1b[5~',
+        TerminalPhysicalKey.pageDown: '\x1b[6~',
+        TerminalPhysicalKey.arrowUp: '\x1b[A',
+        TerminalPhysicalKey.arrowDown: '\x1b[B',
+        TerminalPhysicalKey.arrowRight: '\x1b[C',
+        TerminalPhysicalKey.arrowLeft: '\x1b[D',
+        TerminalPhysicalKey.home: '\x1b[H',
+        TerminalPhysicalKey.end: '\x1b[F',
+        TerminalPhysicalKey.f1: '\x1b[P',
+        TerminalPhysicalKey.f2: '\x1b[Q',
+        TerminalPhysicalKey.f3: '\x1b[13~',
+        TerminalPhysicalKey.f4: '\x1b[S',
+        TerminalPhysicalKey.f5: '\x1b[15~',
+        TerminalPhysicalKey.f6: '\x1b[17~',
+        TerminalPhysicalKey.f7: '\x1b[18~',
+        TerminalPhysicalKey.f8: '\x1b[19~',
+        TerminalPhysicalKey.f9: '\x1b[20~',
+        TerminalPhysicalKey.f10: '\x1b[21~',
+        TerminalPhysicalKey.f11: '\x1b[23~',
+        TerminalPhysicalKey.f12: '\x1b[24~',
+        for (var index = 0; index < 8; index++)
+          TerminalPhysicalKey.values[TerminalPhysicalKey.f13.index + index]:
+              '\x1b[${57376 + index}u',
+        for (var index = 0; index < 10; index++)
+          TerminalPhysicalKey.values[TerminalPhysicalKey.keypad0.index + index]:
+              '\x1b[${57399 + index}u',
+        TerminalPhysicalKey.keypadDecimal: '\x1b[57409u',
+        TerminalPhysicalKey.keypadDivide: '\x1b[57410u',
+        TerminalPhysicalKey.keypadMultiply: '\x1b[57411u',
+        TerminalPhysicalKey.keypadSubtract: '\x1b[57412u',
+        TerminalPhysicalKey.keypadAdd: '\x1b[57413u',
+        TerminalPhysicalKey.keypadEnter: '\x1b[57414u',
+        TerminalPhysicalKey.keypadEquals: '\x1b[57415u',
+        TerminalPhysicalKey.jisKeypadComma: '\x1b[57416u',
+      };
+  for (final MapEntry<TerminalPhysicalKey, String> entry in expected.entries) {
+    _expectBytes(
+      encoder.encode(_event(entry.key), modes: modes),
+      entry.value,
+      'Kitty functional map encodes ${entry.key.name}',
+    );
+  }
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.f5,
+        modifiers: const TerminalKeyModifiers(capsLock: true),
+      ),
+      modes: modes,
+    ),
+    '\x1b[15;65~',
+    'Kitty reports Caps Lock for non-text functional keys',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keypad1,
+        modifiers: const TerminalKeyModifiers(numericPad: true),
+      ),
+      modes: modes,
+    ),
+    '\x1b[57400u',
+    'numeric-pad event origin is not misreported as active Num Lock',
+  );
+}
+
+void _testKittyEventTypes() {
+  final TerminalKeyEncoder encoder = TerminalKeyEncoder();
+  const TerminalKeyboardModes eventModes = TerminalKeyboardModes(
+    kittyKeyboardFlags: TerminalKeyboardModes.kittyReportEventTypes,
+  );
+  _expectBytes(
+    encoder.encode(_event(TerminalPhysicalKey.arrowUp), modes: eventModes),
+    '\x1b[A',
+    'Kitty omits the default press event type',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.arrowUp,
+        eventType: TerminalKeyEventType.repeat,
+      ),
+      modes: eventModes,
+    ),
+    '\x1b[1;1:2A',
+    'Kitty reports functional-key repeat',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.arrowUp,
+        eventType: TerminalKeyEventType.release,
+      ),
+      modes: eventModes,
+    ),
+    '\x1b[1;1:3A',
+    'Kitty reports functional-key release',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyA,
+        text: 'a',
+        eventType: TerminalKeyEventType.repeat,
+      ),
+      modes: eventModes,
+    ),
+    'a',
+    'text repeat stays legacy without all-keys reporting',
+  );
+  _expect(
+    encoder
+        .encode(
+          _event(
+            TerminalPhysicalKey.keyA,
+            text: 'a',
+            eventType: TerminalKeyEventType.release,
+          ),
+          modes: eventModes,
+        )
+        .isEmpty,
+    'text release is suppressed without all-keys reporting',
+  );
+  _expect(
+    encoder
+        .encode(
+          _event(
+            TerminalPhysicalKey.enter,
+            eventType: TerminalKeyEventType.release,
+          ),
+          modes: eventModes,
+        )
+        .isEmpty,
+    'Enter release is suppressed without all-keys reporting',
+  );
+  _expect(
+    encoder
+        .encode(
+          _event(
+            TerminalPhysicalKey.arrowUp,
+            eventType: TerminalKeyEventType.release,
+          ),
+        )
+        .isEmpty,
+    'legacy mode suppresses release events',
+  );
+}
+
+void _testKittyAllKeysAssociatedTextAndBounds() {
+  final TerminalKeyEncoder encoder = TerminalKeyEncoder();
+  const int allFlags =
+      TerminalKeyboardModes.kittyReportEventTypes |
+      TerminalKeyboardModes.kittyReportAlternateKeys |
+      TerminalKeyboardModes.kittyReportAllKeys |
+      TerminalKeyboardModes.kittyReportAssociatedText;
+  const TerminalKeyboardModes modes = TerminalKeyboardModes(
+    kittyKeyboardFlags: allFlags,
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyA,
+        text: 'A',
+        unmodifiedText: 'a',
+        modifiers: const TerminalKeyModifiers(shift: true),
+      ),
+      modes: modes,
+    ),
+    '\x1b[97:65;2;65u',
+    'all-keys mode carries shifted alternate and associated text',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(TerminalPhysicalKey.unknown, text: '日本', unmodifiedText: ''),
+      modes: modes,
+    ),
+    '\x1b[0;1;26085:26412u',
+    'pure multi-codepoint text uses key zero and associated codepoints',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(TerminalPhysicalKey.keyA, text: 'a\n', unmodifiedText: 'a'),
+      modes: modes,
+    ),
+    '\x1b[97u',
+    'associated text containing a control code is omitted atomically',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyA,
+        text: 'a',
+        unmodifiedText: 'a',
+        modifiers: const TerminalKeyModifiers(capsLock: true),
+        eventType: TerminalKeyEventType.repeat,
+      ),
+      modes: modes,
+    ),
+    '\x1b[97;65:2;97u',
+    'all-keys repeat includes lock state, event type, and text',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyA,
+        text: 'a',
+        unmodifiedText: 'a',
+        eventType: TerminalKeyEventType.release,
+      ),
+      modes: modes,
+    ),
+    '\x1b[97;1:3u',
+    'all-keys release excludes associated text',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.keyA,
+        text: 'a',
+        unmodifiedText: 'a',
+        modifiers: const TerminalKeyModifiers(command: true),
+      ),
+      modes: modes,
+    ),
+    '\x1b[97;9u',
+    'Super prevents non-produced text from becoming associated text',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.enter,
+        eventType: TerminalKeyEventType.release,
+      ),
+      modes: modes,
+    ),
+    '\x1b[13;1:3u',
+    'all-keys mode enables Enter release',
+  );
+  _expect(
+    encoder
+        .encode(
+          _event(
+            TerminalPhysicalKey.jisEisu,
+            eventType: TerminalKeyEventType.release,
+          ),
+          modes: modes,
+        )
+        .isEmpty,
+    'a physical key without a protocol key code fails closed',
+  );
+  _expectThrowsLimit(
+    () => TerminalKeyEncoder(maximumEncodedBytes: 32).encode(
+      _event(
+        TerminalPhysicalKey.unknown,
+        text: List<String>.filled(20, '界').join(),
+      ),
+      modes: modes,
+    ),
+    'oversized associated text remains bounded',
+  );
+}
+
 TerminalKeyEvent _event(
   TerminalPhysicalKey physicalKey, {
   String text = '',
   String? unmodifiedText,
   TerminalKeyModifiers modifiers = const TerminalKeyModifiers(),
   bool isRepeat = false,
+  TerminalKeyEventType eventType = TerminalKeyEventType.press,
 }) => TerminalKeyEvent(
   physicalKey: physicalKey,
   text: text,
   unmodifiedText: unmodifiedText ?? text,
   modifiers: modifiers,
   isRepeat: isRepeat,
+  eventType: eventType,
 );
 
 void _expectBytes(Uint8List actual, String expected, String description) {

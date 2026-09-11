@@ -125,12 +125,12 @@ void runTerminalTextInputEventRouterTests() {
 
   _expect(
     rawResult.disposition == TerminalTextInputRouteDisposition.rawKey &&
-        raw.length == 1 &&
-        raw.single.physicalKey == TerminalPhysicalKey.arrowUp &&
-        raw.single.modifiers.function &&
-        raw.single.isRepeat &&
-        keyUpResult.disposition ==
-            TerminalTextInputRouteDisposition.keyUpIgnored &&
+        raw.length == 2 &&
+        raw.first.physicalKey == TerminalPhysicalKey.arrowUp &&
+        raw.first.modifiers.function &&
+        raw.first.eventType == TerminalKeyEventType.repeat &&
+        keyUpResult.disposition == TerminalTextInputRouteDisposition.rawKey &&
+        raw.last.eventType == TerminalKeyEventType.release &&
         suppressedResult.disposition ==
             TerminalTextInputRouteDisposition.rawSuppressed &&
         commitResult.disposition ==

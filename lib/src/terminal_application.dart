@@ -954,7 +954,7 @@ final class TerminalApplication {
           TerminalTextInputEventRouter(
             clientId: createdTextInputClient.clientId,
             onRawKeyDown: (TerminalKeyEvent event) {
-              keyEventRouter.handleTerminalKeyDown(event, createdPane);
+              keyEventRouter.handleTerminalKeyEvent(event, createdPane);
             },
             onPreedit:
                 ({
@@ -2475,7 +2475,7 @@ final class TerminalApplication {
               }
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
               reconcileRequest?.call();
-              lastKeyRoutes[pane.id] = keyRouter.handleTerminalKeyDown(
+              lastKeyRoutes[pane.id] = keyRouter.handleTerminalKeyEvent(
                 event,
                 pane,
               );
@@ -5703,7 +5703,7 @@ keybind = control+k=pane.focus-next
           TerminalTextInputEventRouter(
             clientId: client.clientId,
             onRawKeyDown: (TerminalKeyEvent event) {
-              keyRouter.handleTerminalKeyDown(event, pane);
+              keyRouter.handleTerminalKeyEvent(event, pane);
             },
             onPreedit:
                 ({
@@ -6626,7 +6626,7 @@ keybind = control+k=pane.focus-next
                     clientId: client.clientId,
                     onRawKeyDown: (TerminalKeyEvent event) {
                       terminalInputDeliveryCount++;
-                      keyRouter.handleTerminalKeyDown(event, pane);
+                      keyRouter.handleTerminalKeyEvent(event, pane);
                     },
                     onPreedit:
                         ({
@@ -11471,7 +11471,7 @@ final class TerminalKeyRouteResult {
   final TerminalActionId? applicationAction;
 }
 
-/// Resolves and encodes one AppKit key-down event for the active terminal pane.
+/// Resolves and encodes one AppKit key event for the active terminal pane.
 ///
 /// Each handled event invokes one pane action, schedules one application
 /// action, or performs one bounded pane write. An application binding without
@@ -11505,20 +11505,26 @@ final class TerminalKeyEventRouter {
   TerminalKeyRouteResult handleKeyDown(
     AppKitKeyEvent appKitEvent,
     TerminalPane pane,
-  ) {
-    if (appKitEvent.kind != AppKitKeyEventKind.down) {
-      return TerminalKeyRouteResult.ignored;
-    }
-    return handleTerminalKeyDown(
-      TerminalAppKitKeyAdapter.adapt(appKitEvent),
-      pane,
-    );
-  }
+  ) => handleKeyEvent(appKitEvent, pane);
+
+  TerminalKeyRouteResult handleKeyEvent(
+    AppKitKeyEvent appKitEvent,
+    TerminalPane pane,
+  ) =>
+      handleTerminalKeyEvent(TerminalAppKitKeyAdapter.adapt(appKitEvent), pane);
 
   TerminalKeyRouteResult handleTerminalKeyDown(
     TerminalKeyEvent event,
     TerminalPane pane,
+  ) => handleTerminalKeyEvent(event, pane);
+
+  TerminalKeyRouteResult handleTerminalKeyEvent(
+    TerminalKeyEvent event,
+    TerminalPane pane,
   ) {
+    if (event.eventType == TerminalKeyEventType.release) {
+      return _encode(event, pane);
+    }
     final TerminalKeyBindingResolution resolution =
         (_configurationAuthority?.keyBindingEngine ?? _bindingEngine).resolve(
           event,
@@ -11564,7 +11570,7 @@ final class TerminalKeyEventRouter {
           numericPad: event.modifiers.numericPad,
           function: event.modifiers.function,
         ),
-        isRepeat: event.isRepeat,
+        eventType: event.eventType,
       );
 
   static void _performAction(

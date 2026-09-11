@@ -4,7 +4,7 @@
 
 - Date started: 2026-09-11
 - Scope: first Phase 9 roadmap item
-- Status: subtask 1 complete; parent in progress
+- Status: subtasks 1–2 complete; parent in progress
 
 ## Purpose and background
 
@@ -176,6 +176,88 @@ in ROADMAP, and committed before the next one begins.
   6→2 and accepted replies 3→4 while every visible snapshot line matched. The
   exact counter line and aggregate snapshot hash `995854368` were updated;
   exhaustive 1,437 split/bytewise runs passed afterward.
+- 2026-09-11: after committing subtask 1 as `341f938` (`Add bounded Kitty
+  keyboard protocol controls`), ROADMAP and this memo were reread. The next
+  ordered target is canonical key-event encoding and press/repeat/release
+  routing; product acceptance and compatibility closure remain explicitly
+  deferred to subtask 3.
+- 2026-09-11: subtask 2 starts from a clean worktree. The existing native text
+  input router currently discards key-up before adapting the event, while the
+  direct AppKit router also rejects it. The release path must therefore be
+  added at the composition boundary as well as the AppKit adapter/router, with
+  release events bypassing keybindings and remaining silent unless Kitty's
+  report-event-types policy permits an encoding.
+- 2026-09-11: Kitty v0.48.2 defines press/repeat/release values 1/2/3, permits
+  omitting the default press subfield, suppresses Enter/Tab/Backspace release
+  unless all-keys reporting is active, excludes control code points from
+  associated text, maps Command to Super and Option to Alt, and assigns the
+  exposed F13–F20/keypad families to PUA values 57376–57383 and 57399–57416.
+  The implementation keeps the AppKit `numericPad` origin bit separate from
+  Num Lock state, because the former does not establish that Num Lock is on.
+- 2026-09-11: the pinned xterm-411 contract and its current official manual
+  agree that modifyOtherKeys level 1 retains well-known Shift/Control behavior,
+  level 2 applies all ordinary-key modifiers, and level 3 also encodes
+  unmodified keys as `CSI 27;modifier;codepoint~`. The pinned mintty page
+  specifies application Escape exactly as `ESC O [`.
+- 2026-09-11: a current Alacritty primary implementation was consulted only as
+  corroborating comparison evidence: it omits the press event subfield, adds
+  event types only for repeat/release, excludes associated text on release,
+  routes release outside keybindings, and uses the canonical F3 `CSI 13 ~`
+  form. Product behavior remains derived from the pinned protocol sources.
+- 2026-09-11: direct formatting completed but then Dart telemetry attempted to
+  update an existing user-cache timestamp outside the workspace sandbox and
+  failed. Approved-cache focused encoder, adapter, and native text-input router
+  tests passed. The first integrated `test/run_tests.dart` attempt stopped at
+  the expected Phase 7 AppKit acceptance freshness gate after its covered input
+  sources changed; `dart analyze` independently reported no issues. The
+  acceptance ledger must be regenerated and the same runner repeated.
+- 2026-09-11: the platform-independent event now retains an explicit
+  press/repeat/release type. The former `isRepeat` constructor input and getter
+  remain compatible, while AppKit and native text-input events translate key-up
+  to release. Release bypasses the binding engine and application actions; the
+  encoder emits it only when report-event-types is set and the key is reportable
+  under the active progressive flags. IME-active raw events remain suppressed.
+- 2026-09-11: Kitty encoding takes precedence over modifyOtherKeys whenever a
+  progressive flag requires an escape representation. Default flags still use
+  the original encoder branch byte-for-byte. Disambiguation covers Escape,
+  modified ASCII keys, non-text functional keys, and dedicated keypad PUA
+  values; F3 uses canonical `CSI 13 ~`, while F1/F2/F4 and cursor keys use the
+  protocol's parameterized CSI forms independent of legacy application modes.
+- 2026-09-11: alternate-key emission includes a shifted key only when Shift is
+  active and its scalar differs, and includes the PC-101 physical base only
+  when distinct, using an empty shifted subfield when required. Associated text
+  is emitted only with all-keys plus associated-text, only for press/repeat,
+  only when Ctrl/Alt/Super did not prevent text production, and only when the
+  complete scalar list contains no C0/C1/AppKit private function placeholder.
+  Unknown text-only input can use key zero; unsupported key-only physical
+  positions return no bytes.
+- 2026-09-11: xterm modifyOtherKeys states 1–3 are encoded separately in their
+  `CSI 27;modifier;keysym~` form. Level 1 preserves well-known Control mappings,
+  level 2 includes all modified ordinary keys (including the shifted keysym),
+  and level 3 includes unmodified ordinary keys. Kitty state wins if both are
+  active. The 256-byte product limit is enforced after every new encoding path.
+
+## Subtask 2 verification
+
+- `test/terminal_key_encoder_test.dart`: passed legacy equivalence plus exact
+  application-Escape and modifyOtherKeys levels 1–3 vectors; all exposed
+  cursor/edit/F1–F20/keypad mappings; Super/Caps Lock handling; Cyrillic
+  PC-101 base and shifted alternates; press/repeat/release suppression and
+  emission; associated multi-codepoint text/control filtering; unsupported-key
+  fail-closed behavior; and an oversized associated-text rejection.
+- `test/terminal_appkit_key_adapter_test.dart` and
+  `test/terminal_text_input_event_router_test.dart`: passed repeat/release field
+  preservation and exclusive IME/raw delivery with key-up retained.
+- `test/run_tests.dart`: passed mode-aware AppKit routing, including one
+  requested arrow release write and a Control-D release which bypasses the
+  matching key-down action. The regenerated Phase 7 AppKit acceptance ledger
+  reports 4 criteria, 13 source references, 10 unit tests, 4 integration tests,
+  and 8 UI assertions.
+- Final `CI=true DART_SUPPRESS_ANALYTICS=true make test`: passed every generated
+  artifact and compatibility freshness check, formatted 246 files without
+  changes, reported no analyzer issues, and passed the complete test runner.
+- `git diff --check`: passed before the ROADMAP progress update. Final staged
+  scope is reviewed immediately before the subtask commit.
 
 ## Subtask 1 verification
 

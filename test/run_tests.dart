@@ -389,6 +389,52 @@ Future<void> _testModeAwareAppKitKeyRoute() async {
     'key-up and ignored Command input do not duplicate a pane write',
   );
 
+  session.keyboardModes = const TerminalKeyboardModes(
+    kittyKeyboardFlags: TerminalKeyboardModes.kittyReportEventTypes,
+  );
+  final TerminalKeyRouteResult kittyReleaseResult = standardRouter
+      .handleKeyEvent(
+        _appKitKeyEvent(
+          keyCode: 126,
+          characters: '\uf700',
+          unmodifiedCharacters: '\uf700',
+          modifierBits: ModifierKeys.functionBit,
+          kind: AppKitKeyEventKind.up,
+        ),
+        pane,
+      );
+  _expect(
+    kittyReleaseResult.disposition == TerminalKeyRouteDisposition.encoded &&
+        _bytesEqual(session.inputWrites.last, ascii.encode('\x1b[1;1:3A')),
+    'requested Kitty key-up bypasses bindings and writes one release event',
+  );
+
+  session.keyboardModes = const TerminalKeyboardModes(
+    kittyKeyboardFlags:
+        TerminalKeyboardModes.kittyReportEventTypes |
+        TerminalKeyboardModes.kittyReportAllKeys,
+  );
+  final TerminalKeyRouteResult boundReleaseResult = standardRouter
+      .handleKeyEvent(
+        _appKitKeyEvent(
+          keyCode: 2,
+          characters: '\x04',
+          unmodifiedCharacters: 'd',
+          modifierBits: ModifierKeys.controlBit,
+          kind: AppKitKeyEventKind.up,
+        ),
+        pane,
+      );
+  _expect(
+    boundReleaseResult.disposition == TerminalKeyRouteDisposition.encoded &&
+        session.endOfFileCount == 0 &&
+        _bytesEqual(session.inputWrites.last, ascii.encode('\x1b[100;5:3u')),
+    'Kitty release never invokes the matching key-down action',
+  );
+  session.keyboardModes = const TerminalKeyboardModes(
+    applicationCursorKeys: true,
+  );
+
   final TerminalKeyEventRouter passthroughRouter = TerminalKeyEventRouter(
     bindingEngine: TerminalKeyBindingEngine.standard(
       overrides: const <TerminalKeyBindingDefinition>[

@@ -38,8 +38,9 @@ final class TerminalTextInputRouteResult {
 /// Single-delivery policy between native NSTextInputClient events and a pane.
 ///
 /// Native already suppresses raw keys while marked text exists. This owner
-/// repeats that invariant defensively, ignores key-up for terminal encoding,
-/// and makes commit the only composition event that inserts text into the PTY.
+/// repeats that invariant defensively, retains raw key-up for mode-aware
+/// terminal encoding, and makes commit the only composition event that inserts
+/// text into the PTY.
 final class TerminalTextInputEventRouter {
   TerminalTextInputEventRouter({
     required this.clientId,
@@ -102,12 +103,6 @@ final class TerminalTextInputEventRouter {
   }
 
   TerminalTextInputRouteResult _routeKey(TerminalTextInputKeyEvent event) {
-    if (event.kind == TerminalTextInputKeyKind.up) {
-      return TerminalTextInputRouteResult(
-        TerminalTextInputRouteDisposition.keyUpIgnored,
-        event.generation,
-      );
-    }
     if (_compositionActive) {
       return TerminalTextInputRouteResult(
         TerminalTextInputRouteDisposition.rawSuppressed,
@@ -119,6 +114,9 @@ final class TerminalTextInputEventRouter {
         keyCode: event.keyCode,
         modifiers: event.modifiers,
         isRepeat: event.isRepeat,
+        eventType: event.kind == TerminalTextInputKeyKind.up
+            ? TerminalKeyEventType.release
+            : TerminalKeyEventType.press,
         characters: event.characters,
         charactersIgnoringModifiers: event.charactersIgnoringModifiers,
       ),

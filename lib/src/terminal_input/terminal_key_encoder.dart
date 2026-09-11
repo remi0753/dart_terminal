@@ -21,10 +21,10 @@ final class TerminalKeyEncodingLimitException implements Exception {
 
 enum TerminalOptionKeyBehavior { escape, text }
 
-/// Bounded encoder for the Phase 5 legacy xterm keyboard contract.
+/// Bounded encoder for legacy xterm and progressive Kitty keyboard input.
 ///
-/// Kitty keyboard and modifyOtherKeys are intentionally separate later
-/// protocols. An empty result means that this event has no terminal bytes.
+/// An empty result means that this event has no terminal bytes. Progressive
+/// modes are opt-in, and zero Kitty flags preserve the original legacy path.
 final class TerminalKeyEncoder {
   TerminalKeyEncoder({
     this.maximumEncodedBytes =
@@ -50,10 +50,6 @@ final class TerminalKeyEncoder {
     TerminalKeyEvent event, {
     TerminalKeyboardModes modes = const TerminalKeyboardModes(),
   }) {
-    if (event.modifiers.command) {
-      return Uint8List(0);
-    }
-
     final TerminalKeyEvent effectiveEvent =
         optionKeyBehavior == TerminalOptionKeyBehavior.text &&
             event.modifiers.option
@@ -69,9 +65,26 @@ final class TerminalKeyEncoder {
               numericPad: event.modifiers.numericPad,
               function: event.modifiers.function,
             ),
-            isRepeat: event.isRepeat,
+            eventType: event.eventType,
           )
         : event;
+
+    final List<int>? kitty = _encodeKitty(effectiveEvent, modes);
+    if (kitty != null) {
+      return _bounded(kitty);
+    }
+    if (effectiveEvent.eventType == TerminalKeyEventType.release ||
+        effectiveEvent.modifiers.command) {
+      return Uint8List(0);
+    }
+
+    final List<int>? modifiedOther = _encodeModifyOtherKeys(
+      effectiveEvent,
+      modes.modifyOtherKeys,
+    );
+    if (modifiedOther != null) {
+      return _bounded(modifiedOther);
+    }
 
     final List<int>? special = _encodeSpecial(effectiveEvent, modes);
     if (special != null) {
@@ -105,6 +118,440 @@ final class TerminalKeyEncoder {
     ]);
   }
 
+  /// Returns null to continue through the byte-identical legacy path.
+  /// An empty list suppresses an event which the active protocol cannot send.
+  List<int>? _encodeKitty(TerminalKeyEvent event, TerminalKeyboardModes modes) {
+    final int flags =
+        modes.kittyKeyboardFlags & TerminalKeyboardModes.kittyKnownFlags;
+    if (flags == 0) {
+      return null;
+    }
+
+    final bool disambiguate =
+        flags & TerminalKeyboardModes.kittyDisambiguateEscapeCodes != 0;
+    final bool reportEvents =
+        flags & TerminalKeyboardModes.kittyReportEventTypes != 0;
+    final bool reportAlternates =
+        flags & TerminalKeyboardModes.kittyReportAlternateKeys != 0;
+    final bool reportAll =
+        flags & TerminalKeyboardModes.kittyReportAllKeys != 0;
+    final bool reportAssociated =
+        reportAll &&
+        flags & TerminalKeyboardModes.kittyReportAssociatedText != 0;
+    final List<int>? associated =
+        reportAssociated &&
+            event.eventType != TerminalKeyEventType.release &&
+            !event.modifiers.control &&
+            !event.modifiers.option &&
+            !event.modifiers.command
+        ? _associatedTextCodePoints(event.text)
+        : null;
+
+    if (event.eventType == TerminalKeyEventType.release && !reportEvents) {
+      return const <int>[];
+    }
+
+    final bool legacyResetKey =
+        event.physicalKey == TerminalPhysicalKey.enter ||
+        event.physicalKey == TerminalPhysicalKey.tab ||
+        event.physicalKey == TerminalPhysicalKey.backspace;
+    if (legacyResetKey && !reportAll) {
+      return event.eventType == TerminalKeyEventType.release
+          ? const <int>[]
+          : null;
+    }
+
+    final bool protocolEncoding = disambiguate || reportEvents || reportAll;
+    final _KittyKeyEncoding? functional = protocolEncoding
+        ? _kittyFunctionalKey(event.physicalKey)
+        : null;
+    final int? textKey = _kittyTextKeyCode(event);
+    final bool textNeedsEscape =
+        reportAll ||
+        (disambiguate &&
+            _isLegacyAsciiTextKey(event.physicalKey) &&
+            (event.modifiers.control ||
+                event.modifiers.option ||
+                event.modifiers.command));
+
+    _KittyKeyEncoding? encoding = functional;
+    var textEncoding = false;
+    if (encoding == null && textNeedsEscape) {
+      final int? keyCode =
+          textKey ?? (associated != null && associated.isNotEmpty ? 0 : null);
+      if (keyCode != null) {
+        encoding = _KittyKeyEncoding.kitty(keyCode);
+        textEncoding = true;
+      }
+    }
+
+    if (encoding == null) {
+      return event.eventType == TerminalKeyEventType.release
+          ? const <int>[]
+          : null;
+    }
+
+    String keyField = encoding.key.toString();
+    if (textEncoding && reportAlternates && encoding.finalByte == 'u') {
+      final int? shifted = event.modifiers.shift
+          ? _kittyShiftedKeyCode(event)
+          : null;
+      final int? base = _baseLayoutKeyCode(event.physicalKey);
+      final int? distinctShifted = shifted != null && shifted != encoding.key
+          ? shifted
+          : null;
+      final int? distinctBase =
+          base != null && base != encoding.key && base != distinctShifted
+          ? base
+          : null;
+      if (distinctBase != null) {
+        keyField = '$keyField:${distinctShifted ?? ''}:$distinctBase';
+      } else if (distinctShifted != null) {
+        keyField = '$keyField:$distinctShifted';
+      }
+    }
+
+    final bool reportsEventType =
+        reportEvents && event.eventType != TerminalKeyEventType.press;
+    final int modifier = _kittyModifierParameter(
+      event.modifiers,
+      includeLocks: reportAll || !textEncoding,
+    );
+    final bool needsParameters =
+        modifier != 1 || reportsEventType || associated != null;
+    if (encoding.omitDefaultOne && !needsParameters) {
+      keyField = '';
+    }
+    final StringBuffer body = StringBuffer(keyField);
+    if (needsParameters) {
+      body.write(';$modifier');
+    }
+    if (reportsEventType) {
+      body
+        ..write(':')
+        ..write(switch (event.eventType) {
+          TerminalKeyEventType.press => 1,
+          TerminalKeyEventType.repeat => 2,
+          TerminalKeyEventType.release => 3,
+        });
+    }
+    if (associated != null) {
+      body
+        ..write(';')
+        ..write(associated.join(':'));
+    }
+    body.write(encoding.finalByte);
+    return _csi(body.toString());
+  }
+
+  List<int>? _encodeModifyOtherKeys(TerminalKeyEvent event, int state) {
+    if (state <= 0 || state > 3) {
+      return null;
+    }
+    final int? codePoint = _xtermOtherKeyCode(event);
+    if (codePoint == null) {
+      return null;
+    }
+    final TerminalKeyModifiers modifiers = event.modifiers;
+    final bool applies = switch (state) {
+      1 =>
+        modifiers.option ||
+            (modifiers.control && _controlByte(event.unmodifiedText) == null),
+      2 => modifiers.hasXtermModifier,
+      3 => true,
+      _ => false,
+    };
+    if (!applies) {
+      return null;
+    }
+    return _csi('27;${modifiers.xtermParameter};$codePoint~');
+  }
+
+  static _KittyKeyEncoding? _kittyFunctionalKey(TerminalPhysicalKey key) =>
+      switch (key) {
+        TerminalPhysicalKey.escape => _KittyKeyEncoding.kitty(27),
+        TerminalPhysicalKey.enter => _KittyKeyEncoding.kitty(13),
+        TerminalPhysicalKey.tab => _KittyKeyEncoding.kitty(9),
+        TerminalPhysicalKey.backspace => _KittyKeyEncoding.kitty(127),
+        TerminalPhysicalKey.insert => _KittyKeyEncoding.normal(2, '~'),
+        TerminalPhysicalKey.deleteForward => _KittyKeyEncoding.normal(3, '~'),
+        TerminalPhysicalKey.pageUp => _KittyKeyEncoding.normal(5, '~'),
+        TerminalPhysicalKey.pageDown => _KittyKeyEncoding.normal(6, '~'),
+        TerminalPhysicalKey.arrowUp => _KittyKeyEncoding.normal(
+          1,
+          'A',
+          omitDefaultOne: true,
+        ),
+        TerminalPhysicalKey.arrowDown => _KittyKeyEncoding.normal(
+          1,
+          'B',
+          omitDefaultOne: true,
+        ),
+        TerminalPhysicalKey.arrowRight => _KittyKeyEncoding.normal(
+          1,
+          'C',
+          omitDefaultOne: true,
+        ),
+        TerminalPhysicalKey.arrowLeft => _KittyKeyEncoding.normal(
+          1,
+          'D',
+          omitDefaultOne: true,
+        ),
+        TerminalPhysicalKey.home => _KittyKeyEncoding.normal(
+          1,
+          'H',
+          omitDefaultOne: true,
+        ),
+        TerminalPhysicalKey.end => _KittyKeyEncoding.normal(
+          1,
+          'F',
+          omitDefaultOne: true,
+        ),
+        TerminalPhysicalKey.f1 => _KittyKeyEncoding.normal(
+          1,
+          'P',
+          omitDefaultOne: true,
+        ),
+        TerminalPhysicalKey.f2 => _KittyKeyEncoding.normal(
+          1,
+          'Q',
+          omitDefaultOne: true,
+        ),
+        TerminalPhysicalKey.f3 => _KittyKeyEncoding.normal(13, '~'),
+        TerminalPhysicalKey.f4 => _KittyKeyEncoding.normal(
+          1,
+          'S',
+          omitDefaultOne: true,
+        ),
+        TerminalPhysicalKey.f5 => _KittyKeyEncoding.normal(15, '~'),
+        TerminalPhysicalKey.f6 => _KittyKeyEncoding.normal(17, '~'),
+        TerminalPhysicalKey.f7 => _KittyKeyEncoding.normal(18, '~'),
+        TerminalPhysicalKey.f8 => _KittyKeyEncoding.normal(19, '~'),
+        TerminalPhysicalKey.f9 => _KittyKeyEncoding.normal(20, '~'),
+        TerminalPhysicalKey.f10 => _KittyKeyEncoding.normal(21, '~'),
+        TerminalPhysicalKey.f11 => _KittyKeyEncoding.normal(23, '~'),
+        TerminalPhysicalKey.f12 => _KittyKeyEncoding.normal(24, '~'),
+        TerminalPhysicalKey.f13 => _KittyKeyEncoding.kitty(57376),
+        TerminalPhysicalKey.f14 => _KittyKeyEncoding.kitty(57377),
+        TerminalPhysicalKey.f15 => _KittyKeyEncoding.kitty(57378),
+        TerminalPhysicalKey.f16 => _KittyKeyEncoding.kitty(57379),
+        TerminalPhysicalKey.f17 => _KittyKeyEncoding.kitty(57380),
+        TerminalPhysicalKey.f18 => _KittyKeyEncoding.kitty(57381),
+        TerminalPhysicalKey.f19 => _KittyKeyEncoding.kitty(57382),
+        TerminalPhysicalKey.f20 => _KittyKeyEncoding.kitty(57383),
+        TerminalPhysicalKey.keypad0 => _KittyKeyEncoding.kitty(57399),
+        TerminalPhysicalKey.keypad1 => _KittyKeyEncoding.kitty(57400),
+        TerminalPhysicalKey.keypad2 => _KittyKeyEncoding.kitty(57401),
+        TerminalPhysicalKey.keypad3 => _KittyKeyEncoding.kitty(57402),
+        TerminalPhysicalKey.keypad4 => _KittyKeyEncoding.kitty(57403),
+        TerminalPhysicalKey.keypad5 => _KittyKeyEncoding.kitty(57404),
+        TerminalPhysicalKey.keypad6 => _KittyKeyEncoding.kitty(57405),
+        TerminalPhysicalKey.keypad7 => _KittyKeyEncoding.kitty(57406),
+        TerminalPhysicalKey.keypad8 => _KittyKeyEncoding.kitty(57407),
+        TerminalPhysicalKey.keypad9 => _KittyKeyEncoding.kitty(57408),
+        TerminalPhysicalKey.keypadDecimal => _KittyKeyEncoding.kitty(57409),
+        TerminalPhysicalKey.keypadDivide => _KittyKeyEncoding.kitty(57410),
+        TerminalPhysicalKey.keypadMultiply => _KittyKeyEncoding.kitty(57411),
+        TerminalPhysicalKey.keypadSubtract => _KittyKeyEncoding.kitty(57412),
+        TerminalPhysicalKey.keypadAdd => _KittyKeyEncoding.kitty(57413),
+        TerminalPhysicalKey.keypadEnter => _KittyKeyEncoding.kitty(57414),
+        TerminalPhysicalKey.keypadEquals => _KittyKeyEncoding.kitty(57415),
+        TerminalPhysicalKey.jisKeypadComma => _KittyKeyEncoding.kitty(57416),
+        _ => null,
+      };
+
+  static bool _isLegacyAsciiTextKey(TerminalPhysicalKey key) =>
+      _baseLayoutKeyCode(key) != null;
+
+  static int? _kittyTextKeyCode(TerminalKeyEvent event) {
+    final int? candidate = _singlePrintableScalar(event.unmodifiedText);
+    final int? base = _baseLayoutKeyCode(event.physicalKey);
+    if (candidate == null) {
+      return base;
+    }
+    if (!event.modifiers.shift) {
+      return candidate;
+    }
+
+    final int? shiftedBase = _shiftedBaseLayoutKeyCode(event.physicalKey);
+    if (base != null && (candidate == base || candidate == shiftedBase)) {
+      return base;
+    }
+    final String lower = String.fromCharCode(candidate).toLowerCase();
+    return _singlePrintableScalar(lower) ?? candidate;
+  }
+
+  static int? _kittyShiftedKeyCode(TerminalKeyEvent event) =>
+      _singlePrintableScalar(event.text) ??
+      _shiftedBaseLayoutKeyCode(event.physicalKey);
+
+  static int? _xtermOtherKeyCode(TerminalKeyEvent event) {
+    if (event.physicalKey == TerminalPhysicalKey.tab) {
+      return 9;
+    }
+    if (!_isLegacyAsciiTextKey(event.physicalKey) &&
+        event.physicalKey != TerminalPhysicalKey.section &&
+        event.physicalKey != TerminalPhysicalKey.jisYen &&
+        event.physicalKey != TerminalPhysicalKey.jisUnderscore &&
+        event.physicalKey != TerminalPhysicalKey.unknown) {
+      return null;
+    }
+    if (event.modifiers.shift) {
+      return _singlePrintableScalar(event.text) ??
+          _shiftedBaseLayoutKeyCode(event.physicalKey) ??
+          _kittyTextKeyCode(event);
+    }
+    return _singlePrintableScalar(event.unmodifiedText) ??
+        _baseLayoutKeyCode(event.physicalKey);
+  }
+
+  static int _kittyModifierParameter(
+    TerminalKeyModifiers modifiers, {
+    required bool includeLocks,
+  }) =>
+      1 +
+      (modifiers.shift ? 1 : 0) +
+      (modifiers.option ? 2 : 0) +
+      (modifiers.control ? 4 : 0) +
+      (modifiers.command ? 8 : 0) +
+      (includeLocks && modifiers.capsLock ? 64 : 0);
+
+  static List<int>? _associatedTextCodePoints(String text) {
+    if (text.isEmpty) {
+      return null;
+    }
+    final List<int> codePoints = text.runes.toList(growable: false);
+    if (codePoints.any(
+      (int scalar) =>
+          scalar < 0x20 ||
+          (scalar >= 0x7f && scalar <= 0x9f) ||
+          (scalar >= 0xf700 && scalar <= 0xf8ff),
+    )) {
+      return null;
+    }
+    return codePoints;
+  }
+
+  static int? _singlePrintableScalar(String text) {
+    final Iterator<int> iterator = text.runes.iterator;
+    if (!iterator.moveNext()) {
+      return null;
+    }
+    final int scalar = iterator.current;
+    if (iterator.moveNext() ||
+        scalar < 0x20 ||
+        (scalar >= 0x7f && scalar <= 0x9f) ||
+        (scalar >= 0xf700 && scalar <= 0xf8ff)) {
+      return null;
+    }
+    return scalar;
+  }
+
+  static int? _baseLayoutKeyCode(TerminalPhysicalKey key) => switch (key) {
+    TerminalPhysicalKey.keyA => 0x61,
+    TerminalPhysicalKey.keyB => 0x62,
+    TerminalPhysicalKey.keyC => 0x63,
+    TerminalPhysicalKey.keyD => 0x64,
+    TerminalPhysicalKey.keyE => 0x65,
+    TerminalPhysicalKey.keyF => 0x66,
+    TerminalPhysicalKey.keyG => 0x67,
+    TerminalPhysicalKey.keyH => 0x68,
+    TerminalPhysicalKey.keyI => 0x69,
+    TerminalPhysicalKey.keyJ => 0x6a,
+    TerminalPhysicalKey.keyK => 0x6b,
+    TerminalPhysicalKey.keyL => 0x6c,
+    TerminalPhysicalKey.keyM => 0x6d,
+    TerminalPhysicalKey.keyN => 0x6e,
+    TerminalPhysicalKey.keyO => 0x6f,
+    TerminalPhysicalKey.keyP => 0x70,
+    TerminalPhysicalKey.keyQ => 0x71,
+    TerminalPhysicalKey.keyR => 0x72,
+    TerminalPhysicalKey.keyS => 0x73,
+    TerminalPhysicalKey.keyT => 0x74,
+    TerminalPhysicalKey.keyU => 0x75,
+    TerminalPhysicalKey.keyV => 0x76,
+    TerminalPhysicalKey.keyW => 0x77,
+    TerminalPhysicalKey.keyX => 0x78,
+    TerminalPhysicalKey.keyY => 0x79,
+    TerminalPhysicalKey.keyZ => 0x7a,
+    TerminalPhysicalKey.digit0 => 0x30,
+    TerminalPhysicalKey.digit1 => 0x31,
+    TerminalPhysicalKey.digit2 => 0x32,
+    TerminalPhysicalKey.digit3 => 0x33,
+    TerminalPhysicalKey.digit4 => 0x34,
+    TerminalPhysicalKey.digit5 => 0x35,
+    TerminalPhysicalKey.digit6 => 0x36,
+    TerminalPhysicalKey.digit7 => 0x37,
+    TerminalPhysicalKey.digit8 => 0x38,
+    TerminalPhysicalKey.digit9 => 0x39,
+    TerminalPhysicalKey.grave => 0x60,
+    TerminalPhysicalKey.minus => 0x2d,
+    TerminalPhysicalKey.equal => 0x3d,
+    TerminalPhysicalKey.leftBracket => 0x5b,
+    TerminalPhysicalKey.rightBracket => 0x5d,
+    TerminalPhysicalKey.backslash => 0x5c,
+    TerminalPhysicalKey.semicolon => 0x3b,
+    TerminalPhysicalKey.quote => 0x27,
+    TerminalPhysicalKey.comma => 0x2c,
+    TerminalPhysicalKey.period => 0x2e,
+    TerminalPhysicalKey.slash => 0x2f,
+    TerminalPhysicalKey.space => 0x20,
+    _ => null,
+  };
+
+  static int? _shiftedBaseLayoutKeyCode(TerminalPhysicalKey key) =>
+      switch (key) {
+        TerminalPhysicalKey.keyA => 0x41,
+        TerminalPhysicalKey.keyB => 0x42,
+        TerminalPhysicalKey.keyC => 0x43,
+        TerminalPhysicalKey.keyD => 0x44,
+        TerminalPhysicalKey.keyE => 0x45,
+        TerminalPhysicalKey.keyF => 0x46,
+        TerminalPhysicalKey.keyG => 0x47,
+        TerminalPhysicalKey.keyH => 0x48,
+        TerminalPhysicalKey.keyI => 0x49,
+        TerminalPhysicalKey.keyJ => 0x4a,
+        TerminalPhysicalKey.keyK => 0x4b,
+        TerminalPhysicalKey.keyL => 0x4c,
+        TerminalPhysicalKey.keyM => 0x4d,
+        TerminalPhysicalKey.keyN => 0x4e,
+        TerminalPhysicalKey.keyO => 0x4f,
+        TerminalPhysicalKey.keyP => 0x50,
+        TerminalPhysicalKey.keyQ => 0x51,
+        TerminalPhysicalKey.keyR => 0x52,
+        TerminalPhysicalKey.keyS => 0x53,
+        TerminalPhysicalKey.keyT => 0x54,
+        TerminalPhysicalKey.keyU => 0x55,
+        TerminalPhysicalKey.keyV => 0x56,
+        TerminalPhysicalKey.keyW => 0x57,
+        TerminalPhysicalKey.keyX => 0x58,
+        TerminalPhysicalKey.keyY => 0x59,
+        TerminalPhysicalKey.keyZ => 0x5a,
+        TerminalPhysicalKey.digit0 => 0x29,
+        TerminalPhysicalKey.digit1 => 0x21,
+        TerminalPhysicalKey.digit2 => 0x40,
+        TerminalPhysicalKey.digit3 => 0x23,
+        TerminalPhysicalKey.digit4 => 0x24,
+        TerminalPhysicalKey.digit5 => 0x25,
+        TerminalPhysicalKey.digit6 => 0x5e,
+        TerminalPhysicalKey.digit7 => 0x26,
+        TerminalPhysicalKey.digit8 => 0x2a,
+        TerminalPhysicalKey.digit9 => 0x28,
+        TerminalPhysicalKey.grave => 0x7e,
+        TerminalPhysicalKey.minus => 0x5f,
+        TerminalPhysicalKey.equal => 0x2b,
+        TerminalPhysicalKey.leftBracket => 0x7b,
+        TerminalPhysicalKey.rightBracket => 0x7d,
+        TerminalPhysicalKey.backslash => 0x7c,
+        TerminalPhysicalKey.semicolon => 0x3a,
+        TerminalPhysicalKey.quote => 0x22,
+        TerminalPhysicalKey.comma => 0x3c,
+        TerminalPhysicalKey.period => 0x3e,
+        TerminalPhysicalKey.slash => 0x3f,
+        TerminalPhysicalKey.space => 0x20,
+        _ => null,
+      };
+
   List<int>? _encodeSpecial(
     TerminalKeyEvent event,
     TerminalKeyboardModes modes,
@@ -128,7 +575,9 @@ final class TerminalKeyEncoder {
           modifiers.control ? 0x08 : 0x7f,
         ];
       case TerminalPhysicalKey.escape:
-        return const <int>[0x1b];
+        return modes.applicationEscape
+            ? const <int>[0x1b, 0x4f, 0x5b]
+            : const <int>[0x1b];
       case TerminalPhysicalKey.arrowUp:
         return _cursor('A', modifiers, modes);
       case TerminalPhysicalKey.arrowDown:
@@ -383,4 +832,24 @@ final class TerminalKeyEncoder {
     }
     return Uint8List.fromList(bytes);
   }
+}
+
+final class _KittyKeyEncoding {
+  const _KittyKeyEncoding._(
+    this.key,
+    this.finalByte, {
+    this.omitDefaultOne = false,
+  });
+
+  const _KittyKeyEncoding.kitty(int key) : this._(key, 'u');
+
+  const _KittyKeyEncoding.normal(
+    int key,
+    String finalByte, {
+    bool omitDefaultOne = false,
+  }) : this._(key, finalByte, omitDefaultOne: omitDefaultOne);
+
+  final int key;
+  final String finalByte;
+  final bool omitDefaultOne;
 }

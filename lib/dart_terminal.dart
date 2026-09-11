@@ -133,6 +133,7 @@ export 'src/terminal_input/terminal_key_event.dart'
     show
         TerminalInputLimits,
         TerminalKeyEvent,
+        TerminalKeyEventType,
         TerminalKeyModifiers,
         TerminalPhysicalKey;
 export 'src/terminal_input/terminal_mouse_encoder.dart';

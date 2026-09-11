@@ -115,6 +115,9 @@ abstract final class TerminalInputLimits {
   static const int maximumEncodedBytesPerKeyEvent = 256;
 }
 
+/// Native key-event identity retained through routing and terminal encoding.
+enum TerminalKeyEventType { press, repeat, release }
+
 /// Independent modifier fields retained from the platform event.
 final class TerminalKeyModifiers {
   const TerminalKeyModifiers({
@@ -171,12 +174,16 @@ final class TerminalKeyEvent {
     this.text = '',
     this.unmodifiedText = '',
     this.modifiers = const TerminalKeyModifiers(),
-    this.isRepeat = false,
-  });
+    TerminalKeyEventType eventType = TerminalKeyEventType.press,
+    bool isRepeat = false,
+  }) : eventType = isRepeat ? TerminalKeyEventType.repeat : eventType;
 
   final TerminalPhysicalKey physicalKey;
   final String text;
   final String unmodifiedText;
   final TerminalKeyModifiers modifiers;
-  final bool isRepeat;
+  final TerminalKeyEventType eventType;
+
+  /// Compatibility view retained for the original press/repeat-only API.
+  bool get isRepeat => eventType == TerminalKeyEventType.repeat;
 }

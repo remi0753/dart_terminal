@@ -166,6 +166,23 @@ void _testEventFieldsRemainIndependent() {
         event.modifiers.function,
     'physical key, produced text, modifiers, and repeat stay independent',
   );
+
+  final TerminalKeyEvent release = TerminalAppKitKeyAdapter.adapt(
+    const AppKitKeyEvent(
+      windowHandle: 77,
+      monotonicMicros: 89,
+      kind: AppKitKeyEventKind.up,
+      keyCode: 0,
+      modifiers: ModifierKeys(0),
+      isRepeat: false,
+      characters: 'a',
+      charactersIgnoringModifiers: 'a',
+    ),
+  );
+  _expect(
+    release.eventType == TerminalKeyEventType.release && !release.isRepeat,
+    'AppKit key-up identity survives the platform adapter',
+  );
 }
 
 void _expect(bool condition, String message) {
