@@ -226,6 +226,7 @@ final class _ProductCorpusLoader {
     _expectKeys(map, const <String>{
       'max_sequence_bytes',
       'max_string_bytes',
+      'max_application_program_command_bytes',
       'max_parameters',
       'max_intermediates',
       'max_numeric_value',
@@ -236,6 +237,10 @@ final class _ProductCorpusLoader {
         '$id.max_sequence_bytes',
       ),
       maxStringBytes: _integer(map['max_string_bytes'], '$id.max_string_bytes'),
+      maxApplicationProgramCommandBytes: _integer(
+        map['max_application_program_command_bytes'],
+        '$id.max_application_program_command_bytes',
+      ),
       maxParameters: _integer(map['max_parameters'], '$id.max_parameters'),
       maxIntermediates: _integer(
         map['max_intermediates'],

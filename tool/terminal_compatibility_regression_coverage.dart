@@ -485,6 +485,10 @@ _ParserTraceEvidence _checkParserTrace(Directory root) {
             parser['max_string_bytes'],
             'max string bytes',
           ),
+          maxApplicationProgramCommandBytes: _integer(
+            parser['max_application_program_command_bytes'],
+            'max application program command bytes',
+          ),
           maxParameters: _integer(parser['max_parameters'], 'max parameters'),
           maxIntermediates: _integer(
             parser['max_intermediates'],

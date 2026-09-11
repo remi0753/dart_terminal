@@ -61,6 +61,9 @@ void _testVersionedRedactedTraceAndChunkIndependence() {
   final Map<String, Object?> limits = report['limits']! as Map<String, Object?>;
   _expect(
     (limits['parser']! as Map<String, Object?>)['string_bytes'] == 16 &&
+        (limits['parser']!
+                as Map<String, Object?>)['application_program_command_bytes'] ==
+            4610 &&
         (limits['inspector']! as Map<String, Object?>)['records'] == 64 &&
         (limits['export']! as Map<String, Object?>)['output_bytes'] == 1048576,
     'all reproduction and serialization bounds are exported',

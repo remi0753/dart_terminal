@@ -30,7 +30,7 @@ void _testCompletePinnedInventory() {
     inventory.version == 1 &&
         inventory.inventoryRevision == 5 &&
         inventory.scope == 'complete-baseline' &&
-        inventory.sourcePins.length == 12 &&
+        inventory.sourcePins.length == 19 &&
         inventory.records.length == 270 &&
         kinds[TerminalCompatibilitySelectorKind.c0] == 10 &&
         kinds[TerminalCompatibilitySelectorKind.c1] == 9 &&
@@ -95,6 +95,31 @@ void _testCompletePinnedInventory() {
     (TerminalCompatibilitySourcePin pin) =>
         pin.id == 'kitty-0-48-2-keyboard-protocol',
   );
+  final TerminalCompatibilitySourcePin kittyGraphics = inventory.sourcePins
+      .singleWhere(
+        (TerminalCompatibilitySourcePin pin) =>
+            pin.id == 'kitty-0-48-2-graphics-protocol',
+      );
+  const Map<String, String> graphicsParityPins = <String, String>{
+    'ghostty-d4d8f62-graphics-command':
+        '72d96e07ff675af5b77651a6718571688604e089525694979c797420ada19051',
+    'ghostty-d4d8f62-graphics-exec':
+        '617587c5edd81699029ae726436abf01a2852ed06598fea8ad4456a1bb99e8e2',
+    'ghostty-d4d8f62-graphics-image':
+        'b8c2071d24ca11fa077b5e3eb6bf09990257424428ce61a3d6c0d12e958d7d84',
+    'ghostty-d4d8f62-graphics-root':
+        '4a8853a61c8e03b4832802d5f79bd75d8704dd6d7775c88e42ab7b7240bc249d',
+    'ghostty-d4d8f62-graphics-storage':
+        'a2c29c02531f00b939485a9e45eeb8198d55648f116282c31e37bed84677328d',
+    'ghostty-d4d8f62-renderer-image':
+        '96562bf9b0a6a4fd2104586076768a7d15db34957cffbb0417b78371658fb3ad',
+  };
+  final bool graphicsParityExact = graphicsParityPins.entries.every(
+    (MapEntry<String, String> entry) => inventory.sourcePins.any(
+      (TerminalCompatibilitySourcePin pin) =>
+          pin.id == entry.key && pin.artifactSha256 == entry.value,
+    ),
+  );
   final TerminalCompatibilitySourcePin mintty = inventory.sourcePins
       .singleWhere(
         (TerminalCompatibilitySourcePin pin) =>
@@ -131,6 +156,10 @@ void _testCompletePinnedInventory() {
         kitty.artifactBytes == 36641 &&
         kitty.artifactSha256 ==
             'cd452d4f1b5070752499233f8d76455c854d0ec5f2318e38309f835baf2410ce' &&
+        kittyGraphics.artifactBytes == 59715 &&
+        kittyGraphics.artifactSha256 ==
+            'f575c1644fd4242a10e8c0d4d784f8cc8d8445f1bad3f3a87e6c3f51ad56e364' &&
+        graphicsParityExact &&
         mintty.artifactBytes == 264856 &&
         mintty.artifactSha256 ==
             '4144a9212fdc412088d5a094a09d827d729082239c8fbb7ef7b163d13d5d9d0e' &&
@@ -140,7 +169,7 @@ void _testCompletePinnedInventory() {
             '69773380309da4c8b5d4ec9646eec703c47bc41db29a8efa5b94c30798c72349' &&
         inventory.machineLine() ==
             'TERMINAL_COMPATIBILITY_INVENTORY_CHECK version=1 revision=5 '
-                'sources=12 records=270 implemented=96 partial=20 '
+                'sources=19 records=270 implemented=96 partial=20 '
                 'safe_ignore=9 unsupported=145',
     'primary source pins and content-free summary remain exact',
   );

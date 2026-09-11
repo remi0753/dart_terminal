@@ -153,7 +153,7 @@ final class TerminalCompatibilityInventory {
   static const String formatName = 'dart-terminal-sequence-mode-inventory';
   static const int formatVersion = 1;
   static const int maximumManifestBytes = 1024 * 1024;
-  static const int maximumSourcePins = 16;
+  static const int maximumSourcePins = 32;
   static const int maximumRecords = 4096;
   static const int maximumReferencesPerRecord = 8;
   static const int maximumEvidencePerRecord = 16;

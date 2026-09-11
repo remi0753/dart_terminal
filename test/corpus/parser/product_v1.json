@@ -12,6 +12,7 @@
       "parser_limits": {
         "max_sequence_bytes": 8192,
         "max_string_bytes": 4096,
+        "max_application_program_command_bytes": 4610,
         "max_parameters": 32,
         "max_intermediates": 8,
         "max_numeric_value": 1000000
@@ -32,6 +33,7 @@
       "parser_limits": {
         "max_sequence_bytes": 8192,
         "max_string_bytes": 4096,
+        "max_application_program_command_bytes": 4610,
         "max_parameters": 32,
         "max_intermediates": 8,
         "max_numeric_value": 1000000
@@ -52,6 +54,7 @@
       "parser_limits": {
         "max_sequence_bytes": 8192,
         "max_string_bytes": 4096,
+        "max_application_program_command_bytes": 4610,
         "max_parameters": 32,
         "max_intermediates": 8,
         "max_numeric_value": 1000000
@@ -72,6 +75,7 @@
       "parser_limits": {
         "max_sequence_bytes": 32,
         "max_string_bytes": 8,
+        "max_application_program_command_bytes": 16,
         "max_parameters": 3,
         "max_intermediates": 1,
         "max_numeric_value": 99
@@ -92,6 +96,7 @@
       "parser_limits": {
         "max_sequence_bytes": 8192,
         "max_string_bytes": 4096,
+        "max_application_program_command_bytes": 4610,
         "max_parameters": 32,
         "max_intermediates": 8,
         "max_numeric_value": 1000000
@@ -112,6 +117,7 @@
       "parser_limits": {
         "max_sequence_bytes": 8192,
         "max_string_bytes": 4096,
+        "max_application_program_command_bytes": 4610,
         "max_parameters": 32,
         "max_intermediates": 8,
         "max_numeric_value": 1000000
@@ -132,6 +138,7 @@
       "parser_limits": {
         "max_sequence_bytes": 8192,
         "max_string_bytes": 4096,
+        "max_application_program_command_bytes": 4610,
         "max_parameters": 32,
         "max_intermediates": 8,
         "max_numeric_value": 1000000
@@ -152,6 +159,7 @@
       "parser_limits": {
         "max_sequence_bytes": 8192,
         "max_string_bytes": 4096,
+        "max_application_program_command_bytes": 4610,
         "max_parameters": 32,
         "max_intermediates": 8,
         "max_numeric_value": 1000000

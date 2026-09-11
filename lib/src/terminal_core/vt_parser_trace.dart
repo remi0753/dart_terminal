@@ -114,6 +114,8 @@ final class VtParserTraceExporter {
         'parser': <String, Object?>{
           'sequence_bytes': parserLimits.maxSequenceBytes,
           'string_bytes': parserLimits.maxStringBytes,
+          'application_program_command_bytes':
+              parserLimits.maxApplicationProgramCommandBytes,
           'parameters': parserLimits.maxParameters,
           'intermediates': parserLimits.maxIntermediates,
           'numeric_value': parserLimits.maxNumericValue,

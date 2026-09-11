@@ -9,6 +9,7 @@ void runVtParserTests() {
   _testTypedSequenceFamiliesAcrossChunks();
   _testUncapturedSequenceMetadataPath();
   _testUncapturedSequenceLimitBoundary();
+  _testApcSpecificUncapturedLimit();
   _testUtf8RecoveryAndC1PrecedenceAcrossChunks();
   _testCancellationMalformedAndGroundControls();
   _testParserLimitsAndRecovery();
@@ -16,6 +17,43 @@ void runVtParserTests() {
   _testFinishResetAndSlices();
   _testRetainedSequenceCopies();
   _testLimitValidation();
+}
+
+void _testApcSpecificUncapturedLimit() {
+  final _UncapturedRecorder acceptedRecorder = _UncapturedRecorder();
+  final VtParser accepted = VtParser(sink: acceptedRecorder);
+  accepted.parse(
+    Uint8List.fromList(<int>[
+      0x1b,
+      0x5f,
+      ...List<int>.filled(4100, 0x41),
+      0x1b,
+      0x5c,
+    ]),
+  );
+  accepted.finish();
+  _expect(
+    acceptedRecorder.limits == 0 &&
+        acceptedRecorder.sequences.single == 'controlString/0/0/0/0/4100/1',
+    'uncaptured APC fast path uses the larger APC-specific limit',
+  );
+
+  final _UncapturedRecorder rejectedRecorder = _UncapturedRecorder();
+  final VtParser rejected = VtParser(sink: rejectedRecorder);
+  rejected.parse(
+    Uint8List.fromList(<int>[
+      0x1b,
+      0x5f,
+      ...List<int>.filled(4611, 0x41),
+      0x1b,
+      0x5c,
+    ]),
+  );
+  rejected.finish();
+  _expect(
+    rejectedRecorder.limits == 1 && rejectedRecorder.sequences.isEmpty,
+    'uncaptured APC fast path rejects input over the APC-specific limit',
+  );
 }
 
 void _testUncapturedSequenceLimitBoundary() {
@@ -466,6 +504,7 @@ void _testLimitValidation() {
   for (final VtParserLimits limits in <VtParserLimits>[
     const VtParserLimits(maxSequenceBytes: 3, maxStringBytes: 1),
     const VtParserLimits(maxSequenceBytes: 4, maxStringBytes: 4),
+    const VtParserLimits(maxApplicationProgramCommandBytes: 0),
     const VtParserLimits(maxParameters: 0),
     const VtParserLimits(maxIntermediates: 0),
     const VtParserLimits(maxNumericValue: 0),

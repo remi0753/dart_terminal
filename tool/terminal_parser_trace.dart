@@ -115,6 +115,10 @@ Future<_TraceCase> _loadFixture() async {
     parserLimits: VtParserLimits(
       maxSequenceBytes: _requiredInt(parser, 'max_sequence_bytes'),
       maxStringBytes: _requiredInt(parser, 'max_string_bytes'),
+      maxApplicationProgramCommandBytes: _requiredInt(
+        parser,
+        'max_application_program_command_bytes',
+      ),
       maxParameters: _requiredInt(parser, 'max_parameters'),
       maxIntermediates: _requiredInt(parser, 'max_intermediates'),
       maxNumericValue: _requiredInt(parser, 'max_numeric_value'),

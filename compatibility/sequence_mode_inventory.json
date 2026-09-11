@@ -77,6 +77,78 @@
       "retrievedOn": "2026-09-11"
     },
     {
+      "id": "ghostty-d4d8f62-graphics-command",
+      "family": "ghostty",
+      "title": "Ghostty Kitty graphics command parser",
+      "edition": "commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
+      "artifactUrl": "https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/kitty/graphics_command.zig",
+      "artifactBytes": 59818,
+      "artifactSha256": "72d96e07ff675af5b77651a6718571688604e089525694979c797420ada19051",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
+    },
+    {
+      "id": "ghostty-d4d8f62-graphics-exec",
+      "family": "ghostty",
+      "title": "Ghostty Kitty graphics command execution",
+      "edition": "commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
+      "artifactUrl": "https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/kitty/graphics_exec.zig",
+      "artifactBytes": 121582,
+      "artifactSha256": "617587c5edd81699029ae726436abf01a2852ed06598fea8ad4456a1bb99e8e2",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
+    },
+    {
+      "id": "ghostty-d4d8f62-graphics-image",
+      "family": "ghostty",
+      "title": "Ghostty Kitty graphics image state",
+      "edition": "commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
+      "artifactUrl": "https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/kitty/graphics_image.zig",
+      "artifactBytes": 62395,
+      "artifactSha256": "b8c2071d24ca11fa077b5e3eb6bf09990257424428ce61a3d6c0d12e958d7d84",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
+    },
+    {
+      "id": "ghostty-d4d8f62-graphics-root",
+      "family": "ghostty",
+      "title": "Ghostty Kitty graphics root contract",
+      "edition": "commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
+      "artifactUrl": "https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/kitty/graphics.zig",
+      "artifactBytes": 1446,
+      "artifactSha256": "4a8853a61c8e03b4832802d5f79bd75d8704dd6d7775c88e42ab7b7240bc249d",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
+    },
+    {
+      "id": "ghostty-d4d8f62-graphics-storage",
+      "family": "ghostty",
+      "title": "Ghostty Kitty graphics storage",
+      "edition": "commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
+      "artifactUrl": "https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/terminal/kitty/graphics_storage.zig",
+      "artifactBytes": 183116,
+      "artifactSha256": "a2c29c02531f00b939485a9e45eeb8198d55648f116282c31e37bed84677328d",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
+    },
+    {
+      "id": "ghostty-d4d8f62-renderer-image",
+      "family": "ghostty",
+      "title": "Ghostty renderer image projection",
+      "edition": "commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
+      "artifactUrl": "https://raw.githubusercontent.com/ghostty-org/ghostty/d4d8f62262cb1a974a7d2470d5f79f811fab15e4/src/renderer/image.zig",
+      "artifactBytes": 55221,
+      "artifactSha256": "96562bf9b0a6a4fd2104586076768a7d15db34957cffbb0417b78371658fb3ad",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
+    },
+    {
       "id": "ghostty-d4d8f62-semantic-prompt",
       "family": "ghostty",
       "title": "Ghostty OSC semantic prompt parser",
@@ -111,6 +183,18 @@
       "documentPath": null,
       "documentSha256": null,
       "retrievedOn": "2026-09-07"
+    },
+    {
+      "id": "kitty-0-48-2-graphics-protocol",
+      "family": "kitty",
+      "title": "Terminal graphics protocol",
+      "edition": "kitty v0.48.2",
+      "artifactUrl": "https://raw.githubusercontent.com/kovidgoyal/kitty/v0.48.2/docs/graphics-protocol.rst",
+      "artifactBytes": 59715,
+      "artifactSha256": "f575c1644fd4242a10e8c0d4d784f8cc8d8445f1bad3f3a87e6c3f51ad56e364",
+      "documentPath": null,
+      "documentSha256": null,
+      "retrievedOn": "2026-09-11"
     },
     {
       "id": "kitty-0-48-2-keyboard-protocol",

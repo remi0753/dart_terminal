@@ -25,9 +25,16 @@ Excluded from this bounded baseline are ECMA transmission controls and paged-med
 | `dec-vt510-rm-b01` | `dec` | B01, August 1995, EK-VT510-RM | 3378497 bytes, `440bbee110eb75027a06b5b375683fbc87cb739edac32899005ad46981c7d514` |
 | `ecma-48-5e` | `ecma48` | ECMA-48, fifth edition, June 1991 | 1607865 bytes, `9577ad2514c411584b274ef7a4b3238c80aa93defbb349b18b8c78f78873f450` |
 | `ghostty-d4d8f62-device-status` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 4808 bytes, `244a5aa349845a7780dfff4cd2cda2efa574153774d0655727bf4d22d12f579f` |
+| `ghostty-d4d8f62-graphics-command` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 59818 bytes, `72d96e07ff675af5b77651a6718571688604e089525694979c797420ada19051` |
+| `ghostty-d4d8f62-graphics-exec` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 121582 bytes, `617587c5edd81699029ae726436abf01a2852ed06598fea8ad4456a1bb99e8e2` |
+| `ghostty-d4d8f62-graphics-image` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 62395 bytes, `b8c2071d24ca11fa077b5e3eb6bf09990257424428ce61a3d6c0d12e958d7d84` |
+| `ghostty-d4d8f62-graphics-root` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 1446 bytes, `4a8853a61c8e03b4832802d5f79bd75d8704dd6d7775c88e42ab7b7240bc249d` |
+| `ghostty-d4d8f62-graphics-storage` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 183116 bytes, `a2c29c02531f00b939485a9e45eeb8198d55648f116282c31e37bed84677328d` |
+| `ghostty-d4d8f62-renderer-image` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 55221 bytes, `96562bf9b0a6a4fd2104586076768a7d15db34957cffbb0417b78371658fb3ad` |
 | `ghostty-d4d8f62-semantic-prompt` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 42962 bytes, `04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff` |
 | `ghostty-d4d8f62-size-report` | `ghostty` | commit d4d8f62262cb1a974a7d2470d5f79f811fab15e4 | 4250 bytes, `806a5932dd0f6c877902e884b72cc171e27d6d3d1991e97d3dd28217ad61f3ae` |
 | `iterm2-escape-codes-2026-09-07` | `iterm2` | retrieved 2026-09-07 | 31258 bytes, `b297c4fcd7ea35908e145420d743fe98fc0ee5bbb5844ed4a1f35f2d547cac98` |
+| `kitty-0-48-2-graphics-protocol` | `kitty` | kitty v0.48.2 | 59715 bytes, `f575c1644fd4242a10e8c0d4d784f8cc8d8445f1bad3f3a87e6c3f51ad56e364` |
 | `kitty-0-48-2-keyboard-protocol` | `kitty` | kitty v0.48.2 | 36641 bytes, `cd452d4f1b5070752499233f8d76455c854d0ec5f2318e38309f835baf2410ce` |
 | `mintty-ctrlseqs-25c73c7` | `mintty` | wiki revision 25c73c77961243934d790e632f1f9decaae82ee8 | 264856 bytes, `4144a9212fdc412088d5a094a09d827d729082239c8fbb7ef7b163d13d5d9d0e` |
 | `xterm-411` | `xterm` | xterm Patch #411, 2026-08-24 | 1633400 bytes, `969be283670deadd66934865c4de6c5ab045e3a3facc2b228decf91a20d8c36c` |

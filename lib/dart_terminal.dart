@@ -30,6 +30,21 @@ export 'src/terminal_core/terminal_hyperlink.dart'
         TerminalHyperlinkTable;
 export 'src/terminal_core/terminal_keyboard_modes.dart'
     show TerminalKeyboardModes;
+export 'src/terminal_core/terminal_kitty_graphics.dart'
+    show
+        TerminalKittyGraphicsAction,
+        TerminalKittyGraphicsCommand,
+        TerminalKittyGraphicsCommandParser,
+        TerminalKittyGraphicsCompression,
+        TerminalKittyGraphicsDeleteSelector,
+        TerminalKittyGraphicsDeletion,
+        TerminalKittyGraphicsLimits,
+        TerminalKittyGraphicsMedium,
+        TerminalKittyGraphicsParseException,
+        TerminalKittyGraphicsPlacement,
+        TerminalKittyGraphicsQuiet,
+        TerminalKittyGraphicsResponseEncoder,
+        TerminalKittyGraphicsTransmission;
 export 'src/terminal_core/terminal_mouse_modes.dart';
 export 'src/terminal_core/terminal_reply.dart'
     show

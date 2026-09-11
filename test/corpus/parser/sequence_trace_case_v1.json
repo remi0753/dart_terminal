@@ -6,6 +6,7 @@
   "parser_limits": {
     "max_sequence_bytes": 64,
     "max_string_bytes": 16,
+    "max_application_program_command_bytes": 4610,
     "max_parameters": 32,
     "max_intermediates": 8,
     "max_numeric_value": 1000000

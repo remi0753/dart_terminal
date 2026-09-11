@@ -36,6 +36,7 @@ final class VtParserLimits {
   const VtParserLimits({
     this.maxSequenceBytes = 8192,
     this.maxStringBytes = 4096,
+    this.maxApplicationProgramCommandBytes = 4610,
     this.maxParameters = 32,
     this.maxIntermediates = 8,
     this.maxNumericValue = 1000000,
@@ -43,6 +44,7 @@ final class VtParserLimits {
 
   final int maxSequenceBytes;
   final int maxStringBytes;
+  final int maxApplicationProgramCommandBytes;
   final int maxParameters;
   final int maxIntermediates;
   final int maxNumericValue;
@@ -60,6 +62,14 @@ final class VtParserLimits {
         maxStringBytes,
         'maxStringBytes',
         'must be positive and smaller than maxSequenceBytes',
+      );
+    }
+    if (maxApplicationProgramCommandBytes < 1 ||
+        maxApplicationProgramCommandBytes > 1024 * 1024) {
+      throw ArgumentError.value(
+        maxApplicationProgramCommandBytes,
+        'maxApplicationProgramCommandBytes',
+        'must be between 1 and 1048576',
       );
     }
     if (maxParameters < 1 || maxParameters > 1024) {
@@ -274,7 +284,11 @@ final class VtParser {
       _intermediates = Uint8List(limits.maxIntermediates),
       _parameterValues = Uint32List(limits.maxParameters),
       _parameterMetadata = Uint8List(limits.maxParameters),
-      _stringPayload = Uint8List(limits.maxStringBytes),
+      _stringPayload = Uint8List(
+        limits.maxStringBytes > limits.maxApplicationProgramCommandBytes
+            ? limits.maxStringBytes
+            : limits.maxApplicationProgramCommandBytes,
+      ),
       _utf8Byte = Uint8List(1),
       _utf8Decoder = StreamingUtf8Decoder(onScalar: sink.print);
 
@@ -409,7 +423,7 @@ final class VtParser {
         final int runLength = stringEnd - index;
         if (runLength != 0 &&
             _sequenceBytes + runLength <= limits.maxSequenceBytes &&
-            _stringLength + runLength <= limits.maxStringBytes) {
+            _stringLength + runLength <= _activeStringByteLimit) {
           _sequenceBytes += runLength;
           _stringLength += runLength;
           index = stringEnd;
@@ -798,7 +812,7 @@ final class VtParser {
     if (!_stringActive || _stringRejected) {
       return;
     }
-    if (_stringLength >= _stringPayload.length) {
+    if (_stringLength >= _activeStringByteLimit) {
       _markLimit(sourceState, VtParserLimitKind.stringBytes);
       return;
     }
@@ -807,6 +821,11 @@ final class VtParser {
     }
     _stringLength++;
   }
+
+  int get _activeStringByteLimit =>
+      _stringKind == VtStringKind.applicationProgramCommand
+      ? limits.maxApplicationProgramCommandBytes
+      : limits.maxStringBytes;
 
   void _leaveString(
     VtParserState sourceState,

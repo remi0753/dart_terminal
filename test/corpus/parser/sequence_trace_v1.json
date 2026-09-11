@@ -13,6 +13,7 @@
     "parser": {
       "sequence_bytes": 64,
       "string_bytes": 16,
+      "application_program_command_bytes": 4610,
       "parameters": 32,
       "intermediates": 8,
       "numeric_value": 1000000

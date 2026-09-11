@@ -4,7 +4,7 @@
   "manifest_path": "test/corpus/differential/reviewed_v1.json",
   "manifest_sha256": "3f981013bf7cc12a53e1016dd8f9df5c8abe66713dd3d9b360afdd351a08335b",
   "inventory_path": "compatibility/sequence_mode_inventory.json",
-  "inventory_sha256": "f331b66c244fdebb9d085909910089d640452be6bce836edfa6d5d0dd25e85a3",
+  "inventory_sha256": "2eef25ff6420781d6e34c5a42c824b5902d5ffa5cf553264b86c698e4ae4b440",
   "implementation_manifest_path": "compatibility/implemented_sequence_manifest.json",
   "implementation_manifest_sha256": "f634f32970422d06de8aceba92cc6bd6732387017008c05a32745b49eb9c2dd7",
   "observation_version": 1,

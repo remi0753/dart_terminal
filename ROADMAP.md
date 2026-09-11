@@ -1132,6 +1132,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] product appearance/resize projection、compatibility closure
   - [x] M1 real PTY/Metal acceptance、親項目完了判定
 - [ ] Kitty graphics parse/storage/placement/render
+  （分割、境界、完了条件は
+  [`docs/phase9/kitty-graphics.md`](docs/phase9/kitty-graphics.md)
+  を参照して順に実施する）
+  - [x] immutable source pins、bounded APC command grammar、reply contract
+  - [ ] process-worker direct decode と bounded static image storage
+  - [ ] placement/delete/z-index/scroll/screen semantics と reference projection
+  - [ ] Metal product acceptance、compatibility/documentation closure、親項目完了判定
 - [ ] image animation と resource eviction
 - [ ] desktop notification、progress、semantic prompt extensions
 - [ ] OSC 52 confirmation/policy UI

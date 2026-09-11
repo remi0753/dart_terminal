@@ -269,6 +269,7 @@ void _withFixture(
           'parser_limits': <String, Object?>{
             'max_sequence_bytes': 32,
             'max_string_bytes': 16,
+            'max_application_program_command_bytes': 4610,
             'max_parameters': 8,
             'max_intermediates': 4,
             'max_numeric_value': 1000,
