@@ -11208,6 +11208,10 @@ keybind = control+k=pane.focus-next
     const String scrollMarker = '__DT_KITTY_GRAPHICS_SCROLL__';
     const String erasedMarker = '__DT_KITTY_GRAPHICS_ERASED__';
     const String deletedMarker = '__DT_KITTY_GRAPHICS_DELETED__';
+    const String animationMarker = '__DT_KITTY_GRAPHICS_ANIMATION__';
+    const String evictionMarker = '__DT_KITTY_GRAPHICS_EVICTION__';
+    const String evictionDeletedMarker =
+        '__DT_KITTY_GRAPHICS_EVICTION_DELETED__';
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
     pane.insertText(
@@ -11385,9 +11389,73 @@ keybind = control+k=pane.focus-next
       'offset=${screens.viewport.offset}, positions=$placementPositions)',
     );
 
+    final TerminalLiveMetalSurfaceSnapshot animationBaseline = surface
+        .snapshot();
+    final int acceptedBeforeAnimation =
+        session.kittyGraphicsController.acceptedCommandCount;
     pane.insertText(
+      "stty raw -echo; "
+      "printf '\\033_Ga=f,i=93,f=32,s=1,v=1;AP8A/w==\\033\\\\'; "
+      "dd bs=1 count=16 >/dev/null 2>&1; "
+      "printf '\\033_Ga=a,i=93,r=1,z=40,c=1,s=3,v=1\\033\\\\'; "
+      "sleep 1; stty sane; "
+      "printf '\\r\\n__DT_KITTY_GRAPHICS_%s__\\r\\n' 'ANIMATION'",
+    );
+    await pane.submit();
+    final Set<int> observedAnimationFrames = <int>{};
+    TerminalLiveMetalSurfaceSnapshot? animated;
+    final Stopwatch animationDeadline = Stopwatch()..start();
+    while (animationDeadline.elapsed < const Duration(seconds: 5)) {
+      final image = screens.primaryKittyImages.imageById(93);
+      if (image != null) observedAnimationFrames.add(image.currentFrameNumber);
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      if (image?.frameCount == 2 &&
+          session.kittyGraphicsController.acceptedCommandCount ==
+              acceptedBeforeAnimation + 2 &&
+          session.kittyGraphicsController.pendingJobCount == 0 &&
+          screens.primaryKittyImages.placementCount == 3 &&
+          observedAnimationFrames.length == 2 &&
+          snapshot.kittyImageCount == 1 &&
+          snapshot.kittyPlacementCount == 1 &&
+          snapshot.kittyTileCount == 1 &&
+          snapshot.kittyAtlasEntryCount >=
+              animationBaseline.kittyAtlasEntryCount &&
+          snapshot.kittyAtlasEntryCount <=
+              animationBaseline.kittyAtlasEntryCount + 1 &&
+          snapshot.acceptedFrameCount >=
+              animationBaseline.acceptedFrameCount + 2 &&
+          snapshot.pendingFrameCount <= 1 &&
+          snapshot.liveAtlasPinCount <= 3) {
+        animated = snapshot;
+        break;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited during Kitty animation acceptance',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    _expectLifecycle(
+      animated != null,
+      'Kitty animation did not advance through bounded Metal frames '
+      '(protocol_frames=${screens.primaryKittyImages.imageById(93)?.frameCount}, '
+      'observed=$observedAnimationFrames, '
+      'placements=${screens.primaryKittyImages.placementCount}, '
+      'surface_images=${surface.snapshot().kittyImageCount}, '
+      'surface_placements=${surface.snapshot().kittyPlacementCount}, '
+      'surface_tiles=${surface.snapshot().kittyTileCount}, '
+      'atlas_tiles=${surface.snapshot().kittyAtlasEntryCount}, '
+      'accepted=${surface.snapshot().acceptedFrameCount}, '
+      'baseline=${animationBaseline.acceptedFrameCount})',
+    );
+    await _waitForAsciiMarker(session, animationMarker);
+
+    pane.insertText(
+      "printf '\\033_Ga=a,i=93,s=1\\033\\\\'; "
       "printf '\\033[2J\\033[H'; "
-      "printf '__DT_KITTY_GRAPHICS_%s__\\r\\n' 'ERASED'",
+      "printf '__DT_KITTY_GRAPHICS_%s__\\r\\n' 'ERASED'; sleep 1; "
+      "printf '\\033_Ga=d,d=R,x=91,y=92,q=2\\033\\\\'; "
+      "printf '__DT_KITTY_GRAPHICS_%s__\\r\\n' 'DELETED'",
     );
     await pane.submit();
     await _waitForAsciiMarker(session, erasedMarker);
@@ -11406,11 +11474,6 @@ keybind = control+k=pane.focus-next
     }
     _expectLifecycle(erased, 'ED 2 did not clear only the visible Kitty image');
 
-    pane.insertText(
-      "printf '\\033_Ga=d,d=R,x=91,y=92,q=2\\033\\\\'; "
-      "printf '__DT_KITTY_GRAPHICS_%s__\\r\\n' 'DELETED'",
-    );
-    await pane.submit();
     await _waitForAsciiMarker(session, deletedMarker);
     await session.kittyGraphicsController.waitForIdle();
     final Stopwatch deleteDeadline = Stopwatch()..start();
@@ -11421,6 +11484,7 @@ keybind = control+k=pane.focus-next
           snapshot.kittyImageCount == 0 &&
           snapshot.kittyPlacementCount == 0 &&
           snapshot.kittyTileCount == 0 &&
+          snapshot.kittyAtlasEntryCount == 0 &&
           snapshot.pendingFrameCount <= 1 &&
           snapshot.liveAtlasPinCount <= 3) {
         deleted = true;
@@ -11439,11 +11503,82 @@ keybind = control+k=pane.focus-next
       'pending=${session.kittyGraphicsController.pendingJobCount}, '
       'accepted=${session.kittyGraphicsController.acceptedCommandCount})',
     );
+
+    final int acceptedBeforeEviction =
+        session.kittyGraphicsController.acceptedCommandCount;
+    final int resourceEvictionsBefore =
+        screens.primaryKittyImages.evictionCount;
+    final int evictedBytesBefore = screens.primaryKittyImages.evictedBytes;
+    pane.insertText(
+      "stty raw -echo; i=100; while [ \$i -le 164 ]; do "
+      "printf '\\033_Gi=%d,q=2,f=32,s=1,v=1;AQIDBA==\\033\\\\' \"\$i\"; "
+      "sleep 0.02; i=\$((i+1)); done; stty sane; "
+      "printf '\\r\\n__DT_KITTY_GRAPHICS_%s__\\r\\n' 'EVICTION'",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, evictionMarker);
+    await session.kittyGraphicsController.waitForIdle();
+    TerminalLiveMetalSurfaceSnapshot? evicted;
+    final Stopwatch evictionDeadline = Stopwatch()..start();
+    while (evictionDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      if (session.kittyGraphicsController.acceptedCommandCount ==
+              acceptedBeforeEviction + 65 &&
+          screens.primaryKittyImages.length ==
+              screens.primaryKittyImages.maximumImages &&
+          screens.primaryKittyImages.imageById(100) == null &&
+          screens.primaryKittyImages.imageById(101) != null &&
+          screens.primaryKittyImages.imageById(164) != null &&
+          screens.primaryKittyImages.retainedBytes == 64 * 4 &&
+          screens.primaryKittyImages.evictionCount ==
+              resourceEvictionsBefore + 1 &&
+          screens.primaryKittyImages.evictedBytes == evictedBytesBefore + 4 &&
+          screens.primaryKittyImages.placementCount == 0 &&
+          screens.primaryKittyImages.animationFrameCount == 0 &&
+          snapshot.kittyAtlasEntryCount == 0 &&
+          snapshot.kittyResourceEvictionCount ==
+              screens.primaryKittyImages.evictionCount +
+                  screens.alternateKittyImages.evictionCount &&
+          snapshot.kittyEvictedBytes ==
+              screens.primaryKittyImages.evictedBytes +
+                  screens.alternateKittyImages.evictedBytes) {
+        evicted = snapshot;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      evicted != null,
+      'real PTY image pressure did not retain the deterministic bounded set '
+      '(accepted=${session.kittyGraphicsController.acceptedCommandCount - acceptedBeforeEviction}, '
+      'images=${screens.primaryKittyImages.length}, '
+      'bytes=${screens.primaryKittyImages.retainedBytes}, '
+      'evictions=${screens.primaryKittyImages.evictionCount - resourceEvictionsBefore}, '
+      'evicted_bytes=${screens.primaryKittyImages.evictedBytes - evictedBytesBefore}, '
+      'oldest=${screens.primaryKittyImages.imageById(100) != null}, '
+      'newest=${screens.primaryKittyImages.imageById(164) != null})',
+    );
+
+    pane.insertText(
+      "printf '\\033_Ga=d,d=R,x=101,y=164,q=2\\033\\\\'; "
+      "printf '__DT_KITTY_GRAPHICS_%s__\\r\\n' 'EVICTION_DELETED'",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, evictionDeletedMarker);
+    await session.kittyGraphicsController.waitForIdle();
+    _expectLifecycle(
+      screens.primaryKittyImages.isEmpty &&
+          screens.primaryKittyImages.evictionCount ==
+              resourceEvictionsBefore + 1 &&
+          screens.primaryKittyImages.evictedBytes == evictedBytesBefore + 4,
+      'pressure cleanup did not preserve lifetime eviction diagnostics',
+    );
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     stdout.writeln(
       'TERMINAL_KITTY_GRAPHICS_TEST query=true multipart_rgba=true '
       'multipart_png=true placement=true z_order=true scroll=true '
-      'history=true erase=true delete=true metal=true bounded=true',
+      'history=true erase=true delete=true animation=true eviction=true '
+      'atlas_cleanup=true metal=true bounded=true',
     );
     return true;
   }

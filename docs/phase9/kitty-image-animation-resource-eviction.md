@@ -5,7 +5,7 @@
 - Date started: 2026-09-11
 - Scope: fifth Phase 9 roadmap item
 - Feature-matrix owners: CAP-11, SEC-01
-- Status: first child committed; second child verified, completion commit pending
+- Status: all children verified; final child completion commit pending
 - Predecessor: `docs/phase9/kitty-graphics.md`
 
 ## Purpose and background
@@ -332,3 +332,113 @@ The parent remains incomplete until all three children pass independently.
   filesystem sandbox cannot create `.git/index.lock`; no path was staged or
   changed. The same enumerated task-only path list is retried through the
   approved repository Git-write boundary before staged review.
+- 2026-09-11: the second child was committed as `9a5fd15 Drive Kitty
+  animations through the Metal frame clock`. Immediately afterward ROADMAP,
+  README, FEATURE_MATRIX, recent history, and the clean worktree were reread.
+  Deterministic resource eviction and parent/product closure is now the first
+  unchecked task; notification, OSC 52 UI, and fuzz/security work remain later.
+- 2026-09-11: pinned Ghostty storage lines 1600–1697 fix eviction priority as
+  transient-unplaced, persistent-unplaced, transient-placed, then persistent-
+  placed, breaking ties by immutable image generation and ID. The replacing or
+  frame-receiving image is excluded. Eviction removes the whole image and every
+  placement; a request that cannot reclaim enough space fails without applying
+  its candidate plan. Dart applies this ordering to its additional image-count,
+  aggregate-frame-count, and byte ceilings while preserving the per-image
+  64-frame hard rejection.
+- 2026-09-11: store eviction is planned completely before mutation. Candidates
+  that cannot contribute to an unmet aggregate-frame constraint are skipped;
+  every image contributes to image/byte pressure. Successful plans maintain
+  exact retained byte/frame/placement accounting and saturating content-free
+  eviction counters. Explicit replacement and deletion are not counted as
+  pressure eviction, and primary/alternate stores remain independent.
+- 2026-09-11: an atlas content key now retains both stable image resource
+  generation and current frame content generation. The live surface prunes only
+  resources absent from both screen stores and only when an image-set generation
+  changes, so normal animation ticks do not scan the atlas. Build/submission-
+  pinned stale tiles are reported and retried after ordinary renderer retirement;
+  per-frame tiles of a still-live image remain eligible for bounded LRU reuse.
+  Focused formatting and analysis of these implementation boundaries passed.
+- 2026-09-11: unit coverage now fixes all four eviction classes, immutable-age
+  tie breaking, target exclusion, exact placement/frame/byte accounting,
+  atomic failed plans, primary/alternate and history placement isolation, a
+  1,024-image bounded flood, and late worker completion after target eviction.
+  Atlas coverage fixes replacement-resource identity and verifies that stale
+  animation tiles are pruned immediately unless submission-pinned, then pruned
+  after retirement. A first attempt used `dart test`, which failed because this
+  repository intentionally exposes executable test programs without a
+  `package:test` dev dependency; no dependency was added. The correct focused
+  commands, `dart run test/glyph_atlas_test.dart`, `dart run
+  test/metal_pipeline_test.dart`, and `dart run
+  test/terminal_kitty_graphics_controller_test.dart`, all pass. The only
+  assertion correction was that a create-frame request with protocol `r=0`
+  must omit `r` from its exact late-ENOENT reply.
+- 2026-09-11: the first real Developer JIT display attempt reached all prior
+  acceptance markers but rejected the new animation check because image 94 was
+  absent. The failure was in the test command construction, not the protocol:
+  the newly patched Dart strings contained interpreted `\033` plus a single
+  runtime backslash before the shell quote, so the zsh `printf` commands were
+  malformed. The existing acceptance convention passes literal `\\033` and
+  `\\\\` sequences to shell `printf`; all new animation, flood, cleanup, and
+  marker commands were corrected to the same escaping before retrying.
+- 2026-09-11: the second Developer JIT display attempt proved that the real
+  parser/controller/worker stored image 94 with two frames, but no placement
+  remained (`protocol_frames=2`, `surface_placements=0`), so the deliberately
+  visible-only animation driver correctly did not advance it. The quiet root
+  and frame transmissions had allowed zsh to publish later output before their
+  asynchronous controller completions. The acceptance now reads the exact
+  12-byte transmit-and-place success and 16-byte assigned-frame success from
+  the raw PTY before issuing animation control or marker output, matching the
+  established product FIFO synchronization pattern.
+- 2026-09-11: the third Developer JIT attempt still retained both frames but
+  observed no placement after the combined transmit-and-place shell command.
+  The acceptance was made more diagnostic and less cursor-coupled: real PTY
+  transmit, assigned-frame reply, and reply-free running control must first
+  settle as exactly three accepted controller commands with two stored frames;
+  a fourth real PTY command then performs placement at home and consumes its
+  exact reply. Metal/frame-clock assertions begin only after that boundary.
+- 2026-09-11: the fourth Developer JIT attempt accepted the separated placement
+  but prompt output still invalidated its logical anchor before the polling
+  loop observed it. The shell now remains raw and output-free for one second
+  after the exact placement reply. Animation and Metal are sampled inside that
+  explicit observation window; only afterward does zsh restore tty state and
+  publish the marker used to begin cleanup.
+- 2026-09-11: reusing the already accepted visible image 93 eliminated the
+  new-anchor ambiguity and the next Developer JIT run passed real animation
+  transmission, both observed frame numbers, bounded Metal submission, and the
+  ED 2 animation cleanup. The following range-delete shell line raced the prior
+  marker/prompt boundary and was not applied. Cleanup is now one ordered zsh
+  line: stop, ED 2, erased marker, one-second state-inspection window, uppercase
+  range delete, then deleted marker. This preserves separate erase and delete
+  assertions without a second input-line race.
+- 2026-09-11: the ordered cleanup change passed the full terminal-display
+  integration in both modes: Developer JIT reported 11,316 ms and Release AOT
+  10,498 ms. The accepted path includes two observed animation frames on real
+  image 93, bounded Metal/atlas state, ED/range cleanup, 65 direct one-pixel
+  real-PTY transmissions retaining IDs 101–164, exactly one four-byte resource
+  eviction, lifetime diagnostics, and final store cleanup. A focused planner
+  assertion also ensures aggregate frame pressure skips a lower-priority static
+  image that cannot contribute and selects an animated resource instead.
+- 2026-09-11: README, CAP-11, SEC-01, and generated Kitty APC evidence were
+  updated to close animation/eviction product support while retaining explicit
+  unsupported transport/placement boundaries. The first inventory regeneration
+  wrote JSON but its summary validation rejected a 1,285-character Kitty note
+  against the 1,024-character schema cap. The note was deduplicated against its
+  evidence fields; regeneration then produced both the inventory and summary.
+- 2026-09-11: changing the application acceptance and compatibility inventory
+  intentionally invalidated hash-owned derived artifacts. The first exact
+  `make test` retry stopped at stale Phase 7 AppKit acceptance; after regenerating
+  that artifact, the next retry stopped at the stale differential baseline.
+  The official generators refreshed the AppKit acceptance, implementation
+  manifest, differential baseline/evidence/acceptance, regression coverage,
+  application evidence, sequence inventory, and support summary. No source
+  contract or test expectation was weakened.
+- 2026-09-11: final focused verification passes formatting, analysis,
+  `glyph_atlas_test.dart`, `metal_pipeline_test.dart`,
+  `terminal_kitty_graphics_controller_test.dart`, and
+  `terminal_application_acceptance_test.dart`. The exact repository gate
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` then passes: all freshness,
+  compatibility/differential/application/terminfo/shell checks pass, 260 files
+  are formatting-clean, analyzer reports no issues, and the aggregate runner
+  reports `dart_terminal tests passed`. `git diff --check` is clean. Together
+  with the Developer JIT and Release AOT real display passes, all three child
+  completion criteria and the parent animation/eviction task are satisfied.

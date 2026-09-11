@@ -91,6 +91,10 @@ final class TerminalLiveMetalSurfaceSnapshot {
     required this.kittyImageCount,
     required this.kittyPlacementCount,
     required this.kittyTileCount,
+    required this.kittyResourceEvictionCount,
+    required this.kittyEvictedBytes,
+    required this.kittyEvictedPlacementCount,
+    required this.kittyAtlasEvictionCount,
     required this.hasScheduledWork,
     required this.synchronizedOutputMode,
     required this.synchronizedOutputHeld,
@@ -137,6 +141,10 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int kittyImageCount;
   final int kittyPlacementCount;
   final int kittyTileCount;
+  final int kittyResourceEvictionCount;
+  final int kittyEvictedBytes;
+  final int kittyEvictedPlacementCount;
+  final int kittyAtlasEvictionCount;
   final bool hasScheduledWork;
   final bool synchronizedOutputMode;
   final bool synchronizedOutputHeld;
@@ -467,6 +475,8 @@ final class TerminalLiveMetalSurface {
   int _lastKittyImageCount = 0;
   int _lastKittyPlacementCount = 0;
   int _lastKittyTileCount = 0;
+  int _prunedPrimaryKittyImageSetGeneration = 0;
+  int _prunedAlternateKittyImageSetGeneration = 0;
   double _publishedAccessibilityCellWidth = 0;
   double _publishedAccessibilityCellHeight = 0;
   TerminalAccessibilitySnapshot? _lastAccessibilitySnapshot;
@@ -703,6 +713,7 @@ final class TerminalLiveMetalSurface {
         _retryRequested = true;
         return;
       }
+      _pruneStaleKittyAtlasResources();
       if (_synchronizedPresentationGate.isHolding) {
         _needsDrain = true;
         return;
@@ -758,6 +769,19 @@ final class TerminalLiveMetalSurface {
       kittyImageCount: _lastKittyImageCount,
       kittyPlacementCount: _lastKittyPlacementCount,
       kittyTileCount: _lastKittyTileCount,
+      kittyResourceEvictionCount: _boundedMetricSum(
+        screenSet.primaryKittyImages.evictionCount,
+        screenSet.alternateKittyImages.evictionCount,
+      ),
+      kittyEvictedBytes: _boundedMetricSum(
+        screenSet.primaryKittyImages.evictedBytes,
+        screenSet.alternateKittyImages.evictedBytes,
+      ),
+      kittyEvictedPlacementCount: _boundedMetricSum(
+        screenSet.primaryKittyImages.evictedPlacementCount,
+        screenSet.alternateKittyImages.evictedPlacementCount,
+      ),
+      kittyAtlasEvictionCount: atlas.kittyImageEvictionCount,
       hasScheduledWork:
           _timer != null || (_paneWorkScheduler?.isPending(sessionId) ?? false),
       synchronizedOutputMode: screenSet.synchronizedOutputMode,
@@ -857,6 +881,33 @@ final class TerminalLiveMetalSurface {
     _boundScreen.requestFullSnapshot();
     _scheduler.requestFullRedraw();
     return true;
+  }
+
+  void _pruneStaleKittyAtlasResources() {
+    final int primaryGeneration =
+        screenSet.primaryKittyImages.imageSetGeneration;
+    final int alternateGeneration =
+        screenSet.alternateKittyImages.imageSetGeneration;
+    if (primaryGeneration == _prunedPrimaryKittyImageSetGeneration &&
+        alternateGeneration == _prunedAlternateKittyImageSetGeneration) {
+      return;
+    }
+    final result = atlas.pruneKittyImageResources((
+      TerminalKittyImageAtlasKey key,
+    ) {
+      final store = switch (key.screenKindIndex) {
+        0 => screenSet.primaryKittyImages,
+        1 => screenSet.alternateKittyImages,
+        _ => null,
+      };
+      final image = store?.imageById(key.imageId);
+      return image != null &&
+          image.resourceGeneration == key.imageResourceGeneration;
+    });
+    if (result.pinnedEntryCount == 0) {
+      _prunedPrimaryKittyImageSetGeneration = primaryGeneration;
+      _prunedAlternateKittyImageSetGeneration = alternateGeneration;
+    }
   }
 
   bool _synchronizeSynchronizedOutput(int now) {
@@ -1279,6 +1330,11 @@ final class TerminalLiveMetalSurface {
 
   static double _effectivePadding(double extent, double configured) =>
       math.min(configured, math.max(0, (extent - 1) / 2));
+
+  static int _boundedMetricSum(int first, int second) =>
+      first >= 0x7fffffffffffffff - second
+      ? 0x7fffffffffffffff
+      : first + second;
 }
 
 /// Projects active-screen Kitty animation state into the ordinary frame clock.

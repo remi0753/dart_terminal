@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "cfdb3b514c06217738fbc2cb37ef955254746c0859e18a8d249673c200dbe805"
+          "sha256": "3d77eff3234c5c87576d5d2b83be363506d7887896ea6c05b5e8c6b148bec873"
         },
         {
           "path": "lib/src/terminal_input/terminal_text_input_event_router.dart",
@@ -187,7 +187,7 @@
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "cfdb3b514c06217738fbc2cb37ef955254746c0859e18a8d249673c200dbe805"
+          "sha256": "3d77eff3234c5c87576d5d2b83be363506d7887896ea6c05b5e8c6b148bec873"
         }
       ],
       "unit_tests": [

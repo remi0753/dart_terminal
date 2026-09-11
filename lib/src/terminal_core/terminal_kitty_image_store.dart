@@ -450,12 +450,20 @@ final class TerminalKittyImageStore {
   var _nextResourceGeneration = 1;
   var _nextPlacementGeneration = 1;
   var _stateGeneration = 1;
+  var _imageSetGeneration = 1;
+  var _evictionCount = 0;
+  var _evictedBytes = 0;
+  var _evictedPlacementCount = 0;
 
   int get length => _byId.length;
   int get retainedBytes => _retainedBytes;
   int get placementCount => _placements.length;
   int get animationFrameCount => _animationFrameCount;
   int get stateGeneration => _stateGeneration;
+  int get imageSetGeneration => _imageSetGeneration;
+  int get evictionCount => _evictionCount;
+  int get evictedBytes => _evictedBytes;
+  int get evictedPlacementCount => _evictedPlacementCount;
   bool get isEmpty => _byId.isEmpty;
 
   TerminalKittyImage? imageById(int id) => _byId[id];
@@ -490,8 +498,12 @@ final class TerminalKittyImageStore {
     final int projectedCount = _byId.length + (replaced == null ? 1 : 0);
     final int projectedBytes =
         _retainedBytes - (replaced?.storageByteLength ?? 0) + rgba.length;
-    if (projectedCount > maximumImages ||
-        projectedBytes > maximumRetainedBytes) {
+    final List<TerminalKittyImage>? evictions = _planEvictions(
+      excludeImageId: resolvedId,
+      imagesToFree: _positiveExcess(projectedCount, maximumImages),
+      bytesToFree: _positiveExcess(projectedBytes, maximumRetainedBytes),
+    );
+    if (evictions == null) {
       return const TerminalKittyImageStoreResult(
         TerminalKittyImageStoreDisposition.resourceLimit,
       );
@@ -507,8 +519,10 @@ final class TerminalKittyImageStore {
       transient: transient,
       rgba: rgba,
     );
+    _applyEvictions(evictions);
     if (replaced != null) {
       _animationFrameCount -= replaced._frames.length;
+      _retainedBytes -= replaced.storageByteLength;
       _removePlacementsWhere(
         (TerminalKittyImagePlacement placement) =>
             placement.imageId == resolvedId,
@@ -517,7 +531,8 @@ final class TerminalKittyImageStore {
       _byId.remove(resolvedId);
     }
     _byId[resolvedId] = image;
-    _retainedBytes = projectedBytes;
+    _retainedBytes += rgba.length;
+    _imageSetGeneration++;
     _stateGeneration++;
     return TerminalKittyImageStoreResult(
       TerminalKittyImageStoreDisposition.stored,
@@ -584,9 +599,25 @@ final class TerminalKittyImageStore {
           frameNumber: frameNumber,
         );
       }
-      if (count >= TerminalKittyImageStoreLimits.maximumFramesPerImage ||
-          _animationFrameCount >= maximumAnimationFrames ||
-          _retainedBytes + image.byteLength > maximumRetainedBytes) {
+      if (count >= TerminalKittyImageStoreLimits.maximumFramesPerImage) {
+        return TerminalKittyAnimationMutationResult(
+          TerminalKittyAnimationMutationDisposition.resourceLimit,
+          image: image,
+          frameNumber: frameNumber,
+        );
+      }
+      final List<TerminalKittyImage>? evictions = _planEvictions(
+        excludeImageId: image.id,
+        animationFramesToFree: _positiveExcess(
+          _animationFrameCount + 1,
+          maximumAnimationFrames,
+        ),
+        bytesToFree: _positiveExcess(
+          _retainedBytes + image.byteLength,
+          maximumRetainedBytes,
+        ),
+      );
+      if (evictions == null) {
         return TerminalKittyAnimationMutationResult(
           TerminalKittyAnimationMutationDisposition.resourceLimit,
           image: image,
@@ -623,6 +654,7 @@ final class TerminalKittyImageStore {
       );
       _animationFrameCount++;
       _retainedBytes += image.byteLength;
+      _applyEvictions(evictions);
       _stateGeneration++;
       return TerminalKittyAnimationMutationResult(
         TerminalKittyAnimationMutationDisposition.stored,
@@ -1413,6 +1445,7 @@ final class TerminalKittyImageStore {
     _placements.clear();
     _retainedBytes = 0;
     _animationFrameCount = 0;
+    _imageSetGeneration++;
     _stateGeneration++;
   }
 
@@ -1457,7 +1490,99 @@ final class TerminalKittyImageStore {
     if (removed == null) return false;
     _retainedBytes -= removed.storageByteLength;
     _animationFrameCount -= removed._frames.length;
+    _imageSetGeneration++;
     return true;
+  }
+
+  List<TerminalKittyImage>? _planEvictions({
+    required int excludeImageId,
+    int imagesToFree = 0,
+    int animationFramesToFree = 0,
+    int bytesToFree = 0,
+  }) {
+    if (imagesToFree == 0 && animationFramesToFree == 0 && bytesToFree == 0) {
+      return const <TerminalKittyImage>[];
+    }
+    final Map<int, int> placementCounts = <int, int>{};
+    for (final TerminalKittyImagePlacement placement in _placements.values) {
+      placementCounts.update(
+        placement.imageId,
+        (int count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    final List<TerminalKittyImage> candidates =
+        _byId.values
+            .where((TerminalKittyImage image) => image.id != excludeImageId)
+            .toList()
+          ..sort((TerminalKittyImage left, TerminalKittyImage right) {
+            final int priority =
+                _evictionPriority(
+                  left,
+                  placementCounts[left.id] ?? 0,
+                ).compareTo(
+                  _evictionPriority(right, placementCounts[right.id] ?? 0),
+                );
+            if (priority != 0) return priority;
+            final int age = left.resourceGeneration.compareTo(
+              right.resourceGeneration,
+            );
+            return age != 0 ? age : left.id.compareTo(right.id);
+          });
+    var freedImages = 0;
+    var freedFrames = 0;
+    var freedBytes = 0;
+    final List<TerminalKittyImage> selected = <TerminalKittyImage>[];
+    for (final TerminalKittyImage candidate in candidates) {
+      final int candidateFrames = candidate._frames.length;
+      final int candidateBytes = candidate.storageByteLength;
+      final bool contributes =
+          freedImages < imagesToFree ||
+          freedFrames < animationFramesToFree && candidateFrames != 0 ||
+          freedBytes < bytesToFree && candidateBytes != 0;
+      if (!contributes) continue;
+      selected.add(candidate);
+      freedImages++;
+      freedFrames += candidateFrames;
+      freedBytes += candidateBytes;
+      if (freedImages >= imagesToFree &&
+          freedFrames >= animationFramesToFree &&
+          freedBytes >= bytesToFree) {
+        return selected;
+      }
+    }
+    return null;
+  }
+
+  void _applyEvictions(List<TerminalKittyImage> images) {
+    for (final TerminalKittyImage image in images) {
+      final int bytes = image.storageByteLength;
+      final int placements = _removePlacementsWhere(
+        (TerminalKittyImagePlacement placement) =>
+            placement.imageId == image.id,
+        bumpGeneration: false,
+      );
+      if (!_removeImage(image.id)) {
+        throw StateError('planned Kitty eviction candidate disappeared');
+      }
+      _evictionCount = _saturatingMetricAdd(_evictionCount, 1);
+      _evictedBytes = _saturatingMetricAdd(_evictedBytes, bytes);
+      _evictedPlacementCount = _saturatingMetricAdd(
+        _evictedPlacementCount,
+        placements,
+      );
+    }
+  }
+
+  static int _evictionPriority(TerminalKittyImage image, int placements) =>
+      (image.transient ? 0 : 1) + (placements == 0 ? 0 : 2);
+
+  static int _positiveExcess(int value, int maximum) =>
+      value > maximum ? value - maximum : 0;
+
+  static int _saturatingMetricAdd(int value, int increment) {
+    const int maximum = 0x7fffffffffffffff;
+    return value >= maximum - increment ? maximum : value + increment;
   }
 
   static void _setFrameContentGeneration(

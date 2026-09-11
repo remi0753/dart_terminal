@@ -48,6 +48,7 @@ final class TerminalKittyImageAtlasKey {
   const TerminalKittyImageAtlasKey({
     required this.screenKindIndex,
     required this.imageId,
+    required this.imageResourceGeneration,
     required this.imageContentGeneration,
     required this.placementGeneration,
     required this.sourceX,
@@ -67,6 +68,7 @@ final class TerminalKittyImageAtlasKey {
 
   final int screenKindIndex;
   final int imageId;
+  final int imageResourceGeneration;
   final int imageContentGeneration;
   final int placementGeneration;
   final int sourceX;
@@ -87,6 +89,7 @@ final class TerminalKittyImageAtlasKey {
   int get hashCode => Object.hashAll(<int>[
     screenKindIndex,
     imageId,
+    imageResourceGeneration,
     imageContentGeneration,
     placementGeneration,
     sourceX,
@@ -109,6 +112,7 @@ final class TerminalKittyImageAtlasKey {
       other is TerminalKittyImageAtlasKey &&
       screenKindIndex == other.screenKindIndex &&
       imageId == other.imageId &&
+      imageResourceGeneration == other.imageResourceGeneration &&
       imageContentGeneration == other.imageContentGeneration &&
       placementGeneration == other.placementGeneration &&
       sourceX == other.sourceX &&
@@ -395,6 +399,7 @@ final class TerminalGlyphAtlas {
   int _useClock = 1;
   int _retainedBytes = 0;
   int _evictionCount = 0;
+  int _kittyImageEvictionCount = 0;
   int _hitCount = 0;
   int _missCount = 0;
   int _activeBuildLeaseCount = 0;
@@ -420,6 +425,7 @@ final class TerminalGlyphAtlas {
       .length;
   int get retainedBytes => _retainedBytes;
   int get evictionCount => _evictionCount;
+  int get kittyImageEvictionCount => _kittyImageEvictionCount;
   int get hitCount => _hitCount;
   int get missCount => _missCount;
   int get livePinCount => _pins.length;
@@ -507,6 +513,36 @@ final class TerminalGlyphAtlas {
       return existing;
     }
     return _insertKittyImageTile(key, rgba);
+  }
+
+  /// Removes stale whole-image Kitty tiles in deterministic entry order.
+  ///
+  /// Submission/build-pinned entries remain until their owner retires and are
+  /// reported so the caller can retry without discarding a live GPU resource.
+  ({int removedEntryCount, int pinnedEntryCount}) pruneKittyImageResources(
+    bool Function(TerminalKittyImageAtlasKey key) retain,
+  ) {
+    final List<TerminalGlyphAtlasEntry> stale = <TerminalGlyphAtlasEntry>[];
+    for (final MapEntry<TerminalKittyImageAtlasKey, TerminalGlyphAtlasEntry>
+        entry
+        in _kittyImageEntries.entries) {
+      if (!retain(entry.key)) stale.add(entry.value);
+    }
+    stale.sort(
+      (TerminalGlyphAtlasEntry left, TerminalGlyphAtlasEntry right) =>
+          left.entryId.compareTo(right.entryId),
+    );
+    var removed = 0;
+    var pinned = 0;
+    for (final TerminalGlyphAtlasEntry entry in stale) {
+      if (entry.isPinned) {
+        pinned++;
+        continue;
+      }
+      _evict(entry);
+      removed++;
+    }
+    return (removedEntryCount: removed, pinnedEntryCount: pinned);
   }
 
   void pinForSubmission(
@@ -974,7 +1010,12 @@ final class TerminalGlyphAtlas {
     if (entry.isPinned) throw StateError('cannot evict a pinned atlas entry');
     _entries.remove(entry.key);
     final TerminalKittyImageAtlasKey? imageKey = entry.kittyImageKey;
-    if (imageKey != null) _kittyImageEntries.remove(imageKey);
+    if (imageKey != null) {
+      _kittyImageEntries.remove(imageKey);
+      _kittyImageEvictionCount = _saturatingAtlasIncrement(
+        _kittyImageEvictionCount,
+      );
+    }
     if (!entry.isEmpty) {
       final _AtlasPage page = _pageForEntry(entry);
       final _AtlasRect allocation = entry._allocation!;

@@ -19,6 +19,7 @@ Future<void> main() => runTerminalKittyGraphicsControllerTests();
 
 Future<void> runTerminalKittyGraphicsControllerTests() async {
   _testStoreIdentityCopiesReplacementAndCaps();
+  _testDeterministicResourceEviction();
   _testAnimationFrameStateCompositionAndCaps();
   _testAnimationMonotonicPlayback();
   _testPlacementStoreGeometryIdentityAndDeletion();
@@ -27,7 +28,7 @@ Future<void> runTerminalKittyGraphicsControllerTests() async {
   _testPlacementMarginsEraseReflowAlternateAndReset();
   await _testControllerQueryStorageMultipartAndRejection();
   await _testControllerAnimationProtocolAndStaleTarget();
-  await _testControllerStorageCapQueueCapAndStaleWorker();
+  await _testControllerStorageEvictionQueueCapAndStaleWorker();
   await _testControllerPlacementActionsAndDelete();
   await _testControllerFailureReplyAndPendingTeardown();
   await _testSessionParserAndReplyFifo();
@@ -848,7 +849,7 @@ void _testStoreIdentityCopiesReplacementAndCaps() {
     'image numbers allocate unique IDs and resolve newest-first',
   );
 
-  final TerminalKittyImageStoreResult rejected = store.store(
+  final TerminalKittyImageStoreResult replacedWithEviction = store.store(
     imageId: 7,
     imageNumber: 0,
     width: 2,
@@ -856,16 +857,324 @@ void _testStoreIdentityCopiesReplacementAndCaps() {
     transient: false,
     rgba: Uint8List.fromList(const <int>[1, 2, 3, 4, 5, 6, 7, 8]),
   );
+  final TerminalKittyImage evictingReplacement = replacedWithEviction.image!;
   _expect(
-    rejected.disposition == TerminalKittyImageStoreDisposition.resourceLimit &&
-        identical(store.imageById(7), replacement) &&
-        store.retainedBytes == 12,
-    'rejected replacement preserves the existing image and accounting',
+    store.imageById(numberedFirst.id) == null &&
+        identical(store.imageById(numberedSecond.id), numberedSecond) &&
+        identical(store.imageById(7), evictingReplacement) &&
+        evictingReplacement.resourceGeneration >
+            replacement.resourceGeneration &&
+        store.retainedBytes == 12 &&
+        store.evictionCount == 1 &&
+        store.evictedBytes == 4,
+    'a growing replacement excludes itself and evicts the oldest other image',
+  );
+  final TerminalKittyImageStoreResult impossible = store.store(
+    imageId: 7,
+    imageNumber: 0,
+    width: 4,
+    height: 1,
+    transient: false,
+    rgba: Uint8List(16),
+  );
+  _expect(
+    impossible.disposition ==
+            TerminalKittyImageStoreDisposition.resourceLimit &&
+        identical(store.imageById(7), evictingReplacement) &&
+        identical(store.imageById(numberedSecond.id), numberedSecond) &&
+        store.retainedBytes == 12 &&
+        store.evictionCount == 1,
+    'an impossible replacement rejects before evicting any candidate',
   );
   store.clear();
   _expect(
-    store.isEmpty && store.retainedBytes == 0,
-    'store clear releases every retained byte',
+    store.isEmpty &&
+        store.retainedBytes == 0 &&
+        store.evictionCount == 1 &&
+        store.evictedBytes == 4,
+    'store clear releases data while preserving content-free lifetime metrics',
+  );
+}
+
+void _testDeterministicResourceEviction() {
+  TerminalKittyImageStore exercisePriority({
+    required bool firstTransient,
+    required bool firstPlaced,
+    required bool secondTransient,
+    required bool secondPlaced,
+    required int expectedEvictedId,
+  }) {
+    final TerminalKittyImageStore store = TerminalKittyImageStore(
+      maximumImages: 2,
+      maximumRetainedBytes: 16,
+    );
+    void add(int id, {required bool transient, required bool placed}) {
+      store.store(
+        imageId: id,
+        imageNumber: 0,
+        width: 1,
+        height: 1,
+        transient: transient,
+        rgba: Uint8List.fromList(<int>[id, 0, 0, 255]),
+      );
+      if (placed) {
+        store.place(
+          imageId: id,
+          imageNumber: 0,
+          placementId: id,
+          logicalLineId: id,
+          logicalLineEpoch: 1,
+          logicalCellOffset: 0,
+          sourceX: 0,
+          sourceY: 0,
+          sourceWidth: 0,
+          sourceHeight: 0,
+          cellOffsetX: 0,
+          cellOffsetY: 0,
+          columns: 1,
+          rows: 1,
+          z: 0,
+        );
+      }
+    }
+
+    add(1, transient: firstTransient, placed: firstPlaced);
+    add(2, transient: secondTransient, placed: secondPlaced);
+    final bool evictedWasPlaced = expectedEvictedId == 1
+        ? firstPlaced
+        : secondPlaced;
+    final int expectedPlacements =
+        store.placementCount - (evictedWasPlaced ? 1 : 0);
+    final TerminalKittyImageStoreResult admitted = store.store(
+      imageId: 3,
+      imageNumber: 0,
+      width: 1,
+      height: 1,
+      transient: false,
+      rgba: Uint8List.fromList(const <int>[3, 0, 0, 255]),
+    );
+    _expect(
+      admitted.disposition == TerminalKittyImageStoreDisposition.stored &&
+          store.imageById(expectedEvictedId) == null &&
+          store.imageById(expectedEvictedId == 1 ? 2 : 1) != null &&
+          store.imageById(3) != null &&
+          store.length == 2 &&
+          store.placementCount == expectedPlacements &&
+          store.evictionCount == 1 &&
+          store.evictedBytes == 4 &&
+          store.evictedPlacementCount == (evictedWasPlaced ? 1 : 0),
+      'eviction chooses expected priority candidate $expectedEvictedId',
+    );
+    return store;
+  }
+
+  exercisePriority(
+    firstTransient: false,
+    firstPlaced: false,
+    secondTransient: true,
+    secondPlaced: false,
+    expectedEvictedId: 2,
+  );
+  exercisePriority(
+    firstTransient: true,
+    firstPlaced: true,
+    secondTransient: false,
+    secondPlaced: false,
+    expectedEvictedId: 2,
+  );
+  exercisePriority(
+    firstTransient: false,
+    firstPlaced: true,
+    secondTransient: true,
+    secondPlaced: true,
+    expectedEvictedId: 2,
+  );
+  exercisePriority(
+    firstTransient: false,
+    firstPlaced: false,
+    secondTransient: false,
+    secondPlaced: false,
+    expectedEvictedId: 1,
+  );
+
+  final TerminalKittyImageStore framePressure = TerminalKittyImageStore(
+    maximumImages: 4,
+    maximumAnimationFrames: 1,
+    maximumRetainedBytes: 32,
+  );
+  TerminalKittyImage addRoot(
+    TerminalKittyImageStore store,
+    int id,
+    int width,
+  ) => store
+      .store(
+        imageId: id,
+        imageNumber: 0,
+        width: width,
+        height: 1,
+        transient: false,
+        rgba: Uint8List(width * 4),
+      )
+      .image!;
+  TerminalKittyAnimationMutationResult append(
+    TerminalKittyImageStore store,
+    TerminalKittyImage image,
+  ) => store.storeAnimationFrame(
+    imageId: image.id,
+    imageNumber: 0,
+    expectedResourceGeneration: image.resourceGeneration,
+    width: 1,
+    height: 1,
+    x: 0,
+    y: 0,
+    baseFrame: 0,
+    editFrame: 0,
+    gapMilliseconds: 40,
+    overwrite: true,
+    backgroundRgba: 0,
+    transient: false,
+    rgba: Uint8List(4),
+  );
+  framePressure.store(
+    imageId: 8,
+    imageNumber: 0,
+    width: 1,
+    height: 1,
+    transient: true,
+    rgba: Uint8List(4),
+  );
+  final TerminalKittyImage oldAnimation = addRoot(framePressure, 10, 1);
+  append(framePressure, oldAnimation);
+  framePressure.place(
+    imageId: 10,
+    imageNumber: 0,
+    placementId: 1,
+    logicalLineId: 1,
+    logicalLineEpoch: 1,
+    logicalCellOffset: 0,
+    sourceX: 0,
+    sourceY: 0,
+    sourceWidth: 0,
+    sourceHeight: 0,
+    cellOffsetX: 0,
+    cellOffsetY: 0,
+    columns: 1,
+    rows: 1,
+    z: 0,
+  );
+  final TerminalKittyImage frameTarget = addRoot(framePressure, 11, 1);
+  _expect(
+    append(framePressure, frameTarget).disposition ==
+            TerminalKittyAnimationMutationDisposition.stored &&
+        framePressure.imageById(8) != null &&
+        framePressure.imageById(10) == null &&
+        frameTarget.frameCount == 2 &&
+        framePressure.animationFrameCount == 1 &&
+        framePressure.placementCount == 0 &&
+        framePressure.evictedPlacementCount == 1,
+    'frame pressure skips a lower-priority static non-contributor and evicts '
+    'another whole animation with its placements',
+  );
+
+  final TerminalKittyImageStore bytePressure = TerminalKittyImageStore(
+    maximumImages: 3,
+    maximumAnimationFrames: 3,
+    maximumRetainedBytes: 12,
+  );
+  addRoot(bytePressure, 20, 2);
+  final TerminalKittyImage byteTarget = addRoot(bytePressure, 21, 1);
+  _expect(
+    append(bytePressure, byteTarget).disposition ==
+            TerminalKittyAnimationMutationDisposition.stored &&
+        bytePressure.imageById(20) == null &&
+        bytePressure.retainedBytes == 8 &&
+        bytePressure.evictedBytes == 8,
+    'frame byte pressure evicts another image but never its target',
+  );
+
+  final TerminalKittyImageStore failedPlan = TerminalKittyImageStore(
+    maximumImages: 2,
+    maximumRetainedBytes: 8,
+  );
+  final TerminalKittyImage failedTarget = addRoot(failedPlan, 30, 1);
+  final TerminalKittyImage failedOther = addRoot(failedPlan, 31, 1);
+  _expect(
+    failedPlan
+                .store(
+                  imageId: 30,
+                  imageNumber: 0,
+                  width: 3,
+                  height: 1,
+                  transient: false,
+                  rgba: Uint8List(12),
+                )
+                .disposition ==
+            TerminalKittyImageStoreDisposition.resourceLimit &&
+        identical(failedPlan.imageById(30), failedTarget) &&
+        identical(failedPlan.imageById(31), failedOther) &&
+        failedPlan.evictionCount == 0 &&
+        failedPlan.retainedBytes == 8,
+    'an unsatisfied candidate plan fails atomically without collateral eviction',
+  );
+
+  final TerminalKittyImageStore flood = TerminalKittyImageStore(
+    maximumImages: 8,
+    maximumRetainedBytes: 32,
+  );
+  for (var id = 1; id <= 1024; id++) {
+    flood.store(
+      imageId: id,
+      imageNumber: 0,
+      width: 1,
+      height: 1,
+      transient: false,
+      rgba: Uint8List(4),
+    );
+  }
+  _expect(
+    flood.length == 8 &&
+        flood.retainedBytes == 32 &&
+        flood.evictionCount == 1016 &&
+        flood.evictedBytes == 4064 &&
+        flood.imageById(1016) == null &&
+        flood.imageById(1017) != null &&
+        flood.imageById(1024) != null,
+    'a 1,024-image flood retains exactly the newest bounded working set',
+  );
+
+  final TerminalScreenSet history = TerminalScreenSet(
+    rows: 2,
+    columns: 2,
+    scrollback: TerminalScrollback(maxLines: 2, maxBytes: 1000, pageRows: 1),
+    primaryKittyImages: TerminalKittyImageStore(
+      maximumImages: 2,
+      maximumRetainedBytes: 16,
+    ),
+    alternateKittyImages: TerminalKittyImageStore(
+      maximumImages: 2,
+      maximumRetainedBytes: 16,
+    ),
+  );
+  history.updateLogicalCellSize(width: 1, height: 1);
+  _storeAndPlace(history, imageId: 40, row: 0, column: 0);
+  addRoot(history.primaryKittyImages, 41, 1);
+  history.primary.scrollUp(1);
+  addRoot(history.primaryKittyImages, 42, 1);
+  _expect(
+    history.primaryKittyImages.imageById(40) != null &&
+        history.primaryKittyImages.imageById(41) == null &&
+        history.primaryKittyImages.imageById(42) != null &&
+        history.primaryKittyImages.placementCount == 1 &&
+        history.primaryKittyImages.evictionCount == 1 &&
+        history.alternateKittyImages.evictionCount == 0,
+    'a history placement counts as used and screen eviction remains isolated',
+  );
+  history.reset();
+  _expect(
+    history.primaryKittyImages.isEmpty &&
+        history.alternateKittyImages.isEmpty &&
+        history.primaryKittyImages.evictionCount == 1,
+    'RIS clears both stores without erasing lifetime eviction diagnostics',
   );
 }
 
@@ -1511,7 +1820,7 @@ Future<void> _testControllerAnimationProtocolAndStaleTarget() async {
   worker.dispose();
 }
 
-Future<void> _testControllerStorageCapQueueCapAndStaleWorker() async {
+Future<void> _testControllerStorageEvictionQueueCapAndStaleWorker() async {
   final TerminalScreenSet boundedScreens = TerminalScreenSet(
     rows: 2,
     columns: 2,
@@ -1542,9 +1851,32 @@ Future<void> _testControllerStorageCapQueueCapAndStaleWorker() async {
   await bounded.waitForIdle();
   _expect(
     boundedScreens.primaryKittyImages.length == 1 &&
-        boundedScreens.primaryKittyImages.imageById(1) != null &&
-        boundedReplies.last.contains('ENOSPC:image storage limit reached'),
-    'storage rejection preserves the first image and reports ENOSPC',
+        boundedScreens.primaryKittyImages.imageById(1) == null &&
+        boundedScreens.primaryKittyImages.imageById(2) != null &&
+        boundedScreens.primaryKittyImages.evictionCount == 1 &&
+        boundedReplies.last == '\x1b_Gi=2;OK\x1b\\',
+    'storage pressure evicts the oldest image and acknowledges admission',
+  );
+  final Completer<void> evictionGate = Completer<void>();
+  boundedWorker.gate = evictionGate;
+  bounded.enqueueCommand(_command('Ga=f,i=2,f=32,s=1,v=1;AQIDBA=='));
+  await Future<void>.delayed(Duration.zero);
+  boundedScreens.primaryKittyImages.store(
+    imageId: 3,
+    imageNumber: 0,
+    width: 1,
+    height: 1,
+    transient: false,
+    rgba: Uint8List.fromList(const <int>[9, 10, 11, 12]),
+  );
+  evictionGate.complete();
+  await bounded.waitForIdle();
+  boundedWorker.gate = null;
+  _expect(
+    boundedScreens.primaryKittyImages.imageById(2) == null &&
+        boundedScreens.primaryKittyImages.imageById(3)?.frameCount == 1 &&
+        boundedReplies.last == '\x1b_Gi=2;ENOENT:image not found\x1b\\',
+    'a late frame worker completion cannot resurrect an evicted target',
   );
   await bounded.dispose();
   boundedWorker.dispose();

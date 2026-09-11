@@ -157,9 +157,11 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   pause、frame content generation付きimmutable viewport projection。CPU oracleと通常の
   color-atlas/Metal frame pathはanimationを含む同じnearest-neighbor tile、layer order、
   1x/2x pixel結果を使い、
-  static graphicsは実zsh PTYからDeveloper JIT/Release AOTの両方で受け入れる。
-  file/shared-memory transport、
-  virtual/relative/extreme-negative z、resource evictionとanimationの実製品最終受け入れは未実装
+  static/animation graphics、65-image pressureによる決定的resource eviction、stale atlas cleanupは
+  実zsh PTYからDeveloper JIT/Release AOTの両方で受け入れる。transient/unplaced優先と
+  immutable generation/ID tie-breakで他imageをwhole-resource evictionし、targetは除外、
+  満たせない要求は既存stateを変えず拒否する。file/shared-memory transport、
+  virtual/relative/extreme-negative zは対応範囲外
 - Unicode 17 grapheme境界・幅判定、bounded grapheme intern、wide/continuation
   invariantとprimary historyを含むatomic resize/reflow
 - fixed-page SoA scrollback、独立line/byte cap、O(1) page eviction、primary

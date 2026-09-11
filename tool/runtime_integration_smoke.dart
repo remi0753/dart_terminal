@@ -1126,9 +1126,10 @@ Future<void> _runTerminalDisplay(
     observation.stdoutText.contains(
       'TERMINAL_KITTY_GRAPHICS_TEST query=true multipart_rgba=true '
       'multipart_png=true placement=true z_order=true scroll=true '
-      'history=true erase=true delete=true metal=true bounded=true',
+      'history=true erase=true delete=true animation=true eviction=true '
+      'atlas_cleanup=true metal=true bounded=true',
     ),
-    'terminal display launch omitted static Kitty graphics acceptance',
+    'terminal display launch omitted Kitty graphics product acceptance',
   );
   _expect(
     observation.stdoutText.contains(

@@ -23,6 +23,7 @@ void runGlyphAtlasTests() {
   _testPageAndBytePressure();
   _testResetAndValidation();
   _testKittyImageTilesShareAtlasLimitsAndPins();
+  _testKittyImageResourcePruningWaitsForPins();
   _testTextGoldens();
 }
 
@@ -43,6 +44,7 @@ void _testKittyImageTilesShareAtlasLimitsAndPins() {
       TerminalKittyImageAtlasKey(
         screenKindIndex: 0,
         imageId: placement,
+        imageResourceGeneration: 1,
         imageContentGeneration: contentGeneration,
         placementGeneration: placement,
         sourceX: 0,
@@ -106,6 +108,95 @@ void _testKittyImageTilesShareAtlasLimitsAndPins() {
         atlas.evictionCount == 1,
     'a new animation content generation invalidates the unpinned old tile '
     'through the common bounded LRU ceiling',
+  );
+}
+
+void _testKittyImageResourcePruningWaitsForPins() {
+  final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
+    catalogGeneration: 1,
+    limits: const TerminalGlyphAtlasLimits(
+      pageWidth: 8,
+      pageHeight: 8,
+      maximumAlphaPages: 1,
+      maximumColorPages: 1,
+      maximumEntries: 4,
+      maximumRetainedBytes: 8 * 8 * 4,
+      gutter: 1,
+    ),
+  );
+  TerminalKittyImageAtlasKey key({
+    required int resourceGeneration,
+    required int contentGeneration,
+  }) => TerminalKittyImageAtlasKey(
+    screenKindIndex: 0,
+    imageId: 7,
+    imageResourceGeneration: resourceGeneration,
+    imageContentGeneration: contentGeneration,
+    placementGeneration: 1,
+    sourceX: 0,
+    sourceY: 0,
+    sourceWidth: 1,
+    sourceHeight: 1,
+    destinationX: 0,
+    destinationY: 0,
+    destinationWidth: 1,
+    destinationHeight: 1,
+    tileX: 0,
+    tileY: 0,
+    tileWidth: 1,
+    tileHeight: 1,
+    scale16_16: 1 << 16,
+  );
+  final Uint8List pixel = Uint8List.fromList(const <int>[1, 2, 3, 255]);
+  final TerminalKittyImageAtlasKey staleRootKey = key(
+    resourceGeneration: 1,
+    contentGeneration: 1,
+  );
+  final TerminalKittyImageAtlasKey staleFrameKey = key(
+    resourceGeneration: 1,
+    contentGeneration: 2,
+  );
+  final TerminalKittyImageAtlasKey currentKey = key(
+    resourceGeneration: 2,
+    contentGeneration: 3,
+  );
+  final TerminalGlyphAtlasEntry staleRoot = atlas.ingestKittyImageTile(
+    key: staleRootKey,
+    rgba: pixel,
+  );
+  atlas.ingestKittyImageTile(key: staleFrameKey, rgba: pixel);
+  final TerminalGlyphAtlasEntry current = atlas.ingestKittyImageTile(
+    key: currentKey,
+    rgba: pixel,
+  );
+  atlas.pinForSubmission(1, <TerminalGlyphAtlasEntry>[staleRoot]);
+
+  final firstPrune = atlas.pruneKittyImageResources(
+    (TerminalKittyImageAtlasKey candidate) =>
+        candidate.imageResourceGeneration == 2,
+  );
+  _expect(
+    firstPrune.removedEntryCount == 1 &&
+        firstPrune.pinnedEntryCount == 1 &&
+        identical(atlas.lookupKittyImage(staleRootKey), staleRoot) &&
+        atlas.lookupKittyImage(staleFrameKey) == null &&
+        identical(atlas.lookupKittyImage(currentKey), current),
+    'whole-resource pruning removes unpinned frames and defers pinned tiles',
+  );
+
+  atlas.completeSubmission(1);
+  final secondPrune = atlas.pruneKittyImageResources(
+    (TerminalKittyImageAtlasKey candidate) =>
+        candidate.imageResourceGeneration == 2,
+  );
+  _expect(
+    secondPrune.removedEntryCount == 1 &&
+        secondPrune.pinnedEntryCount == 0 &&
+        atlas.lookupKittyImage(staleRootKey) == null &&
+        identical(atlas.lookupKittyImage(currentKey), current) &&
+        atlas.kittyImageEntryCount == 1 &&
+        atlas.kittyImageEvictionCount == 2,
+    'retired submission pins allow deterministic stale-resource cleanup',
   );
 }
 

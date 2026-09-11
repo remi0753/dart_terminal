@@ -32,6 +32,7 @@ void _testKittyImageTileSurvivesRendererReplacement() {
     key: const TerminalKittyImageAtlasKey(
       screenKindIndex: 0,
       imageId: 1,
+      imageResourceGeneration: 1,
       imageContentGeneration: 1,
       placementGeneration: 1,
       sourceX: 0,
@@ -54,6 +55,7 @@ void _testKittyImageTileSurvivesRendererReplacement() {
     key: const TerminalKittyImageAtlasKey(
       screenKindIndex: 0,
       imageId: 1,
+      imageResourceGeneration: 1,
       imageContentGeneration: 2,
       placementGeneration: 1,
       sourceX: 0,
