@@ -338,7 +338,7 @@ final class TerminalNativeHierarchyAdapter {
           <TerminalTabId, TerminalSplitLayout>{};
       final Set<PaneId> livePaneIds = <PaneId>{};
       for (final TerminalWindowState window in logicalWindows) {
-        final TerminalWindowPlacement placement = _windowPlacements.putIfAbsent(
+        _windowPlacements.putIfAbsent(
           window.id,
           () => _defaultPlacement(window),
         );
@@ -346,17 +346,6 @@ final class TerminalNativeHierarchyAdapter {
           logicalTabs[tab.id] = tab;
           tabOwners[tab.id] = window;
           livePaneIds.addAll(tab.paneIds);
-          layouts[tab.id] = tab.splitTree.layout(
-            availableSize:
-                _tabSizes[tab.id] ??
-                TerminalSplitLayoutSize(
-                  width: placement.windowedFrame.width,
-                  height: placement.windowedFrame.height,
-                ),
-            cellSize: _cellSize,
-            dividerThickness: dividerThickness,
-            zoomedPaneId: tab.zoomedPaneId,
-          );
         }
       }
 
@@ -421,6 +410,37 @@ final class TerminalNativeHierarchyAdapter {
         nextWindows[entry.key] = window;
       }
 
+      for (final TerminalWindowState logicalWindow in logicalWindows) {
+        final List<TerminalTabId> tabIds = logicalWindow.tabIds;
+        if (tabIds.length > 1) {
+          final Window anchor = nextWindows[tabIds.first]!;
+          for (final TerminalTabId tabId in tabIds.skip(1)) {
+            if (createdTabWindows.contains(tabId) ||
+                createdTabWindows.contains(tabIds.first)) {
+              anchor.addTabbedWindow(nextWindows[tabId]!);
+            }
+          }
+        }
+      }
+
+      for (final MapEntry<TerminalTabId, TerminalTabState> entry
+          in logicalTabs.entries) {
+        final TerminalTabState tab = entry.value;
+        final TerminalWindowPlacement placement = placementForWindow(
+          tabOwners[tab.id]!.id,
+        );
+        layouts[tab.id] = tab.splitTree.layout(
+          availableSize: _contentLayoutSize(
+            tab.id,
+            nextWindows[tab.id]!,
+            placement,
+          ),
+          cellSize: _cellSize,
+          dividerThickness: dividerThickness,
+          zoomedPaneId: tab.zoomedPaneId,
+        );
+      }
+
       final Map<TerminalSplitNodeId, TwoPaneSplitView> nextSplitViews =
           <TerminalSplitNodeId, TwoPaneSplitView>{};
       for (final MapEntry<TerminalTabId, TerminalTabState> entry
@@ -436,19 +456,6 @@ final class TerminalNativeHierarchyAdapter {
         final Window window = nextWindows[tab.id]!;
         if (!identical(window.contentView, root)) {
           window.contentView = root;
-        }
-      }
-
-      for (final TerminalWindowState logicalWindow in logicalWindows) {
-        final List<TerminalTabId> tabIds = logicalWindow.tabIds;
-        if (tabIds.length > 1) {
-          final Window anchor = nextWindows[tabIds.first]!;
-          for (final TerminalTabId tabId in tabIds.skip(1)) {
-            if (createdTabWindows.contains(tabId) ||
-                createdTabWindows.contains(tabIds.first)) {
-              anchor.addTabbedWindow(nextWindows[tabId]!);
-            }
-          }
         }
       }
 
@@ -713,6 +720,37 @@ final class TerminalNativeHierarchyAdapter {
         frame: _terminalFrame(screen.frame),
         visibleFrame: _terminalFrame(screen.visibleFrame),
       );
+
+  TerminalSplitLayoutSize _contentLayoutSize(
+    TerminalTabId tabId,
+    Window window,
+    TerminalWindowPlacement placement,
+  ) {
+    try {
+      final Rect content = window.contentLayoutRect;
+      if (!content.width.isFinite ||
+          !content.height.isFinite ||
+          content.width <= 0 ||
+          content.height <= 0) {
+        throw StateError(
+          'native content layout for $tabId is not finite and positive',
+        );
+      }
+      final TerminalSplitLayoutSize resolved = TerminalSplitLayoutSize(
+        width: content.width,
+        height: content.height,
+      );
+      _tabSizes[tabId] = resolved;
+      return resolved;
+    } on AppKitNativeException catch (error) {
+      if (error.status != 8) rethrow;
+    }
+    return _tabSizes[tabId] ??
+        TerminalSplitLayoutSize(
+          width: placement.windowedFrame.width,
+          height: placement.windowedFrame.height,
+        );
+  }
 
   View _buildNode(
     TerminalSplitNode node,

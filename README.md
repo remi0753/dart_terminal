@@ -613,6 +613,8 @@ wheelで移動できます。terminal mouse tracking中はwheel reportをPTYへ�
 Shift overrideとalternate-screen cursor-key emulationも同じbounded routingで扱います。
 standard clipboardとkeybind設定は製品経路へ接続済みです。
 通常の大量出力後に最新promptが表示範囲外へ隠れることはありません。
+初回描画からnative windowのcontent layout寸法をMetal viewportへ使うため、title/tab barを
+含むouter frameとの差でdrawableが拡縮されず、scroll後もglyph pixelを等倍表示します。
 
 `TerminalPaneOwner`がpaneを、`TerminalPane`がsession generationを、
 `TerminalSession`が公開`PtyProcess`を所有します。実backendとdeterministic fakeは

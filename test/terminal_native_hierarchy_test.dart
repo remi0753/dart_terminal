@@ -17,6 +17,7 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testSettingsInspectorPresenterLifecycle();
   await _testConfiguredWindowAndPaddingProjection();
   await _testPerWindowCreationFrameProjection();
+  await _testInitialNativeContentLayoutProjection();
   await _testRepeatedMultiWindowRestoredProjection();
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
@@ -683,6 +684,65 @@ Future<void> _testPerWindowCreationFrameProjection() async {
           adapter.placementForWindow(first.id).windowedFrame.width == 700 &&
           adapter.placementForWindow(second.id).windowedFrame.width == 1100,
       'new logical windows capture their creation-time frame provider value',
+    );
+  } finally {
+    adapter.dispose();
+    await state.shutdown();
+    await application.terminate();
+    await rawEvents.close();
+  }
+}
+
+Future<void> _testInitialNativeContentLayoutProjection() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings()
+    ..windowContentLayoutHeightInset = 69;
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalPaneConfiguration configuration = TerminalPaneConfiguration(
+    sessionFactory: (
+      TerminalSessionId id, {
+      required void Function() onChanged,
+      required void Function() onTerminated,
+    }) => _HierarchyFakeSession(id),
+    onChanged: () {},
+    onExitRequested: () {},
+  );
+  final TerminalWindowState logicalWindow = await state.createWindow(
+    configuration,
+  );
+  await state.createTab(logicalWindow.id, configuration);
+  final Map<PaneId, TerminalPaneLayoutRect> layouts =
+      <PaneId, TerminalPaneLayoutRect>{};
+  final TerminalNativeHierarchyAdapter adapter = TerminalNativeHierarchyAdapter(
+    state: state,
+    paneResourcesFactory: (TerminalPane pane) => TerminalNativePaneResources(
+      paneId: pane.id,
+      view: View(configuration: terminalBaseViewConfiguration),
+      onLayout: (TerminalPaneLayoutRect? rectangle, {required bool visible}) {
+        if (visible) layouts[pane.id] = rectangle!;
+      },
+    ),
+    windowFrame: const Rect.fromLTWH(100, 90, 920, 580),
+    cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+    presentWindows: false,
+  );
+  try {
+    adapter.reconcile();
+    _expect(
+      layouts.length == 2 &&
+          layouts.values.every(
+            (TerminalPaneLayoutRect rectangle) =>
+                rectangle.width == 920 && rectangle.height == 511,
+          ) &&
+          bindings.windowContentLayoutQueryCounts.values.every(
+            (int count) => count == 1,
+          ),
+      'initial tab layouts use native content height before any resize event',
     );
   } finally {
     adapter.dispose();
@@ -2138,6 +2198,9 @@ final class _HierarchyNativeBindings
   final Map<Object, int> _handles = Map<Object, int>.identity();
   final Map<int, String> windowTitles = <int, String>{};
   final Map<int, Rect> windowFrames = <int, Rect>{};
+  final Map<int, NativeRect> windowContentLayoutRects = <int, NativeRect>{};
+  final Map<int, int> windowContentLayoutQueryCounts = <int, int>{};
+  double windowContentLayoutHeightInset = 0;
   final Map<int, int> windowStyleMasks = <int, int>{};
   final Map<int, bool> windowFullscreenRequests = <int, bool>{};
   final Map<int, int> windowShowCounts = <int, int>{};
@@ -2236,6 +2299,12 @@ final class _HierarchyNativeBindings
     final NativeValueResult<int> result = _create('window');
     windowTitles[result.value!] = title;
     windowFrames[result.value!] = Rect.fromLTWH(x, y, width, height);
+    windowContentLayoutRects[result.value!] = NativeRect(
+      x: 0,
+      y: 0,
+      width: width,
+      height: height - windowContentLayoutHeightInset,
+    );
     windowStyleMasks[result.value!] = styleMask;
     return result;
   }
@@ -2249,7 +2318,23 @@ final class _HierarchyNativeBindings
     required double height,
   }) {
     windowFrames[handle] = Rect.fromLTWH(x, y, width, height);
+    windowContentLayoutRects[handle] = NativeRect(
+      x: 0,
+      y: 0,
+      width: width,
+      height: height - windowContentLayoutHeightInset,
+    );
     return const NativeCallResult.success();
+  }
+
+  @override
+  NativeValueResult<NativeRect> windowGetContentLayoutRect(int handle) {
+    windowContentLayoutQueryCounts[handle] =
+        (windowContentLayoutQueryCounts[handle] ?? 0) + 1;
+    final NativeRect? rect = windowContentLayoutRects[handle];
+    return rect == null
+        ? const NativeValueResult<NativeRect>.failure(2, 'unknown window')
+        : NativeValueResult<NativeRect>.success(rect);
   }
 
   @override
@@ -2560,6 +2645,8 @@ final class _HierarchyNativeBindings
     objects.remove(handle);
     windowTitles.remove(handle);
     windowFrames.remove(handle);
+    windowContentLayoutRects.remove(handle);
+    windowContentLayoutQueryCounts.remove(handle);
     windowStyleMasks.remove(handle);
     windowFullscreenRequests.remove(handle);
     windowShowCounts.remove(handle);

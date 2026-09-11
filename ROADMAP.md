@@ -768,6 +768,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （[`docs/phase4/glyph-raster-orientation.md`](docs/phase4/glyph-raster-orientation.md) を参照して実施）
 - [x] zero-config既定フォントサイズを14ptへ拡大し実GUIで判読性を確認する
   （[`docs/phase4/larger-default-font-size.md`](docs/phase4/larger-default-font-size.md) を参照して実施）
+- [x] scroll中のglyph垂直クリップを解消し、viewport移動後も行全体を安定表示する
+  （[`docs/phase4/scroll-glyph-vertical-clipping.md`](docs/phase4/scroll-glyph-vertical-clipping.md)
+  を参照して実施する）
+  - [x] `dart_appkit`からnative content layout rectをread-only公開し、初期drawable寸法を取得できるようにする
+  - [x] 初回hierarchy layoutをcontent寸法へ一致させ、scroll前後のglyph pixel安定性を検証する
 
 終了条件:
 
