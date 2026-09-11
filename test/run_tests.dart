@@ -26,6 +26,7 @@ import 'reference_renderer_test.dart';
 import 'render_rebuild_coordinator_test.dart';
 import 'render_resource_rebuilder_test.dart';
 import 'renderer_metrics_test.dart';
+import 'runtime_image_worker_test.dart';
 import 'runtime_lifecycle_test.dart';
 import 'terminal_accessibility_snapshot_test.dart';
 import 'terminal_action_menu_test.dart';
@@ -219,6 +220,7 @@ Future<void> main() async {
   await _testControlDAppKitKeyRoute();
   await _testModeAwareAppKitKeyRoute();
   await runRuntimeLifecycleTests().timeout(const Duration(seconds: 30));
+  await runRuntimeImageWorkerTests().timeout(const Duration(seconds: 30));
   await runTerminalSessionReplyTests();
   await _testPersistentCommandSession();
   await _testBoundedPasteTransport();

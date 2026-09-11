@@ -5,7 +5,8 @@
 - Date started: 2026-09-11
 - Scope: fourth Phase 9 roadmap item
 - Feature-matrix owner: CAP-11
-- Status: grammar child complete; storage child pending
+- Status: grammar and typed worker-decode children complete; session storage
+  child pending
 - Predecessor: `docs/phase9/light-dark-notification-extended-reports.md`
 
 ## Purpose and background
@@ -255,6 +256,27 @@ behavior early.
    and teardown. Explicitly reject file, temporary-file, shared-memory, and
    animation actions. Complete when no decode runs on the UI root and focused
    worker/session tests prove FIFO reply/state behavior and clean recovery.
+   This child is itself split before implementation because pure-Dart image
+   decode/IPC and session-owned protocol state have independent failure and
+   review boundaries:
+   1. **Typed worker decode.** Generalize lifecycle requests to copied bounded
+      payload replies while preserving the existing signed-int traffic API;
+      add a versioned image subprotocol and worker-only strict base64, bounded
+      RFC 1950 zlib, raw RGB/RGBA, and non-interlaced 8-bit PNG decode to
+      canonical RGBA. Enforce request/response, encoded, decompressed,
+      dimension, pixel, PNG chunk, and CRC bounds. Complete with codec/decode,
+      process generation, malformed input, backpressure, late result, and
+      teardown tests, plus the normal gate and a standalone commit.
+   2. **Session storage and FIFO semantics.** Add independent bounded primary
+      and alternate image stores, generation-safe ID/number replacement, and a
+      session controller that sends every direct multipart chunk to the worker
+      instead of accumulating/decompressing on the UI root. Serialize graphics
+      commands and later ordinary replies, enforce command/work/storage caps,
+      abort partial transfers on delete/restart/dispose, publish exact query/
+      success/error replies, and ignore stale completions. Explicitly reject
+      local media and animation actions. Complete with fake-PTY/real-worker
+      tests for all state/reply/failure/teardown transitions, then close the
+      storage child in a second standalone commit.
 3. **Placement, deletion, z-index, scrolling, screen semantics, and reference
    projection.** Reuse stable logical anchors for static placements; implement
    crop/offset/cell sizing, cursor movement, IDs, supported z ordering, clear/
@@ -320,3 +342,66 @@ after this parent is committed.
 - The first explicit staging attempt was denied while creating `.git/index.lock`
   under the managed repository metadata boundary. No index entry changed; the
   identical scoped file list is staged with repository-metadata permission.
+- 2026-09-11: grammar child completed in commit `e376ea9` (`Define bounded
+  Kitty graphics command grammar`). ROADMAP, README, FEATURE_MATRIX, this memo,
+  and the clean worktree were reread. The first unchecked item is process-worker
+  direct decode and bounded static image storage. This child owns worker IPC,
+  multipart/static decode, per-screen image identity/storage, query/reply FIFO,
+  rejection policy, cancellation, and teardown only; placement projection,
+  Metal, animation, and eviction remain later ordered work.
+- 2026-09-11: the existing worker frame is versioned, generation/operation
+  addressed, copied, and capped at 1 MiB, while the coordinator stores only
+  `Completer<int>` and validates every response as an 8-byte integer. The worker
+  loop is currently colocated in `runtime_lifecycle.dart`, so importing the
+  coordinator into the AppKit root also compiles worker-only behavior. The
+  typed-decode unit will generalize the coordinator to bounded byte payloads
+  (retaining the integer wrapper), move the child loop to a worker-only source,
+  and keep all base64/zlib/PNG routines reachable only from the helper
+  entrypoint.
+- 2026-09-11: canonical static output is RGBA8 with a per-image ceiling of
+  262,144 pixels / 1 MiB. Direct encoded input is capped at 1,398,104 bytes
+  (the exact RFC 4648 expansion ceiling for 1 MiB), each APC chunk remains
+  4,096 bytes, PNG dimensions are capped at 4,096 per axis, and non-interlaced
+  8-bit grayscale, truecolor, indexed, grayscale-alpha, and RGBA PNG are
+  admitted. The worker validates PNG structure, CRC, palette/transparency,
+  filter bytes, bounded IDAT/inflated scanlines, and exact raw dimensions.
+  Interlacing, higher/lower bit depths, color-management transforms, and
+  unknown critical chunks fail closed.
+- 2026-09-11: multipart encoded bytes are owned only by the helper. Requests
+  identify pane, session generation, and transfer generation; start replaces
+  an older transfer for that session, continuation must match, abort/dispose
+  releases it, and every chunk gets a typed acknowledgement/result. The worker
+  caps pending transfers at 64 and aggregate pending encoded bytes at 8 MiB so
+  64 request slots cannot imply 64 maximum-sized image accumulators. The outer
+  frame payload cap becomes 1 MiB plus a fixed 64-byte allowance, sufficient
+  for one canonical RGBA response without permitting the full encoded
+  accumulator in a single IPC frame.
+- 2026-09-11: the first scoped worker analyzer pass found one compile-time
+  issue: `dart:io`'s `ZLibDecoder` constructor is not const. Removing the
+  incorrect `const` is the only correction; no behavioral test had run yet.
+- 2026-09-11: the new worker decode suite passed, including real helper
+  processes. A direct invocation of the pre-existing lifecycle test did not
+  run because that imported suite lacked a standalone `main`; adding the same
+  thin `main => runRuntimeLifecycleTests` entrypoint used by other suites makes
+  the focused regression independently executable without changing assertions.
+- 2026-09-11: after adding configurable bounded-service caps and an outer
+  coordinator payload preflight, scoped formatting changed only the image
+  worker test, scoped analysis reported no issues, and both the image-worker
+  and lifecycle focused suites passed. The real-worker test proves an
+  oversized request is rejected before IPC and that the same worker remains
+  usable for legacy integer traffic.
+- 2026-09-11: the first complete `make test` for this child stopped at the
+  Phase 7 AppKit acceptance freshness check after all earlier generators
+  passed. The acceptance artifact hashes the lifecycle source moved by this
+  child, so this is an expected reviewed-artifact regeneration requirement,
+  not a runtime assertion failure. Regenerate that artifact in its prescribed
+  order, review the delta, and rerun the complete gate.
+- 2026-09-11: Phase 7 acceptance regeneration changed only the expected SHA-256
+  values for `runtime_lifecycle.dart` and its focused test; criteria, evidence
+  paths, counts, and statuses did not drift. The complete gate then passed all
+  freshness, compatibility, differential, application, terminfo, shell,
+  formatting, analysis, native-hook, and Dart test stages with 252 formatted
+  files and `dart_terminal tests passed`. `git diff --check` also passed.
+  The typed worker-decode child therefore meets its isolated completion
+  conditions; per-screen identity/storage and FIFO session replies remain the
+  next ordered child and are deliberately not marked complete.

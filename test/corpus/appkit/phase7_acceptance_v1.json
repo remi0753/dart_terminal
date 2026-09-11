@@ -132,7 +132,7 @@
         },
         {
           "path": "lib/src/runtime_lifecycle.dart",
-          "sha256": "10e1be2b7f5ddfaaceb802450eb1bf99117046ac0982d7527c21ff76dabe21d4"
+          "sha256": "040b55a6915fc2b1dff529115a1575f976bdba6081c9a92b2ce011dd6125abe1"
         }
       ],
       "unit_tests": [
@@ -144,7 +144,7 @@
         {
           "path": "test/runtime_lifecycle_test.dart",
           "entrypoint": "runRuntimeLifecycleTests",
-          "sha256": "c95364de960d95d919f9e04ce8294588d4ad90cbdadd0735a796e639e245021d"
+          "sha256": "1784d8f0ac79310b28c5a84892ac281b8de4d2b0064cdc8f56ecc97b7909d232"
         }
       ],
       "integration_tests": [

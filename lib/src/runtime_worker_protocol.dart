@@ -5,7 +5,7 @@ import 'dart:typed_data';
 const int runtimeWorkerProtocolMagic = 0x44545257;
 const int runtimeWorkerProtocolVersion = 1;
 const int runtimeWorkerHeaderLength = 20;
-const int runtimeWorkerMaximumPayloadLength = 1024 * 1024;
+const int runtimeWorkerMaximumPayloadLength = 1024 * 1024 + 64;
 
 enum RuntimeWorkerMessageType {
   ready(1),
@@ -76,12 +76,16 @@ abstract final class RuntimeWorkerFrameCodec {
   }
 
   static int readInt64Payload(RuntimeWorkerFrame frame) {
-    if (frame.payload.length != 8) {
+    return readInt64Bytes(frame.payload, context: frame.type.name);
+  }
+
+  static int readInt64Bytes(Uint8List payload, {String context = 'worker'}) {
+    if (payload.length != 8) {
       throw FormatException(
-        '${frame.type.name} payload must contain one signed 64-bit integer',
+        '$context payload must contain one signed 64-bit integer',
       );
     }
-    return ByteData.sublistView(frame.payload).getInt64(0, Endian.big);
+    return ByteData.sublistView(payload).getInt64(0, Endian.big);
   }
 
   static void _requireUint32(int value, String field) {

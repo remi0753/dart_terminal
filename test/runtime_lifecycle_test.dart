@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:dart_terminal/src/runtime_lifecycle.dart';
 import 'package:dart_terminal/src/runtime_worker_protocol.dart';
 
+Future<void> main() => runRuntimeLifecycleTests();
+
 Future<void> runRuntimeLifecycleTests() async {
   await _protocolContract();
   _sourceBoundary();
