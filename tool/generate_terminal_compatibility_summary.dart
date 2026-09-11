@@ -74,7 +74,8 @@ String generateTerminalCompatibilitySummary(
     )
     ..writeln(
       '- the bounded leading-G Kitty APC subset for direct static image '
-      'transmit/query, worker decode, per-screen storage, and replies.',
+      'transmit/query, worker decode, per-screen storage, static placement, '
+      'delete, and replies.',
     )
     ..writeln()
     ..writeln(
@@ -83,8 +84,9 @@ String generateTerminalCompatibilitySummary(
       'meaning; exhaustive ISO-2022 national replacement-set final-byte '
       'variants beyond ASCII and DEC line drawing; physical printer/modem '
       'parameter variants; Tektronix command details; terminal-to-host keyboard '
-      'output beyond the declared keyboard modes; Kitty image placement, '
-      'rendering, local transport, and animation; and other Ghostty-only '
+      'output beyond the declared keyboard modes; Kitty image rendering, '
+      'scroll/clear/reflow projection, virtual/relative placement, local '
+      'transport, and animation; and other Ghostty-only '
       'protocols assigned to later roadmap tasks. An exclusion '
       'is not silently supported.',
     )

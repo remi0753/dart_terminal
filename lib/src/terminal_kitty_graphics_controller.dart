@@ -7,6 +7,7 @@ import 'runtime_lifecycle.dart';
 import 'terminal_core/terminal_kitty_graphics.dart';
 import 'terminal_core/terminal_kitty_image_store.dart';
 import 'terminal_core/terminal_reply.dart';
+import 'terminal_core/terminal_screen.dart';
 import 'terminal_core/terminal_screen_set.dart';
 
 abstract final class TerminalKittyGraphicsControllerLimits {
@@ -21,12 +22,14 @@ final class TerminalKittyGraphicsController {
     required this.paneId,
     required this.sessionGeneration,
     required TerminalReplyHandler onReply,
+    void Function()? onChanged,
     RuntimeWorkerPayloadClient? worker,
     this.maximumQueuedJobs =
         TerminalKittyGraphicsControllerLimits.maximumQueuedJobs,
     this.maximumQueuedBytes =
         TerminalKittyGraphicsControllerLimits.maximumQueuedBytes,
   }) : _onReply = onReply,
+       _onChanged = onChanged,
        _worker = worker {
     if (paneId <= 0 ||
         paneId > 0xffffffff ||
@@ -50,6 +53,7 @@ final class TerminalKittyGraphicsController {
   final int paneId;
   final int sessionGeneration;
   final TerminalReplyHandler _onReply;
+  final void Function()? _onChanged;
   final int maximumQueuedJobs;
   final int maximumQueuedBytes;
   final Queue<_TerminalKittyQueueJob> _queue = Queue<_TerminalKittyQueueJob>();
@@ -236,13 +240,18 @@ final class TerminalKittyGraphicsController {
         _emitError(command, 'ENOTSUP', 'image animation is not supported');
         return;
       case TerminalKittyGraphicsAction.place:
-      case TerminalKittyGraphicsAction.transmitAndPlace:
         await _abortPendingTransfer();
-        _emitError(command, 'ENOTSUP', 'image placement is not yet supported');
+        _placeImage(
+          command,
+          identitySource: command,
+          screenKind: screenSet.activeKind,
+        );
         return;
+      case TerminalKittyGraphicsAction.transmitAndPlace:
+        break;
       case TerminalKittyGraphicsAction.delete:
         await _abortPendingTransfer();
-        _emitError(command, 'ENOTSUP', 'image deletion is not yet supported');
+        _delete(command);
         return;
       case TerminalKittyGraphicsAction.query:
       case TerminalKittyGraphicsAction.transmit:
@@ -294,6 +303,14 @@ final class TerminalKittyGraphicsController {
       return;
     }
     final int transferGeneration = _takeTransferGeneration();
+    if (command.action != TerminalKittyGraphicsAction.query &&
+        command.transmission.imageId != 0 &&
+        screenSet.activeKittyImages.removePlacementsForImage(
+              command.transmission.imageId,
+            ) !=
+            0) {
+      _notifyChanged();
+    }
     final _TerminalKittyPendingTransfer transfer =
         _TerminalKittyPendingTransfer(
           command: command,
@@ -470,11 +487,221 @@ final class TerminalKittyGraphicsController {
       return;
     }
     final TerminalKittyImage image = stored.image!;
+    if (initial.action == TerminalKittyGraphicsAction.transmitAndPlace) {
+      _placeImage(
+        finalCommand,
+        identitySource: initial,
+        screenKind: transfer.screenKind,
+        resolvedImageId: image.id,
+      );
+      return;
+    }
+    _notifyChanged();
     _emitSuccess(
       finalCommand,
       identitySource: initial,
       resolvedImageId: image.id,
     );
+  }
+
+  void _placeImage(
+    TerminalKittyGraphicsCommand replyCommand, {
+    required TerminalKittyGraphicsCommand identitySource,
+    required TerminalScreenKind screenKind,
+    int? resolvedImageId,
+  }) {
+    final TerminalKittyGraphicsPlacement request = identitySource.placement;
+    if (request.cursorMovement > 1) {
+      _emitError(
+        replyCommand,
+        'EINVAL',
+        'cursor movement must be zero or one',
+        identitySource: identitySource,
+      );
+      return;
+    }
+    if (request.virtual) {
+      _emitError(
+        replyCommand,
+        'ENOTSUP',
+        'virtual image placement is not supported',
+        identitySource: identitySource,
+      );
+      return;
+    }
+    if (request.parentImageId != 0 ||
+        request.parentPlacementId != 0 ||
+        request.relativeColumnOffset != 0 ||
+        request.relativeRowOffset != 0) {
+      _emitError(
+        replyCommand,
+        'ENOTSUP',
+        'relative image placement is not supported',
+        identitySource: identitySource,
+      );
+      return;
+    }
+    if (request.z < -0x40000000) {
+      _emitError(
+        replyCommand,
+        'ENOTSUP',
+        'extreme negative image z-index is not supported',
+        identitySource: identitySource,
+      );
+      return;
+    }
+    final TerminalScreen screen = screenSet.screenFor(screenKind);
+    final TerminalLogicalAnchor anchor = screenSet.viewport.anchorAtScreen(
+      screenKind,
+      screen.cursorRow,
+      screen.cursorColumn,
+    );
+    final TerminalKittyImageStore store = screenSet.kittyImagesFor(screenKind);
+    late final TerminalKittyImagePlacementResult result;
+    try {
+      result = store.place(
+        imageId: resolvedImageId ?? request.imageId,
+        imageNumber: resolvedImageId == null ? request.imageNumber : 0,
+        placementId: request.placementId,
+        logicalLineId: anchor.logicalLineId,
+        logicalLineEpoch: anchor.logicalLineEpoch,
+        logicalCellOffset: anchor.cellOffset,
+        sourceX: request.sourceX,
+        sourceY: request.sourceY,
+        sourceWidth: request.sourceWidth,
+        sourceHeight: request.sourceHeight,
+        cellOffsetX: request.cellOffsetX,
+        cellOffsetY: request.cellOffsetY,
+        columns: request.columns,
+        rows: request.rows,
+        z: request.z,
+      );
+    } on Object {
+      _emitError(
+        replyCommand,
+        'EINVAL',
+        'invalid image placement metadata',
+        identitySource: identitySource,
+      );
+      return;
+    }
+    switch (result.disposition) {
+      case TerminalKittyImagePlacementDisposition.imageMissing:
+        _emitError(
+          replyCommand,
+          'ENOENT',
+          'image not found',
+          identitySource: identitySource,
+        );
+        return;
+      case TerminalKittyImagePlacementDisposition.resourceLimit:
+        _emitError(
+          replyCommand,
+          'ENOSPC',
+          'image placement limit reached',
+          identitySource: identitySource,
+        );
+        return;
+      case TerminalKittyImagePlacementDisposition.stored:
+        break;
+    }
+    final TerminalKittyImage image = result.image!;
+    final TerminalKittyImagePlacement placement = result.placement!;
+    final ({int width, int height})? cell = screenSet.logicalCellSize;
+    final TerminalKittyImagePlacementGeometry geometry = placement.geometry(
+      image: image,
+      cellWidth: cell?.width ?? 0,
+      cellHeight: cell?.height ?? 0,
+    );
+    if (!request.suppressCursorMovement) {
+      _moveCursorAfterPlacement(screen, geometry);
+    }
+    _notifyChanged();
+    _emitSuccess(
+      replyCommand,
+      identitySource: identitySource,
+      resolvedImageId: image.id,
+    );
+  }
+
+  void _moveCursorAfterPlacement(
+    TerminalScreen screen,
+    TerminalKittyImagePlacementGeometry geometry,
+  ) {
+    if (geometry.columns == 0 || geometry.rows == 0) return;
+    final int targetColumn = screen.cursorColumn + geometry.columns;
+    final bool wraps = targetColumn >= screen.columns;
+    final int requestedRows = geometry.rows - 1 + (wraps ? 1 : 0);
+    final bool cursorInRegion =
+        screen.cursorRow >= screen.topMargin &&
+        screen.cursorRow <= screen.bottomMargin &&
+        screen.cursorColumn >= screen.activeLeftMargin &&
+        screen.cursorColumn <= screen.activeRightMargin;
+    final int rowsBeforeScroll = cursorInRegion
+        ? screen.bottomMargin - screen.cursorRow
+        : 0;
+    final int rowsToMove = requestedRows.clamp(
+      0,
+      rowsBeforeScroll + screen.rows,
+    );
+    for (var row = 0; row < rowsToMove; row++) {
+      screen.index();
+    }
+    screen.setCursorPosition(screen.cursorRow, wraps ? 0 : targetColumn);
+  }
+
+  void _delete(TerminalKittyGraphicsCommand command) {
+    final TerminalKittyGraphicsDeleteSelector selector =
+        command.deletion.selector;
+    if (selector == TerminalKittyGraphicsDeleteSelector.animationFrames ||
+        selector ==
+            TerminalKittyGraphicsDeleteSelector.animationFramesAndData) {
+      _emitError(
+        command,
+        'ENOTSUP',
+        'animation frame deletion is not supported',
+      );
+      return;
+    }
+    final TerminalScreenKind kind = screenSet.activeKind;
+    final TerminalScreen screen = screenSet.activeScreen;
+    final TerminalKittyImageStore store = screenSet.activeKittyImages;
+    final ({int width, int height})? cell = screenSet.logicalCellSize;
+    final TerminalKittyImageDeleteResult deleted = store.delete(
+      deletion: command.deletion,
+      cursorRow: screen.cursorRow,
+      cursorColumn: screen.cursorColumn,
+      screenRows: screen.rows,
+      screenColumns: screen.columns,
+      cellWidth: cell?.width ?? 0,
+      cellHeight: cell?.height ?? 0,
+      resolvePosition: (TerminalKittyImagePlacement placement) {
+        final TerminalViewportPosition? position = screenSet.viewport
+            .activeScreenPositionOf(
+              TerminalLogicalAnchor(
+                screenKind: kind,
+                logicalLineId: placement.logicalLineId,
+                logicalLineEpoch: placement.logicalLineEpoch,
+                cellOffset: placement.logicalCellOffset,
+              ),
+            );
+        return position == null
+            ? null
+            : TerminalKittyImagePlacementPosition(
+                row: position.row,
+                column: position.column,
+              );
+      },
+    );
+    if (deleted.mutated) _notifyChanged();
+  }
+
+  void _notifyChanged() {
+    try {
+      _onChanged?.call();
+    } on Object {
+      // Presentation notification cannot alter terminal protocol ownership.
+    }
   }
 
   Future<void> _abortPendingTransfer() async {

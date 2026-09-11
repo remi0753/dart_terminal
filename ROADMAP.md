@@ -1140,6 +1140,9 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] typed generation-safe base64/zlib/PNG/RGB(A) worker decode
     - [x] per-screen storage、multipart/FIFO replies、failure/teardown semantics
   - [ ] placement/delete/z-index/scroll/screen semantics と reference projection
+    - [x] bounded placement state、put/delete actions、cursor/z semantics
+    - [ ] scroll/erase/reflow/alternate/RIS semantics、immutable viewport projection
+    - [ ] CPU reference compositor/golden、placement child完了判定
   - [ ] Metal product acceptance、compatibility/documentation closure、親項目完了判定
 - [ ] image animation と resource eviction
 - [ ] desktop notification、progress、semantic prompt extensions

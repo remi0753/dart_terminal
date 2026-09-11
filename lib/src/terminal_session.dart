@@ -233,6 +233,7 @@ final class TerminalSession implements TerminalPaneSession {
       paneId: id.paneId.value,
       sessionGeneration: id.generation,
       onReply: _writeTerminalReplyDirect,
+      onChanged: _notifyChanged,
       worker: graphicsWorker,
     );
     terminalParserSink = TerminalScreenParserSink.forScreenSet(

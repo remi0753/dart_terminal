@@ -143,9 +143,14 @@ void _testHistoryScreenProjectionAndNavigation() {
   );
 
   viewport.scrollByRows(1);
+  final TerminalLogicalAnchor liveAnchor = viewport.anchorAtActiveScreen(0, 2);
+  final TerminalViewportPosition? livePosition = viewport
+      .activeScreenPositionOf(liveAnchor);
   _expect(
     viewport.offset == 1 &&
         !viewport.atBottom &&
+        livePosition == const TerminalViewportPosition(row: 0, column: 2) &&
+        liveAnchor != viewport.anchorAt(0, 2) &&
         _rowLead(viewport, 0) == 0x43 &&
         _rowLead(viewport, 1) == 0x44 &&
         _rowLead(viewport, 2) == 0x45 &&
@@ -157,7 +162,7 @@ void _testHistoryScreenProjectionAndNavigation() {
         viewport.rowFlagsAt(0) == TerminalRowFlags.output &&
         viewport.cursorRow == 1 &&
         viewport.cursorColumn == 2,
-    'one-row offset crosses the history/screen boundary',
+    'history navigation leaves live-grid placement anchors independent',
   );
 
   viewport.scrollByPages(1);

@@ -149,6 +149,10 @@ final class TerminalScreenSet {
     TerminalScreenKind.primary => primary,
     TerminalScreenKind.alternate => alternate,
   };
+  TerminalScreen screenFor(TerminalScreenKind kind) => switch (kind) {
+    TerminalScreenKind.primary => primary,
+    TerminalScreenKind.alternate => alternate,
+  };
   TerminalKittyImageStore get activeKittyImages => switch (_activeKind) {
     TerminalScreenKind.primary => primaryKittyImages,
     TerminalScreenKind.alternate => alternateKittyImages,

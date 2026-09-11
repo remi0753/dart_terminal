@@ -18,8 +18,11 @@ Future<void> main() => runTerminalKittyGraphicsControllerTests();
 
 Future<void> runTerminalKittyGraphicsControllerTests() async {
   _testStoreIdentityCopiesReplacementAndCaps();
+  _testPlacementStoreGeometryIdentityAndDeletion();
+  _testEveryStaticDeleteSelector();
   await _testControllerQueryStorageMultipartAndRejection();
   await _testControllerStorageCapQueueCapAndStaleWorker();
+  await _testControllerPlacementActionsAndDelete();
   await _testControllerFailureReplyAndPendingTeardown();
   await _testSessionParserAndReplyFifo();
   await _testRealWorkerSessionRoundTripAndTeardown();
@@ -114,6 +117,370 @@ void _testStoreIdentityCopiesReplacementAndCaps() {
   );
 }
 
+void _testPlacementStoreGeometryIdentityAndDeletion() {
+  final TerminalKittyImageStore store = TerminalKittyImageStore(
+    maximumImages: 4,
+    maximumPlacements: 2,
+    maximumRetainedBytes: 128,
+  );
+  final TerminalKittyImage image = store
+      .store(
+        imageId: 1,
+        imageNumber: 0,
+        width: 4,
+        height: 2,
+        transient: false,
+        rgba: Uint8List(32),
+      )
+      .image!;
+  final TerminalKittyImagePlacement first = store
+      .place(
+        imageId: 1,
+        imageNumber: 0,
+        placementId: 7,
+        logicalLineId: 10,
+        logicalLineEpoch: 1,
+        logicalCellOffset: 3,
+        sourceX: 1,
+        sourceY: 0,
+        sourceWidth: 0,
+        sourceHeight: 0,
+        cellOffsetX: 9,
+        cellOffsetY: 19,
+        columns: 2,
+        rows: 0,
+        z: -2,
+      )
+      .placement!;
+  final TerminalKittyImagePlacementGeometry geometry = first.geometry(
+    image: image,
+    cellWidth: 10,
+    cellHeight: 20,
+  );
+  _expect(
+    geometry.source.x == 1 &&
+        geometry.source.width == 3 &&
+        geometry.pixelWidth == 11 &&
+        geometry.pixelHeight == 7 &&
+        geometry.columns == 2 &&
+        geometry.rows == 2,
+    'placement geometry intersects crop and preserves aspect ratio',
+  );
+
+  final TerminalKittyImagePlacement replacement = store
+      .place(
+        imageId: 1,
+        imageNumber: 0,
+        placementId: 7,
+        logicalLineId: 11,
+        logicalLineEpoch: 1,
+        logicalCellOffset: 4,
+        sourceX: 0,
+        sourceY: 0,
+        sourceWidth: 0,
+        sourceHeight: 0,
+        cellOffsetX: 0,
+        cellOffsetY: 0,
+        columns: 1,
+        rows: 1,
+        z: 3,
+      )
+      .placement!;
+  _expect(
+    store.placementCount == 1 &&
+        replacement.placementGeneration > first.placementGeneration,
+    'explicit placement identity replaces atomically with a fresh generation',
+  );
+  store.place(
+    imageId: 1,
+    imageNumber: 0,
+    placementId: 0,
+    logicalLineId: 12,
+    logicalLineEpoch: 1,
+    logicalCellOffset: 5,
+    sourceX: 0,
+    sourceY: 0,
+    sourceWidth: 0,
+    sourceHeight: 0,
+    cellOffsetX: 0,
+    cellOffsetY: 0,
+    columns: 1,
+    rows: 1,
+    z: 0,
+  );
+  final TerminalKittyImagePlacementResult capped = store.place(
+    imageId: 1,
+    imageNumber: 0,
+    placementId: 0,
+    logicalLineId: 13,
+    logicalLineEpoch: 1,
+    logicalCellOffset: 6,
+    sourceX: 0,
+    sourceY: 0,
+    sourceWidth: 0,
+    sourceHeight: 0,
+    cellOffsetX: 0,
+    cellOffsetY: 0,
+    columns: 1,
+    rows: 1,
+    z: 0,
+  );
+  _expect(
+    capped.disposition ==
+            TerminalKittyImagePlacementDisposition.resourceLimit &&
+        store.placementCount == 2,
+    'anonymous placement admission rejects beyond the independent cap',
+  );
+
+  final TerminalKittyImageDeleteResult lower = store.delete(
+    deletion: _command('Ga=d,d=i,i=1,p=7').deletion,
+    cursorRow: 0,
+    cursorColumn: 0,
+    screenRows: 4,
+    screenColumns: 4,
+    cellWidth: 10,
+    cellHeight: 20,
+    resolvePosition: (TerminalKittyImagePlacement placement) =>
+        TerminalKittyImagePlacementPosition(
+          row: placement.logicalLineId - 11,
+          column: 0,
+        ),
+  );
+  _expect(
+    lower.deletedPlacements == 1 &&
+        lower.deletedImages == 0 &&
+        store.imageById(1) != null,
+    'lowercase identified delete removes placement but retains image data',
+  );
+  final TerminalKittyImageDeleteResult upper = store.delete(
+    deletion: _command('Ga=d,d=P,x=1,y=2').deletion,
+    cursorRow: 0,
+    cursorColumn: 0,
+    screenRows: 4,
+    screenColumns: 4,
+    cellWidth: 10,
+    cellHeight: 20,
+    resolvePosition: (TerminalKittyImagePlacement placement) =>
+        TerminalKittyImagePlacementPosition(
+          row: placement.logicalLineId - 11,
+          column: 0,
+        ),
+  );
+  _expect(
+    upper.deletedPlacements == 1 && upper.deletedImages == 1 && store.isEmpty,
+    'uppercase cell delete reclaims now-unused image data',
+  );
+
+  final TerminalKittyImageStore numbered = TerminalKittyImageStore(
+    maximumImages: 4,
+    maximumRetainedBytes: 64,
+  );
+  final TerminalKittyImage older = numbered
+      .store(
+        imageId: 0,
+        imageNumber: 9,
+        width: 1,
+        height: 1,
+        transient: false,
+        rgba: Uint8List(4),
+      )
+      .image!;
+  final TerminalKittyImage newer = numbered
+      .store(
+        imageId: 0,
+        imageNumber: 9,
+        width: 1,
+        height: 1,
+        transient: false,
+        rgba: Uint8List(4),
+      )
+      .image!;
+  final TerminalKittyImagePlacementResult newestPlacement = numbered.place(
+    imageId: 0,
+    imageNumber: 9,
+    placementId: 2,
+    logicalLineId: 20,
+    logicalLineEpoch: 1,
+    logicalCellOffset: 0,
+    sourceX: 0,
+    sourceY: 0,
+    sourceWidth: 0,
+    sourceHeight: 0,
+    cellOffsetX: 0,
+    cellOffsetY: 0,
+    columns: 1,
+    rows: 1,
+    z: 0,
+  );
+  _expect(
+    newestPlacement.image!.id == newer.id && older.id != newer.id,
+    'placement by image number resolves only the newest image',
+  );
+  numbered.store(
+    imageId: newer.id,
+    imageNumber: 0,
+    width: 1,
+    height: 1,
+    transient: false,
+    rgba: Uint8List.fromList(const <int>[1, 2, 3, 4]),
+  );
+  _expect(
+    numbered.placementCount == 0,
+    'explicit image replacement removes every old placement',
+  );
+}
+
+void _testEveryStaticDeleteSelector() {
+  final List<({String command, int placements, int images})> cases =
+      <({String command, int placements, int images})>[
+        (command: 'Ga=d,d=a', placements: 4, images: 0),
+        (command: 'Ga=d,d=A', placements: 4, images: 3),
+        (command: 'Ga=d,d=c', placements: 1, images: 0),
+        (command: 'Ga=d,d=C', placements: 1, images: 1),
+        (command: 'Ga=d,d=n,I=9', placements: 1, images: 0),
+        (command: 'Ga=d,d=N,I=9', placements: 1, images: 1),
+        (command: 'Ga=d,d=i,i=10', placements: 2, images: 0),
+        (command: 'Ga=d,d=I,i=10', placements: 2, images: 1),
+        (command: 'Ga=d,d=p,x=1,y=1', placements: 1, images: 0),
+        (command: 'Ga=d,d=P,x=1,y=1', placements: 1, images: 0),
+        (command: 'Ga=d,d=q,x=1,y=1,z=-1', placements: 1, images: 0),
+        (command: 'Ga=d,d=Q,x=1,y=1,z=-1', placements: 1, images: 0),
+        (command: 'Ga=d,d=r,x=10,y=20', placements: 3, images: 0),
+        (command: 'Ga=d,d=R,x=10,y=20', placements: 3, images: 2),
+        (command: 'Ga=d,d=x,x=4', placements: 1, images: 0),
+        (command: 'Ga=d,d=X,x=4', placements: 1, images: 0),
+        (command: 'Ga=d,d=y,y=2', placements: 2, images: 0),
+        (command: 'Ga=d,d=Y,y=2', placements: 2, images: 1),
+        (command: 'Ga=d,d=z,z=5', placements: 2, images: 0),
+        (command: 'Ga=d,d=Z,z=5', placements: 2, images: 1),
+      ];
+  for (final ({String command, int placements, int images}) testCase in cases) {
+    final ({
+      TerminalKittyImageStore store,
+      Map<int, TerminalKittyImagePlacementPosition> positions,
+    })
+    fixture = _deleteFixture();
+    final TerminalKittyImageDeleteResult result = fixture.store.delete(
+      deletion: _command(testCase.command).deletion,
+      cursorRow: 1,
+      cursorColumn: 4,
+      screenRows: 4,
+      screenColumns: 6,
+      cellWidth: 10,
+      cellHeight: 20,
+      resolvePosition: (TerminalKittyImagePlacement placement) =>
+          fixture.positions[placement.placementGeneration],
+    );
+    _expect(
+      result.deletedPlacements == testCase.placements &&
+          result.deletedImages == testCase.images,
+      '${testCase.command} has exact static deletion semantics',
+    );
+  }
+}
+
+({
+  TerminalKittyImageStore store,
+  Map<int, TerminalKittyImagePlacementPosition> positions,
+})
+_deleteFixture() {
+  final TerminalKittyImageStore store = TerminalKittyImageStore(
+    maximumImages: 8,
+    maximumRetainedBytes: 64,
+  );
+  for (final int imageId in const <int>[10, 20, 30]) {
+    store.store(
+      imageId: imageId,
+      imageNumber: 0,
+      width: 1,
+      height: 1,
+      transient: false,
+      rgba: Uint8List(4),
+    );
+  }
+  final TerminalKittyImage numbered = store
+      .store(
+        imageId: 0,
+        imageNumber: 9,
+        width: 1,
+        height: 1,
+        transient: false,
+        rgba: Uint8List(4),
+      )
+      .image!;
+  final Map<int, TerminalKittyImagePlacementPosition> positions =
+      <int, TerminalKittyImagePlacementPosition>{};
+  void add({
+    required int imageId,
+    required int placementId,
+    required int row,
+    required int column,
+    required int columns,
+    required int rows,
+    required int z,
+  }) {
+    final TerminalKittyImagePlacement placement = store
+        .place(
+          imageId: imageId,
+          imageNumber: 0,
+          placementId: placementId,
+          logicalLineId: 100 + placementId,
+          logicalLineEpoch: 1,
+          logicalCellOffset: column,
+          sourceX: 0,
+          sourceY: 0,
+          sourceWidth: 0,
+          sourceHeight: 0,
+          cellOffsetX: 0,
+          cellOffsetY: 0,
+          columns: columns,
+          rows: rows,
+          z: z,
+        )
+        .placement!;
+    positions[placement.placementGeneration] =
+        TerminalKittyImagePlacementPosition(row: row, column: column);
+  }
+
+  add(
+    imageId: 10,
+    placementId: 1,
+    row: 0,
+    column: 0,
+    columns: 2,
+    rows: 2,
+    z: -1,
+  );
+  add(
+    imageId: 10,
+    placementId: 2,
+    row: 3,
+    column: 3,
+    columns: 1,
+    rows: 1,
+    z: 5,
+  );
+  add(
+    imageId: 20,
+    placementId: 3,
+    row: 1,
+    column: 4,
+    columns: 1,
+    rows: 1,
+    z: 5,
+  );
+  add(
+    imageId: numbered.id,
+    placementId: 9,
+    row: 2,
+    column: 1,
+    columns: 1,
+    rows: 1,
+    z: 7,
+  );
+  return (store: store, positions: positions);
+}
+
 Future<void> _testControllerQueryStorageMultipartAndRejection() async {
   final TerminalScreenSet screens = TerminalScreenSet(rows: 3, columns: 4);
   final _InProcessImageWorker worker = _InProcessImageWorker();
@@ -194,13 +561,14 @@ Future<void> _testControllerQueryStorageMultipartAndRejection() async {
 
   controller.enqueueCommand(_command('Gi=10,f=32,s=1,v=1,m=1;AQID'));
   await controller.waitForIdle();
+  final int repliesBeforeDelete = replies.length;
   controller.enqueueCommand(_command('Ga=d,d=i,i=10'));
   await controller.waitForIdle();
   _expect(
     !controller.hasPendingTransfer &&
         worker.service.pendingTransferCount == 0 &&
-        replies.last.contains('ENOTSUP:image deletion is not yet supported'),
-    'delete aborts partial worker data before its bounded unsupported reply',
+        replies.length == repliesBeforeDelete,
+    'delete aborts partial worker data and emits no success reply',
   );
 
   final int requestCount = worker.requests.length;
@@ -340,6 +708,151 @@ Future<void> _testControllerStorageCapQueueCapAndStaleWorker() async {
   replacementWorker.dispose();
 }
 
+Future<void> _testControllerPlacementActionsAndDelete() async {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 4, columns: 6);
+  screens.updateLogicalCellSize(width: 10, height: 20);
+  final _InProcessImageWorker worker = _InProcessImageWorker();
+  final List<String> replies = <String>[];
+  var changeCount = 0;
+  final TerminalKittyGraphicsController controller =
+      TerminalKittyGraphicsController(
+        screenSet: screens,
+        paneId: 25,
+        sessionGeneration: 1,
+        worker: worker,
+        onReply: (Uint8List bytes) {
+          replies.add(ascii.decode(bytes));
+          return true;
+        },
+        onChanged: () => changeCount++,
+      );
+  controller.enqueueCommand(_command('Gi=70,f=32,s=1,v=1;AQIDBA=='));
+  await controller.waitForIdle();
+  screens.activeScreen.setCursorPosition(1, 1);
+  controller.enqueueCommand(_command('Ga=p,i=70,p=3,c=2,r=2,C=1,z=-1,x=0,y=0'));
+  await controller.waitForIdle();
+  final TerminalKittyImagePlacement first = screens.primaryKittyImages
+      .placementSnapshot()
+      .single;
+  _expect(
+    replies.last == '\x1b_Gi=70,p=3;OK\x1b\\' &&
+        first.imageId == 70 &&
+        first.z == -1 &&
+        screens.activeScreen.cursorRow == 1 &&
+        screens.activeScreen.cursorColumn == 1,
+    'identified put stores one below-text placement without cursor movement',
+  );
+
+  screens.activeScreen.setCursorPosition(2, 2);
+  controller.enqueueCommand(_command('Ga=p,i=70,p=3,c=1,r=1,C=1'));
+  await controller.waitForIdle();
+  final TerminalKittyImagePlacement replacement = screens.primaryKittyImages
+      .placementSnapshot()
+      .single;
+  _expect(
+    replacement.placementGeneration > first.placementGeneration &&
+        replacement.logicalLineId != first.logicalLineId,
+    'the same explicit image/placement pair moves atomically',
+  );
+
+  screens.activeScreen.setCursorPosition(0, 0);
+  controller.enqueueCommand(_command('Ga=p,i=70,c=2,r=2'));
+  await controller.waitForIdle();
+  _expect(
+    screens.primaryKittyImages.placementCount == 2 &&
+        screens.activeScreen.cursorRow == 1 &&
+        screens.activeScreen.cursorColumn == 2,
+    'anonymous placement remains distinct and applies bounded cursor movement',
+  );
+
+  controller.enqueueCommand(
+    _command('Ga=T,i=71,p=4,f=32,s=1,v=1,c=1,r=1,C=1;BQYHCA=='),
+  );
+  await controller.waitForIdle();
+  _expect(
+    screens.primaryKittyImages.imageById(71) != null &&
+        screens.primaryKittyImages.placementSnapshot().any(
+          (TerminalKittyImagePlacement placement) =>
+              placement.imageId == 71 && placement.placementId == 4,
+        ) &&
+        replies.last == '\x1b_Gi=71,p=4;OK\x1b\\',
+    'transmit-and-place publishes image and placement before one success reply',
+  );
+
+  final int beforeErrors = screens.primaryKittyImages.placementCount;
+  controller.enqueueCommand(_command('Ga=p,i=999,C=1'));
+  controller.enqueueCommand(_command('Ga=p,i=70,U=2,C=1'));
+  controller.enqueueCommand(_command('Ga=p,i=70,P=70,Q=3,C=1'));
+  controller.enqueueCommand(_command('Ga=p,i=70,z=-1073741825,C=1'));
+  controller.enqueueCommand(_command('Ga=p,i=70,C=2'));
+  controller.enqueueCommand(_command('Ga=d,d=f,i=70'));
+  await controller.waitForIdle();
+  _expect(
+    screens.primaryKittyImages.placementCount == beforeErrors &&
+        replies.any(
+          (String value) => value.contains('ENOENT:image not found'),
+        ) &&
+        replies.any(
+          (String value) => value.contains('virtual image placement'),
+        ) &&
+        replies.any(
+          (String value) => value.contains('relative image placement'),
+        ) &&
+        replies.any((String value) => value.contains('extreme negative')) &&
+        replies.any((String value) => value.contains('cursor movement')) &&
+        replies.any((String value) => value.contains('frame deletion')),
+    'unsupported placement and animation-delete forms fail without mutation',
+  );
+
+  final int repliesBeforeLowerDelete = replies.length;
+  controller.enqueueCommand(_command('Ga=d,d=i,i=70,p=3'));
+  await controller.waitForIdle();
+  _expect(
+    replies.length == repliesBeforeLowerDelete &&
+        screens.primaryKittyImages.imageById(70) != null &&
+        screens.primaryKittyImages.placementSnapshot().every(
+          (TerminalKittyImagePlacement placement) =>
+              placement.imageId != 70 || placement.placementId != 3,
+        ),
+    'lowercase delete is silent and retains decoded image data',
+  );
+  controller.enqueueCommand(_command('Ga=d,d=I,i=70'));
+  await controller.waitForIdle();
+  _expect(
+    screens.primaryKittyImages.imageById(70) == null &&
+        screens.primaryKittyImages.placementSnapshot().every(
+          (TerminalKittyImagePlacement placement) => placement.imageId != 70,
+        ),
+    'uppercase image delete removes placements and now-unused data',
+  );
+
+  screens.activeScreen.setCursorPosition(0, 0);
+  controller.enqueueCommand(_command('Ga=p,i=71,p=8,c=1,r=1,C=1'));
+  await controller.waitForIdle();
+  final TerminalKittyImage oldImage = screens.primaryKittyImages.imageById(71)!;
+  final Completer<void> replacementGate = Completer<void>();
+  worker.gate = replacementGate;
+  controller.enqueueCommand(_command('Gi=71,f=32,s=1,v=1;CQoLDA=='));
+  await Future<void>.delayed(Duration.zero);
+  _expect(
+    screens.primaryKittyImages.placementSnapshot().every(
+          (TerminalKittyImagePlacement placement) => placement.imageId != 71,
+        ) &&
+        identical(screens.primaryKittyImages.imageById(71), oldImage),
+    'replacement start removes old placements before worker completion',
+  );
+  replacementGate.complete();
+  await controller.waitForIdle();
+  _expect(
+    screens.primaryKittyImages.imageById(71)!.resourceGeneration >
+            oldImage.resourceGeneration &&
+        changeCount >= 8,
+    'replacement completion publishes a fresh resource and presentation notice',
+  );
+  await controller.dispose();
+  worker.dispose();
+}
+
 Future<void> _testControllerFailureReplyAndPendingTeardown() async {
   final TerminalScreenSet screens = TerminalScreenSet(rows: 2, columns: 2);
   final _InProcessImageWorker worker = _InProcessImageWorker();
@@ -433,11 +946,12 @@ Future<void> _testSessionParserAndReplyFifo() async {
   final _InProcessImageWorker worker = _InProcessImageWorker();
   final Completer<void> gate = Completer<void>();
   worker.gate = gate;
+  var sessionChangeCount = 0;
   final TerminalSession session = TerminalSession(
     id: const TerminalSessionId(paneId: PaneId(40), generation: 2),
     ptyBackend: backend,
     graphicsWorker: worker,
-    onChanged: () {},
+    onChanged: () => sessionChangeCount++,
     onTerminated: () {},
   );
   await session.start();
@@ -480,6 +994,14 @@ Future<void> _testSessionParserAndReplyFifo() async {
   _expect(
     session.terminalScreenSet.primaryKittyImages.imageById(45) != null,
     'session parser publishes a direct image into its active screen store',
+  );
+  session.terminalScreenSet.updateLogicalCellSize(width: 10, height: 20);
+  process.emitOutput(_bytes('\x1b_Ga=p,i=45,p=2,c=1,r=1,C=1\x1b\\'));
+  await session.kittyGraphicsController.waitForIdle();
+  _expect(
+    session.terminalScreenSet.primaryKittyImages.placementCount == 1 &&
+        sessionChangeCount > 0,
+    'fake PTY placement reaches session state and presentation notification',
   );
   await session.dispose();
   _expect(

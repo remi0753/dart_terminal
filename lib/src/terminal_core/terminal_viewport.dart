@@ -356,6 +356,45 @@ final class TerminalViewport {
     return _anchorAtCombined(kind, combinedRow, column);
   }
 
+  /// Captures a stable anchor from the active live grid, independently of the
+  /// user's current primary-history viewport offset.
+  TerminalLogicalAnchor anchorAtActiveScreen(int row, int column) {
+    return anchorAtScreen(_screens.activeKind, row, column);
+  }
+
+  /// Captures a stable anchor from either live grid without changing which
+  /// screen is active or observing the primary viewport offset.
+  TerminalLogicalAnchor anchorAtScreen(
+    TerminalScreenKind kind,
+    int row,
+    int column,
+  ) {
+    _sync();
+    final TerminalScreen screen = _screens.screenFor(kind);
+    if (row < 0 || row >= screen.rows) {
+      throw RangeError.range(row, 0, screen.rows - 1, 'row');
+    }
+    final int combinedRow = kind == TerminalScreenKind.primary
+        ? _screens.scrollback.length + row
+        : row;
+    return _anchorAtCombined(kind, combinedRow, column);
+  }
+
+  /// Resolves an anchor relative to the active live grid, not the navigated
+  /// viewport. A negative row identifies retained primary scrollback.
+  TerminalViewportPosition? activeScreenPositionOf(
+    TerminalLogicalAnchor anchor,
+  ) {
+    _sync();
+    if (anchor.screenKind != _screens.activeKind) return null;
+    final _CombinedPosition? position = _resolveCombined(anchor);
+    if (position == null) return null;
+    final int row = anchor.screenKind == TerminalScreenKind.primary
+        ? position.row - _screens.scrollback.length
+        : position.row;
+    return TerminalViewportPosition(row: row, column: position.column);
+  }
+
   /// Returns the stable boundary immediately after one projected cell.
   TerminalLogicalAnchor anchorAfter(int viewportRow, int column) {
     final _ViewportLocation location = _locate(viewportRow);

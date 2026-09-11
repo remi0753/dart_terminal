@@ -53,6 +53,8 @@ enum TerminalKittyGraphicsQuiet { replies, errorsOnly, none }
 enum TerminalKittyGraphicsDeleteSelector {
   all('a'),
   allAndData('A'),
+  animationFrames('f'),
+  animationFramesAndData('F'),
   cursor('c'),
   cursorAndData('C'),
   newest('n'),
@@ -120,7 +122,7 @@ final class TerminalKittyGraphicsPlacement {
     required this.cellOffsetY,
     required this.columns,
     required this.rows,
-    required this.suppressCursorMovement,
+    required this.cursorMovement,
     required this.virtual,
     required this.z,
     required this.parentImageId,
@@ -140,7 +142,8 @@ final class TerminalKittyGraphicsPlacement {
   final int cellOffsetY;
   final int columns;
   final int rows;
-  final bool suppressCursorMovement;
+  final int cursorMovement;
+  bool get suppressCursorMovement => cursorMovement == 1;
   final bool virtual;
   final int z;
   final int parentImageId;
@@ -321,8 +324,8 @@ abstract final class TerminalKittyGraphicsCommandParser {
         cellOffsetY: _unsigned(values, 0x59),
         columns: _unsigned(values, 0x63),
         rows: _unsigned(values, 0x72),
-        suppressCursorMovement: usesPlacement && _unsigned(values, 0x43) == 1,
-        virtual: usesPlacement && _unsigned(values, 0x55) == 1,
+        cursorMovement: usesPlacement ? _unsigned(values, 0x43) : 0,
+        virtual: usesPlacement && _unsigned(values, 0x55) != 0,
         z: _signed(values, 0x7a),
         parentImageId: _unsigned(values, 0x50),
         parentPlacementId: _unsigned(values, 0x51),

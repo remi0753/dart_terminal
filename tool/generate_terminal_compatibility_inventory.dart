@@ -2653,9 +2653,12 @@ Map<String, Object?> _partialKittyApcRecord(_Gap gap) => <String, Object?>{
       'A leading-G APC supports bounded direct static RGB/RGBA/PNG transmit, '
       'multipart worker decode, query, explicit ID replacement, image-number '
       'allocation, per-screen reject-on-cap storage, exact quiet replies, and '
-      'teardown. Non-Kitty APC remains bounded safe-ignore. File/shared-memory '
-      'transport, placement/deletion effects, animation, projection, and render '
-      'are explicitly rejected pending their ordered roadmap work.',
+      'teardown; plus bounded static placement identity, crop/grid geometry, '
+      'cursor movement, supported z order, and delete selectors. Non-Kitty APC '
+      'remains bounded safe-ignore. File/shared-memory transport, virtual and '
+      'relative placement, extreme negative z, animation, scroll/clear/reflow '
+      'projection, and render are explicitly rejected or deferred pending their '
+      'ordered roadmap work.',
 };
 
 Map<String, Object?> _unsupportedMode(

@@ -69,6 +69,7 @@ void _testCompleteStaticControlValues() {
         placement.cellOffsetY == 6 &&
         placement.columns == 7 &&
         placement.rows == 8 &&
+        placement.cursorMovement == 1 &&
         placement.suppressCursorMovement &&
         placement.virtual &&
         placement.z == -9 &&
@@ -78,6 +79,11 @@ void _testCompleteStaticControlValues() {
         placement.relativeRowOffset == 16 &&
         ascii.decode(command.copyData()) == 'QUJD',
     'all static transmission and placement controls retain typed values',
+  );
+  _expect(
+    _parse('Ga=p,i=1,C=2,U=2').placement.cursorMovement == 2 &&
+        _parse('Ga=p,i=1,C=2,U=2').placement.virtual,
+    'non-default placement controls survive grammar for semantic rejection',
   );
 }
 

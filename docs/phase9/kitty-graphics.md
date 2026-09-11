@@ -5,8 +5,8 @@
 - Date started: 2026-09-11
 - Scope: fourth Phase 9 roadmap item
 - Feature-matrix owner: CAP-11
-- Status: grammar and typed worker-decode children complete; session storage
-  child pending
+- Status: grammar and process-worker storage children complete; placement
+  state/action child in progress
 - Predecessor: `docs/phase9/light-dark-notification-extended-reports.md`
 
 ## Purpose and background
@@ -293,6 +293,31 @@ behavior early.
    frames in Developer JIT and Release AOT. Refresh compatibility/public docs,
    run all normal/source/bundle gates, and close the parent only if all pass.
 
+The placement child is split into three ordered review units before its
+implementation because protocol mutation, terminal-history lifecycle, and
+pixel compositing have independent invariants and failure surfaces:
+
+1. **Bounded placement state and actions.** Add immutable per-screen static
+   placements tied to image generations and stable logical anchors, a separate
+   placement cap, explicit/anonymous placement identity and replacement,
+   transmit-and-place, all non-animation delete selectors, crop/offset/grid
+   sizing, bounded cursor movement, supported z ordering, and exact replies.
+   Reject virtual, relative, invalid geometry, and the under-cell-background
+   extreme-z band explicitly. Complete with store/controller/fake-PTY tests and
+   a standalone commit.
+2. **Terminal lifecycle and viewport projection.** Make full-screen/region
+   scroll, scrollback pruning, reflow, clear-screen, alternate 1049, RIS, and
+   teardown update placements without changing other erase behavior. Resolve
+   stable anchors to copied visible placement/image snapshots with deterministic
+   clipping and generation checks. Complete with history/viewport state tests
+   and a standalone commit.
+3. **CPU reference compositor and golden.** Scale and crop projected RGBA into
+   logical pixels, blend stable z/image/placement order below or above text,
+   clip at cell/viewport boundaries, and extend the deterministic 1x/2x oracle.
+   Complete with pixel-exact golden/failure tests, the normal gate, and a
+   standalone commit that closes the placement child. Metal atlas/product work
+   remains the following roadmap child.
+
 Dependencies are strict: storage consumes the typed grammar, placement consumes
 decoded generation-owned images, and Metal consumes immutable placements. The
 next roadmap item may replace reject-on-cap with eviction and add animation only
@@ -537,3 +562,102 @@ after this parent is committed.
   `git diff --check` passed. The session-storage/FIFO child and its
   process-worker parent are therefore complete; placement/projection remains
   the first unchecked Kitty graphics child.
+- 2026-09-11: session storage/FIFO completed in commit `0dc010f` (`Store Kitty
+  images through the session worker FIFO`). ROADMAP, README, FEATURE_MATRIX,
+  this memo, recent commits, and the clean worktree were reread. The first
+  unchecked item is placement/delete/z-index/scroll/screen semantics and
+  reference projection. CAP-11 and SEC-01 still say image/storage limits are
+  wholly unimplemented; update them to an exact partial state as the placement
+  work documents the now-supported surface. Metal, animation, and eviction
+  remain later ordered work.
+- 2026-09-11: immutable Kitty v0.48.2 lines 413–499 and 671–750 confirm that
+  placements reference the newest ID resolved from an ID or image number, an
+  explicit `(image ID, placement ID)` replaces atomically while placement ID
+  zero creates additional anonymous placements, and explicit image
+  retransmission removes all prior placements. Source cropping is intersected
+  with the image; destination columns/rows scale the result; negative z renders
+  below text; `C=1` suppresses cursor movement. Delete selectors distinguish
+  lowercase placement-only from uppercase data reclamation and any delete
+  aborts a partial upload.
+- 2026-09-11: immutable Kitty lines 1034–1049 require RIS and clear-screen to
+  clear visible images, mode 1049 entry to clear alternate images, other text
+  erases to leave graphics untouched, and scrolling/history navigation to move
+  graphics with text. Margin scrolling moves only placements wholly inside the
+  page region and clips them when they cross it. The pinned Ghostty source
+  downloaded for review matches the recorded hashes for `graphics_exec.zig`
+  and `graphics_storage.zig`; its bounded cursor behavior uses the resolved
+  grid size, at most a screen of extra index operations, and then leaves the
+  cursor immediately right of the placement (wrapping once when necessary).
+- 2026-09-11: the existing `TerminalLogicalAnchor` can preserve a placement
+  through full-screen scrollback and reflow, but its public viewport lookup is
+  tied to the user's current scroll offset. Placement actions/deletion need a
+  live-grid resolver independent of viewport navigation, while margin scroll
+  and clipping need an explicit screen-mutation hook because a content anchor
+  alone cannot represent a placement intentionally held at a physical cell.
+  The existing reference renderer already owns deterministic straight-alpha
+  RGBA bitmaps and bounded source bytes but has only text layers. These are
+  three independent changes, so the placement child is split in ROADMAP before
+  implementation into action state, lifecycle/projection, and reference-
+  compositor units with separate completion commits.
+- 2026-09-11: the action-state implementation keeps placement metadata beside
+  its per-screen image store but stores only logical-line ID/epoch/cell offset,
+  avoiding a dependency cycle with the viewport library. Each placement pins
+  the decoded image resource generation; explicit nonzero placement IDs replace
+  only the same image/placement pair, zero IDs receive a fresh internal
+  generation, and 256 retained placements per screen is an independent hard
+  ceiling. Source/destination geometry uses saturating 32-bit products,
+  intersected crop rectangles, clamped first-cell offsets, nearest-integer
+  aspect scaling, and no loop proportional to untrusted dimensions.
+- 2026-09-11: placement anchors are captured/resolved against the live grid,
+  independent of the user's scrollback viewport offset. The controller admits
+  standalone put and transmit-and-place, resolves image numbers newest-first,
+  moves the cursor with a screen-bounded form of the pinned Ghostty rule, and
+  notifies presentation after asynchronous state publication. Virtual,
+  relative, invalid cursor mode, and z below -1,073,741,824 fail explicitly;
+  animation-frame delete is parsed only to return `ENOTSUP`. Static lowercase/
+  uppercase delete selectors are implemented as placement-only versus unused-
+  data reclamation, with zero/invalid coordinates selecting nothing.
+- 2026-09-11: the first scoped analyzer pass found one missing public screen
+  selector: image stores already had `kittyImagesFor(kind)`, but the controller
+  also needs the corresponding primary/alternate `TerminalScreen` for a
+  multipart transmit-and-place captured on a non-active screen. Add the bounded
+  `screenFor(kind)` switch; no placement assertion had run yet.
+- 2026-09-11: scoped analysis passed after the screen selector correction. The
+  placement/store/controller focused suite passes crop/aspect calculation,
+  generation-safe explicit replacement, anonymous placement cap, every one of
+  the 20 non-animation lowercase/uppercase delete selectors, standalone put,
+  transmit-and-place, cursor behavior, presentation notification, unsupported
+  form rejection, partial-upload abort, and replacement-start teardown. The
+  grammar focused suite also passes with `f/F` delete parsing, raw `C=2`
+  preservation, and any nonzero `U` classified as virtual.
+- 2026-09-11: FEATURE_MATRIX now reports CAP-11 and SEC-01 as exact partial
+  implementations, including worker/image/placement/FIFO ceilings. The APC
+  inventory text and generated human summary include static placement/delete
+  while continuing to exclude lifecycle projection, Metal, virtual/relative/
+  extreme-z, local media, and animation. Inventory and summary regenerated
+  successfully; their classification/count totals are unchanged.
+- 2026-09-11: reviewed evidence was refreshed in dependency order before the
+  complete gate. Phase 7 acceptance changed only the `terminal_session.dart`
+  hash. The differential baseline report changed only its inventory hash and
+  no local observation file or external acceptance changed because the
+  implementation selector manifest and recorded screen/reply behavior are
+  unchanged. Regression coverage changed only inventory and FEATURE_MATRIX
+  hashes; all case, split, gap, and corruption results remain fixed.
+- 2026-09-11: `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed the full
+  freshness, compatibility, differential, application, terminfo, shell,
+  formatting, analysis, native-hook, and Dart test chain with 255 formatted
+  files, zero changes, no analyzer issues, and `dart_terminal tests passed`.
+- 2026-09-11: commit review identified that the new live-grid anchor API needed
+  a direct regression with the user viewport scrolled into history. The focused
+  viewport suite now proves `anchorAtActiveScreen` still resolves to live row 0
+  while ordinary `anchorAt` refers to the visible history row. The focused
+  suite passes; the complete gate is rerun because this assertion was added
+  after the preceding pass.
+- 2026-09-11: the final rerun passed the entire gate again with 255 Dart files,
+  zero format changes, no analyzer findings, and `dart_terminal tests passed`.
+  Final review confirms image/placement generations cannot cross-reference a
+  replaced resource, delete work is bounded by at most 256 placements and 64
+  images, cursor work is bounded by at most the distance to the margin plus one
+  screen, and no renderer/lifecycle behavior from the next subtask was added.
+  `git diff --check` passed; the bounded placement state/action subtask meets
+  its completion conditions and is marked complete.
