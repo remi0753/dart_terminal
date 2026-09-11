@@ -138,6 +138,10 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   root-isolate同期とRIS後のproduct title復帰
 - shared style/palette資源と独立したgrid/stateを持つprimary/alternate screen、
   DEC private mode 47/1047/1048/1049、切替時full-snapshot contract
+- DEC private mode 2026 synchronized output。canonical grid・PTY reply・inputは
+  継続しながら最後のaccepted Metal frameとcaret/accessibility projectionを保持し、
+  end/RISまたは1,000 ms monotonic timeoutでnewest full frameだけを公開する
+  constant-space presentation gate
 - Unicode 17 grapheme境界・幅判定、bounded grapheme intern、wide/continuation
   invariantとprimary historyを含むatomic resize/reflow
 - fixed-page SoA scrollback、独立line/byte cap、O(1) page eviction、primary

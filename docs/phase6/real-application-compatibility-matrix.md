@@ -517,17 +517,21 @@ immutable PTY bytes rather than by rewriting their provenance.
 - Phase 9 synchronized-output semantic replay: passed with 7 current
   unsupported increments, 4 variants, and 3 owned gaps. fzf and lazygit are
   clean agreements; mode 2026 now has an immutable Contour source pin and is
-  removed from the application-gap set. Real PTY/Metal product acceptance is
-  tracked by the second synchronized-output roadmap child.
+  removed from the application-gap set.
 - Phase 9 Kitty product acceptance: passed exact primary and alternate query
   replies, independent flags, canonical release bytes, state reset, and legacy
   cursor bytes in the M1 Developer JIT and Release AOT display suites.
+- Phase 9 synchronized-output product acceptance: passed exact set/reset mode
+  queries, zero frame builds/accepts during partial output, one newest frame on
+  explicit end, one newest frame on the 1,000 ms timeout, immediate legacy
+  presentation afterward, bounded pending/atlas state, and clean teardown in
+  the M1 Developer JIT and Release AOT display suites.
 - `git diff --check`, staged-scope review, and final worktree review are run
   immediately before the completion commit.
 - Remaining work is not hidden: the 3 gap owners are pinned in the acceptance
   report and linked from ROADMAP. Character-set, XTGETTCAP, XTVERSION, and
-  window-size gaps are closed; later Phase 9 owners retain input, presentation,
-  and theme gaps, while highlight mode has an evidence-backed non-adoption.
+  window-size gaps are closed; later Phase 9 owners retain theme gaps, while
+  highlight mode has an evidence-backed non-adoption.
 - Current coverage imports the accepted 6 clean/2 documented-gap cells, 3 owned
   explicit-unsupported gaps, 4 variants, and 7 unsupported increments into
   the deterministic regression coverage report. Every remaining minimal gap

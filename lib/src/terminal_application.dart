@@ -7760,6 +7760,11 @@ keybind = control+k=pane.focus-next
     );
     final bool decrqss = await _exerciseDecrqssSgr(session, pane);
     final bool queryReports = await _exerciseQueryReports(session, pane);
+    final bool synchronizedOutput = await _exerciseSynchronizedOutput(
+      session,
+      pane,
+      surface,
+    );
     final bool focus = await _exerciseFocusReporting(
       application,
       session,
@@ -7910,6 +7915,7 @@ keybind = control+k=pane.focus-next
           inputMatrix &&
           decrqss &&
           queryReports &&
+          synchronizedOutput &&
           focus &&
           mouse &&
           selection &&
@@ -7937,7 +7943,7 @@ keybind = control+k=pane.focus-next
           'frame_bounded=$frameBounded system_font=$systemFont '
           'mode_key=$modeKey text_input=$textInput '
           'input_matrix=$inputMatrix decrqss=$decrqss '
-          'query_reports=$queryReports '
+          'query_reports=$queryReports synchronized_output=$synchronizedOutput '
           'focus=$focus mouse=$mouse '
           'selection=$selection '
           'close_scroll=$closeScroll '
@@ -7968,7 +7974,7 @@ keybind = control+k=pane.focus-next
       'surface_scale_16_16=$surfaceScale16_16 system_font=$systemFont '
       'mode_key=$modeKey text_input=$textInput '
       'input_matrix=$inputMatrix decrqss=$decrqss '
-      'query_reports=$queryReports '
+      'query_reports=$queryReports synchronized_output=$synchronizedOutput '
       'focus=$focus mouse=$mouse '
       'selection=$selection '
       'close_scroll=$closeScroll '
@@ -10661,6 +10667,216 @@ keybind = control+k=pane.focus-next
       'TERMINAL_KITTY_KEYBOARD_TEST primary_query=true '
       'alternate_query=true screens=true release=true legacy=true '
       'exact=true bytes=21',
+    );
+    return true;
+  }
+
+  static Future<bool> _exerciseSynchronizedOutput(
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+  ) async {
+    const String partialMarker = '__DT_SYNC_PARTIAL__';
+    const String finalMarker = '__DT_SYNC_FINAL_1b5b3f323032363b312479__';
+    const String timeoutPartialMarker = '__DT_SYNC_TIMEOUT_PARTIAL__';
+    const String timeoutLegacyMarker =
+        '__DT_SYNC_TIMEOUT_LEGACY_1b5b3f323032363b312479_'
+        '1b5b3f323032363b322479__';
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+
+    final TerminalLiveMetalSurfaceSnapshot beforeRelease = surface.snapshot();
+    pane.insertText(
+      "stty raw -echo; printf "
+      "'\\033[?2026h\\033[?2026\$p\\033[2J\\033[H$partialMarker'; "
+      "set_reply=\$(dd bs=1 count=11 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); sleep 0.60; "
+      "printf '\\033[H__DT_SYNC_FINAL_%s__\\033[K\\033[?2026l' "
+      '"\$set_reply"; stty sane; sleep 0.80',
+    );
+    await pane.submit();
+
+    TerminalLiveMetalSurfaceSnapshot? held;
+    final Stopwatch holdDeadline = Stopwatch()..start();
+    while (holdDeadline.elapsed < const Duration(seconds: 3)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      final TerminalScreenSet screens = session.terminalScreenSet;
+      if (screens.synchronizedOutputMode &&
+          snapshot.synchronizedOutputHeld &&
+          _findAscii(screens.activeScreen, partialMarker) != null) {
+        held = snapshot;
+        break;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before synchronized output was held',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    _expectLifecycle(
+      held != null &&
+          held.synchronizedOutputReleaseCount ==
+              beforeRelease.synchronizedOutputReleaseCount &&
+          held.synchronizedOutputTimeoutCount ==
+              beforeRelease.synchronizedOutputTimeoutCount,
+      'display-test did not enter synchronized output exactly once',
+    );
+    final TerminalLiveMetalSurfaceSnapshot heldSnapshot = held!;
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    final TerminalLiveMetalSurfaceSnapshot frozen = surface.snapshot();
+    _expectLifecycle(
+      session.terminalScreenSet.synchronizedOutputMode &&
+          frozen.synchronizedOutputHeld &&
+          frozen.acceptedFrameCount == heldSnapshot.acceptedFrameCount &&
+          frozen.frameBuildCount == heldSnapshot.frameBuildCount &&
+          frozen.pendingFrameCount <= 1,
+      'synchronized output built or accepted an intermediate frame',
+    );
+
+    TerminalLiveMetalSurfaceSnapshot? released;
+    final Stopwatch releaseDeadline = Stopwatch()..start();
+    while (releaseDeadline.elapsed < const Duration(seconds: 3)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      final TerminalScreenSet screens = session.terminalScreenSet;
+      if (!screens.synchronizedOutputMode &&
+          !snapshot.synchronizedOutputHeld &&
+          snapshot.synchronizedOutputReleaseCount ==
+              beforeRelease.synchronizedOutputReleaseCount + 1 &&
+          snapshot.synchronizedOutputTimeoutCount ==
+              beforeRelease.synchronizedOutputTimeoutCount &&
+          snapshot.acceptedFrameCount == heldSnapshot.acceptedFrameCount + 1 &&
+          _findAscii(screens.activeScreen, finalMarker) != null) {
+        released = snapshot;
+        break;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before synchronized output released',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    _expectLifecycle(
+      released != null &&
+          released.pendingFrameCount <= 1 &&
+          released.liveAtlasPinCount <= 3,
+      'synchronized output did not publish one bounded newest frame',
+    );
+
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    final TerminalLiveMetalSurfaceSnapshot beforeTimeout = surface.snapshot();
+    pane.insertText(
+      "stty raw -echo; printf "
+      "'\\033[?2026h\\033[?2026\$p\\033[2J\\033[H$timeoutPartialMarker'; "
+      "set_reply=\$(dd bs=1 count=11 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); sleep 1.35; "
+      "printf '\\033[?2026\$p'; "
+      "reset_reply=\$(dd bs=1 count=11 2>/dev/null | "
+      "od -An -tx1 | tr -d ' \\n'); "
+      "printf '\\033[H__DT_SYNC_TIMEOUT_LEGACY_%s_%s__\\033[K' "
+      '"\$set_reply" "\$reset_reply"; stty sane; sleep 0.80',
+    );
+    await pane.submit();
+
+    TerminalLiveMetalSurfaceSnapshot? timeoutHeld;
+    final Stopwatch timeoutHoldDeadline = Stopwatch()..start();
+    while (timeoutHoldDeadline.elapsed < const Duration(seconds: 3)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      final TerminalScreenSet screens = session.terminalScreenSet;
+      if (screens.synchronizedOutputMode &&
+          snapshot.synchronizedOutputHeld &&
+          _findAscii(screens.activeScreen, timeoutPartialMarker) != null) {
+        timeoutHeld = snapshot;
+        break;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before timeout hold was observed',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    _expectLifecycle(
+      timeoutHeld != null,
+      'display-test did not enter the abandoned synchronized-output hold',
+    );
+    final TerminalLiveMetalSurfaceSnapshot timeoutHeldSnapshot = timeoutHeld!;
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    final TerminalLiveMetalSurfaceSnapshot timeoutFrozen = surface.snapshot();
+    _expectLifecycle(
+      session.terminalScreenSet.synchronizedOutputMode &&
+          timeoutFrozen.synchronizedOutputHeld &&
+          timeoutFrozen.acceptedFrameCount ==
+              timeoutHeldSnapshot.acceptedFrameCount &&
+          timeoutFrozen.frameBuildCount ==
+              timeoutHeldSnapshot.frameBuildCount &&
+          timeoutFrozen.pendingFrameCount <= 1,
+      'abandoned synchronized output presented before its deadline',
+    );
+
+    TerminalLiveMetalSurfaceSnapshot? timedOut;
+    final Stopwatch timeoutDeadline = Stopwatch()..start();
+    while (timeoutDeadline.elapsed < const Duration(seconds: 3)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      final TerminalScreenSet screens = session.terminalScreenSet;
+      if (!screens.synchronizedOutputMode &&
+          !snapshot.synchronizedOutputHeld &&
+          snapshot.synchronizedOutputReleaseCount ==
+              beforeTimeout.synchronizedOutputReleaseCount + 1 &&
+          snapshot.synchronizedOutputTimeoutCount ==
+              beforeTimeout.synchronizedOutputTimeoutCount + 1 &&
+          snapshot.acceptedFrameCount ==
+              timeoutHeldSnapshot.acceptedFrameCount + 1 &&
+          _findAscii(screens.activeScreen, timeoutPartialMarker) != null &&
+          _findAscii(screens.activeScreen, timeoutLegacyMarker) == null) {
+        timedOut = snapshot;
+        break;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before synchronized-output timeout recovery',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    _expectLifecycle(
+      timedOut != null &&
+          timedOut.pendingFrameCount <= 1 &&
+          timedOut.liveAtlasPinCount <= 3,
+      'synchronized-output timeout did not release one bounded newest frame',
+    );
+    final TerminalLiveMetalSurfaceSnapshot timedOutSnapshot = timedOut!;
+
+    TerminalLiveMetalSurfaceSnapshot? legacy;
+    final Stopwatch legacyDeadline = Stopwatch()..start();
+    while (legacyDeadline.elapsed < const Duration(seconds: 3)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      final TerminalScreenSet screens = session.terminalScreenSet;
+      if (!screens.synchronizedOutputMode &&
+          !snapshot.synchronizedOutputHeld &&
+          snapshot.synchronizedOutputReleaseCount ==
+              timedOutSnapshot.synchronizedOutputReleaseCount &&
+          snapshot.synchronizedOutputTimeoutCount ==
+              timedOutSnapshot.synchronizedOutputTimeoutCount &&
+          snapshot.acceptedFrameCount > timedOutSnapshot.acceptedFrameCount &&
+          snapshot.pendingFrameCount <= 1 &&
+          snapshot.liveAtlasPinCount <= 3 &&
+          _findAscii(screens.activeScreen, timeoutLegacyMarker) != null) {
+        legacy = snapshot;
+        break;
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before legacy presentation resumed',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    _expectLifecycle(
+      legacy != null,
+      'display-test did not resume immediate legacy presentation after timeout',
+    );
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+
+    stdout.writeln(
+      'TERMINAL_SYNCHRONIZED_OUTPUT_TEST query_set=true query_reset=true '
+      'hold=true intermediate_frames=0 release_frames=1 timeout=true '
+      'timeout_frames=1 legacy=true bounded=true',
     );
     return true;
   }

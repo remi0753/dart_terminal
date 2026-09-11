@@ -5,7 +5,7 @@
 - Date started: 2026-09-11
 - Scope: second Phase 9 roadmap item
 - Feature-matrix owner: CAP-09
-- Status: subtask 1 complete; subtask 2 pending
+- Status: complete; completion commit pending
 - Predecessor: `docs/phase9/kitty-keyboard-protocol.md`
 
 ## Purpose and background
@@ -222,6 +222,34 @@ marked in ROADMAP, and committed before the next one begins.
   returns. Because the Phase 7 AppKit acceptance pins the exact scheduler test
   digest, the next full gate correctly stopped at freshness again. Its unchanged
   criteria were regenerated with the new test digest before the final rerun.
+- 2026-09-11: commit `eb06695` (`Hold synchronized terminal updates until
+  release`) completed subtask 1. ROADMAP and this memo were reread from a clean
+  worktree immediately afterward. The next and only current item is real
+  PTY/Metal acceptance plus parent completion; theme/report work remains out of
+  scope until that child is committed.
+- 2026-09-11: product acceptance runs two real zsh PTY transactions through the
+  ordinary parser and attached Metal surface. The explicit-end transaction
+  reads the 11-byte set DECRQM reply inside the child, proves a 120 ms partial
+  interval changes neither frame-build nor accepted-frame counters, and accepts
+  exactly one frame containing the final marker after DECRST. The abandoned
+  transaction repeats the frozen interval, observes exactly one release at the
+  1,000 ms deadline, reads the reset DECRQM reply, and then proves a later
+  legacy marker advances the accepted-frame counter without another release.
+  Both stages retain at most one pending frame and three live atlas pins.
+- 2026-09-11: the runtime smoke verifier requires the exact content-free
+  synchronized-output result and also requires `synchronized_output=true` in
+  the aggregate display result. Existing clean ownership teardown remains the
+  final assertion, so the new test cannot pass while leaking session, Metal,
+  native view, or text-input resources.
+- 2026-09-11: the first scoped analyzer run reported five nullable-snapshot
+  accesses after assertion-helper calls. Dart cannot promote a local through a
+  custom assertion method, so the already-validated values are captured once
+  with explicit non-null local types and reused. The rerun passed with no
+  issues; timing, count, and resource assertions were unchanged.
+- 2026-09-11: README, FEATURE_MATRIX, and the Phase 6 compatibility record now
+  describe the completed atomic presentation and product evidence. The
+  compatibility coverage report and Phase 7 AppKit ledger were regenerated
+  only for their exact source digests before the full normal gate.
 
 ## Verification results
 
@@ -248,3 +276,19 @@ marked in ROADMAP, and committed before the next one begins.
   Dart test runner.
 - `git diff --check`: passed. Staged-scope and index review are performed
   immediately before the first-subtask completion commit.
+- Product acceptance source and smoke verifier scoped analysis: passed with no
+  issues after one expected nullable-snapshot correction; no runtime assertion
+  was weakened.
+- M1 Developer JIT display suite: passed the real PTY/Metal synchronized-output
+  assertions and existing display matrix in 6,781 ms.
+- M1 stock Release AOT display suite: passed the same assertions in 5,961 ms.
+- Final `CI=true DART_SUPPRESS_ANALYTICS=true make test`: passed all freshness
+  checks, formatted 246 files with zero changes, reported no analyzer issues,
+  and passed the complete Dart runner.
+- `make RUNTIME_ARCH=arm64 runtime-source-check runtime-bundle-audit`: passed
+  with 461 tracked files, zero product-native sources, one reviewed native test
+  source, and exact Developer JIT/Release AOT bundles each containing one helper,
+  one asset set, and one capability declaration.
+- Product smoke completed clean ownership teardown in both modes. Final
+  `git diff --check` and staged-scope review are performed immediately before
+  the completion commit.

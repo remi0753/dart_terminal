@@ -1116,6 +1116,14 @@ Future<void> _runTerminalDisplay(
   );
   _expect(
     observation.stdoutText.contains(
+      'TERMINAL_SYNCHRONIZED_OUTPUT_TEST query_set=true query_reset=true '
+      'hold=true intermediate_frames=0 release_frames=1 timeout=true '
+      'timeout_frames=1 legacy=true bounded=true',
+    ),
+    'terminal display launch omitted exact synchronized-output acceptance',
+  );
+  _expect(
+    observation.stdoutText.contains(
       'TERMINAL_DECRQSS_TEST selector=sgr default=true xterm=true '
       'exact=true bytes=9',
     ),
@@ -1239,7 +1247,8 @@ Future<void> _runTerminalDisplay(
     r'wrapped_rows=([2-9]|[1-9][0-9]+) prompt_bottom=true '
     r'metal_default=true newest_frame=true frame_bounded=true '
     r'system_font=true mode_key=true text_input=true input_matrix=true '
-    r'decrqss=true query_reports=true focus=true mouse=true selection=true '
+    r'decrqss=true query_reports=true synchronized_output=true '
+    r'focus=true mouse=true selection=true '
     r'close_scroll=true scroll=true '
     r'hyperlink=true '
     r'window_title=true cursor_color=true accessibility=true font_size=14\.0 '
