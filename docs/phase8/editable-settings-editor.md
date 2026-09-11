@@ -358,3 +358,63 @@ otherwise make the document look visually different.
 - `git diff --check`: passed. No adjacent `dart_appkit` changes have begun; its
   worktree remains clean at `2b36186`, which is the next ordered dependency
   subtask.
+
+### 2026-09-11 — generic attributed editable AppKit surface
+
+- The authorized adjacent `dart_appkit` repository now exposes a public
+  `TextEditor` distinct from the display-only `TextView`. One native
+  `NSScrollView`/`NSTextView` pair owns the complete multiline buffer,
+  selection, marked-text state, scrolling, first-responder behavior, native
+  input-client path, Undo infrastructure, and find panel for its lifetime.
+- `TextEditor.setDocument` validates and atomically publishes UTF-8 text,
+  UTF-16 selection, and ordered non-overlapping foreground/underline runs.
+  Text is bounded at 16 MiB, runs at 65,536, and every selection/run endpoint
+  rejects the middle of a surrogate pair. The native bridge constructs the
+  attributed candidate away from live storage and swaps it only after all
+  validation and styling succeeds.
+- `TextEditor.setStyleRuns` changes attributes on the existing
+  `NSTextStorage`, preserving both its string and selection. `isEditable`
+  changes only native interaction on the same surface. Native acceptance keeps
+  the entire `NSAttributedString` equal across the non-editable-to-editable
+  transition, directly pinning the product requirement that NORMAL and INSERT
+  retain identical syntax presentation.
+- A generic-view wrapper remains the Dart ownership/container handle;
+  `Window.makeFirstResponder` validates that wrapper in the content hierarchy
+  and then targets its inner `NSTextView`. No Objective-C pointer crosses the C
+  or Dart boundary and no terminal-specific code entered `dart_appkit`.
+- The new ABI is additive and keeps existing ABI/event protocol versions.
+  `FfiNativeBindings` discovers it through an optional, separate
+  `NativeTextEditorBindings` capability, so older bridge images and unrelated
+  existing fakes remain source/load compatible and return unsupported status
+  8. The terminal fake will implement that optional capability only when the
+  product composition begins in ordered subtask 4.
+- Public/fake coverage verifies atomic document/config transfer, same-surface
+  editable/selection/style mutations, invalid UTF-16 and run ordering, bounds,
+  and lifecycle. Native coverage inspects real foreground/underline
+  attributes, stale-attribute removal, text-storage identity, invalid-update
+  atomicity, snapshot state, focus forwarding, wrong handle/thread, and stale
+  handles. Current and legacy Mach-O FFI smoke tests verify signatures and
+  fallback.
+- The adjacent implementation and its README, G5 partial-progress roadmap,
+  worklog, and verification matrix were committed as
+  `3b92fa130a783ea13f35aebace002d776554d8dd` (`Add attributed multiline text
+  editor`). The adjacent worktree is clean after the commit.
+
+### Verification for ordered subtask 3
+
+- Adjacent focused package format/analyze and Dart API tests: passed, including
+  `attributed multiline text editor`.
+- Adjacent `make native-test` and `make ffi-smoke`: passed with warnings as
+  errors, real AppKit attribute/selection/focus checks, current FFI, and legacy
+  optional-symbol fallback.
+- Adjacent full `make test`: passed on the final source. Scaffold and C/C++
+  header contracts, native bridge, Runner/scheduler, runtime/capabilities,
+  renderer/PTY, every Dart package, launcher/Kernel compile, and FFI paths all
+  remained green.
+- Terminal full `make test` against the committed path dependency: passed. All
+  generation/freshness/configuration/compatibility checks passed, 245 files
+  formatted with 0 changes, analysis reported no issues, and the aggregate
+  ended with `dart_terminal tests passed`.
+- Terminal `git diff --check`: passed before progress recording. No product UI
+  code was advanced early; native composition remains the next ordered
+  subtask.
