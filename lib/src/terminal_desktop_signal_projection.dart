@@ -16,6 +16,7 @@ typedef TerminalDesktopSignalProjectionErrorHandler = void Function(
 /// Product-owned native boundary for bounded desktop terminal signals.
 abstract interface class TerminalDesktopSignalNativePort {
   bool postNotification({
+    required TerminalSessionId sessionId,
     required String identifier,
     required String title,
     required String body,
@@ -40,6 +41,7 @@ final class TerminalAppKitDesktopSignalPort
 
   @override
   bool postNotification({
+    required TerminalSessionId sessionId,
     required String identifier,
     required String title,
     required String body,
@@ -138,6 +140,7 @@ final class TerminalDesktopSignalCoordinator {
         defaultMaximumLiveNotificationsPerSession,
     String fallbackTitle = 'Dart Terminal',
     bool applicationActive = false,
+    bool notificationsEnabled = true,
   }) {
     final Stopwatch clock = Stopwatch()..start();
     return TerminalDesktopSignalCoordinator._(
@@ -148,6 +151,7 @@ final class TerminalDesktopSignalCoordinator {
       maximumLiveNotificationsPerSession: maximumLiveNotificationsPerSession,
       fallbackTitle: fallbackTitle,
       applicationActive: applicationActive,
+      notificationsEnabled: notificationsEnabled,
     );
   }
 
@@ -159,9 +163,11 @@ final class TerminalDesktopSignalCoordinator {
     required this.maximumLiveNotificationsPerSession,
     required this.fallbackTitle,
     required bool applicationActive,
+    required bool notificationsEnabled,
   }) : _nativePort = nativePort,
        _monotonicMicros = monotonicMicros,
-       _applicationActive = applicationActive {
+       _applicationActive = applicationActive,
+       _notificationsEnabled = notificationsEnabled {
     RangeError.checkValueInInterval(
       notificationBudget,
       1,
@@ -215,6 +221,7 @@ final class TerminalDesktopSignalCoordinator {
   TerminalSessionId? _focusedSessionId;
   String? _projectedDockBadgeLabel;
   bool _applicationActive;
+  bool _notificationsEnabled;
   bool _disposed = false;
   int _lastMonotonicMicros = 0;
   int _nextNativeSerial = 1;
@@ -230,6 +237,7 @@ final class TerminalDesktopSignalCoordinator {
   bool get isDisposed => _disposed;
   TerminalSessionId? get focusedSessionId => _focusedSessionId;
   String? get projectedDockBadgeLabel => _projectedDockBadgeLabel;
+  bool get notificationsEnabled => _notificationsEnabled;
 
   TerminalDesktopSignalMetrics get metrics => TerminalDesktopSignalMetrics(
     admittedNotificationCount: _admittedNotificationCount,
@@ -361,6 +369,40 @@ final class TerminalDesktopSignalCoordinator {
     _applicationActive = active;
   }
 
+  void setNotificationsEnabled(bool enabled) {
+    if (_disposed || _notificationsEnabled == enabled) return;
+    _notificationsEnabled = enabled;
+    if (!enabled) {
+      for (final TerminalDesktopSignalSessionProjection projection
+          in _sessions.values) {
+        final _SessionProjectionState? state = projection._state;
+        if (state != null) _cancelAll(state);
+      }
+      _admittedNotificationMicros.clear();
+    }
+  }
+
+  /// Forgets an asynchronously rejected native delivery without another remove.
+  void reportNotificationDeliveryFailure(String nativeIdentifier) {
+    if (_disposed) return;
+    for (final TerminalDesktopSignalSessionProjection projection
+        in _sessions.values) {
+      final _SessionProjectionState? state = projection._state;
+      final _LiveNotification? notification =
+          state?.liveNotifications[nativeIdentifier];
+      if (state == null || notification == null) continue;
+      state.liveNotifications.remove(nativeIdentifier);
+      final String? logicalIdentifier = notification.logicalIdentifier;
+      if (logicalIdentifier != null &&
+          state.nativeIdentifierByLogicalIdentifier[logicalIdentifier] ==
+              nativeIdentifier) {
+        state.nativeIdentifierByLogicalIdentifier.remove(logicalIdentifier);
+      }
+      _projectionFailureCount = _saturatingIncrement(_projectionFailureCount);
+      return;
+    }
+  }
+
   void removeSession(TerminalSessionId sessionId) {
     if (_disposed) return;
     _sessions[sessionId]?.close();
@@ -398,6 +440,7 @@ final class TerminalDesktopSignalCoordinator {
     _SessionProjectionState state,
     TerminalDesktopNotificationRequest request,
   ) {
+    if (!_notificationsEnabled) return;
     if (_applicationActive && _focusedSessionId == sessionId) {
       _focusSuppressedNotificationCount = _saturatingIncrement(
         _focusSuppressedNotificationCount,
@@ -441,6 +484,7 @@ final class TerminalDesktopSignalCoordinator {
     }
     final String title = request.title.isEmpty ? fallbackTitle : request.title;
     final bool projected = _nativePort.postNotification(
+      sessionId: sessionId,
       identifier: nativeIdentifier,
       title: title,
       body: request.body,

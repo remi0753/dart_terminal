@@ -806,6 +806,7 @@ final class _GuardedDesktopPort implements TerminalDesktopSignalNativePort {
 
   @override
   bool postNotification({
+    required TerminalSessionId sessionId,
     required String identifier,
     required String title,
     required String body,

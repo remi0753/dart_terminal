@@ -110,6 +110,7 @@ import 'terminal_shell_integration_resource_test.dart';
 import 'terminal_shell_integration_test.dart';
 import 'terminal_snapshot_test.dart';
 import 'terminal_style_test.dart';
+import 'terminal_system_automation_product_test.dart';
 import 'terminal_terminfo_environment_test.dart';
 import 'terminal_terminfo_test.dart';
 import 'terminal_text_input_event_router_test.dart';
@@ -224,6 +225,7 @@ Future<void> main() async {
   runTerminalShellIntegrationTests();
   runTerminalShellIntegrationResourceTests();
   await runTerminalShellIntegrationProjectionTests();
+  await runTerminalSystemAutomationProductTests();
   runTerminalSelectionSearchTests();
   runTerminalSnapshotTests();
   runTerminalScreenMetalCompositorTests();

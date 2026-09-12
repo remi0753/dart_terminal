@@ -11,7 +11,48 @@ Future<void> runTerminalDesktopSignalProjectionTests() async {
   _testDeterministicAdmissionAndCoalescing();
   _testPaneProgressSemanticAndResetLifecycle();
   _testProjectionFailureAndConfigurationBounds();
+  _testLiveDisableAndAsynchronousDeliveryFailure();
   await _testTerminalSessionOutputAndCloseIntegration();
+}
+
+void _testLiveDisableAndAsynchronousDeliveryFailure() {
+  final _FakeNativePort port = _FakeNativePort();
+  final TerminalDesktopSignalCoordinator coordinator =
+      TerminalDesktopSignalCoordinator(
+        nativePort: port,
+        notificationBudget: 8,
+        notificationsEnabled: false,
+      );
+  const TerminalSessionId id = TerminalSessionId(
+    paneId: PaneId(25),
+    generation: 2,
+  );
+  final _Harness harness = _Harness();
+  final TerminalDesktopSignalSessionProjection projection = coordinator
+      .registerSession(id);
+  harness.parse(_osc(99, 'i=job;disabled'));
+  projection.synchronize(harness.screens);
+  coordinator.setNotificationsEnabled(true);
+  harness.parse(_osc(99, 'i=job;enabled'));
+  projection.synchronize(harness.screens);
+  final String identifier = port.posts.single.identifier;
+  coordinator.reportNotificationDeliveryFailure(identifier);
+  _expect(
+    port.posts.single.sessionId == id &&
+        coordinator.snapshotFor(id)!.liveNotificationCount == 0 &&
+        coordinator.metrics.projectionFailureCount == 1,
+    'live enable or asynchronous delivery failure state was not exact',
+  );
+  harness.parse(_osc(99, 'i=job;retry'));
+  projection.synchronize(harness.screens);
+  coordinator.setNotificationsEnabled(false);
+  _expect(
+    port.posts.length == 2 &&
+        port.removed.single == port.posts.last.identifier &&
+        coordinator.snapshotFor(id)!.liveNotificationCount == 0,
+    'live disable did not cancel the currently tracked native identity',
+  );
+  coordinator.dispose();
 }
 
 void _testDeterministicAdmissionAndCoalescing() {
@@ -42,6 +83,7 @@ void _testDeterministicAdmissionAndCoalescing() {
   firstProjection.synchronize(first.screens);
   _expect(
     port.posts.length == 1 &&
+        port.posts.single.sessionId == firstId &&
         port.posts.single.title == 'second' &&
         !port.posts.single.identifier.contains('job') &&
         coordinator.metrics.coalescedNotificationCount == 1,
@@ -290,8 +332,23 @@ final class _FakeClock {
 }
 
 final class _FakeNativePort implements TerminalDesktopSignalNativePort {
-  final List<({String identifier, String title, String body})> posts =
-      <({String identifier, String title, String body})>[];
+  final List<
+    ({
+      TerminalSessionId sessionId,
+      String identifier,
+      String title,
+      String body,
+    })
+  >
+  posts =
+      <
+        ({
+          TerminalSessionId sessionId,
+          String identifier,
+          String title,
+          String body,
+        })
+      >[];
   final List<String> removed = <String>[];
   final List<String?> badgeLabels = <String?>[];
   bool failPost = false;
@@ -300,12 +357,18 @@ final class _FakeNativePort implements TerminalDesktopSignalNativePort {
 
   @override
   bool postNotification({
+    required TerminalSessionId sessionId,
     required String identifier,
     required String title,
     required String body,
   }) {
     if (failPost) return false;
-    posts.add((identifier: identifier, title: title, body: body));
+    posts.add((
+      sessionId: sessionId,
+      identifier: identifier,
+      title: title,
+      body: body,
+    ));
     return true;
   }
 

@@ -8,11 +8,13 @@ import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_appkit/testing.dart' as appkit_testing;
 import 'package:dart_macos_runtime/dart_macos_runtime.dart';
 import 'package:dart_pty_macos/dart_pty_macos.dart';
+import 'package:dart_terminal_app_intents_macos/dart_terminal_app_intents_macos.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'runtime_lifecycle.dart';
 import 'terminal_action_menu.dart';
 import 'terminal_action_registry.dart';
+import 'terminal_app_intents_product.dart';
 import 'terminal_appkit_policy.dart';
 import 'terminal_applescript_product.dart';
 import 'terminal_application_quit_coordinator.dart';
@@ -49,6 +51,7 @@ import 'terminal_input/terminal_selection_gesture.dart';
 import 'terminal_input/terminal_text_input_event_router.dart';
 import 'terminal_native_content.dart';
 import 'terminal_native_hierarchy.dart';
+import 'terminal_notification_product.dart';
 import 'terminal_osc52_confirmation.dart';
 import 'terminal_osc52_projection.dart';
 import 'terminal_pane.dart';
@@ -2556,6 +2559,8 @@ final class TerminalApplication {
     TerminalExternalPasteController<PaneId>? externalPasteController;
     TerminalAppleScriptMacosNativePort? appleScriptNativePort;
     TerminalAppleScriptProductSession? appleScriptSession;
+    TerminalAppIntentsProductController? appIntentsController;
+    Timer? appIntentsPollTimer;
     Future<void> Function(PaneId? paneId)? closePaneRequest;
     Future<void> Function(PaneId paneId, TerminalExternalContent content)?
     externalContentRequest;
@@ -2617,6 +2622,28 @@ final class TerminalApplication {
       },
     );
 
+    late final TerminalDesktopSignalCoordinator desktopSignalCoordinator;
+    late final Future<bool> Function(TerminalSessionId sessionId)
+    focusNotificationSession;
+    final TerminalNotificationProductController notificationController =
+        TerminalNotificationProductController(
+          platform: TerminalAppKitUserNotificationPlatformPort(application),
+          focusSession: (TerminalSessionId sessionId) =>
+              focusNotificationSession(sessionId),
+          onStatusChanged: () {
+            final TerminalSettingsInspectorPresenter? settings =
+                settingsPresenter;
+            if (settings != null && !settings.isDisposed) settings.refresh();
+          },
+          onError: (Object error, StackTrace _) {
+            stderr.writeln(
+              'TERMINAL_NOTIFICATION_PRODUCT_ERROR type=${error.runtimeType}',
+            );
+          },
+          onDeliveryFailure: (String identifier) => desktopSignalCoordinator
+              .reportNotificationDeliveryFailure(identifier),
+        );
+
     final _TerminalDesktopSignalAcceptanceNativePort?
     desktopSignalAcceptancePort = runDesktopSignalAcceptance
         ? _TerminalDesktopSignalAcceptanceNativePort(application)
@@ -2625,21 +2652,22 @@ final class TerminalApplication {
         runDesktopSignalAcceptance
         ? _TerminalDesktopSignalAcceptanceClock()
         : null;
-    final TerminalDesktopSignalCoordinator desktopSignalCoordinator =
-        TerminalDesktopSignalCoordinator(
-          nativePort:
-              desktopSignalAcceptancePort ??
-              TerminalAppKitDesktopSignalPort(
-                application: application,
-                onError: (Object error, StackTrace _) {
-                  stderr.writeln(
-                    'TERMINAL_DESKTOP_SIGNAL_NATIVE_ERROR error=$error',
-                  );
-                },
-              ),
-          monotonicMicros: desktopSignalAcceptanceClock?.call,
-          applicationActive: application.isActive,
-        );
+    desktopSignalCoordinator = TerminalDesktopSignalCoordinator(
+      nativePort: desktopSignalAcceptancePort ?? notificationController,
+      monotonicMicros: desktopSignalAcceptanceClock?.call,
+      applicationActive: application.isActive,
+      notificationsEnabled: false,
+    );
+
+    void applyNotificationConfiguration(bool enabled) {
+      if (enabled) {
+        notificationController.applyEnabled(true);
+        desktopSignalCoordinator.setNotificationsEnabled(true);
+      } else {
+        desktopSignalCoordinator.setNotificationsEnabled(false);
+        notificationController.applyEnabled(false);
+      }
+    }
 
     String? inheritedWorkingDirectory(
       PaneId? sourcePaneId,
@@ -3686,8 +3714,21 @@ final class TerminalApplication {
     };
 
     Future<void> disposeProductResourcesOnce() async {
-      Object? secureDisposalError;
-      StackTrace? secureDisposalStackTrace;
+      Object? disposalError;
+      StackTrace? disposalStackTrace;
+      appIntentsPollTimer?.cancel();
+      appIntentsPollTimer = null;
+      try {
+        await appIntentsController?.dispose();
+      } on Object catch (error, stackTrace) {
+        disposalError = error;
+        disposalStackTrace = stackTrace;
+      }
+      appIntentsController = null;
+      if (!notificationController.isDisposed &&
+          notificationController.status.enabled) {
+        applyNotificationConfiguration(false);
+      }
       externalContentRequest = null;
       quickLookRequest = null;
       nativeContentReconcileRequest = null;
@@ -3708,8 +3749,8 @@ final class TerminalApplication {
         try {
           secure.dispose();
         } on Object catch (error, stackTrace) {
-          secureDisposalError = error;
-          secureDisposalStackTrace = stackTrace;
+          disposalError ??= error;
+          disposalStackTrace ??= stackTrace;
         }
       }
       await quickTerminalController?.dispose();
@@ -3749,11 +3790,8 @@ final class TerminalApplication {
         await lifecycle?.shutdown();
         lifecycleWasShutDown = true;
       }
-      if (secureDisposalError != null) {
-        Error.throwWithStackTrace(
-          secureDisposalError,
-          secureDisposalStackTrace!,
-        );
+      if (disposalError != null) {
+        Error.throwWithStackTrace(disposalError, disposalStackTrace!);
       }
     }
 
@@ -3898,6 +3936,14 @@ final class TerminalApplication {
                 .quickTerminalShortcut,
           );
           stdout.writeln(quick.shortcutStatus.machineLine());
+        }
+        final TerminalAppIntentsProductController? appIntents =
+            appIntentsController;
+        if (appIntents != null && !appIntents.isDisposed) {
+          appIntents.applyEnabled(configuration.macosAppIntents);
+        }
+        if (!notificationController.isDisposed) {
+          applyNotificationConfiguration(configuration.macosNotifications);
         }
         appleScriptSession?.applyEnabled(configuration.macosAppleScript);
       }
@@ -4242,6 +4288,42 @@ final class TerminalApplication {
             onError: recordAsynchronousError,
           );
       quickTerminalController = createdQuickTerminal;
+      focusNotificationSession = (TerminalSessionId sessionId) async {
+        final TerminalSession? session = sessions[sessionId.paneId];
+        if (session == null || session.id != sessionId || !session.isLive) {
+          return false;
+        }
+        final TerminalPaneLocation? location = state.locationForPane(
+          sessionId.paneId,
+        );
+        final TerminalWindowState? logicalWindow = location == null
+            ? null
+            : state.windowForId(location.windowId);
+        final TerminalTabState? tab = location == null
+            ? null
+            : state.tabForId(location.tabId);
+        if (logicalWindow == null || tab == null) return false;
+        state
+          ..activateWindow(logicalWindow.id)
+          ..selectTab(logicalWindow.id, tab.id)
+          ..focusPane(tab.id, sessionId.paneId);
+        if (logicalWindow.role == TerminalWindowRole.quickTerminal &&
+            !createdQuickTerminal.lifecycle.isVisibleOrShowing) {
+          await createdQuickTerminal.toggle();
+          return sessions[sessionId.paneId]?.id == sessionId &&
+              sessions[sessionId.paneId]?.isLive == true;
+        }
+        reconcileInteractiveHierarchy();
+        final Window? nativeWindow = createdHierarchy.windowForTab(tab.id);
+        final TerminalNativePaneResources? resources = createdHierarchy
+            .resourcesForPane(sessionId.paneId);
+        if (nativeWindow == null || resources == null) return false;
+        nativeWindow
+          ..show()
+          ..selectTab()
+          ..makeFirstResponder(resources.view);
+        return true;
+      };
       dispatcher = TerminalActionDispatcher(
         catalog: catalog,
         registrations: <TerminalActionRegistration>[
@@ -4384,6 +4466,20 @@ final class TerminalApplication {
         ],
       );
       actionDispatcher = dispatcher;
+      appIntentsController = TerminalAppIntentsProductController(
+        session: TerminalAppIntentsMacos.open(),
+        dispatch: dispatcher.dispatch,
+        onStatusChanged: () {
+          final TerminalSettingsInspectorPresenter? settings =
+              settingsPresenter;
+          if (settings != null && !settings.isDisposed) settings.refresh();
+        },
+        onError: (Object error, StackTrace _) {
+          stderr.writeln(
+            'TERMINAL_APP_INTENTS_PRODUCT_ERROR type=${error.runtimeType}',
+          );
+        },
+      );
       for (final PaneId paneId in owners.keys.toList(growable: false)) {
         synchronizeNativeContentPane(paneId);
       }
@@ -4438,9 +4534,26 @@ final class TerminalApplication {
           onError: recordAsynchronousError,
           runtimeStatus: () =>
               '${createdQuickTerminal.shortcutStatus.settingsLine}    '
-              '${createdSecureKeyboardEntry.status.settingsLine}',
+              '${createdSecureKeyboardEntry.status.settingsLine}    '
+              '${appIntentsController!.status.settingsLine}    '
+              '${notificationController.status.settingsLine}',
         );
       }
+      final TerminalProductConfiguration automationConfiguration =
+          configurationAuthority.newSessionConfiguration;
+      appIntentsController!.applyEnabled(
+        automationConfiguration.macosAppIntents,
+      );
+      applyNotificationConfiguration(
+        automationConfiguration.macosNotifications,
+      );
+      appIntentsPollTimer = Timer.periodic(const Duration(milliseconds: 16), (
+        _,
+      ) {
+        final TerminalAppIntentsProductController? controller =
+            appIntentsController;
+        if (controller != null) unawaited(controller.poll());
+      });
       installedPalette = TerminalCommandPalettePresenter.withFocusTarget(
         dispatcher: dispatcher,
         focusTarget: () {
@@ -4614,8 +4727,11 @@ final class TerminalApplication {
                 .then<void>((_) => handleFolderService(event))
                 .then<void>((_) {}, onError: recordAsynchronousError);
           case ApplicationUserNotificationChangedEvent():
-            // Product policy is connected by the following ordered subtask.
-            break;
+            unawaited(
+              notificationController
+                  .handleEvent(event)
+                  .then<void>((_) {}, onError: recordAsynchronousError),
+            );
           case WindowEvent() ||
               MenuItemInvokedEvent() ||
               GlobalHotKeyPressedEvent() ||
@@ -4824,6 +4940,7 @@ final class TerminalApplication {
       }
       stdout.writeln(shutdown.machineLine());
       desktopSignalCoordinator.dispose();
+      notificationController.dispose();
       final Object? error = asynchronousError;
       if (error != null && !closed.isCompleted) {
         Error.throwWithStackTrace(error, asynchronousStackTrace!);
@@ -7279,7 +7396,7 @@ final class TerminalApplication {
           actionDispatches.last.disposition ==
               TerminalActionDispatchDisposition.executed &&
           application.debugLiveObjectCount == nativeHandleBaseline + 6 &&
-          reloadController.effectiveSnapshot.schema.options.length == 45 &&
+          reloadController.effectiveSnapshot.schema.options.length == 47 &&
           settings.state.occurrences
                   .map(
                     (TerminalSettingsOptionOccurrence occurrence) =>
@@ -15252,6 +15369,7 @@ final class _TerminalDesktopSignalAcceptanceNativePort
 
   @override
   bool postNotification({
+    required TerminalSessionId sessionId,
     required String identifier,
     required String title,
     required String body,

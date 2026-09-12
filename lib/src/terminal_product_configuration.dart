@@ -169,6 +169,8 @@ final class TerminalProductConfiguration {
     required this.quickTerminalScreen,
     required this.quickTerminalAnimationDuration,
     required this.quickTerminalAutohide,
+    required this.macosAppIntents,
+    required this.macosNotifications,
     required this.macosAppleScript,
     required this.macosSecureInputAuto,
     required this.macosSecureInputIndication,
@@ -221,6 +223,12 @@ final class TerminalProductConfiguration {
     quickTerminalAutohide: snapshot.value(
       TerminalProductConfigSchema.quickTerminalAutohide,
     ),
+    macosAppIntents: snapshot.value(
+      TerminalProductConfigSchema.macosAppIntents,
+    ),
+    macosNotifications: snapshot.value(
+      TerminalProductConfigSchema.macosNotifications,
+    ),
     macosAppleScript: snapshot.value(
       TerminalProductConfigSchema.macosAppleScript,
     ),
@@ -272,6 +280,8 @@ final class TerminalProductConfiguration {
   final TerminalConfiguredQuickTerminalScreen quickTerminalScreen;
   final double quickTerminalAnimationDuration;
   final bool quickTerminalAutohide;
+  final bool macosAppIntents;
+  final bool macosNotifications;
   final bool macosAppleScript;
   final bool macosSecureInputAuto;
   final bool macosSecureInputIndication;

@@ -851,6 +851,30 @@ abstract final class TerminalProductConfigSchema {
         formatter: _formatBoolean,
       );
 
+  static final TerminalConfigOption<bool> macosAppIntents =
+      TerminalConfigOption<bool>(
+        name: 'macos-app-intents',
+        description:
+            'Allow the parameterless terminal actions exposed to Shortcuts.',
+        valueSyntax: 'true|false',
+        applicationPolicy: TerminalConfigApplicationPolicy.live,
+        defaultValue: true,
+        parser: _parseBoolean,
+        formatter: _formatBoolean,
+      );
+
+  static final TerminalConfigOption<bool> macosNotifications =
+      TerminalConfigOption<bool>(
+        name: 'macos-notifications',
+        description:
+            'Allow terminal desktop notifications under macOS system policy.',
+        valueSyntax: 'true|false',
+        applicationPolicy: TerminalConfigApplicationPolicy.live,
+        defaultValue: true,
+        parser: _parseBoolean,
+        formatter: _formatBoolean,
+      );
+
   static final TerminalConfigOption<bool> macosSecureInputAuto =
       TerminalConfigOption<bool>(
         name: 'macos-secure-input-auto',
@@ -997,6 +1021,8 @@ abstract final class TerminalProductConfigSchema {
       quickTerminalScreen,
       quickTerminalAnimationDuration,
       quickTerminalAutohide,
+      macosAppIntents,
+      macosNotifications,
       macosAppleScript,
       macosSecureInputAuto,
       macosSecureInputIndication,

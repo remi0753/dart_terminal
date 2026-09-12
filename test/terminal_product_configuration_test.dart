@@ -83,6 +83,8 @@ Future<void> _testAcceptedConfigurationAuthority() async {
       '--quick-terminal-screen=mouse',
       '--quick-terminal-animation-duration=0',
       '--quick-terminal-autohide=false',
+      '--macos-app-intents=false',
+      '--macos-notifications=false',
       '--macos-applescript=false',
       '--macos-secure-input-auto=false',
       '--macos-secure-input-indication=false',
@@ -128,6 +130,8 @@ Future<void> _testAcceptedConfigurationAuthority() async {
             TerminalConfiguredQuickTerminalScreen.mouse &&
         authority.newSessionConfiguration.quickTerminalAnimationDuration == 0 &&
         !authority.newSessionConfiguration.quickTerminalAutohide &&
+        !authority.newSessionConfiguration.macosAppIntents &&
+        !authority.newSessionConfiguration.macosNotifications &&
         !authority.newSessionConfiguration.macosAppleScript &&
         !authority.newSessionConfiguration.macosSecureInputAuto &&
         !authority.newSessionConfiguration.macosSecureInputIndication &&
@@ -154,6 +158,8 @@ Future<void> _testAcceptedConfigurationAuthority() async {
     '--quick-terminal-screen=mouse',
     '--quick-terminal-animation-duration=0',
     '--quick-terminal-autohide=false',
+    '--macos-app-intents=false',
+    '--macos-notifications=false',
     '--macos-applescript=false',
     '--macos-secure-input-auto=false',
     '--macos-secure-input-indication=false',
@@ -206,10 +212,11 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
     live.map((TerminalConfigOptionBase option) => option.name).join(',') ==
             'quick-terminal-shortcut,quick-terminal-screen,'
                 'quick-terminal-animation-duration,quick-terminal-autohide,'
+                'macos-app-intents,macos-notifications,'
                 'macos-applescript,'
                 'macos-secure-input-auto,macos-secure-input-indication,'
                 'macos-option-key,keybind' &&
-        schema.options.length == 45 &&
+        schema.options.length == 47 &&
         schema.options.every(
           (TerminalConfigOptionBase option) =>
               option.applicationPolicy ==
@@ -237,6 +244,8 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
       '--quick-terminal-screen=mouse',
       '--quick-terminal-animation-duration=0',
       '--quick-terminal-autohide=false',
+      '--macos-app-intents=false',
+      '--macos-notifications=false',
       '--macos-applescript=false',
       '--macos-secure-input-auto=false',
       '--macos-secure-input-indication=false',
@@ -255,6 +264,7 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
             .join(',') ==
         'font-size,quick-terminal-shortcut,quick-terminal-screen,'
             'quick-terminal-animation-duration,quick-terminal-autohide,'
+            'macos-app-intents,macos-notifications,'
             'macos-applescript,'
             'macos-secure-input-auto,macos-secure-input-indication,'
             'macos-option-key,keybind',
@@ -266,6 +276,7 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
                 .join(',') ==
             'quick-terminal-shortcut,quick-terminal-screen,'
                 'quick-terminal-animation-duration,quick-terminal-autohide,'
+                'macos-app-intents,macos-notifications,'
                 'macos-applescript,'
                 'macos-secure-input-auto,macos-secure-input-indication,'
                 'macos-option-key,keybind' &&
@@ -356,16 +367,16 @@ void _testDefaultsAndSchemaInventory() {
   final TerminalProductConfiguration defaults =
       TerminalProductConfiguration.defaults;
   _expect(
-    TerminalProductConfigSchema.instance.options.length == 45 &&
+    TerminalProductConfigSchema.instance.options.length == 47 &&
         TerminalProductConfigSchema.instance.options
                 .map((TerminalConfigOptionBase option) => option.name)
                 .toSet()
                 .length ==
-            45 &&
+            47 &&
         TerminalProductConfigSchema.instance.options.every(
           (TerminalConfigOptionBase option) => option.description.isNotEmpty,
         ),
-    'product schema has 45 unique documented options',
+    'product schema has 47 unique documented options',
   );
   _expect(
     defaults.workingDirectory == null &&
@@ -396,6 +407,8 @@ void _testDefaultsAndSchemaInventory() {
             TerminalConfiguredQuickTerminalScreen.main &&
         defaults.quickTerminalAnimationDuration == 0.2 &&
         defaults.quickTerminalAutohide &&
+        defaults.macosAppIntents &&
+        defaults.macosNotifications &&
         defaults.macosAppleScript &&
         defaults.macosSecureInputAuto &&
         defaults.macosSecureInputIndication &&
@@ -620,6 +633,8 @@ void _testCompleteFileProfile() {
     ..writeln('quick-terminal-screen = mouse')
     ..writeln('quick-terminal-animation-duration = 0')
     ..writeln('quick-terminal-autohide = false')
+    ..writeln('macos-app-intents = false')
+    ..writeln('macos-notifications = false')
     ..writeln('macos-applescript = false')
     ..writeln('macos-secure-input-auto = false')
     ..writeln('macos-secure-input-indication = true')
@@ -671,6 +686,8 @@ void _testCompleteFileProfile() {
             TerminalConfiguredQuickTerminalScreen.mouse &&
         profile.quickTerminalAnimationDuration == 0 &&
         !profile.quickTerminalAutohide &&
+        !profile.macosAppIntents &&
+        !profile.macosNotifications &&
         !profile.macosAppleScript &&
         !profile.macosSecureInputAuto &&
         profile.macosSecureInputIndication &&
@@ -712,6 +729,8 @@ quick-terminal-shortcut = grave
 quick-terminal-screen = keyboard
 quick-terminal-animation-duration = 6
 quick-terminal-autohide = maybe
+macos-app-intents = maybe
+macos-notifications = maybe
 macos-applescript = maybe
 macos-secure-input-auto = maybe
 macos-secure-input-indication = maybe
@@ -732,7 +751,7 @@ clipboard-write = enabled
   final TerminalProductConfiguration recovered =
       TerminalProductConfiguration.fromSnapshot(snapshot);
   _expect(
-    snapshot.diagnostics.length == 26 &&
+    snapshot.diagnostics.length == 28 &&
         snapshot.diagnostics.every(
           (TerminalConfigDiagnostic diagnostic) =>
               diagnostic.code == 'CFG_INVALID_VALUE' &&
@@ -755,6 +774,8 @@ clipboard-write = enabled
             TerminalConfiguredQuickTerminalScreen.main &&
         recovered.quickTerminalAnimationDuration == 0.2 &&
         recovered.quickTerminalAutohide &&
+        recovered.macosAppIntents &&
+        recovered.macosNotifications &&
         recovered.macosAppleScript &&
         recovered.macosSecureInputAuto &&
         recovered.macosSecureInputIndication &&
@@ -809,6 +830,8 @@ cursor-blink = false
     '--quick-terminal-screen=nearest',
     '--quick-terminal-animation-duration=-0.1',
     '--quick-terminal-autohide=yes',
+    '--macos-app-intents=yes',
+    '--macos-notifications=yes',
     '--macos-applescript=yes',
     '--macos-secure-input-auto=yes',
     '--macos-secure-input-indication=yes',

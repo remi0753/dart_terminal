@@ -6,8 +6,8 @@
 - Task: App Intents/Shortcuts and notifications
 - Started: 2026-09-12
 - State: in progress
-- Current subtask: consumer declaration, dependency gates, and bundle audit
-  (complete)
+- Current subtask: product configuration, shared actions, Settings, and
+  lifecycle integration (complete)
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -175,6 +175,12 @@ second application-state owner.
 - 2026-09-12: Commit `750044d` closed AppleScript documentation/evidence. A
   complete ROADMAP reread selected this item as the first unfinished Phase 10
   work, and both the terminal and dependency worktrees were clean.
+- Product-integration scope is one live boolean for App Intent admission, one
+  live boolean for terminal desktop notifications, a Dart-owned bounded status
+  projection for each, exact mapping of the three native intent enums to the
+  existing action dispatcher, and opaque notification-response focus routing.
+  Runtime self-acceptance, external Shortcuts/permission observations, and
+  public documentation closure remain in the following ordered subtask.
 - The current `HandleUserNotificationWithSystem` calls
   `requestAuthorizationWithOptions:` for every post and immediately reports
   native submission success. It discards authorization errors, denied results,
@@ -439,6 +445,54 @@ second application-state owner.
   passes. It formatted 280 files with zero changes, reported no analyzer issues,
   used fixed Phase 9 stress seed `0x509a1171`, and passed all freshness,
   compatibility, integration, security, and product tests.
+- Product configuration now has two Boolean, default-enabled, live options:
+  `macos-app-intents` controls only native App Intent admission, and
+  `macos-notifications` controls only terminal desktop-notification projection.
+  The generated configuration reference lists 47 total options, 11 live and 36
+  new-session options; Settings document/inspector and effective-config tests
+  were updated to the same schema inventory.
+- `TerminalAppIntentsProductController` is the sole Dart drain for the native
+  queue. It maps the three closed native enum values to `newWindow`, `newTab`,
+  and `toggleQuickTerminal` on the existing `TerminalActionDispatcher`, completes
+  each taken command exactly once, collapses unavailable/busy/action/native/
+  timeout states into content-free bounded status, and stops admission plus the
+  16 ms main-isolate poll before native shutdown.
+- `TerminalNotificationProductController` replaces the former fire-and-forget
+  AppKit port in the ordinary product. It retains at most 256 internal records
+  keyed by independent delivery and response tokens, never derives a pane from
+  the notification identifier, and resolves the copied `TerminalSessionId`
+  against the current live session before focusing the owning window/tab/pane.
+  Unknown/stale/duplicate tokens cannot focus anything. Default notification
+  activation remains macOS-owned; the product restores the exact responder.
+- Notification settings and authorization requests remain asynchronous. A live
+  disable first clears desktop-model identities through the still-enabled
+  native port, then rejects new posts and forgets request/response tokens.
+  Async delivery failure removes the corresponding desktop-model identity so a
+  later terminal update may retry. Session close, reset, config disable, and
+  final disposal all remove delivered/pending notification ownership.
+- Settings appends only content-free runtime lines: App Intent enabled/
+  availability/pending/result counters and notification enabled/authorization/
+  pending/response/last-failure state. No title, body, native identifier,
+  hierarchy ID, action parameter, or error text is rendered.
+- Focused product tests cover exact shared-action mapping, unavailable/busy/
+  failed dispositions, native disposal, notification settings/authorization/
+  delivery/default-response events, stale-session rejection, live disable,
+  async failure reconciliation, and the 256-record hard bound. Existing desktop
+  projection tests now prove the internal session identity crosses the product
+  port and that disabled/failure state cannot leave a coalescing tombstone.
+- The first all-Dart run correctly rejected stale Phase 7 AppKit evidence after
+  product wiring changed; `make phase7-appkit-acceptance` regenerated the
+  checked corpus. The first exact full gate then stopped because it formatted
+  the last edited new test file. An explicit idempotent format/analyze/focused
+  pass followed, and the unchanged exact gate was rerun rather than weakening
+  its zero-format-diff requirement.
+- Final validation: `dart analyze` reports no issues; focused system-automation,
+  desktop-projection, and product-configuration tests pass; generated
+  configuration reference freshness reports `options=47 live=11
+  new_session=36 repeatable=1`; and
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passes with 283 formatted
+  files unchanged, fixed Phase 9 stress seed `0x509a1171`, and every freshness,
+  compatibility, integration, security, and product test green.
 
 ## Handoff and remaining work
 
@@ -450,8 +504,10 @@ second application-state owner.
   `9a2a014`, marked complete in the ROADMAP, and its consuming full gate passes.
   Its consumer-side progress record is committed as `19b6e61`. Consumer
   declaration and exact bundle auditing are complete, including both runtime
-  corrections and both signed bundle modes. Product polling, action dispatch,
-  and Settings wiring have not started early.
+  corrections and both signed bundle modes. Product polling, shared action
+  dispatch, live configuration, notification response focus, Settings status,
+  and teardown are complete. Shipped-runtime self-acceptance, manual external
+  observations, and public documentation closure remain in the final child.
 
 ### Completed capability unit boundary
 
