@@ -1321,7 +1321,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] signing／hardened runtime／notarization contractとcredential inventory
   - [x] `dart_macos_runtime`の汎用atomic distribution signing／notarization基盤
-  - [ ] product最小entitlements、distribution audit、credential-independent negative gate
+  - [x] product最小entitlements、distribution audit、credential-independent negative gate
   - [ ] 実Developer ID署名、公証、staple／Gatekeeper／clean-machine受け入れ、親項目完了判定
 - [ ] update feed、署名検証、rollback
 - [ ] local crash report、hang sample、privacy-safe diagnostics

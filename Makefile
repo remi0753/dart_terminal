@@ -90,12 +90,22 @@ override X86_64_RELEASE_AOT_BUNDLE := \
 	$(X86_64_RELEASE_AOT_BUILD_DIR)/DartTerminal.app
 override UNIVERSAL_RELEASE_AOT_BUNDLE := \
 	$(UNIVERSAL_RELEASE_AOT_BUILD_DIR)/DartTerminal.app
+DISTRIBUTION_OUTPUT_DIR ?= $(PROJECT_ROOT)/build/runtime/distribution
+DISTRIBUTION_ENTITLEMENTS ?= \
+	$(PROJECT_ROOT)/resources/DartTerminal.entitlements
+DEVELOPER_ID_APPLICATION ?=
+DEVELOPER_TEAM_ID ?=
+NOTARY_KEYCHAIN_PROFILE ?=
 override RUNTIME_BUILDER := $(DART) run dart_macos_runtime:build \
 	--manifest $(APPLICATION_MANIFEST) --engine-root $(DART_ENGINE_ROOT)
 override RUNTIME_UNIVERSAL_ASSEMBLER := \
 	$(DART) run dart_macos_runtime:universal
+override RUNTIME_DISTRIBUTION_PUBLISHER := \
+	$(DART) run dart_macos_runtime:distribute
 override INTEGRATION_TOOL := $(DART) run tool/runtime_integration_smoke.dart
 override BUNDLE_AUDIT_TOOL := $(DART) run tool/dart_only_bundle_audit.dart
+override TERMINAL_DISTRIBUTION_POLICY_TOOL := \
+	$(DART) run tool/terminal_distribution_policy.dart
 override PRODUCT_PARSER_BENCHMARK_DIR := $(PROJECT_ROOT)/build/benchmarks
 override PRODUCT_PARSER_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_parser_benchmark
 override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_damage_benchmark
@@ -134,6 +144,9 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	release-aot-arm64-integration release-aot-x86_64-integration \
 	release-aot-universal-integration release-aot-distribution-integration \
 	release-aot-distribution-verify \
+	terminal-distribution-policy-test release-distribution-preflight \
+	release-distribution-credentials-check release-distribution-build \
+	release-distribution-audit release-distribution-verify \
 	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
 	release-aot-resource release-aot-shutdown-fault runtime-bundle-audit \
 	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-user-actions-integration runtime-applescript-integration runtime-system-automation-integration runtime-native-content-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-diagnostics-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-clipboard-integration runtime-lifecycle-integration \
@@ -195,6 +208,8 @@ help:
 	@echo "  make release-aot-thin-builds       Build arm64 and x86_64 thin AOT applications"
 	@echo "  make release-aot-universal-build   Assemble both thin applications as Universal"
 	@echo "  make release-aot-distribution-verify  Audit and smoke-test all release architectures"
+	@echo "  make release-distribution-preflight  Validate product signing policy without credentials"
+	@echo "  make release-distribution-verify     Sign, notarize, staple, and audit a distribution"
 	@echo "  make runtime-terminal-display-integration  Verify the live Metal terminal in both modes"
 	@echo "  make runtime-native-hierarchy-integration  Verify four-pane hierarchy and Close/Quit in both modes"
 	@echo "  make runtime-user-actions-integration  Verify normal-product window/tab/split actions in both modes"
@@ -543,7 +558,7 @@ terminal-localization-check: dependencies
 terminal-diagnostics-privacy-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_diagnostics_privacy_audit.dart
 
-test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
+test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check terminal-distribution-policy-test
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart
@@ -743,6 +758,54 @@ release-aot-distribution-integration: release-aot-arm64-integration \
 
 release-aot-distribution-verify: test release-aot-distribution-audit \
 	release-aot-distribution-integration
+
+terminal-distribution-policy-test: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run \
+		test/terminal_distribution_policy_test.dart
+
+release-distribution-preflight: release-aot-universal-audit \
+	terminal-distribution-policy-test
+	@cd $(PROJECT_ROOT) && $(TERMINAL_DISTRIBUTION_POLICY_TOOL) \
+		--source-app=$(UNIVERSAL_RELEASE_AOT_BUNDLE) \
+		--entitlements=$(DISTRIBUTION_ENTITLEMENTS)
+	@cd $(PROJECT_ROOT) && $(RUNTIME_DISTRIBUTION_PUBLISHER) \
+		--input-app $(UNIVERSAL_RELEASE_AOT_BUNDLE) \
+		--output-directory $(DISTRIBUTION_OUTPUT_DIR) \
+		--signing-identity "Developer ID Application: Preflight Placeholder (ABCDE12345)" \
+		--team-id ABCDE12345 \
+		--entitlements $(DISTRIBUTION_ENTITLEMENTS) \
+		--keychain-profile preflight-placeholder --validate-only
+
+release-distribution-credentials-check:
+	@if [[ -z "$(DEVELOPER_ID_APPLICATION)" || -z "$(NOTARY_KEYCHAIN_PROFILE)" ]]; then \
+		echo "DEVELOPER_ID_APPLICATION and NOTARY_KEYCHAIN_PROFILE are required" >&2; \
+		exit 69; \
+	fi
+	@if [[ ! "$(DEVELOPER_TEAM_ID)" =~ ^[A-Z0-9]{10}$$ ]]; then \
+		echo "DEVELOPER_TEAM_ID must be ten uppercase letters or digits" >&2; \
+		exit 64; \
+	fi
+
+release-distribution-build: release-distribution-preflight \
+	release-distribution-credentials-check
+	@mkdir -p $(dir $(DISTRIBUTION_OUTPUT_DIR))
+	@cd $(PROJECT_ROOT) && $(RUNTIME_DISTRIBUTION_PUBLISHER) \
+		--input-app $(UNIVERSAL_RELEASE_AOT_BUNDLE) \
+		--output-directory $(DISTRIBUTION_OUTPUT_DIR) \
+		--signing-identity "$(DEVELOPER_ID_APPLICATION)" \
+		--team-id $(DEVELOPER_TEAM_ID) \
+		--entitlements $(DISTRIBUTION_ENTITLEMENTS) \
+		--keychain-profile "$(NOTARY_KEYCHAIN_PROFILE)"
+
+release-distribution-audit: release-distribution-build
+	@cd $(PROJECT_ROOT) && $(TERMINAL_DISTRIBUTION_POLICY_TOOL) \
+		--source-app=$(UNIVERSAL_RELEASE_AOT_BUNDLE) \
+		--entitlements=$(DISTRIBUTION_ENTITLEMENTS) \
+		--distribution-directory=$(DISTRIBUTION_OUTPUT_DIR) \
+		--signing-identity="$(DEVELOPER_ID_APPLICATION)" \
+		--team-id=$(DEVELOPER_TEAM_ID)
+
+release-distribution-verify: test release-distribution-audit
 
 release-aot-display: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \

@@ -670,6 +670,35 @@ x86_64 cross-build、Rosetta 実行、Universal 構造監査と M1-native 実行
 x86_64 thin／Universal 成果物を Intel Mac へ no-rebuild で渡す主要ゴール後の確認です。
 この follow-up の未実施は M1 baseline の完了を阻害しません。
 
+### Developer ID 配布 preflight
+
+Release AOT 配布は、空の [`resources/DartTerminal.entitlements`](resources/DartTerminal.entitlements)
+を唯一の entitlement 入力とします。JIT、debug、unsigned executable memory、library validation
+bypass などの追加権限はありません。credential を使わずに fresh Universal bundle、製品
+contract、全9 code image、全resource evidence、entitlement policy を検証する場合:
+
+```shell
+make release-distribution-preflight
+```
+
+実配布 gate は、Keychain に有効な Developer ID Application identity と `notarytool` profile
+が存在する環境で次を実行します。password や API private key を Make 変数へ渡さず、profile
+名だけを指定します。
+
+```shell
+make release-distribution-verify \
+  DEVELOPER_ID_APPLICATION="Developer ID Application: Example Company (ABCDE12345)" \
+  DEVELOPER_TEAM_ID=ABCDE12345 \
+  NOTARY_KEYCHAIN_PROFILE=example-notary-profile
+```
+
+この gate は監査済み ad-hoc Universal を変更せず、別の staging copy を全nested codeから
+outer appの順にhardened runtime・secure timestamp付きで署名します。Apple公証のAccepted
+statusとissue 0のlogを確認し、appへticketをstaple・検証してGatekeeper評価を通した後だけ
+最終ZIPを作成します。出力directoryにはstapled `.app`、そのZIP、source／entitlement／
+archive／全code hashを束縛するmanifestだけがatomicに公開されます。失敗時は既存の
+last-good配布物を保持します。
+
 ## ローカルチェック
 
 ```shell

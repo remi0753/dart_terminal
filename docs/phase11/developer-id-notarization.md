@@ -264,3 +264,52 @@ all four children and this parent are complete.
   security stress, and root tests against the committed generic dependency.
   The generic child is complete; product-owned entitlement policy and
   credential-independent distribution gates are next.
+- 2026-09-13: selected an empty product entitlement dictionary. The accepted
+  Release AOT root and helper execute precompiled code, all loadable images are
+  bundled and signed by one team, and the product receives rather than sends
+  Apple events, so no JIT, unsigned-memory, library-validation bypass,
+  automation, sandbox, or file/network entitlement has a demonstrated need.
+  Product policy rejects every added key, including a false-valued one, so a
+  future authority change requires an explicit reviewed contract update.
+- 2026-09-13: added a product distribution policy/audit tool. Preflight binds
+  schema 2, Release AOT, `dev.dart-terminal`, exact arm64/x86_64 and nine-code
+  inventories, the helper host/payload, PTY asset, both native capabilities,
+  App Intents image, and empty entitlement. Full audit binds the generic
+  13-field distribution manifest to the immutable source and entitlement
+  hashes, requested identity/team, hardened/timestamp flags, accepted zero-
+  issue notary evidence, exact app/archive names, and every signed-code hash.
+- 2026-09-13: full product audit independently verifies the Developer ID
+  certificate requirement, Team ID, runtime/timestamp metadata on all nine
+  images and outer app, exact empty signed entitlements, stapled ticket,
+  Gatekeeper acceptance, final ZIP hash, and byte-identical no-symlink archive
+  extraction. This path is implemented but cannot run positively without the
+  credentialed artifact owned by the next child.
+- 2026-09-13: seven product fixture groups passed exact empty policy, rejection
+  of every added entitlement, header/architecture/code drift, helper/asset/
+  capability/App Intents drift, accepted evidence, authority/notary drift, and
+  archive/code/extra-field drift. The normal `make test` now includes this
+  credential-independent suite.
+- 2026-09-13: `make release-distribution-preflight` rebuilt arm64 and x86_64
+  thin applications, atomically reassembled and audited the Universal input,
+  reran the product policy suite, and reported both
+  `TERMINAL_DISTRIBUTION_POLICY_PASS code=9 entitlements=0` and
+  `DISTRIBUTION_PREFLIGHT_PASS bundle=dev.dart-terminal code=9`. It performed
+  no identity lookup, signature mutation, upload, staple, Gatekeeper action, or
+  distribution publication.
+- 2026-09-13: Make exposes separate preflight, credential check, full publish,
+  full product audit, and aggregate verify targets. A dry-run with display-safe
+  placeholder labels confirmed the exact generic arguments and Keychain-profile
+  boundary without execution. Running the credential check with the current
+  empty environment failed closed with its explicit missing-identity/profile
+  diagnostic, as intended.
+- 2026-09-13: regenerated the tracked compatibility report through its
+  canonical target after README and FEATURE_MATRIX changed; review confirmed
+  that only those two document hashes changed. The final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed the new seven-group
+  distribution policy suite, all generated evidence, 296-file formatting,
+  analysis, package/native suites, security stress, and root tests.
+- 2026-09-13: `plutil` canonicalized the reviewed product entitlement file to
+  exactly `{}`, `git diff --check` passed, and the adjacent generic repository
+  remained clean. The product policy/independent audit/credential-free gate
+  child is complete without claiming a Developer ID signature or Apple
+  notarization. The credentialed acceptance child is next.
