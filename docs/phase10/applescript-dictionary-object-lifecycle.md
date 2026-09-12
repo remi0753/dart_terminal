@@ -409,3 +409,85 @@ authoritative hierarchy, paste safety, or teardown rules.
   may declare and package the dependency/SDEF in terminal bundles and prove
   generic host behavior, but it must not initialize or connect live product
   state until the following product-integration item.
+- Consumer-declaration inspection finds one PTY `nativeAsset`, one renderer
+  `nativeCapability`, and no scripting definition. The product source audit
+  currently asserts those singleton counts, while the bundle audit checks both
+  dylibs but does not inspect scripting plist/resource/build-manifest fields.
+  This unit will add the AppleScript package as a second capability, keep a
+  reviewed product-local copy of the canonical SDEF for the project-relative
+  runtime manifest, and make source audit compare it byte-for-byte with the
+  dependency package so the necessary copy cannot drift.
+- The first plain `dart pub get` resolved dependencies but returned nonzero
+  only because the sandbox denied a telemetry session timestamp write under
+  `~/.dart-tool`; package resolution itself reported success. The same command
+  is rerun with the repository's standard `DART_SUPPRESS_ANALYTICS=true`
+  environment, without changing dependency constraints.
+- The suppressed-analytics retry reached the same SDK telemetry timestamp
+  failure on this installed Dart 3.13.2 build. Because both attempts completed
+  resolution before that environment-only error, the exact command is rerun
+  with permission for Dart's user cache rather than altering project code.
+- Dependency resolution completes with cache permission and adds only the
+  path-sourced AppleScript package to the lock. The first formatter invocation
+  correctly formatted both audit tools, then reported the same post-command
+  telemetry timestamp denial; later source/full gates run with the established
+  cache permission and will verify formatter idempotence.
+- The first updated source-audit run stopped at Dart compilation because a map
+  comprehension retained the loop variable's original `Object?` type on its
+  value side despite casting it for the key. Iterating the capability list
+  through a typed `cast<Map<String, Object?>>()` makes both key and value
+  statically exact; the audit itself had not run and no acceptance was claimed.
+- After the typed iteration fix, both audit tools format with zero changes and
+  `make runtime-source-check` passes (`tracked=510`, zero product native
+  sources, one reviewed test-native source). It verifies exactly two capability
+  declarations and byte identity between the product SDEF and dependency-owned
+  canonical dictionary.
+- `make RUNTIME_ARCH=arm64 runtime-bundle-audit` rebuilds and passes both
+  Developer JIT and Release AOT bundles. Each copies three native assets,
+  includes the AppleScript dylib and exact `DartTerminal.sdef`, records two
+  capabilities plus one scripting definition, emits the two Cocoa Scripting
+  plist keys, contains the arm64 slice without build-machine links, and passes
+  deep strict signature verification.
+- The first ordinary `runtime-integration` attempt rebuilt the Developer JIT
+  bundle successfully but the smoke driver reported `missing current native
+  event wire observation` before reaching Release AOT. This is treated as a
+  real host-start regression until logs distinguish capability initialization,
+  app launch, or observation timing; no task completion is claimed.
+- Direct Developer JIT launch with the smoke's exact arguments/environment
+  exits 0, emits every expected lifecycle line, and shuts down cleanly. Its
+  native event records are consistently negotiated/protocol version 12; the
+  smoke still hard-coded the former version 8 in event, window-state, menu,
+  close-request, scroll, and theme checks. The failure is therefore stale
+  acceptance text, not the scripting capability. Those expectations are
+  advanced together to the dependency's current protocol 12 before rerunning
+  both modes.
+- The protocol-corrected rerun reached the next stale assertion: current
+  startup emits six action sections and 28 actions, while the smoke expected
+  26. The two additional split-divider actions are already covered by the
+  completed native-workflow task; the acceptance count is synchronized to 28
+  and the same two-mode smoke is rerun.
+- With protocol 12 and the existing 28-action projection reflected, ordinary
+  Developer JIT and Release AOT smoke both pass (`2377 ms` and `1843 ms`). Each
+  rebuild loads the three declared native assets, observes current native
+  events, starts/reaps its worker, and shuts down cleanly; the capability is
+  packaged and initialized by the generic host without product session wiring.
+- The exact consumer gate `CI=true DART_SUPPRESS_ANALYTICS=true make test`
+  passes: every generated reference/evidence freshness check, compatibility and
+  application corpus, terminfo/shell resources, formatting of 278 files with
+  zero changes, analysis with no issues, Phase 9 security stress, and the full
+  aggregate Dart test runner complete successfully.
+- Final audit hardening requires the AppleScript capability's six manifest
+  fields exactly in source and both generated build manifests, not only its ID.
+  After formatting that change, the combined source plus arm64 Developer
+  JIT/Release AOT bundle audit passes again with zero product native sources,
+  exact canonical/bundled SDEF bytes, two exact Cocoa Scripting plist keys,
+  two capabilities, valid Mach-O linkage, and deep signatures.
+- The exact consumer full gate is rerun after final audit hardening and passes
+  again: 278 files need no formatting, analysis has no issues, all freshness,
+  compatibility, corpus, security-stress, and aggregate tests pass.
+- 2026-09-12: **Native AppleScript capability and runtime dictionary
+  packaging — complete.** Generic validated SDEF staging (`41d6a75`), the
+  bounded terminal-specific capability (`d15f4aa`), product dependency/manifest
+  declaration, canonical-copy audit, both arm64 generic-host bundles and smoke,
+  dependency and consumer full gates, documentation, and final diff review meet
+  the ordered subtask's completion conditions. Live hierarchy publication and
+  command execution remain exclusively in the next product-integration task.

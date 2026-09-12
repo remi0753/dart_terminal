@@ -17,6 +17,9 @@
       "menuItem": "New Dart Terminal Window Here"
     }
   ],
+  "scriptingDefinition": {
+    "path": "resources/DartTerminal.sdef"
+  },
   "runner": {
     "activationPolicy": "regular",
     "activateOnLaunch": true,
@@ -53,6 +56,14 @@
     }
   ],
   "nativeCapabilities": [
+    {
+      "id": "dart_terminal_applescript_macos",
+      "package": "dart_terminal_applescript_macos",
+      "library": "libdart_terminal_applescript_macos.dylib",
+      "abiVersion": 1,
+      "abiVersionSymbol": "dtas_abi_version",
+      "initializerSymbol": "dtas_initialize"
+    },
     {
       "id": "dart_terminal_renderer_macos",
       "package": "dart_terminal_renderer_macos",

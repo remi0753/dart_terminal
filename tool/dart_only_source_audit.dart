@@ -148,10 +148,53 @@ Future<void> main() async {
       (assets.single! as Map<String, Object?>)['package'] == 'dart_pty_macos',
       'PTY package is not declared as a native asset',
     );
+    final Map<String, Map<String, Object?>> capabilitiesById =
+        <String, Map<String, Object?>>{
+          for (final Map<String, Object?> value
+              in capabilities.cast<Map<String, Object?>>())
+            value['id']! as String: value,
+        };
     _expect(
-      (capabilities.single! as Map<String, Object?>)['package'] ==
-          'dart_terminal_renderer_macos',
-      'renderer package is not declared as a native capability',
+      capabilitiesById.length == 2 &&
+          capabilitiesById['dart_terminal_renderer_macos']?['package'] ==
+              'dart_terminal_renderer_macos' &&
+          capabilitiesById['dart_terminal_applescript_macos']?['package'] ==
+              'dart_terminal_applescript_macos' &&
+          _exactEntries(
+            capabilitiesById['dart_terminal_applescript_macos']!,
+            const <String, Object>{
+              'id': 'dart_terminal_applescript_macos',
+              'package': 'dart_terminal_applescript_macos',
+              'library': 'libdart_terminal_applescript_macos.dylib',
+              'abiVersion': 1,
+              'abiVersionSymbol': 'dtas_abi_version',
+              'initializerSymbol': 'dtas_initialize',
+            },
+          ),
+      'terminal native capability declarations do not match',
+    );
+    final Map<String, Object?> scriptingDefinition =
+        manifest['scriptingDefinition']! as Map<String, Object?>;
+    _expect(
+      scriptingDefinition.length == 1 &&
+          scriptingDefinition['path'] == 'resources/DartTerminal.sdef',
+      'terminal scripting definition declaration does not match',
+    );
+    final File consumerSdef = File('resources/DartTerminal.sdef');
+    final File canonicalSdef = await _packageFile(
+      'dart_terminal_applescript_macos',
+      'native/DartTerminal.sdef',
+    );
+    _expect(
+      consumerSdef.existsSync() && canonicalSdef.existsSync(),
+      'consumer or canonical terminal scripting definition is missing',
+    );
+    _expect(
+      _sameBytes(
+        await consumerSdef.readAsBytes(),
+        await canonicalSdef.readAsBytes(),
+      ),
+      'consumer terminal scripting definition differs from the capability',
     );
     _expect(
       (helpers.single! as Map<String, Object?>)['entrypoint'] ==
@@ -167,6 +210,37 @@ Future<void> main() async {
     stderr.writeln('DART_ONLY_SOURCE_AUDIT_FAIL $error');
     exitCode = 1;
   }
+}
+
+Future<File> _packageFile(String packageName, String relativePath) async {
+  final File configuration = File('.dart_tool/package_config.json').absolute;
+  final Map<String, Object?> root =
+      jsonDecode(await configuration.readAsString()) as Map<String, Object?>;
+  final List<Object?> packages = root['packages']! as List<Object?>;
+  final Map<String, Object?> package = packages
+      .cast<Map<String, Object?>>()
+      .singleWhere((Map<String, Object?> item) => item['name'] == packageName);
+  final String rootUri = package['rootUri']! as String;
+  final Uri resolved = configuration.uri.resolve(
+    rootUri.endsWith('/') ? rootUri : '$rootUri/',
+  );
+  return File.fromUri(resolved.resolve(relativePath));
+}
+
+bool _sameBytes(List<int> left, List<int> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
+}
+
+bool _exactEntries(Map<String, Object?> actual, Map<String, Object> expected) {
+  if (actual.length != expected.length) return false;
+  for (final MapEntry<String, Object> entry in expected.entries) {
+    if (actual[entry.key] != entry.value) return false;
+  }
+  return true;
 }
 
 void _expect(bool condition, String message) {

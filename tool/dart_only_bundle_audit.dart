@@ -61,6 +61,8 @@ Future<void> main(List<String> arguments) async {
     final List<Object?> assets = manifest['nativeAssets']! as List<Object?>;
     final List<Object?> capabilities =
         manifest['nativeCapabilities']! as List<Object?>;
+    final Map<String, Object?> scriptingDefinition =
+        manifest['scriptingDefinition']! as Map<String, Object?>;
     _expect(
       helpers.length == 1 &&
           (helpers.single! as Map<String, Object?>)['name'] ==
@@ -72,11 +74,37 @@ Future<void> main(List<String> arguments) async {
           (assets.single! as Map<String, Object?>)['id'] == 'dart_pty_macos',
       'PTY asset manifest mismatch',
     );
+    final Map<String, Map<String, Object?>> capabilitiesById =
+        <String, Map<String, Object?>>{
+          for (final Map<String, Object?> value
+              in capabilities.cast<Map<String, Object?>>())
+            value['id']! as String: value,
+        };
     _expect(
-      capabilities.length == 1 &&
-          (capabilities.single! as Map<String, Object?>)['id'] ==
-              'dart_terminal_renderer_macos',
-      'renderer capability manifest mismatch',
+      capabilities.length == 2 &&
+          capabilitiesById.length == 2 &&
+          capabilitiesById.containsKey('dart_terminal_renderer_macos') &&
+          capabilitiesById.containsKey('dart_terminal_applescript_macos') &&
+          _exactEntries(
+            capabilitiesById['dart_terminal_applescript_macos']!,
+            const <String, Object>{
+              'id': 'dart_terminal_applescript_macos',
+              'package': 'dart_terminal_applescript_macos',
+              'library': 'libdart_terminal_applescript_macos.dylib',
+              'abiVersion': 1,
+              'abiVersionSymbol': 'dtas_abi_version',
+              'initializerSymbol': 'dtas_initialize',
+            },
+          ),
+      'terminal capability manifest mismatch',
+    );
+    _expect(
+      scriptingDefinition.length == 3 &&
+          scriptingDefinition['source'] == 'resources/DartTerminal.sdef' &&
+          scriptingDefinition['bundleName'] == 'DartTerminal.sdef' &&
+          scriptingDefinition['bytes'] is int &&
+          (scriptingDefinition['bytes']! as int) > 0,
+      'terminal scripting definition build manifest mismatch',
     );
 
     final String executable = '$contents/MacOS/dart_terminal';
@@ -86,6 +114,9 @@ Future<void> main(List<String> arguments) async {
     final String pty = '$contents/Frameworks/libdart_pty_macos.dylib';
     final String renderer =
         '$contents/Frameworks/libdart_terminal_renderer_macos.dylib';
+    final String appleScript =
+        '$contents/Frameworks/libdart_terminal_applescript_macos.dylib';
+    final String scriptingDictionary = '$resources/DartTerminal.sdef';
     final String payload =
         '$resources/${mode == 'developer-jit' ? 'application.dill' : 'application.aot'}';
     final TerminalTerminfoContract terminfoContract =
@@ -106,6 +137,8 @@ Future<void> main(List<String> arguments) async {
       engine,
       pty,
       renderer,
+      appleScript,
+      scriptingDictionary,
       payload,
       '$resources/DART_SDK_LICENSE.txt',
       terminfo,
@@ -118,6 +151,29 @@ Future<void> main(List<String> arguments) async {
       _expect(await file.exists(), 'required bundle file is missing: $path');
       _expect((await file.stat()).size > 0, 'bundle file is empty: $path');
     }
+    final List<int> bundledSdef = await File(scriptingDictionary).readAsBytes();
+    final List<int> reviewedSdef = await File('resources/DartTerminal.sdef')
+        .readAsBytes();
+    _expect(
+      _sameBytes(bundledSdef, reviewedSdef) &&
+          bundledSdef.length == scriptingDefinition['bytes'],
+      'bundled scripting definition differs from its reviewed source',
+    );
+    final ProcessResult plistResult = await Process.run(
+      '/usr/bin/plutil',
+      <String>['-convert', 'json', '-o', '-', '$contents/Info.plist'],
+    );
+    _expect(
+      plistResult.exitCode == 0,
+      'Info.plist conversion failed: ${plistResult.stderr}',
+    );
+    final Map<String, Object?> infoPlist =
+        jsonDecode(plistResult.stdout as String) as Map<String, Object?>;
+    _expect(
+      infoPlist['NSAppleScriptEnabled'] == true &&
+          infoPlist['OSAScriptingDefinition'] == 'DartTerminal.sdef',
+      'Cocoa Scripting Info.plist declaration mismatch',
+    );
     _expect(
       terminalDifferentialSha256(await File(terminfo).readAsBytes()) ==
           terminfoContract.compiledSha256,
@@ -142,6 +198,7 @@ Future<void> main(List<String> arguments) async {
       engine,
       pty,
       renderer,
+      appleScript,
     ]) {
       final ProcessResult arch = await Process.run('/usr/bin/lipo', <String>[
         '-archs',
@@ -183,12 +240,28 @@ Future<void> main(List<String> arguments) async {
     stdout.writeln(
       'DART_ONLY_BUNDLE_AUDIT_PASS mode=$mode architecture=$architecture '
       'helpers=${helpers.length} assets=${assets.length} '
-      'capabilities=${capabilities.length}',
+      'capabilities=${capabilities.length} scripting_definition=1',
     );
   } on Object catch (error) {
     stderr.writeln('DART_ONLY_BUNDLE_AUDIT_FAIL $error');
     exitCode = 1;
   }
+}
+
+bool _sameBytes(List<int> left, List<int> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
+}
+
+bool _exactEntries(Map<String, Object?> actual, Map<String, Object> expected) {
+  if (actual.length != expected.length) return false;
+  for (final MapEntry<String, Object> entry in expected.entries) {
+    if (actual[entry.key] != entry.value) return false;
+  }
+  return true;
 }
 
 void _expect(bool condition, String message) {

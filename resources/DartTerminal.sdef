@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<dictionary title="Dart Terminal Terminology">
+  <suite name="Standard Suite" code="core" description="Common application objects and commands.">
+    <class name="application" code="capp" description="The Dart Terminal application.">
+      <cocoa class="NSApplication"/>
+      <element type="window" access="r">
+        <cocoa key="dtasWindows"/>
+      </element>
+      <property name="name" code="pnam" type="text" access="r" description="The application name."/>
+      <property name="frontmost" code="pisf" type="boolean" access="r" description="Whether the application is active.">
+        <cocoa key="isActive"/>
+      </property>
+      <property name="version" code="vers" type="text" access="r" description="The application version."/>
+      <property name="scripting enabled" code="DTen" type="boolean" access="r" description="Whether terminal scripting is enabled.">
+        <cocoa key="dtasScriptingEnabled"/>
+      </property>
+    </class>
+
+    <class name="window" code="cwin" description="A standard terminal window.">
+      <cocoa class="DTASScriptWindow"/>
+      <element type="tab" access="r">
+        <cocoa key="dtasTabs"/>
+      </element>
+      <property name="id" code="ID  " type="text" access="r" description="The stable window identifier.">
+        <cocoa key="uniqueID"/>
+      </property>
+      <property name="title" code="pnam" type="text" access="r" description="The current window title."/>
+      <property name="index" code="pidx" type="integer" access="r" description="The one-based front-to-back index.">
+        <cocoa key="orderedIndex"/>
+      </property>
+      <property name="frontmost" code="pisf" type="boolean" access="r" description="Whether this is the front terminal window."/>
+      <property name="selected tab" code="DTst" type="tab" access="r" description="The selected tab."/>
+    </class>
+
+    <command name="close" code="coreclos" description="Close a terminal, tab, or window through application policy.">
+      <cocoa class="DTASCloseCommand"/>
+      <direct-parameter type="specifier" description="The terminal, tab, or window to close."/>
+      <result type="boolean" description="Whether the close completed."/>
+    </command>
+  </suite>
+
+  <suite name="Dart Terminal Suite" code="DTas" description="Terminal hierarchy and mutation commands.">
+    <enumeration name="split direction" code="DTsd">
+      <enumerator name="right" code="rght" description="Create the terminal to the right."/>
+      <enumerator name="left" code="left" description="Create the terminal to the left."/>
+      <enumerator name="down" code="down" description="Create the terminal below."/>
+      <enumerator name="up" code="up  " description="Create the terminal above."/>
+    </enumeration>
+
+    <class name="tab" code="DTtb" description="A tab in a standard terminal window.">
+      <cocoa class="DTASScriptTab"/>
+      <element type="terminal" access="r">
+        <cocoa key="terminals"/>
+      </element>
+      <property name="id" code="ID  " type="text" access="r" description="The stable tab identifier.">
+        <cocoa key="uniqueID"/>
+      </property>
+      <property name="title" code="pnam" type="text" access="r" description="The selected terminal title."/>
+      <property name="index" code="pidx" type="integer" access="r" description="The one-based tab index."/>
+      <property name="selected" code="DTsl" type="boolean" access="r" description="Whether this tab is selected."/>
+      <property name="focused terminal" code="DTft" type="terminal" access="r" description="The focused terminal in this tab."/>
+    </class>
+
+    <class name="terminal" code="DTtm" description="A terminal pane without screen or history contents.">
+      <cocoa class="DTASScriptTerminal"/>
+      <property name="id" code="ID  " type="text" access="r" description="The stable terminal identifier.">
+        <cocoa key="uniqueID"/>
+      </property>
+      <property name="title" code="pnam" type="text" access="r" description="The current terminal title."/>
+      <property name="working directory" code="DTwd" type="text" access="r" description="The trusted local working directory, or empty text."/>
+    </class>
+
+    <command name="new window" code="DTasnwnd" description="Create a standard terminal window.">
+      <cocoa class="DTASNewWindowCommand"/>
+      <result type="window" description="The created window."/>
+    </command>
+
+    <command name="new tab" code="DTasntab" description="Create a tab in a standard terminal window.">
+      <cocoa class="DTASNewTabCommand"/>
+      <parameter name="in" code="DTtg" type="window" description="The target window.">
+        <cocoa key="Target"/>
+      </parameter>
+      <result type="tab" description="The created tab."/>
+    </command>
+
+    <command name="split" code="DTassplt" description="Split a terminal in one of four directions.">
+      <cocoa class="DTASSplitCommand"/>
+      <direct-parameter type="terminal" description="The terminal to split."/>
+      <parameter name="direction" code="DTdr" type="split direction" description="The split direction.">
+        <cocoa key="Direction"/>
+      </parameter>
+      <result type="terminal" description="The created terminal."/>
+    </command>
+
+    <command name="input text" code="DTasinpt" description="Send text through the terminal paste safety path.">
+      <cocoa class="DTASInputTextCommand"/>
+      <direct-parameter type="text" description="The text to input."/>
+      <parameter name="in" code="DTtg" type="terminal" description="The target terminal.">
+        <cocoa key="Target"/>
+      </parameter>
+      <result type="boolean" description="Whether the input completed."/>
+    </command>
+
+    <command name="focus" code="DTasfocs" description="Focus a terminal and select its containing hierarchy.">
+      <cocoa class="DTASFocusCommand"/>
+      <direct-parameter type="terminal" description="The terminal to focus."/>
+      <result type="boolean" description="Whether focus completed."/>
+    </command>
+  </suite>
+</dictionary>
