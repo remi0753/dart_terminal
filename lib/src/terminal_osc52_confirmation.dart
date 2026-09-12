@@ -7,6 +7,7 @@ import 'terminal_appkit_policy.dart';
 import 'terminal_core/terminal_osc52.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_key_event.dart';
+import 'terminal_localization.dart';
 import 'terminal_osc52_projection.dart';
 
 final class TerminalOsc52ConfirmationFocusTarget {
@@ -35,15 +36,18 @@ final class TerminalOsc52ConfirmationPresenter {
     required TerminalOsc52ConfirmationResolver approve,
     required TerminalOsc52ConfirmationResolver deny,
     TerminalOsc52ConfirmationErrorHandler? onError,
+    TerminalLocalization? localization,
   }) : _focusTarget = focusTarget,
        _approve = approve,
        _deny = deny,
-       _onError = onError;
+       _onError = onError,
+       _localization = localization ?? TerminalLocalization.english;
 
   final TerminalOsc52ConfirmationFocusTargetProvider _focusTarget;
   final TerminalOsc52ConfirmationResolver _approve;
   final TerminalOsc52ConfirmationResolver _deny;
   final TerminalOsc52ConfirmationErrorHandler? _onError;
+  final TerminalLocalization _localization;
 
   Window? _window;
   TextView? _view;
@@ -81,7 +85,7 @@ final class TerminalOsc52ConfirmationPresenter {
     try {
       window = Window(
         frame: const Rect.fromLTWH(240, 190, 640, 460),
-        title: 'OSC 52 Clipboard Request',
+        title: _localization.osc52Title,
         configuration: terminalWindowConfiguration,
       )..contentView = view;
       window
@@ -182,28 +186,32 @@ final class TerminalOsc52ConfirmationPresenter {
     if (view == null || view.isDisposed || pending == null) return;
     final TerminalOsc52Operation operation = pending.request.operation;
     final StringBuffer output = StringBuffer()
-      ..writeln('OSC 52 Clipboard Request')
+      ..writeln(_localization.osc52Title)
       ..writeln()
       ..writeln(
-        'Pane ${pending.sessionId.paneId.value}  '
-        'Session ${pending.sessionId.generation}  Request ${pending.id}',
+        _localization.osc52Identity(
+          pane: pending.sessionId.paneId.value,
+          session: pending.sessionId.generation,
+          request: pending.id,
+        ),
       )
-      ..writeln('Selection: ${jsonEncode(pending.request.selection)}')
       ..writeln(
-        'Operation: ${switch (operation) {
-          TerminalOsc52Operation.read => 'Read clipboard',
-          TerminalOsc52Operation.write => 'Write clipboard (${pending.writeUtf8Bytes} UTF-8 bytes)',
-          TerminalOsc52Operation.clear => 'Clear clipboard',
-        }}',
+        _localization.osc52Selection(jsonEncode(pending.request.selection)),
+      )
+      ..writeln(
+        _localization.osc52Operation(switch (operation) {
+          TerminalOsc52Operation.read => _localization.osc52ReadClipboard,
+          TerminalOsc52Operation.write => _localization.osc52WriteClipboard(
+            pending.writeUtf8Bytes,
+          ),
+          TerminalOsc52Operation.clear => _localization.osc52ClearClipboard,
+        }),
       )
       ..writeln()
       ..writeln(switch (operation) {
-        TerminalOsc52Operation.read =>
-          'The focused terminal is requesting clipboard contents.',
-        TerminalOsc52Operation.write =>
-          'The focused terminal is requesting this exact text:',
-        TerminalOsc52Operation.clear =>
-          'The focused terminal is requesting destructive clipboard clear.',
+        TerminalOsc52Operation.read => _localization.osc52ReadExplanation,
+        TerminalOsc52Operation.write => _localization.osc52WriteExplanation,
+        TerminalOsc52Operation.clear => _localization.osc52ClearExplanation,
       });
     if (pending.writeText != null) {
       output
@@ -212,8 +220,8 @@ final class TerminalOsc52ConfirmationPresenter {
     }
     output
       ..writeln()
-      ..writeln('Return  Allow      Esc  Deny')
-      ..write('You can change the matching clipboard policy in Settings.');
+      ..writeln(_localization.osc52Instructions)
+      ..write(_localization.osc52PolicyHint);
     view.text = output.toString();
   }
 

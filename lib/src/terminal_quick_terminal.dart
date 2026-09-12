@@ -7,6 +7,7 @@ import 'terminal_application_state.dart';
 import 'terminal_config.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_key_binding.dart';
+import 'terminal_localization.dart';
 import 'terminal_native_hierarchy.dart';
 import 'terminal_product_configuration.dart';
 
@@ -243,15 +244,21 @@ final class TerminalQuickTerminalShortcutStatus {
   final TerminalKeyBindingChord? active;
   final TerminalQuickTerminalShortcutFailure? failure;
 
-  String get settingsLine => switch (disposition) {
-    TerminalQuickTerminalShortcutDisposition.disabled =>
-      'Quick Terminal shortcut: disabled',
-    TerminalQuickTerminalShortcutDisposition.registered =>
-      'Quick Terminal shortcut: active (${active!.configName})',
-    TerminalQuickTerminalShortcutDisposition.failed =>
-      'Quick Terminal shortcut: ${failure!.name}; requested '
-          '${desired!.configName}; retained ${active?.configName ?? 'none'}',
-  };
+  String get settingsLine => settingsLineFor(TerminalLocalization.english);
+
+  String settingsLineFor(TerminalLocalization localization) =>
+      switch (disposition) {
+        TerminalQuickTerminalShortcutDisposition.disabled =>
+          localization.quickTerminalShortcutDisabled(),
+        TerminalQuickTerminalShortcutDisposition.registered =>
+          localization.quickTerminalShortcutActive(active!.configName),
+        TerminalQuickTerminalShortcutDisposition.failed =>
+          localization.quickTerminalShortcutFailed(
+            failure: failure!.name,
+            requested: desired!.configName,
+            retained: active?.configName,
+          ),
+      };
 
   String machineLine() =>
       'TERMINAL_QUICK_TERMINAL_SHORTCUT '

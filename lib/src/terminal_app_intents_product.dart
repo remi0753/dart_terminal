@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dart_terminal_app_intents_macos/dart_terminal_app_intents_macos.dart';
 
 import 'terminal_action_registry.dart';
+import 'terminal_localization.dart';
 
 typedef TerminalAppIntentActionDispatch =
     Future<TerminalActionDispatchResult> Function(TerminalActionId action);
@@ -44,16 +45,23 @@ final class TerminalAppIntentsProductStatus {
   final int failedCommandCount;
   final TerminalAppIntentsProductFailure lastFailure;
 
-  String get settingsLine {
+  String get settingsLine => settingsLineFor(TerminalLocalization.english);
+
+  String settingsLineFor(TerminalLocalization localization) {
     final String availability = disposed
         ? 'stopped'
         : enabled
         ? 'ready'
         : 'disabled';
-    return 'App Intents: ${enabled ? 'enabled' : 'disabled'} '
-        'availability=$availability pending=$pendingCommandCount '
-        'completed=$completedCommandCount rejected=$rejectedCommandCount '
-        'failed=$failedCommandCount last=${lastFailure.name}';
+    return localization.appIntentsStatus(
+      enabled: enabled,
+      availability: availability,
+      pending: pendingCommandCount,
+      completed: completedCommandCount,
+      rejected: rejectedCommandCount,
+      failed: failedCommandCount,
+      last: lastFailure.name,
+    );
   }
 }
 

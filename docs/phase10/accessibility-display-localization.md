@@ -297,3 +297,22 @@ injectable localization boundary with English and Japanese catalogs.
   gate then passed unchanged, including format/analyze, generated references,
   application evidence, and bounded security stress. No duration-only test was
   run.
+- 2026-09-13: moved standard menu section/context titles, Command Palette
+  window/header/empty/disabled/instruction copy, and the complete OSC 52
+  confirmation shell into the selected catalog. Dynamic pane/session/request
+  numbers, selection tokens, UTF-8 byte counts, and spoof-safe JSON previews
+  remain exact data. Presenter constructors accept a locale explicitly and
+  preserve English as the compatibility default until application wiring in
+  the next ordered child.
+- 2026-09-13: added localized Settings status projections for Quick Terminal
+  shortcut state, Secure Keyboard Entry mode/ownership/options, notification
+  authorization/count/failure state, and App Intents availability/count/failure
+  state while leaving their machine lines unchanged. Secure Input badge text,
+  accessibility label, and help now use the catalog; the English path reuses
+  the existing constant badges to preserve owner identity and tests.
+- 2026-09-13: `dart analyze` and focused localization, action menu, Command
+  Palette, Secure Input, system-automation status, OSC 52/native hierarchy
+  lifecycle tests passed. Regenerated the Phase 7 acceptance inventory because
+  its menu source hash changed; criteria/counts stayed fixed. The exact full
+  `make test` then passed all gates, including format/analyze and bounded
+  security stress. No duration-only test was run.

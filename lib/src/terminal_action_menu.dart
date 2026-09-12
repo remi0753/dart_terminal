@@ -4,6 +4,7 @@ import 'package:dart_appkit/dart_appkit.dart';
 
 import 'terminal_action_registry.dart';
 import 'terminal_appkit_policy.dart';
+import 'terminal_localization.dart';
 
 typedef TerminalMenuEnabledReader = bool Function();
 typedef TerminalMenuEnabledWriter = void Function(bool value);
@@ -183,7 +184,10 @@ final class TerminalAppKitMenuProjection {
         const <TerminalActionId, TerminalMenuCheckedReader>{},
     TerminalNativeMenuInvocationObserver? onNativeInvocation,
     TerminalMenuDispatchObserver? onDispatched,
+    TerminalLocalization? localization,
   }) {
+    final TerminalLocalization messages =
+        localization ?? TerminalLocalization.english;
     final List<Menu> menus = <Menu>[];
     final List<MenuItem> items = <MenuItem>[];
     final List<StreamSubscription<MenuItemInvokedEvent>> subscriptions =
@@ -209,7 +213,7 @@ final class TerminalAppKitMenuProjection {
       final Map<TerminalActionMenu, Menu> actionMenus =
           <TerminalActionMenu, Menu>{};
       for (final TerminalActionMenu section in TerminalActionMenu.values) {
-        final String title = _menuTitle(section);
+        final String title = _menuTitle(section, messages);
         final Menu menu = ownMenu(
           Menu(title: title, configuration: terminalMenuConfiguration),
         );
@@ -378,7 +382,10 @@ final class TerminalAppKitContextMenuProjection {
     TerminalMenuRouteObserver? onWillRoute,
     TerminalNativeMenuInvocationObserver? onNativeInvocation,
     TerminalMenuDispatchObserver? onDispatched,
+    TerminalLocalization? localization,
   }) {
+    final TerminalLocalization messages =
+        localization ?? TerminalLocalization.english;
     const List<TerminalActionId> actionIds = <TerminalActionId>[
       TerminalActionId.copy,
       TerminalActionId.paste,
@@ -387,7 +394,7 @@ final class TerminalAppKitContextMenuProjection {
       TerminalActionId.splitPaneDown,
     ];
     final Menu menu = Menu(
-      title: 'Terminal',
+      title: messages.menuTitle(TerminalMenuMessageId.context),
       configuration: terminalMenuConfiguration,
     );
     final List<MenuItem> items = <MenuItem>[];
@@ -529,13 +536,22 @@ final class TerminalAppKitContextMenuProjection {
   }
 }
 
-String _menuTitle(TerminalActionMenu menu) => switch (menu) {
-  TerminalActionMenu.application => 'Dart Terminal',
-  TerminalActionMenu.file => 'File',
-  TerminalActionMenu.edit => 'Edit',
-  TerminalActionMenu.shell => 'Shell',
-  TerminalActionMenu.view => 'View',
-  TerminalActionMenu.window => 'Window',
+String _menuTitle(
+  TerminalActionMenu menu,
+  TerminalLocalization localization,
+) => switch (menu) {
+  TerminalActionMenu.application => localization.menuTitle(
+    TerminalMenuMessageId.application,
+  ),
+  TerminalActionMenu.file => localization.menuTitle(TerminalMenuMessageId.file),
+  TerminalActionMenu.edit => localization.menuTitle(TerminalMenuMessageId.edit),
+  TerminalActionMenu.shell => localization.menuTitle(
+    TerminalMenuMessageId.shell,
+  ),
+  TerminalActionMenu.view => localization.menuTitle(TerminalMenuMessageId.view),
+  TerminalActionMenu.window => localization.menuTitle(
+    TerminalMenuMessageId.window,
+  ),
 };
 
 ModifierKeys _nativeModifiers(TerminalActionShortcut? shortcut) {

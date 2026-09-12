@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dart_appkit/dart_appkit.dart';
 
 import 'terminal_desktop_signal_projection.dart';
+import 'terminal_localization.dart';
 import 'terminal_pane.dart';
 
 typedef TerminalNotificationFocusSession = FutureOr<bool> Function(
@@ -95,11 +96,17 @@ final class TerminalNotificationProductStatus {
   final TerminalNotificationProductFailure lastFailure;
   final bool disposed;
 
-  String get settingsLine =>
-      'Notifications: ${enabled ? 'enabled' : 'disabled'} '
-      'authorization=${authorizationStatus.name} '
-      'pending=$pendingRequestCount responses=$liveResponseCount '
-      'last=${lastFailure.name}${disposed ? ' stopped' : ''}';
+  String get settingsLine => settingsLineFor(TerminalLocalization.english);
+
+  String settingsLineFor(TerminalLocalization localization) =>
+      localization.notificationStatus(
+        enabled: enabled,
+        authorization: authorizationStatus.name,
+        pending: pendingRequestCount,
+        responses: liveResponseCount,
+        last: lastFailure.name,
+        stopped: disposed,
+      );
 }
 
 /// Owns content-free notification request/response correlation for the product.

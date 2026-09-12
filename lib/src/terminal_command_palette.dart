@@ -6,6 +6,7 @@ import 'terminal_action_registry.dart';
 import 'terminal_appkit_policy.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_key_event.dart';
+import 'terminal_localization.dart';
 
 enum TerminalCommandPaletteKeyDisposition {
   ignored,
@@ -120,10 +121,12 @@ final class TerminalCommandPalettePresenter {
     required View terminalView,
     this.onDispatched,
     this.onError,
+    TerminalLocalization? localization,
   }) : _focusTarget = (() => TerminalCommandPaletteFocusTarget(
          window: terminalWindow,
          view: terminalView,
        )),
+       _localization = localization ?? TerminalLocalization.english,
        state = TerminalCommandPaletteState(dispatcher) {
     _keys = TerminalCommandPaletteKeyController(state);
   }
@@ -133,13 +136,16 @@ final class TerminalCommandPalettePresenter {
     required TerminalCommandPaletteFocusTargetProvider focusTarget,
     this.onDispatched,
     this.onError,
+    TerminalLocalization? localization,
   }) : _focusTarget = focusTarget,
+       _localization = localization ?? TerminalLocalization.english,
        state = TerminalCommandPaletteState(dispatcher) {
     _keys = TerminalCommandPaletteKeyController(state);
   }
 
   final TerminalActionDispatcher dispatcher;
   final TerminalCommandPaletteFocusTargetProvider _focusTarget;
+  final TerminalLocalization _localization;
   final TerminalCommandPaletteDispatchObserver? onDispatched;
   final TerminalCommandPaletteErrorObserver? onError;
   final TerminalCommandPaletteState state;
@@ -191,7 +197,7 @@ final class TerminalCommandPalettePresenter {
     try {
       window = Window(
         frame: const Rect.fromLTWH(220, 180, 560, 420),
-        title: 'Command Palette',
+        title: _localization.commandPaletteTitle,
         configuration: terminalWindowConfiguration,
       )..contentView = view;
       window
@@ -334,11 +340,11 @@ final class TerminalCommandPalettePresenter {
       return;
     }
     final StringBuffer output = StringBuffer()
-      ..writeln('Command Palette')
+      ..writeln(_localization.commandPaletteTitle)
       ..writeln('> ${state.query}')
       ..writeln();
     if (state.results.isEmpty) {
-      output.writeln('  No matching actions');
+      output.writeln('  ${_localization.commandPaletteNoMatches}');
     } else {
       for (var index = 0; index < state.results.length; index++) {
         final TerminalActionSnapshot snapshot = state.results[index];
@@ -346,14 +352,14 @@ final class TerminalCommandPalettePresenter {
           ..write(index == state.selectedIndex ? '› ' : '  ')
           ..write(snapshot.definition.title);
         if (!snapshot.isEnabled) {
-          output.write('  — Unavailable');
+          output.write('  — ${_localization.commandPaletteUnavailable}');
         }
         output.writeln();
       }
     }
     output
       ..writeln()
-      ..write('↑↓ Select    Return Run    Esc Close');
+      ..write(_localization.commandPaletteInstructions);
     view.text = output.toString();
   }
 

@@ -1,5 +1,7 @@
 import 'package:dart_appkit/dart_appkit.dart';
 
+import 'terminal_localization.dart';
+
 typedef TerminalSecureKeyboardEntryStatusObserver = void Function(
   TerminalSecureKeyboardEntryStatus status,
 );
@@ -136,15 +138,20 @@ final class TerminalSecureKeyboardEntryStatus {
   final bool? terminalEchoEnabled;
   final Object? failure;
 
-  String get settingsLine {
+  String get settingsLine => settingsLineFor(TerminalLocalization.english);
+
+  String settingsLineFor(TerminalLocalization localization) {
     final String ownership = ownedEnabled
         ? 'owned'
         : desired
         ? 'yielded'
         : 'released';
-    return 'Secure Keyboard Entry: ${mode.name} ($ownership; '
-        'automatic=${automaticEnabled ? 'on' : 'off'}; '
-        'indicator=${indicationEnabled ? 'on' : 'off'})';
+    return localization.secureKeyboardStatus(
+      mode: mode.name,
+      ownership: ownership,
+      automatic: automaticEnabled,
+      indicator: indicationEnabled,
+    );
   }
 
   String machineLine() =>
@@ -446,11 +453,34 @@ const ViewBadge terminalSecureKeyboardEntryManualBadge = ViewBadge(
 );
 
 ViewBadge? appKitSecureInputBadge(
-  TerminalSecureKeyboardEntryIndicator indicator,
-) => switch (indicator) {
+  TerminalSecureKeyboardEntryIndicator indicator, {
+  TerminalLocalization? localization,
+}) => switch (indicator) {
   TerminalSecureKeyboardEntryIndicator.hidden => null,
-  TerminalSecureKeyboardEntryIndicator.automatic =>
-    terminalSecureKeyboardEntryAutomaticBadge,
-  TerminalSecureKeyboardEntryIndicator.manual =>
-    terminalSecureKeyboardEntryManualBadge,
+  TerminalSecureKeyboardEntryIndicator.automatic => _secureInputBadge(
+    automatic: true,
+    localization: localization,
+  ),
+  TerminalSecureKeyboardEntryIndicator.manual => _secureInputBadge(
+    automatic: false,
+    localization: localization,
+  ),
 };
+
+ViewBadge _secureInputBadge({
+  required bool automatic,
+  required TerminalLocalization? localization,
+}) {
+  final TerminalLocalization messages =
+      localization ?? TerminalLocalization.english;
+  if (messages.language == TerminalLanguage.english) {
+    return automatic
+        ? terminalSecureKeyboardEntryAutomaticBadge
+        : terminalSecureKeyboardEntryManualBadge;
+  }
+  return ViewBadge(
+    text: messages.secureBadgeText(automatic: automatic),
+    accessibilityLabel: messages.secureBadgeLabel(automatic: automatic),
+    accessibilityHelp: messages.secureBadgeHelp,
+  );
+}
