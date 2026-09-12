@@ -1635,7 +1635,8 @@ final class TerminalApplication {
               }
             case WindowEvent() ||
                 MenuItemInvokedEvent() ||
-                GlobalHotKeyPressedEvent():
+                GlobalHotKeyPressedEvent() ||
+                ViewQuickLookRequestedEvent():
               break;
           }
         },
@@ -3995,7 +3996,8 @@ final class TerminalApplication {
             );
           case WindowEvent() ||
               MenuItemInvokedEvent() ||
-              GlobalHotKeyPressedEvent():
+              GlobalHotKeyPressedEvent() ||
+              ViewQuickLookRequestedEvent():
             break;
         }
       }, onError: recordAsynchronousError);

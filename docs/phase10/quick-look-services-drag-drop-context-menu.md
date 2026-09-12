@@ -6,8 +6,7 @@
 - Task: Quick Look, Services, drag/drop, and context menu
 - Started: 2026-09-12
 - State: active
-- Current subtask: `dart_appkit` Quick Look request event and definition
-  presentation substrate
+- Current subtask: `dart_appkit` Services and drop-destination substrate
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -278,6 +277,74 @@ committed contracts.
   DART_SUPPRESS_ANALYTICS=true make test` also passes with 276 formatted files,
   clean analysis, generated reference/evidence checks, Phase 9 security stress,
   and the aggregate terminal suite.
+- 2026-09-12: Rechecking the pinned comparison source shows its custom View
+  receives `pressureChange`, resets a retained previous stage on mouse-up, and
+  invokes Quick Look only on the first transition into pressure stage 2. It
+  then resolves the terminal word/font and calls AppKit definition
+  presentation at bottom-left View coordinates. `dart_appkit` cannot override
+  an arbitrary provider-owned View method, so its reusable equivalent will be
+  a non-consuming local pressure monitor enabled per generation-checked View;
+  it returns the original event and emits one asynchronous v9 request only for
+  the first stage-2 transition under that View.
+- 2026-09-12: The Quick Look event will use stable type 42 and carry finite
+  View-local AppKit x/y coordinates. Definition presentation is a separate
+  synchronous Dart-to-native call with non-empty text bounded to 4096 UTF-8
+  bytes, existing typed system/monospaced/named font selection, and finite
+  baseline geometry. This keeps word/grid policy in the product and gives both
+  native gesture and keyboard action paths the same presentation mechanism.
+- 2026-09-12: The adjacent implementation now uses one non-consuming local
+  AppKit pressure monitor for all explicitly enabled Views. It selects the
+  deepest registered ancestor under the event, retains each View weakly,
+  resets on mouse-up or a stage below 2, and emits one generation-checked v9
+  request per first stage-2 transition. View release removes its registration
+  and the monitor is removed when the last registration disappears.
+- 2026-09-12: `DefinitionPresentation` validates non-empty display-safe text at
+  a 4096-byte UTF-8 hard limit, reuses the existing typed View font contract,
+  and requires finite View-local baseline geometry. The additive native call
+  copies all bytes before returning and uses AppKit's attributed-string
+  definition presentation; product word/grid selection remains outside the
+  dependency.
+- 2026-09-12: Event protocol v9 preserves the v2-v8 envelope and adds only type
+  42 with two finite doubles. The shared Runner encoder, strict Dart decoder,
+  weak exact-View routing, optional current/legacy FFI symbols, and release
+  retry semantics are covered by native and Dart tests. Enabling requests on a
+  negotiated v8 sink fails before native registration, while definition
+  presentation remains an independent Dart-to-native call.
+- 2026-09-12: The first focused Dart run stopped because one current-protocol
+  lifecycle assertion still expected version 8. Since that test failed before
+  disposing its singleton test application, all later cases reported the same
+  attach conflict. Updating that exact negotiation assertion to version 9 made
+  the rerun pass all 24 API groups plus current and legacy FFI smoke tests.
+- 2026-09-12: The first consuming terminal gate reached compilation and found
+  the expected consequence of extending sealed `AppKitEvent`: two application
+  event switches were no longer exhaustive. This dependency subtask adds the
+  new View request to their explicit no-op groups only. Product lookup routing
+  remains deferred to the ordered integration subtask rather than being
+  implemented ahead of Services/drop/runtime prerequisites.
+- 2026-09-12: The terminal file formatter reported zero textual changes but
+  returned 1 in the filesystem sandbox because the Dart CLI attempted to touch
+  its existing telemetry session outside the writable roots. Repeating the
+  exact one-file format in the approved normal environment returned 0 with
+  zero changes.
+- 2026-09-12: The next terminal gate correctly rejected stale Phase 7 AppKit
+  acceptance evidence after the reviewed application source changed. Running
+  `make phase7-appkit-acceptance` updated only the two deterministic SHA-256
+  references for `terminal_application.dart`; no acceptance criteria or test
+  inventory changed.
+- 2026-09-12: Final dependency validation passes the focused ABI/native/shared
+  encoder/Dart/current+legacy FFI gate, both warning-clean Developer JIT and
+  Release AOT host builds, and the exact full dependency gate. The final
+  consuming exact gate passes generated references/evidence, 276-file format,
+  static analysis, Phase 9 security stress, and the aggregate terminal suite.
+- 2026-09-12: Adjacent `dart_appkit` commit `1106ee6` records the complete
+  Quick Look request/definition substrate. With the earlier context-menu commit,
+  the ordered AppKit content-menu/Quick Look parent is complete. ROADMAP reread
+  selects AppKit Services and drop-destination substrate next; runtime manifest
+  declaration and product integration remain intentionally untouched.
+- 2026-09-12: The first terminal staging attempt was rejected because the
+  filesystem sandbox could not create `.git/index.lock`; no index or working
+  tree content was changed. Staging is retried through the approved repository
+  write path.
 
 ## Risks and handoff notes
 

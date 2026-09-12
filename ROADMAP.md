@@ -1219,9 +1219,9 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase10/quick-look-services-drag-drop-context-menu.md`](docs/phase10/quick-look-services-drag-drop-context-menu.md)
   を参照して順に実施する）
   - [x] bounded terminal interaction contracts、shared action metadata
-  - [ ] `dart_appkit` context-menu、Quick Look substrate
+  - [x] `dart_appkit` context-menu、Quick Look substrate
     - [x] View context-menu attachment、ownership substrate
-    - [ ] Quick Look request event、definition presentation substrate
+    - [x] Quick Look request event、definition presentation substrate
   - [ ] `dart_appkit` Services、drop-destination substrate
   - [ ] `dart_macos_runtime` service declaration substrate
   - [ ] product integration、両runtime acceptance、documentation closure、親項目完了判定
