@@ -1266,7 +1266,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] 全件inventoryと所有権境界、移設順、検証方針を確定する
   - [x] PTY native asset packageを製品repositoryへ移設する
-  - [ ] Metal renderer capability packageを製品repositoryへ移設する
+  - [x] Metal renderer capability packageを製品repositoryへ移設する
   - [ ] AppleScript capability packageを製品repositoryへ移設する
   - [ ] App Intents capability packageを製品repositoryへ移設する
   - [ ] Finder folder Servicesをapplication注入の汎用actionへ変更する

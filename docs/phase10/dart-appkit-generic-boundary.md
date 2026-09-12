@@ -6,7 +6,7 @@
 - Task: remove product-specific implementation from `dart_appkit`
 - Started: 2026-09-12
 - State: in progress
-- Current subtask: move the Metal renderer capability package
+- Current subtask: move the AppleScript capability package
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -217,3 +217,17 @@ before starting the next subtask.
   the build-hook native asset. The dependency copy and ignored build outputs
   were removed; its `make validate`, dry-run aggregate test plan, absence check,
   and no-stale-PTY-target check passed.
+- 2026-09-12: moved all 26 tracked renderer package files into this repository,
+  switched the root and package-local generic dependencies to their new paths,
+  and transferred the C/C++ ABI checks, Metal shader/plugin build, AppKit-backed
+  native capability suite, Dart analysis, native-asset hook, and facade tests to
+  this root Makefile and aggregate `test`. The first sandboxed run failed only
+  because Metal could not write its user module cache; the required rerun in the
+  normal environment passed native compilation and tests. That rerun exposed a
+  real relocation assumption in `hook/build.dart`: its old `../../native`
+  include resolved inside the product repository. Pointing the product hook at
+  the adjacent generic dependency's public native headers fixed it, and the
+  unchanged focused rerun passed all renderer Dart/hook tests. The dependency
+  package, ignored outputs, targets, and variables were then removed; dependency
+  `make validate`, stale-target dry-run audit, path absence, and diff check
+  passed.
