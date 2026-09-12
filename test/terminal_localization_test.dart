@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_terminal/dart_terminal.dart';
 
@@ -7,7 +10,107 @@ void runTerminalLocalizationTests() {
   _testLocaleSelectionAndDirection();
   _testActionCatalogCompletenessAndStablePolicy();
   _testPresenterAndStatusMessages();
+  _testSettingsCatalogAndResourceDeclarations();
 }
+
+void _testSettingsCatalogAndResourceDeclarations() {
+  final TerminalLocalization japanese = TerminalLocalization.japanese;
+  _expect(
+    japanese
+            .settingsNormalStatus(japanese.settingsSaveState('modified'))
+            .contains('変更あり') &&
+        japanese.settingsCollapsedDetail == '›\n\n詳\n細' &&
+        TerminalLocalization.resolve('ar').settingsCollapsedDetail ==
+            '‹\n\nD\nE\nT\nA\nI\nL' &&
+        japanese
+            .settingsInspectorDiagnostics(latestAttempt: true, count: 2)
+            .contains('最新の再読み込み試行'),
+    'Settings shell and directional markers use the selected catalog',
+  );
+  for (final TerminalConfigOptionBase option
+      in TerminalProductConfigSchema.instance.options) {
+    _expect(
+      japanese.settingsOptionDescription(option.name, option.description) !=
+          option.description,
+      'Japanese Settings description covers ${option.name}',
+    );
+  }
+
+  final Map<String, Object?> manifest = jsonDecode(
+    _projectFile('macos_application.json').readAsStringSync(),
+  ) as Map<String, Object?>;
+  final Map<String, Object?> application =
+      manifest['application']! as Map<String, Object?>;
+  final Set<String> resources = (manifest['resources']! as List<Object?>)
+      .cast<String>()
+      .toSet();
+  const Set<String> localizedResources = <String>{
+    'en.lproj/InfoPlist.strings',
+    'en.lproj/Localizable.strings',
+    'en.lproj/AppShortcuts.strings',
+    'en.lproj/ServicesMenu.strings',
+    'ja.lproj/InfoPlist.strings',
+    'ja.lproj/Localizable.strings',
+    'ja.lproj/AppShortcuts.strings',
+    'ja.lproj/ServicesMenu.strings',
+  };
+  _expect(
+    application['displayName'] == 'Dart Terminal' &&
+        resources.containsAll(localizedResources),
+    'manifest injects the display name and both localization resource sets',
+  );
+  for (final String fileName in const <String>[
+    'InfoPlist.strings',
+    'Localizable.strings',
+    'AppShortcuts.strings',
+    'ServicesMenu.strings',
+  ]) {
+    final Set<String> english = _stringsKeys(
+      _projectFile('en.lproj/$fileName').readAsStringSync(),
+    );
+    final Set<String> japaneseKeys = _stringsKeys(
+      _projectFile('ja.lproj/$fileName').readAsStringSync(),
+    );
+    _expect(
+      english.isNotEmpty &&
+          english.difference(japaneseKeys).isEmpty &&
+          japaneseKeys.difference(english).isEmpty,
+      '$fileName has identical nonempty English and Japanese key sets',
+    );
+  }
+  final String swift = _projectFile(
+    'packages/dart_terminal_app_intents_macos/native/'
+    'TerminalAppIntents.swift',
+  ).readAsStringSync();
+  final Set<String> localizableKeys = _stringsKeys(
+    _projectFile('en.lproj/Localizable.strings').readAsStringSync(),
+  );
+  _expect(
+    localizableKeys.every(swift.contains) &&
+        swift.contains('String(localized:'),
+    'App Intent declarations and localized errors are covered by resources',
+  );
+  final Set<String> serviceKeys = _stringsKeys(
+    _projectFile('en.lproj/ServicesMenu.strings').readAsStringSync(),
+  );
+  final Set<String> declaredServices = (manifest['services']! as List<Object?>)
+      .cast<Map<String, Object?>>()
+      .map((Map<String, Object?> value) => value['menuItem']! as String)
+      .toSet();
+  _expect(
+    serviceKeys.length == declaredServices.length &&
+        serviceKeys.containsAll(declaredServices),
+    'Finder Service default menu titles have exact localization keys',
+  );
+}
+
+File _projectFile(String relativePath) =>
+    File.fromUri(Platform.script.resolve('../$relativePath'));
+
+Set<String> _stringsKeys(String source) => RegExp(
+  r'^"((?:[^"\\]|\\.)+)"\s*=',
+  multiLine: true,
+).allMatches(source).map((RegExpMatch match) => match.group(1)!).toSet();
 
 void _testPresenterAndStatusMessages() {
   final TerminalLocalization messages = TerminalLocalization.japanese;

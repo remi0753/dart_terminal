@@ -1,0 +1,3 @@
+"New window in ${applicationName}" = "${applicationName}で新しいウインドウを開く";
+"New tab in ${applicationName}" = "${applicationName}で新しいタブを開く";
+"Toggle Quick Terminal in ${applicationName}" = "${applicationName}でクイックターミナルを切り替える";

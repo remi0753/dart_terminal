@@ -7,7 +7,42 @@ Future<void> main() => runTerminalSettingsInspectorTests();
 
 Future<void> runTerminalSettingsInspectorTests() async {
   await _testSearchRenderingAndReloadProjection();
+  _testJapaneseSearchProjection();
   _testKeyboardOwnershipAndBounds();
+}
+
+void _testJapaneseSearchProjection() {
+  final TerminalConfigSnapshot initial = TerminalConfigLoader().resolve(
+    const <String>['--no-config', '--font-size=15'],
+    environment: const <String, String>{},
+  ).snapshot;
+  final TerminalConfigReloadController controller =
+      TerminalConfigReloadController(
+        initialSnapshot: initial,
+        resolver: () => TerminalConfigResolution(
+          snapshot: initial,
+          remainingArguments: const <String>[],
+        ),
+      );
+  final TerminalSettingsInspectorState state = TerminalSettingsInspectorState(
+    controller: controller,
+    localization: TerminalLocalization.japanese,
+  )..open();
+  try {
+    state.setQuery('フォントサイズ');
+    final String rendered = state.render();
+    _expect(
+      state.selectedEntry?.option.name == 'font-size' &&
+          rendered.contains('設定 — 有効な構成') &&
+          rendered.contains('値: 15') &&
+          rendered.contains('適用方針: 新規セッション') &&
+          rendered.contains('ターミナルのフォントサイズ'),
+      'Japanese inspector copy and localized description search are incomplete',
+    );
+  } finally {
+    state.dismiss();
+    controller.dispose();
+  }
 }
 
 Future<void> _testSearchRenderingAndReloadProjection() async {

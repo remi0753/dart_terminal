@@ -10,6 +10,7 @@ import 'terminal_config_reload.dart';
 import 'terminal_effective_config.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_key_event.dart';
+import 'terminal_localization.dart';
 import 'terminal_settings_document.dart';
 import 'terminal_settings_editor.dart';
 
@@ -86,15 +87,25 @@ final class TerminalSettingsInspectorState {
     required TerminalConfigReloadController controller,
     TerminalSettingsInspectorLimits limits =
         const TerminalSettingsInspectorLimits(),
+    TerminalLocalization? localization,
   }) {
     limits.validate();
-    return TerminalSettingsInspectorState._(controller, limits);
+    return TerminalSettingsInspectorState._(
+      controller,
+      limits,
+      localization ?? TerminalLocalization.english,
+    );
   }
 
-  TerminalSettingsInspectorState._(this.controller, this.limits);
+  TerminalSettingsInspectorState._(
+    this.controller,
+    this.limits,
+    this.localization,
+  );
 
   final TerminalConfigReloadController controller;
   final TerminalSettingsInspectorLimits limits;
+  final TerminalLocalization localization;
 
   var _isOpen = false;
   var _query = '';
@@ -105,7 +116,7 @@ final class TerminalSettingsInspectorState {
       const <TerminalEffectiveConfigEntry>[];
   List<TerminalConfigDiagnostic> _diagnostics =
       const <TerminalConfigDiagnostic>[];
-  String _diagnosticContext = 'effective configuration';
+  var _latestDiagnosticAttempt = false;
   String? _lastFailure;
 
   bool get isOpen => _isOpen;
@@ -121,7 +132,13 @@ final class TerminalSettingsInspectorState {
 
   List<TerminalEffectiveConfigEntry> get results => _results;
   List<TerminalConfigDiagnostic> get diagnostics => _diagnostics;
-  String get diagnosticContext => _diagnosticContext;
+  String get diagnosticContext => _latestDiagnosticAttempt
+      ? (localization.language == TerminalLanguage.japanese
+            ? '最新の再読み込み試行'
+            : 'latest reload attempt')
+      : (localization.language == TerminalLanguage.japanese
+            ? '有効な構成'
+            : 'effective configuration');
   String? get lastFailure => _lastFailure;
   TerminalEffectiveConfigEntry? get selectedEntry =>
       _results.isEmpty ? null : _results[_selectedIndex];
@@ -152,9 +169,7 @@ final class TerminalSettingsInspectorState {
     _diagnostics = List<TerminalConfigDiagnostic>.unmodifiable(
       attempted?.diagnostics ?? _effective.diagnostics,
     );
-    _diagnosticContext = attempted == null
-        ? 'effective configuration'
-        : 'latest reload attempt';
+    _latestDiagnosticAttempt = attempted != null;
     _lastFailure = _safeFailure(controller.lastFailure);
     _rebuildResults();
   }
@@ -204,21 +219,29 @@ final class TerminalSettingsInspectorState {
       limits.maxRenderedCharacters,
     );
     writer
-      ..line('Settings — Effective Configuration')
-      ..line('Search: $_query')
+      ..line(localization.settingsInspectorTitle)
+      ..line(localization.settingsInspectorSearch(_query))
       ..line(
-        'Accepted generation: $acceptedGeneration    '
-        'Reload: ${reloadInProgress ? 'in progress' : 'idle'}',
+        localization.settingsInspectorGeneration(
+          generation: acceptedGeneration,
+          inProgress: reloadInProgress,
+        ),
       )
-      ..line('Config file: ${_field(_effective.rootPath ?? '<none>')}')
       ..line(
-        'Matches: $_matchingEntryCount of ${_effective.entries.length} '
-        'effective entries',
+        localization.settingsInspectorConfigFile(
+          _field(_effective.rootPath ?? localization.settingsNoValue),
+        ),
+      )
+      ..line(
+        localization.settingsInspectorMatches(
+          matches: _matchingEntryCount,
+          total: _effective.entries.length,
+        ),
       )
       ..line();
 
     if (_results.isEmpty) {
-      writer.line('  No matching configuration entries');
+      writer.line(localization.settingsInspectorNoMatches);
     } else {
       final int visible = limits.maxVisibleResults.clamp(1, _results.length);
       var start = _selectedIndex - visible ~/ 2;
@@ -232,14 +255,18 @@ final class TerminalSettingsInspectorState {
             ? ' ${entry.occurrenceIndex}/${entry.occurrenceCount}'
             : '';
         writer.line(
-          '${index == _selectedIndex ? '›' : ' '} '
+          '${index == _selectedIndex ? localization.directionalSelectionMarker : ' '} '
           '${entry.option.name}$occurrence = '
-          '${_field(entry.canonicalValue ?? '<none>')}',
+          '${_field(entry.canonicalValue ?? localization.settingsNoValue)}',
         );
       }
       if (_results.length > visible) {
         writer.line(
-          '  Showing ${start + 1}-${start + visible} of ${_results.length}',
+          localization.settingsInspectorShowing(
+            first: start + 1,
+            last: start + visible,
+            total: _results.length,
+          ),
         );
       }
     }
@@ -247,32 +274,52 @@ final class TerminalSettingsInspectorState {
     final TerminalEffectiveConfigEntry? selected = selectedEntry;
     writer
       ..line()
-      ..line('Selected entry');
+      ..line(localization.settingsInspectorSelectedEntry);
     if (selected == null) {
-      writer.line('  <none>');
+      writer.line('  ${localization.settingsNoValue}');
     } else {
       final TerminalConfigSource source = selected.source;
       writer
-        ..line('  Name: ${selected.option.name}')
-        ..line('  Value: ${_field(selected.canonicalValue ?? '<none>')}')
-        ..line('  Syntax: ${_field(selected.option.valueSyntax)}')
-        ..line('  Policy: ${_policy(selected.option.applicationPolicy)}')
         ..line(
-          '  Source: ${_sourceKind(source.kind)} '
+          '  ${localization.settingsInspectorName}: ${selected.option.name}',
+        )
+        ..line(
+          '  ${localization.settingsInspectorValue}: '
+          '${_field(selected.canonicalValue ?? localization.settingsNoValue)}',
+        )
+        ..line(
+          '  ${localization.settingsSyntax}: '
+          '${_field(selected.option.valueSyntax)}',
+        )
+        ..line(
+          '  ${localization.settingsInspectorPolicy}: '
+          '${_localizedPolicy(selected.option.applicationPolicy)}',
+        )
+        ..line(
+          '  ${localization.settingsInspectorSource}: '
+          '${_localizedSourceKind(source.kind)} '
           '${_field(source.path)}:${source.line}:${source.column}',
         )
         ..line(
-          '  Occurrence: ${selected.occurrenceIndex}/'
+          '  ${localization.settingsInspectorOccurrence}: '
+          '${selected.occurrenceIndex}/'
           '${selected.occurrenceCount}',
         )
-        ..line('  ${_field(selected.option.description)}');
+        ..line(
+          '  ${_field(localization.settingsOptionDescription(selected.option.name, selected.option.description))}',
+        );
     }
 
     writer
       ..line()
-      ..line('Diagnostics — $_diagnosticContext (${_diagnostics.length})');
+      ..line(
+        localization.settingsInspectorDiagnostics(
+          latestAttempt: _latestDiagnosticAttempt,
+          count: _diagnostics.length,
+        ),
+      );
     if (_diagnostics.isEmpty) {
-      writer.line('  None');
+      writer.line(localization.settingsInspectorNone);
     } else {
       final int visible = limits.maxVisibleDiagnostics.clamp(
         1,
@@ -283,24 +330,32 @@ final class TerminalSettingsInspectorState {
         final TerminalConfigSource source = diagnostic.source;
         writer
           ..line(
-            '  ${diagnostic.severity.name.toUpperCase()} '
+            '  ${localization.settingsDiagnosticSeverity(diagnostic.severity.name.toUpperCase())} '
             '${_field(diagnostic.code)} '
-            '${_field(_sourceLabel(source))}:'
+            '${_field(_localizedSourceLabel(source))}:'
             '${source.line}:${source.column}',
           )
           ..line('    ${_field(diagnostic.message)}');
         final String? hint = diagnostic.hint;
-        if (hint != null) writer.line('    Fix: ${_field(hint)}');
+        if (hint != null) {
+          writer.line('    ${localization.settingsFix}: ${_field(hint)}');
+        }
       }
       if (_diagnostics.length > visible) {
-        writer.line('  … ${_diagnostics.length - visible} more diagnostics');
+        writer.line(
+          localization.settingsInspectorMoreDiagnostics(
+            _diagnostics.length - visible,
+          ),
+        );
       }
     }
     final String? failure = _lastFailure;
-    if (failure != null) writer.line('  Reload failure: ${_field(failure)}');
+    if (failure != null) {
+      writer.line(localization.settingsInspectorReloadFailure(_field(failure)));
+    }
     writer
       ..line()
-      ..line('Type to search    ↑↓ Select    ⌘R Reload    Esc Close');
+      ..line(localization.settingsInspectorInstructions);
     return writer.finish();
   }
 
@@ -328,17 +383,18 @@ final class TerminalSettingsInspectorState {
     }
   }
 
-  static bool _matches(
-    TerminalEffectiveConfigEntry entry,
-    List<String> tokens,
-  ) {
+  bool _matches(TerminalEffectiveConfigEntry entry, List<String> tokens) {
     if (tokens.isEmpty) return true;
     final TerminalConfigSource source = entry.source;
     final String candidate = <String>[
       entry.option.name,
       entry.option.valueSyntax,
       entry.option.description,
-      entry.canonicalValue ?? '<none>',
+      localization.settingsOptionDescription(
+        entry.option.name,
+        entry.option.description,
+      ),
+      entry.canonicalValue ?? localization.settingsNoValue,
       _policy(entry.option.applicationPolicy),
       _sourceKind(source.kind),
       source.path,
@@ -392,8 +448,14 @@ final class TerminalSettingsInspectorState {
     TerminalConfigSourceKind.commandLine => 'command-line',
   };
 
-  static String _sourceLabel(TerminalConfigSource source) =>
-      source.path.isEmpty ? _sourceKind(source.kind) : source.path;
+  String _localizedPolicy(TerminalConfigApplicationPolicy policy) =>
+      localization.settingsApplicationPolicy(_policy(policy));
+
+  String _localizedSourceKind(TerminalConfigSourceKind kind) =>
+      localization.settingsSourceKind(_sourceKind(kind));
+
+  String _localizedSourceLabel(TerminalConfigSource source) =>
+      source.path.isEmpty ? _localizedSourceKind(source.kind) : source.path;
 }
 
 enum TerminalSettingsInspectorKeyDisposition {
@@ -484,10 +546,12 @@ final class TerminalSettingsInspectorPresenter {
     this.onReloaded,
     this.onError,
     this.runtimeStatus,
+    TerminalLocalization? localization,
     TerminalAccessibilityPresentation accessibilityPresentation =
         const TerminalAccessibilityPresentation.standard(),
   }) : _focusTarget = focusTarget,
        _reload = reload,
+       _localization = localization ?? TerminalLocalization.english,
        _accessibilityPresentation = accessibilityPresentation,
        _settingsPresentation = terminalSettingsPresentationFor(
          accessibilityPresentation,
@@ -496,6 +560,7 @@ final class TerminalSettingsInspectorPresenter {
          controller: controller,
          documentSession: documentSession,
          limits: limits,
+         localization: localization,
        ) {
     _keys = TerminalSettingsEditorKeyController(state);
   }
@@ -505,6 +570,7 @@ final class TerminalSettingsInspectorPresenter {
   final TerminalSettingsInspectorReloadObserver? onReloaded;
   final TerminalSettingsInspectorErrorObserver? onError;
   final TerminalSettingsRuntimeStatusProvider? runtimeStatus;
+  final TerminalLocalization _localization;
   final TerminalSettingsEditorState state;
   TerminalAccessibilityPresentation _accessibilityPresentation;
   TerminalSettingsPresentation _settingsPresentation;
@@ -593,8 +659,8 @@ final class TerminalSettingsInspectorPresenter {
           firstMinimumExtent: 260,
           secondMinimumExtent: 38,
         );
-      rootSplit = TwoPaneSplitView(axis: SplitViewAxis.horizontal)
-        ..setChildren(first: editorStatusSplit, second: detailView);
+      rootSplit = TwoPaneSplitView(axis: SplitViewAxis.horizontal);
+      _setRootChildren(rootSplit, editorStatusSplit, detailView);
       window =
           Window(
               frame: const Rect.fromLTWH(110, 80, 1040, 720),
@@ -702,8 +768,8 @@ final class TerminalSettingsInspectorPresenter {
           firstMinimumExtent: 260,
           secondMinimumExtent: 38,
         );
-      rootSplit = TwoPaneSplitView(axis: SplitViewAxis.horizontal)
-        ..setChildren(first: editorStatusSplit, second: detailView);
+      rootSplit = TwoPaneSplitView(axis: SplitViewAxis.horizontal);
+      _setRootChildren(rootSplit, editorStatusSplit, detailView);
 
       _editor = editor;
       _statusView = statusView;
@@ -964,13 +1030,9 @@ final class TerminalSettingsInspectorPresenter {
         : '${state.renderStatus()}    $productStatus';
     detailView.text = state.detailsExpanded
         ? state.renderDetail()
-        : '›\n\nD\nE\nT\nA\nI\nL';
+        : _localization.settingsCollapsedDetail;
     if (_publishedDetailsExpanded != state.detailsExpanded) {
-      rootSplit.setPosition(
-        fraction: state.detailsExpanded ? 0.7 : 0.965,
-        firstMinimumExtent: 360,
-        secondMinimumExtent: state.detailsExpanded ? 260 : 30,
-      );
+      _setRootPosition(rootSplit, state.detailsExpanded);
       _publishedDetailsExpanded = state.detailsExpanded;
     }
   }
@@ -1045,13 +1107,41 @@ final class TerminalSettingsInspectorPresenter {
     TerminalSettingsTextSelection selection,
   ) => TextEditorSelection(start: selection.start, length: selection.length);
 
-  static String _fileName(String? path) {
-    if (path == null || path.isEmpty) return 'Settings';
+  String _fileName(String? path) {
+    if (path == null || path.isEmpty) return _localization.settingsWindowTitle;
     final List<String> components = path.split(RegExp(r'[/\\]'));
     return components.lastWhere(
       (String component) => component.isNotEmpty,
-      orElse: () => 'Settings',
+      orElse: () => _localization.settingsWindowTitle,
     );
+  }
+
+  void _setRootChildren(
+    TwoPaneSplitView root,
+    TwoPaneSplitView editorStatus,
+    TextView detail,
+  ) {
+    if (_localization.textDirection == TerminalTextDirection.rightToLeft) {
+      root.setChildren(first: detail, second: editorStatus);
+    } else {
+      root.setChildren(first: editorStatus, second: detail);
+    }
+  }
+
+  void _setRootPosition(TwoPaneSplitView root, bool detailsExpanded) {
+    if (_localization.textDirection == TerminalTextDirection.rightToLeft) {
+      root.setPosition(
+        fraction: detailsExpanded ? 0.3 : 0.035,
+        firstMinimumExtent: detailsExpanded ? 260 : 30,
+        secondMinimumExtent: 360,
+      );
+    } else {
+      root.setPosition(
+        fraction: detailsExpanded ? 0.7 : 0.965,
+        firstMinimumExtent: 360,
+        secondMinimumExtent: detailsExpanded ? 260 : 30,
+      );
+    }
   }
 
   static String? _boundedRuntimeStatus(String? value) {

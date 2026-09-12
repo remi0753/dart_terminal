@@ -1,0 +1,14 @@
+"New Terminal Window" = "New Terminal Window";
+"Open a new terminal window." = "Open a new terminal window.";
+"New Terminal Tab" = "New Terminal Tab";
+"Open a new terminal tab." = "Open a new terminal tab.";
+"Toggle Quick Terminal" = "Toggle Quick Terminal";
+"Show or hide Quick Terminal." = "Show or hide Quick Terminal.";
+"New Window" = "New Window";
+"New Tab" = "New Tab";
+"Quick Terminal" = "Quick Terminal";
+"This terminal action is disabled in Settings." = "This terminal action is disabled in Settings.";
+"The terminal action is currently unavailable." = "The terminal action is currently unavailable.";
+"The terminal is busy. Try the action again." = "The terminal is busy. Try the action again.";
+"The terminal did not finish the action in time." = "The terminal did not finish the action in time.";
+"The terminal could not complete the action." = "The terminal could not complete the action.";

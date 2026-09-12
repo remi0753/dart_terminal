@@ -1283,7 +1283,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [ ] English／Japanese catalog、locale fallback、RTL application UI投影
     - [x] locale／direction model、typed catalog基盤、action metadataを実装する
     - [x] menu／palette／confirmation／status UIをcatalogへ移行する
-    - [ ] Settings／application UI、RTL composition、resource宣言を移行する
+    - [x] Settings／application UI、RTL composition、resource宣言を移行する
     - [ ] static UI leak auditとcatalog completeness検証で子項目を完了する
   - [ ] 両runtime受け入れ、文書／matrix更新、Phase 10完了判定
 - [ ] terminal inspector と diagnostics bundle

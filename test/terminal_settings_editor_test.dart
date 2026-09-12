@@ -10,7 +10,34 @@ void runTerminalSettingsEditorTests() {
   _testDisabledAssignmentSyntax();
   _testModeInvariantSyntaxAndWholeDocumentSynchronization();
   _testContextDetailOutcomesAndDiagnostics();
+  _testJapaneseProjection();
   _testSelectionAndBounds();
+}
+
+void _testJapaneseProjection() {
+  final _EditorFixture fixture = _EditorFixture.create(
+    localization: TerminalLocalization.japanese,
+  );
+  final TerminalSettingsEditorState state = fixture.state..open();
+  try {
+    final TerminalSettingsOptionOccurrence font = state.occurrences.singleWhere(
+      (TerminalSettingsOptionOccurrence occurrence) =>
+          occurrence.option.name == 'font-size',
+    );
+    state.setSelection(TerminalSettingsTextSelection(start: font.nameStart));
+    final String detail = state.renderDetail();
+    _expect(
+      state.renderStatus().contains('変更なし') &&
+          detail.contains('現在の値') &&
+          detail.contains('開いているターミナル') &&
+          detail.contains('現在の値を維持') &&
+          detail.contains('ターミナルのフォントサイズ'),
+      'Japanese Settings state did not localize status, detail, and schema description',
+    );
+  } finally {
+    state.dismiss();
+    fixture.dispose();
+  }
 }
 
 void _testDisabledAssignmentSyntax() {
@@ -368,6 +395,7 @@ final class _EditorFixture {
 
   factory _EditorFixture.create({
     TerminalSettingsEditorLimits limits = const TerminalSettingsEditorLimits(),
+    TerminalLocalization? localization,
   }) {
     final _MemoryEditorFileSystem files = _MemoryEditorFileSystem(
       <String, String>{'/config': ''},
@@ -397,6 +425,7 @@ final class _EditorFixture {
           writer: files,
         ),
         limits: limits,
+        localization: localization,
       ),
     );
   }

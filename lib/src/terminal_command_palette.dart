@@ -349,7 +349,11 @@ final class TerminalCommandPalettePresenter {
       for (var index = 0; index < state.results.length; index++) {
         final TerminalActionSnapshot snapshot = state.results[index];
         output
-          ..write(index == state.selectedIndex ? '› ' : '  ')
+          ..write(
+            index == state.selectedIndex
+                ? '${_localization.directionalSelectionMarker} '
+                : '  ',
+          )
           ..write(snapshot.definition.title);
         if (!snapshot.isEnabled) {
           output.write('  — ${_localization.commandPaletteUnavailable}');

@@ -132,6 +132,11 @@ final class TerminalLocalization {
 
   bool get _ja => language == TerminalLanguage.japanese;
 
+  String get applicationName => 'Dart Terminal';
+
+  String get directionalSelectionMarker =>
+      textDirection == TerminalTextDirection.rightToLeft ? '‹' : '›';
+
   String menuTitle(TerminalMenuMessageId id) => switch ((language, id)) {
     (TerminalLanguage.english, TerminalMenuMessageId.application) ||
     (
@@ -244,6 +249,132 @@ final class TerminalLocalization {
   String get secureBadgeHelp => _ja
       ? 'キーボード入力は他のアプリケーションから保護されています。'
       : 'Keyboard input is protected from other applications.';
+
+  String get settingsWindowTitle => _ja ? '設定' : 'Settings';
+  String settingsSaveState(String state) => switch ((language, state)) {
+    (TerminalLanguage.english, 'unchanged') => 'UNCHANGED',
+    (TerminalLanguage.english, 'modified') => 'MODIFIED',
+    (TerminalLanguage.english, 'saved') => 'SAVED',
+    (TerminalLanguage.english, 'invalid') => 'FIX ERRORS',
+    (TerminalLanguage.english, 'conflict') => 'FILE CHANGED',
+    (TerminalLanguage.english, 'unavailable') => 'SAVE UNAVAILABLE',
+    (TerminalLanguage.english, 'failed') => 'SAVE FAILED',
+    (TerminalLanguage.japanese, 'unchanged') => '変更なし',
+    (TerminalLanguage.japanese, 'modified') => '変更あり',
+    (TerminalLanguage.japanese, 'saved') => '保存済み',
+    (TerminalLanguage.japanese, 'invalid') => 'エラーを修正',
+    (TerminalLanguage.japanese, 'conflict') => 'ファイル変更あり',
+    (TerminalLanguage.japanese, 'unavailable') => '保存不可',
+    (TerminalLanguage.japanese, 'failed') => '保存失敗',
+    _ => state,
+  };
+  String settingsNormalStatus(String save) => _ja
+      ? 'NORMAL  $save    i 挿入  a 追記  / 検索  ] 詳細  ⌘S 保存  Esc 閉じる'
+      : 'NORMAL  $save    i Insert  a Append  / Search  '
+            '] Details  ⌘S Save  Esc Close';
+  String settingsInsertStatus(String save) => _ja
+      ? 'INSERT  $save    Esc NORMAL  ⌘S 保存'
+      : 'INSERT  $save    Esc Normal  ⌘S Save';
+  String settingsSearchStatus(String query) => _ja
+      ? '/$query    ↑↓ 一致項目  Return 選択  Esc NORMAL'
+      : '/$query    ↑↓ Match  Enter Select  Esc Normal';
+  String get settingsNoSettingAtCursor =>
+      _ja ? 'カーソル位置に設定項目はありません' : 'No setting at the cursor';
+  String get settingsEmptyValue => _ja ? '<空>' : '<empty>';
+  String get settingsNotSetValue => _ja ? '<未設定>' : '<not set>';
+  String get settingsNoValue => _ja ? '<なし>' : '<none>';
+  String get settingsCurrentValue => _ja ? '現在の値' : 'Current value';
+  String settingsDraft({required bool disabled}) => _ja
+      ? '下書き${disabled ? '（無効）' : ''}'
+      : 'Draft${disabled ? ' (disabled)' : ''}';
+  String get settingsSyntax => _ja ? '構文' : 'Syntax';
+  String get settingsAfterSave => _ja ? '保存後' : 'After save';
+  String get settingsOpenTerminals => _ja ? '開いているターミナル' : 'Open terminals';
+  String get settingsNewTerminals => _ja ? '新しいターミナル' : 'New terminals';
+  String get settingsChangeImmediately => _ja ? 'ただちに変更' : 'Change immediately';
+  String get settingsKeepCurrentValue => _ja ? '現在の値を維持' : 'Keep current value';
+  String get settingsUseSavedValue => _ja ? '保存した値を使用' : 'Use saved value';
+  String get settingsIssues => _ja ? '問題' : 'Issues';
+  String get settingsFix => _ja ? '修正' : 'Fix';
+  String get settingsCollapsedDetail {
+    final String label = _ja ? '詳\n細' : 'D\nE\nT\nA\nI\nL';
+    return '$directionalSelectionMarker\n\n$label';
+  }
+
+  String get settingsInspectorTitle =>
+      _ja ? '設定 — 有効な構成' : 'Settings — Effective Configuration';
+  String settingsInspectorSearch(String query) =>
+      _ja ? '検索: $query' : 'Search: $query';
+  String settingsInspectorGeneration({
+    required int generation,
+    required bool inProgress,
+  }) => _ja
+      ? '承認世代: $generation    再読み込み: ${inProgress ? '処理中' : '待機中'}'
+      : 'Accepted generation: $generation    '
+            'Reload: ${inProgress ? 'in progress' : 'idle'}';
+  String settingsInspectorConfigFile(String path) =>
+      _ja ? '設定ファイル: $path' : 'Config file: $path';
+  String settingsInspectorMatches({required int matches, required int total}) =>
+      _ja
+      ? '一致: 有効な$total項目中$matches項目'
+      : 'Matches: $matches of $total effective entries';
+  String get settingsInspectorNoMatches =>
+      _ja ? '  一致する設定項目はありません' : '  No matching configuration entries';
+  String settingsInspectorShowing({
+    required int first,
+    required int last,
+    required int total,
+  }) =>
+      _ja ? '  $total項目中 $first–$last を表示' : '  Showing $first-$last of $total';
+  String get settingsInspectorSelectedEntry => _ja ? '選択項目' : 'Selected entry';
+  String get settingsInspectorName => _ja ? '名前' : 'Name';
+  String get settingsInspectorValue => _ja ? '値' : 'Value';
+  String get settingsInspectorPolicy => _ja ? '適用方針' : 'Policy';
+  String get settingsInspectorSource => _ja ? '出典' : 'Source';
+  String get settingsInspectorOccurrence => _ja ? '出現回数' : 'Occurrence';
+  String settingsInspectorDiagnostics({
+    required bool latestAttempt,
+    required int count,
+  }) => _ja
+      ? '診断 — ${latestAttempt ? '最新の再読み込み試行' : '有効な構成'} ($count)'
+      : 'Diagnostics — ${latestAttempt ? 'latest reload attempt' : 'effective configuration'} ($count)';
+  String get settingsInspectorNone => _ja ? '  なし' : '  None';
+  String settingsInspectorMoreDiagnostics(int count) =>
+      _ja ? '  … 他$count件の診断' : '  … $count more diagnostics';
+  String settingsInspectorReloadFailure(String failure) =>
+      _ja ? '  再読み込み失敗: $failure' : '  Reload failure: $failure';
+  String get settingsInspectorInstructions => _ja
+      ? '入力して検索    ↑↓ 選択    ⌘R 再読み込み    Esc 閉じる'
+      : 'Type to search    ↑↓ Select    ⌘R Reload    Esc Close';
+  String settingsDiagnosticSeverity(String severity) =>
+      switch ((language, severity)) {
+        (TerminalLanguage.japanese, 'WARNING') => '警告',
+        (TerminalLanguage.japanese, 'ERROR') => 'エラー',
+        _ => severity,
+      };
+  String settingsApplicationPolicy(String policy) =>
+      switch ((language, policy)) {
+        (TerminalLanguage.japanese, 'live') => '即時',
+        (TerminalLanguage.japanese, 'new-session') => '新規セッション',
+        _ => policy,
+      };
+  String settingsSourceKind(String kind) => switch ((language, kind)) {
+    (TerminalLanguage.japanese, 'default') => '既定値',
+    (TerminalLanguage.japanese, 'file') => 'ファイル',
+    (TerminalLanguage.japanese, 'command-line') => 'コマンドライン',
+    _ => kind,
+  };
+
+  String settingsOptionDescription(String name, String englishFallback) {
+    if (!_ja) return englishFallback;
+    if (name.startsWith('palette-')) {
+      final int? index = int.tryParse(name.substring('palette-'.length));
+      if (index != null && index >= 0 && index <= 15) {
+        return 'ANSIパレット色 $index。';
+      }
+    }
+    return _japaneseSettingsOptionDescriptions[name] ?? englishFallback;
+  }
 
   String _japaneseState(String value) => switch (value) {
     'disabled' => '無効',
@@ -525,4 +656,40 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
         '移動',
         '次',
       ]),
+    });
+
+final Map<String, String> _japaneseSettingsOptionDescriptions =
+    Map<String, String>.unmodifiable(<String, String>{
+      'working-directory': 'コマンドの初期作業ディレクトリ。',
+      'shell': '新しいターミナルセッションで使う実行ファイルの絶対パス。',
+      'shell-integration': 'シェル統合方針: detect、none、zsh、bash、fish、nushell。',
+      'theme': '基本テーマ: system、light、dark。',
+      'palette-foreground': 'ターミナルの既定の前景色。',
+      'palette-background': 'ターミナルの既定の背景色。',
+      'palette-cursor': 'ターミナルのカーソル色。',
+      'font-family': 'ターミナルの等幅フォント、または `system`。',
+      'font-size': 'ターミナルのフォントサイズ（ポイント）。',
+      'font-synthetic-style': '不足している太字・斜体フェイスの合成を許可するか。',
+      'window-width': 'ターミナルウインドウの初期幅（論理ポイント）。',
+      'window-height': 'ターミナルウインドウの初期高さ（論理ポイント）。',
+      'window-padding-horizontal': 'ターミナル内容の左右余白（論理ポイント）。',
+      'window-padding-vertical': 'ターミナル内容の上下余白（論理ポイント）。',
+      'quick-terminal-shortcut':
+          'クイックターミナル切り替え専用のmacOSグローバルショートカット、または `none`。',
+      'quick-terminal-screen': 'クイックターミナルを表示する画面: キーボードフォーカス、マウス、macOSメニューバー。',
+      'quick-terminal-animation-duration': 'クイックターミナル表示・非表示アニメーションの秒数。0で無効。',
+      'quick-terminal-autohide': 'ウインドウがフォーカスを失ったときクイックターミナルを自動的に隠す。',
+      'macos-app-intents': 'ショートカットに公開する引数なしのターミナル操作を許可する。',
+      'macos-notifications': 'macOSのシステム方針に従ってターミナル通知を許可する。',
+      'macos-secure-input-auto': 'フォーカス中のターミナルでechoが無効な間、セキュアキーボード入力を自動要求する。',
+      'macos-applescript': 'TCCで許可されたAppleScriptの照会とターミナル操作を許可する。',
+      'macos-secure-input-indication': '自動または手動のセキュアキーボード入力をアクセシブルに表示する。',
+      'macos-option-key': 'macOSのOptionキーを `escape` または合成 `text` として扱う。',
+      'scrollback-lines': '保持するプライマリ画面履歴の最大行数。',
+      'scrollback-bytes': '保持するプライマリ画面履歴の最大バイト数。',
+      'cursor-shape': 'ターミナルカーソルの初期形状。',
+      'cursor-blink': '初期状態でターミナルカーソルを点滅させるか。',
+      'clipboard-read': 'OSC 52クリップボード読み取り方針: deny、ask、allow。',
+      'clipboard-write': 'OSC 52クリップボード書き込み・消去方針: deny、ask、allow。',
+      'keybind': '物理キーの正確な組み合わせと操作の上書き。',
     });

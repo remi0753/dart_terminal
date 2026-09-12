@@ -52,6 +52,7 @@ import 'terminal_input/terminal_scroll_router.dart';
 import 'terminal_input/terminal_selection_autoscroll.dart';
 import 'terminal_input/terminal_selection_gesture.dart';
 import 'terminal_input/terminal_text_input_event_router.dart';
+import 'terminal_localization.dart';
 import 'terminal_native_content.dart';
 import 'terminal_native_hierarchy.dart';
 import 'terminal_notification_product.dart';
@@ -139,6 +140,7 @@ final class TerminalOptions {
     this.configurationDiagnostics = const <TerminalConfigDiagnostic>[],
     this.configurationReloadController,
     this.settingsDocumentSession,
+    this.localization,
   });
 
   factory TerminalOptions.parse(
@@ -893,6 +895,7 @@ final class TerminalOptions {
         environment: selectedEnvironment,
         currentDirectory: selectedCurrentDirectory,
       ),
+      localization: TerminalLocalization.fromEnvironment(selectedEnvironment),
     );
   }
 
@@ -924,6 +927,7 @@ final class TerminalOptions {
   final List<TerminalConfigDiagnostic> configurationDiagnostics;
   final TerminalConfigReloadController? configurationReloadController;
   final TerminalSettingsDocumentSession? settingsDocumentSession;
+  final TerminalLocalization? localization;
 }
 
 final class TerminalApplication {
@@ -1021,6 +1025,9 @@ final class TerminalApplication {
         options.runtimeWorkerCommand,
         options.initialWorkingDirectory,
         productConfiguration,
+        localization:
+            options.localization ??
+            TerminalLocalization.fromEnvironment(Platform.environment),
         configurationReloadController: options.configurationReloadController,
         settingsDocumentSession: options.settingsDocumentSession,
         runUserActionAcceptance: options.runtimeUserActionsTest,
@@ -2539,6 +2546,7 @@ final class TerminalApplication {
     RuntimeLifecycleWorkerCommand workerCommand,
     String? initialWorkingDirectory,
     TerminalProductConfiguration productConfiguration, {
+    required TerminalLocalization localization,
     TerminalConfigReloadController? configurationReloadController,
     TerminalSettingsDocumentSession? settingsDocumentSession,
     bool runUserActionAcceptance = false,
@@ -3222,7 +3230,10 @@ final class TerminalApplication {
         isLive: pane.isLive,
         terminalEchoEnabled: process.terminalEchoEnabled,
         setIndicator: (TerminalSecureKeyboardEntryIndicator indicator) {
-          owner.view.badge = appKitSecureInputBadge(indicator);
+          owner.view.badge = appKitSecureInputBadge(
+            indicator,
+            localization: localization,
+          );
         },
       );
     }
@@ -3370,6 +3381,7 @@ final class TerminalApplication {
         owner.contextMenu = TerminalAppKitContextMenuProjection.install(
           view: owner.view,
           dispatcher: dispatcher,
+          localization: localization,
           onWillRoute: (TerminalActionId id) {
             final TerminalNativeContentCell? contextCell =
                 id == TerminalActionId.quickLook
@@ -4142,7 +4154,7 @@ final class TerminalApplication {
                 (TerminalWindowState window, TerminalTabState tab) =>
                     presentationResolver.resolve(
                       tab,
-                      fallbackTitle: _productWindowTitle,
+                      fallbackTitle: localization.applicationName,
                     ),
           );
       hierarchy = createdHierarchy;
@@ -4211,6 +4223,7 @@ final class TerminalApplication {
         approve: osc52Coordinator.approve,
         deny: osc52Coordinator.deny,
         onError: recordAsynchronousError,
+        localization: localization,
       );
       final TerminalOsc52PendingRequest? startupPending =
           osc52Coordinator.pendingRequest;
@@ -4280,17 +4293,17 @@ final class TerminalApplication {
         nativePort: createdAppleScriptNativePort,
         executor: appleScriptExecutor,
         titleForTab: (TerminalTabState tab) => presentationResolver
-            .resolve(tab, fallbackTitle: _productWindowTitle)
+            .resolve(tab, fallbackTitle: localization.applicationName)
             .title,
         titleForTerminal: (PaneId paneId) {
           final TerminalPaneLocation? location = state.locationForPane(paneId);
           final TerminalTabState? tab = location == null
               ? null
               : state.tabForId(location.tabId);
-          if (tab == null) return _productWindowTitle;
+          if (tab == null) return localization.applicationName;
           return sessions[paneId]?.terminalScreenSet.metadata.windowTitle ??
               presentationResolver
-                  .resolve(tab, fallbackTitle: _productWindowTitle)
+                  .resolve(tab, fallbackTitle: localization.applicationName)
                   .title;
         },
         workingDirectoryFor: (PaneId paneId) =>
@@ -4342,7 +4355,9 @@ final class TerminalApplication {
           );
         }
       }
-      final TerminalActionCatalog catalog = TerminalActionCatalog.standard();
+      final TerminalActionCatalog catalog = TerminalActionCatalog.standard(
+        localization: localization,
+      );
       late final TerminalCommandPalettePresenter installedPalette;
       late final TerminalActionDispatcher dispatcher;
       final TerminalQuickTerminalController createdQuickTerminal =
@@ -4628,11 +4643,12 @@ final class TerminalApplication {
           onError: recordAsynchronousError,
           accessibilityPresentation:
               applicationAccessibilityProjection!.presentation,
+          localization: localization,
           runtimeStatus: () =>
-              '${createdQuickTerminal.shortcutStatus.settingsLine}    '
-              '${createdSecureKeyboardEntry.status.settingsLine}    '
-              '${appIntentsController!.status.settingsLine}    '
-              '${notificationController.status.settingsLine}',
+              '${createdQuickTerminal.shortcutStatus.settingsLineFor(localization)}    '
+              '${createdSecureKeyboardEntry.status.settingsLineFor(localization)}    '
+              '${appIntentsController!.status.settingsLineFor(localization)}    '
+              '${notificationController.status.settingsLineFor(localization)}',
         );
       }
       final TerminalProductConfiguration automationConfiguration =
@@ -4680,11 +4696,13 @@ final class TerminalApplication {
           }
         },
         onError: recordAsynchronousError,
+        localization: localization,
       );
       palettePresenter = installedPalette;
       menuProjection = TerminalAppKitMenuProjection.install(
         application: application,
         dispatcher: dispatcher,
+        localization: localization,
         checkedReaders: <TerminalActionId, TerminalMenuCheckedReader>{
           TerminalActionId.toggleSecureKeyboardEntry: () =>
               createdSecureKeyboardEntry.manualRequested,

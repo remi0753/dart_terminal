@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "application": {
     "name": "DartTerminal",
+    "displayName": "Dart Terminal",
     "executableName": "dart_terminal",
     "bundleIdentifier": "dev.dart-terminal",
     "version": "0.1.0",
@@ -44,6 +45,14 @@
     }
   ],
   "resources": [
+    "en.lproj/InfoPlist.strings",
+    "en.lproj/Localizable.strings",
+    "en.lproj/AppShortcuts.strings",
+    "en.lproj/ServicesMenu.strings",
+    "ja.lproj/InfoPlist.strings",
+    "ja.lproj/Localizable.strings",
+    "ja.lproj/AppShortcuts.strings",
+    "ja.lproj/ServicesMenu.strings",
     "resources/terminfo/78/xterm-256color",
     "resources/shell-integration/contract.json",
     "resources/shell-integration/zsh/.zshenv",

@@ -1,0 +1,14 @@
+"New Terminal Window" = "新規ターミナルウインドウ";
+"Open a new terminal window." = "新しいターミナルウインドウを開きます。";
+"New Terminal Tab" = "新規ターミナルタブ";
+"Open a new terminal tab." = "新しいターミナルタブを開きます。";
+"Toggle Quick Terminal" = "クイックターミナルを切り替え";
+"Show or hide Quick Terminal." = "クイックターミナルを表示または非表示にします。";
+"New Window" = "新規ウインドウ";
+"New Tab" = "新規タブ";
+"Quick Terminal" = "クイックターミナル";
+"This terminal action is disabled in Settings." = "このターミナル操作は設定で無効になっています。";
+"The terminal action is currently unavailable." = "このターミナル操作は現在利用できません。";
+"The terminal is busy. Try the action again." = "ターミナルは処理中です。もう一度操作してください。";
+"The terminal did not finish the action in time." = "ターミナル操作が時間内に完了しませんでした。";
+"The terminal could not complete the action." = "ターミナル操作を完了できませんでした。";

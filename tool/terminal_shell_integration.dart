@@ -121,6 +121,14 @@ void _validateManifest(Directory root) {
   final List<String> resources = (manifest['resources']! as List<Object?>)
       .cast<String>();
   final Set<String> expected = <String>{
+    'en.lproj/InfoPlist.strings',
+    'en.lproj/Localizable.strings',
+    'en.lproj/AppShortcuts.strings',
+    'en.lproj/ServicesMenu.strings',
+    'ja.lproj/InfoPlist.strings',
+    'ja.lproj/Localizable.strings',
+    'ja.lproj/AppShortcuts.strings',
+    'ja.lproj/ServicesMenu.strings',
     'resources/terminfo/78/xterm-256color',
     TerminalShellIntegrationContract.relativePath,
     for (final TerminalShellIntegrationFileRequirement required

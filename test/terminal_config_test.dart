@@ -543,6 +543,7 @@ working-directory = /from-file
           file.effectiveConfiguration!.diagnostics,
         ) &&
         file.configurationReloadController != null &&
+        file.localization?.language == TerminalLanguage.english &&
         identical(
           file.configurationReloadController!.effectiveSnapshot,
           file.effectiveConfiguration,
@@ -551,15 +552,16 @@ working-directory = /from-file
   );
   final TerminalOptions overridden = TerminalOptions.parse(
     const <String>['--config=/config', '--working-directory=/from-cli'],
-    environment: const <String, String>{},
+    environment: const <String, String>{'LANG': 'ja_JP.UTF-8'},
     configFileSystem: files,
     runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
       executable: '/usr/bin/true',
     ),
   );
   _expect(
-    overridden.initialWorkingDirectory == '/from-cli',
-    'TerminalOptions applies the schema CLI winner',
+    overridden.initialWorkingDirectory == '/from-cli' &&
+        overridden.localization?.language == TerminalLanguage.japanese,
+    'TerminalOptions applies the schema CLI winner and injected launch locale',
   );
   final _RecordingAvailabilityValidator availabilityValidator =
       _RecordingAvailabilityValidator();

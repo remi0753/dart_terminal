@@ -39,15 +39,15 @@ private enum TerminalIntentError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .disabled:
-      return "This terminal action is disabled in Settings."
+      return String(localized: "This terminal action is disabled in Settings.")
     case .unavailable:
-      return "The terminal action is currently unavailable."
+      return String(localized: "The terminal action is currently unavailable.")
     case .busy:
-      return "The terminal is busy. Try the action again."
+      return String(localized: "The terminal is busy. Try the action again.")
     case .timedOut:
-      return "The terminal did not finish the action in time."
+      return String(localized: "The terminal did not finish the action in time.")
     case .failed:
-      return "The terminal could not complete the action."
+      return String(localized: "The terminal could not complete the action.")
     }
   }
 }

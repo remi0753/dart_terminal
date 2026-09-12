@@ -16,6 +16,7 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testApplicationThemeProjectionLifecycle();
   await _testOsc52ConfirmationPresenterLifecycle();
   await _testSettingsInspectorPresenterLifecycle();
+  await _testRtlApplicationComposition();
   await _testConfiguredWindowAndPaddingProjection();
   await _testPerWindowCreationFrameProjection();
   await _testRoleAwareWindowProjection();
@@ -1056,6 +1057,129 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
     await settings.dispose();
     await palette.dispose();
     reloadController.dispose();
+    if (!terminalWindow.isClosed) terminalWindow.close();
+    terminalWindow.dispose();
+    terminalView.dispose();
+    await application.terminate();
+    await rawEvents.close();
+  }
+}
+
+Future<void> _testRtlApplicationComposition() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final TerminalLocalization rtl = TerminalLocalization.resolve('ar-EG');
+  final _SettingsMemoryFileSystem fileSystem = _SettingsMemoryFileSystem(
+    const <String, String>{'/settings.conf': 'font-size = 15\n'},
+  );
+  final TerminalConfigLoader loader = TerminalConfigLoader(
+    fileSystem: fileSystem,
+  );
+  const List<String> arguments = <String>['--config=/settings.conf'];
+  final TerminalConfigSnapshot initial = loader
+      .resolve(arguments, environment: const <String, String>{})
+      .snapshot;
+  final TerminalConfigReloadController controller =
+      TerminalConfigReloadController(
+        initialSnapshot: initial,
+        resolver: () =>
+            loader.resolve(arguments, environment: const <String, String>{}),
+      );
+  final View terminalView = View(configuration: terminalBaseViewConfiguration);
+  final Window terminalWindow = Window(
+    frame: const Rect.fromLTWH(100, 90, 640, 480),
+    title: 'Terminal',
+    configuration: terminalWindowConfiguration,
+  )..contentView = terminalView;
+  terminalWindow
+    ..show()
+    ..makeFirstResponder(terminalView);
+  final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+    catalog: TerminalActionCatalog.standard(localization: rtl),
+  );
+  final TerminalCommandPalettePresenter palette =
+      TerminalCommandPalettePresenter(
+        dispatcher: dispatcher,
+        terminalWindow: terminalWindow,
+        terminalView: terminalView,
+        localization: rtl,
+      );
+  final TerminalSettingsInspectorPresenter settings =
+      TerminalSettingsInspectorPresenter(
+        controller: controller,
+        documentSession: TerminalSettingsDocumentSession(
+          loader: loader,
+          arguments: arguments,
+          environment: const <String, String>{},
+          writer: fileSystem,
+        ),
+        focusTarget: () => TerminalSettingsInspectorFocusTarget(
+          window: terminalWindow,
+          view: terminalView,
+        ),
+        reload: () async => const TerminalActionDispatchResult(
+          id: TerminalActionId.reloadConfiguration,
+          disposition: TerminalActionDispatchDisposition.unavailable,
+        ),
+        localization: rtl,
+      );
+  try {
+    await palette.open();
+    _expect(
+      palette.activeWindow!.title == 'Command Palette' &&
+          palette.renderedText!.contains('‹ Settings…'),
+      'RTL fallback did not retain English copy and reverse the palette marker',
+    );
+    await palette.dismiss();
+
+    await settings.open();
+    final int root = bindings.handleFor(settings.activeRootSplit!);
+    final int detail = bindings.handleFor(settings.activeDetailView!);
+    final int editorStatus = bindings.handleFor(
+      settings.activeEditorStatusSplit!,
+    );
+    _expect(
+      bindings.splitViewChildren[root]!.first == detail &&
+          bindings.splitViewChildren[root]!.last == editorStatus &&
+          bindings.splitViewFractions[root] == 0.3 &&
+          settings.activeDetailView!.text.contains('Current value'),
+      'RTL Settings did not place detail before editor without changing copy fallback',
+    );
+    settings.state.toggleDetails();
+    settings.refresh();
+    _expect(
+      bindings.splitViewFractions[root] == 0.035 &&
+          settings.activeDetailView!.text.startsWith('‹'),
+      'RTL Settings collapsed detail did not stay on the leading edge',
+    );
+    _expect(
+      settings.updateAccessibilityPresentation(
+        const TerminalAccessibilityPresentation(
+          reduceMotion: false,
+          increaseContrast: true,
+          differentiateWithoutColor: true,
+        ),
+      ),
+      'RTL Settings did not accept presentation replacement',
+    );
+    final int replacedRoot = bindings.handleFor(settings.activeRootSplit!);
+    _expect(
+      bindings.splitViewChildren[replacedRoot]!.first ==
+              bindings.handleFor(settings.activeDetailView!) &&
+          bindings.splitViewChildren[replacedRoot]!.last ==
+              bindings.handleFor(settings.activeEditorStatusSplit!) &&
+          bindings.splitViewFractions[replacedRoot] == 0.035,
+      'RTL ordering or collapsed fraction was lost during live replacement',
+    );
+  } finally {
+    await settings.dispose();
+    await palette.dispose();
+    controller.dispose();
     if (!terminalWindow.isClosed) terminalWindow.close();
     terminalWindow.dispose();
     terminalView.dispose();

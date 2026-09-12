@@ -4,6 +4,7 @@ import 'terminal_config.dart';
 import 'terminal_config_reload.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_key_event.dart';
+import 'terminal_localization.dart';
 import 'terminal_settings_document.dart';
 
 enum TerminalSettingsEditorMode { normal, insert, search }
@@ -187,13 +188,15 @@ final class TerminalSettingsEditorState {
     required this.controller,
     required this.documentSession,
     this.limits = const TerminalSettingsEditorLimits(),
-  }) {
+    TerminalLocalization? localization,
+  }) : localization = localization ?? TerminalLocalization.english {
     limits.validate();
   }
 
   final TerminalConfigReloadController controller;
   final TerminalSettingsDocumentSession documentSession;
   final TerminalSettingsEditorLimits limits;
+  final TerminalLocalization localization;
 
   var _isOpen = false;
   var _mode = TerminalSettingsEditorMode.normal;
@@ -480,54 +483,53 @@ final class TerminalSettingsEditorState {
 
   String renderStatus() {
     _ensureOpen();
-    final String save = switch (_saveState) {
-      TerminalSettingsSaveState.unchanged => 'UNCHANGED',
-      TerminalSettingsSaveState.modified => 'MODIFIED',
-      TerminalSettingsSaveState.saved => 'SAVED',
-      TerminalSettingsSaveState.invalid => 'FIX ERRORS',
-      TerminalSettingsSaveState.conflict => 'FILE CHANGED',
-      TerminalSettingsSaveState.unavailable => 'SAVE UNAVAILABLE',
-      TerminalSettingsSaveState.failed => 'SAVE FAILED',
-    };
+    final String save = localization.settingsSaveState(_saveState.name);
     return switch (_mode) {
-      TerminalSettingsEditorMode.normal =>
-        'NORMAL  $save    i Insert  a Append  / Search  '
-            '] Details  ⌘S Save  Esc Close',
-      TerminalSettingsEditorMode.insert =>
-        'INSERT  $save    Esc Normal  ⌘S Save',
-      TerminalSettingsEditorMode.search =>
-        '/$_query    ↑↓ Match  Enter Select  Esc Normal',
+      TerminalSettingsEditorMode.normal => localization.settingsNormalStatus(
+        save,
+      ),
+      TerminalSettingsEditorMode.insert => localization.settingsInsertStatus(
+        save,
+      ),
+      TerminalSettingsEditorMode.search => localization.settingsSearchStatus(
+        _query,
+      ),
     };
   }
 
   String renderDetail() {
     _ensureOpen();
     final TerminalSettingsOptionOccurrence? occurrence = selectedOccurrence;
-    if (occurrence == null) return 'No setting at the cursor';
+    if (occurrence == null) return localization.settingsNoSettingAtCursor;
     final TerminalConfigOptionBase option = occurrence.option;
     final String current = _currentValue(option);
     final String draft = occurrence.draftValue(_text).isEmpty
-        ? '<empty>'
+        ? localization.settingsEmptyValue
         : occurrence.draftValue(_text);
     final String openTerminals =
         option.applicationPolicy == TerminalConfigApplicationPolicy.live
-        ? 'Change immediately'
-        : 'Keep current value';
+        ? localization.settingsChangeImmediately
+        : localization.settingsKeepCurrentValue;
     final StringBuffer buffer = StringBuffer()
       ..writeln(option.name)
       ..writeln()
-      ..writeln('Current value')
+      ..writeln(localization.settingsCurrentValue)
       ..writeln('  ${_singleLine(current)}')
-      ..writeln('Draft${occurrence.isCommented ? ' (disabled)' : ''}')
+      ..writeln(localization.settingsDraft(disabled: occurrence.isCommented))
       ..writeln('  ${_singleLine(draft)}')
-      ..writeln('Syntax')
+      ..writeln(localization.settingsSyntax)
       ..writeln('  ${option.valueSyntax}')
       ..writeln()
-      ..writeln('After save')
-      ..writeln('  Open terminals   $openTerminals')
-      ..writeln('  New terminals    Use saved value')
+      ..writeln(localization.settingsAfterSave)
+      ..writeln('  ${localization.settingsOpenTerminals}   $openTerminals')
+      ..writeln(
+        '  ${localization.settingsNewTerminals}    '
+        '${localization.settingsUseSavedValue}',
+      )
       ..writeln()
-      ..writeln(option.description);
+      ..writeln(
+        localization.settingsOptionDescription(option.name, option.description),
+      );
     final List<TerminalConfigDiagnostic> relevant = _diagnostics
         .where(
           (TerminalConfigDiagnostic diagnostic) =>
@@ -539,14 +541,16 @@ final class TerminalSettingsEditorState {
     if (relevant.isNotEmpty) {
       buffer
         ..writeln()
-        ..writeln('Issues');
+        ..writeln(localization.settingsIssues);
       for (final TerminalConfigDiagnostic diagnostic in relevant.take(3)) {
         buffer.writeln(
-          '  ${diagnostic.severity.name.toUpperCase()} '
+          '  ${localization.settingsDiagnosticSeverity(diagnostic.severity.name.toUpperCase())} '
           '${diagnostic.code}: ${_singleLine(diagnostic.message)}',
         );
         final String? hint = diagnostic.hint;
-        if (hint != null) buffer.writeln('  Fix: ${_singleLine(hint)}');
+        if (hint != null) {
+          buffer.writeln('  ${localization.settingsFix}: ${_singleLine(hint)}');
+        }
       }
     }
     final String rendered = buffer.toString();
@@ -671,11 +675,11 @@ final class TerminalSettingsEditorState {
     final TerminalConfigSnapshot snapshot = controller.effectiveSnapshot;
     if (!option.isRepeatable) {
       final Object? value = snapshot.resolvedOption(option).value;
-      return option.formatObject(value) ?? '<not set>';
+      return option.formatObject(value) ?? localization.settingsNotSetValue;
     }
     final List<TerminalResolvedConfigValue<Object?>> values = snapshot
         .occurrencesFor(option);
-    if (values.isEmpty) return '<not set>';
+    if (values.isEmpty) return localization.settingsNotSetValue;
     return values
         .map(
           (TerminalResolvedConfigValue<Object?> value) =>

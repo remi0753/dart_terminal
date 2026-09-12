@@ -316,3 +316,93 @@ injectable localization boundary with English and Japanese catalogs.
   its menu source hash changed; criteria/counts stayed fixed. The exact full
   `make test` then passed all gates, including format/analyze and bounded
   security stress. No duration-only test was run.
+- 2026-09-13: after commit `d1809f7` (`Localize native command surfaces`),
+  reread the roadmap and began the Settings/application/RTL/resource child from
+  a clean tree. The launch parser already owns an immutable injected environment
+  map but did not retain its locale decision, so this child will select one
+  `TerminalLocalization` during `TerminalOptions.parse` and inject that same
+  immutable value into the production action catalog, native menu/context menu,
+  Command Palette, OSC 52 confirmation, Settings, runtime statuses, and Secure
+  Input badge. Machine lines and acceptance-only fixtures remain unchanged.
+- 2026-09-13: inventoried both Settings render paths. The active document editor
+  owns mode/save status, option detail headings, fallback values, issue/fix
+  labels, the window fallback title, and the collapsed detail rail; the retained
+  effective-configuration inspector owns its complete search/result/diagnostic
+  shell. Schema option names, syntax, canonical values, paths, codes, and
+  diagnostic payloads are stable data. Product option descriptions are static
+  UI and therefore need a Japanese projection keyed by their stable option
+  names, with the original description as the defensive English fallback.
+- 2026-09-13: RTL remains application composition only. The Settings horizontal
+  split will place detail first and editor/status second, invert the published
+  split fraction/minimum extents, and use a left-pointing selection/detail
+  marker. Command Palette and the retained inspector use the same directional
+  marker. Terminal pane order, split action semantics, cell coordinates, PTY
+  text, selection, and renderer layout remain LTR and unchanged.
+- 2026-09-13: inspected bundle construction and Apple platform guidance. The
+  generic runtime already copies declared files while preserving relative
+  paths, so product-owned `en.lproj`/`ja.lproj` strings resources can be staged
+  directly. Finder Services require `ServicesMenu.strings` keyed by each default
+  menu title; bundle naming uses `InfoPlist.strings`; App Intent titles,
+  descriptions, shortcut titles/phrases, and localized errors use product
+  `Localizable.strings`/`AppShortcuts.strings`. The base Info.plist currently has
+  no `CFBundleDisplayName`; a minimal generic manifest `displayName` field is
+  therefore required in `dart_macos_runtime`. It will contain no product text or
+  terminal naming: this repository supplies `Dart Terminal` and all localized
+  resource values.
+- 2026-09-13: implemented the generic optional `application.displayName`
+  manifest field in `dart_appkit`; omission preserves `application.name`, while
+  an injected value becomes XML-escaped `CFBundleDisplayName`. Parser default
+  and override tests plus Developer JIT bundle inspection passed. The focused
+  runtime suite and the exact adjacent `make test` gate passed, including the
+  generic ownership audit, native bridge, Dart API, runtime builder, launcher,
+  example, current FFI, and legacy fallback. No product string or product rule
+  was added to the generic repository.
+- 2026-09-13: the first five focused product tests reached the new RTL native
+  lifecycle assertion after localization/editor/inspector tests passed. Its
+  expected selected Command Palette row incorrectly named the palette-opening
+  action, which is deliberately excluded from palette results; the actual first
+  visible action is Settings. Corrected only that test expectation to retain
+  the intended directional-marker assertion.
+- 2026-09-13: after all focused tests, `.strings` plist syntax checks, and the
+  aggregate product test passed, the first complete gate reached the existing
+  shell-integration resource audit and correctly rejected the eight newly
+  declared localization resources as untracked extras. Extended that exact-set
+  manifest contract with the two locale/four resource families; shell and
+  terminfo paths and hashes remain unchanged.
+- 2026-09-13: completed product application wiring. `TerminalOptions.parse`
+  now resolves locale once from the same immutable injected environment used by
+  configuration and passes that instance through the normal hierarchy. The
+  action catalog, main/context menus, Command Palette, OSC 52 confirmation,
+  Settings, four runtime-status producers, Secure Input badge, and default
+  window/AppleScript titles all consume it. Stable action/config identifiers,
+  machine output, paths, terminal content, and diagnostics payloads remain
+  untranslated.
+- 2026-09-13: completed both Settings projections. English behavior remains the
+  compatibility default; Japanese covers editor modes/save states, detail
+  labels/outcomes, diagnostic shell, effective-config inspector, and all 47
+  schema entries (31 named descriptions plus 16 bounded ANSI palette entries).
+  Localized descriptions participate in Settings search while exact option
+  names, syntax, values, sources, diagnostic codes/messages, and file content
+  remain visible as data.
+- 2026-09-13: implemented RTL application composition without changing the
+  terminal model. Unsupported `ar-EG` correctly uses English fallback strings,
+  swaps Settings detail/editor native children, inverts expanded/collapsed
+  fractions and minimum extents, and uses a left-pointing selection/detail
+  marker. Native tests cover initial layout, collapsed rail, Command Palette,
+  and live high-contrast view replacement; terminal pane/cell order is not
+  modified.
+- 2026-09-13: added complete `en.lproj` and `ja.lproj` product resources for
+  `InfoPlist.strings`, `Localizable.strings`, `AppShortcuts.strings`, and
+  `ServicesMenu.strings`. App Intent error descriptions now use Foundation
+  localized lookup. Tests require identical nonempty key sets, exact Finder
+  Service keys, complete Swift declaration coverage, and the manifest's exact
+  eight resources. All eight files passed `plutil -lint`.
+- 2026-09-13: final bounded verification passed: `dart analyze`; localization,
+  Settings editor/inspector, native hierarchy/RTL, and option tests; aggregate
+  `test/run_tests.dart`; the exact `make test` gate; and Developer JIT plus
+  Release AOT build/audit. The first complete gate's tracked-resource failure
+  was fixed and the rerun passed. Both built bundles contain the injected
+  `CFBundleDisplayName` and byte-identical copies of every locale resource.
+  Phase 7 acceptance hashes changed only for the modified application/native
+  hierarchy sources and retained 4 criteria, 13 source references, 10 unit
+  tests, 4 integrations, and 8 UI assertions. No duration-only soak was run.
