@@ -10,7 +10,141 @@ void runTerminalLocalizationTests() {
   _testLocaleSelectionAndDirection();
   _testActionCatalogCompletenessAndStablePolicy();
   _testPresenterAndStatusMessages();
+  _testEnumBackedCatalogCompleteness();
   _testSettingsCatalogAndResourceDeclarations();
+}
+
+void _testEnumBackedCatalogCompleteness() {
+  final TerminalLocalization japanese = TerminalLocalization.japanese;
+  for (final TerminalMenuMessageId id in TerminalMenuMessageId.values) {
+    _expect(
+      japanese.menuTitle(id).trim().isNotEmpty &&
+          TerminalLocalization.english.menuTitle(id).trim().isNotEmpty,
+      'both menu catalogs cover ${id.name}',
+    );
+  }
+  for (final TerminalSettingsSaveState state
+      in TerminalSettingsSaveState.values) {
+    _expectLocalizedState(
+      japanese.settingsSaveState(state.name),
+      state.name,
+      'Settings save state',
+    );
+  }
+  for (final TerminalQuickTerminalShortcutFailure failure
+      in TerminalQuickTerminalShortcutFailure.values) {
+    _expectLocalizedState(
+      japanese.quickTerminalShortcutFailed(
+        failure: failure.name,
+        requested: 'command-f18',
+        retained: null,
+      ),
+      failure.name,
+      'Quick Terminal failure',
+    );
+  }
+  for (final TerminalSecureKeyboardEntryMode mode
+      in TerminalSecureKeyboardEntryMode.values) {
+    _expectLocalizedState(
+      japanese.secureKeyboardStatus(
+        mode: mode.name,
+        ownership: 'owned',
+        automatic: true,
+        indicator: true,
+      ),
+      mode.name,
+      'Secure Input mode',
+    );
+  }
+  for (final String ownership in const <String>[
+    'owned',
+    'yielded',
+    'released',
+  ]) {
+    _expectLocalizedState(
+      japanese.secureKeyboardStatus(
+        mode: 'automatic',
+        ownership: ownership,
+        automatic: true,
+        indicator: true,
+      ),
+      ownership,
+      'Secure Input ownership',
+    );
+  }
+  for (final AppKitUserNotificationAuthorizationStatus authorization
+      in AppKitUserNotificationAuthorizationStatus.values) {
+    _expectLocalizedState(
+      japanese.notificationStatus(
+        enabled: true,
+        authorization: authorization.name,
+        pending: 0,
+        responses: 0,
+        last: TerminalNotificationProductFailure.none.name,
+        stopped: false,
+      ),
+      authorization.name,
+      'notification authorization',
+    );
+  }
+  for (final TerminalNotificationProductFailure failure
+      in TerminalNotificationProductFailure.values) {
+    _expectLocalizedState(
+      japanese.notificationStatus(
+        enabled: true,
+        authorization:
+            AppKitUserNotificationAuthorizationStatus.authorized.name,
+        pending: 0,
+        responses: 0,
+        last: failure.name,
+        stopped: false,
+      ),
+      failure.name,
+      'notification failure',
+    );
+  }
+  for (final String availability in const <String>[
+    'stopped',
+    'ready',
+    'disabled',
+  ]) {
+    _expectLocalizedState(
+      japanese.appIntentsStatus(
+        enabled: true,
+        availability: availability,
+        pending: 0,
+        completed: 0,
+        rejected: 0,
+        failed: 0,
+        last: TerminalAppIntentsProductFailure.none.name,
+      ),
+      availability,
+      'App Intents availability',
+    );
+  }
+  for (final TerminalAppIntentsProductFailure failure
+      in TerminalAppIntentsProductFailure.values) {
+    _expectLocalizedState(
+      japanese.appIntentsStatus(
+        enabled: true,
+        availability: 'ready',
+        pending: 0,
+        completed: 0,
+        rejected: 0,
+        failed: 0,
+        last: failure.name,
+      ),
+      failure.name,
+      'App Intents failure',
+    );
+  }
+}
+
+void _expectLocalizedState(String output, String raw, String kind) {
+  _expect(
+    output.trim().isNotEmpty && !output.contains(raw),
+    'Japanese $kind catalog covers $raw',
+  );
 }
 
 void _testSettingsCatalogAndResourceDeclarations() {

@@ -104,6 +104,7 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	terminal-parser-trace terminal-parser-trace-check \
 	configuration-reference configuration-reference-check \
 	keybind-action-reference keybind-action-reference-check \
+	terminal-localization-check \
 	phase7-appkit-acceptance phase7-appkit-acceptance-check \
 	terminal-compatibility-regressions-check terminal-compatibility-regression-coverage terminal-compatibility-regression-coverage-check \
 	product-damage-benchmark-build product-damage-benchmark \
@@ -159,6 +160,7 @@ help:
 	@echo "  make configuration-reference-check  Reject stale configuration/CLI documentation"
 	@echo "  make keybind-action-reference     Regenerate keybinding/action documentation"
 	@echo "  make keybind-action-reference-check  Reject stale keybinding/action documentation"
+	@echo "  make terminal-localization-check    Reject static UI leaks and incomplete resources"
 	@echo "  make phase7-appkit-acceptance    Regenerate the Phase 7 AppKit test inventory"
 	@echo "  make phase7-appkit-acceptance-check  Reject stale Phase 7 AppKit test evidence"
 	@echo "  make terminal-compatibility-regressions-check  Replay byte-level compatibility fixes"
@@ -509,7 +511,10 @@ terminal-shell-integration: dependencies
 terminal-shell-integration-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_shell_integration.dart --check
 
-test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
+terminal-localization-check: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_localization_audit.dart
+
+test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart

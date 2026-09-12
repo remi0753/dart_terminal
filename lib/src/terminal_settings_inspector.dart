@@ -132,13 +132,8 @@ final class TerminalSettingsInspectorState {
 
   List<TerminalEffectiveConfigEntry> get results => _results;
   List<TerminalConfigDiagnostic> get diagnostics => _diagnostics;
-  String get diagnosticContext => _latestDiagnosticAttempt
-      ? (localization.language == TerminalLanguage.japanese
-            ? '最新の再読み込み試行'
-            : 'latest reload attempt')
-      : (localization.language == TerminalLanguage.japanese
-            ? '有効な構成'
-            : 'effective configuration');
+  String get diagnosticContext =>
+      localization.settingsInspectorDiagnosticContext(_latestDiagnosticAttempt);
   String? get lastFailure => _lastFailure;
   TerminalEffectiveConfigEntry? get selectedEntry =>
       _results.isEmpty ? null : _results[_selectedIndex];

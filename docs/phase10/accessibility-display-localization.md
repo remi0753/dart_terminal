@@ -406,3 +406,59 @@ injectable localization boundary with English and Japanese catalogs.
   Phase 7 acceptance hashes changed only for the modified application/native
   hierarchy sources and retained 4 criteria, 13 source references, 10 unit
   tests, 4 integrations, and 8 UI assertions. No duration-only soak was run.
+- 2026-09-13: after commit `76119ba` (`Localize application settings and
+  resources`), reread the roadmap and began the final localization audit child
+  from a clean tree. This child adds no new UI behavior. Its scope is a
+  deterministic static leak audit for the product-owned presenter surfaces,
+  production localization-injection wiring, and the declared English/Japanese
+  bundle resources, plus exhaustive tests for every current enum-backed status
+  and catalog entry. Stable identifiers, command/machine output, diagnostic
+  payloads, PTY content, and isolated runtime-test probe titles are explicitly
+  outside the translated UI boundary.
+- 2026-09-13: the initial source inventory found one remaining product display
+  literal outside the catalog: the compatibility-only default tab title in
+  `terminal_native_hierarchy.dart`. Normal application wiring already injects a
+  localized title builder, but the fallback will now obtain the product name
+  from the English catalog as well. The similarly named resource and shutdown
+  fault windows in `terminal_application.dart` exist only in bounded runtime
+  probes, while other matches there are acceptance assertions; neither is a
+  production presenter leak.
+- 2026-09-13: the first focused audit invocation in the restricted sandbox was
+  blocked before execution by the Dart analytics session timestamp outside the
+  repository, so verification uses the normal approved Dart environment. The
+  first real audit then identified `commandPaletteUnavailable` inside a string
+  interpolation as though the identifier itself were rendered copy. Updated
+  the literal scanner to remove `$identifier` and `${expression}` regions
+  before comparing catalog phrases; literal portions of interpolated UI remain
+  covered.
+- 2026-09-13: focused catalog and audit tests passed. The first `dart analyze`
+  run then reported only the new aggregate test import ordering; sorted the two
+  localization test imports alphabetically without changing execution order.
+- 2026-09-13: the final application-wide literal classification found the old
+  single-window compatibility path still used a private `Dart Terminal`
+  constant for its native title and terminal-title reset acceptance. Replaced
+  it with the same once-selected localization instance used by the normal
+  hierarchy, and threaded its catalog-owned application name through the
+  bounded display acceptance helper. Human-readable stdout lifecycle sentences
+  remain developer/test output rather than native UI; acceptance assertion
+  copy and the two isolated probe window titles likewise remain outside the
+  production presenter audit.
+- 2026-09-13: completed the static guard as `terminal-localization-check` and
+  made it part of the default test gate. It scans 12 product presentation/wiring
+  owners, rejects catalog phrases in presenter literals while ignoring
+  interpolation expressions, requires the eight production injection sites,
+  and requires the exact two-locale/four-family resource layout. It also checks
+  21 paired nonempty resource keys, Japanese values, Finder Service titles,
+  bundle-name keys, and Swift App Intent/shortcut declarations. Unit coverage
+  proves a direct literal is rejected and a comment/identifier is ignored.
+- 2026-09-13: catalog completeness now iterates every action, menu, Settings
+  save state, Quick Terminal failure, Secure Input mode/ownership,
+  notification authorization/failure, App Intent availability/failure, and all
+  47 configuration descriptions. The final focused audit reported
+  `sources=12 resource_families=4 resource_keys=21`; focused catalog/audit tests
+  passed. The regenerated Phase 7 evidence retained 4 criteria, 13 source
+  references, 10 unit tests, 4 integrations, and 8 UI assertions. The final
+  exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passed format,
+  analysis, all native capability/resource/compatibility checks, and the full
+  aggregate Dart suite. Duration-only soak was intentionally not run under the
+  user's priority instruction and is not a blocker.

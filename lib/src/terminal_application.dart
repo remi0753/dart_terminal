@@ -933,11 +933,13 @@ final class TerminalOptions {
 final class TerminalApplication {
   const TerminalApplication({this.options = const TerminalOptions()});
 
-  static const String _productWindowTitle = 'Dart Terminal';
-
   final TerminalOptions options;
 
   Future<void> run() async {
+    final TerminalLocalization localization =
+        options.localization ??
+        TerminalLocalization.fromEnvironment(Platform.environment);
+    final String productWindowTitle = localization.applicationName;
     final RuntimeLifecycleScenario scenario = options.runtimeLifecycleScenario;
     _writeLifecycleEvent(scenario, 'root-start', 0);
     TerminalRendererMacos.initialize();
@@ -1025,9 +1027,7 @@ final class TerminalApplication {
         options.runtimeWorkerCommand,
         options.initialWorkingDirectory,
         productConfiguration,
-        localization:
-            options.localization ??
-            TerminalLocalization.fromEnvironment(Platform.environment),
+        localization: localization,
         configurationReloadController: options.configurationReloadController,
         settingsDocumentSession: options.settingsDocumentSession,
         runUserActionAcceptance: options.runtimeUserActionsTest,
@@ -1111,7 +1111,7 @@ final class TerminalApplication {
       final Window createdWindow =
           Window(
               frame: const Rect.fromLTWH(100, 90, 920, 580),
-              title: _productWindowTitle,
+              title: productWindowTitle,
               configuration: terminalWindowConfiguration,
             )
             ..contentView = createdContentView
@@ -1204,14 +1204,14 @@ final class TerminalApplication {
             final TerminalTabState? tab = windowPresentationTab;
             final TerminalTabPresentation presentation =
                 resolver != null && tab != null
-                ? resolver.resolve(tab, fallbackTitle: _productWindowTitle)
+                ? resolver.resolve(tab, fallbackTitle: productWindowTitle)
                 : TerminalTabPresentation(
                     title:
                         terminalSession
                             ?.terminalScreenSet
                             .metadata
                             .windowTitle ??
-                        _productWindowTitle,
+                        productWindowTitle,
                     color: null,
                     representedFilePath: null,
                   );
@@ -2218,6 +2218,7 @@ final class TerminalApplication {
               createdSelectionOwner,
               scrollObservation,
               hyperlinkObservation,
+              productWindowTitle,
             );
           } else if (options.runtimeClipboardTest) {
             await _exerciseClipboardProduct(
@@ -11926,6 +11927,7 @@ keybind = control+k=pane.focus-next
     _TerminalSelectionProductOwner selectionOwner,
     _TerminalScrollProductObservation scrollObservation,
     _TerminalHyperlinkProductObservation hyperlinkObservation,
+    String fallbackWindowTitle,
   ) async {
     const String prompt = '__DT_DISPLAY_PROMPT__ ';
     const String colorMarker = '__DT_COLOR__';
@@ -12017,6 +12019,7 @@ keybind = control+k=pane.focus-next
       session,
       pane,
       window,
+      fallbackWindowTitle,
     );
     final bool cursorColor = await _exerciseCursorColorPresentation(
       session,
@@ -12266,6 +12269,7 @@ keybind = control+k=pane.focus-next
     TerminalSession session,
     TerminalPane pane,
     Window window,
+    String fallbackWindowTitle,
   ) async {
     const String nativeTitle = '__DT_NATIVE_TITLE__';
     const String temporaryTitle = '__DT_TEMP_TITLE__';
@@ -12309,7 +12313,7 @@ keybind = control+k=pane.focus-next
       session,
       window,
       expectedMetadata: null,
-      expectedNative: _productWindowTitle,
+      expectedNative: fallbackWindowTitle,
       expectedRepresentedFilePath: null,
     );
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);

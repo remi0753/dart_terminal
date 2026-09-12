@@ -108,6 +108,15 @@ final class TerminalLocalization {
   final TerminalLanguage language;
   final TerminalTextDirection textDirection;
 
+  static const String englishSecureAutomaticBadgeText = 'SECURE AUTO';
+  static const String englishSecureManualBadgeText = 'SECURE MANUAL';
+  static const String englishSecureAutomaticBadgeLabel =
+      'Secure Keyboard Entry — Automatic';
+  static const String englishSecureManualBadgeLabel =
+      'Secure Keyboard Entry — Manual';
+  static const String englishSecureBadgeHelp =
+      'Keyboard input is protected from other applications.';
+
   bool get usesFallbackCatalog {
     final String raw = requestedLocale ?? '';
     final String languageTag = raw
@@ -242,13 +251,16 @@ final class TerminalLocalization {
 
   String secureBadgeText({required bool automatic}) => _ja
       ? (automatic ? '保護 自動' : '保護 手動')
-      : (automatic ? 'SECURE AUTO' : 'SECURE MANUAL');
+      : (automatic
+            ? englishSecureAutomaticBadgeText
+            : englishSecureManualBadgeText);
   String secureBadgeLabel({required bool automatic}) => _ja
       ? 'セキュアキーボード入力 — ${automatic ? '自動' : '手動'}'
-      : 'Secure Keyboard Entry — ${automatic ? 'Automatic' : 'Manual'}';
-  String get secureBadgeHelp => _ja
-      ? 'キーボード入力は他のアプリケーションから保護されています。'
-      : 'Keyboard input is protected from other applications.';
+      : (automatic
+            ? englishSecureAutomaticBadgeLabel
+            : englishSecureManualBadgeLabel);
+  String get secureBadgeHelp =>
+      _ja ? 'キーボード入力は他のアプリケーションから保護されています。' : englishSecureBadgeHelp;
 
   String get settingsWindowTitle => _ja ? '設定' : 'Settings';
   String settingsSaveState(String state) => switch ((language, state)) {
@@ -336,8 +348,11 @@ final class TerminalLocalization {
     required bool latestAttempt,
     required int count,
   }) => _ja
-      ? '診断 — ${latestAttempt ? '最新の再読み込み試行' : '有効な構成'} ($count)'
-      : 'Diagnostics — ${latestAttempt ? 'latest reload attempt' : 'effective configuration'} ($count)';
+      ? '診断 — ${settingsInspectorDiagnosticContext(latestAttempt)} ($count)'
+      : 'Diagnostics — ${settingsInspectorDiagnosticContext(latestAttempt)} ($count)';
+  String settingsInspectorDiagnosticContext(bool latestAttempt) => _ja
+      ? (latestAttempt ? '最新の再読み込み試行' : '有効な構成')
+      : (latestAttempt ? 'latest reload attempt' : 'effective configuration');
   String get settingsInspectorNone => _ja ? '  なし' : '  None';
   String settingsInspectorMoreDiagnostics(int count) =>
       _ja ? '  … 他$count件の診断' : '  … $count more diagnostics';

@@ -1280,11 +1280,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] accessibility preference／UI text inventoryとtyped contractを確定する
   - [x] `dart_appkit`の汎用accessibility display preference snapshot／event substrate
   - [x] Reduce Motion／Increase Contrast／Differentiate Without Colorの製品投影
-  - [ ] English／Japanese catalog、locale fallback、RTL application UI投影
+  - [x] English／Japanese catalog、locale fallback、RTL application UI投影
     - [x] locale／direction model、typed catalog基盤、action metadataを実装する
     - [x] menu／palette／confirmation／status UIをcatalogへ移行する
     - [x] Settings／application UI、RTL composition、resource宣言を移行する
-    - [ ] static UI leak auditとcatalog completeness検証で子項目を完了する
+    - [x] static UI leak auditとcatalog completeness検証で子項目を完了する
   - [ ] 両runtime受け入れ、文書／matrix更新、Phase 10完了判定
 - [ ] terminal inspector と diagnostics bundle
 

@@ -2,6 +2,7 @@ import 'package:dart_appkit/dart_appkit.dart';
 
 import 'terminal_appkit_policy.dart';
 import 'terminal_application_state.dart';
+import 'terminal_localization.dart';
 import 'terminal_pane.dart';
 import 'terminal_restoration.dart';
 import 'terminal_tab_presentation.dart';
@@ -1224,7 +1225,9 @@ final class TerminalNativeHierarchyAdapter {
     TerminalWindowState window,
     TerminalTabState tab,
   ) => TerminalTabPresentation(
-    title: 'Dart Terminal — ${window.id}:${tab.id}',
+    title:
+        '${TerminalLocalization.english.applicationName} — '
+        '${window.id}:${tab.id}',
     color: null,
     representedFilePath: null,
   );

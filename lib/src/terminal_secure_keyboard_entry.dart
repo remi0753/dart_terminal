@@ -441,15 +441,15 @@ final class TerminalSecureKeyboardEntryController {
 }
 
 const ViewBadge terminalSecureKeyboardEntryAutomaticBadge = ViewBadge(
-  text: 'SECURE AUTO',
-  accessibilityLabel: 'Secure Keyboard Entry — Automatic',
-  accessibilityHelp: 'Keyboard input is protected from other applications.',
+  text: TerminalLocalization.englishSecureAutomaticBadgeText,
+  accessibilityLabel: TerminalLocalization.englishSecureAutomaticBadgeLabel,
+  accessibilityHelp: TerminalLocalization.englishSecureBadgeHelp,
 );
 
 const ViewBadge terminalSecureKeyboardEntryManualBadge = ViewBadge(
-  text: 'SECURE MANUAL',
-  accessibilityLabel: 'Secure Keyboard Entry — Manual',
-  accessibilityHelp: 'Keyboard input is protected from other applications.',
+  text: TerminalLocalization.englishSecureManualBadgeText,
+  accessibilityLabel: TerminalLocalization.englishSecureManualBadgeLabel,
+  accessibilityHelp: TerminalLocalization.englishSecureBadgeHelp,
 );
 
 ViewBadge? appKitSecureInputBadge(
