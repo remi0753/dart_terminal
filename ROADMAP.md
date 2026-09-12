@@ -1313,7 +1313,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] distribution inventory、thin／Universal bundle contract
   - [x] `dart_macos_runtime`の汎用target-architecture thin Release AOT build
-  - [ ] `dart_macos_runtime`の汎用atomic Universal release assembly
+  - [x] `dart_macos_runtime`の汎用atomic Universal release assembly
   - [ ] product thin／Universal build、resource audit、runtime受け入れ、親項目完了判定
 - [ ] Developer ID signing、hardened runtime、notarization
 - [ ] update feed、署名検証、rollback

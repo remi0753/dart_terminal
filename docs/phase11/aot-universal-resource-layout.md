@@ -302,3 +302,48 @@ begin until all four children and this parent are complete.
   exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` gates passed after the
   commit. The dependency milestone is therefore complete; no duration-only
   validation was needed or used as a blocker.
+- 2026-09-13: after main milestone commit `67ce838`, reread ROADMAP with both
+  worktrees clean. The first incomplete item is the generic atomic Universal
+  assembler child. Reconfirmed that its scope is only two-thin validation,
+  architecture-neutral equality, all-code merging, deterministic evidence,
+  nested/outer ad-hoc signing, strict verification, and atomic last-good
+  publication; product build targets and product assertions remain in the
+  following child.
+- 2026-09-13: implemented the adjacent generic Universal CLI with exactly two
+  repeated thin inputs and one distinct `.app` output. It identifies slice
+  roles from schema-1 Release AOT evidence rather than argument order, rejects
+  input/output overlap and every symlink, compares exact case-fold-safe entry
+  inventories, permissions, neutral file sizes and SHA-256 hashes, and rejects
+  executable or Mach-O files outside the manifest-derived code inventory.
+- 2026-09-13: the assembler validates each thin signature and exact single
+  architecture, normalizes only the architecture-derived App Intents triple
+  and code byte count when comparing application contracts, then merges every
+  declared host, AOT payload, helper, Engine, asset, capability, and App
+  Intents image. It revalidates exact `arm64 x86_64` slices and non-system
+  dependency paths, writes path-free deterministic schema-2 evidence, signs
+  all nested code before the outer app, verifies deeply and strictly, and uses
+  same-directory staging plus a restoration backup for atomic last-good
+  publication.
+- 2026-09-13: added standalone fixture/fault coverage for both thin input
+  orders, deterministic evidence, successful old-output replacement, distinct
+  and non-overlapping paths, output symlinks, resource/plist/manifest drift,
+  missing/extra entries, input symlinks, undeclared Mach-O, wrong thin/merged
+  slices, invalid thin signatures, merge failure, absolute dependency, signing
+  failure, and preservation of an existing output. Package analysis and all
+  nine assembler test groups passed.
+- 2026-09-13: bounded real-input validation built a fresh arm64 thin product
+  after the sandboxed Metal compiler cache write was correctly retried outside
+  the sandbox. The first real Universal attempt exposed that `otool -L` emits
+  one absolute-path heading per architecture for a fat image; dependency
+  parsing now considers only indented load-command rows, with a two-heading
+  fixture regression. The corrected assembler merged and signed all eight
+  real code entries successfully. Reversing thin input order and replacing the
+  existing output reproduced the exact Universal manifest SHA-256
+  `ed0e340e635fd152c3d6bee4001ab40677325625e89c0625bc7ddf4c0a533d9b`;
+  strict signature/plist checks passed and no staging/backup directory remained.
+- 2026-09-13: the adjacent exact full gate passed with
+  `GENERIC_REPOSITORY_AUDIT_PASS` and no forbidden product/`terminal` name in
+  any added line or new file. Committed the generic assembler as `f3e7715`
+  (`Add atomic Universal application assembly`). The exact main
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate also passed against
+  that committed dependency, completing the generic Universal milestone.
