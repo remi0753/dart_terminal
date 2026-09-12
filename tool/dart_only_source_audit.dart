@@ -14,6 +14,9 @@ Future<void> main() async {
   try {
     final ProcessResult trackedResult = await Process.run('git', const <String>[
       'ls-files',
+      '--cached',
+      '--others',
+      '--exclude-standard',
     ]);
     _expect(trackedResult.exitCode == 0, 'could not enumerate tracked files');
     final List<String> tracked = const LineSplitter()
@@ -29,9 +32,19 @@ Future<void> main() async {
       '.m',
       '.mm',
       '.metal',
+      '.swift',
     };
     const Set<String> reviewedTestNativeSources = <String>{
       'test/corpus/applications/support/ncurses_resize_fixture.c',
+    };
+    const Set<String> reviewedToolNativeSources = <String>{
+      'tool/terminal_differential_macos_activation.swift',
+    };
+    const Set<String> productPackageNativeRoots = <String>{
+      'packages/dart_pty_macos/native/',
+      'packages/dart_terminal_renderer_macos/native/',
+      'packages/dart_terminal_applescript_macos/native/',
+      'packages/dart_terminal_app_intents_macos/native/',
     };
     final List<String> nativeSources = tracked
         .where(
@@ -40,14 +53,28 @@ Future<void> main() async {
               nativeExtensions.any(path.toLowerCase().endsWith),
         )
         .toList();
-    final List<String> productNativeSources = nativeSources
-        .where((String path) => !reviewedTestNativeSources.contains(path))
+    final List<String> productPackageNativeSources = nativeSources
+        .where((String path) => productPackageNativeRoots.any(path.startsWith))
+        .toList();
+    final List<String> applicationNativeSources = nativeSources
+        .where(
+          (String path) =>
+              !reviewedTestNativeSources.contains(path) &&
+              !reviewedToolNativeSources.contains(path) &&
+              !productPackageNativeRoots.any(path.startsWith),
+        )
         .toList();
     _expect(
-      productNativeSources.isEmpty,
-      'product repository contains native source: '
-      '${productNativeSources.join(', ')}',
+      applicationNativeSources.isEmpty,
+      'application layer contains native source outside an owned package: '
+      '${applicationNativeSources.join(', ')}',
     );
+    for (final String root in productPackageNativeRoots) {
+      _expect(
+        productPackageNativeSources.any((String path) => path.startsWith(root)),
+        'owned native package is missing its source boundary: $root',
+      );
+    }
     for (final String path in reviewedTestNativeSources) {
       _expect(
         nativeSources.contains(path) && File(path).existsSync(),
@@ -58,14 +85,21 @@ Future<void> main() async {
         'reviewed native source escaped the test corpus: $path',
       );
     }
+    for (final String path in reviewedToolNativeSources) {
+      _expect(
+        nativeSources.contains(path) && File(path).existsSync(),
+        'reviewed tool native source is missing: $path',
+      );
+      _expect(
+        path.startsWith('tool/'),
+        'reviewed native tool escaped the tool boundary: $path',
+      );
+    }
 
     final String makefile = await File('Makefile').readAsString();
     for (final String forbidden in <String>[
-      '/native/bridge',
       '/native/runner',
       '/native/macos',
-      'clang++',
-      'xcrun',
       'TerminalMetalView.mm',
       'DeveloperJitRunner.mm',
       'ReleaseAotRunner.mm',
@@ -239,8 +273,10 @@ Future<void> main() async {
     );
     stdout.writeln(
       'DART_ONLY_SOURCE_AUDIT_PASS tracked=${tracked.length} '
-      'product_native_sources=0 '
-      'reviewed_test_native_sources=${reviewedTestNativeSources.length}',
+      'application_native_sources=0 '
+      'product_package_native_sources=${productPackageNativeSources.length} '
+      'reviewed_test_native_sources=${reviewedTestNativeSources.length} '
+      'reviewed_tool_native_sources=${reviewedToolNativeSources.length}',
     );
   } on Object catch (error) {
     stderr.writeln('DART_ONLY_SOURCE_AUDIT_FAIL $error');

@@ -708,11 +708,13 @@ malformed/late event、double dispose、worker crash を封じ込め、最終 na
 Universal、Intel-native の再受け入れは、ROADMAP 上の低優先 follow-up です。
 
 Phase 0 の debug/JIT、release-AOT、worker-isolate、PTY、Metal、CoreText の native
-実装は歴史的な feasibility evidence として `docs/phase0` から参照します。製品・bundle
-build path には native source とその旧 build target を残していません。Phase 6 の外部
-application比較で使ったreview済みncurses fixture sourceだけは、prebuilt fixtureの来歴を
-固定するtest corpusとして保持し、製品へcompile/link/bundleしません。parser/benchmark
-などの Dart-only harness は後続実装の比較資料として残しています。
+実装は歴史的な feasibility evidence として `docs/phase0` から参照します。applicationの
+`bin/`／`lib/` とruntime host buildはDart-onlyで、native実装は製品所有の
+`packages/dart_pty_macos`、`packages/dart_terminal_renderer_macos`、
+`packages/dart_terminal_applescript_macos`、`packages/dart_terminal_app_intents_macos`
+だけに閉じています。Phase 6 の外部application比較で使ったreview済みncurses fixtureと
+macOS activation helperはtest/tool専用で、製品bundleへcompile/linkしません。
+parser/benchmarkなどの Dart-only harness は後続実装の比較資料として残しています。
 
 個別の再現方法と測定結果は [`docs/phase0`](docs/phase0)、設計判断は
 [`docs/adr`](docs/adr)、runtime matrix と Universal assembly の契約は

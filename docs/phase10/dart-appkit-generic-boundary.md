@@ -342,3 +342,25 @@ the consuming application in Developer JIT and Release AOT modes. Re-run the
 generic ownership audit on the committed source, inspect both diffs/worktrees,
 and close the parent only if every ownership and runtime acceptance condition
 passes with no residual untracked output or serious blocker.
+
+- 2026-09-13: the generic repository's exact `make test` passed, including its
+  committed 131-path ownership audit. The product repository's exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` also passed with all four
+  package gates, 283-file format, analysis, compatibility, and security stress.
+- The first final `make runtime-verify` then passed the repeated product full
+  gate but correctly stopped at `runtime-source-check`: the audit still encoded
+  the pre-transfer rule that no native source could exist anywhere in the
+  product repository. The four newly product-owned package roots were therefore
+  all reported. This was an audit ownership update omitted during relocation,
+  not a build or runtime failure.
+- Updated the audit to allow native source only below the four exact declared
+  product package roots while continuing to require zero native source in the
+  application layer. Swift is now included in the native-source extensions;
+  this exposed the existing macOS differential activation helper, which is now
+  tracked as a separate exact reviewed tool source alongside the exact ncurses
+  test fixture. Generic host implementation source remains forbidden in the
+  product Makefile, and `bin/`/`lib/` still reject direct FFI/image loading.
+- The audit now checks non-ignored untracked files as well as tracked files. A
+  temporary C source under `lib/` was rejected and removed. The clean rerun
+  passed with 601 paths, zero application native sources, 25 package native
+  sources, one reviewed test source, and one reviewed tool source.
