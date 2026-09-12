@@ -256,3 +256,49 @@ begin until all four children and this parent are complete.
   the complete code/resource inventory, risks, failure policy, acceptance
   matrix, and ordered ownership boundaries are now reproducible for the next
   child.
+- 2026-09-13: implemented the generic target-architecture Release AOT path in
+  adjacent `dart_macos_runtime`. `--target-architecture=arm64|x86_64` now
+  selects the Product Engine output, platform Kernel, snapshotter, native host
+  compiler architecture, helper/build-hook Dart target, App Intents target
+  triple, and build-manifest architecture. Developer JIT rejects an explicit
+  target and a foreign target rejects `--run`, retaining the builder's clear
+  host-execution boundary.
+- 2026-09-13: an arm64 Dart executable cannot emit a macOS x64 helper through
+  `dart build cli`; it rejects `macos_x64` as an unsupported host platform.
+  Selected the same-revision target Dart SDK from Engine `ReleaseX64` for
+  foreign helper and build-hook compilation. The builder now validates exact
+  SDK version/revision, the target executable's Mach-O architecture, and every
+  VM/compiler/platform artifact used by `dart build cli` before starting work.
+  A first broad `create_sdk` Ninja invocation included unrelated cross-platform
+  outputs and was stopped; targeted SDK phony outputs supplied the bounded
+  macOS SDK instead. Missing platform dill and `dartvm` artifacts had produced
+  opaque front-end failures, motivating the explicit preflight allowlist.
+- 2026-09-13: the first real x86_64 native compile exposed three Objective-C
+  `BOOL` to C++ `bool` narrowing errors in generic accessibility preference
+  snapshots. Explicit `!= NO` conversion fixes both architectures without
+  changing API behavior. A later sandboxed x86_64 snapshot attempt failed at
+  Dart's Rosetta CPU feature query because `machdep.cpu.*` sysctls were denied;
+  the identical bounded build succeeded outside that sandbox. This is an
+  execution-environment constraint, not a missing build input.
+- 2026-09-13: final generic validation passed: formatter (no changes),
+  `dart analyze`, all 14 `dart_macos_runtime` tests, `git diff --check`, the
+  added-line forbidden-name audit, and exact adjacent
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test`. The generic repository
+  audit reported `GENERIC_REPOSITORY_AUDIT_PASS`; no product or `terminal`
+  naming was added to the generic repository.
+- 2026-09-13: the final generic code built the actual product manifest as an
+  x86_64 thin Release AOT application outside the CPU-info-restricted sandbox.
+  Product structural audit passed with one helper, one plain native asset, two
+  native capabilities, one scripting definition, three App Intents entries,
+  and eight localization files; strict deep ad-hoc signature verification also
+  passed. Direct Rosetta execution exited zero and proved AppKit startup, one
+  PTY, worker and native-capability loading, menu dispatch, diagnostics, and
+  clean teardown. The existing product smoke expects 28 menu actions while the
+  freshly built source correctly publishes 30 (the two divider-movement
+  actions added earlier); updating that product-owned assertion remains in the
+  ordered product integration child rather than this generic child.
+- 2026-09-13: committed the adjacent generic implementation as `e22aec9`
+  (`Add generic cross-architecture AOT builds`). Both the adjacent and main
+  exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` gates passed after the
+  commit. The dependency milestone is therefore complete; no duration-only
+  validation was needed or used as a blocker.
