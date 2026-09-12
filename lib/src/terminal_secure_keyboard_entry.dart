@@ -433,13 +433,24 @@ final class TerminalSecureKeyboardEntryController {
   }
 }
 
-SecureInputIndicatorState appKitSecureInputIndicatorState(
+const ViewBadge terminalSecureKeyboardEntryAutomaticBadge = ViewBadge(
+  text: 'SECURE AUTO',
+  accessibilityLabel: 'Secure Keyboard Entry — Automatic',
+  accessibilityHelp: 'Keyboard input is protected from other applications.',
+);
+
+const ViewBadge terminalSecureKeyboardEntryManualBadge = ViewBadge(
+  text: 'SECURE MANUAL',
+  accessibilityLabel: 'Secure Keyboard Entry — Manual',
+  accessibilityHelp: 'Keyboard input is protected from other applications.',
+);
+
+ViewBadge? appKitSecureInputBadge(
   TerminalSecureKeyboardEntryIndicator indicator,
 ) => switch (indicator) {
-  TerminalSecureKeyboardEntryIndicator.hidden =>
-    SecureInputIndicatorState.hidden,
+  TerminalSecureKeyboardEntryIndicator.hidden => null,
   TerminalSecureKeyboardEntryIndicator.automatic =>
-    SecureInputIndicatorState.automatic,
+    terminalSecureKeyboardEntryAutomaticBadge,
   TerminalSecureKeyboardEntryIndicator.manual =>
-    SecureInputIndicatorState.manual,
+    terminalSecureKeyboardEntryManualBadge,
 };

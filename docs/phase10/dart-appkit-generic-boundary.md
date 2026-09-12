@@ -271,7 +271,7 @@ before starting the next subtask.
   including all four relocated package gates, format of 283 files, analysis,
   compatibility, and security stress coverage.
 
-## Current subtask
+## Secure Input display genericization
 
 Replace the Secure Input-specific overlay in the generic bridge with a bounded
 generic badge whose visible and accessibility strings are copied from an
@@ -279,3 +279,40 @@ application-owned configuration. This repository must inject every secure-
 input label and map its existing coordinator state to show, update, or hide the
 badge. The native mechanism must preserve main-thread ownership, no hit
 testing, no layout resizing, and bounded accessible output.
+
+- 2026-09-13: replaced `DaSecureInputIndicatorState`,
+  `da_view_set_secure_input_indicator`, `SecureInputIndicatorState`, and
+  `View.secureInputIndicatorState` with the unrelated generic
+  `DaViewBadgeConfiguration`, `da_view_set_badge`, `ViewBadge`, and
+  `View.badge` surfaces. A non-null badge requires copied non-empty,
+  display-safe visible, accessibility-label, and accessibility-help strings,
+  each at most 256 UTF-8 bytes; null removes it. The overlay remains
+  non-interactive, top/trailing anchored, and outside target layout sizing.
+- The old display symbol was optional under ABI version 1, as is the new badge
+  symbol. Both old and new Dart/native image combinations therefore fail this
+  optional display feature as unsupported rather than dereferencing a missing
+  symbol; the generic bridge ABI and event protocol versions do not change.
+  Secure Event Input acquisition and ownership remain a separate generic
+  resource and are unaffected.
+- All product strings now live in `terminal_secure_keyboard_entry.dart`:
+  `SECURE AUTO`, `SECURE MANUAL`, both accessibility labels, and the help text.
+  The product maps hidden to null and automatic/manual states to immutable
+  product-owned badges before assigning `View.badge`.
+- Generic `make contract-check native-test dart-test ffi-smoke` passed,
+  covering C/C++ headers, native copy/bounds/UTF-8/display-safety/layout/a11y,
+  Dart cache/failure/validation, and current/legacy FFI. The first sandboxed
+  product unit run and acceptance-evidence generation were blocked only by the
+  Metal compiler's user module-cache write; normal-environment reruns passed.
+  After regenerating the intentional source hashes, the exact product
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passed. Both
+  Developer JIT and Release AOT real-application Secure Keyboard Entry suites
+  passed through acquire, automatic/manual transitions, badge handoff/hide,
+  IME isolation, and clean teardown.
+
+## Current subtask
+
+Remove remaining product examples, identifiers, tests, build descriptions, and
+current documentation from the generic repository. Add an executable source
+audit that rejects future product words and package identities in tracked paths
+or executable/build/test sources while retaining explicitly historical worklog
+evidence.

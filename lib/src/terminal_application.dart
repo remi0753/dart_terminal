@@ -3213,8 +3213,7 @@ final class TerminalApplication {
         isLive: pane.isLive,
         terminalEchoEnabled: process.terminalEchoEnabled,
         setIndicator: (TerminalSecureKeyboardEntryIndicator indicator) {
-          owner.view.secureInputIndicatorState =
-              appKitSecureInputIndicatorState(indicator);
+          owner.view.badge = appKitSecureInputBadge(indicator);
         },
       );
     }
@@ -9166,8 +9165,7 @@ keybind = control+k=pane.focus-next
       () =>
           secureItem.isEnabled &&
           !secureItem.isChecked &&
-          ordinaryOwner.view.secureInputIndicatorState ==
-              SecureInputIndicatorState.hidden,
+          ordinaryOwner.view.badge == null,
       'released Secure Keyboard Entry did not project an unchecked menu and '
       'hidden indicator',
     );
@@ -9184,8 +9182,7 @@ keybind = control+k=pane.focus-next
           status.ownedEnabled &&
           status.terminalEchoEnabled == false &&
           ordinaryOwner.pane.processSnapshot().terminalEchoEnabled == false &&
-          ordinaryOwner.view.secureInputIndicatorState ==
-              SecureInputIndicatorState.automatic;
+          ordinaryOwner.view.badge == terminalSecureKeyboardEntryAutomaticBadge;
     }, 'real PTY echo-off did not acquire and indicate automatic secure input');
 
     final int preeditGeneration = ordinaryOwner.textRouter.lastGeneration + 1;
@@ -9244,8 +9241,7 @@ keybind = control+k=pane.focus-next
           !status.ownedEnabled &&
           status.terminalEchoEnabled == true &&
           ordinaryOwner.pane.processSnapshot().terminalEchoEnabled == true &&
-          ordinaryOwner.view.secureInputIndicatorState ==
-              SecureInputIndicatorState.hidden;
+          ordinaryOwner.view.badge == null;
     }, 'real PTY echo-on did not release automatic secure input');
     await _waitForAsciiMarker(ordinarySession, prompt);
     await waitFor(
@@ -9275,8 +9271,7 @@ keybind = control+k=pane.focus-next
               TerminalSecureKeyboardEntryMode.manual &&
           secureKeyboardEntry.status.ownedEnabled &&
           secureItem.isChecked &&
-          ordinaryOwner.view.secureInputIndicatorState ==
-              SecureInputIndicatorState.manual &&
+          ordinaryOwner.view.badge == terminalSecureKeyboardEntryManualBadge &&
           nativeActionInvocations.length == menuInvocationBaseline + 1 &&
           actionDispatches.length == menuDispatchBaseline + 1,
       'native menu did not acquire manual secure input and project its check',
@@ -9296,8 +9291,7 @@ keybind = control+k=pane.focus-next
     await waitFor(
       () =>
           ordinaryNative.isFocused &&
-          ordinaryOwner.view.secureInputIndicatorState ==
-              SecureInputIndicatorState.manual,
+          ordinaryOwner.view.badge == terminalSecureKeyboardEntryManualBadge,
       'dismissing Settings did not restore the focused manual indication',
     );
 
@@ -9316,8 +9310,7 @@ keybind = control+k=pane.focus-next
           secureKeyboardEntry.status.mode ==
               TerminalSecureKeyboardEntryMode.manual &&
           secureKeyboardEntry.status.desired &&
-          ordinaryOwner.view.secureInputIndicatorState ==
-              SecureInputIndicatorState.hidden,
+          ordinaryOwner.view.badge == null,
       'application inactivity did not retain manual intent while hiding its '
       'product indication',
     );
@@ -9334,8 +9327,7 @@ keybind = control+k=pane.focus-next
       () =>
           application.isActive &&
           secureKeyboardEntry.status.ownedEnabled &&
-          ordinaryOwner.view.secureInputIndicatorState ==
-              SecureInputIndicatorState.manual,
+          ordinaryOwner.view.badge == terminalSecureKeyboardEntryManualBadge,
       'application reactivation did not reacquire retained manual intent',
     );
 
@@ -9364,8 +9356,7 @@ keybind = control+k=pane.focus-next
               TerminalSecureKeyboardEntryMode.automatic &&
           secureKeyboardEntry.status.ownedEnabled &&
           !secureItem.isChecked &&
-          ordinaryOwner.view.secureInputIndicatorState ==
-              SecureInputIndicatorState.automatic,
+          ordinaryOwner.view.badge == terminalSecureKeyboardEntryAutomaticBadge,
       'command palette did not clear manual intent and restore automatic '
       'secure-input policy',
     );
@@ -9425,10 +9416,8 @@ keybind = control+k=pane.focus-next
       () =>
           secureKeyboardEntry.status.targetIdentity == quickPaneId &&
           secureKeyboardEntry.status.ownedEnabled &&
-          quickOwner.view.secureInputIndicatorState ==
-              SecureInputIndicatorState.manual &&
-          ordinaryOwner.view.secureInputIndicatorState ==
-              SecureInputIndicatorState.hidden,
+          quickOwner.view.badge == terminalSecureKeyboardEntryManualBadge &&
+          ordinaryOwner.view.badge == null,
       'manual secure-input ownership did not hand its indication to Quick '
       'Terminal',
     );
@@ -9439,10 +9428,8 @@ keybind = control+k=pane.focus-next
               TerminalQuickTerminalVisibility.hidden &&
           state.activeWindowId == ordinaryWindow.id &&
           secureKeyboardEntry.status.targetIdentity == ordinaryPaneId &&
-          ordinaryOwner.view.secureInputIndicatorState ==
-              SecureInputIndicatorState.manual &&
-          quickOwner.view.secureInputIndicatorState ==
-              SecureInputIndicatorState.hidden,
+          ordinaryOwner.view.badge == terminalSecureKeyboardEntryManualBadge &&
+          quickOwner.view.badge == null,
       'hiding Quick Terminal did not restore the manual indication to the '
       'ordinary terminal',
     );

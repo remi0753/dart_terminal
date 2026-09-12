@@ -7,6 +7,28 @@ void runTerminalSecureKeyboardEntryTests() {
   _testManualLifecycleAndLiveConfiguration();
   _testFailureRetryAndDeterministicDisposal();
   _testUnavailableNativeOwnerRemainsVisible();
+  _testProductBadgeProjection();
+}
+
+void _testProductBadgeProjection() {
+  final automatic = appKitSecureInputBadge(
+    TerminalSecureKeyboardEntryIndicator.automatic,
+  );
+  final manual = appKitSecureInputBadge(
+    TerminalSecureKeyboardEntryIndicator.manual,
+  );
+  _expect(
+    appKitSecureInputBadge(TerminalSecureKeyboardEntryIndicator.hidden) ==
+            null &&
+        automatic?.text == 'SECURE AUTO' &&
+        automatic?.accessibilityLabel == 'Secure Keyboard Entry — Automatic' &&
+        manual?.text == 'SECURE MANUAL' &&
+        manual?.accessibilityLabel == 'Secure Keyboard Entry — Manual' &&
+        automatic?.accessibilityHelp ==
+            'Keyboard input is protected from other applications.' &&
+        manual?.accessibilityHelp == automatic?.accessibilityHelp,
+    'product owns all visible and accessible badge wording',
+  );
 }
 
 void _testAutomaticFocusAndEchoArbitration() {
