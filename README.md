@@ -99,6 +99,14 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   正規化・重複除去してfresh standard tab/windowのcwdにする。設定画面に専用toggleはなく、
   手動のFinder／third-party Service／Force Touch確認手順は
   [Native Content Manual Acceptance Checklist](docs/phase10/native-content-manual-checklist.md)を参照
+- standard window → tab → terminalだけを公開するnative AppleScript dictionary。
+  monotonicな型付きstable ID、title、trusted local cwd、selected/focused関係を同期cacheから読み、
+  new window/tab、4方向split、input、focus、terminal/tab/window closeをDart所有の通常階層へ配送する。
+  terminal画面/historyとQuick Terminalは公開せず、inputは既存のbounded paste確認・実PTY transport、
+  closeはforeground-process確認を迂回しない。`macos-applescript`は既定有効でlive無効化・再有効化でき、
+  外部senderのAutomation/TCC権限はmacOSと利用者だけが管理する。辞書、制限、例、権限境界は
+  [AppleScript reference](docs/reference/applescript.md)、外部確認手順は
+  [manual acceptance checklist](docs/phase10/applescript-manual-acceptance.md)を参照
 - terminal output由来のdesktop signalを、pane/session所有権とglobal policyの下で投影する。
   legacy OSC 9 notificationとConEmu OSC 9;4 progress、Kitty OSC 99のplain UTF-8
   title/body・bounded ID/chunk subset、OSC 133 A/B/C/D/I/L/N/Pのcontent-free semantic
@@ -367,6 +375,7 @@ quick-terminal-shortcut = control+option+command+f18
 quick-terminal-screen = main
 quick-terminal-animation-duration = 0.2
 quick-terminal-autohide = true
+macos-applescript = true
 keybind = control+d=unbind
 keybind = shift+control+k=pane.focus-next
 ```
@@ -400,7 +409,8 @@ Applicationメニューまたはcommand paletteの`Reload Configuration`、あ�
 `application.reload-configuration` keybindで、起動時と同じfile/include/CLI priorityを再解決
 できます。error diagnosticが1件でもあるreloadは全体を拒否し、現在のeffective configと
 pane/PTY/native resourceを保持します。warning-onlyまたは正常な候補はatomicに受理します。
-`macos-option-key`、`keybind`、4個の`quick-terminal-*`、2個の`macos-secure-input-*`はlive適用され、
+`macos-option-key`、`keybind`、4個の`quick-terminal-*`、2個の`macos-secure-input-*`、
+`macos-applescript`はlive適用され、
 それ以外の現在のoptionは新しく作るsession/resource/windowだけに適用されます。既存palette/OSC state、cursor、
 scrollback、font、padding、window frameは書き換えません。自動file watchとSIGHUP reloadは
 現在の対象外です。
@@ -425,6 +435,9 @@ editor ownerを解放してterminalのfirst responderを復元します。canoni
 全diagnosticの機械可読表示には引き続き`--show-config`を使用できます。
 Settingsのruntime statusにはQuick Terminal shortcutに加え、Secure Keyboard Entryの
 automatic/manual/disabled/failed mode、owned/yielded/released、および自動取得・indicator設定も表示します。
+AppleScriptの現在値とlive policyは同じ45-option document/context detailに表示されます。
+無効化するとscriptable collectionを空にして新規commandを拒否し、再有効化すると生存中の
+standard hierarchyを同じIDで再公開します。設定変更はmacOS Automation/TCC権限を付与、取消、resetしません。
 
 `theme` は `system`、`light`、`dark` を受理し、互換記法の `default` は `system` として扱います。
 `default`を使用すると`CFG_DEPRECATED_VALUE` warningと`theme = system`への修正案を表示し、
@@ -618,6 +631,7 @@ make RUNTIME_ARCH=arm64 runtime-integration
 make RUNTIME_ARCH=arm64 runtime-terminal-display-integration
 make RUNTIME_ARCH=arm64 runtime-native-hierarchy-integration
 make RUNTIME_ARCH=arm64 runtime-user-actions-integration
+make RUNTIME_ARCH=arm64 runtime-applescript-integration
 make RUNTIME_ARCH=arm64 runtime-configuration-integration
 make RUNTIME_ARCH=arm64 runtime-theme-integration
 make RUNTIME_ARCH=arm64 runtime-osc52-integration
@@ -626,6 +640,7 @@ make RUNTIME_ARCH=arm64 runtime-restoration-integration
 
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
 smoke、real-PTY live Metal display、native tab/4-pane hierarchy、通常製品のuser action、
+AppleScript dictionary/object lifecycle、
 effective-config early exit/Settings/configuration reload、light/dark/system appearance、
 shell/semantic、desktop notification/progress、OSC 52 confirmation、
 fullscreen/migration/restoration/reopen、clipboard、lifecycle、bounded traffic、

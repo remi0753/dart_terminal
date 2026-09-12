@@ -5,8 +5,8 @@
 - Phase: 10
 - Task: AppleScript dictionary and object lifecycle
 - Started: 2026-09-12
-- State: active
-- Current subtask: product integration and shipped-runtime acceptance
+- State: complete
+- Current subtask: none
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -647,3 +647,39 @@ authoritative hierarchy, paste safety, or teardown rules.
   packaging, source/bundle/full gates, zero-owner teardown, and the external
   discovery/TCC checklist. No manual consent result is claimed or fabricated;
   the checklist is the controlled follow-up for user-authorized macOS testing.
+- Commit `c6529c6` records the shipped-runtime acceptance and leaves both the
+  terminal and adjacent dependency worktrees clean. The mandatory full ROADMAP
+  reread selects documentation/evidence closure and the AppleScript parent
+  completion decision next; App Intents remains a later, untouched item.
+- Documentation reconciliation finds the implementation reference already
+  lists the generated 45th `macos-applescript` option, but README has no public
+  scripting surface or runtime gate, Feature Matrix UI-08 still says
+  unimplemented, CFG-04 still says native connection is in progress, and the
+  security/privacy rows do not record AppleScript's bounded paste/TCC/data
+  boundaries. Closure will update only those current facts and add a user-facing
+  dictionary reference; it will continue to mark App Intents as unfinished.
+- README now documents the standard-only hierarchy, policy reuse, live option,
+  TCC ownership, dedicated runtime gate, and links to the new dictionary and
+  manual references. Feature Matrix records AppleScript complete while keeping
+  App Intents incomplete, closes the CFG-04 native live-configuration gap, and
+  records distinct paste authority plus content-free/TCC privacy boundaries.
+  The compatibility coverage generator changes only the expected README and
+  Feature Matrix SHA-256 fields; all nine cases, 417 split runs, and fix-family
+  evidence remain unchanged.
+- The final documentation candidate passes the exact full gate: all generated
+  references and evidence are fresh, 280 files require no formatting changes,
+  analysis reports no issues, fixed-seed security stress passes, and the
+  aggregate runner ends with `dart_terminal tests passed`. The final source
+  audit covers 514 tracked files with zero product-native sources and one
+  reviewed test-native source.
+- `/usr/bin/osacompile` successfully compiles the documented new-window,
+  new-tab, focused-terminal, right-split, input-text, and focus example against
+  the built Release AOT `DartTerminal.sdef`. This performs dictionary lookup and
+  syntax validation only; it sends no Apple Event and requests no TCC consent.
+- 2026-09-12: **Documentation/evidence closure and AppleScript parent —
+  complete.** All five parent completion conditions are represented by focused
+  Dart/native/package tests, canonical dictionary/plist/bundle audits, both
+  shipped runtime gates, generated configuration/reference evidence, bounded
+  security/privacy behavior, and the external manual checklist. App Intents is
+  deliberately still incomplete in Feature Matrix UI-08 and remains the next
+  ROADMAP task; no external TCC consent result is claimed.
