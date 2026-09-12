@@ -22,6 +22,7 @@ abstract final class TerminalAppleScriptLimits {
       TerminalSessionMetadata.maximumWorkingDirectoryUtf8Bytes;
   static const int maximumInputUtf8Bytes =
       TerminalPasteCodec.maximumEncodedBodyBytes;
+  static const int maximumCommandBytes = maximumInputUtf8Bytes + 4096;
 }
 
 enum TerminalAppleScriptObjectKind { window, tab, terminal }
@@ -609,6 +610,75 @@ final class TerminalAppleScriptCommandRequest {
   final TerminalAppleScriptObjectId? target;
   final TerminalAppleScriptSplitDirection? direction;
   final String? text;
+}
+
+/// Strict decoder for one validated command packet emitted by the native
+/// Cocoa Scripting bridge.
+abstract final class TerminalAppleScriptCommandCodec {
+  static const int version = 1;
+
+  static TerminalAppleScriptCommandRequest decode(Uint8List bytes) {
+    if (bytes.isEmpty ||
+        bytes.length > TerminalAppleScriptLimits.maximumCommandBytes) {
+      throw const FormatException('invalid AppleScript command byte length');
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(bytes, allowMalformed: false));
+    } on Object catch (error) {
+      throw FormatException('invalid AppleScript command JSON', error);
+    }
+    final Map<String, Object?> root = _object(decoded, 'command');
+    _exactKeys(root, const <String>{
+      'version',
+      'operationId',
+      'kind',
+      'target',
+      'direction',
+      'text',
+    });
+    if (root['version'] != version) {
+      throw const FormatException('unsupported AppleScript command version');
+    }
+    final String kindName = _string(root['kind'], 'kind');
+    final TerminalAppleScriptCommandKind kind = TerminalAppleScriptCommandKind
+        .values
+        .firstWhere(
+          (TerminalAppleScriptCommandKind value) => value.name == kindName,
+          orElse: () => throw FormatException(
+            'unknown AppleScript command kind',
+            kindName,
+          ),
+        );
+    final Object? targetValue = root['target'];
+    final Object? directionValue = root['direction'];
+    final Object? textValue = root['text'];
+    final TerminalAppleScriptSplitDirection? direction = directionValue == null
+        ? null
+        : TerminalAppleScriptSplitDirection.values.firstWhere(
+            (TerminalAppleScriptSplitDirection value) =>
+                value.name == _string(directionValue, 'direction'),
+            orElse: () => throw FormatException(
+              'unknown AppleScript split direction',
+              directionValue,
+            ),
+          );
+    try {
+      return TerminalAppleScriptCommandRequest(
+        operationId: _integer(root['operationId'], 'operationId'),
+        kind: kind,
+        target: targetValue == null
+            ? null
+            : TerminalAppleScriptObjectId.parse(_string(targetValue, 'target')),
+        direction: direction,
+        text: textValue == null ? null : _string(textValue, 'text'),
+      );
+    } on FormatException {
+      rethrow;
+    } on Object catch (error) {
+      throw FormatException('invalid AppleScript command shape', error);
+    }
+  }
 }
 
 enum TerminalAppleScriptCommandDisposition {

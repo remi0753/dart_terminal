@@ -14,6 +14,7 @@ import 'runtime_lifecycle.dart';
 import 'terminal_action_menu.dart';
 import 'terminal_action_registry.dart';
 import 'terminal_appkit_policy.dart';
+import 'terminal_applescript_product.dart';
 import 'terminal_application_quit_coordinator.dart';
 import 'terminal_application_state.dart';
 import 'terminal_application_theme.dart';
@@ -842,6 +843,7 @@ final class TerminalApplication {
     final RuntimeLifecycleScenario scenario = options.runtimeLifecycleScenario;
     _writeLifecycleEvent(scenario, 'root-start', 0);
     TerminalRendererMacos.initialize();
+    TerminalAppleScriptMacosNativePort.initialize();
     final MacosPtyBackend nativePtyBackend = MacosPtyBackend.open(
       MacosRuntime.bundleFrameworkPath(dartPtyMacosLibraryName),
     );
@@ -2504,6 +2506,7 @@ final class TerminalApplication {
     TerminalActionDispatchScheduler? keyBindingActionScheduler;
     TerminalActionDispatcher? actionDispatcher;
     TerminalExternalPasteController<PaneId>? externalPasteController;
+    TerminalAppleScriptProductSession? appleScriptSession;
     Future<void> Function(PaneId? paneId)? closePaneRequest;
     Future<void> Function(PaneId paneId, TerminalExternalContent content)?
     externalContentRequest;
@@ -2726,6 +2729,7 @@ final class TerminalApplication {
               !hierarchyReconciliationInProgress) {
             nativeHierarchy.refreshPresentation();
           }
+          appleScriptSession?.scheduleReconcile();
           final TerminalAppKitMenuProjection? menu = menuProjection;
           if (menu != null && !menu.isDisposed) menu.refresh();
           final TerminalCommandPalettePresenter? palette = palettePresenter;
@@ -3364,6 +3368,7 @@ final class TerminalApplication {
       desktopSignalCoordinator.focusSession(sessions[focusedPaneId]?.id);
       osc52Coordinator.focusSession(sessions[focusedPaneId]?.id);
       reconcileSecureKeyboardEntry();
+      appleScriptSession?.reconcile();
     }
 
     reconcileRequest = reconcileInteractiveHierarchy;
@@ -3636,6 +3641,8 @@ final class TerminalApplication {
       externalContentRequest = null;
       quickLookRequest = null;
       nativeContentReconcileRequest = null;
+      appleScriptSession?.dispose();
+      appleScriptSession = null;
       pasteConfirmationGate.clear();
       externalPasteController?.dispose();
       externalPasteController = null;
@@ -3841,6 +3848,7 @@ final class TerminalApplication {
           );
           stdout.writeln(quick.shortcutStatus.machineLine());
         }
+        appleScriptSession?.applyEnabled(configuration.macosAppleScript);
       }
       settingsPresenter?.refresh();
       if (result.disposition == TerminalConfigReloadDisposition.failed) {
@@ -4054,6 +4062,51 @@ final class TerminalApplication {
             },
           );
       actionCoordinator = createdActions;
+      final TerminalAppleScriptProductCommandExecutor appleScriptExecutor =
+          TerminalAppleScriptProductCommandExecutor(
+            state: state,
+            configurationFactory: configuration,
+            startPane: (PaneId paneId) async {
+              final TerminalPane? pane = state.paneForId(paneId);
+              if (pane == null) {
+                throw StateError('AppleScript-created pane is stale');
+              }
+              await pane.start();
+            },
+            reconcile: reconcileInteractiveHierarchy,
+            pasteController: externalPasteController!,
+            paneCloseCoordinator: createdPaneCloseCoordinator,
+            canMutate: () =>
+                productResourceDisposalFuture == null &&
+                !createdPaneCloseCoordinator.removalInProgress &&
+                !createdPaneCloseCoordinator.applicationQuitInProgress,
+          );
+      appleScriptSession = TerminalAppleScriptProductSession(
+        state: state,
+        enabled:
+            configurationAuthority.newSessionConfiguration.macosAppleScript,
+        nativePort: TerminalAppleScriptMacosNativePort.open(),
+        executor: appleScriptExecutor,
+        titleForTab: (TerminalTabState tab) => presentationResolver
+            .resolve(tab, fallbackTitle: _productWindowTitle)
+            .title,
+        titleForTerminal: (PaneId paneId) {
+          final TerminalPaneLocation? location = state.locationForPane(paneId);
+          final TerminalTabState? tab = location == null
+              ? null
+              : state.tabForId(location.tabId);
+          if (tab == null) return _productWindowTitle;
+          return sessions[paneId]?.terminalScreenSet.metadata.windowTitle ??
+              presentationResolver
+                  .resolve(tab, fallbackTitle: _productWindowTitle)
+                  .title;
+        },
+        workingDirectoryFor: (PaneId paneId) =>
+            TerminalTabPresentationResolver.localFilePath(
+              sessions[paneId]?.terminalScreenSet.metadata.workingDirectory,
+            ),
+        onError: recordAsynchronousError,
+      );
       final TerminalPromptNavigationActionCoordinator promptNavigationActions =
           TerminalPromptNavigationActionCoordinator(
             activeViewport: activeViewport,

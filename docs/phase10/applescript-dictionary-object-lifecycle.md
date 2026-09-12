@@ -178,6 +178,19 @@ authoritative hierarchy, paste safety, or teardown rules.
    - Complete when focused product tests, JIT/AOT exact behavior, source/bundle
      audits, full gate, manual checklist, review, progress, and a standalone
      commit pass.
+
+   This item is implemented in two ordered units because product state/policy
+   adaptation can be exhaustively unit-tested without a bundle, while native
+   self-automation and TCC-facing instructions require both shipped apps:
+
+   1. Add a product session adapter that projects live standard-window state,
+      polls and completes native commands, routes each mutation through current
+      hierarchy/paste/close policy, handles live enablement and disposal, and
+      passes deterministic fake-native/product tests in a standalone commit.
+   2. Add bounded self-automation acceptance to both runtime modes, exact
+      dictionary/object/PTY/focus/close/disable/teardown observations, and the
+      external TCC/manual checklist; pass source/bundle/full gates and complete
+      the integration parent in a standalone commit.
 4. **Documentation/evidence closure and parent completion decision**
    - Reconcile README, Feature Matrix UI-08/security/configuration status,
      dictionary reference, acceptance evidence, remaining manual observations,
@@ -491,3 +504,61 @@ authoritative hierarchy, paste safety, or teardown rules.
   dependency and consumer full gates, documentation, and final diff review meet
   the ordered subtask's completion conditions. Live hierarchy publication and
   command execution remain exclusively in the next product-integration task.
+- 2026-09-12: **Product session adapter and snapshot/command policy tests —
+  complete.** The live app initializes the packaged capability, publishes
+  coalesced immutable standard-window snapshots, polls a bounded queue, maps
+  native completion dispositions, follows live configuration, and clears the
+  cache before shutdown. Every command uses the Dart-owned hierarchy and the
+  existing paste/close policy, focused tests and the exact full gate pass, and
+  the remaining work is the separately ordered two-runtime self-automation and
+  manual checklist unit.
+- Product wiring inspection confirms that native commands use the exact JSON
+  fields `version`, `operationId`, `kind`, `target`, `direction`, and `text`,
+  but the product contract previously had no decoder. The adapter therefore
+  adds a strict versioned decoder before any state lookup and rejects unknown,
+  missing, wrong-kind, and shape-invalid values without mutating the hierarchy.
+- The product adapter projects only `standard` windows, derives window and tab
+  ordering from the Dart-owned insertion order, preserves stable numeric IDs,
+  and deliberately reports no frontmost standard window while Quick Terminal
+  is active. Commands resolve IDs anew at execution time and treat every Quick
+  Terminal or stale target as not found.
+- Input reuses `TerminalExternalPasteController` with the existing
+  `appleScript` source identity; close-terminal/tab/window reuse
+  `TerminalPaneCloseCoordinator`, including repeat-to-confirm behavior. No
+  AppleScript-only bypass of paste or process-safety policy is introduced.
+- The first focused product-test launch did not reach the tests: the renderer
+  build hook's Metal compiler could not update
+  `/Users/remi/.cache/clang/ModuleCache` inside the filesystem sandbox and
+  exited with `Operation not permitted`. This is an environment boundary, so
+  the identical tests must be rerun with the established cache permission; no
+  test success is inferred from this attempt.
+- With cache permission, the contract and product-adapter focused tests pass.
+  The first exact aggregate `make test` then reaches the expected deterministic
+  Phase 7 AppKit evidence freshness failure after `terminal_application.dart`
+  changed. Earlier generators and reference checks pass. The reviewed evidence
+  generator will be run, and its diff must be limited to hashes for the
+  intentionally changed source before the exact full gate is repeated.
+- The reviewed Phase 7 generator changes only the two expected SHA-256 entries
+  for `terminal_application.dart`. The subsequent full gate passes but reports
+  one directive-ordering info for the newly aggregated test import; the import
+  is sorted and focused analysis then reports `No issues found!`.
+- Disable/re-enable review identifies an asynchronous lifecycle boundary: an
+  already executing Dart command may finish after the native disabled snapshot
+  has resumed and removed its pending Apple event. A monotonically increasing
+  command epoch now invalidates such completions across every enablement change
+  and disposal, including when scripting is re-enabled before the old executor
+  finishes. A controlled-executor regression test proves no stale native
+  completion is sent.
+- Product tests pass after final wiring. They cover strict command decoding;
+  stable standard-only snapshots and Quick Terminal exclusion; explicit target
+  resolution; all four split axes/placements; safe and repeat-confirmed input;
+  focus; close confirmation and aggregate collapse; stale, hidden, busy,
+  disabled, re-enabled, malformed, bounded-poll, and disposal behavior.
+- The final exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` passes from
+  the completed candidate: all freshness, compatibility, differential,
+  application, terminfo, and shell-integration checks pass; 280 files format
+  with zero changes; analysis reports no issues; the security stress and full
+  aggregate Dart runner end successfully.
+- The first task-scoped staging attempt was denied when the sandbox could not
+  create `.git/index.lock`; no paths were staged or modified by Git. Staging is
+  retried with repository-metadata permission and the exact reviewed file list.

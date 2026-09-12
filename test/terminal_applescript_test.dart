@@ -203,6 +203,70 @@ void _testCommandValidation() {
         target: terminal,
         text: 'printf ok\n',
       );
+  final TerminalAppleScriptCommandRequest decoded =
+      TerminalAppleScriptCommandCodec.decode(
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode(<String, Object?>{
+              'version': 1,
+              'operationId': 9,
+              'kind': 'split',
+              'target': 'terminal:2',
+              'direction': 'up',
+              'text': null,
+            }),
+          ),
+        ),
+      );
+  _expect(
+    decoded.operationId == 9 &&
+        decoded.kind == TerminalAppleScriptCommandKind.split &&
+        decoded.target == terminal &&
+        decoded.direction == TerminalAppleScriptSplitDirection.up,
+    'native command JSON did not decode into the strict product contract',
+  );
+  for (final Map<String, Object?> invalid in <Map<String, Object?>>[
+    <String, Object?>{
+      'version': 2,
+      'operationId': 9,
+      'kind': 'split',
+      'target': 'terminal:2',
+      'direction': 'up',
+      'text': null,
+    },
+    <String, Object?>{
+      'version': 1,
+      'operationId': 9,
+      'kind': 'split',
+      'target': 'terminal:2',
+      'direction': 'sideways',
+      'text': null,
+    },
+    <String, Object?>{
+      'version': 1,
+      'operationId': 9,
+      'kind': 'newWindow',
+      'target': 'window:1',
+      'direction': null,
+      'text': null,
+    },
+    <String, Object?>{
+      'version': 1,
+      'operationId': 9,
+      'kind': 'focus',
+      'target': 'terminal:2',
+      'direction': null,
+      'text': null,
+      'unknown': true,
+    },
+  ]) {
+    _expectThrows<FormatException>(
+      () => TerminalAppleScriptCommandCodec.decode(
+        Uint8List.fromList(utf8.encode(jsonEncode(invalid))),
+      ),
+      'command codec accepted an invalid native packet',
+    );
+  }
   _expect(
     split.direction == TerminalAppleScriptSplitDirection.left &&
         input.text == 'printf ok\n',
