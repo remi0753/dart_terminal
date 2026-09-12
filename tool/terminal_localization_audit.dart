@@ -76,8 +76,8 @@ Future<TerminalLocalizationAuditResult> runTerminalLocalizationAudit({
     'lib/src/terminal_application.dart',
   );
   _expect(
-    'localization: localization'.allMatches(applicationSource).length == 8,
-    'production application localization injection count changed',
+    'localization: localization'.allMatches(applicationSource).length == 9,
+    'production and runtime-acceptance localization injection count changed',
   );
 
   final String catalog = _read(root, 'lib/src/terminal_localization.dart');

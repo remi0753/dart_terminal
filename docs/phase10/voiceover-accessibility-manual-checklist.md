@@ -6,6 +6,8 @@ Validate the macOS-owned assistive surfaces that deterministic Developer JIT
 and Release AOT acceptance cannot drive: spoken VoiceOver navigation,
 Accessibility Inspector presentation, and system Full Keyboard Access focus.
 Run this checklist only after `make runtime-configuration-integration` passes.
+Display-preference and locale observations are tracked separately in the
+[accessibility display/localization checklist](accessibility-display-localization-manual-checklist.md).
 
 ## Preconditions and safety
 

@@ -61,6 +61,22 @@ Future<void> main(List<String> arguments) async {
     final List<Object?> assets = manifest['nativeAssets']! as List<Object?>;
     final List<Object?> capabilities =
         manifest['nativeCapabilities']! as List<Object?>;
+    final Set<String> declaredResources =
+        (manifest['resources']! as List<Object?>).cast<String>().toSet();
+    const List<String> localizedResources = <String>[
+      'en.lproj/InfoPlist.strings',
+      'en.lproj/Localizable.strings',
+      'en.lproj/AppShortcuts.strings',
+      'en.lproj/ServicesMenu.strings',
+      'ja.lproj/InfoPlist.strings',
+      'ja.lproj/Localizable.strings',
+      'ja.lproj/AppShortcuts.strings',
+      'ja.lproj/ServicesMenu.strings',
+    ];
+    _expect(
+      declaredResources.containsAll(localizedResources),
+      'runtime manifest omitted localization resources',
+    );
     final Map<String, Object?> scriptingDefinition =
         manifest['scriptingDefinition']! as Map<String, Object?>;
     final Map<String, Object?> appIntents =
@@ -180,6 +196,8 @@ Future<void> main(List<String> arguments) async {
       appIntentsVersion,
       payload,
       '$resources/DART_SDK_LICENSE.txt',
+      for (final String relativePath in localizedResources)
+        '$resources/$relativePath',
       terminfo,
       shellContractPath,
       for (final TerminalShellIntegrationFileContract file
@@ -198,6 +216,15 @@ Future<void> main(List<String> arguments) async {
           bundledSdef.length == scriptingDefinition['bytes'],
       'bundled scripting definition differs from its reviewed source',
     );
+    for (final String relativePath in localizedResources) {
+      _expect(
+        _sameBytes(
+          await File('$resources/$relativePath').readAsBytes(),
+          await File(relativePath).readAsBytes(),
+        ),
+        'bundled localization resource differs: $relativePath',
+      );
+    }
     final File canonicalAppIntents = await _packageFile(
       'dart_terminal_app_intents_macos',
       'native/TerminalAppIntents.swift',
@@ -274,9 +301,10 @@ Future<void> main(List<String> arguments) async {
     final Map<String, Object?> infoPlist =
         jsonDecode(plistResult.stdout as String) as Map<String, Object?>;
     _expect(
-      infoPlist['NSAppleScriptEnabled'] == true &&
+      infoPlist['CFBundleDisplayName'] == 'Dart Terminal' &&
+          infoPlist['NSAppleScriptEnabled'] == true &&
           infoPlist['OSAScriptingDefinition'] == 'DartTerminal.sdef',
-      'Cocoa Scripting Info.plist declaration mismatch',
+      'localized display name or Cocoa Scripting Info.plist declaration mismatch',
     );
     _expect(
       terminalDifferentialSha256(await File(terminfo).readAsBytes()) ==
@@ -360,7 +388,7 @@ Future<void> main(List<String> arguments) async {
       'DART_ONLY_BUNDLE_AUDIT_PASS mode=$mode architecture=$architecture '
       'helpers=${helpers.length} assets=${assets.length} '
       'capabilities=${capabilities.length} scripting_definition=1 '
-      'app_intents=${actionNames.length}',
+      'app_intents=${actionNames.length} localizations=${localizedResources.length}',
     );
   } on Object catch (error) {
     stderr.writeln('DART_ONLY_BUNDLE_AUDIT_FAIL $error');

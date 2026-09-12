@@ -2384,7 +2384,10 @@ keybind = command+d=pane.focus-next
       options,
       invocation,
       <String>['--config=$configurationPath', '--runtime-configuration-test'],
-      environment: const <String, String>{'DT_RUNTIME_CONFIGURATION_TEST': '1'},
+      environment: const <String, String>{
+        'DT_RUNTIME_CONFIGURATION_TEST': '1',
+        'LC_ALL': 'C',
+      },
       timeout: const Duration(seconds: 60),
     );
     _expect(
@@ -2508,7 +2511,10 @@ cursor-blink = false
       options,
       invocation,
       <String>['--config=$configurationPath', '--runtime-theme-test'],
-      environment: const <String, String>{'DT_RUNTIME_THEME_TEST': '1'},
+      environment: const <String, String>{
+        'DT_RUNTIME_THEME_TEST': '1',
+        'LC_ALL': 'ja_JP.UTF-8',
+      },
       timeout: const Duration(seconds: 60),
     );
     _expect(
@@ -2538,6 +2544,18 @@ cursor-blink = false
           ).allMatches(observation.stdoutText).length ==
           1,
       'ordinary product omitted exact theme/appearance acceptance',
+    );
+    _expect(
+      RegExp(
+            '^TERMINAL_ACCESSIBILITY_LOCALIZATION_TEST '
+            'protocol=$dartAppKitCurrentEventProtocolVersion '
+            r'language=ja fallback=false rtl=false menu=true palette=true '
+            r'settings=true statuses=true preferences=true motion=true '
+            r'contrast=true noncolor=true deduplicated=true identities=true$',
+            multiLine: true,
+          ).allMatches(observation.stdoutText).length ==
+          1,
+      'ordinary product omitted live preferences or Japanese UI acceptance',
     );
     _expect(
       RegExp(
@@ -2574,7 +2592,7 @@ cursor-blink = false
     stdout.writeln(
       'RUNTIME_THEME_INTEGRATION_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
-      'panes=3 appearances=3 elapsed_ms='
+      'panes=3 appearances=3 preferences=3 localization=ja elapsed_ms='
       '${observation.elapsed.inMilliseconds}',
     );
   } finally {

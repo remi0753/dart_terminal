@@ -5007,13 +5007,19 @@ final class TerminalApplication {
           state: state,
           hierarchy: createdHierarchy,
           dispatcher: dispatcher,
+          menu: menuProjection,
+          palette: installedPalette,
+          settings: settingsPresenter!,
+          quickTerminal: createdQuickTerminal,
           sessions: sessions,
           allSessions: allSessions,
           owners: owners,
           themeProjection: applicationThemeProjection,
+          accessibilityProjection: applicationAccessibilityProjection!,
           configurationReloadController: configurationReloadController,
           configurationAuthority: configurationAuthority,
           paneConfigurations: paneConfigurations,
+          localization: localization,
           closed: closed,
           prompt: acceptancePrompt.trimRight(),
         );
@@ -6950,13 +6956,19 @@ final class TerminalApplication {
     required TerminalApplicationState state,
     required TerminalNativeHierarchyAdapter hierarchy,
     required TerminalActionDispatcher dispatcher,
+    required TerminalAppKitMenuProjection menu,
+    required TerminalCommandPalettePresenter palette,
+    required TerminalSettingsInspectorPresenter settings,
+    required TerminalQuickTerminalController quickTerminal,
     required Map<PaneId, TerminalSession> sessions,
     required List<TerminalSession> allSessions,
     required Map<PaneId, _TerminalHierarchyProductPane> owners,
     required TerminalApplicationThemeProjection<PaneId> themeProjection,
+    required TerminalApplicationAccessibilityProjection accessibilityProjection,
     required TerminalConfigReloadController? configurationReloadController,
     required TerminalProductConfigurationAuthority configurationAuthority,
     required Map<PaneId, TerminalProductConfiguration> paneConfigurations,
+    required TerminalLocalization localization,
     required Completer<void> closed,
     required String prompt,
   }) async {
@@ -7516,6 +7528,167 @@ final class TerminalApplication {
       '$fixedPaletteGeneration/${fixedScreens.palette.generation}',
     );
 
+    _expectLifecycle(
+      localization.language == TerminalLanguage.japanese &&
+          !localization.usesFallbackCatalog &&
+          localization.textDirection == TerminalTextDirection.leftToRight,
+      'theme runtime did not select the injected Japanese catalog',
+    );
+    final TerminalActionMessages copyMessages = localization.action(
+      TerminalActionMessageId.copy,
+    );
+    _expectLifecycle(
+      dispatcher.catalog.actionForId(TerminalActionId.copy)?.title ==
+              copyMessages.title &&
+          menu.itemForAction(TerminalActionId.copy).title == copyMessages.title,
+      'Japanese action copy did not reach the dispatcher and native menu',
+    );
+    await dispatch(TerminalActionId.openCommandPalette);
+    await waitFor(
+      () =>
+          palette.isOpen &&
+          (palette.renderedText ?? '').contains(
+            localization.commandPaletteTitle,
+          ) &&
+          (palette.renderedText ?? '').contains(copyMessages.title),
+      'Japanese catalog did not reach the native Command Palette',
+    );
+    await palette.dismiss();
+    await dispatch(TerminalActionId.openSettings);
+    await waitFor(
+      () => settings.isOpen && settings.renderedText != null,
+      'Japanese Settings presenter did not open',
+    );
+    final TerminalSettingsOptionOccurrence selectedSetting =
+        settings.state.selectedOccurrence!;
+    final String settingsStatus = settings.activeStatusView!.text;
+    final String settingsDetail = settings.activeDetailView!.text;
+    _expectLifecycle(
+      settingsStatus.contains(
+            localization.settingsSaveState(settings.state.saveState.name),
+          ) &&
+          settingsStatus.contains('クイックターミナルのショートカット:') &&
+          settingsStatus.contains('セキュアキーボード入力:') &&
+          settingsStatus.contains('通知:') &&
+          settingsDetail.contains(
+            localization.settingsOptionDescription(
+              selectedSetting.option.name,
+              selectedSetting.option.description,
+            ),
+          ),
+      'Japanese Settings shell, status, or option detail was incomplete',
+    );
+
+    _injectApplicationAccessibilityDisplayPreferencesEventForTesting(
+      application,
+      reduceMotion: false,
+      increaseContrast: false,
+      differentiateWithoutColor: false,
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          accessibilityProjection.presentation ==
+              const TerminalAccessibilityPresentation.standard() &&
+          quickTerminal.accessibilityPresentation ==
+              const TerminalAccessibilityPresentation.standard() &&
+          settings.accessibilityPresentation ==
+              const TerminalAccessibilityPresentation.standard() &&
+          owners.values.every((_TerminalHierarchyProductPane owner) {
+            final TerminalLiveMetalSurfaceSnapshot snapshot = owner.surface
+                .snapshot();
+            return !snapshot.reduceMotion &&
+                !snapshot.increaseContrast &&
+                !snapshot.differentiateWithoutColor;
+          }),
+      'standard accessibility preferences did not reach every product owner',
+    );
+    final Window settingsWindowIdentity = settings.activeWindow!;
+    final TextEditor settingsEditorBeforeContrast = settings.activeView!;
+    final String settingsTextIdentity = settings.state.text;
+    final TerminalSettingsTextSelection settingsSelectionIdentity =
+        settings.state.selection;
+    final TerminalSettingsEditorMode settingsModeIdentity = settings.state.mode;
+    final TerminalLiveMetalSurface laterSurfaceIdentityBeforePreferences =
+        laterSystemOwner.surface;
+    final TerminalLiveMetalSurfaceSnapshot beforePreferences =
+        await waitForStableSurface(laterSystemOwner);
+    const AppKitAccessibilityDisplayPreferences enabledPreferences =
+        AppKitAccessibilityDisplayPreferences(
+          reduceMotion: true,
+          increaseContrast: true,
+          differentiateWithoutColor: true,
+        );
+    _injectApplicationAccessibilityDisplayPreferencesEventForTesting(
+      application,
+      reduceMotion: true,
+      increaseContrast: true,
+      differentiateWithoutColor: true,
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(() {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = laterSystemOwner.surface
+          .snapshot();
+      return application.accessibilityDisplayPreferences ==
+              enabledPreferences &&
+          accessibilityProjection.presentation.reduceMotion &&
+          accessibilityProjection.presentation.increaseContrast &&
+          accessibilityProjection.presentation.differentiateWithoutColor &&
+          quickTerminal.accessibilityPresentation.reduceMotion &&
+          settings.accessibilityPresentation.increaseContrast &&
+          snapshot.reduceMotion &&
+          snapshot.increaseContrast &&
+          snapshot.differentiateWithoutColor &&
+          snapshot.acceptedFrameCount > beforePreferences.acceptedFrameCount;
+    }, 'live accessibility preferences did not reach accepted presentation');
+    await waitForStableSurface(laterSystemOwner);
+    final TextEditor settingsEditorAfterContrast = settings.activeView!;
+    _expectLifecycle(
+      terminalQuickTerminalEffectiveAnimationDuration(
+                configurationAuthority
+                    .newSessionConfiguration
+                    .quickTerminalAnimationDuration,
+                quickTerminal.accessibilityPresentation,
+              ) ==
+              Duration.zero &&
+          identical(settings.activeWindow, settingsWindowIdentity) &&
+          !identical(
+            settingsEditorAfterContrast,
+            settingsEditorBeforeContrast,
+          ) &&
+          settings.state.text == settingsTextIdentity &&
+          settings.state.selection == settingsSelectionIdentity &&
+          settings.state.mode == settingsModeIdentity &&
+          identical(
+            laterSystemOwner.surface,
+            laterSurfaceIdentityBeforePreferences,
+          ),
+      'live preference projection changed stable product state or identity',
+    );
+    _injectApplicationAccessibilityDisplayPreferencesEventForTesting(
+      application,
+      reduceMotion: true,
+      increaseContrast: true,
+      differentiateWithoutColor: true,
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await Future<void>.delayed(Duration.zero);
+    _expectLifecycle(
+      identical(settings.activeView, settingsEditorAfterContrast) &&
+          identical(
+            laterSystemOwner.surface,
+            laterSurfaceIdentityBeforePreferences,
+          ),
+      'duplicate accessibility preferences replaced product owners',
+    );
+    stdout.writeln(
+      'TERMINAL_ACCESSIBILITY_LOCALIZATION_TEST protocol='
+      '${application.eventProtocolVersion} language=ja fallback=false '
+      'rtl=false menu=true palette=true settings=true statuses=true '
+      'preferences=true motion=true contrast=true noncolor=true '
+      'deduplicated=true identities=true',
+    );
+
     await dispatch(TerminalActionId.quitApplication);
     if (!closed.isCompleted) {
       await dispatch(TerminalActionId.quitApplication);
@@ -7526,6 +7699,7 @@ final class TerminalApplication {
       state.isDisposed &&
           hierarchy.isDisposed &&
           themeProjection.isDisposed &&
+          accessibilityProjection.isDisposed &&
           themeProjection.registeredPaneCount == 0 &&
           allSessions.length == 3 &&
           allSessions.every(
@@ -14380,6 +14554,26 @@ keybind = control+k=pane.focus-next
       monotonicNanoseconds,
       0,
       isDark,
+    ]);
+  }
+
+  static void _injectApplicationAccessibilityDisplayPreferencesEventForTesting(
+    AppKitApplication application, {
+    required bool reduceMotion,
+    required bool increaseContrast,
+    required bool differentiateWithoutColor,
+    required int monotonicNanoseconds,
+  }) {
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      34,
+      0,
+      0,
+      monotonicNanoseconds,
+      0,
+      reduceMotion,
+      increaseContrast,
+      differentiateWithoutColor,
     ]);
   }
 

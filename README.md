@@ -301,6 +301,15 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   range/cursor frameはresize時のpadding縮退・復元にも追従する。外部VoiceOver、
   Accessibility Inspector、Full Keyboard Accessの確認手順は
   [manual checklist](docs/phase10/voiceover-accessibility-manual-checklist.md)を参照
+- macOSのReduce Motion、Increase Contrast、Differentiate Without Colorを起動時と
+  live変更時に受け取り、Quick Terminalのtransitionとvisual bell、Settings、cursor、
+  selection、link underlineへ投影する。設定値やfont/cell寸法、PTY/sessionは変えず、
+  同一値の通知もownerを再生成しない。Application/File/Edit/Shell/View/Window menu、
+  context menu、Command Palette、Settings、confirmation/status、Finder Services、
+  App Intents/Shortcutsはtyped catalogからEnglish/Japaneseを選び、未対応localeはEnglishへ
+  fallbackする。RTLはapplication UIの構成だけを反転し、terminal cell、PTY文字列、
+  path、shell出力は並べ替えない。外部macOS設定での実機確認は
+  [display/localization checklist](docs/phase10/accessibility-display-localization-manual-checklist.md)を参照
 
 ## 起動
 
@@ -639,6 +648,7 @@ make phase9-protocol-properties
 make phase9-security-stress
 make product-parser-benchmark
 make runtime-source-check
+make terminal-localization-check
 make test
 make RUNTIME_ARCH=arm64 runtime-bundle-audit
 make RUNTIME_ARCH=arm64 runtime-integration
@@ -679,8 +689,14 @@ user action suiteは通常起動と同じdispatcher、hierarchy、pane resource 
 Split Downを操作します。2 window/3 tab/5 paneの生成、各paneへのraw key/IME分離、
 1 paneを閉じた後の4-pane階層、5つのPTY世代と全Metal/text-input/native handleの回収を
 Developer JIT/Release AOTで要求します。
-theme suiteはv7 appearance/geometry eventを通常製品へ注入し、初期light、live dark/light、
-custom ANSI overlay、system/fixed pane、reloadのnew-session境界を実Metal frameで検査します。
+theme suiteはv7 appearance/geometry eventとv14 accessibility preference eventを通常製品へ
+注入し、初期light、live dark/light、custom ANSI overlay、system/fixed pane、reloadの
+new-session境界を実Metal frameで検査します。Japanese catalogがmenu、Command Palette、
+Settings、statusへ届くことに加え、Reduce Motion、Increase Contrast、Differentiate Without
+Colorが既存Quick Terminal、Settings、全Metal surfaceへ届き、同一通知を重複適用せず
+owner identityと設定値を維持することも検査します。configuration suiteは`C` localeの
+English UIを検査し、bundle auditはEnglish/Japanese各4 family、合計8 resourceがmanifestと
+bundleでbyte一致することを要求します。
 実zshは996/997、XTWINOPS 16、mode 2048の即時/resize応答をPTYからexact byteで読み、2031の
 disable/RIS、2048 disableとsession teardown後のsubscription解除も検査します。同じpaneの
 PTY、screen、palette/style/scrollback、surface、renderer/atlas resourceを維持し、3 session、

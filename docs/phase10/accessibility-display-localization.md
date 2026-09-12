@@ -462,3 +462,82 @@ injectable localization boundary with English and Japanese catalogs.
   analysis, all native capability/resource/compatibility checks, and the full
   aggregate Dart suite. Duration-only soak was intentionally not run under the
   user's priority instruction and is not a blocker.
+- 2026-09-13: after commit `367fdc6` (`Enforce localization catalog
+  coverage`), reread the roadmap and began the final dual-runtime/documentation
+  closure from a clean tree. The existing `theme` runtime suite already owns
+  real AppKit event injection, accepted Metal frames, identity preservation,
+  Settings construction, and complete teardown, making it the narrowest
+  end-to-end host for the preference projection. This closure will extend that
+  suite with a protocol-v14 accessibility-preference event and Japanese
+  catalog assertions rather than add another duplicate process lifecycle. The
+  configuration runtime will explicitly select the `C` locale for deterministic
+  English acceptance; RTL composition remains covered by the native hierarchy
+  tests because the terminal cell model must not be reversed.
+- 2026-09-13: acceptance scope is Developer JIT and Release AOT builds, bundle
+  audit/resource bytes, English configuration UI, Japanese menu/palette/
+  Settings/status UI, live all-three-preference projection into the existing
+  Quick Terminal, Settings, and Metal owners, deduplication/identity/cleanup,
+  plus README/feature-matrix/manual-check reconciliation. Signing,
+  notarization, update distribution, diagnostics bundles, external user setting
+  mutation, and duration-only soak remain later tasks.
+- 2026-09-13: the first closure analysis found one nullable local passed to the
+  theme acceptance after its unconditional construction. Added the explicit
+  non-null assertion at that already-established lifecycle boundary; no
+  production fallback or error handling changed.
+- 2026-09-13: both rebuilt bundle audits and both English configuration runtime
+  acceptances passed. The first Developer JIT Japanese theme extension reached
+  all prior appearance work and cleanly tore down three sessions, but its new
+  assertion incorrectly expected the Settings window title to be the catalog's
+  generic `Settings` label. With an actual config file, the intended title is
+  the user-provided file basename (`config`), which is external data and must
+  remain untranslated. Removed only that incorrect title condition; Japanese
+  Settings shell, status, and schema descriptions remain required.
+- 2026-09-13: the corrected Developer JIT theme acceptance passed with protocol
+  v14, Japanese menu/palette/Settings/status catalog projection, three live
+  preference events, stable owners, and complete three-session teardown. The
+  same Release AOT acceptance passed with the identical marker and ownership
+  bounds. Neither run changes global macOS preferences; external visual and OS
+  registration observations are bounded by
+  [the manual checklist](accessibility-display-localization-manual-checklist.md).
+- 2026-09-13: documentation closure records the product behavior in README,
+  replaces stale AX-02/AX-03 matrix state, adds AX-04 localization ownership,
+  and separates system-owned display/language/RTL observations into the manual
+  checklist. The checklist is deliberately short-running; duration soak remains
+  excluded by user priority. The static injection count is nine: eight normal
+  product presenter handoffs plus the theme runtime acceptance handoff.
+- 2026-09-13: the first local closure command formatted all four touched Dart
+  files without changes, then `dart analyze` was prevented from updating the
+  sandbox-external Dart telemetry session file. This is an environment write,
+  not an analyzer finding; rerun uses the repository's documented
+  `DART_SUPPRESS_ANALYTICS=true` boundary.
+- 2026-09-13: the first Phase 7 evidence regeneration was blocked before the
+  generator by Metal's build hook attempting to populate the sandbox-external
+  clang module cache. This is the known native-hook environment boundary; no
+  acceptance evidence was changed by the failed attempt. Rerun uses the normal
+  host build environment.
+- 2026-09-13: the first exact full gate passed native capability packages,
+  generated schema/action/localization checks, the regenerated Phase 7
+  inventory, and the nine compatibility cases, then correctly rejected the
+  Phase 6 reconciliation report as stale after application/README/matrix source
+  changes. Regenerate that derived report before rerunning the unchanged gate.
+- 2026-09-13: regenerated Phase 7 evidence (`criteria=4`, `source_refs=13`,
+  `unit_tests=10`, `integration_tests=4`, `ui_assertions=8`) and Phase 6
+  reconciliation (`fix_families=9`, `cases=9`, `split_runs=417`). The second
+  exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` completed all native
+  package checks, generated/freshness gates, formatting of 289 files, analyzer,
+  compatibility/application evidence, fixed-seed security stress, and the full
+  Dart aggregate suite with no failure.
+- 2026-09-13: reran the current bundle auditor directly against both already
+  accepted arm64 bundles. Developer JIT and Release AOT each reported one
+  helper, one native asset, two capabilities, one scripting definition, three
+  App Intents, and all eight localized resources. Earlier in this same closure,
+  `make developer-jit-theme` and `make release-aot-theme` passed with three
+  panes, three appearances, three preference events, Japanese localization,
+  stable identities, and complete cleanup; both configuration runtimes passed
+  under the deterministic English `C` locale.
+- 2026-09-13: completion determination: this accessibility/localization parent
+  and all its children now meet their automated, documentation, bundle, and
+  dual-runtime acceptance conditions. Phase 10 as a whole is **not** complete:
+  the next ordered roadmap item, terminal inspector and diagnostics bundle,
+  remains open. External system-owned observations remain explicit release
+  checklist work and duration-only soak was not run by user direction.
