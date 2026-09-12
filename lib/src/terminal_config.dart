@@ -862,6 +862,18 @@ abstract final class TerminalProductConfigSchema {
         formatter: _formatBoolean,
       );
 
+  static final TerminalConfigOption<bool> macosAppleScript =
+      TerminalConfigOption<bool>(
+        name: 'macos-applescript',
+        description:
+            'Allow TCC-authorized AppleScript queries and terminal automation.',
+        valueSyntax: 'true|false',
+        applicationPolicy: TerminalConfigApplicationPolicy.live,
+        defaultValue: true,
+        parser: _parseBoolean,
+        formatter: _formatBoolean,
+      );
+
   static final TerminalConfigOption<bool> macosSecureInputIndication =
       TerminalConfigOption<bool>(
         name: 'macos-secure-input-indication',
@@ -985,6 +997,7 @@ abstract final class TerminalProductConfigSchema {
       quickTerminalScreen,
       quickTerminalAnimationDuration,
       quickTerminalAutohide,
+      macosAppleScript,
       macosSecureInputAuto,
       macosSecureInputIndication,
       macosOptionKey,

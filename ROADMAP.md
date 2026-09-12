@@ -1232,6 +1232,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] Developer JIT／Release AOT native acceptance、manual checklist
     - [x] documentation/evidence closure、親項目完了判定
 - [ ] AppleScript dictionary と object lifecycle
+  （分割、境界、完了条件は
+  [`docs/phase10/applescript-dictionary-object-lifecycle.md`](docs/phase10/applescript-dictionary-object-lifecycle.md)
+  を参照して順に実施する）
+  - [x] typed configuration、snapshot、command、lifecycle contract
+  - [ ] native AppleScript capability、runtime dictionary packaging
+  - [ ] product integration、両runtime acceptance、manual checklist
+  - [ ] documentation/evidence closure、親項目完了判定
 - [ ] App Intents/Shortcuts、notifications
 - [ ] complete VoiceOver/Accessibility Inspector pass
   - [ ] configured terminal padding の accessibility hit/range geometry を

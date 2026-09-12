@@ -731,7 +731,7 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
                   .view
                   .acceptsFirstResponder ==
               false &&
-          settings.state.occurrences.length == 44 &&
+          settings.state.occurrences.length == 45 &&
           settings.state.syntaxSpans.isNotEmpty &&
           disabled.isCommented &&
           disabledSpans.length == 1 &&

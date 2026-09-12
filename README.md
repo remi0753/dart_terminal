@@ -407,7 +407,7 @@ scrollback、font、padding、window frameは書き換えません。自動file 
 
 Applicationメニューの`Settings…`（Command-,）、command palette、または非予約chordへ設定した
 `application.open-settings` actionから、root設定ファイルを編集するnative modal editorを開けます。
-最初のkey入力を待たず、新規・空・疎なファイルでも全44 optionを同じdocument内へ補完して表示し、
+最初のkey入力を待たず、新規・空・疎なファイルでも全45 optionを同じdocument内へ補完して表示し、
 右のcontext panelはcaret位置の
 current/draft value、構文、説明と、保存後に既存terminalへ即時反映されるか新規terminalから使われるかを
 表示します。line/source行や別のvalue入力欄は持たず、panelを閉じても右端の細いrailが残ります。

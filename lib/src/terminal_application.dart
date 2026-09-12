@@ -6860,7 +6860,7 @@ final class TerminalApplication {
           actionDispatches.last.disposition ==
               TerminalActionDispatchDisposition.executed &&
           application.debugLiveObjectCount == nativeHandleBaseline + 6 &&
-          reloadController.effectiveSnapshot.schema.options.length == 44 &&
+          reloadController.effectiveSnapshot.schema.options.length == 45 &&
           settings.state.occurrences
                   .map(
                     (TerminalSettingsOptionOccurrence occurrence) =>
@@ -6868,7 +6868,7 @@ final class TerminalApplication {
                   )
                   .toSet()
                   .length ==
-              44 &&
+              45 &&
           initialFont.draftValue(settings.state.text) == 'SF Mono Terminal' &&
           reloadController.effectiveSnapshot.value(
                 TerminalProductConfigSchema.theme,

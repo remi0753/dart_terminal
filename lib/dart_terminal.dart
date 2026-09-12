@@ -4,6 +4,7 @@ library;
 export 'src/runtime_lifecycle.dart' show RuntimeLifecycleScenario;
 export 'src/terminal_action_menu.dart';
 export 'src/terminal_action_registry.dart';
+export 'src/terminal_applescript.dart';
 export 'src/terminal_application.dart'
     show
         TerminalApplication,

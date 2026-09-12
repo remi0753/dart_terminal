@@ -169,6 +169,7 @@ final class TerminalProductConfiguration {
     required this.quickTerminalScreen,
     required this.quickTerminalAnimationDuration,
     required this.quickTerminalAutohide,
+    required this.macosAppleScript,
     required this.macosSecureInputAuto,
     required this.macosSecureInputIndication,
     required this.macosOptionKey,
@@ -220,6 +221,9 @@ final class TerminalProductConfiguration {
     quickTerminalAutohide: snapshot.value(
       TerminalProductConfigSchema.quickTerminalAutohide,
     ),
+    macosAppleScript: snapshot.value(
+      TerminalProductConfigSchema.macosAppleScript,
+    ),
     macosSecureInputAuto: snapshot.value(
       TerminalProductConfigSchema.macosSecureInputAuto,
     ),
@@ -268,6 +272,7 @@ final class TerminalProductConfiguration {
   final TerminalConfiguredQuickTerminalScreen quickTerminalScreen;
   final double quickTerminalAnimationDuration;
   final bool quickTerminalAutohide;
+  final bool macosAppleScript;
   final bool macosSecureInputAuto;
   final bool macosSecureInputIndication;
   final TerminalConfiguredOptionKey macosOptionKey;

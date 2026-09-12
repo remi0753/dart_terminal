@@ -451,6 +451,28 @@ Future<void> _testExternalPasteLifecycle() async {
 
   harness
     ..writes.clear()
+    ..notices.clear();
+  final TerminalExternalContent scripted =
+      TerminalExternalContentAdmission.text(
+        risky.text,
+        source: TerminalExternalTextSource.appleScript,
+      ).content!;
+  final TerminalExternalPasteResult serviceConfirmation = await controller
+      .submit(7, risky);
+  final TerminalExternalPasteResult scriptConfirmation = await controller
+      .submit(7, scripted);
+  _expect(
+    serviceConfirmation.disposition ==
+            TerminalExternalPasteDisposition.confirmationRequired &&
+        scriptConfirmation.disposition ==
+            TerminalExternalPasteDisposition.confirmationRequired &&
+        harness.writes.isEmpty &&
+        harness.notices.length == 2,
+    'scripted text reused confirmation authority from a Service delivery',
+  );
+
+  harness
+    ..writes.clear()
     .._resolutionCount = 0
     ..replaceAfterFirstResolution = true;
   final TerminalExternalPasteResult stale = await controller.submit(7, safe);

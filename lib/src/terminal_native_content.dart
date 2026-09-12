@@ -355,7 +355,7 @@ abstract final class TerminalWordLookup {
 
 enum TerminalExternalContentKind { text, filePaths }
 
-enum TerminalExternalTextSource { service, drop }
+enum TerminalExternalTextSource { service, drop, appleScript }
 
 enum TerminalExternalContentDisposition {
   admitted,
@@ -582,7 +582,12 @@ final class TerminalExternalPasteController<T> {
   )) {
     (TerminalExternalContentKind.text, TerminalExternalTextSource.service) => 1,
     (TerminalExternalContentKind.text, TerminalExternalTextSource.drop) => 2,
-    (TerminalExternalContentKind.filePaths, _) => 3,
+    (
+      TerminalExternalContentKind.text,
+      TerminalExternalTextSource.appleScript,
+    ) =>
+      3,
+    (TerminalExternalContentKind.filePaths, _) => 4,
   };
 }
 
