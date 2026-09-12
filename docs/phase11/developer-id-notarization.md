@@ -217,3 +217,50 @@ all four children and this parent are complete.
   state. All required sections and the ROADMAP link exist, `git diff --check`
   passed, and the adjacent generic worktree remained clean. The contract child
   is complete; the generic atomic distribution substrate is next.
+- 2026-09-13: Apple documentation reconfirmed that current direct distribution
+  requires Developer ID rather than ad-hoc/development signing, hardened runtime
+  on distributed executables, secure timestamps, no enabled
+  `com.apple.security.get-task-allow`, notary-log review, and a new distribution
+  ZIP after stapling the accepted application. The implementation follows
+  [Apple's notarization requirements](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)
+  and [custom workflow order](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow).
+- 2026-09-13: added the generic `dart_macos_runtime:distribute` CLI in the
+  adjacent repository. It accepts one audited schema-2 Universal Release AOT
+  input, a distinct atomic output directory, identity label, exact Team ID,
+  reviewed entitlements plist, Keychain profile label, and bounded wait.
+  `--validate-only` performs the full immutable source/resource/code and
+  entitlement preflight without identity lookup, signing, upload, staple,
+  Gatekeeper, or publication.
+- 2026-09-13: full publication rescans exact neutral-resource hashes and all
+  code slices/dependencies, requires the original strict ad-hoc signature,
+  copies into same-parent staging, signs every manifest code owner explicitly
+  before the outer app with runtime/timestamp options, and verifies Developer
+  ID Application authority, Team ID, runtime flag, timestamp, exact outer
+  entitlements, and deep strict validity. It generically rejects enabled debug,
+  JIT, unsigned-memory, executable-page-protection, and library-validation
+  bypass entitlements for Release AOT.
+- 2026-09-13: the publisher creates a transient submission ZIP, uses only the
+  named Keychain profile for separate JSON submit/wait calls, reviews an
+  accepted matching notary log below 1 MiB and requires zero issues, staples
+  and validates the app ticket, checks signature and Gatekeeper, then creates
+  the final ZIP. Its path-free manifest binds source/entitlement/archive/code
+  hashes and bounded acceptance metadata. Any tested fault before publication
+  deletes staging and preserves last-good output.
+- 2026-09-13: five generic fixture groups passed option/secret boundaries,
+  authority-free preflight, explicit signing and post-staple archive order,
+  exact evidence/replacement, unsafe schema/resource/path rejection, and 15
+  authority/runtime/timestamp/entitlement/notary/log/staple/Gatekeeper/archive
+  failures. The current real nine-image Universal product bundle also reported
+  `DISTRIBUTION_PREFLIGHT_PASS` without credential access or output creation.
+- 2026-09-13: the exact adjacent
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed generic repository,
+  native bridge/runtime, package analysis, builder, Universal assembler,
+  publisher, public API, example, and FFI gates. Added-line/new-source review
+  found no product or `terminal` name in generic code. Committed the adjacent
+  implementation as `a895dfb` (`Add atomic hardened distribution publishing`).
+- 2026-09-13: the exact main
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` also passed unchanged
+  generated evidence, 294-file formatting, analysis, all package/native tests,
+  security stress, and root tests against the committed generic dependency.
+  The generic child is complete; product-owned entitlement policy and
+  credential-independent distribution gates are next.
