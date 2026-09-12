@@ -1238,7 +1238,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] typed configuration、snapshot、command、lifecycle contract
   - [ ] native AppleScript capability、runtime dictionary packaging
     - [x] `dart_macos_runtime` scripting-definition manifest／bundle substrate
-    - [ ] terminal-specific cached hierarchy／suspended-command native package
+    - [x] terminal-specific cached hierarchy／suspended-command native package
     - [ ] dependency gates、consumer declaration、bundle audit
   - [ ] product integration、両runtime acceptance、manual checklist
   - [ ] documentation/evidence closure、親項目完了判定

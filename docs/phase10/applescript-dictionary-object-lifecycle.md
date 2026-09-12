@@ -333,3 +333,79 @@ authoritative hierarchy, paste safety, or teardown rules.
   records the generic runtime unit. Its required post-commit ROADMAP reread
   confirms the terminal-specific cached hierarchy/suspended-command package is
   now the first unfinished unit; product wiring remains later and untouched.
+- Native-package design keeps the scripting surface dependency-owned and
+  singleton because Cocoa Scripting is process/application global. ABI version
+  1 is main-thread-only, accepts one atomically validated snapshot packet,
+  exposes synchronous cached KVC wrappers through an `NSApplication` category,
+  and returns queued versioned command packets only when Dart polls. It never
+  invokes Dart from an AppKit callback.
+- Custom `NSScriptCommand` subclasses validate and resolve only cached wrapper
+  IDs, call `suspendExecution`, and are retained in a 16-entry pending table.
+  Dart completion calls `resumeExecutionWithResult:` exactly once; 30-second
+  native timeout, live-disabled snapshot replacement, and shutdown resume all
+  remaining commands with typed errors. Product state is deliberately not
+  mutated in this unit.
+- The dictionary will expose application -> windows -> tabs -> terminals;
+  stable text IDs, bounded title/cwd, selected/focused/frontmost relationships;
+  new window, new tab, four-direction split, input text, focus, and standard
+  close. It declares no terminal contents/history, arbitrary action, key/mouse,
+  mutable title, launch-record, or Quick Terminal surface.
+- The first strict Objective-C syntax pass failed only on five uses of the GNU
+  omitted-middle `?:` convenience syntax, which the repository's `-Wpedantic
+  -Werror` policy rejects. They are replaced with explicit nil conditionals;
+  no ABI or lifecycle design is changed before rerunning the same compiler.
+- After those replacements, Objective-C and C/C++ header checks pass. The first
+  combined native-test compile then failed before compilation because
+  `clang++ -std=c++20` cannot apply a C++ language standard to the separate
+  `.m` translation unit. The capability source is compiled as Objective-C to
+  its own test object, then linked with the Objective-C++ test, matching the
+  repository's established per-language build boundaries.
+- The first package-test run found two test-harness assumptions, not native
+  implementation faults: the fake intentionally consumed its command buffer
+  before the assertion inspected it, and standalone `dart run` executes outside
+  the AppKit main-thread host so the native session correctly returned
+  `WRONG_THREAD` rather than `NOT_INITIALIZED`. The fake retains a separate
+  source buffer for copy verification, while the native-asset hook test now
+  asserts the main-thread rejection; the Objective-C++ host test remains the
+  owner/lifecycle proof on the process main thread.
+- Final native review found that `DtasEnqueuePacket` and the AppleScript error
+  adapter both incremented the rejected-command counter for the same failed
+  enqueue. Counting is now owned by the public boundary: Cocoa command errors
+  increment in `DtasRejectCommand`, while the test-only direct enqueue wrapper
+  increments its own failures. Each rejected request is therefore observable
+  exactly once without changing queue or suspension semantics.
+- `make terminal-applescript-native-test` passes the C11/C++20 header checks,
+  system-DTD SDEF validation, strict Objective-C dylib build, and process-main
+  Objective-C++ hierarchy/queue/lifecycle tests. `make
+  terminal-applescript-dart-test` resolves the package, analyzes with no
+  issues, passes the deterministic facade/fake suite, and loads the compiled
+  build-hook native asset with the expected non-AppKit-thread guard.
+- The exact dependency full gate `CI=true DART_SUPPRESS_ANALYTICS=true make
+  test` passes after the package and aggregate target are added. This includes
+  scaffold validation, all bridge/runtime/renderer/PTy native suites, all Dart
+  package analyses and tests, hello-window Kernel compilation, and current plus
+  legacy FFI smoke tests; no existing regression failed.
+- The rejected-command ownership fix is locked by summary assertions: the
+  malformed/duplicate/disabled sequence records four rejections, and two queue
+  cap failures record two. The focused native suite passes again after adding
+  these exact-count checks.
+- Completion review also found that the raw ABI could return an arbitrary
+  cached object for an object-producing dictionary command, or no object at
+  all. Native completion now derives the command kind from its retained packet:
+  new-window/new-tab/split require a cached window/tab/terminal ID of the exact
+  declared result kind, while input/focus/close reject object results. Wrong,
+  missing, and correct object plus boolean-result cases are tested; the strict
+  native suite passes after the hardening.
+- The exact dependency full gate is rerun after the completion-type hardening
+  and passes again end to end. The committed package candidate is therefore the
+  same source exercised by both the focused native contract and the aggregate
+  dependency regression matrix.
+- Dependency commit `d15f4aa` (`Add bounded terminal AppleScript capability`)
+  records the terminal-specific package, dictionary, native cache/command
+  lifecycle, Dart facade, build hook, documentation, and focused plus aggregate
+  verification. The adjacent dependency worktree is clean after the commit.
+- The required post-commit ROADMAP reread selects dependency gates, terminal
+  consumer declaration, and bundle audit as the next unfinished unit. That unit
+  may declare and package the dependency/SDEF in terminal bundles and prove
+  generic host behavior, but it must not initialize or connect live product
+  state until the following product-integration item.
