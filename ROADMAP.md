@@ -1220,7 +1220,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] bounded terminal interaction contracts、shared action metadata
   - [ ] `dart_appkit` context-menu、Quick Look substrate
-    - [ ] View context-menu attachment、ownership substrate
+    - [x] View context-menu attachment、ownership substrate
     - [ ] Quick Look request event、definition presentation substrate
   - [ ] `dart_appkit` Services、drop-destination substrate
   - [ ] `dart_macos_runtime` service declaration substrate

@@ -6,7 +6,8 @@
 - Task: Quick Look, Services, drag/drop, and context menu
 - Started: 2026-09-12
 - State: active
-- Current subtask: `dart_appkit` context-menu and Quick Look substrate
+- Current subtask: `dart_appkit` Quick Look request event and definition
+  presentation substrate
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -250,9 +251,33 @@ committed contracts.
   versioned view-source event are the reusable boundary.
 - 2026-09-12: Context-menu attachment does not change the event protocol;
   Quick Look does. The two mechanisms are therefore added as ordered nested
-  subtasks before dependency code changes. Context-menu disposal will detach
-  live View references before releasing a Menu, while native View release also
-  clears its menu so finalizer/shutdown paths cannot retain an actionable menu.
+  subtasks before dependency code changes.
+- 2026-09-12: Adjacent `dart_appkit` commit `7869872` adds optional additive
+  `da_view_set_context_menu`, public cache-on-success `View.contextMenu`, and
+  generic/specialized View support without changing the ABI or event protocol
+  versions. AppKit owns secondary-click/Control-click presentation through
+  `NSView.menu`; selected items still use the existing asynchronous,
+  generation-checked `MenuItem` event path, so no native callback enters Dart
+  synchronously.
+- 2026-09-12: Lifetime coordination is bidirectional. Native code keeps only a
+  weak set of attached views, clears a View's menu on View release, and clears
+  all matching Views before Menu release. Dart Menu wrappers hold weak View
+  references and update either side only after native success. A failed View or
+  Menu release consequently preserves retryable wrapper/native state, while a
+  successful release clears the surviving wrappers' caches.
+- 2026-09-12: The first dependency native run found that a registry-domain test
+  intentionally stores a non-`NSView` release probe under generic `kView`.
+  Limiting the new cleanup hook to objects that are actually `NSView`
+  subclasses preserves that extensible registry contract. The first exact gate
+  then found only an unused C header-probe pointer; referencing the new symbol
+  in both C11 and C++20 probe results fixed the warning-as-error failure.
+- 2026-09-12: Focused native/Dart/current+legacy FFI tests cover attach,
+  replacement, clear, type/thread/stale rejection, cross-application guards,
+  failure cache preservation, and release from either side. Both generic host
+  builds and the dependency exact gate pass. The consuming exact `CI=true
+  DART_SUPPRESS_ANALYTICS=true make test` also passes with 276 formatted files,
+  clean analysis, generated reference/evidence checks, Phase 9 security stress,
+  and the aggregate terminal suite.
 
 ## Risks and handoff notes
 
