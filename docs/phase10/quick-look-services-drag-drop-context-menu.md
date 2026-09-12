@@ -140,9 +140,11 @@ committed contracts.
      text cases, action conflicts, API exports, focused tests, and the full
      terminal gate pass.
 2. **AppKit context-menu and Quick Look substrate**
-   - Add reusable View-owned context-menu attachment plus pressure/Quick Look
-     request and native definition presentation, preserving asynchronous event
-     delivery and generation ownership.
+   1. Add reusable View-owned context-menu attachment with explicit Menu/View
+      lifetime coordination.
+   2. Add pressure/Quick Look request events and native definition
+      presentation, preserving asynchronous event delivery and generation
+      ownership.
    - Complete when fake/native/legacy/public API, accessibility geometry,
      disposal, both host builds, dependency full gate, and consuming terminal
      full gate pass.
@@ -239,6 +241,18 @@ committed contracts.
   compatibility evidence are fresh, 28 application actions and 15 native
   shortcuts reconcile, all 276 files are formatted, static analysis reports no
   issues, security stress passes, and the aggregate terminal tests pass.
+- 2026-09-12: Dependency inspection after commit `2023a72` found that an
+  ordinary context menu can reuse the existing generation-checked `Menu`
+  through `NSView.menu`, but a force-click request must also reach registered
+  custom views such as the terminal's provider-owned `MTKView`. The generic
+  base View class alone cannot override such a custom view's pressure responder.
+  A non-delaying pressure recognizer attached to the registered view and a new
+  versioned view-source event are the reusable boundary.
+- 2026-09-12: Context-menu attachment does not change the event protocol;
+  Quick Look does. The two mechanisms are therefore added as ordered nested
+  subtasks before dependency code changes. Context-menu disposal will detach
+  live View references before releasing a Menu, while native View release also
+  clears its menu so finalizer/shutdown paths cannot retain an actionable menu.
 
 ## Risks and handoff notes
 
