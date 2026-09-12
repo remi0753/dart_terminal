@@ -227,12 +227,25 @@ split before code changes so each layer consumes only committed contracts.
   prerequisite of the current product-integration task. It is recorded as the
   first nested item before implementation; no unrelated menu validation or
   product policy will be moved into the dependency.
+- 2026-09-12: `dart_appkit` now exposes additive
+  `da_menu_item_set_checked` and cache-on-success `MenuItem.isChecked` for
+  actionable items. The native boundary validates the main thread, exact
+  Boolean input, handle generation/type, and separator rejection; older
+  bridges return typed unsupported. It changes only AppKit off/on state and
+  does not own product policy, action dispatch, enablement, mixed state, or
+  menu artwork.
+- 2026-09-12: Native/Dart/current/legacy/header coverage passed on/off,
+  idempotence, cache retention after native failure, invalid values,
+  separator rejection, main-thread guards, and unsupported fallback. Exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed in `dart_appkit` and
+  this consuming repository. The dependency is committed as `387daa0`
+  (`Expose checked menu item state`). The first sandboxed `dart format`
+  completed formatting but failed while touching the user telemetry-session
+  timestamp; the identical permitted rerun made zero changes and succeeded.
 
 ## Next-subtask objective
 
-First add the minimal checked Boolean projection to the existing AppKit
-menu-item handle and verify current/legacy FFI plus native/Dart ownership. Then
-aggregate the focused live pane's content-free echo observation with explicit
+Aggregate the focused live pane's content-free echo observation with explicit
 manual intent in one product controller. Add live configuration defaults and
 Settings status, a stable manual toggle action shared by menu, command palette,
 and keybindings, and project automatic/manual/failure indication only to the

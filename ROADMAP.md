@@ -1211,7 +1211,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] `dart_pty_macos` content-free terminal echo observation substrate
   - [x] `dart_appkit` balanced Secure Event Input/indication substrate
   - [ ] terminal policy/configuration/action/lifecycle integration
-    - [ ] `dart_appkit` checked menu-item projection prerequisite
+    - [x] `dart_appkit` checked menu-item projection prerequisite
     - [ ] controller、live config、shared action、UI/lifecycle integration
   - [ ] 両runtime acceptance、manual checklist、documentation closure、親項目完了判定
 - [ ] Quick Look、Services、drag/drop、context menu
