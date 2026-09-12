@@ -1293,7 +1293,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] field inventory、privacy分類、versioned inspector／bundle contract
   - [x] `dart_appkit`の汎用save-destination panel substrate
   - [x] bounded live parser inspector／diagnostics export model
-  - [ ] localized product window、shared actions、atomic export integration
+  - [x] localized product window、shared actions、atomic export integration
   - [ ] static privacy audit、両runtime受け入れ、文書／matrix更新、Phase 10完了判定
 
 終了条件:

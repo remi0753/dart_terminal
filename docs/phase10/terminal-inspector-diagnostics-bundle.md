@@ -245,6 +245,16 @@ bounded to 256 KiB and shows a stable truncation/eviction summary when needed.
 
 ## Progress and findings
 
+- 2026-09-13: after commit `0b2f496` (`Add bounded privacy-safe
+  diagnostics model`), reread ROADMAP from a clean worktree and began only the
+  localized product window/action/export child. The existing Settings and
+  Command Palette presenters establish the single-window ownership, deferred
+  close, Dart-only key routing, and terminal responder restoration patterns;
+  the interactive hierarchy reconciliation point already centralizes focused
+  pane changes. The implementation will add one product-owned read-only
+  presenter, invoke the generic injected save panel, and keep snapshot
+  assembly in the product repository. It will not add or rename any adjacent
+  `dart_appkit` code.
 - 2026-09-13: created this memo before implementation after rereading README,
   ROADMAP, FEATURE_MATRIX, the clean worktree, Phase 6 parser inspector/trace
   references, Phase 8 Settings inspector/config diagnostics, and Phase 1
@@ -373,3 +383,45 @@ bounded to 256 KiB and shows a stable truncation/eviction summary when needed.
   final bound tests, format, analysis, all native/package/generated evidence,
   corpus/property/security, renderer, and real PTY paths. Duration-only soak was
   intentionally skipped and is not a blocker under the user's instruction.
+- 2026-09-13: implemented one product-owned, read-only diagnostics presenter
+  on the normal interactive hierarchy path. Opening starts an empty capture for
+  only the focused live pane; focus reconciliation disables and clears the old
+  pane before enabling the new one. Parser notifications are epoch-guarded and
+  coalesced onto a microtask so observation cannot synchronously backpressure
+  parser delivery. Escape, native close, pane loss, presenter disposal, and
+  application teardown clear capture, release the TextView/window owners, and
+  restore the current live terminal responder when possible.
+- 2026-09-13: assembled the frozen allowlisted application, hierarchy, pane,
+  parser, renderer, configuration, and feature snapshot at the product layer.
+  The adjacent generic AppKit bridge receives only localized save-panel copy
+  and returns a transient destination; it received no product code in this
+  child and its worktree remains clean. The presenter encodes deterministic
+  JSON before any write, invokes the atomic writer only for a selected path,
+  and exposes path-free `written`, `cancelled`, `unavailable`, native,
+  encoding, or write-failure results. Cancellation is a successful no-write
+  result. Inspector presentation remains within 256 KiB even when the
+  localized instruction must be omitted.
+- 2026-09-13: registered localized English/Japanese `Open Terminal Inspector`
+  and `Export Diagnostics…` shared actions. The same action identities and
+  dynamic focused-live-pane availability flow through File/View menus, the
+  Command Palette, and the generated keybinding reference; Option-Command-I
+  and Option-Command-E are Dart-routed application shortcuts and write no
+  bytes to the PTY. The localization audit now includes every presenter-owned
+  visible string and rejects the new English/Japanese phrases outside the
+  catalog or injected test fixtures.
+- 2026-09-13: the focused action-registry, action-menu, localization,
+  localization-audit, reference-generation, Phase 7 acceptance-inventory, and
+  native hierarchy tests passed. The native hierarchy fixture proves Japanese
+  palette discovery, exactly-one open owner, Dart-only responder routing,
+  coalesced refresh, capture handoff/clear, cancel, atomic success, write
+  failure cleanup, native failure, Escape close, terminal responder restore,
+  and owner release. One intermediate full run hit the pre-existing real-PTY
+  completion timing test with `No element`; the immediately repeated focused
+  PTY test and subsequent complete gates passed, so it was not reproducible or
+  caused by this UI/export boundary.
+- 2026-09-13: after regenerating only the expected keybinding reference and
+  Phase 7 source-hash corpus, `git diff --check` passed. Final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed with formatting,
+  analysis, all native/package/generated/compatibility/application gates, the
+  real PTY suite, and Phase 9 security stress. Long-duration checks were
+  intentionally skipped under the user's instruction and are not a blocker.

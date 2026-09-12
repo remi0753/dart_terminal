@@ -16,6 +16,7 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testApplicationThemeProjectionLifecycle();
   await _testOsc52ConfirmationPresenterLifecycle();
   await _testSettingsInspectorPresenterLifecycle();
+  await _testDiagnosticsPresenterLifecycle();
   await _testRtlApplicationComposition();
   await _testConfiguredWindowAndPaddingProjection();
   await _testPerWindowCreationFrameProjection();
@@ -1062,6 +1063,287 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
     terminalView.dispose();
     await application.terminate();
     await rawEvents.close();
+  }
+}
+
+Future<void> _testDiagnosticsPresenterLifecycle() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final View terminalView = View(configuration: terminalBaseViewConfiguration);
+  final Window terminalWindow = Window(
+    frame: const Rect.fromLTWH(100, 90, 640, 480),
+    title: 'Terminal',
+    configuration: terminalWindowConfiguration,
+  )..contentView = terminalView;
+  terminalWindow
+    ..show()
+    ..makeFirstResponder(terminalView);
+
+  final TerminalScreenSet firstScreens = TerminalScreenSet(rows: 3, columns: 8);
+  final TerminalScreenParserSink firstSink =
+      TerminalScreenParserSink.forScreenSet(firstScreens);
+  final VtParserInspector firstInspector = VtParserInspector(
+    downstream: firstSink,
+    captureEnabled: false,
+  );
+  final TerminalScreenSet secondScreens = TerminalScreenSet(
+    rows: 4,
+    columns: 10,
+  );
+  final TerminalScreenParserSink secondSink =
+      TerminalScreenParserSink.forScreenSet(secondScreens);
+  final VtParserInspector secondInspector = VtParserInspector(
+    downstream: secondSink,
+    captureEnabled: false,
+  );
+  TerminalDiagnosticsFocusTarget target(
+    String identity,
+    VtParserInspector inspector,
+    TerminalScreenParserSink sink,
+  ) => TerminalDiagnosticsFocusTarget(
+    identity: identity,
+    window: terminalWindow,
+    view: terminalView,
+    isLive: () => true,
+    beginCapture: (VtParserInspectionObserver observer) {
+      inspector.beginCapture(onEvent: observer);
+    },
+    endCapture: inspector.endCapture,
+    snapshot: () => _diagnosticsPresenterSnapshot(inspector, sink),
+  );
+
+  TerminalDiagnosticsFocusTarget active = target(
+    'first',
+    firstInspector,
+    firstSink,
+  );
+  final _DiagnosticsMemoryFiles files = _DiagnosticsMemoryFiles();
+  final TerminalDiagnosticsPresenter presenter = TerminalDiagnosticsPresenter(
+    application: application,
+    focusTarget: () => active,
+    localization: TerminalLocalization.japanese,
+    writer: TerminalDiagnosticsAtomicWriter(files: files),
+  );
+  final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+    catalog: TerminalActionCatalog.standard(
+      localization: TerminalLocalization.japanese,
+    ),
+    registrations: <TerminalActionRegistration>[
+      TerminalActionRegistration(
+        id: TerminalActionId.openTerminalInspector,
+        handler: presenter.open,
+      ),
+      TerminalActionRegistration(
+        id: TerminalActionId.exportDiagnostics,
+        handler: () async {
+          await presenter.export();
+        },
+      ),
+    ],
+  );
+  try {
+    _expect(
+      dispatcher.search('インスペクタ').first.definition.id ==
+              TerminalActionId.openTerminalInspector &&
+          dispatcher.search('診断 書き出す').first.definition.id ==
+              TerminalActionId.exportDiagnostics,
+      'localized Command Palette search does not expose both shared actions',
+    );
+    _expect(
+      (await dispatcher.dispatch(TerminalActionId.openTerminalInspector))
+                  .disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          presenter.isOpen &&
+          presenter.captureHandoffCount == 1 &&
+          presenter.capturedTargetIdentity == 'first' &&
+          firstInspector.captureEnabled &&
+          presenter.activeWindow!.title == 'ターミナルインスペクタ' &&
+          presenter.renderedText!.contains('"format":') &&
+          presenter.renderedText!.contains('Escで閉じる'),
+      'shared action did not open one localized read-only inspector',
+    );
+    final int inspectorWindowHandle = bindings.handleFor(
+      presenter.activeWindow!,
+    );
+    final int inspectorViewHandle = bindings.handleFor(presenter.activeView!);
+    _expect(
+      bindings.firstResponders[inspectorWindowHandle] == inspectorViewHandle &&
+          bindings.windowKeyEventRoutings[inspectorWindowHandle] == 1,
+      'inspector did not own its Dart-only keyboard surface',
+    );
+
+    firstInspector.execute(0x07);
+    await Future<void>.delayed(Duration.zero);
+    _expect(
+      presenter.renderedText!.contains('"events_total": 1'),
+      'parser notifications did not coalesce into an immutable refresh',
+    );
+    active = target('second', secondInspector, secondSink);
+    presenter.synchronizeFocus();
+    _expect(
+      presenter.captureHandoffCount == 2 &&
+          presenter.capturedTargetIdentity == 'second' &&
+          !firstInspector.captureEnabled &&
+          firstInspector.snapshot().events.isEmpty &&
+          secondInspector.captureEnabled,
+      'focus handoff did not clear the previous capture before enabling next',
+    );
+
+    bindings.savePanelResult =
+        const NativeValueResult<NativeSavePanelResult>.success(
+          NativeSavePanelResult.cancelled(),
+        );
+    await dispatcher.dispatch(TerminalActionId.exportDiagnostics);
+    _expect(
+      presenter.lastExportResult?.disposition ==
+              TerminalDiagnosticsPresentationExportDisposition.cancelled &&
+          presenter.lastExportResult!.isSuccess &&
+          files.destinations.isEmpty,
+      'save-panel cancellation was not a successful no-write outcome',
+    );
+    bindings.savePanelResult =
+        const NativeValueResult<NativeSavePanelResult>.success(
+          NativeSavePanelResult.selected('/tmp/terminal-diagnostics.json'),
+        );
+    await dispatcher.dispatch(TerminalActionId.exportDiagnostics);
+    final Uint8List written =
+        files.destinations['/tmp/terminal-diagnostics.json']!;
+    _expect(
+      presenter.lastExportResult?.disposition ==
+              TerminalDiagnosticsPresentationExportDisposition.written &&
+          presenter.lastExportResult?.byteCount == written.length &&
+          utf8.decode(written).contains('"capture_enabled": true') &&
+          bindings.lastSavePanelConfiguration?.title == '診断情報を書き出す' &&
+          bindings.lastSavePanelConfiguration?.defaultFileName ==
+              'dart-terminal-diagnostics.json' &&
+          bindings.lastSavePanelConfiguration?.allowedFileExtension == 'json' &&
+          files.temporaryFiles.isEmpty,
+      'localized save panel did not feed one bounded atomic JSON write',
+    );
+    files.failReplace = true;
+    await presenter.export();
+    _expect(
+      presenter.lastExportResult?.disposition ==
+              TerminalDiagnosticsPresentationExportDisposition.writeFailure &&
+          files.temporaryFiles.isEmpty,
+      'atomic writer failure was not cleaned and classified without a path',
+    );
+    files.failReplace = false;
+    bindings.savePanelResult =
+        const NativeValueResult<NativeSavePanelResult>.failure(9, 'injected');
+    await presenter.export();
+    _expect(
+      presenter.lastExportResult?.disposition ==
+          TerminalDiagnosticsPresentationExportDisposition.nativeFailure,
+      'native save failure did not remain path-free and classified',
+    );
+
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      inspectorWindowHandle,
+      keyCode: 53,
+      characters: '\u001b',
+    );
+    await _waitForHierarchy(
+      () => !presenter.isOpen,
+      'Escape did not close the diagnostics inspector',
+    );
+    _expect(
+      !secondInspector.captureEnabled &&
+          secondInspector.snapshot().events.isEmpty &&
+          presenter.terminalResponderRestoreCount == 1 &&
+          bindings.firstResponders[bindings.handleFor(terminalWindow)] ==
+              bindings.handleFor(terminalView) &&
+          !bindings.objects.containsKey(inspectorWindowHandle) &&
+          !bindings.objects.containsKey(inspectorViewHandle),
+      'close did not clear capture, restore terminal focus, or release owners',
+    );
+  } finally {
+    await presenter.dispose();
+    if (!terminalWindow.isClosed) terminalWindow.close();
+    terminalWindow.dispose();
+    terminalView.dispose();
+    await application.terminate();
+    await rawEvents.close();
+  }
+}
+
+TerminalDiagnosticsSnapshot _diagnosticsPresenterSnapshot(
+  VtParserInspector inspector,
+  TerminalScreenParserSink sink,
+) => TerminalDiagnosticsSnapshot(
+  application: TerminalDiagnosticsApplicationSnapshot(
+    runtimeKind: TerminalDiagnosticsRuntimeKind.developerJit,
+    appKitEventProtocol: 14,
+    language: TerminalDiagnosticsLanguage.japanese,
+    direction: TerminalDiagnosticsDirection.leftToRight,
+    reduceMotion: false,
+    increaseContrast: false,
+    differentiateWithoutColor: false,
+  ),
+  hierarchy: TerminalDiagnosticsHierarchySnapshot(
+    windowCount: 1,
+    tabCount: 1,
+    paneCount: 1,
+    livePaneCount: 1,
+    activeWindowRole: TerminalDiagnosticsWindowRole.standard,
+  ),
+  focusedPane: TerminalDiagnosticsFocusedPaneSnapshot.unavailable(),
+  parser: TerminalDiagnosticsParserSnapshot.capture(
+    inspector: inspector,
+    sink: sink,
+  ),
+  renderer: TerminalDiagnosticsRendererSnapshot.unavailable(),
+  configuration: TerminalDiagnosticsConfigurationSnapshot(
+    schemaOptionCount: 47,
+    effectiveGeneration: 0,
+    attemptGeneration: 0,
+    warningCount: 0,
+    errorCount: 0,
+    liveOptionCount: 11,
+    newSessionOptionCount: 36,
+  ),
+  features: TerminalDiagnosticsFeaturesSnapshot(
+    secureInput: TerminalDiagnosticsFeatureState.disabled,
+    quickWindowShortcut: TerminalDiagnosticsFeatureState.disabled,
+    notifications: TerminalDiagnosticsFeatureState.disabled,
+    appIntents: TerminalDiagnosticsFeatureState.disabled,
+    appleScript: TerminalDiagnosticsFeatureState.disabled,
+    osc52: TerminalDiagnosticsFeatureState.disabled,
+    pendingOsc52Requests: 0,
+    pendingNotificationRequests: 0,
+  ),
+);
+
+final class _DiagnosticsMemoryFiles
+    implements TerminalDiagnosticsFileOperations {
+  final Map<String, Uint8List> destinations = <String, Uint8List>{};
+  final Map<String, Uint8List> temporaryFiles = <String, Uint8List>{};
+  bool failReplace = false;
+
+  @override
+  Future<void> writeExclusive(String path, Uint8List bytes) async {
+    if (temporaryFiles.containsKey(path)) {
+      throw StateError('temporary path was reused');
+    }
+    temporaryFiles[path] = Uint8List.fromList(bytes);
+  }
+
+  @override
+  Future<void> replace(String sourcePath, String destinationPath) async {
+    if (failReplace) throw StateError('injected replace failure');
+    destinations[destinationPath] = temporaryFiles.remove(sourcePath)!;
+  }
+
+  @override
+  Future<void> remove(String path) async {
+    temporaryFiles.remove(path);
   }
 }
 
@@ -3024,6 +3306,7 @@ final class _HierarchyNativeBindings
     implements
         NativeBindings,
         NativeTextEditorBindings,
+        NativeSavePanelBindings,
         NativeSplitViewPositionBindings {
   int _nextHandle = (1 << 32) | 100;
   final Map<int, String> objects = <int, String>{};
@@ -3073,6 +3356,12 @@ final class _HierarchyNativeBindings
   final Map<int, int> splitViewZoomedChildren = <int, int>{};
   final List<int> releaseOrder = <int>[];
   final List<String> terminationReplies = <String>[];
+  NativeValueResult<NativeSavePanelResult> savePanelResult =
+      const NativeValueResult<NativeSavePanelResult>.success(
+        NativeSavePanelResult.cancelled(),
+      );
+  NativeSavePanelConfiguration? lastSavePanelConfiguration;
+  int savePanelRunCount = 0;
   var terminationDeferralEnabled = false;
 
   int handleFor(Object resource) => _handles[resource]!;
@@ -3100,6 +3389,17 @@ final class _HierarchyNativeBindings
   @override
   NativeValueResult<int> debugIsMainThread() =>
       const NativeValueResult<int>.success(1);
+
+  @override
+  NativeValueResult<NativeSavePanelResult> runSavePanel(
+    NativeSavePanelConfiguration configuration,
+  ) {
+    if (savePanelResult.isSuccess) {
+      lastSavePanelConfiguration = configuration;
+      savePanelRunCount++;
+    }
+    return savePanelResult;
+  }
 
   @override
   NativeCallResult applicationTerminate() => const NativeCallResult.success();

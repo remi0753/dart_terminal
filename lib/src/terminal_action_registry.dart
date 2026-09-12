@@ -11,6 +11,7 @@ enum TerminalActionId {
   toggleSecureKeyboardEntry('application.toggle-secure-keyboard-entry'),
   quitApplication('application.quit'),
   newWindow('window.new'),
+  exportDiagnostics('file.export-diagnostics'),
   closeWindow('window.close'),
   newTab('tab.new'),
   selectPreviousTab('tab.select-previous'),
@@ -24,6 +25,7 @@ enum TerminalActionId {
   jumpToNextPrompt('pane.jump-to-next-prompt'),
   togglePaneZoom('pane.toggle-zoom'),
   equalizeSplits('pane.equalize-splits'),
+  openTerminalInspector('view.open-terminal-inspector'),
   moveDividerLeft('pane.move-divider-left'),
   moveDividerRight('pane.move-divider-right'),
   moveDividerUp('pane.move-divider-up'),
@@ -312,6 +314,15 @@ final class TerminalActionCatalog {
         ),
       ),
       action(
+        TerminalActionId.exportDiagnostics,
+        TerminalActionMenu.file,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'e',
+          option: true,
+          command: true,
+        ),
+      ),
+      action(
         TerminalActionId.closeWindow,
         TerminalActionMenu.file,
         shortcut: const TerminalActionShortcut(
@@ -378,6 +389,17 @@ final class TerminalActionCatalog {
       ),
       action(TerminalActionId.togglePaneZoom, TerminalActionMenu.view),
       action(TerminalActionId.equalizeSplits, TerminalActionMenu.view),
+      action(
+        TerminalActionId.openTerminalInspector,
+        TerminalActionMenu.view,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'i',
+          option: true,
+          command: true,
+        ),
+        separatorBefore: true,
+        restoresTerminalFocusAfterInvocation: false,
+      ),
       action(
         TerminalActionId.moveDividerLeft,
         TerminalActionMenu.view,
@@ -455,6 +477,8 @@ TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
     TerminalActionMessageId.toggleSecureKeyboardEntry,
   TerminalActionId.quitApplication => TerminalActionMessageId.quitApplication,
   TerminalActionId.newWindow => TerminalActionMessageId.newWindow,
+  TerminalActionId.exportDiagnostics =>
+    TerminalActionMessageId.exportDiagnostics,
   TerminalActionId.closeWindow => TerminalActionMessageId.closeWindow,
   TerminalActionId.copy => TerminalActionMessageId.copy,
   TerminalActionId.paste => TerminalActionMessageId.paste,
@@ -468,6 +492,8 @@ TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
   TerminalActionId.quickLook => TerminalActionMessageId.quickLook,
   TerminalActionId.togglePaneZoom => TerminalActionMessageId.togglePaneZoom,
   TerminalActionId.equalizeSplits => TerminalActionMessageId.equalizeSplits,
+  TerminalActionId.openTerminalInspector =>
+    TerminalActionMessageId.openTerminalInspector,
   TerminalActionId.moveDividerLeft => TerminalActionMessageId.moveDividerLeft,
   TerminalActionId.moveDividerRight => TerminalActionMessageId.moveDividerRight,
   TerminalActionId.moveDividerUp => TerminalActionMessageId.moveDividerUp,

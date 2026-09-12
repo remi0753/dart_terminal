@@ -150,6 +150,7 @@ void _testStableStandardCatalog() {
           TerminalActionId.quickLook,
           TerminalActionId.togglePaneZoom,
           TerminalActionId.equalizeSplits,
+          TerminalActionId.openTerminalInspector,
           TerminalActionId.moveDividerLeft,
           TerminalActionId.moveDividerRight,
           TerminalActionId.moveDividerUp,
@@ -158,6 +159,24 @@ void _testStableStandardCatalog() {
           TerminalActionId.jumpToNextPrompt,
         ].join(','),
     'view menu contains stable prompt navigation actions in catalog order',
+  );
+  _expect(
+    catalog
+                .actionForId(TerminalActionId.openTerminalInspector)!
+                .shortcut!
+                .identity ==
+            'option+command+i' &&
+        !catalog
+            .actionForId(TerminalActionId.openTerminalInspector)!
+            .restoresTerminalFocusAfterInvocation &&
+        catalog
+                .actionForId(TerminalActionId.exportDiagnostics)!
+                .shortcut!
+                .identity ==
+            'option+command+e' &&
+        catalog.actionForId(TerminalActionId.exportDiagnostics)!.menu ==
+            TerminalActionMenu.file,
+    'inspector and export actions own their reviewed shared shortcuts',
   );
   _expect(
     catalog.actionForId(TerminalActionId.quickLook)!.shortcut!.identity ==

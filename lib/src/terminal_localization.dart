@@ -23,6 +23,7 @@ enum TerminalActionMessageId {
   toggleSecureKeyboardEntry,
   quitApplication,
   newWindow,
+  exportDiagnostics,
   closeWindow,
   copy,
   paste,
@@ -34,6 +35,7 @@ enum TerminalActionMessageId {
   quickLook,
   togglePaneZoom,
   equalizeSplits,
+  openTerminalInspector,
   moveDividerLeft,
   moveDividerRight,
   moveDividerUp,
@@ -263,6 +265,20 @@ final class TerminalLocalization {
       _ja ? 'キーボード入力は他のアプリケーションから保護されています。' : englishSecureBadgeHelp;
 
   String get settingsWindowTitle => _ja ? '設定' : 'Settings';
+
+  String get terminalInspectorWindowTitle =>
+      _ja ? 'ターミナルインスペクタ' : 'Terminal Inspector';
+  String get terminalInspectorUnavailable =>
+      _ja ? 'フォーカス中のターミナルは利用できません。' : 'The focused terminal is unavailable.';
+  String get terminalInspectorInstructions =>
+      _ja ? 'Escで閉じる' : 'Press Esc to close';
+  String get diagnosticsSavePanelTitle =>
+      _ja ? '診断情報を書き出す' : 'Export Diagnostics';
+  String get diagnosticsSavePanelMessage => _ja
+      ? '内容やパスを含まない診断情報をJSONファイルに保存します。'
+      : 'Save content-free diagnostics without terminal text or paths.';
+  String get diagnosticsSavePanelPrompt => _ja ? '書き出す' : 'Export';
+  String get diagnosticsDefaultFileName => 'dart-terminal-diagnostics.json';
   String settingsSaveState(String state) => switch ((language, state)) {
     (TerminalLanguage.english, 'unchanged') => 'UNCHANGED',
     (TerminalLanguage.english, 'modified') => 'MODIFIED',
@@ -462,6 +478,10 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
           'create',
           'terminal',
         ]),
+        TerminalActionMessageId.exportDiagnostics: _action(
+          'Export Diagnostics…',
+          <String>['save', 'support', 'privacy', 'json'],
+        ),
         TerminalActionMessageId.closeWindow: _action('Close Window', <String>[
           'close',
           'terminal',
@@ -507,6 +527,10 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
         TerminalActionMessageId.equalizeSplits: _action(
           'Equalize Splits',
           <String>['balance', 'resize', 'panes'],
+        ),
+        TerminalActionMessageId.openTerminalInspector: _action(
+          'Open Terminal Inspector',
+          <String>['parser', 'diagnostics', 'state', 'debug'],
         ),
         TerminalActionMessageId.moveDividerLeft: _action(
           'Move Split Divider Left',
@@ -588,6 +612,12 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
         '作成',
         'ターミナル',
       ]),
+      TerminalActionMessageId.exportDiagnostics: _action('診断情報を書き出す…', <String>[
+        '保存',
+        'サポート',
+        'プライバシー',
+        'JSON',
+      ]),
       TerminalActionMessageId.closeWindow: _action('ウインドウを閉じる', <String>[
         '閉じる',
         'ターミナル',
@@ -626,6 +656,10 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
         'サイズ変更',
         'ペイン',
       ]),
+      TerminalActionMessageId.openTerminalInspector: _action(
+        'ターミナルインスペクタを開く',
+        <String>['パーサー', '診断', '状態', 'デバッグ'],
+      ),
       TerminalActionMessageId.moveDividerLeft: _action('分割境界を左へ移動', <String>[
         'サイズ変更',
         'ペイン',

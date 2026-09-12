@@ -41,6 +41,19 @@ const TextViewConfiguration terminalCommandPaletteTextViewConfiguration =
       backgroundColor: TextViewColor.windowBackground(),
     );
 
+/// Read-only presentation for the privacy-bounded terminal inspector.
+const TextViewConfiguration terminalDiagnosticsTextViewConfiguration =
+    TextViewConfiguration(
+      view: terminalBaseViewConfiguration,
+      font: TextViewFont.monospacedSystem(
+        size: 13,
+        weight: TextViewFontWeight.regular,
+      ),
+      padding: TextViewPadding.all(18),
+      foregroundColor: TextViewColor.label(),
+      backgroundColor: TextViewColor.windowBackground(),
+    );
+
 /// Presentation used by the searchable effective-configuration inspector.
 const TextViewConfiguration terminalSettingsInspectorTextViewConfiguration =
     TextViewConfiguration(

@@ -37,7 +37,10 @@ import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_core/terminal_semantic_prompt.dart';
 import 'terminal_core/terminal_style.dart';
+import 'terminal_core/vt_parser_inspector.dart';
 import 'terminal_desktop_signal_projection.dart';
+import 'terminal_diagnostics.dart';
+import 'terminal_diagnostics_presenter.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_focus_reporter.dart';
 import 'terminal_input/terminal_hyperlink_interaction.dart';
@@ -89,6 +92,20 @@ const Duration _runtimePtyFaultGracefulTimeout = Duration(milliseconds: 200);
 const Duration _runtimePtyFaultFinalTimeout = Duration(milliseconds: 200);
 const Duration _runtimePtyFaultCleanupTimeout = Duration(milliseconds: 200);
 const Duration _hostTerminationTimeout = Duration(seconds: 1);
+
+TerminalDiagnosticsPaneLifecycle _terminalDiagnosticsLifecycle(
+  TerminalPaneState state,
+) => switch (state) {
+  TerminalPaneState.created => TerminalDiagnosticsPaneLifecycle.created,
+  TerminalPaneState.starting => TerminalDiagnosticsPaneLifecycle.starting,
+  TerminalPaneState.running => TerminalDiagnosticsPaneLifecycle.running,
+  TerminalPaneState.confirmationPending =>
+    TerminalDiagnosticsPaneLifecycle.confirmationPending,
+  TerminalPaneState.exited => TerminalDiagnosticsPaneLifecycle.exited,
+  TerminalPaneState.failed => TerminalDiagnosticsPaneLifecycle.failed,
+  TerminalPaneState.closing => TerminalDiagnosticsPaneLifecycle.closing,
+  TerminalPaneState.closed => TerminalDiagnosticsPaneLifecycle.closed,
+};
 
 enum RuntimeShellExitTestScenario {
   none,
@@ -2618,6 +2635,7 @@ final class TerminalApplication {
     TerminalAppKitMenuProjection? menuProjection;
     TerminalCommandPalettePresenter? palettePresenter;
     TerminalSettingsInspectorPresenter? settingsPresenter;
+    TerminalDiagnosticsPresenter? diagnosticsPresenter;
     TerminalOsc52ConfirmationPresenter? osc52Presenter;
     TerminalActionDispatchScheduler? keyBindingActionScheduler;
     TerminalActionDispatcher? actionDispatcher;
@@ -2686,6 +2704,7 @@ final class TerminalApplication {
         if (menu != null && !menu.isDisposed) menu.refresh();
         final TerminalCommandPalettePresenter? palette = palettePresenter;
         if (palette != null && !palette.isDisposed) palette.refresh();
+        diagnosticsPresenter?.refresh();
       },
     );
 
@@ -2707,6 +2726,7 @@ final class TerminalApplication {
             final TerminalSettingsInspectorPresenter? settings =
                 settingsPresenter;
             if (settings != null && !settings.isDisposed) settings.refresh();
+            diagnosticsPresenter?.refresh();
           },
           onError: (Object error, StackTrace _) {
             stderr.writeln(
@@ -2886,6 +2906,7 @@ final class TerminalApplication {
           if (menu != null && !menu.isDisposed) menu.refresh();
           final TerminalCommandPalettePresenter? palette = palettePresenter;
           if (palette != null && !palette.isDisposed) palette.refresh();
+          diagnosticsPresenter?.refresh();
         },
         onExitRequested: () {
           final PaneId? id = paneId;
@@ -3524,6 +3545,7 @@ final class TerminalApplication {
           state.activeWindow?.selectedTab.focusedPaneId;
       desktopSignalCoordinator.focusSession(sessions[focusedPaneId]?.id);
       osc52Coordinator.focusSession(sessions[focusedPaneId]?.id);
+      diagnosticsPresenter?.synchronizeFocus();
       reconcileSecureKeyboardEntry();
       appleScriptSession?.reconcile();
     }
@@ -3837,6 +3859,8 @@ final class TerminalApplication {
       await osc52Presenter?.dispose();
       osc52Presenter = null;
       osc52Coordinator.dispose();
+      await diagnosticsPresenter?.dispose();
+      diagnosticsPresenter = null;
       await settingsPresenter?.dispose();
       settingsPresenter = null;
       configurationReloadController?.dispose();
@@ -4029,6 +4053,7 @@ final class TerminalApplication {
         appleScriptSession?.applyEnabled(configuration.macosAppleScript);
       }
       settingsPresenter?.refresh();
+      diagnosticsPresenter?.refresh();
       if (result.disposition == TerminalConfigReloadDisposition.failed) {
         Error.throwWithStackTrace(result.error!, result.stackTrace!);
       }
@@ -4054,6 +4079,7 @@ final class TerminalApplication {
               if (settings != null && !settings.isDisposed) {
                 settings.updateAccessibilityPresentation(presentation);
               }
+              diagnosticsPresenter?.refresh();
               for (final _TerminalHierarchyProductPane owner
                   in owners.values.toList(growable: false)) {
                 if (!owner.surface.isDisposed) {
@@ -4196,6 +4222,7 @@ final class TerminalApplication {
               if (menu != null && !menu.isDisposed) menu.refresh();
               final TerminalCommandPalettePresenter? palette = palettePresenter;
               if (palette != null && !palette.isDisposed) palette.refresh();
+              diagnosticsPresenter?.refresh();
             },
             onFailure: (Object error, StackTrace stackTrace) {
               stderr.writeln(
@@ -4244,6 +4271,7 @@ final class TerminalApplication {
               if (menu != null && !menu.isDisposed) menu.refresh();
               final TerminalCommandPalettePresenter? palette = palettePresenter;
               if (palette != null && !palette.isDisposed) palette.refresh();
+              diagnosticsPresenter?.refresh();
             },
           );
       final TerminalProductHierarchyActionCoordinator createdActions =
@@ -4392,6 +4420,7 @@ final class TerminalApplication {
               if (menu != null && !menu.isDisposed) menu.refresh();
               final TerminalCommandPalettePresenter? palette = palettePresenter;
               if (palette != null && !palette.isDisposed) palette.refresh();
+              diagnosticsPresenter?.refresh();
             },
             onError: recordAsynchronousError,
             accessibilityPresentation:
@@ -4434,12 +4463,260 @@ final class TerminalApplication {
           ..makeFirstResponder(resources.view);
         return true;
       };
+
+      TerminalDiagnosticsFeatureState secureDiagnosticsState() {
+        final TerminalSecureKeyboardEntryStatus status =
+            createdSecureKeyboardEntry.status;
+        return switch (status.mode) {
+          TerminalSecureKeyboardEntryMode.failed =>
+            TerminalDiagnosticsFeatureState.failed,
+          TerminalSecureKeyboardEntryMode.disabled =>
+            TerminalDiagnosticsFeatureState.disabled,
+          TerminalSecureKeyboardEntryMode.automatic ||
+          TerminalSecureKeyboardEntryMode.manual =>
+            status.desired
+                ? TerminalDiagnosticsFeatureState.active
+                : TerminalDiagnosticsFeatureState.enabled,
+        };
+      }
+
+      TerminalDiagnosticsFeatureState quickDiagnosticsState() {
+        return switch (createdQuickTerminal.shortcutStatus.disposition) {
+          TerminalQuickTerminalShortcutDisposition.disabled =>
+            TerminalDiagnosticsFeatureState.disabled,
+          TerminalQuickTerminalShortcutDisposition.failed =>
+            TerminalDiagnosticsFeatureState.failed,
+          TerminalQuickTerminalShortcutDisposition.registered =>
+            createdQuickTerminal.lifecycle.isVisibleOrShowing
+                ? TerminalDiagnosticsFeatureState.active
+                : TerminalDiagnosticsFeatureState.enabled,
+        };
+      }
+
+      TerminalDiagnosticsFeatureState notificationDiagnosticsState() {
+        final TerminalNotificationProductStatus status =
+            notificationController.status;
+        if (!status.enabled) return TerminalDiagnosticsFeatureState.disabled;
+        if (status.authorizationStatus ==
+                AppKitUserNotificationAuthorizationStatus.denied ||
+            status.lastFailure == TerminalNotificationProductFailure.denied) {
+          return TerminalDiagnosticsFeatureState.denied;
+        }
+        if (status.lastFailure ==
+                TerminalNotificationProductFailure.nativeFailure ||
+            status.lastFailure == TerminalNotificationProductFailure.system) {
+          return TerminalDiagnosticsFeatureState.failed;
+        }
+        return status.pendingRequestCount > 0
+            ? TerminalDiagnosticsFeatureState.active
+            : TerminalDiagnosticsFeatureState.enabled;
+      }
+
+      TerminalDiagnosticsFeatureState appIntentsDiagnosticsState() {
+        final TerminalAppIntentsProductStatus? status =
+            appIntentsController?.status;
+        if (status == null || status.disposed) {
+          return TerminalDiagnosticsFeatureState.unavailable;
+        }
+        if (!status.enabled) return TerminalDiagnosticsFeatureState.disabled;
+        if (status.lastFailure ==
+                TerminalAppIntentsProductFailure.nativeFailure ||
+            status.lastFailure ==
+                TerminalAppIntentsProductFailure.actionFailed) {
+          return TerminalDiagnosticsFeatureState.failed;
+        }
+        return status.polling || status.pendingCommandCount > 0
+            ? TerminalDiagnosticsFeatureState.active
+            : TerminalDiagnosticsFeatureState.enabled;
+      }
+
+      TerminalDiagnosticsSnapshot captureDiagnosticsSnapshot(PaneId paneId) {
+        final TerminalPane pane =
+            state.paneForId(paneId) ??
+            (throw StateError('focused diagnostics pane is unavailable'));
+        final TerminalSession session =
+            sessions[paneId] ??
+            (throw StateError('focused diagnostics session is unavailable'));
+        final _TerminalHierarchyProductPane owner =
+            owners[paneId] ??
+            (throw StateError('focused diagnostics renderer is unavailable'));
+        final TerminalAccessibilityPresentation presentation =
+            applicationAccessibilityProjection!.presentation;
+        final TerminalConfigReloadController? reload =
+            configurationReloadController;
+        final TerminalConfigSnapshot? effective = reload?.effectiveSnapshot;
+        final TerminalConfigSchema schema =
+            effective?.schema ?? TerminalProductConfigSchema.instance;
+        final List<TerminalConfigDiagnostic> diagnostics =
+            reload?.lastAttemptedSnapshot == null
+            ? effective?.diagnostics ?? const <TerminalConfigDiagnostic>[]
+            : reload!.lastAttemptDiagnostics;
+        final int warningCount = diagnostics
+            .where(
+              (TerminalConfigDiagnostic diagnostic) =>
+                  diagnostic.severity ==
+                  TerminalConfigDiagnosticSeverity.warning,
+            )
+            .length;
+        final int errorCount = diagnostics.length - warningCount;
+        final TerminalNotificationProductStatus notificationStatus =
+            notificationController.status;
+        final TerminalProductConfiguration currentConfiguration =
+            configurationAuthority.newSessionConfiguration;
+        final bool osc52Enabled =
+            currentConfiguration.clipboardRead !=
+                TerminalConfiguredClipboardAccess.deny ||
+            currentConfiguration.clipboardWrite !=
+                TerminalConfiguredClipboardAccess.deny;
+        return TerminalDiagnosticsSnapshot(
+          application: TerminalDiagnosticsApplicationSnapshot(
+            runtimeKind: const bool.fromEnvironment('dart.vm.product')
+                ? TerminalDiagnosticsRuntimeKind.releaseAot
+                : TerminalDiagnosticsRuntimeKind.developerJit,
+            appKitEventProtocol: application.eventProtocolVersion,
+            language: localization.language == TerminalLanguage.japanese
+                ? TerminalDiagnosticsLanguage.japanese
+                : TerminalDiagnosticsLanguage.english,
+            direction:
+                localization.textDirection == TerminalTextDirection.rightToLeft
+                ? TerminalDiagnosticsDirection.rightToLeft
+                : TerminalDiagnosticsDirection.leftToRight,
+            reduceMotion: presentation.reduceMotion,
+            increaseContrast: presentation.increaseContrast,
+            differentiateWithoutColor: presentation.differentiateWithoutColor,
+          ),
+          hierarchy: TerminalDiagnosticsHierarchySnapshot(
+            windowCount: state.windowCount,
+            tabCount: state.tabCount,
+            paneCount: state.paneCount,
+            livePaneCount: state.paneIds
+                .where((PaneId id) => state.paneForId(id)?.isLive == true)
+                .length,
+            activeWindowRole:
+                state.activeWindow?.role == TerminalWindowRole.quickTerminal
+                ? TerminalDiagnosticsWindowRole.quick
+                : TerminalDiagnosticsWindowRole.standard,
+          ),
+          focusedPane: session.captureFocusedPaneDiagnostics(
+            lifecycle: _terminalDiagnosticsLifecycle(pane.state),
+          ),
+          parser: session.captureParserDiagnostics(),
+          renderer: owner.surface.isDisposed
+              ? TerminalDiagnosticsRendererSnapshot.unavailable()
+              : TerminalDiagnosticsRendererSnapshot.fromLiveSurface(
+                  owner.surface.snapshot(),
+                ),
+          configuration: TerminalDiagnosticsConfigurationSnapshot(
+            schemaOptionCount: schema.options.length,
+            effectiveGeneration:
+                reload?.acceptedGeneration ??
+                configurationAuthority.acceptedGeneration,
+            attemptGeneration:
+                (reload?.acceptedGeneration ??
+                    configurationAuthority.acceptedGeneration) +
+                (reload?.lastAttemptedSnapshot == null ? 0 : 1),
+            warningCount: warningCount,
+            errorCount: errorCount,
+            liveOptionCount: schema.options
+                .where(
+                  (TerminalConfigOptionBase option) =>
+                      option.applicationPolicy ==
+                      TerminalConfigApplicationPolicy.live,
+                )
+                .length,
+            newSessionOptionCount: schema.options
+                .where(
+                  (TerminalConfigOptionBase option) =>
+                      option.applicationPolicy ==
+                      TerminalConfigApplicationPolicy.newSession,
+                )
+                .length,
+          ),
+          features: TerminalDiagnosticsFeaturesSnapshot(
+            secureInput: secureDiagnosticsState(),
+            quickWindowShortcut: quickDiagnosticsState(),
+            notifications: notificationDiagnosticsState(),
+            appIntents: appIntentsDiagnosticsState(),
+            appleScript: appleScriptSession == null
+                ? TerminalDiagnosticsFeatureState.unavailable
+                : appleScriptSession!.isEnabled
+                ? TerminalDiagnosticsFeatureState.enabled
+                : TerminalDiagnosticsFeatureState.disabled,
+            osc52: !osc52Enabled
+                ? TerminalDiagnosticsFeatureState.disabled
+                : osc52Coordinator.pendingRequest != null
+                ? TerminalDiagnosticsFeatureState.active
+                : TerminalDiagnosticsFeatureState.enabled,
+            pendingOsc52Requests: osc52Coordinator.pendingRequest == null
+                ? 0
+                : 1,
+            pendingNotificationRequests: notificationStatus.pendingRequestCount,
+          ),
+        );
+      }
+
+      TerminalDiagnosticsFocusTarget? activeDiagnosticsTarget() {
+        final TerminalWindowState? activeWindow = state.activeWindow;
+        if (activeWindow == null) return null;
+        final TerminalTabState tab = activeWindow.selectedTab;
+        final PaneId paneId = tab.focusedPaneId;
+        final TerminalPane? pane = state.paneForId(paneId);
+        final TerminalSession? session = sessions[paneId];
+        final Window? window = createdHierarchy.windowForTab(tab.id);
+        final TerminalNativePaneResources? resources = createdHierarchy
+            .resourcesForPane(paneId);
+        if (pane == null ||
+            session == null ||
+            !pane.isLive ||
+            !session.isLive ||
+            window == null ||
+            resources == null) {
+          return null;
+        }
+        return TerminalDiagnosticsFocusTarget(
+          identity: session.id,
+          window: window,
+          view: resources.view,
+          isLive: () =>
+              identical(sessions[paneId], session) &&
+              state.paneForId(paneId)?.isLive == true &&
+              session.isLive,
+          beginCapture: (VtParserInspectionObserver observer) {
+            session.beginDiagnosticsCapture(onEvent: observer);
+          },
+          endCapture: session.endDiagnosticsCapture,
+          snapshot: () => captureDiagnosticsSnapshot(paneId),
+        );
+      }
+
+      diagnosticsPresenter = TerminalDiagnosticsPresenter(
+        application: application,
+        focusTarget: activeDiagnosticsTarget,
+        localization: localization,
+        onError: recordAsynchronousError,
+      );
       dispatcher = TerminalActionDispatcher(
         catalog: catalog,
         registrations: <TerminalActionRegistration>[
           TerminalActionRegistration(
             id: TerminalActionId.openCommandPalette,
             handler: () => installedPalette.open(),
+          ),
+          TerminalActionRegistration(
+            id: TerminalActionId.openTerminalInspector,
+            isAvailable: () =>
+                productResourceDisposalFuture == null &&
+                diagnosticsPresenter?.hasAvailableTarget == true,
+            handler: () => diagnosticsPresenter!.open(),
+          ),
+          TerminalActionRegistration(
+            id: TerminalActionId.exportDiagnostics,
+            isAvailable: () =>
+                productResourceDisposalFuture == null &&
+                diagnosticsPresenter?.hasAvailableTarget == true,
+            handler: () async {
+              await diagnosticsPresenter!.export();
+            },
           ),
           if (configurationReloadController != null)
             TerminalActionRegistration(
@@ -4583,6 +4860,7 @@ final class TerminalApplication {
           final TerminalSettingsInspectorPresenter? settings =
               settingsPresenter;
           if (settings != null && !settings.isDisposed) settings.refresh();
+          diagnosticsPresenter?.refresh();
         },
         onError: (Object error, StackTrace _) {
           stderr.writeln(

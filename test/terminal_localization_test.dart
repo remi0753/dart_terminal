@@ -252,6 +252,13 @@ void _testPresenterAndStatusMessages() {
     messages.menuTitle(TerminalMenuMessageId.file) == 'ファイル' &&
         messages.commandPaletteTitle == 'コマンドパレット' &&
         messages.commandPaletteNoMatches.contains('一致') &&
+        messages.terminalInspectorWindowTitle == 'ターミナルインスペクタ' &&
+        messages.terminalInspectorInstructions.contains('Esc') &&
+        messages.diagnosticsSavePanelTitle.contains('診断') &&
+        messages.diagnosticsSavePanelMessage.contains('パスを含まない') &&
+        messages.diagnosticsSavePanelPrompt == '書き出す' &&
+        messages.diagnosticsDefaultFileName ==
+            'dart-terminal-diagnostics.json' &&
         messages.osc52Identity(pane: 2, session: 3, request: 4) ==
             'ペイン 2  セッション 3  要求 4' &&
         messages.osc52WriteClipboard(9).contains('9 UTF-8 bytes') &&

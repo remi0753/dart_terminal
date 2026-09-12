@@ -69,6 +69,7 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `application.toggle-secure-keyboard-entry` | Secure Keyboard Entry | application | — |
 | `application.quit` | Quit Dart Terminal | application | `command+q` |
 | `window.new` | New Window | file | `command+n` |
+| `file.export-diagnostics` | Export Diagnostics… | file | `option+command+e` |
 | `window.close` | Close Window | file | `command+w` |
 | `edit.copy` | Copy | edit | `command+c` |
 | `edit.paste` | Paste | edit | `command+v` |
@@ -80,6 +81,7 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `pane.quick-look` | Quick Look | view | `control+command+d` |
 | `pane.toggle-zoom` | Toggle Pane Zoom | view | — |
 | `pane.equalize-splits` | Equalize Splits | view | — |
+| `view.open-terminal-inspector` | Open Terminal Inspector | view | `option+command+i` |
 | `pane.move-divider-left` | Move Split Divider Left | view | `command+left` |
 | `pane.move-divider-right` | Move Split Divider Right | view | `command+right` |
 | `pane.move-divider-up` | Move Split Divider Up | view | `command+up` |
@@ -101,6 +103,7 @@ AppKit consumes these standard menu shortcuts before raw terminal key routing. A
 | `command+comma` | `application.open-settings` | Settings… |
 | `command+q` | `application.quit` | Quit Dart Terminal |
 | `command+n` | `window.new` | New Window |
+| `option+command+e` | `file.export-diagnostics` | Export Diagnostics… |
 | `command+w` | `window.close` | Close Window |
 | `command+c` | `edit.copy` | Copy |
 | `command+v` | `edit.paste` | Paste |
@@ -108,6 +111,7 @@ AppKit consumes these standard menu shortcuts before raw terminal key routing. A
 | `command+d` | `pane.split-right` | Split Pane Right |
 | `shift+command+d` | `pane.split-down` | Split Pane Down |
 | `control+command+d` | `pane.quick-look` | Quick Look |
+| `option+command+i` | `view.open-terminal-inspector` | Open Terminal Inspector |
 | `command+left` | `pane.move-divider-left` | Move Split Divider Left |
 | `command+right` | `pane.move-divider-right` | Move Split Divider Right |
 | `command+up` | `pane.move-divider-up` | Move Split Divider Up |

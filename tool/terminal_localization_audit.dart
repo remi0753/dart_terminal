@@ -76,7 +76,7 @@ Future<TerminalLocalizationAuditResult> runTerminalLocalizationAudit({
     'lib/src/terminal_application.dart',
   );
   _expect(
-    'localization: localization'.allMatches(applicationSource).length == 9,
+    'localization: localization'.allMatches(applicationSource).length == 10,
     'production and runtime-acceptance localization injection count changed',
   );
 
@@ -249,6 +249,9 @@ const List<String> _catalogPhrases = <String>[
   'No setting at the cursor',
   'SECURE AUTO',
   'Keyboard input is protected from other applications.',
+  'Open Terminal Inspector',
+  'Export Diagnostics…',
+  'Save content-free diagnostics without terminal text or paths.',
 ];
 
 const List<_SourceRule> _sourceRules = <_SourceRule>[
@@ -281,6 +284,8 @@ const List<_SourceRule> _sourceRules = <_SourceRule>[
       'Focus Next Pane',
       'Select Previous Tab',
       'Select Next Tab',
+      'Open Terminal Inspector',
+      'Export Diagnostics…',
     ],
   ),
   _SourceRule(
@@ -351,6 +356,25 @@ const List<_SourceRule> _sourceRules = <_SourceRule>[
     ],
   ),
   _SourceRule(
+    'lib/src/terminal_diagnostics_presenter.dart',
+    requiredTokens: <String>[
+      '_localization.terminalInspectorWindowTitle',
+      '_localization.terminalInspectorUnavailable',
+      '_localization.terminalInspectorInstructions',
+      '_localization.diagnosticsSavePanelTitle',
+      '_localization.diagnosticsSavePanelMessage',
+      '_localization.diagnosticsSavePanelPrompt',
+      '_localization.diagnosticsDefaultFileName',
+    ],
+    forbiddenPhrases: <String>[
+      'Terminal Inspector',
+      'focused terminal is unavailable',
+      'Press Esc to close',
+      'Export Diagnostics',
+      'Save content-free diagnostics',
+    ],
+  ),
+  _SourceRule(
     'lib/src/terminal_osc52_confirmation.dart',
     requiredTokens: <String>[
       '_localization.osc52Title',
@@ -412,6 +436,7 @@ const List<_SourceRule> _sourceRules = <_SourceRule>[
       'TerminalActionCatalog.standard(\n        localization: localization',
       'TerminalAppKitContextMenuProjection.install(',
       'TerminalOsc52ConfirmationPresenter(',
+      'TerminalDiagnosticsPresenter(',
       'TerminalSettingsInspectorPresenter(',
       'TerminalCommandPalettePresenter.withFocusTarget(',
       'TerminalAppKitMenuProjection.install(',
