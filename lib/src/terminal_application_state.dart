@@ -69,6 +69,9 @@ enum TerminalSplitDividerDirection { left, right, up, down }
 
 enum TerminalPaneFocusTraversal { previous, next }
 
+/// Product role of one logical terminal window.
+enum TerminalWindowRole { standard, quickTerminal }
+
 /// Positive logical-point dimensions used to project a split tree.
 final class TerminalSplitLayoutSize {
   TerminalSplitLayoutSize({required this.width, required this.height}) {
@@ -739,11 +742,13 @@ final class TerminalWindowState {
   TerminalWindowState._({
     required this.id,
     required TerminalTabState initialTab,
+    required this.role,
   }) : _selectedTabId = initialTab.id {
     _tabs[initialTab.id] = initialTab;
   }
 
   final TerminalWindowId id;
+  final TerminalWindowRole role;
   final Map<TerminalTabId, TerminalTabState> _tabs =
       <TerminalTabId, TerminalTabState>{};
   TerminalTabId _selectedTabId;
@@ -834,6 +839,13 @@ final class TerminalApplicationState {
   TerminalWindowId? get activeWindowId => _activeWindowId;
   TerminalWindowState? get activeWindow =>
       _activeWindowId == null ? null : _windows[_activeWindowId];
+  TerminalWindowState? get quickTerminalWindow {
+    for (final TerminalWindowState window in _windows.values) {
+      if (window.role == TerminalWindowRole.quickTerminal) return window;
+    }
+    return null;
+  }
+
   TerminalPaneOwnerShutdownResult? get shutdownResult => _shutdownResult;
   bool get isDisposed => _disposed;
 
@@ -864,13 +876,18 @@ final class TerminalApplicationState {
   }
 
   Future<TerminalWindowState> createWindow(
-    TerminalPaneConfiguration configuration,
-  ) async {
+    TerminalPaneConfiguration configuration, {
+    TerminalWindowRole role = TerminalWindowRole.standard,
+  }) async {
     _beginMutation();
     TerminalPane? pane;
     try {
       if (_windows.length >= TerminalApplicationStateLimits.maximumWindows) {
         throw StateError('terminal application window limit is exhausted');
+      }
+      if (role == TerminalWindowRole.quickTerminal &&
+          quickTerminalWindow != null) {
+        throw StateError('terminal application already has a Quick Terminal');
       }
       _requirePaneCapacity();
       final TerminalWindowId windowId = TerminalWindowId(
@@ -891,6 +908,7 @@ final class TerminalApplicationState {
       final TerminalWindowState window = TerminalWindowState._(
         id: windowId,
         initialTab: tab,
+        role: role,
       );
       _nextWindowId = windowId.value;
       _nextTabId = tabId.value;
@@ -919,6 +937,9 @@ final class TerminalApplicationState {
     TerminalPane? pane;
     try {
       final TerminalWindowState window = _requireWindow(windowId);
+      if (window.role == TerminalWindowRole.quickTerminal) {
+        throw StateError('Quick Terminal does not support tabs on macOS');
+      }
       if (window._tabs.length >=
           TerminalApplicationStateLimits.maximumTabsPerWindow) {
         throw StateError('terminal window tab limit is exhausted');
@@ -1262,11 +1283,16 @@ final class TerminalApplicationState {
     }
     final Set<TerminalTabId> hierarchyTabs = <TerminalTabId>{};
     final Set<PaneId> hierarchyPanes = <PaneId>{};
+    var quickTerminalWindowCount = 0;
     for (final MapEntry<TerminalWindowId, TerminalWindowState> windowEntry
         in _windows.entries) {
       final TerminalWindowState window = windowEntry.value;
       if (window.id != windowEntry.key || window._tabs.isEmpty) {
         throw StateError('window ${windowEntry.key} has invalid ownership');
+      }
+      if (window.role == TerminalWindowRole.quickTerminal &&
+          ++quickTerminalWindowCount > 1) {
+        throw StateError('application retains multiple Quick Terminals');
       }
       if (window._tabs.length >
           TerminalApplicationStateLimits.maximumTabsPerWindow) {

@@ -10,8 +10,59 @@ Future<void> runTerminalRestorationTests() async {
   _testWindowPlacementPolicy();
   _testStrictCodecRejection();
   await _testBoundedFileStore();
+  await _testQuickTerminalRestorationExclusion();
   await _testHierarchyRoundTripAndFreshOwnership();
   await _testRestoreFailureIsAtomic();
+}
+
+Future<void> _testQuickTerminalRestorationExclusion() async {
+  final List<_RestorationFakeSession> sessions = <_RestorationFakeSession>[];
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalWindowState standard = await state.createWindow(
+    _configuration(sessions, '/private/tmp/standard'),
+  );
+  final TerminalWindowState quick = await state.createWindow(
+    _configuration(sessions, '/private/tmp/quick'),
+    role: TerminalWindowRole.quickTerminal,
+  );
+  final List<TerminalWindowId> placementRequests = <TerminalWindowId>[];
+  final TerminalRestorationSnapshot snapshot =
+      TerminalApplicationRestorationCapture.capture(
+        state,
+        placementForWindow: (TerminalWindowId id) {
+          placementRequests.add(id);
+          return _minimalPlacement();
+        },
+        workingDirectoryForPane: (PaneId id) => null,
+      );
+  _expect(
+    snapshot.windows.length == 1 &&
+        snapshot.activeWindowIndex == 0 &&
+        placementRequests.length == 1 &&
+        placementRequests.single == standard.id,
+    'restoration excludes the active Quick Terminal and its placement',
+  );
+
+  await state.removePane(standard.selectedTab.focusedPaneId);
+  _expect(
+    identical(state.quickTerminalWindow, quick) && state.windowCount == 1,
+    'Quick Terminal remains live after the last standard window closes',
+  );
+  _expectThrows<StateError>(
+    () => TerminalApplicationRestorationCapture.capture(
+      state,
+      placementForWindow: (TerminalWindowId id) => _minimalPlacement(),
+      workingDirectoryForPane: (PaneId id) => null,
+    ),
+    'restoration refuses to serialize an application with no standard window',
+  );
+  await state.shutdown();
+  _expect(
+    sessions.every(
+      (_RestorationFakeSession session) => session.shutdownCount == 1,
+    ),
+    'restoration exclusion fixture releases standard and Quick Terminal panes',
+  );
 }
 
 Future<void> _testBoundedFileStore() async {

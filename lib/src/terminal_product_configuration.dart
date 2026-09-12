@@ -150,7 +150,7 @@ final class TerminalProductPaletteConfiguration {
   final List<bool> ansiColorsExplicit;
 }
 
-/// Immutable new-session settings resolved from one typed config snapshot.
+/// Immutable product settings resolved from one accepted typed snapshot.
 final class TerminalProductConfiguration {
   TerminalProductConfiguration._({
     required this.workingDirectory,
@@ -165,6 +165,10 @@ final class TerminalProductConfiguration {
     required this.windowHeight,
     required this.windowPaddingHorizontal,
     required this.windowPaddingVertical,
+    required this.quickTerminalShortcut,
+    required this.quickTerminalScreen,
+    required this.quickTerminalAnimationDuration,
+    required this.quickTerminalAutohide,
     required this.macosOptionKey,
     required this.scrollbackLines,
     required this.scrollbackBytes,
@@ -201,6 +205,18 @@ final class TerminalProductConfiguration {
     ),
     windowPaddingVertical: snapshot.value(
       TerminalProductConfigSchema.windowPaddingVertical,
+    ),
+    quickTerminalShortcut: snapshot.value(
+      TerminalProductConfigSchema.quickTerminalShortcut,
+    ),
+    quickTerminalScreen: snapshot.value(
+      TerminalProductConfigSchema.quickTerminalScreen,
+    ),
+    quickTerminalAnimationDuration: snapshot.value(
+      TerminalProductConfigSchema.quickTerminalAnimationDuration,
+    ),
+    quickTerminalAutohide: snapshot.value(
+      TerminalProductConfigSchema.quickTerminalAutohide,
     ),
     macosOptionKey: snapshot.value(TerminalProductConfigSchema.macosOptionKey),
     scrollbackLines: snapshot.value(
@@ -240,6 +256,10 @@ final class TerminalProductConfiguration {
   final double windowHeight;
   final double windowPaddingHorizontal;
   final double windowPaddingVertical;
+  final TerminalKeyBindingChord? quickTerminalShortcut;
+  final TerminalConfiguredQuickTerminalScreen quickTerminalScreen;
+  final double quickTerminalAnimationDuration;
+  final bool quickTerminalAutohide;
   final TerminalConfiguredOptionKey macosOptionKey;
   final int scrollbackLines;
   final int scrollbackBytes;

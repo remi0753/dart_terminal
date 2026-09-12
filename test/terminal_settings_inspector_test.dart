@@ -42,12 +42,12 @@ Future<void> _testSearchRenderingAndReloadProjection() async {
   )..open();
   try {
     _expect(
-      state.effectiveSnapshot.entries.length == 38 &&
-          state.results.length == 38 &&
-          state.matchingEntryCount == 38 &&
+      state.effectiveSnapshot.entries.length == 42 &&
+          state.results.length == 42 &&
+          state.matchingEntryCount == 42 &&
           state.diagnostics.single.code == 'CFG_DEPRECATED_VALUE' &&
           state.diagnosticContext == 'effective configuration' &&
-          state.render().contains('Showing 1-8 of 38'),
+          state.render().contains('Showing 1-8 of 42'),
       'opening does not project every schema entry and startup diagnostic',
     );
 

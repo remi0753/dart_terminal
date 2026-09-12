@@ -5,6 +5,7 @@ enum TerminalActionId {
   openCommandPalette('application.open-command-palette'),
   openSettings('application.open-settings'),
   reloadConfiguration('application.reload-configuration'),
+  toggleQuickTerminal('application.toggle-quick-terminal'),
   quitApplication('application.quit'),
   newWindow('window.new'),
   closeWindow('window.close'),
@@ -264,6 +265,19 @@ final class TerminalActionCatalog {
       title: 'Reload Configuration',
       menu: TerminalActionMenu.application,
       keywords: const <String>['config', 'settings', 'refresh'],
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.toggleQuickTerminal,
+      title: 'Toggle Quick Terminal',
+      menu: TerminalActionMenu.application,
+      keywords: const <String>[
+        'show',
+        'hide',
+        'dropdown',
+        'global',
+        'shortcut',
+      ],
+      restoresTerminalFocusAfterInvocation: false,
     ),
     TerminalActionDefinition(
       id: TerminalActionId.quitApplication,

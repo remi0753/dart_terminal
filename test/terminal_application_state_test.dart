@@ -13,6 +13,7 @@ Future<void> runTerminalApplicationStateTests() async {
   _testSplitTopologyValidationAndBounds();
   _testSplitResizeEqualizeTraversalAndLayout();
   await _testApplicationHierarchyFocusAndIndexes();
+  await _testQuickTerminalWindowRole();
   await _testTabPresentationAndCwdPolicy();
   await _testApplicationLayoutMutations();
   await _testPaneRemovalAndOrderedShutdown();
@@ -20,6 +21,58 @@ Future<void> runTerminalApplicationStateTests() async {
   await _testApplicationQuitCoordinator();
   await _testApplicationTotalPaneAdmission();
   await _testApplicationLimitsAndDisposedState();
+}
+
+Future<void> _testQuickTerminalWindowRole() async {
+  final List<_StateFakeSession> sessions = <_StateFakeSession>[];
+  final TerminalPaneConfiguration configuration = _configuration(sessions);
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalWindowState standard = await state.createWindow(configuration);
+  final TerminalWindowState quick = await state.createWindow(
+    configuration,
+    role: TerminalWindowRole.quickTerminal,
+  );
+  final int admittedSessions = sessions.length;
+  _expect(
+    standard.role == TerminalWindowRole.standard &&
+        quick.role == TerminalWindowRole.quickTerminal &&
+        identical(state.quickTerminalWindow, quick) &&
+        state.windowCount == 2,
+    'the hierarchy exposes one explicit singleton Quick Terminal role',
+  );
+  await _expectFutureThrows<StateError>(
+    () => state.createWindow(
+      configuration,
+      role: TerminalWindowRole.quickTerminal,
+    ),
+    'a second Quick Terminal must be rejected before pane allocation',
+  );
+  await _expectFutureThrows<StateError>(
+    () => state.createTab(quick.id, configuration),
+    'Quick Terminal tabs must be rejected on macOS before pane allocation',
+  );
+  _expect(
+    sessions.length == admittedSessions && state.windowCount == 2,
+    'rejected Quick Terminal mutations consume no pane or window identity',
+  );
+  final TerminalPaneRemovalResult removal = await state.removePane(
+    quick.selectedTab.focusedPaneId,
+  );
+  _expect(
+    removal.removedWindow &&
+        state.quickTerminalWindow == null &&
+        state.windowCount == 1 &&
+        identical(state.activeWindow, standard),
+    'tearing down the Quick Terminal releases its singleton role exactly',
+  );
+  final TerminalPaneOwnerShutdownResult shutdown = await state.shutdown();
+  _expect(
+    shutdown.isClean &&
+        sessions.every(
+          (_StateFakeSession session) => session.shutdownCount == 1,
+        ),
+    'Quick Terminal role fixture releases every admitted pane exactly once',
+  );
 }
 
 Future<void> _testApplicationTotalPaneAdmission() async {

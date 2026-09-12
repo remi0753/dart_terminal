@@ -187,6 +187,7 @@ void _testStableStandardCatalog() {
               TerminalActionId.openCommandPalette,
               TerminalActionId.openSettings,
               TerminalActionId.reloadConfiguration,
+              TerminalActionId.toggleQuickTerminal,
               TerminalActionId.quitApplication,
             ].join(',') &&
         catalog
@@ -198,8 +199,13 @@ void _testStableStandardCatalog() {
             .actionForId(TerminalActionId.openSettings)!
             .restoresTerminalFocusAfterInvocation &&
         catalog.actionForId(TerminalActionId.reloadConfiguration)!.shortcut ==
-            null,
-    'Settings and reload have the expected shared application metadata',
+            null &&
+        catalog.actionForId(TerminalActionId.toggleQuickTerminal)!.shortcut ==
+            null &&
+        !catalog
+            .actionForId(TerminalActionId.toggleQuickTerminal)!
+            .restoresTerminalFocusAfterInvocation,
+    'Settings, reload, and Quick Terminal have shared application metadata',
   );
 }
 
@@ -437,6 +443,11 @@ void _testSearchOrderingAndBounds() {
     dispatcher.search('effective settings').single.definition.id ==
         TerminalActionId.openSettings,
     'Settings is discoverable through its shared palette metadata',
+  );
+  _expect(
+    dispatcher.search('dropdown global shortcut').first.definition.id ==
+        TerminalActionId.toggleQuickTerminal,
+    'Quick Terminal is searchable by its global presentation vocabulary',
   );
   _expect(
     !dispatcher

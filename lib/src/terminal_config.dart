@@ -36,6 +36,8 @@ enum TerminalConfiguredCursorShape { block, underline, bar }
 
 enum TerminalConfiguredClipboardAccess { deny, ask, allow }
 
+enum TerminalConfiguredQuickTerminalScreen { main, mouse, macosMenuBar }
+
 enum TerminalConfiguredShellIntegration {
   detect,
   none,
@@ -802,6 +804,53 @@ abstract final class TerminalProductConfigSchema {
         formatter: _formatDouble,
       );
 
+  static final TerminalConfigOption<TerminalKeyBindingChord?>
+  quickTerminalShortcut = TerminalConfigOption<TerminalKeyBindingChord?>(
+    name: 'quick-terminal-shortcut',
+    description:
+        'Exclusive macOS global shortcut for Toggle Quick Terminal, or `none`.',
+    valueSyntax: 'none|<modifier+physical-key>',
+    applicationPolicy: TerminalConfigApplicationPolicy.live,
+    defaultValue: null,
+    parser: _parseQuickTerminalShortcut,
+    formatter: _formatQuickTerminalShortcut,
+  );
+
+  static final TerminalConfigOption<TerminalConfiguredQuickTerminalScreen>
+  quickTerminalScreen =
+      TerminalConfigOption<TerminalConfiguredQuickTerminalScreen>(
+        name: 'quick-terminal-screen',
+        description: 'Quick Terminal screen: keyboard-focus, mouse, or macOS menu-bar screen.',
+        valueSyntax: 'main|mouse|macos-menu-bar',
+        applicationPolicy: TerminalConfigApplicationPolicy.live,
+        defaultValue: TerminalConfiguredQuickTerminalScreen.main,
+        parser: _parseQuickTerminalScreen,
+        formatter: _formatQuickTerminalScreen,
+      );
+
+  static final TerminalConfigOption<double> quickTerminalAnimationDuration =
+      TerminalConfigOption<double>(
+        name: 'quick-terminal-animation-duration',
+        description: 'Quick Terminal enter and exit animation duration in seconds; 0 disables it.',
+        valueSyntax: '<0..5>',
+        applicationPolicy: TerminalConfigApplicationPolicy.live,
+        defaultValue: 0.2,
+        parser: _parseQuickTerminalAnimationDuration,
+        formatter: _formatDouble,
+      );
+
+  static final TerminalConfigOption<bool> quickTerminalAutohide =
+      TerminalConfigOption<bool>(
+        name: 'quick-terminal-autohide',
+        description:
+            'Hide Quick Terminal automatically when its window loses focus.',
+        valueSyntax: 'true|false',
+        applicationPolicy: TerminalConfigApplicationPolicy.live,
+        defaultValue: true,
+        parser: _parseBoolean,
+        formatter: _formatBoolean,
+      );
+
   static final TerminalConfigOption<TerminalConfiguredOptionKey>
   macosOptionKey = TerminalConfigOption<TerminalConfiguredOptionKey>(
     name: 'macos-option-key',
@@ -910,6 +959,10 @@ abstract final class TerminalProductConfigSchema {
       windowHeight,
       windowPaddingHorizontal,
       windowPaddingVertical,
+      quickTerminalShortcut,
+      quickTerminalScreen,
+      quickTerminalAnimationDuration,
+      quickTerminalAutohide,
       macosOptionKey,
       scrollbackLines,
       scrollbackBytes,
@@ -1746,6 +1799,17 @@ String _formatClipboardAccess(TerminalConfiguredClipboardAccess value) =>
       TerminalConfiguredClipboardAccess.allow => 'allow',
     };
 
+String _formatQuickTerminalShortcut(TerminalKeyBindingChord? value) =>
+    value?.configName ?? 'none';
+
+String _formatQuickTerminalScreen(
+  TerminalConfiguredQuickTerminalScreen value,
+) => switch (value) {
+  TerminalConfiguredQuickTerminalScreen.main => 'main',
+  TerminalConfiguredQuickTerminalScreen.mouse => 'mouse',
+  TerminalConfiguredQuickTerminalScreen.macosMenuBar => 'macos-menu-bar',
+};
+
 String _formatBoolean(bool value) => value ? 'true' : 'false';
 
 String _formatKeyBinding(TerminalKeyBindingDefinition value) =>
@@ -2026,6 +2090,65 @@ _parseClipboardAccess(String value) => switch (value) {
       hint: 'use `deny` unless OSC 52 clipboard access is explicitly wanted',
     ),
 };
+
+TerminalConfigDecodeResult<TerminalKeyBindingChord?>
+_parseQuickTerminalShortcut(String value) {
+  if (value == 'none') {
+    return const TerminalConfigDecodeResult<TerminalKeyBindingChord?>.success(
+      null,
+    );
+  }
+  final TerminalConfigDecodeResult<TerminalKeyBindingDefinition> parsed =
+      _parseKeyBinding(
+        '$value=${TerminalActionId.toggleQuickTerminal.stableName}',
+      );
+  if (!parsed.isSuccess) {
+    return TerminalConfigDecodeResult<TerminalKeyBindingChord?>.failure(
+      'quick terminal shortcut is invalid: ${parsed.message}',
+      hint: 'use `none` or a non-menu chord such as `command+grave` with at least one modifier',
+    );
+  }
+  final TerminalKeyBindingChord chord = parsed.value!.chord;
+  if (!chord.shift && !chord.control && !chord.option && !chord.command) {
+    return const TerminalConfigDecodeResult<TerminalKeyBindingChord?>.failure(
+      'quick terminal shortcut must contain at least one modifier',
+      hint: 'for example, use `quick-terminal-shortcut = command+grave`',
+    );
+  }
+  return TerminalConfigDecodeResult<TerminalKeyBindingChord?>.success(chord);
+}
+
+TerminalConfigDecodeResult<TerminalConfiguredQuickTerminalScreen>
+_parseQuickTerminalScreen(String value) => switch (value) {
+  'main' =>
+    const TerminalConfigDecodeResult<
+      TerminalConfiguredQuickTerminalScreen
+    >.success(TerminalConfiguredQuickTerminalScreen.main),
+  'mouse' =>
+    const TerminalConfigDecodeResult<
+      TerminalConfiguredQuickTerminalScreen
+    >.success(TerminalConfiguredQuickTerminalScreen.mouse),
+  'macos-menu-bar' =>
+    const TerminalConfigDecodeResult<
+      TerminalConfiguredQuickTerminalScreen
+    >.success(TerminalConfiguredQuickTerminalScreen.macosMenuBar),
+  _ =>
+    const TerminalConfigDecodeResult<
+      TerminalConfiguredQuickTerminalScreen
+    >.failure(
+      'quick terminal screen must be `main`, `mouse`, or `macos-menu-bar`',
+      hint: 'use `quick-terminal-screen = main` for the default behavior',
+    ),
+};
+
+TerminalConfigDecodeResult<double> _parseQuickTerminalAnimationDuration(
+  String value,
+) => _parseFiniteDouble(
+  value,
+  minimum: 0,
+  maximum: 5,
+  description: 'quick terminal animation duration',
+);
 
 TerminalConfigDecodeResult<TerminalKeyBindingDefinition> _parseKeyBinding(
   String value,

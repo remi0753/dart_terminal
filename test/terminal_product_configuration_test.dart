@@ -79,6 +79,10 @@ Future<void> _testAcceptedConfigurationAuthority() async {
     const <String>[
       '--no-config',
       '--font-size=18',
+      '--quick-terminal-shortcut=command+grave',
+      '--quick-terminal-screen=mouse',
+      '--quick-terminal-animation-duration=0',
+      '--quick-terminal-autohide=false',
       '--macos-option-key=text',
       '--keybind=control+d=unbind',
     ],
@@ -112,6 +116,15 @@ Future<void> _testAcceptedConfigurationAuthority() async {
     authority.acceptedGeneration == 1 &&
         authority.liveGeneration == 1 &&
         authority.newSessionConfiguration.fontSize == 18 &&
+        authority.newSessionConfiguration.quickTerminalShortcut ==
+            const TerminalKeyBindingChord(
+              physicalKey: TerminalPhysicalKey.grave,
+              command: true,
+            ) &&
+        authority.newSessionConfiguration.quickTerminalScreen ==
+            TerminalConfiguredQuickTerminalScreen.mouse &&
+        authority.newSessionConfiguration.quickTerminalAnimationDuration == 0 &&
+        !authority.newSessionConfiguration.quickTerminalAutohide &&
         !identical(authority.keyBindingEngine, initialBindings) &&
         !identical(authority.keyEncoder, initialEncoder) &&
         authority.keyBindingEngine
@@ -131,6 +144,10 @@ Future<void> _testAcceptedConfigurationAuthority() async {
   candidate = TerminalConfigLoader().resolve(const <String>[
     '--no-config',
     '--font-size=20',
+    '--quick-terminal-shortcut=command+grave',
+    '--quick-terminal-screen=mouse',
+    '--quick-terminal-animation-duration=0',
+    '--quick-terminal-autohide=false',
     '--macos-option-key=text',
     '--keybind=control+d=unbind',
   ], environment: const <String, String>{}).snapshot;
@@ -178,8 +195,10 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
       .toList(growable: false);
   _expect(
     live.map((TerminalConfigOptionBase option) => option.name).join(',') ==
-            'macos-option-key,keybind' &&
-        schema.options.length == 38 &&
+            'quick-terminal-shortcut,quick-terminal-screen,'
+                'quick-terminal-animation-duration,quick-terminal-autohide,'
+                'macos-option-key,keybind' &&
+        schema.options.length == 42 &&
         schema.options.every(
           (TerminalConfigOptionBase option) =>
               option.applicationPolicy ==
@@ -203,6 +222,10 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
     const <String>[
       '--no-config',
       '--font-size=18',
+      '--quick-terminal-shortcut=command+grave',
+      '--quick-terminal-screen=mouse',
+      '--quick-terminal-animation-duration=0',
+      '--quick-terminal-autohide=false',
       '--macos-option-key=text',
       '--keybind=control+d=terminal.send-quit-signal',
     ],
@@ -216,14 +239,18 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
     plan.changes
             .map((TerminalConfigChange change) => change.option.name)
             .join(',') ==
-        'font-size,macos-option-key,keybind',
+        'font-size,quick-terminal-shortcut,quick-terminal-screen,'
+            'quick-terminal-animation-duration,quick-terminal-autohide,'
+            'macos-option-key,keybind',
     'change plan follows deterministic schema order',
   );
   _expect(
     plan.liveChanges
                 .map((TerminalConfigChange change) => change.option.name)
                 .join(',') ==
-            'macos-option-key,keybind' &&
+            'quick-terminal-shortcut,quick-terminal-screen,'
+                'quick-terminal-animation-duration,quick-terminal-autohide,'
+                'macos-option-key,keybind' &&
         plan.newSessionChanges.single.option.name == 'font-size',
     'change plan partitions options by declared application policy',
   );
@@ -311,16 +338,16 @@ void _testDefaultsAndSchemaInventory() {
   final TerminalProductConfiguration defaults =
       TerminalProductConfiguration.defaults;
   _expect(
-    TerminalProductConfigSchema.instance.options.length == 38 &&
+    TerminalProductConfigSchema.instance.options.length == 42 &&
         TerminalProductConfigSchema.instance.options
                 .map((TerminalConfigOptionBase option) => option.name)
                 .toSet()
                 .length ==
-            38 &&
+            42 &&
         TerminalProductConfigSchema.instance.options.every(
           (TerminalConfigOptionBase option) => option.description.isNotEmpty,
         ),
-    'product schema has 38 unique documented options',
+    'product schema has 42 unique documented options',
   );
   _expect(
     defaults.workingDirectory == null &&
@@ -346,6 +373,11 @@ void _testDefaultsAndSchemaInventory() {
         defaults.windowHeight == 580 &&
         defaults.windowPaddingHorizontal == 0 &&
         defaults.windowPaddingVertical == 0 &&
+        defaults.quickTerminalShortcut == null &&
+        defaults.quickTerminalScreen ==
+            TerminalConfiguredQuickTerminalScreen.main &&
+        defaults.quickTerminalAnimationDuration == 0.2 &&
+        defaults.quickTerminalAutohide &&
         defaults.clipboardRead == TerminalConfiguredClipboardAccess.deny &&
         defaults.clipboardWrite == TerminalConfiguredClipboardAccess.deny &&
         defaults.terminalContentWidth == 920 &&
@@ -563,6 +595,10 @@ void _testCompleteFileProfile() {
     ..writeln('window-height = 760')
     ..writeln('window-padding-horizontal = 12')
     ..writeln('window-padding-vertical = 8')
+    ..writeln('quick-terminal-shortcut = command+grave')
+    ..writeln('quick-terminal-screen = mouse')
+    ..writeln('quick-terminal-animation-duration = 0')
+    ..writeln('quick-terminal-autohide = false')
     ..writeln('macos-option-key = text')
     ..writeln('scrollback-lines = 50000')
     ..writeln('scrollback-bytes = 128MiB')
@@ -602,6 +638,15 @@ void _testCompleteFileProfile() {
         profile.windowHeight == 760 &&
         profile.windowPaddingHorizontal == 12 &&
         profile.windowPaddingVertical == 8 &&
+        profile.quickTerminalShortcut ==
+            const TerminalKeyBindingChord(
+              physicalKey: TerminalPhysicalKey.grave,
+              command: true,
+            ) &&
+        profile.quickTerminalScreen ==
+            TerminalConfiguredQuickTerminalScreen.mouse &&
+        profile.quickTerminalAnimationDuration == 0 &&
+        !profile.quickTerminalAutohide &&
         profile.terminalContentWidth == 1176 &&
         profile.terminalContentHeight == 744 &&
         profile.macosOptionKey == TerminalConfiguredOptionKey.text &&
@@ -636,6 +681,10 @@ window-width = 479
 window-height = 8193
 window-padding-horizontal = -1
 window-padding-vertical = 65
+quick-terminal-shortcut = grave
+quick-terminal-screen = keyboard
+quick-terminal-animation-duration = 6
+quick-terminal-autohide = maybe
 macos-option-key = meta
 scrollback-lines = 0
 scrollback-bytes = 2GiB
@@ -653,7 +702,7 @@ clipboard-write = enabled
   final TerminalProductConfiguration recovered =
       TerminalProductConfiguration.fromSnapshot(snapshot);
   _expect(
-    snapshot.diagnostics.length == 19 &&
+    snapshot.diagnostics.length == 23 &&
         snapshot.diagnostics.every(
           (TerminalConfigDiagnostic diagnostic) =>
               diagnostic.code == 'CFG_INVALID_VALUE' &&
@@ -671,6 +720,11 @@ clipboard-write = enabled
         recovered.fontSize == TerminalProductConfiguration.defaults.fontSize &&
         recovered.windowWidth ==
             TerminalProductConfiguration.defaults.windowWidth &&
+        recovered.quickTerminalShortcut == null &&
+        recovered.quickTerminalScreen ==
+            TerminalConfiguredQuickTerminalScreen.main &&
+        recovered.quickTerminalAnimationDuration == 0.2 &&
+        recovered.quickTerminalAutohide &&
         recovered.macosOptionKey ==
             TerminalProductConfiguration.defaults.macosOptionKey &&
         recovered.scrollbackBytes ==
@@ -718,6 +772,10 @@ cursor-blink = false
     '--font-size=Infinity',
     '--scrollback-bytes=1MB',
     '--scrollback-lines=1000001',
+    '--quick-terminal-shortcut=command+comma',
+    '--quick-terminal-screen=nearest',
+    '--quick-terminal-animation-duration=-0.1',
+    '--quick-terminal-autohide=yes',
   ]) {
     _expectThrows(
       () => TerminalConfigLoader(fileSystem: files)

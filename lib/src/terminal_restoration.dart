@@ -935,8 +935,17 @@ abstract final class TerminalApplicationRestorationCapture {
     if (state.windows.isEmpty || state.activeWindowId == null) {
       throw StateError('cannot capture an empty terminal application');
     }
+    final List<TerminalWindowState> restorableWindows = state.windows
+        .where(
+          (TerminalWindowState window) =>
+              window.role == TerminalWindowRole.standard,
+        )
+        .toList(growable: false);
+    if (restorableWindows.isEmpty) {
+      throw StateError('cannot capture without a restorable terminal window');
+    }
     final List<TerminalRestorableWindow> windows = <TerminalRestorableWindow>[];
-    for (final TerminalWindowState window in state.windows) {
+    for (final TerminalWindowState window in restorableWindows) {
       final List<TerminalRestorableTab> tabs = <TerminalRestorableTab>[];
       for (final TerminalTabState tab in window.tabs) {
         final List<PaneId> paneIds = tab.paneIds;
@@ -963,9 +972,12 @@ abstract final class TerminalApplicationRestorationCapture {
         ),
       );
     }
+    final int activeWindowIndex = restorableWindows.indexWhere(
+      (TerminalWindowState window) => window.id == state.activeWindowId,
+    );
     return TerminalRestorationSnapshot(
       windows: windows,
-      activeWindowIndex: state.windowIds.indexOf(state.activeWindowId!),
+      activeWindowIndex: activeWindowIndex < 0 ? 0 : activeWindowIndex,
     );
   }
 

@@ -842,7 +842,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
   );
   _expect(
     RegExp(
-          r'^NATIVE_ACTION_MENU installed=true sections=6 actions=21$',
+          r'^NATIVE_ACTION_MENU installed=true sections=6 actions=26$',
           multiLine: true,
         ).allMatches(observation.stdoutText).length ==
         1,
@@ -1760,8 +1760,8 @@ keybind = command+d=pane.focus-next
           effectiveObservation.stderrText.isEmpty &&
           effectiveObservation.workerProcesses.isEmpty &&
           effectiveLines.first ==
-              'dart-terminal-effective-config version=1 options=38 '
-                  'entries=41 diagnostics=3' &&
+              'dart-terminal-effective-config version=1 options=42 '
+                  'entries=45 diagnostics=3' &&
           effectiveLines[1] == 'root path=${jsonEncode(configurationPath)}' &&
           effectiveTheme.contains('value="system"') &&
           effectiveTheme.contains('policy=new-session') &&
