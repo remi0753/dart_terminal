@@ -43,7 +43,7 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 26個のstable application actionを共有するbounded searchable registry、動的な
+- 27個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
@@ -61,6 +61,13 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   独立性、shortcut変更時の競合表示と旧登録保持をDeveloper JIT/Release AOTで検証する。
   global shortcutはexclusive system hot keyだけを所有し、全keyboard monitorやAccessibility権限を
   使用しない
+- focused live paneのcontent-freeなPTY ECHO状態だけを使うSecure Keyboard Entry。
+  ECHO-off時の自動取得と、menu・command palette・任意のlocal keybindで共有する手動切替を
+  備え、所有中だけterminal viewへaccessibleなautomatic/manual indicatorを表示する。
+  Settingsにはmode・owned/yielded/released・自動/表示設定を示し、window/pane/Quick Terminal間の
+  focus移譲、app非active時のyield/reacquire、終了・失敗時のbalanced releaseを行う。
+  `macos-secure-input-auto`と`macos-secure-input-indication`はlive変更でき、実PTY、IME、AppKit、
+  Metal、menu、Settings、Quitの経路をDeveloper JIT/Release AOTで検証する
 - DECSET 9/1000/1002/1003と1005/1006/1015/1016を追跡し、X10/default、UTF-8、
   URXVT、SGRのcell座標とSGR physical-pixel座標をbounded mouse reportとして実PTYへ
   送る製品routing。native logical pointへbacking scaleを一度だけ適用し、通常shellと
@@ -378,14 +385,14 @@ Applicationメニューまたはcommand paletteの`Reload Configuration`、あ�
 `application.reload-configuration` keybindで、起動時と同じfile/include/CLI priorityを再解決
 できます。error diagnosticが1件でもあるreloadは全体を拒否し、現在のeffective configと
 pane/PTY/native resourceを保持します。warning-onlyまたは正常な候補はatomicに受理します。
-`macos-option-key`と`keybind`は既存paneの次のkey eventからlive適用され、それ以外の現在の
-optionは新しく作るsession/resource/windowだけに適用されます。既存palette/OSC state、cursor、
+`macos-option-key`、`keybind`、4個の`quick-terminal-*`、2個の`macos-secure-input-*`はlive適用され、
+それ以外の現在のoptionは新しく作るsession/resource/windowだけに適用されます。既存palette/OSC state、cursor、
 scrollback、font、padding、window frameは書き換えません。自動file watchとSIGHUP reloadは
 現在の対象外です。
 
 Applicationメニューの`Settings…`（Command-,）、command palette、または非予約chordへ設定した
 `application.open-settings` actionから、root設定ファイルを編集するnative modal editorを開けます。
-最初のkey入力を待たず、新規・空・疎なファイルでも全42 optionを同じdocument内へ補完して表示し、
+最初のkey入力を待たず、新規・空・疎なファイルでも全44 optionを同じdocument内へ補完して表示し、
 右のcontext panelはcaret位置の
 current/draft value、構文、説明と、保存後に既存terminalへ即時反映されるか新規terminalから使われるかを
 表示します。line/source行や別のvalue入力欄は持たず、panelを閉じても右端の細いrailが残ります。
@@ -401,6 +408,8 @@ Command-Sはroot全体を既存schemaで事前検証します。invalid draftは
 atomic保存し、上記のshared reload actionを1回実行します。NORMALの`Esc`またはwindow closeは全native
 editor ownerを解放してterminalのfirst responderを復元します。canonical provenance、include/CLI priority、
 全diagnosticの機械可読表示には引き続き`--show-config`を使用できます。
+Settingsのruntime statusにはQuick Terminal shortcutに加え、Secure Keyboard Entryの
+automatic/manual/disabled/failed mode、owned/yielded/released、および自動取得・indicator設定も表示します。
 
 `theme` は `system`、`light`、`dark` を受理し、互換記法の `default` は `system` として扱います。
 `default`を使用すると`CFG_DEPRECATED_VALUE` warningと`theme = system`への修正案を表示し、

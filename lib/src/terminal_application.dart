@@ -116,6 +116,7 @@ final class TerminalOptions {
     this.runtimeDesktopSignalsTest = false,
     this.runtimeOsc52Test = false,
     this.runtimeQuickTerminalTest = false,
+    this.runtimeSecureKeyboardEntryTest = false,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
@@ -166,6 +167,7 @@ final class TerminalOptions {
     var runtimeDesktopSignalsTest = false;
     var runtimeOsc52Test = false;
     var runtimeQuickTerminalTest = false;
+    var runtimeSecureKeyboardEntryTest = false;
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
@@ -288,6 +290,15 @@ final class TerminalOptions {
           );
         }
         runtimeQuickTerminalTest = true;
+        continue;
+      }
+      if (argument == '--runtime-secure-keyboard-entry-test') {
+        if (runtimeSecureKeyboardEntryTest) {
+          throw const FormatException(
+            '--runtime-secure-keyboard-entry-test may only be supplied once',
+          );
+        }
+        runtimeSecureKeyboardEntryTest = true;
         continue;
       }
       if (argument == '--runtime-restoration-test') {
@@ -467,6 +478,35 @@ final class TerminalOptions {
         selectedEnvironment['DT_RUNTIME_QUICK_TERMINAL_TEST'] != '1') {
       throw const FormatException(
         'Quick Terminal test requires the integration-test gate',
+      );
+    }
+    if (runtimeSecureKeyboardEntryTest &&
+        selectedEnvironment['DT_RUNTIME_SECURE_KEYBOARD_ENTRY_TEST'] != '1') {
+      throw const FormatException(
+        'Secure Keyboard Entry test requires the integration-test gate',
+      );
+    }
+    if (runtimeSecureKeyboardEntryTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeShellIntegrationTest ||
+            runtimeDesktopSignalsTest ||
+            runtimeOsc52Test ||
+            runtimeQuickTerminalTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'Secure Keyboard Entry test cannot be combined with another runtime '
+        'test',
       );
     }
     if (runtimeQuickTerminalTest &&
@@ -693,6 +733,7 @@ final class TerminalOptions {
       runtimeDesktopSignalsTest: runtimeDesktopSignalsTest,
       runtimeOsc52Test: runtimeOsc52Test,
       runtimeQuickTerminalTest: runtimeQuickTerminalTest,
+      runtimeSecureKeyboardEntryTest: runtimeSecureKeyboardEntryTest,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
@@ -735,6 +776,7 @@ final class TerminalOptions {
   final bool runtimeDesktopSignalsTest;
   final bool runtimeOsc52Test;
   final bool runtimeQuickTerminalTest;
+  final bool runtimeSecureKeyboardEntryTest;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
@@ -821,6 +863,7 @@ final class TerminalApplication {
         options.runtimeDesktopSignalsTest ||
         options.runtimeOsc52Test ||
         options.runtimeQuickTerminalTest ||
+        options.runtimeSecureKeyboardEntryTest ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -845,6 +888,8 @@ final class TerminalApplication {
         runDesktopSignalAcceptance: options.runtimeDesktopSignalsTest,
         runOsc52Acceptance: options.runtimeOsc52Test,
         runQuickTerminalAcceptance: options.runtimeQuickTerminalTest,
+        runSecureKeyboardEntryAcceptance:
+            options.runtimeSecureKeyboardEntryTest,
         osc52Clipboard: options.runtimeOsc52Test
             ? _MemoryTerminalOsc52Clipboard()
             : null,
@@ -2325,6 +2370,7 @@ final class TerminalApplication {
       !options.runtimeDesktopSignalsTest &&
       !options.runtimeOsc52Test &&
       !options.runtimeQuickTerminalTest &&
+      !options.runtimeSecureKeyboardEntryTest &&
       !options.runtimeRestorationTest &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
@@ -2345,6 +2391,7 @@ final class TerminalApplication {
     bool runDesktopSignalAcceptance = false,
     bool runOsc52Acceptance = false,
     bool runQuickTerminalAcceptance = false,
+    bool runSecureKeyboardEntryAcceptance = false,
     TerminalOsc52ClipboardPort? osc52Clipboard,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
@@ -2512,7 +2559,8 @@ final class TerminalApplication {
                   runThemeAcceptance ||
                   runDesktopSignalAcceptance ||
                   runOsc52Acceptance ||
-                  runQuickTerminalAcceptance;
+                  runQuickTerminalAcceptance ||
+                  runSecureKeyboardEntryAcceptance;
               final Map<String, String> shellEnvironment =
                   usesDeterministicShell
                   ? <String, String>{
@@ -3775,7 +3823,8 @@ final class TerminalApplication {
           if (runUserActionAcceptance ||
               runConfigurationAcceptance ||
               runOsc52Acceptance ||
-              runQuickTerminalAcceptance) {
+              runQuickTerminalAcceptance ||
+              runSecureKeyboardEntryAcceptance) {
             actionDispatches.add(result);
           }
           final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -3841,7 +3890,8 @@ final class TerminalApplication {
           if (runUserActionAcceptance ||
               runConfigurationAcceptance ||
               runOsc52Acceptance ||
-              runQuickTerminalAcceptance) {
+              runQuickTerminalAcceptance ||
+              runSecureKeyboardEntryAcceptance) {
             actionDispatches.add(result);
           }
           final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -3864,7 +3914,8 @@ final class TerminalApplication {
           if (runUserActionAcceptance ||
               runConfigurationAcceptance ||
               runOsc52Acceptance ||
-              runQuickTerminalAcceptance) {
+              runQuickTerminalAcceptance ||
+              runSecureKeyboardEntryAcceptance) {
             nativeActionInvocations.add(id);
           }
         },
@@ -3872,7 +3923,8 @@ final class TerminalApplication {
           if (runUserActionAcceptance ||
               runConfigurationAcceptance ||
               runOsc52Acceptance ||
-              runQuickTerminalAcceptance) {
+              runQuickTerminalAcceptance ||
+              runSecureKeyboardEntryAcceptance) {
             actionDispatches.add(result);
           }
           installedPalette.refresh();
@@ -3949,7 +4001,28 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      if (runQuickTerminalAcceptance) {
+      if (runSecureKeyboardEntryAcceptance) {
+        await _exerciseSecureKeyboardEntryProduct(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          dispatcher: dispatcher,
+          menu: menuProjection,
+          palette: installedPalette,
+          settings: settingsPresenter!,
+          quickTerminal: createdQuickTerminal,
+          secureKeyboardEntry: createdSecureKeyboardEntry,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          nativeActionInvocations: nativeActionInvocations,
+          actionDispatches: actionDispatches,
+          lastKeyRoutes: lastKeyRoutes,
+          keyRouteCounts: keyRouteCounts,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
+      } else if (runQuickTerminalAcceptance) {
         await _exerciseQuickTerminalProduct(
           application: application,
           state: state,
@@ -6956,6 +7029,416 @@ keybind = control+k=pane.focus-next
       'grid_resize=true '
       'menu_zero_write=true input_isolated=true close=true quit=true '
       'sessions_clean=5 text_clients=0 native_handles=0',
+    );
+  }
+
+  static Future<void> _exerciseSecureKeyboardEntryProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalActionDispatcher dispatcher,
+    required TerminalAppKitMenuProjection menu,
+    required TerminalCommandPalettePresenter palette,
+    required TerminalSettingsInspectorPresenter settings,
+    required TerminalQuickTerminalController quickTerminal,
+    required TerminalSecureKeyboardEntryController secureKeyboardEntry,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required List<TerminalActionId> nativeActionInvocations,
+    required List<TerminalActionDispatchResult> actionDispatches,
+    required Map<PaneId, TerminalKeyRouteResult> lastKeyRoutes,
+    required Map<PaneId, int> keyRouteCounts,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    Future<void> waitFor(
+      bool Function() predicate,
+      String message, {
+      Duration timeout = const Duration(seconds: 10),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (!predicate() && deadline.elapsed < timeout) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      _expectLifecycle(predicate(), message);
+    }
+
+    Future<void> dispatch(TerminalActionId id) async {
+      final TerminalActionDispatchResult result = await dispatcher.dispatch(id);
+      _expectLifecycle(
+        result.disposition == TerminalActionDispatchDisposition.executed,
+        'Secure Keyboard Entry action ${id.stableName} did not execute',
+      );
+    }
+
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1 &&
+          hierarchy.paneResourceCount == 1 &&
+          sessions.length == 1 &&
+          owners.length == 1 &&
+          secureKeyboardEntry.status.mode ==
+              TerminalSecureKeyboardEntryMode.disabled &&
+          !secureKeyboardEntry.status.desired &&
+          !secureKeyboardEntry.status.ownedEnabled,
+      'Secure Keyboard Entry product did not start released in a 1/1/1 '
+      'hierarchy',
+    );
+    final TerminalWindowState ordinaryWindow = state.windows.single;
+    final TerminalTabState ordinaryTab = ordinaryWindow.selectedTab;
+    final PaneId ordinaryPaneId = ordinaryTab.focusedPaneId;
+    final TerminalSession ordinarySession = sessions[ordinaryPaneId]!;
+    final _TerminalHierarchyProductPane ordinaryOwner = owners[ordinaryPaneId]!;
+    final Window ordinaryNative = hierarchy.windowForTab(ordinaryTab.id)!;
+    await _waitForAsciiMarker(ordinarySession, prompt);
+    if (!application.isActive) {
+      appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+        application.eventProtocolVersion,
+        30,
+        0,
+        0,
+        19999000,
+        0,
+        true,
+      ]);
+    }
+    await waitFor(
+      () =>
+          application.isActive &&
+          ordinaryNative.isVisible &&
+          ordinaryNative.isFocused,
+      'ordinary terminal did not become the focused secure-input target',
+    );
+
+    const String initialEchoOnMarker = '__DT_SECURE_INITIAL_ECHO_ON__';
+    ordinaryOwner.pane.insertText(
+      "stty echo; printf '\\n$initialEchoOnMarker\\n'",
+    );
+    await ordinaryOwner.pane.submit();
+    await _waitForAsciiMarker(ordinarySession, initialEchoOnMarker);
+    await _waitForAsciiMarker(ordinarySession, prompt);
+    await waitFor(
+      () =>
+          ordinaryOwner.pane.processSnapshot().terminalEchoEnabled == true &&
+          secureKeyboardEntry.status.mode ==
+              TerminalSecureKeyboardEntryMode.disabled &&
+          !secureKeyboardEntry.status.ownedEnabled,
+      'acceptance setup could not establish released echo-on state',
+    );
+
+    final MenuItem secureItem = menu.itemForAction(
+      TerminalActionId.toggleSecureKeyboardEntry,
+    );
+    menu.refresh();
+    await waitFor(
+      () =>
+          secureItem.isEnabled &&
+          !secureItem.isChecked &&
+          ordinaryOwner.view.secureInputIndicatorState ==
+              SecureInputIndicatorState.hidden,
+      'released Secure Keyboard Entry did not project an unchecked menu and '
+      'hidden indicator',
+    );
+
+    const String echoOffMarker = '__DT_SECURE_ECHO_OFF__';
+    ordinaryOwner.pane.insertText("stty -echo; printf '\\n$echoOffMarker\\n'");
+    await ordinaryOwner.pane.submit();
+    await _waitForAsciiMarker(ordinarySession, echoOffMarker);
+    await waitFor(() {
+      final TerminalSecureKeyboardEntryStatus status =
+          secureKeyboardEntry.status;
+      return status.mode == TerminalSecureKeyboardEntryMode.automatic &&
+          status.desired &&
+          status.ownedEnabled &&
+          status.terminalEchoEnabled == false &&
+          ordinaryOwner.pane.processSnapshot().terminalEchoEnabled == false &&
+          ordinaryOwner.view.secureInputIndicatorState ==
+              SecureInputIndicatorState.automatic;
+    }, 'real PTY echo-off did not acquire and indicate automatic secure input');
+
+    final int preeditGeneration = ordinaryOwner.textRouter.lastGeneration + 1;
+    final TerminalTextInputRouteResult preeditResult = ordinaryOwner.textRouter
+        .route(
+          TerminalTextInputPreeditEvent(
+            clientId: ordinaryOwner.client.clientId,
+            generation: preeditGeneration,
+            monotonicNanoseconds: 20000000,
+            text: '安全',
+            selection: const TerminalTextInputRange(2, 0),
+            replacement: TerminalTextInputRange.notFound,
+          ),
+        );
+    await ordinaryOwner.waitForTextInputGeneration(
+      preeditGeneration,
+      compositionActive: true,
+    );
+    final TerminalTextInputRouteResult suppressedResult = ordinaryOwner
+        .textRouter
+        .route(
+          TerminalTextInputKeyEvent(
+            clientId: ordinaryOwner.client.clientId,
+            generation: ordinaryOwner.textRouter.lastGeneration + 1,
+            monotonicNanoseconds: 20001000,
+            kind: TerminalTextInputKeyKind.down,
+            keyCode: 0,
+            modifiers: const ModifierKeys(0),
+            isRepeat: false,
+            characters: 'a',
+            charactersIgnoringModifiers: 'a',
+          ),
+        );
+    const String imeMarker = '__DT_SECURE_IME_COMMIT__';
+    const String echoOnMarker = '__DT_SECURE_ECHO_ON__';
+    final TerminalTextInputRouteResult commitResult = ordinaryOwner.textRouter
+        .route(
+          TerminalTextInputCommitEvent(
+            clientId: ordinaryOwner.client.clientId,
+            generation: ordinaryOwner.textRouter.lastGeneration + 1,
+            monotonicNanoseconds: 20002000,
+            text:
+                "printf '$imeMarker\\n'; stty echo; "
+                "printf '$echoOnMarker\\n'; /bin/sleep 1",
+            replacement: TerminalTextInputRange.notFound,
+          ),
+        );
+    await ordinaryOwner.pane.submit();
+    await _waitForAsciiMarker(ordinarySession, imeMarker);
+    await _waitForAsciiMarker(ordinarySession, echoOnMarker);
+    await waitFor(() {
+      final TerminalSecureKeyboardEntryStatus status =
+          secureKeyboardEntry.status;
+      return status.mode == TerminalSecureKeyboardEntryMode.disabled &&
+          !status.desired &&
+          !status.ownedEnabled &&
+          status.terminalEchoEnabled == true &&
+          ordinaryOwner.pane.processSnapshot().terminalEchoEnabled == true &&
+          ordinaryOwner.view.secureInputIndicatorState ==
+              SecureInputIndicatorState.hidden;
+    }, 'real PTY echo-on did not release automatic secure input');
+    await _waitForAsciiMarker(ordinarySession, prompt);
+    await waitFor(
+      () =>
+          secureKeyboardEntry.status.mode ==
+              TerminalSecureKeyboardEntryMode.automatic &&
+          secureKeyboardEntry.status.ownedEnabled,
+      'zsh line editing did not restore automatic echo-off ownership',
+    );
+    _expectLifecycle(
+      preeditResult.disposition == TerminalTextInputRouteDisposition.preedit &&
+          suppressedResult.disposition ==
+              TerminalTextInputRouteDisposition.rawSuppressed &&
+          commitResult.disposition ==
+              TerminalTextInputRouteDisposition.committed &&
+          !ordinaryOwner.textRouter.isCompositionActive &&
+          !ordinaryOwner.surface.preeditState.isActive,
+      'IME preedit/commit was not isolated from secure-input policy',
+    );
+
+    final int menuInvocationBaseline = nativeActionInvocations.length;
+    final int menuDispatchBaseline = actionDispatches.length;
+    secureItem.performAction();
+    await waitFor(
+      () =>
+          secureKeyboardEntry.status.mode ==
+              TerminalSecureKeyboardEntryMode.manual &&
+          secureKeyboardEntry.status.ownedEnabled &&
+          secureItem.isChecked &&
+          ordinaryOwner.view.secureInputIndicatorState ==
+              SecureInputIndicatorState.manual &&
+          nativeActionInvocations.length == menuInvocationBaseline + 1 &&
+          actionDispatches.length == menuDispatchBaseline + 1,
+      'native menu did not acquire manual secure input and project its check',
+    );
+
+    await settings.open();
+    _expectLifecycle(
+      (settings.renderedText ?? '').contains(
+            'Secure Keyboard Entry: manual (owned',
+          ) &&
+          secureKeyboardEntry.manualRequested &&
+          secureKeyboardEntry.status.ownedEnabled &&
+          secureItem.isChecked,
+      'Settings did not expose retained manual secure-input ownership',
+    );
+    await settings.dismiss();
+    await waitFor(
+      () =>
+          ordinaryNative.isFocused &&
+          ordinaryOwner.view.secureInputIndicatorState ==
+              SecureInputIndicatorState.manual,
+      'dismissing Settings did not restore the focused manual indication',
+    );
+
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      30,
+      0,
+      0,
+      21000000,
+      0,
+      false,
+    ]);
+    await waitFor(
+      () =>
+          !application.isActive &&
+          secureKeyboardEntry.status.mode ==
+              TerminalSecureKeyboardEntryMode.manual &&
+          secureKeyboardEntry.status.desired &&
+          ordinaryOwner.view.secureInputIndicatorState ==
+              SecureInputIndicatorState.hidden,
+      'application inactivity did not retain manual intent while hiding its '
+      'product indication',
+    );
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      30,
+      0,
+      0,
+      21001000,
+      0,
+      true,
+    ]);
+    await waitFor(
+      () =>
+          application.isActive &&
+          secureKeyboardEntry.status.ownedEnabled &&
+          ordinaryOwner.view.secureInputIndicatorState ==
+              SecureInputIndicatorState.manual,
+      'application reactivation did not reacquire retained manual intent',
+    );
+
+    await palette.open();
+    palette
+      ..refresh()
+      ..state.setQuery('secure keyboard')
+      ..refresh();
+    _expectLifecycle(
+      palette.isOpen &&
+          palette.state.selectedAction?.definition.id ==
+              TerminalActionId.toggleSecureKeyboardEntry &&
+          palette.state.selectedAction!.isEnabled,
+      'command palette did not expose the shared secure-input action',
+    );
+    final TerminalActionDispatchResult paletteResult = await palette.state
+        .invokeSelected();
+    await palette.dismiss();
+    menu.refresh();
+    await waitFor(
+      () =>
+          paletteResult.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          !secureKeyboardEntry.manualRequested &&
+          secureKeyboardEntry.status.mode ==
+              TerminalSecureKeyboardEntryMode.automatic &&
+          secureKeyboardEntry.status.ownedEnabled &&
+          !secureItem.isChecked &&
+          ordinaryOwner.view.secureInputIndicatorState ==
+              SecureInputIndicatorState.automatic,
+      'command palette did not clear manual intent and restore automatic '
+      'secure-input policy',
+    );
+
+    final int keyRouteBaseline = keyRouteCounts[ordinaryPaneId] ?? 0;
+    final TerminalTextInputRouteResult keyResult = ordinaryOwner.textRouter
+        .route(
+          TerminalTextInputKeyEvent(
+            clientId: ordinaryOwner.client.clientId,
+            generation: ordinaryOwner.textRouter.lastGeneration + 1,
+            monotonicNanoseconds: 22000000,
+            kind: TerminalTextInputKeyKind.down,
+            keyCode: 1,
+            modifiers: const ModifierKeys(
+              ModifierKeys.controlBit | ModifierKeys.shiftBit,
+            ),
+            isRepeat: false,
+            characters: '\u0013',
+            charactersIgnoringModifiers: 's',
+          ),
+        );
+    await waitFor(
+      () =>
+          keyRouteCounts[ordinaryPaneId] == keyRouteBaseline + 1 &&
+          lastKeyRoutes[ordinaryPaneId]?.applicationAction ==
+              TerminalActionId.toggleSecureKeyboardEntry &&
+          secureKeyboardEntry.manualRequested &&
+          secureKeyboardEntry.status.ownedEnabled &&
+          secureItem.isChecked,
+      'configured local keybinding did not use the shared secure-input action',
+    );
+    _expectLifecycle(
+      keyResult.disposition == TerminalTextInputRouteDisposition.rawKey &&
+          lastKeyRoutes[ordinaryPaneId]?.disposition ==
+              TerminalKeyRouteDisposition.action,
+      'configured secure-input keybinding was not consumed as an application '
+      'action',
+    );
+
+    await dispatch(TerminalActionId.toggleQuickTerminal);
+    await waitFor(
+      () =>
+          quickTerminal.lifecycle.visibility ==
+              TerminalQuickTerminalVisibility.visible &&
+          state.quickTerminalWindow != null &&
+          state.activeWindowId == state.quickTerminalWindow!.id &&
+          state.windowCount == 2 &&
+          state.paneCount == 2,
+      'manual secure input did not coexist with Quick Terminal presentation',
+    );
+    final TerminalWindowState quickWindow = state.quickTerminalWindow!;
+    final PaneId quickPaneId = quickWindow.selectedTab.focusedPaneId;
+    final TerminalSession quickSession = sessions[quickPaneId]!;
+    final _TerminalHierarchyProductPane quickOwner = owners[quickPaneId]!;
+    await _waitForAsciiMarker(quickSession, prompt);
+    await waitFor(
+      () =>
+          secureKeyboardEntry.status.targetIdentity == quickPaneId &&
+          secureKeyboardEntry.status.ownedEnabled &&
+          quickOwner.view.secureInputIndicatorState ==
+              SecureInputIndicatorState.manual &&
+          ordinaryOwner.view.secureInputIndicatorState ==
+              SecureInputIndicatorState.hidden,
+      'manual secure-input ownership did not hand its indication to Quick '
+      'Terminal',
+    );
+    await dispatch(TerminalActionId.toggleQuickTerminal);
+    await waitFor(
+      () =>
+          quickTerminal.lifecycle.visibility ==
+              TerminalQuickTerminalVisibility.hidden &&
+          state.activeWindowId == ordinaryWindow.id &&
+          secureKeyboardEntry.status.targetIdentity == ordinaryPaneId &&
+          ordinaryOwner.view.secureInputIndicatorState ==
+              SecureInputIndicatorState.manual &&
+          quickOwner.view.secureInputIndicatorState ==
+              SecureInputIndicatorState.hidden,
+      'hiding Quick Terminal did not restore the manual indication to the '
+      'ordinary terminal',
+    );
+
+    await dispatch(TerminalActionId.quitApplication);
+    await closed.future;
+    _expectLifecycle(
+      secureKeyboardEntry.isDisposed &&
+          quickTerminal.isDisposed &&
+          state.isDisposed &&
+          hierarchy.isDisposed &&
+          allSessions.length == 2 &&
+          allSessions.every(
+            (TerminalSession session) =>
+                session.shutdownResult?.isClean == true,
+          ) &&
+          debugLiveTerminalTextInputClientCount() == 0 &&
+          application.debugLiveObjectCount == 0,
+      'Quit did not release owned secure input, native UI, and both sessions',
+    );
+    stdout.writeln(
+      'TERMINAL_SECURE_KEYBOARD_ENTRY_TEST automatic=true echo=true '
+      'ime=true menu=true palette=true keybind=true settings=true '
+      'app_lifecycle=true quick_terminal=true checked=true indication=true '
+      'cleanup=true sessions_clean=2 text_clients=0 native_handles=0',
     );
   }
 

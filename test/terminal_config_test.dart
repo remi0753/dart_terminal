@@ -709,6 +709,30 @@ working-directory = /from-file
             0,
     'TerminalOptions admits isolated Quick Terminal configuration acceptance',
   );
+  final TerminalOptions runtimeSecureKeyboardEntry = TerminalOptions.parse(
+    const <String>[
+      '--no-config',
+      '--keybind=control+shift+s=application.toggle-secure-keyboard-entry',
+      '--runtime-secure-keyboard-entry-test',
+    ],
+    environment: const <String, String>{
+      'DT_RUNTIME_SECURE_KEYBOARD_ENTRY_TEST': '1',
+    },
+    configFileSystem: files,
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    runtimeSecureKeyboardEntry.runtimeSecureKeyboardEntryTest &&
+        runtimeSecureKeyboardEntry.effectiveConfiguration!
+                .occurrences(TerminalProductConfigSchema.keybind)
+                .single
+                .value
+                .applicationAction ==
+            TerminalActionId.toggleSecureKeyboardEntry,
+    'TerminalOptions admits isolated Secure Keyboard Entry acceptance',
+  );
   _expectThrows(
     () => TerminalOptions.parse(
       const <String>['--no-config', '--runtime-configuration-test'],
@@ -756,6 +780,31 @@ working-directory = /from-file
       configFileSystem: files,
     ),
     'Quick Terminal acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>['--no-config', '--runtime-secure-keyboard-entry-test'],
+      environment: const <String, String>{},
+      configFileSystem: files,
+    ),
+    'Secure Keyboard Entry acceptance is unavailable without its environment '
+    'gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>[
+        '--no-config',
+        '--runtime-secure-keyboard-entry-test',
+        '--runtime-quick-terminal-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_SECURE_KEYBOARD_ENTRY_TEST': '1',
+        'DT_RUNTIME_QUICK_TERMINAL_TEST': '1',
+      },
+      configFileSystem: files,
+    ),
+    'Secure Keyboard Entry acceptance cannot be combined with another '
+    'runtime test',
   );
   _expectThrows(
     () => TerminalOptions.parse(

@@ -32,6 +32,7 @@ enum _Suite {
   desktopSignals,
   osc52,
   quickTerminal,
+  secureKeyboardEntry,
   restoration,
   clipboard,
   lifecycle,
@@ -45,6 +46,7 @@ enum _Suite {
     _Suite.desktopSignals => 'desktop-signals',
     _Suite.osc52 => 'osc52',
     _Suite.quickTerminal => 'quick-terminal',
+    _Suite.secureKeyboardEntry => 'secure-keyboard-entry',
     _ => name,
   };
 }
@@ -164,8 +166,8 @@ _Options _parseOptions(List<String> arguments) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
           'configuration, theme, shell-integration, desktop-signals, '
-          'osc52, quick-terminal, clipboard, lifecycle, traffic, resource, '
-          'fault, or all',
+          'osc52, quick-terminal, secure-keyboard-entry, clipboard, '
+          'lifecycle, traffic, resource, fault, or all',
         );
       }
       suite = selected;
@@ -1626,6 +1628,88 @@ Future<void> _runQuickTerminal(_Options options, _Invocation invocation) async {
   );
   stdout.writeln(
     'RUNTIME_QUICK_TERMINAL_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'elapsed_ms=${observation.elapsed.inMilliseconds}',
+  );
+}
+
+Future<void> _runSecureKeyboardEntry(
+  _Options options,
+  _Invocation invocation,
+) async {
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>[
+      '--no-config',
+      '--shell-integration=none',
+      '--quick-terminal-animation-duration=0',
+      '--keybind=control+shift+s=application.toggle-secure-keyboard-entry',
+      '--runtime-secure-keyboard-entry-test',
+    ],
+    environment: const <String, String>{
+      'DT_RUNTIME_SECURE_KEYBOARD_ENTRY_TEST': '1',
+    },
+    timeout: const Duration(seconds: 45),
+  );
+  _expect(
+    observation.status == 0,
+    'Secure Keyboard Entry application exited with status '
+    '${observation.status}; stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'Secure Keyboard Entry application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_SECURE_KEYBOARD_ENTRY_TEST automatic=true echo=true '
+          r'ime=true menu=true palette=true keybind=true settings=true '
+          r'app_lifecycle=true quick_terminal=true checked=true indication=true '
+          r'cleanup=true sessions_clean=2 text_clients=0 native_handles=0$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted exact Secure Keyboard Entry acceptance',
+  );
+  _expect(
+    RegExp(
+              r'^TERMINAL_SESSION_SHUTDOWN pane=[12] session=[12]:1 '
+              r'process_id=[1-9][0-9]* disposition=clean '
+              r'termination_observed=true cleanup_completed=true$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            2 &&
+        RegExp(
+              r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=2 disposition=clean$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1 &&
+        observation.stdoutText.contains(
+          'TERMINAL_SECURE_KEYBOARD_ENTRY mode=automatic',
+        ) &&
+        observation.stdoutText.contains(
+          'TERMINAL_SECURE_KEYBOARD_ENTRY mode=manual',
+        ) &&
+        observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+    'Secure Keyboard Entry product did not exercise transitions and cleanly '
+    'release its two sessions',
+  );
+  _expect(
+    !observation.stdoutText.contains('TERMINAL_SECURE_KEYBOARD_ENTRY_ERROR') &&
+        !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW'),
+    'Secure Keyboard Entry product reported a native or IME failure',
+  );
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
+  );
+  stdout.writeln(
+    'RUNTIME_SECURE_KEYBOARD_ENTRY_INTEGRATION_PASS '
+    'mode=${options.mode.name} '
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
@@ -3270,6 +3354,10 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.quickTerminal || options.suite == _Suite.all) {
       await _runQuickTerminal(options, invocation);
+    }
+    if (options.suite == _Suite.secureKeyboardEntry ||
+        options.suite == _Suite.all) {
+      await _runSecureKeyboardEntry(options, invocation);
     }
     if (options.suite == _Suite.configuration || options.suite == _Suite.all) {
       await _runConfiguration(options, invocation);

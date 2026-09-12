@@ -1204,7 +1204,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] `dart_appkit` exclusive global shortcut registration/event substrate
   - [x] `dart_appkit` Quick Terminal window/screen/presentation substrate
   - [x] product integration、両runtime acceptance、documentation closure、親項目完了判定
-- [ ] Secure Keyboard Entry と auto/manual indication
+- [x] Secure Keyboard Entry と auto/manual indication
   （分割、境界、完了条件は
   [`docs/phase10/secure-keyboard-entry.md`](docs/phase10/secure-keyboard-entry.md)
   を参照して順に実施する）
@@ -1213,7 +1213,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] terminal policy/configuration/action/lifecycle integration
     - [x] `dart_appkit` checked menu-item projection prerequisite
     - [x] controller、live config、shared action、UI/lifecycle integration
-  - [ ] 両runtime acceptance、manual checklist、documentation closure、親項目完了判定
+  - [x] 両runtime acceptance、manual checklist、documentation closure、親項目完了判定
 - [ ] Quick Look、Services、drag/drop、context menu
 - [ ] AppleScript dictionary と object lifecycle
 - [ ] App Intents/Shortcuts、notifications

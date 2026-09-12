@@ -308,3 +308,85 @@ application lifecycle in both Developer JIT and Release AOT. Add a bounded
 manual checklist, update public feature/security documentation and generated
 runtime evidence, run source/resource/bundle audits plus exact full gates,
 review the final diff, and only then close the Secure Keyboard Entry parent.
+
+## Runtime acceptance and closure findings
+
+- 2026-09-12: The isolated runtime suite now has a gated
+  `--runtime-secure-keyboard-entry-test` product path and matching Developer
+  JIT/Release AOT Make targets. It is mutually exclusive with every other
+  runtime acceptance and uses a deterministic zsh plus one configured
+  `control+shift+s=application.toggle-secure-keyboard-entry` binding. The
+  runtime driver requires one exact product summary, two clean session
+  shutdowns, one clean pane-owner shutdown, no secure/IME error marker, the
+  normal worker process contract, and empty stderr.
+- 2026-09-12: Each runtime exercises a real interactive PTY, AppKit hierarchy,
+  Metal terminal view, and native Carbon owner. It establishes ECHO-on,
+  requests ECHO-off, observes automatic owned mode and the accessible
+  automatic indicator, then uses a real IME preedit/raw-suppression/commit
+  route to hold ECHO-on long enough to observe automatic release. No terminal
+  content enters the controller; only the nullable content-free process
+  snapshot is asserted.
+- 2026-09-12: The same product run toggles manual intent through a native
+  checked menu item, reads `manual (owned)` through the real Settings window,
+  clears it through the shared command-palette action, and restores it through
+  the configured local keybinding. It verifies the keybinding is consumed as
+  an application action rather than encoded PTY bytes. Manual indication then
+  transfers from the ordinary terminal to the retained Quick Terminal and
+  back before Quit runs while the native reference is still owned.
+- 2026-09-12: Application inactive/active raw-event injection validates the
+  product-side retained-manual and hidden/restored-indicator projections. The
+  public test injection enters the Dart event stream but intentionally does
+  not synthesize an AppKit `NSApplication` transition inside the native
+  bridge; balanced native yield/reacquire remains covered by the dependency's
+  injected native lifecycle test. The new manual checklist therefore keeps an
+  actual app-switch observation as release evidence rather than claiming that
+  the runtime harness changes global desktop focus.
+- 2026-09-12: Real zsh line editing disables terminal ECHO while it owns the
+  prompt. Consequently, clearing manual intent can legitimately return to
+  `automatic (owned)` instead of `disabled (released)`. The acceptance first
+  holds an explicit ECHO-on interval with `/bin/sleep 1` to prove release,
+  then separately verifies zsh's later ECHO-off transition restores automatic
+  mode. This prevents an AOT timing race from weakening the policy assertion.
+- 2026-09-12: The first Developer JIT build failed because the sandbox blocked
+  Metal's Clang module cache under the user cache directory. The identical
+  approved out-of-sandbox Make target built successfully. The first runtime
+  expectation assumed the command-line-launched app was initially active and
+  the shell initially ECHO-on; the observed app was inactive and zsh already
+  owned an ECHO-off line editor. Seeding the typed application-active event and
+  explicitly normalizing ECHO made setup deterministic.
+- 2026-09-12: A later lifecycle expectation incorrectly required the Dart raw
+  event injector to drive the native AppDelegate, and a palette expectation
+  incorrectly required the presenter's callback list when invoking the
+  selected state directly. The final assertions distinguish product inactive
+  projection from native lifecycle injection and use the palette's exact
+  dispatch result plus controller/menu state. The first Release AOT attempt
+  exposed the too-short ECHO-on observation window; the bounded sleep fixed it,
+  and final Developer JIT (2,826 ms) and Release AOT (2,043 ms) runs passed.
+- 2026-09-12: The manual checklist is published at
+  [`secure-keyboard-entry-manual-checklist.md`](secure-keyboard-entry-manual-checklist.md).
+  It forbids real secrets and records only content-free results for automatic,
+  manual/menu/palette/keybind, live Settings policy, IME, pane/window/Quick
+  Terminal handoff, actual application yield/reacquire, normal/Force Quit, and
+  controlled external-owner failure. System focus, Force Quit, and external
+  ownership remain explicit human release observations.
+- 2026-09-12: README and Feature Matrix closure now describe 27 shared
+  actions, 44 options (8 live/36 new-session), checked manual state,
+  automatic/manual indication, bounded Settings status, ECHO-only policy, and
+  teardown ownership. UI-07 and SEC-04 are implemented; Quick Look and later
+  Phase 10 accessibility work remain correctly open.
+- 2026-09-12: `make runtime-source-check` passed with 502 tracked files, zero
+  product-native source files, and one reviewed test-native source. Developer
+  JIT and Release AOT bundle audits each passed for arm64 with one helper, one
+  native asset set, and one declared capability. Both final secure runtime
+  targets passed with two clean PTYs, zero text clients, zero native handles,
+  and no stderr.
+- 2026-09-12: The first exact full gate correctly rejected stale Phase 7
+  AppKit evidence after the product runtime source changed. After canonical
+  regeneration, the next run correctly rejected the dependent compatibility
+  coverage hash; canonical regeneration fixed it. The final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed with 274 formatted
+  files and no changes, clean analysis, 44 configuration options, 27
+  application actions, fresh generated evidence, all Dart tests, and the
+  bounded Phase 9 security stress. The initial direct `dart format` also
+  formatted its files before failing only on the sandboxed telemetry timestamp;
+  the analytics-suppressed rerun made zero changes and succeeded.

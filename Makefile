@@ -40,12 +40,12 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	product-damage-benchmark-build product-damage-benchmark \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
-	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-actions developer-jit-quick-terminal developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
+	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-actions developer-jit-quick-terminal developer-jit-secure-keyboard-entry developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
 	developer-jit-resource developer-jit-shutdown-fault \
 	release-aot-build release-aot-run release-aot-audit \
-	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-quick-terminal release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
+	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
 	release-aot-resource release-aot-shutdown-fault runtime-bundle-audit \
-	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-user-actions-integration runtime-quick-terminal-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-clipboard-integration runtime-lifecycle-integration \
+	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-user-actions-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-clipboard-integration runtime-lifecycle-integration \
 	runtime-traffic-integration runtime-resource-integration \
 	runtime-shutdown-fault-integration runtime-verify clean
 
@@ -95,6 +95,7 @@ help:
 	@echo "  make runtime-native-hierarchy-integration  Verify four-pane hierarchy and Close/Quit in both modes"
 	@echo "  make runtime-user-actions-integration  Verify normal-product window/tab/split actions in both modes"
 	@echo "  make runtime-quick-terminal-integration  Verify Quick Terminal in both modes"
+	@echo "  make runtime-secure-keyboard-entry-integration  Verify Secure Keyboard Entry in both modes"
 	@echo "  make runtime-configuration-integration  Verify configured product projection in both modes"
 	@echo "  make runtime-theme-integration  Verify theme and system appearance in both modes"
 	@echo "  make runtime-shell-integration  Verify bundled zsh integration and disablement in both modes"
@@ -274,6 +275,10 @@ developer-jit-quick-terminal: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
 		--suite=quick-terminal $(DEVELOPER_JIT_BUNDLE)
 
+developer-jit-secure-keyboard-entry: developer-jit-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
+		--suite=secure-keyboard-entry $(DEVELOPER_JIT_BUNDLE)
+
 developer-jit-configuration: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
 		--suite=configuration $(DEVELOPER_JIT_BUNDLE)
@@ -350,6 +355,10 @@ release-aot-quick-terminal: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=quick-terminal $(RELEASE_AOT_BUNDLE)
 
+release-aot-secure-keyboard-entry: release-aot-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
+		--suite=secure-keyboard-entry $(RELEASE_AOT_BUNDLE)
+
 release-aot-configuration: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=configuration $(RELEASE_AOT_BUNDLE)
@@ -410,6 +419,9 @@ runtime-user-actions-integration: \
 runtime-quick-terminal-integration: \
 	developer-jit-quick-terminal release-aot-quick-terminal
 
+runtime-secure-keyboard-entry-integration: \
+	developer-jit-secure-keyboard-entry release-aot-secure-keyboard-entry
+
 runtime-configuration-integration: \
 	developer-jit-configuration release-aot-configuration
 
@@ -443,6 +455,7 @@ runtime-verify: test runtime-source-check runtime-bundle-audit \
 	runtime-native-hierarchy-integration \
 	runtime-user-actions-integration \
 	runtime-quick-terminal-integration \
+	runtime-secure-keyboard-entry-integration \
 	runtime-configuration-integration \
 	runtime-theme-integration \
 	runtime-shell-integration \
