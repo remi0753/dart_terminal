@@ -3782,11 +3782,11 @@ final class TerminalApplication {
         disposalError = error;
         disposalStackTrace = stackTrace;
       }
-      appIntentsController = null;
       if (!notificationController.isDisposed &&
           notificationController.status.enabled) {
         applyNotificationConfiguration(false);
       }
+      appIntentsController = null;
       externalContentRequest = null;
       quickLookRequest = null;
       nativeContentReconcileRequest = null;
@@ -7661,6 +7661,14 @@ final class TerminalApplication {
       'configured product did not project the resolved initial profile',
     );
     await _waitForAsciiMarker(initialSession, prompt);
+    await waitFor(() {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = initialOwner.surface
+          .snapshot();
+      return snapshot.accessibilityGeneration > 0 &&
+          snapshot.accessibilityContentOriginX == configuredHorizontalPadding &&
+          snapshot.accessibilityContentOriginY == configuredVerticalPadding;
+    }, 'configured accessibility origin did not reach the initial surface');
+    initialOwner.surface.debugVerifyAccessibility();
 
     final MenuItem settingsItem = menu.itemForAction(
       TerminalActionId.openSettings,
@@ -7794,7 +7802,7 @@ final class TerminalApplication {
                   )
                   .toSet()
                   .length ==
-              45 &&
+              47 &&
           initialFont.draftValue(settings.state.text) == 'SF Mono Terminal' &&
           reloadController.effectiveSnapshot.value(
                 TerminalProductConfigSchema.theme,
@@ -8475,6 +8483,17 @@ keybind = control+k=pane.focus-next
     final List<PaneId> reloadedPaneIds = sessions.keys
         .where((PaneId paneId) => paneId != initialPaneId)
         .toList(growable: false);
+    await waitFor(
+      () => reloadedPaneIds.every((PaneId paneId) {
+        final TerminalLiveMetalSurfaceSnapshot snapshot = owners[paneId]!
+            .surface
+            .snapshot();
+        return snapshot.accessibilityGeneration > 0 &&
+            snapshot.accessibilityContentOriginX == reloadedHorizontalPadding &&
+            snapshot.accessibilityContentOriginY == reloadedVerticalPadding;
+      }),
+      'configured accessibility origin did not reach reloaded surfaces',
+    );
     final bool initialResourcesRetained =
         initialScreens.palette.defaultForeground == configuredForeground &&
         initialScreens.palette.defaultBackground == configuredBackground &&
@@ -8515,6 +8534,9 @@ keybind = control+k=pane.focus-next
           owner.surface.verticalPadding == reloadedVerticalPadding &&
           snapshot.contentOffsetX > 0 &&
           snapshot.contentOffsetY > 0 &&
+          snapshot.accessibilityGeneration > 0 &&
+          snapshot.accessibilityContentOriginX == reloadedHorizontalPadding &&
+          snapshot.accessibilityContentOriginY == reloadedVerticalPadding &&
           snapshot.contentViewportWidth ==
               snapshot.viewportWidth - snapshot.contentOffsetX * 2 &&
           snapshot.contentViewportHeight ==
@@ -8566,6 +8588,52 @@ keybind = control+k=pane.focus-next
       }),
       'reload unexpectedly disposed a live Metal surface',
     );
+    final PaneId contractedPaneId = reloadedPaneIds.first;
+    final TerminalPaneLocation contractedLocation = state.locationForPane(
+      contractedPaneId,
+    )!;
+    state
+      ..activateWindow(contractedLocation.windowId)
+      ..selectTab(contractedLocation.windowId, contractedLocation.tabId)
+      ..focusPane(contractedLocation.tabId, contractedPaneId);
+    final Window contractedWindow = hierarchy.windowForTab(
+      contractedLocation.tabId,
+    )!;
+    final TerminalNativePaneResources contractedResources = hierarchy
+        .resourcesForPane(contractedPaneId)!;
+    contractedWindow
+      ..show()
+      ..selectTab()
+      ..makeFirstResponder(contractedResources.view);
+    final TerminalLiveMetalSurface contractedSurface =
+        owners[contractedPaneId]!.surface;
+    contractedSurface.debugVerifyAccessibility();
+    final int originGeneration = contractedSurface
+        .snapshot()
+        .accessibilityGeneration;
+    contractedSurface.resizeViewport(logicalWidth: 15, logicalHeight: 9);
+    contractedSurface.processPending();
+    await waitFor(() {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = contractedSurface
+          .snapshot();
+      return snapshot.accessibilityGeneration > originGeneration &&
+          snapshot.accessibilityContentOriginX == 7 &&
+          snapshot.accessibilityContentOriginY == 4;
+    }, 'accessibility origin did not contract with an undersized viewport');
+    contractedSurface.debugVerifyAccessibility();
+    final int contractedGeneration = contractedSurface
+        .snapshot()
+        .accessibilityGeneration;
+    contractedSurface.resizeViewport(logicalWidth: 100, logicalHeight: 100);
+    contractedSurface.processPending();
+    await waitFor(() {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = contractedSurface
+          .snapshot();
+      return snapshot.accessibilityGeneration > contractedGeneration &&
+          snapshot.accessibilityContentOriginX == reloadedHorizontalPadding &&
+          snapshot.accessibilityContentOriginY == reloadedVerticalPadding;
+    }, 'accessibility origin did not restore its configured padding');
+    contractedSurface.debugVerifyAccessibility();
 
     await dispatch(TerminalActionId.quitApplication);
     if (!closed.isCompleted) {
@@ -8587,7 +8655,8 @@ keybind = control+k=pane.focus-next
     );
     stdout.writeln(
       'TERMINAL_CONFIGURATION_TEST config_file=true palette=true font=true '
-      'window=true padding=true option_text=true scrollback=true cursor=true '
+      'window=true padding=true accessibility_padding=true option_text=true '
+      'scrollback=true cursor=true '
       'keybind_pane=true keybind_application=true unbind=true '
       'passthrough=true invalid_recovery=true native_menu_priority=true '
       'unavailable_fallback=true reload_rejected=true '

@@ -74,7 +74,7 @@
       "id": "dart_terminal_renderer_macos",
       "package": "dart_terminal_renderer_macos",
       "library": "libdart_terminal_renderer_macos.dylib",
-      "abiVersion": 10,
+      "abiVersion": 11,
       "abiVersionSymbol": "dtr_abi_version",
       "initializerSymbol": "dtr_initialize"
     }

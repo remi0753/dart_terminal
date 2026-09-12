@@ -5,9 +5,8 @@
 - Phase: 10
 - Task: complete VoiceOver/Accessibility Inspector pass
 - Started: 2026-09-12
-- State: in progress
-- Current subtask: product projection, both-runtime acceptance, manual
-  checklist, and parent completion decision
+- State: complete
+- Current subtask: none
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -34,8 +33,9 @@ and IME caret geometry.
   `accessibilityFrameForRange:` starts frames at view-local `(0, 0)`. Both are
   therefore displaced whenever configured padding is nonzero.
 - The adjacent `dart_terminal_renderer_macos` package owns the terminal-specific
-  native view and packet validation. The product manifest currently requires
-  renderer capability ABI 10.
+  native view and packet validation. At task start, the product manifest
+  required renderer capability ABI 10; this task advances the matched
+  dependency and consumer contract to ABI 11.
 - Both the terminal and adjacent dependency worktrees were clean after commit
   `a2b3858`; that commit completed the preceding App Intents/notifications
   ROADMAP item and a full ROADMAP reread selected this task.
@@ -154,11 +154,99 @@ and IME caret geometry.
   padding`) contains the renderer ABI 11/snapshot v2 contract, native geometry,
   tests, and dependency documentation. A complete post-commit ROADMAP reread
   kept product projection and accessibility closure as the next ordered unit.
+- Product projection now publishes the surface's effective horizontal and
+  vertical padding in every accessibility snapshot, includes origin changes in
+  semantic deduplication, and exposes content-free generation/origin state to
+  deterministic acceptance. The configuration scenario checks initial and
+  reloaded nonzero origins for all live panes, then focuses one reloaded native
+  pane and verifies its selectors before and after undersized-viewport
+  contraction from `(9, 7)` to `(7, 4)` and restoration.
+- The first consumer formatting command used `--set-exit-if-changed`; it
+  correctly stopped after formatting the newly added wait block, so analysis
+  did not run in that invocation. A subsequent focused compile exposed that an
+  initial-origin assertion had been inserted in the preceding theme scenario,
+  before the configuration constants existed. The assertion was moved into the
+  configuration scenario; idempotent formatting, `dart analyze`, and
+  `test/terminal_config_test.dart` then passed.
+- The first Developer JIT configuration acceptance timed out while reporting a
+  teardown exception. Cleanup disposed and nulled the App Intents controller,
+  then disabling notifications synchronously refreshed the still-live Settings
+  presenter whose content-free status closure force-unwrapped that controller.
+  Cleanup now retains the disposed controller through the notification refresh
+  and clears it immediately afterward. This ordering repair is required to
+  reveal the actual acceptance outcome and avoids changing steady-state status
+  ownership.
+- With the teardown exception removed, the second Developer JIT run exposed
+  the original deterministic failure: the configuration acceptance still
+  expected 45 unique Settings options and the smoke expected 45 options/48
+  entries, although the preceding App Intents task added two schema options.
+  The canonical schema and generated reference both report 47 options; this
+  fixture repeats three keybind entries, so its exact effective-config shape is
+  47 options/50 entries. Both stale acceptance expectations were advanced
+  without weakening any diagnostic, owner-identity, or editor assertion.
+- The third Developer JIT run reached the new native verifier but failed while
+  iterating over every surface. That verifier intentionally asserts AppKit
+  focused-element state and focus notifications, so it cannot validly pass for
+  background panes. The product acceptance now asserts copied origin state for
+  all four surfaces, explicitly focuses one reloaded native pane, and runs the
+  content-free native selector verifier at configured, contracted, and restored
+  origins. Dependency tests remain the exhaustive unfocused geometry/malformed
+  packet authority.
+- The first explicit-focus revision called the hierarchy's public reconcile
+  method from inside the acceptance workflow. Applying the unchanged layouts
+  synchronously resized PTYs, whose presentation callback correctly rejected a
+  reentrant refresh while reconciliation was in progress. Reconciliation is
+  unnecessary for this content-free check: the existing native window and pane
+  resources are already projected. The acceptance now updates logical
+  selection and uses those existing AppKit objects directly to select the tab
+  and make the terminal view first responder.
+- The next run showed that an artificial surface-only resize was coalesced with
+  the still-authoritative native pane layout before its timer fired, so the
+  intermediate contracted origin was never published. The acceptance now
+  drains the surface synchronously immediately after the artificial contraction
+  and restoration. This deterministically observes each intended geometry
+  state without mutating the real window layout or PTY grid authority.
+- The final Developer JIT configuration acceptance passes in 1,876 ms and the
+  final Release AOT acceptance passes in 1,205 ms. Each uses four real PTY/
+  Metal surfaces, validates initial and reloaded nonzero origins, runs the
+  focused native selector verifier at configured/contracted/restored origins,
+  preserves fixed font/cell behavior, and completes clean lifecycle teardown.
+- The external release checklist is published at
+  [`voiceover-accessibility-manual-checklist.md`](voiceover-accessibility-manual-checklist.md).
+  It covers spoken visible text/selection/cursor/focus, Inspector point/range
+  geometry at zero/nonzero/contracted padding and multiple display scales,
+  Full Keyboard Access across terminal/native UI, cleanup, and both-runtime
+  parity. No external VoiceOver, Inspector, or system setting observation is
+  claimed or pre-checked.
+- Phase 7 evidence regeneration changes only the two expected hashes for
+  `terminal_application.dart`. Compatibility coverage regeneration changes
+  only the README and Feature Matrix hashes. The public docs now describe ABI
+  11, padding-aligned accessibility geometry, its fail-closed hit boundary, and
+  the external checklist.
+- `CI=true DART_SUPPRESS_ANALYTICS=true make runtime-source-check` passes with
+  521 tracked files, zero product-native sources, and one reviewed test-native
+  source. `make runtime-bundle-audit` passes for both arm64 modes with one
+  helper, one asset set, two capabilities, one scripting definition, and three
+  App Intents.
+- The exact consumer `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate
+  passes all freshness, compatibility, differential, application, terminfo,
+  and shell checks; formats 283 files with zero changes; analyzes cleanly;
+  passes the Phase 9 stress seed `0x509a1171`; and ends with
+  `dart_terminal tests passed`.
+
+## Completion decision
+
+The dependency contract, product projection, both shipped runtime modes,
+source/bundle/full gates, generated evidence, public documentation, and manual
+release checklist satisfy the scoped automated contract. The unchecked manual
+checklist records system-owned release-environment observations and is not an
+unimplemented product path; this follows the same boundary as the Phase 10
+AppleScript, native-content, Secure Keyboard Entry, and App Intents checklists.
+The configured-padding child and VoiceOver/Accessibility Inspector parent may
+therefore be marked complete without fabricating an external manual result.
 
 ## Handoff and remaining work
 
-- The renderer content-origin contract is complete and committed in the
-  dependency. Product projection, both-runtime acceptance, the manual release
-  checklist, documentation/evidence reconciliation, and parent completion are
-  the current ordered unit. Reduce Motion/Contrast/localization remains out of
-  scope until this unit is committed and the ROADMAP is reread.
+- This task is complete. The next ordered ROADMAP item is Reduce Motion,
+  contrast, and localization, but the user requested that execution stop after
+  this task's commit and post-commit ROADMAP reread.

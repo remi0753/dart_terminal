@@ -107,6 +107,8 @@ final class TerminalLiveMetalSurfaceSnapshot {
     required this.accessibilityHasCursor,
     required this.accessibilityCursorRow,
     required this.accessibilityCursorColumn,
+    required this.accessibilityContentOriginX,
+    required this.accessibilityContentOriginY,
     this.viewportOffset = 0,
     this.selectionGeneration = 0,
     this.selectionSpanCount = 0,
@@ -157,6 +159,8 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final bool accessibilityHasCursor;
   final int accessibilityCursorRow;
   final int accessibilityCursorColumn;
+  final double accessibilityContentOriginX;
+  final double accessibilityContentOriginY;
   final int viewportOffset;
   final int selectionGeneration;
   final int selectionSpanCount;
@@ -479,6 +483,8 @@ final class TerminalLiveMetalSurface {
   int _prunedAlternateKittyImageSetGeneration = 0;
   double _publishedAccessibilityCellWidth = 0;
   double _publishedAccessibilityCellHeight = 0;
+  double _publishedAccessibilityContentOriginX = -1;
+  double _publishedAccessibilityContentOriginY = -1;
   TerminalAccessibilitySnapshot? _lastAccessibilitySnapshot;
   Timer? _timer;
 
@@ -795,6 +801,8 @@ final class TerminalLiveMetalSurface {
       accessibilityHasCursor: _accessibilityHasCursor,
       accessibilityCursorRow: _accessibilityCursorRow,
       accessibilityCursorColumn: _accessibilityCursorColumn,
+      accessibilityContentOriginX: _publishedAccessibilityContentOriginX,
+      accessibilityContentOriginY: _publishedAccessibilityContentOriginY,
       viewportOffset: screenSet.viewport.offset,
       selectionGeneration: _selectionSnapshot?.generation ?? 0,
       selectionSpanCount: _selectionProjection?.spans.length ?? 0,
@@ -989,10 +997,14 @@ final class TerminalLiveMetalSurface {
     final int selectionGeneration = _selectionSnapshot?.generation ?? 0;
     final double cellWidth = _catalog.metrics.cellWidth;
     final double cellHeight = _catalog.metrics.cellHeight;
+    final double contentOriginX = _effectiveHorizontalPadding;
+    final double contentOriginY = _effectiveVerticalPadding;
     if (viewportGeneration == _seenAccessibilityViewportGeneration &&
         selectionGeneration == _seenAccessibilitySelectionGeneration &&
         cellWidth == _publishedAccessibilityCellWidth &&
-        cellHeight == _publishedAccessibilityCellHeight) {
+        cellHeight == _publishedAccessibilityCellHeight &&
+        contentOriginX == _publishedAccessibilityContentOriginX &&
+        contentOriginY == _publishedAccessibilityContentOriginY) {
       return;
     }
     final TerminalAccessibilitySnapshot snapshot =
@@ -1008,7 +1020,9 @@ final class TerminalLiveMetalSurface {
     final TerminalAccessibilitySnapshot? previous = _lastAccessibilitySnapshot;
     final bool metricsChanged =
         cellWidth != _publishedAccessibilityCellWidth ||
-        cellHeight != _publishedAccessibilityCellHeight;
+        cellHeight != _publishedAccessibilityCellHeight ||
+        contentOriginX != _publishedAccessibilityContentOriginX ||
+        contentOriginY != _publishedAccessibilityContentOriginY;
     if (!metricsChanged &&
         previous != null &&
         _sameAccessibilitySnapshot(previous, snapshot)) {
@@ -1047,6 +1061,8 @@ final class TerminalLiveMetalSurface {
         cursorColumn: snapshot.cursorColumn,
         cellWidth: cellWidth,
         cellHeight: cellHeight,
+        contentOriginX: contentOriginX,
+        contentOriginY: contentOriginY,
       ),
     );
     _seenAccessibilityViewportGeneration = viewportGeneration;
@@ -1054,6 +1070,8 @@ final class TerminalLiveMetalSurface {
     _lastAccessibilitySnapshot = snapshot;
     _publishedAccessibilityCellWidth = cellWidth;
     _publishedAccessibilityCellHeight = cellHeight;
+    _publishedAccessibilityContentOriginX = contentOriginX;
+    _publishedAccessibilityContentOriginY = contentOriginY;
     _accessibilityGeneration = generation;
     _accessibilityUtf16Length = snapshot.utf16Length;
     _accessibilityHasVisibleSelection = snapshot.hasVisibleSelection;

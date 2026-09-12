@@ -1255,11 +1255,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] consumer declaration、dependency gates、bundle audit
   - [x] product configuration、shared-action、Settings、lifecycle integration
   - [x] Developer JIT／Release AOT acceptance、manual checklist、documentation closure、親項目完了判定
-- [ ] complete VoiceOver/Accessibility Inspector pass
-  - [ ] configured terminal padding の accessibility hit/range geometry を
+- [x] complete VoiceOver/Accessibility Inspector pass
+  - [x] configured terminal padding の accessibility hit/range geometry を
     renderer content origin と一致させる
     - [x] renderer accessibility content-origin contract／native geometry tests
-    - [ ] product projection、両runtime acceptance、manual checklist、親項目完了判定
+    - [x] product projection、両runtime acceptance、manual checklist、親項目完了判定
 - [ ] Reduce Motion/Contrast と localization
 - [ ] terminal inspector と diagnostics bundle
 
