@@ -1274,6 +1274,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] 汎用repositoryのbuild、test fixture、現行文書を製品非依存にする
   - [x] 両repositoryの完全gateと製品runtime受け入れを行い親項目を完了する
 - [ ] Reduce Motion/Contrast と localization
+  （分割、境界、完了条件は
+  [`docs/phase10/accessibility-display-localization.md`](docs/phase10/accessibility-display-localization.md)
+  を参照して順に実施する）
+  - [x] accessibility preference／UI text inventoryとtyped contractを確定する
+  - [ ] `dart_appkit`の汎用accessibility display preference snapshot／event substrate
+  - [ ] Reduce Motion／Increase Contrast／Differentiate Without Colorの製品投影
+  - [ ] English／Japanese catalog、locale fallback、RTL application UI投影
+  - [ ] 両runtime受け入れ、文書／matrix更新、Phase 10完了判定
 - [ ] terminal inspector と diagnostics bundle
 
 終了条件:
