@@ -1271,7 +1271,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] App Intents capability packageを製品repositoryへ移設する
   - [x] Finder folder Servicesをapplication注入の汎用actionへ変更する
   - [x] Secure Input表示をapplication注入の汎用badgeへ変更する
-  - [ ] 汎用repositoryのbuild、test fixture、現行文書を製品非依存にする
+  - [x] 汎用repositoryのbuild、test fixture、現行文書を製品非依存にする
   - [ ] 両repositoryの完全gateと製品runtime受け入れを行い親項目を完了する
 - [ ] Reduce Motion/Contrast と localization
 - [ ] terminal inspector と diagnostics bundle

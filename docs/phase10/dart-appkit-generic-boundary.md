@@ -309,10 +309,36 @@ testing, no layout resizing, and bounded accessible output.
   passed through acquire, automatic/manual transitions, badge handoff/hide,
   IME isolation, and clean teardown.
 
-## Current subtask
+## Generic source closure
 
 Remove remaining product examples, identifiers, tests, build descriptions, and
 current documentation from the generic repository. Add an executable source
 audit that rejects future product words and package identities in tracked paths
 or executable/build/test sources while retaining explicitly historical worklog
 evidence.
+
+- 2026-09-13: the post-move inventory found no remaining tracked path with a
+  product name. Non-historical content was limited to two generic definition
+  fixtures using terminal text, an App Intents image name, two runtime fixture
+  declarations using `dart_pty_macos`/`dpty_*`, and current generic repository
+  README, ROADMAP, architecture, ABI, and verification descriptions of the
+  former product packages. The fixtures now use editor/example-native-asset
+  values, and all current documents describe only generic capability and
+  native-asset ownership. Historical worklog evidence is deliberately retained.
+- Added `tool/generic_repository_audit.dart` and integrated it into the generic
+  root `make validate`. It scans tracked and non-ignored untracked paths plus
+  every decodable UTF-8 source, rejects English/Japanese terminal terms and the
+  old PTY symbol prefix, and exempts only the chronological worklog's content.
+  The clean scan passed with 131 paths/130 text files; a temporary forbidden
+  content probe was rejected and removed, after which the scan passed again.
+- Generic `make validate native-test dart-test runtime-dart-test` passed after
+  the cleanup, including C/C++ contracts, native bridge fixtures, public Dart
+  API/launcher tests, and strict runtime manifest/builder tests.
+
+## Current subtask
+
+Run the exact full gates in both repositories, then rebuild, audit, and execute
+the consuming application in Developer JIT and Release AOT modes. Re-run the
+generic ownership audit on the committed source, inspect both diffs/worktrees,
+and close the parent only if every ownership and runtime acceptance condition
+passes with no residual untracked output or serious blocker.
