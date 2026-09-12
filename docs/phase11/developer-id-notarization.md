@@ -313,3 +313,26 @@ all four children and this parent are complete.
   remained clean. The product policy/independent audit/credential-free gate
   child is complete without claiming a Developer ID signature or Apple
   notarization. The credentialed acceptance child is next.
+- 2026-09-13: after committing the product policy as `8b3c1aa` (`Add minimal
+  hardened distribution policy`), reread ROADMAP from clean main and adjacent
+  worktrees. The first incomplete item remains credentialed acceptance and
+  closure; no update-feed or later item was started.
+- 2026-09-13: repeated `security find-identity -v -p codesigning`; it again
+  reported `0 valid identities found`. Repeated
+  `make release-distribution-credentials-check` with no injected credentials;
+  it failed closed before build or publication with
+  `DEVELOPER_ID_APPLICATION and NOTARY_KEYCHAIN_PROFILE are required` (the
+  recipe exits 69 and make reports exit 2). This confirms the current host
+  cannot produce truthful positive Developer ID, Apple notary, staple,
+  Gatekeeper, or no-rebuild clean-destination evidence.
+- 2026-09-13: progress is stopped at the credentialed acceptance child. Resume
+  requires a valid Developer ID Application certificate and private key in the
+  signing Keychain, its exact 10-character Team ID, a preconfigured
+  `notarytool` Keychain profile, network access to Apple's notary service, and
+  a clean account or machine destination. Secrets must remain in Keychain and
+  must not be placed in repository files, command logs, or chat. Once those
+  prerequisites exist, run the documented `make release-distribution-verify`
+  flow with the identity, Team ID, and profile labels, then complete the
+  no-rebuild lifecycle evidence. The duration-test exemption does not remove
+  this distribution authority boundary, so the child and parent remain
+  unchecked and later ROADMAP work must not begin.
