@@ -147,6 +147,7 @@ void _testStableStandardCatalog() {
             .map((TerminalActionDefinition action) => action.id)
             .join(',') ==
         <TerminalActionId>[
+          TerminalActionId.quickLook,
           TerminalActionId.togglePaneZoom,
           TerminalActionId.equalizeSplits,
           TerminalActionId.moveDividerLeft,
@@ -157,6 +158,11 @@ void _testStableStandardCatalog() {
           TerminalActionId.jumpToNextPrompt,
         ].join(','),
     'view menu contains stable prompt navigation actions in catalog order',
+  );
+  _expect(
+    catalog.actionForId(TerminalActionId.quickLook)!.shortcut!.identity ==
+        'control+command+d',
+    'Quick Look uses the standard macOS dictionary lookup chord',
   );
   _expect(
     catalog.actionForId(TerminalActionId.moveDividerLeft)!.shortcut!.identity ==

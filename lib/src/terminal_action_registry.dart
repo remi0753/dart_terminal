@@ -17,6 +17,7 @@ enum TerminalActionId {
   splitPaneDown('pane.split-down'),
   focusPreviousPane('pane.focus-previous'),
   focusNextPane('pane.focus-next'),
+  quickLook('pane.quick-look'),
   jumpToPreviousPrompt('pane.jump-to-previous-prompt'),
   jumpToNextPrompt('pane.jump-to-next-prompt'),
   togglePaneZoom('pane.toggle-zoom'),
@@ -365,6 +366,17 @@ final class TerminalActionCatalog {
       shortcut: const TerminalActionShortcut(
         keyEquivalent: 'd',
         shift: true,
+        command: true,
+      ),
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.quickLook,
+      title: 'Quick Look',
+      menu: TerminalActionMenu.view,
+      keywords: const <String>['definition', 'dictionary', 'word', 'lookup'],
+      shortcut: const TerminalActionShortcut(
+        keyEquivalent: 'd',
+        control: true,
         command: true,
       ),
     ),

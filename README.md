@@ -43,12 +43,13 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 27個のstable application actionを共有するbounded searchable registry、動的な
+- 28個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
   漏らさない。通常起動ではCommand-N/T/D、Shift-Command-DからNew Window、New Tab、
-  Split Pane Right/Downを使用できる。Command+矢印はfocused paneに最も近い同方向の
+  Split Pane Right/Downを使用できる。Quick Lookは標準Control-Command-Dを予約した
+  shared action contractを持つ。Command+矢印はfocused paneに最も近い同方向の
   split dividerを1 cellずつ動かし、descendantの最小寸法で停止する。focus traversal、
   tab selection、equalize、zoom、semantic promptへのprevious/next jumpも文脈に応じて
   有効になる。実製品gateではmenuとpaletteから2 window/3 tab/5 paneを生成し、Retina

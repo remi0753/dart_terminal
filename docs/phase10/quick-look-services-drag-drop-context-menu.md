@@ -6,7 +6,7 @@
 - Task: Quick Look, Services, drag/drop, and context menu
 - Started: 2026-09-12
 - State: active
-- Current subtask: bounded terminal interaction contracts and shared actions
+- Current subtask: `dart_appkit` context-menu and Quick Look substrate
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -200,6 +200,45 @@ committed contracts.
   behavior and avoids pre-implementing the dependency's broader promised-file
   roadmap. The manual and automated acceptance will describe the delivered
   capability explicitly as a drop destination.
+- 2026-09-12: The product contract now resolves a word from one viewport cell
+  through existing stable selection anchors. It rejects off-grid, whitespace,
+  boundary-limited, scalar-limited, unavailable, and generation-stale results
+  with distinct dispositions; wide continuations and soft wraps resolve to one
+  candidate plus its word-start baseline geometry. It never changes the local
+  selection merely to ask for a definition.
+- 2026-09-12: External Services/drop text is admitted with its source and exact
+  UTF-8 byte count but remains inert until later paste planning. Dropped file
+  paths are limited to 256 absolute paths, 1 MiB each and 64 MiB serialized,
+  reject control characters and malformed UTF-16, and serialize every path as
+  one single-quoted POSIX shell word. Embedded single quotes use the closed
+  `'\''` form; spaces, globs, substitutions, and leading option characters are
+  consequently data rather than shell syntax. A trailing space separates any
+  command text the user types later.
+- 2026-09-12: `pane.quick-look` is the 28th stable application action. It uses
+  the standard macOS dictionary lookup chord Control-Command-D, participates in
+  conflict/reserved-shortcut generation, and deliberately has no product
+  handler until the later native substrate and integration subtasks exist.
+- 2026-09-12: A first focused test attempt inside the filesystem sandbox passed
+  static analysis but could not run the renderer build hook because Clang's
+  existing module cache under `~/.cache` was not writable. The same native
+  content test passed in the approved normal build environment. The first
+  action-registry run then correctly exposed the stale expected View-menu list;
+  adding Quick Look to that exact-order assertion made its rerun pass.
+- 2026-09-12: UTF-8 admission counts code units incrementally and stops at the
+  caller's bound, so an oversized external string is rejected without first
+  allocating an equally large encoded byte list. Valid surrogate pairs count as
+  four bytes and malformed units match Dart's replacement-scalar encoding.
+- 2026-09-12: The first exact full gate stopped at the expected stale Phase 6
+  regression coverage hash after README/FEATURE_MATRIX changed. Regenerating
+  `compatibility/regression_coverage_report.json` changed only those two source
+  hashes. A subsequent full run passed but reported two directive-ordering info
+  diagnostics for the new export/import; alphabetizing them removed both.
+- 2026-09-12: Final focused native-content, action-registry, and generated
+  keybinding-reference tests pass. Final exact `CI=true
+  DART_SUPPRESS_ANALYTICS=true make test` passes: generated references and
+  compatibility evidence are fresh, 28 application actions and 15 native
+  shortcuts reconcile, all 276 files are formatted, static analysis reports no
+  issues, security stress passes, and the aggregate terminal tests pass.
 
 ## Risks and handoff notes
 

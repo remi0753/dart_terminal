@@ -77,6 +77,7 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `tab.new` | New Tab | shell | `command+t` |
 | `pane.split-right` | Split Pane Right | shell | `command+d` |
 | `pane.split-down` | Split Pane Down | shell | `shift+command+d` |
+| `pane.quick-look` | Quick Look | view | `control+command+d` |
 | `pane.toggle-zoom` | Toggle Pane Zoom | view | — |
 | `pane.equalize-splits` | Equalize Splits | view | — |
 | `pane.move-divider-left` | Move Split Divider Left | view | `command+left` |
@@ -106,6 +107,7 @@ AppKit consumes these standard menu shortcuts before raw terminal key routing. A
 | `command+t` | `tab.new` | New Tab |
 | `command+d` | `pane.split-right` | Split Pane Right |
 | `shift+command+d` | `pane.split-down` | Split Pane Down |
+| `control+command+d` | `pane.quick-look` | Quick Look |
 | `command+left` | `pane.move-divider-left` | Move Split Divider Left |
 | `command+right` | `pane.move-divider-right` | Move Split Divider Right |
 | `command+up` | `pane.move-divider-up` | Move Split Divider Up |
