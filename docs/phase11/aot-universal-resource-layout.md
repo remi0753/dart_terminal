@@ -347,3 +347,73 @@ begin until all four children and this parent are complete.
   (`Add atomic Universal application assembly`). The exact main
   `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate also passed against
   that committed dependency, completing the generic Universal milestone.
+- 2026-09-13: after main milestone commit `4e06028`, reread ROADMAP with both
+  repositories clean. The first incomplete item is the product integration
+  child: reproducible thin/Universal Make entry points, schema-2 and exact-slice
+  resource audit, bounded arm64/Rosetta/Universal runtime acceptance, public
+  and generated evidence reconciliation, and parent completion. No signing,
+  notarization, update, performance, or duration-only successor is in scope.
+- 2026-09-13: product smoke passed for both thin applications (arm64 native and
+  x86_64 through Rosetta) but the Universal application failed before its
+  first window with status 70: the generic native-capability loader consumes
+  the build manifest's top-level declaration list, while schema-2 evidence
+  retained those fields only inside `applicationContract`. Reopened the generic
+  Universal child. The selected fix is to keep the complete normalized generic
+  application contract at schema-2 top level for runtime compatibility while
+  retaining the nested immutable contract for validation; product code will
+  not special-case generic capability loading.
+- 2026-09-13: after restoring the top-level declarations, Universal startup
+  reached worker creation but the worker exited before readiness. Direct
+  comparison showed that each thin self-contained Dart helper ran, while its
+  `lipo`-merged image printed the VM usage text and exited 255. The pinned VM's
+  `TryReadAppendedAppSnapshotFromMachO` reads a thin Mach-O header and `LC_NOTE`
+  at file offset zero; a Universal fat header therefore hides the appended
+  application snapshot. Moving the snapshot outside the executable exposed
+  the same format boundary: the stock AOT runtime identifies the fat-header
+  magic as the snapshot type and reaches an invalid isolate bootstrap, while
+  a `lipo -thin arm64` copy runs correctly.
+- 2026-09-13: rejected architecture-specific helper selection, runtime use of
+  the developer-only `lipo` tool, and temporary thin-code extraction. Those
+  alternatives either violate the frozen all-code Universal inventory, add a
+  clean-machine tool dependency, or complicate later signed/hardened runtime
+  ownership. The generic runtime now builds a small native AOT command host
+  per target and a separately retained helper AOT snapshot. The host loads the
+  snapshot through the Engine's dynamic-library API, which delegates Universal
+  slice selection to macOS, invokes the application-supplied helper entrypoint,
+  and runs its Dart event loop. Both host and snapshot remain ordinary declared
+  code entries and are independently merged, signed, and audited as exact
+  `arm64 x86_64` images.
+- 2026-09-13: `MacosRuntime.bundleHelperCommand` resolves the manifest-owned
+  executable plus external snapshot argument without learning any product
+  protocol or name. Developer JIT retains the legacy self-contained helper
+  layout, and Release AOT records `DartHelpers/<name>.aot` in each helper
+  declaration. Missing, malformed, traversing, or undeclared helper evidence
+  fails closed. The assembler derives the extra code path from this generic
+  declaration and includes it in exact-inventory, slice, dependency, signing,
+  and deterministic-evidence checks.
+- 2026-09-13: repeated real thin generation also exposed nondeterministic key
+  order in Xcode's `Metadata.appintents/version.json`; arm64 and x86_64 had
+  equal JSON values but unequal bytes. The generic builder now validates and
+  canonicalizes both extracted JSON files before recording their sizes. The
+  corrected real arm64/x86_64 build and Universal assembly completed with the
+  helper host and helper snapshot each thin in its source bundle and exact fat
+  in the result. Direct execution of the fat host against the fat snapshot
+  reached the requested Dart worker fault, proving entrypoint and slice loading.
+- 2026-09-13: final generic verification passed formatter, analyzer, 14 runtime
+  test groups, 10 Universal fixture/fault groups, a new compiled-and-executed
+  generic AOT command-host regression, `git diff --check`, added-line/new-file
+  product-name audit, `GENERIC_REPOSITORY_AUDIT_PASS`, and exact adjacent
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test`. The sandbox-only Metal
+  module-cache denial was rerun successfully in the normal environment. No
+  duration-only validation was required.
+- 2026-09-13: committed the corrected adjacent generic implementation as
+  `da1d152` (`Support Universal Dart AOT helpers`). The reopened generic child
+  is complete again; the product integration child remains next and owns the
+  consumer command injection, distribution audit, and three-architecture
+  runtime acceptance.
+- 2026-09-13: the exact main
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passed against
+  `da1d152`, including 294-file format, analysis, generated evidence, package
+  native/Dart tests, the bounded security stress, and the root suite. The
+  generic milestone can be recorded without committing the already-started
+  product integration files.
