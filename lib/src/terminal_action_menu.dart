@@ -7,6 +7,8 @@ import 'terminal_appkit_policy.dart';
 
 typedef TerminalMenuEnabledReader = bool Function();
 typedef TerminalMenuEnabledWriter = void Function(bool value);
+typedef TerminalMenuCheckedReader = bool Function();
+typedef TerminalMenuCheckedWriter = void Function(bool value);
 typedef TerminalMenuDispatchObserver = void Function(
   TerminalActionDispatchResult result,
 );
@@ -24,12 +26,29 @@ final class TerminalMenuEnablementBinding {
   final TerminalMenuEnabledWriter write;
 }
 
+/// Native-neutral binding for optional checked state on a projected item.
+final class TerminalMenuCheckedBinding {
+  const TerminalMenuCheckedBinding({
+    required this.id,
+    required this.desired,
+    required this.read,
+    required this.write,
+  });
+
+  final TerminalActionId id;
+  final TerminalMenuCheckedReader desired;
+  final TerminalMenuCheckedReader read;
+  final TerminalMenuCheckedWriter write;
+}
+
 /// Synchronizes menu validation and routes every invocation through one
 /// application action dispatcher.
 final class TerminalMenuProjectionController {
   factory TerminalMenuProjectionController({
     required TerminalActionDispatcher dispatcher,
     required Iterable<TerminalMenuEnablementBinding> bindings,
+    Iterable<TerminalMenuCheckedBinding> checkedBindings =
+        const <TerminalMenuCheckedBinding>[],
     TerminalMenuDispatchObserver? onDispatched,
   }) {
     final Map<TerminalActionId, TerminalMenuEnablementBinding> byId =
@@ -57,9 +76,29 @@ final class TerminalMenuProjectionController {
         '${missing.map((TerminalActionId id) => id.stableName).join(', ')}',
       );
     }
+    final Map<TerminalActionId, TerminalMenuCheckedBinding> checkedById =
+        <TerminalActionId, TerminalMenuCheckedBinding>{};
+    for (final TerminalMenuCheckedBinding binding in checkedBindings) {
+      if (!byId.containsKey(binding.id)) {
+        throw ArgumentError.value(
+          binding.id,
+          'checkedBindings',
+          'is not present in the projected action catalog',
+        );
+      }
+      if (checkedById.containsKey(binding.id)) {
+        throw StateError(
+          'duplicate checked menu binding ${binding.id.stableName}',
+        );
+      }
+      checkedById[binding.id] = binding;
+    }
     return TerminalMenuProjectionController._(
       dispatcher,
       Map<TerminalActionId, TerminalMenuEnablementBinding>.unmodifiable(byId),
+      Map<TerminalActionId, TerminalMenuCheckedBinding>.unmodifiable(
+        checkedById,
+      ),
       onDispatched,
     );
   }
@@ -67,11 +106,13 @@ final class TerminalMenuProjectionController {
   TerminalMenuProjectionController._(
     this.dispatcher,
     this._bindings,
+    this._checkedBindings,
     this.onDispatched,
   );
 
   final TerminalActionDispatcher dispatcher;
   final Map<TerminalActionId, TerminalMenuEnablementBinding> _bindings;
+  final Map<TerminalActionId, TerminalMenuCheckedBinding> _checkedBindings;
   final TerminalMenuDispatchObserver? onDispatched;
   bool _isDisposed = false;
 
@@ -84,6 +125,12 @@ final class TerminalMenuProjectionController {
       final bool enabled = dispatcher.snapshot(entry.key).isEnabled;
       if (entry.value.read() != enabled) {
         entry.value.write(enabled);
+      }
+    }
+    for (final TerminalMenuCheckedBinding binding in _checkedBindings.values) {
+      final bool checked = binding.desired();
+      if (binding.read() != checked) {
+        binding.write(checked);
       }
     }
   }
@@ -125,6 +172,8 @@ final class TerminalAppKitMenuProjection {
   factory TerminalAppKitMenuProjection.install({
     required AppKitApplication application,
     required TerminalActionDispatcher dispatcher,
+    Map<TerminalActionId, TerminalMenuCheckedReader> checkedReaders =
+        const <TerminalActionId, TerminalMenuCheckedReader>{},
     TerminalNativeMenuInvocationObserver? onNativeInvocation,
     TerminalMenuDispatchObserver? onDispatched,
   }) {
@@ -186,6 +235,16 @@ final class TerminalAppKitMenuProjection {
               id: entry.key,
               read: () => entry.value.isEnabled,
               write: (bool value) => entry.value.isEnabled = value,
+            ),
+        ],
+        checkedBindings: <TerminalMenuCheckedBinding>[
+          for (final MapEntry<TerminalActionId, TerminalMenuCheckedReader> entry
+              in checkedReaders.entries)
+            TerminalMenuCheckedBinding(
+              id: entry.key,
+              desired: entry.value,
+              read: () => actionItems[entry.key]!.isChecked,
+              write: (bool value) => actionItems[entry.key]!.isChecked = value,
             ),
         ],
         onDispatched: onDispatched,

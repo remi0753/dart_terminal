@@ -851,6 +851,28 @@ abstract final class TerminalProductConfigSchema {
         formatter: _formatBoolean,
       );
 
+  static final TerminalConfigOption<bool> macosSecureInputAuto =
+      TerminalConfigOption<bool>(
+        name: 'macos-secure-input-auto',
+        description: 'Request Secure Keyboard Entry automatically while the focused terminal has echo disabled.',
+        valueSyntax: 'true|false',
+        applicationPolicy: TerminalConfigApplicationPolicy.live,
+        defaultValue: true,
+        parser: _parseBoolean,
+        formatter: _formatBoolean,
+      );
+
+  static final TerminalConfigOption<bool> macosSecureInputIndication =
+      TerminalConfigOption<bool>(
+        name: 'macos-secure-input-indication',
+        description: 'Show an accessible automatic or manual Secure Keyboard Entry indicator.',
+        valueSyntax: 'true|false',
+        applicationPolicy: TerminalConfigApplicationPolicy.live,
+        defaultValue: true,
+        parser: _parseBoolean,
+        formatter: _formatBoolean,
+      );
+
   static final TerminalConfigOption<TerminalConfiguredOptionKey>
   macosOptionKey = TerminalConfigOption<TerminalConfiguredOptionKey>(
     name: 'macos-option-key',
@@ -963,6 +985,8 @@ abstract final class TerminalProductConfigSchema {
       quickTerminalScreen,
       quickTerminalAnimationDuration,
       quickTerminalAutohide,
+      macosSecureInputAuto,
+      macosSecureInputIndication,
       macosOptionKey,
       scrollbackLines,
       scrollbackBytes,

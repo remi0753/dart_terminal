@@ -74,6 +74,8 @@ final class TerminalPaneProcessSnapshot {
     required this.foregroundProcessGroup,
     required this.owningProcessGroupSystemError,
     required this.foregroundProcessGroupSystemError,
+    required this.terminalEchoEnabled,
+    required this.terminalAttributesSystemError,
   });
 
   factory TerminalPaneProcessSnapshot.nonLive(TerminalSessionId sessionId) =>
@@ -85,6 +87,8 @@ final class TerminalPaneProcessSnapshot {
         foregroundProcessGroup: null,
         owningProcessGroupSystemError: 0,
         foregroundProcessGroupSystemError: 0,
+        terminalEchoEnabled: null,
+        terminalAttributesSystemError: 0,
       );
 
   factory TerminalPaneProcessSnapshot.available({
@@ -93,6 +97,8 @@ final class TerminalPaneProcessSnapshot {
     required int owningProcessGroup,
     required int foregroundProcessGroup,
     bool owningShellCommandActive = false,
+    bool? terminalEchoEnabled,
+    int terminalAttributesSystemError = 0,
   }) {
     for (final MapEntry<String, int> identity in <String, int>{
       'childProcessId': childProcessId,
@@ -119,6 +125,8 @@ final class TerminalPaneProcessSnapshot {
       foregroundProcessGroup: foregroundProcessGroup,
       owningProcessGroupSystemError: 0,
       foregroundProcessGroupSystemError: 0,
+      terminalEchoEnabled: terminalEchoEnabled,
+      terminalAttributesSystemError: terminalAttributesSystemError,
     );
   }
 
@@ -129,6 +137,8 @@ final class TerminalPaneProcessSnapshot {
     int? foregroundProcessGroup,
     int owningProcessGroupSystemError = 0,
     int foregroundProcessGroupSystemError = 0,
+    bool? terminalEchoEnabled,
+    int terminalAttributesSystemError = 0,
   }) => TerminalPaneProcessSnapshot._(
     sessionId: sessionId,
     disposition: TerminalPaneProcessDisposition.unavailable,
@@ -137,6 +147,8 @@ final class TerminalPaneProcessSnapshot {
     foregroundProcessGroup: foregroundProcessGroup,
     owningProcessGroupSystemError: owningProcessGroupSystemError,
     foregroundProcessGroupSystemError: foregroundProcessGroupSystemError,
+    terminalEchoEnabled: terminalEchoEnabled,
+    terminalAttributesSystemError: terminalAttributesSystemError,
   );
 
   final TerminalSessionId sessionId;
@@ -146,6 +158,11 @@ final class TerminalPaneProcessSnapshot {
   final int? foregroundProcessGroup;
   final int owningProcessGroupSystemError;
   final int foregroundProcessGroupSystemError;
+  final bool? terminalEchoEnabled;
+  final int terminalAttributesSystemError;
+
+  bool get hasTerminalAttributes =>
+      terminalEchoEnabled != null && terminalAttributesSystemError == 0;
 
   bool get requiresConfirmation =>
       disposition == TerminalPaneProcessDisposition.owningShellCommand ||
@@ -158,7 +175,13 @@ final class TerminalPaneProcessSnapshot {
       'owning_pgid=${owningProcessGroup ?? 0} '
       'foreground_pgid=${foregroundProcessGroup ?? 0} '
       'owning_errno=$owningProcessGroupSystemError '
-      'foreground_errno=$foregroundProcessGroupSystemError';
+      'foreground_errno=$foregroundProcessGroupSystemError '
+      'terminal_echo_enabled=${terminalEchoEnabled == null
+          ? -1
+          : terminalEchoEnabled!
+          ? 1
+          : 0} '
+      'terminal_attributes_errno=$terminalAttributesSystemError';
 }
 
 /// Product classification of the owning shell's observed termination.

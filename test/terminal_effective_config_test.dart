@@ -13,7 +13,7 @@ Future<void> runTerminalEffectiveConfigTests() async {
 
 void _testSchemaPresentationIsCompleteAndCanonical() {
   final TerminalConfigSchema schema = TerminalProductConfigSchema.instance;
-  _expect(schema.options.length == 42, 'product schema option count changed');
+  _expect(schema.options.length == 44, 'product schema option count changed');
   for (final TerminalConfigOptionBase option in schema.options) {
     _expect(
       option.valueSyntax.isNotEmpty && option.description.isNotEmpty,
@@ -139,7 +139,7 @@ void _testEffectiveSnapshotAndFormattingAreStableAndEscaped() {
   _expect(
     output == formatter.format(snapshot) &&
         output.startsWith(
-          'dart-terminal-effective-config version=1 options=42 entries=43 '
+          'dart-terminal-effective-config version=1 options=44 entries=45 '
           'diagnostics=1\n',
         ) &&
         output.endsWith('end\n') &&

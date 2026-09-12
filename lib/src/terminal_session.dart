@@ -399,6 +399,8 @@ final class TerminalSession implements TerminalPaneSession {
           owningProcessGroupSystemError: snapshot.childProcessGroupSystemError,
           foregroundProcessGroupSystemError:
               snapshot.foregroundProcessGroupSystemError,
+          terminalEchoEnabled: snapshot.terminalEchoEnabled,
+          terminalAttributesSystemError: snapshot.terminalAttributesSystemError,
         );
       }
       return TerminalPaneProcessSnapshot.available(
@@ -409,6 +411,8 @@ final class TerminalSession implements TerminalPaneSession {
         owningShellCommandActive:
             terminalScreenSet.semanticPrompt.shellState ==
             TerminalSemanticShellState.commandOutput,
+        terminalEchoEnabled: snapshot.terminalEchoEnabled,
+        terminalAttributesSystemError: snapshot.terminalAttributesSystemError,
       );
     } on Object {
       return TerminalPaneProcessSnapshot.unavailable(sessionId: id);

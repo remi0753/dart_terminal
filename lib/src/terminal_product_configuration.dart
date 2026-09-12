@@ -169,6 +169,8 @@ final class TerminalProductConfiguration {
     required this.quickTerminalScreen,
     required this.quickTerminalAnimationDuration,
     required this.quickTerminalAutohide,
+    required this.macosSecureInputAuto,
+    required this.macosSecureInputIndication,
     required this.macosOptionKey,
     required this.scrollbackLines,
     required this.scrollbackBytes,
@@ -218,6 +220,12 @@ final class TerminalProductConfiguration {
     quickTerminalAutohide: snapshot.value(
       TerminalProductConfigSchema.quickTerminalAutohide,
     ),
+    macosSecureInputAuto: snapshot.value(
+      TerminalProductConfigSchema.macosSecureInputAuto,
+    ),
+    macosSecureInputIndication: snapshot.value(
+      TerminalProductConfigSchema.macosSecureInputIndication,
+    ),
     macosOptionKey: snapshot.value(TerminalProductConfigSchema.macosOptionKey),
     scrollbackLines: snapshot.value(
       TerminalProductConfigSchema.scrollbackLines,
@@ -260,6 +268,8 @@ final class TerminalProductConfiguration {
   final TerminalConfiguredQuickTerminalScreen quickTerminalScreen;
   final double quickTerminalAnimationDuration;
   final bool quickTerminalAutohide;
+  final bool macosSecureInputAuto;
+  final bool macosSecureInputIndication;
   final TerminalConfiguredOptionKey macosOptionKey;
   final int scrollbackLines;
   final int scrollbackBytes;

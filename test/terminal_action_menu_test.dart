@@ -47,6 +47,20 @@ void _testProjectionValidation() {
     ),
     'projection rejects an item outside the catalog',
   );
+  _expectThrows<StateError>(
+    () => TerminalMenuProjectionController(
+      dispatcher: dispatcher,
+      bindings: <TerminalMenuEnablementBinding>[
+        _binding(TerminalActionId.copy, _FakeEnabledItem()),
+        _binding(TerminalActionId.paste, _FakeEnabledItem()),
+      ],
+      checkedBindings: <TerminalMenuCheckedBinding>[
+        _checkedBinding(TerminalActionId.copy, _FakeEnabledItem(), () => false),
+        _checkedBinding(TerminalActionId.copy, _FakeEnabledItem(), () => true),
+      ],
+    ),
+    'projection rejects duplicate checked bindings',
+  );
 }
 
 Future<void> _testDynamicValidationAndExactlyOnceRouting() async {
@@ -54,6 +68,7 @@ Future<void> _testDynamicValidationAndExactlyOnceRouting() async {
   var canCopy = false;
   var copyCount = 0;
   var pasteCount = 0;
+  var pasteChecked = false;
   final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
     catalog: catalog,
     registrations: <TerminalActionRegistration>[
@@ -79,6 +94,13 @@ Future<void> _testDynamicValidationAndExactlyOnceRouting() async {
           _binding(TerminalActionId.copy, copyItem),
           _binding(TerminalActionId.paste, pasteItem),
         ],
+        checkedBindings: <TerminalMenuCheckedBinding>[
+          _checkedBinding(
+            TerminalActionId.paste,
+            pasteItem,
+            () => pasteChecked,
+          ),
+        ],
         onDispatched: observations.add,
       );
   controller.refresh();
@@ -87,8 +109,17 @@ Future<void> _testDynamicValidationAndExactlyOnceRouting() async {
     'native item enablement reflects current dispatcher availability',
   );
   _expect(
-    copyItem.writeCount == 1 && pasteItem.writeCount == 0,
-    'refresh writes only changed native values',
+    copyItem.writeCount == 1 &&
+        pasteItem.writeCount == 0 &&
+        pasteItem.checkedWriteCount == 0,
+    'refresh writes only changed native enabled and checked values',
+  );
+  pasteChecked = true;
+  controller.refresh();
+  controller.refresh();
+  _expect(
+    pasteItem.checked && pasteItem.checkedWriteCount == 1,
+    'checked projection writes one changed retained mode value',
   );
   final TerminalActionDispatchResult unavailable = await controller.route(
     TerminalActionId.copy,
@@ -224,9 +255,25 @@ TerminalMenuEnablementBinding _binding(
   },
 );
 
+TerminalMenuCheckedBinding _checkedBinding(
+  TerminalActionId id,
+  _FakeEnabledItem item,
+  bool Function() desired,
+) => TerminalMenuCheckedBinding(
+  id: id,
+  desired: desired,
+  read: () => item.checked,
+  write: (bool value) {
+    item.checked = value;
+    item.checkedWriteCount++;
+  },
+);
+
 final class _FakeEnabledItem {
   bool enabled = true;
   int writeCount = 0;
+  bool checked = false;
+  int checkedWriteCount = 0;
 }
 
 void _expectThrows<T extends Object>(void Function() body, String description) {

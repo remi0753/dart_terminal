@@ -6,6 +6,7 @@ enum TerminalActionId {
   openSettings('application.open-settings'),
   reloadConfiguration('application.reload-configuration'),
   toggleQuickTerminal('application.toggle-quick-terminal'),
+  toggleSecureKeyboardEntry('application.toggle-secure-keyboard-entry'),
   quitApplication('application.quit'),
   newWindow('window.new'),
   closeWindow('window.close'),
@@ -278,6 +279,18 @@ final class TerminalActionCatalog {
         'shortcut',
       ],
       restoresTerminalFocusAfterInvocation: false,
+    ),
+    TerminalActionDefinition(
+      id: TerminalActionId.toggleSecureKeyboardEntry,
+      title: 'Secure Keyboard Entry',
+      menu: TerminalActionMenu.application,
+      keywords: const <String>[
+        'secure',
+        'keyboard',
+        'password',
+        'input',
+        'privacy',
+      ],
     ),
     TerminalActionDefinition(
       id: TerminalActionId.quitApplication,

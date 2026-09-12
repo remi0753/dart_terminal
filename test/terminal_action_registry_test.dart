@@ -188,6 +188,7 @@ void _testStableStandardCatalog() {
               TerminalActionId.openSettings,
               TerminalActionId.reloadConfiguration,
               TerminalActionId.toggleQuickTerminal,
+              TerminalActionId.toggleSecureKeyboardEntry,
               TerminalActionId.quitApplication,
             ].join(',') &&
         catalog
@@ -202,10 +203,14 @@ void _testStableStandardCatalog() {
             null &&
         catalog.actionForId(TerminalActionId.toggleQuickTerminal)!.shortcut ==
             null &&
+        catalog
+                .actionForId(TerminalActionId.toggleSecureKeyboardEntry)!
+                .shortcut ==
+            null &&
         !catalog
             .actionForId(TerminalActionId.toggleQuickTerminal)!
             .restoresTerminalFocusAfterInvocation,
-    'Settings, reload, and Quick Terminal have shared application metadata',
+    'Settings, reload, Quick Terminal, and Secure Keyboard Entry have shared application metadata',
   );
 }
 
@@ -448,6 +453,11 @@ void _testSearchOrderingAndBounds() {
     dispatcher.search('dropdown global shortcut').first.definition.id ==
         TerminalActionId.toggleQuickTerminal,
     'Quick Terminal is searchable by its global presentation vocabulary',
+  );
+  _expect(
+    dispatcher.search('password privacy').first.definition.id ==
+        TerminalActionId.toggleSecureKeyboardEntry,
+    'Secure Keyboard Entry is searchable through the shared palette',
   );
   _expect(
     !dispatcher

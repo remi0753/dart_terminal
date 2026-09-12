@@ -242,13 +242,69 @@ split before code changes so each layer consumes only committed contracts.
   (`Expose checked menu item state`). The first sandboxed `dart format`
   completed formatting but failed while touching the user telemetry-session
   timestamp; the identical permitted rerun made zero changes and succeeded.
+- 2026-09-12: Product policy is isolated in
+  `TerminalSecureKeyboardEntryController`. Its only automatic input is the
+  focused live pane's nullable ECHO Boolean. Echo off requests the one lease;
+  echo on/unavailable, pane non-live, window focus/visibility loss, and app
+  inactivity release automatic intent. Manual intent has precedence and
+  remains retained through app inactivity so the native owner, rather than
+  product code, performs balanced yield/reacquire.
+- 2026-09-12: The controller separately owns a content-free lease port and an
+  indicator callback. It hides the previous pane before changing targets,
+  shows automatic/manual state only while this process reports an owned
+  reference, retries failed acquire/release observations, suppresses duplicate
+  transitions, and on dispose attempts hide, release, and native disposal even
+  if an earlier cleanup step fails. An unavailable native owner remains a
+  diagnosable failed state instead of preventing application startup.
+- 2026-09-12: `macos-secure-input-auto` and
+  `macos-secure-input-indication` are Boolean, live-applied, and true by
+  default. The accepted configuration authority immediately reconciles both
+  on reload. The stable `application.toggle-secure-keyboard-entry` action is
+  shared by native menu, command palette, and configurable local keybindings;
+  the native menu check projects retained manual intent. Settings combines
+  the Quick Terminal shortcut status with bounded secure mode/ownership and
+  configuration state.
+- 2026-09-12: Product process snapshots now project the dependency's nullable
+  terminal ECHO state and independent attribute errno alongside the existing
+  process-group evidence. No terminal bytes, prompt text, commands,
+  environment, process name, input writer, or IME callback enters the secure
+  policy interface. Session output, hierarchy pre/post reconciliation,
+  window focus/visibility, application activation, reload, pane removal, and
+  final resource teardown are the only policy refresh boundaries.
+- 2026-09-12: The first analyzer run caught two callbacks referring to a local
+  reconcile function before its declaration plus two directive-order hints.
+  A nullable forward callback and sorted exports/imports fixed all four; the
+  rerun reported no issues. The first reference test then correctly rejected
+  stale configuration/action Markdown, and the first full Dart runner rejected
+  stale Phase 7 AppKit source evidence. Regenerating all three with their
+  canonical Make targets made both focused reference tests and the complete
+  Dart runner pass.
+- 2026-09-12: Focused controller coverage passed automatic echo transitions,
+  exact window focus arbitration, target handoff, manual precedence,
+  inactive yield/active reacquisition observation, live config, indication
+  disablement, typed failure/retry, unavailable support, content-free status,
+  idempotence, and deterministic disposal. Focused menu/action/config tests,
+  `dart analyze`, generated-reference freshness, and `test/run_tests.dart`
+  also passed.
+- 2026-09-12: Exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed
+  with 274 formatted files and no changes, clean analysis, 44 configuration
+  options split into 8 live and 36 new-session entries, 27 application
+  actions, fresh AppKit evidence, compatibility/differential/application
+  evidence, terminfo/shell-integration checks, full Dart tests, and bounded
+  security stress. `git diff --check` is clean; the adjacent dependency is
+  clean. Review found no generated build products, terminal content logging,
+  PTY input mutation, broad keyboard monitoring, or unrelated edits in the
+  integration diff.
+- 2026-09-12: Final review made a same-pane indicator target retain the newest
+  resource callback without issuing a duplicate native write. Its focused test
+  and the exact full gate were rerun against that final code and passed with
+  the same counts and zero formatting/analyzer changes.
 
 ## Next-subtask objective
 
-Aggregate the focused live pane's content-free echo observation with explicit
-manual intent in one product controller. Add live configuration defaults and
-Settings status, a stable manual toggle action shared by menu, command palette,
-and keybindings, and project automatic/manual/failure indication only to the
-active terminal view. All pane/window/Quick Terminal/application loss and
-reload/exit/quit paths must deterministically clear product desire; no terminal
-text or PTY bytes may be inspected or written.
+Exercise automatic/manual transitions and cleanup with the real PTY, AppKit,
+Metal terminal view, native menu/action route, Settings status, IME path, and
+application lifecycle in both Developer JIT and Release AOT. Add a bounded
+manual checklist, update public feature/security documentation and generated
+runtime evidence, run source/resource/bundle audits plus exact full gates,
+review the final diff, and only then close the Secure Keyboard Entry parent.

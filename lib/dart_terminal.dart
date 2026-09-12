@@ -254,6 +254,7 @@ export 'src/terminal_renderer/terminal_screen_metal_compositor.dart';
 export 'src/terminal_renderer/terminal_viewport_render_model.dart';
 export 'src/terminal_restoration.dart';
 export 'src/terminal_restoration_lifecycle.dart';
+export 'src/terminal_secure_keyboard_entry.dart';
 export 'src/terminal_session.dart'
     show
         TerminalSessionNativeObservation,

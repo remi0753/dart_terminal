@@ -91,6 +91,7 @@ import 'terminal_screen_set_test.dart';
 import 'terminal_screen_test.dart';
 import 'terminal_scroll_router_test.dart';
 import 'terminal_scrollback_test.dart';
+import 'terminal_secure_keyboard_entry_test.dart';
 import 'terminal_selection_autoscroll_test.dart';
 import 'terminal_selection_gesture_test.dart';
 import 'terminal_selection_search_test.dart';
@@ -203,6 +204,7 @@ Future<void> main() async {
   runTerminalReplyTests();
   await runTerminalRestorationTests();
   runTerminalScrollbackTests();
+  runTerminalSecureKeyboardEntryTests();
   runTerminalScreenTests();
   runTerminalScreenSetTests();
   runTerminalSemanticPromptTests();
@@ -2173,9 +2175,30 @@ Future<void> _testTerminalProcessSnapshotClassification() async {
         idle.childProcessId == process.pid &&
         idle.owningProcessGroup == process.pid &&
         idle.foregroundProcessGroup == process.pid &&
+        idle.hasTerminalAttributes &&
+        idle.terminalEchoEnabled == true &&
         !idle.requiresConfirmation,
     'owning shell foreground group is classified as idle',
   );
+  process.terminalEchoEnabled = false;
+  final TerminalPaneProcessSnapshot echoDisabled = session.processSnapshot();
+  _expect(
+    echoDisabled.hasTerminalAttributes &&
+        echoDisabled.terminalEchoEnabled == false,
+    'content-free PTY echo state reaches the product snapshot',
+  );
+  process
+    ..terminalEchoEnabled = true
+    ..terminalAttributesSystemError = 25;
+  final TerminalPaneProcessSnapshot attributesUnavailable = session
+      .processSnapshot();
+  _expect(
+    !attributesUnavailable.hasTerminalAttributes &&
+        attributesUnavailable.terminalEchoEnabled == null &&
+        attributesUnavailable.terminalAttributesSystemError == 25,
+    'terminal-attribute failure remains independent from process identity',
+  );
+  process.terminalAttributesSystemError = 0;
   process.emitOutput(utf8.encode('\x1b]133;A\x07'));
   await _waitForSemanticShellState(session, TerminalSemanticShellState.prompt);
   _expect(
@@ -2240,7 +2263,8 @@ Future<void> _testTerminalProcessSnapshotClassification() async {
             'TERMINAL_PANE_PROCESS pane=70 session=70:1 '
                 'disposition=unavailable process_id=${process.pid} '
                 'owning_pgid=${process.pid} foreground_pgid=0 '
-                'owning_errno=0 foreground_errno=6',
+                'owning_errno=0 foreground_errno=6 '
+                'terminal_echo_enabled=1 terminal_attributes_errno=0',
     'lookup failure is conservatively classified with content-free evidence',
   );
   process.finish(exitCode: 0);

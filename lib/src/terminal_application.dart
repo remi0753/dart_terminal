@@ -59,6 +59,7 @@ import 'terminal_renderer/pane_work_scheduler.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_restoration.dart';
 import 'terminal_restoration_lifecycle.dart';
+import 'terminal_secure_keyboard_entry.dart';
 import 'terminal_session.dart';
 import 'terminal_settings_document.dart';
 import 'terminal_settings_editor.dart';
@@ -2392,6 +2393,7 @@ final class TerminalApplication {
     TerminalNativeHierarchyAdapter? hierarchy;
     TerminalNativeSplitDividerGestureController? dividerGestureController;
     TerminalQuickTerminalController? quickTerminalController;
+    TerminalSecureKeyboardEntryController? secureKeyboardEntryController;
     TerminalProductHierarchyActionCoordinator? actionCoordinator;
     TerminalAppKitMenuProjection? menuProjection;
     TerminalCommandPalettePresenter? palettePresenter;
@@ -2400,6 +2402,7 @@ final class TerminalApplication {
     TerminalActionDispatchScheduler? keyBindingActionScheduler;
     Future<void> Function(PaneId? paneId)? closePaneRequest;
     void Function()? reconcileRequest;
+    void Function()? secureReconcileRequest;
     RuntimeLifecycleCoordinator? lifecycle;
     StreamSubscription<AppKitEvent>? applicationSubscription;
     TerminalApplicationThemeProjection<PaneId>? applicationThemeProjection;
@@ -2585,6 +2588,7 @@ final class TerminalApplication {
         onChanged: () {
           final PaneId? id = paneId;
           if (id == null) return;
+          secureReconcileRequest?.call();
           owners[id]?.notifyScreenChanged();
           selections[id]?.synchronize();
           final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
@@ -2801,6 +2805,7 @@ final class TerminalApplication {
         onLayout: owner.applyLayout,
         onBackingScale: owner.updateBackingScale,
         onDisposeAdapters: () {
+          secureReconcileRequest?.call();
           applicationThemeProjection?.removePane(pane.id);
           selections.remove(pane.id)?.dispose();
           mouseRouters.remove(pane.id);
@@ -2823,6 +2828,42 @@ final class TerminalApplication {
       final PaneId? paneId = state.activeWindow?.selectedTab.focusedPaneId;
       return paneId == null ? null : state.paneForId(paneId);
     }
+
+    TerminalSecureKeyboardEntryTarget? activeSecureKeyboardEntryTarget() {
+      final TerminalWindowState? logicalWindow = state.activeWindow;
+      final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+      if (logicalWindow == null ||
+          nativeHierarchy == null ||
+          nativeHierarchy.isDisposed) {
+        return null;
+      }
+      final TerminalTabState tab = logicalWindow.selectedTab;
+      final PaneId paneId = tab.focusedPaneId;
+      final Window? window = nativeHierarchy.windowForTab(tab.id);
+      final TerminalPane? pane = state.paneForId(paneId);
+      final _TerminalHierarchyProductPane? owner = owners[paneId];
+      if (window == null || pane == null || owner == null) return null;
+      final TerminalPaneProcessSnapshot process = pane.processSnapshot();
+      return TerminalSecureKeyboardEntryTarget(
+        identity: paneId,
+        isFocused: window.isFocused && window.isVisible,
+        isLive: pane.isLive,
+        terminalEchoEnabled: process.terminalEchoEnabled,
+        setIndicator: (TerminalSecureKeyboardEntryIndicator indicator) {
+          owner.view.secureInputIndicatorState =
+              appKitSecureInputIndicatorState(indicator);
+        },
+      );
+    }
+
+    void reconcileSecureKeyboardEntry() {
+      final TerminalSecureKeyboardEntryController? controller =
+          secureKeyboardEntryController;
+      if (controller == null || controller.isDisposed) return;
+      controller.reconcile(activeSecureKeyboardEntryTarget());
+    }
+
+    secureReconcileRequest = reconcileSecureKeyboardEntry;
 
     _TerminalSelectionProductOwner? activeSelection() {
       final PaneId? paneId = state.activeWindow?.selectedTab.focusedPaneId;
@@ -2921,6 +2962,7 @@ final class TerminalApplication {
       final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
       if (nativeHierarchy == null || nativeHierarchy.isDisposed) return;
       if (hierarchyReconciliationInProgress) return;
+      reconcileSecureKeyboardEntry();
       hierarchyReconciliationInProgress = true;
       try {
         nativeHierarchy.reconcile();
@@ -2932,6 +2974,7 @@ final class TerminalApplication {
           state.activeWindow?.selectedTab.focusedPaneId;
       desktopSignalCoordinator.focusSession(sessions[focusedPaneId]?.id);
       osc52Coordinator.focusSession(sessions[focusedPaneId]?.id);
+      reconcileSecureKeyboardEntry();
     }
 
     reconcileRequest = reconcileInteractiveHierarchy;
@@ -3011,6 +3054,7 @@ final class TerminalApplication {
             modeEnabled: screens.focusReportingMode,
             modeGeneration: screens.focusReportingGeneration,
           );
+          reconcileSecureKeyboardEntry();
           final TerminalAppKitMenuProjection? menu = menuProjection;
           if (menu != null && !menu.isDisposed) menu.refresh();
           final TerminalCommandPalettePresenter? palette = palettePresenter;
@@ -3026,6 +3070,7 @@ final class TerminalApplication {
               isVisible: isVisible && owner.isVisible,
             );
           }
+          reconcileSecureKeyboardEntry();
         case WindowOcclusionChangedEvent(:final isOccluded):
           for (final PaneId paneId in tab.paneIds) {
             owners[paneId]?.surface.updateWindowState(isOccluded: isOccluded);
@@ -3156,6 +3201,19 @@ final class TerminalApplication {
     };
 
     Future<void> disposeProductResourcesOnce() async {
+      Object? secureDisposalError;
+      StackTrace? secureDisposalStackTrace;
+      final TerminalSecureKeyboardEntryController? secure =
+          secureKeyboardEntryController;
+      secureKeyboardEntryController = null;
+      if (secure != null) {
+        try {
+          secure.dispose();
+        } on Object catch (error, stackTrace) {
+          secureDisposalError = error;
+          secureDisposalStackTrace = stackTrace;
+        }
+      }
       await quickTerminalController?.dispose();
       quickTerminalController = null;
       await osc52Presenter?.dispose();
@@ -3191,6 +3249,12 @@ final class TerminalApplication {
       if (!lifecycleWasShutDown) {
         await lifecycle?.shutdown();
         lifecycleWasShutDown = true;
+      }
+      if (secureDisposalError != null) {
+        Error.throwWithStackTrace(
+          secureDisposalError,
+          secureDisposalStackTrace!,
+        );
       }
     }
 
@@ -3268,6 +3332,18 @@ final class TerminalApplication {
       );
       if (result.isAccepted) {
         configurationAuthority.applyReload(result);
+        final TerminalProductConfiguration configuration =
+            configurationAuthority.newSessionConfiguration;
+        final TerminalSecureKeyboardEntryController? secure =
+            secureKeyboardEntryController;
+        if (secure != null && !secure.isDisposed) {
+          secure.applyConfiguration(
+            automaticEnabled: configuration.macosSecureInputAuto,
+            indicationEnabled: configuration.macosSecureInputIndication,
+            target: activeSecureKeyboardEntryTarget(),
+          );
+          stdout.writeln(secure.status.machineLine());
+        }
         final TerminalQuickTerminalController? quick = quickTerminalController;
         if (quick != null && !quick.isDisposed) {
           await quick.replaceShortcut(
@@ -3397,6 +3473,42 @@ final class TerminalApplication {
       if (runUserActionAcceptance) {
         stdout.writeln('TERMINAL_USER_ACTIONS_STAGE stage=pane-started');
       }
+      late final TerminalSecureKeyboardEntryLease secureLease;
+      try {
+        secureLease = TerminalAppKitSecureKeyboardEntryLease();
+      } on Object catch (error, stackTrace) {
+        secureLease = TerminalUnavailableSecureKeyboardEntryLease(
+          error,
+          stackTrace,
+        );
+      }
+      final TerminalProductConfiguration secureConfiguration =
+          configurationAuthority.newSessionConfiguration;
+      final TerminalSecureKeyboardEntryController createdSecureKeyboardEntry =
+          TerminalSecureKeyboardEntryController(
+            lease: secureLease,
+            automaticEnabled: secureConfiguration.macosSecureInputAuto,
+            indicationEnabled: secureConfiguration.macosSecureInputIndication,
+            applicationActive: application.isActive,
+            onStatusChanged: (TerminalSecureKeyboardEntryStatus status) {
+              final TerminalSettingsInspectorPresenter? settings =
+                  settingsPresenter;
+              if (settings != null && !settings.isDisposed) settings.refresh();
+              final TerminalAppKitMenuProjection? menu = menuProjection;
+              if (menu != null && !menu.isDisposed) menu.refresh();
+              final TerminalCommandPalettePresenter? palette = palettePresenter;
+              if (palette != null && !palette.isDisposed) palette.refresh();
+            },
+            onFailure: (Object error, StackTrace stackTrace) {
+              stderr.writeln(
+                'TERMINAL_SECURE_KEYBOARD_ENTRY_ERROR '
+                'type=${error.runtimeType}',
+              );
+            },
+          );
+      secureKeyboardEntryController = createdSecureKeyboardEntry;
+      reconcileSecureKeyboardEntry();
+      stdout.writeln(createdSecureKeyboardEntry.status.machineLine());
       osc52Presenter = TerminalOsc52ConfirmationPresenter(
         focusTarget: () {
           final TerminalWindowState? activeWindow = state.activeWindow;
@@ -3581,6 +3693,20 @@ final class TerminalApplication {
             handler: createdQuickTerminal.toggle,
           ),
           TerminalActionRegistration(
+            id: TerminalActionId.toggleSecureKeyboardEntry,
+            isAvailable: () =>
+                !state.isDisposed &&
+                !createdSecureKeyboardEntry.isDisposed &&
+                !createdPaneCloseCoordinator.removalInProgress &&
+                !createdPaneCloseCoordinator.applicationQuitInProgress,
+            handler: () {
+              createdSecureKeyboardEntry.toggleManual(
+                target: activeSecureKeyboardEntryTarget(),
+              );
+              stdout.writeln(createdSecureKeyboardEntry.status.machineLine());
+            },
+          ),
+          TerminalActionRegistration(
             id: TerminalActionId.closeWindow,
             isAvailable: () =>
                 state.activeWindow != null &&
@@ -3691,7 +3817,9 @@ final class TerminalApplication {
             if (runConfigurationAcceptance) actionDispatches.add(result);
           },
           onError: recordAsynchronousError,
-          runtimeStatus: () => createdQuickTerminal.shortcutStatus.settingsLine,
+          runtimeStatus: () =>
+              '${createdQuickTerminal.shortcutStatus.settingsLine}    '
+              '${createdSecureKeyboardEntry.status.settingsLine}',
         );
       }
       installedPalette = TerminalCommandPalettePresenter.withFocusTarget(
@@ -3728,6 +3856,10 @@ final class TerminalApplication {
       menuProjection = TerminalAppKitMenuProjection.install(
         application: application,
         dispatcher: dispatcher,
+        checkedReaders: <TerminalActionId, TerminalMenuCheckedReader>{
+          TerminalActionId.toggleSecureKeyboardEntry: () =>
+              createdSecureKeyboardEntry.manualRequested,
+        },
         onNativeInvocation: (TerminalActionId id, MenuItemInvokedEvent event) {
           if (runUserActionAcceptance ||
               runConfigurationAcceptance ||
@@ -3761,6 +3893,10 @@ final class TerminalApplication {
           case ApplicationActiveChangedEvent(:final isActive):
             desktopSignalCoordinator.setApplicationActive(isActive);
             osc52Coordinator.setApplicationActive(isActive);
+            createdSecureKeyboardEntry.setApplicationActive(
+              isActive,
+              target: activeSecureKeyboardEntryTarget(),
+            );
             unawaited(
               createdQuickTerminal
                   .handleApplicationActiveChanged(isActive: isActive)
@@ -5617,7 +5753,7 @@ final class TerminalApplication {
           actionDispatches.last.disposition ==
               TerminalActionDispatchDisposition.executed &&
           application.debugLiveObjectCount == nativeHandleBaseline + 6 &&
-          reloadController.effectiveSnapshot.schema.options.length == 42 &&
+          reloadController.effectiveSnapshot.schema.options.length == 44 &&
           settings.state.occurrences
                   .map(
                     (TerminalSettingsOptionOccurrence occurrence) =>
@@ -5625,7 +5761,7 @@ final class TerminalApplication {
                   )
                   .toSet()
                   .length ==
-              42 &&
+              44 &&
           initialFont.draftValue(settings.state.text) == 'SF Mono Terminal' &&
           reloadController.effectiveSnapshot.value(
                 TerminalProductConfigSchema.theme,
