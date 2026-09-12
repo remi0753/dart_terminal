@@ -400,3 +400,25 @@ passes with no residual untracked output or serious blocker.
   `make runtime-source-check` with 601 paths, zero application native sources,
   25 product-package native sources, and the two exact reviewed native test/tool
   sources.
+- The final normal-environment `CI=true DART_SUPPRESS_ANALYTICS=true make
+  runtime-verify` passed from start to finish. It repeated the complete product
+  gate (all four relocated package gates, generated-contract checks, 283-file
+  formatting, analysis, compatibility, and security stress), repeated the
+  601-path ownership audit, built and audited both arm64 Developer JIT and
+  Release AOT bundles, and passed both runtime variants for smoke, display,
+  native hierarchy/splits, user actions, AppleScript, system automation,
+  Services/native content, Quick Terminal, Secure Keyboard Entry,
+  configuration, theme, shell integration, desktop signals, OSC 52,
+  restoration, clipboard, lifecycle failure/replacement paths, backpressure,
+  1,000-iteration resource stress, shutdown fault injection, and PTY deadline
+  handling. Both bundle audits reported one helper, one native-asset directory,
+  two native capabilities, one scripting definition, and three App Intents.
+- The generic repository was then retested at its unchanged committed source
+  with the exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate. It passed
+  the 131-path/130-text-file product-word audit, scaffold and native bridge/
+  runner/runtime contracts, runtime builder tests, example native asset, Dart
+  API and launcher tests, current FFI smoke, and legacy event fallback. No
+  residual product source, path, test fixture, or current documentation remains
+  in the generic repository; the historical worklog remains the sole explicit
+  audit exemption. The ownership correction and its final acceptance criteria
+  are complete, with no blocker or deferred subtask.

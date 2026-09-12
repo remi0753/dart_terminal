@@ -1260,7 +1260,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     renderer content origin と一致させる
     - [x] renderer accessibility content-origin contract／native geometry tests
     - [x] product projection、両runtime acceptance、manual checklist、親項目完了判定
-- [ ] `dart_appkit` から製品固有実装を分離する
+- [x] `dart_appkit` から製品固有実装を分離する
   （分割、境界、完了条件は
   [`docs/phase10/dart-appkit-generic-boundary.md`](docs/phase10/dart-appkit-generic-boundary.md)
   を参照して順に実施する）
@@ -1272,7 +1272,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] Finder folder Servicesをapplication注入の汎用actionへ変更する
   - [x] Secure Input表示をapplication注入の汎用badgeへ変更する
   - [x] 汎用repositoryのbuild、test fixture、現行文書を製品非依存にする
-  - [ ] 両repositoryの完全gateと製品runtime受け入れを行い親項目を完了する
+  - [x] 両repositoryの完全gateと製品runtime受け入れを行い親項目を完了する
 - [ ] Reduce Motion/Contrast と localization
 - [ ] terminal inspector と diagnostics bundle
 
