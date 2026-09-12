@@ -46,7 +46,8 @@ override PRODUCT_APPKIT_BRIDGE_SOURCES := \
 override PRODUCT_OBJCXX_FLAGS := $(PRODUCT_NATIVE_FLAGS) -std=c++20 \
 	-fobjc-arc -fblocks
 override PRODUCT_APPKIT_LIBS := -framework AppKit -framework CoreFoundation \
-	-framework UserNotifications -framework Carbon
+	-framework UserNotifications -framework UniformTypeIdentifiers \
+	-framework Carbon
 override TERMINAL_RENDERER_PLUGIN_LIBRARY := \
 	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/libdart_terminal_renderer_macos.dylib
 override TERMINAL_RENDERER_TEST_BINARY := \

@@ -309,3 +309,67 @@ bounded to 256 KiB and shows a stable truncation/eviction summary when needed.
   destination panel`). Its worktree is clean. This repository records the
   dependency milestone but does not yet consume product strings or add file
   writing; those remain ordered later children.
+- 2026-09-13: committed that dependency milestone in this repository as
+  `1d65509` (`Record generic save destination substrate`), reread ROADMAP, and
+  began only the bounded live parser/model child. Reinspection confirmed the
+  parser currently targets `TerminalScreenParserSink` directly, the Phase 6
+  decorator is always collecting once constructed, and normal product sessions
+  do not own it. The model child will preserve the existing opt-in constructor
+  behavior for offline callers while giving product sessions one initially
+  disabled decorator, explicit clear/start/stop capture, immutable allowlisted
+  snapshots, deterministic bounded JSON, and a sibling temporary-file writer.
+  AppKit panel invocation, localized strings, focus handoff, actions, and window
+  ownership remain outside this child.
+- 2026-09-13: the first full main gate reached the renderer native fixture and
+  failed to link `_OBJC_CLASS_$_UTType`. The adjacent bridge now uses the
+  system type API for injected filename extensions, while this repository's
+  direct bridge-source fixtures still linked the previous framework set.
+  Added `UniformTypeIdentifiers` once to `PRODUCT_APPKIT_LIBS`, the shared main
+  fixture link definition; no product policy or generic implementation was
+  duplicated.
+- 2026-09-13: the second full gate passed the repaired renderer fixture and all
+  earlier package/native checks, then correctly rejected the deterministic
+  Phase 7 AppKit acceptance inventory as stale because this child changes its
+  tracked product/session/test sources. Regenerated only
+  `test/corpus/appkit/phase7_acceptance_v1.json` with the dedicated generator
+  before retrying the unchanged full gate.
+- 2026-09-13: made `VtParserInspector` dynamically capturable while preserving
+  its historical enabled-by-default behavior for offline callers. Disabled
+  mode invokes the downstream sink first and then returns without allocating
+  event records, incrementing printable/event aggregates, copying CSI/DCS
+  metadata, or invoking observers. Begin/clear/end create isolated ordinal and
+  aggregate generations; immutable snapshots copy the event list and typed
+  count storage, so later parsing cannot change an exported generation.
+- 2026-09-13: every normal `TerminalSession` now owns this decorator between
+  its existing parser and semantic screen sink with capture disabled at
+  construction. Explicit session methods begin, end, and snapshot capture;
+  shutdown disables observers and clears all metadata before other resource
+  cleanup. Focused-pane snapshots allowlist only dimensions, enum/boolean mode
+  state, generations, bounded resource counts, and transport/backpressure
+  aggregates. They contain no pane/session/process identity or content.
+- 2026-09-13: added typed immutable application, hierarchy, focused-pane,
+  parser, renderer, configuration, and feature snapshots plus the frozen
+  version-1 formatter. Its top-level key order is fixed, parser strings remain
+  length-only, printable data remains count-only, reviewed renderer fields omit
+  accessibility text shape/selection/cursor/hover state, and paths, argv,
+  environment, timestamps, stable IDs, and raw errors cannot enter any DTO.
+  Same snapshot produces byte-identical indented UTF-8 JSON with one trailing
+  newline. Export is capped at 1 MiB; inspector text is capped at 256 KiB and
+  falls back to a fixed content-free truncation/eviction summary.
+- 2026-09-13: added an injectable atomic writer with only classified
+  written/failed plus byte-count output. It rejects non-absolute or oversized
+  writes, creates a unique exclusive sibling temporary file, writes and
+  flushes all bytes, renames only after completion, and best-effort removes the
+  temporary on any failure. Neither the selected path nor an exception string
+  enters its result. Fake failure tests prove an existing destination remains
+  unchanged; a real local filesystem test proves replacement and temp cleanup.
+- 2026-09-13: focused analysis and parser/trace/diagnostics tests passed. Tests
+  also prove whole/split parser equivalence, zero retention while closed,
+  observer isolation, snapshot immutability, ordered schema/privacy absence,
+  deterministic bytes, 1 MiB failure, 256 KiB summary fallback, collision
+  retry, atomic success, failed replacement preservation, and session shutdown
+  cleanup. After the link dependency and generated-ledger corrections, exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed twice, including the
+  final bound tests, format, analysis, all native/package/generated evidence,
+  corpus/property/security, renderer, and real PTY paths. Duration-only soak was
+  intentionally skipped and is not a blocker under the user's instruction.

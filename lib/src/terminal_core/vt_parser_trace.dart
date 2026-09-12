@@ -130,21 +130,7 @@ final class VtParserTraceExporter {
         },
       },
       'input_bytes': inputBytes,
-      'printable_scalars': inspector.printableScalarCount,
-      'events_total': inspector.totalEventCount,
-      'events_retained': inspector.events.length,
-      'retained_metadata_bytes': inspector.retainedMetadataBytes,
-      'events_evicted': inspector.evictedEventCount,
-      'events_oversized': inspector.oversizedEventCount,
-      'observer_failures': inspector.observerFailureCount,
-      'event_counts': <String, Object?>{
-        for (final VtParserInspectionKind kind in VtParserInspectionKind.values)
-          kind.name: inspector.eventCount(kind),
-      },
-      'events': <Object?>[
-        for (final VtParserInspectionEvent event in inspector.events)
-          _eventJson(event),
-      ],
+      ...observation(inspector),
     };
     final _BoundedByteSink output = _BoundedByteSink(limits.maxOutputBytes);
     final Sink<Object?> encoder = JsonUtf8Encoder('  ')
@@ -154,6 +140,31 @@ final class VtParserTraceExporter {
     output.add(const <int>[0x0a]);
     return utf8.decode(output.takeBytes());
   }
+
+  /// Returns only the fixed, redacted live-observation fields.
+  Map<String, Object?> observation(VtParserInspector inspector) =>
+      observationSnapshot(inspector.snapshot());
+
+  /// Returns only the fixed, redacted fields from an immutable generation.
+  Map<String, Object?> observationSnapshot(
+    VtParserInspectionSnapshot snapshot,
+  ) => <String, Object?>{
+    'printable_scalars': snapshot.printableScalarCount,
+    'events_total': snapshot.totalEventCount,
+    'events_retained': snapshot.events.length,
+    'retained_metadata_bytes': snapshot.retainedMetadataBytes,
+    'events_evicted': snapshot.evictedEventCount,
+    'events_oversized': snapshot.oversizedEventCount,
+    'observer_failures': snapshot.observerFailureCount,
+    'event_counts': <String, Object?>{
+      for (final VtParserInspectionKind kind in VtParserInspectionKind.values)
+        kind.name: snapshot.eventCount(kind),
+    },
+    'events': <Object?>[
+      for (final VtParserInspectionEvent event in snapshot.events)
+        _eventJson(event),
+    ],
+  };
 
   void _checkInputLength(int length) {
     if (length < 0 || length > limits.maxInputBytes) {

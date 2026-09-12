@@ -115,37 +115,73 @@ final class VtParserInspectionEvent {
   Uint8List copyIntermediates() => Uint8List.fromList(_intermediates);
 }
 
+/// Immutable copy of one bounded inspection generation.
+final class VtParserInspectionSnapshot {
+  VtParserInspectionSnapshot._({
+    required this.captureEnabled,
+    required this.limits,
+    required this.printableScalarCount,
+    required this.totalEventCount,
+    required this.retainedMetadataBytes,
+    required this.evictedEventCount,
+    required this.oversizedEventCount,
+    required this.observerFailureCount,
+    required Iterable<VtParserInspectionEvent> events,
+    required Uint64List kindCounts,
+  }) : events = List<VtParserInspectionEvent>.unmodifiable(events),
+       _kindCounts = Uint64List.fromList(kindCounts);
+
+  final bool captureEnabled;
+  final VtParserInspectorLimits limits;
+  final int printableScalarCount;
+  final int totalEventCount;
+  final int retainedMetadataBytes;
+  final int evictedEventCount;
+  final int oversizedEventCount;
+  final int observerFailureCount;
+  final List<VtParserInspectionEvent> events;
+  final Uint64List _kindCounts;
+
+  int get droppedEventCount => evictedEventCount + oversizedEventCount;
+
+  int eventCount(VtParserInspectionKind kind) => _kindCounts[kind.index];
+}
+
 /// Optional bounded sink decorator for inspecting typed parser actions.
 ///
 /// The downstream sink always runs first. Inspector bookkeeping and the
 /// optional observer cannot change downstream exceptions or parser semantics;
-/// observer exceptions are counted and suppressed. Normal product parsing does
-/// not construct this decorator.
+/// observer exceptions are counted and suppressed. A disabled product-owned
+/// decorator forwards without retaining records, counters, or observer work.
 final class VtParserInspector implements VtParserSink, VtParserAsciiSink {
   factory VtParserInspector({
     required VtParserSink downstream,
     VtParserInspectorLimits limits = const VtParserInspectorLimits(),
     VtParserInspectionObserver? onEvent,
+    bool captureEnabled = true,
   }) {
     limits.validate();
     return VtParserInspector._(
       downstream: downstream,
       limits: limits,
       onEvent: onEvent,
+      captureEnabled: captureEnabled,
     );
   }
 
   VtParserInspector._({
     required this.downstream,
     required this.limits,
-    required this.onEvent,
-  }) : _asciiDownstream = downstream is VtParserAsciiSink
+    required VtParserInspectionObserver? onEvent,
+    required bool captureEnabled,
+  }) : _onEvent = onEvent,
+       _captureEnabled = captureEnabled,
+       _asciiDownstream = downstream is VtParserAsciiSink
            ? downstream as VtParserAsciiSink
            : null;
 
   final VtParserSink downstream;
   final VtParserInspectorLimits limits;
-  final VtParserInspectionObserver? onEvent;
   final VtParserAsciiSink? _asciiDownstream;
   final ListQueue<VtParserInspectionEvent> _events =
       ListQueue<VtParserInspectionEvent>();
@@ -160,7 +196,10 @@ final class VtParserInspector implements VtParserSink, VtParserAsciiSink {
   int _evictedEventCount = 0;
   int _oversizedEventCount = 0;
   int _observerFailureCount = 0;
+  VtParserInspectionObserver? _onEvent;
+  bool _captureEnabled;
 
+  bool get captureEnabled => _captureEnabled;
   int get printableScalarCount => _printableScalarCount;
   int get totalEventCount => _totalEventCount;
   int get retainedMetadataBytes => _retainedMetadataBytes;
@@ -174,10 +213,50 @@ final class VtParserInspector implements VtParserSink, VtParserAsciiSink {
 
   int eventCount(VtParserInspectionKind kind) => _kindCounts[kind.index];
 
+  VtParserInspectionSnapshot snapshot() => VtParserInspectionSnapshot._(
+    captureEnabled: _captureEnabled,
+    limits: limits,
+    printableScalarCount: _printableScalarCount,
+    totalEventCount: _totalEventCount,
+    retainedMetadataBytes: _retainedMetadataBytes,
+    evictedEventCount: _evictedEventCount,
+    oversizedEventCount: _oversizedEventCount,
+    observerFailureCount: _observerFailureCount,
+    events: _events,
+    kindCounts: _kindCounts,
+  );
+
+  /// Clears prior metadata and starts a fresh bounded capture.
+  void beginCapture({VtParserInspectionObserver? onEvent}) {
+    clear();
+    _onEvent = onEvent;
+    _captureEnabled = true;
+  }
+
+  /// Stops capture before optionally clearing every retained aggregate.
+  void endCapture({bool clearRetained = true}) {
+    _captureEnabled = false;
+    _onEvent = null;
+    if (clearRetained) clear();
+  }
+
+  /// Clears all retained records and aggregate counters.
+  void clear() {
+    _events.clear();
+    _kindCounts.fillRange(0, _kindCounts.length, 0);
+    _nextOrdinal = 1;
+    _printableScalarCount = 0;
+    _totalEventCount = 0;
+    _retainedMetadataBytes = 0;
+    _evictedEventCount = 0;
+    _oversizedEventCount = 0;
+    _observerFailureCount = 0;
+  }
+
   @override
   void print(int scalar) {
     downstream.print(scalar);
-    _printableScalarCount++;
+    if (_captureEnabled) _printableScalarCount++;
   }
 
   @override
@@ -190,12 +269,13 @@ final class VtParserInspector implements VtParserSink, VtParserAsciiSink {
     } else {
       ascii.printAscii(bytes, start, end);
     }
-    _printableScalarCount += end - start;
+    if (_captureEnabled) _printableScalarCount += end - start;
   }
 
   @override
   void execute(int controlByte) {
     downstream.execute(controlByte);
+    if (!_captureEnabled) return;
     _record(
       VtParserInspectionEvent._(
         ordinal: _claimOrdinal(),
@@ -208,6 +288,7 @@ final class VtParserInspector implements VtParserSink, VtParserAsciiSink {
   @override
   void dispatchEscape(VtEscapeSequence sequence) {
     downstream.dispatchEscape(sequence);
+    if (!_captureEnabled) return;
     _record(
       VtParserInspectionEvent._(
         ordinal: _claimOrdinal(),
@@ -221,18 +302,21 @@ final class VtParserInspector implements VtParserSink, VtParserAsciiSink {
   @override
   void dispatchCsi(VtSequenceHeader sequence) {
     downstream.dispatchCsi(sequence);
+    if (!_captureEnabled) return;
     _recordHeader(VtParserInspectionKind.controlSequence, sequence);
   }
 
   @override
   void dispatchOsc(VtStringSequence sequence) {
     downstream.dispatchOsc(sequence);
+    if (!_captureEnabled) return;
     _recordString(VtParserInspectionKind.operatingSystemCommand, sequence);
   }
 
   @override
   void dispatchDcs(VtDcsSequence sequence) {
     downstream.dispatchDcs(sequence);
+    if (!_captureEnabled) return;
     final ({List<int?> values, List<bool> subparameters}) parameters =
         _copyParameters(sequence.header.parameters);
     _record(
@@ -254,12 +338,14 @@ final class VtParserInspector implements VtParserSink, VtParserAsciiSink {
   @override
   void dispatchString(VtStringSequence sequence) {
     downstream.dispatchString(sequence);
+    if (!_captureEnabled) return;
     _recordString(VtParserInspectionKind.controlString, sequence);
   }
 
   @override
   void cancel(VtParserState state, int controlByte) {
     downstream.cancel(state, controlByte);
+    if (!_captureEnabled) return;
     _record(
       VtParserInspectionEvent._(
         ordinal: _claimOrdinal(),
@@ -273,6 +359,7 @@ final class VtParserInspector implements VtParserSink, VtParserAsciiSink {
   @override
   void limit(VtParserState state, VtParserLimitKind kind) {
     downstream.limit(state, kind);
+    if (!_captureEnabled) return;
     _record(
       VtParserInspectionEvent._(
         ordinal: _claimOrdinal(),
@@ -286,6 +373,7 @@ final class VtParserInspector implements VtParserSink, VtParserAsciiSink {
   @override
   void malformed(VtParserState state, int byte) {
     downstream.malformed(state, byte);
+    if (!_captureEnabled) return;
     _record(
       VtParserInspectionEvent._(
         ordinal: _claimOrdinal(),
@@ -299,6 +387,7 @@ final class VtParserInspector implements VtParserSink, VtParserAsciiSink {
   @override
   void incomplete(VtParserState state) {
     downstream.incomplete(state);
+    if (!_captureEnabled) return;
     _record(
       VtParserInspectionEvent._(
         ordinal: _claimOrdinal(),
@@ -369,7 +458,7 @@ final class VtParserInspector implements VtParserSink, VtParserAsciiSink {
       _events.addLast(event);
       _retainedMetadataBytes += event.metadataBytes;
     }
-    final VtParserInspectionObserver? observer = onEvent;
+    final VtParserInspectionObserver? observer = _onEvent;
     if (observer != null) {
       try {
         observer(event);

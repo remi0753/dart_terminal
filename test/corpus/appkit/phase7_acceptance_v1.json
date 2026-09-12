@@ -183,7 +183,7 @@
         },
         {
           "path": "lib/src/terminal_session.dart",
-          "sha256": "b1f9560c50dbd01865d861ceb9de28b58b355ff9cca9143db5bb1bcc187a32e0"
+          "sha256": "627ada53ff8a81e65b8326ad35b83c447f48af31bf792c77c57f825bbe69b481"
         },
         {
           "path": "lib/src/terminal_application.dart",

@@ -10,6 +10,7 @@ void runVtParserInspectorTests() {
   _testParserSemanticsAndChunkIndependence();
   _testBoundsEvictionAndObserverIsolation();
   _testLimitsAndConfigurationValidation();
+  _testDynamicCaptureLifecycle();
 }
 
 void _testTypedContentConsciousObservations() {
@@ -244,6 +245,58 @@ void _testLimitsAndConfigurationValidation() {
   );
 }
 
+void _testDynamicCaptureLifecycle() {
+  final _CountingSink downstream = _CountingSink();
+  var observed = 0;
+  final VtParserInspector inspector = VtParserInspector(
+    downstream: downstream,
+    captureEnabled: false,
+    onEvent: (_) => observed++,
+  );
+  final VtParser parser = VtParser(sink: inspector);
+  parser.parse(Uint8List.fromList(<int>[...ascii.encode('private'), 0x07]));
+  _expect(
+    downstream.printableScalars == 7 &&
+        downstream.executeCount == 1 &&
+        !inspector.captureEnabled &&
+        inspector.printableScalarCount == 0 &&
+        inspector.totalEventCount == 0 &&
+        inspector.events.isEmpty &&
+        observed == 0,
+    'disabled capture forwards without retaining or observing metadata',
+  );
+
+  inspector.beginCapture(onEvent: (_) => observed++);
+  parser.parse(Uint8List.fromList(<int>[...ascii.encode('secret'), 0x08]));
+  final VtParserInspectionSnapshot frozen = inspector.snapshot();
+  _expect(
+    frozen.captureEnabled &&
+        frozen.printableScalarCount == 6 &&
+        frozen.totalEventCount == 1 &&
+        frozen.events.single.kind == VtParserInspectionKind.execute &&
+        observed == 1,
+    'beginCapture starts one fresh bounded generation',
+  );
+
+  parser.parse(Uint8List.fromList(const <int>[0x09]));
+  _expect(
+    frozen.totalEventCount == 1 && frozen.events.length == 1,
+    'snapshot does not observe later parser actions',
+  );
+  inspector.endCapture();
+  _expect(
+    !inspector.captureEnabled &&
+        inspector.totalEventCount == 0 &&
+        inspector.events.isEmpty,
+    'endCapture disables observers and clears retained aggregates',
+  );
+  parser.parse(Uint8List.fromList(const <int>[0x0d]));
+  _expect(
+    inspector.totalEventCount == 0 && observed == 2,
+    'closed capture retains no subsequent events',
+  );
+}
+
 String _inspect(Uint8List input, [List<int>? chunks]) {
   final VtParserInspector inspector = VtParserInspector(
     downstream: _CountingSink(),
@@ -286,6 +339,7 @@ String _kinds(List<VtParserInspectionEvent> events) =>
 final class _CountingSink implements VtParserSink, VtParserAsciiSink {
   int printableScalars = 0;
   int asciiRuns = 0;
+  int executeCount = 0;
 
   @override
   void print(int scalar) => printableScalars++;
@@ -297,7 +351,7 @@ final class _CountingSink implements VtParserSink, VtParserAsciiSink {
   }
 
   @override
-  void execute(int controlByte) {}
+  void execute(int controlByte) => executeCount++;
 
   @override
   void dispatchEscape(VtEscapeSequence sequence) {}

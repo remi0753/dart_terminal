@@ -16,7 +16,9 @@ import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_core/terminal_semantic_prompt.dart';
 import 'terminal_core/vt_parser.dart';
+import 'terminal_core/vt_parser_inspector.dart';
 import 'terminal_desktop_signal_projection.dart';
+import 'terminal_diagnostics.dart';
 import 'terminal_input/terminal_hyperlink_interaction.dart';
 import 'terminal_input/terminal_key_event.dart';
 import 'terminal_input/terminal_paste.dart';
@@ -259,7 +261,11 @@ final class TerminalSession implements TerminalPaneSession {
       onKittyGraphicsCommand: kittyGraphicsController.enqueueCommand,
       onOsc52Request: _osc52Projection?.handle,
     );
-    _terminalParser = VtParser(sink: terminalParserSink);
+    parserInspector = VtParserInspector(
+      downstream: terminalParserSink,
+      captureEnabled: false,
+    );
+    _terminalParser = VtParser(sink: parserInspector);
     _lastCompletedSize = _currentSize();
     _desktopSignalProjection = desktopSignalCoordinator?.registerSession(id);
   }
@@ -290,6 +296,7 @@ final class TerminalSession implements TerminalPaneSession {
   final TerminalBuffer buffer = TerminalBuffer();
   late final TerminalScreenSet terminalScreenSet;
   late final TerminalScreenParserSink terminalParserSink;
+  late final VtParserInspector parserInspector;
   late final TerminalKittyGraphicsController kittyGraphicsController;
   late final VtParser _terminalParser;
   final Completer<void> _terminated = Completer<void>();
@@ -361,6 +368,69 @@ final class TerminalSession implements TerminalPaneSession {
   int get pasteConcurrentInputRejectionCount =>
       _pasteConcurrentInputRejectionCount;
   TerminalSessionShutdownResult? get shutdownResult => _shutdownResult;
+
+  bool get diagnosticsCaptureEnabled => parserInspector.captureEnabled;
+
+  void beginDiagnosticsCapture({VtParserInspectionObserver? onEvent}) {
+    if (_disposed) throw StateError('terminal session $id is disposed');
+    parserInspector.beginCapture(onEvent: onEvent);
+  }
+
+  void endDiagnosticsCapture({bool clearRetained = true}) {
+    parserInspector.endCapture(clearRetained: clearRetained);
+  }
+
+  TerminalDiagnosticsFocusedPaneSnapshot captureFocusedPaneDiagnostics({
+    required TerminalDiagnosticsPaneLifecycle lifecycle,
+  }) {
+    final TerminalScreenSet screens = terminalScreenSet;
+    final TerminalKeyboardModes keyboard = screens.keyboardModes;
+    final mouse = screens.mouseModes;
+    return TerminalDiagnosticsFocusedPaneSnapshot(
+      present: true,
+      lifecycle: lifecycle,
+      rows: screens.activeScreen.rows,
+      columns: screens.activeScreen.columns,
+      activeScreen: screens.activeKind,
+      viewportOffset: screens.viewport.offset,
+      applicationCursorKeys: keyboard.applicationCursorKeys,
+      applicationKeypad: keyboard.applicationKeypad,
+      applicationEscape: keyboard.applicationEscape,
+      modifyOtherKeys: keyboard.modifyOtherKeys,
+      kittyKeyboardFlags: keyboard.kittyKeyboardFlags,
+      kittyKeyboardStackDepth: screens.kittyKeyboardStackDepth,
+      bracketedPasteMode: screens.bracketedPasteMode,
+      focusReportingMode: screens.focusReportingMode,
+      synchronizedOutputMode: screens.synchronizedOutputMode,
+      colorSchemeReportingMode: screens.colorSchemeReportingMode,
+      inBandSizeReportingMode: screens.inBandSizeReportingMode,
+      mouseTracking: mouse.tracking,
+      mouseEncoding: mouse.encoding,
+      transitionGeneration: screens.transitionGeneration,
+      resetGeneration: screens.resetGeneration,
+      scrollbackRows: screens.scrollback.length,
+      styleDefinitions: screens.styleTable.definitionCount,
+      graphemeDefinitions: screens.graphemeTable.definitionCount,
+      graphemeScalars: screens.graphemeTable.scalarCount,
+      hyperlinkDefinitions: screens.hyperlinkTable.definitionCount,
+      hyperlinkRefusals: screens.hyperlinkTable.refusalCount,
+      kittyImages:
+          screens.primaryKittyImages.length +
+          screens.alternateKittyImages.length,
+      kittyPlacements:
+          screens.primaryKittyImages.placementCount +
+          screens.alternateKittyImages.placementCount,
+      writeBackpressureCount: _writeBackpressureCount,
+      replyBackpressureCount: _replyWriteBackpressureCount,
+      concurrentPasteInputRejections: _pasteConcurrentInputRejectionCount,
+    );
+  }
+
+  TerminalDiagnosticsParserSnapshot captureParserDiagnostics() =>
+      TerminalDiagnosticsParserSnapshot.capture(
+        inspector: parserInspector,
+        sink: terminalParserSink,
+      );
 
   bool projectColorScheme(TerminalColorScheme scheme) {
     if (_disposed) return false;
@@ -835,6 +905,7 @@ final class TerminalSession implements TerminalPaneSession {
   }
 
   Future<TerminalSessionShutdownResult> _shutdown() async {
+    endDiagnosticsCapture();
     terminalScreenSet.setColorSchemeReportingMode(false);
     terminalScreenSet.setInBandSizeReportingMode(false);
     _desktopSignalProjection?.close();
