@@ -537,6 +537,45 @@ void _testBoundedCursorAndBellClock() {
     'bell expiry produces one replacement frame and leaves no timer',
   );
 
+  _expect(
+    scheduler.updateReduceMotion(reduceMotion: true, monotonicMicros: 110),
+    'enabling Reduce Motion changes presentation policy once',
+  );
+  scheduler.applyDamage(
+    sequence.mutatePresentation(
+      (TerminalScreen screen) => TerminalScreenParserSink(screen).execute(0x07),
+    ),
+    availableResourceGeneration: 1,
+    monotonicMicros: 111,
+  );
+  scheduler.submitNewest();
+  _expect(
+    scheduler.presentationClock.reduceMotion &&
+        scheduler.presentationClock.lastVisualBellGeneration == 3 &&
+        !built.last.presentation!.visualBellActive &&
+        scheduler.nextPresentationDeadlineMicros == null,
+    'Reduce Motion acknowledges BEL without a timed frame or deadline',
+  );
+  _expect(
+    !scheduler.updateReduceMotion(reduceMotion: true, monotonicMicros: 112) &&
+        scheduler.updateReduceMotion(reduceMotion: false, monotonicMicros: 113),
+    'motion preference updates are deduplicated and re-enable future bells',
+  );
+  scheduler.submitNewest();
+  scheduler.applyDamage(
+    sequence.mutatePresentation(
+      (TerminalScreen screen) => TerminalScreenParserSink(screen).execute(0x07),
+    ),
+    availableResourceGeneration: 1,
+    monotonicMicros: 114,
+  );
+  scheduler.submitNewest();
+  _expect(
+    built.last.presentation!.visualBellActive &&
+        scheduler.nextPresentationDeadlineMicros == 119,
+    'disabling Reduce Motion affects only later BEL generations',
+  );
+
   final _DamageSequence boundedSequence = _DamageSequence(rows: 1, columns: 1);
   final TerminalNewestFrameScheduler<_FakeFrame> boundedScheduler =
       TerminalNewestFrameScheduler<_FakeFrame>(

@@ -9,6 +9,31 @@ void runTerminalQuickTerminalTests() {
   _testResetAndDisposal();
   _testFixedSizeScreenGeometry();
   _testHotKeyProjectionAndStatus();
+  _testReduceMotionProjection();
+}
+
+void _testReduceMotionProjection() {
+  const double configuredSeconds = 0.275;
+  _expect(
+    terminalQuickTerminalEffectiveAnimationDuration(
+          configuredSeconds,
+          const TerminalAccessibilityPresentation.standard(),
+        ) ==
+        const Duration(milliseconds: 275),
+    'ordinary presentation preserves the configured animation duration',
+  );
+  _expect(
+    terminalQuickTerminalEffectiveAnimationDuration(
+          configuredSeconds,
+          const TerminalAccessibilityPresentation(
+            reduceMotion: true,
+            increaseContrast: false,
+            differentiateWithoutColor: false,
+          ),
+        ) ==
+        Duration.zero,
+    'Reduce Motion suppresses only the effective native transition duration',
+  );
 }
 
 void _testOrderedTransitionsAndFailureRecovery() {

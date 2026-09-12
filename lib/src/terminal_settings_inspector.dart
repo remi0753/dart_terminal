@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dart_appkit/dart_appkit.dart';
 
+import 'terminal_accessibility_presentation.dart';
 import 'terminal_action_registry.dart';
 import 'terminal_appkit_policy.dart';
 import 'terminal_config.dart';
@@ -483,8 +484,14 @@ final class TerminalSettingsInspectorPresenter {
     this.onReloaded,
     this.onError,
     this.runtimeStatus,
+    TerminalAccessibilityPresentation accessibilityPresentation =
+        const TerminalAccessibilityPresentation.standard(),
   }) : _focusTarget = focusTarget,
        _reload = reload,
+       _accessibilityPresentation = accessibilityPresentation,
+       _settingsPresentation = terminalSettingsPresentationFor(
+         accessibilityPresentation,
+       ),
        state = TerminalSettingsEditorState(
          controller: controller,
          documentSession: documentSession,
@@ -499,6 +506,8 @@ final class TerminalSettingsInspectorPresenter {
   final TerminalSettingsInspectorErrorObserver? onError;
   final TerminalSettingsRuntimeStatusProvider? runtimeStatus;
   final TerminalSettingsEditorState state;
+  TerminalAccessibilityPresentation _accessibilityPresentation;
+  TerminalSettingsPresentation _settingsPresentation;
 
   late final TerminalSettingsEditorKeyController _keys;
   Window? _window;
@@ -541,6 +550,8 @@ final class TerminalSettingsInspectorPresenter {
   int get saveRequestCount => _saveRequestCount;
   int get reloadRequestCount => _reloadRequestCount;
   int get terminalResponderRestoreCount => _terminalResponderRestoreCount;
+  TerminalAccessibilityPresentation get accessibilityPresentation =>
+      _accessibilityPresentation;
 
   Future<void> open() async {
     final Future<void>? closing = _closingFuture;
@@ -566,9 +577,15 @@ final class TerminalSettingsInspectorPresenter {
     StreamSubscription<WindowEvent>? subscription;
     try {
       state.open();
-      editor = TextEditor(configuration: terminalSettingsEditorConfiguration);
-      statusView = TextView(configuration: terminalSettingsStatusConfiguration);
-      detailView = TextView(configuration: terminalSettingsDetailConfiguration);
+      editor = TextEditor(
+        configuration: _settingsPresentation.editorConfiguration,
+      );
+      statusView = TextView(
+        configuration: _settingsPresentation.statusConfiguration,
+      );
+      detailView = TextView(
+        configuration: _settingsPresentation.detailConfiguration,
+      );
       editorStatusSplit = TwoPaneSplitView(axis: SplitViewAxis.vertical)
         ..setChildren(first: editor, second: statusView)
         ..setPosition(
@@ -637,6 +654,100 @@ final class TerminalSettingsInspectorPresenter {
     if (_isDisposed || !state.isOpen) return;
     state.refreshEffectiveConfiguration();
     _render();
+  }
+
+  /// Replaces only immutable native presentation views while retaining the
+  /// Settings window, document session, draft, selection, and editor mode.
+  bool updateAccessibilityPresentation(
+    TerminalAccessibilityPresentation presentation,
+  ) {
+    if (_isDisposed || _accessibilityPresentation == presentation) {
+      return false;
+    }
+    final TerminalSettingsPresentation next = terminalSettingsPresentationFor(
+      presentation,
+    );
+    if (!isOpen || identical(next, _settingsPresentation)) {
+      _accessibilityPresentation = presentation;
+      _settingsPresentation = next;
+      return true;
+    }
+
+    synchronizeNativeEditor();
+    TextEditor? editor;
+    TextView? statusView;
+    TextView? detailView;
+    TwoPaneSplitView? editorStatusSplit;
+    TwoPaneSplitView? rootSplit;
+    final Window window = _window!;
+    final TextEditor oldEditor = _editor!;
+    final TextView oldStatusView = _statusView!;
+    final TextView oldDetailView = _detailView!;
+    final TwoPaneSplitView oldEditorStatusSplit = _editorStatusSplit!;
+    final TwoPaneSplitView oldRootSplit = _rootSplit!;
+    final TerminalAccessibilityPresentation oldAccessibilityPresentation =
+        _accessibilityPresentation;
+    final TerminalSettingsPresentation oldSettingsPresentation =
+        _settingsPresentation;
+    final List<TextEditorStyleRun> oldPublishedStyleRuns = _publishedStyleRuns;
+    final bool? oldPublishedDetailsExpanded = _publishedDetailsExpanded;
+    try {
+      editor = TextEditor(configuration: next.editorConfiguration);
+      statusView = TextView(configuration: next.statusConfiguration);
+      detailView = TextView(configuration: next.detailConfiguration);
+      editorStatusSplit = TwoPaneSplitView(axis: SplitViewAxis.vertical)
+        ..setChildren(first: editor, second: statusView)
+        ..setPosition(
+          fraction: 0.93,
+          firstMinimumExtent: 260,
+          secondMinimumExtent: 38,
+        );
+      rootSplit = TwoPaneSplitView(axis: SplitViewAxis.horizontal)
+        ..setChildren(first: editorStatusSplit, second: detailView);
+
+      _editor = editor;
+      _statusView = statusView;
+      _detailView = detailView;
+      _editorStatusSplit = editorStatusSplit;
+      _rootSplit = rootSplit;
+      _accessibilityPresentation = presentation;
+      _settingsPresentation = next;
+      _publishedStyleRuns = const <TextEditorStyleRun>[];
+      _publishedDetailsExpanded = null;
+      _nativeSynchronizationEpoch++;
+      window.contentView = rootSplit;
+      _render();
+      window.makeFirstResponder(editor);
+      _disposeView(oldRootSplit);
+      _disposeView(oldEditorStatusSplit);
+      _disposeView(oldDetailView);
+      _disposeView(oldStatusView);
+      _disposeView(oldEditor);
+      return true;
+    } on Object catch (error, stackTrace) {
+      _editor = oldEditor;
+      _statusView = oldStatusView;
+      _detailView = oldDetailView;
+      _editorStatusSplit = oldEditorStatusSplit;
+      _rootSplit = oldRootSplit;
+      _accessibilityPresentation = oldAccessibilityPresentation;
+      _settingsPresentation = oldSettingsPresentation;
+      _publishedStyleRuns = oldPublishedStyleRuns;
+      _publishedDetailsExpanded = oldPublishedDetailsExpanded;
+      _nativeSynchronizationEpoch++;
+      try {
+        window.contentView = oldRootSplit;
+        window.makeFirstResponder(oldEditor);
+      } on Object {
+        // Preserve the original creation/projection failure for the owner.
+      }
+      _disposeView(rootSplit);
+      _disposeView(editorStatusSplit);
+      _disposeView(detailView);
+      _disposeView(statusView);
+      _disposeView(editor);
+      Error.throwWithStackTrace(error, stackTrace);
+    }
   }
 
   Future<void> dismiss() {
@@ -803,7 +914,10 @@ final class TerminalSettingsInspectorPresenter {
 
     TextEditorSnapshot snapshot = editorSnapshot ?? editor.snapshot;
     var selectionMovedByDart = false;
-    final List<TextEditorStyleRun> styles = _projectStyleRuns(state);
+    final List<TextEditorStyleRun> styles = _projectStyleRuns(
+      state,
+      _settingsPresentation,
+    );
     if (snapshot.text != state.text) {
       editor.setDocument(
         TextEditorDocument(
@@ -833,7 +947,7 @@ final class TerminalSettingsInspectorPresenter {
     if (snapshot.isEditable != editable) editor.isEditable = editable;
     final TextEditorLineHighlight lineHighlight = TextEditorLineHighlight(
       location: state.selection.start,
-      color: terminalSettingsCurrentLineColor,
+      color: _settingsPresentation.currentLineColor,
     );
     if (editor.lineHighlight != lineHighlight) {
       editor.setLineHighlight(lineHighlight);
@@ -924,7 +1038,7 @@ final class TerminalSettingsInspectorPresenter {
   TextEditorDocument _documentForState() => TextEditorDocument(
     text: state.text,
     selection: _editorSelection(state.selection),
-    styleRuns: _projectStyleRuns(state),
+    styleRuns: _projectStyleRuns(state, _settingsPresentation),
   );
 
   static TextEditorSelection _editorSelection(
@@ -953,47 +1067,6 @@ final class TerminalSettingsInspectorPresenter {
   }
 }
 
-final TextViewColor _settingsCommentColor = TextViewColor.sRgb(
-  red: 0.42,
-  green: 0.47,
-  blue: 0.55,
-);
-final TextViewColor _settingsOptionColor = TextViewColor.sRgb(
-  red: 0.39,
-  green: 0.69,
-  blue: 0.98,
-);
-final TextViewColor _settingsDirectiveColor = TextViewColor.sRgb(
-  red: 0.75,
-  green: 0.56,
-  blue: 0.96,
-);
-final TextViewColor _settingsOperatorColor = TextViewColor.sRgb(
-  red: 0.5,
-  green: 0.55,
-  blue: 0.63,
-);
-final TextViewColor _settingsValueColor = TextViewColor.sRgb(
-  red: 0.59,
-  green: 0.83,
-  blue: 0.65,
-);
-final TextViewColor _settingsUnknownColor = TextViewColor.sRgb(
-  red: 0.98,
-  green: 0.43,
-  blue: 0.48,
-);
-final TextViewColor _settingsErrorColor = TextViewColor.sRgb(
-  red: 1,
-  green: 0.35,
-  blue: 0.4,
-);
-final TextViewColor _settingsWarningColor = TextViewColor.sRgb(
-  red: 0.96,
-  green: 0.7,
-  blue: 0.3,
-);
-
 final class _TerminalSettingsStyleEvent {
   const _TerminalSettingsStyleEvent.syntax({
     required this.offset,
@@ -1015,7 +1088,10 @@ final class _TerminalSettingsStyleEvent {
   final TerminalConfigDiagnosticSeverity? severity;
 }
 
-List<TextEditorStyleRun> _projectStyleRuns(TerminalSettingsEditorState state) {
+List<TextEditorStyleRun> _projectStyleRuns(
+  TerminalSettingsEditorState state,
+  TerminalSettingsPresentation presentation,
+) {
   final String text = state.text;
   final List<_TerminalSettingsStyleEvent> events =
       <_TerminalSettingsStyleEvent>[];
@@ -1084,8 +1160,9 @@ List<TextEditorStyleRun> _projectStyleRuns(TerminalSettingsEditorState state) {
         runs,
         start: cursor,
         end: offset,
-        foreground: _syntaxColor(syntaxKind),
+        foreground: _syntaxColor(syntaxKind, presentation),
         severity: severity,
+        presentation: presentation,
       );
     }
 
@@ -1132,14 +1209,15 @@ void _appendProjectedRun(
   required int end,
   required TextViewColor foreground,
   required TerminalConfigDiagnosticSeverity? severity,
+  required TerminalSettingsPresentation presentation,
 }) {
   final TextEditorUnderlineStyle underline = severity == null
       ? TextEditorUnderlineStyle.none
       : TextEditorUnderlineStyle.single;
   final TextViewColor underlineColor = switch (severity) {
-    TerminalConfigDiagnosticSeverity.error => _settingsErrorColor,
-    TerminalConfigDiagnosticSeverity.warning => _settingsWarningColor,
-    null => terminalSettingsPrimaryTextColor,
+    TerminalConfigDiagnosticSeverity.error => presentation.errorColor,
+    TerminalConfigDiagnosticSeverity.warning => presentation.warningColor,
+    null => presentation.primaryTextColor,
   };
   if (runs.isNotEmpty) {
     final TextEditorStyleRun previous = runs.last;
@@ -1175,14 +1253,17 @@ void _appendProjectedRun(
   );
 }
 
-TextViewColor _syntaxColor(TerminalSettingsSyntaxKind? kind) => switch (kind) {
-  TerminalSettingsSyntaxKind.comment => _settingsCommentColor,
-  TerminalSettingsSyntaxKind.optionName => _settingsOptionColor,
-  TerminalSettingsSyntaxKind.directive => _settingsDirectiveColor,
-  TerminalSettingsSyntaxKind.operatorToken => _settingsOperatorColor,
-  TerminalSettingsSyntaxKind.value => _settingsValueColor,
-  TerminalSettingsSyntaxKind.unknownOption => _settingsUnknownColor,
-  null => terminalSettingsPrimaryTextColor,
+TextViewColor _syntaxColor(
+  TerminalSettingsSyntaxKind? kind,
+  TerminalSettingsPresentation presentation,
+) => switch (kind) {
+  TerminalSettingsSyntaxKind.comment => presentation.commentColor,
+  TerminalSettingsSyntaxKind.optionName => presentation.optionColor,
+  TerminalSettingsSyntaxKind.directive => presentation.directiveColor,
+  TerminalSettingsSyntaxKind.operatorToken => presentation.operatorColor,
+  TerminalSettingsSyntaxKind.value => presentation.valueColor,
+  TerminalSettingsSyntaxKind.unknownOption => presentation.unknownColor,
+  null => presentation.primaryTextColor,
 };
 
 int _styleBoundary(String text, int offset, {required bool towardEnd}) {

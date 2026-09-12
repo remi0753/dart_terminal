@@ -193,3 +193,73 @@ injectable localization boundary with English and Japanese catalogs.
   capability and Dart suites, generated references, compatibility/differential
   evidence, application matrix, and bounded security stress. The isolated PTY
   failure did not recur in either rerun and is not a blocker.
+- 2026-09-13: began the adaptive product projection from a clean tree after
+  rereading the roadmap. The native preferences are process-wide, so one
+  product controller will retain the latest immutable snapshot and fan out
+  deduplicated changes. Existing panes, sessions, palettes, Settings state, and
+  Quick Terminal configuration remain their current owners; the controller
+  only supplies an ephemeral presentation policy.
+- 2026-09-13: selected live update boundaries after inspecting the renderer,
+  Quick Terminal, and Settings ownership. Reduce Motion will choose zero as the
+  effective native window-transition duration and make the presentation clock
+  acknowledge BEL generations without starting a timed overlay. Increase
+  Contrast will use a deterministic Settings palette and black/white terminal
+  overlay edges without rewriting OSC/user palette values. Differentiate
+  Without Color will add selection edges, thicken link hover underlines, and
+  render a bell border rather than relying on a hue change. The Settings
+  window and draft stay alive while its three immutable native text views are
+  transactionally replaced because their creation-time colors have no setter.
+- 2026-09-13: duration-only soak remains intentionally skipped by user
+  direction. Focused state/render/controller tests and the complete bounded
+  repository gate remain required for this child.
+- 2026-09-13: implemented `TerminalApplicationAccessibilityProjection` as the
+  sole product snapshot owner. It starts from the generic AppKit cache,
+  subscribes to the injected typed stream, deduplicates equal values, catches
+  projection errors at the application boundary, and cancels delivery during
+  teardown. New panes, Quick Terminal, and Settings receive the retained value;
+  a distinct live event updates all existing surface owners without replacing
+  sessions, screens, palettes, the Quick Terminal lifecycle, or its stored
+  configuration.
+- 2026-09-13: Quick Terminal now resolves the configured duration through the
+  live product policy, returning exactly zero only while Reduce Motion is on.
+  The presentation clock similarly records every monotonic BEL generation but
+  creates no pulse or deadline under Reduce Motion. Enabling the preference
+  clears an in-flight pulse; disabling it does not replay suppressed bells and
+  affects only later generations.
+- 2026-09-13: the Metal compositor now keeps OSC and theme palette values
+  canonical while adapting application-owned overlays. Increase Contrast uses
+  an opaque black-or-white cursor selected from WCAG relative luminance, a
+  stronger selection fill, and two-tone selection edges. Differentiate Without
+  Color adds explicit selection edges, doubles hovered-link underline thickness,
+  and changes the visual bell from a full hue wash to a viewport border. The
+  live surface exposes the three policy flags in its content-free snapshot and
+  retains one newest full redraw on a real preference change.
+- 2026-09-13: Settings now owns complete standard and high-contrast immutable
+  presentations. All high-contrast text/syntax/diagnostic colors measure at
+  least 7:1 against the black surface; active-line geometry and diagnostic
+  underlines remain. Because generic native text colors are creation-time
+  values, a live contrast change transactionally replaces only the editor,
+  status, detail, and split views. Tests confirm the same window, draft,
+  selection, NORMAL/INSERT mode, collapsed-detail state, first responder, and
+  bounded native object count survive. The exception path restores the old
+  owners and presentation before reporting the original projection failure.
+- 2026-09-13: the first four direct `dart run` attempts were blocked before
+  test entry by the Metal build hook trying to write Clang modules beneath the
+  sandboxed user cache. `CLANG_MODULE_CACHE_PATH` did not affect `xcrun metal`.
+  Re-running in the normal macOS build environment compiled the hook. One
+  direct invocation then exposed a missing standalone `main` in the new test;
+  it was added. The aggregate test next rejected the expected stale Phase 7
+  source hashes; the canonical generator updated only the relevant application,
+  scheduler, and native-hierarchy entries, without changing its criteria.
+- 2026-09-13: final verification passed: `dart analyze` reported no issues;
+  the aggregate `dart run test/run_tests.dart` passed twice (the second run
+  includes the live Settings replacement); `git diff --check` passed; and the
+  exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` completed all PTY,
+  renderer, AppleScript, App Intents, generated-reference, compatibility,
+  differential, application evidence/acceptance, terminfo, shell-integration,
+  format, analyze, product, and bounded security-stress gates. The security
+  stress result was seed `0x509a1171` with OSC 52/desktop/worker 1024 cases and
+  store 2048 cases. No duration-only soak was run, as explicitly permitted.
+- 2026-09-13: the first scoped staging attempt could not create
+  `.git/index.lock` under the filesystem sandbox. The working tree remains
+  intact; staging and commit are retried with repository metadata write access.

@@ -14,6 +14,7 @@ import 'package:dart_terminal_app_intents_macos/testing.dart'
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'runtime_lifecycle.dart';
+import 'terminal_accessibility_presentation.dart';
 import 'terminal_action_menu.dart';
 import 'terminal_action_registry.dart';
 import 'terminal_app_intents_product.dart';
@@ -2627,6 +2628,8 @@ final class TerminalApplication {
     RuntimeLifecycleCoordinator? lifecycle;
     StreamSubscription<AppKitEvent>? applicationSubscription;
     TerminalApplicationThemeProjection<PaneId>? applicationThemeProjection;
+    TerminalApplicationAccessibilityProjection?
+    applicationAccessibilityProjection;
     final Set<PaneId> deferredExitPaneIds = <PaneId>{};
     final List<TerminalActionId> nativeActionInvocations = <TerminalActionId>[];
     final List<TerminalActionDispatchResult> actionDispatches =
@@ -2938,6 +2941,8 @@ final class TerminalApplication {
         syntheticStylePolicy: paneConfiguration.terminalSyntheticStylePolicy,
         horizontalPadding: paneConfiguration.windowPaddingHorizontal,
         verticalPadding: paneConfiguration.windowPaddingVertical,
+        accessibilityPresentation:
+            applicationAccessibilityProjection!.presentation,
         onCaretGeometryChanged: (TerminalCaretRect rectangle) {
           client.publishCaretRect(
             x: rectangle.x,
@@ -3822,6 +3827,8 @@ final class TerminalApplication {
       await settingsPresenter?.dispose();
       settingsPresenter = null;
       configurationReloadController?.dispose();
+      await applicationAccessibilityProjection?.dispose();
+      applicationAccessibilityProjection = null;
       await applicationThemeProjection?.dispose();
       for (final StreamSubscription<WindowEvent> subscription
           in windowSubscriptions.values.toList(growable: false)) {
@@ -4019,6 +4026,30 @@ final class TerminalApplication {
         application: application,
         onError: recordAsynchronousError,
       );
+      applicationAccessibilityProjection =
+          TerminalApplicationAccessibilityProjection(
+            initialPreferences: application.accessibilityDisplayPreferences,
+            events: application.onAccessibilityDisplayPreferencesChanged,
+            onChanged: (TerminalAccessibilityPresentation presentation) {
+              final TerminalQuickTerminalController? quick =
+                  quickTerminalController;
+              if (quick != null && !quick.isDisposed) {
+                quick.updateAccessibilityPresentation(presentation);
+              }
+              final TerminalSettingsInspectorPresenter? settings =
+                  settingsPresenter;
+              if (settings != null && !settings.isDisposed) {
+                settings.updateAccessibilityPresentation(presentation);
+              }
+              for (final _TerminalHierarchyProductPane owner
+                  in owners.values.toList(growable: false)) {
+                if (!owner.surface.isDisposed) {
+                  owner.surface.updateAccessibilityPresentation(presentation);
+                }
+              }
+            },
+            onError: recordAsynchronousError,
+          );
       if (runThemeAcceptance) {
         _expectLifecycle(
           application.eventProtocolVersion >= 7,
@@ -4347,6 +4378,8 @@ final class TerminalApplication {
               if (palette != null && !palette.isDisposed) palette.refresh();
             },
             onError: recordAsynchronousError,
+            accessibilityPresentation:
+                applicationAccessibilityProjection!.presentation,
           );
       quickTerminalController = createdQuickTerminal;
       focusNotificationSession = (TerminalSessionId sessionId) async {
@@ -4593,6 +4626,8 @@ final class TerminalApplication {
             if (runConfigurationAcceptance) actionDispatches.add(result);
           },
           onError: recordAsynchronousError,
+          accessibilityPresentation:
+              applicationAccessibilityProjection!.presentation,
           runtimeStatus: () =>
               '${createdQuickTerminal.shortcutStatus.settingsLine}    '
               '${createdSecureKeyboardEntry.status.settingsLine}    '

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dart_appkit/dart_appkit.dart';
 
+import 'terminal_accessibility_presentation.dart';
 import 'terminal_application_state.dart';
 import 'terminal_config.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
@@ -271,6 +272,15 @@ AppKitScreenSelection terminalQuickTerminalScreenSelection(
 Duration terminalQuickTerminalAnimationDuration(double seconds) =>
     Duration(microseconds: (seconds * Duration.microsecondsPerSecond).round());
 
+/// Resolves transient system presentation policy without changing the stored
+/// Quick Terminal animation duration.
+Duration terminalQuickTerminalEffectiveAnimationDuration(
+  double configuredSeconds,
+  TerminalAccessibilityPresentation accessibilityPresentation,
+) => accessibilityPresentation.reduceMotion
+    ? Duration.zero
+    : terminalQuickTerminalAnimationDuration(configuredSeconds);
+
 typedef TerminalQuickTerminalPaneConfigurationFactory =
     TerminalPaneConfiguration Function();
 typedef TerminalQuickTerminalConfigurationProvider =
@@ -298,12 +308,15 @@ final class TerminalQuickTerminalController {
     required TerminalQuickTerminalGlobalInvocation onGlobalInvocation,
     required void Function() onStatusChanged,
     required TerminalQuickTerminalErrorObserver onError,
+    TerminalAccessibilityPresentation accessibilityPresentation =
+        const TerminalAccessibilityPresentation.standard(),
   }) : _paneConfigurationFactory = paneConfigurationFactory,
        _configuration = configuration,
        _reconcile = reconcile,
        _onGlobalInvocation = onGlobalInvocation,
        _onStatusChanged = onStatusChanged,
-       _onError = onError;
+       _onError = onError,
+       _accessibilityPresentation = accessibilityPresentation;
 
   static const WindowPresentationConfiguration windowPresentation =
       WindowPresentationConfiguration(
@@ -335,6 +348,7 @@ final class TerminalQuickTerminalController {
   double? _lastBackingScaleFactor;
   TerminalQuickTerminalShortcutStatus _shortcutStatus =
       const TerminalQuickTerminalShortcutStatus.disabled();
+  TerminalAccessibilityPresentation _accessibilityPresentation;
   var _disposed = false;
   var _observedFocusSinceShow = false;
 
@@ -344,6 +358,17 @@ final class TerminalQuickTerminalController {
   GlobalHotKey? get registeredHotKey => _globalHotKey;
   TerminalQuickTerminalFrames? get lastFrames => _lastFrames;
   double? get lastBackingScaleFactor => _lastBackingScaleFactor;
+  TerminalAccessibilityPresentation get accessibilityPresentation =>
+      _accessibilityPresentation;
+
+  bool updateAccessibilityPresentation(
+    TerminalAccessibilityPresentation presentation,
+  ) {
+    if (_disposed) return false;
+    if (_accessibilityPresentation == presentation) return false;
+    _accessibilityPresentation = presentation;
+    return true;
+  }
 
   Future<void> toggle() => _serialize(_toggle);
 
@@ -481,8 +506,9 @@ final class TerminalQuickTerminalController {
       window.present(
         startFrame: frames.hidden,
         targetFrame: frames.target,
-        duration: terminalQuickTerminalAnimationDuration(
+        duration: terminalQuickTerminalEffectiveAnimationDuration(
           configuration.quickTerminalAnimationDuration,
+          _accessibilityPresentation,
         ),
       );
       lifecycle.complete(transition, succeeded: true);
@@ -507,8 +533,9 @@ final class TerminalQuickTerminalController {
         if (window != null && !window.isClosed && !window.isDisposed) {
           window.hide(
             targetFrame: frames.hidden,
-            duration: terminalQuickTerminalAnimationDuration(
+            duration: terminalQuickTerminalEffectiveAnimationDuration(
               configuration.quickTerminalAnimationDuration,
+              _accessibilityPresentation,
             ),
           );
         }

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
+import '../terminal_accessibility_presentation.dart';
 import '../terminal_core/terminal_hyperlink.dart';
 import '../terminal_core/terminal_screen.dart';
 import '../terminal_core/terminal_screen_set.dart';
@@ -109,6 +110,9 @@ final class TerminalLiveMetalSurfaceSnapshot {
     required this.accessibilityCursorColumn,
     required this.accessibilityContentOriginX,
     required this.accessibilityContentOriginY,
+    required this.reduceMotion,
+    required this.increaseContrast,
+    required this.differentiateWithoutColor,
     this.viewportOffset = 0,
     this.selectionGeneration = 0,
     this.selectionSpanCount = 0,
@@ -161,6 +165,9 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int accessibilityCursorColumn;
   final double accessibilityContentOriginX;
   final double accessibilityContentOriginY;
+  final bool reduceMotion;
+  final bool increaseContrast;
+  final bool differentiateWithoutColor;
   final int viewportOffset;
   final int selectionGeneration;
   final int selectionSpanCount;
@@ -196,6 +203,8 @@ final class TerminalLiveMetalSurface {
     double verticalPadding = 0,
     TerminalMetalRendererConfig rendererConfig =
         const TerminalMetalRendererConfig(),
+    TerminalAccessibilityPresentation accessibilityPresentation =
+        const TerminalAccessibilityPresentation.standard(),
   }) {
     _validateViewport(logicalWidth, logicalHeight);
     _validatePadding(horizontalPadding, verticalPadding);
@@ -258,6 +267,7 @@ final class TerminalLiveMetalSurface {
         atlas: atlas,
         initialDomain: domain,
         accessibilityClient: accessibilityClient,
+        accessibilityPresentation: accessibilityPresentation,
       );
     } on Object {
       bridge?.abandonRenderer();
@@ -289,6 +299,7 @@ final class TerminalLiveMetalSurface {
     required this.atlas,
     required TerminalMetalRendererRecoveryDomain initialDomain,
     required TerminalAccessibilityClient accessibilityClient,
+    required TerminalAccessibilityPresentation accessibilityPresentation,
   }) : _paneWorkScheduler = paneWorkScheduler,
        _catalog = catalog,
        _shapingCache = shapingCache,
@@ -300,6 +311,7 @@ final class TerminalLiveMetalSurface {
        _desiredVisible = isVisible,
        _desiredOccluded = isOccluded,
        _boundScreen = screenSet.activeScreen,
+       _accessibilityPresentation = accessibilityPresentation,
        _outbox = TerminalDamageOutbox(
          sessionId: sessionId,
          screen: screenSet.activeScreen,
@@ -340,6 +352,7 @@ final class TerminalLiveMetalSurface {
                   styleTable: screenSet.styleTable,
                   palette: screenSet.palette,
                   graphemeTable: screenSet.graphemeTable,
+                  accessibilityPresentation: _accessibilityPresentation,
                 ).compose(
                   _visibleRenderModel(model),
                   frameGeneration: frameGeneration,
@@ -375,6 +388,9 @@ final class TerminalLiveMetalSurface {
                     frameGeneration: frameGeneration,
                   ),
     );
+    if (_accessibilityPresentation.reduceMotion) {
+      scheduler.updateReduceMotion(reduceMotion: true, monotonicMicros: 0);
+    }
     recovery = TerminalMetalFailureRecoveryCoordinator(
       initialDomain: initialDomain,
       prepareReplacement: () => TerminalMetalRendererRecoveryDomain.prepare(
@@ -460,6 +476,7 @@ final class TerminalLiveMetalSurface {
   TerminalSelectionGestureSnapshot? _selectionSnapshot;
   TerminalSelectionProjection? _selectionProjection;
   TerminalHyperlinkHit? _hyperlinkHover;
+  TerminalAccessibilityPresentation _accessibilityPresentation;
   TerminalViewportRenderModel? _viewportRenderModel;
   int _publishedViewportGeneration = 0;
   int _publishedSelectionGeneration = -1;
@@ -494,6 +511,8 @@ final class TerminalLiveMetalSurface {
   TerminalSyntheticStylePolicy get syntheticStylePolicy =>
       _catalog.syntheticStylePolicy;
   TerminalPreeditState get preeditState => _preeditModel.state;
+  TerminalAccessibilityPresentation get accessibilityPresentation =>
+      _accessibilityPresentation;
 
   double get _contentLogicalWidth =>
       _logicalWidth - _effectiveHorizontalPadding * 2;
@@ -539,6 +558,22 @@ final class TerminalLiveMetalSurface {
     _requireLive();
     if (_hyperlinkHover == null) return false;
     _hyperlinkHover = null;
+    if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
+    _needsDrain = true;
+    _scheduleImmediate();
+    return true;
+  }
+
+  bool updateAccessibilityPresentation(
+    TerminalAccessibilityPresentation presentation,
+  ) {
+    _requireLive();
+    if (_accessibilityPresentation == presentation) return false;
+    _accessibilityPresentation = presentation;
+    _scheduler.updateReduceMotion(
+      reduceMotion: presentation.reduceMotion,
+      monotonicMicros: _lastMonotonicMicros,
+    );
     if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
     _needsDrain = true;
     _scheduleImmediate();
@@ -803,6 +838,10 @@ final class TerminalLiveMetalSurface {
       accessibilityCursorColumn: _accessibilityCursorColumn,
       accessibilityContentOriginX: _publishedAccessibilityContentOriginX,
       accessibilityContentOriginY: _publishedAccessibilityContentOriginY,
+      reduceMotion: _accessibilityPresentation.reduceMotion,
+      increaseContrast: _accessibilityPresentation.increaseContrast,
+      differentiateWithoutColor:
+          _accessibilityPresentation.differentiateWithoutColor,
       viewportOffset: screenSet.viewport.offset,
       selectionGeneration: _selectionSnapshot?.generation ?? 0,
       selectionSpanCount: _selectionProjection?.spans.length ?? 0,

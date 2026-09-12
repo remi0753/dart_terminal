@@ -986,6 +986,55 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
           settings.activeDetailView!.text.contains('D\nE\nT\nA\nI\nL'),
       'collapsed Settings detail did not retain a discoverable rail',
     );
+    final String retainedDraft = settings.state.text;
+    final TerminalSettingsTextSelection retainedSelection =
+        settings.state.selection;
+    final TextEditor standardEditor = settings.activeView!;
+    final TextView standardStatus = settings.activeStatusView!;
+    final TextView standardDetail = settings.activeDetailView!;
+    final TwoPaneSplitView standardEditorStatus =
+        settings.activeEditorStatusSplit!;
+    final TwoPaneSplitView standardRoot = settings.activeRootSplit!;
+    _expect(
+      settings.updateAccessibilityPresentation(
+        const TerminalAccessibilityPresentation(
+          reduceMotion: false,
+          increaseContrast: true,
+          differentiateWithoutColor: true,
+        ),
+      ),
+      'Settings did not accept a live accessibility presentation change',
+    );
+    final int accessibleEditorHandle = bindings.handleFor(settings.activeView!);
+    final int accessibleRootHandle = bindings.handleFor(
+      settings.activeRootSplit!,
+    );
+    _expect(
+      identical(settings.activeWindow, settingsWindow) &&
+          settings.state.text == retainedDraft &&
+          settings.state.selection == retainedSelection &&
+          settings.state.mode == TerminalSettingsEditorMode.normal &&
+          settings.activeView!.configuration ==
+              terminalSettingsHighContrastPresentation.editorConfiguration &&
+          settings.activeStatusView!.configuration ==
+              terminalSettingsHighContrastPresentation.statusConfiguration &&
+          settings.activeDetailView!.configuration ==
+              terminalSettingsHighContrastPresentation.detailConfiguration &&
+          settings.activeView!.lineHighlight?.color ==
+              terminalSettingsHighContrastPresentation.currentLineColor &&
+          bindings.contentViews[settingsWindowHandle] == accessibleRootHandle &&
+          bindings.splitViewFractions[accessibleRootHandle] == 0.965 &&
+          bindings.firstResponders[settingsWindowHandle] ==
+              accessibleEditorHandle &&
+          standardEditor.isDisposed &&
+          standardStatus.isDisposed &&
+          standardDetail.isDisposed &&
+          standardEditorStatus.isDisposed &&
+          standardRoot.isDisposed &&
+          bindings.objects.length == 8,
+      'live high-contrast replacement did not retain the Settings window, '
+      'draft, selection, mode, detail state, focus, or bounded ownership',
+    );
     _injectHierarchyKey(
       rawEvents,
       application,

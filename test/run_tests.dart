@@ -28,6 +28,7 @@ import 'render_resource_rebuilder_test.dart';
 import 'renderer_metrics_test.dart';
 import 'runtime_image_worker_test.dart';
 import 'runtime_lifecycle_test.dart';
+import 'terminal_accessibility_presentation_test.dart';
 import 'terminal_accessibility_snapshot_test.dart';
 import 'terminal_action_menu_test.dart';
 import 'terminal_action_registry_test.dart';
@@ -162,6 +163,7 @@ Future<void> main() async {
   runTerminalHyperlinkInteractionTests();
   runTerminalHyperlinkTests();
   runTerminalAccessibilitySnapshotTests();
+  await runTerminalAccessibilityPresentationTests();
   await runTerminalActionMenuTests();
   await runTerminalActionRegistryTests();
   await runTerminalAppleScriptTests();

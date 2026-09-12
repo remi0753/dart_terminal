@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_macos_runtime/dart_macos_runtime.dart';
+import 'package:dart_terminal/src/terminal_accessibility_presentation.dart';
 import 'package:dart_terminal/src/terminal_appkit_policy.dart';
 import 'package:dart_terminal/src/terminal_config.dart';
 import 'package:dart_terminal/src/terminal_renderer/terminal_live_metal_surface.dart';
@@ -60,6 +62,39 @@ void runTerminalAppKitPolicyTests() {
             TerminalDefaultTypography.fontSize,
     'Settings editor matches the zero-config terminal font and size',
   );
+  final TerminalSettingsPresentation highContrast =
+      terminalSettingsHighContrastPresentation;
+  final List<TextViewColor> accessibleTextColors = <TextViewColor>[
+    highContrast.primaryTextColor,
+    highContrast.secondaryTextColor,
+    highContrast.commentColor,
+    highContrast.optionColor,
+    highContrast.directiveColor,
+    highContrast.operatorColor,
+    highContrast.valueColor,
+    highContrast.unknownColor,
+    highContrast.errorColor,
+    highContrast.warningColor,
+  ];
+  _expect(
+    highContrast.surfaceColor.kind == TextViewColorKind.sRgb &&
+        highContrast.surfaceColor.red == 0 &&
+        highContrast.surfaceColor.green == 0 &&
+        highContrast.surfaceColor.blue == 0 &&
+        accessibleTextColors.every(
+          (TextViewColor color) =>
+              _contrastRatio(color, highContrast.surfaceColor) >= 7,
+        ) &&
+        terminalSettingsPresentationFor(
+              const TerminalAccessibilityPresentation(
+                reduceMotion: false,
+                increaseContrast: true,
+                differentiateWithoutColor: false,
+              ),
+            ).editorConfiguration ==
+            highContrast.editorConfiguration,
+    'Increase Contrast selects deterministic Settings colors at 7:1 or more',
+  );
 
   final WindowTabAccessory accessory = terminalTabAccessory(
     TerminalTabColor.purpleMarker,
@@ -107,6 +142,23 @@ void runTerminalAppKitPolicyTests() {
       'terminal URL policy rejects $rejected',
     );
   }
+}
+
+double _contrastRatio(TextViewColor left, TextViewColor right) {
+  final double leftLuminance = _relativeLuminance(left);
+  final double rightLuminance = _relativeLuminance(right);
+  final double lighter = math.max(leftLuminance, rightLuminance);
+  final double darker = math.min(leftLuminance, rightLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+double _relativeLuminance(TextViewColor color) {
+  double linear(double value) => value <= 0.04045
+      ? value / 12.92
+      : math.pow((value + 0.055) / 1.055, 2.4).toDouble();
+  return 0.2126 * linear(color.red) +
+      0.7152 * linear(color.green) +
+      0.0722 * linear(color.blue);
 }
 
 void _expect(bool condition, String message) {

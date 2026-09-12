@@ -2,6 +2,7 @@
 library;
 
 export 'src/runtime_lifecycle.dart' show RuntimeLifecycleScenario;
+export 'src/terminal_accessibility_presentation.dart';
 export 'src/terminal_action_menu.dart';
 export 'src/terminal_action_registry.dart';
 export 'src/terminal_app_intents_product.dart';

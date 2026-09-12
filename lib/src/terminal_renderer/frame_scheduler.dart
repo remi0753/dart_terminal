@@ -260,6 +260,7 @@ final class TerminalPresentationClock {
   TerminalCursorShape _cursorShape = TerminalCursorShape.block;
   int _lastVisualBellGeneration = 0;
   bool _visualBellActive = false;
+  bool _reduceMotion = false;
   int? _cursorDeadlineMicros;
   int? _visualBellDeadlineMicros;
   int _lastMonotonicMicros = 0;
@@ -269,6 +270,7 @@ final class TerminalPresentationClock {
   bool get isRunning => _running;
   bool get cursorDrawn => _running && _cursorDrawn;
   bool get visualBellActive => _running && _visualBellActive;
+  bool get reduceMotion => _reduceMotion;
   int get lastVisualBellGeneration => _lastVisualBellGeneration;
   int? get nextDeadlineMicros {
     if (!_running) return null;
@@ -321,7 +323,7 @@ final class TerminalPresentationClock {
 
     if (model.visualBellGeneration > _lastVisualBellGeneration) {
       _lastVisualBellGeneration = model.visualBellGeneration;
-      if (_running) {
+      if (_running && !_reduceMotion) {
         _visualBellActive = true;
         _visualBellDeadlineMicros = _boundedDeadline(
           monotonicMicros,
@@ -329,6 +331,24 @@ final class TerminalPresentationClock {
         );
       }
     }
+  }
+
+  /// Applies the transient system motion preference without changing the
+  /// configured bell duration or replaying suppressed bell generations.
+  bool updateReduceMotion({
+    required bool reduceMotion,
+    required int monotonicMicros,
+  }) {
+    _validateTime(monotonicMicros);
+    _observeTime(monotonicMicros);
+    if (_reduceMotion == reduceMotion) return false;
+    _reduceMotion = reduceMotion;
+    _advanceRevision();
+    if (reduceMotion) {
+      _visualBellActive = false;
+      _visualBellDeadlineMicros = null;
+    }
+    return true;
   }
 
   bool advance({required int monotonicMicros}) {
@@ -649,6 +669,18 @@ final class TerminalNewestFrameScheduler<Frame> {
       }
       changed = changed || tick.changed;
     }
+    if (changed && model.isInitialized) _pending = true;
+    return changed;
+  }
+
+  bool updateReduceMotion({
+    required bool reduceMotion,
+    required int monotonicMicros,
+  }) {
+    final bool changed = presentationClock.updateReduceMotion(
+      reduceMotion: reduceMotion,
+      monotonicMicros: monotonicMicros,
+    );
     if (changed && model.isInitialized) _pending = true;
     return changed;
   }

@@ -16,10 +16,87 @@ void runTerminalScreenMetalCompositorTests() {
   _testPreeditUsesTransientMetalLayers();
   _testSelectionProjectionUsesOverlayLayer();
   _testHyperlinkHoverUsesDecorationLayer();
+  _testAccessibleOverlaysUseContrastAndGeometry();
   _testPreeditRespectsRendererInstanceLimit();
   _testContentRectangleOffsetsEveryLayer();
   _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder();
   _testKittyAnimationFrameUsesContentGenerationAndNativePixels();
+}
+
+void _testAccessibleOverlaysUseContrastAndGeometry() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 4);
+  _parse(
+    screens,
+    utf8.encode('\x1b]8;https://example.test\x07AB\x1b]8;;\x07CD'),
+  );
+  final TerminalSelectionRange range = screens.viewport.selectionRange(
+    screens.viewport.anchorAt(0, 1),
+    screens.viewport.anchorAfter(0, 2),
+  )!;
+  final int hyperlink = screens.activeScreen.hyperlinkAt(0, 0);
+  final _CompositionFixture fixture = _compose(
+    screens,
+    selection: screens.viewport.projectSelection(range),
+    hoveredHyperlinkId: hyperlink,
+    visualBellActive: true,
+    accessibilityPresentation: const TerminalAccessibilityPresentation(
+      reduceMotion: false,
+      increaseContrast: true,
+      differentiateWithoutColor: true,
+    ),
+  );
+  try {
+    final List<TerminalMetalInstance> selections = fixture.composition.instances
+        .where(
+          (TerminalMetalInstance instance) =>
+              instance.kind == TerminalMetalInstanceKind.selection,
+        )
+        .toList(growable: false);
+    final List<TerminalMetalInstance> decorations = fixture
+        .composition
+        .instances
+        .where(
+          (TerminalMetalInstance instance) =>
+              instance.kind == TerminalMetalInstanceKind.decoration,
+        )
+        .toList(growable: false);
+    final TerminalMetalInstance cursor = fixture.composition.instances
+        .singleWhere(
+          (TerminalMetalInstance instance) =>
+              instance.kind == TerminalMetalInstanceKind.cursor,
+        );
+    _expect(
+      selections.length == 5 &&
+          !selections.any(
+            (TerminalMetalInstance instance) =>
+                instance.width == fixture.viewportWidth &&
+                instance.height ==
+                    fixture.composition.scheduledFrame.frame.viewportHeight,
+          ) &&
+          decorations.any(
+            (TerminalMetalInstance instance) =>
+                instance.colorRgba == 0xffffffff,
+          ) &&
+          decorations.any(
+            (TerminalMetalInstance instance) =>
+                instance.colorRgba == 0x000000ff,
+          ) &&
+          decorations
+              .where(
+                (TerminalMetalInstance instance) =>
+                    instance.colorRgba != 0xffffffff &&
+                    instance.colorRgba != 0x000000ff,
+              )
+              .every(
+                (TerminalMetalInstance instance) => instance.height >= 2,
+              ) &&
+          (cursor.colorRgba == 0xffffffff || cursor.colorRgba == 0x000000ff),
+      'accessible composition uses a bell border, two-tone selection edges, '
+      'a thick link underline, and an opaque contrasting cursor',
+    );
+  } finally {
+    fixture.dispose();
+  }
 }
 
 void _testKittyAnimationFrameUsesContentGenerationAndNativePixels() {
@@ -749,6 +826,9 @@ _CompositionFixture _compose(
   int contentOffsetX = 0,
   int contentOffsetY = 0,
   bool includeKittyImages = false,
+  bool visualBellActive = false,
+  TerminalAccessibilityPresentation accessibilityPresentation =
+      const TerminalAccessibilityPresentation.standard(),
 }) {
   final TerminalFontCatalog catalog = TerminalFontCatalog.open(
     family: fontFamily,
@@ -801,6 +881,7 @@ _CompositionFixture _compose(
           styleTable: screens.styleTable,
           palette: screens.palette,
           graphemeTable: screens.graphemeTable,
+          accessibilityPresentation: accessibilityPresentation,
         ).compose(
           model,
           frameGeneration: 1,
@@ -810,10 +891,10 @@ _CompositionFixture _compose(
           contentOffsetY: contentOffsetY,
           contentViewportWidth: contentViewportWidth,
           contentViewportHeight: contentViewportHeight,
-          presentation: const TerminalFramePresentation(
+          presentation: TerminalFramePresentation(
             revision: 1,
             cursorDrawn: true,
-            visualBellActive: false,
+            visualBellActive: visualBellActive,
             requiresFullRedraw: true,
           ),
           preedit: preedit,

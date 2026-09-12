@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
+import '../terminal_accessibility_presentation.dart';
 import '../terminal_core/terminal_screen.dart';
 import '../terminal_core/terminal_screen_set.dart';
 import '../terminal_core/terminal_style.dart';
@@ -65,6 +66,8 @@ final class TerminalScreenMetalCompositor {
     required this.styleTable,
     required this.palette,
     required this.graphemeTable,
+    this.accessibilityPresentation =
+        const TerminalAccessibilityPresentation.standard(),
   }) {
     if (!identical(shapingCache.catalog, catalog) ||
         !identical(bridge.atlas, atlas) ||
@@ -80,6 +83,7 @@ final class TerminalScreenMetalCompositor {
   final TerminalStyleTable styleTable;
   final TerminalPalette palette;
   final TerminalGraphemeTable graphemeTable;
+  final TerminalAccessibilityPresentation accessibilityPresentation;
 
   TerminalScreenMetalComposition compose(
     TerminalRenderModel model, {
@@ -208,7 +212,9 @@ final class TerminalScreenMetalCompositor {
             x: left,
             y: _underlinePixel(row, metrics, scale),
             width: right - left,
-            height: math.max(1, (metrics.underlineThickness * scale).round()),
+            height: accessibilityPresentation.differentiateWithoutColor
+                ? math.max(2, (metrics.underlineThickness * scale).round() * 2)
+                : math.max(1, (metrics.underlineThickness * scale).round()),
             colorRgba: colors.foregroundRgba,
             viewportWidth: contentWidth,
             viewportHeight: contentHeight,
@@ -234,10 +240,26 @@ final class TerminalScreenMetalCompositor {
           y: top,
           width: right - left,
           height: bottom - top,
-          colorRgba: 0x4a90e260,
+          colorRgba: accessibilityPresentation.increaseContrast
+              ? 0xffffff58
+              : 0x4a90e260,
           viewportWidth: contentWidth,
           viewportHeight: contentHeight,
         );
+        if (accessibilityPresentation.increaseContrast ||
+            accessibilityPresentation.differentiateWithoutColor) {
+          final int thickness = math.max(1, scale.round());
+          _addSelectionEdges(
+            decorations,
+            left: left,
+            top: top,
+            right: right,
+            bottom: bottom,
+            thickness: thickness,
+            viewportWidth: contentWidth,
+            viewportHeight: contentHeight,
+          );
+        }
       }
     }
 
@@ -311,17 +333,34 @@ final class TerminalScreenMetalCompositor {
     }
 
     if (presentation.visualBellActive) {
-      _addClippedSolid(
-        overlays,
-        kind: TerminalMetalInstanceKind.selection,
-        x: 0,
-        y: 0,
-        width: contentWidth,
-        height: contentHeight,
-        colorRgba: 0xffffff30,
-        viewportWidth: contentWidth,
-        viewportHeight: contentHeight,
-      );
+      if (accessibilityPresentation.differentiateWithoutColor) {
+        _addOutline(
+          overlays,
+          kind: TerminalMetalInstanceKind.selection,
+          left: 0,
+          top: 0,
+          right: contentWidth,
+          bottom: contentHeight,
+          thickness: math.max(2, scale.round() * 2),
+          colorRgba: _contrastingRgba(defaultBackground),
+          viewportWidth: contentWidth,
+          viewportHeight: contentHeight,
+        );
+      } else {
+        _addClippedSolid(
+          overlays,
+          kind: TerminalMetalInstanceKind.selection,
+          x: 0,
+          y: 0,
+          width: contentWidth,
+          height: contentHeight,
+          colorRgba: accessibilityPresentation.increaseContrast
+              ? 0xffffff58
+              : 0xffffff30,
+          viewportWidth: contentWidth,
+          viewportHeight: contentHeight,
+        );
+      }
     }
 
     if (preedit != null) {
@@ -483,6 +522,12 @@ final class TerminalScreenMetalCompositor {
       }
 
       if (presentation.cursorDrawn && model.cursorVisible) {
+        final int cursorBackground = _cursorBackgroundRgba(
+          model,
+          row: preedit?.caretRow ?? model.cursorRow,
+          column: preedit?.caretColumn ?? model.cursorColumn,
+          fallback: defaultBackground,
+        );
         _addCursorAt(
           cursors,
           row: preedit?.caretRow ?? model.cursorRow,
@@ -492,6 +537,9 @@ final class TerminalScreenMetalCompositor {
           scale: scale,
           viewportWidth: contentWidth,
           viewportHeight: contentHeight,
+          colorRgba: accessibilityPresentation.increaseContrast
+              ? _contrastingRgba(cursorBackground)
+              : _rgba(palette.cursorColor, alpha: 0xc0),
         );
       }
       final List<TerminalMetalInstance> contentInstances =
@@ -1051,6 +1099,7 @@ final class TerminalScreenMetalCompositor {
     required double scale,
     required int viewportWidth,
     required int viewportHeight,
+    required int colorRgba,
   }) {
     final int left = _columnPixel(column, metrics, scale);
     final int right = _columnPixel(column + 1, metrics, scale);
@@ -1077,10 +1126,130 @@ final class TerminalScreenMetalCompositor {
       y: rectangle.$2,
       width: rectangle.$3,
       height: rectangle.$4,
-      colorRgba: _rgba(palette.cursorColor, alpha: 0xc0),
+      colorRgba: colorRgba,
       viewportWidth: viewportWidth,
       viewportHeight: viewportHeight,
     );
+  }
+
+  int _cursorBackgroundRgba(
+    TerminalRenderModel model, {
+    required int row,
+    required int column,
+    required int fallback,
+  }) {
+    if (row < 0 || row >= model.rows || column < 0 || column >= model.columns) {
+      return fallback;
+    }
+    return _colors(
+      model.foregroundAt(row, column),
+      model.backgroundAt(row, column),
+      styleTable.attributesAt(model.styleAt(row, column)),
+    ).backgroundRgba;
+  }
+
+  static void _addSelectionEdges(
+    List<TerminalMetalInstance> output, {
+    required int left,
+    required int top,
+    required int right,
+    required int bottom,
+    required int thickness,
+    required int viewportWidth,
+    required int viewportHeight,
+  }) {
+    _addClippedSolid(
+      output,
+      kind: TerminalMetalInstanceKind.decoration,
+      x: left,
+      y: top,
+      width: right - left,
+      height: thickness,
+      colorRgba: 0xffffffff,
+      viewportWidth: viewportWidth,
+      viewportHeight: viewportHeight,
+    );
+    _addClippedSolid(
+      output,
+      kind: TerminalMetalInstanceKind.decoration,
+      x: left,
+      y: bottom - thickness,
+      width: right - left,
+      height: thickness,
+      colorRgba: 0x000000ff,
+      viewportWidth: viewportWidth,
+      viewportHeight: viewportHeight,
+    );
+    _addClippedSolid(
+      output,
+      kind: TerminalMetalInstanceKind.decoration,
+      x: left,
+      y: top,
+      width: thickness,
+      height: bottom - top,
+      colorRgba: 0xffffffff,
+      viewportWidth: viewportWidth,
+      viewportHeight: viewportHeight,
+    );
+    _addClippedSolid(
+      output,
+      kind: TerminalMetalInstanceKind.decoration,
+      x: right - thickness,
+      y: top,
+      width: thickness,
+      height: bottom - top,
+      colorRgba: 0x000000ff,
+      viewportWidth: viewportWidth,
+      viewportHeight: viewportHeight,
+    );
+  }
+
+  static void _addOutline(
+    List<TerminalMetalInstance> output, {
+    required TerminalMetalInstanceKind kind,
+    required int left,
+    required int top,
+    required int right,
+    required int bottom,
+    required int thickness,
+    required int colorRgba,
+    required int viewportWidth,
+    required int viewportHeight,
+  }) {
+    for (final (int, int, int, int) edge in <(int, int, int, int)>[
+      (left, top, right - left, thickness),
+      (left, bottom - thickness, right - left, thickness),
+      (left, top, thickness, bottom - top),
+      (right - thickness, top, thickness, bottom - top),
+    ]) {
+      _addClippedSolid(
+        output,
+        kind: kind,
+        x: edge.$1,
+        y: edge.$2,
+        width: edge.$3,
+        height: edge.$4,
+        colorRgba: colorRgba,
+        viewportWidth: viewportWidth,
+        viewportHeight: viewportHeight,
+      );
+    }
+  }
+
+  static int _contrastingRgba(int backgroundRgba) {
+    final int rgb = backgroundRgba >>> 8;
+    final double red = _linearSrgb((rgb >>> 16) & 0xff);
+    final double green = _linearSrgb((rgb >>> 8) & 0xff);
+    final double blue = _linearSrgb(rgb & 0xff);
+    final double luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    return luminance > 0.179 ? 0x000000ff : 0xffffffff;
+  }
+
+  static double _linearSrgb(int component) {
+    final double value = component / 255;
+    return value <= 0.04045
+        ? value / 12.92
+        : math.pow((value + 0.055) / 1.055, 2.4).toDouble();
   }
 
   static int _underlinePixel(
