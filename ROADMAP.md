@@ -1251,7 +1251,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] `dart_appkit` notification permission／result／response substrate
   - [ ] App Intents native capability、runtime metadata packaging
     - [x] `dart_macos_runtime` App Intents manifest／metadata bundle substrate
-    - [ ] terminal-specific Swift App Intents capability／bounded command queue
+    - [x] terminal-specific Swift App Intents capability／bounded command queue
     - [ ] consumer declaration、dependency gates、bundle audit
   - [ ] product configuration、shared-action、Settings、lifecycle integration
   - [ ] Developer JIT／Release AOT acceptance、manual checklist、documentation closure、親項目完了判定

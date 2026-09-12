@@ -6,8 +6,8 @@
 - Task: App Intents/Shortcuts and notifications
 - Started: 2026-09-12
 - State: in progress
-- Current subtask: `dart_macos_runtime` App Intents manifest/metadata bundle
-  substrate
+- Current subtask: terminal-specific Swift App Intents capability and bounded
+  command queue
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -255,6 +255,45 @@ second application-state owner.
   exact metadata file set. An omitted declaration preserves the legacy bundle
   shape. Missing/oversized source, engine-image collision, processor failure,
   absent output, and tools-version mismatch all fail before bundle signing.
+- The terminal capability is a dependency-owned Swift image rather than a Dart
+  native-asset hook. The runtime already links that same image into the host for
+  static App Intents discovery; the Dart facade therefore opens the staged
+  Frameworks image explicitly and validates its versioned C ABI instead of
+  producing a duplicate native image.
+- The Swift source declares exactly three macOS 14 foreground, parameterless
+  intents: new window, new tab, and Quick Terminal toggle. Its shortcuts
+  provider advertises exactly those three actions. Compiler metadata tests parse
+  the generated action model and require three `openAppWhenRun` actions with
+  empty parameter lists and three matching automatic shortcuts; source-text
+  matching alone was rejected as insufficient discovery evidence.
+- One `NSLock`-protected process queue owns only action enum, positive monotonic
+  operation token, generation, timeout, and an optional Swift continuation. It
+  is disabled at session start and capped at 16 pending operations. App Intent
+  execution may admit from framework threads, while start/configuration/poll/
+  completion/shutdown C calls require the AppKit main thread. Dart never runs on
+  the App Intent callback stack.
+- Enable-state transitions advance the generation; disable and shutdown drain
+  all queue/pending ownership before resuming callers. `take` is FIFO and marks
+  an operation taken, `complete` requires the exact current generation and a
+  taken live token, and timeout removes both queued and pending ownership.
+  Invalid action/disposition, disabled, overflow, untaken, duplicate, stale,
+  timeout, and post-shutdown paths have explicit stable statuses.
+- The exported deterministic self-automation seam accepts only the same three
+  enum codes into the same admission path. It cannot carry parameters or invoke
+  Siri/Shortcuts, and is exposed to Dart only from the package testing library.
+  A Swift async test invokes the real `AppIntent.perform()` methods and proves
+  completion success plus disabled, timeout, and shutdown error resumption.
+- Final ownership review found that the first timeout closure captured the whole
+  pending-command object, which would have retained an already-resumed Swift
+  continuation until the deadline. The closure now captures only operation and
+  generation integers plus a weak queue reference; completion/disable/shutdown
+  therefore release the continuation immediately while the harmless stale timer
+  later observes no matching owner.
+- The Dart facade dynamically resolves and ABI-checks the already-linked Swift
+  image. A real dylib FFI test pins all typedefs and verifies that standalone
+  Dart preserves the native wrong-main-thread and not-started statuses; fake
+  bindings separately cover typed bounds, enum decoding, exact opaque
+  completion, retryable shutdown failure, and self-automation rejection.
 
 ## Validation log
 
@@ -311,6 +350,44 @@ second application-state owner.
   with zero changes, no analyzer issues, fixed Phase 9 stress seed
   `0x509a1171`, and all freshness, compatibility, integration, and product
   tests passing.
+- Focused dependency validation passed for the new capability:
+  `make terminal-app-intents-native-test terminal-app-intents-dart-test` builds
+  the strict C/C++ headers, Swift 6 dylib, native queue test, real async
+  `perform()` lifecycle test, Dart facade tests, and real Xcode compiler metadata
+  audit. `swift-format lint --strict`, Xcode `clang-format --dry-run --Werror`,
+  Dart format, and package analysis also pass.
+- The first formatting probe used `/usr/bin/clang-format`, which is absent on
+  this Xcode installation. `xcrun --find clang-format` resolved the toolchain
+  binary; the initial in-place run was sandbox-blocked and the authorized rerun
+  formatted only the four new C/C++ files. A later focused `make` invocation
+  from the package directory had no local Makefile; rerunning the same targets
+  from the repository root passed. Neither failed attempt changed product
+  semantics or weakened a test.
+- The first exact dependency `make test` run passed every App Intents test but
+  encountered the previously documented race in the unrelated PTY
+  `live Dart child cannot steal native PTY completion` case: the exit status was
+  correct but `externalReapObserved` had not reached the diagnostic listener
+  before `firstWhere`. No source was changed. The immediate focused
+  `make dpty-dart-test` rerun passed all PTY cases, including that event.
+- The unchanged exact dependency gate
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` then passed completely,
+  including both App Intents native tests, compiler metadata extraction, all
+  package/native/runtime/runner tests, build hooks, examples, and smoke tests.
+- After the continuation-capture fix and real Dart FFI boundary coverage, the
+  same exact dependency `make test` gate was run once more and passed without a
+  retry. This is the final validation image for the capability commit.
+- Dependency commit `9a2a014` (`Add bounded terminal App Intents capability`)
+  contains only the new Swift/C ABI/Dart package, its focused metadata and
+  lifecycle tests, documentation, and Make integration. The post-commit
+  ROADMAP reread confirmed this nested child as the current unit pending its
+  consumer-side progress record; the next implementation goal remains consumer
+  declaration, dependency gates, and exact bundle audit.
+- 2026-09-12, `/Users/remi/dart/dart_terminal`, Apple M1/arm64: the exact
+  consuming `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passed after
+  the capability commit and ROADMAP update. It reported 280 formatted files
+  with zero changes, no analyzer issues, fixed Phase 9 stress seed
+  `0x509a1171`, and every freshness, compatibility, integration, and product
+  test passing.
 
 ## Handoff and remaining work
 
@@ -318,6 +395,21 @@ second application-state owner.
   The generic runtime App Intents declaration/build/metadata unit is implemented,
   fully validated, committed as `f76c331`, and marked complete in the ROADMAP.
   Its consuming full gate also passes. The terminal-specific Swift capability
-  and bounded command queue is the next unit after this progress commit and
-  mandatory ROADMAP reread. Consumer declaration and product wiring have not
-  started early.
+  and bounded command queue is implemented, fully validated, committed as
+  `9a2a014`, marked complete in the ROADMAP, and its consuming full gate passes.
+  It still requires this progress commit before the next mandatory reread.
+  Consumer declaration and product wiring have not started early.
+
+### Completed capability unit boundary
+
+- One dependency-owned terminal App Intents package contains parameterless new
+  window, new tab, and Quick Terminal toggle declarations plus their static App
+  Shortcuts provider. No product manifest declaration belongs in this unit.
+- Its closed native/Dart capability contract admits only those three
+  action codes into a fixed-capacity FIFO. Each accepted operation has one
+  positive process-local token and one terminal result; disabled, overflow,
+  timeout, stale-generation, and shutdown states reject without queue growth.
+- Native and package tests prove Swift-to-native admission without direct Dart
+  reentry, main-isolate polling/drain semantics, exact-once completion, bounded
+  ownership, and teardown. The next consumer-declaration unit will decide how
+  the product loads, polls, and dispatches these commands.
