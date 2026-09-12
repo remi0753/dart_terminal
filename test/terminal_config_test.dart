@@ -691,6 +691,18 @@ working-directory = /from-file
     runtimeNativeContent.runtimeNativeContentTest,
     'TerminalOptions admits the isolated native content acceptance gate',
   );
+  final TerminalOptions runtimeAppleScript = TerminalOptions.parse(
+    const <String>['--no-config', '--runtime-applescript-test'],
+    environment: const <String, String>{'DT_RUNTIME_APPLESCRIPT_TEST': '1'},
+    configFileSystem: files,
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    runtimeAppleScript.runtimeAppleScriptTest,
+    'TerminalOptions admits the isolated AppleScript acceptance gate',
+  );
   final TerminalOptions runtimeQuickTerminal = TerminalOptions.parse(
     const <String>[
       '--no-config',
@@ -800,6 +812,29 @@ working-directory = /from-file
       configFileSystem: files,
     ),
     'native content acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>['--no-config', '--runtime-applescript-test'],
+      environment: const <String, String>{},
+      configFileSystem: files,
+    ),
+    'AppleScript acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>[
+        '--no-config',
+        '--runtime-applescript-test',
+        '--runtime-osc52-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_APPLESCRIPT_TEST': '1',
+        'DT_RUNTIME_OSC52_TEST': '1',
+      },
+      configFileSystem: files,
+    ),
+    'AppleScript acceptance cannot be combined with another runtime test',
   );
   _expectThrows(
     () => TerminalOptions.parse(

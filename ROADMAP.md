@@ -1240,9 +1240,9 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] `dart_macos_runtime` scripting-definition manifest／bundle substrate
     - [x] terminal-specific cached hierarchy／suspended-command native package
     - [x] dependency gates、consumer declaration、bundle audit
-  - [ ] product integration、両runtime acceptance、manual checklist
+  - [x] product integration、両runtime acceptance、manual checklist
     - [x] product session adapter、snapshot／command policy tests
-    - [ ] Developer JIT／Release AOT self-automation acceptance、manual checklist
+    - [x] Developer JIT／Release AOT self-automation acceptance、manual checklist
   - [ ] documentation/evidence closure、親項目完了判定
 - [ ] App Intents/Shortcuts、notifications
 - [ ] complete VoiceOver/Accessibility Inspector pass

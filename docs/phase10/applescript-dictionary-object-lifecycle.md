@@ -6,8 +6,7 @@
 - Task: AppleScript dictionary and object lifecycle
 - Started: 2026-09-12
 - State: active
-- Current subtask: native AppleScript capability and runtime dictionary
-  packaging
+- Current subtask: product integration and shipped-runtime acceptance
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -562,3 +561,89 @@ authoritative hierarchy, paste safety, or teardown rules.
 - The first task-scoped staging attempt was denied when the sandbox could not
   create `.git/index.lock`; no paths were staged or modified by Git. Staging is
   retried with repository-metadata permission and the exact reviewed file list.
+- Commit `19517ce` records the product session adapter and leaves the terminal
+  worktree clean. The mandatory full ROADMAP reread selects Developer JIT /
+  Release AOT self-automation acceptance and the manual checklist as the next
+  unit; documentation closure remains later.
+- Runtime acceptance must not send external Apple Events or alter the user's
+  Automation/TCC database. The native package already has a packet-enqueue seam
+  compiled only for its native unit tests. This unit will promote the same
+  strictly validated, nil-`NSScriptCommand` queue path to an explicitly named
+  self-automation API, expose it only through the package testing surface, and
+  gate all product use behind both a private CLI flag and environment variable.
+  Thus shipped JIT/AOT code exercises the real native cache/queue/completion
+  ABI without requesting external automation authority; Script Editor,
+  `osascript`, TCC prompt/denial/retry, and System Settings remain manual-only.
+- The dependency promotes that existing native-test queue entry to
+  `dtas_enqueue_self_automation_command` in every packaged capability and
+  exposes its bounded wrapper only from `testing.dart`. Empty/oversized Dart
+  packets fail before FFI, standalone Dart retains the native wrong-thread
+  error, and the native suite exercises valid/invalid/duplicate/disabled
+  packets through the same production implementation. The exact dependency
+  full gate passes: native headers/libraries/suites, runtime, renderer,
+  AppleScript, PTY, AppKit, launcher, and hello-window validation all succeed
+  with no analysis issues.
+- Dependency commit `e61d1fa` records the bounded self-automation surface and
+  leaves `dart_appkit` clean. The post-commit ROADMAP reread keeps the current
+  terminal task on Developer JIT / Release AOT AppleScript acceptance.
+- External dictionary discovery, Script Editor and `osascript` behavior,
+  first-use consent, denial/retry, System Settings visibility, live setting
+  toggles, stale-object errors, and cross-runtime cleanup are specified in
+  [the manual acceptance checklist](applescript-manual-acceptance.md). Automated
+  self-automation remains intentionally unable to mutate or bypass TCC.
+- The first focused analysis invocation stopped before analysis because Dart
+  attempted to update `/Users/remi/.dart-tool/dart-flutter-telemetry-session.json`
+  outside the writable sandbox. Formatting had completed (five files checked,
+  three changed). This is an environment-only failure; retry sets
+  `DART_SUPPRESS_ANALYTICS=true` for every Dart process.
+- Focused analysis then passes with no issues. The escalated option-test run
+  reaches the repository gate and stops because Phase 7 AppKit acceptance is
+  stale after changing `terminal_application.dart`; no functional assertion
+  failed. Regenerate that tracked source-hash evidence before rerunning the
+  option tests and retain the regenerated acceptance file in this task.
+- The first Developer JIT shipped-bundle AppleScript run successfully creates
+  the second window, third tab, and fourth split pane, and the native PTY log
+  confirms the `inputText` command writes and completes 42 bytes. Acceptance
+  then times out because the screen assertion searches for the whole marker in
+  one row; the Release AOT half is therefore not run. This is not a queue or PTY
+  failure. Inspect existing screen-search helpers and the split pane's effective
+  column width, then use a bounded marker/assertion that still proves exact real
+  PTY input without assuming it fits one rendered row.
+- A raw-reader fixture replaces the row-local echo check, but its first run
+  correctly observes that zsh disables bracketed-paste mode while executing a
+  command and fails before sending scripted input. Align the fixture with the
+  established clipboard acceptance: explicitly emit DECSET 2004 before READY,
+  verify the exact framed body in the real PTY reader, then emit DECRST 2004.
+- That retry still observes the mode as disabled because the literal READY
+  marker is visible in the typed fixture command before the shell executes it,
+  causing an early screen-search match. Emit marker suffixes through `printf`
+  arguments so only executed READY/EXACT/MISMATCH output forms each complete
+  marker; this is the same anti-false-positive pattern as other runtime gates.
+- Final `make RUNTIME_ARCH=arm64 runtime-applescript-integration` passes for
+  both shipped bundles. Developer JIT reports 1,802 ms and Release AOT 1,016 ms.
+  Each verifies the reviewed bundled dictionary, ten exactly-once native command
+  completions, stable IDs, real-PTY exact bracketed input, focus and all close
+  scopes, stale-target stability, one disabled rejection, live re-enable, four
+  clean session shutdowns, zero text clients, zero native handles, and no
+  external Apple Event or TCC mutation.
+- The final exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` passes every
+  freshness, compatibility, differential, application, terminfo, and shell
+  integration check; formats 280 files with zero changes; analyzes with no
+  issues; passes the fixed-seed Phase 9 security stress; and ends with
+  `dart_terminal tests passed`.
+- Final source and bundle audits pass. The source audit covers 513 tracked
+  files with zero product-native sources and one reviewed test-native source.
+  Both arm64 bundles report one scripting definition, two native capabilities,
+  one helper, and one asset set. Phase 7 acceptance regeneration changes only
+  the two expected hashes for the final `terminal_application.dart` source.
+
+## Runtime acceptance completion
+
+- 2026-09-12: **Product integration, both shipped runtimes, and manual
+  checklist — complete.** The committed product adapter plus this runtime unit
+  cover standard-only snapshots, every scoped command through existing policy,
+  exact native completion/rejection counts, real-PTY exact input, stale IDs,
+  live disable/re-enable, Developer JIT/Release AOT parity, dictionary/plist
+  packaging, source/bundle/full gates, zero-owner teardown, and the external
+  discovery/TCC checklist. No manual consent result is claimed or fabricated;
+  the checklist is the controlled follow-up for user-authorized macOS testing.

@@ -26,6 +26,7 @@ enum _Suite {
   display,
   hierarchy,
   actions,
+  appleScript,
   configuration,
   theme,
   shellIntegration,
@@ -47,6 +48,7 @@ enum _Suite {
     _Suite.desktopSignals => 'desktop-signals',
     _Suite.osc52 => 'osc52',
     _Suite.nativeContent => 'native-content',
+    _Suite.appleScript => 'applescript',
     _Suite.quickTerminal => 'quick-terminal',
     _Suite.secureKeyboardEntry => 'secure-keyboard-entry',
     _ => name,
@@ -168,8 +170,9 @@ _Options _parseOptions(List<String> arguments) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
           'configuration, theme, shell-integration, desktop-signals, '
-          'osc52, native-content, quick-terminal, secure-keyboard-entry, clipboard, '
-          'lifecycle, traffic, resource, fault, or all',
+          'osc52, native-content, applescript, quick-terminal, '
+          'secure-keyboard-entry, clipboard, lifecycle, traffic, resource, '
+          'fault, or all',
         );
       }
       suite = selected;
@@ -1638,6 +1641,84 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'windows=2 tabs=3 panes=4 elapsed_ms='
     '${observation.elapsed.inMilliseconds}',
+  );
+}
+
+Future<void> _runAppleScript(_Options options, _Invocation invocation) async {
+  final String contentsPath =
+      '${Directory(options.bundlePath).absolute.path}/Contents';
+  _expect(
+    await _plistValue('$contentsPath/Info.plist', 'NSAppleScriptEnabled') ==
+        'true',
+    'AppleScript acceptance bundle is not scriptable',
+  );
+  _expect(
+    await _plistValue('$contentsPath/Info.plist', 'OSAScriptingDefinition') ==
+        'DartTerminal.sdef',
+    'AppleScript acceptance bundle does not select DartTerminal.sdef',
+  );
+  final File dictionary = File('$contentsPath/Resources/DartTerminal.sdef');
+  _expect(await dictionary.exists(), 'AppleScript dictionary is not bundled');
+  final String dictionarySource = await dictionary.readAsString();
+  _expect(
+    RegExp(r'<command name="').allMatches(dictionarySource).length == 6 &&
+        dictionarySource.contains('class name="window"') &&
+        dictionarySource.contains('class name="tab"') &&
+        dictionarySource.contains('class name="terminal"'),
+    'bundled AppleScript dictionary does not expose the reviewed surface',
+  );
+
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>[
+      '--no-config',
+      '--shell-integration=none',
+      '--runtime-applescript-test',
+    ],
+    environment: const <String, String>{'DT_RUNTIME_APPLESCRIPT_TEST': '1'},
+    timeout: const Duration(seconds: 45),
+  );
+  _expect(
+    observation.status == 0,
+    'AppleScript application exited with status ${observation.status}; '
+    'stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'AppleScript application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_APPLESCRIPT_TEST dictionary=true '
+          r'self_automation=true tcc_untouched=true stable_ids=true '
+          r'input_exact=true focus=true close_terminal=true close_tab=true '
+          r'close_window=true stale=true disable=true reenable=true '
+          r'resumed=10 rejected=1 sessions_clean=4 text_clients=0 '
+          r'native_handles=0$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted exact AppleScript lifecycle acceptance',
+  );
+  _expect(
+    observation.stdoutText.contains('Dart Terminal shut down cleanly.') &&
+        !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
+        !observation.stdoutText.contains('HIERARCHY_MISMATCH'),
+    'AppleScript acceptance leaked input, hierarchy, or teardown state',
+  );
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
+  );
+  stdout.writeln(
+    'RUNTIME_APPLESCRIPT_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'dictionary=true commands=10 tcc_untouched=true '
+    'elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }
 
@@ -3499,6 +3580,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.actions || options.suite == _Suite.all) {
       await _runUserActions(options, invocation);
+    }
+    if (options.suite == _Suite.appleScript || options.suite == _Suite.all) {
+      await _runAppleScript(options, invocation);
     }
     if (options.suite == _Suite.nativeContent || options.suite == _Suite.all) {
       await _runNativeContent(options, invocation);

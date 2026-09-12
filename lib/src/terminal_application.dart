@@ -120,6 +120,7 @@ final class TerminalOptions {
     this.runtimeNativeContentTest = false,
     this.runtimeQuickTerminalTest = false,
     this.runtimeSecureKeyboardEntryTest = false,
+    this.runtimeAppleScriptTest = false,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
@@ -172,6 +173,7 @@ final class TerminalOptions {
     var runtimeNativeContentTest = false;
     var runtimeQuickTerminalTest = false;
     var runtimeSecureKeyboardEntryTest = false;
+    var runtimeAppleScriptTest = false;
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
@@ -312,6 +314,15 @@ final class TerminalOptions {
           );
         }
         runtimeSecureKeyboardEntryTest = true;
+        continue;
+      }
+      if (argument == '--runtime-applescript-test') {
+        if (runtimeAppleScriptTest) {
+          throw const FormatException(
+            '--runtime-applescript-test may only be supplied once',
+          );
+        }
+        runtimeAppleScriptTest = true;
         continue;
       }
       if (argument == '--runtime-restoration-test') {
@@ -526,6 +537,36 @@ final class TerminalOptions {
         selectedEnvironment['DT_RUNTIME_SECURE_KEYBOARD_ENTRY_TEST'] != '1') {
       throw const FormatException(
         'Secure Keyboard Entry test requires the integration-test gate',
+      );
+    }
+    if (runtimeAppleScriptTest &&
+        selectedEnvironment['DT_RUNTIME_APPLESCRIPT_TEST'] != '1') {
+      throw const FormatException(
+        'AppleScript test requires the integration-test gate',
+      );
+    }
+    if (runtimeAppleScriptTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeShellIntegrationTest ||
+            runtimeDesktopSignalsTest ||
+            runtimeOsc52Test ||
+            runtimeNativeContentTest ||
+            runtimeQuickTerminalTest ||
+            runtimeSecureKeyboardEntryTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'AppleScript test cannot be combined with another runtime test',
       );
     }
     if (runtimeSecureKeyboardEntryTest &&
@@ -777,6 +818,7 @@ final class TerminalOptions {
       runtimeNativeContentTest: runtimeNativeContentTest,
       runtimeQuickTerminalTest: runtimeQuickTerminalTest,
       runtimeSecureKeyboardEntryTest: runtimeSecureKeyboardEntryTest,
+      runtimeAppleScriptTest: runtimeAppleScriptTest,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
@@ -821,6 +863,7 @@ final class TerminalOptions {
   final bool runtimeNativeContentTest;
   final bool runtimeQuickTerminalTest;
   final bool runtimeSecureKeyboardEntryTest;
+  final bool runtimeAppleScriptTest;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
@@ -910,6 +953,7 @@ final class TerminalApplication {
         options.runtimeNativeContentTest ||
         options.runtimeQuickTerminalTest ||
         options.runtimeSecureKeyboardEntryTest ||
+        options.runtimeAppleScriptTest ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -937,6 +981,7 @@ final class TerminalApplication {
         runQuickTerminalAcceptance: options.runtimeQuickTerminalTest,
         runSecureKeyboardEntryAcceptance:
             options.runtimeSecureKeyboardEntryTest,
+        runAppleScriptAcceptance: options.runtimeAppleScriptTest,
         osc52Clipboard: options.runtimeOsc52Test
             ? _MemoryTerminalOsc52Clipboard()
             : null,
@@ -2423,6 +2468,7 @@ final class TerminalApplication {
       !options.runtimeNativeContentTest &&
       !options.runtimeQuickTerminalTest &&
       !options.runtimeSecureKeyboardEntryTest &&
+      !options.runtimeAppleScriptTest &&
       !options.runtimeRestorationTest &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
@@ -2445,6 +2491,7 @@ final class TerminalApplication {
     bool runNativeContentAcceptance = false,
     bool runQuickTerminalAcceptance = false,
     bool runSecureKeyboardEntryAcceptance = false,
+    bool runAppleScriptAcceptance = false,
     TerminalOsc52ClipboardPort? osc52Clipboard,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
@@ -2506,6 +2553,7 @@ final class TerminalApplication {
     TerminalActionDispatchScheduler? keyBindingActionScheduler;
     TerminalActionDispatcher? actionDispatcher;
     TerminalExternalPasteController<PaneId>? externalPasteController;
+    TerminalAppleScriptMacosNativePort? appleScriptNativePort;
     TerminalAppleScriptProductSession? appleScriptSession;
     Future<void> Function(PaneId? paneId)? closePaneRequest;
     Future<void> Function(PaneId paneId, TerminalExternalContent content)?
@@ -2633,7 +2681,8 @@ final class TerminalApplication {
                   runOsc52Acceptance ||
                   runNativeContentAcceptance ||
                   runQuickTerminalAcceptance ||
-                  runSecureKeyboardEntryAcceptance;
+                  runSecureKeyboardEntryAcceptance ||
+                  runAppleScriptAcceptance;
               final Map<String, String> shellEnvironment =
                   usesDeterministicShell
                   ? <String, String>{
@@ -3643,6 +3692,7 @@ final class TerminalApplication {
       nativeContentReconcileRequest = null;
       appleScriptSession?.dispose();
       appleScriptSession = null;
+      appleScriptNativePort = null;
       pasteConfirmationGate.clear();
       externalPasteController?.dispose();
       externalPasteController = null;
@@ -4081,11 +4131,14 @@ final class TerminalApplication {
                 !createdPaneCloseCoordinator.removalInProgress &&
                 !createdPaneCloseCoordinator.applicationQuitInProgress,
           );
+      final TerminalAppleScriptMacosNativePort createdAppleScriptNativePort =
+          TerminalAppleScriptMacosNativePort.open();
+      appleScriptNativePort = createdAppleScriptNativePort;
       appleScriptSession = TerminalAppleScriptProductSession(
         state: state,
         enabled:
             configurationAuthority.newSessionConfiguration.macosAppleScript,
-        nativePort: TerminalAppleScriptMacosNativePort.open(),
+        nativePort: createdAppleScriptNativePort,
         executor: appleScriptExecutor,
         titleForTab: (TerminalTabState tab) => presentationResolver
             .resolve(tab, fallbackTitle: _productWindowTitle)
@@ -4589,6 +4642,20 @@ final class TerminalApplication {
           closed: closed,
           prompt: acceptancePrompt.trimRight(),
         );
+      } else if (runAppleScriptAcceptance) {
+        await _exerciseAppleScriptProduct(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          dispatcher: dispatcher,
+          session: appleScriptSession!,
+          nativePort: appleScriptNativePort!,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
       } else if (runSecureKeyboardEntryAcceptance) {
         await _exerciseSecureKeyboardEntryProduct(
           application: application,
@@ -4763,6 +4830,301 @@ final class TerminalApplication {
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
     }
     stdout.writeln('Dart Terminal shut down cleanly.');
+  }
+
+  static Future<void> _exerciseAppleScriptProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalActionDispatcher dispatcher,
+    required TerminalAppleScriptProductSession session,
+    required TerminalAppleScriptMacosNativePort nativePort,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    Future<void> waitFor(
+      bool Function() predicate,
+      String message, {
+      Duration timeout = const Duration(seconds: 10),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (!predicate() && deadline.elapsed < timeout) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      _expectLifecycle(predicate(), message);
+    }
+
+    var operationId = 0;
+    Future<void> enqueue(
+      String kind, {
+      String? target,
+      String? direction,
+      String? text,
+      required bool Function() completed,
+    }) async {
+      final int resumed = nativePort.summary.resumedCommandCount;
+      final int enqueueStatus = nativePort.enqueueSelfAutomationCommand(
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode(<String, Object?>{
+              'version': 1,
+              'operationId': ++operationId,
+              'kind': kind,
+              'target': target,
+              'direction': direction,
+              'text': text,
+            }),
+          ),
+        ),
+      );
+      _expectLifecycle(
+        enqueueStatus == 0,
+        'self-automation command was rejected with status $enqueueStatus',
+      );
+      final TerminalAppleScriptNativeSummary queued = nativePort.summary;
+      _expectLifecycle(
+        queued.pendingCommandCount == 1 && queued.queuedCommandCount == 1,
+        'self-automation command did not enter the native pending queue',
+      );
+      await waitFor(() {
+        final TerminalAppleScriptNativeSummary current = nativePort.summary;
+        return current.resumedCommandCount == resumed + 1 &&
+            current.pendingCommandCount == 0 &&
+            current.queuedCommandCount == 0 &&
+            completed();
+      }, 'self-automation command $kind did not complete exactly once');
+    }
+
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1 &&
+          hierarchy.paneResourceCount == 1 &&
+          sessions.length == 1 &&
+          owners.length == 1 &&
+          session.isEnabled,
+      'AppleScript product did not start from a live 1/1/1 hierarchy',
+    );
+    final TerminalWindowState firstWindow = state.windows.single;
+    final TerminalTabState firstTab = firstWindow.selectedTab;
+    final PaneId firstPaneId = firstTab.focusedPaneId;
+    await _waitForAsciiMarker(sessions[firstPaneId]!, prompt);
+    final TerminalAppleScriptNativeSummary initial = nativePort.summary;
+    _expectLifecycle(
+      initial.started &&
+          initial.enabled &&
+          initial.windowCount == 1 &&
+          initial.tabCount == 1 &&
+          initial.terminalCount == 1 &&
+          initial.pendingCommandCount == 0,
+      'initial native AppleScript cache does not match product state',
+    );
+
+    await enqueue(
+      'newWindow',
+      completed: () =>
+          state.windowCount == 2 &&
+          state.tabCount == 2 &&
+          state.paneCount == 2 &&
+          nativePort.summary.windowCount == 2,
+    );
+    final TerminalWindowState secondWindow = state.windowForId(
+      const TerminalWindowId(2),
+    )!;
+    await _waitForAsciiMarker(
+      sessions[secondWindow.selectedTab.focusedPaneId]!,
+      prompt,
+    );
+    await enqueue(
+      'newTab',
+      target: 'window:${firstWindow.id.value}',
+      completed: () =>
+          state.windowForId(firstWindow.id)!.tabs.length == 2 &&
+          state.tabCount == 3 &&
+          state.paneCount == 3 &&
+          nativePort.summary.tabCount == 3,
+    );
+    final TerminalTabState thirdTab = state.tabForId(const TerminalTabId(3))!;
+    await _waitForAsciiMarker(sessions[thirdTab.focusedPaneId]!, prompt);
+    await enqueue(
+      'split',
+      target: 'terminal:${firstPaneId.value}',
+      direction: 'right',
+      completed: () =>
+          firstTab.paneIds.length == 2 &&
+          state.paneCount == 4 &&
+          nativePort.summary.terminalCount == 4,
+    );
+    final PaneId splitPaneId = firstTab.focusedPaneId;
+    _expectLifecycle(
+      splitPaneId == const PaneId(4) &&
+          firstTab.paneIds.join(',') == '${firstPaneId.value},4',
+      'scripted split did not preserve stable IDs and right placement',
+    );
+    final TerminalSession splitSession = sessions[splitPaneId]!;
+    await _waitForAsciiMarker(splitSession, prompt);
+    final _TerminalHierarchyProductPane splitOwner = owners[splitPaneId]!;
+    const String inputBody = 'AS9exact';
+    const String inputReady = '__DT_AS_INPUT_READY__';
+    const String inputExact = '__DT_AS_INPUT_EXACT__';
+    const String inputMismatch = '__DT_AS_INPUT_MISMATCH__';
+    const int inputEncodedBytes =
+        inputBody.length + TerminalPasteCodec.bracketFrameBytes;
+    splitOwner.pane.insertText(
+      "stty -echo -icanon min 1 time 0; "
+      "printf '\\033[?2004h\\r\\n__DT_AS_INPUT_%s__\\r\\n' 'READY'; "
+      "/usr/bin/perl -e 'binmode STDIN; my \$n=$inputEncodedBytes; "
+      "my \$d=\"\"; while (length(\$d) < \$n) { "
+      "my \$r=sysread(STDIN, my \$b, \$n-length(\$d)); "
+      "exit 24 unless defined(\$r) && \$r > 0; \$d .= \$b; } "
+      "exit(\$d eq \"\\e[200~$inputBody\\e[201~\" ? 0 : 23);'; "
+      "result=\$?; printf '\\033[?2004l'; stty echo icanon; "
+      "if [ \$result -eq 0 ]; then "
+      "printf '\\r\\n__DT_AS_INPUT_%s__\\r\\n' 'EXACT'; else "
+      "printf '\\r\\n__DT_AS_INPUT_%s__\\r\\n' 'MISMATCH'; fi",
+    );
+    await splitOwner.pane.submit();
+    await _waitForAsciiMarker(splitSession, inputReady);
+    _expectLifecycle(
+      splitSession.bracketedPasteMode,
+      'AppleScript input fixture did not retain bracketed paste mode',
+    );
+    await enqueue(
+      'inputText',
+      target: 'terminal:${splitPaneId.value}',
+      text: inputBody,
+      completed: () =>
+          _findAscii(splitSession.terminalScreenSet.activeScreen, inputExact) !=
+          null,
+    );
+    _expectLifecycle(
+      _findAscii(splitSession.terminalScreenSet.activeScreen, inputMismatch) ==
+          null,
+      'real PTY rejected the exact AppleScript input payload',
+    );
+    await enqueue(
+      'focus',
+      target: 'terminal:${firstPaneId.value}',
+      completed: () =>
+          state.activeWindowId == firstWindow.id &&
+          firstWindow.selectedTabId == firstTab.id &&
+          firstTab.focusedPaneId == firstPaneId,
+    );
+    await enqueue(
+      'closeTerminal',
+      target: 'terminal:${splitPaneId.value}',
+      completed: () =>
+          state.paneForId(splitPaneId) == null &&
+          nativePort.summary.terminalCount == 3,
+    );
+    await enqueue(
+      'closeTab',
+      target: 'tab:${thirdTab.id.value}',
+      completed: () =>
+          state.tabForId(thirdTab.id) == null &&
+          nativePort.summary.tabCount == 2,
+    );
+    await enqueue(
+      'closeWindow',
+      target: 'window:${secondWindow.id.value}',
+      completed: () =>
+          state.windowForId(secondWindow.id) == null &&
+          nativePort.summary.windowCount == 1,
+    );
+    final int stableGeneration = nativePort.summary.generation;
+    await enqueue(
+      'focus',
+      target: 'terminal:${splitPaneId.value}',
+      completed: () =>
+          state.windowCount == 1 && state.tabCount == 1 && state.paneCount == 1,
+    );
+    _expectLifecycle(
+      nativePort.summary.generation > stableGeneration,
+      'stale target completion did not republish the stable cache',
+    );
+
+    session.applyEnabled(false);
+    final TerminalAppleScriptNativeSummary disabled = nativePort.summary;
+    _expectLifecycle(
+      !disabled.enabled &&
+          disabled.windowCount == 0 &&
+          disabled.tabCount == 0 &&
+          disabled.terminalCount == 0,
+      'disabled scripting retained a visible native hierarchy',
+    );
+    final int rejectedBefore = disabled.rejectedCommandCount;
+    final int disabledStatus = nativePort.enqueueSelfAutomationCommand(
+      Uint8List.fromList(
+        utf8.encode(
+          jsonEncode(<String, Object?>{
+            'version': 1,
+            'operationId': ++operationId,
+            'kind': 'focus',
+            'target': 'terminal:${firstPaneId.value}',
+            'direction': null,
+            'text': null,
+          }),
+        ),
+      ),
+    );
+    _expectLifecycle(
+      disabledStatus == 9,
+      'disabled self-automation did not return the native disabled status',
+    );
+    _expectLifecycle(
+      nativePort.summary.rejectedCommandCount == rejectedBefore + 1,
+      'disabled command was not rejected exactly once',
+    );
+    session.applyEnabled(true);
+    _expectLifecycle(
+      nativePort.summary.enabled &&
+          nativePort.summary.windowCount == 1 &&
+          nativePort.summary.tabCount == 1 &&
+          nativePort.summary.terminalCount == 1,
+      're-enabled scripting did not restore the live standard hierarchy',
+    );
+    await enqueue(
+      'focus',
+      target: 'terminal:${firstPaneId.value}',
+      completed: () => firstTab.focusedPaneId == firstPaneId,
+    );
+
+    final TerminalAppleScriptNativeSummary beforeQuit = nativePort.summary;
+    _expectLifecycle(
+      beforeQuit.resumedCommandCount == 10 &&
+          beforeQuit.rejectedCommandCount == 1 &&
+          allSessions.length == 4,
+      'AppleScript native lifecycle counters differ before teardown',
+    );
+    await dispatcher.dispatch(TerminalActionId.quitApplication);
+    if (!closed.isCompleted) {
+      await dispatcher.dispatch(TerminalActionId.quitApplication);
+    }
+    await closed.future.timeout(const Duration(seconds: 15));
+    await Future<void>.delayed(Duration.zero);
+    _expectLifecycle(
+      state.isDisposed &&
+          hierarchy.isDisposed &&
+          session.isDisposed &&
+          allSessions.every(
+            (TerminalSession terminalSession) =>
+                terminalSession.shutdownResult?.isClean == true,
+          ) &&
+          debugLiveTerminalTextInputClientCount() == 0 &&
+          application.debugLiveObjectCount == 0,
+      'AppleScript product did not release all Dart and native owners',
+    );
+    stdout.writeln(
+      'TERMINAL_APPLESCRIPT_TEST dictionary=true self_automation=true '
+      'tcc_untouched=true stable_ids=true input_exact=true focus=true '
+      'close_terminal=true close_tab=true close_window=true stale=true '
+      'disable=true reenable=true resumed=10 rejected=1 sessions_clean=4 '
+      'text_clients=0 native_handles=0',
+    );
   }
 
   static Future<void> _exerciseNativeContentProduct({

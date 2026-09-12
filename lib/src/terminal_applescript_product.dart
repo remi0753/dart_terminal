@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dart_terminal_applescript_macos/dart_terminal_applescript_macos.dart'
     as native;
+import 'package:dart_terminal_applescript_macos/testing.dart' as native_testing;
 
 import 'terminal_applescript.dart';
 import 'terminal_application_state.dart';
@@ -58,6 +59,33 @@ final class TerminalAppleScriptMacosNativePort
 
   final native.TerminalAppleScriptMacosSession _session;
 
+  TerminalAppleScriptNativeSummary get summary {
+    final native.TerminalAppleScriptMacosSummary value = _session.summary;
+    return TerminalAppleScriptNativeSummary(
+      generation: value.generation,
+      windowCount: value.windowCount,
+      tabCount: value.tabCount,
+      terminalCount: value.terminalCount,
+      queuedCommandCount: value.queuedCommandCount,
+      pendingCommandCount: value.pendingCommandCount,
+      resumedCommandCount: value.resumedCommandCount,
+      rejectedCommandCount: value.rejectedCommandCount,
+      started: value.started,
+      enabled: value.enabled,
+    );
+  }
+
+  int enqueueSelfAutomationCommand(Uint8List bytes) {
+    try {
+      native_testing.TerminalAppleScriptMacosSelfAutomation.enqueueCommand(
+        bytes,
+      );
+      return 0;
+    } on native.TerminalAppleScriptMacosException catch (error) {
+      return error.status;
+    }
+  }
+
   @override
   void publishSnapshot(Uint8List bytes) => _session.publishSnapshot(bytes);
 
@@ -92,6 +120,32 @@ final class TerminalAppleScriptMacosNativePort
 
   @override
   void dispose() => _session.dispose();
+}
+
+final class TerminalAppleScriptNativeSummary {
+  const TerminalAppleScriptNativeSummary({
+    required this.generation,
+    required this.windowCount,
+    required this.tabCount,
+    required this.terminalCount,
+    required this.queuedCommandCount,
+    required this.pendingCommandCount,
+    required this.resumedCommandCount,
+    required this.rejectedCommandCount,
+    required this.started,
+    required this.enabled,
+  });
+
+  final int generation;
+  final int windowCount;
+  final int tabCount;
+  final int terminalCount;
+  final int queuedCommandCount;
+  final int pendingCommandCount;
+  final int resumedCommandCount;
+  final int rejectedCommandCount;
+  final bool started;
+  final bool enabled;
 }
 
 /// Applies dictionary commands to the same Dart-owned hierarchy and safety

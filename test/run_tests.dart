@@ -1479,6 +1479,38 @@ void _testOptions() {
     ),
     'native content and OSC 52 tests are mutually exclusive',
   );
+  final TerminalOptions appleScriptTestOptions = _parseOptions(
+    const <String>['--runtime-applescript-test'],
+    environment: const <String, String>{'DT_RUNTIME_APPLESCRIPT_TEST': '1'},
+  );
+  _expect(
+    appleScriptTestOptions.runtimeAppleScriptTest,
+    'gated AppleScript product test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-applescript-test']),
+    'AppleScript product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-applescript-test',
+        '--runtime-applescript-test',
+      ],
+      environment: const <String, String>{'DT_RUNTIME_APPLESCRIPT_TEST': '1'},
+    ),
+    'duplicate AppleScript product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-applescript-test', '--runtime-osc52-test'],
+      environment: const <String, String>{
+        'DT_RUNTIME_APPLESCRIPT_TEST': '1',
+        'DT_RUNTIME_OSC52_TEST': '1',
+      },
+    ),
+    'AppleScript and OSC 52 tests are mutually exclusive',
+  );
   final TerminalOptions quickTerminalTestOptions = _parseOptions(
     const <String>['--runtime-quick-terminal-test'],
     environment: const <String, String>{'DT_RUNTIME_QUICK_TERMINAL_TEST': '1'},
