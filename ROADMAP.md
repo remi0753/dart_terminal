@@ -1209,7 +1209,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase10/secure-keyboard-entry.md`](docs/phase10/secure-keyboard-entry.md)
   を参照して順に実施する）
   - [x] `dart_pty_macos` content-free terminal echo observation substrate
-  - [ ] `dart_appkit` balanced Secure Event Input/indication substrate
+  - [x] `dart_appkit` balanced Secure Event Input/indication substrate
   - [ ] terminal policy/configuration/action/lifecycle integration
   - [ ] 両runtime acceptance、manual checklist、documentation closure、親項目完了判定
 - [ ] Quick Look、Services、drag/drop、context menu

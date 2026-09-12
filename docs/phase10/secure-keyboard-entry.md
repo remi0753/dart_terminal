@@ -6,7 +6,7 @@
 - Task: Secure Keyboard Entry and automatic/manual indication
 - Started: 2026-09-12
 - State: active
-- Current subtask: balanced AppKit Secure Event Input and indication substrate
+- Current subtask: terminal policy, configuration, action, and lifecycle integration
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -182,3 +182,47 @@ split before code changes so each layer consumes only committed contracts.
   tests, the exact `dart_appkit make test`, and the consuming exact
   `CI=true DART_SUPPRESS_ANALYTICS=true make test` all passed. The dependency
   is committed as `1490829` (`Expose content-free terminal echo state`).
+- 2026-09-12: `dart_appkit` now owns a singleton, generation-checked
+  `SecureEventInput` resource on the AppKit main thread. It records retained
+  desire independently from one successfully acquired Carbon reference,
+  yields only that owned reference on application resignation, reacquires on
+  activation, and routes explicit/finalizer/shutdown disposal through one
+  prepare path. The observational global enabled bit is snapshot-only and is
+  never treated as proof that this process may call disable.
+- 2026-09-12: The additive ABI exposes a size-prefixed, content-free snapshot
+  with desired/owned/system/last-OSStatus fields and a dedicated failure
+  status. The public Dart facade maps unavailable, duplicate-owner, and system
+  failure cases to typed `SecureEventInputException` values. All new FFI
+  lookups are optional, so an older bridge returns unsupported rather than
+  failing library initialization.
+- 2026-09-12: `View.secureInputIndicatorState` projects hidden, automatic, or
+  manual to one top/trailing native overlay. The overlay is accessible, never
+  accepts first responder or hit testing, and constrains only itself inside the
+  target view; native tests verify unchanged target bounds and a stable single
+  overlay when changing modes. This keeps terminal grid and Metal drawable
+  geometry under the product layout owner.
+- 2026-09-12: The first Dart focused run found that promotion from the core
+  `NativeBindings` interface to the independent optional secure interface was
+  not retained at the call site, and a test referenced a nonexistent generic
+  view handle hook. Explicit interface casts and inspection through the fake's
+  single indicator value fixed those issues; the rerun passed analysis and all
+  API tests.
+- 2026-09-12: Native injection coverage passed idempotent acquisition,
+  inactive yield, active reacquisition, typed disable failure/retry, external
+  owner preservation, singleton enforcement, wrong thread/type/size, and
+  shutdown balancing. Current/legacy FFI, C11/C++20 headers, public Dart API,
+  accessible non-interactive indication, and cache-on-success tests passed.
+  Exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed in both
+  `dart_appkit` and this consuming repository; Developer JIT and Release AOT
+  generic hosts also linked the changed bridge warning-clean. The dependency
+  is committed as `8688a2f` (`Add balanced Secure Event Input ownership`).
+
+## Next-subtask objective
+
+Aggregate the focused live pane's content-free echo observation with explicit
+manual intent in one product controller. Add live configuration defaults and
+Settings status, a stable manual toggle action shared by menu, command palette,
+and keybindings, and project automatic/manual/failure indication only to the
+active terminal view. All pane/window/Quick Terminal/application loss and
+reload/exit/quit paths must deterministically clear product desire; no terminal
+text or PTY bytes may be inspected or written.
