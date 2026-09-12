@@ -6,8 +6,8 @@
 - Task: App Intents/Shortcuts and notifications
 - Started: 2026-09-12
 - State: in progress
-- Current subtask: notification substrate consumer closure; next is
-  `dart_macos_runtime` App Intents manifest/metadata bundle substrate
+- Current subtask: `dart_macos_runtime` App Intents manifest/metadata bundle
+  substrate
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -228,6 +228,33 @@ second application-state owner.
   inverse legacy-layout patch from a formatted HEAD image; each recovered file
   was accepted only when formatting the recovered result reproduced the exact
   semantic implementation image. Remaining diffs are task-scoped.
+- The installed Xcode 26.6 build `17F113` exposes Swift 6.3.3 and
+  `appintentsmetadataprocessor`. A local minimal provider experiment established
+  that `swiftc -emit-const-values` alone produces no usable constant-value file;
+  the compile must also pass a const-gather protocol list containing
+  `AppIntent` and `AppShortcutsProvider`. Linking that object as an `@rpath`
+  dylib and processing its source/constant-value lists produces exactly
+  `Metadata.appintents/version.json` and `extract.actionsdata` with the intent
+  type and automatic shortcut declaration.
+- The runtime manifest now has one optional closed `appIntents` object:
+  dependency package, normalized `.swift` source, Swift module name, and unique
+  dylib filename. It requires macOS 13 or later, bounds the path/source/output
+  sizes, resolves the package exactly once from `package_config.json`, rejects
+  symlink escape and native-image collisions, and reserves the complete
+  `Metadata.appintents` resource namespace even when the declaration is absent.
+- The runtime compiles the dependency source for the bundle architecture and
+  minimum deployment target, verifies the metadata tools version against the
+  selected Xcode build, and accepts only the two expected metadata files. The
+  Swift image is linked directly into both generic hosts and given an `@rpath`
+  install name so dyld loads the declarations before application startup; a
+  late dynamic load was rejected because system discovery must not depend on a
+  Dart-side timing path.
+- Both bundle modes stage the image in `Contents/Frameworks` and the compiler
+  output in `Contents/Resources/Metadata.appintents`. The build manifest records
+  package/source/module/image, byte counts, target triple, Xcode build, and the
+  exact metadata file set. An omitted declaration preserves the legacy bundle
+  shape. Missing/oversized source, engine-image collision, processor failure,
+  absent output, and tools-version mismatch all fail before bundle signing.
 
 ## Validation log
 
@@ -257,11 +284,40 @@ second application-state owner.
   It reported 280 formatted files with zero changes, no analyzer issues, fixed
   Phase 9 stress seed `0x509a1171`, all freshness/compatibility gates, and the
   complete Dart Terminal test suite.
+- Consumer commit `9ff23d8` (`Adopt notification lifecycle events`) records the
+  event-switch compatibility, regenerated evidence, task memo, and completed
+  first ROADMAP child. The post-commit ROADMAP reread selected the runtime App
+  Intents declaration/build/metadata substrate as the next ordered unit.
+- 2026-09-12, `/Users/remi/dart/dart_appkit`, Apple M1/arm64, Xcode 26.6 build
+  `17F113`, Swift 6.3.3: focused `dart analyze` and
+  `dart run test/run_tests.dart` passed. The real-toolchain test compiled the
+  minimal provider, extracted discoverable intent/automatic-shortcut metadata,
+  and verified its dylib install name and AppIntents framework dependency.
+  Fake-builder coverage verified strict declaration parsing, legacy omission,
+  all closed failure paths, direct JIT/AOT host-link inputs, exact bundle
+  staging, and complete build-manifest evidence.
+- The exact dependency gate `CI=true DART_SUPPRESS_ANALYTICS=true make test`
+  passed after the final runtime review. It includes native bridge/runner/
+  lifecycle/capability tests, every package analysis and test suite, build-hook
+  checks, examples, and FFI/legacy-event smoke tests.
+- Dependency commit `f76c331` (`Package App Intents metadata in runtime
+  bundles`) contains the closed manifest, Swift build/extraction/staging path,
+  JIT/AOT host link input, audit evidence, public documentation, and focused
+  coverage. The post-commit ROADMAP reread confirmed this nested unit as the
+  current item pending only its consumer-side progress record.
+- 2026-09-12, `/Users/remi/dart/dart_terminal`, Apple M1/arm64: the exact
+  consuming gate `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed after
+  the dependency commit and ROADMAP update. It reported 280 formatted files
+  with zero changes, no analyzer issues, fixed Phase 9 stress seed
+  `0x509a1171`, and all freshness, compatibility, integration, and product
+  tests passing.
 
 ## Handoff and remaining work
 
-- The first ordered subtask is complete: its dependency is committed and its
-  consumer switch, regenerated evidence, full gate, documentation, and ROADMAP
-  progress are ready for the standalone consumer commit. After that commit,
-  reread ROADMAP before starting the runtime manifest/metadata substrate. No
-  terminal-specific Swift capability or product wiring may start early.
+- The first ordered subtask is complete in dependency and consumer commits.
+  The generic runtime App Intents declaration/build/metadata unit is implemented,
+  fully validated, committed as `f76c331`, and marked complete in the ROADMAP.
+  Its consuming full gate also passes. The terminal-specific Swift capability
+  and bounded command queue is the next unit after this progress commit and
+  mandatory ROADMAP reread. Consumer declaration and product wiring have not
+  started early.
