@@ -220,3 +220,36 @@ contracts from the previous child.
   compatibility/evidence checks passed, formatting changed 0 files, analysis
   found no issues, Phase 9 stress passed, and the unified Dart test runner
   printed `dart_terminal tests passed`.
+- 2026-09-12: The second subtask adds `dart_appkit` event protocol v8 and an
+  owned `GlobalHotKey` resource using exclusive `RegisterEventHotKey`. The
+  public boundary accepts physical macOS key codes 0..127 with a nonempty
+  Shift/Control/Option/Command mask, maps an occupied chord separately from
+  other OS registration failures, posts a payload-free generation-checked
+  pressed event, and unregisters before handle reuse on explicit, finalizer,
+  and shutdown release paths. It does not install a global event monitor or
+  request Accessibility/Input Monitoring authority.
+- 2026-09-12: `dart_appkit` focused native/encoder/Dart/current+legacy FFI tests
+  and exact full `make test` passed. Both generic runtime binaries also linked
+  the updated bridge warning-clean via `make runtime-jit-runner
+  runtime-aot-runner`. The reusable dependency is committed independently as
+  `f6721af` (`Add exclusive global hot keys`).
+- 2026-09-12: Advancing the dependency protocol from v7 to v8 required the
+  consuming shipped-runtime assertions to expect the negotiated current
+  version while retaining theme's minimum requirement at v7. Product theme
+  and scroll evidence now print the negotiated value rather than freezing the
+  current version. The Phase 7 acceptance source hashes were regenerated; the
+  first sandbox run was blocked only by the Metal compiler's user cache, and
+  the approved rerun completed successfully.
+- 2026-09-12: The first terminal full-gate run stopped during parser-trace
+  compilation because the new sealed `GlobalHotKeyPressedEvent` made two
+  application-event switches non-exhaustive. The product does not register or
+  act on the event until the final integration subtask, so both current sinks
+  explicitly ignore it while preserving exhaustive compile-time coverage.
+  Phase 7 source hashes were regenerated once more from that final source.
+- 2026-09-12: The exact consuming gate `CI=true
+  DART_SUPPRESS_ANALYTICS=true make test` then passed. All generated-reference,
+  compatibility, differential, application-matrix, terminfo, shell-integration,
+  format, and analyze checks passed; the Phase 9 stress harness completed and
+  the unified runner printed `dart_terminal tests passed`. The exclusive
+  registration substrate is therefore complete without prematurely adding
+  Quick Terminal window presentation or product registration behavior.

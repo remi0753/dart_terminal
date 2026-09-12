@@ -1544,7 +1544,9 @@ final class TerminalApplication {
               if (!createdWindow.isClosed && !createdWindow.isDisposed) {
                 createdWindow.requestClose();
               }
-            case WindowEvent() || MenuItemInvokedEvent():
+            case WindowEvent() ||
+                MenuItemInvokedEvent() ||
+                GlobalHotKeyPressedEvent():
               break;
           }
         },
@@ -3220,8 +3222,8 @@ final class TerminalApplication {
       );
       if (runThemeAcceptance) {
         _expectLifecycle(
-          application.eventProtocolVersion == 7,
-          'theme acceptance requires AppKit event protocol v7',
+          application.eventProtocolVersion >= 7,
+          'theme acceptance requires AppKit event protocol v7 or later',
         );
         _injectApplicationAppearanceEventForTesting(
           application,
@@ -3661,7 +3663,9 @@ final class TerminalApplication {
                 onError: recordAsynchronousError,
               ),
             );
-          case WindowEvent() || MenuItemInvokedEvent():
+          case WindowEvent() ||
+              MenuItemInvokedEvent() ||
+              GlobalHotKeyPressedEvent():
             break;
         }
       }, onError: recordAsynchronousError);
@@ -5147,7 +5151,8 @@ final class TerminalApplication {
       'theme product did not cleanly release all resources',
     );
     stdout.writeln(
-      'TERMINAL_THEME_TEST protocol=7 initial_light=true live_dark=true '
+      'TERMINAL_THEME_TEST protocol=${application.eventProtocolVersion} '
+      'initial_light=true live_dark=true '
       'live_light=true appearance_query=true appearance_notifications=2 '
       'appearance_disable=true appearance_reset=true cell_report=true '
       'in_band_size=true native_resize=true exact=true '
@@ -11030,7 +11035,8 @@ keybind = control+k=pane.focus-next
       'scroll product acceptance did not preserve bounded exclusive ownership',
     );
     stdout.writeln(
-      'TERMINAL_SCROLL_TEST protocol=7 precise=true momentum=true '
+      'TERMINAL_SCROLL_TEST protocol=${application.eventProtocolVersion} '
+      'precise=true momentum=true '
       'wheel=true mouse_report=true shift_override=true alternate=true '
       'app_cursor=true local=true metal=true exclusive=true '
       'reports=${observation.terminalReportCount} '

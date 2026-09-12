@@ -776,7 +776,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     );
   }
   final RegExp eventWire = RegExp(
-    r'^NATIVE_EVENT_WIRE negotiated=7 event=window-closed protocol=7 '
+    r'^NATIVE_EVENT_WIRE negotiated=8 event=window-closed protocol=8 '
     r'source_generation=[1-9][0-9]* operation_id=0 '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -785,9 +785,9 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     eventWire.hasMatch(observation.stdoutText),
     'missing current native event wire observation',
   );
-  final String statePrefix = r'^NATIVE_WINDOW_STATE negotiated=7 event=';
+  final String statePrefix = r'^NATIVE_WINDOW_STATE negotiated=8 event=';
   final String stateMetadata =
-      r' protocol=7 source_generation=[1-9][0-9]* operation_id=0 '
+      r' protocol=8 source_generation=[1-9][0-9]* operation_id=0 '
       r'timestamp_ns=[1-9][0-9]* ';
   RegExp stateEvent(String name, String payload) =>
       RegExp('$statePrefix$name$stateMetadata$payload', multiLine: true);
@@ -822,7 +822,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     );
   }
   final RegExp applicationState = RegExp(
-    r'^NATIVE_APPLICATION_STATE negotiated=7 active=(true|false)$',
+    r'^NATIVE_APPLICATION_STATE negotiated=8 active=(true|false)$',
     multiLine: true,
   );
   _expect(
@@ -849,7 +849,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     'missing or duplicate standard action-menu projection observation',
   );
   RegExp menuAction(String action) => RegExp(
-    '^NATIVE_MENU_ACTION negotiated=7 action=$action protocol=7 '
+    '^NATIVE_MENU_ACTION negotiated=8 action=$action protocol=8 '
     r'source_generation=[1-9][0-9]* operation_id=0 '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -875,7 +875,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     'missing or duplicate pasteboard snapshot observation',
   );
   final RegExp closeRequest = RegExp(
-    r'^NATIVE_WINDOW_CLOSE_REQUEST negotiated=7 protocol=7 '
+    r'^NATIVE_WINDOW_CLOSE_REQUEST negotiated=8 protocol=8 '
     r'source_generation=[1-9][0-9]* operation_id=[1-9][0-9]* '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -1194,7 +1194,7 @@ Future<void> _runTerminalDisplay(
     'terminal display launch omitted refused-close viewport acceptance',
   );
   final RegExp scrollAcceptance = RegExp(
-    r'^TERMINAL_SCROLL_TEST protocol=7 precise=true momentum=true '
+    r'^TERMINAL_SCROLL_TEST protocol=8 precise=true momentum=true '
     r'wheel=true mouse_report=true shift_override=true alternate=true '
     r'app_cursor=true local=true metal=true exclusive=true reports=1 '
     r'local=4 alternate_inputs=1 ignored=3 bytes=20 alternate_bytes=6$',
@@ -1941,7 +1941,7 @@ cursor-blink = false
     );
     _expect(
       RegExp(
-            r'^TERMINAL_THEME_TEST protocol=7 initial_light=true '
+            r'^TERMINAL_THEME_TEST protocol=8 initial_light=true '
             r'live_dark=true live_light=true appearance_query=true '
             r'appearance_notifications=2 appearance_disable=true '
             r'appearance_reset=true cell_report=true in_band_size=true '
