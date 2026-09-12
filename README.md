@@ -43,7 +43,7 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 25個のstable application actionを共有するbounded searchable registry、動的な
+- 26個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
@@ -54,6 +54,13 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   有効になる。実製品gateではmenuとpaletteから2 window/3 tab/5 paneを生成し、Retina
   scale継承、divider command後の固定font metricsとgrid resize、terminal write 0、
   各paneの入力分離を両runtimeで検証する
+- `application.toggle-quick-terminal`をmenu、command palette、任意のlocal keybind、
+  opt-inのsystem-wide shortcutで共有するsingleton Quick Terminal。選択画面の現在の
+  visible frameへclampし、最初のframe前にRetina scaleを投影する。表示・非表示のframe寸法を
+  同一に保つtop-edge animation、hidden中のPTY/session保持、focus-loss autohide、通常windowとの
+  独立性、shortcut変更時の競合表示と旧登録保持をDeveloper JIT/Release AOTで検証する。
+  global shortcutはexclusive system hot keyだけを所有し、全keyboard monitorやAccessibility権限を
+  使用しない
 - DECSET 9/1000/1002/1003と1005/1006/1015/1016を追跡し、X10/default、UTF-8、
   URXVT、SGRのcell座標とSGR physical-pixel座標をbounded mouse reportとして実PTYへ
   送る製品routing。native logical pointへbacking scaleを一度だけ適用し、通常shellと
@@ -113,9 +120,10 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
 - PTY通知欠落時もpane ownerを閉じ、status 75でhost終了するclassified recovery
 - AppKit main-thread root と公式 Dart 子プロセス worker の bounded lifecycle
   （M1/arm64 Developer JIT / Release AOT）
-- native event protocol v7（source generation、nanosecond timestamp、operation
+- native event protocol v8（source generation、nanosecond timestamp、operation
   ID、focus/visibility/occlusion/backing scale/screen/frame/fullscreen state、
-  application/window lifecycle/appearance、menu action、precision/momentum scroll）と、旧 v1–v6
+  application/window lifecycle/appearance、menu action、exclusive global hot key、
+  precision/momentum scroll）と、旧 v1–v7
   endpoint との compatibility negotiation
 - generic/custom `View` 境界と、型を保った content-view attachment
 - `dart_terminal_renderer_macos` の公開 facadeからdependency-owned
@@ -333,6 +341,10 @@ scrollback-lines = 50000
 scrollback-bytes = 128MiB
 cursor-shape = bar
 cursor-blink = false
+quick-terminal-shortcut = control+option+command+f18
+quick-terminal-screen = main
+quick-terminal-animation-duration = 0.2
+quick-terminal-autohide = true
 keybind = control+d=unbind
 keybind = shift+control+k=pane.focus-next
 ```
@@ -347,6 +359,10 @@ ANSI palette 0–15、font family/size/synthetic style、初期window sizeとpad
 exact physical key chordをpane actionまたはapplication actionへ割り当てます。構文、全key名、
 action ID、`unbind`/`passthrough`、既定binding、予約済みnative shortcutは
 [Keybindings and actions](docs/reference/keybindings-and-actions.md)を参照してください。
+`quick-terminal-shortcut`の既定値は`none`で、設定した場合だけsystem-wide shortcutを
+exclusiveに登録します。`quick-terminal-screen`は`main | mouse | macos-menu-bar`、animationは
+0から5秒で0なら即時表示、autohideは既定で有効です。shortcutをlive reloadした際に新しい
+登録が競合または失敗した場合は、動作中の旧shortcutを維持し、Settingsのstatusへ理由を表示します。
 unknown key、不正な値、読めない明示ファイル、include cycle等はpath、line、column、安定した
 diagnostic code、可能な場合は修正案とともに標準エラーへ表示します。有効な最後の値または
 schema defaultへ復旧して起動を続けます。一方、command line自体の不正やintegration専用
@@ -369,7 +385,7 @@ scrollback、font、padding、window frameは書き換えません。自動file 
 
 Applicationメニューの`Settings…`（Command-,）、command palette、または非予約chordへ設定した
 `application.open-settings` actionから、root設定ファイルを編集するnative modal editorを開けます。
-最初のkey入力を待たず、新規・空・疎なファイルでも全38 optionを同じdocument内へ補完して表示し、
+最初のkey入力を待たず、新規・空・疎なファイルでも全42 optionを同じdocument内へ補完して表示し、
 右のcontext panelはcaret位置の
 current/draft value、構文、説明と、保存後に既存terminalへ即時反映されるか新規terminalから使われるかを
 表示します。line/source行や別のvalue入力欄は持たず、panelを閉じても右端の細いrailが残ります。

@@ -679,6 +679,36 @@ working-directory = /from-file
             TerminalConfiguredClipboardAccess.ask,
     'TerminalOptions admits the isolated OSC 52 acceptance gate',
   );
+  final TerminalOptions runtimeQuickTerminal = TerminalOptions.parse(
+    const <String>[
+      '--no-config',
+      '--quick-terminal-shortcut=control+option+command+f18',
+      '--quick-terminal-animation-duration=0',
+      '--runtime-quick-terminal-test',
+    ],
+    environment: const <String, String>{'DT_RUNTIME_QUICK_TERMINAL_TEST': '1'},
+    configFileSystem: files,
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    runtimeQuickTerminal.runtimeQuickTerminalTest &&
+        runtimeQuickTerminal.effectiveConfiguration!.value(
+              TerminalProductConfigSchema.quickTerminalShortcut,
+            ) ==
+            const TerminalKeyBindingChord(
+              physicalKey: TerminalPhysicalKey.f18,
+              control: true,
+              option: true,
+              command: true,
+            ) &&
+        runtimeQuickTerminal.effectiveConfiguration!.value(
+              TerminalProductConfigSchema.quickTerminalAnimationDuration,
+            ) ==
+            0,
+    'TerminalOptions admits isolated Quick Terminal configuration acceptance',
+  );
   _expectThrows(
     () => TerminalOptions.parse(
       const <String>['--no-config', '--runtime-configuration-test'],
@@ -718,6 +748,14 @@ working-directory = /from-file
       configFileSystem: files,
     ),
     'OSC 52 acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>['--no-config', '--runtime-quick-terminal-test'],
+      environment: const <String, String>{},
+      configFileSystem: files,
+    ),
+    'Quick Terminal acceptance is unavailable without its environment gate',
   );
   _expectThrows(
     () => TerminalOptions.parse(

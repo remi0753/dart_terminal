@@ -5,8 +5,8 @@
 - Phase: 10
 - Task: Quick Terminal and global shortcut
 - Started: 2026-09-12
-- State: active
-- Current subtask: Quick Terminal window/screen/presentation substrate
+- State: complete
+- Current subtask: all ordered subtasks complete
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -288,3 +288,68 @@ contracts from the previous child.
   reusable presentation child is complete; lazy creation, geometry policy,
   renderer scale projection, global registration, autohide, failure UI, and
   real runtime acceptance remain exclusively in the final integration child.
+- 2026-09-12: After `ddcfa70` and `e15d66e`, both worktrees are clean and the
+  ROADMAP reread selects the fourth and final child. This child will consume,
+  not expand, the committed typed product and AppKit contracts: register the
+  optional chord safely, lazily create exactly one borderless Quick Terminal,
+  resolve its screen/scale/visible-frame geometry at each show, preserve its
+  pane/session while hidden, serialize action/hot-key/autohide transitions,
+  surface registration failure, and close every owner on shutdown. Secure
+  Input and later Phase 10 items remain out of scope until this parent closes.
+- 2026-09-12: Product integration will keep the Quick Terminal in the existing
+  `TerminalApplicationState` and native hierarchy rather than building a
+  second ownership tree. The hierarchy will gain only role-aware native window
+  construction and automatic-presentation policy plus an authoritative frame
+  update; the product remains responsible for the singleton role, borderless
+  overlay policy, screen choice, animation, shortcut, and autohide.
+- 2026-09-12: Each show resolves the selected screen and computes two frames
+  with identical width and height: a target clamped and centered at the top of
+  `visibleFrame`, and a hidden frame immediately above it. Keeping both frame
+  extents identical prevents animation from scaling terminal contents. The
+  resolved backing scale is applied to pane resources before the first native
+  presentation call.
+- 2026-09-12: Shortcut replacement will register and subscribe the candidate
+  before releasing the old owner. A typed registration failure therefore
+  leaves the prior chord active, is rendered in Settings through a bounded
+  runtime-status line, and emits a content-free machine diagnostic. Disabling
+  the option explicitly cancels and disposes the current registration.
+- 2026-09-12: The product now routes menu, palette, configured local keybind,
+  and the protocol-v8 global-hot-key event through the same serialized
+  `application.toggle-quick-terminal` registration. Normal hierarchy
+  reconciliation creates the role-specific borderless native window but does
+  not show it automatically. The controller alone owns current-screen
+  resolution, fixed-size enter/exit presentation, first-frame scale, focus
+  restoration, and explicit Close-as-hide policy.
+- 2026-09-12: Initial Developer JIT acceptance did not reach its deterministic
+  prompt because the new suite had not selected the existing bounded test
+  shell. Adding the Quick Terminal suite to that explicit acceptance-only
+  branch fixed the timeout without changing normal shell launch behavior.
+- 2026-09-12: A second runtime attempt showed that a stale native focus-loss
+  event from the preceding hide could arrive after a global show and hide the
+  new generation. Autohide now requires a focus-gained observation belonging
+  to the current visible/showing generation before accepting focus-loss or
+  application-inactive input. The acceptance injects that ordered focus pair;
+  both runtime modes then retained the same pane/session across menu, global,
+  hide, and show transitions.
+- 2026-09-12: Focused Quick Terminal, hierarchy, configuration, configuration-
+  reference, and action-reference tests passed. The first focused invocation
+  was blocked before tests by the sandbox denying the Metal compiler's normal
+  `~/.cache/clang` module cache, and one combined command used the incorrect
+  filename `configuration_reference_test.dart`; the approved rerun with the
+  actual `terminal_configuration_reference_test.dart` passed. These were
+  environment/command issues rather than product failures.
+- 2026-09-12: `make RUNTIME_ARCH=arm64 runtime-source-check
+  runtime-bundle-audit` passed with zero product native sources and clean
+  Developer JIT/Release AOT bundles. `make RUNTIME_ARCH=arm64
+  runtime-quick-terminal-integration` passed in both modes. The product line
+  confirms singleton and retained-session behavior, shared menu/global action,
+  current-screen fixed geometry, Retina scale, autohide, visible conflict,
+  Close-as-hide, ordinary-window independence, two clean PTY sessions, zero
+  text clients, and zero native handles.
+- 2026-09-12: The first exact full gate reached the generated compatibility
+  coverage check and correctly rejected a stale runtime source hash. After
+  regenerating `compatibility/regression_coverage_report.json`, the exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` rerun passed: 42 options (6
+  live, 36 new-session), 26 application actions, all generated/evidence/
+  compatibility/application/terminfo/shell checks, formatting, analysis,
+  Phase 9 security stress, and the unified Dart runner were green.

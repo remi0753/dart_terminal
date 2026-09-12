@@ -1196,14 +1196,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 目的: macOS 専用アプリとしての完成度を上げる。
 
-- [ ] Quick Terminal と global shortcut
+- [x] Quick Terminal と global shortcut
   （分割、境界、完了条件は
   [`docs/phase10/quick-terminal-global-shortcut.md`](docs/phase10/quick-terminal-global-shortcut.md)
   を参照して順に実施する）
   - [x] typed Quick Terminal configuration、action、logical lifecycle contract
   - [x] `dart_appkit` exclusive global shortcut registration/event substrate
   - [x] `dart_appkit` Quick Terminal window/screen/presentation substrate
-  - [ ] product integration、両runtime acceptance、documentation closure、親項目完了判定
+  - [x] product integration、両runtime acceptance、documentation closure、親項目完了判定
 - [ ] Secure Keyboard Entry と auto/manual indication
 - [ ] Quick Look、Services、drag/drop、context menu
 - [ ] AppleScript dictionary と object lifecycle

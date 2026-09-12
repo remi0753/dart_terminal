@@ -18,6 +18,7 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testSettingsInspectorPresenterLifecycle();
   await _testConfiguredWindowAndPaddingProjection();
   await _testPerWindowCreationFrameProjection();
+  await _testRoleAwareWindowProjection();
   await _testInitialNativeContentLayoutProjection();
   await _testNewSplitInheritsNativeBackingScale();
   await _testNativeDividerGestureSynchronizesLayout();
@@ -26,6 +27,90 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testRoleAwareWindowProjection() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final TerminalApplicationState state = TerminalApplicationState();
+  final List<_HierarchyFakeSession> sessions = <_HierarchyFakeSession>[];
+  final TerminalWindowState ordinary = await state.createWindow(
+    _configuration(sessions),
+  );
+  final TerminalWindowState quick = await state.createWindow(
+    _configuration(sessions),
+    role: TerminalWindowRole.quickTerminal,
+  );
+  final TerminalNativeHierarchyAdapter adapter = TerminalNativeHierarchyAdapter(
+    state: state,
+    paneResourcesFactory: (TerminalPane pane) => TerminalNativePaneResources(
+      paneId: pane.id,
+      view: View(configuration: terminalBaseViewConfiguration),
+    ),
+    windowFrame: const Rect.fromLTWH(100, 90, 920, 580),
+    cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+    windowConfigurationBuilder: (TerminalWindowState window) =>
+        window.role == TerminalWindowRole.quickTerminal
+        ? const WindowConfiguration(
+            titled: false,
+            closable: false,
+            miniaturizable: false,
+            resizable: false,
+          )
+        : terminalWindowConfiguration,
+    automaticPresentationPolicy: (TerminalWindowState window) =>
+        window.role == TerminalWindowRole.standard,
+  );
+  try {
+    adapter.reconcile();
+    final Window ordinaryNative = adapter.windowForTab(ordinary.selectedTabId)!;
+    final Window quickNative = adapter.windowForTab(quick.selectedTabId)!;
+    final int ordinaryHandle = bindings.handleFor(ordinaryNative);
+    final int quickHandle = bindings.handleFor(quickNative);
+    _expect(
+      ordinaryNative.configuration == terminalWindowConfiguration &&
+          quickNative.configuration ==
+              const WindowConfiguration(
+                titled: false,
+                closable: false,
+                miniaturizable: false,
+                resizable: false,
+              ) &&
+          bindings.windowShowCounts[ordinaryHandle] == 1 &&
+          bindings.windowShowCounts[quickHandle] == null,
+      'logical roles select native style and automatic presentation policy',
+    );
+
+    const Rect moved = Rect.fromLTWH(-720, 420, 640, 480);
+    adapter.updateWindowedFrame(quick.id, moved);
+    _expect(
+      quickNative.frame == moved &&
+          adapter.placementForWindow(quick.id).windowedFrame ==
+              TerminalWindowFrame(
+                left: -720,
+                top: 420,
+                width: 640,
+                height: 480,
+              ),
+      'custom presentation geometry updates native and authoritative frames',
+    );
+    adapter.present();
+    _expect(
+      bindings.windowShowCounts[ordinaryHandle] == 2 &&
+          bindings.windowShowCounts[quickHandle] == null,
+      'generic reopen presentation excludes product-managed windows',
+    );
+  } finally {
+    adapter.dispose();
+    await state.shutdown();
+    await application.terminate();
+    await rawEvents.close();
+  }
 }
 
 Future<void> _testFocusedDividerCommandsUseCellGeometry() async {
@@ -565,6 +650,7 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
       view: terminalView,
     ),
     reload: () => dispatcher.dispatch(TerminalActionId.reloadConfiguration),
+    runtimeStatus: () => 'Quick Terminal shortcut: disabled',
   );
   try {
     _expect(
@@ -600,6 +686,12 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
     final int detailViewHandle = bindings.handleFor(settings.activeDetailView!);
     final int rootSplitHandle = bindings.handleFor(rootSplit);
     final int editorStatusSplitHandle = bindings.handleFor(editorStatusSplit);
+    _expect(
+      settings.activeStatusView!.text.contains(
+        'Quick Terminal shortcut: disabled',
+      ),
+      'Settings did not surface bounded product runtime status',
+    );
     final List<NativeTextEditorStyleRun> normalStyles =
         List<NativeTextEditorStyleRun>.from(
           bindings.textEditorStyleRuns[settingsViewHandle]!,

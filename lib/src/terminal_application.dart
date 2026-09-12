@@ -54,6 +54,7 @@ import 'terminal_pane_close_coordinator.dart';
 import 'terminal_product_configuration.dart';
 import 'terminal_product_hierarchy_actions.dart';
 import 'terminal_prompt_navigation.dart';
+import 'terminal_quick_terminal.dart';
 import 'terminal_renderer/pane_work_scheduler.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_restoration.dart';
@@ -113,6 +114,7 @@ final class TerminalOptions {
     this.runtimeShellIntegrationTest = false,
     this.runtimeDesktopSignalsTest = false,
     this.runtimeOsc52Test = false,
+    this.runtimeQuickTerminalTest = false,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
@@ -162,6 +164,7 @@ final class TerminalOptions {
     var runtimeShellIntegrationTest = false;
     var runtimeDesktopSignalsTest = false;
     var runtimeOsc52Test = false;
+    var runtimeQuickTerminalTest = false;
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
@@ -275,6 +278,15 @@ final class TerminalOptions {
           );
         }
         runtimeOsc52Test = true;
+        continue;
+      }
+      if (argument == '--runtime-quick-terminal-test') {
+        if (runtimeQuickTerminalTest) {
+          throw const FormatException(
+            '--runtime-quick-terminal-test may only be supplied once',
+          );
+        }
+        runtimeQuickTerminalTest = true;
         continue;
       }
       if (argument == '--runtime-restoration-test') {
@@ -448,6 +460,33 @@ final class TerminalOptions {
             '1') {
       throw const FormatException(
         'native hierarchy test requires the integration-test gate',
+      );
+    }
+    if (runtimeQuickTerminalTest &&
+        selectedEnvironment['DT_RUNTIME_QUICK_TERMINAL_TEST'] != '1') {
+      throw const FormatException(
+        'Quick Terminal test requires the integration-test gate',
+      );
+    }
+    if (runtimeQuickTerminalTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeShellIntegrationTest ||
+            runtimeDesktopSignalsTest ||
+            runtimeOsc52Test ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'Quick Terminal test cannot be combined with another runtime test',
       );
     }
     if (runtimeUserActionsTest &&
@@ -652,6 +691,7 @@ final class TerminalOptions {
       runtimeShellIntegrationTest: runtimeShellIntegrationTest,
       runtimeDesktopSignalsTest: runtimeDesktopSignalsTest,
       runtimeOsc52Test: runtimeOsc52Test,
+      runtimeQuickTerminalTest: runtimeQuickTerminalTest,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
@@ -693,6 +733,7 @@ final class TerminalOptions {
   final bool runtimeShellIntegrationTest;
   final bool runtimeDesktopSignalsTest;
   final bool runtimeOsc52Test;
+  final bool runtimeQuickTerminalTest;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
@@ -778,6 +819,7 @@ final class TerminalApplication {
         options.runtimeShellIntegrationTest ||
         options.runtimeDesktopSignalsTest ||
         options.runtimeOsc52Test ||
+        options.runtimeQuickTerminalTest ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -801,6 +843,7 @@ final class TerminalApplication {
         runShellIntegrationAcceptance: options.runtimeShellIntegrationTest,
         runDesktopSignalAcceptance: options.runtimeDesktopSignalsTest,
         runOsc52Acceptance: options.runtimeOsc52Test,
+        runQuickTerminalAcceptance: options.runtimeQuickTerminalTest,
         osc52Clipboard: options.runtimeOsc52Test
             ? _MemoryTerminalOsc52Clipboard()
             : null,
@@ -2280,6 +2323,7 @@ final class TerminalApplication {
       !options.runtimeShellIntegrationTest &&
       !options.runtimeDesktopSignalsTest &&
       !options.runtimeOsc52Test &&
+      !options.runtimeQuickTerminalTest &&
       !options.runtimeRestorationTest &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
@@ -2299,6 +2343,7 @@ final class TerminalApplication {
     bool runShellIntegrationAcceptance = false,
     bool runDesktopSignalAcceptance = false,
     bool runOsc52Acceptance = false,
+    bool runQuickTerminalAcceptance = false,
     TerminalOsc52ClipboardPort? osc52Clipboard,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
@@ -2346,6 +2391,7 @@ final class TerminalApplication {
     final Completer<void> closed = Completer<void>();
     TerminalNativeHierarchyAdapter? hierarchy;
     TerminalNativeSplitDividerGestureController? dividerGestureController;
+    TerminalQuickTerminalController? quickTerminalController;
     TerminalProductHierarchyActionCoordinator? actionCoordinator;
     TerminalAppKitMenuProjection? menuProjection;
     TerminalCommandPalettePresenter? palettePresenter;
@@ -2462,7 +2508,8 @@ final class TerminalApplication {
                   runConfigurationAcceptance ||
                   runThemeAcceptance ||
                   runDesktopSignalAcceptance ||
-                  runOsc52Acceptance;
+                  runOsc52Acceptance ||
+                  runQuickTerminalAcceptance;
               final Map<String, String> shellEnvironment =
                   usesDeterministicShell
                   ? <String, String>{
@@ -2945,6 +2992,17 @@ final class TerminalApplication {
             dividerGestureController?.cancel(tabId);
             cancelHyperlinkInteraction(tab);
           }
+          if (logicalWindow.role == TerminalWindowRole.quickTerminal) {
+            final TerminalQuickTerminalController? quick =
+                quickTerminalController;
+            if (quick != null && !quick.isDisposed) {
+              unawaited(
+                quick
+                    .handleFocusChanged(isFocused: isFocused)
+                    .then<void>((_) {}, onError: recordAsynchronousError),
+              );
+            }
+          }
           final PaneId focusedPaneId = tab.focusedPaneId;
           final TerminalScreenSet screens =
               sessions[focusedPaneId]!.terminalScreenSet;
@@ -3098,6 +3156,8 @@ final class TerminalApplication {
     };
 
     Future<void> disposeProductResourcesOnce() async {
+      await quickTerminalController?.dispose();
+      quickTerminalController = null;
       await osc52Presenter?.dispose();
       osc52Presenter = null;
       osc52Coordinator.dispose();
@@ -3208,6 +3268,15 @@ final class TerminalApplication {
       );
       if (result.isAccepted) {
         configurationAuthority.applyReload(result);
+        final TerminalQuickTerminalController? quick = quickTerminalController;
+        if (quick != null && !quick.isDisposed) {
+          await quick.replaceShortcut(
+            configurationAuthority
+                .newSessionConfiguration
+                .quickTerminalShortcut,
+          );
+          stdout.writeln(quick.shortcutStatus.machineLine());
+        }
       }
       settingsPresenter?.refresh();
       if (result.disposition == TerminalConfigReloadDisposition.failed) {
@@ -3296,6 +3365,12 @@ final class TerminalApplication {
                 configuration.windowHeight,
               );
             },
+            windowConfigurationBuilder: (TerminalWindowState window) =>
+                window.role == TerminalWindowRole.quickTerminal
+                ? terminalQuickTerminalWindowConfiguration
+                : terminalWindowConfiguration,
+            automaticPresentationPolicy: (TerminalWindowState window) =>
+                window.role == TerminalWindowRole.standard,
             cellSize: TerminalSplitLayoutSize(
               width: 8 + productConfiguration.windowPaddingHorizontal * 2,
               height: 16 + productConfiguration.windowPaddingVertical * 2,
@@ -3423,7 +3498,43 @@ final class TerminalApplication {
       }
       final TerminalActionCatalog catalog = TerminalActionCatalog.standard();
       late final TerminalCommandPalettePresenter installedPalette;
-      final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+      late final TerminalActionDispatcher dispatcher;
+      final TerminalQuickTerminalController createdQuickTerminal =
+          TerminalQuickTerminalController(
+            application: application,
+            state: state,
+            hierarchy: createdHierarchy,
+            paneConfigurationFactory: () => configuration(null),
+            configuration: () => configurationAuthority.newSessionConfiguration,
+            reconcile: reconcileInteractiveHierarchy,
+            onGlobalInvocation: () async {
+              final TerminalActionDispatchResult result = await dispatcher
+                  .dispatch(TerminalActionId.toggleQuickTerminal);
+              if (runQuickTerminalAcceptance) actionDispatches.add(result);
+              if (runQuickTerminalAcceptance) {
+                stdout.writeln(
+                  'TERMINAL_QUICK_TERMINAL_GLOBAL_DISPATCH '
+                  'disposition=${result.disposition.name}',
+                );
+              }
+              if (result.disposition ==
+                  TerminalActionDispatchDisposition.failed) {
+                Error.throwWithStackTrace(result.error!, result.stackTrace!);
+              }
+            },
+            onStatusChanged: () {
+              final TerminalSettingsInspectorPresenter? settings =
+                  settingsPresenter;
+              if (settings != null && !settings.isDisposed) settings.refresh();
+              final TerminalAppKitMenuProjection? menu = menuProjection;
+              if (menu != null && !menu.isDisposed) menu.refresh();
+              final TerminalCommandPalettePresenter? palette = palettePresenter;
+              if (palette != null && !palette.isDisposed) palette.refresh();
+            },
+            onError: recordAsynchronousError,
+          );
+      quickTerminalController = createdQuickTerminal;
+      dispatcher = TerminalActionDispatcher(
         catalog: catalog,
         registrations: <TerminalActionRegistration>[
           TerminalActionRegistration(
@@ -3461,13 +3572,27 @@ final class TerminalApplication {
             },
           ),
           TerminalActionRegistration(
+            id: TerminalActionId.toggleQuickTerminal,
+            isAvailable: () =>
+                !state.isDisposed &&
+                !createdQuickTerminal.isDisposed &&
+                !createdPaneCloseCoordinator.removalInProgress &&
+                !createdPaneCloseCoordinator.applicationQuitInProgress,
+            handler: createdQuickTerminal.toggle,
+          ),
+          TerminalActionRegistration(
             id: TerminalActionId.closeWindow,
             isAvailable: () =>
                 state.activeWindow != null &&
                 !createdPaneCloseCoordinator.removalInProgress &&
                 !createdPaneCloseCoordinator.applicationQuitInProgress,
             handler: () async {
-              await closePaneRequest!(null);
+              if (state.activeWindow?.role ==
+                  TerminalWindowRole.quickTerminal) {
+                await createdQuickTerminal.hide();
+              } else {
+                await closePaneRequest!(null);
+              }
             },
           ),
           TerminalActionRegistration(
@@ -3523,7 +3648,8 @@ final class TerminalApplication {
         onDispatched: (TerminalActionDispatchResult result) {
           if (runUserActionAcceptance ||
               runConfigurationAcceptance ||
-              runOsc52Acceptance) {
+              runOsc52Acceptance ||
+              runQuickTerminalAcceptance) {
             actionDispatches.add(result);
           }
           final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -3565,6 +3691,7 @@ final class TerminalApplication {
             if (runConfigurationAcceptance) actionDispatches.add(result);
           },
           onError: recordAsynchronousError,
+          runtimeStatus: () => createdQuickTerminal.shortcutStatus.settingsLine,
         );
       }
       installedPalette = TerminalCommandPalettePresenter.withFocusTarget(
@@ -3585,7 +3712,8 @@ final class TerminalApplication {
         onDispatched: (TerminalActionDispatchResult result) {
           if (runUserActionAcceptance ||
               runConfigurationAcceptance ||
-              runOsc52Acceptance) {
+              runOsc52Acceptance ||
+              runQuickTerminalAcceptance) {
             actionDispatches.add(result);
           }
           final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -3603,14 +3731,16 @@ final class TerminalApplication {
         onNativeInvocation: (TerminalActionId id, MenuItemInvokedEvent event) {
           if (runUserActionAcceptance ||
               runConfigurationAcceptance ||
-              runOsc52Acceptance) {
+              runOsc52Acceptance ||
+              runQuickTerminalAcceptance) {
             nativeActionInvocations.add(id);
           }
         },
         onDispatched: (TerminalActionDispatchResult result) {
           if (runUserActionAcceptance ||
               runConfigurationAcceptance ||
-              runOsc52Acceptance) {
+              runOsc52Acceptance ||
+              runQuickTerminalAcceptance) {
             actionDispatches.add(result);
           }
           installedPalette.refresh();
@@ -3622,17 +3752,29 @@ final class TerminalApplication {
       if (runUserActionAcceptance) {
         stdout.writeln('TERMINAL_USER_ACTIONS_STAGE stage=menu-installed');
       }
+      await createdQuickTerminal.replaceShortcut(
+        configurationAuthority.newSessionConfiguration.quickTerminalShortcut,
+      );
+      stdout.writeln(createdQuickTerminal.shortcutStatus.machineLine());
       applicationSubscription = application.events.listen((AppKitEvent event) {
         switch (event) {
           case ApplicationActiveChangedEvent(:final isActive):
             desktopSignalCoordinator.setApplicationActive(isActive);
             osc52Coordinator.setApplicationActive(isActive);
+            unawaited(
+              createdQuickTerminal
+                  .handleApplicationActiveChanged(isActive: isActive)
+                  .then<void>((_) {}, onError: recordAsynchronousError),
+            );
           case ApplicationAppearanceChangedEvent():
             // The dedicated theme projection owns palette application.
             break;
           case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
             if (hasVisibleWindows || state.isDisposed) break;
-            if (state.windowCount > 0) {
+            if (state.windows.any(
+              (TerminalWindowState window) =>
+                  window.role == TerminalWindowRole.standard,
+            )) {
               createdHierarchy.present();
               break;
             }
@@ -3671,7 +3813,24 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      if (runOsc52Acceptance) {
+      if (runQuickTerminalAcceptance) {
+        await _exerciseQuickTerminalProduct(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          dispatcher: dispatcher,
+          menu: menuProjection,
+          settings: settingsPresenter!,
+          controller: createdQuickTerminal,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          nativeActionInvocations: nativeActionInvocations,
+          actionDispatches: actionDispatches,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
+      } else if (runOsc52Acceptance) {
         await _exerciseOsc52Product(
           application: application,
           state: state,
@@ -6661,6 +6820,240 @@ keybind = control+k=pane.focus-next
       'grid_resize=true '
       'menu_zero_write=true input_isolated=true close=true quit=true '
       'sessions_clean=5 text_clients=0 native_handles=0',
+    );
+  }
+
+  static Future<void> _exerciseQuickTerminalProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalActionDispatcher dispatcher,
+    required TerminalAppKitMenuProjection menu,
+    required TerminalSettingsInspectorPresenter settings,
+    required TerminalQuickTerminalController controller,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required List<TerminalActionId> nativeActionInvocations,
+    required List<TerminalActionDispatchResult> actionDispatches,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    Future<void> waitFor(
+      bool Function() predicate,
+      String message, {
+      Duration timeout = const Duration(seconds: 10),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (!predicate() && deadline.elapsed < timeout) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      _expectLifecycle(predicate(), message);
+    }
+
+    Future<void> dispatch(TerminalActionId id) async {
+      final TerminalActionDispatchResult result = await dispatcher.dispatch(id);
+      _expectLifecycle(
+        result.disposition == TerminalActionDispatchDisposition.executed,
+        'Quick Terminal action ${id.stableName} did not execute',
+      );
+    }
+
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1 &&
+          controller.activeShortcut != null &&
+          controller.registeredHotKey != null &&
+          controller.shortcutStatus.disposition ==
+              TerminalQuickTerminalShortcutDisposition.registered,
+      'Quick Terminal product did not start disabled-in-window and '
+      'configured-in-shortcut',
+    );
+    final TerminalWindowState ordinaryWindow = state.windows.single;
+    final TerminalSession ordinarySession = sessions.values.single;
+    await _waitForAsciiMarker(ordinarySession, prompt);
+
+    final MenuItem toggleItem = menu.itemForAction(
+      TerminalActionId.toggleQuickTerminal,
+    );
+    _expectLifecycle(
+      toggleItem.isEnabled &&
+          toggleItem.keyEquivalent.isEmpty &&
+          toggleItem.modifiers.bits == 0,
+      'Quick Terminal menu action was unavailable or duplicated a local key',
+    );
+    final int menuInvocationBaseline = nativeActionInvocations.length;
+    final int menuDispatchBaseline = actionDispatches.length;
+    toggleItem.performAction();
+    await waitFor(
+      () =>
+          controller.lifecycle.visibility ==
+              TerminalQuickTerminalVisibility.visible &&
+          state.quickTerminalWindow != null &&
+          state.windowCount == 2 &&
+          state.paneCount == 2 &&
+          hierarchy.nativeWindowCount == 2 &&
+          hierarchy.paneResourceCount == 2 &&
+          nativeActionInvocations.length == menuInvocationBaseline + 1 &&
+          actionDispatches.length == menuDispatchBaseline + 1,
+      'menu toggle did not lazily present one Quick Terminal',
+    );
+
+    final TerminalWindowState quickWindow = state.quickTerminalWindow!;
+    final TerminalTabState quickTab = quickWindow.selectedTab;
+    final PaneId quickPaneId = quickTab.focusedPaneId;
+    final TerminalSession quickSession = sessions[quickPaneId]!;
+    final _TerminalHierarchyProductPane quickOwner = owners[quickPaneId]!;
+    final Window quickNative = hierarchy.windowForTab(quickTab.id)!;
+    final TerminalQuickTerminalFrames frames = controller.lastFrames!;
+    await _waitForAsciiMarker(quickSession, prompt);
+    final int expectedScale = (controller.lastBackingScaleFactor! * 65536)
+        .round();
+    _expectLifecycle(
+      quickWindow.role == TerminalWindowRole.quickTerminal &&
+          quickWindow.tabIds.length == 1 &&
+          quickNative.configuration ==
+              terminalQuickTerminalWindowConfiguration &&
+          quickNative.presentationConfiguration ==
+              TerminalQuickTerminalController.windowPresentation &&
+          quickNative.frame == frames.target &&
+          frames.hidden.width == frames.target.width &&
+          frames.hidden.height == frames.target.height &&
+          quickOwner.surface.snapshot().scale16_16 == expectedScale,
+      'Quick Terminal style, fixed-size geometry, or first-frame scale '
+      'projection diverged',
+    );
+
+    final TerminalPane retainedPane = state.paneForId(quickPaneId)!;
+    await dispatch(TerminalActionId.toggleQuickTerminal);
+    _expectLifecycle(
+      controller.lifecycle.visibility ==
+              TerminalQuickTerminalVisibility.hidden &&
+          identical(state.paneForId(quickPaneId), retainedPane) &&
+          identical(sessions[quickPaneId], quickSession) &&
+          state.activeWindowId == ordinaryWindow.id &&
+          state.windowCount == 2 &&
+          hierarchy.nativeWindowCount == 2,
+      'hide did not retain the singleton session or restore normal ownership',
+    );
+
+    final GlobalHotKey hotKey = controller.registeredHotKey!;
+    final int hotKeyHandle = appkit_testing.nativeGlobalHotKeyHandleForTesting(
+      hotKey,
+    );
+    final int globalDispatchBaseline = actionDispatches.length;
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      41,
+      hotKeyHandle,
+      hotKeyHandle >> 32,
+      18000000,
+      0,
+    ]);
+    await waitFor(
+      () =>
+          controller.lifecycle.visibility ==
+              TerminalQuickTerminalVisibility.visible &&
+          actionDispatches.length == globalDispatchBaseline + 1,
+      'exclusive global hot key did not use the shared toggle action',
+    );
+    _expectLifecycle(
+      identical(state.quickTerminalWindow, quickWindow) &&
+          identical(state.paneForId(quickPaneId), retainedPane) &&
+          identical(sessions[quickPaneId], quickSession),
+      'global toggle replaced the retained Quick Terminal generation',
+    );
+
+    _injectFocusEventForTesting(
+      application,
+      quickNative,
+      isFocused: true,
+      monotonicNanoseconds: 18000500,
+    );
+    _injectFocusEventForTesting(
+      application,
+      quickNative,
+      isFocused: false,
+      monotonicNanoseconds: 18001000,
+    );
+    await waitFor(
+      () =>
+          controller.lifecycle.visibility ==
+              TerminalQuickTerminalVisibility.hidden &&
+          state.activeWindowId == ordinaryWindow.id,
+      'configured focus-loss autohide did not hide Quick Terminal',
+    );
+
+    const TerminalKeyBindingChord conflictingChord = TerminalKeyBindingChord(
+      physicalKey: TerminalPhysicalKey.f17,
+      control: true,
+      option: true,
+      command: true,
+    );
+    final TerminalQuickTerminalHotKeyBinding conflictingBinding =
+        TerminalQuickTerminalHotKeyBinding.fromChord(conflictingChord);
+    final GlobalHotKey blocker = GlobalHotKey(
+      keyCode: conflictingBinding.keyCode,
+      modifiers: conflictingBinding.modifiers,
+    );
+    try {
+      await controller.replaceShortcut(conflictingChord);
+      _expectLifecycle(
+        controller.shortcutStatus.disposition ==
+                TerminalQuickTerminalShortcutDisposition.failed &&
+            controller.shortcutStatus.failure ==
+                TerminalQuickTerminalShortcutFailure.conflict &&
+            identical(controller.registeredHotKey, hotKey) &&
+            !hotKey.isDisposed,
+        'failed live replacement did not retain the active registration',
+      );
+      await settings.open();
+      _expectLifecycle(
+        (settings.renderedText ?? '').contains(
+          'Quick Terminal shortcut: conflict',
+        ),
+        'Settings did not surface shortcut replacement failure',
+      );
+      await settings.dismiss();
+    } finally {
+      blocker.dispose();
+    }
+    await controller.replaceShortcut(controller.activeShortcut);
+
+    await dispatch(TerminalActionId.toggleQuickTerminal);
+    await dispatch(TerminalActionId.closeWindow);
+    _expectLifecycle(
+      controller.lifecycle.visibility ==
+              TerminalQuickTerminalVisibility.hidden &&
+          state.windowCount == 2 &&
+          state.paneCount == 2,
+      'Close on Quick Terminal did not hide and retain its pane',
+    );
+
+    await dispatch(TerminalActionId.quitApplication);
+    await closed.future.timeout(const Duration(seconds: 15));
+    await Future<void>.delayed(Duration.zero);
+    _expectLifecycle(
+      state.isDisposed &&
+          hierarchy.isDisposed &&
+          controller.isDisposed &&
+          allSessions.length == 2 &&
+          allSessions.every(
+            (TerminalSession session) =>
+                session.shutdownResult?.isClean == true,
+          ) &&
+          debugLiveTerminalTextInputClientCount() == 0 &&
+          application.debugLiveObjectCount == 0,
+      'Quick Terminal quit did not release global/native/session owners',
+    );
+    stdout.writeln(
+      'TERMINAL_QUICK_TERMINAL_TEST singleton=true shortcut=true '
+      'menu=true global_action=true screen=true fixed_geometry=true '
+      'retina_scale=true retained_session=true autohide=true '
+      'conflict_visible=true close_hides=true normal_independent=true '
+      'sessions_clean=2 text_clients=0 native_handles=0',
     );
   }
 

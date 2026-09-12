@@ -22,6 +22,14 @@ typedef TerminalNativeWindowFrameBuilder = Rect Function(
   TerminalWindowState window,
 );
 
+typedef TerminalNativeWindowConfigurationBuilder = WindowConfiguration Function(
+  TerminalWindowState window,
+);
+
+typedef TerminalNativeWindowAutomaticPresentationPolicy = bool Function(
+  TerminalWindowState window,
+);
+
 typedef TerminalNativeTabTitleBuilder = String Function(
   TerminalWindowState window,
   TerminalTabState tab,
@@ -159,6 +167,9 @@ final class TerminalNativeHierarchyAdapter {
     required Rect windowFrame,
     required TerminalSplitLayoutSize cellSize,
     TerminalNativeWindowFrameBuilder? windowFrameBuilder,
+    TerminalNativeWindowConfigurationBuilder? windowConfigurationBuilder,
+    TerminalNativeWindowAutomaticPresentationPolicy?
+    automaticPresentationPolicy,
     Map<TerminalWindowId, TerminalWindowPlacement> windowPlacements =
         const <TerminalWindowId, TerminalWindowPlacement>{},
     this.dividerThickness = 1,
@@ -171,6 +182,10 @@ final class TerminalNativeHierarchyAdapter {
        _paneResourcesFactory = paneResourcesFactory,
        _windowFrame = windowFrame,
        _windowFrameBuilder = windowFrameBuilder,
+       _windowConfigurationBuilder =
+           windowConfigurationBuilder ?? _defaultWindowConfiguration,
+       _automaticPresentationPolicy =
+           automaticPresentationPolicy ?? _alwaysPresentWindow,
        _cellSize = cellSize,
        _windowPlacements = Map<TerminalWindowId, TerminalWindowPlacement>.of(
          windowPlacements,
@@ -212,6 +227,9 @@ final class TerminalNativeHierarchyAdapter {
   final TerminalNativePaneResourcesFactory _paneResourcesFactory;
   final Rect _windowFrame;
   final TerminalNativeWindowFrameBuilder? _windowFrameBuilder;
+  final TerminalNativeWindowConfigurationBuilder _windowConfigurationBuilder;
+  final TerminalNativeWindowAutomaticPresentationPolicy
+  _automaticPresentationPolicy;
   final TerminalSplitLayoutSize _cellSize;
   final Map<TerminalWindowId, TerminalWindowPlacement> _windowPlacements;
   final TerminalNativeTabPresentationBuilder _presentationBuilder;
@@ -432,6 +450,32 @@ final class TerminalNativeHierarchyAdapter {
     );
   }
 
+  /// Updates one authoritative windowed frame before a custom presentation.
+  ///
+  /// [project] may be disabled when [Window.present] will apply the native
+  /// animation endpoints itself. The model still advances immediately so a
+  /// later reconciliation cannot snap the window back to stale geometry.
+  void updateWindowedFrame(
+    TerminalWindowId windowId,
+    Rect frame, {
+    AppKitScreen? screen,
+    bool project = true,
+  }) {
+    _ensureCanReconcile();
+    final TerminalWindowState? logicalWindow = _state.windowForId(windowId);
+    if (logicalWindow == null) {
+      throw StateError('unknown terminal window $windowId');
+    }
+    _validateWindowFrame(frame);
+    final TerminalWindowPlacement current = placementForWindow(windowId);
+    _windowPlacements[windowId] = current.copyWith(
+      windowedFrame: _terminalFrame(frame),
+      screen: screen == null ? null : _terminalScreen(screen),
+      fullscreen: false,
+    );
+    if (project) _projectPlacement(logicalWindow);
+  }
+
   /// Requests fullscreen for the selected native tab of one logical window.
   void requestFullscreen(TerminalWindowId windowId, bool enabled) {
     _ensureCanReconcile();
@@ -511,6 +555,7 @@ final class TerminalNativeHierarchyAdapter {
   void present({bool restoreSelectionAndFocus = true}) {
     _ensureCanReconcile();
     for (final TerminalWindowState logicalWindow in _presentationOrder()) {
+      if (!_automaticPresentationPolicy(logicalWindow)) continue;
       _presentWindow(logicalWindow, force: restoreSelectionAndFocus);
     }
   }
@@ -626,7 +671,7 @@ final class TerminalNativeHierarchyAdapter {
               Window(
                   frame: nativeFrame,
                   title: presentation.title,
-                  configuration: terminalWindowConfiguration,
+                  configuration: _windowConfigurationBuilder(owner),
                 )
                 ..keyEventRouting = keyEventRouting
                 ..defersCloseRequests = defersCloseRequests;
@@ -707,7 +752,10 @@ final class TerminalNativeHierarchyAdapter {
           windows: nextWindows,
           paneResources: nextPaneResources,
           force: created,
-          show: presentWindows && created,
+          show:
+              presentWindows &&
+              created &&
+              _automaticPresentationPolicy(logicalWindow),
         );
       }
 
@@ -937,14 +985,7 @@ final class TerminalNativeHierarchyAdapter {
 
   TerminalWindowPlacement _defaultPlacement(TerminalWindowState window) {
     final Rect frame = _windowFrameBuilder?.call(window) ?? _windowFrame;
-    if (!frame.left.isFinite ||
-        !frame.top.isFinite ||
-        !frame.width.isFinite ||
-        !frame.height.isFinite ||
-        frame.width <= 0 ||
-        frame.height <= 0) {
-      throw ArgumentError.value(frame, 'windowFrameBuilder', 'invalid frame');
-    }
+    _validateWindowFrame(frame);
     return TerminalWindowPlacement(
       windowedFrame: _terminalFrame(frame),
       screen: null,
@@ -968,6 +1009,23 @@ final class TerminalNativeHierarchyAdapter {
         frame: _terminalFrame(screen.frame),
         visibleFrame: _terminalFrame(screen.visibleFrame),
       );
+
+  static void _validateWindowFrame(Rect frame) {
+    if (!frame.left.isFinite ||
+        !frame.top.isFinite ||
+        !frame.width.isFinite ||
+        !frame.height.isFinite ||
+        frame.width <= 0 ||
+        frame.height <= 0) {
+      throw ArgumentError.value(frame, 'frame', 'invalid window frame');
+    }
+  }
+
+  static WindowConfiguration _defaultWindowConfiguration(
+    TerminalWindowState _,
+  ) => terminalWindowConfiguration;
+
+  static bool _alwaysPresentWindow(TerminalWindowState _) => true;
 
   TerminalSplitLayoutSize _contentLayoutSize(
     TerminalTabId tabId,

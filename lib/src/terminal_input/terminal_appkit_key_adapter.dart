@@ -148,4 +148,13 @@ abstract final class TerminalAppKitKeyAdapter {
         126 => TerminalPhysicalKey.arrowUp,
         _ => TerminalPhysicalKey.unknown,
       };
+
+  /// Returns the macOS virtual code for a supported physical position.
+  static int? keyCodeForPhysicalKey(TerminalPhysicalKey physicalKey) {
+    if (physicalKey == TerminalPhysicalKey.unknown) return null;
+    for (var keyCode = 0; keyCode <= 127; keyCode++) {
+      if (physicalKeyForCode(keyCode) == physicalKey) return keyCode;
+    }
+    return null;
+  }
 }

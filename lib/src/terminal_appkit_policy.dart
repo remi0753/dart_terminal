@@ -11,6 +11,15 @@ const WindowConfiguration terminalWindowConfiguration = WindowConfiguration(
   resizable: true,
 );
 
+/// Borderless retained surface used only by the product Quick Terminal role.
+const WindowConfiguration terminalQuickTerminalWindowConfiguration =
+    WindowConfiguration(
+      titled: false,
+      closable: false,
+      miniaturizable: false,
+      resizable: false,
+    );
+
 /// Behavior used by package-created diagnostic views.
 const ViewConfiguration terminalBaseViewConfiguration = ViewConfiguration(
   acceptsFirstResponder: true,

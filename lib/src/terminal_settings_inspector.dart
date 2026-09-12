@@ -470,6 +470,7 @@ typedef TerminalSettingsInspectorErrorObserver = void Function(
   Object error,
   StackTrace stackTrace,
 );
+typedef TerminalSettingsRuntimeStatusProvider = String? Function();
 
 /// Product-owned modal Settings editor backed by one reload controller.
 final class TerminalSettingsInspectorPresenter {
@@ -481,6 +482,7 @@ final class TerminalSettingsInspectorPresenter {
     TerminalSettingsEditorLimits limits = const TerminalSettingsEditorLimits(),
     this.onReloaded,
     this.onError,
+    this.runtimeStatus,
   }) : _focusTarget = focusTarget,
        _reload = reload,
        state = TerminalSettingsEditorState(
@@ -495,6 +497,7 @@ final class TerminalSettingsInspectorPresenter {
   final TerminalSettingsInspectorReload _reload;
   final TerminalSettingsInspectorReloadObserver? onReloaded;
   final TerminalSettingsInspectorErrorObserver? onError;
+  final TerminalSettingsRuntimeStatusProvider? runtimeStatus;
   final TerminalSettingsEditorState state;
 
   late final TerminalSettingsEditorKeyController _keys;
@@ -841,7 +844,10 @@ final class TerminalSettingsInspectorPresenter {
     window.keyEventRouting = editable
         ? KeyEventRouting.dartAndAppKit
         : KeyEventRouting.dartOnly;
-    statusView.text = state.renderStatus();
+    final String? productStatus = _boundedRuntimeStatus(runtimeStatus?.call());
+    statusView.text = productStatus == null
+        ? state.renderStatus()
+        : '${state.renderStatus()}    $productStatus';
     detailView.text = state.detailsExpanded
         ? state.renderDetail()
         : '›\n\nD\nE\nT\nA\nI\nL';
@@ -932,6 +938,14 @@ final class TerminalSettingsInspectorPresenter {
       (String component) => component.isNotEmpty,
       orElse: () => 'Settings',
     );
+  }
+
+  static String? _boundedRuntimeStatus(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final Iterable<int> safe = value.runes
+        .take(512)
+        .map((int rune) => rune < 0x20 || rune == 0x7f ? 0x20 : rune);
+    return String.fromCharCodes(safe);
   }
 
   static void _disposeView(View? view) {

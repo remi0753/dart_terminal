@@ -31,6 +31,7 @@ enum _Suite {
   shellIntegration,
   desktopSignals,
   osc52,
+  quickTerminal,
   restoration,
   clipboard,
   lifecycle,
@@ -43,6 +44,7 @@ enum _Suite {
     _Suite.shellIntegration => 'shell-integration',
     _Suite.desktopSignals => 'desktop-signals',
     _Suite.osc52 => 'osc52',
+    _Suite.quickTerminal => 'quick-terminal',
     _ => name,
   };
 }
@@ -162,7 +164,8 @@ _Options _parseOptions(List<String> arguments) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
           'configuration, theme, shell-integration, desktop-signals, '
-          'osc52, clipboard, lifecycle, traffic, resource, fault, or all',
+          'osc52, quick-terminal, clipboard, lifecycle, traffic, resource, '
+          'fault, or all',
         );
       }
       suite = selected;
@@ -1555,6 +1558,76 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'windows=2 tabs=3 panes=4 elapsed_ms='
     '${observation.elapsed.inMilliseconds}',
+  );
+}
+
+Future<void> _runQuickTerminal(_Options options, _Invocation invocation) async {
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>[
+      '--no-config',
+      '--shell-integration=none',
+      '--quick-terminal-shortcut=control+option+command+f18',
+      '--quick-terminal-animation-duration=0',
+      '--runtime-quick-terminal-test',
+    ],
+    environment: const <String, String>{'DT_RUNTIME_QUICK_TERMINAL_TEST': '1'},
+    timeout: const Duration(seconds: 45),
+  );
+  _expect(
+    observation.status == 0,
+    'Quick Terminal application exited with status ${observation.status}; '
+    'stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'Quick Terminal application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_QUICK_TERMINAL_TEST singleton=true shortcut=true '
+          r'menu=true global_action=true screen=true fixed_geometry=true '
+          r'retina_scale=true retained_session=true autohide=true '
+          r'conflict_visible=true close_hides=true normal_independent=true '
+          r'sessions_clean=2 text_clients=0 native_handles=0$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted exact Quick Terminal acceptance',
+  );
+  _expect(
+    RegExp(
+              r'^TERMINAL_SESSION_SHUTDOWN pane=[12] session=[12]:1 '
+              r'process_id=[1-9][0-9]* disposition=clean '
+              r'termination_observed=true cleanup_completed=true$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            2 &&
+        RegExp(
+              r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=2 disposition=clean$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1 &&
+        observation.stdoutText.contains(
+          'TERMINAL_QUICK_TERMINAL_SHORTCUT status=registered '
+          'failure=none retained=true',
+        ) &&
+        observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+    'Quick Terminal product did not cleanly release two sessions and its '
+    'configured registration',
+  );
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
+  );
+  stdout.writeln(
+    'RUNTIME_QUICK_TERMINAL_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }
 
@@ -3194,6 +3267,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.actions || options.suite == _Suite.all) {
       await _runUserActions(options, invocation);
+    }
+    if (options.suite == _Suite.quickTerminal || options.suite == _Suite.all) {
+      await _runQuickTerminal(options, invocation);
     }
     if (options.suite == _Suite.configuration || options.suite == _Suite.all) {
       await _runConfiguration(options, invocation);

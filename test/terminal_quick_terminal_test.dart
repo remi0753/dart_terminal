@@ -1,3 +1,4 @@
+import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_terminal/dart_terminal.dart';
 
 void main() => runTerminalQuickTerminalTests();
@@ -6,6 +7,8 @@ void runTerminalQuickTerminalTests() {
   _testOrderedTransitionsAndFailureRecovery();
   _testSupersededTransitionsAndAutohide();
   _testResetAndDisposal();
+  _testFixedSizeScreenGeometry();
+  _testHotKeyProjectionAndStatus();
 }
 
 void _testOrderedTransitionsAndFailureRecovery() {
@@ -101,6 +104,84 @@ void _testResetAndDisposal() {
   _expectThrows<StateError>(
     lifecycle.requestToggle,
     'disposed lifecycle rejects new presentation work',
+  );
+}
+
+void _testFixedSizeScreenGeometry() {
+  final TerminalQuickTerminalFrames ordinary =
+      TerminalQuickTerminalFrames.resolve(
+        visibleFrame: const Rect.fromLTWH(-1512, 48, 1512, 934),
+        desiredWidth: 920,
+        desiredHeight: 580,
+      );
+  _expect(
+    ordinary.target == const Rect.fromLTWH(-1216, 402, 920, 580) &&
+        ordinary.hidden == const Rect.fromLTWH(-1216, 982, 920, 580) &&
+        ordinary.target.width == ordinary.hidden.width &&
+        ordinary.target.height == ordinary.hidden.height,
+    'Quick Terminal uses fixed-size endpoints at a negative-coordinate '
+    'screen top edge',
+  );
+
+  final TerminalQuickTerminalFrames clamped =
+      TerminalQuickTerminalFrames.resolve(
+        visibleFrame: const Rect.fromLTWH(100, -200, 640, 480),
+        desiredWidth: 920,
+        desiredHeight: 580,
+      );
+  _expect(
+    clamped.target == const Rect.fromLTWH(100, -200, 640, 480) &&
+        clamped.hidden == const Rect.fromLTWH(100, 280, 640, 480),
+    'Quick Terminal clamps both endpoints without changing their scale',
+  );
+}
+
+void _testHotKeyProjectionAndStatus() {
+  const TerminalKeyBindingChord chord = TerminalKeyBindingChord(
+    physicalKey: TerminalPhysicalKey.f18,
+    control: true,
+    option: true,
+    command: true,
+  );
+  final TerminalQuickTerminalHotKeyBinding binding =
+      TerminalQuickTerminalHotKeyBinding.fromChord(chord);
+  _expect(
+    binding.keyCode == 79 &&
+        binding.modifiers.control &&
+        binding.modifiers.option &&
+        binding.modifiers.command &&
+        !binding.modifiers.shift,
+    'configured physical chord projects to its macOS virtual identity',
+  );
+  _expect(
+    const TerminalQuickTerminalShortcutStatus.disabled().settingsLine ==
+            'Quick Terminal shortcut: disabled' &&
+        const TerminalQuickTerminalShortcutStatus.registered(chord).settingsLine
+            .contains('active') &&
+        const TerminalQuickTerminalShortcutStatus.failed(
+              desired: chord,
+              active: null,
+              failure: TerminalQuickTerminalShortcutFailure.conflict,
+            ).machineLine() ==
+            'TERMINAL_QUICK_TERMINAL_SHORTCUT status=failed '
+                'failure=conflict retained=false',
+    'shortcut state has bounded Settings and machine projections',
+  );
+  _expect(
+    terminalQuickTerminalScreenSelection(
+          TerminalConfiguredQuickTerminalScreen.macosMenuBar,
+        ) ==
+        AppKitScreenSelection.menuBar,
+    'configured screen maps to the reusable AppKit selector',
+  );
+  _expectThrows<ArgumentError>(
+    () => TerminalQuickTerminalHotKeyBinding.fromChord(
+      const TerminalKeyBindingChord(
+        physicalKey: TerminalPhysicalKey.unknown,
+        command: true,
+      ),
+    ),
+    'unsupported physical key is rejected before native registration',
   );
 }
 
