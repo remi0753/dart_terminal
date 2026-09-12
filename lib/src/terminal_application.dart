@@ -1756,6 +1756,10 @@ final class TerminalApplication {
               // Isolated legacy runtime fixtures retain their fixed palette;
               // the ordinary hierarchy owns live theme projection.
               break;
+            case ApplicationAccessibilityDisplayPreferencesChangedEvent():
+              // Product projection is installed only by the ordinary
+              // hierarchy; isolated legacy fixtures safely ignore the value.
+              break;
             case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
               if (!hasVisibleWindows &&
                   !createdWindow.isClosed &&
@@ -4742,6 +4746,9 @@ final class TerminalApplication {
             );
           case ApplicationAppearanceChangedEvent():
             // The dedicated theme projection owns palette application.
+            break;
+          case ApplicationAccessibilityDisplayPreferencesChangedEvent():
+            // The dedicated accessibility projection owns application policy.
             break;
           case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
             if (hasVisibleWindows || state.isDisposed) break;

@@ -9,9 +9,10 @@ injectable localization boundary with English and Japanese catalogs.
 
 ## Background and current state
 
-- `dart_appkit` protocol version 13 publishes application active state and
-  effective light/dark appearance, but it has no typed snapshot or change event
-  for the three accessibility display preferences.
+- At task start, `dart_appkit` protocol version 13 published application active
+  state and effective light/dark appearance but had no typed snapshot or change
+  event for the three accessibility display preferences. The completed generic
+  substrate now negotiates version 14 for that additive event.
 - AppKit exposes those process-wide values through `NSWorkspace` and publishes
   one accessibility-display-options change notification. Observing the native
   mechanism belongs in the generic library; deciding how a terminal changes its
@@ -154,3 +155,41 @@ injectable localization boundary with English and Japanese catalogs.
   animation, palette, overlay, menu, palette, Settings, confirmation, badge, and
   manifest owners. The five-part plan above keeps generic mechanism and product
   policy separate and gives each child an independently verifiable commit.
+- 2026-09-13: completed the adjacent generic substrate in commit `147cf2a`
+  (`Observe accessibility display preferences`). Protocol v14 carries exactly
+  three booleans under the zero application identity. `NSWorkspace` observation
+  emits an initial copied snapshot, deduplicates complete-state changes, stops
+  before event-port replacement and shutdown, and is not installed for legacy
+  sinks. Dart exposes an immutable value, nullable latest cache, and typed
+  stream with strict length/type/source/version/operation validation.
+- 2026-09-13: generic focused tests and the exact full gate passed, including
+  the ownership audit, header/native bridge/event encoder contracts, Dart API,
+  runtime builder, current FFI, and v1 legacy fallback. The generic hello-window
+  also built and completed its bounded Timer/menu/close/handle-release smoke in
+  Developer JIT and Release AOT. No long-duration test was needed or run.
+- 2026-09-13: the first consumer `make test` stopped at Kernel compilation
+  because the additive sealed event made two application event switches
+  non-exhaustive. Added explicit no-op cases only: isolated legacy fixtures and
+  the ordinary hierarchy now accept v14 without prematurely choosing product
+  presentation policy. The next subtask will replace the ordinary-hierarchy
+  no-op with the dedicated live projection.
+- 2026-09-13: a direct `dart format` reported no source changes but could not
+  update the sandboxed user telemetry timestamp; subsequent commands set
+  `DART_SUPPRESS_ANALYTICS=true`. The next complete consumer gate passed the
+  new compile point, then one existing PTY process-lifecycle case did not find
+  its expected child-exit event (`Bad state: No element`). This is unrelated to
+  the display-preference event path; the focused PTY gate is being rerun before
+  deciding whether it is an environmental transient or a blocker.
+- 2026-09-13: the focused PTY rerun passed, and a second complete consumer gate
+  also passed that lifecycle case. It then correctly rejected stale generated
+  Phase 7 AppKit acceptance inventory because the adjacent public Dart suite
+  gained the new preference-event test. Regeneration from the canonical test
+  sources is required; acceptance conditions are not being weakened.
+- 2026-09-13: regenerated `test/corpus/appkit/phase7_acceptance_v1.json`; only
+  the two expected hashes for `terminal_application.dart` changed, and the
+  acceptance check passed with the same 4 criteria, 13 source references, 10
+  unit tests, 4 integrations, and 8 UI assertions. A third exact consumer
+  `make test` then passed end to end, including format/analyze, all native
+  capability and Dart suites, generated references, compatibility/differential
+  evidence, application matrix, and bounded security stress. The isolated PTY
+  failure did not recur in either rerun and is not a blocker.
