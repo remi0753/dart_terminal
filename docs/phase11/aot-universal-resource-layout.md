@@ -176,7 +176,8 @@ begin until all four children and this parent are complete.
 | --- | --- | --- |
 | `Contents/MacOS/<executable>` | generic AppKit/Dart AOT host | merge verified arm64 and x86_64 thin images |
 | `Contents/Resources/application.aot` | product entrypoint compiled by generic runtime | merge verified AOT Mach-O snapshots |
-| `Contents/Helpers/*` | manifest-declared product Dart entrypoints | merge every exact matching helper name |
+| `Contents/Helpers/*` | generic native helper host for manifest-declared Dart entrypoints | merge every exact matching helper name |
+| `Contents/Resources/DartHelpers/*.aot` | manifest-declared product helper entrypoints compiled by generic runtime | merge every declared Release AOT helper payload |
 | Engine image | configured official Engine output | merge same basename and pinned SDK/Engine contract |
 | native assets/capabilities | manifest-declared dependency build hooks | merge every declared matching library |
 | App Intents image | manifest-declared dependency Swift source | merge matching library after per-thin metadata validation |
@@ -417,3 +418,55 @@ begin until all four children and this parent are complete.
   native/Dart tests, the bounded security stress, and the root suite. The
   generic milestone can be recorded without committing the already-started
   product integration files.
+- 2026-09-13: product startup now converts the application-supplied helper
+  name through generic `MacosRuntime.bundleHelperCommand` and injects its
+  executable and generic argument prefix into the product lifecycle command.
+  The product continues to own the helper name and worker protocol; the
+  adjacent generic repository contains no product-specific default or name.
+- 2026-09-13: expanded the product audit to require the exact helper
+  declaration and Release payload, compare every runtime-consumed schema-2
+  top-level declaration with its nested application contract, include all
+  nine declared code paths, and check an exact one-slice thin or exact
+  two-slice Universal architecture set. Universal evidence must own the exact
+  20 neutral regular files, in safe sorted paths with matching byte counts and
+  SHA-256 hashes; symlinks, case aliases, undeclared files, build-machine load
+  paths, and non-strict signatures fail closed.
+- 2026-09-13: `make release-aot-distribution-audit` rebuilt both product thin
+  inputs and atomically assembled the Universal result. arm64, x86_64, and
+  Universal audits all reported `DART_ONLY_BUNDLE_AUDIT_PASS`. The final
+  schema-2 manifest SHA-256 was
+  `33add137b914727e05137f3d39367b99b90ad6e838c564a251b43b5e85de4b5c`;
+  it declares nine code images and 20 neutral files. Direct inspection of the
+  main host, helper host, helper AOT payload, and main AOT payload returned
+  exactly `x86_64 arm64`; deep strict signature verification passed and no
+  staging or backup directory remained.
+- 2026-09-13: `make release-aot-distribution-integration` rebuilt each accepted
+  lane and passed the normal product smoke with arm64 native in 2,008 ms,
+  x86_64 through explicitly selected Rosetta in 5,570 ms, and Universal native
+  in 1,964 ms. Each run exercised AppKit startup, one ordinary terminal pane,
+  PTY, worker host plus external AOT payload, native capabilities, the current
+  30-action menu, diagnostics, and complete clean teardown.
+- 2026-09-13: a direct product audit inside the restricted filesystem first
+  failed because the Dart build hook could not write Clang's normal Metal
+  module cache. The identical bounded audit succeeded in the normal build
+  environment. This was an execution-environment restriction rather than a
+  bundle defect and did not weaken the product gate.
+- 2026-09-13: the first exact main gate stopped at two truthful freshness
+  checks after the product source and public documentation changed. Regenerated
+  `test/corpus/appkit/phase7_acceptance_v1.json` and
+  `compatibility/regression_coverage_report.json` through their canonical Make
+  targets; review confirmed that only the expected source/document hashes
+  changed. No acceptance criterion, expected behavior, or historical result
+  was weakened.
+- 2026-09-13: the final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` completed with exit zero.
+  It checked 294 formatted files, analyzer output, all generated contracts and
+  compatibility evidence, native and Dart package tests, bounded Phase 9
+  security stress, and the root test suite. `git diff --check` also passed and
+  the adjacent generic worktree remained clean.
+- 2026-09-13: reconciled the README build/acceptance commands and helper layout,
+  FEATURE_MATRIX `DIST-01`, generated source evidence, and the roadmap's
+  remaining hardware scope. The product child and parent meet every completion
+  condition. Only a genuine Intel-native no-rebuild handoff remains in the
+  post-goal low-priority item; duration-only validation was neither required
+  nor treated as a blocker.

@@ -78,8 +78,22 @@ override RELEASE_AOT_BUILD_DIR := \
 	$(RUNTIME_BUILD_DIR)/$(RUNTIME_ARCH)/release-aot
 override DEVELOPER_JIT_BUNDLE := $(DEVELOPER_JIT_BUILD_DIR)/DartTerminal.app
 override RELEASE_AOT_BUNDLE := $(RELEASE_AOT_BUILD_DIR)/DartTerminal.app
+override ARM64_RELEASE_AOT_BUILD_DIR := \
+	$(RUNTIME_BUILD_DIR)/arm64/release-aot
+override X86_64_RELEASE_AOT_BUILD_DIR := \
+	$(RUNTIME_BUILD_DIR)/x86_64/release-aot
+override UNIVERSAL_RELEASE_AOT_BUILD_DIR := \
+	$(RUNTIME_BUILD_DIR)/universal/release-aot
+override ARM64_RELEASE_AOT_BUNDLE := \
+	$(ARM64_RELEASE_AOT_BUILD_DIR)/DartTerminal.app
+override X86_64_RELEASE_AOT_BUNDLE := \
+	$(X86_64_RELEASE_AOT_BUILD_DIR)/DartTerminal.app
+override UNIVERSAL_RELEASE_AOT_BUNDLE := \
+	$(UNIVERSAL_RELEASE_AOT_BUILD_DIR)/DartTerminal.app
 override RUNTIME_BUILDER := $(DART) run dart_macos_runtime:build \
 	--manifest $(APPLICATION_MANIFEST) --engine-root $(DART_ENGINE_ROOT)
+override RUNTIME_UNIVERSAL_ASSEMBLER := \
+	$(DART) run dart_macos_runtime:universal
 override INTEGRATION_TOOL := $(DART) run tool/runtime_integration_smoke.dart
 override BUNDLE_AUDIT_TOOL := $(DART) run tool/dart_only_bundle_audit.dart
 override PRODUCT_PARSER_BENCHMARK_DIR := $(PROJECT_ROOT)/build/benchmarks
@@ -114,6 +128,12 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-actions developer-jit-applescript developer-jit-system-automation developer-jit-native-content developer-jit-quick-terminal developer-jit-secure-keyboard-entry developer-jit-diagnostics developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
 	developer-jit-resource developer-jit-shutdown-fault \
 	release-aot-build release-aot-run release-aot-audit \
+	release-aot-arm64-build release-aot-x86_64-build release-aot-thin-builds \
+	release-aot-universal-build release-aot-arm64-audit release-aot-x86_64-audit \
+	release-aot-universal-audit release-aot-distribution-audit \
+	release-aot-arm64-integration release-aot-x86_64-integration \
+	release-aot-universal-integration release-aot-distribution-integration \
+	release-aot-distribution-verify \
 	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
 	release-aot-resource release-aot-shutdown-fault runtime-bundle-audit \
 	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-user-actions-integration runtime-applescript-integration runtime-system-automation-integration runtime-native-content-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-diagnostics-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-clipboard-integration runtime-lifecycle-integration \
@@ -172,6 +192,9 @@ help:
 	@echo "  make developer-jit-run            Build and run the JIT application"
 	@echo "  make release-aot-build             Build the generic-host AOT application"
 	@echo "  make release-aot-run               Build and run the AOT application"
+	@echo "  make release-aot-thin-builds       Build arm64 and x86_64 thin AOT applications"
+	@echo "  make release-aot-universal-build   Assemble both thin applications as Universal"
+	@echo "  make release-aot-distribution-verify  Audit and smoke-test all release architectures"
 	@echo "  make runtime-terminal-display-integration  Verify the live Metal terminal in both modes"
 	@echo "  make runtime-native-hierarchy-integration  Verify four-pane hierarchy and Close/Quit in both modes"
 	@echo "  make runtime-user-actions-integration  Verify normal-product window/tab/split actions in both modes"
@@ -420,7 +443,7 @@ runtime-architecture-check:
 		echo "RUNTIME_ARCH must be arm64 or x86_64" >&2; exit 64; \
 	fi
 	@if [[ "$(RUNTIME_ARCH)" != "$$(uname -m)" ]]; then \
-		echo "The generic builder currently builds the host architecture only" >&2; \
+		echo "This target requires the host architecture; use the explicit release distribution targets for cross-builds" >&2; \
 		exit 69; \
 	fi
 
@@ -656,6 +679,25 @@ release-aot-build: runtime-architecture-check dependencies
 	@cd $(PROJECT_ROOT) && $(RUNTIME_BUILDER) --mode release-aot \
 		--build-dir $(RELEASE_AOT_BUILD_DIR)
 
+release-aot-arm64-build: dependencies
+	@cd $(PROJECT_ROOT) && $(RUNTIME_BUILDER) --mode release-aot \
+		--target-architecture arm64 \
+		--build-dir $(ARM64_RELEASE_AOT_BUILD_DIR)
+
+release-aot-x86_64-build: dependencies
+	@cd $(PROJECT_ROOT) && $(RUNTIME_BUILDER) --mode release-aot \
+		--target-architecture x86_64 \
+		--build-dir $(X86_64_RELEASE_AOT_BUILD_DIR)
+
+release-aot-thin-builds: release-aot-arm64-build release-aot-x86_64-build
+
+release-aot-universal-build: release-aot-thin-builds
+	@mkdir -p $(UNIVERSAL_RELEASE_AOT_BUILD_DIR)
+	@cd $(PROJECT_ROOT) && $(RUNTIME_UNIVERSAL_ASSEMBLER) \
+		--input-app $(ARM64_RELEASE_AOT_BUNDLE) \
+		--input-app $(X86_64_RELEASE_AOT_BUNDLE) \
+		--output-app $(UNIVERSAL_RELEASE_AOT_BUNDLE)
+
 release-aot-run: runtime-architecture-check dependencies
 	@cd $(PROJECT_ROOT) && $(RUNTIME_BUILDER) --mode release-aot \
 		--build-dir $(RELEASE_AOT_BUILD_DIR) --run -- $(RUNTIME_ARGUMENTS)
@@ -664,9 +706,43 @@ release-aot-audit: release-aot-build
 	@cd $(PROJECT_ROOT) && $(BUNDLE_AUDIT_TOOL) \
 		--mode=release-aot --architecture=$(RUNTIME_ARCH) $(RELEASE_AOT_BUNDLE)
 
+release-aot-arm64-audit: release-aot-arm64-build
+	@cd $(PROJECT_ROOT) && $(BUNDLE_AUDIT_TOOL) \
+		--mode=release-aot --architecture=arm64 $(ARM64_RELEASE_AOT_BUNDLE)
+
+release-aot-x86_64-audit: release-aot-x86_64-build
+	@cd $(PROJECT_ROOT) && $(BUNDLE_AUDIT_TOOL) \
+		--mode=release-aot --architecture=x86_64 $(X86_64_RELEASE_AOT_BUNDLE)
+
+release-aot-universal-audit: release-aot-universal-build
+	@cd $(PROJECT_ROOT) && $(BUNDLE_AUDIT_TOOL) \
+		--mode=release-aot --architecture=universal \
+		$(UNIVERSAL_RELEASE_AOT_BUNDLE)
+
+release-aot-distribution-audit: release-aot-arm64-audit \
+	release-aot-x86_64-audit release-aot-universal-audit
+
 release-aot-integration: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=smoke $(RELEASE_AOT_BUNDLE)
+
+release-aot-arm64-integration: release-aot-arm64-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
+		--suite=smoke --launch-architecture=arm64 $(ARM64_RELEASE_AOT_BUNDLE)
+
+release-aot-x86_64-integration: release-aot-x86_64-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
+		--suite=smoke --launch-architecture=x86_64 $(X86_64_RELEASE_AOT_BUNDLE)
+
+release-aot-universal-integration: release-aot-universal-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
+		--suite=smoke $(UNIVERSAL_RELEASE_AOT_BUNDLE)
+
+release-aot-distribution-integration: release-aot-arm64-integration \
+	release-aot-x86_64-integration release-aot-universal-integration
+
+release-aot-distribution-verify: test release-aot-distribution-audit \
+	release-aot-distribution-integration
 
 release-aot-display: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \

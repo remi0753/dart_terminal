@@ -36,8 +36,15 @@ Future<void> main(List<String> arguments) async {
       'mode must be developer-jit or release-aot',
     );
     _expect(
-      architecture == 'arm64' || architecture == 'x86_64',
-      'architecture must be arm64 or x86_64',
+      architecture == 'arm64' ||
+          architecture == 'x86_64' ||
+          architecture == 'universal',
+      'architecture must be arm64, x86_64, or universal',
+    );
+    final bool universal = architecture == 'universal';
+    _expect(
+      !universal || mode == 'release-aot',
+      'Universal audit requires release-aot mode',
     );
     _expect(bundlePath != null, 'application bundle path is required');
 
@@ -45,12 +52,86 @@ Future<void> main(List<String> arguments) async {
     _expect(await bundle.exists(), 'bundle does not exist: ${bundle.path}');
     final String contents = '${bundle.path}/Contents';
     final String resources = '$contents/Resources';
-    final Map<String, Object?> manifest = jsonDecode(
+    final Map<String, Object?> rootManifest = jsonDecode(
       await File('$resources/runtime-build-manifest.json').readAsString(),
     ) as Map<String, Object?>;
-    _expect(manifest['schemaVersion'] == 1, 'manifest schema mismatch');
-    _expect(manifest['runtimeMode'] == mode, 'runtime mode mismatch');
-    _expect(manifest['architecture'] == architecture, 'architecture mismatch');
+    final Map<String, Object?> manifest;
+    if (universal) {
+      _expect(rootManifest['schemaVersion'] == 2, 'manifest schema mismatch');
+      _expect(
+        rootManifest['runtimeMode'] == 'release-aot',
+        'runtime mode mismatch',
+      );
+      final Object? architectures = rootManifest['architectures'];
+      _expect(
+        architectures is List<Object?> &&
+            architectures.length == 2 &&
+            architectures[0] == 'arm64' &&
+            architectures[1] == 'x86_64',
+        'Universal architecture evidence mismatch',
+      );
+      final Object? applicationContract = rootManifest['applicationContract'];
+      _expect(
+        applicationContract is Map<String, Object?>,
+        'Universal application contract is missing',
+      );
+      manifest = applicationContract! as Map<String, Object?>;
+      for (final String key in const <String>[
+        'bundleIdentifier',
+        'executable',
+        'payload',
+        'engine',
+        'dartSdkVersion',
+        'dartSdkRevision',
+      ]) {
+        _expect(
+          rootManifest[key] == manifest[key],
+          'Universal top-level $key differs from its application contract',
+        );
+      }
+      for (final String key in const <String>[
+        'runner',
+        'services',
+        'scriptingDefinition',
+        'appIntents',
+        'dartHelpers',
+        'resources',
+        'nativeAssets',
+        'nativeCapabilities',
+      ]) {
+        _expect(
+          jsonEncode(rootManifest[key]) == jsonEncode(manifest[key]),
+          'Universal top-level $key differs from its application contract',
+        );
+      }
+      final Object? thinManifests = rootManifest['thinManifests'];
+      _expect(
+        thinManifests is Map<String, Object?> &&
+            thinManifests.length == 2 &&
+            thinManifests.keys.toSet().containsAll(const <String>{
+              'arm64',
+              'x86_64',
+            }) &&
+            thinManifests.values.every(
+              (Object? value) =>
+                  value is String && RegExp(r'^[0-9a-f]{64}$').hasMatch(value),
+            ),
+        'Universal thin manifest ownership evidence mismatch',
+      );
+      _expect(
+        !jsonEncode(rootManifest).contains('/Users/') &&
+            !jsonEncode(rootManifest).contains('/dart_appkit/'),
+        'Universal evidence contains a build-machine path',
+      );
+    } else {
+      _expect(rootManifest['schemaVersion'] == 1, 'manifest schema mismatch');
+      _expect(rootManifest['runtimeMode'] == mode, 'runtime mode mismatch');
+      _expect(
+        rootManifest['architecture'] == architecture,
+        'architecture mismatch',
+      );
+      manifest = rootManifest;
+    }
     _expect(
       manifest['bundleIdentifier'] == 'dev.dart-terminal',
       'bundle identifier mismatch',
@@ -81,10 +162,17 @@ Future<void> main(List<String> arguments) async {
         manifest['scriptingDefinition']! as Map<String, Object?>;
     final Map<String, Object?> appIntents =
         manifest['appIntents']! as Map<String, Object?>;
+    _expect(helpers.length == 1, 'Dart helper manifest mismatch');
+    final Map<String, Object?> helperDeclaration =
+        helpers.single! as Map<String, Object?>;
+    final String? helperPayload = mode == 'release-aot'
+        ? 'DartHelpers/dart_terminal_runtime_worker.aot'
+        : null;
     _expect(
-      helpers.length == 1 &&
-          (helpers.single! as Map<String, Object?>)['name'] ==
-              'dart_terminal_runtime_worker',
+      helperDeclaration['name'] == 'dart_terminal_runtime_worker' &&
+          helperDeclaration['entrypoint'] == 'bin/runtime_worker.dart' &&
+          helperDeclaration['payload'] == helperPayload &&
+          helperDeclaration.length == (mode == 'release-aot' ? 3 : 2),
       'Dart helper manifest mismatch',
     );
     _expect(
@@ -132,16 +220,20 @@ Future<void> main(List<String> arguments) async {
         value['name']! as String: value['bytes']! as int,
     };
     _expect(
-      appIntents.length == 10 &&
+      appIntents.length == (universal ? 9 : 10) &&
           appIntents['package'] == 'dart_terminal_app_intents_macos' &&
           appIntents['source'] == 'native/TerminalAppIntents.swift' &&
           appIntents['moduleName'] == 'DartTerminalAppIntents' &&
           appIntents['library'] == 'libdart_terminal_app_intents_macos.dylib' &&
           appIntents['sourceBytes'] is int &&
           (appIntents['sourceBytes']! as int) > 0 &&
-          appIntents['libraryBytes'] is int &&
-          (appIntents['libraryBytes']! as int) > 0 &&
-          appIntents['targetTriple'] == '$architecture-apple-macos14.0' &&
+          (universal ||
+              (appIntents['libraryBytes'] is int &&
+                  (appIntents['libraryBytes']! as int) > 0)) &&
+          appIntents['targetTriple'] ==
+              (universal
+                  ? r'$ARCH-apple-macos14.0'
+                  : '$architecture-apple-macos14.0') &&
           appIntents['xcodeBuildVersion'] is String &&
           (appIntents['xcodeBuildVersion']! as String).isNotEmpty &&
           appIntents['metadataBundle'] == 'Metadata.appintents' &&
@@ -171,6 +263,77 @@ Future<void> main(List<String> arguments) async {
     final String appIntentsVersion = '$appIntentsMetadata/version.json';
     final String payload =
         '$resources/${mode == 'developer-jit' ? 'application.dill' : 'application.aot'}';
+    final String? helperPayloadPath = helperPayload == null
+        ? null
+        : '$resources/$helperPayload';
+    final List<String> codeImages = <String>[
+      executable,
+      helper,
+      engine,
+      pty,
+      renderer,
+      appleScript,
+      appIntentsImage,
+      if (helperPayloadPath != null) helperPayloadPath,
+      if (mode == 'release-aot') payload,
+    ];
+    if (universal) {
+      final List<String> expectedCodePaths =
+          codeImages
+              .map((String path) => path.substring(bundle.path.length + 1))
+              .toList()
+            ..sort();
+      final Object? declaredCodePaths = rootManifest['codePaths'];
+      _expect(
+        declaredCodePaths is List<Object?> &&
+            _sameStrings(declaredCodePaths.cast<String>(), expectedCodePaths),
+        'Universal code path evidence mismatch',
+      );
+      final Object? declaredResourceFiles = rootManifest['resourceFiles'];
+      _expect(
+        declaredResourceFiles is List<Object?>,
+        'Universal resource evidence is missing',
+      );
+      final Set<String> evidencePaths = <String>{};
+      String previousPath = '';
+      for (final Object? value in declaredResourceFiles! as List<Object?>) {
+        _expect(
+          value is Map<String, Object?> &&
+              value.length == 3 &&
+              value['path'] is String &&
+              value['bytes'] is int &&
+              value['sha256'] is String,
+          'Universal resource evidence entry is malformed',
+        );
+        final Map<String, Object?> entry = value! as Map<String, Object?>;
+        final String path = entry['path']! as String;
+        _expect(
+          _safeRelativePath(path) &&
+              path.compareTo(previousPath) > 0 &&
+              evidencePaths.add(path),
+          'Universal resource evidence paths are unsafe or unordered',
+        );
+        previousPath = path;
+        final File file = File('${bundle.path}/$path');
+        _expect(
+          await file.exists(),
+          'Universal evidence file is missing: $path',
+        );
+        final List<int> bytes = await file.readAsBytes();
+        _expect(
+          bytes.length == entry['bytes'] &&
+              terminalDifferentialSha256(bytes) == entry['sha256'],
+          'Universal resource evidence differs from bundle bytes: $path',
+        );
+      }
+      final Set<String> actualNeutralFiles = await _regularBundleFiles(bundle)
+        ..removeAll(expectedCodePaths)
+        ..remove('Contents/Resources/runtime-build-manifest.json');
+      _expect(
+        _sameStrings(evidencePaths, actualNeutralFiles),
+        'Universal resource evidence does not own the exact neutral inventory',
+      );
+    }
     final TerminalTerminfoContract terminfoContract =
         TerminalTerminfoContract.load(
           File(defaultTerminalTerminfoContractPath),
@@ -194,6 +357,7 @@ Future<void> main(List<String> arguments) async {
       scriptingDictionary,
       appIntentsActions,
       appIntentsVersion,
+      if (helperPayloadPath != null) helperPayloadPath,
       payload,
       '$resources/DART_SDK_LICENSE.txt',
       for (final String relativePath in localizedResources)
@@ -232,7 +396,9 @@ Future<void> main(List<String> arguments) async {
     _expect(
       canonicalAppIntents.existsSync() &&
           canonicalAppIntents.lengthSync() == appIntents['sourceBytes'] &&
-          File(appIntentsImage).lengthSync() == appIntents['libraryBytes'] &&
+          (universal ||
+              File(appIntentsImage).lengthSync() ==
+                  appIntents['libraryBytes']) &&
           File(appIntentsActions).lengthSync() ==
               appIntentsMetadataBytes['extract.actionsdata'] &&
           File(appIntentsVersion).lengthSync() ==
@@ -324,15 +490,10 @@ Future<void> main(List<String> arguments) async {
       'Dart helper is not executable',
     );
 
-    for (final String path in <String>[
-      executable,
-      helper,
-      engine,
-      pty,
-      renderer,
-      appleScript,
-      appIntentsImage,
-    ]) {
+    final Set<String> expectedArchitectures = universal
+        ? const <String>{'arm64', 'x86_64'}
+        : <String>{architecture!};
+    for (final String path in codeImages) {
       final ProcessResult arch = await Process.run('/usr/bin/lipo', <String>[
         '-archs',
         path,
@@ -344,8 +505,9 @@ Future<void> main(List<String> arguments) async {
           .where((String value) => value.isNotEmpty)
           .toSet();
       _expect(
-        architectures.contains(architecture),
-        '$path does not contain $architecture: $architectures',
+        _sameStrings(architectures, expectedArchitectures),
+        '$path does not contain the exact expected architectures: '
+        '$architectures',
       );
       final ProcessResult links = await Process.run('/usr/bin/otool', <String>[
         '-L',
@@ -354,7 +516,7 @@ Future<void> main(List<String> arguments) async {
       _expect(links.exitCode == 0, 'otool failed for $path: ${links.stderr}');
       final String linkText = const LineSplitter()
           .convert(links.stdout as String)
-          .skip(1)
+          .where((String line) => line.startsWith(' ') || line.startsWith('\t'))
           .join('\n');
       _expect(
         !linkText.contains('/Users/') && !linkText.contains('/dart_appkit/'),
@@ -409,6 +571,62 @@ Future<File> _packageFile(String packageName, String relativePath) async {
     rootUri.endsWith('/') ? rootUri : '$rootUri/',
   );
   return File.fromUri(resolved.resolve(relativePath));
+}
+
+Future<Set<String>> _regularBundleFiles(Directory bundle) async {
+  final Set<String> files = <String>{};
+  final Set<String> foldedPaths = <String>{};
+  await for (final FileSystemEntity entity in bundle.list(
+    recursive: true,
+    followLinks: false,
+  )) {
+    final String relativePath = entity.path.substring(bundle.path.length + 1);
+    final FileSystemEntityType type = await FileSystemEntity.type(
+      entity.path,
+      followLinks: false,
+    );
+    _expect(type != FileSystemEntityType.link, 'bundle contains a symlink');
+    _expect(
+      type == FileSystemEntityType.file ||
+          type == FileSystemEntityType.directory,
+      'bundle contains an unsupported filesystem entry',
+    );
+    _expect(
+      foldedPaths.add(relativePath.toLowerCase()),
+      'bundle contains case-folded path aliases',
+    );
+    if (relativePath == 'Contents/_CodeSignature' ||
+        relativePath.startsWith('Contents/_CodeSignature/')) {
+      continue;
+    }
+    if (type == FileSystemEntityType.file) files.add(relativePath);
+  }
+  return files;
+}
+
+bool _safeRelativePath(String value) {
+  if (value.isEmpty || value.startsWith('/') || value.contains('\\')) {
+    return false;
+  }
+  return value
+      .split('/')
+      .every(
+        (String part) =>
+            part.isNotEmpty &&
+            part != '.' &&
+            part != '..' &&
+            !part.contains('\u0000'),
+      );
+}
+
+bool _sameStrings(Iterable<String> left, Iterable<String> right) {
+  final List<String> sortedLeft = left.toList()..sort();
+  final List<String> sortedRight = right.toList()..sort();
+  if (sortedLeft.length != sortedRight.length) return false;
+  for (var index = 0; index < sortedLeft.length; ++index) {
+    if (sortedLeft[index] != sortedRight[index]) return false;
+  }
+  return true;
 }
 
 bool _sameBytes(List<int> left, List<int> right) {

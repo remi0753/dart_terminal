@@ -51,17 +51,17 @@ Phase 6 の標準互換性判断は、固定した一次資料と製品コード
 [`support baseline`](docs/phase6/sequence-mode-support.md) を参照する。未実装という
 短い表記だけで safe-ignore と reject を混同せず、部分実装の境界も同サマリーに従う。
 
-現在の Dart Terminal は、M1/arm64 Developer JIT / Release AOT の未改変 AppKit
-main-thread root、manifest-declared Dart worker helper、dependency-owned
+現在の Dart Terminal は、M1/arm64 Developer JIT と arm64/x86_64 thin・Universal
+Release AOT の未改変 AppKit main-thread root、manifest-declared Dart worker helper、dependency-owned
 `TerminalMetalView`、v8 native event、privacy-safeなlocal-run metadata、typed
 pane/session ownerが保持するpersistent login zsh、Dart-only VT coreとlive
 CoreText/Metal表示までである。製品repositoryのnative sourceは削除済みである。
 下表の「現在」が `未実装` でも欠落ではなく、指定 Phase まで明示的に defer した
 backlog である。
 
-実機受け入れは Apple M1/arm64 を優先する。x86_64 cross-build、Rosetta、Universal、
-Intel-native handoff は、M1 の製品 contract 完了後に行う低優先 follow-up であり、
-M1 の各 Phase や主要ゴールの完了条件ではない。
+実機受け入れは Apple M1/arm64 を優先する。Release AOT の x86_64 cross-build、
+Rosetta smoke、Universal exact-slice audit と M1-native smoke は通常 gate に含む。
+Intel-native no-rebuild handoff だけが主要ゴール後の低優先 follow-up である。
 
 ## Runtime、PTY、process lifecycle
 
@@ -214,7 +214,7 @@ M1 の各 Phase や主要ゴールの完了条件ではない。
 | PERF-01 | parser AOT ≥100 MiB/s、AppKit event p95 <1 ms、key→PTY p95 <2 ms | P0 | 0–11 | `G:src/benchmark/`, `G:macos/Tests/BenchmarkTests.swift` | product parserはRelease AOT反復で107.67–111.92 MiB/sを確認。AppKit event/key→PTYの継続gateは後続Phase |
 | PERF-02 | 100 MiB burst で UI hang 0、bounded memory/queue。1 pane flood が他 pane latency を2倍にしない | P0/P1 | 2/7/11 | Ghostty termio/renderer threaded design | PTY reactorの連続output下force-close、4 KiB consumer-completed delivery、2 callback/turn、64-pane/1-pending/4-work上限を完了。正確な100 MiB可視flood中の別pane入力→Metal応答は最終full matrixでDeveloper JIT 0.830x、Release AOT 0.815x、flood前応答・yield増加・全resource回収を実アプリgate化。汎用PTYの既定値0は不変。長期性能campaignはPhase 11 |
 | REL-01 | child/GPU/runtime-worker fault、late event/double dispose、sleep/wake/display change、24/72h soak | P0/P1 | 1–11 | pinned tests, crash and renderer recovery paths | M1 両 mode の process fault、malformed/late event、double dispose/shutdown、1,000 Window/View leak gate、early/nonzero diagnostic metadata、GPU renderer failure/replacement 完了。sleep/soak は後続 |
-| DIST-01 | release AOT `.app`、arm64/x86_64、Universal Binary | P0 | 1/11 | native Ghostty app and universal release workflow | stock-runtime M1 arm64 Release 完了。x86_64/Universal は低優先 follow-up |
+| DIST-01 | release AOT `.app`、arm64/x86_64、Universal Binary | P0 | 1/11 | native Ghostty app and universal release workflow | stock-runtime arm64/x86_64 thin とatomic Universalを完了。全9 code imageのexact slice、全20 neutral resource、strict ad-hoc signatureを監査し、M1-native arm64、Rosetta x86_64、Universal native smokeを通過。Intel-native no-rebuild確認のみ低優先 follow-up |
 | DIST-02 | Developer ID、hardened runtime、notarization、minimal entitlements | P0/P1 | 11 | `G:.github/workflows/release-tag.yml`, `G:macos/Ghostty.entitlements` | 未実装 |
 | DIST-03 | signed update feed、rollback/failure path、release notes | P2 | 11 | `G:macos/Sources/Features/Update/`, `G:dist/macos/` | 未実装 |
 | DIST-04 | local crash/hang metadata と privacy-safe diagnostics | P1 | 11 | `G:src/crash/`, release dSYM workflow | Phase 1 で local-run metadata、previous-unclean marker、Unified Logging、retention/privacy contract を完了。crash/hang report、dSYM、consent は Phase 11 |

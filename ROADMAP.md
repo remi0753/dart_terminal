@@ -1307,14 +1307,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 目的: feature complete build を安全に配布できる release へする。
 
-- [ ] AOT release、Universal Binary、resource layout
+- [x] AOT release、Universal Binary、resource layout
   （分割、bundle境界、完了条件は
   [`docs/phase11/aot-universal-resource-layout.md`](docs/phase11/aot-universal-resource-layout.md)
   を参照して順に実施する）
   - [x] distribution inventory、thin／Universal bundle contract
   - [x] `dart_macos_runtime`の汎用target-architecture thin Release AOT build
   - [x] `dart_macos_runtime`の汎用atomic Universal release assembly
-  - [ ] product thin／Universal build、resource audit、runtime受け入れ、親項目完了判定
+  - [x] product thin／Universal build、resource audit、runtime受け入れ、親項目完了判定
 - [ ] Developer ID signing、hardened runtime、notarization
 - [ ] update feed、署名検証、rollback
 - [ ] local crash report、hang sample、privacy-safe diagnostics
@@ -1334,8 +1334,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 主要ゴール後の低優先 follow-up
 
-- [ ] 公開・未改変 runtime の x86_64 cross-build、Rosetta、Universal compatibility
-  再検証、Intel-native no-rebuild runtime handoff と追加互換性証跡（主要ゴール達成後に実施し、
+- [ ] 公開・未改変 runtime の Intel-native no-rebuild runtime handoff と追加互換性証跡
+  （主要ゴール達成後に実施し、
   [`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)
   を実施時に参照する）
 

@@ -4,9 +4,10 @@
 エミュレーターです。Ghostty は機能・品質の比較基準としてのみ参照し、
 Ghostty や `libghostty` を製品へ組み込みません。
 
-主要な開発・実機受け入れ baseline は Apple M1/arm64 です。x86_64 cross-build、
-Rosetta、Universal、Intel-native 実機確認は、M1 の製品 contract が完了した後の
-低優先 follow-up であり、M1 の完了を阻害しません。
+主要な開発・実機受け入れ baseline は Apple M1/arm64 です。Release AOT は
+x86_64 cross-build と Rosetta 実行、arm64/x86_64 Universal bundle の厳密監査と
+M1-native 実行まで確認します。Intel-native の no-rebuild 実機確認だけを主要ゴール後の
+低優先 follow-up とし、M1 の完了を阻害しません。
 
 現在の通常エントリーポイントは、再利用可能な `dart_pty_macos` を使う
 pane-owned persistent login shell です。Phase 0 の native spike source は移行時に削除し、
@@ -19,7 +20,8 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
 
 現在選定している製品 contract は、未改変の公式 Dart だけを使う AppKit root と、
 独立して回収・再生成できる公式 Dart 子プロセス worker です。M1/arm64 Developer JIT
-と Release AOT はともにこの observable contract へ移行済みです。旧 Engine 改変ファイル、
+と arm64/x86_64 thin・Universal Release AOT はこの observable contract へ移行済みです。
+旧 Engine 改変ファイル、
 適用経路、およびそれを正当な成果物として扱う来歴・監査・test code は削除済みです。
 
 ## 現在できること
@@ -621,7 +623,7 @@ typed ID、固定されたdisposition、termination/cleanupの真偽だけで最
 
 ## Release AOT
 
-M1/arm64 Release bundle の build、監査、起動は次のとおりです。
+host-architecture の Release bundle を個別に build、監査、起動する場合は次のとおりです。
 
 ```shell
 make RUNTIME_ARCH=arm64 release-aot-build
@@ -629,11 +631,27 @@ make RUNTIME_ARCH=arm64 release-aot-audit
 make RUNTIME_ARCH=arm64 release-aot-run
 ```
 
-Release bundle は AppKit main thread 上の単一 stock Engine root、AOT snapshot、同じ公式
-SDK が生成した自己完結 worker executable を含みます。worker は
-`Contents/Helpers/dart_terminal_runtime_worker` から別 PID で起動され、配布先の Dart SDK
-には依存しません。通常 smoke、failure/replacement/shutdown、bounded traffic、resource
-stress、shutdown fault injection を個別に再検証する場合:
+arm64/x86_64 thin と Universal の配布構造をまとめて生成・監査・通常起動する場合は
+次を使用します。x86_64 smoke は M1 上で Rosetta と明示されます。
+
+```shell
+make release-aot-thin-builds
+make release-aot-universal-build
+make release-aot-distribution-audit
+make release-aot-distribution-integration
+# source gate、全build、全audit、全smokeを一括実行
+make release-aot-distribution-verify
+```
+
+Release bundle は AppKit main thread 上の単一 stock Engine root、main AOT snapshot、
+汎用 native worker host、製品 manifest が指定した外部 worker AOT payload を含みます。
+worker は `Contents/Helpers/dart_terminal_runtime_worker` から別 PID で起動され、
+`Contents/Resources/DartHelpers/dart_terminal_runtime_worker.aot` を読み込みます。thin では
+全コードが指定した1 slice、Universal では全9コードイメージが正確に arm64/x86_64 の
+2 slice です。配布先の Dart SDK や `lipo` には依存しません。
+
+通常 smoke 以外の failure/replacement/shutdown、bounded traffic、resource stress、
+shutdown fault injection を host architecture で個別に再検証する場合:
 
 ```shell
 make RUNTIME_ARCH=arm64 release-aot-integration
@@ -647,10 +665,10 @@ make RUNTIME_ARCH=arm64 release-aot-shutdown-fault
 
 ### 低優先の Intel-native handoff
 
-x86_64 cross-build、Rosetta、Universal、Intel-native handoff は、M1 の製品 contract
-完了後に再検証する後続項目です。ROADMAPには残していますが、再検証が終わるまで
-M1/arm64 の主要受け入れ手順には含めません。この follow-up の未実施は M1 baseline の
-完了を阻害しません。
+x86_64 cross-build、Rosetta 実行、Universal 構造監査と M1-native 実行は通常の配布
+受け入れに含まれます。残る Intel-native handoff は、ここで生成・監査した immutable
+x86_64 thin／Universal 成果物を Intel Mac へ no-rebuild で渡す主要ゴール後の確認です。
+この follow-up の未実施は M1 baseline の完了を阻害しません。
 
 ## ローカルチェック
 
@@ -733,8 +751,9 @@ resource stress は実アプリの Dart API から 1,000 組の Window/View を�
 malformed/late event、double dispose、worker crash を封じ込め、最終 native handle が 0、
 記録した worker PID が消滅することを確認します。いずれも専用の integration-test gate が
 ない通常起動では選択できません。
-汎用 builder は現在、実行ホストと同じ architecture を構築します。x86_64、Rosetta、
-Universal、Intel-native の再受け入れは、ROADMAP 上の低優先 follow-up です。
+汎用 builder は host architecture に加え、Release AOT の明示的な arm64/x86_64 thin
+target と、監査済み thin pair からの atomic Universal assembly を提供します。
+Intel-native の no-rebuild 実機受け入れだけが ROADMAP 上の低優先 follow-up です。
 
 Phase 0 の debug/JIT、release-AOT、worker-isolate、PTY、Metal、CoreText の native
 実装は歴史的な feasibility evidence として `docs/phase0` から参照します。applicationの

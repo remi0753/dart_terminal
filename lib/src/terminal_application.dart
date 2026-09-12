@@ -93,6 +93,16 @@ const Duration _runtimePtyFaultFinalTimeout = Duration(milliseconds: 200);
 const Duration _runtimePtyFaultCleanupTimeout = Duration(milliseconds: 200);
 const Duration _hostTerminationTimeout = Duration(seconds: 1);
 
+RuntimeLifecycleWorkerCommand _bundledRuntimeWorkerCommand() {
+  final MacosRuntimeHelperCommand command = MacosRuntime.bundleHelperCommand(
+    _runtimeWorkerName,
+  );
+  return RuntimeLifecycleWorkerCommand(
+    executable: command.executable,
+    arguments: command.arguments,
+  );
+}
+
 TerminalDiagnosticsPaneLifecycle _terminalDiagnosticsLifecycle(
   TerminalPaneState state,
 ) => switch (state) {
@@ -951,10 +961,7 @@ final class TerminalOptions {
       runtimeShellExitTestScenario: selectedShellExitTest,
       runtimeLifecycleScenario: selectedScenario,
       runtimeWorkerCommand:
-          runtimeWorkerCommand ??
-          RuntimeLifecycleWorkerCommand(
-            executable: MacosRuntime.bundleHelperPath(_runtimeWorkerName),
-          ),
+          runtimeWorkerCommand ?? _bundledRuntimeWorkerCommand(),
       effectiveConfiguration: configuration.snapshot,
       configurationDiagnostics: configuration.snapshot.diagnostics,
       configurationReloadController: TerminalConfigReloadController.fromStartup(

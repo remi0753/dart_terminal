@@ -257,6 +257,31 @@ void _expect(bool condition, String message) {
   }
 }
 
+Map<String, Object?> _applicationBuildContract(
+  Map<String, Object?> buildManifest,
+) {
+  if (buildManifest['schemaVersion'] == 1) return buildManifest;
+  _expect(
+    buildManifest['schemaVersion'] == 2 &&
+        buildManifest['runtimeMode'] == 'release-aot',
+    'runtime build manifest schema is unsupported',
+  );
+  final Object? architectures = buildManifest['architectures'];
+  _expect(
+    architectures is List<Object?> &&
+        architectures.length == 2 &&
+        architectures[0] == 'arm64' &&
+        architectures[1] == 'x86_64',
+    'Universal runtime build manifest architecture contract is invalid',
+  );
+  final Object? applicationContract = buildManifest['applicationContract'];
+  _expect(
+    applicationContract is Map<String, Object?>,
+    'Universal runtime build manifest omitted its application contract',
+  );
+  return applicationContract! as Map<String, Object?>;
+}
+
 Future<_Invocation> _loadInvocation(_Options options) async {
   final Directory bundle = Directory(options.bundlePath).absolute;
   _expect(await bundle.exists(), 'bundle does not exist: ${bundle.path}');
@@ -270,6 +295,9 @@ Future<_Invocation> _loadInvocation(_Options options) async {
   final Map<String, Object?> buildManifest = jsonDecode(
     await buildManifestFile.readAsString(),
   ) as Map<String, Object?>;
+  final Map<String, Object?> applicationContract = _applicationBuildContract(
+    buildManifest,
+  );
   final String declaredMode = buildManifest['runtimeMode']! as String;
   _expect(
     declaredMode == options.mode.name,
@@ -288,7 +316,7 @@ Future<_Invocation> _loadInvocation(_Options options) async {
           'performSecondaryFolderService',
         ),
       ];
-  final Object? manifestServicesValue = buildManifest['services'];
+  final Object? manifestServicesValue = applicationContract['services'];
   _expect(
     manifestServicesValue is List<Object?> &&
         manifestServicesValue.length == expectedServices.length,
@@ -948,7 +976,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
   );
   _expect(
     RegExp(
-          r'^NATIVE_ACTION_MENU installed=true sections=6 actions=28$',
+          r'^NATIVE_ACTION_MENU installed=true sections=6 actions=30$',
           multiLine: true,
         ).allMatches(observation.stdoutText).length ==
         1,
@@ -1889,13 +1917,17 @@ Future<void> _runSystemAutomation(
     await File('$contentsPath/Resources/runtime-build-manifest.json')
         .readAsString(),
   ) as Map<String, Object?>;
-  final Object? declarationValue = buildManifest['appIntents'];
+  final Map<String, Object?> applicationContract = _applicationBuildContract(
+    buildManifest,
+  );
+  final Object? declarationValue = applicationContract['appIntents'];
   _expect(
     declarationValue is Map<String, Object?>,
     'system automation bundle omitted App Intents build evidence',
   );
   final Map<String, Object?> declaration =
       declarationValue! as Map<String, Object?>;
+  final bool universal = buildManifest['schemaVersion'] == 2;
   _expect(
     declaration['package'] == 'dart_terminal_app_intents_macos' &&
         declaration['source'] == 'native/TerminalAppIntents.swift' &&
@@ -1903,13 +1935,16 @@ Future<void> _runSystemAutomation(
         declaration['library'] == 'libdart_terminal_app_intents_macos.dylib' &&
         declaration['metadataBundle'] == 'Metadata.appintents' &&
         declaration['targetTriple'] ==
-            '${invocation.architecture}-apple-macos14.0' &&
+            (universal
+                ? r'$ARCH-apple-macos14.0'
+                : '${invocation.architecture}-apple-macos14.0') &&
         declaration['xcodeBuildVersion'] is String &&
         (declaration['xcodeBuildVersion']! as String).isNotEmpty &&
         declaration['sourceBytes'] is int &&
         (declaration['sourceBytes']! as int) > 0 &&
-        declaration['libraryBytes'] is int &&
-        (declaration['libraryBytes']! as int) > 0,
+        (universal ||
+            (declaration['libraryBytes'] is int &&
+                (declaration['libraryBytes']! as int) > 0)),
     'system automation bundle App Intents declaration differs from the closed contract',
   );
   final Object? metadataFilesValue = declaration['metadataFiles'];
