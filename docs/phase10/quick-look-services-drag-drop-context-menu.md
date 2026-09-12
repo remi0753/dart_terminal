@@ -6,8 +6,8 @@
 - Task: Quick Look, Services, drag/drop, and context menu
 - Started: 2026-09-12
 - State: active
-- Current subtask: `dart_appkit` cached plain-text Services requestor and
-  returned-text event substrate
+- Current subtask: `dart_appkit` bounded text/file-URL drop-destination
+  substrate
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -356,6 +356,66 @@ committed contracts.
   callbacks must read copied bounded native state or enqueue versioned events;
   none may synchronously enter Dart. Runtime `NSServices` metadata remains the
   next top-level task and is not pulled into the provider substrate.
+- 2026-09-12: The installed AppKit SDK defines
+  `validRequestorForSendType:returnType:` on the responder chain and the
+  `NSServicesMenuRequestor` write/read callbacks as synchronous methods. A
+  provider-owned custom View cannot override them generically. The reusable
+  boundary therefore lets the known `DaWindow` select the deepest registered
+  View containing its current first responder and return a native requestor
+  object backed only by that View's copied snapshot.
+- 2026-09-12: The Services snapshot distinguishes no selection from an empty
+  selected string, independently enables returned text, and gives returned
+  text a caller-selected positive bound no larger than the existing 64 MiB
+  pasteboard hard maximum. Disabled state is represented by removing the
+  requestor; an inert snapshot with neither capability is rejected instead of
+  remaining in the responder chain.
+- 2026-09-12: Synchronous selection export writes only
+  `NSPasteboardTypeString` from the cached native copy. Synchronous returned
+  text import reads the supplied service pasteboard under the configured bound
+  and posts a generation-checked View event; it never calls Dart inline.
+  Event protocol v10 adds only this bounded string record so future drop and
+  provider event types can receive their own negotiated versions without
+  making an older v10 decoder accept unknown records.
+- 2026-09-12: The first native focused run found one incorrect test
+  expectation, not an implementation failure: after the inner View was changed
+  to return-only, the send-only query correctly fell back to the registered
+  outer ancestor rather than returning no requestor. The assertion now checks
+  that exact distinct-owner fallback, while send+return still selects the
+  deepest owner that satisfies both capabilities.
+- 2026-09-12: The next focused run passed native and encoder tests, then Dart
+  analysis rejected access to the sibling event classes' shared `viewHandle`
+  getter after an `is A || is B` check. Routing now uses the inherited
+  `AppKitEvent.sourceHandle`, which is the same generation-checked identity and
+  does not depend on union promotion.
+- 2026-09-12: Final diff review found that a native-port string payload is NUL
+  terminated and would silently truncate otherwise valid Services text with an
+  embedded NUL. The v10 record now carries length-bearing `Uint8` typed data;
+  the shared encoder preserves exact bytes and the Dart codec bounds and
+  strictly decodes UTF-8 before exposing a `String`.
+- 2026-09-12: The same review found that the FFI path represented an absent
+  selection as a non-null pointer to an empty string, conflicting with the
+  native presence bit. It now passes null/zero for absent and reserves
+  non-null/zero for a present empty selection. The first added smoke fixture
+  omitted its required nullable field and stopped analysis; explicitly setting
+  `selectionText: null` fixed the fixture and the rerun passed.
+- 2026-09-12: Final dependency validation passes native bridge and shared
+  encoder tests, all 25 Dart API groups, current/legacy FFI smoke, both
+  warning-clean Developer JIT and Release AOT runner links, and the exact full
+  `dart_appkit` gate. Returned-text coverage includes embedded NUL, malformed
+  UTF-8, configured read limits, stale generations, failed updates/releases,
+  and late events.
+- 2026-09-12: The terminal compatibility change adds the new sealed View event
+  only to two explicit no-op switch groups. A first evidence regeneration in
+  the filesystem sandbox failed because the renderer hook could not write the
+  existing Clang module cache; the approved normal build rerun succeeded and
+  changed only the two expected `terminal_application.dart` hashes. The exact
+  consuming gate then passed all generated evidence, 276-file formatting,
+  analysis, Phase 9 security stress, and aggregate tests.
+- 2026-09-12: Adjacent `dart_appkit` commit `a9fd6c0` records the cached
+  plain-text Services requestor and returned-text event substrate. ROADMAP
+  reread confirms the first remaining item is the bounded text/file-URL
+  drop-destination substrate; the application provider, runtime declarations,
+  and terminal product integration remain later ordered work.
 - 2026-09-12: The first terminal staging attempt was rejected because the
   filesystem sandbox could not create `.git/index.lock`; no index or working
   tree content was changed. Staging is retried through the approved repository
