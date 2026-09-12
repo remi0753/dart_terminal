@@ -3,7 +3,10 @@ import 'terminal_application_state.dart';
 import 'terminal_pane.dart';
 
 typedef TerminalProductPaneConfigurationFactory =
-    TerminalPaneConfiguration Function(PaneId? inheritanceSourcePaneId);
+    TerminalPaneConfiguration Function(
+      PaneId? inheritanceSourcePaneId, {
+      String? workingDirectoryOverride,
+    });
 typedef TerminalProductHierarchyReconciler = void Function();
 typedef TerminalProductHierarchyMutationAdmission = bool Function();
 typedef TerminalProductDividerMovementAvailability = bool Function(
@@ -44,6 +47,46 @@ final class TerminalProductHierarchyActionCoordinator {
   bool _disposed = false;
 
   bool get isDisposed => _disposed;
+
+  /// Creates as many fresh tabs as current product limits admit.
+  Future<int> createTabsAtWorkingDirectories(
+    Iterable<String> workingDirectories,
+  ) async {
+    var created = 0;
+    for (final String workingDirectory in workingDirectories) {
+      if (!_canCreateTab()) break;
+      final TerminalWindowState window = _requireActiveWindow();
+      final TerminalTabState tab = await state.createTab(
+        window.id,
+        _configurationFactory(
+          window.selectedTab.focusedPaneId,
+          workingDirectoryOverride: workingDirectory,
+        ),
+      );
+      await _startAndProject(tab.focusedPaneId);
+      created++;
+    }
+    return created;
+  }
+
+  /// Creates as many fresh windows as current product limits admit.
+  Future<int> createWindowsAtWorkingDirectories(
+    Iterable<String> workingDirectories,
+  ) async {
+    var created = 0;
+    for (final String workingDirectory in workingDirectories) {
+      if (!_canCreateWindow()) break;
+      final TerminalWindowState window = await state.createWindow(
+        _configurationFactory(
+          _focusedPaneId,
+          workingDirectoryOverride: workingDirectory,
+        ),
+      );
+      await _startAndProject(window.selectedTab.focusedPaneId);
+      created++;
+    }
+    return created;
+  }
 
   List<TerminalActionRegistration> registrations() =>
       <TerminalActionRegistration>[

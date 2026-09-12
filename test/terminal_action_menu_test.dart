@@ -7,6 +7,7 @@ Future<void> main() => runTerminalActionMenuTests();
 Future<void> runTerminalActionMenuTests() async {
   _testProjectionValidation();
   await _testDynamicValidationAndExactlyOnceRouting();
+  await _testPartialContextProjectionUsesSharedDispatcher();
   await _testBusyFailureAndDisposal();
 }
 
@@ -146,6 +147,46 @@ Future<void> _testDynamicValidationAndExactlyOnceRouting() async {
         observations.length == 2,
     'one menu route reaches exactly one selected handler and observation',
   );
+}
+
+Future<void> _testPartialContextProjectionUsesSharedDispatcher() async {
+  final TerminalActionCatalog catalog = _catalog();
+  var copyCount = 0;
+  final List<TerminalActionId> willRoute = <TerminalActionId>[];
+  final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+    catalog: catalog,
+    registrations: <TerminalActionRegistration>[
+      TerminalActionRegistration(
+        id: TerminalActionId.copy,
+        handler: () => copyCount++,
+      ),
+    ],
+  );
+  final _FakeEnabledItem copyItem = _FakeEnabledItem();
+  final TerminalMenuProjectionController context =
+      TerminalMenuProjectionController(
+        dispatcher: dispatcher,
+        bindings: <TerminalMenuEnablementBinding>[
+          _binding(TerminalActionId.copy, copyItem),
+        ],
+        requireEveryCatalogAction: false,
+        onWillRoute: willRoute.add,
+      );
+  context.refresh();
+  final TerminalActionDispatchResult result = await context.route(
+    TerminalActionId.copy,
+  );
+  _expect(
+    result.disposition == TerminalActionDispatchDisposition.executed &&
+        copyCount == 1 &&
+        willRoute.join(',') == TerminalActionId.copy.toString(),
+    'a context subset focuses then invokes the same registered action once',
+  );
+  await _expectFutureThrows<StateError>(
+    () => context.route(TerminalActionId.paste),
+    'a context projection cannot route an unprojected catalog action',
+  );
+  context.dispose();
 }
 
 Future<void> _testBusyFailureAndDisposal() async {

@@ -1,5 +1,188 @@
+import 'terminal_core/terminal_mouse_modes.dart';
 import 'terminal_core/terminal_screen_set.dart';
 import 'terminal_input/terminal_paste.dart';
+
+/// One terminal cell resolved from native View-local coordinates.
+final class TerminalNativeContentCell {
+  const TerminalNativeContentCell({required this.row, required this.column});
+
+  final int row;
+  final int column;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalNativeContentCell &&
+      other.row == row &&
+      other.column == column;
+
+  @override
+  int get hashCode => Object.hash(row, column);
+}
+
+/// Native definition baseline derived from stable terminal cell geometry.
+final class TerminalDefinitionPlacement {
+  const TerminalDefinitionPlacement({
+    required this.baselineX,
+    required this.baselineY,
+  });
+
+  final double baselineX;
+  final double baselineY;
+}
+
+/// Suppresses every native context-click phase from terminal mouse routing.
+final class TerminalNativeContextGestureGate<T> {
+  final Set<T> _activeTargets = <T>{};
+
+  bool suppress({
+    required T target,
+    required bool isButtonDown,
+    required bool isButtonUp,
+    required bool startsNativeContextGesture,
+  }) {
+    if (isButtonDown) _activeTargets.remove(target);
+    if (_activeTargets.contains(target) && !isButtonDown) {
+      if (isButtonUp) _activeTargets.remove(target);
+      return true;
+    }
+    if (startsNativeContextGesture) {
+      _activeTargets.add(target);
+      return true;
+    }
+    return false;
+  }
+
+  void cancel(T target) {
+    _activeTargets.remove(target);
+  }
+
+  void clear() {
+    _activeTargets.clear();
+  }
+}
+
+/// Native-neutral policy shared by context-menu, Quick Look, and Services.
+abstract final class TerminalNativeContentPolicy {
+  static bool contextMenuAvailable({
+    required bool isLive,
+    required TerminalMouseModes mouseModes,
+  }) => isLive && !mouseModes.reportingEnabled;
+
+  static bool isContextGesture({
+    required bool isButtonDown,
+    required int button,
+    required bool control,
+  }) => isButtonDown && (button == 1 || button == 0 && control);
+
+  static TerminalNativeContentCell? cellAtPoint({
+    required double x,
+    required double y,
+    required double contentOriginX,
+    required double contentOriginY,
+    required double cellWidth,
+    required double cellHeight,
+    required int rows,
+    required int columns,
+  }) {
+    if (!x.isFinite ||
+        !y.isFinite ||
+        !contentOriginX.isFinite ||
+        !contentOriginY.isFinite ||
+        !cellWidth.isFinite ||
+        !cellHeight.isFinite ||
+        cellWidth <= 0 ||
+        cellHeight <= 0 ||
+        rows <= 0 ||
+        columns <= 0) {
+      return null;
+    }
+    final double localX = x - contentOriginX;
+    final double localY = y - contentOriginY;
+    if (localX < 0 || localY < 0) return null;
+    final int column = (localX / cellWidth).floor();
+    final int row = (localY / cellHeight).floor();
+    if (row >= rows || column >= columns) return null;
+    return TerminalNativeContentCell(row: row, column: column);
+  }
+
+  static TerminalNativeContentCell? cursorCell({
+    required TerminalViewport viewport,
+    required int cursorRow,
+    required int cursorColumn,
+  }) {
+    if (viewport.offset != 0 ||
+        cursorRow < 0 ||
+        cursorRow >= viewport.rows ||
+        cursorColumn < 0 ||
+        cursorColumn >= viewport.columns ||
+        cursorColumn >= viewport.columnsAt(cursorRow)) {
+      return null;
+    }
+    return TerminalNativeContentCell(row: cursorRow, column: cursorColumn);
+  }
+
+  static TerminalDefinitionPlacement? definitionPlacement({
+    required TerminalWordCandidate candidate,
+    required double contentOriginX,
+    required double contentOriginY,
+    required double cellWidth,
+    required double cellHeight,
+    required double fontBaseline,
+  }) {
+    if (!contentOriginX.isFinite ||
+        !contentOriginY.isFinite ||
+        !cellWidth.isFinite ||
+        !cellHeight.isFinite ||
+        !fontBaseline.isFinite ||
+        cellWidth <= 0 ||
+        cellHeight <= 0 ||
+        fontBaseline < 0 ||
+        fontBaseline > cellHeight) {
+      return null;
+    }
+    return TerminalDefinitionPlacement(
+      baselineX: contentOriginX + candidate.baselineColumn * cellWidth,
+      baselineY:
+          contentOriginY + candidate.baselineRow * cellHeight + fontBaseline,
+    );
+  }
+
+  static String? servicesSelection(TerminalSelectionText? selection) {
+    if (selection == null || selection.isTruncated || selection.text.isEmpty) {
+      return null;
+    }
+    final TerminalExternalContentResult admitted =
+        TerminalExternalContentAdmission.text(
+          selection.text,
+          source: TerminalExternalTextSource.service,
+        );
+    return admitted.content?.text;
+  }
+
+  static String? localFilePath(Uri fileUrl) {
+    if (fileUrl.scheme != 'file' ||
+        fileUrl.userInfo.isNotEmpty ||
+        fileUrl.hasPort ||
+        fileUrl.hasQuery ||
+        fileUrl.hasFragment ||
+        fileUrl.host.isNotEmpty && fileUrl.host.toLowerCase() != 'localhost') {
+      return null;
+    }
+    try {
+      final String path = Uri(path: fileUrl.path).toFilePath(windows: false);
+      final TerminalExternalContentResult admitted =
+          TerminalExternalContentAdmission.filePaths(<String>[path]);
+      return admitted.isAdmitted ? path : null;
+    } on FormatException {
+      return null;
+    } on UnsupportedError {
+      return null;
+    }
+  }
+
+  static String? folderWorkingDirectory(Uri directoryUrl) =>
+      localFilePath(directoryUrl);
+}
 
 /// Why a terminal word cannot be offered to native Quick Look.
 enum TerminalWordLookupDisposition {
@@ -214,6 +397,193 @@ final class TerminalExternalContentResult {
 
   bool get isAdmitted =>
       disposition == TerminalExternalContentDisposition.admitted;
+}
+
+enum TerminalExternalPasteDisposition {
+  completed,
+  confirmationRequired,
+  staleTarget,
+  busy,
+  tooLarge,
+  transferIncomplete,
+  disposed,
+}
+
+/// One resolved live target; [identity] must remain identical across planning.
+final class TerminalExternalPasteTarget {
+  const TerminalExternalPasteTarget({
+    required this.identity,
+    required this.bracketedPasteMode,
+    required this.pasteInProgress,
+    required this.showNotice,
+    required this.paste,
+  });
+
+  final Object identity;
+  final bool bracketedPasteMode;
+  final bool pasteInProgress;
+  final void Function(TerminalClipboardNotice notice) showNotice;
+  final Future<TerminalPasteTransferResult> Function(TerminalPastePlan plan)
+  paste;
+}
+
+final class TerminalExternalPasteResult {
+  const TerminalExternalPasteResult(
+    this.disposition, {
+    this.analysis,
+    this.transfer,
+  });
+
+  final TerminalExternalPasteDisposition disposition;
+  final TerminalPasteAnalysis? analysis;
+  final TerminalPasteTransferResult? transfer;
+}
+
+typedef TerminalExternalPasteTargetResolver<T> =
+    TerminalExternalPasteTarget? Function(T identity);
+
+/// Applies ordinary paste planning, confirmation, and transport to native data.
+final class TerminalExternalPasteController<T> {
+  factory TerminalExternalPasteController({
+    required TerminalExternalPasteTargetResolver<T> resolveTarget,
+    TerminalPasteConfirmationGate? confirmationGate,
+    int Function()? monotonicMicros,
+  }) {
+    final Stopwatch clock = Stopwatch()..start();
+    return TerminalExternalPasteController._(
+      resolveTarget,
+      confirmationGate ?? TerminalPasteConfirmationGate(),
+      monotonicMicros ?? () => clock.elapsedMicroseconds,
+    );
+  }
+
+  TerminalExternalPasteController._(
+    this._resolveTarget,
+    this._confirmationGate,
+    this._monotonicMicros,
+  );
+
+  final TerminalExternalPasteTargetResolver<T> _resolveTarget;
+  final TerminalPasteConfirmationGate _confirmationGate;
+  final int Function() _monotonicMicros;
+  bool _disposed = false;
+  bool _requestInProgress = false;
+
+  bool get isDisposed => _disposed;
+
+  Future<TerminalExternalPasteResult> submit(
+    T targetIdentity,
+    TerminalExternalContent content,
+  ) async {
+    if (_disposed) {
+      return const TerminalExternalPasteResult(
+        TerminalExternalPasteDisposition.disposed,
+      );
+    }
+    if (_requestInProgress) {
+      return const TerminalExternalPasteResult(
+        TerminalExternalPasteDisposition.busy,
+      );
+    }
+    _requestInProgress = true;
+    try {
+      return await _submit(targetIdentity, content);
+    } finally {
+      _requestInProgress = false;
+    }
+  }
+
+  Future<TerminalExternalPasteResult> _submit(
+    T targetIdentity,
+    TerminalExternalContent content,
+  ) async {
+    final TerminalExternalPasteTarget? initial = _resolveTarget(targetIdentity);
+    if (initial == null) {
+      return const TerminalExternalPasteResult(
+        TerminalExternalPasteDisposition.staleTarget,
+      );
+    }
+    if (initial.pasteInProgress) {
+      return const TerminalExternalPasteResult(
+        TerminalExternalPasteDisposition.busy,
+      );
+    }
+    final int invocationMicros = _monotonicMicros();
+    TerminalPastePlan plan;
+    try {
+      plan = await TerminalPasteCodec.planAsync(
+        content.text,
+        bracketed: initial.bracketedPasteMode,
+      );
+    } on TerminalPasteLimitException {
+      initial.showNotice(
+        const TerminalClipboardNotice(
+          TerminalClipboardNoticeKind.pasteTooLarge,
+        ),
+      );
+      return const TerminalExternalPasteResult(
+        TerminalExternalPasteDisposition.tooLarge,
+      );
+    }
+    final TerminalExternalPasteTarget? current = _disposed
+        ? null
+        : _resolveTarget(targetIdentity);
+    if (current == null || !identical(current.identity, initial.identity)) {
+      return TerminalExternalPasteResult(
+        _disposed
+            ? TerminalExternalPasteDisposition.disposed
+            : TerminalExternalPasteDisposition.staleTarget,
+        analysis: plan.analysis,
+      );
+    }
+    if (current.pasteInProgress) {
+      return TerminalExternalPasteResult(
+        TerminalExternalPasteDisposition.busy,
+        analysis: plan.analysis,
+      );
+    }
+    final TerminalPasteApprovalResult approval = _confirmationGate.evaluate(
+      pasteboardChangeCount: _sourceIdentity(content),
+      plan: plan,
+      invocationMicros: invocationMicros,
+      confirmationIssuedMicros: _monotonicMicros(),
+    );
+    if (!approval.isApproved) {
+      current.showNotice(
+        TerminalClipboardNotice(
+          TerminalClipboardNoticeKind.pasteConfirmationRequired,
+          analysis: approval.analysis,
+        ),
+      );
+      return TerminalExternalPasteResult(
+        TerminalExternalPasteDisposition.confirmationRequired,
+        analysis: approval.analysis,
+      );
+    }
+    final TerminalPasteTransferResult transfer = await current.paste(plan);
+    return TerminalExternalPasteResult(
+      transfer.isCompleted
+          ? TerminalExternalPasteDisposition.completed
+          : TerminalExternalPasteDisposition.transferIncomplete,
+      analysis: plan.analysis,
+      transfer: transfer,
+    );
+  }
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _confirmationGate.clear();
+  }
+
+  static int _sourceIdentity(TerminalExternalContent content) => switch ((
+    content.kind,
+    content.textSource,
+  )) {
+    (TerminalExternalContentKind.text, TerminalExternalTextSource.service) => 1,
+    (TerminalExternalContentKind.text, TerminalExternalTextSource.drop) => 2,
+    (TerminalExternalContentKind.filePaths, _) => 3,
+  };
 }
 
 /// Bounded admission shared by Services and the terminal drop destination.

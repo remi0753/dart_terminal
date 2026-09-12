@@ -46,6 +46,7 @@ import 'terminal_input/terminal_scroll_router.dart';
 import 'terminal_input/terminal_selection_autoscroll.dart';
 import 'terminal_input/terminal_selection_gesture.dart';
 import 'terminal_input/terminal_text_input_event_router.dart';
+import 'terminal_native_content.dart';
 import 'terminal_native_hierarchy.dart';
 import 'terminal_osc52_confirmation.dart';
 import 'terminal_osc52_projection.dart';
@@ -2423,6 +2424,10 @@ final class TerminalApplication {
         <PaneId, TerminalFocusReporter>{};
     final Map<PaneId, TerminalHyperlinkInteractionController>
     hyperlinkControllers = <PaneId, TerminalHyperlinkInteractionController>{};
+    final Map<PaneId, TerminalNativeContentCell> quickLookCells =
+        <PaneId, TerminalNativeContentCell>{};
+    final TerminalNativeContextGestureGate<TerminalTabId>
+    nativeContextGestures = TerminalNativeContextGestureGate<TerminalTabId>();
     final Map<TerminalTabId, StreamSubscription<WindowEvent>>
     windowSubscriptions = <TerminalTabId, StreamSubscription<WindowEvent>>{};
     final TerminalPaneWorkScheduler paneWorkScheduler =
@@ -2451,7 +2456,14 @@ final class TerminalApplication {
     TerminalSettingsInspectorPresenter? settingsPresenter;
     TerminalOsc52ConfirmationPresenter? osc52Presenter;
     TerminalActionDispatchScheduler? keyBindingActionScheduler;
+    TerminalActionDispatcher? actionDispatcher;
+    TerminalExternalPasteController<PaneId>? externalPasteController;
     Future<void> Function(PaneId? paneId)? closePaneRequest;
+    Future<void> Function(PaneId paneId, TerminalExternalContent content)?
+    externalContentRequest;
+    void Function(PaneId paneId, TerminalNativeContentCell cell)?
+    quickLookRequest;
+    void Function(PaneId paneId)? nativeContentReconcileRequest;
     void Function()? reconcileRequest;
     void Function()? secureReconcileRequest;
     RuntimeLifecycleCoordinator? lifecycle;
@@ -2470,6 +2482,7 @@ final class TerminalApplication {
     var configurationEndOfFileActionCount = 0;
     var lifecycleWasShutDown = false;
     var hierarchyReconciliationInProgress = false;
+    Future<void> folderServiceQueue = Future<void>.value();
     Future<void>? productResourceDisposalFuture;
     Object? asynchronousError;
     StackTrace? asynchronousStackTrace;
@@ -2540,13 +2553,15 @@ final class TerminalApplication {
           initialWorkingDirectory;
     }
 
-    TerminalPaneConfiguration configuration(PaneId? sourcePaneId) {
+    TerminalPaneConfiguration configuration(
+      PaneId? sourcePaneId, {
+      String? workingDirectoryOverride,
+    }) {
       final TerminalProductConfiguration capturedConfiguration =
           configurationAuthority.newSessionConfiguration;
-      final String? workingDirectory = inheritedWorkingDirectory(
-        sourcePaneId,
-        capturedConfiguration,
-      );
+      final String? workingDirectory =
+          workingDirectoryOverride ??
+          inheritedWorkingDirectory(sourcePaneId, capturedConfiguration);
       PaneId? paneId;
       return TerminalPaneConfiguration(
         sessionFactory:
@@ -2640,9 +2655,11 @@ final class TerminalApplication {
         onChanged: () {
           final PaneId? id = paneId;
           if (id == null) return;
+          quickLookCells.remove(id);
           secureReconcileRequest?.call();
           owners[id]?.notifyScreenChanged();
           selections[id]?.synchronize();
+          nativeContentReconcileRequest?.call(id);
           final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
           if (nativeHierarchy != null &&
               !nativeHierarchy.isDisposed &&
@@ -2817,6 +2834,98 @@ final class TerminalApplication {
         ),
         surface: surface,
       );
+      owner
+        ..addNativeContentSubscription(
+          view.onQuickLookRequested.listen((ViewQuickLookRequestedEvent event) {
+            if (!identical(owners[pane.id], owner)) return;
+            final TerminalPaneLayoutRect? layout = owner.layout;
+            final TerminalPaneLayoutRect? content = owner.contentLayout;
+            if (layout == null || content == null) return;
+            final TerminalScreen screen =
+                session.terminalScreenSet.activeScreen;
+            final TerminalFontCatalogMetrics metrics = surface.fontMetrics;
+            final TerminalNativeContentCell? cell =
+                TerminalNativeContentPolicy.cellAtPoint(
+                  x: event.x,
+                  y: event.y,
+                  contentOriginX: content.left - layout.left,
+                  contentOriginY: content.top - layout.top,
+                  cellWidth: metrics.cellWidth,
+                  cellHeight: metrics.cellHeight,
+                  rows: screen.rows,
+                  columns: screen.columns,
+                );
+            if (cell != null) quickLookRequest?.call(pane.id, cell);
+          }, onError: recordAsynchronousError),
+        )
+        ..addNativeContentSubscription(
+          view.onServicesTextReceived.listen((
+            ViewServicesTextReceivedEvent event,
+          ) {
+            if (!identical(owners[pane.id], owner)) return;
+            final TerminalExternalContentResult result =
+                TerminalExternalContentAdmission.text(
+                  event.text,
+                  source: TerminalExternalTextSource.service,
+                );
+            final TerminalExternalContent? content = result.content;
+            final Future<void> Function(
+              PaneId paneId,
+              TerminalExternalContent content,
+            )?
+            request = externalContentRequest;
+            if (content != null && request != null) {
+              unawaited(
+                request(
+                  pane.id,
+                  content,
+                ).then<void>((_) {}, onError: recordAsynchronousError),
+              );
+            }
+          }, onError: recordAsynchronousError),
+        )
+        ..addNativeContentSubscription(
+          view.onDropPerformed.listen((ViewDropPerformedEvent event) {
+            if (!identical(owners[pane.id], owner)) return;
+            final TerminalExternalContentResult result =
+                switch (event.content) {
+                  DroppedPlainText(:final text) =>
+                    TerminalExternalContentAdmission.text(
+                      text,
+                      source: TerminalExternalTextSource.drop,
+                    ),
+                  DroppedFileUrls(:final fileUrls) => () {
+                    final List<String> paths = <String>[];
+                    for (final Uri fileUrl in fileUrls) {
+                      final String? path =
+                          TerminalNativeContentPolicy.localFilePath(fileUrl);
+                      if (path == null) {
+                        return const TerminalExternalContentResult.rejected(
+                          TerminalExternalContentDisposition.invalidPath,
+                        );
+                      }
+                      paths.add(path);
+                    }
+                    return TerminalExternalContentAdmission.filePaths(paths);
+                  }(),
+                };
+            final TerminalExternalContent? content = result.content;
+            final Future<void> Function(
+              PaneId paneId,
+              TerminalExternalContent content,
+            )?
+            request = externalContentRequest;
+            if (content != null && request != null) {
+              unawaited(
+                request(
+                  pane.id,
+                  content,
+                ).then<void>((_) {}, onError: recordAsynchronousError),
+              );
+            }
+          }, onError: recordAsynchronousError),
+        );
+      nativeContentReconcileRequest?.call(pane.id);
       mouseRouters[pane.id] = TerminalMouseRouter(
         onTerminalReport: pane.sendInput,
         onLocalSelection: (TerminalLocalSelectionIntent intent) {
@@ -2864,6 +2973,8 @@ final class TerminalApplication {
           scrollRouters.remove(pane.id);
           focusReporters.remove(pane.id);
           hyperlinkControllers.remove(pane.id)?.cancelPress();
+          quickLookCells.remove(pane.id);
+          nativeContextGestures.clear();
           owner.disposeAdapters();
           owners.remove(pane.id);
           final TerminalSession? removedSession = sessions.remove(pane.id);
@@ -2928,6 +3039,157 @@ final class TerminalApplication {
           ? null
           : sessions[paneId]?.terminalScreenSet.viewport;
     }
+
+    bool focusNativeContentPane(PaneId paneId) {
+      final TerminalPaneLocation? location = state.locationForPane(paneId);
+      final TerminalPane? pane = state.paneForId(paneId);
+      if (location == null ||
+          pane == null ||
+          !pane.isLive ||
+          !owners.containsKey(paneId)) {
+        return false;
+      }
+      state
+        ..activateWindow(location.windowId)
+        ..selectTab(location.windowId, location.tabId)
+        ..focusPane(location.tabId, paneId);
+      reconcileRequest?.call();
+      return identical(activePane(), pane);
+    }
+
+    bool presentQuickLook(PaneId paneId, TerminalNativeContentCell cell) {
+      if (!focusNativeContentPane(paneId)) return false;
+      final _TerminalHierarchyProductPane? owner = owners[paneId];
+      final TerminalPaneLayoutRect? layout = owner?.layout;
+      final TerminalPaneLayoutRect? content = owner?.contentLayout;
+      final TerminalSession? session = sessions[paneId];
+      if (owner == null ||
+          layout == null ||
+          content == null ||
+          session == null ||
+          owner.view.isDisposed) {
+        return false;
+      }
+      final TerminalViewport viewport = session.terminalScreenSet.viewport;
+      final TerminalWordLookupResult lookup = TerminalWordLookup.atCell(
+        viewport,
+        cell.row,
+        cell.column,
+      );
+      final TerminalWordCandidate? candidate = lookup.candidate;
+      if (candidate == null ||
+          !TerminalWordLookup.revalidate(viewport, candidate).isAvailable) {
+        return false;
+      }
+      final TerminalFontCatalogMetrics metrics = owner.surface.fontMetrics;
+      final TerminalDefinitionPlacement? placement =
+          TerminalNativeContentPolicy.definitionPlacement(
+            candidate: candidate,
+            contentOriginX: content.left - layout.left,
+            contentOriginY: content.top - layout.top,
+            cellWidth: metrics.cellWidth,
+            cellHeight: metrics.cellHeight,
+            fontBaseline: metrics.baseline,
+          );
+      if (placement == null) return false;
+      final String fontFamily = owner.surface.fontFamily;
+      final TextViewFont font = fontFamily.isEmpty
+          ? TextViewFont.monospacedSystem(size: metrics.pointSize)
+          : TextViewFont.named(fontFamily, size: metrics.pointSize);
+      owner.view.showDefinition(
+        DefinitionPresentation(
+          text: candidate.text,
+          baselineX: placement.baselineX,
+          baselineY: placement.baselineY,
+          font: font,
+        ),
+      );
+      return true;
+    }
+
+    TerminalNativeContentCell? quickLookCellForPane(PaneId paneId) {
+      final TerminalSession? session = sessions[paneId];
+      if (session == null || !session.isLive) return null;
+      final TerminalViewport viewport = session.terminalScreenSet.viewport;
+      final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+      final TerminalNativeContentCell? cell =
+          quickLookCells[paneId] ??
+          TerminalNativeContentPolicy.cursorCell(
+            viewport: viewport,
+            cursorRow: screen.cursorRow,
+            cursorColumn: screen.cursorColumn,
+          );
+      if (cell == null) return null;
+      return TerminalWordLookup.atCell(
+            viewport,
+            cell.row,
+            cell.column,
+          ).isAvailable
+          ? cell
+          : null;
+    }
+
+    void synchronizeNativeContentPane(PaneId paneId) {
+      final _TerminalHierarchyProductPane? owner = owners[paneId];
+      final TerminalSession? session = sessions[paneId];
+      final TerminalPane? pane = state.paneForId(paneId);
+      if (owner == null ||
+          session == null ||
+          pane == null ||
+          owner.view.isDisposed) {
+        return;
+      }
+      final bool live = pane.isLive;
+      final _TerminalSelectionProductOwner? selection = selections[paneId];
+      final int selectionGeneration =
+          selection?.gesture.snapshot.generation ?? 0;
+      owner.view
+        ..quickLookRequestsEnabled = live
+        ..dropDestination = live ? const DropDestinationConfiguration() : null;
+      owner.synchronizeServicesRequestor(
+        live: live,
+        selectionGeneration: selectionGeneration,
+        viewportGeneration: session.terminalScreenSet.viewport.generation,
+        selectionText: () => TerminalNativeContentPolicy.servicesSelection(
+          selection?.selectedText(),
+        ),
+      );
+      final TerminalActionDispatcher? dispatcher = actionDispatcher;
+      if (dispatcher != null && owner.contextMenu == null) {
+        owner.contextMenu = TerminalAppKitContextMenuProjection.install(
+          view: owner.view,
+          dispatcher: dispatcher,
+          onWillRoute: (_) {
+            focusNativeContentPane(paneId);
+          },
+          onDispatched: (TerminalActionDispatchResult result) {
+            final TerminalAppKitMenuProjection? menu = menuProjection;
+            if (menu != null && !menu.isDisposed) menu.refresh();
+            final TerminalCommandPalettePresenter? palette = palettePresenter;
+            if (palette != null && !palette.isDisposed) palette.refresh();
+            if (result.disposition ==
+                TerminalActionDispatchDisposition.failed) {
+              recordAsynchronousError(result.error!, result.stackTrace!);
+            }
+          },
+        );
+      }
+      owner.contextMenu?.setAvailable(
+        TerminalNativeContentPolicy.contextMenuAvailable(
+          isLive: live,
+          mouseModes: session.terminalScreenSet.mouseModes,
+        ),
+      );
+    }
+
+    nativeContentReconcileRequest = synchronizeNativeContentPane;
+    quickLookRequest = (PaneId paneId, TerminalNativeContentCell cell) {
+      try {
+        presentQuickLook(paneId, cell);
+      } on Object catch (error, stackTrace) {
+        recordAsynchronousError(error, stackTrace);
+      }
+    };
 
     void synchronizePromptNavigation(TerminalViewport viewport) {
       final PaneId? paneId = state.activeWindow?.selectedTab.focusedPaneId;
@@ -3003,6 +3265,7 @@ final class TerminalApplication {
 
     void cancelHyperlinkInteraction(TerminalTabState tab) {
       for (final PaneId paneId in tab.paneIds) {
+        nativeContextGestures.cancel(tab.id);
         hyperlinkControllers[paneId]?.cancelPress();
         owners[paneId]?.surface.clearHyperlinkHover();
       }
@@ -3160,6 +3423,46 @@ final class TerminalApplication {
               ..focusPane(tabId, paneId);
             reconcileInteractiveHierarchy();
           }
+          final TerminalScreenSet contextScreens =
+              sessions[paneId]!.terminalScreenSet;
+          final bool startsNativeContextGesture =
+              TerminalNativeContentPolicy.isContextGesture(
+                isButtonDown: event.kind == AppKitMouseEventKind.down,
+                button: event.button,
+                control: event.modifiers.control,
+              ) &&
+              !contextScreens.mouseModes.reportingEnabled;
+          if (nativeContextGestures.suppress(
+            target: tabId,
+            isButtonDown: event.kind == AppKitMouseEventKind.down,
+            isButtonUp: event.kind == AppKitMouseEventKind.up,
+            startsNativeContextGesture: startsNativeContextGesture,
+          )) {
+            if (!startsNativeContextGesture) return;
+            final TerminalPaneLayoutRect? content = owner.contentLayout;
+            final TerminalScreen screen = contextScreens.activeScreen;
+            final TerminalFontCatalogMetrics metrics =
+                owner.surface.fontMetrics;
+            final TerminalNativeContentCell? cell = content == null
+                ? null
+                : TerminalNativeContentPolicy.cellAtPoint(
+                    x: event.x,
+                    y: event.y,
+                    contentOriginX: content.left,
+                    contentOriginY: content.top,
+                    cellWidth: metrics.cellWidth,
+                    cellHeight: metrics.cellHeight,
+                    rows: screen.rows,
+                    columns: screen.columns,
+                  );
+            if (cell == null) {
+              quickLookCells.remove(paneId);
+            } else {
+              quickLookCells[paneId] = cell;
+            }
+            synchronizeNativeContentPane(paneId);
+            return;
+          }
           for (final PaneId otherPaneId in tab.paneIds) {
             if (otherPaneId != paneId) {
               owners[otherPaneId]?.surface.clearHyperlinkHover();
@@ -3197,6 +3500,7 @@ final class TerminalApplication {
                   nativeHierarchy.windowForTab(tabId)?.backingScaleFactor ?? 1,
             );
           }
+          synchronizeNativeContentPane(paneId);
           final TerminalAppKitMenuProjection? menu = menuProjection;
           if (menu != null && !menu.isDisposed) menu.refresh();
         case AppKitScrollEvent():
@@ -3255,6 +3559,16 @@ final class TerminalApplication {
     Future<void> disposeProductResourcesOnce() async {
       Object? secureDisposalError;
       StackTrace? secureDisposalStackTrace;
+      externalContentRequest = null;
+      quickLookRequest = null;
+      nativeContentReconcileRequest = null;
+      pasteConfirmationGate.clear();
+      externalPasteController?.dispose();
+      externalPasteController = null;
+      if (!application.isTerminated) {
+        application.folderServicesProvider = null;
+      }
+      await folderServiceQueue;
       final TerminalSecureKeyboardEntryController? secure =
           secureKeyboardEntryController;
       secureKeyboardEntryController = null;
@@ -3282,6 +3596,7 @@ final class TerminalApplication {
       windowSubscriptions.clear();
       await palettePresenter?.dispose();
       await menuProjection?.dispose();
+      actionDispatcher = null;
       actionCoordinator?.dispose();
       dividerGestureController?.dispose();
       dividerGestureController = null;
@@ -3313,10 +3628,53 @@ final class TerminalApplication {
     Future<void> disposeProductResources() =>
         productResourceDisposalFuture ??= disposeProductResourcesOnce();
 
+    Future<void> pasteText(
+      TerminalPane pane,
+      String text, {
+      required TerminalPasteConfirmationGate confirmationGate,
+      required int sourceIdentity,
+    }) async {
+      final int invocationMicros = pasteClock.elapsedMicroseconds;
+      TerminalPastePlan plan;
+      try {
+        plan = await TerminalPasteCodec.planAsync(
+          text,
+          bracketed: pane.bracketedPasteMode,
+        );
+      } on TerminalPasteLimitException {
+        pane.showClipboardNotice(
+          const TerminalClipboardNotice(
+            TerminalClipboardNoticeKind.pasteTooLarge,
+          ),
+        );
+        return;
+      }
+      if (!pane.isLive ||
+          !identical(state.paneForId(pane.id), pane) ||
+          !identical(activePane(), pane)) {
+        return;
+      }
+      final TerminalPasteApprovalResult approval = confirmationGate.evaluate(
+        pasteboardChangeCount: sourceIdentity,
+        plan: plan,
+        invocationMicros: invocationMicros,
+        confirmationIssuedMicros: pasteClock.elapsedMicroseconds,
+      );
+      if (!approval.isApproved) {
+        pane.showClipboardNotice(
+          TerminalClipboardNotice(
+            TerminalClipboardNoticeKind.pasteConfirmationRequired,
+            analysis: approval.analysis,
+          ),
+        );
+        return;
+      }
+      await pane.paste(plan);
+    }
+
     Future<void> paste() async {
       final TerminalPane? pane = activePane();
       if (pane == null) return;
-      final int invocationMicros = pasteClock.elapsedMicroseconds;
       PasteboardTextSnapshot snapshot;
       try {
         snapshot = clipboard.readText();
@@ -3337,38 +3695,38 @@ final class TerminalApplication {
         );
         return;
       }
-      TerminalPastePlan plan;
-      try {
-        plan = await TerminalPasteCodec.planAsync(
-          text,
-          bracketed: pane.bracketedPasteMode,
-        );
-      } on TerminalPasteLimitException {
-        pane.showClipboardNotice(
-          const TerminalClipboardNotice(
-            TerminalClipboardNoticeKind.pasteTooLarge,
-          ),
-        );
-        return;
-      }
-      final TerminalPasteApprovalResult approval = pasteConfirmationGate
-          .evaluate(
-            pasteboardChangeCount: snapshot.changeCount,
-            plan: plan,
-            invocationMicros: invocationMicros,
-            confirmationIssuedMicros: pasteClock.elapsedMicroseconds,
-          );
-      if (!approval.isApproved) {
-        pane.showClipboardNotice(
-          TerminalClipboardNotice(
-            TerminalClipboardNoticeKind.pasteConfirmationRequired,
-            analysis: approval.analysis,
-          ),
-        );
-        return;
-      }
-      await pane.paste(plan);
+      await pasteText(
+        pane,
+        text,
+        confirmationGate: pasteConfirmationGate,
+        sourceIdentity: snapshot.changeCount,
+      );
     }
+
+    externalPasteController = TerminalExternalPasteController<PaneId>(
+      resolveTarget: (PaneId paneId) {
+        final TerminalPane? pane = state.paneForId(paneId);
+        if (pane == null ||
+            !pane.isLive ||
+            !identical(activePane(), pane) ||
+            !owners.containsKey(paneId)) {
+          return null;
+        }
+        return TerminalExternalPasteTarget(
+          identity: pane,
+          bracketedPasteMode: pane.bracketedPasteMode,
+          pasteInProgress: pane.pasteInProgress,
+          showNotice: pane.showClipboardNotice,
+          paste: pane.paste,
+        );
+      },
+      monotonicMicros: () => pasteClock.elapsedMicroseconds,
+    );
+    externalContentRequest =
+        (PaneId paneId, TerminalExternalContent content) async {
+          if (!focusNativeContentPane(paneId)) return;
+          await externalPasteController?.submit(paneId, content);
+        };
 
     Future<void> reloadConfiguration() async {
       final TerminalConfigReloadController? controller =
@@ -3607,6 +3965,7 @@ final class TerminalApplication {
             canMoveDivider: createdHierarchy.canMoveFocusedDivider,
             moveDivider: createdHierarchy.moveFocusedDivider,
             canMutate: () =>
+                productResourceDisposalFuture == null &&
                 !createdPaneCloseCoordinator.removalInProgress &&
                 !createdPaneCloseCoordinator.applicationQuitInProgress,
             onChanged: () {
@@ -3774,6 +4133,24 @@ final class TerminalApplication {
             },
           ),
           TerminalActionRegistration(
+            id: TerminalActionId.quickLook,
+            isAvailable: () {
+              final PaneId? paneId =
+                  state.activeWindow?.selectedTab.focusedPaneId;
+              return paneId != null && quickLookCellForPane(paneId) != null;
+            },
+            handler: () {
+              final PaneId? paneId =
+                  state.activeWindow?.selectedTab.focusedPaneId;
+              if (paneId == null) return;
+              final TerminalNativeContentCell? cell = quickLookCellForPane(
+                paneId,
+              );
+              quickLookCells.remove(paneId);
+              if (cell != null) presentQuickLook(paneId, cell);
+            },
+          ),
+          TerminalActionRegistration(
             id: TerminalActionId.copy,
             isAvailable: () {
               final TerminalSelectionText? selected = activeSelection()
@@ -3821,6 +4198,10 @@ final class TerminalApplication {
           ...createdActions.registrations(),
         ],
       );
+      actionDispatcher = dispatcher;
+      for (final PaneId paneId in owners.keys.toList(growable: false)) {
+        synchronizeNativeContentPane(paneId);
+      }
       keyBindingActionScheduler = TerminalActionDispatchScheduler(
         dispatcher: dispatcher,
         onDispatched: (TerminalActionDispatchResult result) {
@@ -3944,6 +4325,52 @@ final class TerminalApplication {
         configurationAuthority.newSessionConfiguration.quickTerminalShortcut,
       );
       stdout.writeln(createdQuickTerminal.shortcutStatus.machineLine());
+      Future<void> handleFolderService(
+        ApplicationFolderServiceRequestedEvent event,
+      ) async {
+        final List<String> workingDirectories = <String>[];
+        for (final Uri directoryUrl in event.directoryUrls) {
+          final String? workingDirectory =
+              TerminalNativeContentPolicy.folderWorkingDirectory(directoryUrl);
+          if (workingDirectory == null ||
+              !Directory(workingDirectory).existsSync()) {
+            return;
+          }
+          workingDirectories.add(workingDirectory);
+        }
+        if (workingDirectories.isEmpty) return;
+        switch (event.disposition) {
+          case FolderServiceDisposition.newTabs:
+            TerminalWindowState? targetWindow = state.activeWindow;
+            if (targetWindow?.role != TerminalWindowRole.standard) {
+              targetWindow = null;
+              for (final TerminalWindowState window in state.windows) {
+                if (window.role == TerminalWindowRole.standard) {
+                  targetWindow = window;
+                }
+              }
+            }
+            if (targetWindow == null) {
+              final int created = await createdActions
+                  .createWindowsAtWorkingDirectories(<String>[
+                    workingDirectories.removeAt(0),
+                  ]);
+              if (created == 0 || workingDirectories.isEmpty) return;
+            } else {
+              state.activateWindow(targetWindow.id);
+            }
+            await createdActions.createTabsAtWorkingDirectories(
+              workingDirectories,
+            );
+          case FolderServiceDisposition.newWindows:
+            await createdActions.createWindowsAtWorkingDirectories(
+              workingDirectories,
+            );
+        }
+      }
+
+      application.folderServicesProvider =
+          const FolderServicesProviderConfiguration();
       applicationSubscription = application.events.listen((AppKitEvent event) {
         switch (event) {
           case ApplicationActiveChangedEvent(:final isActive):
@@ -3997,10 +4424,13 @@ final class TerminalApplication {
                 onError: recordAsynchronousError,
               ),
             );
+          case ApplicationFolderServiceRequestedEvent():
+            folderServiceQueue = folderServiceQueue
+                .then<void>((_) => handleFolderService(event))
+                .then<void>((_) {}, onError: recordAsynchronousError);
           case WindowEvent() ||
               MenuItemInvokedEvent() ||
               GlobalHotKeyPressedEvent() ||
-              ApplicationFolderServiceRequestedEvent() ||
               ViewQuickLookRequestedEvent() ||
               ViewServicesTextReceivedEvent() ||
               ViewDropPerformedEvent():
@@ -13862,12 +14292,18 @@ final class _TerminalHierarchyProductPane {
   final double horizontalPadding;
   final double verticalPadding;
   final StreamSubscription<TerminalTextInputEvent> _textInputSubscription;
+  final List<StreamSubscription<AppKitEvent>> _nativeContentSubscriptions =
+      <StreamSubscription<AppKitEvent>>[];
 
   Future<void>? _cancelFuture;
   bool _textInputCancelled = false;
   bool adaptersDisposed = false;
   bool isVisible = false;
   TerminalPaneLayoutRect? layout;
+  TerminalAppKitContextMenuProjection? contextMenu;
+  int _servicesSelectionGeneration = -1;
+  int _servicesViewportGeneration = -1;
+  bool _servicesRequestorLive = false;
 
   TerminalPaneLayoutRect? get contentLayout {
     final TerminalPaneLayoutRect? rectangle = layout;
@@ -13896,6 +14332,35 @@ final class _TerminalHierarchyProductPane {
     if (!surface.isDisposed) surface.updateBackingScale(backingScaleFactor);
   }
 
+  void addNativeContentSubscription(
+    StreamSubscription<AppKitEvent> subscription,
+  ) {
+    if (_textInputCancelled || adaptersDisposed) {
+      unawaited(subscription.cancel());
+      throw StateError('hierarchy pane ${pane.id} adapters are closing');
+    }
+    _nativeContentSubscriptions.add(subscription);
+  }
+
+  void synchronizeServicesRequestor({
+    required bool live,
+    required int selectionGeneration,
+    required int viewportGeneration,
+    required String? Function() selectionText,
+  }) {
+    if (_servicesRequestorLive == live &&
+        _servicesSelectionGeneration == selectionGeneration &&
+        _servicesViewportGeneration == viewportGeneration) {
+      return;
+    }
+    view.servicesTextRequestor = live
+        ? ServicesTextRequestorConfiguration(selectionText: selectionText())
+        : null;
+    _servicesRequestorLive = live;
+    _servicesSelectionGeneration = selectionGeneration;
+    _servicesViewportGeneration = viewportGeneration;
+  }
+
   void applyLayout(TerminalPaneLayoutRect? rectangle, {required bool visible}) {
     if (adaptersDisposed) {
       throw StateError('hierarchy pane ${pane.id} adapters are disposed');
@@ -13916,6 +14381,11 @@ final class _TerminalHierarchyProductPane {
 
   Future<void> _cancelTextInput() async {
     await _textInputSubscription.cancel();
+    for (final StreamSubscription<AppKitEvent> subscription
+        in _nativeContentSubscriptions) {
+      await subscription.cancel();
+    }
+    _nativeContentSubscriptions.clear();
     _textInputCancelled = true;
   }
 
@@ -13926,6 +14396,17 @@ final class _TerminalHierarchyProductPane {
         'hierarchy pane ${pane.id} text input must be cancelled first',
       );
     }
+    contextMenu?.dispose();
+    contextMenu = null;
+    if (!view.isDisposed) {
+      view
+        ..quickLookRequestsEnabled = false
+        ..servicesTextRequestor = null
+        ..dropDestination = null;
+    }
+    _servicesRequestorLive = false;
+    _servicesSelectionGeneration = -1;
+    _servicesViewportGeneration = -1;
     if (!client.isDisposed) client.dispose();
     if (!surface.isDisposed) surface.dispose();
     adaptersDisposed = true;

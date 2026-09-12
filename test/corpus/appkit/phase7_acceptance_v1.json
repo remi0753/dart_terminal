@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "1a4040765696114013d7842fa3be00fc426380e5facda47c78c8ca65c3c032fa"
+          "sha256": "874811a11fd384d1be2cd2ba1df8634a7fb17da6b9d5e1f5c50f6b4c3ad5dd22"
         },
         {
           "path": "lib/src/terminal_input/terminal_text_input_event_router.dart",
@@ -63,11 +63,11 @@
         },
         {
           "path": "lib/src/terminal_action_menu.dart",
-          "sha256": "edf174edbf201a602915b3397b0f12a4b55be80b1581226226b14e92d82a832e"
+          "sha256": "21baabe41283f3f69a3a06952ffc653167f635d985587b0e54a0171ef7be8a91"
         },
         {
           "path": "lib/src/terminal_product_hierarchy_actions.dart",
-          "sha256": "8498ec4b8dbb992b72de0d0514c983a690cd0029f3e8b843d4864baa7bf0f88a"
+          "sha256": "821c291a8f61c429df81117a179c024c5cde6454d4d04633bab4eb5cfbb204ca"
         }
       ],
       "unit_tests": [
@@ -84,12 +84,12 @@
         {
           "path": "test/terminal_action_menu_test.dart",
           "entrypoint": "runTerminalActionMenuTests",
-          "sha256": "5fb4eb68af9381cef50322e152c2cbad857ca7ce1d049a6ef94a3141b29861ad"
+          "sha256": "3ece48c0c4ecc7a2b28729d10c5f2d6e626e3632d22731898dbbeaa6923717b3"
         },
         {
           "path": "test/terminal_product_hierarchy_actions_test.dart",
           "entrypoint": "runTerminalProductHierarchyActionTests",
-          "sha256": "f3aa0ed3314b013a6137b83a996c8d597afc06ba962354ed713ab1a8fde2e0cb"
+          "sha256": "f4740caff8cec167c35b5b2a545f8e03810c44b648e0f331de77dab7b74723cb"
         }
       ],
       "integration_tests": [
@@ -187,7 +187,7 @@
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "1a4040765696114013d7842fa3be00fc426380e5facda47c78c8ca65c3c032fa"
+          "sha256": "874811a11fd384d1be2cd2ba1df8634a7fb17da6b9d5e1f5c50f6b4c3ad5dd22"
         }
       ],
       "unit_tests": [

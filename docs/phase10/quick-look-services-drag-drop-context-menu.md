@@ -6,7 +6,8 @@
 - Task: Quick Look, Services, drag/drop, and context menu
 - Started: 2026-09-12
 - State: active
-- Current subtask: `dart_macos_runtime` service declaration completion
+- Current subtask: focused product wiring and deterministic policy/lifecycle
+  tests
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -746,6 +747,139 @@ cached/local state without entering Dart inline.
   integration, shipped-runtime acceptance, documentation closure, and the
   parent completion decision in this Quick Look/Services/drop/context-menu
   item.
+
+## Current subtask definition — focused product integration
+
+### Split, order, and dependencies
+
+The remaining parent combines user-facing routing, real signed bundle runs,
+hardware/system-dependent checks, and final documentation. These are separate
+review and failure boundaries, so it is split before product code changes:
+
+1. **Focused product wiring and deterministic policy/lifecycle tests**
+   - Connect context menu, Quick Look, Services selection/return, text/file
+     drops, folder provider events, shared actions, paste admission, cwd
+     creation, settings/status projection, manifest declarations, and teardown.
+   - Complete when fake/unit/product integration tests cover exact PTY bytes,
+     rejection/staleness/focus/mouse/lifecycle behavior and the ordinary full
+     gate passes. This must commit before runtime acceptance.
+2. **Developer JIT/Release AOT native acceptance and manual checklist**
+   - Extend the shipped-runtime harness to exercise all deterministic native
+     paths in both modes, audit both bundle plists/build manifests, and publish
+     a bounded checklist for Finder registration, force click, context click,
+     and external system Services.
+   - Depends on the committed product wiring. Complete when both runtime modes,
+     bundle/source/handle audits, and every automatable assertion pass, with
+     hardware/system-only items explicitly assigned to the checklist.
+3. **Documentation/evidence closure and parent completion decision**
+   - Reconcile README, Feature Matrix, configuration/action references,
+     acceptance evidence, task memo, and the parent completion conditions.
+   - Depends on committed runtime acceptance. Complete when no untracked gap or
+     stale evidence remains, exact full gate and diff review pass, and both the
+     nested closure item and parent can truthfully be checked and committed.
+
+### Purpose and scope of the current subtask
+
+- Make every previously committed reusable substrate reachable through the
+  focused terminal pane and existing application action/paste/cwd ownership.
+- Preserve a single policy path: external text and shell-quoted paths must use
+  ordinary paste planning/confirmation/transport; Quick Look and context menu
+  must reuse current cell geometry and action availability; Service folder
+  requests must reuse trusted new-tab/new-window cwd creation.
+- Project live availability and failures through existing menu/palette/settings
+  models without adding an independent command registry or unbounded status.
+- Install/cache native registrations only on the AppKit main isolate and clear
+  them before View/window/application teardown so late events cannot write to a
+  PTY or resurrect a pane.
+
+### Out of scope for the current subtask
+
+- Finder database refresh, physical trackpad force-click behavior, or invoking
+  third-party Services; these require the next manual/native acceptance layer.
+- New drag source operations, rich pasteboard types, arbitrary Finder service
+  definitions, or bypasses around existing paste confirmation.
+- AppleScript, App Intents, complete accessibility/localization, inspector, or
+  later Phase 10 work.
+
+### Current completion conditions and validation
+
+1. The focused live pane owns native context/Quick Look/Services/drop state and
+   changes ownership atomically across focus, pane creation, replacement,
+   closure, Quick Terminal transfer, and application shutdown.
+2. Menu/context/palette routes share action IDs and enabled state; gestures or
+   mouse capture cannot duplicate input or dispatch.
+3. External text and file paths produce exact bounded PTY bytes only after the
+   existing admission result permits them; malformed, oversized, stale,
+   inactive, cancelled, or unavailable targets produce zero writes.
+4. Folder events create one fresh tab/window per ordered directory using the
+   established trusted cwd API and never reuse a current shell session.
+5. Focused unit/fake tests, configuration/action references, deterministic
+   product integration, exact `make test`, docs findings, diff review, roadmap
+   progress, and one standalone commit pass.
+
+## Focused product wiring findings
+
+- 2026-09-12: Product wiring uses one separately owned context `Menu` per
+  terminal View, but every item routes through the same application action
+  dispatcher as the main menu and command palette. The closed context surface
+  is Copy, Paste, Quick Look, Split Right, and Split Down; a partial projection
+  controller preserves shared availability without pretending to own every
+  catalog action.
+- 2026-09-12: Secondary-click and Control-click are removed from terminal mouse
+  routing when reporting is disabled, and the View context menu is detached
+  while DEC mouse reporting is enabled. Quick Look points are converted through
+  the effective content rectangle rather than configured padding, then use the
+  live renderer cell metrics and font baseline. The keyboard action falls back
+  to the visible caret and is inert while primary scrollback hides that caret.
+- 2026-09-12: Returned Service text, dropped text, and shell-quoted dropped file
+  paths reuse `TerminalPasteCodec`, `TerminalPasteConfirmationGate`, and
+  `TerminalPane.paste`. An external-only metadata gate prevents a clipboard
+  action from approving external data; repeating the same risky Service/drop
+  request within the normal confirmation window is the explicit approval and
+  no source text is retained by the gate.
+- 2026-09-12: Finder provider events are converted from bounded local file URLs
+  to exact cwd overrides and create fresh started panes through the existing
+  hierarchy action coordinator. The application manifest opts into only the
+  two closed runtime declarations and application teardown disables the
+  provider before releasing pane adapters.
+- 2026-09-12: The first focused analysis found that
+  `focusNativeContentPane` referenced the later local
+  `reconcileInteractiveHierarchy` declaration. Dart does not hoist this local
+  function for static resolution, so the integration must call the already
+  declared nullable reconciliation port instead.
+- 2026-09-12: Focused analysis then reports no issues. Its telemetry cleanup
+  cannot update the sandboxed user-session file after analysis completes, and
+  the first native-content test likewise cannot write Clang's existing Metal
+  module cache under `~/.cache`. This is the known environment boundary rather
+  than a product diagnostic; focused runs are repeated through the approved
+  normal build environment before results are accepted.
+- 2026-09-12: All three focused suites pass in that environment, including
+  exact bracketed bytes, first-request confirmation with zero writes,
+  replacement/busy/disposed target rejection, partial shared-action routing,
+  and exact cwd overrides. The first exact full gate then stopped at the
+  expected stale Phase 7 AppKit source ledger after the reviewed product
+  application changed. The dedicated generator is used next; only its
+  deterministic source hashes are eligible changes.
+- 2026-09-12: The first generator attempt hit the same sandboxed Metal module
+  cache before writing evidence. It made no repository change and is rerun
+  through the approved normal build environment rather than treating the
+  environmental cache denial as generated evidence.
+- 2026-09-12: Final routing retains one tab-scoped context-gesture gate through
+  mouse-up, so neither right-click nor Control-click leaks a later phase into
+  hyperlink, selection, or PTY routing. Folder requests use a serialized queue;
+  shutdown disables the provider and awaits that queue, while new-tab Services
+  select a standard window or create one instead of mutating Quick Terminal.
+- 2026-09-12: Final focused analysis and the native-content, action-menu, and
+  hierarchy-action tests all pass. The regenerated Phase 7 ledger changed only
+  reviewed source/test SHA-256 fields. Final exact `CI=true
+  DART_SUPPRESS_ANALYTICS=true make test` passes generated references and
+  evidence, all 276 formatted files, clean whole-package analysis, Phase 9
+  security stress, and the aggregate terminal suite. The adjacent dependency
+  worktree remains clean and final `git diff --check` has no whitespace errors.
+- 2026-09-12: The first staging attempt was denied when the workspace sandbox
+  could not create `.git/index.lock`; no path was staged or otherwise changed.
+  Staging is repeated through the approved repository metadata boundary before
+  the standalone completion commit.
 
 ## Risks and handoff notes
 

@@ -12,6 +12,7 @@ typedef TerminalMenuCheckedWriter = void Function(bool value);
 typedef TerminalMenuDispatchObserver = void Function(
   TerminalActionDispatchResult result,
 );
+typedef TerminalMenuRouteObserver = void Function(TerminalActionId id);
 
 /// Native-neutral binding used to synchronize one projected menu item.
 final class TerminalMenuEnablementBinding {
@@ -49,6 +50,8 @@ final class TerminalMenuProjectionController {
     required Iterable<TerminalMenuEnablementBinding> bindings,
     Iterable<TerminalMenuCheckedBinding> checkedBindings =
         const <TerminalMenuCheckedBinding>[],
+    bool requireEveryCatalogAction = true,
+    TerminalMenuRouteObserver? onWillRoute,
     TerminalMenuDispatchObserver? onDispatched,
   }) {
     final Map<TerminalActionId, TerminalMenuEnablementBinding> byId =
@@ -70,7 +73,7 @@ final class TerminalMenuProjectionController {
         .map((TerminalActionDefinition action) => action.id)
         .where((TerminalActionId id) => !byId.containsKey(id))
         .toSet();
-    if (missing.isNotEmpty) {
+    if (requireEveryCatalogAction && missing.isNotEmpty) {
       throw StateError(
         'menu projection is missing actions: '
         '${missing.map((TerminalActionId id) => id.stableName).join(', ')}',
@@ -99,6 +102,7 @@ final class TerminalMenuProjectionController {
       Map<TerminalActionId, TerminalMenuCheckedBinding>.unmodifiable(
         checkedById,
       ),
+      onWillRoute,
       onDispatched,
     );
   }
@@ -107,12 +111,14 @@ final class TerminalMenuProjectionController {
     this.dispatcher,
     this._bindings,
     this._checkedBindings,
+    this.onWillRoute,
     this.onDispatched,
   );
 
   final TerminalActionDispatcher dispatcher;
   final Map<TerminalActionId, TerminalMenuEnablementBinding> _bindings;
   final Map<TerminalActionId, TerminalMenuCheckedBinding> _checkedBindings;
+  final TerminalMenuRouteObserver? onWillRoute;
   final TerminalMenuDispatchObserver? onDispatched;
   bool _isDisposed = false;
 
@@ -140,6 +146,7 @@ final class TerminalMenuProjectionController {
     if (!_bindings.containsKey(id)) {
       throw StateError('action ${id.stableName} is not projected');
     }
+    onWillRoute?.call(id);
     final TerminalActionDispatchResult result = await dispatcher.dispatch(id);
     if (!_isDisposed) {
       refresh();
@@ -359,6 +366,165 @@ final class TerminalAppKitMenuProjection {
       if (!menu.isDisposed) {
         menu.dispose();
       }
+    }
+  }
+}
+
+/// Owns one pane-local native context menu backed by the shared dispatcher.
+final class TerminalAppKitContextMenuProjection {
+  factory TerminalAppKitContextMenuProjection.install({
+    required View view,
+    required TerminalActionDispatcher dispatcher,
+    TerminalMenuRouteObserver? onWillRoute,
+    TerminalNativeMenuInvocationObserver? onNativeInvocation,
+    TerminalMenuDispatchObserver? onDispatched,
+  }) {
+    const List<TerminalActionId> actionIds = <TerminalActionId>[
+      TerminalActionId.copy,
+      TerminalActionId.paste,
+      TerminalActionId.quickLook,
+      TerminalActionId.splitPaneRight,
+      TerminalActionId.splitPaneDown,
+    ];
+    final Menu menu = Menu(
+      title: 'Terminal',
+      configuration: terminalMenuConfiguration,
+    );
+    final List<MenuItem> items = <MenuItem>[];
+    final List<StreamSubscription<MenuItemInvokedEvent>> subscriptions =
+        <StreamSubscription<MenuItemInvokedEvent>>[];
+    final Map<TerminalActionId, MenuItem> actionItems =
+        <TerminalActionId, MenuItem>{};
+    TerminalMenuProjectionController? controller;
+    try {
+      for (final TerminalActionId id in actionIds) {
+        if (id == TerminalActionId.quickLook ||
+            id == TerminalActionId.splitPaneRight) {
+          final MenuItem separator = MenuItem.separator();
+          items.add(separator);
+          menu.addItem(separator);
+        }
+        final TerminalActionDefinition definition =
+            dispatcher.catalog.actionForId(id) ??
+            (throw StateError('context action ${id.stableName} is missing'));
+        final MenuItem item = MenuItem(title: definition.title);
+        items.add(item);
+        actionItems[id] = item;
+        menu.addItem(item);
+      }
+      controller = TerminalMenuProjectionController(
+        dispatcher: dispatcher,
+        bindings: <TerminalMenuEnablementBinding>[
+          for (final MapEntry<TerminalActionId, MenuItem> entry
+              in actionItems.entries)
+            TerminalMenuEnablementBinding(
+              id: entry.key,
+              read: () => entry.value.isEnabled,
+              write: (bool value) => entry.value.isEnabled = value,
+            ),
+        ],
+        requireEveryCatalogAction: false,
+        onWillRoute: onWillRoute,
+        onDispatched: onDispatched,
+      );
+      final TerminalMenuProjectionController installedController = controller;
+      for (final MapEntry<TerminalActionId, MenuItem> entry
+          in actionItems.entries) {
+        subscriptions.add(
+          entry.value.onInvoked.listen((MenuItemInvokedEvent event) {
+            onNativeInvocation?.call(entry.key, event);
+            unawaited(installedController.route(entry.key));
+          }),
+        );
+      }
+      controller.refresh();
+      return TerminalAppKitContextMenuProjection._(
+        view: view,
+        menu: menu,
+        items: List<MenuItem>.unmodifiable(items),
+        actionItems: Map<TerminalActionId, MenuItem>.unmodifiable(actionItems),
+        subscriptions: subscriptions,
+        controller: controller,
+      );
+    } on Object {
+      for (final StreamSubscription<MenuItemInvokedEvent> subscription
+          in subscriptions) {
+        unawaited(subscription.cancel());
+      }
+      controller?.dispose();
+      for (final MenuItem item in items.reversed) {
+        if (!item.isDisposed) item.dispose();
+      }
+      if (!menu.isDisposed) menu.dispose();
+      rethrow;
+    }
+  }
+
+  TerminalAppKitContextMenuProjection._({
+    required this.view,
+    required this.menu,
+    required this.items,
+    required Map<TerminalActionId, MenuItem> actionItems,
+    required List<StreamSubscription<MenuItemInvokedEvent>> subscriptions,
+    required TerminalMenuProjectionController controller,
+  }) : _actionItems = actionItems,
+       _subscriptions = subscriptions,
+       _controller = controller;
+
+  final View view;
+  final Menu menu;
+  final List<MenuItem> items;
+  final Map<TerminalActionId, MenuItem> _actionItems;
+  final List<StreamSubscription<MenuItemInvokedEvent>> _subscriptions;
+  final TerminalMenuProjectionController _controller;
+  bool _isAttached = false;
+  bool _isDisposed = false;
+
+  bool get isAttached => _isAttached;
+  bool get isDisposed => _isDisposed;
+
+  MenuItem itemForAction(TerminalActionId id) {
+    _ensureAlive();
+    return _actionItems[id] ??
+        (throw StateError('action ${id.stableName} is not in context menu'));
+  }
+
+  void setAvailable(bool value) {
+    _ensureAlive();
+    if (_isAttached != value) {
+      view.contextMenu = value ? menu : null;
+      _isAttached = value;
+    }
+    _controller.refresh();
+  }
+
+  void refresh() {
+    _ensureAlive();
+    _controller.refresh();
+  }
+
+  void dispose() {
+    if (_isDisposed) return;
+    if (_isAttached && !view.isDisposed) {
+      view.contextMenu = null;
+    }
+    _isAttached = false;
+    _isDisposed = true;
+    for (final StreamSubscription<MenuItemInvokedEvent> subscription
+        in _subscriptions) {
+      unawaited(subscription.cancel());
+    }
+    _subscriptions.clear();
+    _controller.dispose();
+    for (final MenuItem item in items.reversed) {
+      if (!item.isDisposed) item.dispose();
+    }
+    if (!menu.isDisposed) menu.dispose();
+  }
+
+  void _ensureAlive() {
+    if (_isDisposed) {
+      throw StateError('native context-menu projection is disposed');
     }
   }
 }

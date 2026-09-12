@@ -1,13 +1,203 @@
+import 'dart:convert';
+
 import 'package:dart_terminal/dart_terminal.dart';
 
-void main() => runTerminalNativeContentTests();
+Future<void> main() => runTerminalNativeContentTests();
 
-void runTerminalNativeContentTests() {
+Future<void> runTerminalNativeContentTests() async {
   _testBoundedWordLookup();
   _testWideWrappedAndStaleWordLookup();
+  _testNativeContentGeometryAndMousePolicy();
+  _testServicesSelectionAndFolderPolicy();
   _testExternalTextAdmission();
   _testShellSafeFilePathAdmission();
   _testExternalContentLimits();
+  await _testExternalPasteLifecycle();
+}
+
+void _testNativeContentGeometryAndMousePolicy() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 2, columns: 8);
+  _write(screens.primary, 'alpha');
+  final TerminalNativeContentCell? cell =
+      TerminalNativeContentPolicy.cellAtPoint(
+        x: 26,
+        y: 31,
+        contentOriginX: 10,
+        contentOriginY: 7,
+        cellWidth: 8,
+        cellHeight: 16,
+        rows: 2,
+        columns: 8,
+      );
+  _expect(
+    cell == const TerminalNativeContentCell(row: 1, column: 2) &&
+        TerminalNativeContentPolicy.cellAtPoint(
+              x: 9.9,
+              y: 7,
+              contentOriginX: 10,
+              contentOriginY: 7,
+              cellWidth: 8,
+              cellHeight: 16,
+              rows: 2,
+              columns: 8,
+            ) ==
+            null &&
+        TerminalNativeContentPolicy.cellAtPoint(
+              x: 10,
+              y: double.nan,
+              contentOriginX: 10,
+              contentOriginY: 7,
+              cellWidth: 8,
+              cellHeight: 16,
+              rows: 2,
+              columns: 8,
+            ) ==
+            null,
+    'native points resolve only inside finite padding-aware grid geometry',
+  );
+  final TerminalWordCandidate candidate = TerminalWordLookup.atCell(
+    screens.viewport,
+    0,
+    2,
+  ).candidate!;
+  final TerminalDefinitionPlacement? placement =
+      TerminalNativeContentPolicy.definitionPlacement(
+        candidate: candidate,
+        contentOriginX: 10,
+        contentOriginY: 7,
+        cellWidth: 8,
+        cellHeight: 16,
+        fontBaseline: 12,
+      );
+  _expect(
+    placement?.baselineX == 10 && placement?.baselineY == 19,
+    'definition placement uses the word start and current font baseline',
+  );
+  _expect(
+    TerminalNativeContentPolicy.cursorCell(
+          viewport: screens.viewport,
+          cursorRow: 0,
+          cursorColumn: 4,
+        ) ==
+        const TerminalNativeContentCell(row: 0, column: 4),
+    'keyboard Quick Look resolves the visible caret cell',
+  );
+
+  _expect(
+    TerminalNativeContentPolicy.isContextGesture(
+          isButtonDown: true,
+          button: 1,
+          control: false,
+        ) &&
+        TerminalNativeContentPolicy.isContextGesture(
+          isButtonDown: true,
+          button: 0,
+          control: true,
+        ) &&
+        !TerminalNativeContentPolicy.isContextGesture(
+          isButtonDown: false,
+          button: 1,
+          control: false,
+        ) &&
+        TerminalNativeContentPolicy.contextMenuAvailable(
+          isLive: true,
+          mouseModes: const TerminalMouseModes(),
+        ) &&
+        !TerminalNativeContentPolicy.contextMenuAvailable(
+          isLive: true,
+          mouseModes: const TerminalMouseModes(
+            tracking: TerminalMouseTrackingMode.anyEvent,
+          ),
+        ) &&
+        !TerminalNativeContentPolicy.contextMenuAvailable(
+          isLive: false,
+          mouseModes: const TerminalMouseModes(),
+        ),
+    'secondary/control gestures are native only outside terminal capture',
+  );
+  final TerminalNativeContextGestureGate<String> gestureGate =
+      TerminalNativeContextGestureGate<String>();
+  _expect(
+    gestureGate.suppress(
+          target: 'tab',
+          isButtonDown: true,
+          isButtonUp: false,
+          startsNativeContextGesture: true,
+        ) &&
+        gestureGate.suppress(
+          target: 'tab',
+          isButtonDown: false,
+          isButtonUp: false,
+          startsNativeContextGesture: false,
+        ) &&
+        gestureGate.suppress(
+          target: 'tab',
+          isButtonDown: false,
+          isButtonUp: true,
+          startsNativeContextGesture: false,
+        ) &&
+        !gestureGate.suppress(
+          target: 'tab',
+          isButtonDown: true,
+          isButtonUp: false,
+          startsNativeContextGesture: false,
+        ),
+    'a full native context gesture is suppressed exactly through mouse-up',
+  );
+  gestureGate
+    ..suppress(
+      target: 'tab',
+      isButtonDown: true,
+      isButtonUp: false,
+      startsNativeContextGesture: true,
+    )
+    ..clear();
+  _expect(
+    !gestureGate.suppress(
+      target: 'tab',
+      isButtonDown: false,
+      isButtonUp: true,
+      startsNativeContextGesture: false,
+    ),
+    'gesture teardown cannot suppress a later unrelated terminal event',
+  );
+}
+
+void _testServicesSelectionAndFolderPolicy() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 8);
+  _write(screens.primary, 'selected');
+  final TerminalSelectionRange range = screens.viewport.selectionRange(
+    screens.viewport.anchorAt(0, 0),
+    screens.viewport.anchorAfter(0, 7),
+    unit: TerminalSelectionUnit.cell,
+  )!;
+  final TerminalSelectionText selected = screens.viewport.extractSelection(
+    range,
+  )!;
+  _expect(
+    TerminalNativeContentPolicy.servicesSelection(selected) == 'selected' &&
+        TerminalNativeContentPolicy.servicesSelection(null) == null,
+    'Services caches only one complete non-empty terminal selection',
+  );
+  _expect(
+    TerminalNativeContentPolicy.folderWorkingDirectory(
+              Uri.parse('file:///private/tmp/Folder%20Name'),
+            ) ==
+            '/private/tmp/Folder Name' &&
+        TerminalNativeContentPolicy.folderWorkingDirectory(
+              Uri.parse('file://localhost/private/tmp'),
+            ) ==
+            '/private/tmp' &&
+        TerminalNativeContentPolicy.folderWorkingDirectory(
+              Uri.parse('https://example.com/private/tmp'),
+            ) ==
+            null &&
+        TerminalNativeContentPolicy.folderWorkingDirectory(
+              Uri.parse('file://remote/private/tmp'),
+            ) ==
+            null,
+    'Finder directories become bounded local cwd authority only',
+  );
 }
 
 void _testBoundedWordLookup() {
@@ -208,6 +398,128 @@ void _testExternalContentLimits() {
     ], maxFilePaths: TerminalExternalContentAdmission.maximumFilePaths + 1),
     'file count above the hard maximum',
   );
+}
+
+Future<void> _testExternalPasteLifecycle() async {
+  final _ExternalPasteHarness harness = _ExternalPasteHarness();
+  final TerminalExternalPasteController<int> controller =
+      TerminalExternalPasteController<int>(
+        resolveTarget: harness.resolve,
+        monotonicMicros: () => harness.clockMicros++,
+      );
+  final TerminalExternalContent safe = TerminalExternalContentAdmission.text(
+    'safe',
+    source: TerminalExternalTextSource.drop,
+  ).content!;
+  final TerminalExternalPasteResult completed = await controller.submit(
+    7,
+    safe,
+  );
+  _expect(
+    completed.disposition == TerminalExternalPasteDisposition.completed &&
+        harness.writes.single == '\x1b[200~safe\x1b[201~' &&
+        harness.notices.isEmpty,
+    'safe external text uses exact bracketed ordinary paste transport bytes',
+  );
+
+  harness.writes.clear();
+  final TerminalExternalContent risky = TerminalExternalContentAdmission.text(
+    'first\nsecond',
+    source: TerminalExternalTextSource.service,
+  ).content!;
+  final TerminalExternalPasteResult confirmation = await controller.submit(
+    7,
+    risky,
+  );
+  _expect(
+    confirmation.disposition ==
+            TerminalExternalPasteDisposition.confirmationRequired &&
+        harness.writes.isEmpty &&
+        harness.notices.single.kind ==
+            TerminalClipboardNoticeKind.pasteConfirmationRequired,
+    'first risky Service delivery confirms without any PTY write',
+  );
+  final TerminalExternalPasteResult approved = await controller.submit(
+    7,
+    risky,
+  );
+  _expect(
+    approved.disposition == TerminalExternalPasteDisposition.completed &&
+        harness.writes.single == '\x1b[200~first\nsecond\x1b[201~',
+    'repeating the same risky Service delivery approves the same paste path',
+  );
+
+  harness
+    ..writes.clear()
+    .._resolutionCount = 0
+    ..replaceAfterFirstResolution = true;
+  final TerminalExternalPasteResult stale = await controller.submit(7, safe);
+  _expect(
+    stale.disposition == TerminalExternalPasteDisposition.staleTarget &&
+        harness.writes.isEmpty,
+    'target replacement during asynchronous planning produces zero writes',
+  );
+  harness
+    ..replaceAfterFirstResolution = false
+    ..busy = true;
+  _expect(
+    (await controller.submit(7, safe)).disposition ==
+            TerminalExternalPasteDisposition.busy &&
+        harness.writes.isEmpty,
+    'a target with an active paste fails closed',
+  );
+  controller.dispose();
+  controller.dispose();
+  _expect(
+    (await controller.submit(7, safe)).disposition ==
+        TerminalExternalPasteDisposition.disposed,
+    'disposed native paste lifecycle rejects late events',
+  );
+}
+
+final class _ExternalPasteHarness {
+  final Object originalIdentity = Object();
+  final Object replacementIdentity = Object();
+  final List<String> writes = <String>[];
+  final List<TerminalClipboardNotice> notices = <TerminalClipboardNotice>[];
+  int clockMicros = 1;
+  int _resolutionCount = 0;
+  bool replaceAfterFirstResolution = false;
+  bool busy = false;
+
+  TerminalExternalPasteTarget? resolve(int identity) {
+    if (identity != 7) return null;
+    _resolutionCount++;
+    final Object token = replaceAfterFirstResolution && _resolutionCount > 1
+        ? replacementIdentity
+        : originalIdentity;
+    return TerminalExternalPasteTarget(
+      identity: token,
+      bracketedPasteMode: true,
+      pasteInProgress: busy,
+      showNotice: notices.add,
+      paste: (TerminalPastePlan plan) async {
+        final List<int> bytes = <int>[];
+        final TerminalPasteChunkEncoder encoder = plan.encoder();
+        for (
+          var chunk = encoder.nextChunk();
+          chunk != null;
+          chunk = encoder.nextChunk()
+        ) {
+          bytes.addAll(chunk);
+        }
+        writes.add(utf8.decode(bytes));
+        return TerminalPasteTransferResult(
+          disposition: TerminalPasteTransferDisposition.completed,
+          encodedBytes: bytes.length,
+          completedChunks: writes.length,
+          backpressureCount: 0,
+          maximumQueuedBytes: bytes.length,
+          concurrentInputRejections: 0,
+        );
+      },
+    );
+  }
 }
 
 void _write(TerminalScreen screen, String value) {

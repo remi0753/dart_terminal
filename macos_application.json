@@ -7,6 +7,16 @@
     "version": "0.1.0",
     "minimumSystemVersion": "14.0"
   },
+  "services": [
+    {
+      "kind": "newTabAtFolder",
+      "menuItem": "New Dart Terminal Tab Here"
+    },
+    {
+      "kind": "newWindowAtFolder",
+      "menuItem": "New Dart Terminal Window Here"
+    }
+  ],
   "runner": {
     "activationPolicy": "regular",
     "activateOnLaunch": true,

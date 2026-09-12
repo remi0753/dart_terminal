@@ -166,7 +166,7 @@ Future<void> main() async {
   await runTerminalApplicationMatrixTests();
   await runTerminalApplicationStateTests();
   await runTerminalNativeHierarchyTests();
-  runTerminalNativeContentTests();
+  await runTerminalNativeContentTests();
   runTerminalInputMatrixTests();
   runTerminalAppKitKeyAdapterTests();
   runTerminalAppKitPolicyTests();

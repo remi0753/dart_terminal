@@ -7,8 +7,36 @@ Future<void> main() => runTerminalProductHierarchyActionTests();
 
 Future<void> runTerminalProductHierarchyActionTests() async {
   await _testCreationAndExistingMutations();
+  await _testExplicitWorkingDirectoryCreation();
   await _testSerializationFailureAndDisposal();
   await _testAggregatePaneAvailabilityBound();
+}
+
+Future<void> _testExplicitWorkingDirectoryCreation() async {
+  final _Harness harness = _Harness();
+  await harness.createInitialWindow();
+  final int tabs = await harness.coordinator.createTabsAtWorkingDirectories(
+    const <String>['/private/tmp/first', '/private/tmp/second'],
+  );
+  final int windows = await harness.coordinator
+      .createWindowsAtWorkingDirectories(const <String>['/private/tmp/third']);
+  _expect(
+    tabs == 2 &&
+        windows == 1 &&
+        harness.configurationWorkingDirectories.join('|') ==
+            '/private/tmp/first|/private/tmp/second|/private/tmp/third' &&
+        harness.sessions.values.every((_FakeSession session) => session.live),
+    'folder requests create fresh started panes with exact cwd overrides',
+  );
+  harness.coordinator.dispose();
+  _expect(
+    await harness.coordinator.createTabsAtWorkingDirectories(const <String>[
+          '/private/tmp/ignored',
+        ]) ==
+        0,
+    'disposed folder creation fails closed before configuration or startup',
+  );
+  await harness.state.shutdown();
 }
 
 Future<void> _testCreationAndExistingMutations() async {
@@ -193,6 +221,7 @@ final class _Harness {
   final TerminalApplicationState state = TerminalApplicationState();
   final Map<PaneId, _FakeSession> sessions = <PaneId, _FakeSession>{};
   final List<PaneId?> configurationSources = <PaneId?>[];
+  final List<String> configurationWorkingDirectories = <String>[];
   late final TerminalProductHierarchyActionCoordinator coordinator =
       TerminalProductHierarchyActionCoordinator(
         state: state,
@@ -230,8 +259,14 @@ final class _Harness {
     registrations: coordinator.registrations(),
   );
 
-  TerminalPaneConfiguration configuration(PaneId? source) {
+  TerminalPaneConfiguration configuration(
+    PaneId? source, {
+    String? workingDirectoryOverride,
+  }) {
     configurationSources.add(source);
+    if (workingDirectoryOverride != null) {
+      configurationWorkingDirectories.add(workingDirectoryOverride);
+    }
     return TerminalPaneConfiguration(
       sessionFactory:
           (
