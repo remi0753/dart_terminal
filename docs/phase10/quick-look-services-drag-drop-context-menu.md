@@ -1,0 +1,216 @@
+# Quick Look, Services, Drag and Drop, and Context Menu
+
+## Status
+
+- Phase: 10
+- Task: Quick Look, Services, drag/drop, and context menu
+- Started: 2026-09-12
+- State: active
+- Current subtask: bounded terminal interaction contracts and shared actions
+- Primary environment: macOS 14 or later on Apple M1/arm64
+
+## Purpose
+
+Make terminal text and files participate in standard macOS content workflows
+without bypassing terminal input policy. A user must be able to look up a word,
+invoke relevant terminal actions from a context menu, send or receive selected
+plain text through Services, drop text or file URLs into a terminal, and open
+folders from Finder Services in a new tab or window.
+
+## Background
+
+- Phase 5 completed bounded selection, standard plain-text Copy/Paste,
+  dangerous/large paste confirmation, terminal mouse arbitration, hyperlinks,
+  native text input, and Metal cell geometry.
+- Phase 7 completed the application action registry, native menus, pane/window
+  ownership, trusted working-directory inheritance, and deterministic teardown.
+- Phase 10 Quick Terminal and Secure Keyboard Entry added retained window roles,
+  checked menu projection, and application activation ownership.
+- Feature Matrix IN-10 and UI-07 still identify drag/drop, Services, Quick Look,
+  and contextual native interaction as missing. The adjacent `dart_appkit`
+  roadmap likewise has no View context-menu, drag destination, or Services
+  requestor/provider API.
+
+## Scope
+
+- Add bounded product contracts for word lookup at a terminal cell, shell-safe
+  file-path insertion, and shared Quick Look/context-menu actions.
+- Add generic `dart_appkit` View support for a prebuilt native context menu and
+  dictionary definition presentation, including pressure-click request events.
+- Add generic `dart_appkit` plain-text Services requestor support backed by a
+  cached selection, asynchronous returned-text events, and a text/file-URL drag
+  destination with typed operation negotiation and bounded payloads.
+- Add a generic application Services provider for opening normalized directory
+  URLs and the runtime manifest declarations needed for Finder's “New Tab at
+  Folder” and “New Window at Folder” entries.
+- Integrate all routes with the focused pane, existing paste confirmation and
+  PTY transport, current action availability, terminal mouse capture, trusted
+  cwd rules, Quick Terminal ownership, and deterministic shutdown.
+- Verify native behavior in Developer JIT and Release AOT and provide a manual
+  Finder/Services/force-click/context-menu checklist.
+
+## Out of scope
+
+- A drag source, promised files, image/rich-text/custom pasteboard types, or
+  arbitrary application-defined drag operations. The pinned comparison surface
+  is a text/file-URL drop destination, and broader generic AppKit drag support
+  remains tracked by the dependency roadmap.
+- Previewing files with `QLPreviewPanel`. Here Quick Look means the standard
+  macOS dictionary/data-detector lookup for a terminal word, matching the pinned
+  comparison surface.
+- Option-click cursor positioning, semantic output selection, AppleScript, App
+  Intents, complete accessibility audit, localization, or terminal inspector
+  work from other roadmap items.
+- Sending terminal contents other than the explicit local selection, accepting
+  unbounded pasteboard data, or writing dropped/service-returned text directly
+  to a PTY outside the existing paste policy.
+
+## Dependencies
+
+- `dart_appkit` generation-checked View/Menu ownership, asynchronous native
+  event protocol, pasteboard bounds, fake/native bindings, application
+  lifecycle, and AppKit-main-thread root.
+- `dart_macos_runtime` manifest validation and deterministic Info.plist/bundle
+  generation for declared Services.
+- Terminal selection/viewport/cell metrics, mouse reporting state, paste
+  planning/confirmation/transport, action registry/menu projection, hierarchy
+  cwd inheritance, and shipped-runtime harness.
+- ADR-001 keeps reusable OS mechanisms in dependencies and product policy in
+  this repository. ADR-002 forbids synchronous native-to-Dart reentry.
+
+## Completion conditions
+
+1. Right-click and Control-click show one native terminal context menu only when
+   terminal mouse capture does not own that gesture. Copy, Paste, Quick Look,
+   Split Right, and Split Down use the same action registrations and current
+   availability as the main menu/command palette; no terminal mouse or PTY byte
+   is duplicated.
+2. Force-click or the shared Quick Look action resolves one bounded word at the
+   relevant terminal cell and uses native definition presentation with current
+   font/baseline geometry. Empty, whitespace, truncated, stale, and unavailable
+   lookups are inert and typed rather than guessed.
+3. macOS Services can read only the current bounded plain-text selection and can
+   return bounded plain text through the ordinary paste confirmation/transport
+   path. Synchronous AppKit requestor checks use native cached state and never
+   synchronously enter Dart.
+4. Dropped plain text and file URLs are accepted with copy semantics, bounded
+   before crossing the ABI, and delivered asynchronously through the same paste
+   policy. File paths are normalized and shell-quoted as data. Unsupported,
+   malformed, oversized, stale, or inactive-target drops make no PTY write.
+5. Finder Services normalize selected files to unique parent directories and
+   selected directories to themselves, then create a fresh terminal tab/window
+   at each trusted local directory through typed asynchronous provider events.
+   Runtime bundles contain only the declared service metadata.
+6. Focused/fake/native/dependency tests, both shipped runtime paths, source and
+   bundle audits, exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`, README/
+   FEATURE_MATRIX/reference/evidence updates, final diff review, roadmap
+   completion, and one standalone commit per ordered subtask pass.
+
+## Validation approach
+
+- Unit tests cover word boundaries, quoting, payload limits, stale target
+  identity, mouse-capture suppression, and action availability without AppKit.
+- `dart_appkit` fake/native tests cover context gesture recognition, menu
+  attachment ownership, definition placement, pressure events, Services
+  requestor send/receive, drag negotiation, type/size rejection, provider URL
+  normalization, late events, and disposal.
+- `dart_macos_runtime` tests compare exact manifest validation and generated
+  Info.plist service dictionaries for JIT and AOT bundles.
+- Product acceptance drives real AppKit events and pasteboards while using
+  deterministic temporary paths and a private test pasteboard. It asserts exact
+  PTY bytes only after policy approval, zero writes on rejection/cancellation,
+  no gesture duplication, fixed terminal metrics, and zero native/session
+  handles after close and Quit.
+- A manual checklist covers Finder Services visibility, system service text
+  transforms, trackpad force click, keyboard/context invocation, and assistive
+  input settings that cannot be enabled deterministically in automation.
+
+## Ordered subtasks
+
+This item spans product text semantics, two native dependency ABIs, synchronous
+AppKit responder requirements, runtime bundle metadata, and real Finder/system
+integration. It is split before implementation so later layers consume only
+committed contracts.
+
+1. **Bounded terminal interaction contracts and shared actions**
+   - Define word-at-cell lookup, shell-safe dropped-path serialization, typed
+     external-content admission, and Quick Look action metadata independently
+     of AppKit.
+   - Complete when empty/wide/wrapped/stale/bounded word and hostile filename/
+     text cases, action conflicts, API exports, focused tests, and the full
+     terminal gate pass.
+2. **AppKit context-menu and Quick Look substrate**
+   - Add reusable View-owned context-menu attachment plus pressure/Quick Look
+     request and native definition presentation, preserving asynchronous event
+     delivery and generation ownership.
+   - Complete when fake/native/legacy/public API, accessibility geometry,
+     disposal, both host builds, dependency full gate, and consuming terminal
+     full gate pass.
+3. **AppKit Services and drop-destination substrate**
+   - Add cached plain-text Services requestor state, bounded asynchronous
+     service-return/drop events, text/file URL operation negotiation, and a
+     typed application folder-service provider.
+   - Complete when synchronous responder behavior never re-enters Dart and all
+     type/limit/normalization/stale/disposal/native tests plus dependency and
+     consuming full gates pass.
+4. **Runtime service declaration substrate**
+   - Extend the runtime manifest and deterministic Info.plist generation with a
+     closed service declaration schema required by the application provider.
+   - Complete when malformed manifests fail closed and JIT/AOT fixture, schema,
+     bundle audit, dependency full gate, and consuming full gate pass.
+5. **Product integration, shipped-runtime acceptance, and closure**
+   - Connect focused pane selection, mouse policy, shared actions, Services,
+     drops, cwd creation, Settings/menu availability, and all teardown paths.
+   - Complete when Developer JIT/Release AOT native acceptance, full gates and
+     audits, manual checklist, docs/evidence, final diff review, roadmap parent,
+     and its standalone commit pass.
+
+## Findings and decision log
+
+- 2026-09-12: After commit `0563192` (`Complete secure keyboard entry
+  acceptance`), terminal and adjacent `dart_appkit` worktrees are clean. ROADMAP
+  reread selects this item as the first remaining Phase 10 work; AppleScript and
+  all later polish remain out of scope until this parent is committed.
+- 2026-09-12: The pinned comparison Service provider reads file URLs from the
+  service pasteboard, maps files to parent directories, de-duplicates directory
+  URLs, and creates a terminal tab or window for each directory. Source:
+  `macos/Sources/Features/Services/ServiceProvider.swift` at pinned commit
+  `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`.
+- 2026-09-12: The pinned AppKit surface registers string/file-URL drop types,
+  negotiates copy, and asynchronously sends the resulting text to its surface.
+  It implements Quick Look as word-under-cursor dictionary presentation and
+  exposes Services send/return text through the responder chain. Its context
+  menu is limited to right-click/Control-click outside mouse capture and reuses
+  ordinary application actions. Source: `macos/Sources/Ghostty/Surface View/
+  SurfaceView_AppKit.swift` at the same pinned commit.
+- 2026-09-12: The installed macOS SDK confirms `menuForEvent:`,
+  `quickLookWithEvent:`, `showDefinitionForAttributedString:atPoint:`,
+  `registerForDraggedTypes:`, `validRequestorForSendType:returnType:`, and the
+  `NSServicesMenuRequestor` read/write callbacks are synchronous AppKit methods.
+  Native code therefore must answer from cached bounded state and emit any Dart
+  work later through the existing event queue.
+- 2026-09-12: The runtime manifest currently has no arbitrary Info.plist or
+  `NSServices` representation. A closed additive schema is required; accepting
+  arbitrary plist fragments would weaken deterministic bundle validation.
+- 2026-09-12: All external text entry will reuse `TerminalPasteCodec`, the
+  confirmation gate, and one-in-flight transport. Drag or Services callbacks
+  must not call the pane's raw input writer. File URLs will be converted to
+  normalized local paths and quoted as shell data before that same admission.
+- 2026-09-12: No drag source will be added. This matches the pinned product
+  behavior and avoids pre-implementing the dependency's broader promised-file
+  roadmap. The manual and automated acceptance will describe the delivered
+  capability explicitly as a drop destination.
+
+## Risks and handoff notes
+
+- A system Services menu may call availability methods while Dart is busy. Only
+  immutable cached selection text and closed native flags may be read there.
+- Native menu objects cannot have ambiguous ownership between the main menu and
+  a View context menu. Context menus will be separately constructed from shared
+  action definitions and dispose their own generation-checked handles.
+- File URLs may name remote, nonexistent, relative, control-containing, or very
+  long paths. The provider and drop paths need separate closed validation;
+  neither may infer trust from a URL string alone.
+- Pressure events and force-click preferences vary by hardware and user
+  settings. Automation covers the event/definition boundary; the checklist owns
+  physical gesture acceptance.

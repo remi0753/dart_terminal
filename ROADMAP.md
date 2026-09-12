@@ -1215,6 +1215,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] controller、live config、shared action、UI/lifecycle integration
   - [x] 両runtime acceptance、manual checklist、documentation closure、親項目完了判定
 - [ ] Quick Look、Services、drag/drop、context menu
+  （分割、境界、完了条件は
+  [`docs/phase10/quick-look-services-drag-drop-context-menu.md`](docs/phase10/quick-look-services-drag-drop-context-menu.md)
+  を参照して順に実施する）
+  - [ ] bounded terminal interaction contracts、shared action metadata
+  - [ ] `dart_appkit` context-menu、Quick Look substrate
+  - [ ] `dart_appkit` Services、drop-destination substrate
+  - [ ] `dart_macos_runtime` service declaration substrate
+  - [ ] product integration、両runtime acceptance、documentation closure、親項目完了判定
 - [ ] AppleScript dictionary と object lifecycle
 - [ ] App Intents/Shortcuts、notifications
 - [ ] complete VoiceOver/Accessibility Inspector pass
