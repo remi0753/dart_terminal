@@ -272,3 +272,40 @@ bounded to 256 KiB and shows a stable truncation/eviction summary when needed.
   children in ROADMAP before implementation. `git diff --check` passed for the
   contract/memo and roadmap-only change; there is no executable behavior to
   test in this first child.
+- 2026-09-13: after commit `55c9a7f` (`Define inspector diagnostics privacy
+  contract`), reread the roadmap and began only the generic save-destination
+  child. The adjacent worktree is clean and has no repository-specific agent
+  instructions. Its existing optional-binding pattern allows this API to be
+  added without raising the base ABI or forcing legacy fakes to implement it.
+- 2026-09-13: implemented the adjacent generic substrate as a synchronous,
+  main-thread-only `NSSavePanel` boundary. All display strings, the default
+  filename, one optional lowercase extension, and the directory-creation flag
+  are copied from the caller under fixed UTF-8 limits. The API returns only a
+  copied selected/cancelled result and never creates or writes a file. The C
+  ABI result is borrowed only until the next panel call; the FFI layer validates
+  and copies it immediately. Older native libraries fail closed through the
+  existing optional-binding convention.
+- 2026-09-13: added a native injected handler so tests cover selection,
+  cancellation, presentation failure, copied Unicode input, invalid/unsafe or
+  oversized input, invalid returned paths, malformed UTF-8, and wrong-thread
+  calls without showing a real modal. Dart fake/API tests cover field injection,
+  typed native failure, public validation, cancellation, and post-termination
+  rejection. The README documents that content ownership and file writing stay
+  with the caller.
+- 2026-09-13: the first focused native build exposed a declaration-order
+  designated-initializer warning under `-Werror`; reordering the test fixture
+  fields resolved it. The next Dart analysis exposed two native result types
+  omitted from the test's explicit `show` list; adding those imports resolved
+  it. No product behavior or acceptance condition was weakened.
+- 2026-09-13: adjacent validation passed with `make native-test dart-test
+  validate`, including native tests, Dart analysis/API/launcher tests,
+  `GENERIC_REPOSITORY_AUDIT_PASS`, and scaffold validation. Exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` then passed the complete
+  bridge, runner, runtime, example, FFI, and generic repository gate. The
+  explicit forbidden-name search over every changed generic source, test,
+  header, build, and documentation file returned no matches. Duration-only
+  testing was intentionally not added under the user's priority instruction.
+- 2026-09-13: committed the adjacent repository as `58dce74` (`Add generic save
+  destination panel`). Its worktree is clean. This repository records the
+  dependency milestone but does not yet consume product strings or add file
+  writing; those remain ordered later children.
