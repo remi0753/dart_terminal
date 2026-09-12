@@ -6,7 +6,7 @@
 - Task: Quick Terminal and global shortcut
 - Started: 2026-09-12
 - State: active
-- Current subtask: exclusive global shortcut registration/event substrate
+- Current subtask: Quick Terminal window/screen/presentation substrate
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -23,10 +23,10 @@ fail visibly without acquiring broader keyboard-monitoring authority.
   screen migration, restoration, reopen, actions, menus, and command palette.
 - The Phase 10 roadmap item maps to Feature Matrix UI-06, whose acceptance unit
   includes Quick Terminal, global shortcut, screen selection, and animation.
-- The current product has no Quick Terminal role, no global shortcut API, and
-  no overlay-window presentation primitive. Normal terminal windows are all
-  restorable and native event protocol v7 has no application-scoped shortcut
-  event.
+- The current product has a logical Quick Terminal role and the dependency now
+  has an owned global shortcut API, but there is no overlay-window presentation
+  primitive. Normal terminal windows are otherwise restorable and native event
+  protocol v8 carries the shortcut event.
 - The pinned comparison behavior describes a singleton whose terminal state is
   retained while hidden, is not restored across application launches on macOS,
   and has no default global binding. The screen selector supports the keyboard-
@@ -253,3 +253,38 @@ contracts from the previous child.
   the unified runner printed `dart_terminal tests passed`. The exclusive
   registration substrate is therefore complete without prematurely adding
   Quick Terminal window presentation or product registration behavior.
+- 2026-09-12: After commits `f6721af` and `89e23f3`, both worktrees are clean.
+  ROADMAP was reread and selects the third child: reusable screen resolution
+  and overlay presentation in `dart_appkit`. This child must remain generic;
+  singleton/session/configuration/autohide policy stays deferred to the fourth
+  product-integration child. Its acceptance boundary is current-screen
+  selection, visible-frame geometry, window level/Spaces behavior, focus,
+  bounded or zero-duration show/hide animation, interruption safety, and
+  deterministic cleanup across native, Dart, and both generic hosts.
+- 2026-09-12: The reusable dependency now resolves `main` (keyboard-focus),
+  global-mouse, and menu-bar screens afresh into copied display ID, full frame,
+  visible frame, and backing scale. Missing main/mouse hits fall back to the
+  first valid screen, including mixed and negative global coordinates. No
+  `NSScreen` reference crosses the C boundary.
+- 2026-09-12: Generic window presentation now exposes normal/floating/status
+  levels, typed join-all-Spaces/fullscreen-auxiliary/stationary/transient
+  behavior, optional focus activation, and 0..5 second frame show/hide. Hide
+  orders out without closing or releasing content. Owner-local generations
+  invalidate stale animation completions on a later present/hide/direct-frame/
+  ordinary-show/close/release operation, preventing an interrupted hide from
+  hiding a newly shown window.
+- 2026-09-12: Native tests cover two-screen negative-coordinate selection,
+  current-screen fallback and real snapshots, level/Spaces projection, zero
+  and bounded endpoints, show/hide interruption, validation/type/thread, and
+  cleanup. Dart and FFI tests cover all selectors, backing scale, cache-on-
+  success, optional focus, legacy unsupported symbols, and native main-thread
+  guards. The exact `dart_appkit make test` gate and both generic host builds
+  passed; the dependency is committed as `ddcfa70` (`Add current-screen window
+  presentation`).
+- 2026-09-12: The exact consuming `CI=true DART_SUPPRESS_ANALYTICS=true make
+  test` gate passed without terminal source changes. All generated-reference,
+  compatibility, differential/application evidence, terminfo, shell resource,
+  format, analyze, Phase 9 stress, and unified Dart tests remained green. The
+  reusable presentation child is complete; lazy creation, geometry policy,
+  renderer scale projection, global registration, autohide, failure UI, and
+  real runtime acceptance remain exclusively in the final integration child.

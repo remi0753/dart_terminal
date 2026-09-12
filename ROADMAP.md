@@ -1202,7 +1202,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] typed Quick Terminal configuration、action、logical lifecycle contract
   - [x] `dart_appkit` exclusive global shortcut registration/event substrate
-  - [ ] `dart_appkit` Quick Terminal window/screen/presentation substrate
+  - [x] `dart_appkit` Quick Terminal window/screen/presentation substrate
   - [ ] product integration、両runtime acceptance、documentation closure、親項目完了判定
 - [ ] Secure Keyboard Entry と auto/manual indication
 - [ ] Quick Look、Services、drag/drop、context menu
