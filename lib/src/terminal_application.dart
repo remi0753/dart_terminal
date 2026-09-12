@@ -1729,6 +1729,7 @@ final class TerminalApplication {
                 MenuItemInvokedEvent() ||
                 GlobalHotKeyPressedEvent() ||
                 ApplicationFolderServiceRequestedEvent() ||
+                ApplicationUserNotificationChangedEvent() ||
                 ViewQuickLookRequestedEvent() ||
                 ViewServicesTextReceivedEvent() ||
                 ViewDropPerformedEvent():
@@ -4612,6 +4613,9 @@ final class TerminalApplication {
             folderServiceQueue = folderServiceQueue
                 .then<void>((_) => handleFolderService(event))
                 .then<void>((_) {}, onError: recordAsynchronousError);
+          case ApplicationUserNotificationChangedEvent():
+            // Product policy is connected by the following ordered subtask.
+            break;
           case WindowEvent() ||
               MenuItemInvokedEvent() ||
               GlobalHotKeyPressedEvent() ||
