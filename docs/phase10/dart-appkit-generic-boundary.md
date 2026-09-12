@@ -6,7 +6,7 @@
 - Task: remove product-specific implementation from `dart_appkit`
 - Started: 2026-09-12
 - State: in progress
-- Current subtask: move the AppleScript capability package
+- Current subtask: move the App Intents capability package
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -231,3 +231,14 @@ before starting the next subtask.
   package, ignored outputs, targets, and variables were then removed; dependency
   `make validate`, stale-target dry-run audit, path absence, and diff check
   passed.
+- 2026-09-12: moved all 17 AppleScript capability files here and transferred
+  SDEF validity, C/C++ header compatibility, warning-clean plugin/test builds,
+  native queue/lifecycle tests, Dart analysis/facade tests, and the direct
+  native-asset hook smoke into this root Makefile and aggregate test. The
+  package-local runtime dependency and native-extension header include now
+  resolve the adjacent generic repository from the product-owned package.
+  `make dependencies terminal-applescript-native-test
+  terminal-applescript-dart-test` passed in the normal environment. The generic
+  repository copy, ignored outputs, and all associated Makefile ownership were
+  removed; its validation, stale-target dry-run audit, path absence, and diff
+  check passed.

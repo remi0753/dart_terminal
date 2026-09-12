@@ -1,0 +1,15 @@
+name: dart_terminal_applescript_macos
+description: A bounded Cocoa Scripting capability for Dart terminal applications.
+version: 0.1.0-dev.1
+publish_to: none
+
+environment:
+  sdk: '>=3.13.2 <3.14.0'
+
+dependencies:
+  code_assets: any
+  dart_macos_runtime:
+    path: ../../../dart_appkit/packages/dart_macos_runtime
+  ffi: any
+  hooks: any
+  native_toolchain_c: any

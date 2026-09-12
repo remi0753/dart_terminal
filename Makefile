@@ -54,6 +54,12 @@ override TERMINAL_RENDERER_SHADER_SOURCE := \
 	$(PROJECT_ROOT)/packages/dart_terminal_renderer_macos/native/TerminalShaders.metal
 override TERMINAL_RENDERER_SHADER_LIBRARY := \
 	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/TerminalShaders.metallib
+override TERMINAL_APPLESCRIPT_PLUGIN_LIBRARY := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/libdart_terminal_applescript_macos.dylib
+override TERMINAL_APPLESCRIPT_TEST_OBJECT := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_applescript_plugin_test.o
+override TERMINAL_APPLESCRIPT_TEST_BINARY := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_applescript_capability_tests
 
 override APPLICATION_MANIFEST := $(PROJECT_ROOT)/macos_application.json
 override DEVELOPER_JIT_BUILD_DIR := \
@@ -74,6 +80,8 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	dpty-native-test dpty-dart-test \
 	terminal-renderer-contract-check terminal-renderer-native-test \
 	terminal-renderer-dart-test \
+	terminal-applescript-contract-check terminal-applescript-native-test \
+	terminal-applescript-dart-test \
 	compatibility-inventory compatibility-inventory-check \
 	compatibility-manifest compatibility-manifest-check terminal-differential-contract-check \
 	terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check \
@@ -106,6 +114,8 @@ help:
 	@echo "  make dpty-dart-test               Test its Dart facade and build-hook asset"
 	@echo "  make terminal-renderer-native-test  Test the product renderer capability"
 	@echo "  make terminal-renderer-dart-test  Test its Dart facade and build-hook asset"
+	@echo "  make terminal-applescript-native-test  Test the product scripting capability"
+	@echo "  make terminal-applescript-dart-test  Test its Dart facade and build-hook asset"
 	@echo "  make product-parser-corpus        Replay reviewed product parser fixtures"
 	@echo "  make product-parser-properties    Run deterministic property and fuzz cases"
 	@echo "  make phase9-protocol-properties   Run deterministic modern-protocol properties"
@@ -273,6 +283,67 @@ terminal-renderer-dart-test:
 	@cd $(PROJECT_ROOT)/packages/dart_terminal_renderer_macos && \
 		$(DART) run test/run_tests.dart
 
+terminal-applescript-contract-check:
+	@$(CLANG) $(PRODUCT_NATIVE_FLAGS) -std=c11 \
+		-I$(DART_APPKIT_ROOT)/native/bridge/include \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native \
+		-fsyntax-only \
+		$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native/test/header_compile.c
+	@$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 \
+		-I$(DART_APPKIT_ROOT)/native/bridge/include \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native \
+		-fsyntax-only \
+		$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native/test/header_compile.cc
+	@/usr/bin/xmllint --noout --valid \
+		$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native/DartTerminal.sdef
+
+$(TERMINAL_APPLESCRIPT_PLUGIN_LIBRARY): \
+		$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native/TerminalAppleScriptPlugin.h \
+		$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native/TerminalAppleScriptPlugin.m \
+		$(DART_APPKIT_ROOT)/native/bridge/include/dart_appkit.h \
+		$(DART_APPKIT_ROOT)/native/bridge/include/dart_appkit_native_extension.h
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
+	$(CLANG) $(PRODUCT_NATIVE_FLAGS) -fobjc-arc -fblocks -dynamiclib \
+		-I$(DART_APPKIT_ROOT)/native/bridge/include \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native \
+		$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native/TerminalAppleScriptPlugin.m \
+		-framework AppKit -framework Foundation \
+		-Wl,-install_name,@rpath/libdart_terminal_applescript_macos.dylib -o $@
+
+$(TERMINAL_APPLESCRIPT_TEST_OBJECT): \
+		$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native/TerminalAppleScriptPlugin.h \
+		$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native/TerminalAppleScriptPlugin.m
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
+	$(CLANG) $(PRODUCT_NATIVE_FLAGS) -fobjc-arc -fblocks -DDTAS_TESTING \
+		-I$(DART_APPKIT_ROOT)/native/bridge/include \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native \
+		-c $(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native/TerminalAppleScriptPlugin.m \
+		-o $@
+
+$(TERMINAL_APPLESCRIPT_TEST_BINARY): \
+		$(TERMINAL_APPLESCRIPT_TEST_OBJECT) \
+		$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native/test/TerminalAppleScriptCapabilityTests.mm
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
+	$(CLANGXX) $(PRODUCT_OBJCXX_FLAGS) -DDTAS_TESTING \
+		-I$(DART_APPKIT_ROOT)/native/bridge/include \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native \
+		$(PROJECT_ROOT)/packages/dart_terminal_applescript_macos/native/test/TerminalAppleScriptCapabilityTests.mm \
+		$(TERMINAL_APPLESCRIPT_TEST_OBJECT) \
+		-framework AppKit -framework Foundation -o $@
+
+terminal-applescript-native-test: terminal-applescript-contract-check \
+		$(TERMINAL_APPLESCRIPT_PLUGIN_LIBRARY) \
+		$(TERMINAL_APPLESCRIPT_TEST_BINARY)
+	@$(TERMINAL_APPLESCRIPT_TEST_BINARY)
+
+terminal-applescript-dart-test:
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_applescript_macos && $(DART) pub get
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_applescript_macos && $(DART) analyze
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_applescript_macos && \
+		$(DART) run test/run_tests.dart
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_applescript_macos && \
+		$(DART) run test/native_asset_test.dart
+
 runtime-architecture-check:
 	@if [[ "$(RUNTIME_ARCH)" != "arm64" && "$(RUNTIME_ARCH)" != "x86_64" ]]; then \
 		echo "RUNTIME_ARCH must be arm64 or x86_64" >&2; exit 64; \
@@ -372,7 +443,7 @@ terminal-shell-integration: dependencies
 terminal-shell-integration-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_shell_integration.dart --check
 
-test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
+test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart
