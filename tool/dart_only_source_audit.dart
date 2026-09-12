@@ -144,6 +144,8 @@ Future<void> main() async {
     final List<Object?> capabilities =
         manifest['nativeCapabilities']! as List<Object?>;
     final List<Object?> helpers = manifest['dartHelpers']! as List<Object?>;
+    final Map<String, Object?> appIntents =
+        manifest['appIntents']! as Map<String, Object?>;
     _expect(
       (assets.single! as Map<String, Object?>)['package'] == 'dart_pty_macos',
       'PTY package is not declared as a native asset',
@@ -179,6 +181,40 @@ Future<void> main() async {
       scriptingDefinition.length == 1 &&
           scriptingDefinition['path'] == 'resources/DartTerminal.sdef',
       'terminal scripting definition declaration does not match',
+    );
+    _expect(
+      _exactEntries(appIntents, const <String, Object>{
+        'package': 'dart_terminal_app_intents_macos',
+        'source': 'native/TerminalAppIntents.swift',
+        'moduleName': 'DartTerminalAppIntents',
+        'library': 'libdart_terminal_app_intents_macos.dylib',
+      }),
+      'terminal App Intents declaration does not match',
+    );
+    final File canonicalAppIntents = await _packageFile(
+      'dart_terminal_app_intents_macos',
+      'native/TerminalAppIntents.swift',
+    );
+    _expect(
+      canonicalAppIntents.existsSync() &&
+          canonicalAppIntents.lengthSync() > 0 &&
+          canonicalAppIntents.lengthSync() <= 1024 * 1024,
+      'canonical terminal App Intents source is missing or outside its bound',
+    );
+    final Map<String, Object?> packageGraph = jsonDecode(
+      await File('.dart_tool/package_graph.json').readAsString(),
+    ) as Map<String, Object?>;
+    final Map<String, Object?> rootPackage =
+        (packageGraph['packages']! as List<Object?>)
+            .cast<Map<String, Object?>>()
+            .singleWhere(
+              (Map<String, Object?> value) => value['name'] == 'dart_terminal',
+            );
+    _expect(
+      (rootPackage['dependencies']! as List<Object?>).contains(
+        'dart_terminal_app_intents_macos',
+      ),
+      'terminal App Intents package is not a direct product dependency',
     );
     final File consumerSdef = File('resources/DartTerminal.sdef');
     final File canonicalSdef = await _packageFile(

@@ -6,8 +6,8 @@
 - Task: App Intents/Shortcuts and notifications
 - Started: 2026-09-12
 - State: in progress
-- Current subtask: terminal-specific Swift App Intents capability and bounded
-  command queue
+- Current subtask: consumer declaration, dependency gates, and bundle audit
+  (complete)
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -388,6 +388,57 @@ second application-state owner.
   with zero changes, no analyzer issues, fixed Phase 9 stress seed
   `0x509a1171`, and every freshness, compatibility, integration, and product
   test passing.
+- The consumer now declares `dart_terminal_app_intents_macos` as a direct path
+  dependency and names its package-owned Swift source, module, and staged dylib
+  in `macos_application.json`. The source audit rejects a missing, indirect,
+  empty, oversized, or mismatched declaration before any product build.
+- The first real Developer JIT bundle build exposed a runtime integration bug:
+  `_xcrunFind` resolved Xcode tool symlinks before execution. On this Xcode,
+  `swiftc` is a multi-call driver symlink, so invoking its resolved
+  `swift-frontend` path selected the wrong command mode and rejected
+  `-emit-const-values` and `-Xfrontend`. The runtime now validates but preserves
+  the exact path returned by `xcrun`; its fixture makes `swiftc` a symlink so a
+  future eager resolution fails the existing manifest-driven assembly tests.
+- The focused runtime test and the exact dependency gate
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` pass with that fix. The gate
+  includes the real installed-Xcode metadata extraction test, both fake JIT/AOT
+  assembly paths, every native/package test, examples, and smoke tests.
+- The next Developer JIT audit compiled and signed the complete app but rejected
+  the App Intents image byte evidence: the runtime recorded the Swift linker's
+  image size before the bundle's deep ad-hoc signing replaced its signature.
+  An isolated signing probe confirmed that one explicit signature changes the
+  image from 186120 to 203168 bytes for the product library name, while a second
+  signature is size-stable. The runtime therefore signs the package image before
+  recording its bounded size and copying it into the bundle; the final deep app
+  signature retains that evidence. Fake assembly now requires the image-specific
+  signing command as well as final bundle signing.
+- One focused-test command used repository-relative paths while already inside
+  the package directory, and a second used the package-local test path from the
+  repository root; neither found the intended files. The corrected root-level
+  `CI=true DART_SUPPRESS_ANALYTICS=true dart run
+  packages/dart_macos_runtime/test/run_tests.dart` invocation passed every
+  runtime builder test.
+- Dependency commits `d4984c2` (`Preserve Xcode tool invocation names`) and
+  `0526a9e` (`Record signed App Intents image evidence`) contain the two minimal
+  runtime integration corrections. Each was committed only after the exact
+  dependency `make test` gate passed, and each post-commit ROADMAP reread kept
+  the consumer declaration/audit child as the current ordered unit.
+- `CI=true DART_SUPPRESS_ANALYTICS=true make runtime-source-check` passes with
+  `tracked=516`, no product-native source, and the one reviewed native test
+  fixture. It validates the direct package-graph dependency and the exact
+  bounded package-owned Swift declaration.
+- `CI=true DART_SUPPRESS_ANALYTICS=true make runtime-bundle-audit` passes for
+  both Developer JIT and Release AOT on arm64. Each signed bundle contains the
+  exact three parameterless, foreground action declarations and three matching
+  automatic shortcuts, the two-file `Metadata.appintents` bundle, and the
+  directly linked `@rpath/libdart_terminal_app_intents_macos.dylib`. The image
+  has the expected install identity and AppIntents framework dependency; source,
+  signed-image, metadata sizes, Xcode build version, architecture, and target
+  triple agree with the build manifest.
+- The final consumer gate `CI=true DART_SUPPRESS_ANALYTICS=true make test`
+  passes. It formatted 280 files with zero changes, reported no analyzer issues,
+  used fixed Phase 9 stress seed `0x509a1171`, and passed all freshness,
+  compatibility, integration, security, and product tests.
 
 ## Handoff and remaining work
 
@@ -397,8 +448,10 @@ second application-state owner.
   Its consuming full gate also passes. The terminal-specific Swift capability
   and bounded command queue is implemented, fully validated, committed as
   `9a2a014`, marked complete in the ROADMAP, and its consuming full gate passes.
-  It still requires this progress commit before the next mandatory reread.
-  Consumer declaration and product wiring have not started early.
+  Its consumer-side progress record is committed as `19b6e61`. Consumer
+  declaration and exact bundle auditing are complete, including both runtime
+  corrections and both signed bundle modes. Product polling, action dispatch,
+  and Settings wiring have not started early.
 
 ### Completed capability unit boundary
 

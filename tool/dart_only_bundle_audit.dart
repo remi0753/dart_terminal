@@ -63,6 +63,8 @@ Future<void> main(List<String> arguments) async {
         manifest['nativeCapabilities']! as List<Object?>;
     final Map<String, Object?> scriptingDefinition =
         manifest['scriptingDefinition']! as Map<String, Object?>;
+    final Map<String, Object?> appIntents =
+        manifest['appIntents']! as Map<String, Object?>;
     _expect(
       helpers.length == 1 &&
           (helpers.single! as Map<String, Object?>)['name'] ==
@@ -106,6 +108,35 @@ Future<void> main(List<String> arguments) async {
           (scriptingDefinition['bytes']! as int) > 0,
       'terminal scripting definition build manifest mismatch',
     );
+    final List<Object?> appIntentsMetadataFiles =
+        appIntents['metadataFiles']! as List<Object?>;
+    final Map<String, int> appIntentsMetadataBytes = <String, int>{
+      for (final Map<String, Object?> value
+          in appIntentsMetadataFiles.cast<Map<String, Object?>>())
+        value['name']! as String: value['bytes']! as int,
+    };
+    _expect(
+      appIntents.length == 10 &&
+          appIntents['package'] == 'dart_terminal_app_intents_macos' &&
+          appIntents['source'] == 'native/TerminalAppIntents.swift' &&
+          appIntents['moduleName'] == 'DartTerminalAppIntents' &&
+          appIntents['library'] == 'libdart_terminal_app_intents_macos.dylib' &&
+          appIntents['sourceBytes'] is int &&
+          (appIntents['sourceBytes']! as int) > 0 &&
+          appIntents['libraryBytes'] is int &&
+          (appIntents['libraryBytes']! as int) > 0 &&
+          appIntents['targetTriple'] == '$architecture-apple-macos14.0' &&
+          appIntents['xcodeBuildVersion'] is String &&
+          (appIntents['xcodeBuildVersion']! as String).isNotEmpty &&
+          appIntents['metadataBundle'] == 'Metadata.appintents' &&
+          appIntentsMetadataFiles.length == 2 &&
+          appIntentsMetadataBytes.length == 2 &&
+          appIntentsMetadataBytes.keys.toSet().containsAll(const <String>{
+            'extract.actionsdata',
+            'version.json',
+          }),
+      'terminal App Intents build manifest mismatch',
+    );
 
     final String executable = '$contents/MacOS/dart_terminal';
     final String helper = '$contents/Helpers/dart_terminal_runtime_worker';
@@ -116,7 +147,12 @@ Future<void> main(List<String> arguments) async {
         '$contents/Frameworks/libdart_terminal_renderer_macos.dylib';
     final String appleScript =
         '$contents/Frameworks/libdart_terminal_applescript_macos.dylib';
+    final String appIntentsImage =
+        '$contents/Frameworks/libdart_terminal_app_intents_macos.dylib';
     final String scriptingDictionary = '$resources/DartTerminal.sdef';
+    final String appIntentsMetadata = '$resources/Metadata.appintents';
+    final String appIntentsActions = '$appIntentsMetadata/extract.actionsdata';
+    final String appIntentsVersion = '$appIntentsMetadata/version.json';
     final String payload =
         '$resources/${mode == 'developer-jit' ? 'application.dill' : 'application.aot'}';
     final TerminalTerminfoContract terminfoContract =
@@ -138,7 +174,10 @@ Future<void> main(List<String> arguments) async {
       pty,
       renderer,
       appleScript,
+      appIntentsImage,
       scriptingDictionary,
+      appIntentsActions,
+      appIntentsVersion,
       payload,
       '$resources/DART_SDK_LICENSE.txt',
       terminfo,
@@ -158,6 +197,71 @@ Future<void> main(List<String> arguments) async {
       _sameBytes(bundledSdef, reviewedSdef) &&
           bundledSdef.length == scriptingDefinition['bytes'],
       'bundled scripting definition differs from its reviewed source',
+    );
+    final File canonicalAppIntents = await _packageFile(
+      'dart_terminal_app_intents_macos',
+      'native/TerminalAppIntents.swift',
+    );
+    _expect(
+      canonicalAppIntents.existsSync() &&
+          canonicalAppIntents.lengthSync() == appIntents['sourceBytes'] &&
+          File(appIntentsImage).lengthSync() == appIntents['libraryBytes'] &&
+          File(appIntentsActions).lengthSync() ==
+              appIntentsMetadataBytes['extract.actionsdata'] &&
+          File(appIntentsVersion).lengthSync() ==
+              appIntentsMetadataBytes['version.json'],
+      'App Intents source, image, or metadata byte evidence differs',
+    );
+    final List<String> metadataEntries =
+        Directory(appIntentsMetadata)
+            .listSync(followLinks: false)
+            .map((FileSystemEntity value) => value.uri.pathSegments.last)
+            .toList()
+          ..sort();
+    _expect(
+      metadataEntries.join(',') == 'extract.actionsdata,version.json',
+      'App Intents metadata bundle contains an unexpected file',
+    );
+    final Map<String, Object?> actionMetadata = jsonDecode(
+      await File(appIntentsActions).readAsString(),
+    ) as Map<String, Object?>;
+    final Map<String, Object?> actionDeclarations =
+        actionMetadata['actions']! as Map<String, Object?>;
+    final List<Object?> shortcuts =
+        actionMetadata['autoShortcuts']! as List<Object?>;
+    final Set<String> actionNames = actionDeclarations.keys.toSet();
+    final Set<Object?> shortcutActions = shortcuts
+        .map(
+          (Object? value) =>
+              (value! as Map<String, Object?>)['actionIdentifier'],
+        )
+        .toSet();
+    _expect(
+      actionNames.length == 3 &&
+          actionNames.containsAll(const <String>{
+            'NewTerminalWindowIntent',
+            'NewTerminalTabIntent',
+            'ToggleQuickTerminalIntent',
+          }) &&
+          actionDeclarations.values.every(
+            (Object? value) =>
+                value is Map<String, Object?> &&
+                value['openAppWhenRun'] == true &&
+                (value['parameters']! as List<Object?>).isEmpty,
+          ) &&
+          shortcuts.length == 3 &&
+          shortcutActions.length == 3 &&
+          shortcutActions.containsAll(actionNames),
+      'App Intents metadata is not the exact parameterless action set',
+    );
+    final Map<String, Object?> metadataVersion = jsonDecode(
+      await File(appIntentsVersion).readAsString(),
+    ) as Map<String, Object?>;
+    _expect(
+      metadataVersion['toolsVersion'] == appIntents['xcodeBuildVersion'] &&
+          metadataVersion['version'] is String &&
+          (metadataVersion['version']! as String).isNotEmpty,
+      'App Intents metadata tools version differs from build evidence',
     );
     final ProcessResult plistResult = await Process.run(
       '/usr/bin/plutil',
@@ -199,6 +303,7 @@ Future<void> main(List<String> arguments) async {
       pty,
       renderer,
       appleScript,
+      appIntentsImage,
     ]) {
       final ProcessResult arch = await Process.run('/usr/bin/lipo', <String>[
         '-archs',
@@ -227,6 +332,20 @@ Future<void> main(List<String> arguments) async {
         !linkText.contains('/Users/') && !linkText.contains('/dart_appkit/'),
         '$path retains a build-machine dependency path',
       );
+      if (path == executable) {
+        _expect(
+          linkText.contains('@rpath/libdart_terminal_app_intents_macos.dylib'),
+          'runtime host does not load the App Intents image at launch',
+        );
+      } else if (path == appIntentsImage) {
+        _expect(
+          linkText.contains(
+                '@rpath/libdart_terminal_app_intents_macos.dylib',
+              ) &&
+              linkText.contains('/AppIntents.framework/'),
+          'App Intents image identity or framework dependency mismatch',
+        );
+      }
     }
 
     final ProcessResult signature = await Process.run(
@@ -240,12 +359,28 @@ Future<void> main(List<String> arguments) async {
     stdout.writeln(
       'DART_ONLY_BUNDLE_AUDIT_PASS mode=$mode architecture=$architecture '
       'helpers=${helpers.length} assets=${assets.length} '
-      'capabilities=${capabilities.length} scripting_definition=1',
+      'capabilities=${capabilities.length} scripting_definition=1 '
+      'app_intents=${actionNames.length}',
     );
   } on Object catch (error) {
     stderr.writeln('DART_ONLY_BUNDLE_AUDIT_FAIL $error');
     exitCode = 1;
   }
+}
+
+Future<File> _packageFile(String packageName, String relativePath) async {
+  final File configuration = File('.dart_tool/package_config.json').absolute;
+  final Map<String, Object?> root =
+      jsonDecode(await configuration.readAsString()) as Map<String, Object?>;
+  final List<Object?> packages = root['packages']! as List<Object?>;
+  final Map<String, Object?> package = packages
+      .cast<Map<String, Object?>>()
+      .singleWhere((Map<String, Object?> item) => item['name'] == packageName);
+  final String rootUri = package['rootUri']! as String;
+  final Uri resolved = configuration.uri.resolve(
+    rootUri.endsWith('/') ? rootUri : '$rootUri/',
+  );
+  return File.fromUri(resolved.resolve(relativePath));
 }
 
 bool _sameBytes(List<int> left, List<int> right) {

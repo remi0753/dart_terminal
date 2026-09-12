@@ -1249,10 +1249,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase10/app-intents-shortcuts-notifications.md`](docs/phase10/app-intents-shortcuts-notifications.md)
   を参照して順に実施する）
   - [x] `dart_appkit` notification permission／result／response substrate
-  - [ ] App Intents native capability、runtime metadata packaging
+  - [x] App Intents native capability、runtime metadata packaging
     - [x] `dart_macos_runtime` App Intents manifest／metadata bundle substrate
     - [x] terminal-specific Swift App Intents capability／bounded command queue
-    - [ ] consumer declaration、dependency gates、bundle audit
+    - [x] consumer declaration、dependency gates、bundle audit
   - [ ] product configuration、shared-action、Settings、lifecycle integration
   - [ ] Developer JIT／Release AOT acceptance、manual checklist、documentation closure、親項目完了判定
 - [ ] complete VoiceOver/Accessibility Inspector pass

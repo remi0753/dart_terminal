@@ -14,5 +14,7 @@ dependencies:
     path: ../dart_appkit/packages/dart_pty_macos
   dart_terminal_applescript_macos:
     path: ../dart_appkit/packages/dart_terminal_applescript_macos
+  dart_terminal_app_intents_macos:
+    path: ../dart_appkit/packages/dart_terminal_app_intents_macos
   dart_terminal_renderer_macos:
     path: ../dart_appkit/packages/dart_terminal_renderer_macos

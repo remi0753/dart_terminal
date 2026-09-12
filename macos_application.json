@@ -20,6 +20,12 @@
   "scriptingDefinition": {
     "path": "resources/DartTerminal.sdef"
   },
+  "appIntents": {
+    "package": "dart_terminal_app_intents_macos",
+    "source": "native/TerminalAppIntents.swift",
+    "moduleName": "DartTerminalAppIntents",
+    "library": "libdart_terminal_app_intents_macos.dylib"
+  },
   "runner": {
     "activationPolicy": "regular",
     "activateOnLaunch": true,
