@@ -1636,6 +1636,7 @@ final class TerminalApplication {
             case WindowEvent() ||
                 MenuItemInvokedEvent() ||
                 GlobalHotKeyPressedEvent() ||
+                ApplicationFolderServiceRequestedEvent() ||
                 ViewQuickLookRequestedEvent() ||
                 ViewServicesTextReceivedEvent() ||
                 ViewDropPerformedEvent():
@@ -3999,6 +4000,7 @@ final class TerminalApplication {
           case WindowEvent() ||
               MenuItemInvokedEvent() ||
               GlobalHotKeyPressedEvent() ||
+              ApplicationFolderServiceRequestedEvent() ||
               ViewQuickLookRequestedEvent() ||
               ViewServicesTextReceivedEvent() ||
               ViewDropPerformedEvent():

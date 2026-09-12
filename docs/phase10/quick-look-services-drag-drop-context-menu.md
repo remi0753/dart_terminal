@@ -6,8 +6,8 @@
 - Task: Quick Look, Services, drag/drop, and context menu
 - Started: 2026-09-12
 - State: active
-- Current subtask: `dart_appkit` bounded text/file-URL drop-destination
-  substrate
+- Current subtask: `dart_appkit` application folder Services provider
+  completion and consuming compatibility
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -173,10 +173,121 @@ committed contracts.
      drops, cwd creation, Settings/menu availability, and all teardown paths.
    - Complete when Developer JIT/Release AOT native acceptance, full gates and
      audits, manual checklist, docs/evidence, final diff review, roadmap parent,
-     and its standalone commit pass.
+   and its standalone commit pass.
+
+## Current subtask definition — application folder Services provider
+
+### Purpose and background
+
+The committed View requestor and drop destination cover text exchange and
+dragging, but Finder still needs two application-scoped Service entry points
+that turn a bounded selection of local file URLs into asynchronous requests to
+open fresh terminal tabs or windows. AppKit invokes Service provider methods
+synchronously, so URL admission and normalization must be completed in native
+cached/local state without entering Dart inline.
+
+### Scope
+
+- Add a typed, enable/disable application provider contract for the two folder
+  Service dispositions: new tabs and new windows.
+- Read only file-URL pasteboard items; bound count, bytes per URL, and aggregate
+  bytes before event delivery.
+- Accept only absolute local file URLs. Normalize selected directories to
+  themselves and selected files to their parent directories, then preserve
+  first occurrence order while de-duplicating canonical directory URLs.
+- Emit one generation-independent application event per accepted Service
+  invocation through the existing asynchronous native-port queue, with strict
+  shared-encoder and Dart decoding.
+- Cover public/fake/current/legacy bindings, synchronous native provider
+  callbacks, malformed/remote/excess input, disable/termination, and both
+  generic host builds.
+
+### Out of scope
+
+- `NSServices` Info.plist declarations and runtime manifest schema, which are
+  the immediately following ordered repository task.
+- Creating terminal tabs/windows, choosing focused owners, cwd trust policy,
+  menu exposure, or Finder-visible end-to-end acceptance, which belong to the
+  later product-integration task.
+- Non-file URL types, remote URLs, recursive directory inspection, existence
+  creation, security-scoped bookmarks, aliases, or file promises.
+
+### Dependencies and risks
+
+- Reuse the committed local-file-URL count/per-item/aggregate hard limits and a
+  closed length-prefixed packet rather than introducing an unbounded plist or
+  Dart callback boundary.
+- AppKit supplies only a synchronous pasteboard callback and optional error
+  string. Failure must set a bounded deterministic native error description,
+  post no partial event, and leave the provider reusable.
+- File-versus-directory classification must use explicit filesystem metadata;
+  nonexistent or indeterminate inputs fail closed rather than guessing from a
+  trailing slash.
+- The provider object is owned by `NSApplication.servicesProvider`; replacement,
+  disable, and shutdown must clear that ownership without leaking a native
+  registry handle or retaining Dart objects.
+
+### Completion and validation
+
+- Exact C/C++ header layout and optional-symbol compatibility compile.
+- Native tests exercise both selectors, directory/file normalization,
+  canonical order/de-duplication, empty/mixed/remote/malformed/missing/excess
+  input, event-port refusal, enable/replace/disable, thread guards, and shutdown.
+- Shared encoder tests assert the exact current record and older-protocol
+  filtering; Dart tests assert immutable typed events, strict packet decoding,
+  cache-on-success, failed-update retry, late events, and legacy rejection.
+- Focused validation, Developer JIT and Release AOT links, exact full
+  `dart_appkit` and consuming `dart_terminal` gates, documentation, diff review,
+  progress update, and standalone commits all pass.
 
 ## Findings and decision log
 
+- 2026-09-12: ROADMAP reread after consumer commit `646f4bd` selects the
+  application folder Services provider as the first remaining item. The
+  adjacent `dart_appkit` worktree is clean at `0a8a025`; its README/ROADMAP and
+  the terminal README/FEATURE_MATRIX reconfirm that runtime declarations and
+  terminal behavior remain later ordered work. `dart_appkit` has no separate
+  `FEATURE_MATRIX.md`, so its README/ROADMAP are the available product plan.
+- 2026-09-12: The installed SDK exposes a strong nullable
+  `NSApplication.servicesProvider` and synchronous Service methods supplied by
+  the provider object. The pinned comparison provider uses Objective-C service
+  messages `openTab:userData:error:` and `openWindow:userData:error:`, reads
+  only file URLs, obtains `NSURLIsDirectoryKey`, maps files to their parents,
+  and de-duplicates directories. This substrate will keep those stable message
+  bases (`openTab`/`openWindow`) for the following runtime declaration task,
+  but will reject missing/indeterminate filesystem metadata instead of falling
+  back to a trailing-slash guess.
+- 2026-09-12: The first provider native/header compile reached the linker but
+  the filesystem sandbox could not replace the adjacent repository's existing
+  `build/native/bridge_tests` output. No implementation diagnostic was emitted;
+  the same focused gate is rerun through the approved dependency build path.
+- 2026-09-12: The approved compile was warning-clean and its only five native
+  failures were stale protocol expectations: the prior unsupported-version
+  probe now negotiated v12, and current-capture assertions still expected v11.
+  The protocol ladder now explicitly verifies that the application folder
+  event is filtered at v11, accepted at v12, and v13 remains unsupported;
+  current Services/drop expectations advance to v12 without changing payloads.
+- 2026-09-12: The first two Dart format passes stopped on a trailing comma in
+  the new switch-expression operand; unlike ordinary argument lists, this
+  grammar does not permit that comma even when the operand is line-broken.
+  Removing it restores valid Dart syntax. The first pass formatted two other
+  changed files; neither attempt touched generated or unrelated files.
+- 2026-09-12: The first Dart analysis then rejected calling the optional
+  folder-provider interface through its `NativeBindings`-typed local after the
+  runtime type guard. Matching the established optional-View binding pattern,
+  an explicit post-guard cast preserves the closed unsupported fallback and
+  makes the capability call statically valid.
+- 2026-09-12: The next Dart run passed analysis and stopped at the single
+  current-protocol assertion that still expected v11; because that assertion
+  precedes application disposal, the remaining 25 cases reported the expected
+  singleton attach cascade. Advancing that exact negotiation assertion to v12
+  lets the full suite exercise the new provider case.
+- 2026-09-12: The provider API case first reached its intentional malformed
+  v11 record, but the new typed filtered stream subscription had no error
+  handler, so the same decoder error already collected by the application
+  stream became an unhandled asynchronous error. Giving the typed test stream
+  an inert error handler verifies normal typed routing without double-counting
+  the application error assertions.
 - 2026-09-12: After commit `0563192` (`Complete secure keyboard entry
   acceptance`), terminal and adjacent `dart_appkit` worktrees are clean. ROADMAP
   reread selects this item as the first remaining Phase 10 work; AppleScript and
@@ -472,6 +583,50 @@ committed contracts.
   filesystem sandbox could not create `.git/index.lock`; no index or working
   tree content was changed. Staging is retried through the approved repository
   write path.
+- 2026-09-12: The application provider uses the SDK's strong nullable
+  `NSApplication.servicesProvider` property and the fixed `openTab:userData:error:`
+  and `openWindow:userData:error:` selectors expected by the pinned Ghostty
+  comparison. Its size-prefixed native snapshot owns positive count, per-URL,
+  and aggregate URL limits capped at 256 items, 1 MiB per URL, and 64 MiB total.
+  Runtime bundle metadata is deliberately absent until the following ordered
+  runtime-declaration task.
+- 2026-09-12: Each synchronous callback snapshots file-URL pasteboard items,
+  validates absolute local URLs, and queries `NSURLIsDirectoryKey`; selected
+  directories remain themselves and selected files become their parent.
+  Missing paths or indeterminate metadata fail closed instead of inferring a
+  directory from a trailing slash. Canonical directory URLs are de-duplicated
+  in first-seen order and one v12 application event is posted only after all
+  inputs and both input/output bounds pass. Provider disable, application
+  termination, bridge shutdown, and retained stale-provider callbacks cannot
+  post.
+- 2026-09-12: The public dependency API adds immutable provider bounds,
+  cache-on-success installation, a closed new-tabs/new-windows disposition,
+  immutable directory URL events, strict packet/source/operation/canonical URL
+  decoding, optional current FFI support, deterministic fake behavior, and a
+  typed legacy unsupported path. Native, encoder, Dart, FFI, malformed URL,
+  filesystem metadata, bound, deduplication, refusal, replacement, disable,
+  termination, and stale-lifetime tests cover the boundary.
+- 2026-09-12: During focused validation, the first native link was blocked by
+  sandbox access to an existing adjacent build product; the approved rerun
+  exposed only stale v12 protocol assertions. Dart formatting then found a
+  switch-expression trailing-comma syntax error, analysis required an explicit
+  post-guard cast for the optional interface, and the first API rerun found a
+  stale v11 expectation followed by singleton attach cascades. After those
+  corrections, one intentionally malformed typed-stream fixture needed an
+  inert error handler to avoid surfacing the same expected decoder error twice.
+- 2026-09-12: Final dependency validation passed the focused ABI/native/shared
+  encoder/Dart/current+legacy FFI gate, both warning-clean Developer JIT and
+  Release AOT links, and exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`.
+  Dependency commit `87b8f9a` records the provider. The terminal consumer adds
+  the new sealed application event only to its two explicit no-op switch groups;
+  opening tabs/windows remains owned by the later product-integration task.
+- 2026-09-12: Terminal acceptance regeneration changed only the two expected
+  `terminal_application.dart` SHA-256 references. A first standalone format
+  attempt reported zero file changes but could not update the Dart telemetry
+  session outside the sandbox; rerunning with the repository's CI environment
+  returned successfully. The exact consuming gate passed generated references
+  and evidence, 276-file formatting, analysis, Phase 9 security stress, and the
+  aggregate test suite. Both repositories pass `git diff --check`.
 
 ## Risks and handoff notes
 
