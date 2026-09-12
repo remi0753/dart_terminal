@@ -1258,6 +1258,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] complete VoiceOver/Accessibility Inspector pass
   - [ ] configured terminal padding の accessibility hit/range geometry を
     renderer content origin と一致させる
+    - [x] renderer accessibility content-origin contract／native geometry tests
+    - [ ] product projection、両runtime acceptance、manual checklist、親項目完了判定
 - [ ] Reduce Motion/Contrast と localization
 - [ ] terminal inspector と diagnostics bundle
 
