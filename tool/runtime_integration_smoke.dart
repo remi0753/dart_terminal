@@ -31,6 +31,7 @@ enum _Suite {
   shellIntegration,
   desktopSignals,
   osc52,
+  nativeContent,
   quickTerminal,
   secureKeyboardEntry,
   restoration,
@@ -45,6 +46,7 @@ enum _Suite {
     _Suite.shellIntegration => 'shell-integration',
     _Suite.desktopSignals => 'desktop-signals',
     _Suite.osc52 => 'osc52',
+    _Suite.nativeContent => 'native-content',
     _Suite.quickTerminal => 'quick-terminal',
     _Suite.secureKeyboardEntry => 'secure-keyboard-entry',
     _ => name,
@@ -166,7 +168,7 @@ _Options _parseOptions(List<String> arguments) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
           'configuration, theme, shell-integration, desktop-signals, '
-          'osc52, quick-terminal, secure-keyboard-entry, clipboard, '
+          'osc52, native-content, quick-terminal, secure-keyboard-entry, clipboard, '
           'lifecycle, traffic, resource, fault, or all',
         );
       }
@@ -221,6 +223,25 @@ Future<String> _plistValue(String plistPath, String key) async {
   return (result.stdout as String).trim();
 }
 
+Future<Object?> _plistJsonValue(String plistPath, String key) async {
+  final ProcessResult result = await Process.run('/usr/bin/plutil', <String>[
+    '-extract',
+    key,
+    'json',
+    '-o',
+    '-',
+    plistPath,
+  ]);
+  if (result.exitCode != 0) {
+    throw _SmokeException(
+      'could not read $key from Info.plist: '
+              '${result.stdout}${result.stderr}'
+          .trim(),
+    );
+  }
+  return jsonDecode(result.stdout as String);
+}
+
 void _expect(bool condition, String message) {
   if (!condition) {
     throw _SmokeException(message);
@@ -245,6 +266,63 @@ Future<_Invocation> _loadInvocation(_Options options) async {
     declaredMode == options.mode.name,
     'declared runtime mode $declaredMode != ${options.mode.name}',
   );
+  const List<(String, String, String)> expectedServices =
+      <(String, String, String)>[
+        ('newTabAtFolder', 'New Dart Terminal Tab Here', 'openTab'),
+        ('newWindowAtFolder', 'New Dart Terminal Window Here', 'openWindow'),
+      ];
+  final Object? manifestServicesValue = buildManifest['services'];
+  _expect(
+    manifestServicesValue is List<Object?> &&
+        manifestServicesValue.length == expectedServices.length,
+    'runtime build manifest omitted the exact closed Services list',
+  );
+  final List<Object?> manifestServices =
+      manifestServicesValue! as List<Object?>;
+  for (var index = 0; index < expectedServices.length; index++) {
+    final Object? value = manifestServices[index];
+    final (String kind, String menuItem, _) = expectedServices[index];
+    _expect(
+      value is Map<String, Object?> &&
+          value.length == 2 &&
+          value['kind'] == kind &&
+          value['menuItem'] == menuItem,
+      'runtime build manifest Service $index differs from the declaration',
+    );
+  }
+  final Object? plistServicesValue = await _plistJsonValue(
+    plistPath,
+    'NSServices',
+  );
+  _expect(
+    plistServicesValue is List<Object?> &&
+        plistServicesValue.length == expectedServices.length,
+    'Info.plist omitted the exact closed NSServices list',
+  );
+  final List<Object?> plistServices = plistServicesValue! as List<Object?>;
+  for (var index = 0; index < expectedServices.length; index++) {
+    final Object? value = plistServices[index];
+    final (_, String menuItem, String message) = expectedServices[index];
+    final Map<String, Object?>? service = value is Map<String, Object?>
+        ? value
+        : null;
+    final Object? menuValue = service?['NSMenuItem'];
+    final Object? fileTypesValue = service?['NSSendFileTypes'];
+    _expect(
+      service != null &&
+          service.length == 4 &&
+          service['NSMessage'] == message &&
+          service['NSRequiredContext'] is Map<String, Object?> &&
+          (service['NSRequiredContext']! as Map<String, Object?>).isEmpty &&
+          menuValue is Map<String, Object?> &&
+          menuValue.length == 1 &&
+          menuValue['default'] == menuItem &&
+          fileTypesValue is List<Object?> &&
+          fileTypesValue.length == 1 &&
+          fileTypesValue.single == 'public.item',
+      'Info.plist Service $index differs from the closed Finder contract',
+    );
+  }
   final String executableName = await _plistValue(
     plistPath,
     'CFBundleExecutable',
@@ -1560,6 +1638,76 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'windows=2 tabs=3 panes=4 elapsed_ms='
     '${observation.elapsed.inMilliseconds}',
+  );
+}
+
+Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>[
+      '--no-config',
+      '--shell-integration=none',
+      '--runtime-native-content-test',
+    ],
+    environment: const <String, String>{'DT_RUNTIME_NATIVE_CONTENT_TEST': '1'},
+    timeout: const Duration(seconds: 60),
+  );
+  _expect(
+    observation.status == 0,
+    'native content application exited with status ${observation.status}; '
+    'stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'native content application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_NATIVE_CONTENT_TEST context=true '
+          r'mouse_zero_write=true quick_look=true services_selection=true '
+          r'service_confirmation=true service_exact=true '
+          r'drop_text_exact=true drop_files_exact=true folder_tabs=true '
+          r'folder_windows=true cwd_exact=true focus=true close=true '
+          r'sessions_clean=4 text_clients=0 native_handles=0$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted exact native content acceptance',
+  );
+  _expect(
+    RegExp(
+              r'^TERMINAL_SESSION_SHUTDOWN pane=[1-4] session=[1-4]:1 '
+              r'process_id=[1-9][0-9]* disposition=clean '
+              r'termination_observed=true cleanup_completed=true$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            4 &&
+        RegExp(
+              r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=3 disposition=clean$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1 &&
+        observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+    'native content product did not cleanly release four sessions',
+  );
+  _expect(
+    !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
+        !observation.stdoutText.contains('HIERARCHY_MISMATCH'),
+    'native content product leaked or overflowed terminal input',
+  );
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
+  );
+  stdout.writeln(
+    'RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'services_manifest=true exact_pty=true sessions=4 '
+    'elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }
 
@@ -3351,6 +3499,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.actions || options.suite == _Suite.all) {
       await _runUserActions(options, invocation);
+    }
+    if (options.suite == _Suite.nativeContent || options.suite == _Suite.all) {
+      await _runNativeContent(options, invocation);
     }
     if (options.suite == _Suite.quickTerminal || options.suite == _Suite.all) {
       await _runQuickTerminal(options, invocation);

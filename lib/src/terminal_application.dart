@@ -116,6 +116,7 @@ final class TerminalOptions {
     this.runtimeShellIntegrationTest = false,
     this.runtimeDesktopSignalsTest = false,
     this.runtimeOsc52Test = false,
+    this.runtimeNativeContentTest = false,
     this.runtimeQuickTerminalTest = false,
     this.runtimeSecureKeyboardEntryTest = false,
     this.runtimeRestorationTest = false,
@@ -167,6 +168,7 @@ final class TerminalOptions {
     var runtimeShellIntegrationTest = false;
     var runtimeDesktopSignalsTest = false;
     var runtimeOsc52Test = false;
+    var runtimeNativeContentTest = false;
     var runtimeQuickTerminalTest = false;
     var runtimeSecureKeyboardEntryTest = false;
     var runtimeRestorationTest = false;
@@ -282,6 +284,15 @@ final class TerminalOptions {
           );
         }
         runtimeOsc52Test = true;
+        continue;
+      }
+      if (argument == '--runtime-native-content-test') {
+        if (runtimeNativeContentTest) {
+          throw const FormatException(
+            '--runtime-native-content-test may only be supplied once',
+          );
+        }
+        runtimeNativeContentTest = true;
         continue;
       }
       if (argument == '--runtime-quick-terminal-test') {
@@ -473,6 +484,35 @@ final class TerminalOptions {
             '1') {
       throw const FormatException(
         'native hierarchy test requires the integration-test gate',
+      );
+    }
+    if (runtimeNativeContentTest &&
+        selectedEnvironment['DT_RUNTIME_NATIVE_CONTENT_TEST'] != '1') {
+      throw const FormatException(
+        'native content test requires the integration-test gate',
+      );
+    }
+    if (runtimeNativeContentTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeShellIntegrationTest ||
+            runtimeDesktopSignalsTest ||
+            runtimeOsc52Test ||
+            runtimeQuickTerminalTest ||
+            runtimeSecureKeyboardEntryTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'native content test cannot be combined with another runtime test',
       );
     }
     if (runtimeQuickTerminalTest &&
@@ -733,6 +773,7 @@ final class TerminalOptions {
       runtimeShellIntegrationTest: runtimeShellIntegrationTest,
       runtimeDesktopSignalsTest: runtimeDesktopSignalsTest,
       runtimeOsc52Test: runtimeOsc52Test,
+      runtimeNativeContentTest: runtimeNativeContentTest,
       runtimeQuickTerminalTest: runtimeQuickTerminalTest,
       runtimeSecureKeyboardEntryTest: runtimeSecureKeyboardEntryTest,
       runtimeRestorationTest: runtimeRestorationTest,
@@ -776,6 +817,7 @@ final class TerminalOptions {
   final bool runtimeShellIntegrationTest;
   final bool runtimeDesktopSignalsTest;
   final bool runtimeOsc52Test;
+  final bool runtimeNativeContentTest;
   final bool runtimeQuickTerminalTest;
   final bool runtimeSecureKeyboardEntryTest;
   final bool runtimeRestorationTest;
@@ -863,6 +905,7 @@ final class TerminalApplication {
         options.runtimeShellIntegrationTest ||
         options.runtimeDesktopSignalsTest ||
         options.runtimeOsc52Test ||
+        options.runtimeNativeContentTest ||
         options.runtimeQuickTerminalTest ||
         options.runtimeSecureKeyboardEntryTest ||
         _usesInteractiveProductHierarchy(options)) {
@@ -888,6 +931,7 @@ final class TerminalApplication {
         runShellIntegrationAcceptance: options.runtimeShellIntegrationTest,
         runDesktopSignalAcceptance: options.runtimeDesktopSignalsTest,
         runOsc52Acceptance: options.runtimeOsc52Test,
+        runNativeContentAcceptance: options.runtimeNativeContentTest,
         runQuickTerminalAcceptance: options.runtimeQuickTerminalTest,
         runSecureKeyboardEntryAcceptance:
             options.runtimeSecureKeyboardEntryTest,
@@ -2374,6 +2418,7 @@ final class TerminalApplication {
       !options.runtimeShellIntegrationTest &&
       !options.runtimeDesktopSignalsTest &&
       !options.runtimeOsc52Test &&
+      !options.runtimeNativeContentTest &&
       !options.runtimeQuickTerminalTest &&
       !options.runtimeSecureKeyboardEntryTest &&
       !options.runtimeRestorationTest &&
@@ -2395,6 +2440,7 @@ final class TerminalApplication {
     bool runShellIntegrationAcceptance = false,
     bool runDesktopSignalAcceptance = false,
     bool runOsc52Acceptance = false,
+    bool runNativeContentAcceptance = false,
     bool runQuickTerminalAcceptance = false,
     bool runSecureKeyboardEntryAcceptance = false,
     TerminalOsc52ClipboardPort? osc52Clipboard,
@@ -2478,6 +2524,10 @@ final class TerminalApplication {
     final Map<PaneId, TerminalKeyRouteResult> lastKeyRoutes =
         <PaneId, TerminalKeyRouteResult>{};
     final Map<PaneId, int> keyRouteCounts = <PaneId, int>{};
+    final Map<PaneId, int> nativeContentWriteEnqueuedCounts = <PaneId, int>{};
+    final List<TerminalExternalPasteResult> nativeContentPasteResults =
+        <TerminalExternalPasteResult>[];
+    final List<String> nativeContentQuickLookTexts = <String>[];
     var terminalInputDeliveryCount = 0;
     var configurationEndOfFileActionCount = 0;
     var lifecycleWasShutDown = false;
@@ -2578,6 +2628,7 @@ final class TerminalApplication {
                   runThemeAcceptance ||
                   runDesktopSignalAcceptance ||
                   runOsc52Acceptance ||
+                  runNativeContentAcceptance ||
                   runQuickTerminalAcceptance ||
                   runSecureKeyboardEntryAcceptance;
               final Map<String, String> shellEnvironment =
@@ -2634,6 +2685,15 @@ final class TerminalApplication {
                       stdout.writeln(observation.machineLine());
                     },
                 nativeObserver: (TerminalSessionNativeObservation observation) {
+                  if (runNativeContentAcceptance &&
+                      observation.event.stage ==
+                          PtyDiagnosticStage.writeEnqueued) {
+                    nativeContentWriteEnqueuedCounts.update(
+                      id.paneId,
+                      (int count) => count + 1,
+                      ifAbsent: () => 1,
+                    );
+                  }
                   stdout.writeln(observation.machineLine());
                 },
                 palette: palette,
@@ -3104,6 +3164,9 @@ final class TerminalApplication {
           font: font,
         ),
       );
+      if (runNativeContentAcceptance) {
+        nativeContentQuickLookTexts.add(candidate.text);
+      }
       return true;
     }
 
@@ -3159,10 +3222,21 @@ final class TerminalApplication {
         owner.contextMenu = TerminalAppKitContextMenuProjection.install(
           view: owner.view,
           dispatcher: dispatcher,
-          onWillRoute: (_) {
+          onWillRoute: (TerminalActionId id) {
+            final TerminalNativeContentCell? contextCell =
+                id == TerminalActionId.quickLook
+                ? quickLookCells[paneId]
+                : null;
             focusNativeContentPane(paneId);
+            if (contextCell != null && owners.containsKey(paneId)) {
+              quickLookCells[paneId] = contextCell;
+            }
+          },
+          onNativeInvocation: (TerminalActionId id, _) {
+            if (runNativeContentAcceptance) nativeActionInvocations.add(id);
           },
           onDispatched: (TerminalActionDispatchResult result) {
+            if (runNativeContentAcceptance) actionDispatches.add(result);
             final TerminalAppKitMenuProjection? menu = menuProjection;
             if (menu != null && !menu.isDisposed) menu.refresh();
             final TerminalCommandPalettePresenter? palette = palettePresenter;
@@ -3725,7 +3799,11 @@ final class TerminalApplication {
     externalContentRequest =
         (PaneId paneId, TerminalExternalContent content) async {
           if (!focusNativeContentPane(paneId)) return;
-          await externalPasteController?.submit(paneId, content);
+          final TerminalExternalPasteResult? result =
+              await externalPasteController?.submit(paneId, content);
+          if (runNativeContentAcceptance && result != null) {
+            nativeContentPasteResults.add(result);
+          }
         };
 
     Future<void> reloadConfiguration() async {
@@ -4439,7 +4517,26 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      if (runSecureKeyboardEntryAcceptance) {
+      if (runNativeContentAcceptance) {
+        await _exerciseNativeContentProduct(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          dispatcher: dispatcher,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          selections: selections,
+          launchWorkingDirectories: launchWorkingDirectories,
+          nativeActionInvocations: nativeActionInvocations,
+          actionDispatches: actionDispatches,
+          pasteResults: nativeContentPasteResults,
+          writeEnqueuedCounts: nativeContentWriteEnqueuedCounts,
+          quickLookTexts: nativeContentQuickLookTexts,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
+      } else if (runSecureKeyboardEntryAcceptance) {
         await _exerciseSecureKeyboardEntryProduct(
           application: application,
           state: state,
@@ -4613,6 +4710,505 @@ final class TerminalApplication {
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
     }
     stdout.writeln('Dart Terminal shut down cleanly.');
+  }
+
+  static Future<void> _exerciseNativeContentProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalActionDispatcher dispatcher,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required Map<PaneId, _TerminalSelectionProductOwner> selections,
+    required Map<PaneId, String?> launchWorkingDirectories,
+    required List<TerminalActionId> nativeActionInvocations,
+    required List<TerminalActionDispatchResult> actionDispatches,
+    required List<TerminalExternalPasteResult> pasteResults,
+    required Map<PaneId, int> writeEnqueuedCounts,
+    required List<String> quickLookTexts,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    const String lookupWord = 'NATIVECONTENTLOOKUP';
+    const String serviceText = 'service-first\nservice-second';
+    const String droppedText = 'DROPPED_TEXT_EXACT';
+    var eventTimestamp = 91000000000;
+
+    Future<void> waitFor(
+      bool Function() predicate,
+      String message, {
+      Duration timeout = const Duration(seconds: 10),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (!predicate() && deadline.elapsed < timeout) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      _expectLifecycle(predicate(), message);
+    }
+
+    void injectViewEvent(
+      _TerminalHierarchyProductPane owner,
+      int version,
+      int type,
+      List<Object?> payload,
+    ) {
+      final int handle = appkit_testing.nativeViewHandleForTesting(owner.view);
+      appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+        version,
+        type,
+        handle,
+        handle >> 32,
+        eventTimestamp++,
+        0,
+        ...payload,
+      ]);
+    }
+
+    Uint8List fileUrlPacket(Iterable<Uri> urls) {
+      final BytesBuilder builder = BytesBuilder(copy: false);
+      void addUint32(int value) {
+        final ByteData data = ByteData(4)..setUint32(0, value, Endian.little);
+        builder.add(data.buffer.asUint8List());
+      }
+
+      final List<Uint8List> encoded = urls
+          .map((Uri url) => Uint8List.fromList(utf8.encode(url.toString())))
+          .toList(growable: false);
+      addUint32(encoded.length);
+      for (final Uint8List value in encoded) {
+        addUint32(value.length);
+        builder.add(value);
+      }
+      return builder.takeBytes();
+    }
+
+    Future<void> prepareExactPasteReader(
+      TerminalPane pane,
+      TerminalSession session, {
+      required String id,
+      required String payload,
+    }) async {
+      final String expected = '\x1b[200~$payload\x1b[201~';
+      final String encoded = base64Encode(utf8.encode(expected));
+      pane.insertText(
+        "stty -echo -icanon min 1 time 0; "
+        "printf '\\033[?2004h\\r\\n__DT_NATIVE_%s__\\r\\n' "
+        "'${id}_READY'; "
+        "/usr/bin/perl -MMIME::Base64 -e 'binmode STDIN; "
+        "my \$want=decode_base64(\$ARGV[0]); my \$got=\"\"; "
+        "while (length(\$got) < length(\$want)) { "
+        "my \$n=sysread(STDIN, my \$b, "
+        "length(\$want)-length(\$got)); "
+        "exit 42 unless defined(\$n) && \$n > 0; \$got .= \$b; } "
+        "exit(\$got eq \$want ? 0 : 43);' '$encoded'; result=\$?; "
+        "printf '\\033[?2004l'; stty echo icanon; "
+        "if [ \$result -eq 0 ]; then "
+        "printf '\\r\\n__DT_NATIVE_%s__\\r\\n' '${id}_EXACT'; "
+        "else printf '\\r\\n__DT_NATIVE_%s__\\r\\n' "
+        "'${id}_MISMATCH'; fi",
+      );
+      await pane.submit();
+      await _waitForAsciiMarker(session, '__DT_NATIVE_${id}_READY__');
+      _expectLifecycle(
+        session.bracketedPasteMode,
+        '$id fixture did not enable bracketed paste mode',
+      );
+    }
+
+    Future<void> expectExactPaste(TerminalSession session, String id) async {
+      await _waitForAsciiMarker(session, '__DT_NATIVE_${id}_EXACT__');
+      _expectLifecycle(
+        _findAscii(
+              session.terminalScreenSet.activeScreen,
+              '__DT_NATIVE_${id}_MISMATCH__',
+            ) ==
+            null,
+        '$id did not preserve exact PTY paste bytes',
+      );
+    }
+
+    Future<void> dispatch(TerminalActionId id) async {
+      final TerminalActionDispatchResult result = await dispatcher.dispatch(id);
+      _expectLifecycle(
+        result.disposition == TerminalActionDispatchDisposition.executed,
+        'native content action ${id.stableName} did not execute',
+      );
+    }
+
+    final Directory fixtureRoot = await Directory.systemTemp.createTemp(
+      'dart-terminal-native-content-',
+    );
+    try {
+      final Directory tabDirectory = Directory(
+        '${fixtureRoot.path}/service-tab',
+      )..createSync();
+      final Directory windowDirectory = Directory(
+        '${fixtureRoot.path}/service-window',
+      )..createSync();
+      final File firstDroppedFile = File('${fixtureRoot.path}/drop one.txt')
+        ..writeAsStringSync('one');
+      final File secondDroppedFile = File("${fixtureRoot.path}/drop'2.txt")
+        ..writeAsStringSync('two');
+
+      _expectLifecycle(
+        state.windowCount == 1 &&
+            state.tabCount == 1 &&
+            state.paneCount == 1 &&
+            hierarchy.nativeWindowCount == 1 &&
+            hierarchy.paneResourceCount == 1 &&
+            sessions.length == 1 &&
+            owners.length == 1,
+        'native content product did not start from a 1/1/1 hierarchy',
+      );
+      final TerminalWindowState initialWindow = state.windows.single;
+      final TerminalTabState initialTab = initialWindow.selectedTab;
+      final PaneId initialPaneId = initialTab.focusedPaneId;
+      final TerminalPane initialPane = state.paneForId(initialPaneId)!;
+      final TerminalSession initialSession = sessions[initialPaneId]!;
+      final _TerminalHierarchyProductPane initialOwner = owners[initialPaneId]!;
+      final _TerminalSelectionProductOwner selection =
+          selections[initialPaneId]!;
+      await _waitForAsciiMarker(initialSession, prompt);
+      initialPane.insertText("printf '\\r\\nNATIVE%s\\r\\n' 'CONTENTLOOKUP'");
+      await initialPane.submit();
+      await _waitForAsciiMarker(initialSession, lookupWord);
+
+      final TerminalAppKitContextMenuProjection contextMenu =
+          initialOwner.contextMenu!;
+      _expectLifecycle(
+        initialOwner.view.quickLookRequestsEnabled &&
+            initialOwner.view.dropDestination != null &&
+            initialOwner.view.servicesTextRequestor != null &&
+            contextMenu.isAttached &&
+            identical(initialOwner.view.contextMenu, contextMenu.menu),
+        'live pane omitted a native content adapter',
+      );
+      final _TerminalAsciiPosition lookupPosition = _findAscii(
+        initialSession.terminalScreenSet.activeScreen,
+        lookupWord,
+      )!;
+      final TerminalPaneLayoutRect content = initialOwner.contentLayout!;
+      final TerminalFontCatalogMetrics metrics =
+          initialOwner.surface.fontMetrics;
+      final Window nativeWindow = hierarchy.windowForTab(initialTab.id)!;
+      double xForColumn(int column) =>
+          content.left + (column + 0.5) * metrics.cellWidth;
+      final double lookupY =
+          content.top + (lookupPosition.row + 0.5) * metrics.cellHeight;
+      final int selectionGeneration = selection.gesture.snapshot.generation;
+      for (final (AppKitMouseEventKind kind, int column)
+          in <(AppKitMouseEventKind, int)>[
+            (AppKitMouseEventKind.down, lookupPosition.column),
+            (
+              AppKitMouseEventKind.dragged,
+              lookupPosition.column + lookupWord.length - 1,
+            ),
+            (
+              AppKitMouseEventKind.up,
+              lookupPosition.column + lookupWord.length - 1,
+            ),
+          ]) {
+        _injectMouseEventForTesting(
+          application,
+          nativeWindow,
+          kind: kind,
+          x: xForColumn(column),
+          y: lookupY,
+          button: 0,
+          modifiers: 0,
+          clickCount: 1,
+          monotonicNanoseconds: eventTimestamp++,
+        );
+      }
+      await _waitForSelectionGeneration(selection, selectionGeneration + 3);
+      _expectLifecycle(
+        selection.selectedText()?.text == lookupWord &&
+            initialOwner.view.servicesTextRequestor?.selectionText ==
+                lookupWord,
+        'Services did not receive the exact bounded native selection snapshot',
+      );
+
+      final int contextSelectionGeneration =
+          selection.gesture.snapshot.generation;
+      final int contextWriteBaseline = writeEnqueuedCounts[initialPaneId] ?? 0;
+      for (final AppKitMouseEventKind kind in <AppKitMouseEventKind>[
+        AppKitMouseEventKind.down,
+        AppKitMouseEventKind.dragged,
+        AppKitMouseEventKind.up,
+      ]) {
+        _injectMouseEventForTesting(
+          application,
+          nativeWindow,
+          kind: kind,
+          x: xForColumn(lookupPosition.column),
+          y: lookupY,
+          button: 1,
+          modifiers: 0,
+          clickCount: 1,
+          monotonicNanoseconds: eventTimestamp++,
+        );
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      _expectLifecycle(
+        selection.gesture.snapshot.generation == contextSelectionGeneration &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) == contextWriteBaseline &&
+            selection.selectedText()?.text == lookupWord,
+        'native context gesture reached selection or PTY input routing',
+      );
+
+      injectViewEvent(initialOwner, 9, 42, <Object?>[
+        xForColumn(lookupPosition.column) - initialOwner.layout!.left,
+        lookupY - initialOwner.layout!.top,
+      ]);
+      await waitFor(
+        () => quickLookTexts.length == 1,
+        'pressure Quick Look did not reach native definition presentation',
+      );
+      _expectLifecycle(
+        quickLookTexts.single == lookupWord,
+        'pressure Quick Look resolved the wrong terminal word',
+      );
+
+      for (final AppKitMouseEventKind kind in <AppKitMouseEventKind>[
+        AppKitMouseEventKind.down,
+        AppKitMouseEventKind.up,
+      ]) {
+        _injectMouseEventForTesting(
+          application,
+          nativeWindow,
+          kind: kind,
+          x: xForColumn(lookupPosition.column),
+          y: lookupY,
+          button: 1,
+          modifiers: 0,
+          clickCount: 1,
+          monotonicNanoseconds: eventTimestamp++,
+        );
+      }
+      contextMenu.refresh();
+      _expectLifecycle(
+        contextMenu.itemForAction(TerminalActionId.quickLook).isEnabled,
+        'context Quick Look was not enabled at menu-open time',
+      );
+      final int contextInvocationBaseline = nativeActionInvocations.length;
+      final int contextDispatchBaseline = actionDispatches.length;
+      contextMenu.itemForAction(TerminalActionId.quickLook).performAction();
+      await waitFor(
+        () =>
+            nativeActionInvocations.length == contextInvocationBaseline + 1 &&
+            actionDispatches.length == contextDispatchBaseline + 1,
+        'context Quick Look did not reach the shared action dispatcher',
+      );
+      _expectLifecycle(
+        nativeActionInvocations.last == TerminalActionId.quickLook &&
+            actionDispatches.last.id == TerminalActionId.quickLook &&
+            actionDispatches.last.disposition ==
+                TerminalActionDispatchDisposition.executed,
+        'context Quick Look recorded a divergent action result: '
+        '${actionDispatches.last.disposition.name}',
+      );
+      await waitFor(
+        () => quickLookTexts.length == 2,
+        'context Quick Look action did not present its definition',
+      );
+
+      contextMenu
+          .itemForAction(TerminalActionId.splitPaneRight)
+          .performAction();
+      await waitFor(
+        () =>
+            state.paneCount == 2 &&
+            sessions.length == 2 &&
+            hierarchy.paneResourceCount == 2 &&
+            actionDispatches.last.id == TerminalActionId.splitPaneRight,
+        'context Split Right did not create one shared-action pane',
+      );
+      final PaneId splitPaneId = initialTab.focusedPaneId;
+      _expectLifecycle(
+        splitPaneId != initialPaneId &&
+            nativeActionInvocations.last == TerminalActionId.splitPaneRight &&
+            actionDispatches.last.disposition ==
+                TerminalActionDispatchDisposition.executed,
+        'context Split Right did not retain native invocation ownership',
+      );
+      await dispatch(TerminalActionId.closeWindow);
+      await waitFor(
+        () =>
+            state.paneCount == 1 &&
+            sessions.length == 1 &&
+            owners.length == 1 &&
+            hierarchy.paneResourceCount == 1 &&
+            allSessions.length == 2 &&
+            sessions.containsKey(initialPaneId),
+        'Close did not remove only the focused split pane',
+      );
+      _expectLifecycle(
+        allSessions
+                .singleWhere(
+                  (TerminalSession session) => session.id.paneId == splitPaneId,
+                )
+                .shutdownResult
+                ?.isClean ==
+            true,
+        'Close did not cleanly release the split session',
+      );
+
+      await prepareExactPasteReader(
+        initialPane,
+        initialSession,
+        id: 'SERVICE',
+        payload: serviceText,
+      );
+      final int serviceResultBaseline = pasteResults.length;
+      final int serviceWriteBaseline = writeEnqueuedCounts[initialPaneId] ?? 0;
+      final Uint8List serviceBytes = Uint8List.fromList(
+        utf8.encode(serviceText),
+      );
+      injectViewEvent(initialOwner, 10, 43, <Object?>[serviceBytes]);
+      await waitFor(
+        () => pasteResults.length == serviceResultBaseline + 1,
+        'Services text did not settle its confirmation result',
+      );
+      _expectLifecycle(
+        pasteResults.last.disposition ==
+                TerminalExternalPasteDisposition.confirmationRequired &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) == serviceWriteBaseline &&
+            initialTab.focusedPaneId == initialPaneId,
+        'first risky Services delivery wrote bytes or failed to focus target',
+      );
+      injectViewEvent(initialOwner, 10, 43, <Object?>[serviceBytes]);
+      await waitFor(
+        () => pasteResults.length == serviceResultBaseline + 2,
+        'repeated Services approval did not settle',
+      );
+      _expectLifecycle(
+        pasteResults.last.disposition ==
+            TerminalExternalPasteDisposition.completed,
+        'repeated risky Services delivery did not approve',
+      );
+      await expectExactPaste(initialSession, 'SERVICE');
+
+      await prepareExactPasteReader(
+        initialPane,
+        initialSession,
+        id: 'DROP_TEXT',
+        payload: droppedText,
+      );
+      final int dropTextBaseline = pasteResults.length;
+      injectViewEvent(initialOwner, 11, 44, <Object?>[
+        0,
+        20.0,
+        20.0,
+        Uint8List.fromList(utf8.encode(droppedText)),
+      ]);
+      await waitFor(
+        () => pasteResults.length == dropTextBaseline + 1,
+        'plain-text drop did not settle',
+      );
+      _expectLifecycle(
+        pasteResults.last.disposition ==
+            TerminalExternalPasteDisposition.completed,
+        'plain-text drop did not use ordinary paste transport',
+      );
+      await expectExactPaste(initialSession, 'DROP_TEXT');
+
+      final List<String> droppedPaths = <String>[
+        firstDroppedFile.path,
+        secondDroppedFile.path,
+      ];
+      final String serializedPaths = TerminalExternalContentAdmission.filePaths(
+        droppedPaths,
+      ).content!.text;
+      await prepareExactPasteReader(
+        initialPane,
+        initialSession,
+        id: 'DROP_FILES',
+        payload: serializedPaths,
+      );
+      final int dropFilesBaseline = pasteResults.length;
+      injectViewEvent(initialOwner, 11, 44, <Object?>[
+        1,
+        25.0,
+        25.0,
+        fileUrlPacket(droppedPaths.map(Uri.file)),
+      ]);
+      await waitFor(
+        () => pasteResults.length == dropFilesBaseline + 1,
+        'file-URL drop did not settle',
+      );
+      _expectLifecycle(
+        pasteResults.last.disposition ==
+            TerminalExternalPasteDisposition.completed,
+        'file-URL drop did not use shell-quoted paste transport',
+      );
+      await expectExactPaste(initialSession, 'DROP_FILES');
+
+      final int folderSessionBaseline = allSessions.length;
+      appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+        12,
+        45,
+        0,
+        0,
+        eventTimestamp++,
+        0,
+        0,
+        fileUrlPacket(<Uri>[Uri.file('${tabDirectory.path}/')]),
+      ]);
+      appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+        12,
+        45,
+        0,
+        0,
+        eventTimestamp++,
+        0,
+        1,
+        fileUrlPacket(<Uri>[Uri.file('${windowDirectory.path}/')]),
+      ]);
+      await waitFor(
+        () =>
+            state.windowCount == 2 &&
+            state.tabCount == 3 &&
+            state.paneCount == 3 &&
+            allSessions.length == folderSessionBaseline + 2 &&
+            hierarchy.nativeWindowCount == 3 &&
+            hierarchy.paneResourceCount == 3,
+        'folder Services did not serialize one tab and one window creation',
+      );
+      _expectLifecycle(
+        launchWorkingDirectories.values.contains('${tabDirectory.path}/') &&
+            launchWorkingDirectories.values.contains(
+              '${windowDirectory.path}/',
+            ),
+        'folder Services did not preserve exact trusted working directories',
+      );
+
+      await dispatch(TerminalActionId.quitApplication);
+      await closed.future;
+      _expectLifecycle(
+        state.isDisposed &&
+            hierarchy.isDisposed &&
+            allSessions.length == 4 &&
+            allSessions.every(
+              (TerminalSession session) =>
+                  session.shutdownResult?.isClean == true,
+            ) &&
+            debugLiveTerminalTextInputClientCount() == 0 &&
+            application.debugLiveObjectCount == 0,
+        'native content Quit did not release all sessions and native owners',
+      );
+      stdout.writeln(
+        'TERMINAL_NATIVE_CONTENT_TEST context=true mouse_zero_write=true '
+        'quick_look=true services_selection=true service_confirmation=true '
+        'service_exact=true drop_text_exact=true drop_files_exact=true '
+        'folder_tabs=true folder_windows=true cwd_exact=true focus=true '
+        'close=true sessions_clean=4 text_clients=0 native_handles=0',
+      );
+    } finally {
+      if (fixtureRoot.existsSync()) {
+        fixtureRoot.deleteSync(recursive: true);
+      }
+    }
   }
 
   static Future<void> _exerciseOsc52Product({

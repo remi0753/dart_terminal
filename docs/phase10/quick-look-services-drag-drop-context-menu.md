@@ -6,8 +6,8 @@
 - Task: Quick Look, Services, drag/drop, and context menu
 - Started: 2026-09-12
 - State: active
-- Current subtask: focused product wiring and deterministic policy/lifecycle
-  tests
+- Current subtask: Developer JIT/Release AOT native acceptance and manual
+  checklist
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -894,3 +894,194 @@ review and failure boundaries, so it is split before product code changes:
 - Pressure events and force-click preferences vary by hardware and user
   settings. Automation covers the event/definition boundary; the checklist owns
   physical gesture acceptance.
+
+## Current subtask definition — shipped-runtime native acceptance
+
+### Purpose and background
+
+The committed product now owns all native content routes, but the ordinary test
+gate does not launch the generated `.app` bundles or inspect their final
+Info.plists. This subtask proves that the same product graph works through the
+real AppKit bridge in Developer JIT and Release AOT, and identifies the small
+set of Finder/hardware behaviors that require a person rather than weakening
+automation.
+
+### Scope
+
+- Add one bounded runtime acceptance scenario that injects real versioned
+  AppKit View/application events into a deterministic terminal session and
+  observes product results without private direct-Dart shortcuts.
+- Exercise context-menu attachment and mouse-capture suppression, Quick Look
+  presentation, cached Services selection/returned text, text/file drops,
+  ordered folder tab/window requests, focus changes, and close/Quit teardown.
+- Assert exact PTY bytes, confirmation/rejection boundaries, pane cwd/start
+  ownership, native registry/session handle counts, and matching JIT/AOT
+  machine output.
+- Audit both generated Info.plists and runtime build manifests for only the two
+  declared folder Services, then add the dedicated Makefile/runtime-smoke entry.
+- Write a bounded manual checklist for Finder Services discovery, third-party
+  text Services, physical force-click, right/Control-click presentation, and
+  relevant macOS input preferences.
+
+### Out of scope
+
+- Automating Finder's Services database, changing system trackpad settings, or
+  scripting third-party Service providers; these remain explicit manual steps.
+- Changing the delivered product policy, adding configuration switches, rich
+  drop types, a drag source, or later AppleScript/App Intents/accessibility
+  work. A policy defect discovered here blocks this subtask and returns to the
+  already committed integration contract rather than being hidden in the
+  harness.
+- Final README/Feature Matrix/evidence reconciliation and parent completion;
+  those are the following ordered closure subtask.
+
+### Dependencies, risks, and completion conditions
+
+- Reuse the existing runtime integration launcher, deterministic zsh prompt,
+  bridge testing injectors, bundle auditor, and current/legacy protocol checks.
+  Acceptance-only hooks must be gated by a closed command-line scenario and
+  cannot ship an unguarded test path.
+- Native menus and dictionary UI can be environment-sensitive. Automation must
+  assert bridge state/events and product-side effects; it must not wait for a
+  user to dismiss UI or claim physical gesture coverage from an injected event.
+- Complete only when the focused harness test, both dedicated runtime modes,
+  exact plist/build-manifest/source/handle audits, manual checklist, ordinary
+  full gate, diff review, ROADMAP progress update, and one standalone commit
+  all pass.
+
+### Shipped-runtime investigation and implementation record
+
+- 2026-09-12: The public AppKit test hook delivers records through the same
+  strict decoder, source-generation check, application stream, and View-local
+  stream used by the native port. The product acceptance therefore launches
+  the real bundle and injects only at this versioned event boundary; it does not
+  call product listeners or paste handlers directly.
+- View records are closed by protocol version and type: Quick Look `9/42`,
+  returned Services text `10/43`, and drops `11/44`. Folder Services use the
+  generation-independent application record `12/45`. View source generation is
+  the high 32 bits of the generation-checked native handle.
+- The acceptance uses a deterministic `zsh -f` prompt and a raw Perl reader to
+  compare exact bracketed-paste bytes for multiline Services text, dropped
+  text, and shell-quoted dropped file paths. The first multiline Service
+  delivery is checked at the native `writeEnqueued` observation boundary to
+  prove confirmation occurs with zero PTY writes.
+- The context-menu path is exercised through real native `MenuItem` target/
+  action delivery. A complete right-click down/drag/up record is injected first
+  to prove selection and PTY write counts remain unchanged; Quick Look and
+  Split Right must then reach the same dispatcher result stream as the main
+  menu.
+- Two existing temporary directories are passed through the application folder
+  Service record queue. The resulting new-tab and new-window sessions must
+  retain their exact working-directory overrides, and Quit must leave four
+  clean sessions, zero text-input clients, and zero native handles.
+- Exact `services` entries in `runtime-build-manifest.json` and the corresponding
+  four-key `NSServices` dictionaries in the final `Info.plist` are audited
+  whenever the shipped-runtime tool loads either bundle.
+- Physical pressure, Finder Services database registration, system text
+  Services, drag-source negotiation, and user accessibility settings remain OS
+  state rather than deterministic program inputs. Their observable acceptance
+  steps are isolated in
+  [`native-content-manual-checklist.md`](native-content-manual-checklist.md).
+- The first attempt to append this record targeted wording from an earlier
+  draft of this section and `apply_patch` found no matching context. It changed
+  no file; the record was re-anchored to the actual completion paragraph.
+- The first focused format/analyze command formatted all four Dart changes but
+  analysis stopped before reading source because the sandbox could not update
+  `~/.dart-tool/dart-flutter-telemetry-session.json`. No analysis result is
+  accepted from that attempt; the same focused analysis is rerun through the
+  approved normal build environment with analytics suppressed.
+- Focused analysis then passed. The first Developer JIT acceptance reached the
+  real product but stopped before invoking context Quick Look because the item
+  had become disabled after the earlier context cell was invalidated by an
+  asynchronous screen generation change. No input was sent and cleanup was
+  clean. The harness is corrected to inject the context gesture immediately
+  before reading/invoking its menu state, matching AppKit's actual menu-open
+  ordering instead of retaining a context cell across unrelated native UI work.
+- The second Developer JIT run confirmed that Quick Look was enabled at the
+  corrected menu-open boundary, but its combined observation timeout did not
+  identify whether native invocation, dispatcher completion, or definition
+  presentation lagged. Cleanup again completed with no leaked session. The
+  assertion is split at those three asynchronous boundaries so a product defect
+  cannot be hidden by an ambiguous aggregate timeout.
+- The split assertion identified a real product-ordering defect: the native
+  invocation arrived and the item was enabled, but the context projection's
+  focus reconciliation invalidated the cached click cell before the shared
+  dispatcher re-read availability, so Quick Look returned `unavailable`.
+  Context Quick Look now retains that one bounded cell across `onWillRoute`;
+  the handler still revalidates the live viewport/candidate before presenting,
+  so stale content remains inert. Other actions retain the ordinary focus path.
+- The next JIT run passed context actions plus all exact Services/text/file-drop
+  byte comparisons, then the strict folder decoder rejected the harness URL.
+  `Uri.file(directory.path)` is a valid local file URL but does not preserve the
+  directory-only trailing-slash invariant required by protocol 12. The fixture
+  now encodes `Uri.file('${directory.path}/')`; the production provider already
+  emits that canonical directory form. Both created sessions and the runtime
+  worker cleaned up after the rejected record.
+- With canonical URLs, both folder requests created the expected sessions and
+  all four sessions shut down cleanly, but the harness expected two native
+  windows. This hierarchy intentionally owns one native AppKit window per tab,
+  grouped by native tabbing: two logical windows plus the additional tab are
+  three native windows. The assertion is aligned with the established
+  hierarchy ownership invariant (`windows=2`, `tabs=3`, `nativeWindowCount=3`).
+- The following run met that hierarchy invariant and reached the cwd check. The
+  recorded overrides intentionally retain the canonical directory URL's
+  trailing slash, whereas `Directory.path` for the created fixture does not.
+  The assertion now compares the exact expected canonical override
+  (`${fixturePath}/`) rather than treating the equivalent spelling as a failed
+  location; session startup still receives that unchanged trusted value.
+- Developer JIT acceptance then passed end to end on arm64 in 2.156 seconds:
+  exact Services declarations, context/Quick Look dispatch, zero-write risky
+  confirmation, all three exact PTY payloads, ordered folder creation, exact
+  canonical cwd overrides, four clean sessions, zero text clients, and zero
+  native handles.
+- Release AOT acceptance passed the identical contract on arm64 in 1.338
+  seconds. The final AOT `Info.plist`/build manifest contained the same two
+  closed Services declarations, exact PTY comparisons passed, and four
+  sessions again shut down with zero text-input/native handles.
+- Focused `terminal_config_test.dart` passes the new gated/duplicate/exclusive
+  runtime option contract. `runtime-source-check` reports 506 tracked files,
+  zero product native sources, and one reviewed test-native source. Both rebuilt
+  bundles pass the Dart-only audit with one helper, one native asset, and one
+  native capability each.
+- The first exact full gate passed parser/configuration/action generated checks
+  and then stopped at the expected stale Phase 7 AppKit acceptance ledger after
+  `terminal_application.dart` changed. This is a deterministic source-hash
+  mismatch, not a test failure. The dedicated
+  `make phase7-appkit-acceptance` generator is run next, and its diff must remain
+  limited to reviewed hash fields before the exact gate is repeated.
+- The dedicated generator succeeded. Review shows exactly two occurrences of
+  the `terminal_application.dart` SHA-256 changed in
+  `test/corpus/appkit/phase7_acceptance_v1.json`; no inventory structure,
+  expectation, or unrelated source entry changed. `git diff --check` is clean.
+- The repeated exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate
+  passes: generated references/evidence are current, all 276 Dart files are
+  formatted, whole-package analysis reports no issues, Phase 9 security stress
+  passes, and the aggregate terminal test suite passes.
+- The final aggregate `make runtime-native-content-integration` target passes
+  both rebuilt bundles in sequence: Developer JIT 2.200 seconds and Release AOT
+  1.273 seconds. Each reports `services_manifest=true`, `exact_pty=true`, and
+  four clean sessions. Automated results intentionally do not mark any item in
+  the hardware/system-owned manual checklist as performed.
+- Final scope review found that the runtime sequence proved Quit teardown but
+  had not independently removed a pane through the ordinary Close action named
+  in this subtask's acceptance scope. The scenario now closes the context-menu
+  split first, asserts that session is clean and the original pane survives,
+  then creates the two folder Service sessions and quits. This keeps four total
+  created sessions while the final live owner count is correctly three. The
+  deterministic View timestamps were also changed from wall clock values to a
+  strictly increasing fixture counter.
+- The revised Close-then-Quit aggregate passes: Developer JIT 2.228 seconds and
+  Release AOT 1.329 seconds, with the same Services manifest/exact-PTY/four-
+  session machine contract. The removed split session is clean before folder
+  creation, and the remaining three pane owners are cleanly released by Quit.
+- After the final source-ledger refresh, the exact full gate passes again with
+  the same 276-file format count, clean whole-package analysis, Phase 9 stress,
+  and aggregate test result. No manual checklist box was pre-checked, because
+  those steps require actual Finder, trackpad, Services, and user settings.
+- Final review covers the runtime-only option gate, product acceptance observer
+  boundaries, native context ordering fix, exact manifest/plist audit, Makefile
+  dependency graph, option tests, two-field generated hash diff, manual
+  checklist, and this task record. `git diff --check` is clean, the adjacent
+  `dart_appkit` worktree is clean, build outputs remain ignored, and ROADMAP
+  marks only the shipped-runtime acceptance subtask complete. The following
+  documentation/evidence closure and parent decision remain unchecked.

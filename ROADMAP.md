@@ -1229,7 +1229,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] `dart_macos_runtime` service declaration substrate
   - [ ] product integration、両runtime acceptance、documentation closure、親項目完了判定
     - [x] focused product wiring、deterministic policy/lifecycle tests
-    - [ ] Developer JIT／Release AOT native acceptance、manual checklist
+    - [x] Developer JIT／Release AOT native acceptance、manual checklist
     - [ ] documentation/evidence closure、親項目完了判定
 - [ ] AppleScript dictionary と object lifecycle
 - [ ] App Intents/Shortcuts、notifications

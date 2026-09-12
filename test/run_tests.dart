@@ -1441,6 +1441,40 @@ void _testOptions() {
     ),
     'OSC 52 and desktop signals tests are mutually exclusive',
   );
+  final TerminalOptions nativeContentTestOptions = _parseOptions(
+    const <String>['--runtime-native-content-test'],
+    environment: const <String, String>{'DT_RUNTIME_NATIVE_CONTENT_TEST': '1'},
+  );
+  _expect(
+    nativeContentTestOptions.runtimeNativeContentTest,
+    'gated ordinary-product native content test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-native-content-test']),
+    'native content product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-native-content-test',
+        '--runtime-native-content-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_NATIVE_CONTENT_TEST': '1',
+      },
+    ),
+    'duplicate native content product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-native-content-test', '--runtime-osc52-test'],
+      environment: const <String, String>{
+        'DT_RUNTIME_NATIVE_CONTENT_TEST': '1',
+        'DT_RUNTIME_OSC52_TEST': '1',
+      },
+    ),
+    'native content and OSC 52 tests are mutually exclusive',
+  );
   final TerminalOptions quickTerminalTestOptions = _parseOptions(
     const <String>['--runtime-quick-terminal-test'],
     environment: const <String, String>{'DT_RUNTIME_QUICK_TERMINAL_TEST': '1'},

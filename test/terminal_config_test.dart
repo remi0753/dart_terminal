@@ -679,6 +679,18 @@ working-directory = /from-file
             TerminalConfiguredClipboardAccess.ask,
     'TerminalOptions admits the isolated OSC 52 acceptance gate',
   );
+  final TerminalOptions runtimeNativeContent = TerminalOptions.parse(
+    const <String>['--no-config', '--runtime-native-content-test'],
+    environment: const <String, String>{'DT_RUNTIME_NATIVE_CONTENT_TEST': '1'},
+    configFileSystem: files,
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    runtimeNativeContent.runtimeNativeContentTest,
+    'TerminalOptions admits the isolated native content acceptance gate',
+  );
   final TerminalOptions runtimeQuickTerminal = TerminalOptions.parse(
     const <String>[
       '--no-config',
@@ -780,6 +792,29 @@ working-directory = /from-file
       configFileSystem: files,
     ),
     'Quick Terminal acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>['--no-config', '--runtime-native-content-test'],
+      environment: const <String, String>{},
+      configFileSystem: files,
+    ),
+    'native content acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>[
+        '--no-config',
+        '--runtime-native-content-test',
+        '--runtime-osc52-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_NATIVE_CONTENT_TEST': '1',
+        'DT_RUNTIME_OSC52_TEST': '1',
+      },
+      configFileSystem: files,
+    ),
+    'native content acceptance cannot be combined with another runtime test',
   );
   _expectThrows(
     () => TerminalOptions.parse(
