@@ -27,6 +27,7 @@ enum _Suite {
   hierarchy,
   actions,
   appleScript,
+  systemAutomation,
   configuration,
   theme,
   shellIntegration,
@@ -49,6 +50,7 @@ enum _Suite {
     _Suite.osc52 => 'osc52',
     _Suite.nativeContent => 'native-content',
     _Suite.appleScript => 'applescript',
+    _Suite.systemAutomation => 'system-automation',
     _Suite.quickTerminal => 'quick-terminal',
     _Suite.secureKeyboardEntry => 'secure-keyboard-entry',
     _ => name,
@@ -170,7 +172,7 @@ _Options _parseOptions(List<String> arguments) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
           'configuration, theme, shell-integration, desktop-signals, '
-          'osc52, native-content, applescript, quick-terminal, '
+          'osc52, native-content, applescript, system-automation, quick-terminal, '
           'secure-keyboard-entry, clipboard, lifecycle, traffic, resource, '
           'fault, or all',
         );
@@ -1719,6 +1721,178 @@ Future<void> _runAppleScript(_Options options, _Invocation invocation) async {
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'dictionary=true commands=10 tcc_untouched=true '
     'elapsed_ms=${observation.elapsed.inMilliseconds}',
+  );
+}
+
+Future<void> _runSystemAutomation(
+  _Options options,
+  _Invocation invocation,
+) async {
+  final String contentsPath =
+      '${Directory(options.bundlePath).absolute.path}/Contents';
+  final Map<String, Object?> buildManifest = jsonDecode(
+    await File('$contentsPath/Resources/runtime-build-manifest.json')
+        .readAsString(),
+  ) as Map<String, Object?>;
+  final Object? declarationValue = buildManifest['appIntents'];
+  _expect(
+    declarationValue is Map<String, Object?>,
+    'system automation bundle omitted App Intents build evidence',
+  );
+  final Map<String, Object?> declaration =
+      declarationValue! as Map<String, Object?>;
+  _expect(
+    declaration['package'] == 'dart_terminal_app_intents_macos' &&
+        declaration['source'] == 'native/TerminalAppIntents.swift' &&
+        declaration['moduleName'] == 'DartTerminalAppIntents' &&
+        declaration['library'] == 'libdart_terminal_app_intents_macos.dylib' &&
+        declaration['metadataBundle'] == 'Metadata.appintents' &&
+        declaration['targetTriple'] ==
+            '${invocation.architecture}-apple-macos14.0' &&
+        declaration['xcodeBuildVersion'] is String &&
+        (declaration['xcodeBuildVersion']! as String).isNotEmpty &&
+        declaration['sourceBytes'] is int &&
+        (declaration['sourceBytes']! as int) > 0 &&
+        declaration['libraryBytes'] is int &&
+        (declaration['libraryBytes']! as int) > 0,
+    'system automation bundle App Intents declaration differs from the closed contract',
+  );
+  final Object? metadataFilesValue = declaration['metadataFiles'];
+  _expect(
+    metadataFilesValue is List<Object?> && metadataFilesValue.length == 2,
+    'system automation bundle does not contain exactly two metadata records',
+  );
+  final Set<String> metadataNames = <String>{};
+  for (final Object? value in metadataFilesValue! as List<Object?>) {
+    _expect(
+      value is Map<String, Object?> &&
+          value.length == 2 &&
+          value['name'] is String &&
+          value['bytes'] is int &&
+          (value['bytes']! as int) > 0,
+      'system automation bundle has malformed metadata byte evidence',
+    );
+    metadataNames.add((value as Map<String, Object?>)['name']! as String);
+  }
+  _expect(
+    metadataNames.length == 2 &&
+        metadataNames.contains('extract.actionsdata') &&
+        metadataNames.contains('version.json'),
+    'system automation bundle metadata file set differs from the closed contract',
+  );
+  final File intentImage = File(
+    '$contentsPath/Frameworks/libdart_terminal_app_intents_macos.dylib',
+  );
+  final File actionsFile = File(
+    '$contentsPath/Resources/Metadata.appintents/extract.actionsdata',
+  );
+  final File versionFile = File(
+    '$contentsPath/Resources/Metadata.appintents/version.json',
+  );
+  _expect(
+    await intentImage.exists() &&
+        await intentImage.length() == declaration['libraryBytes'] &&
+        await actionsFile.exists() &&
+        await versionFile.exists(),
+    'system automation bundle omitted its signed image or metadata files',
+  );
+  final Map<String, Object?> actionsData =
+      jsonDecode(await actionsFile.readAsString()) as Map<String, Object?>;
+  final Object? actionsValue = actionsData['actions'];
+  const Set<String> expectedActions = <String>{
+    'NewTerminalWindowIntent',
+    'NewTerminalTabIntent',
+    'ToggleQuickTerminalIntent',
+  };
+  _expect(
+    actionsValue is Map<String, Object?> &&
+        actionsValue.keys.toSet().containsAll(expectedActions) &&
+        actionsValue.length == expectedActions.length,
+    'system automation metadata does not expose exactly three reviewed actions',
+  );
+  for (final String name in expectedActions) {
+    final Object? value = (actionsValue as Map<String, Object?>)[name];
+    _expect(
+      value is Map<String, Object?> &&
+          value['openAppWhenRun'] == true &&
+          value['parameters'] is List<Object?> &&
+          (value['parameters']! as List<Object?>).isEmpty,
+      'system automation metadata action $name is not parameterless and foreground',
+    );
+  }
+  final Object? shortcutsValue = actionsData['autoShortcuts'];
+  _expect(
+    shortcutsValue is List<Object?> && shortcutsValue.length == 3,
+    'system automation metadata does not expose exactly three automatic shortcuts',
+  );
+  final Set<String> shortcutActions = <String>{
+    for (final Object? value in shortcutsValue! as List<Object?>)
+      if (value is Map<String, Object?> && value['actionIdentifier'] is String)
+        value['actionIdentifier']! as String,
+  };
+  _expect(
+    shortcutActions.length == 3 && shortcutActions.containsAll(expectedActions),
+    'system automation shortcuts do not map one-to-one to reviewed actions',
+  );
+
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>[
+      '--no-config',
+      '--shell-integration=none',
+      '--runtime-system-automation-test',
+    ],
+    environment: const <String, String>{
+      'DT_RUNTIME_SYSTEM_AUTOMATION_TEST': '1',
+    },
+    timeout: const Duration(seconds: 45),
+  );
+  _expect(
+    observation.status == 0,
+    'system automation application exited with status ${observation.status}; '
+    'stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'system automation application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_SYSTEM_AUTOMATION_TEST app_intents=3 '
+          r'shared_actions=true native_queue=true disabled_rejected=1 '
+          r'metadata_external=true notification_settings=true '
+          r'authorization=true denied=true retry=true response_focus=true '
+          r'duplicate_inert=true disable=true reenable=true '
+          r'permission_untouched=true visible_notifications=0 '
+          r'sessions_clean=4 text_clients=0 native_handles=0$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted exact App Intents/notification acceptance',
+  );
+  _expect(
+    observation.stdoutText.contains('Dart Terminal shut down cleanly.') &&
+        !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
+        !observation.stdoutText.contains('HIERARCHY_MISMATCH') &&
+        !observation.stdoutText.contains(
+          'TERMINAL_NOTIFICATION_PRODUCT_ERROR',
+        ) &&
+        !observation.stdoutText.contains('TERMINAL_APP_INTENTS_PRODUCT_ERROR'),
+    'system automation acceptance leaked input, hierarchy, or native state',
+  );
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
+  );
+  stdout.writeln(
+    'RUNTIME_SYSTEM_AUTOMATION_INTEGRATION_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'metadata_actions=3 shortcuts=3 permission_untouched=true '
+    'visible_notifications=0 elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }
 
@@ -3583,6 +3757,10 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.appleScript || options.suite == _Suite.all) {
       await _runAppleScript(options, invocation);
+    }
+    if (options.suite == _Suite.systemAutomation ||
+        options.suite == _Suite.all) {
+      await _runSystemAutomation(options, invocation);
     }
     if (options.suite == _Suite.nativeContent || options.suite == _Suite.all) {
       await _runNativeContent(options, invocation);

@@ -5,9 +5,9 @@
 - Phase: 10
 - Task: App Intents/Shortcuts and notifications
 - Started: 2026-09-12
-- State: in progress
-- Current subtask: product configuration, shared actions, Settings, and
-  lifecycle integration (complete)
+- State: complete
+- Current subtask: Developer JIT/Release AOT acceptance, manual checklist,
+  documentation closure, and parent completion decision (complete)
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -169,6 +169,24 @@ second application-state owner.
      outcomes, audit exact JIT/AOT metadata and owners, document external system
      observations, reconcile README/Feature Matrix/security/configuration
      evidence, and decide the parent item only after all conditions pass.
+
+### Final subtask implementation plan
+
+1. Add one environment-gated ordinary-product acceptance mode. It will use the
+   shipped App Intents dylib and its existing parameterless self-automation seam
+   to drive all three shared actions through the real product controller. A
+   private recorder will replace only the macOS notification transport during
+   this test mode, so authorization, delivery failure, default response, live
+   disable/re-enable, and cleanup are deterministic and cannot display a user
+   notification or mutate notification permission.
+2. Add exact Developer JIT and Release AOT launch gates. Each launch will first
+   inspect the staged image, the two-file metadata bundle, the three
+   parameterless/open-app action records, and the three matching automatic
+   shortcuts, then require real PTY/session/native-owner cleanup.
+3. Publish a manual checklist for external Shortcuts discovery/invocation and
+   user-owned notification permission/click behavior. Reconcile README and the
+   Feature Matrix, run focused and full gates, review both repositories and the
+   final diff, and only then mark this child and its parent complete.
 
 ## Findings and decision log
 
@@ -493,6 +511,44 @@ second application-state owner.
   `CI=true DART_SUPPRESS_ANALYTICS=true make test` passes with 283 formatted
   files unchanged, fixed Phase 9 stress seed `0x509a1171`, and every freshness,
   compatibility, integration, security, and product test green.
+- The first Developer JIT product-acceptance launch reached all three shipped
+  App Intent actions and created four real sessions, then correctly stopped at
+  the disabled-admission assertion. The acceptance had confused the stable C
+  ABI values `disabled=8` and `stale-generation=9`; the production queue
+  returned the documented value 8. The expectation now names the disabled ABI
+  constant, and no product behavior or dependency source was changed.
+- After moving packaged self-automation behind the dependency testing façade,
+  one aggregate Release AOT run received a native focus event while the Quick
+  Terminal create mutation was in progress and stopped on the existing nested
+  mutation guard. The user reported a possible concurrent manual window
+  operation. An unchanged rerun of
+  `CI=true DART_SUPPRESS_ANALYTICS=true make release-aot-system-automation`
+  passed (`metadata_actions=3`, `shortcuts=3`, `permission_untouched=true`,
+  `visible_notifications=0`, exit 0), so the failure was not reproducible under
+  isolated execution. No product focus deferral or weakened assertion was
+  introduced; the aggregate gate is rerun below as the final parity check.
+- A focused validation attempt launched three `dart run` commands concurrently.
+  Two product tests passed, while `terminal_config_test.dart` failed because the
+  Dart tool processes raced while rewriting the same `.dart_tool/lib` native
+  asset with `install_name_tool`. A serial unchanged rerun passed. This is a
+  validation-harness concurrency constraint rather than a product failure; all
+  remaining native-asset-bearing checks are run serially.
+- The first final full-gate run stopped at the compatibility regression coverage
+  freshness check after README and Feature Matrix reconciliation changed their
+  tracked hashes. `make terminal-compatibility-regression-coverage` regenerated
+  only those two source hashes in
+  `compatibility/regression_coverage_report.json`; all nine regression cases and
+  417 split runs passed. The exact full gate is rerun unchanged below.
+- Final runtime parity passes in both Developer JIT and Release AOT with three
+  metadata actions, three shortcuts, untouched notification permission, and no
+  visible notification. The source audit passes with 519 tracked files, no
+  product-native source, and one reviewed native test fixture. Both signed
+  bundle audits report three App Intents and exact metadata/image ownership.
+- The final unchanged `CI=true DART_SUPPRESS_ANALYTICS=true make test` passes:
+  all generated-evidence freshness checks are current, 283 files format with
+  zero changes, analysis reports no issues, the fixed security stress seed is
+  `0x509a1171`, and every product, compatibility, integration, and security test
+  is green.
 
 ## Handoff and remaining work
 
@@ -506,8 +562,11 @@ second application-state owner.
   declaration and exact bundle auditing are complete, including both runtime
   corrections and both signed bundle modes. Product polling, shared action
   dispatch, live configuration, notification response focus, Settings status,
-  and teardown are complete. Shipped-runtime self-acceptance, manual external
-  observations, and public documentation closure remain in the final child.
+  and teardown are complete. Shipped-runtime self-acceptance, the manual
+  external-observation checklist, public documentation, evidence reconciliation,
+  and final gates are also complete. The parent item satisfies all four
+  completion conditions; the next ordered Phase 10 item is the complete
+  VoiceOver/Accessibility Inspector pass.
 
 ### Completed capability unit boundary
 
@@ -520,5 +579,6 @@ second application-state owner.
   timeout, stale-generation, and shutdown states reject without queue growth.
 - Native and package tests prove Swift-to-native admission without direct Dart
   reentry, main-isolate polling/drain semantics, exact-once completion, bounded
-  ownership, and teardown. The next consumer-declaration unit will decide how
-  the product loads, polls, and dispatches these commands.
+  ownership, and teardown. The completed consumer integration loads and polls
+  this package only through its public/testing façades and dispatches every
+  accepted command through the existing shared action owner.

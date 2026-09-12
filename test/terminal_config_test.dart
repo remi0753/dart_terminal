@@ -703,6 +703,20 @@ working-directory = /from-file
     runtimeAppleScript.runtimeAppleScriptTest,
     'TerminalOptions admits the isolated AppleScript acceptance gate',
   );
+  final TerminalOptions runtimeSystemAutomation = TerminalOptions.parse(
+    const <String>['--no-config', '--runtime-system-automation-test'],
+    environment: const <String, String>{
+      'DT_RUNTIME_SYSTEM_AUTOMATION_TEST': '1',
+    },
+    configFileSystem: files,
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    runtimeSystemAutomation.runtimeSystemAutomationTest,
+    'TerminalOptions admits the isolated system automation acceptance gate',
+  );
   final TerminalOptions runtimeQuickTerminal = TerminalOptions.parse(
     const <String>[
       '--no-config',
@@ -820,6 +834,29 @@ working-directory = /from-file
       configFileSystem: files,
     ),
     'AppleScript acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>['--no-config', '--runtime-system-automation-test'],
+      environment: const <String, String>{},
+      configFileSystem: files,
+    ),
+    'system automation acceptance is unavailable without its environment gate',
+  );
+  _expectThrows(
+    () => TerminalOptions.parse(
+      const <String>[
+        '--no-config',
+        '--runtime-system-automation-test',
+        '--runtime-applescript-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_SYSTEM_AUTOMATION_TEST': '1',
+        'DT_RUNTIME_APPLESCRIPT_TEST': '1',
+      },
+      configFileSystem: files,
+    ),
+    'system automation acceptance cannot combine with another runtime test',
   );
   _expectThrows(
     () => TerminalOptions.parse(

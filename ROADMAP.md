@@ -1244,7 +1244,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] product session adapter、snapshot／command policy tests
     - [x] Developer JIT／Release AOT self-automation acceptance、manual checklist
   - [x] documentation/evidence closure、親項目完了判定
-- [ ] App Intents/Shortcuts、notifications
+- [x] App Intents/Shortcuts、notifications
   （分割、境界、完了条件は
   [`docs/phase10/app-intents-shortcuts-notifications.md`](docs/phase10/app-intents-shortcuts-notifications.md)
   を参照して順に実施する）
@@ -1254,7 +1254,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] terminal-specific Swift App Intents capability／bounded command queue
     - [x] consumer declaration、dependency gates、bundle audit
   - [x] product configuration、shared-action、Settings、lifecycle integration
-  - [ ] Developer JIT／Release AOT acceptance、manual checklist、documentation closure、親項目完了判定
+  - [x] Developer JIT／Release AOT acceptance、manual checklist、documentation closure、親項目完了判定
 - [ ] complete VoiceOver/Accessibility Inspector pass
   - [ ] configured terminal padding の accessibility hit/range geometry を
     renderer content origin と一致させる

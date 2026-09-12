@@ -107,14 +107,24 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   外部senderのAutomation/TCC権限はmacOSと利用者だけが管理する。辞書、制限、例、権限境界は
   [AppleScript reference](docs/reference/applescript.md)、外部確認手順は
   [manual acceptance checklist](docs/phase10/applescript-manual-acceptance.md)を参照
+- Swift App Intentsとして **New Terminal Window**、**New Terminal Tab**、
+  **Quick Terminal** の3つだけをShortcutsへ公開する。すべてparameterlessかつforegroundで、
+  既存の共有action dispatcherへbounded queueからexactly onceで配送する。
+  `macos-app-intents`はlive無効化・再有効化でき、overflow／disabled／timeout／shutdownは
+  hierarchyを変更せずfail closedになる。Developer JIT／Release AOTの両bundleでSwift image、
+  compiler抽出metadata、3 actions／3 shortcutsと実queueを検証し、外部Shortcuts確認は
+  [App Intents／notifications manual checklist](docs/phase10/app-intents-notifications-manual-checklist.md)を参照
 - terminal output由来のdesktop signalを、pane/session所有権とglobal policyの下で投影する。
   legacy OSC 9 notificationとConEmu OSC 9;4 progress、Kitty OSC 99のplain UTF-8
   title/body・bounded ID/chunk subset、OSC 133 A/B/C/D/I/L/N/Pのcontent-free semantic
   stateを扱う。通知は全pane合計3件/10秒（hard maximum 8）、sessionごと8 live ID、最大64
   sessionに制限し、同一IDをcoalesce、activeかつfocusedな出力を抑止する。attacker IDは
   native IDに使わず、RIS/pane closeで通知を取消し、focused paneのprogressだけをDock badgeへ
-  投影する。2実PTYでのburst/reset/close/recoveryとnative removal/Dock cleanupを
-  Developer JIT/Release AOTの両方で検証
+  投影する。`macos-notifications`はlive変更でき、非同期の現在設定／許可／delivery failureを
+  content-freeにSettingsへ表示する。default clickは独立opaque tokenからstill-live sessionを
+  再解決してwindow/tab/paneをfocusし、stale／duplicate responseはinertになる。
+  2実PTYでのburst/reset/close/recoveryとnative removal/Dock cleanupに加え、許可拒否、再試行、
+  click focus、disable/re-enable、owner回収をDeveloper JIT/Release AOTの両方で検証
 - キー入力、Backspace/Delete、左右移動、Home/End、zsh自身の行編集とコマンド履歴
 - 1 paneにつき1つのTTY付きinteractive login zsh
 - 同じshell内での`cd`、環境変数、background job、`jobs`、`fg`/`bg`
@@ -417,7 +427,7 @@ scrollback、font、padding、window frameは書き換えません。自動file 
 
 Applicationメニューの`Settings…`（Command-,）、command palette、または非予約chordへ設定した
 `application.open-settings` actionから、root設定ファイルを編集するnative modal editorを開けます。
-最初のkey入力を待たず、新規・空・疎なファイルでも全45 optionを同じdocument内へ補完して表示し、
+最初のkey入力を待たず、新規・空・疎なファイルでも全47 optionを同じdocument内へ補完して表示し、
 右のcontext panelはcaret位置の
 current/draft value、構文、説明と、保存後に既存terminalへ即時反映されるか新規terminalから使われるかを
 表示します。line/source行や別のvalue入力欄は持たず、panelを閉じても右端の細いrailが残ります。
@@ -632,6 +642,7 @@ make RUNTIME_ARCH=arm64 runtime-terminal-display-integration
 make RUNTIME_ARCH=arm64 runtime-native-hierarchy-integration
 make RUNTIME_ARCH=arm64 runtime-user-actions-integration
 make RUNTIME_ARCH=arm64 runtime-applescript-integration
+make RUNTIME_ARCH=arm64 runtime-system-automation-integration
 make RUNTIME_ARCH=arm64 runtime-configuration-integration
 make RUNTIME_ARCH=arm64 runtime-theme-integration
 make RUNTIME_ARCH=arm64 runtime-osc52-integration
@@ -641,6 +652,7 @@ make RUNTIME_ARCH=arm64 runtime-restoration-integration
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
 smoke、real-PTY live Metal display、native tab/4-pane hierarchy、通常製品のuser action、
 AppleScript dictionary/object lifecycle、
+App Intents metadata/shared actionsとnotification permission/response lifecycle、
 effective-config early exit/Settings/configuration reload、light/dark/system appearance、
 shell/semantic、desktop notification/progress、OSC 52 confirmation、
 fullscreen/migration/restoration/reopen、clipboard、lifecycle、bounded traffic、

@@ -9,6 +9,8 @@ import 'package:dart_appkit/testing.dart' as appkit_testing;
 import 'package:dart_macos_runtime/dart_macos_runtime.dart';
 import 'package:dart_pty_macos/dart_pty_macos.dart';
 import 'package:dart_terminal_app_intents_macos/dart_terminal_app_intents_macos.dart';
+import 'package:dart_terminal_app_intents_macos/testing.dart'
+    as app_intents_testing;
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'runtime_lifecycle.dart';
@@ -80,6 +82,7 @@ const String _runtimeWorkerName = 'dart_terminal_runtime_worker';
 const int _runtimeSoftwareFailureExitCode = 70;
 const int _runtimeTemporaryFailureExitCode = 75;
 const int _appKitLimitExceededStatus = 10;
+const int _appIntentsDisabledStatus = 8;
 const Duration _runtimePtyFaultGracefulTimeout = Duration(milliseconds: 200);
 const Duration _runtimePtyFaultFinalTimeout = Duration(milliseconds: 200);
 const Duration _runtimePtyFaultCleanupTimeout = Duration(milliseconds: 200);
@@ -124,6 +127,7 @@ final class TerminalOptions {
     this.runtimeQuickTerminalTest = false,
     this.runtimeSecureKeyboardEntryTest = false,
     this.runtimeAppleScriptTest = false,
+    this.runtimeSystemAutomationTest = false,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
@@ -177,6 +181,7 @@ final class TerminalOptions {
     var runtimeQuickTerminalTest = false;
     var runtimeSecureKeyboardEntryTest = false;
     var runtimeAppleScriptTest = false;
+    var runtimeSystemAutomationTest = false;
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
@@ -326,6 +331,15 @@ final class TerminalOptions {
           );
         }
         runtimeAppleScriptTest = true;
+        continue;
+      }
+      if (argument == '--runtime-system-automation-test') {
+        if (runtimeSystemAutomationTest) {
+          throw const FormatException(
+            '--runtime-system-automation-test may only be supplied once',
+          );
+        }
+        runtimeSystemAutomationTest = true;
         continue;
       }
       if (argument == '--runtime-restoration-test') {
@@ -570,6 +584,37 @@ final class TerminalOptions {
             selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
       throw const FormatException(
         'AppleScript test cannot be combined with another runtime test',
+      );
+    }
+    if (runtimeSystemAutomationTest &&
+        selectedEnvironment['DT_RUNTIME_SYSTEM_AUTOMATION_TEST'] != '1') {
+      throw const FormatException(
+        'system automation test requires the integration-test gate',
+      );
+    }
+    if (runtimeSystemAutomationTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeShellIntegrationTest ||
+            runtimeDesktopSignalsTest ||
+            runtimeOsc52Test ||
+            runtimeNativeContentTest ||
+            runtimeQuickTerminalTest ||
+            runtimeSecureKeyboardEntryTest ||
+            runtimeAppleScriptTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'system automation test cannot be combined with another runtime test',
       );
     }
     if (runtimeSecureKeyboardEntryTest &&
@@ -822,6 +867,7 @@ final class TerminalOptions {
       runtimeQuickTerminalTest: runtimeQuickTerminalTest,
       runtimeSecureKeyboardEntryTest: runtimeSecureKeyboardEntryTest,
       runtimeAppleScriptTest: runtimeAppleScriptTest,
+      runtimeSystemAutomationTest: runtimeSystemAutomationTest,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
@@ -867,6 +913,7 @@ final class TerminalOptions {
   final bool runtimeQuickTerminalTest;
   final bool runtimeSecureKeyboardEntryTest;
   final bool runtimeAppleScriptTest;
+  final bool runtimeSystemAutomationTest;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
@@ -957,6 +1004,7 @@ final class TerminalApplication {
         options.runtimeQuickTerminalTest ||
         options.runtimeSecureKeyboardEntryTest ||
         options.runtimeAppleScriptTest ||
+        options.runtimeSystemAutomationTest ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -985,6 +1033,7 @@ final class TerminalApplication {
         runSecureKeyboardEntryAcceptance:
             options.runtimeSecureKeyboardEntryTest,
         runAppleScriptAcceptance: options.runtimeAppleScriptTest,
+        runSystemAutomationAcceptance: options.runtimeSystemAutomationTest,
         osc52Clipboard: options.runtimeOsc52Test
             ? _MemoryTerminalOsc52Clipboard()
             : null,
@@ -2473,6 +2522,7 @@ final class TerminalApplication {
       !options.runtimeQuickTerminalTest &&
       !options.runtimeSecureKeyboardEntryTest &&
       !options.runtimeAppleScriptTest &&
+      !options.runtimeSystemAutomationTest &&
       !options.runtimeRestorationTest &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
@@ -2496,6 +2546,7 @@ final class TerminalApplication {
     bool runQuickTerminalAcceptance = false,
     bool runSecureKeyboardEntryAcceptance = false,
     bool runAppleScriptAcceptance = false,
+    bool runSystemAutomationAcceptance = false,
     TerminalOsc52ClipboardPort? osc52Clipboard,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
@@ -2625,9 +2676,15 @@ final class TerminalApplication {
     late final TerminalDesktopSignalCoordinator desktopSignalCoordinator;
     late final Future<bool> Function(TerminalSessionId sessionId)
     focusNotificationSession;
+    final _TerminalNotificationAcceptancePlatformPort?
+    notificationAcceptancePlatform = runSystemAutomationAcceptance
+        ? _TerminalNotificationAcceptancePlatformPort()
+        : null;
     final TerminalNotificationProductController notificationController =
         TerminalNotificationProductController(
-          platform: TerminalAppKitUserNotificationPlatformPort(application),
+          platform:
+              notificationAcceptancePlatform ??
+              TerminalAppKitUserNotificationPlatformPort(application),
           focusSession: (TerminalSessionId sessionId) =>
               focusNotificationSession(sessionId),
           onStatusChanged: () {
@@ -2711,7 +2768,8 @@ final class TerminalApplication {
                   runNativeContentAcceptance ||
                   runQuickTerminalAcceptance ||
                   runSecureKeyboardEntryAcceptance ||
-                  runAppleScriptAcceptance;
+                  runAppleScriptAcceptance ||
+                  runSystemAutomationAcceptance;
               final Map<String, String> shellEnvironment =
                   usesDeterministicShell
                   ? <String, String>{
@@ -4762,6 +4820,24 @@ final class TerminalApplication {
           closed: closed,
           prompt: acceptancePrompt.trimRight(),
         );
+      } else if (runSystemAutomationAcceptance) {
+        await _exerciseSystemAutomationProduct(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          dispatcher: dispatcher,
+          appIntents: appIntentsController!,
+          notifications: notificationController,
+          notificationPlatform: notificationAcceptancePlatform!,
+          applyNotificationConfiguration: applyNotificationConfiguration,
+          desktopSignalCoordinator: desktopSignalCoordinator,
+          quickTerminal: createdQuickTerminal,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
       } else if (runAppleScriptAcceptance) {
         await _exerciseAppleScriptProduct(
           application: application,
@@ -4951,6 +5027,320 @@ final class TerminalApplication {
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
     }
     stdout.writeln('Dart Terminal shut down cleanly.');
+  }
+
+  static Future<void> _exerciseSystemAutomationProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalActionDispatcher dispatcher,
+    required TerminalAppIntentsProductController appIntents,
+    required TerminalNotificationProductController notifications,
+    required _TerminalNotificationAcceptancePlatformPort notificationPlatform,
+    required void Function(bool enabled) applyNotificationConfiguration,
+    required TerminalDesktopSignalCoordinator desktopSignalCoordinator,
+    required TerminalQuickTerminalController quickTerminal,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    Future<void> waitFor(
+      bool Function() predicate,
+      String message, {
+      Duration timeout = const Duration(seconds: 10),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (!predicate() && deadline.elapsed < timeout) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      _expectLifecycle(predicate(), message);
+    }
+
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1 &&
+          sessions.length == 1 &&
+          owners.length == 1,
+      'system automation product did not start from a 1/1/1 hierarchy',
+    );
+    final TerminalWindowState initialWindow = state.windows.single;
+    final TerminalTabState initialTab = initialWindow.selectedTab;
+    final PaneId initialPaneId = initialTab.focusedPaneId;
+    final TerminalSession initialSession = sessions[initialPaneId]!;
+    final _TerminalHierarchyProductPane initialOwner = owners[initialPaneId]!;
+    await _waitForAsciiMarker(initialSession, prompt);
+
+    final app_intents_testing.TerminalAppIntentsMacosSelfAutomation automation =
+        app_intents_testing.openTerminalAppIntentsMacosSelfAutomation();
+
+    Future<void> invokeIntent(
+      TerminalAppIntentAction action,
+      bool Function() completed,
+      String message,
+    ) async {
+      final int completedBefore = appIntents.status.completedCommandCount;
+      automation.enqueue(action);
+      await appIntents.poll();
+      await waitFor(completed, message);
+      _expectLifecycle(
+        appIntents.status.completedCommandCount == completedBefore + 1,
+        'App Intent ${action.name} did not complete exactly once',
+      );
+    }
+
+    await invokeIntent(
+      TerminalAppIntentAction.newWindow,
+      () =>
+          state.windowCount == 2 &&
+          state.tabCount == 2 &&
+          state.paneCount == 2 &&
+          sessions.length == 2,
+      'new-window App Intent did not use the shared hierarchy action',
+    );
+    await invokeIntent(
+      TerminalAppIntentAction.newTab,
+      () =>
+          state.windowCount == 2 &&
+          state.tabCount == 3 &&
+          state.paneCount == 3 &&
+          sessions.length == 3,
+      'new-tab App Intent did not use the shared hierarchy action',
+    );
+    await invokeIntent(
+      TerminalAppIntentAction.toggleQuickTerminal,
+      () =>
+          quickTerminal.lifecycle.visibility ==
+              TerminalQuickTerminalVisibility.visible &&
+          state.windowCount == 3 &&
+          state.tabCount == 4 &&
+          state.paneCount == 4 &&
+          sessions.length == 4,
+      'Quick Terminal App Intent did not use the shared toggle action',
+    );
+    _expectLifecycle(
+      appIntents.status.pendingCommandCount == 0 &&
+          appIntents.status.completedCommandCount == 3 &&
+          appIntents.status.rejectedCommandCount == 0 &&
+          appIntents.status.failedCommandCount == 0,
+      'App Intent native/product counters differ after three shared actions',
+    );
+    appIntents.applyEnabled(false);
+    final int rejectedBefore = appIntents.status.rejectedCommandCount;
+    var disabledStatus = -1;
+    try {
+      automation.enqueue(TerminalAppIntentAction.newWindow);
+    } on TerminalAppIntentsMacosException catch (error) {
+      disabledStatus = error.status;
+    }
+    appIntents.applyEnabled(true);
+    _expectLifecycle(
+      disabledStatus == _appIntentsDisabledStatus &&
+          appIntents.status.rejectedCommandCount == rejectedBefore + 1 &&
+          appIntents.status.lastFailure ==
+              TerminalAppIntentsProductFailure.nativeRejected,
+      'disabled App Intent admission did not fail closed exactly once',
+    );
+
+    _expectLifecycle(
+      notificationPlatform.settingsTokens.length == 1 &&
+          notifications.status.enabled &&
+          desktopSignalCoordinator.notificationsEnabled,
+      'notification product did not begin with one asynchronous settings query',
+    );
+    await notifications.handleEvent(
+      ApplicationUserNotificationChangedEvent(
+        monotonicMicros: 1,
+        kind: AppKitUserNotificationEventKind.settings,
+        token: notificationPlatform.settingsTokens.single,
+        authorizationStatus:
+            AppKitUserNotificationAuthorizationStatus.notDetermined,
+        failure: AppKitUserNotificationFailure.none,
+      ),
+    );
+    notifications.requestAuthorization();
+    _expectLifecycle(
+      notificationPlatform.authorizationTokens.length == 1,
+      'notification authorization did not remain an asynchronous request',
+    );
+    await notifications.handleEvent(
+      ApplicationUserNotificationChangedEvent(
+        monotonicMicros: 2,
+        kind: AppKitUserNotificationEventKind.authorization,
+        token: notificationPlatform.authorizationTokens.single,
+        authorizationStatus: AppKitUserNotificationAuthorizationStatus.denied,
+        failure: AppKitUserNotificationFailure.denied,
+      ),
+    );
+
+    desktopSignalCoordinator.setApplicationActive(true);
+    initialOwner.pane.insertText(
+      "printf '\\033]9;automation-denied\\007__DT_AUTOMATION_DENIED__\\n'",
+    );
+    await initialOwner.pane.submit();
+    await waitFor(
+      () => notificationPlatform.posts.length == 1,
+      'background terminal notification did not reach the product port',
+    );
+    final _TerminalNotificationAcceptancePost deniedPost =
+        notificationPlatform.posts.single;
+    await notifications.handleEvent(
+      ApplicationUserNotificationChangedEvent(
+        monotonicMicros: 3,
+        kind: AppKitUserNotificationEventKind.delivery,
+        token: deniedPost.deliveryToken,
+        authorizationStatus: AppKitUserNotificationAuthorizationStatus.denied,
+        failure: AppKitUserNotificationFailure.denied,
+      ),
+    );
+    _expectLifecycle(
+      notifications.status.lastFailure ==
+              TerminalNotificationProductFailure.denied &&
+          notifications.status.liveResponseCount == 0 &&
+          desktopSignalCoordinator.metrics.projectionFailureCount == 1,
+      'denied notification did not release native and logical ownership',
+    );
+
+    initialOwner.pane.insertText(
+      "printf '\\033]9;automation-focus\\007__DT_AUTOMATION_FOCUS__\\n'",
+    );
+    await initialOwner.pane.submit();
+    await waitFor(
+      () => notificationPlatform.posts.length == 2,
+      'notification retry did not recover after asynchronous delivery failure',
+    );
+    final _TerminalNotificationAcceptancePost responsePost =
+        notificationPlatform.posts.last;
+    await notifications.handleEvent(
+      ApplicationUserNotificationChangedEvent(
+        monotonicMicros: 4,
+        kind: AppKitUserNotificationEventKind.delivery,
+        token: responsePost.deliveryToken,
+        authorizationStatus:
+            AppKitUserNotificationAuthorizationStatus.authorized,
+        failure: AppKitUserNotificationFailure.none,
+      ),
+    );
+    await notifications.handleEvent(
+      ApplicationUserNotificationChangedEvent(
+        monotonicMicros: 5,
+        kind: AppKitUserNotificationEventKind.defaultResponse,
+        token: responsePost.responseToken,
+        authorizationStatus: AppKitUserNotificationAuthorizationStatus.unknown,
+        failure: AppKitUserNotificationFailure.none,
+      ),
+    );
+    _expectLifecycle(
+      state.activeWindowId == initialWindow.id &&
+          initialWindow.selectedTabId == initialTab.id &&
+          initialTab.focusedPaneId == initialPaneId &&
+          notifications.status.liveResponseCount == 0,
+      'default notification response did not focus the exact live session',
+    );
+    await notifications.handleEvent(
+      ApplicationUserNotificationChangedEvent(
+        monotonicMicros: 6,
+        kind: AppKitUserNotificationEventKind.defaultResponse,
+        token: responsePost.responseToken,
+        authorizationStatus: AppKitUserNotificationAuthorizationStatus.unknown,
+        failure: AppKitUserNotificationFailure.none,
+      ),
+    );
+    _expectLifecycle(
+      notifications.status.liveResponseCount == 0,
+      'duplicate notification response reacquired consumed ownership',
+    );
+
+    final TerminalSession backgroundSession = sessions.values.firstWhere(
+      (TerminalSession session) =>
+          session.id != initialSession.id &&
+          state.locationForPane(session.id.paneId)?.windowId !=
+              state.quickTerminalWindow?.id,
+    );
+    final _TerminalHierarchyProductPane backgroundOwner =
+        owners[backgroundSession.id.paneId]!;
+    backgroundOwner.pane.insertText(
+      "printf '\\033]9;automation-disable\\007__DT_AUTOMATION_DISABLE__\\n'",
+    );
+    await backgroundOwner.pane.submit();
+    await waitFor(
+      () => notificationPlatform.posts.length == 3,
+      'notification disable fixture did not create a live tracked record',
+    );
+    applyNotificationConfiguration(false);
+    _expectLifecycle(
+      !notifications.status.enabled &&
+          !desktopSignalCoordinator.notificationsEnabled &&
+          notifications.status.liveResponseCount == 0 &&
+          notificationPlatform.removedIdentifiers.length == 2,
+      'notification live disable did not cancel all remaining native owners',
+    );
+    final int postsWhileDisabled = notificationPlatform.posts.length;
+    backgroundOwner.pane.insertText(
+      "printf '\\033]9;automation-blocked\\007__DT_AUTOMATION_BLOCKED__\\n'",
+    );
+    await backgroundOwner.pane.submit();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    _expectLifecycle(
+      notificationPlatform.posts.length == postsWhileDisabled,
+      'disabled notification projection reached the native port',
+    );
+    applyNotificationConfiguration(true);
+    final int recoverySettingsToken = notificationPlatform.settingsTokens.last;
+    await notifications.handleEvent(
+      ApplicationUserNotificationChangedEvent(
+        monotonicMicros: 7,
+        kind: AppKitUserNotificationEventKind.settings,
+        token: recoverySettingsToken,
+        authorizationStatus:
+            AppKitUserNotificationAuthorizationStatus.authorized,
+        failure: AppKitUserNotificationFailure.none,
+      ),
+    );
+    _expectLifecycle(
+      notifications.status.authorizationStatus ==
+              AppKitUserNotificationAuthorizationStatus.authorized &&
+          appIntents.status.settingsLine.contains('availability=ready') &&
+          notifications.status.settingsLine.contains(
+            'authorization=authorized',
+          ) &&
+          !notifications.status.settingsLine.contains('automation-focus'),
+      'Settings status did not recover with content-free automation state',
+    );
+
+    await dispatcher.dispatch(TerminalActionId.quitApplication);
+    if (!closed.isCompleted) {
+      await dispatcher.dispatch(TerminalActionId.quitApplication);
+    }
+    await closed.future.timeout(const Duration(seconds: 15));
+    await Future<void>.delayed(Duration.zero);
+    _expectLifecycle(
+      state.isDisposed &&
+          hierarchy.isDisposed &&
+          appIntents.isDisposed &&
+          !notifications.status.enabled &&
+          notifications.status.liveResponseCount == 0 &&
+          notificationPlatform.visiblePostCount == 0 &&
+          allSessions.length == 4 &&
+          allSessions.every(
+            (TerminalSession session) =>
+                session.shutdownResult?.isClean == true,
+          ) &&
+          debugLiveTerminalTextInputClientCount() == 0 &&
+          application.debugLiveObjectCount == 0,
+      'system automation product did not release every session/native owner',
+    );
+    stdout.writeln(
+      'TERMINAL_SYSTEM_AUTOMATION_TEST app_intents=3 shared_actions=true '
+      'native_queue=true disabled_rejected=1 metadata_external=true '
+      'notification_settings=true authorization=true denied=true retry=true '
+      'response_focus=true duplicate_inert=true disable=true reenable=true '
+      'permission_untouched=true visible_notifications=0 sessions_clean=4 '
+      'text_clients=0 native_handles=0',
+    );
   }
 
   static Future<void> _exerciseAppleScriptProduct({
@@ -15336,6 +15726,77 @@ TerminalColorScheme _terminalColorScheme(TerminalThemeBrightness brightness) =>
       TerminalThemeBrightness.light => TerminalColorScheme.light,
       TerminalThemeBrightness.dark => TerminalColorScheme.dark,
     };
+
+final class _TerminalNotificationAcceptancePost {
+  const _TerminalNotificationAcceptancePost({
+    required this.notification,
+    required this.deliveryToken,
+    required this.responseToken,
+  });
+
+  final AppKitUserNotification notification;
+  final int deliveryToken;
+  final int responseToken;
+}
+
+/// Content-owning recorder used only by the gated shipped-runtime acceptance.
+final class _TerminalNotificationAcceptancePlatformPort
+    implements TerminalUserNotificationPlatformPort {
+  final List<int> settingsTokens = <int>[];
+  final List<int> authorizationTokens = <int>[];
+  final List<_TerminalNotificationAcceptancePost> posts =
+      <_TerminalNotificationAcceptancePost>[];
+  final List<String> removedIdentifiers = <String>[];
+  final List<String?> badgeLabels = <String?>[];
+  var _nextToken = 1;
+
+  @override
+  AppKitUserNotificationAuthorizationStatus? get cachedAuthorizationStatus =>
+      AppKitUserNotificationAuthorizationStatus.unknown;
+
+  /// This recorder never calls UserNotifications or creates a visible post.
+  int get visiblePostCount => 0;
+
+  @override
+  int refreshSettings() {
+    final int token = _nextToken++;
+    settingsTokens.add(token);
+    return token;
+  }
+
+  @override
+  int requestAuthorization() {
+    final int token = _nextToken++;
+    authorizationTokens.add(token);
+    return token;
+  }
+
+  @override
+  int postTrackedNotification(
+    AppKitUserNotification notification, {
+    required int responseToken,
+  }) {
+    final int deliveryToken = _nextToken++;
+    posts.add(
+      _TerminalNotificationAcceptancePost(
+        notification: notification,
+        deliveryToken: deliveryToken,
+        responseToken: responseToken,
+      ),
+    );
+    return deliveryToken;
+  }
+
+  @override
+  void removeNotification(String identifier) {
+    removedIdentifiers.add(identifier);
+  }
+
+  @override
+  void setDockBadgeLabel(String? label) {
+    badgeLabels.add(label);
+  }
+}
 
 final class _TerminalDesktopSignalAcceptanceClock {
   int _micros = 0;

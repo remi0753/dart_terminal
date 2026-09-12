@@ -1513,6 +1513,45 @@ void _testOptions() {
     ),
     'AppleScript and OSC 52 tests are mutually exclusive',
   );
+  final TerminalOptions systemAutomationTestOptions = _parseOptions(
+    const <String>['--runtime-system-automation-test'],
+    environment: const <String, String>{
+      'DT_RUNTIME_SYSTEM_AUTOMATION_TEST': '1',
+    },
+  );
+  _expect(
+    systemAutomationTestOptions.runtimeSystemAutomationTest,
+    'gated system automation product test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-system-automation-test']),
+    'system automation product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-system-automation-test',
+        '--runtime-system-automation-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_SYSTEM_AUTOMATION_TEST': '1',
+      },
+    ),
+    'duplicate system automation product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-system-automation-test',
+        '--runtime-applescript-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_SYSTEM_AUTOMATION_TEST': '1',
+        'DT_RUNTIME_APPLESCRIPT_TEST': '1',
+      },
+    ),
+    'system automation and AppleScript tests are mutually exclusive',
+  );
   final TerminalOptions quickTerminalTestOptions = _parseOptions(
     const <String>['--runtime-quick-terminal-test'],
     environment: const <String, String>{'DT_RUNTIME_QUICK_TERMINAL_TEST': '1'},
