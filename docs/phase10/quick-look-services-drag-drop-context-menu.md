@@ -5,9 +5,8 @@
 - Phase: 10
 - Task: Quick Look, Services, drag/drop, and context menu
 - Started: 2026-09-12
-- State: active
-- Current subtask: Developer JIT/Release AOT native acceptance and manual
-  checklist
+- State: completed
+- Current subtask: completed
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -1085,3 +1084,134 @@ automation.
   `dart_appkit` worktree is clean, build outputs remain ignored, and ROADMAP
   marks only the shipped-runtime acceptance subtask complete. The following
   documentation/evidence closure and parent decision remain unchecked.
+
+## Current subtask definition — documentation and evidence closure
+
+### Purpose and background
+
+All reusable substrates, product wiring, deterministic tests, both shipped
+runtime modes, audits, and the manual checklist are committed. The remaining
+ordered work is to reconcile user-facing and engineering references with the
+delivered surface, prove that no completion condition is silently deferred,
+and make the parent completion decision from recorded evidence.
+
+### Scope
+
+- Reconcile README terminal/settings behavior, `FEATURE_MATRIX.md` status and
+  evidence links, shared action/keybinding references, Phase 10 acceptance
+  evidence, and this decision record against the committed implementation.
+- State the user-visible context menu, Quick Look, Services, drop, Finder
+  folder, paste-confirmation, mouse-capture, focus, and teardown behavior
+  without presenting private runtime flags as supported CLI.
+- Verify each parent completion condition against a concrete automated test,
+  shipped-runtime result, dependency result, or explicit unperformed manual
+  checklist item. Manual OS/hardware coverage must remain truthfully distinct
+  from automated acceptance.
+- Run generated-reference checks, focused documentation/evidence checks, the
+  exact full terminal gate, source/bundle audits as needed, final diff review,
+  and ensure the adjacent dependency worktree stays clean.
+- If all conditions are met, check the documentation/evidence closure item, its
+  product-integration parent, and the top-level Quick Look/Services/drag/drop/
+  context-menu item in one standalone closure commit.
+
+### Out of scope
+
+- Performing the Finder/trackpad/third-party Service manual checklist on behalf
+  of the user, or marking its boxes complete without observation.
+- Adding new product behavior, configuration, native ABI, AppleScript, App
+  Intents, accessibility, localization, or inspector work. A newly identified
+  product gap is a blocker or a newly ordered ROADMAP item, not documentation
+  wording.
+- Starting the following AppleScript item before this parent is committed and
+  ROADMAP is reread.
+
+### Dependencies, risks, completion conditions, and validation
+
+- The source of truth is committed code plus the Developer JIT/Release AOT
+  machine contracts from commit `7597e2b`; older planning statements cannot be
+  used as completion evidence if they disagree.
+- Generated references may reject stale source hashes after documentation or
+  evidence changes. Only their dedicated generators may update them, and each
+  generated diff must be reviewed before rerunning the exact gate.
+- Feature Matrix status must distinguish delivered automated support from
+  remaining manual release acceptance, without leaving IN-10/UI-07 described as
+  wholly missing.
+- Complete only when every parent condition has a traceable evidence entry,
+  user-facing docs match current behavior, all required checks pass, final
+  diffs contain no implementation expansion, and only then all three ROADMAP
+  checkboxes are marked complete and committed.
+
+### Documentation reconciliation and parent evidence
+
+- `README.md` now describes the user-visible context menu, definition lookup,
+  Services, text/file drops, folder Services, ordinary paste confirmation, and
+  the absence of a dedicated Settings toggle. It links the manual checklist
+  instead of implying that system-owned behavior is automated.
+- Feature Matrix IN-10 now distinguishes the completed drag/drop, Services,
+  and Quick Look surface from the still-unimplemented Option-click cursor and
+  semantic output selection. UI-05 records the shared context-menu actions and
+  mouse-capture arbitration; UI-07 records the completed definition surface.
+- The generated action reference already contains `pane.quick-look`, its
+  standard `control+command+d` shortcut, and the reserved native shortcut.
+  This closure introduces no schema, action, or public command-line option, so
+  the generated configuration reference requires no content change.
+
+| Parent condition | Evidence and decision |
+| --- | --- |
+| 1. One context menu, shared actions, no duplicate mouse/PTY input | Focused policy/lifecycle tests cover mouse-capture suppression and one shared action registration. The real AppKit acceptance injects a full right-click sequence, observes zero selection/PTY writes, then invokes Quick Look and Split Right through the native menu target/action route. |
+| 2. Bounded, geometry-correct Quick Look | Word-at-cell tests cover empty, whitespace, wide/wrapped, truncated, stale, and bounded cases. AppKit tests cover pressure events and current definition geometry; both shipped runtimes present through the strict View event decoder. Physical Force Touch remains an unchecked manual item. |
+| 3. Bounded Services selection and returned text | Native requestor tests prove synchronous callbacks read only cached bounded state and asynchronously return text. Product tests retain the originating pane, use ordinary paste admission, and prove the first multiline request has zero `writeEnqueued` before a repeated confirmation. |
+| 4. Bounded text/file drops and ordinary paste policy | Unit/native tests reject malformed, unsupported, oversized, stale, and inactive targets. Both runtime modes compare exact bracketed bytes for dropped text and shell-quoted local file paths; no direct PTY bypass exists. |
+| 5. Finder folder Services and closed bundle declaration | Provider/runtime tests cover local URL normalization, ordered de-duplication, limits, and exact manifest/plist dictionaries. Product acceptance creates one tab and one window with exact canonical cwd overrides and only the two declared Services. Finder database discovery remains an unchecked manual item. |
+| 6. Tests, runtime paths, audits, docs, review, and per-subtask commits | Dependency and product commits record focused/full gates. Commit `7597e2b` records final JIT/AOT acceptance, source/bundle audits, clean Close/Quit recovery, manual checklist publication, and the exact full terminal gate. This closure reruns reference checks and the full terminal gate after documentation changes before changing ROADMAP state. |
+
+The unchecked manual checklist is release-environment evidence, not an
+unimplemented product contract: its system database, physical pressure, and
+third-party providers cannot be driven deterministically by the shipped
+runtime harness. Every deterministic boundary and both deliverable runtime
+modes are covered above. Subject to the final closure validation below, all six
+parent conditions are therefore satisfied and the parent may be marked
+complete without falsely checking a manual observation.
+
+### Closure validation record
+
+- 2026-09-12: Initial `git diff --check` passed and the documentation-only diff
+  contains no product, test, schema, generated-reference, or dependency change.
+  The first combined reference-check command stopped during `dependencies`
+  before any checker ran because Dart analytics attempted to update
+  `~/.dart-tool/dart-flutter-telemetry-session.json` outside the sandbox. This
+  is an environment failure and supplies no accepted validation result; the
+  same checks are rerun with analytics suppressed in the approved build
+  environment.
+- The approved rerun passed without regenerating files:
+  `CONFIGURATION_REFERENCE_CHECK_PASS` reports 44 options (8 live, 36 new-
+  session, 1 repeatable), `KEYBIND_ACTION_REFERENCE_CHECK_PASS` reports 105
+  keys, 4 pane actions, 28 application actions, 1 standard binding, and 15
+  reserved shortcuts, and `PHASE7_APPKIT_ACCEPTANCE_PASS` reports all four
+  criteria with 13 source references, 10 unit tests, 4 integration tests, and
+  8 UI assertions. The existing generated references are current.
+- The first exact full gate passed parser, configuration, action, Phase 7, and
+  terminal regression checks, then correctly rejected the stale generated
+  terminal compatibility coverage report after these documentation/evidence
+  files changed. No later gate result is inferred. Its dedicated generator is
+  inspected and run next; only the expected provenance hashes may change
+  before the exact gate is repeated.
+- The dedicated coverage generator replayed all 9 fix families, 390 input
+  bytes, and 417 split runs, then changed exactly the `README.md` and
+  `FEATURE_MATRIX.md` SHA-256 values in
+  `compatibility/regression_coverage_report.json`. Review found no status,
+  source inventory, fix-family, acceptance, or phase-exit semantic change;
+  `git diff --check` remains clean and the adjacent `dart_appkit` worktree is
+  clean.
+- The repeated exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate
+  passes every generated/reference/compatibility/application/terminfo/shell
+  check, formats all 276 Dart files with zero changes, reports no analyzer
+  issues, passes the Phase 9 security stress harness, and ends with
+  `dart_terminal tests passed`.
+- Final parent decision: all six completion conditions are satisfied by the
+  committed dependency/product work, both native shipped-runtime modes, closed
+  plist/build-manifest and exact-PTY evidence, the explicit manual checklist,
+  reconciled public documentation, and the final full gate. No product change,
+  hidden follow-up, checked manual observation, or later-roadmap implementation
+  is included in this closure. The top-level item, product-integration parent,
+  and documentation/evidence child can be marked complete together.

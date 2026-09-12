@@ -85,6 +85,20 @@ boundedなread-only text areaとしてVoiceOverにも公開します。
   cellへ配置し、全角文字の左右どちらからでも同じgraphemeを選択・コピーする
 - native Edit menuからのbounded plain-text Copy/Paste、wide CJKを含むexact Copy、
   bracketed paste、newline正規化、危険またはlarge pasteの再操作confirmation
+- terminal mouse reportingがgestureを所有していない時だけ表示するnative context menu。
+  Copy、Paste、Quick Look、Split Right/Downはmain menu・command paletteと同じactionと
+  availabilityを使い、右クリック／Control-clickをselection変更やPTY入力へ重複配送しない。
+  Force-clickまたはControl-Command-DのQuick Lookは、現在のviewport generationとfont/
+  baselineに対応するboundedなwordだけをmacOSのdefinition popoverへ渡し、空白、切り詰め、
+  staleなcellでは何も表示しない
+- 現在のbounded selectionだけをmacOS Servicesへ公開し、Serviceから戻るplain textと、
+  paneへdropしたplain text／local file URLをfocused targetの通常Paste policyへ配送する。
+  multiline/control textは既存の再操作confirmationを経由し、file pathは空白やquoteを含んでも
+  shell literalとして安全にquoteする。Finderの **New Dart Terminal Tab Here** と
+  **New Dart Terminal Window Here** は、選択fileの親directoryまたは選択directoryを
+  正規化・重複除去してfresh standard tab/windowのcwdにする。設定画面に専用toggleはなく、
+  手動のFinder／third-party Service／Force Touch確認手順は
+  [Native Content Manual Acceptance Checklist](docs/phase10/native-content-manual-checklist.md)を参照
 - terminal output由来のdesktop signalを、pane/session所有権とglobal policyの下で投影する。
   legacy OSC 9 notificationとConEmu OSC 9;4 progress、Kitty OSC 99のplain UTF-8
   title/body・bounded ID/chunk subset、OSC 133 A/B/C/D/I/L/N/Pのcontent-free semantic
