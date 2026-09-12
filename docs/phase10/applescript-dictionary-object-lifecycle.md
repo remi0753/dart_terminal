@@ -154,6 +154,23 @@ authoritative hierarchy, paste safety, or teardown rules.
      generic host builds, dependency full gate, consuming full gate, audits,
      documentation, ROADMAP progress, and standalone dependency/product commits
      pass.
+
+   This work is further ordered into three reviewable units because generic
+   bundle packaging, the terminal-specific native ABI, and the consuming
+   declaration have separate ownership and validation boundaries:
+
+   1. Extend only `dart_macos_runtime` with a closed optional
+      scripting-definition manifest object, bounded validated staging, exact
+      plist keys, and build-manifest evidence. Complete with runtime focused
+      tests and a standalone dependency commit.
+   2. Add `dart_terminal_applescript_macos` as an optional native capability
+      package. It owns the cached Cocoa wrappers, application category,
+      bounded command queue, suspend/resume lifecycle, C ABI, Dart facade,
+      headers, native/fake/lifecycle tests, and a standalone dependency commit.
+   3. Declare both the dictionary and capability in Dart Terminal, update
+      dependency locks/audits, prove both generic host builds plus dependency
+      and consuming full gates, then complete the second parent child in a
+      standalone consuming commit.
 3. **Product integration, both shipped runtimes, and manual checklist**
    - Connect snapshots and commands to live hierarchy, paste, focus, close, and
      configuration; add deterministic self-automation acceptance and manual TCC
@@ -285,3 +302,34 @@ authoritative hierarchy, paste safety, or teardown rules.
   tests, source audit, and exact full gate meet subtask 1's completion
   conditions. Native Cocoa scripting and bundle packaging remain exclusively in
   ordered subtask 2.
+- 2026-09-12: The required post-commit ROADMAP reread selected native
+  capability/runtime packaging next. It is split before implementation into
+  generic runtime packaging, the terminal-specific capability, and consumer
+  declaration/gates. The first unit changes `dart_macos_runtime` only; no
+  application hierarchy or later product integration is allowed yet.
+- The first generic-runtime format pass identified two Dart files needing
+  formatting but could not overwrite the adjacent dependency worktree under
+  the terminal repository's sandbox (`Operation not permitted`). No partial
+  rewrite occurred. The same formatter is rerun with explicit permission for
+  the already-scoped dependency files.
+- The generic runtime now accepts only an optional
+  `scriptingDefinition: {path}` object. Its normalized project-relative `.sdef`
+  path is capped at 1024 UTF-8 bytes; the source must exist, be non-empty, and
+  be at most 1 MiB. The builder runs system-DTD validation before copying the
+  basename to the Resources root, emits only `NSAppleScriptEnabled=true` and
+  `OSAScriptingDefinition=<basename>`, and records source, basename, and byte
+  count. Legacy manifests emit none of these fields. A direct resource name
+  collision is rejected during manifest parsing.
+- Runtime tests cover default/valid/unknown/malformed/absolute/remote/
+  traversing/oversized-path declarations, missing/oversized/DTD-invalid files,
+  collision rejection, exact JIT/AOT resource/plist/build-manifest output, and
+  legacy absence. The test dictionary passes the installed system DTD.
+- One follow-up formatter invocation used a repository-relative path while its
+  working directory was already the runtime package and therefore found no
+  file; it changed nothing. The corrected package-relative invocation formatted
+  the test file. `make runtime-dart-test` then resolves dependencies, analyzes
+  with no issues, and passes all ten runtime test groups.
+- Dependency commit `41d6a75` (`Package validated scripting definitions`)
+  records the generic runtime unit. Its required post-commit ROADMAP reread
+  confirms the terminal-specific cached hierarchy/suspended-command package is
+  now the first unfinished unit; product wiring remains later and untouched.
