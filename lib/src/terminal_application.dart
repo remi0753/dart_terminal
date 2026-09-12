@@ -147,6 +147,8 @@ final class TerminalOptions {
     this.runtimeSecureKeyboardEntryTest = false,
     this.runtimeAppleScriptTest = false,
     this.runtimeSystemAutomationTest = false,
+    this.runtimeDiagnosticsTest = false,
+    this.runtimeDiagnosticsDirectory,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
@@ -202,6 +204,7 @@ final class TerminalOptions {
     var runtimeSecureKeyboardEntryTest = false;
     var runtimeAppleScriptTest = false;
     var runtimeSystemAutomationTest = false;
+    var runtimeDiagnosticsTest = false;
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
@@ -360,6 +363,15 @@ final class TerminalOptions {
           );
         }
         runtimeSystemAutomationTest = true;
+        continue;
+      }
+      if (argument == '--runtime-diagnostics-test') {
+        if (runtimeDiagnosticsTest) {
+          throw const FormatException(
+            '--runtime-diagnostics-test may only be supplied once',
+          );
+        }
+        runtimeDiagnosticsTest = true;
         continue;
       }
       if (argument == '--runtime-restoration-test') {
@@ -637,6 +649,50 @@ final class TerminalOptions {
         'system automation test cannot be combined with another runtime test',
       );
     }
+    final String? runtimeDiagnosticsDirectory = runtimeDiagnosticsTest
+        ? selectedEnvironment['DT_RUNTIME_DIAGNOSTICS_DIRECTORY']
+        : null;
+    if (runtimeDiagnosticsTest &&
+        selectedEnvironment['DT_RUNTIME_DIAGNOSTICS_TEST'] != '1') {
+      throw const FormatException(
+        'diagnostics test requires the integration-test gate',
+      );
+    }
+    if (runtimeDiagnosticsTest &&
+        (runtimeDiagnosticsDirectory == null ||
+            runtimeDiagnosticsDirectory.isEmpty ||
+            utf8.encode(runtimeDiagnosticsDirectory).length > 4096 ||
+            !File(runtimeDiagnosticsDirectory).isAbsolute)) {
+      throw const FormatException(
+        'diagnostics test requires a bounded absolute export directory',
+      );
+    }
+    if (runtimeDiagnosticsTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeShellIntegrationTest ||
+            runtimeDesktopSignalsTest ||
+            runtimeOsc52Test ||
+            runtimeNativeContentTest ||
+            runtimeQuickTerminalTest ||
+            runtimeSecureKeyboardEntryTest ||
+            runtimeAppleScriptTest ||
+            runtimeSystemAutomationTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'diagnostics test cannot be combined with another runtime test',
+      );
+    }
     if (runtimeSecureKeyboardEntryTest &&
         (selectedScenario != RuntimeLifecycleScenario.normal ||
             autoCloseAfter != null ||
@@ -888,6 +944,8 @@ final class TerminalOptions {
       runtimeSecureKeyboardEntryTest: runtimeSecureKeyboardEntryTest,
       runtimeAppleScriptTest: runtimeAppleScriptTest,
       runtimeSystemAutomationTest: runtimeSystemAutomationTest,
+      runtimeDiagnosticsTest: runtimeDiagnosticsTest,
+      runtimeDiagnosticsDirectory: runtimeDiagnosticsDirectory,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
@@ -935,6 +993,8 @@ final class TerminalOptions {
   final bool runtimeSecureKeyboardEntryTest;
   final bool runtimeAppleScriptTest;
   final bool runtimeSystemAutomationTest;
+  final bool runtimeDiagnosticsTest;
+  final String? runtimeDiagnosticsDirectory;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
@@ -1029,6 +1089,7 @@ final class TerminalApplication {
         options.runtimeSecureKeyboardEntryTest ||
         options.runtimeAppleScriptTest ||
         options.runtimeSystemAutomationTest ||
+        options.runtimeDiagnosticsTest ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -1059,6 +1120,8 @@ final class TerminalApplication {
             options.runtimeSecureKeyboardEntryTest,
         runAppleScriptAcceptance: options.runtimeAppleScriptTest,
         runSystemAutomationAcceptance: options.runtimeSystemAutomationTest,
+        runDiagnosticsAcceptance: options.runtimeDiagnosticsTest,
+        diagnosticsExportDirectory: options.runtimeDiagnosticsDirectory,
         osc52Clipboard: options.runtimeOsc52Test
             ? _MemoryTerminalOsc52Clipboard()
             : null,
@@ -2553,6 +2616,7 @@ final class TerminalApplication {
       !options.runtimeSecureKeyboardEntryTest &&
       !options.runtimeAppleScriptTest &&
       !options.runtimeSystemAutomationTest &&
+      !options.runtimeDiagnosticsTest &&
       !options.runtimeRestorationTest &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
@@ -2578,6 +2642,8 @@ final class TerminalApplication {
     bool runSecureKeyboardEntryAcceptance = false,
     bool runAppleScriptAcceptance = false,
     bool runSystemAutomationAcceptance = false,
+    bool runDiagnosticsAcceptance = false,
+    String? diagnosticsExportDirectory,
     TerminalOsc52ClipboardPort? osc52Clipboard,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
@@ -2627,6 +2693,12 @@ final class TerminalApplication {
         TerminalPasteConfirmationGate();
     final Stopwatch pasteClock = Stopwatch()..start();
     final Completer<void> closed = Completer<void>();
+    var diagnosticsExportSelectionIndex = 0;
+    if (runDiagnosticsAcceptance && diagnosticsExportDirectory == null) {
+      throw StateError(
+        'diagnostics acceptance requires an isolated export directory',
+      );
+    }
     TerminalNativeHierarchyAdapter? hierarchy;
     TerminalNativeSplitDividerGestureController? dividerGestureController;
     TerminalQuickTerminalController? quickTerminalController;
@@ -2805,7 +2877,8 @@ final class TerminalApplication {
                   runQuickTerminalAcceptance ||
                   runSecureKeyboardEntryAcceptance ||
                   runAppleScriptAcceptance ||
-                  runSystemAutomationAcceptance;
+                  runSystemAutomationAcceptance ||
+                  runDiagnosticsAcceptance;
               final Map<String, String> shellEnvironment =
                   usesDeterministicShell
                   ? <String, String>{
@@ -3001,7 +3074,8 @@ final class TerminalApplication {
             onRawKeyDown: (TerminalKeyEvent event) {
               if (runUserActionAcceptance ||
                   runConfigurationAcceptance ||
-                  runOsc52Acceptance) {
+                  runOsc52Acceptance ||
+                  runDiagnosticsAcceptance) {
                 terminalInputDeliveryCount++;
               }
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
@@ -3036,7 +3110,8 @@ final class TerminalApplication {
             onCommit: (String text) {
               if (runUserActionAcceptance ||
                   runConfigurationAcceptance ||
-                  runOsc52Acceptance) {
+                  runOsc52Acceptance ||
+                  runDiagnosticsAcceptance) {
                 terminalInputDeliveryCount++;
               }
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
@@ -4693,6 +4768,12 @@ final class TerminalApplication {
         application: application,
         focusTarget: activeDiagnosticsTarget,
         localization: localization,
+        chooseSaveDestination: runDiagnosticsAcceptance
+            ? (SavePanelConfiguration _) => SavePanelResult.selected(
+                '$diagnosticsExportDirectory/export-'
+                '${diagnosticsExportSelectionIndex++}.json',
+              )
+            : null,
         onError: recordAsynchronousError,
       );
       dispatcher = TerminalActionDispatcher(
@@ -4878,7 +4959,8 @@ final class TerminalApplication {
               runConfigurationAcceptance ||
               runOsc52Acceptance ||
               runQuickTerminalAcceptance ||
-              runSecureKeyboardEntryAcceptance) {
+              runSecureKeyboardEntryAcceptance ||
+              runDiagnosticsAcceptance) {
             actionDispatches.add(result);
           }
           final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -4965,7 +5047,8 @@ final class TerminalApplication {
               runConfigurationAcceptance ||
               runOsc52Acceptance ||
               runQuickTerminalAcceptance ||
-              runSecureKeyboardEntryAcceptance) {
+              runSecureKeyboardEntryAcceptance ||
+              runDiagnosticsAcceptance) {
             actionDispatches.add(result);
           }
           final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -4991,7 +5074,8 @@ final class TerminalApplication {
               runConfigurationAcceptance ||
               runOsc52Acceptance ||
               runQuickTerminalAcceptance ||
-              runSecureKeyboardEntryAcceptance) {
+              runSecureKeyboardEntryAcceptance ||
+              runDiagnosticsAcceptance) {
             nativeActionInvocations.add(id);
           }
         },
@@ -5000,7 +5084,8 @@ final class TerminalApplication {
               runConfigurationAcceptance ||
               runOsc52Acceptance ||
               runQuickTerminalAcceptance ||
-              runSecureKeyboardEntryAcceptance) {
+              runSecureKeyboardEntryAcceptance ||
+              runDiagnosticsAcceptance) {
             actionDispatches.add(result);
           }
           installedPalette.refresh();
@@ -5139,7 +5224,27 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      if (runNativeContentAcceptance) {
+      if (runDiagnosticsAcceptance) {
+        await _exerciseDiagnosticsProduct(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          dispatcher: dispatcher,
+          menu: menuProjection,
+          palette: installedPalette,
+          presenter: diagnosticsPresenter!,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          nativeActionInvocations: nativeActionInvocations,
+          actionDispatches: actionDispatches,
+          terminalInputDeliveryCount: () => terminalInputDeliveryCount,
+          reconcile: reconcileInteractiveHierarchy,
+          exportDirectory: diagnosticsExportDirectory!,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
+      } else if (runNativeContentAcceptance) {
         await _exerciseNativeContentProduct(
           application: application,
           state: state,
@@ -5371,6 +5476,313 @@ final class TerminalApplication {
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
     }
     stdout.writeln('Dart Terminal shut down cleanly.');
+  }
+
+  static Future<void> _exerciseDiagnosticsProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalActionDispatcher dispatcher,
+    required TerminalAppKitMenuProjection menu,
+    required TerminalCommandPalettePresenter palette,
+    required TerminalDiagnosticsPresenter presenter,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required List<TerminalActionId> nativeActionInvocations,
+    required List<TerminalActionDispatchResult> actionDispatches,
+    required int Function() terminalInputDeliveryCount,
+    required void Function() reconcile,
+    required String exportDirectory,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    var eventTimestamp = 18000000;
+
+    Future<void> waitFor(
+      bool Function() predicate,
+      String message, {
+      Duration timeout = const Duration(seconds: 10),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (!predicate() && deadline.elapsed < timeout) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      _expectLifecycle(predicate(), message);
+    }
+
+    bool sameBytes(List<int> left, List<int> right) {
+      if (left.length != right.length) return false;
+      for (var index = 0; index < left.length; index++) {
+        if (left[index] != right[index]) return false;
+      }
+      return true;
+    }
+
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1 &&
+          sessions.length == 1 &&
+          owners.length == 1,
+      'diagnostics product did not start from a 1/1/1 hierarchy',
+    );
+    final PaneId initialPaneId = state.activeWindow!.selectedTab.focusedPaneId;
+    final TerminalSession initialSession = sessions[initialPaneId]!;
+    final _TerminalHierarchyProductPane initialOwner = owners[initialPaneId]!;
+    await _waitForAsciiMarker(initialSession, prompt);
+
+    final int handleBaseline = application.debugLiveObjectCount;
+    final int openInvocationBaseline = nativeActionInvocations.length;
+    final int openDispatchBaseline = actionDispatches.length;
+    final MenuItem openItem = menu.itemForAction(
+      TerminalActionId.openTerminalInspector,
+    );
+    _expectLifecycle(
+      openItem.isEnabled &&
+          openItem.keyEquivalent == 'i' &&
+          openItem.modifiers.bits ==
+              ModifierKeys.optionBit | ModifierKeys.commandBit,
+      'diagnostics inspector menu action has wrong availability or shortcut',
+    );
+    openItem.performAction();
+    await waitFor(
+      () =>
+          presenter.isOpen &&
+          initialSession.diagnosticsCaptureEnabled &&
+          nativeActionInvocations.length == openInvocationBaseline + 1 &&
+          actionDispatches.length == openDispatchBaseline + 1,
+      'diagnostics inspector did not open and capture exactly once',
+    );
+    final Window inspectorWindow = presenter.activeWindow!;
+    final int inspectorHandleCount = application.debugLiveObjectCount;
+    final TerminalActionDispatchResult reopened = await dispatcher.dispatch(
+      TerminalActionId.openTerminalInspector,
+    );
+    _expectLifecycle(
+      reopened.disposition == TerminalActionDispatchDisposition.executed &&
+          identical(presenter.activeWindow, inspectorWindow) &&
+          inspectorHandleCount == handleBaseline + 2 &&
+          application.debugLiveObjectCount == inspectorHandleCount,
+      'diagnostics inspector did not preserve its single native owner pair',
+    );
+
+    const String firstPrivateMarker = '__DT_DIAGNOSTICS_PRIVATE_ALPHA__';
+    initialOwner.pane.insertText(
+      "printf '\\033[31m$firstPrivateMarker\\033[0m\\n'",
+    );
+    await initialOwner.pane.submit();
+    await _waitForAsciiMarker(initialSession, firstPrivateMarker);
+    await waitFor(
+      () =>
+          initialSession.captureParserDiagnostics().inspection.totalEventCount >
+              0 &&
+          (presenter.renderedText ?? '').contains('events_total'),
+      'diagnostics inspector did not refresh from live parser events',
+    );
+    _expectLifecycle(
+      !(presenter.renderedText ?? '').contains(firstPrivateMarker),
+      'diagnostics inspector retained printable terminal content',
+    );
+
+    final TerminalActionDispatchResult split = await dispatcher.dispatch(
+      TerminalActionId.splitPaneRight,
+    );
+    await waitFor(
+      () =>
+          split.disposition == TerminalActionDispatchDisposition.executed &&
+          state.paneCount == 2 &&
+          sessions.length == 2 &&
+          owners.length == 2,
+      'diagnostics acceptance could not create a second focused pane',
+    );
+    reconcile();
+    final PaneId focusedPaneId = state.activeWindow!.selectedTab.focusedPaneId;
+    _expectLifecycle(
+      focusedPaneId != initialPaneId,
+      'diagnostics split did not focus the new pane',
+    );
+    final TerminalSession focusedSession = sessions[focusedPaneId]!;
+    final _TerminalHierarchyProductPane focusedOwner = owners[focusedPaneId]!;
+    await _waitForAsciiMarker(focusedSession, prompt);
+    await waitFor(
+      () =>
+          !initialSession.diagnosticsCaptureEnabled &&
+          initialSession.captureParserDiagnostics().inspection.events.isEmpty &&
+          focusedSession.diagnosticsCaptureEnabled &&
+          presenter.capturedTargetIdentity == focusedSession.id &&
+          presenter.captureHandoffCount >= 2,
+      'diagnostics focus handoff did not clear old capture before new capture',
+    );
+
+    const String secondPrivateMarker = '__DT_DIAGNOSTICS_PRIVATE_BETA__';
+    focusedOwner.pane.insertText(
+      "printf '\\033[32m$secondPrivateMarker\\033[0m\\n'",
+    );
+    await focusedOwner.pane.submit();
+    await _waitForAsciiMarker(focusedSession, secondPrivateMarker);
+    await waitFor(
+      () =>
+          focusedSession.captureParserDiagnostics().inspection.totalEventCount >
+              0 &&
+          !(presenter.renderedText ?? '').contains(secondPrivateMarker),
+      'diagnostics new-pane capture did not stay live and redacted',
+    );
+
+    final int terminalInputBaseline = terminalInputDeliveryCount();
+    final MenuItem exportItem = menu.itemForAction(
+      TerminalActionId.exportDiagnostics,
+    );
+    _expectLifecycle(
+      exportItem.isEnabled &&
+          exportItem.keyEquivalent == 'e' &&
+          exportItem.modifiers.bits ==
+              ModifierKeys.optionBit | ModifierKeys.commandBit,
+      'diagnostics export menu action has wrong availability or shortcut',
+    );
+    final int exportInvocationBaseline = nativeActionInvocations.length;
+    final int exportDispatchBaseline = actionDispatches.length;
+    exportItem.performAction();
+    final File menuExport = File('$exportDirectory/export-0.json');
+    await waitFor(
+      () =>
+          menuExport.existsSync() &&
+          presenter.lastExportResult?.disposition ==
+              TerminalDiagnosticsPresentationExportDisposition.written &&
+          nativeActionInvocations.length == exportInvocationBaseline + 1 &&
+          actionDispatches.length == exportDispatchBaseline + 1,
+      'diagnostics menu export did not atomically complete exactly once',
+    );
+
+    final MenuItem paletteItem = menu.itemForAction(
+      TerminalActionId.openCommandPalette,
+    );
+    paletteItem.performAction();
+    await waitFor(
+      () => palette.isOpen,
+      'diagnostics acceptance could not open the command palette',
+    );
+    final Window paletteWindow = palette.activeWindow!;
+    _injectKeyEventForTesting(
+      application,
+      paletteWindow,
+      keyCode: 14,
+      modifiers: 0,
+      characters: 'export diagnostics',
+      charactersIgnoringModifiers: 'export diagnostics',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          palette.state.query == 'export diagnostics' &&
+          palette.state.selectedAction?.definition.id ==
+              TerminalActionId.exportDiagnostics &&
+          palette.state.selectedAction!.isEnabled,
+      'command palette did not discover the diagnostics export action',
+    );
+    _injectKeyEventForTesting(
+      application,
+      paletteWindow,
+      keyCode: 36,
+      modifiers: 0,
+      characters: '\r',
+      charactersIgnoringModifiers: '\r',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    final File paletteExport = File('$exportDirectory/export-1.json');
+    await waitFor(
+      () => !palette.isOpen && paletteExport.existsSync(),
+      'command-palette diagnostics export did not complete',
+    );
+    _expectLifecycle(
+      palette.lastDispatchResult?.id == TerminalActionId.exportDiagnostics &&
+          palette.lastDispatchResult?.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          terminalInputDeliveryCount() == terminalInputBaseline,
+      'diagnostics UI actions leaked input or bypassed the shared dispatcher',
+    );
+
+    for (final File export in <File>[menuExport, paletteExport]) {
+      final List<int> bytes = export.readAsBytesSync();
+      final Object? decoded = jsonDecode(utf8.decode(bytes));
+      _expectLifecycle(
+        decoded is Map<String, Object?> &&
+            decoded['format'] == TerminalDiagnosticsFormatter.formatName &&
+            decoded['version'] == TerminalDiagnosticsFormatter.formatVersion &&
+            decoded['privacy'] is Map<String, Object?> &&
+            (decoded['privacy']! as Map<String, Object?>)['paths'] ==
+                'omitted' &&
+            bytes.length <=
+                TerminalDiagnosticsFormatter.maximumOutputUtf8Bytes &&
+            bytes.isNotEmpty &&
+            bytes.last == 0x0a &&
+            !utf8.decode(bytes).contains(firstPrivateMarker) &&
+            !utf8.decode(bytes).contains(secondPrivateMarker) &&
+            utf8
+                    .encode(
+                      '${const JsonEncoder.withIndent('  ').convert(decoded)}\n',
+                    )
+                    .length ==
+                bytes.length &&
+            sameBytes(
+              bytes,
+              utf8.encode(
+                '${const JsonEncoder.withIndent('  ').convert(decoded)}\n',
+              ),
+            ),
+        'diagnostics export was noncanonical, oversized, or content-bearing',
+      );
+    }
+
+    final int handlesBeforeDismiss = application.debugLiveObjectCount;
+    _injectKeyEventForTesting(
+      application,
+      inspectorWindow,
+      keyCode: 53,
+      modifiers: 0,
+      characters: '\u001b',
+      charactersIgnoringModifiers: '\u001b',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          !presenter.isOpen &&
+          !focusedSession.diagnosticsCaptureEnabled &&
+          focusedSession.captureParserDiagnostics().inspection.events.isEmpty &&
+          application.debugLiveObjectCount == handlesBeforeDismiss - 2 &&
+          presenter.terminalResponderRestoreCount >= 1,
+      'diagnostics close did not clear capture and restore native ownership',
+    );
+
+    await dispatcher.dispatch(TerminalActionId.quitApplication);
+    if (!closed.isCompleted) {
+      await dispatcher.dispatch(TerminalActionId.quitApplication);
+    }
+    await closed.future.timeout(const Duration(seconds: 15));
+    await Future<void>.delayed(Duration.zero);
+    _expectLifecycle(
+      state.isDisposed &&
+          hierarchy.isDisposed &&
+          presenter.isDisposed &&
+          allSessions.length == 2 &&
+          allSessions.every(
+            (TerminalSession session) =>
+                session.shutdownResult?.isClean == true &&
+                !session.diagnosticsCaptureEnabled &&
+                session.captureParserDiagnostics().inspection.events.isEmpty,
+          ) &&
+          debugLiveTerminalTextInputClientCount() == 0 &&
+          application.debugLiveObjectCount == 0,
+      'diagnostics product did not release all parser, PTY, or native owners',
+    );
+    stdout.writeln(
+      'TERMINAL_DIAGNOSTICS_TEST inspector=true singleton=true '
+      'capture=true focus_handoff=true parser_events=true redacted=true '
+      'menu=true palette=true canonical=true atomic=true exports=2 '
+      'terminal_write_delta=0 sessions_clean=2 text_clients=0 '
+      'native_handles=0',
+    );
   }
 
   static Future<void> _exerciseSystemAutomationProduct({

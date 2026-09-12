@@ -1286,7 +1286,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] Settings／application UI、RTL composition、resource宣言を移行する
     - [x] static UI leak auditとcatalog completeness検証で子項目を完了する
   - [x] 両runtime受け入れ、文書／matrix更新、Phase 10完了判定
-- [ ] terminal inspector と diagnostics bundle
+- [x] terminal inspector と diagnostics bundle
   （分割、privacy境界、完了条件は
   [`docs/phase10/terminal-inspector-diagnostics-bundle.md`](docs/phase10/terminal-inspector-diagnostics-bundle.md)
   を参照して順に実施する）
@@ -1294,7 +1294,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] `dart_appkit`の汎用save-destination panel substrate
   - [x] bounded live parser inspector／diagnostics export model
   - [x] localized product window、shared actions、atomic export integration
-  - [ ] static privacy audit、両runtime受け入れ、文書／matrix更新、Phase 10完了判定
+  - [x] static privacy audit、両runtime受け入れ、文書／matrix更新、Phase 10完了判定
 
 終了条件:
 

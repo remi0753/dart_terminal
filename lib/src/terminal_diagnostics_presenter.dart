@@ -74,6 +74,9 @@ typedef TerminalDiagnosticsPresentationErrorObserver = void Function(
   Object error,
   StackTrace stackTrace,
 );
+typedef TerminalDiagnosticsSaveDestinationChooser = SavePanelResult Function(
+  SavePanelConfiguration configuration,
+);
 
 /// Owns the single read-only inspector window and explicit local export flow.
 final class TerminalDiagnosticsPresenter {
@@ -84,18 +87,22 @@ final class TerminalDiagnosticsPresenter {
     TerminalDiagnosticsFormatter formatter =
         const TerminalDiagnosticsFormatter(),
     TerminalDiagnosticsAtomicWriter? writer,
+    TerminalDiagnosticsSaveDestinationChooser? chooseSaveDestination,
     this.onExported,
     this.onError,
   }) : _focusTarget = focusTarget,
        _localization = localization ?? TerminalLocalization.english,
        _formatter = formatter,
-       _writer = writer ?? TerminalDiagnosticsAtomicWriter();
+       _writer = writer ?? TerminalDiagnosticsAtomicWriter(),
+       _chooseSaveDestination =
+           chooseSaveDestination ?? application.chooseSaveDestination;
 
   final AppKitApplication application;
   final TerminalDiagnosticsFocusTargetProvider _focusTarget;
   final TerminalLocalization _localization;
   final TerminalDiagnosticsFormatter _formatter;
   final TerminalDiagnosticsAtomicWriter _writer;
+  final TerminalDiagnosticsSaveDestinationChooser _chooseSaveDestination;
   final TerminalDiagnosticsPresentationExportObserver? onExported;
   final TerminalDiagnosticsPresentationErrorObserver? onError;
 
@@ -233,7 +240,7 @@ final class TerminalDiagnosticsPresenter {
 
     SavePanelResult selection;
     try {
-      selection = application.chooseSaveDestination(
+      selection = _chooseSaveDestination(
         SavePanelConfiguration(
           title: _localization.diagnosticsSavePanelTitle,
           message: _localization.diagnosticsSavePanelMessage,

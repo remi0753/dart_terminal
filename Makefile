@@ -105,18 +105,18 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	terminal-parser-trace terminal-parser-trace-check \
 	configuration-reference configuration-reference-check \
 	keybind-action-reference keybind-action-reference-check \
-	terminal-localization-check \
+	terminal-localization-check terminal-diagnostics-privacy-check \
 	phase7-appkit-acceptance phase7-appkit-acceptance-check \
 	terminal-compatibility-regressions-check terminal-compatibility-regression-coverage terminal-compatibility-regression-coverage-check \
 	product-damage-benchmark-build product-damage-benchmark \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
-	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-actions developer-jit-applescript developer-jit-system-automation developer-jit-native-content developer-jit-quick-terminal developer-jit-secure-keyboard-entry developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
+	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-actions developer-jit-applescript developer-jit-system-automation developer-jit-native-content developer-jit-quick-terminal developer-jit-secure-keyboard-entry developer-jit-diagnostics developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
 	developer-jit-resource developer-jit-shutdown-fault \
 	release-aot-build release-aot-run release-aot-audit \
-	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
+	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
 	release-aot-resource release-aot-shutdown-fault runtime-bundle-audit \
-	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-user-actions-integration runtime-applescript-integration runtime-system-automation-integration runtime-native-content-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-clipboard-integration runtime-lifecycle-integration \
+	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-user-actions-integration runtime-applescript-integration runtime-system-automation-integration runtime-native-content-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-diagnostics-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-clipboard-integration runtime-lifecycle-integration \
 	runtime-traffic-integration runtime-resource-integration \
 	runtime-shutdown-fault-integration runtime-verify clean
 
@@ -162,6 +162,7 @@ help:
 	@echo "  make keybind-action-reference     Regenerate keybinding/action documentation"
 	@echo "  make keybind-action-reference-check  Reject stale keybinding/action documentation"
 	@echo "  make terminal-localization-check    Reject static UI leaks and incomplete resources"
+	@echo "  make terminal-diagnostics-privacy-check  Reject diagnostics schema/source privacy expansion"
 	@echo "  make phase7-appkit-acceptance    Regenerate the Phase 7 AppKit test inventory"
 	@echo "  make phase7-appkit-acceptance-check  Reject stale Phase 7 AppKit test evidence"
 	@echo "  make terminal-compatibility-regressions-check  Replay byte-level compatibility fixes"
@@ -177,6 +178,7 @@ help:
 	@echo "  make runtime-native-content-integration  Verify Quick Look, Services, drops, and context actions in both modes"
 	@echo "  make runtime-quick-terminal-integration  Verify Quick Terminal in both modes"
 	@echo "  make runtime-secure-keyboard-entry-integration  Verify Secure Keyboard Entry in both modes"
+	@echo "  make runtime-diagnostics-integration  Verify inspector and diagnostics export in both modes"
 	@echo "  make runtime-configuration-integration  Verify configured product projection in both modes"
 	@echo "  make runtime-theme-integration  Verify theme and system appearance in both modes"
 	@echo "  make runtime-shell-integration  Verify bundled zsh integration and disablement in both modes"
@@ -515,7 +517,10 @@ terminal-shell-integration-check: dependencies
 terminal-localization-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_localization_audit.dart
 
-test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
+terminal-diagnostics-privacy-check: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_diagnostics_privacy_audit.dart
+
+test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart
@@ -598,6 +603,10 @@ developer-jit-quick-terminal: developer-jit-build
 developer-jit-secure-keyboard-entry: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
 		--suite=secure-keyboard-entry $(DEVELOPER_JIT_BUNDLE)
+
+developer-jit-diagnostics: developer-jit-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
+		--suite=diagnostics $(DEVELOPER_JIT_BUNDLE)
 
 developer-jit-configuration: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
@@ -691,6 +700,10 @@ release-aot-secure-keyboard-entry: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=secure-keyboard-entry $(RELEASE_AOT_BUNDLE)
 
+release-aot-diagnostics: release-aot-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
+		--suite=diagnostics $(RELEASE_AOT_BUNDLE)
+
 release-aot-configuration: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=configuration $(RELEASE_AOT_BUNDLE)
@@ -763,6 +776,9 @@ runtime-quick-terminal-integration: \
 runtime-secure-keyboard-entry-integration: \
 	developer-jit-secure-keyboard-entry release-aot-secure-keyboard-entry
 
+runtime-diagnostics-integration: \
+	developer-jit-diagnostics release-aot-diagnostics
+
 runtime-configuration-integration: \
 	developer-jit-configuration release-aot-configuration
 
@@ -800,6 +816,7 @@ runtime-verify: test runtime-source-check runtime-bundle-audit \
 	runtime-native-content-integration \
 	runtime-quick-terminal-integration \
 	runtime-secure-keyboard-entry-integration \
+	runtime-diagnostics-integration \
 	runtime-configuration-integration \
 	runtime-theme-integration \
 	runtime-shell-integration \

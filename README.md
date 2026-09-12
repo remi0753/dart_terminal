@@ -43,7 +43,7 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 28個のstable application actionを共有するbounded searchable registry、動的な
+- 30個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
@@ -55,6 +55,15 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   有効になる。実製品gateではmenuとpaletteから2 window/3 tab/5 paneを生成し、Retina
   scale継承、divider command後の固定font metricsとgrid resize、terminal write 0、
   各paneの入力分離を両runtimeで検証する
+- focused live paneだけを追跡するsingle-windowのread-only Terminal Inspector。
+  printable textはcountのみ、string payloadはlengthのみを保持し、focus移譲時とclose時に
+  旧captureをclearする。View > Open Terminal Inspector（Option-Command-I）と
+  File > Export Diagnostics…（Option-Command-E）はmenu、Command Palette、任意keybindで
+  shared actionを使う。明示保存するversion 1 JSONは1 MiB以内の固定allowlistで、terminal
+  text、command、cwd/path、argv/environment、clipboard/notification、hyperlink/image、
+  timestamp/stable ID/raw errorを含めず、sibling temporary fileからatomic replaceする。
+  privacy境界、失敗分類、検証方法は
+  [Terminal inspector and diagnostics reference](docs/reference/terminal-diagnostics.md)を参照
 - `application.toggle-quick-terminal`をmenu、command palette、任意のlocal keybind、
   opt-inのsystem-wide shortcutで共有するsingleton Quick Terminal。選択画面の現在の
   visible frameへclampし、最初のframe前にRetina scaleを投影する。表示・非表示のframe寸法を
@@ -551,6 +560,10 @@ make RUNTIME_ARCH=arm64 developer-jit-shutdown-fault
 ```
 
 ## Runtime diagnostics
+
+利用者が明示的に保存するTerminal Inspectorのcontent-freeな診断JSONは、以下の起動ごとの
+local metadataとは別物です。Inspector/exportの操作、固定schema、除外対象、atomic保存は
+[Terminal inspector and diagnostics reference](docs/reference/terminal-diagnostics.md)を参照してください。
 
 Developer JIT と Release AOT は、起動直後から終了までの固定イベントを macOS Unified
 Logging の subsystem `dev.dart-terminal`、category `runtime` / `crash` に記録します。

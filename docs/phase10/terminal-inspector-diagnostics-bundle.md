@@ -245,6 +245,57 @@ bounded to 256 KiB and shows a stable truncation/eviction summary when needed.
 
 ## Progress and findings
 
+- 2026-09-13: completed the final privacy/runtime/documentation child. A
+  dedicated source/schema audit freezes 168 diagnostic field keys, all 11
+  ordered top-level bundle keys, six snapshot/export owner boundaries, and the
+  fixed privacy declaration; mutation tests prove that adding `cwd` or removing
+  `raw_errors` is rejected. The only runtime acceptance seam is an injected
+  save-destination chooser in the product presenter. Normal use still invokes
+  the generic native panel, while acceptance selects bounded temporary paths;
+  neither path nor an error string is exposed in JSON, status, or machine
+  evidence.
+- 2026-09-13: the ordinary-product diagnostics scenario passed through native
+  menu and Command Palette dispatch in both packaged runtimes. It opened the
+  single inspector, captured a subsequent redacted parser event, handed capture
+  from the old pane to a newly split focused pane, produced two atomic canonical
+  exports, kept application keystrokes out of terminal input, closed with
+  responder restoration, and terminated two sessions with zero retained parser
+  events, text clients, worker owners, or native handles. Focused Developer JIT
+  and Release AOT runs passed (`elapsed_ms=1673` and `974` respectively), and
+  the final public `runtime-diagnostics-integration` target passed both modes;
+  its final Release AOT run reported `elapsed_ms=870`.
+- 2026-09-13: the first Developer JIT attempt exposed that the new acceptance
+  mode had not been included in the deterministic shell fixture; the second
+  exposed that menu-dispatch observation did not include the new mode. Adding
+  the mode to those existing acceptance-only branches fixed both omissions
+  without weakening product assertions. The first complete repository gate
+  then correctly rejected a stale compatibility coverage ledger; regenerating
+  that dedicated artifact fixed the evidence mismatch. The unchanged final
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed static privacy audit,
+  generated-evidence freshness, formatting of 294 files, analysis, all unit,
+  native, corpus, compatibility, product, real-PTY, and security-stress gates.
+- 2026-09-13: README, FEATURE_MATRIX, the diagnostics reference, and the manual
+  checklist now describe the two product actions, dynamic focused-pane capture,
+  deterministic local-only export, explicit exclusions, atomic failure policy,
+  and the boundary with Phase 11 crash/hang material. Optional manual and
+  long-duration checks are recorded as skipped under the user's priority
+  instruction and are not blockers. The adjacent generic `dart_appkit`
+  worktree remains clean and contains no product-specific addition from this
+  child.
+- 2026-09-13: all five ordered children and the parent completion conditions
+  are satisfied. Together with the earlier native-feature failure paths,
+  Secure Input abnormal cleanup, AppleScript hierarchy acceptance, and
+  VoiceOver/Full Keyboard Access release checklist, the Phase 10 exit
+  conditions are met. Crash reports, hang samples, distribution signing,
+  updates, and broader release diagnostics remain correctly owned by Phase 11.
+- 2026-09-13: after commit `f52aae9` (`Integrate terminal inspector and
+  diagnostics export`), reread ROADMAP from a clean worktree and began only the
+  final static-audit/runtime-acceptance/documentation child. Its goal is to
+  prove the frozen privacy allowlist at source/schema boundaries, exercise the
+  live product presenter and export through the ordinary Developer JIT and
+  Release AOT application paths, reconcile public/manual/generated evidence,
+  and decide the parent and Phase 10 state. It will not expand the schema,
+  collect crash/hang material, or begin any Phase 11 implementation.
 - 2026-09-13: after commit `0b2f496` (`Add bounded privacy-safe
   diagnostics model`), reread ROADMAP from a clean worktree and began only the
   localized product window/action/export child. The existing Settings and

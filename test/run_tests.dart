@@ -54,6 +54,7 @@ import 'terminal_damage_test.dart';
 import 'terminal_damage_transfer_test.dart';
 import 'terminal_desktop_signal_projection_test.dart';
 import 'terminal_desktop_signals_test.dart';
+import 'terminal_diagnostics_privacy_audit_test.dart';
 import 'terminal_diagnostics_test.dart';
 import 'terminal_differential_acceptance_test.dart';
 import 'terminal_differential_adapters_test.dart';
@@ -225,6 +226,7 @@ Future<void> main() async {
   await runTerminalDesktopSignalProjectionTests();
   runTerminalDesktopSignalsTests();
   await runTerminalDiagnosticsTests();
+  await runTerminalDiagnosticsPrivacyAuditTests();
   await runTerminalSettingsInspectorTests();
   runTerminalSettingsDocumentTests();
   runTerminalSettingsEditorTests();
@@ -1031,6 +1033,11 @@ void _testOptions() {
     'desktop signals test defaults off',
   );
   _expect(!options.runtimeOsc52Test, 'OSC 52 test defaults off');
+  _expect(!options.runtimeDiagnosticsTest, 'diagnostics test defaults off');
+  _expect(
+    options.runtimeDiagnosticsDirectory == null,
+    'diagnostics export directory defaults off',
+  );
   _expect(!options.runtimeRestorationTest, 'restoration test defaults off');
   _expect(
     options.runtimeRestorationPath == null,
@@ -1559,6 +1566,60 @@ void _testOptions() {
       },
     ),
     'system automation and AppleScript tests are mutually exclusive',
+  );
+  final TerminalOptions diagnosticsTestOptions = _parseOptions(
+    const <String>['--runtime-diagnostics-test'],
+    environment: const <String, String>{
+      'DT_RUNTIME_DIAGNOSTICS_TEST': '1',
+      'DT_RUNTIME_DIAGNOSTICS_DIRECTORY': '/private/tmp/diagnostics',
+    },
+  );
+  _expect(
+    diagnosticsTestOptions.runtimeDiagnosticsTest &&
+        diagnosticsTestOptions.runtimeDiagnosticsDirectory ==
+            '/private/tmp/diagnostics',
+    'gated diagnostics product test and isolated export directory',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-diagnostics-test']),
+    'diagnostics product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-diagnostics-test'],
+      environment: const <String, String>{
+        'DT_RUNTIME_DIAGNOSTICS_TEST': '1',
+        'DT_RUNTIME_DIAGNOSTICS_DIRECTORY': 'relative/diagnostics',
+      },
+    ),
+    'diagnostics product test absolute export directory',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-diagnostics-test',
+        '--runtime-diagnostics-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_DIAGNOSTICS_TEST': '1',
+        'DT_RUNTIME_DIAGNOSTICS_DIRECTORY': '/private/tmp/diagnostics',
+      },
+    ),
+    'duplicate diagnostics product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-diagnostics-test',
+        '--runtime-user-actions-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_DIAGNOSTICS_TEST': '1',
+        'DT_RUNTIME_DIAGNOSTICS_DIRECTORY': '/private/tmp/diagnostics',
+        'DT_RUNTIME_USER_ACTIONS_TEST': '1',
+      },
+    ),
+    'diagnostics and user-action tests are mutually exclusive',
   );
   final TerminalOptions quickTerminalTestOptions = _parseOptions(
     const <String>['--runtime-quick-terminal-test'],

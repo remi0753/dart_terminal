@@ -39,6 +39,7 @@ enum _Suite {
   nativeContent,
   quickTerminal,
   secureKeyboardEntry,
+  diagnostics,
   restoration,
   clipboard,
   lifecycle,
@@ -176,7 +177,7 @@ _Options _parseOptions(List<String> arguments) {
           '--suite must be smoke, display, hierarchy, actions, restoration, '
           'configuration, theme, shell-integration, desktop-signals, '
           'osc52, native-content, applescript, system-automation, quick-terminal, '
-          'secure-keyboard-entry, clipboard, lifecycle, traffic, resource, '
+          'secure-keyboard-entry, diagnostics, clipboard, lifecycle, traffic, resource, '
           'fault, or all',
         );
       }
@@ -1666,6 +1667,138 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
     'windows=2 tabs=3 panes=4 elapsed_ms='
     '${observation.elapsed.inMilliseconds}',
   );
+}
+
+Future<void> _runDiagnostics(_Options options, _Invocation invocation) async {
+  final Directory exportDirectory = await Directory.systemTemp.createTemp(
+    'dart-terminal-product-diagnostics-',
+  );
+  try {
+    final _ProcessObservation observation = await _launch(
+      options,
+      invocation,
+      const <String>['--runtime-diagnostics-test'],
+      environment: <String, String>{
+        'DT_RUNTIME_DIAGNOSTICS_TEST': '1',
+        'DT_RUNTIME_DIAGNOSTICS_DIRECTORY': exportDirectory.path,
+        'LC_ALL': 'en_US.UTF-8',
+      },
+      timeout: const Duration(seconds: 45),
+    );
+    _expect(
+      observation.status == 0,
+      'diagnostics application exited with status ${observation.status}; '
+      'stdout=${observation.stdoutText.trim()} '
+      'stderr=${observation.stderrText.trim()}',
+    );
+    _expect(
+      observation.stderrText.trim().isEmpty,
+      'diagnostics application wrote unexpected stderr: '
+      '${observation.stderrText.trim()}',
+    );
+    _expect(
+      RegExp(
+            r'^TERMINAL_DIAGNOSTICS_TEST inspector=true singleton=true '
+            r'capture=true focus_handoff=true parser_events=true redacted=true '
+            r'menu=true palette=true canonical=true atomic=true exports=2 '
+            r'terminal_write_delta=0 sessions_clean=2 text_clients=0 '
+            r'native_handles=0$',
+            multiLine: true,
+          ).allMatches(observation.stdoutText).length ==
+          1,
+      'ordinary product omitted exact diagnostics acceptance',
+    );
+    final List<FileSystemEntity> entries = exportDirectory.listSync();
+    final List<File> files = entries.whereType<File>().toList()
+      ..sort((File left, File right) => left.path.compareTo(right.path));
+    _expect(
+      files.length == 2 &&
+          files[0].path.endsWith('/export-0.json') &&
+          files[1].path.endsWith('/export-1.json') &&
+          entries.every(
+            (FileSystemEntity entity) => !entity.path.endsWith('.tmp'),
+          ),
+      'diagnostics export did not leave exactly two final atomic files',
+    );
+    const List<String> expectedTopLevelKeys = <String>[
+      'format',
+      'version',
+      'privacy',
+      'limits',
+      'application',
+      'hierarchy',
+      'focused_pane',
+      'parser',
+      'renderer',
+      'configuration',
+      'features',
+    ];
+    final String expectedRuntime = options.mode == _RuntimeMode.releaseAot
+        ? 'releaseAot'
+        : 'developerJit';
+    for (final File file in files) {
+      final String text = file.readAsStringSync();
+      final Object? decoded = jsonDecode(text);
+      _expect(decoded is Map<String, Object?>, 'diagnostics root is not a map');
+      final Map<String, Object?> report = decoded! as Map<String, Object?>;
+      final Map<String, Object?> privacy =
+          report['privacy']! as Map<String, Object?>;
+      final Map<String, Object?> application =
+          report['application']! as Map<String, Object?>;
+      final Map<String, Object?> hierarchy =
+          report['hierarchy']! as Map<String, Object?>;
+      final Map<String, Object?> parser =
+          report['parser']! as Map<String, Object?>;
+      final Map<String, Object?> inspection =
+          parser['inspection']! as Map<String, Object?>;
+      _expect(
+        _sameStrings(report.keys.toList(), expectedTopLevelKeys) &&
+            report['format'] == 'dart-terminal-diagnostics' &&
+            report['version'] == 1 &&
+            privacy.length == 9 &&
+            privacy['printable_text'] == 'count_only' &&
+            privacy['string_payloads'] == 'length_only' &&
+            privacy['paths'] == 'omitted' &&
+            privacy['arguments'] == 'omitted' &&
+            privacy['environment'] == 'omitted' &&
+            privacy['clipboard'] == 'omitted' &&
+            privacy['timestamps'] == 'omitted' &&
+            privacy['stable_identifiers'] == 'omitted' &&
+            privacy['raw_errors'] == 'omitted' &&
+            application['runtime'] == expectedRuntime &&
+            hierarchy['panes'] == 2 &&
+            hierarchy['live_panes'] == 2 &&
+            (inspection['events_total']! as int) > 0 &&
+            (inspection['events']! as List<Object?>).isNotEmpty &&
+            text.endsWith('\n') &&
+            text == '${const JsonEncoder.withIndent('  ').convert(report)}\n' &&
+            utf8.encode(text).length <= 1024 * 1024 &&
+            !text.contains('__DT_DIAGNOSTICS_PRIVATE_ALPHA__') &&
+            !text.contains('__DT_DIAGNOSTICS_PRIVATE_BETA__') &&
+            !text.contains(exportDirectory.path),
+        'diagnostics export violated schema, privacy, or canonical encoding',
+      );
+    }
+    _expect(
+      observation.stdoutText.contains('Dart Terminal shut down cleanly.') &&
+          !observation.stdoutText.contains(exportDirectory.path),
+      'diagnostics runtime evidence leaked its path or omitted clean teardown',
+    );
+    _expectWorkerProcessContract(
+      observation,
+      scenario: 'normal',
+      expectedCount: 1,
+    );
+    stdout.writeln(
+      'RUNTIME_DIAGNOSTICS_INTEGRATION_PASS mode=${options.mode.name} '
+      'launch_architecture=${options.launchArchitecture ?? 'native'} '
+      'exports=2 elapsed_ms=${observation.elapsed.inMilliseconds}',
+    );
+  } finally {
+    if (exportDirectory.existsSync()) {
+      exportDirectory.deleteSync(recursive: true);
+    }
+  }
 }
 
 Future<void> _runAppleScript(_Options options, _Invocation invocation) async {
@@ -3814,6 +3947,9 @@ Future<void> main(List<String> arguments) async {
     if (options.suite == _Suite.secureKeyboardEntry ||
         options.suite == _Suite.all) {
       await _runSecureKeyboardEntry(options, invocation);
+    }
+    if (options.suite == _Suite.diagnostics || options.suite == _Suite.all) {
+      await _runDiagnostics(options, invocation);
     }
     if (options.suite == _Suite.configuration || options.suite == _Suite.all) {
       await _runConfiguration(options, invocation);
