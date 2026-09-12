@@ -364,3 +364,10 @@ passes with no residual untracked output or serious blocker.
   temporary C source under `lib/` was rejected and removed. The clean rerun
   passed with 601 paths, zero application native sources, 25 package native
   sources, one reviewed test source, and one reviewed tool source.
+- After committing that correction and rereading the ROADMAP, the next complete
+  `runtime-verify` advanced past the source audit and stopped because the
+  compatibility coverage report hashes `README.md`; the ownership-boundary
+  wording update had intentionally changed that source. Regenerating with
+  `make terminal-compatibility-regression-coverage` passed its nine-case/417-
+  split prerequisite and updated only the generated report. This is expected
+  evidence synchronization rather than a compatibility failure.
