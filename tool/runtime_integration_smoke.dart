@@ -273,8 +273,16 @@ Future<_Invocation> _loadInvocation(_Options options) async {
   );
   const List<(String, String, String)> expectedServices =
       <(String, String, String)>[
-        ('newTabAtFolder', 'New Dart Terminal Tab Here', 'openTab'),
-        ('newWindowAtFolder', 'New Dart Terminal Window Here', 'openWindow'),
+        (
+          'primary',
+          'New Dart Terminal Tab Here',
+          'performPrimaryFolderService',
+        ),
+        (
+          'secondary',
+          'New Dart Terminal Window Here',
+          'performSecondaryFolderService',
+        ),
       ];
   final Object? manifestServicesValue = buildManifest['services'];
   _expect(
@@ -286,11 +294,11 @@ Future<_Invocation> _loadInvocation(_Options options) async {
       manifestServicesValue! as List<Object?>;
   for (var index = 0; index < expectedServices.length; index++) {
     final Object? value = manifestServices[index];
-    final (String kind, String menuItem, _) = expectedServices[index];
+    final (String action, String menuItem, _) = expectedServices[index];
     _expect(
       value is Map<String, Object?> &&
           value.length == 2 &&
-          value['kind'] == kind &&
+          value['action'] == action &&
           value['menuItem'] == menuItem,
       'runtime build manifest Service $index differs from the declaration',
     );

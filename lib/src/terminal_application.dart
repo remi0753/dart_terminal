@@ -4695,8 +4695,8 @@ final class TerminalApplication {
           workingDirectories.add(workingDirectory);
         }
         if (workingDirectories.isEmpty) return;
-        switch (event.disposition) {
-          case FolderServiceDisposition.newTabs:
+        switch (event.action) {
+          case FolderServiceAction.primary:
             TerminalWindowState? targetWindow = state.activeWindow;
             if (targetWindow?.role != TerminalWindowRole.standard) {
               targetWindow = null;
@@ -4718,7 +4718,7 @@ final class TerminalApplication {
             await createdActions.createTabsAtWorkingDirectories(
               workingDirectories,
             );
-          case FolderServiceDisposition.newWindows:
+          case FolderServiceAction.secondary:
             await createdActions.createWindowsAtWorkingDirectories(
               workingDirectories,
             );

@@ -252,3 +252,30 @@ before starting the next subtask.
   validation, dry-run stale-reference audit, path absence, and diff check
   passed. All 78 pre-change product package files now have the product
   repository as their sole source owner.
+- 2026-09-12: replaced the generic bridge/runtime's tab/window-shaped folder
+  Service contract with closed `primary` and `secondary` actions. The wire
+  integer values and protocol version remain unchanged, while native provider
+  selectors are now `performPrimaryFolderService` and
+  `performSecondaryFolderService`; arbitrary selector injection remains
+  impossible. This application injects the existing tab/window menu labels in
+  `macos_application.json` and maps primary to tab creation and secondary to
+  window creation in `TerminalApplication`.
+- The focused generic contract/native/event/runtime/Dart/FFI gate first failed
+  in the sandbox only because the linker could not write the adjacent generic
+  repository's build output. Its normal-environment rerun passed all bridge,
+  event encoder, runtime manifest/builder, Dart API, launcher, and current/
+  legacy FFI tests. The product's first exact `make test` run then found only a
+  stale generated AppKit acceptance hash caused by the intentional application
+  source change. `make phase7-appkit-acceptance` regenerated that evidence, and
+  the second exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` run passed,
+  including all four relocated package gates, format of 283 files, analysis,
+  compatibility, and security stress coverage.
+
+## Current subtask
+
+Replace the Secure Input-specific overlay in the generic bridge with a bounded
+generic badge whose visible and accessibility strings are copied from an
+application-owned configuration. This repository must inject every secure-
+input label and map its existing coordinator state to show, update, or hide the
+badge. The native mechanism must preserve main-thread ownership, no hit
+testing, no layout resizing, and bounded accessible output.

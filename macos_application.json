@@ -9,11 +9,11 @@
   },
   "services": [
     {
-      "kind": "newTabAtFolder",
+      "action": "primary",
       "menuItem": "New Dart Terminal Tab Here"
     },
     {
-      "kind": "newWindowAtFolder",
+      "action": "secondary",
       "menuItem": "New Dart Terminal Window Here"
     }
   ],
