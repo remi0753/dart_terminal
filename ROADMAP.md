@@ -1226,7 +1226,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] cached plain-text Services requestor、returned-text event substrate
     - [x] bounded text/file-URL drop-destination substrate
     - [x] application folder Services provider substrate
-  - [ ] `dart_macos_runtime` service declaration substrate
+  - [x] `dart_macos_runtime` service declaration substrate
   - [ ] product integration、両runtime acceptance、documentation closure、親項目完了判定
 - [ ] AppleScript dictionary と object lifecycle
 - [ ] App Intents/Shortcuts、notifications

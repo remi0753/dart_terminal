@@ -6,8 +6,7 @@
 - Task: Quick Look, Services, drag/drop, and context menu
 - Started: 2026-09-12
 - State: active
-- Current subtask: `dart_appkit` application folder Services provider
-  completion and consuming compatibility
+- Current subtask: `dart_macos_runtime` service declaration completion
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -175,7 +174,7 @@ committed contracts.
      audits, manual checklist, docs/evidence, final diff review, roadmap parent,
    and its standalone commit pass.
 
-## Current subtask definition — application folder Services provider
+## Completed subtask definition — application folder Services provider
 
 ### Purpose and background
 
@@ -627,6 +626,126 @@ cached/local state without entering Dart inline.
   returned successfully. The exact consuming gate passed generated references
   and evidence, 276-file formatting, analysis, Phase 9 security stress, and the
   aggregate test suite. Both repositories pass `git diff --check`.
+
+## Current subtask definition — runtime service declaration substrate
+
+### Purpose and background
+
+- Publish the two already-implemented application folder provider selectors as
+  Finder Services in bundles produced by `dart_macos_runtime`.
+- Keep bundle metadata declarative, strictly validated, deterministic, and
+  identical between Developer JIT and Release AOT assembly.
+- 2026-09-12: After commits `87b8f9a` and `9b9037e`, a ROADMAP reread confirms
+  this is the first unfinished item. Both repositories were clean at task
+  start. The following product integration remains unstarted.
+
+### Scope
+
+- Add a closed additive manifest representation for the folder Services used
+  by this application provider.
+- Validate all service fields and cross-entry invariants before bundle
+  mutation; older manifests without a declaration retain their exact output.
+- Generate deterministic `NSServices` dictionaries in `Info.plist` and record
+  the validated declaration in `runtime-build-manifest.json` for audit.
+- Cover strict parsing, malformed/duplicate declarations, plist escaping and
+  exact JIT/AOT bundle output in focused runtime tests and documentation.
+- Re-run the full dependency and consuming terminal gates; update only the
+  consuming evidence made stale by source changes.
+
+### Out of scope
+
+- Installing the AppKit provider or handling its asynchronous events; the
+  dependency substrate already owns that boundary.
+- Creating tabs/windows, choosing target pane/window policy, registering
+  selection/returned-text Services, or exercising Finder UI. Those belong to
+  the following product integration and manual acceptance task.
+- Arbitrary passthrough Info.plist keys, arbitrary selectors, return values,
+  localized title catalogs, user data, timeouts, ports, or third-party service
+  declarations.
+
+### Dependencies and risks
+
+- `MacosApplicationManifest` schema version 1 currently accepts only closed
+  top-level keys and has no Services representation. `_assembleBundle` owns
+  both Info.plist and the bounded JSON build manifest for both runtime modes.
+- The declaration must exactly match the provider's fixed `openTab` and
+  `openWindow` message bases and local file-URL pasteboard contract. Allowing
+  caller-selected selectors would permit a bundle/native mismatch.
+- Service menu labels are user-visible and plist XML-sensitive. They require a
+  bounded display-safe string contract and the builder's existing XML escape
+  path, not raw string interpolation.
+- Duplicate semantic declarations or nondeterministic ordering would create
+  ambiguous Finder entries and unstable audits; both must fail closed or be
+  made canonical before any filesystem output.
+
+### Completion conditions
+
+1. A manifest can opt into the fixed New Tab at Folder and New Window at Folder
+   declarations through a closed schema; omission preserves legacy output.
+2. Wrong types, unknown keys, invalid/unsafe labels, duplicate declarations,
+   unsupported kinds, and excessive input fail before bundle mutation.
+3. JIT and AOT Info.plists contain the exact deterministic `NSServices`
+   dictionaries and their runtime build manifests contain the same validated
+   declaration; no arbitrary plist injection exists.
+4. Package analysis/tests, both fixture modes, dependency exact full gate,
+   consuming terminal exact full gate, docs, final diff review, roadmap update,
+   and standalone commits pass.
+
+### Validation plan
+
+- Extend strict parser tests with legacy omission, two valid folder entries,
+  all rejected shapes/types/keys/kinds/labels, duplicate-kind rejection, and
+  immutable snapshots.
+- Inspect generated JIT and AOT plist/build-manifest outputs, including XML
+  escaping and absence from a legacy fixture.
+- Run focused runtime format/analyze/tests first, then the exact repository
+  gates and deterministic terminal evidence check.
+
+### Findings and implementation record
+
+- 2026-09-12: Apple documents `NSServices` as an array of dictionaries where
+  `NSMenuItem.default` is the visible label, `NSMessage` forms the
+  `message:userData:error:` selector, and `NSSendFileTypes` accepts UTIs and
+  delivers file URLs. Its Services guide says to include `NSRequiredContext`
+  even without filtering. The pinned Ghostty plist declares ordered `openTab`
+  and `openWindow` entries; its product-specific build-variable labels and
+  legacy filename/plain-text types are not required by this bridge's strict
+  local file-URL provider.
+- 2026-09-12: Adopted an optional top-level `services` array rather than an
+  arbitrary plist object. Each exact entry contains only a closed
+  `newTabAtFolder` or `newWindowAtFolder` kind and its menu label. Kind and
+  label duplicates fail closed. Labels are trimmed, slash-free, control- and
+  invisible-scalar-free, and capped at 256 UTF-8 bytes. The validated list is
+  immutable and declaration order is preserved.
+- 2026-09-12: The builder maps the two kinds internally to fixed `openTab` and
+  `openWindow` messages, emits an empty `NSRequiredContext`, and advertises
+  `public.item` through `NSSendFileTypes` so selected files and directories
+  arrive as file URLs. Callers cannot choose selectors, pasteboard types,
+  contexts, ports, timeouts, or other plist keys.
+- 2026-09-12: Non-empty declarations are XML-escaped into deterministic
+  `NSServices` entries and copied as kind/label pairs to the runtime build
+  manifest. Omitted or empty declarations add no plist or JSON key, preserving
+  the legacy artifact shape. The completed plist is linted before signing.
+- 2026-09-12: Initial focused formatting changed only the expanded runtime
+  fixture layout. Package analysis and all runtime tests passed, including
+  malformed schema, immutable snapshot, escaped JIT output, ordered AOT output,
+  build-manifest audit, and legacy omission. Final dependency and consumer
+  gates remain to be run after documentation and diff review.
+- 2026-09-12: Final review preserved source compatibility for callers that use
+  the public `MacosApplicationManifest` constructor by making its new Services
+  list default to immutable empty. Focused analysis/tests passed again with the
+  exact 256-byte label boundary and real `plutil` parsing. The final dependency
+  exact gate passed every native/runtime/package/Kernel/current+legacy FFI
+  suite, and the consuming terminal exact gate passed generated evidence,
+  276-file formatting, analysis, Phase 9 security stress, and aggregate tests.
+  No terminal source or acceptance evidence changed for this metadata-only
+  substrate.
+- 2026-09-12: Adjacent dependency commit `708474f` records the closed runtime
+  declarations, deterministic plist/build-manifest generation, lint gate,
+  strict tests, and documentation. ROADMAP progress now leaves only product
+  integration, shipped-runtime acceptance, documentation closure, and the
+  parent completion decision in this Quick Look/Services/drop/context-menu
+  item.
 
 ## Risks and handoff notes
 
