@@ -416,6 +416,58 @@ committed contracts.
   reread confirms the first remaining item is the bounded text/file-URL
   drop-destination substrate; the application provider, runtime declarations,
   and terminal product integration remain later ordered work.
+- 2026-09-12: The installed SDK declares drag registration on both `NSView`
+  and `NSWindow`, while drag-destination callbacks are optional responder
+  methods. Registering or subclassing an arbitrary provider-owned custom View
+  would violate its ownership boundary. The reusable router therefore
+  registers the known `DaWindow` for plain text and file URLs, converts each
+  drag location into registered View coordinates, and selects the deepest
+  containing View in the same window ancestry. This covers generic,
+  specialized, split-contained, and provider-owned views without an overlay
+  that could intercept terminal input.
+- 2026-09-12: Drag negotiation is closed to `NSDragOperationCopy`; a source
+  mask without copy, an unsupported pasteboard type, no hit-tested registered
+  target, or an exited/stale session returns none synchronously from cached
+  native configuration. Enter/update/prepare/exit remain native lifecycle
+  routing and do not flood Dart. Only a successfully bounded perform posts one
+  generation-checked View event with target-local finite coordinates.
+- 2026-09-12: The drop snapshot independently enables plain text and file
+  URLs and caps text bytes, URL count, per-URL bytes, and aggregate URL bytes
+  below fixed hard maxima. Text is carried as exact UTF-8 bytes. File URLs use
+  a closed little-endian length-prefixed byte packet, reject mixed, remote,
+  relative, query/fragment/credential, malformed, empty, and oversized input,
+  and are strictly decoded again by Dart. Product path normalization and shell
+  quoting stay in the later terminal integration task.
+- 2026-09-12: The first native drop run aborted because the test pasteboard
+  omitted `changeCount`, which the production bounded text reader correctly
+  samples around a copy. After completing the fixture, AppKit `hitTest:` on the
+  non-visible unit-test window returned the content View rather than its
+  bounds-containing child. Explicit finite-coordinate, bounds, same-window,
+  and ancestry-depth routing removed that visibility-dependent behavior.
+- 2026-09-12: The next native run exposed only an expected canonicalization:
+  Foundation standardizes `file://localhost/...` to the equivalent
+  `file:///...`. Updating the fixture to the canonical local URL made native
+  lifecycle/limit/URL tests pass. The shared encoder passed; the first Dart
+  analysis then found one exhaustive test switch missing the new sealed event.
+  Adding its explicit no-op case made all 26 API groups and current/legacy FFI
+  smoke pass.
+- 2026-09-12: The final dependency gate passed scaffold, C/C++ headers,
+  warning-clean native bridge and Runner tests, runtime/capability/renderer/PTY
+  packages, all Dart packages, Kernel launch, current/legacy FFI, and both
+  Developer JIT and Release AOT generic-runner links. The terminal consumer
+  adds the new sealed event only to two explicit no-op switch groups so the
+  later product-integration item retains ownership of behavior.
+- 2026-09-12: The first terminal evidence regeneration failed only because
+  the filesystem sandbox could not write the existing Clang module cache.
+  The approved normal-build rerun succeeded and changed only the two expected
+  `terminal_application.dart` hashes. The exact consuming
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` then passed generated
+  evidence, 276-file formatting, analysis, Phase 9 security stress, and the
+  aggregate tests. Both repositories pass `git diff --check`.
+- 2026-09-12: Adjacent `dart_appkit` commit `0a8a025` records the bounded
+  copy-only plain-text/local-file-URL drop destination and v11 performed-drop
+  event. The terminal compatibility update, regenerated acceptance evidence,
+  and this progress transition are ready for their separate consumer commit.
 - 2026-09-12: The first terminal staging attempt was rejected because the
   filesystem sandbox could not create `.git/index.lock`; no index or working
   tree content was changed. Staging is retried through the approved repository

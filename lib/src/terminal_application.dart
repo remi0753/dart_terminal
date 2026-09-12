@@ -1637,7 +1637,8 @@ final class TerminalApplication {
                 MenuItemInvokedEvent() ||
                 GlobalHotKeyPressedEvent() ||
                 ViewQuickLookRequestedEvent() ||
-                ViewServicesTextReceivedEvent():
+                ViewServicesTextReceivedEvent() ||
+                ViewDropPerformedEvent():
               break;
           }
         },
@@ -3999,7 +4000,8 @@ final class TerminalApplication {
               MenuItemInvokedEvent() ||
               GlobalHotKeyPressedEvent() ||
               ViewQuickLookRequestedEvent() ||
-              ViewServicesTextReceivedEvent():
+              ViewServicesTextReceivedEvent() ||
+              ViewDropPerformedEvent():
             break;
         }
       }, onError: recordAsynchronousError);
