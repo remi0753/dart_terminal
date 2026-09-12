@@ -6,7 +6,8 @@
 - Task: Quick Look, Services, drag/drop, and context menu
 - Started: 2026-09-12
 - State: active
-- Current subtask: `dart_appkit` Services and drop-destination substrate
+- Current subtask: `dart_appkit` cached plain-text Services requestor and
+  returned-text event substrate
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -149,12 +150,19 @@ committed contracts.
      disposal, both host builds, dependency full gate, and consuming terminal
      full gate pass.
 3. **AppKit Services and drop-destination substrate**
-   - Add cached plain-text Services requestor state, bounded asynchronous
-     service-return/drop events, text/file URL operation negotiation, and a
-     typed application folder-service provider.
-   - Complete when synchronous responder behavior never re-enters Dart and all
-     type/limit/normalization/stale/disposal/native tests plus dependency and
-     consuming full gates pass.
+   1. Add cached plain-text Services requestor state plus bounded asynchronous
+      returned-text events. Complete when synchronous send/return selector
+      behavior uses only a native snapshot, current/legacy/public API,
+      generation/disposal/limit tests, both hosts, and both full gates pass.
+   2. Add a bounded text/file-URL drop destination with closed copy-operation
+      negotiation. Complete when enter/update/exit/perform routing, deepest
+      target selection, type/size/URL/stale/disposal tests, both hosts, and both
+      full gates pass.
+   3. Add a typed application folder Services provider. Complete when selected
+      file URLs normalize to unique directory URLs, malformed/remote/excess
+      input fails closed, provider callbacks emit only asynchronous typed
+      requests, both hosts, and both full gates pass. Runtime `NSServices`
+      declaration remains the following ordered repository task.
 4. **Runtime service declaration substrate**
    - Extend the runtime manifest and deterministic Info.plist generation with a
      closed service declaration schema required by the application provider.
@@ -341,6 +349,13 @@ committed contracts.
   the ordered AppKit content-menu/Quick Look parent is complete. ROADMAP reread
   selects AppKit Services and drop-destination substrate next; runtime manifest
   declaration and product integration remain intentionally untouched.
+- 2026-09-12: Services requestor callbacks, drag-destination negotiation, and
+  the application folder provider have separate synchronous AppKit ownership,
+  payload, and lifecycle boundaries. The dependency item is therefore split
+  before implementation into those three ordered nested tasks. All new native
+  callbacks must read copied bounded native state or enqueue versioned events;
+  none may synchronously enter Dart. Runtime `NSServices` metadata remains the
+  next top-level task and is not pulled into the provider substrate.
 - 2026-09-12: The first terminal staging attempt was rejected because the
   filesystem sandbox could not create `.git/index.lock`; no index or working
   tree content was changed. Staging is retried through the approved repository

@@ -1223,6 +1223,9 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] View context-menu attachment、ownership substrate
     - [x] Quick Look request event、definition presentation substrate
   - [ ] `dart_appkit` Services、drop-destination substrate
+    - [ ] cached plain-text Services requestor、returned-text event substrate
+    - [ ] bounded text/file-URL drop-destination substrate
+    - [ ] application folder Services provider substrate
   - [ ] `dart_macos_runtime` service declaration substrate
   - [ ] product integration、両runtime acceptance、documentation closure、親項目完了判定
 - [ ] AppleScript dictionary と object lifecycle
