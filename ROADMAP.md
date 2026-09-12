@@ -1308,6 +1308,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 目的: feature complete build を安全に配布できる release へする。
 
 - [ ] AOT release、Universal Binary、resource layout
+  （分割、bundle境界、完了条件は
+  [`docs/phase11/aot-universal-resource-layout.md`](docs/phase11/aot-universal-resource-layout.md)
+  を参照して順に実施する）
+  - [x] distribution inventory、thin／Universal bundle contract
+  - [ ] `dart_macos_runtime`の汎用target-architecture thin Release AOT build
+  - [ ] `dart_macos_runtime`の汎用atomic Universal release assembly
+  - [ ] product thin／Universal build、resource audit、runtime受け入れ、親項目完了判定
 - [ ] Developer ID signing、hardened runtime、notarization
 - [ ] update feed、署名検証、rollback
 - [ ] local crash report、hang sample、privacy-safe diagnostics
