@@ -1,0 +1,12 @@
+name: dart_terminal_app_intents_macos
+description: Bounded macOS App Intents actions for Dart terminal applications.
+version: 0.1.0-dev.1
+publish_to: none
+
+environment:
+  sdk: '>=3.13.2 <3.14.0'
+
+dependencies:
+  dart_macos_runtime:
+    path: ../../../dart_appkit/packages/dart_macos_runtime
+  ffi: any

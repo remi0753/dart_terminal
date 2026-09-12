@@ -57,7 +57,7 @@ packages:
   dart_terminal_app_intents_macos:
     dependency: "direct main"
     description:
-      path: "../dart_appkit/packages/dart_terminal_app_intents_macos"
+      path: "packages/dart_terminal_app_intents_macos"
       relative: true
     source: path
     version: "0.1.0-dev.1"

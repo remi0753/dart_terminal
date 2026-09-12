@@ -6,7 +6,7 @@
 - Task: remove product-specific implementation from `dart_appkit`
 - Started: 2026-09-12
 - State: in progress
-- Current subtask: move the App Intents capability package
+- Current subtask: genericize Finder folder Service actions
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -242,3 +242,13 @@ before starting the next subtask.
   repository copy, ignored outputs, and all associated Makefile ownership were
   removed; its validation, stale-target dry-run audit, path absence, and diff
   check passed.
+- 2026-09-12: moved all 16 App Intents capability files here, changed root and
+  package-local paths, and transferred Swift compilation, C/C++ ABI checks,
+  native queue/perform lifecycle suites, Dart analysis/facade/FFI coverage, and
+  compiler-extracted metadata verification into this root Makefile and
+  aggregate gate. `make dependencies terminal-app-intents-native-test
+  terminal-app-intents-dart-test` passed. The dependency package and ignored
+  output plus every capability-specific Makefile target were removed; its
+  validation, dry-run stale-reference audit, path absence, and diff check
+  passed. All 78 pre-change product package files now have the product
+  repository as their sole source owner.

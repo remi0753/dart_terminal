@@ -12,6 +12,7 @@ MACOSX_DEPLOYMENT_TARGET ?= 14.0
 
 override CLANG := $(shell xcrun --find clang)
 override CLANGXX := $(shell xcrun --find clang++)
+override SWIFTC := $(shell xcrun --find swiftc)
 override SDKROOT := $(shell xcrun --sdk macosx --show-sdk-path)
 override PRODUCT_NATIVE_TEST_BUILD_DIR := $(PROJECT_ROOT)/build/native-tests
 override PRODUCT_NATIVE_WARNINGS := -Wall -Wextra -Wpedantic -Werror
@@ -60,6 +61,14 @@ override TERMINAL_APPLESCRIPT_TEST_OBJECT := \
 	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_applescript_plugin_test.o
 override TERMINAL_APPLESCRIPT_TEST_BINARY := \
 	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_applescript_capability_tests
+override TERMINAL_APP_INTENTS_LIBRARY := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/libdart_terminal_app_intents_macos.dylib
+override TERMINAL_APP_INTENTS_TEST_BINARY := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_app_intents_capability_tests
+override TERMINAL_APP_INTENTS_PERFORM_TEST_BINARY := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_app_intents_perform_tests
+override TERMINAL_APP_INTENTS_MODULE_CACHE := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_app_intents_module_cache
 
 override APPLICATION_MANIFEST := $(PROJECT_ROOT)/macos_application.json
 override DEVELOPER_JIT_BUILD_DIR := \
@@ -82,6 +91,8 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	terminal-renderer-dart-test \
 	terminal-applescript-contract-check terminal-applescript-native-test \
 	terminal-applescript-dart-test \
+	terminal-app-intents-contract-check terminal-app-intents-native-test \
+	terminal-app-intents-dart-test \
 	compatibility-inventory compatibility-inventory-check \
 	compatibility-manifest compatibility-manifest-check terminal-differential-contract-check \
 	terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check \
@@ -116,6 +127,8 @@ help:
 	@echo "  make terminal-renderer-dart-test  Test its Dart facade and build-hook asset"
 	@echo "  make terminal-applescript-native-test  Test the product scripting capability"
 	@echo "  make terminal-applescript-dart-test  Test its Dart facade and build-hook asset"
+	@echo "  make terminal-app-intents-native-test  Test the product App Intents capability"
+	@echo "  make terminal-app-intents-dart-test  Test its Dart facade and metadata"
 	@echo "  make product-parser-corpus        Replay reviewed product parser fixtures"
 	@echo "  make product-parser-properties    Run deterministic property and fuzz cases"
 	@echo "  make phase9-protocol-properties   Run deterministic modern-protocol properties"
@@ -344,6 +357,59 @@ terminal-applescript-dart-test:
 	@cd $(PROJECT_ROOT)/packages/dart_terminal_applescript_macos && \
 		$(DART) run test/native_asset_test.dart
 
+terminal-app-intents-contract-check:
+	@$(CLANG) $(PRODUCT_NATIVE_FLAGS) -std=c11 \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos/native \
+		-fsyntax-only \
+		$(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos/native/test/header_compile.c
+	@$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos/native \
+		-fsyntax-only \
+		$(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos/native/test/header_compile.cc
+
+$(TERMINAL_APP_INTENTS_LIBRARY): \
+		$(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos/native/TerminalAppIntents.swift
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR) $(TERMINAL_APP_INTENTS_MODULE_CACHE)
+	$(SWIFTC) -parse-as-library -swift-version 6 -warnings-as-errors \
+		-target $(RUNTIME_ARCH)-apple-macos$(MACOSX_DEPLOYMENT_TARGET) \
+		-sdk $(SDKROOT) -module-cache-path $(TERMINAL_APP_INTENTS_MODULE_CACHE) \
+		-emit-library -module-name DartTerminalAppIntents \
+		-Xlinker -install_name \
+		-Xlinker @rpath/libdart_terminal_app_intents_macos.dylib \
+		-o $@ $<
+
+$(TERMINAL_APP_INTENTS_TEST_BINARY): \
+		$(TERMINAL_APP_INTENTS_LIBRARY) \
+		$(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos/native/TerminalAppIntents.h \
+		$(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos/native/test/TerminalAppIntentsCapabilityTests.cc
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
+	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos/native \
+		$(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos/native/test/TerminalAppIntentsCapabilityTests.cc \
+		$(TERMINAL_APP_INTENTS_LIBRARY) \
+		-Wl,-rpath,$(PRODUCT_NATIVE_TEST_BUILD_DIR) -o $@
+
+$(TERMINAL_APP_INTENTS_PERFORM_TEST_BINARY): \
+		$(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos/native/TerminalAppIntents.swift \
+		$(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos/native/test/TerminalAppIntentsPerformTests.swift
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR) $(TERMINAL_APP_INTENTS_MODULE_CACHE)
+	$(SWIFTC) -parse-as-library -swift-version 6 -warnings-as-errors \
+		-target $(RUNTIME_ARCH)-apple-macos$(MACOSX_DEPLOYMENT_TARGET) \
+		-sdk $(SDKROOT) -module-cache-path $(TERMINAL_APP_INTENTS_MODULE_CACHE) \
+		-module-name DartTerminalAppIntentsPerformTests $^ -o $@
+
+terminal-app-intents-native-test: terminal-app-intents-contract-check \
+		$(TERMINAL_APP_INTENTS_TEST_BINARY) \
+		$(TERMINAL_APP_INTENTS_PERFORM_TEST_BINARY)
+	@$(TERMINAL_APP_INTENTS_TEST_BINARY)
+	@$(TERMINAL_APP_INTENTS_PERFORM_TEST_BINARY)
+
+terminal-app-intents-dart-test: $(TERMINAL_APP_INTENTS_LIBRARY)
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos && $(DART) pub get
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos && $(DART) analyze
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos && \
+		$(DART) run test/run_tests.dart $(TERMINAL_APP_INTENTS_LIBRARY)
+
 runtime-architecture-check:
 	@if [[ "$(RUNTIME_ARCH)" != "arm64" && "$(RUNTIME_ARCH)" != "x86_64" ]]; then \
 		echo "RUNTIME_ARCH must be arm64 or x86_64" >&2; exit 64; \
@@ -443,7 +509,7 @@ terminal-shell-integration: dependencies
 terminal-shell-integration-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_shell_integration.dart --check
 
-test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
+test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart

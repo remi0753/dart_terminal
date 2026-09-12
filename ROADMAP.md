@@ -1268,7 +1268,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] PTY native asset packageを製品repositoryへ移設する
   - [x] Metal renderer capability packageを製品repositoryへ移設する
   - [x] AppleScript capability packageを製品repositoryへ移設する
-  - [ ] App Intents capability packageを製品repositoryへ移設する
+  - [x] App Intents capability packageを製品repositoryへ移設する
   - [ ] Finder folder Servicesをapplication注入の汎用actionへ変更する
   - [ ] Secure Input表示をapplication注入の汎用badgeへ変更する
   - [ ] 汎用repositoryのbuild、test fixture、現行文書を製品非依存にする
