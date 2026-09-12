@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'terminal_localization.dart';
+
 /// Stable product-level commands shared by menus and the command palette.
 enum TerminalActionId {
   openCommandPalette('application.open-command-palette'),
@@ -233,244 +235,194 @@ final class TerminalActionCatalog {
     );
   }
 
-  factory TerminalActionCatalog.standard() => TerminalActionCatalog(<
-    TerminalActionDefinition
-  >[
-    TerminalActionDefinition(
-      id: TerminalActionId.openCommandPalette,
-      title: 'Command Palette…',
-      menu: TerminalActionMenu.application,
-      keywords: const <String>['find', 'search', 'action', 'command'],
-      shortcut: const TerminalActionShortcut(
-        keyEquivalent: 'p',
-        shift: true,
-        command: true,
+  factory TerminalActionCatalog.standard({TerminalLocalization? localization}) {
+    final TerminalLocalization messages =
+        localization ?? TerminalLocalization.english;
+    TerminalActionDefinition action(
+      TerminalActionId id,
+      TerminalActionMenu menu, {
+      TerminalActionShortcut? shortcut,
+      bool separatorBefore = false,
+      bool isVisibleInPalette = true,
+      bool restoresTerminalFocusAfterInvocation = true,
+    }) {
+      final TerminalActionMessages text = messages.action(_actionMessageId(id));
+      return TerminalActionDefinition(
+        id: id,
+        title: text.title,
+        menu: menu,
+        keywords: text.keywords,
+        shortcut: shortcut,
+        separatorBefore: separatorBefore,
+        isVisibleInPalette: isVisibleInPalette,
+        restoresTerminalFocusAfterInvocation:
+            restoresTerminalFocusAfterInvocation,
+      );
+    }
+
+    return TerminalActionCatalog(<TerminalActionDefinition>[
+      action(
+        TerminalActionId.openCommandPalette,
+        TerminalActionMenu.application,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'p',
+          shift: true,
+          command: true,
+        ),
+        isVisibleInPalette: false,
       ),
-      isVisibleInPalette: false,
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.openSettings,
-      title: 'Settings…',
-      menu: TerminalActionMenu.application,
-      keywords: const <String>[
-        'config',
-        'preferences',
-        'effective',
-        'options',
-        'diagnostics',
-      ],
-      shortcut: const TerminalActionShortcut(keyEquivalent: ',', command: true),
-      restoresTerminalFocusAfterInvocation: false,
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.reloadConfiguration,
-      title: 'Reload Configuration',
-      menu: TerminalActionMenu.application,
-      keywords: const <String>['config', 'settings', 'refresh'],
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.toggleQuickTerminal,
-      title: 'Toggle Quick Terminal',
-      menu: TerminalActionMenu.application,
-      keywords: const <String>[
-        'show',
-        'hide',
-        'dropdown',
-        'global',
-        'shortcut',
-      ],
-      restoresTerminalFocusAfterInvocation: false,
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.toggleSecureKeyboardEntry,
-      title: 'Secure Keyboard Entry',
-      menu: TerminalActionMenu.application,
-      keywords: const <String>[
-        'secure',
-        'keyboard',
-        'password',
-        'input',
-        'privacy',
-      ],
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.quitApplication,
-      title: 'Quit Dart Terminal',
-      menu: TerminalActionMenu.application,
-      keywords: const <String>['exit', 'application'],
-      shortcut: const TerminalActionShortcut(keyEquivalent: 'q', command: true),
-      separatorBefore: true,
-      isVisibleInPalette: false,
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.newWindow,
-      title: 'New Window',
-      menu: TerminalActionMenu.file,
-      keywords: const <String>['create', 'terminal'],
-      shortcut: const TerminalActionShortcut(keyEquivalent: 'n', command: true),
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.closeWindow,
-      title: 'Close Window',
-      menu: TerminalActionMenu.file,
-      keywords: const <String>['close', 'terminal'],
-      shortcut: const TerminalActionShortcut(keyEquivalent: 'w', command: true),
-      separatorBefore: true,
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.copy,
-      title: 'Copy',
-      menu: TerminalActionMenu.edit,
-      keywords: const <String>['clipboard', 'selection'],
-      shortcut: const TerminalActionShortcut(keyEquivalent: 'c', command: true),
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.paste,
-      title: 'Paste',
-      menu: TerminalActionMenu.edit,
-      keywords: const <String>['clipboard', 'insert'],
-      shortcut: const TerminalActionShortcut(keyEquivalent: 'v', command: true),
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.allowOsc52Clipboard,
-      title: 'Allow OSC 52 Clipboard Request',
-      menu: TerminalActionMenu.edit,
-      keywords: const <String>['clipboard', 'terminal', 'confirm', 'approve'],
-      separatorBefore: true,
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.denyOsc52Clipboard,
-      title: 'Deny OSC 52 Clipboard Request',
-      menu: TerminalActionMenu.edit,
-      keywords: const <String>['clipboard', 'terminal', 'confirm', 'reject'],
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.newTab,
-      title: 'New Tab',
-      menu: TerminalActionMenu.shell,
-      keywords: const <String>['create', 'terminal'],
-      shortcut: const TerminalActionShortcut(keyEquivalent: 't', command: true),
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.splitPaneRight,
-      title: 'Split Pane Right',
-      menu: TerminalActionMenu.shell,
-      keywords: const <String>['horizontal', 'column'],
-      shortcut: const TerminalActionShortcut(keyEquivalent: 'd', command: true),
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.splitPaneDown,
-      title: 'Split Pane Down',
-      menu: TerminalActionMenu.shell,
-      keywords: const <String>['vertical', 'row'],
-      shortcut: const TerminalActionShortcut(
-        keyEquivalent: 'd',
-        shift: true,
-        command: true,
+      action(
+        TerminalActionId.openSettings,
+        TerminalActionMenu.application,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: ',',
+          command: true,
+        ),
+        restoresTerminalFocusAfterInvocation: false,
       ),
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.quickLook,
-      title: 'Quick Look',
-      menu: TerminalActionMenu.view,
-      keywords: const <String>['definition', 'dictionary', 'word', 'lookup'],
-      shortcut: const TerminalActionShortcut(
-        keyEquivalent: 'd',
-        control: true,
-        command: true,
+      action(
+        TerminalActionId.reloadConfiguration,
+        TerminalActionMenu.application,
       ),
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.togglePaneZoom,
-      title: 'Toggle Pane Zoom',
-      menu: TerminalActionMenu.view,
-      keywords: const <String>['maximize', 'restore', 'focus'],
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.equalizeSplits,
-      title: 'Equalize Splits',
-      menu: TerminalActionMenu.view,
-      keywords: const <String>['balance', 'resize', 'panes'],
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.moveDividerLeft,
-      title: 'Move Split Divider Left',
-      menu: TerminalActionMenu.view,
-      keywords: const <String>['resize', 'pane', 'horizontal'],
-      shortcut: const TerminalActionShortcut(
-        keyEquivalent: '\uF702',
-        command: true,
+      action(
+        TerminalActionId.toggleQuickTerminal,
+        TerminalActionMenu.application,
+        restoresTerminalFocusAfterInvocation: false,
       ),
-      separatorBefore: true,
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.moveDividerRight,
-      title: 'Move Split Divider Right',
-      menu: TerminalActionMenu.view,
-      keywords: const <String>['resize', 'pane', 'horizontal'],
-      shortcut: const TerminalActionShortcut(
-        keyEquivalent: '\uF703',
-        command: true,
+      action(
+        TerminalActionId.toggleSecureKeyboardEntry,
+        TerminalActionMenu.application,
       ),
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.moveDividerUp,
-      title: 'Move Split Divider Up',
-      menu: TerminalActionMenu.view,
-      keywords: const <String>['resize', 'pane', 'vertical'],
-      shortcut: const TerminalActionShortcut(
-        keyEquivalent: '\uF700',
-        command: true,
+      action(
+        TerminalActionId.quitApplication,
+        TerminalActionMenu.application,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'q',
+          command: true,
+        ),
+        separatorBefore: true,
+        isVisibleInPalette: false,
       ),
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.moveDividerDown,
-      title: 'Move Split Divider Down',
-      menu: TerminalActionMenu.view,
-      keywords: const <String>['resize', 'pane', 'vertical'],
-      shortcut: const TerminalActionShortcut(
-        keyEquivalent: '\uF701',
-        command: true,
+      action(
+        TerminalActionId.newWindow,
+        TerminalActionMenu.file,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'n',
+          command: true,
+        ),
       ),
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.jumpToPreviousPrompt,
-      title: 'Jump to Previous Prompt',
-      menu: TerminalActionMenu.view,
-      keywords: const <String>['scroll', 'history', 'shell', 'back'],
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.jumpToNextPrompt,
-      title: 'Jump to Next Prompt',
-      menu: TerminalActionMenu.view,
-      keywords: const <String>['scroll', 'history', 'shell', 'forward'],
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.focusPreviousPane,
-      title: 'Focus Previous Pane',
-      menu: TerminalActionMenu.window,
-      keywords: const <String>['navigate', 'back'],
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.focusNextPane,
-      title: 'Focus Next Pane',
-      menu: TerminalActionMenu.window,
-      keywords: const <String>['navigate', 'forward'],
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.selectPreviousTab,
-      title: 'Select Previous Tab',
-      menu: TerminalActionMenu.window,
-      keywords: const <String>['navigate', 'back'],
-      separatorBefore: true,
-    ),
-    TerminalActionDefinition(
-      id: TerminalActionId.selectNextTab,
-      title: 'Select Next Tab',
-      menu: TerminalActionMenu.window,
-      keywords: const <String>['navigate', 'forward'],
-    ),
-  ]);
+      action(
+        TerminalActionId.closeWindow,
+        TerminalActionMenu.file,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'w',
+          command: true,
+        ),
+        separatorBefore: true,
+      ),
+      action(
+        TerminalActionId.copy,
+        TerminalActionMenu.edit,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'c',
+          command: true,
+        ),
+      ),
+      action(
+        TerminalActionId.paste,
+        TerminalActionMenu.edit,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'v',
+          command: true,
+        ),
+      ),
+      action(
+        TerminalActionId.allowOsc52Clipboard,
+        TerminalActionMenu.edit,
+        separatorBefore: true,
+      ),
+      action(TerminalActionId.denyOsc52Clipboard, TerminalActionMenu.edit),
+      action(
+        TerminalActionId.newTab,
+        TerminalActionMenu.shell,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 't',
+          command: true,
+        ),
+      ),
+      action(
+        TerminalActionId.splitPaneRight,
+        TerminalActionMenu.shell,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'd',
+          command: true,
+        ),
+      ),
+      action(
+        TerminalActionId.splitPaneDown,
+        TerminalActionMenu.shell,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'd',
+          shift: true,
+          command: true,
+        ),
+      ),
+      action(
+        TerminalActionId.quickLook,
+        TerminalActionMenu.view,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'd',
+          control: true,
+          command: true,
+        ),
+      ),
+      action(TerminalActionId.togglePaneZoom, TerminalActionMenu.view),
+      action(TerminalActionId.equalizeSplits, TerminalActionMenu.view),
+      action(
+        TerminalActionId.moveDividerLeft,
+        TerminalActionMenu.view,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: '\uF702',
+          command: true,
+        ),
+        separatorBefore: true,
+      ),
+      action(
+        TerminalActionId.moveDividerRight,
+        TerminalActionMenu.view,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: '\uF703',
+          command: true,
+        ),
+      ),
+      action(
+        TerminalActionId.moveDividerUp,
+        TerminalActionMenu.view,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: '\uF700',
+          command: true,
+        ),
+      ),
+      action(
+        TerminalActionId.moveDividerDown,
+        TerminalActionMenu.view,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: '\uF701',
+          command: true,
+        ),
+      ),
+      action(TerminalActionId.jumpToPreviousPrompt, TerminalActionMenu.view),
+      action(TerminalActionId.jumpToNextPrompt, TerminalActionMenu.view),
+      action(TerminalActionId.focusPreviousPane, TerminalActionMenu.window),
+      action(TerminalActionId.focusNextPane, TerminalActionMenu.window),
+      action(
+        TerminalActionId.selectPreviousTab,
+        TerminalActionMenu.window,
+        separatorBefore: true,
+      ),
+      action(TerminalActionId.selectNextTab, TerminalActionMenu.window),
+    ]);
+  }
 
   TerminalActionCatalog._(this.actions)
     : _byId = Map<TerminalActionId, TerminalActionDefinition>.unmodifiable(
@@ -490,6 +442,46 @@ final class TerminalActionCatalog {
         actions.where((TerminalActionDefinition action) => action.menu == menu),
       );
 }
+
+TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
+  TerminalActionId.openCommandPalette =>
+    TerminalActionMessageId.openCommandPalette,
+  TerminalActionId.openSettings => TerminalActionMessageId.openSettings,
+  TerminalActionId.reloadConfiguration =>
+    TerminalActionMessageId.reloadConfiguration,
+  TerminalActionId.toggleQuickTerminal =>
+    TerminalActionMessageId.toggleQuickTerminal,
+  TerminalActionId.toggleSecureKeyboardEntry =>
+    TerminalActionMessageId.toggleSecureKeyboardEntry,
+  TerminalActionId.quitApplication => TerminalActionMessageId.quitApplication,
+  TerminalActionId.newWindow => TerminalActionMessageId.newWindow,
+  TerminalActionId.closeWindow => TerminalActionMessageId.closeWindow,
+  TerminalActionId.copy => TerminalActionMessageId.copy,
+  TerminalActionId.paste => TerminalActionMessageId.paste,
+  TerminalActionId.allowOsc52Clipboard =>
+    TerminalActionMessageId.allowOsc52Clipboard,
+  TerminalActionId.denyOsc52Clipboard =>
+    TerminalActionMessageId.denyOsc52Clipboard,
+  TerminalActionId.newTab => TerminalActionMessageId.newTab,
+  TerminalActionId.splitPaneRight => TerminalActionMessageId.splitPaneRight,
+  TerminalActionId.splitPaneDown => TerminalActionMessageId.splitPaneDown,
+  TerminalActionId.quickLook => TerminalActionMessageId.quickLook,
+  TerminalActionId.togglePaneZoom => TerminalActionMessageId.togglePaneZoom,
+  TerminalActionId.equalizeSplits => TerminalActionMessageId.equalizeSplits,
+  TerminalActionId.moveDividerLeft => TerminalActionMessageId.moveDividerLeft,
+  TerminalActionId.moveDividerRight => TerminalActionMessageId.moveDividerRight,
+  TerminalActionId.moveDividerUp => TerminalActionMessageId.moveDividerUp,
+  TerminalActionId.moveDividerDown => TerminalActionMessageId.moveDividerDown,
+  TerminalActionId.jumpToPreviousPrompt =>
+    TerminalActionMessageId.jumpToPreviousPrompt,
+  TerminalActionId.jumpToNextPrompt => TerminalActionMessageId.jumpToNextPrompt,
+  TerminalActionId.focusPreviousPane =>
+    TerminalActionMessageId.focusPreviousPane,
+  TerminalActionId.focusNextPane => TerminalActionMessageId.focusNextPane,
+  TerminalActionId.selectPreviousTab =>
+    TerminalActionMessageId.selectPreviousTab,
+  TerminalActionId.selectNextTab => TerminalActionMessageId.selectNextTab,
+};
 
 typedef TerminalActionAvailability = bool Function();
 typedef TerminalActionHandler = FutureOr<void> Function();

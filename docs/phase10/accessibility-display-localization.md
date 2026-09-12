@@ -263,3 +263,37 @@ injectable localization boundary with English and Japanese catalogs.
 - 2026-09-13: the first scoped staging attempt could not create
   `.git/index.lock` under the filesystem sandbox. The working tree remains
   intact; staging and commit are retried with repository metadata write access.
+- 2026-09-13: after committing the adaptive product projection as `6ce5663`
+  (`Respect accessibility display preferences`), reread the roadmap and began
+  the localization child from a clean tree. This child spans independent
+  catalog, presenter, application-composition, and audit deliverables, so it is
+  split before implementation into four ordered roadmap children: locale and
+  typed action catalog foundation; menu/palette/confirmation/status adoption;
+  Settings/application/RTL/resource adoption; and a static UI leak plus catalog
+  completeness closure. Each child has its own verification and commit.
+- 2026-09-13: locale selection will consume an injected environment mapping in
+  precedence order `LC_ALL`, `LC_MESSAGES`, then `LANG`. Empty, `C`, `POSIX`,
+  malformed, and unsupported language tags select English strings. Japanese
+  language tags, including regional/encoding suffixes, select Japanese. UI
+  direction is derived independently from the normalized language subtag, so
+  unsupported Arabic/Hebrew/Persian/Urdu tags retain English fallback strings
+  but still project RTL application composition. Terminal cells, paths,
+  user/PTY text, config values, stable IDs, protocol diagnostics, and machine
+  markers remain unchanged.
+- 2026-09-13: completed the locale/action foundation. `TerminalLocalization`
+  normalizes POSIX-style encoding and modifier suffixes, selects the injected
+  environment variables in the documented precedence, retains the requested
+  locale for diagnostics, and resolves catalog language independently from UI
+  direction. The typed action catalog contains one immutable English and
+  Japanese title/keyword entry for every one of the 28 stable actions.
+  `TerminalActionCatalog.standard` now projects those messages while retaining
+  identical action order, menu ownership, shortcuts, separators, visibility,
+  focus restoration, and stable names.
+- 2026-09-13: focused localization, action-registry, and generated keybinding
+  reference tests passed. Tests cover Japanese regional selection, `C`,
+  `POSIX`, empty and malformed English fallback, unsupported Arabic English
+  fallback with RTL direction, catalog completeness/nonempty bounds, Japanese
+  search, and cross-language non-text policy parity. The exact full `make test`
+  gate then passed unchanged, including format/analyze, generated references,
+  application evidence, and bounded security stress. No duration-only test was
+  run.

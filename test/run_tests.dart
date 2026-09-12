@@ -71,6 +71,7 @@ import 'terminal_kitty_graphics_controller_test.dart';
 import 'terminal_kitty_graphics_test.dart';
 import 'terminal_kitty_reference_compositor_test.dart';
 import 'terminal_live_metal_surface_font_test.dart';
+import 'terminal_localization_test.dart';
 import 'terminal_mouse_encoder_test.dart';
 import 'terminal_mouse_router_test.dart';
 import 'terminal_native_content_test.dart';
@@ -203,6 +204,7 @@ Future<void> main() async {
   runTerminalSelectionAutoscrollTests();
   runTerminalSelectionGestureTests();
   runTerminalLiveMetalSurfaceFontTests();
+  runTerminalLocalizationTests();
   runTerminalPaletteTests();
   await runTerminalPasteTests();
   runTerminalPreeditTests();
