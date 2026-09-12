@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dart_appkit/dart_appkit.dart'
+    show dartAppKitCurrentEventProtocolVersion;
+
 final class _SmokeException implements Exception {
   const _SmokeException(this.message);
 
@@ -872,7 +875,8 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     );
   }
   final RegExp eventWire = RegExp(
-    r'^NATIVE_EVENT_WIRE negotiated=12 event=window-closed protocol=12 '
+    '^NATIVE_EVENT_WIRE negotiated=$dartAppKitCurrentEventProtocolVersion '
+    'event=window-closed protocol=$dartAppKitCurrentEventProtocolVersion '
     r'source_generation=[1-9][0-9]* operation_id=0 '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -881,9 +885,12 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     eventWire.hasMatch(observation.stdoutText),
     'missing current native event wire observation',
   );
-  final String statePrefix = r'^NATIVE_WINDOW_STATE negotiated=12 event=';
+  final String statePrefix =
+      '^NATIVE_WINDOW_STATE '
+      'negotiated=$dartAppKitCurrentEventProtocolVersion event=';
   final String stateMetadata =
-      r' protocol=12 source_generation=[1-9][0-9]* operation_id=0 '
+      ' protocol=$dartAppKitCurrentEventProtocolVersion '
+      r'source_generation=[1-9][0-9]* operation_id=0 '
       r'timestamp_ns=[1-9][0-9]* ';
   RegExp stateEvent(String name, String payload) =>
       RegExp('$statePrefix$name$stateMetadata$payload', multiLine: true);
@@ -918,7 +925,9 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     );
   }
   final RegExp applicationState = RegExp(
-    r'^NATIVE_APPLICATION_STATE negotiated=12 active=(true|false)$',
+    '^NATIVE_APPLICATION_STATE '
+    'negotiated=$dartAppKitCurrentEventProtocolVersion '
+    r'active=(true|false)$',
     multiLine: true,
   );
   _expect(
@@ -945,7 +954,8 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     'missing or duplicate standard action-menu projection observation',
   );
   RegExp menuAction(String action) => RegExp(
-    '^NATIVE_MENU_ACTION negotiated=12 action=$action protocol=12 '
+    '^NATIVE_MENU_ACTION negotiated=$dartAppKitCurrentEventProtocolVersion '
+    'action=$action protocol=$dartAppKitCurrentEventProtocolVersion '
     r'source_generation=[1-9][0-9]* operation_id=0 '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -971,7 +981,9 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     'missing or duplicate pasteboard snapshot observation',
   );
   final RegExp closeRequest = RegExp(
-    r'^NATIVE_WINDOW_CLOSE_REQUEST negotiated=12 protocol=12 '
+    '^NATIVE_WINDOW_CLOSE_REQUEST '
+    'negotiated=$dartAppKitCurrentEventProtocolVersion '
+    'protocol=$dartAppKitCurrentEventProtocolVersion '
     r'source_generation=[1-9][0-9]* operation_id=[1-9][0-9]* '
     r'timestamp_ns=[1-9][0-9]*$',
     multiLine: true,
@@ -1290,7 +1302,9 @@ Future<void> _runTerminalDisplay(
     'terminal display launch omitted refused-close viewport acceptance',
   );
   final RegExp scrollAcceptance = RegExp(
-    r'^TERMINAL_SCROLL_TEST protocol=12 precise=true momentum=true '
+    '^TERMINAL_SCROLL_TEST '
+    'protocol=$dartAppKitCurrentEventProtocolVersion '
+    r'precise=true momentum=true '
     r'wheel=true mouse_report=true shift_override=true alternate=true '
     r'app_cursor=true local=true metal=true exclusive=true reports=1 '
     r'local=4 alternate_inputs=1 ignored=3 bytes=20 alternate_bytes=6$',
@@ -2510,7 +2524,9 @@ cursor-blink = false
     );
     _expect(
       RegExp(
-            r'^TERMINAL_THEME_TEST protocol=12 initial_light=true '
+            '^TERMINAL_THEME_TEST '
+            'protocol=$dartAppKitCurrentEventProtocolVersion '
+            r'initial_light=true '
             r'live_dark=true live_light=true appearance_query=true '
             r'appearance_notifications=2 appearance_disable=true '
             r'appearance_reset=true cell_report=true in_band_size=true '

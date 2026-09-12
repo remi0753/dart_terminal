@@ -371,3 +371,32 @@ passes with no residual untracked output or serious blocker.
   `make terminal-compatibility-regression-coverage` passed its nine-case/417-
   split prerequisite and updated only the generated report. This is expected
   evidence synchronization rather than a compatibility failure.
+- After synchronizing that evidence, the next complete `runtime-verify` passed
+  the repeated full product gate, source audit, Developer JIT and Release AOT
+  builds, and both bundle audits, then stopped at the first Developer JIT smoke
+  assertion. A focused rerun failed identically. Directly launching the same
+  built application with the event-wire fixture showed valid negotiated and
+  emitted protocol version 13 records for the close, application, window-state,
+  and menu events; the integration tool still hard-coded version 12 in those
+  checks and in its scroll and theme acceptance records. This is a stale test
+  expectation rather than user interaction or a runtime regression.
+- `dart_appkit` already exports `dartAppKitCurrentEventProtocolVersion` from its
+  public package entrypoint. The integration tool now imports that public
+  generic contract and derives every current-protocol assertion from it, so a
+  future generic protocol increment cannot leave scattered product test
+  literals behind. No generic repository source change was required. `dart
+  format` reported the edited file already formatted; its subsequent analytics
+  timestamp write was sandbox-denied, so all remaining Dart validation is run
+  with analytics suppressed as used by the repository gates.
+- The first focused Developer JIT rerun inside the restricted command sandbox
+  aborted before Dart startup in AppKit's `_RegisterApplication`, leaving a
+  macOS crash report and host-starting diagnostics with no application output.
+  This was a WindowServer registration restriction, not the earlier assertion
+  or a product execution failure. The identical command rerun in the normal GUI
+  environment passed with `RUNTIME_INTEGRATION_PASS`, including the version 13
+  event-wire observations through the new public-constant expectations.
+- Focused validation also passed `dart analyze
+  tool/runtime_integration_smoke.dart` with no issues and the ownership-aware
+  `make runtime-source-check` with 601 paths, zero application native sources,
+  25 product-package native sources, and the two exact reviewed native test/tool
+  sources.
