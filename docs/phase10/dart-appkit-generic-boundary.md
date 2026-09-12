@@ -6,7 +6,7 @@
 - Task: remove product-specific implementation from `dart_appkit`
 - Started: 2026-09-12
 - State: in progress
-- Current subtask: move the PTY native asset package
+- Current subtask: move the Metal renderer capability package
 - Primary environment: macOS 14 or later on Apple M1/arm64
 
 ## Purpose
@@ -206,3 +206,14 @@ before starting the next subtask.
   outside the four package roots, but the Services and indicator APIs exposed
   product meaning under names that did not contain that literal; they are
   therefore explicitly included rather than relying on a string-only audit.
+- 2026-09-12: moved all 19 tracked `dart_pty_macos` files from dependency commit
+  `102d23e` into this repository without source differences, changed the root
+  path dependency to `packages/dart_pty_macos`, and transferred C11/C++20 ABI
+  compile checks, the child-symbol audit, warning-clean native build/test, and
+  Dart analysis/real+fake lifecycle tests into this root `Makefile` and its
+  aggregate `test` target. `CI=true DART_SUPPRESS_ANALYTICS=true make
+  dpty-native-test dpty-dart-test` passed, including interactive/login TTY,
+  process lifecycle, bounded scheduling/write diagnostics, force close, and
+  the build-hook native asset. The dependency copy and ignored build outputs
+  were removed; its `make validate`, dry-run aggregate test plan, absence check,
+  and no-stale-PTY-target check passed.

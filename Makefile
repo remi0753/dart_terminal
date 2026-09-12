@@ -8,6 +8,26 @@ DART_ENGINE_ROOT ?= $(DART_APPKIT_ROOT)/.dart_tool/dart-engine/sdk
 RUNTIME_ARCH ?= $(shell uname -m)
 RUNTIME_BUILD_DIR ?= $(PROJECT_ROOT)/build/runtime
 RUNTIME_ARGUMENTS ?=
+MACOSX_DEPLOYMENT_TARGET ?= 14.0
+
+override CLANG := $(shell xcrun --find clang)
+override CLANGXX := $(shell xcrun --find clang++)
+override SDKROOT := $(shell xcrun --sdk macosx --show-sdk-path)
+override PRODUCT_NATIVE_TEST_BUILD_DIR := $(PROJECT_ROOT)/build/native-tests
+override PRODUCT_NATIVE_WARNINGS := -Wall -Wextra -Wpedantic -Werror
+override PRODUCT_NATIVE_FLAGS := $(PRODUCT_NATIVE_WARNINGS) \
+	-fvisibility=hidden -isysroot $(SDKROOT) \
+	-mmacosx-version-min=$(MACOSX_DEPLOYMENT_TARGET)
+override DPTY_CHILD_OBJECT := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/dpty_exec_child.o
+override DPTY_SPAWN_OBJECT := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/dpty_spawn.o
+override DPTY_SESSION_OBJECT := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/dpty_session.o
+override DPTY_LIBRARY := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/libdart_pty_macos.dylib
+override DPTY_TEST_BINARY := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/dart_pty_macos_tests
 
 override APPLICATION_MANIFEST := $(PROJECT_ROOT)/macos_application.json
 override DEVELOPER_JIT_BUILD_DIR := \
@@ -24,7 +44,9 @@ override PRODUCT_PARSER_BENCHMARK_DIR := $(PROJECT_ROOT)/build/benchmarks
 override PRODUCT_PARSER_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_parser_benchmark
 override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_damage_benchmark
 
-.PHONY: help dependencies test compatibility-inventory compatibility-inventory-check \
+.PHONY: help dependencies test dpty-contract-check dpty-child-audit \
+	dpty-native-test dpty-dart-test \
+	compatibility-inventory compatibility-inventory-check \
 	compatibility-manifest compatibility-manifest-check terminal-differential-contract-check \
 	terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check \
 	terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check \
@@ -52,6 +74,8 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 help:
 	@echo "Dart-only macOS application targets:"
 	@echo "  make test                         Format, analyze, and unit-test Dart source"
+	@echo "  make dpty-native-test             Test the product-owned PTY native asset"
+	@echo "  make dpty-dart-test               Test its Dart facade and build-hook asset"
 	@echo "  make product-parser-corpus        Replay reviewed product parser fixtures"
 	@echo "  make product-parser-properties    Run deterministic property and fuzz cases"
 	@echo "  make phase9-protocol-properties   Run deterministic modern-protocol properties"
@@ -108,6 +132,63 @@ help:
 
 dependencies:
 	@cd $(PROJECT_ROOT) && $(DART) pub get
+
+dpty-contract-check:
+	@$(CLANG) $(PRODUCT_NATIVE_FLAGS) -std=c11 \
+		-I$(PROJECT_ROOT)/packages/dart_pty_macos/native -fsyntax-only \
+		$(PROJECT_ROOT)/packages/dart_pty_macos/native/test/header_compile.c
+	@$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 \
+		-I$(PROJECT_ROOT)/packages/dart_pty_macos/native -fsyntax-only \
+		$(PROJECT_ROOT)/packages/dart_pty_macos/native/test/header_compile.cc
+
+$(DPTY_CHILD_OBJECT): \
+		$(PROJECT_ROOT)/packages/dart_pty_macos/native/PtyExecChild.c \
+		$(PROJECT_ROOT)/packages/dart_pty_macos/native/PtySpawnInternal.h
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
+	$(CLANG) $(PRODUCT_NATIVE_FLAGS) -std=c11 -c \
+		-I$(PROJECT_ROOT)/packages/dart_pty_macos/native $< -o $@
+
+$(DPTY_SPAWN_OBJECT): \
+		$(PROJECT_ROOT)/packages/dart_pty_macos/native/PtySpawn.c \
+		$(PROJECT_ROOT)/packages/dart_pty_macos/native/PtySpawnInternal.h \
+		$(PROJECT_ROOT)/packages/dart_pty_macos/native/dart_pty_macos.h
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
+	$(CLANG) $(PRODUCT_NATIVE_FLAGS) -std=c11 -c \
+		-I$(PROJECT_ROOT)/packages/dart_pty_macos/native $< -o $@
+
+$(DPTY_SESSION_OBJECT): \
+		$(PROJECT_ROOT)/packages/dart_pty_macos/native/PtySession.cc \
+		$(PROJECT_ROOT)/packages/dart_pty_macos/native/PtySpawnInternal.h \
+		$(PROJECT_ROOT)/packages/dart_pty_macos/native/dart_pty_macos.h
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
+	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 -pthread -c \
+		-I$(PROJECT_ROOT)/packages/dart_pty_macos/native $< -o $@
+
+dpty-child-audit: $(DPTY_CHILD_OBJECT)
+	@$(DART) $(PROJECT_ROOT)/packages/dart_pty_macos/tool/audit_pty_child.dart $<
+
+$(DPTY_LIBRARY): $(DPTY_CHILD_OBJECT) $(DPTY_SPAWN_OBJECT) \
+		$(DPTY_SESSION_OBJECT)
+	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 -pthread -dynamiclib \
+		$(DPTY_SESSION_OBJECT) $(DPTY_SPAWN_OBJECT) $(DPTY_CHILD_OBJECT) \
+		-Wl,-install_name,@rpath/libdart_pty_macos.dylib -o $@
+
+$(DPTY_TEST_BINARY): \
+		$(PROJECT_ROOT)/packages/dart_pty_macos/native/test/PtyCapabilityTests.cc \
+		$(PROJECT_ROOT)/packages/dart_pty_macos/native/dart_pty_macos.h
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
+	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 -pthread \
+		-I$(PROJECT_ROOT)/packages/dart_pty_macos/native $< -o $@
+
+dpty-native-test: dpty-contract-check dpty-child-audit $(DPTY_LIBRARY) \
+		$(DPTY_TEST_BINARY)
+	@$(DPTY_TEST_BINARY) $(DPTY_LIBRARY)
+
+dpty-dart-test:
+	@cd $(PROJECT_ROOT)/packages/dart_pty_macos && $(DART) pub get
+	@cd $(PROJECT_ROOT)/packages/dart_pty_macos && $(DART) analyze
+	@cd $(PROJECT_ROOT)/packages/dart_pty_macos && \
+		$(DART) run test/run_tests.dart
 
 runtime-architecture-check:
 	@if [[ "$(RUNTIME_ARCH)" != "arm64" && "$(RUNTIME_ARCH)" != "x86_64" ]]; then \
@@ -208,7 +289,7 @@ terminal-shell-integration: dependencies
 terminal-shell-integration-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_shell_integration.dart --check
 
-test: dependencies vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
+test: dependencies dpty-native-test dpty-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart

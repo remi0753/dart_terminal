@@ -11,7 +11,7 @@ dependencies:
   dart_macos_runtime:
     path: ../dart_appkit/packages/dart_macos_runtime
   dart_pty_macos:
-    path: ../dart_appkit/packages/dart_pty_macos
+    path: packages/dart_pty_macos
   dart_terminal_applescript_macos:
     path: ../dart_appkit/packages/dart_terminal_applescript_macos
   dart_terminal_app_intents_macos:

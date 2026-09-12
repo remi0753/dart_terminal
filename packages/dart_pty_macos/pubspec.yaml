@@ -1,0 +1,13 @@
+name: dart_pty_macos
+description: A bounded asynchronous macOS PTY capability for Dart applications.
+version: 0.1.0-dev.1
+publish_to: none
+
+environment:
+  sdk: '>=3.13.2 <3.14.0'
+
+dependencies:
+  code_assets: any
+  ffi: any
+  hooks: any
+  native_toolchain_c: any

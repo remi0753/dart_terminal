@@ -10,7 +10,7 @@ packages:
     source: hosted
     version: "2.13.1"
   code_assets:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: code_assets
       sha256: cfd4f5f575a49c5f10ca856e9846073f1e6c3ee94912377eea5f6cefc5272941
@@ -33,50 +33,8 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
-  dart_appkit:
-    dependency: "direct main"
-    description:
-      path: "../dart_appkit/packages/dart_appkit"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
-  dart_macos_runtime:
-    dependency: "direct main"
-    description:
-      path: "../dart_appkit/packages/dart_macos_runtime"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
-  dart_pty_macos:
-    dependency: "direct main"
-    description:
-      path: "packages/dart_pty_macos"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
-  dart_terminal_app_intents_macos:
-    dependency: "direct main"
-    description:
-      path: "../dart_appkit/packages/dart_terminal_app_intents_macos"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
-  dart_terminal_applescript_macos:
-    dependency: "direct main"
-    description:
-      path: "../dart_appkit/packages/dart_terminal_applescript_macos"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
-  dart_terminal_renderer_macos:
-    dependency: "direct main"
-    description:
-      path: "../dart_appkit/packages/dart_terminal_renderer_macos"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
   ffi:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: ffi
       sha256: "6d7fd89431262d8f3125e81b50d3847a091d846eafcd4fdb88dd06f36d705a45"
@@ -100,7 +58,7 @@ packages:
     source: hosted
     version: "2.2.0"
   hooks:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: hooks
       sha256: eaac480a35ec0814146c2c48d96aaa829e0e44a7662c88ae84c9edf4bc35651f
@@ -124,7 +82,7 @@ packages:
     source: hosted
     version: "1.19.0"
   native_toolchain_c:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: native_toolchain_c
       sha256: "9d233b6f2d9c52e1a2b5fbe70451d2c10ac674d3bb419d0ec8de14989d437c26"
