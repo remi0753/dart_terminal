@@ -131,11 +131,14 @@ split before code changes so each layer consumes only committed contracts.
      accessible overlay, fake/native/legacy/public API, both host builds, and
      dependency plus consuming repository full gates pass.
 3. **Terminal policy, configuration, action, and lifecycle integration**
-   - Aggregate focused echo state with manual intent, connect live settings and
-     shared action/menu/palette/keybind routes, and cover pane/window/Quick
-     Terminal/application teardown.
-   - Complete when deterministic controller, UI status/checked/overlay state,
-     reload, IME/non-writing behavior, and focused product tests pass.
+   1. Add the missing additive `dart_appkit` checked menu-item projection
+      required to represent manual intent with native AppKit state.
+   2. Aggregate focused echo state with manual intent, connect live settings
+      and shared action/menu/palette/keybind routes, and cover pane/window/Quick
+      Terminal/application teardown.
+   - Complete when the dependency projection and deterministic controller, UI
+     status/checked/overlay state, reload, IME/non-writing behavior, and
+     focused product tests pass.
 4. **Shipped-runtime acceptance and closure**
    - Exercise automatic/manual transitions and all cleanup paths with real
      PTY/AppKit/Metal in Developer JIT and Release AOT, then update docs and
@@ -217,9 +220,19 @@ split before code changes so each layer consumes only committed contracts.
   generic hosts also linked the changed bridge warning-clean. The dependency
   is committed as `8688a2f` (`Add balanced Secure Event Input ownership`).
 
+- 2026-09-12: Product menu inspection found that `dart_appkit.MenuItem`
+  exposes only enabled state. Encoding manual intent in a changing title would
+  not be a native checked state and would weaken accessibility. A minimal
+  additive checked Boolean on the existing menu-item handle is therefore a
+  prerequisite of the current product-integration task. It is recorded as the
+  first nested item before implementation; no unrelated menu validation or
+  product policy will be moved into the dependency.
+
 ## Next-subtask objective
 
-Aggregate the focused live pane's content-free echo observation with explicit
+First add the minimal checked Boolean projection to the existing AppKit
+menu-item handle and verify current/legacy FFI plus native/Dart ownership. Then
+aggregate the focused live pane's content-free echo observation with explicit
 manual intent in one product controller. Add live configuration defaults and
 Settings status, a stable manual toggle action shared by menu, command palette,
 and keybindings, and project automatic/manual/failure indication only to the
