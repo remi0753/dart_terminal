@@ -43,6 +43,7 @@ enum _Suite {
   secureKeyboardEntry,
   diagnostics,
   performance,
+  reliability,
   restoration,
   clipboard,
   lifecycle,
@@ -1667,6 +1668,7 @@ Future<void> _runProductPerformance(
   _Options options,
   _Invocation invocation, {
   required bool runFairness,
+  required bool enforcePerformanceBudgets,
 }) async {
   const String startupMarker =
       'TERMINAL_PRODUCT_PERFORMANCE_STARTUP first_frame=true';
@@ -1707,6 +1709,19 @@ Future<void> _runProductPerformance(
         1,
     'product memory-pressure acceptance summary is missing or duplicated',
   );
+  _expect(
+    RegExp(
+          r'^TERMINAL_BOUNDED_RELIABILITY_TEST iterations=8 sleep=8 wake=8 '
+          r'display_recovery=([89]|[1-9][0-9]+) pressure=8 warning=4 '
+          r'critical=4 pty=1 descriptors=8 root_isolate=1 worker_process=1 '
+          r'metal=1 gpu_pins=0 native_handles=[1-9][0-9]* '
+          r'canonical_retained=true newest_redrawn=true baselines=true '
+          r'content_free=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'bounded aggregate reliability summary is missing or malformed',
+  );
   final Duration? startupElapsed = observation.milestones[startupMarker];
   _expect(
     startupElapsed != null,
@@ -1717,7 +1732,8 @@ Future<void> _runProductPerformance(
     result = RuntimeProductPerformanceResult.parse(
       observation.stdoutText,
       startupElapsed: startupElapsed!,
-      enforceLatencyBudgets: options.mode == _RuntimeMode.releaseAot,
+      enforceLatencyBudgets:
+          enforcePerformanceBudgets && options.mode == _RuntimeMode.releaseAot,
     );
   } on FormatException catch (error) {
     throw _SmokeException(
@@ -1755,22 +1771,33 @@ Future<void> _runProductPerformance(
     expectedCount: 1,
   );
   if (runFairness) await _runNativeHierarchy(options, invocation);
+  if (enforcePerformanceBudgets) {
+    stdout.writeln(
+      'RUNTIME_PRODUCT_PERFORMANCE_INTEGRATION_PASS '
+      'mode=${options.mode.name} '
+      'launch_architecture=${options.launchArchitecture ?? 'native'} '
+      'startup_us=${result.startupMicroseconds} '
+      'refresh_interval_us=${result.refreshIntervalMicroseconds} '
+      'input_p95_us=${result.inputP95Microseconds} '
+      'visible_p95_us=${result.visibleP95Microseconds} '
+      'frame_p95_us=${result.frameP95Microseconds} '
+      'idle_rss_bytes=${result.idleResidentBytes} '
+      'workload_rss_bytes=${result.workloadResidentBytes} '
+      'peak_rss_bytes=${result.peakResidentBytes} '
+      'idle_cpu_basis_points=${result.idleCpuBasisPoints} '
+      'occluded_cpu_basis_points=${result.occludedCpuBasisPoints} '
+      'aggregate_cpu_basis_points=${result.aggregateCpuBasisPoints} '
+      'fairness=true '
+      'elapsed_ms=${observation.elapsed.inMilliseconds}',
+    );
+  }
   stdout.writeln(
-    'RUNTIME_PRODUCT_PERFORMANCE_INTEGRATION_PASS '
+    'RUNTIME_BOUNDED_RELIABILITY_INTEGRATION_PASS '
     'mode=${options.mode.name} '
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
-    'startup_us=${result.startupMicroseconds} '
-    'refresh_interval_us=${result.refreshIntervalMicroseconds} '
-    'input_p95_us=${result.inputP95Microseconds} '
-    'visible_p95_us=${result.visibleP95Microseconds} '
-    'frame_p95_us=${result.frameP95Microseconds} '
-    'idle_rss_bytes=${result.idleResidentBytes} '
-    'workload_rss_bytes=${result.workloadResidentBytes} '
-    'peak_rss_bytes=${result.peakResidentBytes} '
-    'idle_cpu_basis_points=${result.idleCpuBasisPoints} '
-    'occluded_cpu_basis_points=${result.occludedCpuBasisPoints} '
-    'aggregate_cpu_basis_points=${result.aggregateCpuBasisPoints} '
-    'fairness=true '
+    'iterations=8 sleep=8 wake=8 display=true pressure=8 '
+    'pty=true descriptors=true root_isolate=true worker_process=true '
+    'gpu=true native_handles=true canonical_retained=true '
     'elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }
@@ -4156,6 +4183,15 @@ Future<void> main(List<String> arguments) async {
         options,
         invocation,
         runFairness: options.suite == _Suite.performance,
+        enforcePerformanceBudgets: true,
+      );
+    }
+    if (options.suite == _Suite.reliability) {
+      await _runProductPerformance(
+        options,
+        invocation,
+        runFairness: false,
+        enforcePerformanceBudgets: false,
       );
     }
     if (options.suite == _Suite.actions || options.suite == _Suite.all) {

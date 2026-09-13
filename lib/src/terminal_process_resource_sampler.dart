@@ -67,6 +67,16 @@ final class TerminalCurrentProcessResourceSampler {
       .lookupFunction<_MallocNative, _MallocDart>('malloc');
   static final _FreeDart _free = _process
       .lookupFunction<_FreeNative, _FreeDart>('free');
+  static final _GetDescriptorTableSizeDart _getDescriptorTableSize = _process
+      .lookupFunction<
+        _GetDescriptorTableSizeNative,
+        _GetDescriptorTableSizeDart
+      >('getdtablesize');
+  static final _FileControlDart _fileControl = _process
+      .lookupFunction<_FileControlNative, _FileControlDart>('fcntl');
+
+  static const int maximumDescriptorScanCount = 65536;
+  static const int _getDescriptorFlagsCommand = 1;
 
   TerminalProcessResourceSnapshot snapshot() {
     final Pointer<_DarwinResourceUsage> usage = _malloc(
@@ -100,6 +110,23 @@ final class TerminalCurrentProcessResourceSampler {
     } finally {
       _free(usage.cast<Void>());
     }
+  }
+
+  /// Counts open current-process descriptors without retaining their identity.
+  int openFileDescriptorCount() {
+    final int descriptorTableSize = _getDescriptorTableSize();
+    if (descriptorTableSize <= 0 ||
+        descriptorTableSize > maximumDescriptorScanCount) {
+      throw StateError('process descriptor table bound is unavailable');
+    }
+    var count = 0;
+    for (var descriptor = 0; descriptor < descriptorTableSize; descriptor++) {
+      if (_fileControl(descriptor, _getDescriptorFlagsCommand) >= 0) count++;
+    }
+    if (count <= 0) {
+      throw StateError('process descriptor count is unavailable');
+    }
+    return count;
   }
 
   static int _timevalMicroseconds(int seconds, int microseconds) {
@@ -139,3 +166,7 @@ typedef _MallocNative = Pointer<Void> Function(IntPtr size);
 typedef _MallocDart = Pointer<Void> Function(int size);
 typedef _FreeNative = Void Function(Pointer<Void> pointer);
 typedef _FreeDart = void Function(Pointer<Void> pointer);
+typedef _GetDescriptorTableSizeNative = Int32 Function();
+typedef _GetDescriptorTableSizeDart = int Function();
+typedef _FileControlNative = Int32 Function(Int32 descriptor, Int32 command);
+typedef _FileControlDart = int Function(int descriptor, int command);

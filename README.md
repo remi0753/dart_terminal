@@ -179,11 +179,19 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
 - PTY通知欠落時もpane ownerを閉じ、status 75でhost終了するclassified recovery
 - AppKit main-thread root と公式 Dart 子プロセス worker の bounded lifecycle
   （M1/arm64 Developer JIT / Release AOT）
-- native event protocol v8（source generation、nanosecond timestamp、operation
+- genericなnative event protocol v15（source generation、nanosecond timestamp、operation
   ID、focus/visibility/occlusion/backing scale/screen/frame/fullscreen state、
-  application/window lifecycle/appearance、menu action、exclusive global hot key、
-  precision/momentum scroll）と、旧 v1–v7
+  application/window lifecycle/appearance/display preferences、menu action、
+  exclusive global hot key、precision/momentum scroll、power state、screen-set
+  change、memory pressure）と、旧 v1–v14
   endpoint との compatibility negotiation
+- sleep/wake、screen-set change、memory warning/criticalをAppKit callback後のbounded
+  product policyへcoalesceする。sleep中はframe/deadlineを止め、wake時に現在のdisplay/
+  backing scaleを再解決して最新canonical stateだけを再描画する。pressure時はscreen、
+  scrollback、selection、preedit、PTY、Kitty image stateを保持し、再生成可能なhover/
+  shaping/atlasだけをpin-safeに段階回収する。通常製品の8回反復gateでPTY、FD、root/
+  worker、Metal/GPU pin、text-input/native handleの基準線をDeveloper JIT/Release AOTで
+  検証する。実時間24/72時間と物理sleep/display操作は低優先follow-upとして区別する
 - generic/custom `View` 境界と、型を保った content-view attachment
 - `dart_terminal_renderer_macos` の公開 facadeからdependency-owned
   `TerminalMetalView : MTKView`を通常起動で生成・attachし、live terminal screenを
@@ -740,6 +748,7 @@ make RUNTIME_ARCH=arm64 runtime-bundle-audit
 make RUNTIME_ARCH=arm64 runtime-integration
 make RUNTIME_ARCH=arm64 runtime-terminal-display-integration
 make RUNTIME_ARCH=arm64 runtime-native-hierarchy-integration
+make RUNTIME_ARCH=arm64 runtime-bounded-reliability-integration
 make RUNTIME_ARCH=arm64 runtime-user-actions-integration
 make RUNTIME_ARCH=arm64 runtime-applescript-integration
 make RUNTIME_ARCH=arm64 runtime-system-automation-integration
@@ -755,6 +764,14 @@ fairnessを再計測し、固定M1 baselineとpinned Ghostty証跡へ同一実�
 入力結果のSHA-256だけをaggregate証跡へ束縛し、terminal内容、command、path、PID、
 timestamp、raw sampleは保持しません。比較対象の再captureは別の明示的なレビュー工程です。
 
+`make RUNTIME_ARCH=arm64 runtime-bounded-reliability-integration` は通常製品の同一
+window/pane/session/Metal surfaceで、sleep、重複screen-set通知、交互のwarning/critical
+memory pressure、wake、normal復旧を8回繰り返します。sleep中のframe/deadline停止、wake後の
+newest-only redraw、canonical screen/scrollback/preeditとowner identityの保持、atlas capと
+GPU pinのretire、PTY/FD/root isolate/worker/text-input/native handle基準線、および終了後0を
+Developer JIT/Release AOTで検証します。typed eventによるbounded代替であり、物理的なsleep、
+display着脱、OS pressure、または24/72時間経過を実行したという証跡ではありません。
+
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
 smoke、real-PTY live Metal display、native tab/4-pane hierarchy、通常製品のuser action、
 AppleScript dictionary/object lifecycle、
@@ -762,7 +779,7 @@ App Intents metadata/shared actionsとnotification permission/response lifecycle
 effective-config early exit/Settings/configuration reload、light/dark/system appearance、
 shell/semantic、desktop notification/progress、OSC 52 confirmation、
 fullscreen/migration/restoration/reopen、clipboard、lifecycle、bounded traffic、
-resource stress、shutdown fault suiteをまとめて実行します。display suiteは
+bounded system reliability、resource stress、shutdown fault suiteをまとめて実行します。display suiteは
 SGR除去、style、soft wrap、
 bottom prompt、newest-only frame boundに加え、PTY由来のvisible text、local selection、
 cursor、native accessibility selector/geometry/focus/notificationをDeveloper JIT/

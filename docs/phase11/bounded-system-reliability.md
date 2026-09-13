@@ -491,3 +491,137 @@ marked as executed; it remains separately visible after the major goal.
   duration-only or privileged activities remain the documented low-priority
   follow-up and do not mask any reproducible correctness, ownership, teardown,
   or cap failure in the completed bounded checks.
+
+### 2026-09-13 — Bounded aggregate and parent-closure task start
+
+- Re-read README, ROADMAP, FEATURE_MATRIX, this memo, the ordinary product
+  performance/restoration launchers, current-process resource sampler, runtime
+  integration driver, bundle/resource gates, and the committed pressure and
+  system-recovery controllers after commit `ffabaa0`. The final child of the
+  reliability parent is now the first incomplete ROADMAP item; sanitizer/fuzz
+  expansion remains strictly later.
+- Purpose: execute sleep, screen-set recovery, memory pressure, redraw, and
+  recovery together for a fixed short count in one ordinary product lifetime,
+  prove stable owners/resources at every boundary and exact zero cleanup, then
+  publish the bounded-vs-duration limitation in README/FEATURE_MATRIX and close
+  the parent.
+- Scope: extend the existing isolated performance product launch because it
+  already owns one real AppKit window/view, PTY/session, Metal surface, runtime
+  worker, process resource sampler, strict content-free driver, and exact
+  teardown assertions. A separately named reliability Make gate will reuse the
+  same launch rather than add another hidden product CLI mode or duplicate the
+  owner graph.
+- The combined scenario will use eight deterministic iterations. Every
+  iteration queues sleep plus duplicate screen-set events, applies alternating
+  warning/critical pressure while presentation is suspended, verifies no
+  sleeping frame/deadline, wakes, waits for display recovery and one newest
+  lazy redraw, returns pressure to normal, and checks canonical screen,
+  scrollback, active preedit, window/tab/pane/session/surface/renderer identity,
+  bounded queues/atlas, retired GPU submission pins, native-handle and text
+  client baselines, and a live PTY.
+- Current-process file descriptors are not presently part of
+  `TerminalProcessResourceSnapshot`. The sampler will gain a bounded macOS
+  descriptor-count query used only at settled aggregate boundaries. It will
+  retain and emit only a count, not descriptor numbers, paths, sockets, or
+  command data. Worker topology provides the isolate/process boundary: the
+  AppKit root remains the same product isolate and the existing exact worker
+  process contract must remain one start/ready/exit lifecycle.
+- Out of scope: physical sleep, real display cable changes, privileged OS
+  pressure injection, 24/72-hour waiting, resident-memory monotonicity, and
+  Apple notarization. The deterministic typed events exercise the production
+  routing and policy but will be described as bounded equivalents, never as
+  physical or duration evidence.
+- Dependencies: the committed generic v15 transport, product recovery and
+  pressure controllers, live surface pin/cap snapshots, Phase 1 process/worker
+  cleanup, and the existing Developer JIT/Release AOT application bundles.
+  `dart_appkit` requires no edit; all repetition counts, fixtures, thresholds,
+  and result strings remain in `dart_terminal`.
+- Completion: descriptor-sampler tests, aggregate driver validation, both
+  runtime modes through the named reliability target, exact main gate,
+  README/FEATURE_MATRIX and generated Phase 7 evidence freshness, generic
+  repository audit, clean reviewed worktrees, child and parent ROADMAP checks,
+  and one completion commit. Any quick correctness/data/ownership/cap failure
+  remains a blocker; only elapsed-time evidence is deferred.
+
+### 2026-09-13 — Bounded aggregate implementation
+
+- Added a content-free current-process descriptor count to the existing macOS
+  resource sampler. It obtains the bounded descriptor-table size and applies
+  `F_GETFD` without reading or retaining descriptor numbers, paths, socket
+  addresses, or contents. A hard 65,536-descriptor scan ceiling fails closed
+  instead of silently undercounting an unexpected table.
+- Extended the ordinary performance product lifetime with a separate bounded
+  reliability phase after its single warning/critical checks. It establishes
+  one settled AppKit/PTY/Metal baseline, retains an active preedit, and performs
+  exactly eight combined iterations. Even iterations use warning pressure and
+  odd iterations use critical pressure.
+- Each iteration sends sleep, two screen-set events, and two identical pressure
+  events before wake. It waits until presentation is suspended and pressure is
+  explicitly deferred, then proves accepted/build frame counts stay unchanged
+  and no deadline remains. Wake must perform display recovery, apply the
+  pending pressure stage, accept the newest redraw, retire every GPU submission
+  pin, and accept a normal pressure recovery before the next iteration.
+- Every settled boundary requires unchanged canonical screen digest,
+  scrollback length/page/allocation, active preedit, window/tab/pane/session/
+  surface/renderer identities, native window frame, live PTY, root/worker
+  generation and worker PID, one outstanding worker process, AppKit handle and
+  text-client baselines, exact file-descriptor baseline, empty pending queues,
+  and atlas entry/byte caps. Existing ordinary shutdown then requires one clean
+  PTY and zero Metal/text-client/native owners; the external driver also
+  requires the exact worker spawn/reap contract.
+- Added `developer-jit-reliability`, `release-aot-reliability`, and the public
+  aggregate `runtime-bounded-reliability-integration` Make targets. The runtime
+  driver requires one strict content-free eight-iteration marker per launch and
+  prints one mode-specific reliability PASS. `runtime-verify` now includes the
+  aggregate target.
+- Updated README with the generic v15 event contract, product recovery/shedding
+  semantics, new gate, verified resources, and the explicit bounded-equivalent
+  limitation. Updated FEATURE_MATRIX `REL-01` from “sleep/soak later” to the
+  completed generic/product/bounded coverage while retaining physical events
+  and 24/72-hour elapsed-time evidence as low-priority follow-up.
+
+### 2026-09-13 — Bounded aggregate verification and gate correction
+
+- The descriptor sampler test opened and closed exactly one `/dev/null`
+  descriptor and observed baseline, baseline+1, then baseline without exposing
+  its identity. The focused product-performance test and static analysis passed.
+- Initial individual `developer-jit-reliability` and
+  `release-aot-reliability` executions both passed eight iterations, all
+  per-iteration baselines, canonical retention, lazy redraw, and exact cleanup.
+  Their existing hierarchy-fairness prerequisites also passed because the
+  first Make aliases reused the full performance target.
+- The first aggregate Make invocation passed the Developer JIT reliability
+  sequence and the Release AOT reliability sequence itself, including teardown,
+  but exited nonzero because the alias also imposed an unrelated performance
+  p95 gate. That run measured key admission at 2.350 ms against the strict
+  2 ms performance threshold; the preceding Release run measured 1.008 ms and
+  passed. The reliability result was sound, but coupling its completion to a
+  noisy independent latency sample was incorrect.
+- Added a dedicated `reliability` driver suite. It launches the same ordinary
+  product and retains all correctness, RSS/CPU sanity, queue/cap, resource,
+  canonical, and teardown assertions, but does not claim or enforce the separate
+  performance/fairness acceptance. The existing `performance` suite keeps its
+  strict Release latency budgets unchanged. A subsequent output review also
+  removed the misleading performance PASS from reliability-only runs.
+- The final named
+  `CI=true DART_SUPPRESS_ANALYTICS=true make runtime-bounded-reliability-integration`
+  passed with exit 0. Developer JIT completed its eight iterations in 7,535 ms
+  and Release AOT in 6,524 ms; each emitted exactly one reliability PASS with
+  sleep=8, wake=8, pressure=8, descriptor/root/worker/GPU/native baselines true,
+  and canonical retention true.
+- Phase 7 generated acceptance changed only the two recorded
+  `terminal_application.dart` hashes. README/FEATURE_MATRIX then intentionally
+  invalidated the compatibility coverage report; its regeneration changed only
+  those two documentation SHA-256 values. The exact main gate passed after the
+  reviewed regeneration and is repeated once more after final documentation and
+  driver cleanup before ROADMAP closure.
+- That final exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` repetition
+  passed with exit 0: all generated checks, 323-file formatting, analysis,
+  aggregate Dart/native/security/compatibility/differential/application/
+  distribution tests completed successfully. `git diff --check` remained
+  clean. The adjacent `dart_appkit` worktree remained unchanged and its final
+  generic audit again passed for 140 paths and 139 text files.
+- The parent is complete under its documented bounded acceptance contract.
+  Real 24/72-hour duration evidence remains visibly unchecked in the
+  post-major-goal follow-up and was not used to claim physical sleep, display,
+  or operating-system pressure coverage.

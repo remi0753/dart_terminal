@@ -207,6 +207,16 @@ void _testProcessResourceSampler() {
   );
   final TerminalCurrentProcessResourceSampler sampler =
       TerminalCurrentProcessResourceSampler();
+  final int descriptorBaseline = sampler.openFileDescriptorCount();
+  final RandomAccessFile descriptor = File('/dev/null').openSync();
+  final int descriptorOpen = sampler.openFileDescriptorCount();
+  descriptor.closeSync();
+  final int descriptorClosed = sampler.openFileDescriptorCount();
+  _expect(
+    descriptorOpen == descriptorBaseline + 1 &&
+        descriptorClosed == descriptorBaseline,
+    'descriptor sampler observes one exact open/close without identities',
+  );
   final TerminalProcessResourceSnapshot sampledBefore = sampler.snapshot();
   var accumulator = 0;
   for (var index = 0; index < 1000000; index++) {

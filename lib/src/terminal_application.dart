@@ -5493,8 +5493,10 @@ final class TerminalApplication {
           application: application,
           state: state,
           hierarchy: createdHierarchy,
+          lifecycle: createdLifecycle,
           sessions: sessions,
           owners: owners,
+          systemRecovery: systemRecoveryController!,
           memoryPressure: memoryPressureController!,
           observation: performanceObservation!,
           closed: closed,
@@ -5781,8 +5783,10 @@ final class TerminalApplication {
     required AppKitApplication application,
     required TerminalApplicationState state,
     required TerminalNativeHierarchyAdapter hierarchy,
+    required RuntimeLifecycleCoordinator lifecycle,
     required Map<PaneId, TerminalSession> sessions,
     required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required TerminalSystemRecoveryController systemRecovery,
     required TerminalMemoryPressureController memoryPressure,
     required _TerminalProductPerformanceObservation observation,
     required Completer<void> closed,
@@ -6215,6 +6219,19 @@ final class TerminalApplication {
       session: session,
       owner: owner,
     );
+    await _exerciseBoundedSystemReliabilityProduct(
+      application: application,
+      state: state,
+      hierarchy: hierarchy,
+      lifecycle: lifecycle,
+      systemRecovery: systemRecovery,
+      memoryPressure: memoryPressure,
+      pane: pane,
+      session: session,
+      owner: owner,
+      window: window,
+      resourceSampler: resourceSampler,
+    );
     if (!closed.isCompleted) closed.complete();
   }
 
@@ -6392,6 +6409,289 @@ final class TerminalApplication {
       'shaping_entries=${after.memoryPressureShapingEntryCount - warmed.memoryPressureShapingEntryCount} '
       'atlas_entries=${after.memoryPressureAtlasEntryCount - warmed.memoryPressureAtlasEntryCount} '
       'atlas_bytes=${after.memoryPressureAtlasReleasedBytes - warmed.memoryPressureAtlasReleasedBytes}',
+    );
+    surface.clearPreedit(generation: preeditGeneration + 1);
+  }
+
+  static Future<void> _exerciseBoundedSystemReliabilityProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required RuntimeLifecycleCoordinator lifecycle,
+    required TerminalSystemRecoveryController systemRecovery,
+    required TerminalMemoryPressureController memoryPressure,
+    required TerminalPane pane,
+    required TerminalSession session,
+    required _TerminalHierarchyProductPane owner,
+    required Window window,
+    required TerminalCurrentProcessResourceSampler resourceSampler,
+  }) async {
+    const int iterationCount = 8;
+    const int eventTimestampBase = 8300000000000000000;
+    const int eventTimestampStride = 1000000;
+    final TerminalLiveMetalSurface surface = owner.surface;
+    final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+    final TerminalScrollback scrollback = session.terminalScreenSet.scrollback;
+    final int preeditGeneration = surface.preeditState.generation + 1;
+    surface.updatePreedit(
+      generation: preeditGeneration,
+      text: 'bounded-reliability-preedit',
+      selectionLocation: 8,
+      selectionLength: 11,
+    );
+    final Stopwatch warmDeadline = Stopwatch()..start();
+    while ((surface.snapshot().pendingFrameCount != 0 ||
+            surface.snapshot().liveAtlasPinCount != 0) &&
+        warmDeadline.elapsed < const Duration(seconds: 3)) {
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+
+    final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
+    final TerminalSystemRecoverySnapshot systemBaseline = systemRecovery
+        .snapshot();
+    final TerminalMemoryPressureSnapshot pressureBaseline = memoryPressure
+        .snapshot();
+    final int descriptorBaseline = resourceSampler.openFileDescriptorCount();
+    final int nativeHandleBaseline = application.debugLiveObjectCount;
+    final int textClientBaseline = debugLiveTerminalTextInputClientCount();
+    final int screenDigest = _screenCanonicalDigest(screen);
+    final int scrollbackLength = scrollback.length;
+    final int scrollbackPageCount = scrollback.pageCount;
+    final int scrollbackAllocatedBytes = scrollback.allocatedBytes;
+    final int rendererGeneration = baseline.rendererGeneration;
+    final int workerGeneration = lifecycle.generation;
+    final int? workerProcessId = lifecycle.workerPid;
+    final Rect windowFrame = window.frame;
+    final TerminalWindowState logicalWindow = state.activeWindow!;
+    final TerminalTabState logicalTab = logicalWindow.selectedTab;
+    final int initialAcceptedFrameCount = baseline.acceptedFrameCount;
+    var sleepingFrameChecks = 0;
+    var recoveredFrameChecks = 0;
+    var descriptorBaselineChecks = 0;
+
+    _expectLifecycle(
+      baseline.pendingFrameCount == 0 &&
+          baseline.liveAtlasPinCount == 0 &&
+          !baseline.hasScheduledWork &&
+          descriptorBaseline > 0 &&
+          nativeHandleBaseline > 0 &&
+          textClientBaseline == 1 &&
+          workerProcessId != null &&
+          RuntimeLifecycleCoordinator.outstandingProcessCount == 1,
+      'bounded reliability did not begin at stable resource baselines',
+    );
+
+    for (var iteration = 0; iteration < iterationCount; iteration++) {
+      final int timestamp =
+          eventTimestampBase + iteration * eventTimestampStride;
+      final TerminalSystemRecoverySnapshot systemBefore = systemRecovery
+          .snapshot();
+      final TerminalMemoryPressureSnapshot pressureBefore = memoryPressure
+          .snapshot();
+      final TerminalLiveMetalSurfaceSnapshot surfaceBefore = surface.snapshot();
+      final AppKitMemoryPressureLevel level = iteration.isEven
+          ? AppKitMemoryPressureLevel.warning
+          : AppKitMemoryPressureLevel.critical;
+
+      _injectApplicationPowerStateEventForTesting(
+        application,
+        state: AppKitApplicationPowerState.willSleep,
+        monotonicNanoseconds: timestamp + 100000,
+      );
+      _injectApplicationScreenSetEventForTesting(
+        application,
+        monotonicNanoseconds: timestamp + 200000,
+      );
+      _injectApplicationScreenSetEventForTesting(
+        application,
+        monotonicNanoseconds: timestamp + 300000,
+      );
+      _injectApplicationMemoryPressureEventForTesting(
+        application,
+        level: level,
+        monotonicNanoseconds: timestamp + 400000,
+      );
+      _injectApplicationMemoryPressureEventForTesting(
+        application,
+        level: level,
+        monotonicNanoseconds: timestamp + 500000,
+      );
+
+      final Stopwatch suspendDeadline = Stopwatch()..start();
+      while ((!systemRecovery.snapshot().isPresentationSuspended ||
+              !surface.snapshot().isSystemSuspended ||
+              memoryPressure.snapshot().applicationCount <=
+                  pressureBefore.applicationCount) &&
+          suspendDeadline.elapsed < const Duration(seconds: 3)) {
+        await Future<void>.delayed(const Duration(milliseconds: 2));
+      }
+      final TerminalLiveMetalSurfaceSnapshot sleeping = surface.snapshot();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      final TerminalLiveMetalSurfaceSnapshot sleepingStable = surface
+          .snapshot();
+      _expectLifecycle(
+        systemRecovery.snapshot().isPresentationSuspended &&
+            sleeping.isSystemSuspended &&
+            sleeping.pendingMemoryPressureLevel == level &&
+            sleeping.memoryPressureDeferredCount >
+                surfaceBefore.memoryPressureDeferredCount &&
+            sleepingStable.acceptedFrameCount == sleeping.acceptedFrameCount &&
+            sleepingStable.frameBuildCount == sleeping.frameBuildCount &&
+            !sleepingStable.hasScheduledWork,
+        'bounded reliability admitted presentation work while sleeping',
+      );
+      sleepingFrameChecks++;
+
+      _injectApplicationPowerStateEventForTesting(
+        application,
+        state: AppKitApplicationPowerState.didWake,
+        monotonicNanoseconds: timestamp + 600000,
+      );
+      final Stopwatch recoveryDeadline = Stopwatch()..start();
+      while ((systemRecovery.snapshot().isPresentationSuspended ||
+              surface.snapshot().isSystemSuspended ||
+              systemRecovery.snapshot().displayRecoveryCount <=
+                  systemBefore.displayRecoveryCount ||
+              surface.snapshot().pendingMemoryPressureLevel != null ||
+              surface.snapshot().acceptedFrameCount <=
+                  sleeping.acceptedFrameCount ||
+              surface.snapshot().pendingFrameCount != 0 ||
+              surface.snapshot().liveAtlasPinCount != 0 ||
+              surface.snapshot().hasScheduledWork) &&
+          recoveryDeadline.elapsed < const Duration(seconds: 3)) {
+        await Future<void>.delayed(const Duration(milliseconds: 2));
+      }
+      _injectApplicationMemoryPressureEventForTesting(
+        application,
+        level: AppKitMemoryPressureLevel.normal,
+        monotonicNanoseconds: timestamp + 700000,
+      );
+      final Stopwatch normalDeadline = Stopwatch()..start();
+      while ((memoryPressure.snapshot().observedLevel !=
+                  AppKitMemoryPressureLevel.normal ||
+              memoryPressure.snapshot().recoveryCount <=
+                  pressureBefore.recoveryCount) &&
+          normalDeadline.elapsed < const Duration(seconds: 3)) {
+        await Future<void>.delayed(const Duration(milliseconds: 2));
+      }
+
+      final TerminalLiveMetalSurfaceSnapshot recovered = surface.snapshot();
+      final TerminalSystemRecoverySnapshot systemAfter = systemRecovery
+          .snapshot();
+      final TerminalMemoryPressureSnapshot pressureAfter = memoryPressure
+          .snapshot();
+      final bool stageApplied = level == AppKitMemoryPressureLevel.warning
+          ? recovered.memoryPressureWarningCount >
+                surfaceBefore.memoryPressureWarningCount
+          : recovered.memoryPressureCriticalCount >
+                surfaceBefore.memoryPressureCriticalCount;
+      final bool preeditRetained =
+          surface.preeditState.generation == preeditGeneration &&
+          surface.preeditState.text == 'bounded-reliability-preedit' &&
+          surface.preeditState.selectionLocation == 8 &&
+          surface.preeditState.selectionLength == 11;
+      final int descriptorCount = resourceSampler.openFileDescriptorCount();
+      _expectLifecycle(
+        systemAfter.suspendCount == systemBefore.suspendCount + 1 &&
+            systemAfter.displayRecoveryCount >=
+                systemBefore.displayRecoveryCount + 1 &&
+            systemAfter.resumeCount == systemBefore.resumeCount + 1 &&
+            pressureAfter.applicationCount ==
+                pressureBefore.applicationCount + 1 &&
+            pressureAfter.recoveryCount == pressureBefore.recoveryCount + 1 &&
+            pressureAfter.pendingLevel == null &&
+            pressureAfter.observedLevel == AppKitMemoryPressureLevel.normal &&
+            stageApplied &&
+            recovered.pendingMemoryPressureLevel == null &&
+            recovered.lastAcceptedModelRevision ==
+                recovered.lastAppliedDamageGeneration &&
+            recovered.pendingFrameCount == 0 &&
+            recovered.liveAtlasPinCount == 0 &&
+            !recovered.hasScheduledWork &&
+            recovered.atlasEntryCount <= surface.atlas.limits.maximumEntries &&
+            recovered.atlasRetainedBytes <=
+                surface.atlas.limits.maximumRetainedBytes &&
+            recovered.rendererGeneration == rendererGeneration &&
+            _screenCanonicalDigest(screen) == screenDigest &&
+            scrollback.length == scrollbackLength &&
+            scrollback.pageCount == scrollbackPageCount &&
+            scrollback.allocatedBytes == scrollbackAllocatedBytes &&
+            preeditRetained &&
+            state.windowCount == 1 &&
+            state.tabCount == 1 &&
+            state.paneCount == 1 &&
+            identical(state.activeWindow, logicalWindow) &&
+            identical(state.activeWindow!.selectedTab, logicalTab) &&
+            identical(state.paneForId(pane.id), pane) &&
+            identical(hierarchy.windowForTab(logicalTab.id), window) &&
+            window.frame == windowFrame &&
+            identical(owner.surface, surface) &&
+            identical(owner.session, session) &&
+            identical(owner.pane, pane) &&
+            session.isLive &&
+            lifecycle.generation == workerGeneration &&
+            lifecycle.workerPid == workerProcessId &&
+            RuntimeLifecycleCoordinator.outstandingProcessCount == 1 &&
+            application.debugLiveObjectCount == nativeHandleBaseline &&
+            debugLiveTerminalTextInputClientCount() == textClientBaseline &&
+            descriptorCount == descriptorBaseline,
+        'bounded reliability changed canonical state, owners, or resources',
+      );
+      recoveredFrameChecks++;
+      descriptorBaselineChecks++;
+    }
+
+    final TerminalSystemRecoverySnapshot systemAfter = systemRecovery
+        .snapshot();
+    final TerminalMemoryPressureSnapshot pressureAfter = memoryPressure
+        .snapshot();
+    final TerminalLiveMetalSurfaceSnapshot surfaceAfter = surface.snapshot();
+    final int systemAcceptedDelta =
+        systemAfter.acceptedEventCount - systemBaseline.acceptedEventCount;
+    final int systemCoalescedDelta =
+        systemAfter.coalescedEventCount - systemBaseline.coalescedEventCount;
+    final int pressureAcceptedDelta =
+        pressureAfter.acceptedEventCount - pressureBaseline.acceptedEventCount;
+    final int pressureCoalescedDelta =
+        pressureAfter.coalescedEventCount -
+        pressureBaseline.coalescedEventCount;
+    _expectLifecycle(
+      systemAcceptedDelta >= iterationCount * 3 &&
+          systemCoalescedDelta >= iterationCount &&
+          systemAfter.suspendCount ==
+              systemBaseline.suspendCount + iterationCount &&
+          systemAfter.displayRecoveryCount >=
+              systemBaseline.displayRecoveryCount + iterationCount &&
+          systemAfter.resumeCount ==
+              systemBaseline.resumeCount + iterationCount &&
+          pressureAcceptedDelta == iterationCount * 2 &&
+          pressureCoalescedDelta >= iterationCount &&
+          pressureAfter.applicationCount ==
+              pressureBaseline.applicationCount + iterationCount &&
+          pressureAfter.recoveryCount ==
+              pressureBaseline.recoveryCount + iterationCount &&
+          surfaceAfter.memoryPressureWarningCount ==
+              baseline.memoryPressureWarningCount + iterationCount ~/ 2 &&
+          surfaceAfter.memoryPressureCriticalCount ==
+              baseline.memoryPressureCriticalCount + iterationCount ~/ 2 &&
+          surfaceAfter.acceptedFrameCount >=
+              initialAcceptedFrameCount + iterationCount &&
+          sleepingFrameChecks == iterationCount &&
+          recoveredFrameChecks == iterationCount &&
+          descriptorBaselineChecks == iterationCount,
+      'bounded reliability aggregate counters did not match fixed repetitions',
+    );
+    stdout.writeln(
+      'TERMINAL_BOUNDED_RELIABILITY_TEST iterations=$iterationCount '
+      'sleep=$sleepingFrameChecks wake=$recoveredFrameChecks '
+      'display_recovery=${systemAfter.displayRecoveryCount - systemBaseline.displayRecoveryCount} '
+      'pressure=${pressureAfter.applicationCount - pressureBaseline.applicationCount} '
+      'warning=${surfaceAfter.memoryPressureWarningCount - baseline.memoryPressureWarningCount} '
+      'critical=${surfaceAfter.memoryPressureCriticalCount - baseline.memoryPressureCriticalCount} '
+      'pty=1 descriptors=$descriptorBaselineChecks root_isolate=1 '
+      'worker_process=1 metal=1 gpu_pins=0 native_handles=$nativeHandleBaseline '
+      'canonical_retained=true newest_redrawn=true baselines=true '
+      'content_free=true',
     );
     surface.clearPreedit(generation: preeditGeneration + 1);
   }

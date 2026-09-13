@@ -1355,7 +1355,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
         - [x] verified pinned source／Zig acquisitionとclean ReleaseLocal build
         - [x] compatible capture harness／evidenceとpassing relative gate
   - [x] aggregate gate、文書／matrix更新、親項目完了判定
-- [ ] 24/72 hour soak、sleep/wake、display attach/detach、memory pressure
+- [x] 24/72 hour soak、sleep/wake、display attach/detach、memory pressure
   （分割、generic／product境界、bounded代替、完了条件は
   [`docs/phase11/bounded-system-reliability.md`](docs/phase11/bounded-system-reliability.md)
   を参照して順に実施する）
@@ -1363,7 +1363,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] `dart_appkit` generic system-state event transport
   - [x] product sleep/wake／display recovery policy
   - [x] product memory-pressure shedding／recovery
-  - [ ] bounded aggregate受け入れ、文書／matrix、親項目完了判定
+  - [x] bounded aggregate受け入れ、文書／matrix、親項目完了判定
 - [ ] native ASan/UBSan、fuzz corpus、fault injection
 - [ ] Ghostty pinned matrix の P0/P1 gap burn-down
 - [ ] release candidate の daily-use program matrix
