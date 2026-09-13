@@ -51,22 +51,25 @@ void _testRawEvidenceValidation() {
 
   Map<String, Object?> root() =>
       Map<String, Object?>.from(jsonDecode(fixture) as Map<Object?, Object?>);
-  final Map<String, Object?> versionTwo = root();
-  final List<Object?> versionTwoSamples =
-      versionTwo['samples']! as List<Object?>;
-  final Map<String, Object?> versionTwoSample =
-      versionTwoSamples.first! as Map<String, Object?>;
-  versionTwoSample['snapshot'] = (versionTwoSample['snapshot']! as String)
-      .replaceFirst('version=1 ', 'version=2 ');
-  versionTwoSample['snapshot_sha256'] = terminalDifferentialSha256(
-    utf8.encode(versionTwoSample['snapshot']! as String),
+  final Map<String, Object?> currentVersion = root();
+  final List<Object?> currentVersionSamples =
+      currentVersion['samples']! as List<Object?>;
+  final Map<String, Object?> currentVersionSample =
+      currentVersionSamples.first! as Map<String, Object?>;
+  currentVersionSample['snapshot'] =
+      (currentVersionSample['snapshot']! as String).replaceFirst(
+        'version=1 ',
+        'version=4 ',
+      );
+  currentVersionSample['snapshot_sha256'] = terminalDifferentialSha256(
+    utf8.encode(currentVersionSample['snapshot']! as String),
   );
   _expect(
     TerminalApplicationRawEvidence.parse(
-      jsonEncode(versionTwo),
+      jsonEncode(currentVersion),
       scenario: scenario,
     ).samples.first.snapshot.startsWith(
-      'dart-terminal-state-snapshot version=2 ',
+      'dart-terminal-state-snapshot version=4 ',
     ),
     'current snapshot version coexists with immutable version-one evidence',
   );
@@ -103,7 +106,7 @@ void _testRawEvidenceValidation() {
   unsupportedVersionSample['snapshot'] =
       (unsupportedVersionSample['snapshot']! as String).replaceFirst(
         'version=1 ',
-        'version=4 ',
+        'version=5 ',
       );
   unsupportedVersionSample['snapshot_sha256'] = terminalDifferentialSha256(
     utf8.encode(unsupportedVersionSample['snapshot']! as String),

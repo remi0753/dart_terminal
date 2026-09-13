@@ -108,7 +108,7 @@ TerminalPhase9ProtocolPropertyResult runTerminalPhase9ProtocolPropertyTests() {
     result.machineLine() ==
         'TERMINAL_PHASE9_PROTOCOL_PROPERTY_PASS seed=0x509f52a1 '
             'anchors=8 mutations=64 generated=64 executions=680 '
-            'parsed_bytes=731150 state_hash=2246715040',
+            'parsed_bytes=731150 state_hash=2980607666',
     'fixed suite digest changed: ${result.machineLine()}',
   );
   return result;

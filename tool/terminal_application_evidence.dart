@@ -425,7 +425,7 @@ final class TerminalApplicationRawSample {
       512 * 1024,
     );
     _expect(
-      RegExp(r'^dart-terminal-state-snapshot version=(1|2|3) ')
+      RegExp(r'^dart-terminal-state-snapshot version=(1|2|3|4) ')
               .hasMatch(snapshot) &&
           snapshot.endsWith('end\n'),
       'sample snapshot envelope is invalid',

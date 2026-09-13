@@ -185,12 +185,12 @@ String generateTerminalCompatibilityRegressionCoverage({
       .length;
   _expect(
     inventory.records.length == 272 &&
-        support[TerminalCompatibilitySupport.implemented] == 97 &&
-        support[TerminalCompatibilitySupport.partial] == 22 &&
+        support[TerminalCompatibilitySupport.implemented] == 99 &&
+        support[TerminalCompatibilitySupport.partial] == 23 &&
         support[TerminalCompatibilitySupport.safeIgnore] == 8 &&
-        support[TerminalCompatibilitySupport.unsupported] == 145 &&
+        support[TerminalCompatibilitySupport.unsupported] == 142 &&
         safeIgnore == 8 &&
-        explicitUnsupported == 145,
+        explicitUnsupported == 142,
     'reviewed inventory boundary differs',
   );
   final Map<String, Object?> implementation = _jsonObject(
@@ -206,7 +206,7 @@ String generateTerminalCompatibilityRegressionCoverage({
     'implementation.modes',
   ).length;
   _expect(
-    selectors == 92 && modes == 27,
+    selectors == 95 && modes == 27,
     'reviewed implementation declaration totals differ',
   );
 

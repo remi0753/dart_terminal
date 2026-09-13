@@ -1,8 +1,8 @@
-dart-terminal-state-snapshot version=3 kind=screen-set
+dart-terminal-state-snapshot version=4 kind=screen-set
 set active=primary mode1049=false viewport_offset=0 primary_viewport_offset=0
 metadata window_title=null icon_title=null cwd=null window_title_stack=[] icon_title_stack=[]
 resources styles=1 graphemes=1 palette=256
-style id=1 attributes=bold bits=0x0001
+style id=1 attributes=bold bits=0x0001 underline_color=default
 grapheme id=1 width=1 scalars=U+0065,U+0301 text="é"
 palette defaults foreground=#e5e5e5 background=#000000 cursor=#e5e5e5
 palette range=000-015 colors=#000000,#cd0000,#00cd00,#cdcd00,#0000ee,#cd00cd,#00cdcd,#e5e5e5,#7f7f7f,#ff0000,#00ff00,#ffff00,#5c5cff,#ff00ff,#00ffff,#ffffff
@@ -23,7 +23,7 @@ palette range=224-239 colors=#ffd7d7,#ffd7ff,#ffff00,#ffff5f,#ffff87,#ffffaf,#ff
 palette range=240-255 colors=#585858,#626262,#6c6c6c,#767676,#808080,#8a8a8a,#949494,#9e9e9e,#a8a8a8,#b2b2b2,#bcbcbc,#c6c6c6,#d0d0d0,#dadada,#e4e4e4,#eeeeee
 history rows=0 max_lines=16 max_bytes=65536 page_rows=4
 screen name=primary rows=3 columns=10
-primary cursor=1,3 saved=0,0 current=palette:4/default/1 saved_rendition=default/default/0
+primary cursor=1,3 saved=0,0 current=palette:4/default/1 saved_rendition=default/default/0 protection=current:false,saved:false
 primary charsets=g0:ascii,g1:ascii,gl:0 saved=g0:ascii,g1:ascii,gl:0
 primary margins=0,2,0,9 modes=origin:false,insert:false,autoWrap:true,reverseVideo:false,horizontalMargins:false
 primary cursor_style=block visible=true blinking=true wrap_pending=false
@@ -41,7 +41,7 @@ primary cell=1,2 content=U+0058 flags=narrow foreground=palette:4 background=def
 primary cell=1,3 content=U+0074 flags=narrow foreground=palette:4 background=default style=1 hyperlink=0
 primary row=2 flags=- logical=1:3+0 text="          "
 screen name=alternate rows=3 columns=10
-alternate cursor=0,0 saved=0,0 current=default/default/0 saved_rendition=default/default/0
+alternate cursor=0,0 saved=0,0 current=default/default/0 saved_rendition=default/default/0 protection=current:false,saved:false
 alternate charsets=g0:ascii,g1:ascii,gl:0 saved=g0:ascii,g1:ascii,gl:0
 alternate margins=0,2,0,9 modes=origin:false,insert:false,autoWrap:true,reverseVideo:false,horizontalMargins:false
 alternate cursor_style=block visible=true blinking=true wrap_pending=false

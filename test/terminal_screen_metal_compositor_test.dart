@@ -8,6 +8,7 @@ void main() => runTerminalScreenMetalCompositorTests();
 
 void runTerminalScreenMetalCompositorTests() {
   _testAnsiStylesBecomeMetalLayers();
+  _testExtendedDecorationsUseIndependentColors();
   _testCursorColorUsesIndependentMetalLayer();
   _testInverseBackgroundAndConcealMapping();
   _testWrappedOverflowKeepsNewestPromptVisible();
@@ -21,6 +22,44 @@ void runTerminalScreenMetalCompositorTests() {
   _testContentRectangleOffsetsEveryLayer();
   _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder();
   _testKittyAnimationFrameUsesContentGenerationAndNativePixels();
+}
+
+void _testExtendedDecorationsUseIndependentColors() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 3);
+  _parse(screens, ascii.encode('\x1b[38;2;10;20;30;4;58;2;1;2;3;53mA'));
+  final _CompositionFixture fixture = _compose(screens);
+  try {
+    final List<TerminalMetalInstance> decorations = fixture
+        .composition
+        .instances
+        .where(
+          (TerminalMetalInstance instance) =>
+              instance.kind == TerminalMetalInstanceKind.decoration,
+        )
+        .toList(growable: false);
+    final TerminalMetalInstance underline = decorations.singleWhere(
+      (TerminalMetalInstance instance) => instance.colorRgba == 0x010203ff,
+    );
+    final TerminalMetalInstance overline = decorations.singleWhere(
+      (TerminalMetalInstance instance) => instance.colorRgba == 0x0a141eff,
+    );
+    _expect(
+      decorations.length == 2 &&
+          overline.y < underline.y &&
+          overline.width == underline.width &&
+          overline.width > 0,
+      'underline color and foreground overline become distinct Metal layers',
+    );
+    final Uint8List rgba = fixture.renderer.renderRgba(
+      fixture.composition.scheduledFrame.frame,
+    );
+    _expect(
+      rgba.any((int byte) => byte != 0),
+      'extended decorations render through the native Metal path',
+    );
+  } finally {
+    fixture.dispose();
+  }
 }
 
 void _testAccessibleOverlaysUseContrastAndGeometry() {

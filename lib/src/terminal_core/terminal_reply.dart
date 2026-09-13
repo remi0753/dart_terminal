@@ -22,7 +22,7 @@ enum TerminalModeReportStatus {
 
 /// Encodes the bounded terminal replies supported by the Dart terminal core.
 abstract final class TerminalReplyEncoder {
-  static const int maximumReplyBytes = 64;
+  static const int maximumReplyBytes = 96;
   static const int maximumCoordinate = 65535;
   static const int maximumMode = 0x7fffffff;
   static const int maximumOsc52SelectionBytes = 12;
@@ -139,9 +139,11 @@ abstract final class TerminalReplyEncoder {
     required int foreground,
     required int background,
     required int styleAttributes,
+    int underlineColor = 0,
   }) {
     _validateSgrColor(foreground, 'foreground');
     _validateSgrColor(background, 'background');
+    _validateSgrColor(underlineColor, 'underlineColor');
     TerminalStyleAttributes.validate(styleAttributes);
     final _TerminalReplyBuilder builder = _TerminalReplyBuilder()
       ..bytes(const <int>[0x1b, 0x50, 0x31, 0x24, 0x72])
@@ -200,8 +202,15 @@ abstract final class TerminalReplyEncoder {
     )) {
       _sgrParameter(builder, 9);
     }
-    _writeSgrColor(builder, foreground, foreground: true);
-    _writeSgrColor(builder, background, foreground: false);
+    if (TerminalStyleAttributes.has(
+      styleAttributes,
+      TerminalStyleAttributes.overline,
+    )) {
+      _sgrParameter(builder, 53);
+    }
+    _writeSgrColor(builder, foreground, introducer: 38);
+    _writeSgrColor(builder, background, introducer: 48);
+    _writeSgrColor(builder, underlineColor, introducer: 58);
     builder
       ..byte(0x6d)
       ..terminator(VtStringTerminator.stringTerminator);
@@ -369,20 +378,25 @@ abstract final class TerminalReplyEncoder {
   static void _writeSgrColor(
     _TerminalReplyBuilder builder,
     int color, {
-    required bool foreground,
+    required int introducer,
   }) {
-    if (color == 0) return;
-    if (color <= 8) {
-      _sgrParameter(builder, (foreground ? 30 : 40) + color - 1);
-      return;
+    if (introducer != 38 && introducer != 48 && introducer != 58) {
+      throw ArgumentError.value(introducer, 'introducer');
     }
-    if (color <= 16) {
-      _sgrParameter(builder, (foreground ? 90 : 100) + color - 9);
-      return;
+    if (color == 0) return;
+    if (introducer != 58) {
+      if (color <= 8) {
+        _sgrParameter(builder, (introducer == 38 ? 30 : 40) + color - 1);
+        return;
+      }
+      if (color <= 16) {
+        _sgrParameter(builder, (introducer == 38 ? 90 : 100) + color - 9);
+        return;
+      }
     }
     builder
       ..byte(0x3b)
-      ..decimal(foreground ? 38 : 48)
+      ..decimal(introducer)
       ..byte(0x3a);
     if (color <= 256) {
       builder

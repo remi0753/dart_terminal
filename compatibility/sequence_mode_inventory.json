@@ -930,7 +930,7 @@
     {
       "id": "dec:csi:decsca",
       "mnemonic": "DECSCA",
-      "syntax": "CSI Ps \" q",
+      "syntax": "CSI \" q",
       "selector": {
         "kind": "csi",
         "privateMarker": null,
@@ -939,17 +939,21 @@
         ],
         "finalByte": 113
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "dec-vt510-rm-b01",
           "locator": "Part II chapter 5, DECSCA—Select Character Protection Attribute"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Values 0 and 2 select erasable cells; value 1 protects later prints from DECSED and DECSEL."
     },
     {
       "id": "dec:csi:decscl",
@@ -1030,46 +1034,54 @@
     {
       "id": "dec:csi:decsed",
       "mnemonic": "DECSED",
-      "syntax": "CSI ? Ps J",
+      "syntax": "CSI ? J",
       "selector": {
         "kind": "csi",
         "privateMarker": 63,
         "intermediates": [],
         "finalByte": 74
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "partial",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "dec-vt510-rm-b01",
           "locator": "Part II chapter 5, DECSED—Selective Erase in Display"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Modes 0–2 erase only unprotected cells while preserving atomic wide and grapheme cells."
     },
     {
       "id": "dec:csi:decsel",
       "mnemonic": "DECSEL",
-      "syntax": "CSI ? Ps K",
+      "syntax": "CSI ? K",
       "selector": {
         "kind": "csi",
         "privateMarker": 63,
         "intermediates": [],
         "finalByte": 75
       },
-      "support": "unsupported",
-      "disposition": "reject",
+      "support": "implemented",
+      "disposition": "execute",
       "sourceRefs": [
         {
           "source": "dec-vt510-rm-b01",
           "locator": "Part II chapter 5, DECSEL—Selective Erase in Line"
         }
       ],
-      "implementationEvidence": [],
-      "testEvidence": [],
-      "notes": "Not implemented; explicitly rejected by the semantic sink and retained for later compatibility prioritization from differential/application evidence."
+      "implementationEvidence": [
+        "lib/src/terminal_core/terminal_screen_parser_sink.dart#semantic-dispatch"
+      ],
+      "testEvidence": [
+        "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
+      ],
+      "notes": "Modes 0–2 erase only unprotected cells while preserving atomic wide and grapheme cells."
     },
     {
       "id": "dec:csi:decsera",
@@ -3247,7 +3259,7 @@
       "testEvidence": [
         "test/terminal_compatibility_surface_test.dart#declared-selector-reconciliation"
       ],
-      "notes": "Text attributes and ANSI/256/direct colors are implemented; the full ECMA/xterm rendition repertoire is not."
+      "notes": "Text attributes including underline variants and overline, plus ANSI/256/direct foreground, background, and underline colors are implemented; the full ECMA/xterm rendition repertoire is not."
     },
     {
       "id": "ecma48:csi:sl",

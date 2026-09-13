@@ -10,12 +10,13 @@ void runTerminalStyleTests() {
   _testRenditionPrintSaveRestoreResetAndErase();
   _testSgrAttributesAndColors();
   _testSgrUnderlineAndPaletteFamilies();
+  _testProtectedSelectiveErase();
   _testSgrMalformedGroupsAndUnknownParameters();
   _testSgrChunkIndependence();
 }
 
 void _testStyleTableBoundsAndStableIds() {
-  final TerminalStyleTable table = TerminalStyleTable(capacity: 2);
+  final TerminalStyleTable table = TerminalStyleTable(capacity: 4);
   _expect(table.definitionCount == 0, 'style table starts with default only');
   _expect(table.attributesAt(0) == 0, 'style zero is default');
   final int generation = table.generation;
@@ -52,16 +53,39 @@ void _testStyleTableBoundsAndStableIds() {
     'style flag round trip',
   );
 
+  final int coloredCurly = table.intern(curlyAttributes, underlineColor: 7);
+  _expect(
+    coloredCurly == 3 &&
+        table.attributesAt(coloredCurly) == curlyAttributes &&
+        table.underlineColorAt(coloredCurly) == 7 &&
+        table.intern(curlyAttributes, underlineColor: 7) == coloredCurly,
+    'underline color participates in stable style identity',
+  );
+  final int overline = table.intern(TerminalStyleAttributes.overline);
+  _expect(
+    overline == 4 &&
+        TerminalStyleAttributes.has(
+          table.attributesAt(overline),
+          TerminalStyleAttributes.overline,
+        ) &&
+        table.underlineColorAt(overline) == 0,
+    'overline and default underline color round trip',
+  );
+
   final int fullGeneration = table.generation;
   _expectThrowsStateError(
     () => table.intern(TerminalStyleAttributes.faint),
     'style capacity is hard bounded',
   );
-  _expect(table.definitionCount == 2, 'capacity failure is atomic');
+  _expect(table.definitionCount == 4, 'capacity failure is atomic');
   _expect(table.generation == fullGeneration, 'capacity failure generation');
   _expectThrowsArgumentError(
     () => table.intern(1 << 15),
     'unknown style flag rejected',
+  );
+  _expectThrowsArgumentError(
+    () => TerminalStyleTable().intern(0, underlineColor: 257),
+    'invalid underline color rejected',
   );
   _expectThrowsArgumentError(
     () => TerminalStyleAttributes.withUnderline(
@@ -89,6 +113,7 @@ void _testRenditionPrintSaveRestoreResetAndErase() {
     foreground: 4,
     background: 0x80112233,
     styleAttributes: attributes,
+    underlineColor: 6,
   );
   final int styleId = screen.currentStyleId;
   screen.printNarrowScalar(0x41);
@@ -99,6 +124,10 @@ void _testRenditionPrintSaveRestoreResetAndErase() {
     'rendition print background',
   );
   _expect(screen.styleAt(0, 0) == styleId, 'rendition print style ID');
+  _expect(
+    styles.underlineColorAt(styleId) == 6,
+    'rendition print keeps underline color in its style definition',
+  );
   _expect(
     styles.attributesAt(styleId) == attributes,
     'printed style resolves through shared table',
@@ -120,7 +149,8 @@ void _testRenditionPrintSaveRestoreResetAndErase() {
   _expect(
     screen.currentForeground == 4 &&
         screen.currentBackground == 0x80112233 &&
-        screen.currentStyleId == styleId,
+        screen.currentStyleId == styleId &&
+        screen.currentUnderlineColor == 6,
     'restore returns saved rendition',
   );
 
@@ -140,6 +170,7 @@ void _testRenditionPrintSaveRestoreResetAndErase() {
     () => screen.setCurrentRendition(foreground: 257),
     () => screen.setCurrentRendition(background: 0x81000000),
     () => screen.setCurrentRendition(styleAttributes: 1 << 15),
+    () => screen.setCurrentRendition(underlineColor: 257),
   ]) {
     _expectThrowsArgumentError(mutate, 'invalid rendition rejected');
     _expect(screen.currentForeground == 4, 'invalid rendition foreground');
@@ -162,7 +193,8 @@ void _testRenditionPrintSaveRestoreResetAndErase() {
   _expect(
     screen.currentForeground == 0 &&
         screen.currentBackground == 0 &&
-        screen.currentStyleId == 0,
+        screen.currentStyleId == 0 &&
+        screen.currentUnderlineColor == 0,
     'terminal reset clears current rendition',
   );
   _expect(
@@ -183,9 +215,9 @@ void _testSgrAttributesAndColors() {
   final VtParser parser = VtParser(sink: sink);
   parser.parse(
     Uint8List.fromList(<int>[
-      ..._csi('1;2;3;4;5;7;8;9;31;104m'),
+      ..._csi('1;2;3;4;5;7;8;9;31;104;53;58:2::9:8:7m'),
       0x41,
-      ..._csi('22;23;24;25;27;28;29;39;49m'),
+      ..._csi('22;23;24;25;27;28;29;39;49;55;59m'),
       0x42,
       ..._csi('4:3;38:2::1:2:3;48:5:196m'),
       0x43,
@@ -206,17 +238,23 @@ void _testSgrAttributesAndColors() {
         TerminalStyleAttributes.has(all, TerminalStyleAttributes.inverse) &&
         TerminalStyleAttributes.has(all, TerminalStyleAttributes.conceal) &&
         TerminalStyleAttributes.has(all, TerminalStyleAttributes.strike) &&
+        TerminalStyleAttributes.has(all, TerminalStyleAttributes.overline) &&
         TerminalStyleAttributes.underline(all) == TerminalUnderlineStyle.single,
-    'SGR sets every P0 text attribute',
+    'SGR sets base and extended text attributes',
   );
   _expect(
     screen.foregroundAt(0, 0) == 2 && screen.backgroundAt(0, 0) == 13,
     'SGR maps ANSI normal and bright colors to palette tokens',
   );
   _expect(
+    screen.styleTable.underlineColorAt(screen.styleAt(0, 0)) == 0x80090807,
+    'SGR maps direct underline color into style identity',
+  );
+  _expect(
     screen.styleAt(0, 1) == 0 &&
         screen.foregroundAt(0, 1) == 0 &&
-        screen.backgroundAt(0, 1) == 0,
+        screen.backgroundAt(0, 1) == 0 &&
+        screen.styleTable.underlineColorAt(screen.styleAt(0, 1)) == 0,
     'SGR unset and default colors restore default rendition',
   );
 
@@ -249,6 +287,72 @@ void _testSgrAttributesAndColors() {
     'empty SGR resets rendition',
   );
   _expect(sink.unsupportedSequenceCount == 0, 'supported SGR has no rejects');
+}
+
+void _testProtectedSelectiveErase() {
+  final TerminalScreen screen = TerminalScreen(rows: 2, columns: 6);
+  final TerminalScreenParserSink sink = _parse(screen, <int>[
+    ..._csi('1"q'),
+    ...utf8.encode('界'),
+    ..._csi('0"q'),
+    ...ascii.encode('AB'),
+  ]);
+  _expect(
+    screen.widthFlagsAt(0, 0) ==
+            (TerminalCellFlags.wide | TerminalCellFlags.protected) &&
+        screen.widthFlagsAt(0, 1) ==
+            (TerminalCellFlags.continuation | TerminalCellFlags.protected) &&
+        screen.widthFlagsAt(0, 2) == TerminalCellFlags.narrow &&
+        !screen.currentCellProtected,
+    'DECSCA marks complete later cell groups and can return to erasable mode',
+  );
+
+  screen.setCursorPosition(0, 1);
+  _parse(screen, _csi('?0K'));
+  screen.validateCellTopology();
+  _expect(
+    screen.contentAt(0, 0) != 0 &&
+        screen.contentAt(0, 1) == 0 &&
+        screen.contentAt(0, 2) == 0 &&
+        screen.contentAt(0, 3) == 0,
+    'DECSEL preserves a protected wide group and erases later cells',
+  );
+
+  screen.eraseInLine(2);
+  _expect(
+    screen.contentAt(0, 0) == 0 &&
+        screen.widthFlagsAt(0, 0) == TerminalCellFlags.narrow,
+    'ordinary EL ignores DEC protection',
+  );
+
+  _parse(screen, _csi('1"q'));
+  screen.saveCursor();
+  _parse(screen, _csi('2"q'));
+  screen.restoreCursor();
+  screen.printNarrowScalar(0x50);
+  _expect(
+    screen.savedCellProtected &&
+        screen.currentCellProtected &&
+        screen.widthFlagsAt(0, 1) & TerminalCellFlags.protected != 0,
+    'cursor save and restore retains character protection',
+  );
+  final TerminalScreen resized = screen.resized(rows: 3, columns: 7);
+  _expect(
+    resized.currentCellProtected && resized.savedCellProtected,
+    'resize and reflow retain current and saved protection',
+  );
+  final TerminalScreenParserSink invalid = _parse(screen, _csi('3"q'));
+  _expect(
+    screen.currentCellProtected &&
+        sink.unsupportedSequenceCount == 0 &&
+        invalid.unsupportedSequenceCount == 1,
+    'invalid DECSCA is counted without changing protection',
+  );
+  screen.resetTerminalState();
+  _expect(
+    !screen.currentCellProtected && !screen.savedCellProtected,
+    'terminal reset clears current and saved protection',
+  );
 }
 
 void _testSgrMalformedGroupsAndUnknownParameters() {
@@ -410,10 +514,12 @@ List<int> _sgrSnapshot(Uint8List input, [List<int>? chunks]) {
       screen.foregroundAt(0, column),
       screen.backgroundAt(0, column),
       screen.styleTable.attributesAt(screen.styleAt(0, column)),
+      screen.styleTable.underlineColorAt(screen.styleAt(0, column)),
     ],
     screen.currentForeground,
     screen.currentBackground,
     screen.currentStyleAttributes,
+    screen.currentUnderlineColor,
     sink.unsupportedSequenceCount,
   ];
 }

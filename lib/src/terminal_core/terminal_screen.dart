@@ -220,9 +220,11 @@ final class TerminalScreen {
   int _currentForeground = 0;
   int _currentBackground = 0;
   int _currentStyleId = 0;
+  bool _currentCellProtected = false;
   int _savedForeground = 0;
   int _savedBackground = 0;
   int _savedStyleId = 0;
+  bool _savedCellProtected = false;
   TerminalCharacterSet _g0CharacterSet = TerminalCharacterSet.ascii;
   TerminalCharacterSet _g1CharacterSet = TerminalCharacterSet.ascii;
   int _glCharacterSetSlot = 0;
@@ -264,9 +266,12 @@ final class TerminalScreen {
   int get currentBackground => _currentBackground;
   int get currentStyleId => _currentStyleId;
   int get currentStyleAttributes => styleTable.attributesAt(_currentStyleId);
+  int get currentUnderlineColor => styleTable.underlineColorAt(_currentStyleId);
+  bool get currentCellProtected => _currentCellProtected;
   int get savedForeground => _savedForeground;
   int get savedBackground => _savedBackground;
   int get savedStyleId => _savedStyleId;
+  bool get savedCellProtected => _savedCellProtected;
   TerminalCharacterSet get g0CharacterSet => _g0CharacterSet;
   TerminalCharacterSet get g1CharacterSet => _g1CharacterSet;
   int get glCharacterSetSlot => _glCharacterSetSlot;
@@ -681,6 +686,7 @@ final class TerminalScreen {
         _savedForeground == _currentForeground &&
         _savedBackground == _currentBackground &&
         _savedStyleId == _currentStyleId &&
+        _savedCellProtected == _currentCellProtected &&
         _savedG0CharacterSet == _g0CharacterSet &&
         _savedG1CharacterSet == _g1CharacterSet &&
         _savedGlCharacterSetSlot == _glCharacterSetSlot) {
@@ -691,6 +697,7 @@ final class TerminalScreen {
     _savedForeground = _currentForeground;
     _savedBackground = _currentBackground;
     _savedStyleId = _currentStyleId;
+    _savedCellProtected = _currentCellProtected;
     _savedG0CharacterSet = _g0CharacterSet;
     _savedG1CharacterSet = _g1CharacterSet;
     _savedGlCharacterSetSlot = _glCharacterSetSlot;
@@ -701,10 +708,12 @@ final class TerminalScreen {
     bool changed = _setCursorUnchecked(_savedCursorRow, _savedCursorColumn);
     if (_currentForeground != _savedForeground ||
         _currentBackground != _savedBackground ||
-        _currentStyleId != _savedStyleId) {
+        _currentStyleId != _savedStyleId ||
+        _currentCellProtected != _savedCellProtected) {
       _currentForeground = _savedForeground;
       _currentBackground = _savedBackground;
       _currentStyleId = _savedStyleId;
+      _currentCellProtected = _savedCellProtected;
       changed = true;
     }
     if (_g0CharacterSet != _savedG0CharacterSet ||
@@ -725,14 +734,18 @@ final class TerminalScreen {
     int? foreground,
     int? background,
     int? styleAttributes,
+    int? underlineColor,
   }) {
     final int nextForeground = foreground ?? _currentForeground;
     final int nextBackground = background ?? _currentBackground;
     _validateColor(nextForeground, 'foreground');
     _validateColor(nextBackground, 'background');
-    final int nextStyleId = styleAttributes == null
+    final int nextStyleId = styleAttributes == null && underlineColor == null
         ? _currentStyleId
-        : styleTable.intern(styleAttributes);
+        : styleTable.intern(
+            styleAttributes ?? currentStyleAttributes,
+            underlineColor: underlineColor ?? currentUnderlineColor,
+          );
     if (_currentForeground == nextForeground &&
         _currentBackground == nextBackground &&
         _currentStyleId == nextStyleId) {
@@ -741,6 +754,13 @@ final class TerminalScreen {
     _currentForeground = nextForeground;
     _currentBackground = nextBackground;
     _currentStyleId = nextStyleId;
+    _incrementGeneration();
+  }
+
+  /// Sets the DEC character-protection attribute applied to later prints.
+  void setCurrentCellProtection(bool protected) {
+    if (_currentCellProtected == protected) return;
+    _currentCellProtected = protected;
     _incrementGeneration();
   }
 
@@ -1059,9 +1079,11 @@ final class TerminalScreen {
         _currentForeground != 0 ||
         _currentBackground != 0 ||
         _currentStyleId != 0 ||
+        _currentCellProtected ||
         _savedForeground != 0 ||
         _savedBackground != 0 ||
         _savedStyleId != 0 ||
+        _savedCellProtected ||
         _g0CharacterSet != TerminalCharacterSet.ascii ||
         _g1CharacterSet != TerminalCharacterSet.ascii ||
         _glCharacterSetSlot != 0 ||
@@ -1090,9 +1112,11 @@ final class TerminalScreen {
     _currentForeground = 0;
     _currentBackground = 0;
     _currentStyleId = 0;
+    _currentCellProtected = false;
     _savedForeground = 0;
     _savedBackground = 0;
     _savedStyleId = 0;
+    _savedCellProtected = false;
     _g0CharacterSet = TerminalCharacterSet.ascii;
     _g1CharacterSet = TerminalCharacterSet.ascii;
     _glCharacterSetSlot = 0;
@@ -1457,7 +1481,7 @@ final class TerminalScreen {
     }
   }
 
-  void eraseInLine(int mode) {
+  void eraseInLine(int mode, {bool selective = false}) {
     final int left = _horizontalLeftForCursor();
     final int right = _horizontalRightForCursor();
     final int start;
@@ -1477,7 +1501,7 @@ final class TerminalScreen {
     }
     bool changed = _clearWrapPending();
     final int physical = _physicalRow(_cursorRow);
-    if (_clearCellRange(physical, start, end)) {
+    if (_clearCellRange(physical, start, end, preserveProtected: selective)) {
       _markDirtyPhysical(physical, start, end);
       changed = true;
     }
@@ -1486,7 +1510,7 @@ final class TerminalScreen {
     }
   }
 
-  void eraseInDisplay(int mode) {
+  void eraseInDisplay(int mode, {bool selective = false}) {
     if (mode < 0 || mode > 2) {
       throw ArgumentError.value(mode, 'mode', 'must be 0, 1, or 2');
     }
@@ -1511,7 +1535,7 @@ final class TerminalScreen {
         end = columns;
       }
       final int physical = _physicalRow(row);
-      if (_clearCellRange(physical, start, end)) {
+      if (_clearCellRange(physical, start, end, preserveProtected: selective)) {
         _markDirtyPhysical(physical, start, end);
         changed = true;
       }
@@ -1968,7 +1992,7 @@ final class TerminalScreen {
       background: _currentBackground,
       style: _currentStyleId,
       hyperlink: hyperlink,
-      isProtected: false,
+      isProtected: _currentCellProtected,
     );
     _positionCursorAfterCell(row, column, storedWidth, right);
     if (!representsInput) {
@@ -2141,7 +2165,12 @@ final class TerminalScreen {
     _repairRowTopology(destinationPhysical);
   }
 
-  bool _clearCellRange(int physical, int startColumn, int endColumn) {
+  bool _clearCellRange(
+    int physical,
+    int startColumn,
+    int endColumn, {
+    bool preserveProtected = false,
+  }) {
     int expandedStart = startColumn;
     int expandedEnd = endColumn;
     if (expandedStart < expandedEnd &&
@@ -2158,8 +2187,44 @@ final class TerminalScreen {
         expandedEnd < columns) {
       expandedEnd++;
     }
-    final int start = physical * columns + expandedStart;
-    final int end = physical * columns + expandedEnd;
+    final int rowStart = physical * columns;
+    final int start = rowStart + expandedStart;
+    final int end = rowStart + expandedEnd;
+    if (preserveProtected) {
+      bool changed = false;
+      int column = expandedStart;
+      while (column < expandedEnd) {
+        final int index = rowStart + column;
+        final int width = _widthFlags[index] & TerminalCellFlags.widthMask;
+        final int cellWidth = width == TerminalCellFlags.wide ? 2 : 1;
+        final int cellEnd = (column + cellWidth).clamp(0, expandedEnd);
+        if (_widthFlags[index] & TerminalCellFlags.protected == 0) {
+          final int groupEnd = rowStart + cellEnd;
+          for (int current = index; current < groupEnd; current++) {
+            if (_content[current] != 0 ||
+                _foreground[current] != 0 ||
+                _background[current] != _currentBackground ||
+                _styles[current] != 0 ||
+                _hyperlinks[current] != 0 ||
+                _widthFlags[current] != TerminalCellFlags.narrow) {
+              changed = true;
+              break;
+            }
+          }
+          _content.fillRange(index, groupEnd, 0);
+          _foreground.fillRange(index, groupEnd, 0);
+          _background.fillRange(index, groupEnd, _currentBackground);
+          _styles.fillRange(index, groupEnd, 0);
+          _hyperlinks.fillRange(index, groupEnd, 0);
+          _widthFlags.fillRange(index, groupEnd, TerminalCellFlags.narrow);
+        }
+        column = cellEnd;
+      }
+      if (changed) {
+        _markDirtyPhysical(physical, expandedStart, expandedEnd);
+      }
+      return changed;
+    }
     bool changed = false;
     for (int index = start; index < end; index++) {
       if (_content[index] != 0 ||

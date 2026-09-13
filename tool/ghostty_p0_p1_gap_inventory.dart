@@ -120,7 +120,6 @@ const Map<String, String> _classifications = <String, String>{
   'REL-01': 'accepted-external-follow-up',
   'DIST-01': 'accepted-external-follow-up',
   'DIST-02': 'accepted-external-follow-up',
-  'SCR-10': 'actionable-p1',
   'SCR-11': 'actionable-p1',
   'SCR-12': 'actionable-p1',
   'TXT-07': 'actionable-p1',
@@ -136,7 +135,6 @@ const Map<String, List<String>> _rowGapIds = <String, List<String>>{
   'REL-01': <String>['physical-duration-reliability'],
   'DIST-01': <String>['intel-native-handoff'],
   'DIST-02': <String>['apple-service-acceptance'],
-  'SCR-10': <String>['extended-rendition-and-selective-erase'],
   'SCR-11': <String>['semantic-ranges'],
   'SCR-12': <String>['snapshot-restore'],
   'TXT-07': <String>['cursor-ligature-break'],
@@ -191,15 +189,6 @@ const List<_Gap> _gaps = <_Gap>[
     owner: 'docs/phase11/developer-id-notarization.md',
     productActionable: false,
     reason: 'Credential-independent distribution gates pass; positive signing and notarization needs external authority.',
-  ),
-  _Gap(
-    id: 'extended-rendition-and-selective-erase',
-    kind: 'actionable-product-gap',
-    priority: 'P1',
-    rowIds: <String>['SCR-10'],
-    owner: 'ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down',
-    productActionable: true,
-    reason: 'Underline color, overline, protected cells, and selective erase are absent.',
   ),
   _Gap(
     id: 'semantic-ranges',
@@ -292,9 +281,9 @@ final class GhosttyP0P1GapInventoryResult {
   const GhosttyP0P1GapInventoryResult();
 
   int get rows => 102;
-  int get accepted => 89;
+  int get accepted => 90;
   int get actionableP0 => 0;
-  int get actionableP1 => 8;
+  int get actionableP1 => 7;
   int get documentedDifferences => 2;
   int get externalFollowUps => 3;
 
@@ -327,6 +316,18 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
     regressionCoverageSource: _regularFile(
       root,
       'compatibility/regression_coverage_report.json',
+      1024 * 1024,
+    ).readAsStringSync(),
+  );
+  validateGhosttyP1ExtendedRenditionClosureSources(
+    sequenceInventorySource: _regularFile(
+      root,
+      'compatibility/sequence_mode_inventory.json',
+      4 * 1024 * 1024,
+    ).readAsStringSync(),
+    implementationManifestSource: _regularFile(
+      root,
+      'compatibility/implemented_sequence_manifest.json',
       1024 * 1024,
     ).readAsStringSync(),
   );
@@ -403,7 +404,7 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
           classification: classifications[classification] ?? 0,
       },
       'actionable_p0': 0,
-      'actionable_p1': 8,
+      'actionable_p1': 7,
       'silent_misbehavior': 0,
     },
     'p0_closure': <String, Object?>{
@@ -412,6 +413,10 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
       'documented_non_mutating_differences': 1,
       'matrix_blockers': 0,
       'external_follow_ups': <String>['intel-native-handoff'],
+    },
+    'p1_closure': <String, Object?>{
+      'completed': <String>['extended-rendition-and-selective-erase'],
+      'remaining_actionable': 7,
     },
     'rows': encodedRows,
     'gaps': <Map<String, Object?>>[for (final _Gap gap in _gaps) gap.toJson()],
@@ -480,6 +485,8 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
       totals['classifications']! as Map<String, Object?>;
   final Map<String, Object?> p0Closure =
       report['p0_closure']! as Map<String, Object?>;
+  final Map<String, Object?> p1Closure =
+      report['p1_closure']! as Map<String, Object?>;
   _expect(
     totals['rows'] == 102 &&
         priorities['P0'] == 69 &&
@@ -487,21 +494,81 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
         priorities['P1'] == 26 &&
         priorities['P1/P2'] == 1 &&
         totals['actionable_p0'] == 0 &&
-        totals['actionable_p1'] == 8 &&
+        totals['actionable_p1'] == 7 &&
         totals['silent_misbehavior'] == 0 &&
-        classifications['accepted'] == 89 &&
+        classifications['accepted'] == 90 &&
         classifications['accepted-documented-difference'] == 2 &&
         classifications['accepted-external-follow-up'] == 3 &&
-        classifications['actionable-p1'] == 8 &&
+        classifications['actionable-p1'] == 7 &&
         p0Closure['actionable_product_gaps'] == 0 &&
         p0Closure['known_silent_misbehavior'] == 0 &&
         p0Closure['documented_non_mutating_differences'] == 1 &&
         p0Closure['matrix_blockers'] == 0 &&
         (p0Closure['external_follow_ups']! as List<Object?>).single ==
-            'intel-native-handoff',
+            'intel-native-handoff' &&
+        (p1Closure['completed']! as List<Object?>).single ==
+            'extended-rendition-and-selective-erase' &&
+        p1Closure['remaining_actionable'] == 7,
     'reviewed totals differ',
   );
   return const GhosttyP0P1GapInventoryResult();
+}
+
+void validateGhosttyP1ExtendedRenditionClosureSources({
+  required String sequenceInventorySource,
+  required String implementationManifestSource,
+}) {
+  final Map<String, Object?> inventory = _jsonSource(
+    sequenceInventorySource,
+    'sequence inventory',
+  );
+  final List<Map<String, Object?>> records =
+      (inventory['records']! as List<Object?>).cast<Map<String, Object?>>();
+  final Map<String, Map<String, Object?>> byId = <String, Map<String, Object?>>{
+    for (final Map<String, Object?> record in records)
+      record['id']! as String: record,
+  };
+  for (final MapEntry<String, String> expected in const <String, String>{
+    'dec:csi:decsca': 'implemented',
+    'dec:csi:decsed': 'partial',
+    'dec:csi:decsel': 'implemented',
+  }.entries) {
+    final Map<String, Object?>? record = byId[expected.key];
+    _expect(
+      record != null &&
+          record['support'] == expected.value &&
+          record['disposition'] == 'execute' &&
+          (record['implementationEvidence']! as List<Object?>).isNotEmpty &&
+          (record['testEvidence']! as List<Object?>).isNotEmpty,
+      '${expected.key} closure evidence differs',
+    );
+  }
+  final Map<String, Object?>? sgr = byId['ecma48:csi:sgr'];
+  final String sgrNotes = sgr?['notes'] as String? ?? '';
+  _expect(
+    sgr?['support'] == 'partial' &&
+        sgr?['disposition'] == 'execute' &&
+        sgrNotes.contains('overline') &&
+        sgrNotes.contains('underline colors'),
+    'extended SGR closure evidence differs',
+  );
+
+  final Map<String, Object?> manifest = _jsonSource(
+    implementationManifestSource,
+    'implementation manifest',
+  );
+  final Set<String> selectorKeys = (manifest['selectors']! as List<Object?>)
+      .cast<Map<String, Object?>>()
+      .map((Map<String, Object?> selector) => selector['key']! as String)
+      .toSet();
+  _expect(
+    selectorKeys.containsAll(const <String>{
+      'csi:-1:1:34:113',
+      'csi:63:0:0:74',
+      'csi:63:0:0:75',
+    }),
+    'extended rendition implementation selectors differ',
+  );
 }
 
 void validateGhosttyP0ClosureSources({

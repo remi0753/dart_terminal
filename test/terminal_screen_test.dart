@@ -229,6 +229,29 @@ void _testEraseLineAndDisplay() {
     () => display.eraseInDisplay(3),
     'invalid ED mode rejected',
   );
+
+  final TerminalScreen selective = TerminalScreen(rows: 2, columns: 5);
+  _writeRow(selective, 0, 'ABCDE');
+  _writeRow(selective, 1, 'FGHIJ');
+  selective.setNarrowCell(0, 1, 0x42, isProtected: true);
+  selective.setWideCell(1, 1, 0x754c, isProtected: true);
+  selective.setCursorPosition(0, 0);
+  selective.eraseInDisplay(2, selective: true);
+  selective.validateCellTopology();
+  _expect(
+    _rowText(selective, 0) == '.B...' &&
+        selective.contentAt(1, 1) == 0x754c &&
+        selective.widthFlagsAt(1, 1) ==
+            (TerminalCellFlags.wide | TerminalCellFlags.protected) &&
+        selective.widthFlagsAt(1, 2) ==
+            (TerminalCellFlags.continuation | TerminalCellFlags.protected),
+    'DECSED keeps protected narrow and wide groups atomically',
+  );
+  selective.eraseInDisplay(2);
+  _expect(
+    _rowText(selective, 0) == '.....' && _rowText(selective, 1) == '.....',
+    'ordinary ED clears protected cells',
+  );
 }
 
 void _testLineEditingAndMarginScrolling() {

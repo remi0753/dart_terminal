@@ -13,6 +13,7 @@ abstract final class TerminalStyleAttributes {
   static const int inverse = 1 << 7;
   static const int conceal = 1 << 8;
   static const int strike = 1 << 9;
+  static const int overline = 1 << 10;
   static const int knownMask =
       bold |
       faint |
@@ -21,7 +22,8 @@ abstract final class TerminalStyleAttributes {
       blink |
       inverse |
       conceal |
-      strike;
+      strike |
+      overline;
 
   static bool has(int attributes, int flag) => attributes & flag != 0;
 
@@ -65,26 +67,30 @@ final class TerminalStyleTable {
   }
 
   TerminalStyleTable._(this.capacity)
-    : _attributesById = Uint16List(capacity + 1);
+    : _attributesById = Uint16List(capacity + 1),
+      _underlineColorsById = Uint32List(capacity + 1);
 
   static const int defaultCapacity = 4096;
   static const int maxStyleId = 65534;
 
   final int capacity;
   final Uint16List _attributesById;
-  final Map<int, int> _idsByAttributes = <int, int>{};
+  final Uint32List _underlineColorsById;
+  final Map<(int, int), int> _idsByDefinition = <(int, int), int>{};
   int _definitionCount = 0;
   int _generation = 1;
 
   int get definitionCount => _definitionCount;
   int get generation => _generation;
 
-  int intern(int attributes) {
+  int intern(int attributes, {int underlineColor = 0}) {
     TerminalStyleAttributes.validate(attributes);
-    if (attributes == 0) {
+    _validateColor(underlineColor);
+    if (attributes == 0 && underlineColor == 0) {
       return 0;
     }
-    final int? existing = _idsByAttributes[attributes];
+    final (int, int) definition = (attributes, underlineColor);
+    final int? existing = _idsByDefinition[definition];
     if (existing != null) {
       return existing;
     }
@@ -93,7 +99,8 @@ final class TerminalStyleTable {
     }
     final int id = ++_definitionCount;
     _attributesById[id] = attributes;
-    _idsByAttributes[attributes] = id;
+    _underlineColorsById[id] = underlineColor;
+    _idsByDefinition[definition] = id;
     _generation++;
     return id;
   }
@@ -101,5 +108,20 @@ final class TerminalStyleTable {
   int attributesAt(int id) {
     RangeError.checkValueInInterval(id, 0, _definitionCount, 'id');
     return _attributesById[id];
+  }
+
+  int underlineColorAt(int id) {
+    RangeError.checkValueInInterval(id, 0, _definitionCount, 'id');
+    return _underlineColorsById[id];
+  }
+
+  static void _validateColor(int color) {
+    if (color == 0 || color >= 1 && color <= 256) return;
+    if (color >= 0x80000000 && color <= 0x80ffffff) return;
+    throw ArgumentError.value(
+      color,
+      'underlineColor',
+      'is not a terminal color token',
+    );
   }
 }

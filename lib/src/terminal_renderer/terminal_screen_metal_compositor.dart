@@ -157,9 +157,8 @@ final class TerminalScreenMetalCompositor {
           continue;
         }
         final int cellColumns = width == TerminalCellFlags.wide ? 2 : 1;
-        final int attributes = styleTable.attributesAt(
-          model.styleAt(row, column),
-        );
+        final int styleId = model.styleAt(row, column);
+        final int attributes = styleTable.attributesAt(styleId);
         final _TerminalCellColors colors = _colors(
           model.foregroundAt(row, column),
           model.backgroundAt(row, column),
@@ -190,10 +189,14 @@ final class TerminalScreenMetalCompositor {
         final int content = model.contentAt(row, column);
         if (content != 0) {
           renderedCellCount++;
+          final int underlineColor = styleTable.underlineColorAt(styleId);
           _addDecorations(
             decorations,
             attributes: attributes,
             colorRgba: colors.foregroundRgba,
+            underlineColorRgba: underlineColor == 0
+                ? colors.foregroundRgba
+                : _rgba(palette.resolveToken(underlineColor, foreground: true)),
             left: left,
             right: right,
             row: row,
@@ -1008,6 +1011,7 @@ final class TerminalScreenMetalCompositor {
     List<TerminalMetalInstance> output, {
     required int attributes,
     required int colorRgba,
+    required int underlineColorRgba,
     required int left,
     required int right,
     required int row,
@@ -1051,7 +1055,7 @@ final class TerminalScreenMetalCompositor {
           y: y,
           width: math.min(segment, right - x),
           height: underlineThickness,
-          colorRgba: colorRgba,
+          colorRgba: underlineColorRgba,
           viewportWidth: viewportWidth,
           viewportHeight: viewportHeight,
         );
@@ -1066,7 +1070,7 @@ final class TerminalScreenMetalCompositor {
           y: underlineY + underlineThickness * 2,
           width: right - left,
           height: underlineThickness,
-          colorRgba: colorRgba,
+          colorRgba: underlineColorRgba,
           viewportWidth: viewportWidth,
           viewportHeight: viewportHeight,
         );
@@ -1083,6 +1087,23 @@ final class TerminalScreenMetalCompositor {
         y: (baseline - metrics.strikePosition * scale).round(),
         width: right - left,
         height: math.max(1, (metrics.strikeThickness * scale).round()),
+        colorRgba: colorRgba,
+        viewportWidth: viewportWidth,
+        viewportHeight: viewportHeight,
+      );
+    }
+    if (TerminalStyleAttributes.has(
+      attributes,
+      TerminalStyleAttributes.overline,
+    )) {
+      final int rowTop = _rowPixel(row, metrics, scale);
+      _addClippedSolid(
+        output,
+        kind: TerminalMetalInstanceKind.decoration,
+        x: left,
+        y: math.max(rowTop, (baseline - metrics.ascent * scale).round()),
+        width: right - left,
+        height: underlineThickness,
         colorRgba: colorRgba,
         viewportWidth: viewportWidth,
         viewportHeight: viewportHeight,

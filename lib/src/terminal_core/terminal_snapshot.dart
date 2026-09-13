@@ -63,7 +63,7 @@ final class TerminalSnapshotFormatter {
   });
 
   static const String formatName = 'dart-terminal-state-snapshot';
-  static const int formatVersion = 3;
+  static const int formatVersion = 4;
 
   final TerminalSnapshotFormatLimits limits;
 
@@ -272,9 +272,11 @@ final class TerminalSnapshotFormatter {
     );
     for (int id = 1; id <= styles.definitionCount; id++) {
       final int attributes = styles.attributesAt(id);
+      final int underlineColor = styles.underlineColorAt(id);
       writer.line(
         'style id=$id attributes=${_styleAttributes(attributes)} '
-        'bits=${_hex(attributes, 4)}',
+        'bits=${_hex(attributes, 4)} '
+        'underline_color=${_colorToken(underlineColor)}',
       );
     }
     for (int id = 1; id <= graphemes.definitionCount; id++) {
@@ -366,7 +368,9 @@ final class TerminalSnapshotFormatter {
       'current=${_colorToken(screen.currentForeground)}/'
       '${_colorToken(screen.currentBackground)}/${screen.currentStyleId} '
       'saved_rendition=${_colorToken(screen.savedForeground)}/'
-      '${_colorToken(screen.savedBackground)}/${screen.savedStyleId}',
+      '${_colorToken(screen.savedBackground)}/${screen.savedStyleId} '
+      'protection=current:${screen.currentCellProtected},'
+      'saved:${screen.savedCellProtected}',
     );
     writer.line(
       '$name charsets=g0:${screen.g0CharacterSet.name},'
@@ -613,6 +617,12 @@ final class TerminalSnapshotFormatter {
       TerminalStyleAttributes.strike,
     )) {
       names.add('strike');
+    }
+    if (TerminalStyleAttributes.has(
+      attributes,
+      TerminalStyleAttributes.overline,
+    )) {
+      names.add('overline');
     }
     return names.isEmpty ? '-' : names.join('|');
   }

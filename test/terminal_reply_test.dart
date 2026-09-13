@@ -540,7 +540,7 @@ void _testDecrqssSgrStateAndBounds() {
   parser.parse(
     _bytes(
       '\x1bP\x24qm\x1b\\'
-      '\x1b[1;4;38;2;12;34;56;48;5;17m'
+      '\x1b[1;4;38;2;12;34;56;48;5;17;53;58;2;9;8;7m'
       '\x1bP\x24qm\x1b\\'
       '\x1bP\x24qq\x1b\\'
       '\x1bP1\x24qm\x1b\\',
@@ -549,17 +549,19 @@ void _testDecrqssSgrStateAndBounds() {
   parser.finish();
   final int expectedStyle =
       TerminalStyleAttributes.bold |
+      TerminalStyleAttributes.overline |
       TerminalStyleAttributes.withUnderline(0, TerminalUnderlineStyle.single);
   _expectStrings(replies, const <String>[
     '\x1bP1\x24r0m\x1b\\',
-    '\x1bP1\x24r0;1;4;38:2::12:34:56;48:5:17m\x1b\\',
+    '\x1bP1\x24r0;1;4;53;38:2::12:34:56;48:5:17;58:2::9:8:7m\x1b\\',
   ], 'DECRQSS reports default and current SGR in pinned xterm form');
   _expect(
     sink.acceptedReplyCount == 2 &&
         sink.unsupportedSequenceCount == 2 &&
         screen.currentStyleAttributes == expectedStyle &&
         screen.currentForeground == 0x800c2238 &&
-        screen.currentBackground == 18,
+        screen.currentBackground == 18 &&
+        screen.currentUnderlineColor == 0x80090807,
     'only the complete unparameterized SGR request replies without mutation',
   );
 
@@ -571,16 +573,18 @@ void _testDecrqssSgrStateAndBounds() {
       TerminalStyleAttributes.inverse |
       TerminalStyleAttributes.conceal |
       TerminalStyleAttributes.strike |
+      TerminalStyleAttributes.overline |
       TerminalStyleAttributes.withUnderline(0, TerminalUnderlineStyle.dashed);
   final Uint8List maximum = TerminalReplyEncoder.decrqssSgr(
     foreground: 0x80ffffff,
     background: 0x80ffffff,
     styleAttributes: maximumAttributes,
+    underlineColor: 0x80ffffff,
   );
   _expect(
-    maximum.length == 63 &&
+    maximum.length == 84 &&
         maximum.length <= TerminalReplyEncoder.maximumReplyBytes,
-    'the largest representable SGR report stays inside the 64-byte bound',
+    'the largest representable SGR report stays inside the 96-byte bound',
   );
   _expectThrows(
     () => TerminalReplyEncoder.decrqssSgr(
@@ -590,6 +594,16 @@ void _testDecrqssSgrStateAndBounds() {
     ),
     ArgumentError,
     'invalid SGR color token',
+  );
+  _expectThrows(
+    () => TerminalReplyEncoder.decrqssSgr(
+      foreground: 0,
+      background: 0,
+      styleAttributes: 0,
+      underlineColor: 257,
+    ),
+    ArgumentError,
+    'invalid SGR underline color token',
   );
 }
 

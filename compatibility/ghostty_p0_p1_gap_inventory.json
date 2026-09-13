@@ -4,7 +4,7 @@
   "status": "open-actionable-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "bdb125d7a4aa9754d4eeed14d4644570bdfbd12cd5e495955feaea1be136d4ba",
+    "sha256": "1ae77f7bf7100e0dd1a456a19387d01a50c3068dad79f0769b8bb4135c716f75",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -28,11 +28,11 @@
     },
     {
       "path": "compatibility/sequence_mode_inventory.json",
-      "sha256": "9be82246a100aa4b5ca4f9104627e00d46c19901e7b1c682cf34a59c77db264e"
+      "sha256": "f374970cfe506bdcc250c371de31483d6f1695fdfd088159dabd107520d32ee1"
     },
     {
       "path": "compatibility/implemented_sequence_manifest.json",
-      "sha256": "31c9f42e278639b431b8345e56f7e2229ac81b600d0fd2e8009c83458c9de1b9"
+      "sha256": "808c46fe942d40f30a96898228663716abace21ddd0f85f122bf61dabdaa1e50"
     },
     {
       "path": "compatibility/differential_backends.json",
@@ -44,15 +44,15 @@
     },
     {
       "path": "compatibility/differential_acceptance_report.json",
-      "sha256": "df3e0852617fc92752c214de3581cee5390bec253c3f653aa6cb87a837799310"
+      "sha256": "67bb80d410e2e21ee9dd3dc209635f072c9a425501c7ba26aa7bb27f411ae8ee"
     },
     {
       "path": "compatibility/application_matrix_acceptance.json",
-      "sha256": "e572acfe23dc760c100a20c31a28fa4794ef8b5a524692078de7d642d04afa7c"
+      "sha256": "edb25bc4b91f4b72128676886e2c325ef3088d78dd8e991a60412ef2cefd4727"
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "7be641be5af427593d4de6a3c7995a94cd64413cece549b941da58fb091d058b"
+      "sha256": "198229d0ab25d5a61f8e730f637861b8aeb9187bbf989969443462db66083b55"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -72,13 +72,13 @@
       "P1/P2": 1
     },
     "classifications": {
-      "accepted": 89,
+      "accepted": 90,
       "accepted-documented-difference": 2,
       "accepted-external-follow-up": 3,
-      "actionable-p1": 8
+      "actionable-p1": 7
     },
     "actionable_p0": 0,
-    "actionable_p1": 8,
+    "actionable_p1": 7,
     "silent_misbehavior": 0
   },
   "p0_closure": {
@@ -89,6 +89,12 @@
     "external_follow_ups": [
       "intel-native-handoff"
     ]
+  },
+  "p1_closure": {
+    "completed": [
+      "extended-rendition-and-selective-erase"
+    ],
+    "remaining_actionable": 7
   },
   "rows": [
     {
@@ -347,11 +353,9 @@
       "phase": "6",
       "acceptance_sha256": "54fc8d1ca28f5d307f95ce88f430265f0303b9e98c5e96fad746dbb16fa565fe",
       "pinned_evidence_sha256": "abce9e76e94611b8fd01110d0754cbeb56c049707c5917572ecbc8173547ab47",
-      "current_sha256": "481070b8c3011436d248ab541c0164b325ef6b050edcd0ac415c0c8b090e09a6",
-      "classification": "actionable-p1",
-      "gap_ids": [
-        "extended-rendition-and-selective-erase"
-      ]
+      "current_sha256": "7dbe242458023f546ce9a9fe6deef2666ab77cba5bcff2f64e8ac364aa2d5686",
+      "classification": "accepted",
+      "gap_ids": []
     },
     {
       "id": "SCR-11",
@@ -371,7 +375,7 @@
       "phase": "3",
       "acceptance_sha256": "9580b5bd45a2e8762f1ad7c5cffe8d9a86df1d58347d27a899fa61440ba3ee6e",
       "pinned_evidence_sha256": "cab04c131ef078bd197e4ec6a79ccf9eececbbfbd804d9529fd7a79060004b84",
-      "current_sha256": "3cd8918665f557cc6b137c01468bc66df15c3125bee4aa443a16254ca4a674ad",
+      "current_sha256": "e384ff79492bcb2d8bd7960c4bff9b218a655eef716114ddfb1eb30dd106ce41",
       "classification": "actionable-p1",
       "gap_ids": [
         "snapshot-restore"
@@ -445,7 +449,7 @@
       "phase": "6/9",
       "acceptance_sha256": "cdbe07f3709eb3af448dc7b375ebdd9d21e77139281a1ad08769a6df7ef3bcbe",
       "pinned_evidence_sha256": "842749aaa70353f325a8882843a7a9a77cd8e969e4c62ed6e5251ba35bf746c5",
-      "current_sha256": "baa8220798f7a37b0471c4ab8ca69fc9a491c11e731b21a11546764096131a90",
+      "current_sha256": "fba72779ef2874a01b6431363df0ef7e9f89c913babd2795b88fade5e66e79c9",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -1005,7 +1009,7 @@
       "phase": "3/5/9",
       "acceptance_sha256": "7d8612b1f7791c5d801770da55a0002e1ff5f07f43b4b56e0c346d62b2abc85e",
       "pinned_evidence_sha256": "0e013a6c59ccfbfccaec966890edc06b1d712d6a10ff6716da600514049d0a85",
-      "current_sha256": "807eccdc8dab2a4a6c777cc3d344b42874ab4df6630ca88c7d016965ea3f8b8c",
+      "current_sha256": "00c1760eb84a88c05ffc8d443bfd41456a4cd3e13223a2207d30c9889b975ced",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -1200,18 +1204,6 @@
       "product_actionable": false,
       "silent_misbehavior": false,
       "reason": "Credential-independent distribution gates pass; positive signing and notarization needs external authority."
-    },
-    {
-      "id": "extended-rendition-and-selective-erase",
-      "kind": "actionable-product-gap",
-      "priority": "P1",
-      "row_ids": [
-        "SCR-10"
-      ],
-      "owner": "ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down",
-      "product_actionable": true,
-      "silent_misbehavior": false,
-      "reason": "Underline color, overline, protected cells, and selective erase are absent."
     },
     {
       "id": "semantic-ranges",

@@ -15,9 +15,9 @@ void runGhosttyP0P1GapInventoryTests() {
       );
   _expect(
     result.rows == 102 &&
-        result.accepted == 89 &&
+        result.accepted == 90 &&
         result.actionableP0 == 0 &&
-        result.actionableP1 == 8 &&
+        result.actionableP1 == 7 &&
         result.documentedDifferences == 2 &&
         result.externalFollowUps == 3,
     'reviewed result totals are exact',
@@ -28,12 +28,12 @@ void runGhosttyP0P1GapInventoryTests() {
   final List<Object?> gaps = report['gaps']! as List<Object?>;
   _expect(
     rows.length == 102 &&
-        gaps.length == 13 &&
+        gaps.length == 12 &&
         rows
                 .cast<Map<String, Object?>>()
                 .where((row) => row['classification'] == 'actionable-p1')
                 .length ==
-            8 &&
+            7 &&
         gaps
             .cast<Map<String, Object?>>()
             .where((gap) => gap['silent_misbehavior'] == true)
@@ -41,7 +41,7 @@ void runGhosttyP0P1GapInventoryTests() {
     'every row and reviewed gap is represented',
   );
   _expectFailure(
-    committed.replaceFirst('"actionable_p1": 8', '"actionable_p1": 7'),
+    committed.replaceFirst('"actionable_p1": 7', '"actionable_p1": 8'),
     generated,
     'stale actionable total',
   );
@@ -74,6 +74,9 @@ void runGhosttyP0P1GapInventoryTests() {
   final String regressionCoverage = File(
     'compatibility/regression_coverage_report.json',
   ).readAsStringSync();
+  final String implementationManifest = File(
+    'compatibility/implemented_sequence_manifest.json',
+  ).readAsStringSync();
   validateGhosttyP0ClosureSources(
     sequenceInventorySource: sequenceInventory,
     applicationAcceptanceSource: applicationAcceptance,
@@ -105,6 +108,26 @@ void runGhosttyP0P1GapInventoryTests() {
       '"known_p0_silent_corruption": 1',
     ),
     'silent P0 regression',
+  );
+  validateGhosttyP1ExtendedRenditionClosureSources(
+    sequenceInventorySource: sequenceInventory,
+    implementationManifestSource: implementationManifest,
+  );
+  _expectP1Failure(
+    sequenceInventory.replaceFirst(
+      '"id": "dec:csi:decsel",',
+      '"id": "dec:csi:unowned-decsel",',
+    ),
+    implementationManifest,
+    'missing DECSEL evidence',
+  );
+  _expectP1Failure(
+    sequenceInventory,
+    implementationManifest.replaceFirst(
+      '"key": "csi:-1:1:34:113",',
+      '"key": "csi:-1:1:34:114",',
+    ),
+    'missing DECSCA selector',
   );
 }
 
@@ -142,6 +165,23 @@ void _expectP0Failure(
     return;
   }
   throw StateError('test failed: $message');
+}
+
+void _expectP1Failure(
+  String sequenceInventory,
+  String implementationManifest,
+  String message,
+) {
+  var threw = false;
+  try {
+    validateGhosttyP1ExtendedRenditionClosureSources(
+      sequenceInventorySource: sequenceInventory,
+      implementationManifestSource: implementationManifest,
+    );
+  } on GhosttyP0P1GapInventoryException {
+    threw = true;
+  }
+  _expect(threw, message);
 }
 
 void _expect(bool condition, String message) {

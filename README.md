@@ -94,7 +94,7 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   Shift overrideは同じpointer eventをPTYへ重複送信せずcell-based selectionへ配送
 - DECSET 1004を追跡し、native windowのfocus遷移を重複なしのbounded
   `CSI I`/`CSI O`としてactive PTYへ送る製品routing
-- 完全な`DCS $ q m ST`に対し、現在のSGR属性・ANSI/256/direct色を64 byte以内の
+- 完全な`DCS $ q m ST`に対し、現在のSGR属性・ANSI/256/direct色を96 byte以内の
   xterm互換形式で返すDECRQSS。外部製品固有の有効なSGR直列化差はraw証跡を保持して比較
 - `CSI > q`/`CSI > 0 q`へ固定protocol identity `DartTerminal(1)`を返すXTVERSIONと、
   AppKit content viewのbounded logical pixel寸法・現在の行列数を返すXTWINOPS 14/18
@@ -213,8 +213,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   tab stop、coalesced row damage/versionとmonotonic screen generation基盤
 - top/bottom・optional left/right margin、origin/insert/autowrap/reverse-video、
   wrap-pending、cursor shape/blink/visibilityのtyped stateとatomic reset/clamp
-- bounded style ID table、current/saved rendition、P0 text attributes、ANSI
-  16/256色・truecolor・default colorのsemicolon/colon SGR適用
+- bounded style ID table、current/saved rendition、underline variant/color、
+  overlineを含むtext attributes、ANSI 16/256色・truecolor・default colorの
+  semicolon/colon SGR適用。DECSCAのcell protectionと、wide/graphemeを分断しない
+  DECSED/DECSEL selective erase
 - typed xterm-256 palette、logical default foreground/background、独立cursor color、
   bounded OSC 4/10/11/12/104/110/111/112 color mutation/query/reset、
   palette-aware row damageとcursor-only presentation damage
@@ -259,7 +261,7 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   history/active gridを投影するbounded viewportとstable logical anchor
 - end-exclusive cell/word/logical-line selection、soft/hard wrap準拠のbounded
   text extraction、cell-aligned exact scalarのforward/backward bounded search
-- 最大64 byteのreply encoderと、DA/DA2、DSR/CPR、DECRQM、DECRQSS SGR、
+- 最大96 byteのreply encoderと、DA/DA2、DSR/CPR、DECRQM、DECRQSS SGR、
   XTVERSION、XTWINOPS 14/16/18、light/dark、in-band size、
   OSC palette/default color queryのterminal-core dispatch
 - ncurses 6.6で固定生成・能力監査した`xterm-256color` terminfoを両runtime bundleへ同梱し、
@@ -269,7 +271,7 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
 - session-owned screen set/parserへのraw PTY byte feed、従来text projectionとの
   single-subscription共存、generated replyのnative bounded write queue接続
 - historyとprimary/alternate grid、Unicode resource、mode/cursor/character-set/parser countを
-  網羅し、行・cell・resource・出力上限を持つversion 3 terminal-state snapshotと、
+  網羅し、行・cell・resource・出力上限を持つversion 4 terminal-state snapshotと、
   最初の相違位置・escaped contextを返すbounded comparison diagnostics
 - 厳密検証するbyte-exact product parser corpus manifest、shell/less/top/vimの
   review済み記録snapshotをwhole・全single split・bytewiseで再生する非書換えharness、

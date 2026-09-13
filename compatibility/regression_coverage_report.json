@@ -5,23 +5,23 @@
   "sources": [
     {
       "path": "test/corpus/compatibility/regressions_v1.json",
-      "sha256": "002011a991caf67c5b142ec000ea8f8d20223ce203254e7d0b9bc3697a97d4bb"
+      "sha256": "9b570214d9a747433fb885ab01923e3c1778da38726eff2de53b4a7eb3d12e21"
     },
     {
       "path": "compatibility/sequence_mode_inventory.json",
-      "sha256": "9be82246a100aa4b5ca4f9104627e00d46c19901e7b1c682cf34a59c77db264e"
+      "sha256": "f374970cfe506bdcc250c371de31483d6f1695fdfd088159dabd107520d32ee1"
     },
     {
       "path": "compatibility/implemented_sequence_manifest.json",
-      "sha256": "31c9f42e278639b431b8345e56f7e2229ac81b600d0fd2e8009c83458c9de1b9"
+      "sha256": "808c46fe942d40f30a96898228663716abace21ddd0f85f122bf61dabdaa1e50"
     },
     {
       "path": "compatibility/application_matrix_acceptance.json",
-      "sha256": "e572acfe23dc760c100a20c31a28fa4794ef8b5a524692078de7d642d04afa7c"
+      "sha256": "edb25bc4b91f4b72128676886e2c325ef3088d78dd8e991a60412ef2cefd4727"
     },
     {
       "path": "compatibility/differential_acceptance_report.json",
-      "sha256": "df3e0852617fc92752c214de3581cee5390bec253c3f653aa6cb87a837799310"
+      "sha256": "67bb80d410e2e21ee9dd3dc209635f072c9a425501c7ba26aa7bb27f411ae8ee"
     },
     {
       "path": "test/corpus/parser/sequence_trace_case_v1.json",
@@ -33,11 +33,11 @@
     },
     {
       "path": "README.md",
-      "sha256": "8806365c90005ab487ff21904adb0e50d3ca07689efc864892802104895e3a4f"
+      "sha256": "b0da8d595014105cca614272c1ec48e00b434003e6ddbc18ab29f32b25857596"
     },
     {
       "path": "FEATURE_MATRIX.md",
-      "sha256": "bdb125d7a4aa9754d4eeed14d4644570bdfbd12cd5e495955feaea1be136d4ba"
+      "sha256": "1ae77f7bf7100e0dd1a456a19387d01a50c3068dad79f0769b8bb4135c716f75"
     }
   ],
   "fix_families": [
@@ -143,11 +143,11 @@
     },
     "inventory": {
       "records": 272,
-      "implemented": 97,
-      "partial": 22,
+      "implemented": 99,
+      "partial": 23,
       "safe_ignore": 8,
-      "explicit_unsupported": 145,
-      "implementation_selectors": 92,
+      "explicit_unsupported": 142,
+      "implementation_selectors": 95,
       "implementation_modes": 27
     },
     "application_matrix": {

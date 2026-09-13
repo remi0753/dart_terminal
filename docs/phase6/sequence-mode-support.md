@@ -49,10 +49,10 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 
 | Support classification | Records |
 | --- | ---: |
-| `implemented` | 97 |
-| `partial` | 22 |
+| `implemented` | 99 |
+| `partial` | 23 |
 | `safe-ignore` | 8 |
-| `unsupported` | 145 |
+| `unsupported` | 142 |
 | **Total** | **272** |
 
 | Selector kind | Records |
@@ -69,7 +69,7 @@ Full URLs, inner-document hashes, and citation rules are in [`specification-sour
 | `mode` | 85 |
 | **Total** | **272** |
 
-The 97 implemented plus 22 partial records reconcile exactly to all 119 product declarations (92 sequence selectors and 27 modes). The 8 safe-ignore records cover 6 concrete DCS forms and SOS/PM; all 145 remaining records are explicitly unsupported/rejected.
+The 99 implemented plus 23 partial records reconcile exactly to all 122 product declarations (95 sequence selectors and 27 modes). The 8 safe-ignore records cover 6 concrete DCS forms and SOS/PM; all 142 remaining records are explicitly unsupported/rejected.
 
 ## Partial implementation limits
 
@@ -78,6 +78,7 @@ The 97 implemented plus 22 partial records reconcile exactly to all 119 product 
 | `dec:csi:dec-dsr` | `CSI ? n` | DEC cursor-position reporting is implemented; printer, UDK, locator, and integrity reports are not. |
 | `dec:csi:decrst` | `CSI ? l` | The selector is implemented for the explicitly inventoried DEC private modes only. |
 | `dec:csi:decscusr` | `CSI SP q` | Cursor styles 0–6 are implemented; xterm resource-reset value 7 is rejected. |
+| `dec:csi:decsed` | `CSI ? J` | Modes 0–2 erase only unprotected cells while preserving atomic wide and grapheme cells. |
 | `dec:csi:decset` | `CSI ? h` | The selector is implemented for the explicitly inventoried DEC private modes only. |
 | `dec:dcs:decrqss` | `DCS $ q Pt ST` | The complete SGR request payload m receives the current rendition in a bounded pinned-xterm form. Other status-string selectors remain explicit bounded unsupported. |
 | `ecma48:apc:apc` | `APC Pt ST` | Leading-G APC supports bounded direct RGB/RGBA/PNG worker decode, multipart/query/replies, ID replacement, placement/delete/scroll/reflow, and deterministic CPU/Metal color-atlas rendering. Animation transmit/edit/control/compose/delete shares the FIFO with 64 total frames per image, 256 extra frames and 16 MiB per screen. Visible images advance at most once per monotonic tick; hidden, occluded, synchronized, and recovery states pause. Frame generations preserve atlas and renderer identity. Image/frame/byte pressure evicts whole resources by transient and placement class, immutable generation, then ID, excluding the target; unsatisfied plans are atomic and pinned atlas tiles retire later. Real zsh PTY/Metal acceptance covers animation, 65-image pressure, and cleanup in both runtime modes. Non-Kitty APC is safe-ignore. File/shared-memory transport, virtual/relative placement, and extreme negative z are unsupported. |
@@ -85,7 +86,7 @@ The 97 implemented plus 22 partial records reconcile exactly to all 119 product 
 | `ecma48:c0:vt` | `VT (0x0B)` | Handled as line feed, matching xterm rather than ECMA line-tab semantics. |
 | `ecma48:csi:dsr` | `CSI n` | Status, cursor-position, and private color-scheme request 996 are implemented; other DSR parameters are rejected. |
 | `ecma48:csi:rm` | `CSI l` | The selector is implemented for the explicitly inventoried ANSI modes only. |
-| `ecma48:csi:sgr` | `CSI m` | Text attributes and ANSI/256/direct colors are implemented; the full ECMA/xterm rendition repertoire is not. |
+| `ecma48:csi:sgr` | `CSI m` | Text attributes including underline variants and overline, plus ANSI/256/direct foreground, background, and underline colors are implemented; the full ECMA/xterm rendition repertoire is not. |
 | `ecma48:csi:sm` | `CSI h` | The selector is implemented for the explicitly inventoried ANSI modes only. |
 | `ghostty:osc:osc-133` | `OSC 133 ; Ps [; Pt] ST` | The bounded A/B/C/D/I/L/N/P lifecycle projects privacy-safe shell state and row flags; I is line-feed scoped, L/N follow fresh-line semantics, and options are validated but never decoded or retained. |
 | `ghostty:osc:osc-9` | `OSC 9 ; Pt ST / OSC 9 ; 4 ; Ps [; Pp] ST` | Bounded plain-text legacy notifications and ConEmu 9;4 remove/set/error/indeterminate/pause state are implemented. Other ConEmu OSC 9 commands remain rejected, and malformed reserved 9;4 forms never fall back to a notification. |

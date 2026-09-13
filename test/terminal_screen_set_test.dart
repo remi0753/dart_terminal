@@ -568,9 +568,13 @@ List<int> _screenSetSnapshot(Uint8List input, [List<int>? chunks]) {
       screen.currentForeground,
       screen.currentBackground,
       screen.currentStyleAttributes,
+      screen.currentUnderlineColor,
+      screen.currentCellProtected ? 1 : 0,
       screen.savedForeground,
       screen.savedBackground,
       screen.styleTable.attributesAt(screen.savedStyleId),
+      screen.styleTable.underlineColorAt(screen.savedStyleId),
+      screen.savedCellProtected ? 1 : 0,
       screen.wrapPending ? 1 : 0,
       screen.generation,
       for (int row = 0; row < screen.rows; row++)
@@ -579,6 +583,8 @@ List<int> _screenSetSnapshot(Uint8List input, [List<int>? chunks]) {
           screen.foregroundAt(row, column),
           screen.backgroundAt(row, column),
           screen.styleTable.attributesAt(screen.styleAt(row, column)),
+          screen.styleTable.underlineColorAt(screen.styleAt(row, column)),
+          screen.widthFlagsAt(row, column),
         ],
     ],
   ];

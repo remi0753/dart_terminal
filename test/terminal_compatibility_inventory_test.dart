@@ -42,10 +42,10 @@ void _testCompletePinnedInventory() {
         kinds[TerminalCompatibilitySelectorKind.pm] == 1 &&
         kinds[TerminalCompatibilitySelectorKind.apc] == 1 &&
         kinds[TerminalCompatibilitySelectorKind.mode] == 85 &&
-        support[TerminalCompatibilitySupport.implemented] == 97 &&
-        support[TerminalCompatibilitySupport.partial] == 22 &&
+        support[TerminalCompatibilitySupport.implemented] == 99 &&
+        support[TerminalCompatibilitySupport.partial] == 23 &&
         support[TerminalCompatibilitySupport.safeIgnore] == 8 &&
-        support[TerminalCompatibilitySupport.unsupported] == 145,
+        support[TerminalCompatibilitySupport.unsupported] == 142,
     'complete baseline covers every selector kind with exact totals',
   );
   final TerminalCompatibilitySourcePin ecma = inventory.sourcePins.singleWhere(
@@ -187,8 +187,8 @@ void _testCompletePinnedInventory() {
             '69773380309da4c8b5d4ec9646eec703c47bc41db29a8efa5b94c30798c72349' &&
         inventory.machineLine() ==
             'TERMINAL_COMPATIBILITY_INVENTORY_CHECK version=1 revision=6 '
-                'sources=22 records=272 implemented=97 partial=22 '
-                'safe_ignore=8 unsupported=145',
+                'sources=22 records=272 implemented=99 partial=23 '
+                'safe_ignore=8 unsupported=142',
     'primary source pins and content-free summary remain exact',
   );
   _expectThrows<UnsupportedError>(
@@ -276,7 +276,7 @@ void _testImplementationSurfaceReconciliation() {
   final File manifest = File(defaultTerminalImplementationSurfacePath);
   _expect(
     inventory.reconcileImplementationSurface(manifest) ==
-        'TERMINAL_COMPATIBILITY_RECONCILIATION_PASS implementation=119 '
+        'TERMINAL_COMPATIBILITY_RECONCILIATION_PASS implementation=122 '
             'safe_ignore_families=3',
     'all product declarations and safe-ignore families reconcile exactly',
   );

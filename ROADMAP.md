@@ -1380,7 +1380,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] contract、pinned evidence、P0/P1 gap inventory
   - [x] P0 gap burn-down
   - [ ] P1 gap burn-down
-    - [ ] underline color／overline／protected selective erase
+    - [x] underline color／overline／protected selective erase
     - [ ] bounded semantic prompt／command／output ranges
     - [ ] versioned snapshot restore oracle
     - [ ] cursor-cell ligature shaping break

@@ -21,7 +21,11 @@ void _testStandaloneSnapshotIsExactAndReadable() {
   final TerminalStyleTable styles = TerminalStyleTable();
   final int style = styles.intern(
     TerminalStyleAttributes.bold |
-        TerminalStyleAttributes.withUnderline(0, TerminalUnderlineStyle.double),
+        TerminalStyleAttributes.withUnderline(
+          TerminalStyleAttributes.overline,
+          TerminalUnderlineStyle.double,
+        ),
+    underlineColor: 7,
   );
   final TerminalGraphemeTable graphemes = TerminalGraphemeTable();
   final int grapheme = graphemes.intern(const <int>[0x65, 0x301]);
@@ -40,7 +44,9 @@ void _testStandaloneSnapshotIsExactAndReadable() {
     foreground: 2,
     background: 0x80445566,
     styleAttributes: styles.attributesAt(style),
+    underlineColor: styles.underlineColorAt(style),
   );
+  screen.setCurrentCellProtection(true);
   screen.setCursorPosition(1, 4);
   screen.designateCharacterSet(1, TerminalCharacterSet.decSpecialGraphics);
   screen.invokeGlCharacterSet(1);
@@ -59,7 +65,7 @@ void _testStandaloneSnapshotIsExactAndReadable() {
   const TerminalSnapshotFormatter formatter = TerminalSnapshotFormatter();
   final String snapshot = formatter.formatScreen(screen);
   _expect(
-    snapshot.startsWith('dart-terminal-state-snapshot version=3 kind=screen\n'),
+    snapshot.startsWith('dart-terminal-state-snapshot version=4 kind=screen\n'),
     'standalone snapshot has a versioned header',
   );
   _expect(
@@ -71,7 +77,8 @@ void _testStandaloneSnapshotIsExactAndReadable() {
   );
   _expect(
     snapshot.contains(
-      'style id=$style attributes=bold|underline:double bits=0x0011\n',
+      'style id=$style attributes=bold|underline:double|overline '
+      'bits=0x0411 underline_color=palette:6\n',
     ),
     'style definition is readable and exact',
   );
@@ -113,9 +120,10 @@ void _testStandaloneSnapshotIsExactAndReadable() {
     snapshot.contains(
       'screen cursor=1,4 saved=1,4 '
       'current=palette:1/rgb:#445566/$style '
-      'saved_rendition=palette:1/rgb:#445566/$style\n',
+      'saved_rendition=palette:1/rgb:#445566/$style '
+      'protection=current:true,saved:true\n',
     ),
-    'cursor and current/saved rendition are retained',
+    'cursor, rendition, and DEC protection state are retained',
   );
   _expect(
     snapshot.contains(

@@ -307,6 +307,14 @@ final class TerminalScreenParserSink
       return;
     }
     if (sequence.privateMarker == 0x3f && sequence.intermediateCount == 0) {
+      if (sequence.finalByte == 0x4a || sequence.finalByte == 0x4b) {
+        if (sequence.finalByte == 0x4a) {
+          _eraseDisplay(sequence, selective: true);
+        } else {
+          _eraseLine(sequence, selective: true);
+        }
+        return;
+      }
       if (sequence.finalByte == 0x68 || sequence.finalByte == 0x6c) {
         _setPrivateModes(sequence, sequence.finalByte == 0x68);
         return;
@@ -323,6 +331,14 @@ final class TerminalScreenParserSink
           sequence.intermediateAt(0) == 0x20 &&
           sequence.finalByte == 0x71) {
         _setCursorStyle(_parameter(sequence, 0, 0, zeroIsDefault: false));
+        return;
+      }
+      if (sequence.intermediateCount == 1 &&
+          sequence.intermediateAt(0) == 0x22 &&
+          sequence.finalByte == 0x71) {
+        _setCharacterProtection(
+          _parameter(sequence, 0, 0, zeroIsDefault: false),
+        );
         return;
       }
       _unsupportedSequenceCount++;
@@ -666,6 +682,7 @@ final class TerminalScreenParserSink
           foreground: target.currentForeground,
           background: target.currentBackground,
           styleAttributes: target.currentStyleAttributes,
+          underlineColor: target.currentUnderlineColor,
         ),
       );
       return;
@@ -1515,6 +1532,7 @@ final class TerminalScreenParserSink
     int attributes = screen.currentStyleAttributes;
     int foreground = screen.currentForeground;
     int background = screen.currentBackground;
+    int underlineColor = screen.currentUnderlineColor;
     if (sequence.parameters.length == 0) {
       screen.resetCurrentRendition();
       return;
@@ -1533,6 +1551,7 @@ final class TerminalScreenParserSink
           attributes = 0;
           foreground = 0;
           background = 0;
+          underlineColor = 0;
         case 1:
           attributes |= TerminalStyleAttributes.bold;
         case 2:
@@ -1590,12 +1609,15 @@ final class TerminalScreenParserSink
           foreground = parameter - 30 + 1;
         case 38:
         case 48:
+        case 58:
           final _SgrColorResult result = _parseSgrColor(sequence, index);
           if (result.valid) {
             if (parameter == 38) {
               foreground = result.color;
-            } else {
+            } else if (parameter == 48) {
               background = result.color;
+            } else {
+              underlineColor = result.color;
             }
           } else {
             _unsupportedSequenceCount++;
@@ -1608,6 +1630,12 @@ final class TerminalScreenParserSink
           background = parameter - 40 + 1;
         case 49:
           background = 0;
+        case 53:
+          attributes |= TerminalStyleAttributes.overline;
+        case 55:
+          attributes &= ~TerminalStyleAttributes.overline;
+        case 59:
+          underlineColor = 0;
         case >= 90 && <= 97:
           foreground = parameter - 90 + 9;
         case >= 100 && <= 107:
@@ -1622,6 +1650,7 @@ final class TerminalScreenParserSink
         foreground: foreground,
         background: background,
         styleAttributes: attributes,
+        underlineColor: underlineColor,
       );
     } on StateError {
       _unsupportedSequenceCount++;
@@ -1976,19 +2005,31 @@ final class TerminalScreenParserSink
     }
   }
 
-  void _eraseDisplay(VtSequenceHeader sequence) {
+  void _setCharacterProtection(int value) {
+    switch (value) {
+      case 0:
+      case 2:
+        screen.setCurrentCellProtection(false);
+      case 1:
+        screen.setCurrentCellProtection(true);
+      default:
+        _unsupportedSequenceCount++;
+    }
+  }
+
+  void _eraseDisplay(VtSequenceHeader sequence, {bool selective = false}) {
     final int mode = _parameter(sequence, 0, 0, zeroIsDefault: false);
     if (mode >= 0 && mode <= 2) {
-      screen.eraseInDisplay(mode);
+      screen.eraseInDisplay(mode, selective: selective);
     } else {
       _unsupportedSequenceCount++;
     }
   }
 
-  void _eraseLine(VtSequenceHeader sequence) {
+  void _eraseLine(VtSequenceHeader sequence, {bool selective = false}) {
     final int mode = _parameter(sequence, 0, 0, zeroIsDefault: false);
     if (mode >= 0 && mode <= 2) {
-      screen.eraseInLine(mode);
+      screen.eraseInLine(mode, selective: selective);
     } else {
       _unsupportedSequenceCount++;
     }

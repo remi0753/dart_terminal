@@ -341,7 +341,10 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
     'SGR',
     'clause 8.3.117, SGR—Select Graphic Rendition',
     support: 'partial',
-    notes: 'Text attributes and ANSI/256/direct colors are implemented; the full ECMA/xterm rendition repertoire is not.',
+    notes:
+        'Text attributes including underline variants and overline, plus '
+        'ANSI/256/direct foreground, background, and underline colors are '
+        'implemented; the full ECMA/xterm rendition repertoire is not.',
   ),
   0x6e: _Metadata(
     'ecma48',
@@ -408,6 +411,15 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
     support: 'partial',
     notes: 'Cursor styles 0–6 are implemented; xterm resource-reset value 7 is rejected.',
   ),
+  0x012271: _Metadata(
+    'dec',
+    'decsca',
+    'DECSCA',
+    'Part II chapter 5, DECSCA—Select Character Protection Attribute',
+    notes:
+        'Values 0 and 2 select erasable cells; value 1 protects later prints '
+        'from DECSED and DECSEL.',
+  ),
   0x012470: _Metadata(
     'dec',
     'decrqm',
@@ -453,6 +465,25 @@ const Map<int, _Metadata> _csiMetadata = <int, _Metadata>{
     'push-keyboard-flags',
     'KITTY-PUSH-KEYBOARD-FLAGS',
     'keyboard-protocol.rst, Progressive enhancement—push flags',
+  ),
+  0x3f00004a: _Metadata(
+    'dec',
+    'decsed',
+    'DECSED',
+    'Part II chapter 5, DECSED—Selective Erase in Display',
+    support: 'partial',
+    notes:
+        'Modes 0–2 erase only unprotected cells while preserving atomic '
+        'wide and grapheme cells.',
+  ),
+  0x3f00004b: _Metadata(
+    'dec',
+    'decsel',
+    'DECSEL',
+    'Part II chapter 5, DECSEL—Selective Erase in Line',
+    notes:
+        'Modes 0–2 erase only unprotected cells while preserving atomic '
+        'wide and grapheme cells.',
   ),
   0x3f000068: _Metadata(
     'dec',
@@ -1193,34 +1224,6 @@ const List<_Gap> _gaps = <_Gap>[
     locator: 'clause 8.3.135, SR—Scroll Right',
   ),
   _Gap(
-    family: 'dec',
-    kind: 'csi',
-    name: 'decsed',
-    mnemonic: 'DECSED',
-    syntax: 'CSI ? Ps J',
-    selector: <String, Object?>{
-      'kind': 'csi',
-      'privateMarker': 63,
-      'intermediates': <int>[],
-      'finalByte': 74,
-    },
-    locator: 'Part II chapter 5, DECSED—Selective Erase in Display',
-  ),
-  _Gap(
-    family: 'dec',
-    kind: 'csi',
-    name: 'decsel',
-    mnemonic: 'DECSEL',
-    syntax: 'CSI ? Ps K',
-    selector: <String, Object?>{
-      'kind': 'csi',
-      'privateMarker': 63,
-      'intermediates': <int>[],
-      'finalByte': 75,
-    },
-    locator: 'Part II chapter 5, DECSEL—Selective Erase in Line',
-  ),
-  _Gap(
     family: 'xterm',
     kind: 'csi',
     name: 'xtpushcolors',
@@ -1513,20 +1516,6 @@ const List<_Gap> _gaps = <_Gap>[
       'finalByte': 113,
     },
     locator: 'Part II chapter 5, DECLL—Load LEDs',
-  ),
-  _Gap(
-    family: 'dec',
-    kind: 'csi',
-    name: 'decsca',
-    mnemonic: 'DECSCA',
-    syntax: 'CSI Ps " q',
-    selector: <String, Object?>{
-      'kind': 'csi',
-      'privateMarker': null,
-      'intermediates': <int>[34],
-      'finalByte': 113,
-    },
-    locator: 'Part II chapter 5, DECSCA—Select Character Protection Attribute',
   ),
   _Gap(
     family: 'xterm',
