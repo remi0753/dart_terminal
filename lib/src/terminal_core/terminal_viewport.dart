@@ -480,6 +480,12 @@ final class TerminalViewport {
   }) =>
       _semanticLineSelectionAt(this, viewportRow, column, maxRanges: maxRanges);
 
+  /// Combines two already semantic-clamped logical-line selections.
+  TerminalSelectionRange? combineSemanticLineSelections(
+    TerminalSelectionRange first,
+    TerminalSelectionRange second,
+  ) => _combineSemanticLineSelections(this, first, second);
+
   /// Selects the complete retained command-output segment under one cell.
   TerminalSelectionRange? semanticOutputSelectionAt(
     int viewportRow,

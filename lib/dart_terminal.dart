@@ -209,6 +209,7 @@ export 'src/terminal_input/terminal_mouse_event.dart';
 export 'src/terminal_input/terminal_mouse_router.dart';
 export 'src/terminal_input/terminal_paste.dart';
 export 'src/terminal_input/terminal_preedit.dart';
+export 'src/terminal_input/terminal_prompt_click.dart';
 export 'src/terminal_input/terminal_scroll_router.dart';
 export 'src/terminal_input/terminal_selection_autoscroll.dart';
 export 'src/terminal_input/terminal_selection_gesture.dart';

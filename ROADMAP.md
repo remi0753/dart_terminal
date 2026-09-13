@@ -1414,7 +1414,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
       [`docs/phase11/ghostty-p0-p1-gap-burn-down.md`](docs/phase11/ghostty-p0-p1-gap-burn-down.md)
       を参照して順に実施する）
       - [x] bounded semantic click／cursor-movement core
-      - [ ] native Option-click／semantic selection gesture integration
+      - [x] native Option-click／semantic selection gesture integration
       - [ ] dual-runtime evidence、文書／matrix更新、親項目完了判定
   - [ ] aggregate gate、文書／matrix更新、親項目完了判定
 - [ ] release candidate の daily-use program matrix

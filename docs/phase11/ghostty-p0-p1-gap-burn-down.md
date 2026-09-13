@@ -6,9 +6,99 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 Option-click cursor and semantic prompt/output selection
+- Current subtask: native Option-click and semantic selection gesture integration
 
 ## Current P1 child — Option-click cursor and semantic selection
+
+### Active ordered subtask 2 — native gesture integration
+
+- **Purpose:** Connect the already-bounded semantic range and cursor-movement
+  core to the ordinary product mouse path exactly once, without moving terminal
+  policy into generic AppKit code.
+- **Background:** Commit `c7fce01` completed only the content-free screen and
+  viewport planning core. The post-commit clean-tree and roadmap reread on
+  2026-09-14 confirms that native gesture integration is now the first
+  unchecked ordered item and that `IN-10` must remain open until later
+  dual-runtime evidence exists.
+- **Scope:** Add one terminal-local Option-click sequence owner downstream of
+  `TerminalMouseRouter`; encode accepted primary/live prompt movements with the
+  current normal/application cursor mode; clear and redraw local selection at
+  gesture ownership transfer; make ordinary triple-click use a semantic-clamped
+  line and Control-or-Command triple-click/drag use retained output blocks; add
+  focused unit and product-owner integration checks.
+- **Out of scope:** Generic `dart_appkit` changes, OSC 133 producer option
+  negotiation, SGR click-event emission, README/feature-matrix acceptance
+  claims, generated gap closure, dual-runtime product evidence, notarization,
+  and duration-only soak.
+- **Dependencies:** AppKit v15 already supplies modifier/button/cell data;
+  `TerminalMouseRouter` already gives active mouse reporting precedence unless
+  Shift explicitly selects local ownership; the first child supplies stable
+  range queries and movement plans; the existing pane write queue remains the
+  sole PTY input owner.
+- **Completion conditions:** Exact-Option undragged primary clicks are consumed
+  once and emit at most 255 normal or application-cursor arrow bytes only for an
+  accepted plan; drag, stale state, wrong gesture, alternate/history/no-input,
+  and active mouse reporting fail closed without duplicate selection or write.
+  Ordinary triple-click clamps to a retained semantic segment; Control-or-
+  Command triple-click and drag select complete output blocks and ignore
+  non-output expansion targets. Selection surface updates, cancellation, and
+  disposal are deterministic, focused tests and the exact repository gate pass,
+  and the adjacent generic library remains unchanged and terminal-free.
+- **Verification approach:** Add focused controller/router/selection/product
+  tests for ownership, bytes, cap, clearing, rendering observation, cancellation,
+  and cleanup; run formatting, analysis, generated freshness, the exact full
+  `make test` gate, diff review, and the adjacent tracked-path/content audit.
+  Only this ordered subtask is marked and committed after all checks pass.
+- 2026-09-14: Integration inventory found that changing only triple-click's
+  initial range is insufficient: the existing drag path re-expands its raw
+  endpoints as complete logical lines and would cross a prompt/input/output
+  boundary after movement. This child therefore also needs one content-free
+  stable-range combiner for two already-clamped semantic line selections. It
+  does not add new semantic storage or text retention. Exact Option ownership
+  is restricted to left-button single-click begin/update/end with only the
+  Option modifier and an inside-grid undragged release. Once begun, a drag or
+  changed release is consumed as cancellation; otherwise ordinary selection
+  retains ownership. Active mouse reporting without Shift never reaches this
+  local arbiter because `TerminalMouseRouter` already owns and reports it.
+- 2026-09-14: The first formatter invocation mistakenly included this Markdown
+  memo in the Dart source list. Dart formatted the four changed Dart files, then
+  rejected the memo at its first heading as non-Dart input; no memo bytes were
+  changed. Later formatter invocations use Dart files only.
+- 2026-09-14: The first focused prompt-click compile found two direct-import
+  omissions: product code does not see a type merely because the package barrel
+  exports it, and the new controller needs `terminal_mouse_event.dart` for the
+  button enum rather than relying on a sibling import to re-export it. Adding
+  those two internal imports resolved every compile error. The prompt-click and
+  semantic-selection focused executables now both pass, including normal CSI
+  left/right, application-cursor SS3 left, no-op/rejection, 85-arrow/255-byte
+  acceptance, 86-arrow rejection, selection clearing, reporting exclusion,
+  drag/mode-generation cancellation, exact modifier ownership, ordinary word
+  fallback, prompt/input/output clamping, Control/Command output selection,
+  reverse and non-output drag, and stale-screen cancellation.
+- 2026-09-14: Final product-path review found that the pre-existing OSC 8
+  hyperlink owner treated exact Command clicks with every positive click count
+  as an open gesture. That would consume Command triple-click before semantic
+  output selection. Hyperlink activation is now restricted to exact Command
+  single-click; a focused regression proves Command triple down/up passes to
+  the local selection owner and opens nothing, while the existing single-click,
+  unsafe target, stale target, and drag-cancellation checks still pass.
+- 2026-09-14: The final focused suite passes for prompt click, semantic
+  selection, hyperlink ownership, autoscroll, mouse routing, semantic ranges,
+  and selection/search. Static analysis reports no issues. The exact full
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate was run again after the
+  last ownership change and passes: all generated checks are fresh, formatting
+  covers 336 files with zero changes, analysis is clean, and the aggregate ends
+  with `dart_terminal tests passed`. The regenerated Phase 7 acceptance evidence
+  retains four covered criteria; the Ghostty inventory deliberately remains 102
+  rows / 96 accepted / zero actionable P0 / one actionable P1 / zero silent
+  misbehavior because dual-runtime closure is the next child. `git diff
+  --check` is clean. The adjacent `dart_appkit` worktree remains clean, its
+  tracked paths contain no case-insensitive `terminal`, and its tracked Dart,
+  native source, script, manifest, and Makefile content has zero such match.
+  No adjacent file changed. Notarization and duration-only campaigns remain
+  skipped as authorized. This native gesture integration child meets its
+  recorded scope and completion conditions without prematurely closing
+  `IN-10`.
 
 - **Purpose:** Close the final actionable pinned P1 input row by adding
   terminal-local Option-click cursor positioning and bounded semantic

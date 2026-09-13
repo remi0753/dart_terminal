@@ -97,6 +97,7 @@ import 'terminal_phase9_security_stress_test.dart';
 import 'terminal_preedit_test.dart';
 import 'terminal_product_configuration_test.dart';
 import 'terminal_product_hierarchy_actions_test.dart';
+import 'terminal_prompt_click_test.dart';
 import 'terminal_prompt_navigation_test.dart';
 import 'terminal_property_fuzz_test.dart';
 import 'terminal_quick_terminal_test.dart';
@@ -236,6 +237,7 @@ Future<void> main() async {
   runTerminalPaletteTests();
   await runTerminalPasteTests();
   runTerminalPreeditTests();
+  runTerminalPromptClickTests();
   runTerminalScrollRouterTests();
   runTerminalPropertyFuzzTests();
   runTerminalQuickTerminalTests();

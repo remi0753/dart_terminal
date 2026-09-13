@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_terminal/dart_terminal.dart';
 
@@ -7,9 +10,183 @@ void runTerminalSelectionGestureTests() {
   _testInclusiveCellDragInBothDirections();
   _testWideCellDragNormalizesBothVisualHalves();
   _testWordAndLogicalLineClickUnits();
+  _testSemanticTripleClickUnitsAndDragging();
+  _testSemanticOutputGestureRejectsStaleAndNonOutputTargets();
   _testGestureOwnershipAndPersistentRange();
   _testTransientCancellationPreservesSelection();
   _testReflowRetentionAndInvalidation();
+}
+
+void _testSemanticTripleClickUnitsAndDragging() {
+  final _SemanticHarness sameLine = _SemanticHarness(rows: 2, columns: 20);
+  sameLine
+    ..parse(_osc('A'))
+    ..parse(r'$ ')
+    ..parse(_osc('B'))
+    ..parse('echo')
+    ..parse(_osc('C'))
+    ..parse('result')
+    ..parse(_osc('D'));
+  final TerminalSelectionGestureController lines =
+      TerminalSelectionGestureController(viewport: sameLine.screens.viewport);
+  for (final (int, String) expected in <(int, String)>[
+    (0, r'$ '),
+    (3, 'echo'),
+    (8, 'result'),
+  ]) {
+    final TerminalSelectionGestureUpdate began = lines.handle(
+      _intent(
+        TerminalLocalSelectionPhase.begin,
+        row: 0,
+        column: expected.$1,
+        clickCount: 3,
+      ),
+    );
+    _expect(
+      began.snapshot.unit == TerminalSelectionUnit.logicalLine &&
+          _text(sameLine.screens.viewport, began.snapshot.range!) ==
+              expected.$2,
+      'ordinary triple-click stays inside its semantic segment',
+    );
+    lines.clear();
+  }
+  lines.handle(
+    _intent(
+      TerminalLocalSelectionPhase.begin,
+      row: 0,
+      column: 8,
+      clickCount: 3,
+    ),
+  );
+  final TerminalSelectionGestureUpdate withinOutput = lines.handle(
+    _intent(TerminalLocalSelectionPhase.end, row: 0, column: 10, clickCount: 3),
+  );
+  _expect(
+    _text(sameLine.screens.viewport, withinOutput.snapshot.range!) == 'result',
+    'ordinary triple-click drag within one semantic segment stays clamped',
+  );
+
+  final _SemanticHarness blocks = _twoOutputBlocks();
+  final TerminalSelectionGestureController output =
+      TerminalSelectionGestureController(viewport: blocks.screens.viewport);
+  final TerminalSelectionGestureUpdate began = output.handle(
+    _intent(
+      TerminalLocalSelectionPhase.begin,
+      row: 1,
+      column: 1,
+      clickCount: 3,
+      modifiers: const ModifierKeys(ModifierKeys.controlBit),
+    ),
+  );
+  final TerminalSelectionGestureUpdate expanded = output.handle(
+    _intent(
+      TerminalLocalSelectionPhase.update,
+      row: 3,
+      column: 1,
+      clickCount: 3,
+      modifiers: const ModifierKeys(ModifierKeys.controlBit),
+    ),
+  );
+  final String expandedText = _text(
+    blocks.screens.viewport,
+    expanded.snapshot.range!,
+  );
+  _expect(
+    began.snapshot.unit == TerminalSelectionUnit.semanticOutput &&
+        _text(blocks.screens.viewport, began.snapshot.range!) == 'out1' &&
+        expandedText.startsWith('out1') &&
+        expandedText.endsWith('out2') &&
+        expandedText.contains(r'$ two'),
+    'Control triple-click and drag select complete output blocks',
+  );
+
+  output.clear();
+  final TerminalSelectionGestureUpdate command = output.handle(
+    _intent(
+      TerminalLocalSelectionPhase.begin,
+      row: 3,
+      column: 1,
+      clickCount: 3,
+      modifiers: const ModifierKeys(ModifierKeys.commandBit),
+    ),
+  );
+  final TerminalSelectionGestureUpdate reverse = output.handle(
+    _intent(
+      TerminalLocalSelectionPhase.end,
+      row: 1,
+      column: 1,
+      clickCount: 3,
+      modifiers: const ModifierKeys(ModifierKeys.commandBit),
+    ),
+  );
+  _expect(
+    command.snapshot.unit == TerminalSelectionUnit.semanticOutput &&
+        reverse.snapshot.range!.isReversed &&
+        _text(blocks.screens.viewport, reverse.snapshot.range!) == expandedText,
+    'Command triple-click uses Super semantics and preserves reverse output drag',
+  );
+}
+
+void _testSemanticOutputGestureRejectsStaleAndNonOutputTargets() {
+  final _SemanticHarness harness = _twoOutputBlocks();
+  final TerminalSelectionGestureController gesture =
+      TerminalSelectionGestureController(viewport: harness.screens.viewport);
+  final TerminalSelectionGestureUpdate prompt = gesture.handle(
+    _intent(
+      TerminalLocalSelectionPhase.begin,
+      row: 0,
+      column: 0,
+      clickCount: 3,
+      modifiers: const ModifierKeys(ModifierKeys.controlBit),
+    ),
+  );
+  _expect(
+    prompt.outcome == TerminalSelectionGestureOutcome.ignored &&
+        !prompt.snapshot.hasSelection,
+    'semantic output gesture is inert on prompt and input cells',
+  );
+
+  gesture.handle(
+    _intent(
+      TerminalLocalSelectionPhase.begin,
+      row: 1,
+      column: 1,
+      clickCount: 3,
+      modifiers: const ModifierKeys(ModifierKeys.controlBit),
+    ),
+  );
+  final TerminalSelectionRange original = gesture.snapshot.range!;
+  final TerminalSelectionGestureUpdate held = gesture.handle(
+    _intent(
+      TerminalLocalSelectionPhase.update,
+      row: 2,
+      column: 1,
+      clickCount: 3,
+      modifiers: const ModifierKeys(ModifierKeys.controlBit),
+    ),
+  );
+  _expect(
+    held.snapshot.range!.start == original.start &&
+        held.snapshot.range!.end == original.end &&
+        held.snapshot.isActive,
+    'dragging across a non-output target keeps the originating output block',
+  );
+  harness.screens.setAlternateMode47(true);
+  final TerminalSelectionGestureUpdate stale = gesture.handle(
+    _intent(
+      TerminalLocalSelectionPhase.update,
+      row: 0,
+      column: 0,
+      clickCount: 3,
+      modifiers: const ModifierKeys(ModifierKeys.controlBit),
+    ),
+  );
+  _expect(
+    stale.outcome == TerminalSelectionGestureOutcome.cancelled &&
+        !stale.snapshot.hasSelection &&
+        !stale.snapshot.isActive,
+    'a stale semantic output gesture cancels instead of retaining old anchors',
+  );
 }
 
 void _testTransientCancellationPreservesSelection() {
@@ -315,14 +492,50 @@ TerminalLocalSelectionIntent _intent(
   int clickCount = 1,
   TerminalMouseButton button = TerminalMouseButton.left,
   TerminalPointerVerticalEdge edge = TerminalPointerVerticalEdge.inside,
+  ModifierKeys modifiers = const ModifierKeys(0),
 }) => TerminalLocalSelectionIntent(
   phase: phase,
   cell: TerminalPointerCell(row: row, column: column),
   button: button,
   clickCount: clickCount,
-  modifiers: const ModifierKeys(0),
+  modifiers: modifiers,
   verticalEdge: edge,
 );
+
+_SemanticHarness _twoOutputBlocks() {
+  final _SemanticHarness harness = _SemanticHarness(rows: 6, columns: 12);
+  harness
+    ..parse(_osc('A'))
+    ..parse(r'$ ')
+    ..parse(_osc('B'))
+    ..parse('one')
+    ..parse(_osc('C'))
+    ..parse('\r\nout1')
+    ..parse(_osc('D'))
+    ..parse(_osc('A'))
+    ..parse(r'$ ')
+    ..parse(_osc('B'))
+    ..parse('two')
+    ..parse(_osc('C'))
+    ..parse('\r\nout2')
+    ..parse(_osc('D'));
+  return harness;
+}
+
+String _osc(String payload) => '\x1b]133;$payload\x07';
+
+final class _SemanticHarness {
+  _SemanticHarness({required int rows, required int columns})
+    : screens = TerminalScreenSet(rows: rows, columns: columns) {
+    parser = VtParser(sink: TerminalScreenParserSink.forScreenSet(screens));
+  }
+
+  final TerminalScreenSet screens;
+  late final VtParser parser;
+
+  void parse(String value) =>
+      parser.parse(Uint8List.fromList(utf8.encode(value)));
+}
 
 void _setText(TerminalScreen screen, int row, String text) {
   var column = 0;

@@ -71,6 +71,30 @@ void _testHoverAndExclusiveCommandClick() {
     'non-exact Command chord is not promoted to a link action',
   );
 
+  final TerminalHyperlinkRouteResult tripleDown = fixture.route(
+    _event(
+      AppKitMouseEventKind.down,
+      column: 1,
+      clickCount: 3,
+      modifiers: _command,
+    ),
+  );
+  final TerminalHyperlinkRouteResult tripleUp = fixture.route(
+    _event(
+      AppKitMouseEventKind.up,
+      column: 1,
+      clickCount: 3,
+      modifiers: _command,
+    ),
+  );
+  _expect(
+    !tripleDown.isConsumed &&
+        !tripleUp.isConsumed &&
+        fixture.localSelections == 6 &&
+        fixture.opened.length == 1,
+    'Command triple-click passes through for semantic output selection',
+  );
+
   fixture.route(
     _event(AppKitMouseEventKind.moved, column: 12, button: -1, clickCount: 0),
   );

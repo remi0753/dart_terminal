@@ -310,14 +310,46 @@ TerminalSelectionRange? _semanticOutputSelectionAt(
   );
 }
 
+TerminalSelectionRange? _combineSemanticLineSelections(
+  TerminalViewport viewport,
+  TerminalSelectionRange first,
+  TerminalSelectionRange second,
+) => _combineResolvedSelections(
+  viewport,
+  first,
+  second,
+  requiredUnit: TerminalSelectionUnit.logicalLine,
+  resultUnit: TerminalSelectionUnit.logicalLine,
+  semanticRowFlags: first.semanticRowFlags | second.semanticRowFlags,
+  isBoundaryLimited: first.isBoundaryLimited || second.isBoundaryLimited,
+);
+
 TerminalSelectionRange? _combineSemanticOutputSelections(
   TerminalViewport viewport,
   TerminalSelectionRange first,
   TerminalSelectionRange second,
-) {
+) => _combineResolvedSelections(
+  viewport,
+  first,
+  second,
+  requiredUnit: TerminalSelectionUnit.semanticOutput,
+  resultUnit: TerminalSelectionUnit.semanticOutput,
+  semanticRowFlags: TerminalRowFlags.output,
+  isBoundaryLimited: false,
+);
+
+TerminalSelectionRange? _combineResolvedSelections(
+  TerminalViewport viewport,
+  TerminalSelectionRange first,
+  TerminalSelectionRange second, {
+  required TerminalSelectionUnit requiredUnit,
+  required TerminalSelectionUnit resultUnit,
+  required int semanticRowFlags,
+  required bool isBoundaryLimited,
+}) {
   viewport._sync();
-  if (first.unit != TerminalSelectionUnit.semanticOutput ||
-      second.unit != TerminalSelectionUnit.semanticOutput ||
+  if (first.unit != requiredUnit ||
+      second.unit != requiredUnit ||
       first.start.screenKind != second.start.screenKind ||
       !viewport.isSelectionAvailable(first) ||
       !viewport.isSelectionAvailable(second)) {
@@ -345,10 +377,10 @@ TerminalSelectionRange? _combineSemanticOutputSelections(
     viewport,
     secondBeforeFirst ? secondStart : firstStart,
     secondBeforeFirst ? firstEnd : secondEnd,
-    unit: TerminalSelectionUnit.semanticOutput,
+    unit: resultUnit,
     isReversed: secondBeforeFirst,
-    isBoundaryLimited: false,
-    semanticRowFlags: TerminalRowFlags.output,
+    isBoundaryLimited: isBoundaryLimited,
+    semanticRowFlags: semanticRowFlags,
   );
 }
 

@@ -200,7 +200,7 @@ final class TerminalHyperlinkInteractionController {
   static bool _isExactCommandPrimary(AppKitMouseEvent event) =>
       event.button == 0 &&
       event.modifiers.bits == ModifierKeys.commandBit &&
-      event.clickCount > 0;
+      event.clickCount == 1;
 
   static ({int row, int column})? _cellAt(
     AppKitMouseEvent event, {

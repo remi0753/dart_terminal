@@ -53,6 +53,7 @@ import 'terminal_input/terminal_key_event.dart';
 import 'terminal_input/terminal_mouse_event.dart';
 import 'terminal_input/terminal_mouse_router.dart';
 import 'terminal_input/terminal_paste.dart';
+import 'terminal_input/terminal_prompt_click.dart';
 import 'terminal_input/terminal_scroll_router.dart';
 import 'terminal_input/terminal_selection_autoscroll.dart';
 import 'terminal_input/terminal_selection_gesture.dart';
@@ -1475,7 +1476,9 @@ final class TerminalApplication {
             gesture: TerminalSelectionGestureController(
               viewport: terminalSession!.terminalScreenSet.viewport,
             ),
+            screens: terminalSession!.terminalScreenSet,
             surface: createdMetalSurface,
+            onPromptCursorInput: createdPane.sendInput,
           );
       selectionOwner = createdSelectionOwner;
       final TerminalMouseRouter mouseRouter = TerminalMouseRouter(
@@ -3255,7 +3258,9 @@ final class TerminalApplication {
         gesture: TerminalSelectionGestureController(
           viewport: session.terminalScreenSet.viewport,
         ),
+        screens: session.terminalScreenSet,
         surface: surface,
+        onPromptCursorInput: pane.sendInput,
       );
       owner
         ..addNativeContentSubscription(
@@ -19886,10 +19891,20 @@ final class _TerminalClipboardProductObservation {
 }
 
 final class _TerminalSelectionProductOwner {
-  _TerminalSelectionProductOwner({required this.gesture, required this.surface})
-    : autoscroller = TerminalSelectionAutoscroller(gesture: gesture);
+  _TerminalSelectionProductOwner({
+    required this.gesture,
+    required TerminalScreenSet screens,
+    required this.surface,
+    required TerminalPromptClickInputCallback onPromptCursorInput,
+  }) : localGestures = TerminalLocalGestureController(
+         screens: screens,
+         onTerminalInput: onPromptCursorInput,
+         selection: gesture,
+       ),
+       autoscroller = TerminalSelectionAutoscroller(gesture: gesture);
 
   final TerminalSelectionGestureController gesture;
+  final TerminalLocalGestureController localGestures;
   final TerminalLiveMetalSurface surface;
   final TerminalSelectionAutoscroller autoscroller;
   final Stopwatch _clock = Stopwatch()..start();
@@ -19903,6 +19918,12 @@ final class _TerminalSelectionProductOwner {
   bool shiftOverrideObserved = false;
   bool scrolledUp = false;
   bool scrolledDown = false;
+  int promptClickBeginCount = 0;
+  int promptClickMoveCount = 0;
+  int promptClickCancelledCount = 0;
+  int promptClickRejectedCount = 0;
+  int promptClickNoMovementCount = 0;
+  int promptClickInputBytes = 0;
 
   TerminalSelectionText? selectedText({
     int maxScalars = TerminalSelectionText.maximumScalars,
@@ -19915,7 +19936,19 @@ final class _TerminalSelectionProductOwner {
 
   void handle(TerminalLocalSelectionIntent intent) {
     if (_disposed) return;
-    final TerminalSelectionGestureUpdate update = gesture.handle(intent);
+    final TerminalLocalGestureUpdate localUpdate = localGestures.handle(intent);
+    if (localUpdate.consumedByPromptClick) {
+      _recordPromptClick(localUpdate.promptClick);
+      _timer?.cancel();
+      _timer = null;
+      autoscroller.cancel();
+      final TerminalSelectionGestureUpdate? selection = localUpdate.selection;
+      if (selection != null && selection.changed) {
+        surface.updateSelection(selection.snapshot);
+      }
+      return;
+    }
+    final TerminalSelectionGestureUpdate update = localUpdate.selection!;
     if (update.changed) {
       _recordGesture(update.snapshot, intent);
       surface.updateSelection(update.snapshot);
@@ -19937,7 +19970,9 @@ final class _TerminalSelectionProductOwner {
     _timer?.cancel();
     _timer = null;
     autoscroller.cancel();
-    final TerminalSelectionGestureUpdate update = gesture.cancelInteraction();
+    final TerminalLocalGestureUpdate localUpdate = localGestures
+        .cancelInteraction();
+    final TerminalSelectionGestureUpdate update = localUpdate.selection!;
     if (update.changed) surface.updateSelection(update.snapshot);
   }
 
@@ -19946,6 +19981,26 @@ final class _TerminalSelectionProductOwner {
     _disposed = true;
     _timer?.cancel();
     _timer = null;
+    autoscroller.cancel();
+    localGestures.dispose();
+  }
+
+  void _recordPromptClick(TerminalPromptClickUpdate update) {
+    switch (update.outcome) {
+      case TerminalPromptClickOutcome.ignored:
+        break;
+      case TerminalPromptClickOutcome.began:
+        promptClickBeginCount++;
+      case TerminalPromptClickOutcome.moved:
+        promptClickMoveCount++;
+        promptClickInputBytes += update.terminalBytes.length;
+      case TerminalPromptClickOutcome.noMovement:
+        promptClickNoMovementCount++;
+      case TerminalPromptClickOutcome.rejected:
+        promptClickRejectedCount++;
+      case TerminalPromptClickOutcome.cancelled:
+        promptClickCancelledCount++;
+    }
   }
 
   void _recordGesture(

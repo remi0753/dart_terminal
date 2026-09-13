@@ -53,6 +53,7 @@ final class TerminalSelectionGestureController {
   bool _isActive = false;
   TerminalSelectionUnit? _unit;
   TerminalSelectionRange? _range;
+  TerminalSelectionRange? _originRange;
   TerminalLogicalAnchor? _originStart;
   TerminalLogicalAnchor? _originEnd;
   int? _focusColumn;
@@ -114,6 +115,16 @@ final class TerminalSelectionGestureController {
     if (intent.clickCount < 1 || !_cellIsAvailable(intent.cell)) {
       return _result(TerminalSelectionGestureOutcome.ignored);
     }
+    final bool semanticOutput =
+        intent.clickCount >= 3 &&
+        (intent.modifiers.control || intent.modifiers.command);
+    final TerminalSelectionUnit unit = semanticOutput
+        ? TerminalSelectionUnit.semanticOutput
+        : intent.clickCount == 1
+        ? TerminalSelectionUnit.cell
+        : intent.clickCount == 2
+        ? TerminalSelectionUnit.word
+        : TerminalSelectionUnit.logicalLine;
     final TerminalLogicalAnchor start = viewport.anchorAt(
       intent.cell.row,
       intent.cell.column,
@@ -122,22 +133,23 @@ final class TerminalSelectionGestureController {
       intent.cell.row,
       intent.cell.column,
     );
-    final TerminalSelectionUnit unit = intent.clickCount == 1
-        ? TerminalSelectionUnit.cell
-        : intent.clickCount == 2
-        ? TerminalSelectionUnit.word
-        : TerminalSelectionUnit.logicalLine;
-    final TerminalSelectionRange? range = viewport.selectionRange(
-      start,
-      end,
-      unit: unit,
-    );
+    final TerminalSelectionRange? range = switch (unit) {
+      TerminalSelectionUnit.logicalLine => viewport.semanticLineSelectionAt(
+        intent.cell.row,
+        intent.cell.column,
+      ),
+      TerminalSelectionUnit.semanticOutput =>
+        viewport.semanticOutputSelectionAt(intent.cell.row, intent.cell.column),
+      TerminalSelectionUnit.cell || TerminalSelectionUnit.word =>
+        viewport.selectionRange(start, end, unit: unit),
+    };
     if (range == null) {
       return _result(TerminalSelectionGestureOutcome.ignored);
     }
     _isActive = true;
     _unit = unit;
     _range = range;
+    _originRange = range;
     _originStart = start;
     _originEnd = end;
     _focusColumn = intent.cell.column;
@@ -185,27 +197,60 @@ final class TerminalSelectionGestureController {
     required bool ending,
     required TerminalPointerVerticalEdge edge,
   }) {
-    final TerminalLogicalAnchor focusStart = viewport.anchorAt(
-      cell.row,
-      cell.column,
-    );
-    final TerminalLogicalAnchor focusEnd = viewport.anchorAfter(
-      cell.row,
-      cell.column,
-    );
-    final TerminalSelectionRange? forwardProbe = viewport.selectionRange(
-      _originStart!,
-      focusEnd,
-      unit: _unit!,
-    );
-    if (forwardProbe == null) {
+    if (_range == null || !viewport.isSelectionAvailable(_range!)) {
       _reset();
       _advanceGeneration();
       return _result(TerminalSelectionGestureOutcome.cancelled);
     }
-    final TerminalSelectionRange? range = forwardProbe.isReversed
-        ? viewport.selectionRange(_originEnd!, focusStart, unit: _unit!)
-        : forwardProbe;
+    final TerminalSelectionRange? range;
+    if (_unit == TerminalSelectionUnit.logicalLine) {
+      final TerminalSelectionRange? focus = viewport.semanticLineSelectionAt(
+        cell.row,
+        cell.column,
+      );
+      range = focus == null
+          ? null
+          : viewport.combineSemanticLineSelections(_originRange!, focus);
+    } else if (_unit == TerminalSelectionUnit.semanticOutput) {
+      final TerminalSelectionRange? focus = viewport.semanticOutputSelectionAt(
+        cell.row,
+        cell.column,
+      );
+      if (focus == null) {
+        _focusColumn = cell.column;
+        _isActive = !ending;
+        _verticalEdge = ending ? TerminalPointerVerticalEdge.inside : edge;
+        _advanceGeneration();
+        return _result(
+          ending
+              ? TerminalSelectionGestureOutcome.ended
+              : TerminalSelectionGestureOutcome.updated,
+        );
+      }
+      range = viewport.combineSemanticOutputSelections(_originRange!, focus);
+    } else {
+      final TerminalLogicalAnchor focusStart = viewport.anchorAt(
+        cell.row,
+        cell.column,
+      );
+      final TerminalLogicalAnchor focusEnd = viewport.anchorAfter(
+        cell.row,
+        cell.column,
+      );
+      final TerminalSelectionRange? forwardProbe = viewport.selectionRange(
+        _originStart!,
+        focusEnd,
+        unit: _unit!,
+      );
+      if (forwardProbe == null) {
+        _reset();
+        _advanceGeneration();
+        return _result(TerminalSelectionGestureOutcome.cancelled);
+      }
+      range = forwardProbe.isReversed
+          ? viewport.selectionRange(_originEnd!, focusStart, unit: _unit!)
+          : forwardProbe;
+    }
     if (range == null) {
       _reset();
       _advanceGeneration();
@@ -230,6 +275,7 @@ final class TerminalSelectionGestureController {
     _isActive = false;
     _unit = null;
     _range = null;
+    _originRange = null;
     _originStart = null;
     _originEnd = null;
     _focusColumn = null;
