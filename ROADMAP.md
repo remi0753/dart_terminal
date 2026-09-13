@@ -1333,6 +1333,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] product action／release notes、受け入れ、文書／matrix、親項目完了判定
   - [x] 公開action件数と生成済み互換性証跡の整合を再確認
 - [ ] local crash report、hang sample、privacy-safe diagnostics
+  （分割、privacy／symbol境界、完了条件は
+  [`docs/phase11/local-crash-hang-diagnostics.md`](docs/phase11/local-crash-hang-diagnostics.md)
+  を参照して順に実施する）
+  - [x] contract、privacy、report／symbol inventory
+  - [ ] Release AOT dSYM package、UUID／hash監査、atomic publication
+  - [ ] local Apple report discovery／明示raw copy、current-process hang sample
+  - [ ] product action／consent UI、両runtime受け入れ、文書／matrix、親項目完了判定
 - [ ] startup/input/render/parser/memory/power benchmark regression gate
 - [ ] 24/72 hour soak、sleep/wake、display attach/detach、memory pressure
 - [ ] native ASan/UBSan、fuzz corpus、fault injection
