@@ -15,9 +15,9 @@ void runGhosttyP0P1GapInventoryTests() {
       );
   _expect(
     result.rows == 102 &&
-        result.accepted == 96 &&
+        result.accepted == 97 &&
         result.actionableP0 == 0 &&
-        result.actionableP1 == 1 &&
+        result.actionableP1 == 0 &&
         result.documentedDifferences == 2 &&
         result.externalFollowUps == 3,
     'reviewed result totals are exact',
@@ -28,12 +28,12 @@ void runGhosttyP0P1GapInventoryTests() {
   final List<Object?> gaps = report['gaps']! as List<Object?>;
   _expect(
     rows.length == 102 &&
-        gaps.length == 6 &&
+        gaps.length == 5 &&
         rows
                 .cast<Map<String, Object?>>()
                 .where((row) => row['classification'] == 'actionable-p1')
                 .length ==
-            1 &&
+            0 &&
         gaps
             .cast<Map<String, Object?>>()
             .where((gap) => gap['silent_misbehavior'] == true)
@@ -41,7 +41,7 @@ void runGhosttyP0P1GapInventoryTests() {
     'every row and reviewed gap is represented',
   );
   _expectFailure(
-    committed.replaceFirst('"actionable_p1": 1', '"actionable_p1": 2'),
+    committed.replaceFirst('"actionable_p1": 0', '"actionable_p1": 2'),
     generated,
     'stale actionable total',
   );

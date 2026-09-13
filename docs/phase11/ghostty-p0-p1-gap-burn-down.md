@@ -6,9 +6,105 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: native Option-click and semantic selection gesture integration
+- Current subtask: semantic pointer closure complete; aggregate gate pending
 
 ## Current P1 child — Option-click cursor and semantic selection
+
+### Active ordered subtask 3 — dual-runtime evidence and closure
+
+- **Purpose:** Prove the complete semantic pointer behavior through the ordinary
+  AppKit/PTY/Metal product in Developer JIT and Release AOT, then close `IN-10`
+  and its roadmap parent only if the observed evidence is complete.
+- **Background:** Commit `b63f1e8` completed terminal-local gesture integration
+  and its exact full repository gate. The mandatory post-commit roadmap reread
+  identifies this evidence/documentation child as the first unchecked item;
+  the generated inventory still has exactly one actionable P1 row by design.
+- **Scope:** Extend the existing two-mode terminal-display acceptance with real
+  PTY OSC 133 fixtures and native mouse event injection; observe normal and
+  application-cursor movement bytes, semantic prompt/input/output selection,
+  cross-output drag, exact selected text, Metal selection projection, active
+  mouse-report exclusion, idle gesture cleanup, and normal product teardown.
+  Update README, the input reference, `IN-10`, generated evidence, and roadmap
+  parent state after both modes pass.
+- **Out of scope:** New protocol semantics, generic `dart_appkit` changes,
+  external mouse automation, Apple notarization, Intel-host execution, and
+  duration-only soak.
+- **Dependencies:** Existing `display` integration suite already builds and
+  launches the same product bundle in Developer JIT and Release AOT, injects
+  decoded AppKit v15 events, owns a real zsh PTY and live Metal surface, and
+  verifies clean shutdown. The prior two children supply bounded screen plans
+  and the product gesture owner.
+- **Completion conditions:** Both runtime modes observe exact CSI/SS3 bytes from
+  an OSC 133 input range, exact semantic segment copy text and output-block
+  drag, nonzero current-generation Metal selection spans/cells, mouse reporting
+  with zero prompt/local duplication, inactive prompt gesture state, and clean
+  ownership teardown. Public/reference wording accurately states constraints;
+  `IN-10` becomes accepted, inventory reaches zero actionable P1 and zero silent
+  behavior, all generated checks and the exact full gate pass, and adjacent
+  `dart_appkit` remains clean and terminal-free.
+- **Verification approach:** Run the focused display suite first in Developer
+  JIT and Release AOT, update the driver marker contract, regenerate only source
+  evidence affected by the final documentation/code, run focused unit tests,
+  formatting/analysis, the exact full repository gate, diff review, and the
+  adjacent audit. Record every failed attempt and do not close the row or parent
+  before both product modes succeed.
+- 2026-09-14: The first Developer JIT display run built and launched the real
+  AppKit/PTY/Metal product but the new fixture stopped before event injection.
+  Its wait for `abcdef` matched that literal in the shell command echoed before
+  the command executed, so the test inspected the old shell prompt before the
+  screen-clear and custom OSC 133 markers took effect. The failure was explicit
+  (`Option-click fixture did not publish its OSC 133/mode state`), and the app,
+  PTY, worker, surface, and native handles still completed their normal teardown.
+  The fixture will construct every awaited visible marker from separate `printf`
+  format/argument pieces so no complete marker exists in the echoed command.
+- 2026-09-14: The second Developer JIT attempt reached the same pre-injection
+  assertion. Although the echoed command no longer contained contiguous
+  `abcdef`, that generic text already existed in an earlier input-matrix screen
+  row, so the wait could still complete before the fixture cleared the screen.
+  Teardown again completed cleanly. Each cursor-mode and reporting stage will
+  now use its own long, unique input marker, built from a `%s` format hole, and
+  derive the target as `marker.length - expectedMovements`; neither old screen
+  content nor the echoed command can satisfy that wait.
+- 2026-09-14: The unique per-stage fixtures then passed through the ordinary
+  product in both modes. `make developer-jit-display` completed in 11,872 ms
+  and `make release-aot-display` completed in 10,704 ms. Each run observed
+  exact four-movement CSI and two-movement SS3 cursor bytes, exact semantic
+  prompt/input/output copy and cross-output drag, non-empty current-generation
+  Metal selection spans/cells, exact X10 mouse-report ownership with no local
+  duplication, two prompt writes totaling 18 bytes, inactive gesture cleanup,
+  and normal app/PTY/worker/surface/native teardown.
+- 2026-09-14: Closure documentation records only terminal-local policy. No
+  generic `dart_appkit` API or implementation is changed. `IN-10` now describes
+  the 85-movement/255-byte cap, fail-closed screen/generation boundaries,
+  CSI/SS3 encoding, semantic gesture modifiers, mouse-report exclusivity, and
+  dual-runtime product evidence. The generated inventory removes the final
+  actionable P1 gap and pins the focused controller, gesture, product, driver,
+  test, and reference sources as closure evidence.
+- 2026-09-14: The first final full-gate attempt passed dependency/native package
+  checks, parser/configuration/keybind/localization/privacy/generated Phase 7
+  checks, and the nine compatibility regressions, then failed explicitly at
+  `terminal-compatibility-regression-coverage-check` because its committed
+  source hash still described the prior `terminal_application.dart`. This is a
+  generated-evidence freshness failure rather than a product behavior failure.
+  Regenerate only that owned report with its Make target, then rerun the exact
+  full gate from the start; do not weaken the checker or mark the task complete
+  from the partial run.
+- 2026-09-14: The owned compatibility regression coverage report was regenerated
+  with `make terminal-compatibility-regression-coverage`, followed by the gap
+  inventory because it hashes that report. The focused prompt-click, selection,
+  and inventory tests pass, and `dart analyze` reports no issues. The exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` rerun passes from start to
+  finish: the Ghostty inventory reports 102 rows / 97 accepted / zero actionable
+  P0 / zero actionable P1 / zero silent misbehavior, formatting checks 336 files
+  with zero changes, analysis is clean, and the aggregate ends with
+  `dart_terminal tests passed`.
+- 2026-09-14: Final diff validation is clean. The adjacent `dart_appkit`
+  worktree is clean, its tracked paths have zero case-insensitive `terminal`
+  match, and its tracked Dart/native/script/manifest/Makefile content has zero
+  such match. Therefore the dual-runtime child and its Option-click/semantic
+  selection parent meet every recorded completion condition; all children of
+  the P1 burn-down are complete. The Ghostty aggregate gate remains the next
+  ordered item and is deliberately not included in this commit.
 
 ### Active ordered subtask 2 — native gesture integration
 

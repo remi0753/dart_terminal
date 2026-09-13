@@ -102,6 +102,11 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   forward/reverse drag、1 deadlineのbounded edge autoscroll、history-aware viewport
   projection、1x/2x Metal selection overlay。CJK fallback glyphもcanonicalなwidth-two
   cellへ配置し、全角文字の左右どちらからでも同じgraphemeを選択・コピーする
+- OSC 133で識別したprimary live input上の正確なOption-clickを、現在のcursor位置までの
+  CSIまたはapplication-cursor SS3矢印へ変換する。1 gestureは最大85移動／255 byteで、
+  drag、history、alternate screen、stale stateでは送信せず、terminal mouse reportingが
+  有効ならreport側だけが所有する。通常のtriple-clickはprompt/input/output境界内に留まり、
+  ControlまたはCommand triple-clickとdragは完全なoutput blockを選択する
 - native Edit menuからのbounded plain-text Copy/Paste、wide CJKを含むexact Copy、
   bracketed paste、newline正規化、危険またはlarge pasteの再操作confirmation
 - terminal mouse reportingがgestureを所有していない時だけ表示するnative context menu。

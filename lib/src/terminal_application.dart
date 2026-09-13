@@ -14837,6 +14837,15 @@ keybind = control+k=pane.focus-next
       mouseObservation,
       selectionOwner,
     );
+    final bool semanticPointer = await _exerciseSemanticPointerInput(
+      application,
+      session,
+      pane,
+      surface,
+      window,
+      mouseObservation,
+      selectionOwner,
+    );
     final bool closeScroll = await _exerciseWindowCloseScrollPosition(
       application,
       session,
@@ -14972,6 +14981,7 @@ keybind = control+k=pane.focus-next
           focus &&
           mouse &&
           selection &&
+          semanticPointer &&
           closeScroll &&
           scroll &&
           hyperlink &&
@@ -15002,6 +15012,7 @@ keybind = control+k=pane.focus-next
           'cell_glyphs=$cellGlyphs '
           'focus=$focus mouse=$mouse '
           'selection=$selection '
+          'semantic_pointer=$semanticPointer '
           'close_scroll=$closeScroll '
           'scroll=$scroll hyperlink=$hyperlink window_title=$windowTitle '
           'cursor_color=$cursorColor '
@@ -15036,6 +15047,7 @@ keybind = control+k=pane.focus-next
       'cell_glyphs=$cellGlyphs '
       'focus=$focus mouse=$mouse '
       'selection=$selection '
+      'semantic_pointer=$semanticPointer '
       'close_scroll=$closeScroll '
       'scroll=$scroll hyperlink=$hyperlink window_title=$windowTitle '
       'cursor_color=$cursorColor '
@@ -16743,6 +16755,386 @@ keybind = control+k=pane.focus-next
       'selection_preserved=true',
     );
     return preservedCount == targetOffsets.length;
+  }
+
+  static Future<bool> _exerciseSemanticPointerInput(
+    AppKitApplication application,
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+    Window window,
+    _TerminalMouseProductObservation mouseObservation,
+    _TerminalSelectionProductOwner owner,
+  ) async {
+    final TerminalFontCatalogMetrics metrics = surface.fontMetrics;
+    final int initialBeginCount = owner.promptClickBeginCount;
+    final int initialMoveCount = owner.promptClickMoveCount;
+    final int initialPromptBytes = owner.promptClickInputBytes;
+
+    void inject(
+      AppKitMouseEventKind kind, {
+      required int row,
+      required int column,
+      int clickCount = 1,
+      int modifiers = 0,
+    }) {
+      _injectMouseEventForTesting(
+        application,
+        window,
+        kind: kind,
+        x: (column + 0.5) * metrics.cellWidth,
+        y: (row + 0.5) * metrics.cellHeight,
+        button: 0,
+        modifiers: modifiers,
+        clickCount: clickCount,
+        monotonicNanoseconds: mouseObservation.nextInjectedTimestamp(),
+      );
+    }
+
+    Future<void> waitFor(
+      bool Function() predicate,
+      String failure, {
+      Duration timeout = const Duration(seconds: 3),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (deadline.elapsed < timeout && !predicate()) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      _expectLifecycle(predicate(), failure);
+    }
+
+    Future<void> injectSelection(
+      AppKitMouseEventKind kind, {
+      required int row,
+      required int column,
+      int clickCount = 1,
+      int modifiers = 0,
+    }) async {
+      final int generation = owner.gesture.snapshot.generation;
+      inject(
+        kind,
+        row: row,
+        column: column,
+        clickCount: clickCount,
+        modifiers: modifiers,
+      );
+      await _waitForSelectionGeneration(owner, generation + 1);
+    }
+
+    Future<bool> exerciseOptionStage({
+      required bool applicationCursor,
+      required int expectedMovements,
+      required String expectedHex,
+      required String resultMarker,
+    }) async {
+      final String inputKind = applicationCursor ? 'APP' : 'CSI';
+      final String input = '__DT_OPT_${inputKind}_INPUT__';
+      const String prompt = 'P>';
+      final String modeSequence = applicationCursor ? '\\033[?1h' : '\\033[?1l';
+      final int expectedBytes = expectedMovements * 3;
+      pane.insertText(
+        "stty raw -echo; printf '\\033[2J\\033[H$modeSequence"
+        "\\033]133;A\\a$prompt\\033]133;B\\a'; "
+        "printf '__DT_OPT_%s_INPUT__' '$inputKind'; "
+        "bytes=\$(/bin/dd bs=1 count=$expectedBytes 2>/dev/null | "
+        "/usr/bin/od -An -tx1 | /usr/bin/tr -d ' \\n'); "
+        "printf '\\033[?1l\\033]133;D\\a'; stty sane; "
+        "printf '\\r\\n${resultMarker}_%s__\\r\\n' \"\$bytes\"",
+      );
+      await pane.submit();
+      await _waitForAsciiMarker(session, input);
+      final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+      final _TerminalAsciiPosition inputPosition = _findAscii(screen, input)!;
+      _expectLifecycle(
+        session.terminalScreenSet.semanticPrompt.shellState ==
+                TerminalSemanticShellState.input &&
+            session.keyboardModes.applicationCursorKeys == applicationCursor,
+        'Option-click fixture did not publish its OSC 133/mode state',
+      );
+
+      await injectSelection(
+        AppKitMouseEventKind.down,
+        row: inputPosition.row,
+        column: inputPosition.column,
+      );
+      await injectSelection(
+        AppKitMouseEventKind.up,
+        row: inputPosition.row,
+        column: inputPosition.column,
+      );
+      await waitFor(
+        () => surface.snapshot().selectionCellCount == 1,
+        'Option-click fixture did not publish its pre-existing Metal selection',
+      );
+      final int selectionGeneration = owner.gesture.snapshot.generation;
+      final int beginCount = owner.promptClickBeginCount;
+      final int acceptedFrames = surface.snapshot().acceptedFrameCount;
+      final int targetInputOffset = input.length - expectedMovements;
+      inject(
+        AppKitMouseEventKind.down,
+        row: inputPosition.row,
+        column: inputPosition.column + targetInputOffset,
+        modifiers: ModifierKeys.optionBit,
+      );
+      await waitFor(
+        () =>
+            owner.promptClickBeginCount == beginCount + 1 &&
+            owner.gesture.snapshot.generation == selectionGeneration + 1,
+        'native Option down did not exclusively clear local selection',
+      );
+      await waitFor(() {
+        final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+        return snapshot.acceptedFrameCount > acceptedFrames &&
+            snapshot.selectionCellCount == 0 &&
+            snapshot.selectionSpanCount == 0;
+      }, 'native Option down did not clear the Metal selection projection');
+      final int moveCount = owner.promptClickMoveCount;
+      inject(
+        AppKitMouseEventKind.up,
+        row: inputPosition.row,
+        column: inputPosition.column + targetInputOffset,
+        modifiers: ModifierKeys.optionBit,
+      );
+      await waitFor(
+        () => owner.promptClickMoveCount == moveCount + 1,
+        'native Option up did not emit one accepted prompt movement',
+      );
+      await _waitForAsciiMarker(session, '${resultMarker}_${expectedHex}__');
+      await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+      return !owner.localGestures.promptClick.isActive &&
+          !session.keyboardModes.applicationCursorKeys;
+    }
+
+    final bool normalCursor = await exerciseOptionStage(
+      applicationCursor: false,
+      expectedMovements: 4,
+      expectedHex: '1b5b441b5b441b5b441b5b44',
+      resultMarker: '__DT_OPTION_NORMAL',
+    );
+    final bool applicationCursor = await exerciseOptionStage(
+      applicationCursor: true,
+      expectedMovements: 2,
+      expectedHex: '1b4f441b4f44',
+      resultMarker: '__DT_OPTION_APPLICATION',
+    );
+
+    const String promptOne = '__DT_SEM_PROMPT_ONE__';
+    const String inputOne = '__DT_SEM_INPUT_ONE__';
+    const String outputOne = '__DT_SEM_OUTPUT_ONE__';
+    const String promptTwo = '__DT_SEM_PROMPT_TWO__';
+    const String inputTwo = '__DT_SEM_INPUT_TWO__';
+    const String outputTwo = '__DT_SEM_OUTPUT_TWO__';
+    pane.insertText(
+      "printf '\\033[2J\\033[H\\033]133;A\\a'; "
+      "printf '__DT_SEM_%s_ONE__' 'PROMPT'; printf '\\033]133;B\\a'; "
+      "printf '__DT_SEM_%s_ONE__' 'INPUT'; printf '\\033]133;C\\a'; "
+      "printf '__DT_SEM_%s_ONE__' 'OUTPUT'; "
+      "printf '\\033]133;D\\a\\r\\n\\033]133;A\\a'; "
+      "printf '__DT_SEM_%s_TWO__' 'PROMPT'; printf '\\033]133;B\\a'; "
+      "printf '__DT_SEM_%s_TWO__' 'INPUT'; printf '\\033]133;C\\a'; "
+      "printf '__DT_SEM_%s_TWO__' 'OUTPUT'; "
+      "printf '\\033]133;D\\a\\r\\n'",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, outputTwo);
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    final TerminalScreen semanticScreen =
+        session.terminalScreenSet.activeScreen;
+    final _TerminalAsciiPosition promptPosition = _findAscii(
+      semanticScreen,
+      promptOne,
+    )!;
+    final _TerminalAsciiPosition inputPosition = _findAscii(
+      semanticScreen,
+      inputOne,
+    )!;
+    final _TerminalAsciiPosition outputPosition = _findAscii(
+      semanticScreen,
+      outputOne,
+    )!;
+    final _TerminalAsciiPosition outputTwoPosition = _findAscii(
+      semanticScreen,
+      outputTwo,
+    )!;
+
+    Future<bool> exactTriple(
+      _TerminalAsciiPosition position,
+      String expected, {
+      int modifiers = 0,
+      TerminalSelectionUnit unit = TerminalSelectionUnit.logicalLine,
+    }) async {
+      await injectSelection(
+        AppKitMouseEventKind.down,
+        row: position.row,
+        column: position.column,
+        clickCount: 3,
+        modifiers: modifiers,
+      );
+      await injectSelection(
+        AppKitMouseEventKind.up,
+        row: position.row,
+        column: position.column,
+        clickCount: 3,
+        modifiers: modifiers,
+      );
+      final TerminalSelectionGestureSnapshot snapshot = owner.gesture.snapshot;
+      return snapshot.unit == unit && owner.selectedText()?.text == expected;
+    }
+
+    final bool semanticPrompt = await exactTriple(promptPosition, promptOne);
+    final bool semanticInput = await exactTriple(inputPosition, inputOne);
+    final bool semanticOutput = await exactTriple(outputPosition, outputOne);
+    final bool controlOutput = await exactTriple(
+      outputPosition,
+      outputOne,
+      modifiers: ModifierKeys.controlBit,
+      unit: TerminalSelectionUnit.semanticOutput,
+    );
+    final bool commandOutput = await exactTriple(
+      outputTwoPosition,
+      outputTwo,
+      modifiers: ModifierKeys.commandBit,
+      unit: TerminalSelectionUnit.semanticOutput,
+    );
+
+    final int semanticReports = mouseObservation.terminalReportCount;
+    final int metalFrames = surface.snapshot().acceptedFrameCount;
+    await injectSelection(
+      AppKitMouseEventKind.down,
+      row: outputPosition.row,
+      column: outputPosition.column,
+      clickCount: 3,
+      modifiers: ModifierKeys.controlBit,
+    );
+    await injectSelection(
+      AppKitMouseEventKind.dragged,
+      row: outputTwoPosition.row,
+      column: outputTwoPosition.column,
+      clickCount: 3,
+      modifiers: ModifierKeys.controlBit,
+    );
+    await injectSelection(
+      AppKitMouseEventKind.up,
+      row: outputTwoPosition.row,
+      column: outputTwoPosition.column,
+      clickCount: 3,
+      modifiers: ModifierKeys.controlBit,
+    );
+    final TerminalSelectionText? combined = owner.selectedText();
+    final bool outputDrag =
+        owner.gesture.snapshot.unit == TerminalSelectionUnit.semanticOutput &&
+        combined != null &&
+        combined.text.startsWith(outputOne) &&
+        combined.text.endsWith(outputTwo) &&
+        combined.text.contains(promptTwo) &&
+        combined.text.contains(inputTwo);
+    await waitFor(
+      () {
+        final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+        return snapshot.acceptedFrameCount > metalFrames &&
+            snapshot.selectionSpanCount > 0 &&
+            snapshot.selectionCellCount >= outputOne.length + outputTwo.length;
+      },
+      'semantic output drag did not reach the live Metal selection projection',
+    );
+    final bool metal = surface.snapshot().selectionCellCount > 0;
+
+    const String reportPrompt = 'P>';
+    const String reportInput = '__DT_OPT_REPORT_INPUT__';
+    pane.insertText(
+      "stty raw -echo; printf '\\033[2J\\033[H\\033[?9h"
+      "\\033]133;A\\a$reportPrompt\\033]133;B\\a'; "
+      "printf '__DT_OPT_%s_INPUT__' 'REPORT'; "
+      "bytes=\$(/bin/dd bs=1 count=6 2>/dev/null | /usr/bin/od -An -tx1 | "
+      "/usr/bin/tr -d ' \\n'); printf '\\033[?9l\\033]133;D\\a'; "
+      "stty sane; printf '\\r\\n__DT_OPTION_REPORT_%s__\\r\\n' \"\$bytes\"",
+    );
+    await pane.submit();
+    await _waitForAsciiMarker(session, reportInput);
+    final _TerminalAsciiPosition reportPosition = _findAscii(
+      session.terminalScreenSet.activeScreen,
+      reportInput,
+    )!;
+    await waitFor(
+      () =>
+          session.terminalScreenSet.mouseModes.tracking ==
+          TerminalMouseTrackingMode.x10,
+      'mouse-report exclusion fixture did not enable X10 tracking',
+    );
+    final int initialReports = mouseObservation.terminalReportCount;
+    final int initialLocals = mouseObservation.localSelectionCount;
+    final int reportBeginCount = owner.promptClickBeginCount;
+    final int reportMoveCount = owner.promptClickMoveCount;
+    final int targetColumn = reportPosition.column + 2;
+    final List<int> expectedReport = <int>[
+      0x1b,
+      0x5b,
+      0x4d,
+      0x20 + 8,
+      0x20 + targetColumn + 1,
+      0x20 + reportPosition.row + 1,
+    ];
+    final String expectedReportHex = expectedReport
+        .map((int byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    inject(
+      AppKitMouseEventKind.down,
+      row: reportPosition.row,
+      column: targetColumn,
+      modifiers: ModifierKeys.optionBit,
+    );
+    await waitFor(
+      () => mouseObservation.terminalReportCount == initialReports + 1,
+      'active mouse reporting did not own the Option press',
+    );
+    await _waitForAsciiMarker(
+      session,
+      '__DT_OPTION_REPORT_${expectedReportHex}__',
+    );
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    final bool mouseExclusive =
+        mouseObservation.localSelectionCount == initialLocals &&
+        owner.promptClickBeginCount == reportBeginCount &&
+        owner.promptClickMoveCount == reportMoveCount &&
+        !owner.localGestures.promptClick.isActive &&
+        session.terminalScreenSet.mouseModes == const TerminalMouseModes();
+
+    final int moveDelta = owner.promptClickMoveCount - initialMoveCount;
+    final int inputByteDelta = owner.promptClickInputBytes - initialPromptBytes;
+    final bool exactBytes =
+        owner.promptClickBeginCount - initialBeginCount == 2 &&
+        moveDelta == 2 &&
+        inputByteDelta == 18;
+    final bool copyText =
+        semanticPrompt &&
+        semanticInput &&
+        semanticOutput &&
+        controlOutput &&
+        commandOutput &&
+        outputDrag;
+    final bool cleanup =
+        !owner.localGestures.promptClick.isActive &&
+        !owner.gesture.snapshot.isActive;
+    _expectLifecycle(
+      normalCursor &&
+          applicationCursor &&
+          exactBytes &&
+          copyText &&
+          owner.logicalLineObserved &&
+          owner.semanticOutputObserved &&
+          metal &&
+          mouseObservation.terminalReportCount == semanticReports + 1 &&
+          mouseExclusive &&
+          cleanup,
+      'semantic pointer product acceptance did not settle',
+    );
+    stdout.writeln(
+      'TERMINAL_SEMANTIC_POINTER_TEST option=true csi=true ss3=true '
+      'exact_bytes=true prompt=true input=true output=true '
+      'output_drag=true copy=true metal=true mouse_exclusive=true '
+      'cleanup=true writes=$moveDelta bytes=$inputByteDelta',
+    );
+    return true;
   }
 
   static Future<bool> _exerciseAccessibilityInput(

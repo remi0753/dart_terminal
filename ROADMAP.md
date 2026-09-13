@@ -1379,7 +1379,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] contract、pinned evidence、P0/P1 gap inventory
   - [x] P0 gap burn-down
-  - [ ] P1 gap burn-down
+  - [x] P1 gap burn-down
     - [x] underline color／overline／protected selective erase
     - [x] bounded semantic prompt／command／output ranges
     - [x] versioned snapshot restore oracle
@@ -1409,13 +1409,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
       - [x] privacy-safe inspector overlay
       - [x] canonical sRGB／alpha-blending native-reference parity
       - [x] 1x／2x／real-Metal runtime evidence、文書／matrix更新、親項目完了判定
-    - [ ] Option-click cursor／semantic prompt-output selection
+    - [x] Option-click cursor／semantic prompt-output selection
       （分割、実施順、完了条件は
       [`docs/phase11/ghostty-p0-p1-gap-burn-down.md`](docs/phase11/ghostty-p0-p1-gap-burn-down.md)
       を参照して順に実施する）
       - [x] bounded semantic click／cursor-movement core
       - [x] native Option-click／semantic selection gesture integration
-      - [ ] dual-runtime evidence、文書／matrix更新、親項目完了判定
+      - [x] dual-runtime evidence、文書／matrix更新、親項目完了判定
   - [ ] aggregate gate、文書／matrix更新、親項目完了判定
 - [ ] release candidate の daily-use program matrix
 

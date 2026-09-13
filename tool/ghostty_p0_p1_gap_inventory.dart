@@ -120,7 +120,6 @@ const Map<String, String> _classifications = <String, String>{
   'REL-01': 'accepted-external-follow-up',
   'DIST-01': 'accepted-external-follow-up',
   'DIST-02': 'accepted-external-follow-up',
-  'IN-10': 'actionable-p1',
 };
 
 const Map<String, List<String>> _rowGapIds = <String, List<String>>{
@@ -129,7 +128,6 @@ const Map<String, List<String>> _rowGapIds = <String, List<String>>{
   'REL-01': <String>['physical-duration-reliability'],
   'DIST-01': <String>['intel-native-handoff'],
   'DIST-02': <String>['apple-service-acceptance'],
-  'IN-10': <String>['option-click-and-semantic-selection'],
 };
 
 const List<_Gap> _gaps = <_Gap>[
@@ -178,15 +176,6 @@ const List<_Gap> _gaps = <_Gap>[
     productActionable: false,
     reason: 'Credential-independent distribution gates pass; positive signing and notarization needs external authority.',
   ),
-  _Gap(
-    id: 'option-click-and-semantic-selection',
-    kind: 'actionable-product-gap',
-    priority: 'P1',
-    rowIds: <String>['IN-10'],
-    owner: 'ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down',
-    productActionable: true,
-    reason: 'Drag and Services pass; Option-click cursor positioning and semantic selection remain.',
-  ),
 ];
 
 const List<String> _evidencePaths = <String>[
@@ -234,8 +223,13 @@ const List<String> _evidencePaths = <String>[
   'lib/src/terminal_product_configuration.dart',
   'lib/src/terminal_diagnostics.dart',
   'lib/src/terminal_application.dart',
+  'lib/src/terminal_input/terminal_prompt_click.dart',
+  'lib/src/terminal_input/terminal_selection_gesture.dart',
+  'test/terminal_prompt_click_test.dart',
+  'test/terminal_selection_gesture_test.dart',
   'test/terminal_product_configuration_test.dart',
   'test/terminal_diagnostics_test.dart',
+  'docs/phase5/selection-gesture-autoscroll.md',
   'tool/runtime_integration_smoke.dart',
 ];
 
@@ -252,9 +246,9 @@ final class GhosttyP0P1GapInventoryResult {
   const GhosttyP0P1GapInventoryResult();
 
   int get rows => 102;
-  int get accepted => 96;
+  int get accepted => 97;
   int get actionableP0 => 0;
-  int get actionableP1 => 1;
+  int get actionableP1 => 0;
   int get documentedDifferences => 2;
   int get externalFollowUps => 3;
 
@@ -489,6 +483,38 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
       1024 * 1024,
     ).readAsStringSync(),
   );
+  validateGhosttyP1SemanticPointerClosureSources(
+    promptClickSource: _regularFile(
+      root,
+      'lib/src/terminal_input/terminal_prompt_click.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    selectionGestureSource: _regularFile(
+      root,
+      'lib/src/terminal_input/terminal_selection_gesture.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    promptClickTestSource: _regularFile(
+      root,
+      'test/terminal_prompt_click_test.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    selectionGestureTestSource: _regularFile(
+      root,
+      'test/terminal_selection_gesture_test.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    productApplicationSource: _regularFile(
+      root,
+      'lib/src/terminal_application.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    runtimeSmokeSource: _regularFile(
+      root,
+      'tool/runtime_integration_smoke.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+  );
   final Map<String, int> priorities = <String, int>{};
   final Map<String, int> classifications = <String, int>{};
   final List<Map<String, Object?>> encodedRows = <Map<String, Object?>>[];
@@ -518,7 +544,7 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
   final Map<String, Object?> report = <String, Object?>{
     'format': 'dart-terminal-ghostty-p0-p1-gap-inventory',
     'version': 1,
-    'status': 'open-actionable-p1',
+    'status': 'closed-no-actionable-p0-p1',
     'matrix': <String, Object?>{
       'path': _matrixPath,
       'sha256': _sha256Bytes(utf8.encode(matrixSource)),
@@ -562,7 +588,7 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
           classification: classifications[classification] ?? 0,
       },
       'actionable_p0': 0,
-      'actionable_p1': 1,
+      'actionable_p1': 0,
       'silent_misbehavior': 0,
     },
     'p0_closure': <String, Object?>{
@@ -581,8 +607,9 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
         'font-axes-codepoint-overrides-fallback-diagnostics',
         'synthetic-cell-glyphs',
         'image-search-inspector-overlays-and-srgb',
+        'option-click-and-semantic-selection',
       ],
-      'remaining_actionable': 1,
+      'remaining_actionable': 0,
     },
     'rows': encodedRows,
     'gaps': <Map<String, Object?>>[for (final _Gap gap in _gaps) gap.toJson()],
@@ -641,7 +668,7 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
   _expect(
     report['format'] == 'dart-terminal-ghostty-p0-p1-gap-inventory' &&
         report['version'] == 1 &&
-        report['status'] == 'open-actionable-p1',
+        report['status'] == 'closed-no-actionable-p0-p1',
     'report identity or status differs',
   );
   final Map<String, Object?> totals = report['totals']! as Map<String, Object?>;
@@ -660,12 +687,12 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
         priorities['P1'] == 26 &&
         priorities['P1/P2'] == 1 &&
         totals['actionable_p0'] == 0 &&
-        totals['actionable_p1'] == 1 &&
+        totals['actionable_p1'] == 0 &&
         totals['silent_misbehavior'] == 0 &&
-        classifications['accepted'] == 96 &&
+        classifications['accepted'] == 97 &&
         classifications['accepted-documented-difference'] == 2 &&
         classifications['accepted-external-follow-up'] == 3 &&
-        classifications['actionable-p1'] == 1 &&
+        classifications['actionable-p1'] == 0 &&
         p0Closure['actionable_product_gaps'] == 0 &&
         p0Closure['known_silent_misbehavior'] == 0 &&
         p0Closure['documented_non_mutating_differences'] == 1 &&
@@ -678,11 +705,73 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
                 'cursor-cell-ligature-shaping-break,'
                 'font-axes-codepoint-overrides-fallback-diagnostics,'
                 'synthetic-cell-glyphs,'
-                'image-search-inspector-overlays-and-srgb' &&
-        p1Closure['remaining_actionable'] == 1,
+                'image-search-inspector-overlays-and-srgb,'
+                'option-click-and-semantic-selection' &&
+        p1Closure['remaining_actionable'] == 0,
     'reviewed totals differ',
   );
   return const GhosttyP0P1GapInventoryResult();
+}
+
+void validateGhosttyP1SemanticPointerClosureSources({
+  required String promptClickSource,
+  required String selectionGestureSource,
+  required String promptClickTestSource,
+  required String selectionGestureTestSource,
+  required String productApplicationSource,
+  required String runtimeSmokeSource,
+}) {
+  _expect(
+    promptClickSource.contains('class TerminalPromptClickController') &&
+        promptClickSource.contains(
+          'TerminalInputLimits.maximumEncodedBytesPerKeyEvent ~/ 3',
+        ) &&
+        promptClickSource.contains(
+          'intent.modifiers.bits == ModifierKeys.optionBit',
+        ) &&
+        promptClickSource.contains(
+          'screens.keyboardModes.applicationCursorKeys',
+        ),
+    'bounded exact-Option cursor movement contract differs',
+  );
+  _expect(
+    selectionGestureSource.contains('semanticLineSelectionAt') &&
+        selectionGestureSource.contains('semanticOutputSelectionAt') &&
+        selectionGestureSource.contains('combineSemanticLineSelections') &&
+        selectionGestureSource.contains('combineSemanticOutputSelections') &&
+        selectionGestureSource.contains(
+          'intent.modifiers.control || intent.modifiers.command',
+        ),
+    'semantic prompt/output gesture contract differs',
+  );
+  _expect(
+    promptClickTestSource.contains(
+          'the maximum accepted movement remains inside the 256-byte event cap',
+        ) &&
+        promptClickTestSource.contains(
+          'active mouse reporting owns exact Option press/release without local duplication',
+        ) &&
+        selectionGestureTestSource.contains(
+          'ordinary triple-click stays inside its semantic segment',
+        ) &&
+        selectionGestureTestSource.contains(
+          'Control triple-click and drag select complete output blocks',
+        ) &&
+        selectionGestureTestSource.contains(
+          'Command triple-click uses Super semantics and preserves reverse output drag',
+        ),
+    'semantic pointer focused regression evidence differs',
+  );
+  _expect(
+    productApplicationSource.contains('_exerciseSemanticPointerInput') &&
+        productApplicationSource.contains('TERMINAL_SEMANTIC_POINTER_TEST') &&
+        productApplicationSource.contains('mouse_exclusive=true') &&
+        runtimeSmokeSource.contains(
+          'terminal display launch omitted semantic pointer product acceptance',
+        ) &&
+        runtimeSmokeSource.contains(r'semantic_pointer=true '),
+    'dual-runtime semantic pointer acceptance contract differs',
+  );
 }
 
 void validateGhosttyP1FontResolutionClosureSources({

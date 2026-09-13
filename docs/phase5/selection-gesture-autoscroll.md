@@ -291,3 +291,26 @@ implemented early.
 - Final worktree review found no `dart_appkit` changes and only this product
   owner, acceptance, smoke gate, documentation, and progress update in the
   `dart_terminal` task.
+
+## Phase 11 semantic pointer follow-up
+
+The later pinned-compatibility closure extends this same terminal-local owner
+without changing generic AppKit transport:
+
+- An exact Option + primary-button single-click on the current primary-screen
+  OSC 133 input range moves the shell cursor with normal CSI or
+  application-cursor SS3 left/right sequences. The plan is bounded to 85
+  movements and 255 encoded bytes. A drag, viewport history, alternate screen,
+  stale screen/semantic generation, a point outside the live input, or any
+  additional modifier fails closed without a PTY write.
+- Active terminal mouse reporting retains exclusive ownership. An Option-click
+  becomes the negotiated mouse report and cannot also move the prompt cursor or
+  start a local selection.
+- An ordinary triple-click selects a logical line clamped to its OSC 133
+  prompt, input, or output segment. Control- or Command-triple-click selects a
+  complete output block, and drag combines only complete output blocks using
+  stable anchors. Prompt/input targets do not expand an output selection.
+- Developer JIT and Release AOT acceptance inject native pointer events into a
+  real AppKit window backed by a real zsh PTY and Metal surface. It checks exact
+  CSI/SS3/report bytes, exact copied prompt/input/output text, output-block drag,
+  non-empty current-generation Metal spans, and idle cleanup.

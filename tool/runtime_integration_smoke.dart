@@ -1218,7 +1218,7 @@ Future<void> _runTerminalDisplay(
     environment: const <String, String>{
       'DT_RUNTIME_TERMINAL_DISPLAY_TEST': '1',
     },
-    timeout: const Duration(seconds: 15),
+    timeout: const Duration(seconds: 25),
   );
   _expect(
     observation.status == 0,
@@ -1377,6 +1377,17 @@ Future<void> _runTerminalDisplay(
     selectionAcceptance.hasMatch(observation.stdoutText),
     'terminal display launch omitted exact local selection acceptance',
   );
+  final RegExp semanticPointerAcceptance = RegExp(
+    r'^TERMINAL_SEMANTIC_POINTER_TEST option=true csi=true ss3=true '
+    r'exact_bytes=true prompt=true input=true output=true '
+    r'output_drag=true copy=true metal=true mouse_exclusive=true '
+    r'cleanup=true writes=2 bytes=18$',
+    multiLine: true,
+  );
+  _expect(
+    semanticPointerAcceptance.hasMatch(observation.stdoutText),
+    'terminal display launch omitted semantic pointer product acceptance',
+  );
   final RegExp closeScrollAcceptance = RegExp(
     r'^TERMINAL_CLOSE_SCROLL_TEST requests=3 refused=true '
     r'chrome_press_ignored=true offset_preserved=true rows_preserved=true '
@@ -1460,6 +1471,7 @@ Future<void> _runTerminalDisplay(
     r'kitty_graphics=true search_overlay=true p3_color=true '
     r'cell_glyphs=true '
     r'focus=true mouse=true selection=true '
+    r'semantic_pointer=true '
     r'close_scroll=true scroll=true '
     r'hyperlink=true '
     r'window_title=true cursor_color=true accessibility=true font_size=14\.0 '
