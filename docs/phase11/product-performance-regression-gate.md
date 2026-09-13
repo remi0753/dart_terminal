@@ -521,3 +521,81 @@ measurements would violate the recorded comparator policy. A verified source at
 the pinned revision plus the exact Zig toolchain (or a provenance-complete,
 workload-compatible capture from this Mac) is required before that child can be
 completed; aggregate-gate closure must not proceed first.
+
+### 2026-09-13 — Real pinned comparator build start
+
+- Goal: obtain the exact comparator source and toolchain from their authoritative
+  upstream locations, verify their identities, and produce an unmodified arm64
+  `ReleaseLocal` Ghostty build before any timing capture is accepted.
+- Background: the repository contract treats Ghostty only as an external quality
+  comparator. It must never be linked into the product or copied into
+  `dart_appkit`; acquisition and build artifacts therefore live outside both
+  repositories in a disposable directory.
+- Scope: official Zig `0.16.0` macOS arm64 archive and integrity metadata, exact
+  Ghostty commit `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`, clean checkout proof,
+  the recorded `zig build -Doptimize=ReleaseFast` / `ReleaseLocal` product, and
+  reproducible provenance needed by the following capture child.
+- Out of scope: installing files system-wide, mutating the comparator, linking it
+  to this product, accepting a different commit/toolchain/configuration, or
+  claiming any performance result before the compatible harness is implemented.
+- Dependency and risk: network retrieval is acceptable only from the official
+  Zig and Ghostty locations and must be verified before execution. A failed
+  identity check, unavailable dependency, or inability to create the exact build
+  is a blocker; it must not be bypassed with another revision or prebuilt app.
+- Completion: source, toolchain, checkout, build command/configuration, executable
+  identity, and absence of local patches are recorded; a clean build succeeds;
+  repository checks and the adjacent generic-library audit pass; then only the
+  acquisition/build child is checked and committed. The next child owns the
+  measurement harness, real capture, and relative-pass decision.
+
+### 2026-09-13 — Real pinned comparator build blocked
+
+Facts and completed safe work:
+
+- The official Zig download index identified macOS arm64 Zig `0.16.0` as
+  `zig-aarch64-macos-0.16.0.tar.xz`, 52,238,004 bytes, SHA-256
+  `b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489`.
+  The archive was downloaded to the disposable comparator directory and matched
+  both size and SHA-256; the extracted executable reported `0.16.0`.
+- The official Ghostty Git remote returned the exact requested commit. A detached
+  checkout reported
+  `d4d8f62262cb1a974a7d2470d5f79f811fab15e4` and remained clean before and after
+  the attempted build. No comparator source was modified.
+- The host provides Xcode 26.6 (build 17F113) and macOS SDK 26.5. The pinned
+  Ghostty source maps `ReleaseFast` to the Xcode `ReleaseLocal` configuration.
+- The exact build command was launched with the verified Zig first on `PATH`:
+  `zig build -Doptimize=ReleaseFast`. It created approximately 2 GiB of Zig
+  cache and invoked
+  `xcodebuild -target Ghostty -configuration ReleaseLocal`, so source compilation,
+  toolchain selection, and configuration mapping reached the intended path.
+
+Blocker and diagnosis:
+
+- After more than 15 minutes the Xcode process was sleeping at 0% CPU with no
+  compiler or direct child. A bounded one-second `/usr/bin/sample` showed its
+  main thread in `waitForRemoteSourcePackagesToFinishLoading` and the SwiftPM
+  artifact task blocked in `KeychainAuthorizationProvider` while calling
+  `SecItemCopyMatching`. No `Ghostty.app` had been produced.
+- The stuck build was interrupted (exit 130), and no `zig build` or Ghostty
+  `xcodebuild` process remained. Retrying unchanged would repeat a credential
+  service wait rather than compile the app.
+- The documented Xcode alternative,
+  `-packageAuthorizationProvider netrc`, was proposed only for a separate locked
+  `Package.resolved` dependency-resolution step. Execution approval was rejected
+  because it may inspect the user's existing `~/.netrc` credentials. No
+  credential file was read, copied, changed, or bypassed, and no alternate
+  command was attempted after that rejection.
+- The verified toolchain/archive, source checkout, cache, and one-second sample
+  remain only under `/private/tmp/dart-terminal-phase11-comparator`; neither this
+  repository nor `../dart_appkit` contains them. Both product-adjacent worktrees
+  remained free of external comparator code, and `../dart_appkit` remained clean.
+
+This is a serious blocker for the current ordered child. Completion requires one
+of the following explicitly authorized inputs: permission to let Xcode use the
+`netrc` package authorization provider for the pinned public dependency set, or
+an already resolved, integrity-verifiable SwiftPM package/artifact cache supplied
+without access to user credentials. Until then the clean ReleaseLocal app,
+executable SHA-256, compatible capture, passing relative gate, and aggregate
+performance closure cannot be produced. The acquisition/build child and every
+parent remain unchecked. Apple notarization and long-duration tests are unrelated
+to this blocker and remain skipped as directed.
