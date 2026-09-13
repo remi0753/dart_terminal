@@ -1370,7 +1370,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] contract、native境界／corpus／fault inventory
   - [x] product-owned native ASan/UBSan capability gate
-  - [ ] deterministic Dart fuzz corpus／property expansion
+  - [x] deterministic Dart fuzz corpus／property expansion
   - [ ] bounded native／Dart fault injection／recovery
   - [ ] aggregate gate、文書／matrix更新、親項目完了判定
 - [ ] Ghostty pinned matrix の P0/P1 gap burn-down

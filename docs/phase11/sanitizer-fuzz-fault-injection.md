@@ -6,7 +6,7 @@
 - Task: native ASan/UBSan, fuzz corpus, and fault injection
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: product-owned native ASan/UBSan capability gate (complete)
+- Current subtask: deterministic Dart fuzz corpus/property expansion (complete)
 
 ## Purpose
 
@@ -300,3 +300,53 @@ sanitizer coverage.
   case and every subsequent stage. This single non-reproduced observation is
   retained here rather than hidden; recurrence must be treated as a defect in a
   later task, not as evidence against the sanitizer results.
+- 2026-09-13: Commit `8d9b920` (`Gate product native code with sanitizers`)
+  recorded the sanitizer child. The required post-commit ROADMAP and memo reread
+  found a clean worktree and selected deterministic Dart fuzz corpus/property
+  expansion; fault injection remains its next ordered successor.
+- 2026-09-13: Reconciliation of the seven Phase 3 reviewed seeds and the Phase 9
+  protocol property anchors found five boundaries without a reviewed fuzz seed:
+  raw C1 control/string dispatch, sequence re-entry and cancellation, exact and
+  one-over configured parser limits, UTF-8 scalars whose continuation bytes
+  resemble C1 controls, and resize boundaries inside UTF-8/control sequences.
+  The existing generated inputs exercise arbitrary bytes, but do not give these
+  cases stable review identities.
+- 2026-09-13: The existing reviewed seed and bit-mutation path compares whole,
+  deterministic-chunk, and bytewise results but does not apply the recovery
+  sentinel used by generated cases. The expansion will retain the historical
+  manifest unchanged, add a separate versioned Phase 11 manifest, enforce
+  uniqueness and aggregate bounds across both manifests, and run CAN/RIS plus a
+  printable recovery sentinel after every reviewed input and mutation. This
+  adds an invariant rather than increasing counts alone.
+- 2026-09-13: The first focused run was blocked before test execution because
+  the Dart tool attempted to update its user-level telemetry-session metadata
+  outside the repository sandbox despite analytics suppression. Running the
+  same command on the host reached all 1,296 executions without a property
+  failure; it stopped only at the intentionally stale deterministic digest
+  placeholder and reported 95,388 parsed bytes with state hash `733442573`.
+  Those observed values are now the pinned expectation.
+- 2026-09-13: `phase11_v1.json` adds five reviewed identities without changing
+  the historical seven-seed manifest or its mutation ordering:
+  `c1-controls-and-strings`, `sequence-reentry-and-cancel`,
+  `exact-and-over-parser-limits`, `utf8-c1-precedence`, and
+  `resize-inside-streaming-sequences`. Both manifests use the existing strict
+  version 1 decoder. The runner additionally rejects duplicate IDs, more than
+  32 total reviewed seeds, or more than 32 KiB of aggregate input across the
+  pair; the cross-manifest duplicate path has a direct negative test.
+- 2026-09-13: Every one of the 12 reviewed originals and 192 deterministic
+  one-bit mutations now proves bytewise CAN/RIS recovery in addition to whole,
+  generated-chunk, and bytewise equivalence. Together with the unchanged 96
+  generated properties, the focused gate passed 1,296 executions and 95,388
+  parsed bytes with the pinned state hash `733442573`. Failure diagnostics use
+  fixed seed/case/mutation/offset identities and do not print input content.
+- 2026-09-13: Final validation passed `git diff --check`, the focused
+  `CI=true DART_SUPPRESS_ANALYTICS=true dart run
+  test/terminal_property_fuzz_test.dart`, and the exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate. The full gate passed
+  all ordinary native capability, generated/freshness, compatibility,
+  application, distribution, format (324 files, zero changes), analysis (no
+  issues), and Dart tests, ending with `dart_terminal tests passed`.
+- 2026-09-13: The adjacent `dart_appkit` worktree remains clean. A case-
+  insensitive repository audit found `terminal` only in historical
+  `docs/WORKLOG.md` prose and no Dart/native/build source name or content; this
+  child made no change to the generic library.

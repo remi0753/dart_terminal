@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dart_terminal/dart_terminal.dart';
 
 const String _defaultFuzzSeedPath = 'test/corpus/fuzz/product_v1.json';
+const String _phase11FuzzSeedPath = 'test/corpus/fuzz/phase11_v1.json';
 const int _propertySeed = 0x4d595df4;
 const int _generatedCaseCount = 96;
 const int _mutationsPerSeed = 16;
@@ -55,9 +56,10 @@ final class TerminalPropertyFuzzResult {
 
 TerminalPropertyFuzzResult runTerminalPropertyFuzzTests({
   String seedPath = _defaultFuzzSeedPath,
+  String phase11SeedPath = _phase11FuzzSeedPath,
 }) {
   _testSeedManifestValidation();
-  final List<_FuzzSeed> seeds = const _FuzzSeedLoader().load(seedPath);
+  final List<_FuzzSeed> seeds = _loadReviewedSeeds(seedPath, phase11SeedPath);
   final _RunAccumulator accumulator = _RunAccumulator();
   _runGeneratedProperties(accumulator);
   _runReviewedSeeds(seeds, accumulator);
@@ -70,14 +72,14 @@ TerminalPropertyFuzzResult runTerminalPropertyFuzzTests({
     stateHash: accumulator.stateHash,
   );
   _expect(
-    result.executions == 837,
+    result.executions == 1296,
     'property/fuzz execution budget remains fixed',
   );
   _expect(
     result.machineLine() ==
-        'TERMINAL_PROPERTY_FUZZ_PASS seed=0x4d595df4 generated=96 seeds=7 '
-            'mutations=112 executions=837 parsed_bytes=66675 '
-            'state_hash=1051389745',
+        'TERMINAL_PROPERTY_FUZZ_PASS seed=0x4d595df4 generated=96 seeds=12 '
+            'mutations=192 executions=1296 parsed_bytes=95388 '
+            'state_hash=733442573',
     'property/fuzz result is deterministic: ${result.machineLine()}',
   );
   return result;
@@ -177,12 +179,33 @@ void _compareReviewedPlans(
 ) {
   try {
     _comparePlans(input, resizes, random, context, accumulator);
+    _expectRecovery(input, context, accumulator);
   } on Object catch (error) {
     if (error.toString().contains('PROPERTY_FAILURE')) {
       rethrow;
     }
     throw StateError('PROPERTY_FAILURE $context execution: $error');
   }
+}
+
+List<_FuzzSeed> _loadReviewedSeeds(String basePath, String expansionPath) {
+  const _FuzzSeedLoader loader = _FuzzSeedLoader();
+  final List<_FuzzSeed> seeds = <_FuzzSeed>[];
+  final Set<String> ids = <String>{};
+  var aggregateBytes = 0;
+  for (final String path in <String>[basePath, expansionPath]) {
+    for (final _FuzzSeed seed in loader.load(path)) {
+      _expect(ids.add(seed.id), 'unique seed id across manifests');
+      aggregateBytes += seed.input.length;
+      _expect(
+        aggregateBytes <= 32 * 1024,
+        'aggregate reviewed seed bytes <= 32768',
+      );
+      seeds.add(seed);
+    }
+  }
+  _expect(seeds.length <= 32, 'at most 32 reviewed seeds across manifests');
+  return List<_FuzzSeed>.unmodifiable(seeds);
 }
 
 void _comparePlans(
@@ -685,6 +708,7 @@ void _testSeedManifestValidation() {
     'dart-terminal-fuzz-seeds-',
   );
   final File file = File('${root.path}/seeds.json');
+  final File duplicateFile = File('${root.path}/duplicate.json');
   const Map<String, Object?> seed = <String, Object?>{
     'id': 'fixture',
     'description': 'loader fixture',
@@ -732,6 +756,18 @@ void _testSeedManifestValidation() {
         },
       ],
     }, 'out-of-range resize offset');
+    file.writeAsStringSync(jsonEncode(manifest));
+    duplicateFile.writeAsStringSync(jsonEncode(manifest));
+    var duplicateAcrossManifestsRejected = false;
+    try {
+      _loadReviewedSeeds(file.path, duplicateFile.path);
+    } on StateError {
+      duplicateAcrossManifestsRejected = true;
+    }
+    _expect(
+      duplicateAcrossManifestsRejected,
+      'duplicate seed id across manifests',
+    );
   } finally {
     root.deleteSync(recursive: true);
   }
