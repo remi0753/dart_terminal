@@ -6,8 +6,8 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 synthetic cell glyphs — Box Drawing deterministic raster
-  geometry
+- Current subtask: P1 synthetic cell glyphs — Block Elements and Braille
+  deterministic raster geometry
 
 ## Purpose
 
@@ -657,6 +657,74 @@ preceding subtask is verified and committed.
   `dart_appkit` worktree is clean; both the case-insensitive executable-source
   content audit outside docs/build/cache/git and filename audit returned no
   `terminal` matches. No generic-library file changed.
+
+#### Current raster subtask — Block Elements and Braille
+
+- **Purpose:** Produce deterministic device-pixel alpha geometry for every
+  U+2580..U+259F Block Element and U+2800..U+28FF Braille Pattern while keeping
+  filled adjoining regions seam-free and braille dots legible within the cell.
+- **Background:** Commits `92b2632` and `a426749` establish the bounded raster
+  contract and complete Box Drawing. The next roadmap item is the remaining two
+  complete public Unicode families; neither may be sent to the atlas until its
+  pure raster behavior is exhaustively verified.
+- **Scope:** Port pinned device-pixel fractional block rounding/alignment,
+  four fixed shade coverage values, quadrant overlap rules, Unicode braille bit
+  mapping, and pinned dot sizing/spacing/margin redistribution; add exhaustive
+  1x/2x-equivalent deterministic and geometry tests for all 288 scalars.
+- **Out of scope:** Powerline, atlas/compositor integration, source-controlled
+  image goldens, real Metal, font configuration or layout changes, arbitrary
+  Unicode geometric symbols, and every `dart_appkit` change.
+- **Dependencies:** The committed request/result and clipped rectangle canvas,
+  complementary fraction helpers, pinned `draw/block.zig`, `draw/braille.zig`,
+  and `draw/common.zig` identities, and the aggregate raster test registration.
+- **Completion conditions:** All 32 blocks have exact-size deterministic output
+  with full/shade/fraction/quadrant semantics; half/quadrant complements cover
+  odd and even cells without transparent seams; blank braille is empty and all
+  other 255 patterns encode exactly their Unicode dot bits with bounded,
+  nonoverlapping device-pixel dots at 1x/2x; invalid family calls fail closed;
+  focused and exact full gates pass; `dart_appkit` remains untouched and clean.
+- **Verification approach:** Implement each family behind a family-checking
+  raster entry point, exhaustively render twice at 7x15/1px and 14x30/2px,
+  assert exact coverage and edge/complement behavior for representative blocks,
+  assert braille bit-to-position/count behavior for every scalar, run focused
+  format/analyze/tests and the exact repository gate, review the diff, and
+  repeat the adjacent generic-library audit before marking this item complete.
+- 2026-09-14: Block Elements now use the pinned device-grid rules for
+  top/bottom/left/right eighths and halves, exact full-cell alpha shades 0x40,
+  0x80, 0xc0, and 0xff, plus complementary min/max quadrant boundaries that
+  overlap by one pixel on odd extents instead of leaving a seam. The ten
+  U+2596..U+259F quadrant masks match the pinned top-left/top-right/bottom-left/
+  bottom-right combinations; the family entry point rejects every other
+  classified family.
+- 2026-09-14: Braille now maps the low Unicode pattern byte in standard dot
+  order (left 1/2/3, right 4/5/6, then left/right 7/8). Dot width, spacing, and
+  margins follow the pinned redistribution sequence derived solely from the
+  device cell. U+2800 remains an exact empty alpha raster; every other pattern
+  owns only its selected nonoverlapping square dots. No font, atlas, compositor,
+  native, or generic-library behavior changed.
+- 2026-09-14: Focused formatting ended with zero changes, analysis reported
+  `No issues found!`, and the aggregate raster suite passed. It renders all 32
+  Block Elements and 256 Braille Patterns twice at 7x15/1px and 14x30/2px;
+  checks byte determinism and bounds; exact full/shade coverage; every eighth's
+  rounded area and anchored edge; half and quadrant complement seam coverage;
+  all 256 popcount-derived dot areas; exact eight 1x positions and eight 3x3
+  2x positions; blank/full patterns; and wrong-family rejection.
+- 2026-09-14: Final code review removed unused center alignment variants, added
+  the pinned braille layout inequality as a fail-closed runtime invariant, and
+  strengthened exhaustive Block Element tests to admit only the exact alpha
+  domain `{0, 0x40, 0x80, 0xc0, 0xff}`. Formatting, clean focused analysis, and
+  the raster suite passed again. Because executable code changed after the
+  preceding repository gate, that gate is rerun before completion.
+- 2026-09-14: The final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` rerun passed with every
+  native package and generated/compatibility/distribution check, 332-file
+  zero-change formatting, clean whole-product analysis, aggregate raster,
+  security/update/recovery suites, and `dart_terminal tests passed`. Final
+  `git diff --check` passed with only this raster subtask's code, tests, memo,
+  and roadmap state pending.
+- 2026-09-14: The adjacent `dart_appkit` worktree is clean. A case-insensitive
+  executable-source/content audit outside docs/build/cache/git and a filename
+  audit both found zero `terminal` matches. No generic-library file changed.
 
 ## Inventory and decisions
 

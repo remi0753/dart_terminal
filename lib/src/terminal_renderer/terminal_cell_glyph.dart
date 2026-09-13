@@ -185,6 +185,150 @@ final class TerminalCellGlyphRaster {
 
 /// Deterministic raster entry points for product-owned cell glyph families.
 abstract final class TerminalCellGlyphRasterizer {
+  static TerminalCellGlyphRaster rasterizeBlockElement(
+    TerminalCellGlyphRasterRequest request,
+  ) {
+    if (request.spec.family != TerminalCellGlyphFamily.blockElement) {
+      throw ArgumentError.value(
+        request.scalar,
+        'request',
+        'must classify as Block Elements',
+      );
+    }
+    final _TerminalCellGlyphCanvas canvas = _TerminalCellGlyphCanvas(request);
+    switch (request.scalar) {
+      case 0x2580:
+        _drawAlignedBlock(canvas, heightNumerator: 1, heightDenominator: 2);
+      case >= 0x2581 && <= 0x2587:
+        _drawAlignedBlock(
+          canvas,
+          heightNumerator: request.scalar - 0x2580,
+          heightDenominator: 8,
+          verticalAlignment: _CellVerticalAlignment.bottom,
+        );
+      case 0x2588:
+        canvas.rect(0, 0, canvas.width, canvas.height);
+      case >= 0x2589 && <= 0x258f:
+        _drawAlignedBlock(
+          canvas,
+          widthNumerator: 0x2590 - request.scalar,
+          widthDenominator: 8,
+        );
+      case 0x2590:
+        _drawAlignedBlock(
+          canvas,
+          widthNumerator: 1,
+          widthDenominator: 2,
+          horizontalAlignment: _CellHorizontalAlignment.right,
+        );
+      case 0x2591:
+        canvas.rect(0, 0, canvas.width, canvas.height, 0x40);
+      case 0x2592:
+        canvas.rect(0, 0, canvas.width, canvas.height, 0x80);
+      case 0x2593:
+        canvas.rect(0, 0, canvas.width, canvas.height, 0xc0);
+      case 0x2594:
+        _drawAlignedBlock(canvas, heightNumerator: 1, heightDenominator: 8);
+      case 0x2595:
+        _drawAlignedBlock(
+          canvas,
+          widthNumerator: 1,
+          widthDenominator: 8,
+          horizontalAlignment: _CellHorizontalAlignment.right,
+        );
+      case >= 0x2596 && <= 0x259f:
+        _drawQuadrants(canvas, _blockQuadrantMasks[request.scalar - 0x2596]);
+    }
+    return _finish(request, canvas);
+  }
+
+  static TerminalCellGlyphRaster rasterizeBraille(
+    TerminalCellGlyphRasterRequest request,
+  ) {
+    if (request.spec.family != TerminalCellGlyphFamily.braille) {
+      throw ArgumentError.value(
+        request.scalar,
+        'request',
+        'must classify as Braille Patterns',
+      );
+    }
+    final _TerminalCellGlyphCanvas canvas = _TerminalCellGlyphCanvas(request);
+    var dotWidth = math.min(canvas.width ~/ 4, canvas.height ~/ 8);
+    var xSpacing = canvas.width ~/ 4;
+    var ySpacing = canvas.height ~/ 8;
+    var xMargin = xSpacing ~/ 2;
+    var yMargin = ySpacing ~/ 2;
+    var xPixelsLeft = canvas.width - 2 * xMargin - xSpacing - 2 * dotWidth;
+    var yPixelsLeft = canvas.height - 2 * yMargin - 3 * ySpacing - 4 * dotWidth;
+
+    if (xPixelsLeft >= 2 && yPixelsLeft >= 4 && dotWidth == 0) {
+      dotWidth++;
+      xPixelsLeft -= 2;
+      yPixelsLeft -= 4;
+    }
+    if (xPixelsLeft >= 2 && xMargin == 0) {
+      xMargin++;
+      xPixelsLeft -= 2;
+    }
+    if (yPixelsLeft >= 2 && yMargin == 0) {
+      yMargin++;
+      yPixelsLeft -= 2;
+    }
+    if (xPixelsLeft >= 1) {
+      xSpacing++;
+      xPixelsLeft--;
+    }
+    if (yPixelsLeft >= 3) {
+      ySpacing++;
+      yPixelsLeft -= 3;
+    }
+    if (xPixelsLeft >= 2) {
+      xMargin++;
+      xPixelsLeft -= 2;
+    }
+    if (yPixelsLeft >= 2) {
+      yMargin++;
+      yPixelsLeft -= 2;
+    }
+    if (xPixelsLeft >= 2 && yPixelsLeft >= 4) {
+      dotWidth++;
+    }
+    if (2 * xMargin + 2 * dotWidth + xSpacing > canvas.width ||
+        2 * yMargin + 4 * dotWidth + 3 * ySpacing > canvas.height) {
+      throw StateError('braille device geometry exceeds its cell');
+    }
+
+    final List<int> x = <int>[xMargin, xMargin + dotWidth + xSpacing];
+    final List<int> y = <int>[
+      yMargin,
+      yMargin + dotWidth + ySpacing,
+      yMargin + 2 * (dotWidth + ySpacing),
+      yMargin + 3 * (dotWidth + ySpacing),
+    ];
+    final int pattern = request.scalar & 0xff;
+    const List<(int, int)> dotPositions = <(int, int)>[
+      (0, 0),
+      (0, 1),
+      (0, 2),
+      (1, 0),
+      (1, 1),
+      (1, 2),
+      (0, 3),
+      (1, 3),
+    ];
+    for (int bit = 0; bit < dotPositions.length; bit++) {
+      if (pattern & (1 << bit) == 0) continue;
+      final (int, int) position = dotPositions[bit];
+      canvas.rect(
+        x[position.$1],
+        y[position.$2],
+        x[position.$1] + dotWidth,
+        y[position.$2] + dotWidth,
+      );
+    }
+    return _finish(request, canvas);
+  }
+
   static TerminalCellGlyphRaster rasterizeBoxDrawing(
     TerminalCellGlyphRasterRequest request,
   ) {
@@ -288,10 +432,89 @@ abstract final class TerminalCellGlyphRasterizer {
           _BoxLines.decode(_boxLineTopologies[request.scalar - 0x2500]),
         );
     }
+    return _finish(request, canvas);
+  }
+
+  static TerminalCellGlyphRaster _finish(
+    TerminalCellGlyphRasterRequest request,
+    _TerminalCellGlyphCanvas canvas,
+  ) {
     return TerminalCellGlyphRaster._owned(
       request: request,
       coverage: canvas.takeCoverage(),
     );
+  }
+}
+
+enum _CellHorizontalAlignment { left, right }
+
+enum _CellVerticalAlignment { top, bottom }
+
+void _drawAlignedBlock(
+  _TerminalCellGlyphCanvas canvas, {
+  int widthNumerator = 1,
+  int widthDenominator = 1,
+  int heightNumerator = 1,
+  int heightDenominator = 1,
+  _CellHorizontalAlignment horizontalAlignment = _CellHorizontalAlignment.left,
+  _CellVerticalAlignment verticalAlignment = _CellVerticalAlignment.top,
+}) {
+  final int width = canvas.request.fractionMax(
+    widthNumerator,
+    widthDenominator,
+    extent: canvas.width,
+  );
+  final int height = canvas.request.fractionMax(
+    heightNumerator,
+    heightDenominator,
+    extent: canvas.height,
+  );
+  final int left = switch (horizontalAlignment) {
+    _CellHorizontalAlignment.left => 0,
+    _CellHorizontalAlignment.right => canvas.width - width,
+  };
+  final int top = switch (verticalAlignment) {
+    _CellVerticalAlignment.top => 0,
+    _CellVerticalAlignment.bottom => canvas.height - height,
+  };
+  canvas.rect(left, top, left + width, top + height);
+}
+
+const List<int> _blockQuadrantMasks = <int>[
+  0x4,
+  0x8,
+  0x1,
+  0xd,
+  0x9,
+  0x7,
+  0xb,
+  0x2,
+  0x6,
+  0xe,
+];
+
+void _drawQuadrants(_TerminalCellGlyphCanvas canvas, int mask) {
+  final int middleLeft = canvas.request.fractionMin(1, 2, extent: canvas.width);
+  final int middleRight = canvas.request.fractionMax(
+    1,
+    2,
+    extent: canvas.width,
+  );
+  final int middleTop = canvas.request.fractionMin(1, 2, extent: canvas.height);
+  final int middleBottom = canvas.request.fractionMax(
+    1,
+    2,
+    extent: canvas.height,
+  );
+  if (mask & 0x1 != 0) canvas.rect(0, 0, middleRight, middleBottom);
+  if (mask & 0x2 != 0) {
+    canvas.rect(middleLeft, 0, canvas.width, middleBottom);
+  }
+  if (mask & 0x4 != 0) {
+    canvas.rect(0, middleTop, middleRight, canvas.height);
+  }
+  if (mask & 0x8 != 0) {
+    canvas.rect(middleLeft, middleTop, canvas.width, canvas.height);
   }
 }
 

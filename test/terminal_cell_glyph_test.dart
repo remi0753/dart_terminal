@@ -11,6 +11,9 @@ void runTerminalCellGlyphTests() {
   _testEveryBoxDrawingScalarIsBoundedAndDeterministic();
   _testBoxDrawingEdgeOwnershipAndJoins();
   _testBoxDrawingSpecialGeometry();
+  _testEveryBlockElementIsBoundedAndDeterministic();
+  _testBlockElementFractionsShadesAndQuadrants();
+  _testEveryBraillePatternUsesPinnedDots();
 }
 
 void _testExactScalarClassification() {
@@ -378,6 +381,250 @@ void _testBoxDrawingSpecialGeometry() {
   }
 }
 
+void _testEveryBlockElementIsBoundedAndDeterministic() {
+  for (final (int, int, int) geometry in <(int, int, int)>[
+    (7, 15, 1),
+    (14, 30, 2),
+  ]) {
+    for (int scalar = 0x2580; scalar <= 0x259f; scalar++) {
+      final TerminalCellGlyphRaster first = _blockRaster(
+        scalar,
+        width: geometry.$1,
+        height: geometry.$2,
+        thickness: geometry.$3,
+      );
+      final TerminalCellGlyphRaster second = _blockRaster(
+        scalar,
+        width: geometry.$1,
+        height: geometry.$2,
+        thickness: geometry.$3,
+      );
+      _expect(
+        first.width == geometry.$1 &&
+            first.height == geometry.$2 &&
+            first.rowStride == geometry.$1 &&
+            first.byteLength == geometry.$1 * geometry.$2 &&
+            first.copyCoverage().every(
+              (int alpha) =>
+                  const <int>{0, 0x40, 0x80, 0xc0, 0xff}.contains(alpha),
+            ) &&
+            first.copyCoverage().any((int alpha) => alpha != 0) &&
+            _bytesEqual(first.copyCoverage(), second.copyCoverage()),
+        'Block Element U+${scalar.toRadixString(16)} is bounded and '
+        'deterministic at ${geometry.$1}x${geometry.$2}',
+      );
+    }
+  }
+  _expectThrows(
+    () => TerminalCellGlyphRasterizer.rasterizeBlockElement(
+      TerminalCellGlyphRasterRequest(
+        scalar: 0x2500,
+        cellWidth: 7,
+        cellHeight: 15,
+        lineThickness: 1,
+      ),
+    ),
+    'Block Elements entry point rejects another classified family',
+  );
+}
+
+void _testBlockElementFractionsShadesAndQuadrants() {
+  for (final (int, int, int) geometry in <(int, int, int)>[
+    (7, 15, 1),
+    (14, 30, 2),
+  ]) {
+    final TerminalCellGlyphRaster full = _blockRaster(
+      0x2588,
+      width: geometry.$1,
+      height: geometry.$2,
+      thickness: geometry.$3,
+    );
+    _expect(
+      full.copyCoverage().every((int alpha) => alpha == 0xff),
+      'full block covers the entire ${geometry.$1}x${geometry.$2} cell',
+    );
+    for (final (int, int) shade in <(int, int)>[
+      (0x2591, 0x40),
+      (0x2592, 0x80),
+      (0x2593, 0xc0),
+    ]) {
+      _expect(
+        _blockRaster(
+          shade.$1,
+          width: geometry.$1,
+          height: geometry.$2,
+          thickness: geometry.$3,
+        ).copyCoverage().every((int alpha) => alpha == shade.$2),
+        'shade U+${shade.$1.toRadixString(16)} owns exact alpha ${shade.$2}',
+      );
+    }
+
+    final TerminalCellGlyphRaster upper = _blockRaster(
+      0x2580,
+      width: geometry.$1,
+      height: geometry.$2,
+      thickness: geometry.$3,
+    );
+    final TerminalCellGlyphRaster lower = _blockRaster(
+      0x2584,
+      width: geometry.$1,
+      height: geometry.$2,
+      thickness: geometry.$3,
+    );
+    final TerminalCellGlyphRaster left = _blockRaster(
+      0x258c,
+      width: geometry.$1,
+      height: geometry.$2,
+      thickness: geometry.$3,
+    );
+    final TerminalCellGlyphRaster right = _blockRaster(
+      0x2590,
+      width: geometry.$1,
+      height: geometry.$2,
+      thickness: geometry.$3,
+    );
+    final TerminalCellGlyphRaster diagonalA = _blockRaster(
+      0x259a,
+      width: geometry.$1,
+      height: geometry.$2,
+      thickness: geometry.$3,
+    );
+    final TerminalCellGlyphRaster diagonalB = _blockRaster(
+      0x259e,
+      width: geometry.$1,
+      height: geometry.$2,
+      thickness: geometry.$3,
+    );
+    _expect(
+      _coverageUnionIsFull(upper, lower) &&
+          _coverageUnionIsFull(left, right) &&
+          _coverageUnionIsFull(diagonalA, diagonalB),
+      'half and quadrant complements leave no seam at '
+      '${geometry.$1}x${geometry.$2}',
+    );
+  }
+
+  final TerminalCellGlyphRasterRequest request = TerminalCellGlyphRasterRequest(
+    scalar: 0x2581,
+    cellWidth: 7,
+    cellHeight: 15,
+    lineThickness: 1,
+  );
+  for (int eighth = 1; eighth <= 7; eighth++) {
+    final TerminalCellGlyphRaster lower = _blockRaster(0x2580 + eighth);
+    final int expectedRows = request.fractionMax(eighth, 8, extent: 15);
+    _expect(
+      _inkCount(lower) == 7 * expectedRows && _edgeHasInk(lower, _down),
+      'lower $eighth/8 block uses exact rounded rows and bottom edge',
+    );
+    final TerminalCellGlyphRaster left = _blockRaster(0x2590 - eighth);
+    final int expectedColumns = request.fractionMax(eighth, 8, extent: 7);
+    _expect(
+      _inkCount(left) == expectedColumns * 15 && _edgeHasInk(left, _left),
+      'left $eighth/8 block uses exact rounded columns and left edge',
+    );
+  }
+}
+
+void _testEveryBraillePatternUsesPinnedDots() {
+  for (final (int, int, int, int) geometry in <(int, int, int, int)>[
+    (7, 15, 1, 1),
+    (14, 30, 2, 3),
+  ]) {
+    for (int scalar = 0x2800; scalar <= 0x28ff; scalar++) {
+      final TerminalCellGlyphRaster first = _brailleRaster(
+        scalar,
+        width: geometry.$1,
+        height: geometry.$2,
+        thickness: geometry.$3,
+      );
+      final TerminalCellGlyphRaster second = _brailleRaster(
+        scalar,
+        width: geometry.$1,
+        height: geometry.$2,
+        thickness: geometry.$3,
+      );
+      final int expectedInk =
+          _bitCount(scalar & 0xff) * geometry.$4 * geometry.$4;
+      _expect(
+        first.width == geometry.$1 &&
+            first.height == geometry.$2 &&
+            first.byteLength == geometry.$1 * geometry.$2 &&
+            _inkCount(first) == expectedInk &&
+            _bytesEqual(first.copyCoverage(), second.copyCoverage()),
+        'Braille U+${scalar.toRadixString(16)} owns exactly '
+        '${_bitCount(scalar & 0xff)} pinned dots at '
+        '${geometry.$1}x${geometry.$2}',
+      );
+    }
+  }
+
+  const List<(int, int)> oneXPositions = <(int, int)>[
+    (1, 2),
+    (1, 5),
+    (1, 8),
+    (4, 2),
+    (4, 5),
+    (4, 8),
+    (1, 11),
+    (4, 11),
+  ];
+  for (int bit = 0; bit < oneXPositions.length; bit++) {
+    final TerminalCellGlyphRaster raster = _brailleRaster(0x2800 | (1 << bit));
+    final (int, int) position = oneXPositions[bit];
+    _expect(
+      raster.coverageAt(position.$1, position.$2) == 0xff &&
+          _inkCount(raster) == 1,
+      'braille bit $bit maps to pinned device position $position',
+    );
+  }
+  const List<(int, int)> twoXPositions = <(int, int)>[
+    (2, 2),
+    (2, 9),
+    (2, 16),
+    (9, 2),
+    (9, 9),
+    (9, 16),
+    (2, 23),
+    (9, 23),
+  ];
+  for (int bit = 0; bit < twoXPositions.length; bit++) {
+    final TerminalCellGlyphRaster raster = _brailleRaster(
+      0x2800 | (1 << bit),
+      width: 14,
+      height: 30,
+      thickness: 2,
+    );
+    final (int, int) position = twoXPositions[bit];
+    var exactDot = true;
+    for (int y = position.$2; y < position.$2 + 3; y++) {
+      for (int x = position.$1; x < position.$1 + 3; x++) {
+        exactDot = exactDot && raster.coverageAt(x, y) == 0xff;
+      }
+    }
+    _expect(
+      exactDot && _inkCount(raster) == 9,
+      'braille bit $bit maps to pinned 3x3 position $position at 2x',
+    );
+  }
+  _expect(
+    _inkCount(_brailleRaster(0x2800)) == 0 &&
+        _inkCount(_brailleRaster(0x28ff)) == 8,
+    'blank and full braille patterns preserve all Unicode bits',
+  );
+  _expectThrows(
+    () => TerminalCellGlyphRasterizer.rasterizeBraille(
+      TerminalCellGlyphRasterRequest(
+        scalar: 0x2588,
+        cellWidth: 7,
+        cellHeight: 15,
+        lineThickness: 1,
+      ),
+    ),
+    'Braille entry point rejects another classified family',
+  );
+}
+
 const int _up = 1;
 const int _right = 2;
 const int _down = 4;
@@ -529,6 +776,57 @@ TerminalCellGlyphRaster _boxRaster(
     lineThickness: thickness,
   ),
 );
+
+TerminalCellGlyphRaster _blockRaster(
+  int scalar, {
+  int width = 7,
+  int height = 15,
+  int thickness = 1,
+}) => TerminalCellGlyphRasterizer.rasterizeBlockElement(
+  TerminalCellGlyphRasterRequest(
+    scalar: scalar,
+    cellWidth: width,
+    cellHeight: height,
+    lineThickness: thickness,
+  ),
+);
+
+TerminalCellGlyphRaster _brailleRaster(
+  int scalar, {
+  int width = 7,
+  int height = 15,
+  int thickness = 1,
+}) => TerminalCellGlyphRasterizer.rasterizeBraille(
+  TerminalCellGlyphRasterRequest(
+    scalar: scalar,
+    cellWidth: width,
+    cellHeight: height,
+    lineThickness: thickness,
+  ),
+);
+
+bool _coverageUnionIsFull(
+  TerminalCellGlyphRaster first,
+  TerminalCellGlyphRaster second,
+) {
+  final Uint8List firstBytes = first.copyCoverage();
+  final Uint8List secondBytes = second.copyCoverage();
+  if (firstBytes.length != secondBytes.length) return false;
+  for (int index = 0; index < firstBytes.length; index++) {
+    if (firstBytes[index] == 0 && secondBytes[index] == 0) return false;
+  }
+  return true;
+}
+
+int _bitCount(int value) {
+  var remaining = value;
+  var count = 0;
+  while (remaining != 0) {
+    count += remaining & 1;
+    remaining >>= 1;
+  }
+  return count;
+}
 
 bool _edgeHasInk(TerminalCellGlyphRaster raster, int side) =>
     _edge(raster, side).any((int alpha) => alpha != 0);
