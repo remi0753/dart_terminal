@@ -1,0 +1,479 @@
+{
+  "format": "dart-terminal-release-candidate-daily-use-matrix",
+  "version": 1,
+  "status": "bounded-release-candidate-ready",
+  "baseline": {
+    "os": "macos",
+    "architecture": "arm64",
+    "hardware_class": "apple-m1",
+    "runtime_modes": [
+      "developer-jit",
+      "release-aot"
+    ]
+  },
+  "claims": {
+    "bounded_automation": true,
+    "human_daily_use_days": 0,
+    "physical_sleep": false,
+    "physical_display_change": false,
+    "os_memory_pressure": false,
+    "developer_id_signing": false,
+    "apple_notarization": false,
+    "intel_native_execution": false,
+    "fresh_external_program_launch": false
+  },
+  "release_blockers": {
+    "blocker_bugs": 0,
+    "crashes": 0,
+    "data_loss_bugs": 0,
+    "security_bugs": 0,
+    "silent_misbehavior": 0,
+    "actionable_p0": 0,
+    "actionable_p1": 0
+  },
+  "totals": {
+    "programs": 8,
+    "clean_programs": 7,
+    "documented_program_gaps": 1,
+    "workflows": 8,
+    "gates": 31,
+    "known_limitations": 5,
+    "evidence_sources": 20
+  },
+  "evidence_sources": [
+    {
+      "path": "Makefile",
+      "sha256": "ef79521a792d25b11ef7e4075c6a81a4345aab2aaf576d2b320db3ebe2a6eae8"
+    },
+    {
+      "path": "test/corpus/applications/matrix_v1.json",
+      "sha256": "2d00fb8a5e40dd5b8a1e0f594cf99d5918a49ebb97d38277a9545f2551a9dcc5"
+    },
+    {
+      "path": "compatibility/application_matrix_acceptance.json",
+      "sha256": "edb25bc4b91f4b72128676886e2c325ef3088d78dd8e991a60412ef2cefd4727"
+    },
+    {
+      "path": "compatibility/ghostty_p0_p1_gap_inventory.json",
+      "sha256": "ec0e3b43774edf2480fd632c3643172492ddeb55bb73fd70bf03a0ce455aba53"
+    },
+    {
+      "path": "benchmark/evidence/product-performance-regression-macos-arm64-m1.json",
+      "sha256": "ac7a7a120b7a02c5096389bcef02d5fdebc9150a9e7d1f909de73e5d79bd0918"
+    },
+    {
+      "path": "benchmark/evidence/product-relative-performance-macos-arm64-m1.json",
+      "sha256": "3fe5dac9350727ee81a1775845deb0e1d59774091ca1c5c36f49d7a7b78ae7c0"
+    },
+    {
+      "path": "test/corpus/appkit/phase7_acceptance_v1.json",
+      "sha256": "a53f5d671ae6819b85977af618a19086b2efafb6dde850331ec3637f7d480e86"
+    },
+    {
+      "path": "test/corpus/fuzz/phase11_v1.json",
+      "sha256": "127a0dd1361789f23f92dd040a6c2f9f2c7cff72166240be6d099abed6a4cd65"
+    },
+    {
+      "path": "resources/DartTerminal.entitlements",
+      "sha256": "97704a8960b4facceef54397a08fb5d0a456247c3627359215aa2a27df22656c"
+    },
+    {
+      "path": "tool/dart_only_bundle_audit.dart",
+      "sha256": "8282c82359e802c2805396f8af0652d165dd80f491a33254156509248daebd64"
+    },
+    {
+      "path": "tool/terminal_distribution_policy.dart",
+      "sha256": "0d2a5c10ddbe2a8a595dff49cd146fd43a8965fe9e344303bd4f898f147036b2"
+    },
+    {
+      "path": "tool/product_performance_regression_gate.dart",
+      "sha256": "cbda5c771d4f4c9690c181b1d30342ecf10b89dd1155dfdb5872af6e9bf6230d"
+    },
+    {
+      "path": "tool/terminal_application_acceptance.dart",
+      "sha256": "4ec408f4e865c07036fca60c5c179239c3f24b5d858dbe572fa01c8dcf1cf803"
+    },
+    {
+      "path": "tool/terminal_localization_audit.dart",
+      "sha256": "ba953929bed0cb60fe7f262c8c711ba5723a71d4bcf4061c9a8fcb456cefccc6"
+    },
+    {
+      "path": "tool/native_sanitizer_gate.dart",
+      "sha256": "85fdb21a860d4b6cd4abff5d62252f8129b16f1cc79d026a25557eeb2dab9f34"
+    },
+    {
+      "path": "tool/runtime_integration_smoke.dart",
+      "sha256": "a2fdfe82396c6df3d60f1d7814ead06dd9ac525c3d2650f11c46bb31c2e7cbc3"
+    },
+    {
+      "path": "test/terminal_property_fuzz_test.dart",
+      "sha256": "3fdcc9348f6e6348e89a19f84b2c6ade2876b822a674338a02eaf79569ae971b"
+    },
+    {
+      "path": "test/run_tests.dart",
+      "sha256": "0a040dc51555f502cbacb2d334c9da37afd49813ef6e6b9631fbb5d6ecaf8af5"
+    },
+    {
+      "path": "tool/release_candidate_daily_use.dart",
+      "sha256": "938f5fa244cc3c23b63d40f28f599709635d2a83828dfb7ce6778a5772e9774e"
+    },
+    {
+      "path": "test/release_candidate_daily_use_test.dart",
+      "sha256": "8f9c9a62ed81c1c46ec1e90969d6496337c611017c1ed24279d0d0ff79ce251c"
+    }
+  ],
+  "programs": [
+    {
+      "id": "emacs",
+      "scenario_id": "emacs-terminal-ui",
+      "capture_kind": "checked-in-replay",
+      "classification": "clean-agreement",
+      "accepted": true,
+      "gap_ids": [],
+      "deadline_ms": 20000,
+      "maximum_output_bytes": 262144
+    },
+    {
+      "id": "fzf",
+      "scenario_id": "fzf-filter-selection",
+      "capture_kind": "checked-in-replay",
+      "classification": "clean-agreement",
+      "accepted": true,
+      "gap_ids": [],
+      "deadline_ms": 15000,
+      "maximum_output_bytes": 262144
+    },
+    {
+      "id": "lazygit",
+      "scenario_id": "lazygit-repository-ui",
+      "capture_kind": "checked-in-replay",
+      "classification": "clean-agreement",
+      "accepted": true,
+      "gap_ids": [],
+      "deadline_ms": 20000,
+      "maximum_output_bytes": 524288
+    },
+    {
+      "id": "mosh",
+      "scenario_id": "mosh-local-session",
+      "capture_kind": "checked-in-replay",
+      "classification": "documented-gap",
+      "accepted": true,
+      "gap_ids": [
+        "hilite-mouse"
+      ],
+      "deadline_ms": 30000,
+      "maximum_output_bytes": 524288
+    },
+    {
+      "id": "ncurses",
+      "scenario_id": "ncurses-resize-ui",
+      "capture_kind": "checked-in-replay",
+      "classification": "clean-agreement",
+      "accepted": true,
+      "gap_ids": [],
+      "deadline_ms": 15000,
+      "maximum_output_bytes": 262144
+    },
+    {
+      "id": "neovim",
+      "scenario_id": "neovim-editing-ui",
+      "capture_kind": "checked-in-replay",
+      "classification": "clean-agreement",
+      "accepted": true,
+      "gap_ids": [],
+      "deadline_ms": 20000,
+      "maximum_output_bytes": 524288
+    },
+    {
+      "id": "ssh",
+      "scenario_id": "ssh-local-pty",
+      "capture_kind": "checked-in-replay",
+      "classification": "clean-agreement",
+      "accepted": true,
+      "gap_ids": [],
+      "deadline_ms": 30000,
+      "maximum_output_bytes": 262144
+    },
+    {
+      "id": "tmux",
+      "scenario_id": "tmux-session-resize",
+      "capture_kind": "checked-in-replay",
+      "classification": "clean-agreement",
+      "accepted": true,
+      "gap_ids": [],
+      "deadline_ms": 20000,
+      "maximum_output_bytes": 524288
+    }
+  ],
+  "workflows": [
+    {
+      "id": "startup-shell",
+      "gate_ids": [
+        "test",
+        "runtime-integration",
+        "runtime-terminal-display-integration",
+        "runtime-shell-integration"
+      ]
+    },
+    {
+      "id": "input-editor",
+      "gate_ids": [
+        "terminal-application-acceptance-check",
+        "runtime-terminal-display-integration",
+        "runtime-clipboard-integration"
+      ]
+    },
+    {
+      "id": "multiplexer-remote",
+      "gate_ids": [
+        "terminal-application-acceptance-check",
+        "runtime-native-hierarchy-integration"
+      ]
+    },
+    {
+      "id": "hierarchy-content",
+      "gate_ids": [
+        "runtime-native-hierarchy-integration",
+        "runtime-native-content-integration",
+        "runtime-quick-terminal-integration",
+        "runtime-secure-keyboard-entry-integration",
+        "runtime-diagnostics-integration"
+      ]
+    },
+    {
+      "id": "configuration-appearance",
+      "gate_ids": [
+        "terminal-localization-check",
+        "runtime-configuration-integration",
+        "runtime-theme-integration"
+      ]
+    },
+    {
+      "id": "automation-integration",
+      "gate_ids": [
+        "runtime-user-actions-integration",
+        "runtime-applescript-integration",
+        "runtime-system-automation-integration",
+        "runtime-desktop-signals-integration",
+        "runtime-osc52-integration"
+      ]
+    },
+    {
+      "id": "lifecycle-recovery-resource",
+      "gate_ids": [
+        "runtime-bounded-reliability-integration",
+        "runtime-restoration-integration",
+        "runtime-lifecycle-integration",
+        "runtime-traffic-integration",
+        "runtime-resource-integration",
+        "runtime-shutdown-fault-integration"
+      ]
+    },
+    {
+      "id": "distribution-performance-security-parity",
+      "gate_ids": [
+        "release-aot-distribution-verify",
+        "product-performance-regression-gate",
+        "product-parser-properties",
+        "product-native-sanitizer",
+        "product-fault-injection",
+        "ghostty-p0-p1-gap-closure"
+      ]
+    }
+  ],
+  "gate_catalog": [
+    {
+      "id": "test",
+      "expected_marker": "dart_terminal tests passed",
+      "evidence_kind": "ordinary"
+    },
+    {
+      "id": "terminal-application-acceptance-check",
+      "expected_marker": "TERMINAL_APPLICATION_ACCEPTANCE_PASS",
+      "evidence_kind": "checked-in-replay"
+    },
+    {
+      "id": "terminal-localization-check",
+      "expected_marker": "TERMINAL_LOCALIZATION_AUDIT_PASS",
+      "evidence_kind": "ordinary"
+    },
+    {
+      "id": "runtime-integration",
+      "expected_marker": "RUNTIME_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-terminal-display-integration",
+      "expected_marker": "RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-native-hierarchy-integration",
+      "expected_marker": "RUNTIME_NATIVE_HIERARCHY_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-bounded-reliability-integration",
+      "expected_marker": "RUNTIME_BOUNDED_RELIABILITY_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-user-actions-integration",
+      "expected_marker": "RUNTIME_USER_ACTIONS_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-applescript-integration",
+      "expected_marker": "RUNTIME_APPLESCRIPT_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-system-automation-integration",
+      "expected_marker": "RUNTIME_SYSTEM_AUTOMATION_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-native-content-integration",
+      "expected_marker": "RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-quick-terminal-integration",
+      "expected_marker": "RUNTIME_QUICK_TERMINAL_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-secure-keyboard-entry-integration",
+      "expected_marker": "RUNTIME_SECURE_KEYBOARD_ENTRY_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-diagnostics-integration",
+      "expected_marker": "RUNTIME_DIAGNOSTICS_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-configuration-integration",
+      "expected_marker": "RUNTIME_CONFIGURATION_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-theme-integration",
+      "expected_marker": "RUNTIME_THEME_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-shell-integration",
+      "expected_marker": "RUNTIME_SHELL_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-desktop-signals-integration",
+      "expected_marker": "RUNTIME_DESKTOP_SIGNALS_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-osc52-integration",
+      "expected_marker": "RUNTIME_OSC52_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-restoration-integration",
+      "expected_marker": "RUNTIME_RESTORATION_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-clipboard-integration",
+      "expected_marker": "RUNTIME_CLIPBOARD_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-lifecycle-integration",
+      "expected_marker": "RUNTIME_LIFECYCLE_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-traffic-integration",
+      "expected_marker": "RUNTIME_TRAFFIC_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-resource-integration",
+      "expected_marker": "RUNTIME_RESOURCE_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "runtime-shutdown-fault-integration",
+      "expected_marker": "RUNTIME_SHUTDOWN_FAULT_INTEGRATION_PASS",
+      "evidence_kind": "two-mode-product"
+    },
+    {
+      "id": "release-aot-distribution-verify",
+      "expected_marker": "DART_ONLY_BUNDLE_AUDIT_PASS",
+      "evidence_kind": "three-architecture-release"
+    },
+    {
+      "id": "product-performance-regression-gate",
+      "expected_marker": "PRODUCT_PERFORMANCE_REGRESSION_PASS",
+      "evidence_kind": "release-aot-measured"
+    },
+    {
+      "id": "product-parser-properties",
+      "expected_marker": "TERMINAL_PROPERTY_FUZZ_PASS",
+      "evidence_kind": "bounded-deterministic"
+    },
+    {
+      "id": "product-native-sanitizer",
+      "expected_marker": "PRODUCT_NATIVE_SANITIZER_PASS",
+      "evidence_kind": "native-host-sanitized"
+    },
+    {
+      "id": "product-fault-injection",
+      "expected_marker": "PRODUCT_FAULT_INJECTION_PASS",
+      "evidence_kind": "bounded-deterministic"
+    },
+    {
+      "id": "ghostty-p0-p1-gap-closure",
+      "expected_marker": "GHOSTTY_P0_P1_GAP_CLOSURE_PASS",
+      "evidence_kind": "ordinary-and-two-mode-product"
+    }
+  ],
+  "known_limitations": [
+    {
+      "id": "hilite-mouse",
+      "kind": "documented-product-difference",
+      "owner": "compatibility/application_matrix_acceptance.json",
+      "release_blocker": false,
+      "claimed_as_pass": false
+    },
+    {
+      "id": "ghostty-differential-activation",
+      "kind": "supplemental-comparator-unavailable",
+      "owner": "compatibility/differential_acceptance_report.json",
+      "release_blocker": false,
+      "claimed_as_pass": false
+    },
+    {
+      "id": "physical-duration-reliability",
+      "kind": "approved-external-follow-up",
+      "owner": "docs/phase11/bounded-system-reliability.md",
+      "release_blocker": false,
+      "claimed_as_pass": false
+    },
+    {
+      "id": "intel-native-handoff",
+      "kind": "approved-external-follow-up",
+      "owner": "docs/phase1/universal-runtime-matrix.md",
+      "release_blocker": false,
+      "claimed_as_pass": false
+    },
+    {
+      "id": "apple-service-acceptance",
+      "kind": "approved-external-follow-up",
+      "owner": "docs/phase11/developer-id-notarization.md",
+      "release_blocker": false,
+      "claimed_as_pass": false
+    }
+  ]
+}

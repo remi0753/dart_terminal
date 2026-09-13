@@ -1422,7 +1422,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase11/release-candidate-daily-use-program.md`](docs/phase11/release-candidate-daily-use-program.md)
   を参照して順に実施する）
   - [x] contract、program／evidence inventory、bounded-duration境界
-  - [ ] versioned daily-use matrix、fail-closed checker、通常gate統合
+  - [x] versioned daily-use matrix、fail-closed checker、通常gate統合
   - [ ] bounded release-candidate aggregate、文書／matrix更新、Phase 11完了判定
 
 終了条件:

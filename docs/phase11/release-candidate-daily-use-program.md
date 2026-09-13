@@ -6,7 +6,7 @@
 - Task: release candidate daily-use program matrix
 - Started: 2026-09-14
 - State: in progress
-- Current subtask: contract complete; versioned matrix pending
+- Current subtask: versioned matrix complete; bounded aggregate pending
 
 ## Purpose
 
@@ -176,3 +176,43 @@ not claim.
   resolve correctly, `git diff --check` passes, and no source, generated
   evidence, runtime output, or adjacent repository file changed. The first
   child is complete; the versioned matrix/checker is the next ordered child.
+- 2026-09-14: The first matrix generation failed before writing output because
+  the new checker treated `resources/DartTerminal.entitlements` as JSON. The
+  product entitlement is correctly an XML property list containing one empty
+  `<dict/>`; the existing distribution policy decodes it before applying its
+  empty-map assertion. This checker only needs to bind the reviewed product
+  source, so it will compare the exact canonical empty-plist text instead of
+  adding a second partial plist parser or weakening the empty-entitlement rule.
+- 2026-09-14: Review of the first generated report found that marker discovery
+  concatenated every Dart evidence source, including the new generator which
+  declares the expected marker catalog. That would let the catalog prove
+  itself even if an owning gate stopped emitting a marker. The generator and
+  its test remain hash-bound evidence but are excluded from marker discovery;
+  each marker must occur in the pre-existing owner/Make sources. A source that
+  constructs `..._PASS` dynamically may declare the exact stem, while the
+  report and semantic validator still require the full fixed success marker.
+- 2026-09-14: Version 1 now generates a 20-source, content-free matrix with all
+  eight ordered program cells, eight workflow families, 31 exact Make gate/
+  marker owners, five non-blocking limitations, and seven zero-valued release
+  blocker classes. It validates the existing application replay, zero-actionable
+  Ghostty inventory, passing M1 Release AOT absolute/relative performance,
+  four covered AppKit criteria, five additional Phase 11 fuzz seeds, exact empty
+  entitlement plist, target declarations, and marker ownership before writing.
+  The focused test passes positive freshness and hostile status/hash/program/
+  workflow/gate/limitation/blocker/actionable/unsupported-claim mutations.
+- 2026-09-14: The standalone checker passes with 8 programs, 7 clean program
+  agreements, 1 documented program gap, 8 workflows, 31 gates, 5 known
+  limitations, and zero release blockers. Static analysis reports no issues.
+  The exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate also passes
+  after ordinary integration: it emits the same matrix marker, checks 338 Dart
+  files with zero formatting changes, reports no analysis issue, and ends with
+  `dart_terminal tests passed` after all native, compatibility, security,
+  update, recovery, and aggregate Dart suites.
+- 2026-09-14: Final diff validation is clean. The adjacent `dart_appkit`
+  worktree remains clean, with zero case-insensitive `terminal` match in
+  tracked paths or tracked Dart/native/script/manifest/Makefile content. No
+  adjacent or runtime artifact is part of this change. The versioned matrix,
+  fail-closed checker, hostile tests, runner registration, Make generate/check
+  targets, and ordinary-gate integration meet the second child's completion
+  conditions. The bounded release-candidate aggregate remains deliberately
+  unimplemented until the next ordered child.

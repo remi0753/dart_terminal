@@ -28,6 +28,7 @@ import 'product_performance_benchmark_test.dart';
 import 'product_performance_comparator_test.dart';
 import 'product_performance_regression_gate_test.dart';
 import 'reference_renderer_test.dart';
+import 'release_candidate_daily_use_test.dart';
 import 'render_rebuild_coordinator_test.dart';
 import 'render_resource_rebuilder_test.dart';
 import 'renderer_metrics_test.dart';
@@ -163,6 +164,7 @@ Future<void> main() async {
   runTerminalDifferentialEvidenceTests();
   runTerminalCompatibilityRegressionCoverageTests();
   runGhosttyP0P1GapInventoryTests();
+  runReleaseCandidateDailyUseTests();
   runProductParserBenchmarkTests();
   await runProductPerformanceBenchmarkTests();
   runProductPerformanceComparatorTests();

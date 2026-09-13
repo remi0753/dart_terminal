@@ -145,6 +145,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-terminfo terminal-terminfo-check \
 	terminal-shell-integration terminal-shell-integration-check \
 	ghostty-p0-p1-gap-inventory ghostty-p0-p1-gap-inventory-check ghostty-p0-p1-gap-closure \
+	release-candidate-daily-use-matrix release-candidate-daily-use-matrix-check \
 	product-parser-corpus product-parser-properties phase9-protocol-properties phase9-security-stress \
 	product-native-sanitizer product-fault-injection product-sanitizer-fuzz-fault-gate \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
@@ -222,6 +223,8 @@ help:
 	@echo "  make ghostty-p0-p1-gap-inventory  Regenerate the pinned P0/P1 gap inventory"
 	@echo "  make ghostty-p0-p1-gap-inventory-check  Reject stale pinned P0/P1 gap evidence"
 	@echo "  make ghostty-p0-p1-gap-closure  Run ordinary and two-mode product parity closure"
+	@echo "  make release-candidate-daily-use-matrix  Regenerate the bounded release-candidate matrix"
+	@echo "  make release-candidate-daily-use-matrix-check  Reject stale or unsafe release-candidate evidence"
 	@echo "  make vt-parser-table              Regenerate the Dart VT transition table"
 	@echo "  make vt-parser-table-check        Reject a stale generated parser table"
 	@echo "  make terminal-parser-trace        Regenerate the bounded parser trace"
@@ -608,13 +611,19 @@ ghostty-p0-p1-gap-closure:
 	@$(MAKE) RUNTIME_ARCH=$(RUNTIME_ARCH) runtime-terminal-display-integration
 	@echo "GHOSTTY_P0_P1_GAP_CLOSURE_PASS ordinary=true runtime_modes=2"
 
+release-candidate-daily-use-matrix: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/release_candidate_daily_use.dart --generate
+
+release-candidate-daily-use-matrix-check: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/release_candidate_daily_use.dart --check
+
 terminal-localization-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_localization_audit.dart
 
 terminal-diagnostics-privacy-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_diagnostics_privacy_audit.dart
 
-test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check ghostty-p0-p1-gap-inventory-check terminal-distribution-policy-test
+test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check ghostty-p0-p1-gap-inventory-check release-candidate-daily-use-matrix-check terminal-distribution-policy-test
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart
