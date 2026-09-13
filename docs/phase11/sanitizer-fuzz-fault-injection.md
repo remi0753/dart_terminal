@@ -6,7 +6,7 @@
 - Task: native ASan/UBSan, fuzz corpus, and fault injection
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: contract and inventory (complete)
+- Current subtask: product-owned native ASan/UBSan capability gate (complete)
 
 ## Purpose
 
@@ -238,3 +238,65 @@ sanitizer coverage.
   application/distribution checks, formatted 323 Dart files with zero changes,
   reported no analysis issues, and ended with `dart_terminal tests passed`.
   No build artifact is part of the task diff.
+- 2026-09-13: Commit `cf03966` (`Define sanitizer fuzz and fault boundaries`)
+  recorded the first child. The required post-commit ROADMAP and memo reread
+  found a clean worktree and selected the product-owned native sanitizer child;
+  fuzz expansion remains its next ordered successor.
+- 2026-09-13: The first sanitizer execution compiled and passed the PTY suite,
+  then the Metal compiler tried to write its implicit module cache under the
+  user cache directory, which the task sandbox intentionally cannot modify.
+  This was a build-runner isolation defect, not a product or sanitizer report.
+  The runner now assigns both Clang and Metal module caches to the same bounded
+  temporary sanitizer directory, which is deleted after every success/failure.
+- 2026-09-13: The isolated retry reached the renderer but every Metal-dependent
+  expectation failed without an ASan/UBSan diagnostic. Exact section audits
+  proved that the embedded `__DATA,__dtrlib` length and bytes matched the normal
+  artifact. An optimization hypothesis was tested with local address/lifetime
+  changes, but did not change the result and those experimental product/test
+  edits were removed.
+- 2026-09-13: A fresh ordinary, uninstrumented renderer capability run then
+  failed at the same device-creation boundary, and an independent Swift probe
+  returned `MTLCreateSystemDefaultDevice() == nil` while `system_profiler`
+  continued to report the Apple M1 GPU and Metal support. This establishes a
+  transient host/display/device-availability condition, not a sanitizer report
+  or source regression. The sanitizer gate will always exercise a device-
+  independent renderer ABI/CoreText/allocation subset and accept only the typed
+  device-unavailable result when no device exists. The ordinary full Metal gate
+  remains mandatory and will be retried before this child can complete. The
+  final host sanitizer acceptance also requires real Metal renderer allocation;
+  typed unavailability is diagnostic coverage, not a passing substitute.
+- 2026-09-13: Re-running the ordinary renderer target outside the restricted
+  task sandbox rebuilt it and passed the complete Metal capability contract.
+  This confirms the earlier device absence was sandbox visibility. The first
+  host sanitizer retry then passed PTY, renderer with a real Metal allocation,
+  AppleScript, and both App Intents executables without an ASan/UBSan report.
+- 2026-09-13: Final `make product-native-sanitizer` acceptance passed on the
+  arm64 host with strict abort/halt runtime options and real Metal allocation.
+  All four owners and five executable suites passed. The audit found ASan
+  runtime linkage and instrumentation in all nine inspected dylib/executable
+  artifacts, and UBSan symbols in seven artifacts with at least one in each of
+  the PTY, renderer, AppleScript, and App Intents owners. Swift accepted both
+  sanitizer compile flags but emitted no UBSan symbol for its dylib or perform
+  executable; its C++ ABI harness emitted three while both Swift artifacts had
+  24 ASan markers. This is recorded as toolchain behavior, not misrepresented as
+  per-artifact UBSan instrumentation.
+- 2026-09-13: The dedicated renderer sanitizer harness exercises public ABI,
+  malformed UTF-8 rejection, CoreText catalog/shape/raster allocations and
+  exact release, real Metal create/release, and duplicate-release behavior. It
+  avoids duplicating the large ordinary AppKit/Metal test, which was separately
+  rebuilt and passed in full on the same host.
+- 2026-09-13: Final validation passed the exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate outside the restricted
+  GPU sandbox: all four ordinary native families, freshness/compatibility/
+  application/distribution checks, formatting of 324 Dart files with zero
+  changes, analysis with no issues, and the complete Dart suite passed. The
+  sanitizer runner deletes its isolated temporary build on both success and
+  failure, and `git diff --check` reports no whitespace errors.
+- 2026-09-13: The first final full-gate invocation had one pre-existing PTY
+  Dart race symptom: `live Dart child cannot steal native PTY completion`
+  observed no matching completion and raised `Bad state: No element`; adjacent
+  PTY cases and native capability had passed. No timeout, assertion, source, or
+  test input was changed. The required identical full-gate retry passed that
+  case and every subsequent stage. This single non-reproduced observation is
+  retained here rather than hidden; recurrence must be treated as a defect in a
+  later task, not as evidence against the sanitizer results.

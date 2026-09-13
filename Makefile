@@ -145,6 +145,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-terminfo terminal-terminfo-check \
 	terminal-shell-integration terminal-shell-integration-check \
 	product-parser-corpus product-parser-properties phase9-protocol-properties phase9-security-stress \
+	product-native-sanitizer \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
 	terminal-parser-trace terminal-parser-trace-check \
 	configuration-reference configuration-reference-check \
@@ -193,6 +194,7 @@ help:
 	@echo "  make product-parser-properties    Run deterministic property and fuzz cases"
 	@echo "  make phase9-protocol-properties   Run deterministic modern-protocol properties"
 	@echo "  make phase9-security-stress       Stress modern authority and resource bounds"
+	@echo "  make product-native-sanitizer     Run isolated ASan/UBSan native capability gates"
 	@echo "  make product-parser-benchmark     Run the Release AOT 100 MiB/s parser gate"
 	@echo "  make product-damage-benchmark     Run the Release AOT 100,000-cell damage gate"
 	@echo "  make product-performance-benchmark  Run product microbenchmarks against the M1 baseline"
@@ -611,6 +613,9 @@ phase9-protocol-properties: dependencies
 
 phase9-security-stress: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_phase9_security_stress_test.dart
+
+product-native-sanitizer: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/native_sanitizer_gate.dart
 
 product-parser-benchmark-build: dependencies
 	@mkdir -p $(PRODUCT_PARSER_BENCHMARK_DIR)
