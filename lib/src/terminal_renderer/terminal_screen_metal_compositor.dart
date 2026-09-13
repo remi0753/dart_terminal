@@ -140,6 +140,8 @@ final class TerminalScreenMetalCompositor {
     final List<TerminalMetalInstance> overlays = <TerminalMetalInstance>[];
     final List<TerminalMetalInstance> glyphInstances =
         <TerminalMetalInstance>[];
+    final List<TerminalMetalInstance> kittyImagesBelowBackground =
+        <TerminalMetalInstance>[];
     final List<TerminalMetalInstance> kittyImagesBelowText =
         <TerminalMetalInstance>[];
     final List<TerminalMetalInstance> kittyImagesAboveText =
@@ -595,15 +597,28 @@ final class TerminalScreenMetalCompositor {
         if (instance != null) glyphInstances.add(instance);
       }
       for (final _TerminalKittyPositionedTile tile in kittyTiles) {
-        final TerminalMetalInstance? instance = bridge.glyphInstance(
+        final TerminalMetalInstance? instance = bridge.imageInstance(
           tile.entry,
           x: tile.x,
           y: tile.y,
+          layer: switch (tile.layer) {
+            TerminalKittyImageLayer.belowBackground =>
+              TerminalMetalImageLayer.belowBackground,
+            TerminalKittyImageLayer.belowText =>
+              TerminalMetalImageLayer.belowText,
+            TerminalKittyImageLayer.aboveText =>
+              TerminalMetalImageLayer.aboveText,
+          },
         );
         if (instance == null) continue;
-        (tile.aboveText ? kittyImagesAboveText : kittyImagesBelowText).add(
-          instance,
-        );
+        switch (tile.layer) {
+          case TerminalKittyImageLayer.belowBackground:
+            kittyImagesBelowBackground.add(instance);
+          case TerminalKittyImageLayer.belowText:
+            kittyImagesBelowText.add(instance);
+          case TerminalKittyImageLayer.aboveText:
+            kittyImagesAboveText.add(instance);
+        }
       }
 
       if (presentation.cursorDrawn && model.cursorVisible) {
@@ -629,6 +644,7 @@ final class TerminalScreenMetalCompositor {
       }
       final List<TerminalMetalInstance> contentInstances =
           <TerminalMetalInstance>[
+            ...kittyImagesBelowBackground,
             ...backgrounds,
             ...overlays,
             ...kittyImagesBelowText,
@@ -805,7 +821,7 @@ final class TerminalScreenMetalCompositor {
               entry: entry,
               x: tileX,
               y: tileY,
-              aboveText: placement.z >= 0,
+              layer: placement.layer,
             ),
           );
         }
@@ -940,29 +956,52 @@ final class TerminalScreenMetalCompositor {
     TerminalMetalInstance instance, {
     required int offsetX,
     required int offsetY,
-  }) => instance.kind.isGlyph
-      ? TerminalMetalInstance.glyph(
-          format: instance.kind == TerminalMetalInstanceKind.alphaGlyph
-              ? TerminalMetalAtlasFormat.alpha8
-              : TerminalMetalAtlasFormat.rgba8Straight,
-          x: instance.x + offsetX,
-          y: instance.y + offsetY,
-          width: instance.width,
-          height: instance.height,
-          atlasX: instance.atlasX,
-          atlasY: instance.atlasY,
-          colorRgba: instance.colorRgba,
-          pageIndex: instance.pageIndex,
-          pageGeneration: instance.pageGeneration,
-        )
-      : TerminalMetalInstance.solid(
-          kind: instance.kind,
-          x: instance.x + offsetX,
-          y: instance.y + offsetY,
-          width: instance.width,
-          height: instance.height,
-          colorRgba: instance.colorRgba,
-        );
+  }) {
+    if (instance.kind.isImage) {
+      return TerminalMetalInstance.image(
+        layer: switch (instance.kind) {
+          TerminalMetalInstanceKind.imageBelowBackground =>
+            TerminalMetalImageLayer.belowBackground,
+          TerminalMetalInstanceKind.imageBelowText =>
+            TerminalMetalImageLayer.belowText,
+          TerminalMetalInstanceKind.imageAboveText =>
+            TerminalMetalImageLayer.aboveText,
+          _ => throw StateError('unknown Metal image instance kind'),
+        },
+        x: instance.x + offsetX,
+        y: instance.y + offsetY,
+        width: instance.width,
+        height: instance.height,
+        atlasX: instance.atlasX,
+        atlasY: instance.atlasY,
+        pageIndex: instance.pageIndex,
+        pageGeneration: instance.pageGeneration,
+      );
+    }
+    return instance.kind.isGlyph
+        ? TerminalMetalInstance.glyph(
+            format: instance.kind == TerminalMetalInstanceKind.alphaGlyph
+                ? TerminalMetalAtlasFormat.alpha8
+                : TerminalMetalAtlasFormat.rgba8Straight,
+            x: instance.x + offsetX,
+            y: instance.y + offsetY,
+            width: instance.width,
+            height: instance.height,
+            atlasX: instance.atlasX,
+            atlasY: instance.atlasY,
+            colorRgba: instance.colorRgba,
+            pageIndex: instance.pageIndex,
+            pageGeneration: instance.pageGeneration,
+          )
+        : TerminalMetalInstance.solid(
+            kind: instance.kind,
+            x: instance.x + offsetX,
+            y: instance.y + offsetY,
+            width: instance.width,
+            height: instance.height,
+            colorRgba: instance.colorRgba,
+          );
+  }
 
   void _addPreedit(
     TerminalPreeditLayout preedit, {
@@ -1504,13 +1543,13 @@ final class _TerminalKittyPositionedTile {
     required this.entry,
     required this.x,
     required this.y,
-    required this.aboveText,
+    required this.layer,
   });
 
   final TerminalGlyphAtlasEntry entry;
   final int x;
   final int y;
-  final bool aboveText;
+  final TerminalKittyImageLayer layer;
 }
 
 final class _TerminalKittyDeviceRect {

@@ -112,7 +112,7 @@
     },
     {
       "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
-      "sha256": "70833e97c5fbd98619d4cd756919d2e9a03060bf82d25611435cd65b3ecd06d7"
+      "sha256": "a955f7f1deb5f8871f08e3abd99afc68d2bbae77e1b1131c5e1404e3e7f078a1"
     },
     {
       "path": "test/terminal_cell_glyph_test.dart",
@@ -120,7 +120,7 @@
     },
     {
       "path": "test/terminal_screen_metal_compositor_test.dart",
-      "sha256": "7f63a245339159eb8623c1f17b7aac90cc98e01bd1537b24f8975e135afab858"
+      "sha256": "06e57464060a782192312ada41bd19b346728b08aecc6f82f820310750371262"
     },
     {
       "path": "test/goldens/cell-glyphs/synthetic-corpus-1x.dtgi",
@@ -140,15 +140,15 @@
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.h",
-      "sha256": "24252f35ccfa7b36181d2221edfae073cf89666f0731d1d79dabf224d165cb93"
+      "sha256": "64324ecf5b29d85ed40212c074cdc097a344ea694c98b7a9dec229ab8d16c826"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m",
-      "sha256": "8ed6c6457d3649506d76972d65b7e24cf59e00bcbe842705d122f40817b49350"
+      "sha256": "3740edcd2a28fe8b1b6984296e9e725eb092edcd3d27ddc15da44813affd80dc"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/test/TerminalRendererCapabilityTests.mm",
-      "sha256": "67426d9211ddd89731a3a044da3ad02b350a787278a1923fd06d26a4d5e30998"
+      "sha256": "f8ed85cb48367e3aeb155251fab44d339f3d595a107ca23b00b4ecc5d2214d00"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/test/font_catalog_test.dart",

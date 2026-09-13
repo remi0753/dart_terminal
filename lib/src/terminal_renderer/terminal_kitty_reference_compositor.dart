@@ -59,9 +59,14 @@ abstract final class TerminalKittyReferenceCompositor {
           throw StateError('Kitty placement refers to an absent resource');
         }
         yield TerminalReferenceSampledBitmap(
-          layer: placement.z < 0
-              ? TerminalReferenceLayer.imageBelowText
-              : TerminalReferenceLayer.imageAboveText,
+          layer: switch (placement.layer) {
+            TerminalKittyImageLayer.belowBackground =>
+              TerminalReferenceLayer.imageBelowBackground,
+            TerminalKittyImageLayer.belowText =>
+              TerminalReferenceLayer.imageBelowText,
+            TerminalKittyImageLayer.aboveText =>
+              TerminalReferenceLayer.imageAboveText,
+          },
           x: placement.destinationX,
           y: placement.destinationY,
           width: placement.destinationWidth,

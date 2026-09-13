@@ -41,6 +41,44 @@ void _testTypedCreationFailures() {
 }
 
 void _testEncoderValidationAndOwnership() {
+  final List<TerminalMetalInstance> imageBands = TerminalMetalImageLayer.values
+      .map(
+        (TerminalMetalImageLayer layer) => TerminalMetalInstance.image(
+          layer: layer,
+          x: 0,
+          y: 0,
+          width: 1,
+          height: 1,
+          atlasX: 0,
+          atlasY: 0,
+          pageIndex: 0,
+          pageGeneration: 1,
+        ),
+      )
+      .toList(growable: false);
+  _expect(
+    imageBands[0].kind == TerminalMetalInstanceKind.imageBelowBackground &&
+        imageBands[1].kind == TerminalMetalInstanceKind.imageBelowText &&
+        imageBands[2].kind == TerminalMetalInstanceKind.imageAboveText &&
+        imageBands.every(
+          (TerminalMetalInstance value) =>
+              value.kind.isImage &&
+              value.kind.isAtlasBacked &&
+              !value.kind.isGlyph,
+        ),
+    'three image factories preserve distinct ordered color-atlas kinds',
+  );
+  _expectThrows(
+    () => TerminalMetalInstance.solid(
+      kind: TerminalMetalInstanceKind.imageBelowText,
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+      colorRgba: 0,
+    ),
+    'an image kind cannot bypass atlas-backed validation as a solid',
+  );
   final List<TerminalMetalInstance> source = <TerminalMetalInstance>[
     TerminalMetalInstance.solid(
       kind: TerminalMetalInstanceKind.cellBackground,

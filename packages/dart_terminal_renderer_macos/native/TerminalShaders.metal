@@ -62,7 +62,8 @@ fragment float4 dtr_terminal_fragment(
                            input.page_index).r;
     return float4(input.color.rgb, input.color.a * coverage);
   }
-  if (input.kind == 4u) {
+  if (input.kind == 4u || input.kind == 7u || input.kind == 8u ||
+      input.kind == 9u) {
     return color_atlas.sample(atlas_sampler, input.atlas_position,
                               input.page_index);
   }

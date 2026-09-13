@@ -3,6 +3,7 @@ import 'dart:typed_data';
 /// Draw order shared by the deterministic reference renderer and the native
 /// renderer contract.
 enum TerminalReferenceLayer {
+  imageBelowBackground,
   cellBackground,
   selection,
   imageBelowText,

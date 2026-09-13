@@ -35,7 +35,7 @@ void runTerminalScreenMetalCompositorTests() {
   _testAccessibleOverlaysUseContrastAndGeometry();
   _testPreeditRespectsRendererInstanceLimit();
   _testContentRectangleOffsetsEveryLayer();
-  _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder();
+  _testKittyImagesUseThreeOrderedMetalBands();
   _testKittyAnimationFrameUsesContentGenerationAndNativePixels();
 }
 
@@ -559,26 +559,34 @@ void _testKittyAnimationFrameUsesContentGenerationAndNativePixels() {
   }
 }
 
-void _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder() {
+void _testKittyImagesUseThreeOrderedMetalBands() {
   for (final double scale in <double>[1, 2]) {
     final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 3);
-    _parse(screens, ascii.encode('A'));
+    _parse(screens, ascii.encode('\x1b[44mA'));
     _storeKittyImage(
       screens,
       imageId: 1,
-      rgba: const <int>[255, 0, 0, 255, 0, 255, 0, 255],
-      width: 2,
-      height: 1,
-    );
-    _placeKittyImage(screens, imageId: 1, column: 0, z: -1);
-    _storeKittyImage(
-      screens,
-      imageId: 2,
-      rgba: const <int>[0, 0, 255, 255],
+      rgba: const <int>[255, 0, 0, 255],
       width: 1,
       height: 1,
     );
-    _placeKittyImage(screens, imageId: 2, column: 0, z: 0);
+    _placeKittyImage(screens, imageId: 1, column: 0, z: -0x40000001);
+    _storeKittyImage(
+      screens,
+      imageId: 2,
+      rgba: const <int>[0, 255, 0, 255],
+      width: 1,
+      height: 1,
+    );
+    _placeKittyImage(screens, imageId: 2, column: 0, z: -1);
+    _storeKittyImage(
+      screens,
+      imageId: 3,
+      rgba: const <int>[255, 255, 0, 255],
+      width: 1,
+      height: 1,
+    );
+    _placeKittyImage(screens, imageId: 3, column: 0, z: 0);
 
     final _CompositionFixture fixture = _compose(
       screens,
@@ -589,7 +597,9 @@ void _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder() {
       final List<TerminalMetalInstanceKind> contentKinds = fixture
           .composition
           .instances
-          .where((TerminalMetalInstance instance) => instance.kind.isGlyph)
+          .where(
+            (TerminalMetalInstance instance) => instance.kind.isAtlasBacked,
+          )
           .map((TerminalMetalInstance instance) => instance.kind)
           .toList();
       final List<TerminalGlyphAtlasEntry> kittyEntries = fixture
@@ -599,24 +609,25 @@ void _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder() {
           .where((TerminalGlyphAtlasEntry entry) => entry.isKittyImage)
           .toList();
       _expect(
-        contentKinds.length == 3 &&
-            contentKinds[0] == TerminalMetalInstanceKind.colorGlyph &&
-            contentKinds[1] == TerminalMetalInstanceKind.alphaGlyph &&
-            contentKinds[2] == TerminalMetalInstanceKind.colorGlyph,
-        'negative and nonnegative Kitty tiles bracket text in the shared '
-        'Metal glyph layer at ${scale}x',
+        contentKinds.length == 4 &&
+            contentKinds[0] == TerminalMetalInstanceKind.imageBelowBackground &&
+            contentKinds[1] == TerminalMetalInstanceKind.imageBelowText &&
+            contentKinds[2] == TerminalMetalInstanceKind.alphaGlyph &&
+            contentKinds[3] == TerminalMetalInstanceKind.imageAboveText,
+        'extreme-negative, negative, and nonnegative Kitty tiles use three '
+        'ordered Metal image bands around background and text at ${scale}x',
       );
       _expect(
-        fixture.composition.kittyImageCount == 2 &&
-            fixture.composition.kittyPlacementCount == 2 &&
-            fixture.composition.kittyTileCount == 2 &&
-            fixture.atlas.kittyImageEntryCount == 2 &&
-            kittyEntries.length == 2 &&
+        fixture.composition.kittyImageCount == 3 &&
+            fixture.composition.kittyPlacementCount == 3 &&
+            fixture.composition.kittyTileCount == 3 &&
+            fixture.atlas.kittyImageEntryCount == 3 &&
+            kittyEntries.length == 3 &&
             kittyEntries.every(
               (TerminalGlyphAtlasEntry entry) =>
                   entry.width > 0 && entry.height > 0,
             ),
-        'static Kitty placements become bounded, retained color-atlas tiles',
+        'all three Kitty bands become bounded, retained color-atlas tiles',
       );
       final Uint8List rendered = fixture.renderer.renderRgba(
         fixture.composition.scheduledFrame.frame,
@@ -627,11 +638,11 @@ void _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder() {
           .floor();
       final int sampleOffset = (sampleY * fixture.viewportWidth + sampleX) * 4;
       _expect(
-        rendered[sampleOffset] == 0 &&
-            rendered[sampleOffset + 1] == 0 &&
-            rendered[sampleOffset + 2] == 255 &&
+        rendered[sampleOffset] == 255 &&
+            rendered[sampleOffset + 1] == 255 &&
+            rendered[sampleOffset + 2] == 0 &&
             rendered[sampleOffset + 3] == 255,
-        'the accepted native frame shows the opaque above-text image at '
+        'the accepted native frame shows the opaque above-text band at '
         '${scale}x',
       );
     } finally {

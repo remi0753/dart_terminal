@@ -1,5 +1,8 @@
 part of 'terminal_screen_set.dart';
 
+/// Paint band selected by the signed Kitty placement z value.
+enum TerminalKittyImageLayer { belowBackground, belowText, aboveText }
+
 /// One copied RGBA8 resource in an immutable Kitty viewport snapshot.
 final class TerminalKittyViewportImage {
   TerminalKittyViewportImage._({
@@ -64,6 +67,15 @@ final class TerminalKittyViewportPlacement {
   final int destinationWidth;
   final int destinationHeight;
   final int z;
+
+  /// Ghostty-compatible boundary for images painted below cell backgrounds.
+  static const int backgroundLayerZLimit = -0x40000000;
+
+  TerminalKittyImageLayer get layer => z < backgroundLayerZLimit
+      ? TerminalKittyImageLayer.belowBackground
+      : z < 0
+      ? TerminalKittyImageLayer.belowText
+      : TerminalKittyImageLayer.aboveText;
 }
 
 /// Generation-pinned, copied image state for one navigated terminal viewport.

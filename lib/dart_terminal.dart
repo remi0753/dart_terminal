@@ -94,6 +94,7 @@ export 'src/terminal_core/terminal_screen_set.dart'
         TerminalAccessibilitySnapshot,
         TerminalAccessibilityTextRange,
         TerminalLogicalAnchor,
+        TerminalKittyImageLayer,
         TerminalKittyViewportImage,
         TerminalKittyViewportPlacement,
         TerminalKittyViewportSnapshot,

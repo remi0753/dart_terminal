@@ -153,6 +153,34 @@ final class TerminalGlyphAtlasMetalBridge {
     );
   }
 
+  TerminalMetalInstance? imageInstance(
+    TerminalGlyphAtlasEntry entry, {
+    required int x,
+    required int y,
+    required TerminalMetalImageLayer layer,
+  }) {
+    if (entry.format != TerminalGlyphAtlasFormat.rgba8Straight) {
+      throw ArgumentError.value(
+        entry.format,
+        'entry',
+        'image instances require a straight RGBA atlas entry',
+      );
+    }
+    final TerminalMetalInstance? glyph = glyphInstance(entry, x: x, y: y);
+    if (glyph == null) return null;
+    return TerminalMetalInstance.image(
+      layer: layer,
+      x: glyph.x,
+      y: glyph.y,
+      width: glyph.width,
+      height: glyph.height,
+      atlasX: glyph.atlasX,
+      atlasY: glyph.atlasY,
+      pageIndex: glyph.pageIndex,
+      pageGeneration: glyph.pageGeneration,
+    );
+  }
+
   TerminalMetalSubmissionResult submit(
     TerminalMetalFrame frame, {
     required Iterable<TerminalGlyphAtlasEntry> glyphEntries,

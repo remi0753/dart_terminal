@@ -1338,6 +1338,13 @@ int main(int argc, const char* argv[]) {
     color_glyph.color_rgba = 0xffffffff;
     color_glyph.kind = DTR_METAL_INSTANCE_COLOR_GLYPH;
     color_glyph.page_generation = 1;
+    DtrMetalInstanceV1 image_below_background = color_glyph;
+    image_below_background.x = 0;
+    image_below_background.kind = DTR_METAL_INSTANCE_IMAGE_BELOW_BACKGROUND;
+    DtrMetalInstanceV1 image_below_text = color_glyph;
+    image_below_text.kind = DTR_METAL_INSTANCE_IMAGE_BELOW_TEXT;
+    DtrMetalInstanceV1 image_above_text = color_glyph;
+    image_above_text.kind = DTR_METAL_INSTANCE_IMAGE_ABOVE_TEXT;
     DtrMetalInstanceV1 decoration = {};
     decoration.y = 4;
     decoration.width = 4;
@@ -1352,7 +1359,9 @@ int main(int argc, const char* argv[]) {
     cursor.color_rgba = 0xffffffff;
     cursor.kind = DTR_METAL_INSTANCE_CURSOR;
     const std::vector<DtrMetalInstanceV1> instances = {
-        cell, selection, alpha_glyph, color_glyph, decoration, cursor};
+        image_below_background, cell,       selection,
+        image_below_text,       alpha_glyph, color_glyph,
+        image_above_text,       decoration,  cursor};
     auto make_frame = [&](const std::vector<DtrMetalInstanceV1>& items,
                           uint64_t renderer_generation,
                           uint64_t atlas_generation) {
@@ -1443,10 +1452,10 @@ int main(int argc, const char* argv[]) {
     Expect(PixelNear(metal_pixels, 8, 7, 0, 0x202020ff) &&
                PixelNear(metal_pixels, 8, 0, 0, 0x101090ff) &&
                PixelNear(metal_pixels, 8, 2, 0, 0x901010ff) &&
-               PixelNear(metal_pixels, 8, 4, 0, 0x109010ff) &&
+               PixelNear(metal_pixels, 8, 4, 0, 0x04e404ff) &&
                PixelNear(metal_pixels, 8, 0, 4, 0x00ffffff) &&
                PixelNear(metal_pixels, 8, 6, 4, 0xffffffff),
-           "six visual kinds preserve top-down order and straight alpha");
+           "nine visual kinds preserve three image bands and straight alpha");
 
     auto mutate_header = [&](std::vector<uint8_t> frame,
                              void (^mutation)(DtrMetalFrameHeaderV1*)) {
@@ -1483,7 +1492,7 @@ int main(int argc, const char* argv[]) {
                         0, &metal_required) == DTR_STATUS_INVALID_ARGUMENT,
            "out-of-order visual layers are rejected");
     malformed_frame = mutate_instance(
-        metal_frame, 2, ^(DtrMetalInstanceV1* instance) {
+        metal_frame, 4, ^(DtrMetalInstanceV1* instance) {
           instance->page_index = 2;
         });
     Expect(metal_render(metal_summary.handle, malformed_frame.data(),
@@ -1499,7 +1508,7 @@ int main(int argc, const char* argv[]) {
                         0, &metal_required) == DTR_STATUS_STALE_GENERATION,
            "stale frame atlas generation is rejected");
     malformed_frame = mutate_instance(
-        metal_frame, 2, ^(DtrMetalInstanceV1* instance) {
+        metal_frame, 4, ^(DtrMetalInstanceV1* instance) {
           instance->page_generation = 2;
         });
     Expect(metal_render(metal_summary.handle, malformed_frame.data(),
@@ -1530,7 +1539,7 @@ int main(int argc, const char* argv[]) {
           header->frame_generation = 2;
         });
     generation_two_frame = mutate_instance(
-        generation_two_frame, 2, ^(DtrMetalInstanceV1* instance) {
+        generation_two_frame, 4, ^(DtrMetalInstanceV1* instance) {
           instance->page_generation = 2;
         });
     uint32_t generation_two_required = 0;
@@ -1544,7 +1553,7 @@ int main(int argc, const char* argv[]) {
                         static_cast<uint32_t>(generation_two_frame.size()),
                         generation_two_pixels.data(), generation_two_required,
                         &generation_two_required) == DTR_STATUS_OK &&
-               PixelNear(generation_two_pixels, 8, 4, 0, 0x109010ff),
+               PixelNear(generation_two_pixels, 8, 4, 0, 0x04e404ff),
            "atlas advance preserves unchanged color texture slices");
     Expect(metal_upload(metal_summary.handle, &alpha_upload,
                         alpha_pixels.data()) == DTR_STATUS_STALE_GENERATION,

@@ -6,8 +6,8 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 remaining overlays and P3 conversion — inventory and
-  bounded contract
+- Current subtask: P1 remaining overlays and P3 conversion — three-band Kitty
+  image layer ordering
 
 ## Current P1 child — remaining overlays and P3 conversion
 
@@ -87,6 +87,109 @@
      1x/2x evidence, update README/rendering reference and `REN-08`, regenerate
      dependent reports, pass the exact full gate and adjacent-library audit,
      then close only this parent if every preceding child is complete.
+
+### Current child — three-band Kitty image layer ordering
+
+- **Purpose:** Preserve Ghostty's accepted Kitty z semantics by placing extreme
+  negative images below cell backgrounds, ordinary negative images below text,
+  and nonnegative images above text in both the deterministic CPU oracle and
+  the real Metal frame.
+- **Background:** The store and viewport already preserve signed 32-bit z and
+  sort placements by z then immutable placement generation, but both renderers
+  currently collapse that value to `z < 0` versus `z >= 0`. The pinned Ghostty
+  boundary is `minInt(i32) / 2`, or `-0x40000000`.
+- **Scope:** Add one shared three-band classification to immutable viewport
+  placements; add a below-background reference layer; extend the terminal Metal
+  instance vocabulary and native validation/shader sampling for three ordered
+  color-atlas image kinds; retain all visible image tiles through the existing
+  build/submission leases; cover exact boundaries, stable z/generation order,
+  clipping, atlas pins, native acceptance, and pixels at 1x/2x.
+- **Out of scope:** Kitty store/parser/decode/animation semantics, search and
+  inspector projection, color-space/alpha changes, file/shared-memory image
+  transport, virtual/relative placement, runtime screenshots, matrix claims,
+  and any change to generic `dart_appkit`.
+- **Dependencies:** Signed z validation in the Kitty command/store path;
+  generation-bound viewport snapshots; color atlas and dirty upload bridge;
+  terminal renderer frame ABI v1; CPU reference layer grouping; existing 64
+  image/256 placement and viewport clipping bounds.
+- **Completion conditions:** `z < -0x40000000`,
+  `-0x40000000 <= z < 0`, and `z >= 0` map to distinct ordered bands; equal-z
+  placements retain generation order; CPU and Metal produce the same visible
+  layer result at 1x/2x; offscreen placements allocate no tile; every encoded
+  tile remains submission-pinned; malformed/order-violating native input still
+  fails closed; all focused and exact repository gates pass.
+- **Verification approach:** Add contract, reference, compositor, package, and
+  native capability assertions; run focused Dart/native tests at both scales;
+  run format/analyze and the exact repository gate; audit the adjacent generic
+  library; record results before changing only this roadmap child to complete.
+- 2026-09-14: The existing frame clear supplies the default background before
+  all instances. Per-cell non-default backgrounds are explicit solid instances,
+  so an extreme-negative color-atlas image can be drawn after the clear but
+  before those solids. The current renderer ABI treats every color image as a
+  normal color glyph (kind 4), and both Dart and native validators infer layer
+  order from that kind. Distinct image kinds are therefore required; merely
+  reordering the product list would be rejected natively and would not preserve
+  fail-closed direct-FFI validation.
+- 2026-09-14: An initial focused format/analyze command formatted the three
+  changed Dart implementation files, then analysis could not update the
+  sandbox-external Dart telemetry-session timestamp and exited before analyzing
+  sources. This was an environment write restriction, not an analyzer finding;
+  subsequent focused commands use the accepted CI/analytics-suppressed
+  environment outside that restriction.
+- 2026-09-14: The first analyzer run with the accepted environment found 15
+  test-surface errors, all in the new CPU test: it had referred to private
+  fixture helpers from another library and the new public layer enum was not in
+  the package's explicit `show` export. The product implementation files had no
+  analyzer finding. The test now owns its small store/place helpers and the
+  enum is added to the existing viewport export; private test helpers are not
+  made public merely for reuse.
+- 2026-09-14: A direct `clang-format -i` attempt stopped before any file change
+  because the available executable is Chromium's checkout-discovery wrapper
+  and this repository is not a Chromium tree. The subsequent Dart commands in
+  that shell chain therefore did not run. Native edits remain the small manual
+  `apply_patch` diff and are checked with `git diff --check`; the repository's
+  own full gate remains the authoritative native formatting/build check.
+- 2026-09-14: After clean focused analysis, the renderer-package test passed,
+  but the first CPU three-band pixel assertion failed at 1x and stopped the
+  chained run before the screen compositor test. The ordering/classification
+  assertions had passed. The pixel assertion is being reduced by reporting the
+  three exact output pixels; no expected value will be relaxed without locating
+  the layer or fixture error.
+- 2026-09-14: Exact output was red/green/red instead of blue/green/red. The
+  renderer order was correct: all three placements had resolved to column zero
+  because the test's otherwise-empty logical line had no distinct cell anchors,
+  so the final above-text image legitimately covered the first pixel. Seeding
+  the fixture with bounded visible cells before taking anchors fixed the
+  geometry without changing expected colors. The CPU test then passed at both
+  1x and 2x with the original blue/green/red expectation.
+- 2026-09-14: Focused Dart analysis is clean. The renderer package contract,
+  CPU reference compositor, and screen Metal compositor tests pass; the latter
+  renders all three image bands through the real native readback at both 1x and
+  2x and retains all three color-atlas entries in the scheduled frame. The
+  focused native capability target rebuilt the Metal shader and Objective-C
+  plugin/test with warnings as errors, accepted all nine visual kinds in exact
+  order, preserved readback pixels, and continued to reject out-of-order,
+  malformed, out-of-range, and stale frames.
+- 2026-09-14: The first exact full gate after implementation passed every
+  native/package/compatibility/differential/application/shell check reached,
+  then correctly failed at `GHOSTTY_P0_P1_GAP_INVENTORY_FAIL` because the
+  checked-in inventory hashes renderer evidence changed by this child. This is
+  an expected freshness failure, not an implementation failure; the dependent
+  Ghostty reports must be regenerated in their declared order before rerunning
+  the gate.
+- 2026-09-14: The canonical Ghostty generator changed only five evidence
+  digests for the compositor, compositor test, native header/plugin, and native
+  capability test. The final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passed: the native
+  renderer contract and shader build passed, all package/root analyses reported
+  no issues, 334 Dart files were already formatted, every generated-evidence
+  check was fresh, the inventory remained 95 accepted with the same two parent
+  P1 gaps, and aggregate/security tests ended with `dart_terminal tests passed`.
+- 2026-09-14: Final adjacent-library audit found a clean
+  `/Users/remi/dart/dart_appkit` worktree, no tracked path containing
+  `terminal`, and no terminal-specific content in its tracked native,
+  `dart_appkit`, runtime, script, example, tool, or test source. This child made
+  no adjacent-library change. `git diff --check` is clean.
 - 2026-09-14: The pinned checkout remains clean at exact revision
   `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`. Relevant source identities are
   `src/renderer/image.zig`

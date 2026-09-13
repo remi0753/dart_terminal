@@ -1743,18 +1743,44 @@ enum {
            frame + sizeof(DtrMetalFrameHeaderV1) +
                index * sizeof(DtrMetalInstanceV1),
            sizeof(instance));
-    const BOOL glyph =
-        instance.kind == DTR_METAL_INSTANCE_ALPHA_GLYPH ||
-        instance.kind == DTR_METAL_INSTANCE_COLOR_GLYPH;
-    const uint32_t layer =
-        instance.kind == DTR_METAL_INSTANCE_COLOR_GLYPH
-            ? DTR_METAL_INSTANCE_ALPHA_GLYPH
-            : instance.kind;
+    BOOL atlas_backed = NO;
+    uint32_t layer = 0;
+    switch (instance.kind) {
+      case DTR_METAL_INSTANCE_IMAGE_BELOW_BACKGROUND:
+        atlas_backed = YES;
+        layer = 1;
+        break;
+      case DTR_METAL_INSTANCE_CELL_BACKGROUND:
+        layer = 2;
+        break;
+      case DTR_METAL_INSTANCE_SELECTION:
+        layer = 3;
+        break;
+      case DTR_METAL_INSTANCE_IMAGE_BELOW_TEXT:
+        atlas_backed = YES;
+        layer = 4;
+        break;
+      case DTR_METAL_INSTANCE_ALPHA_GLYPH:
+      case DTR_METAL_INSTANCE_COLOR_GLYPH:
+        atlas_backed = YES;
+        layer = 5;
+        break;
+      case DTR_METAL_INSTANCE_IMAGE_ABOVE_TEXT:
+        atlas_backed = YES;
+        layer = 6;
+        break;
+      case DTR_METAL_INSTANCE_DECORATION:
+        layer = 7;
+        break;
+      case DTR_METAL_INSTANCE_CURSOR:
+        layer = 8;
+        break;
+      default:
+        return DTR_STATUS_INVALID_ARGUMENT;
+    }
     const int64_t right = (int64_t)instance.x + instance.width;
     const int64_t bottom = (int64_t)instance.y + instance.height;
-    if (instance.kind < DTR_METAL_INSTANCE_CELL_BACKGROUND ||
-        instance.kind > DTR_METAL_INSTANCE_CURSOR ||
-        layer < previous_layer || instance.width == 0 ||
+    if (layer < previous_layer || instance.width == 0 ||
         instance.height == 0 || instance.width > header->viewport_width ||
         instance.height > header->viewport_height || right <= 0 || bottom <= 0 ||
         instance.x >= (int32_t)header->viewport_width ||
@@ -1762,7 +1788,7 @@ enum {
       return DTR_STATUS_INVALID_ARGUMENT;
     }
     previous_layer = layer;
-    if (!glyph) {
+    if (!atlas_backed) {
       if (instance.atlas_x != 0 || instance.atlas_y != 0 ||
           instance.atlas_width != 0 || instance.atlas_height != 0 ||
           instance.page_index != 0 || instance.page_generation != 0) {

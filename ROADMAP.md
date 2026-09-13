@@ -1404,7 +1404,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
       [`docs/phase11/ghostty-p0-p1-gap-burn-down.md`](docs/phase11/ghostty-p0-p1-gap-burn-down.md)
       を参照して順に実施する）
       - [x] bounded overlay projection／P3-to-sRGB color contract
-      - [ ] three-band Kitty image layer ordering
+      - [x] three-band Kitty image layer ordering
       - [ ] search-result projection／Metal highlight overlay
       - [ ] privacy-safe inspector overlay
       - [ ] canonical sRGB／alpha-blending native-reference parity

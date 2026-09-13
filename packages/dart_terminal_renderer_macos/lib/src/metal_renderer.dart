@@ -8,12 +8,15 @@ const String _metalAssetId =
     'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 enum TerminalMetalInstanceKind {
-  cellBackground(1, 1),
-  selection(2, 2),
-  alphaGlyph(3, 3),
-  colorGlyph(4, 3),
-  decoration(5, 5),
-  cursor(6, 6);
+  imageBelowBackground(7, 1),
+  cellBackground(1, 2),
+  selection(2, 3),
+  imageBelowText(8, 4),
+  alphaGlyph(3, 5),
+  colorGlyph(4, 5),
+  imageAboveText(9, 6),
+  decoration(5, 7),
+  cursor(6, 8);
 
   const TerminalMetalInstanceKind(this.nativeValue, this.layerOrder);
 
@@ -23,7 +26,16 @@ enum TerminalMetalInstanceKind {
   bool get isGlyph =>
       this == TerminalMetalInstanceKind.alphaGlyph ||
       this == TerminalMetalInstanceKind.colorGlyph;
+
+  bool get isImage =>
+      this == TerminalMetalInstanceKind.imageBelowBackground ||
+      this == TerminalMetalInstanceKind.imageBelowText ||
+      this == TerminalMetalInstanceKind.imageAboveText;
+
+  bool get isAtlasBacked => isGlyph || isImage;
 }
+
+enum TerminalMetalImageLayer { belowBackground, belowText, aboveText }
 
 enum TerminalMetalAtlasFormat {
   alpha8(1, 1),
@@ -172,7 +184,7 @@ final class TerminalMetalInstance {
     required int height,
     required int colorRgba,
   }) {
-    if (kind.isGlyph) {
+    if (kind.isAtlasBacked) {
       throw ArgumentError.value(kind, 'kind', 'must be a solid visual kind');
     }
     return TerminalMetalInstance._(
@@ -215,6 +227,38 @@ final class TerminalMetalInstance {
     atlasWidth: width,
     atlasHeight: height,
     colorRgba: colorRgba,
+    pageIndex: pageIndex,
+    pageGeneration: pageGeneration,
+  );
+
+  factory TerminalMetalInstance.image({
+    required TerminalMetalImageLayer layer,
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+    required int atlasX,
+    required int atlasY,
+    required int pageIndex,
+    required int pageGeneration,
+  }) => TerminalMetalInstance._(
+    kind: switch (layer) {
+      TerminalMetalImageLayer.belowBackground =>
+        TerminalMetalInstanceKind.imageBelowBackground,
+      TerminalMetalImageLayer.belowText =>
+        TerminalMetalInstanceKind.imageBelowText,
+      TerminalMetalImageLayer.aboveText =>
+        TerminalMetalInstanceKind.imageAboveText,
+    },
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    atlasX: atlasX,
+    atlasY: atlasY,
+    atlasWidth: width,
+    atlasHeight: height,
+    colorRgba: 0xffffffff,
     pageIndex: pageIndex,
     pageGeneration: pageGeneration,
   );
@@ -389,7 +433,7 @@ abstract final class TerminalMetalFrameEncoder {
         instance.y >= viewportHeight) {
       throw ArgumentError.value(instance, 'instances', 'invalid bounds');
     }
-    if (!instance.kind.isGlyph) {
+    if (!instance.kind.isAtlasBacked) {
       if (instance.atlasX != 0 ||
           instance.atlasY != 0 ||
           instance.atlasWidth != 0 ||
