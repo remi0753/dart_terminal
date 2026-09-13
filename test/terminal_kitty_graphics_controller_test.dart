@@ -2142,7 +2142,7 @@ Future<void> _testControllerFailureReplyAndPendingTeardown() async {
   final TerminalScreenSet screens = TerminalScreenSet(rows: 2, columns: 2);
   final _InProcessImageWorker worker = _InProcessImageWorker();
   final List<String> replies = <String>[];
-  var acceptReplies = true;
+  var throwReply = false;
   final TerminalKittyGraphicsController controller =
       TerminalKittyGraphicsController(
         screenSet: screens,
@@ -2150,8 +2150,11 @@ Future<void> _testControllerFailureReplyAndPendingTeardown() async {
         sessionGeneration: 1,
         worker: worker,
         onReply: (Uint8List bytes) {
+          if (throwReply) {
+            throw StateError('injected PTY reply failure');
+          }
           replies.add(ascii.decode(bytes));
-          return acceptReplies;
+          return true;
         },
       );
 
@@ -2178,16 +2181,38 @@ Future<void> _testControllerFailureReplyAndPendingTeardown() async {
   );
 
   worker.throwRequest = false;
-  acceptReplies = false;
+  throwReply = true;
   controller.enqueueCommand(_command('Ga=q,i=62,f=32,s=1,v=1;AQIDBA=='));
   await controller.waitForIdle();
   _expect(
     screens.primaryKittyImages.isEmpty &&
         controller.emittedGraphicsReplyCount == 2 &&
         controller.rejectedGraphicsReplyCount == 1,
-    'a rejected PTY write is counted and does not turn a query into storage',
+    'a throwing PTY reply is contained and does not turn a query into storage',
+  );
+  throwReply = false;
+  controller.enqueueCommand(_command('Gi=63,f=32,s=1,v=1;AQIDBA=='));
+  await controller.waitForIdle();
+  _expect(
+    screens.primaryKittyImages.imageById(63) != null &&
+        replies.last == '\x1b_Gi=63;OK\x1b\\' &&
+        controller.pendingJobCount == 0 &&
+        controller.pendingByteCount == 0 &&
+        !controller.hasPendingTransfer &&
+        controller.workerFailureCount == 2 &&
+        controller.emittedGraphicsReplyCount == 3 &&
+        controller.rejectedGraphicsReplyCount == 1,
+    'the same queue accepts valid work after worker and reply callback faults',
   );
   await controller.dispose();
+  await controller.dispose();
+  _expect(
+    screens.primaryKittyImages.isEmpty &&
+        screens.alternateKittyImages.isEmpty &&
+        controller.pendingJobCount == 0 &&
+        controller.pendingByteCount == 0,
+    'faulted queue cleanup is idempotent and releases retained image state',
+  );
   worker.dispose();
 
   final TerminalScreenSet teardownScreens = TerminalScreenSet(

@@ -145,7 +145,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-terminfo terminal-terminfo-check \
 	terminal-shell-integration terminal-shell-integration-check \
 	product-parser-corpus product-parser-properties phase9-protocol-properties phase9-security-stress \
-	product-native-sanitizer \
+	product-native-sanitizer product-fault-injection \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
 	terminal-parser-trace terminal-parser-trace-check \
 	configuration-reference configuration-reference-check \
@@ -195,6 +195,7 @@ help:
 	@echo "  make phase9-protocol-properties   Run deterministic modern-protocol properties"
 	@echo "  make phase9-security-stress       Stress modern authority and resource bounds"
 	@echo "  make product-native-sanitizer     Run isolated ASan/UBSan native capability gates"
+	@echo "  make product-fault-injection      Run bounded native/Dart ownership recovery faults"
 	@echo "  make product-parser-benchmark     Run the Release AOT 100 MiB/s parser gate"
 	@echo "  make product-damage-benchmark     Run the Release AOT 100,000-cell damage gate"
 	@echo "  make product-performance-benchmark  Run product microbenchmarks against the M1 baseline"
@@ -296,7 +297,7 @@ $(DPTY_SESSION_OBJECT): \
 		$(PROJECT_ROOT)/packages/dart_pty_macos/native/PtySpawnInternal.h \
 		$(PROJECT_ROOT)/packages/dart_pty_macos/native/dart_pty_macos.h
 	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
-	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 -pthread -c \
+	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 -pthread -DDPTY_TESTING -c \
 		-I$(PROJECT_ROOT)/packages/dart_pty_macos/native $< -o $@
 
 dpty-child-audit: $(DPTY_CHILD_OBJECT)
@@ -312,7 +313,7 @@ $(DPTY_TEST_BINARY): \
 		$(PROJECT_ROOT)/packages/dart_pty_macos/native/test/PtyCapabilityTests.cc \
 		$(PROJECT_ROOT)/packages/dart_pty_macos/native/dart_pty_macos.h
 	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
-	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 -pthread \
+	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 -pthread -DDPTY_TESTING \
 		-I$(PROJECT_ROOT)/packages/dart_pty_macos/native $< -o $@
 
 dpty-native-test: dpty-contract-check dpty-child-audit $(DPTY_LIBRARY) \
@@ -616,6 +617,12 @@ phase9-security-stress: dependencies
 
 product-native-sanitizer: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/native_sanitizer_gate.dart
+
+product-fault-injection: dependencies dpty-native-test
+	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_reply_test.dart
+	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_kitty_graphics_controller_test.dart
+	@cd $(PROJECT_ROOT) && $(DART) run test/metal_failure_recovery_test.dart
+	@echo "PRODUCT_FAULT_INJECTION_PASS native_boundaries=1 dart_boundaries=3"
 
 product-parser-benchmark-build: dependencies
 	@mkdir -p $(PRODUCT_PARSER_BENCHMARK_DIR)

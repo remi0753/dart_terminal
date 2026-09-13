@@ -217,6 +217,13 @@ dpty_get_last_error(DptyError* out_error);
 __attribute__((visibility("default"))) uint64_t
 dpty_debug_live_session_count(void);
 
+#if defined(DPTY_TESTING)
+// Test artifacts only: arms one session-allocation failure. Validation and
+// unrelated ABI calls do not consume the fault.
+__attribute__((visibility("default"))) int32_t
+dpty_debug_fail_next_session_allocation(void);
+#endif
+
 #if defined(__cplusplus)
 }
 #endif

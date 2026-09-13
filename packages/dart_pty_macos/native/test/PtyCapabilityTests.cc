@@ -60,7 +60,9 @@ struct Api {
   int32_t (*process_snapshot)(DptySessionHandle,
                               DptyProcessSnapshotV1*) = nullptr;
   int32_t (*destroy)(DptySessionHandle) = nullptr;
+  int32_t (*last_error)(DptyError*) = nullptr;
   uint64_t (*live_count)() = nullptr;
+  int32_t (*fail_next_allocation)() = nullptr;
 };
 
 struct PendingAck {
@@ -201,17 +203,14 @@ int32_t Write(Api* api, DptySessionHandle session, const std::string& value) {
                     value.size());
 }
 
-DptySessionHandle Create(Api* api, Events* events, const char* executable,
-                         const std::vector<const char*>& arguments,
-                         size_t high_water = 256 * 1024,
-                         size_t low_water = 128 * 1024,
-                         size_t write_capacity = 64 * 1024,
-                         bool diagnostics = false, size_t read_batch = 0,
-                         bool legacy_config_prefix = false,
-                         bool previous_config_prefix = false,
-                         uint32_t read_batches_per_event_loop_turn = 0) {
-  const char* environment[] = {"PATH=/usr/bin:/bin", "TERM=xterm-256color",
-                               "HOME=/private/tmp"};
+DptySessionConfigV1 BuildConfig(
+    Events* events, const char* executable,
+    const std::vector<const char*>& arguments, size_t high_water,
+    size_t low_water, size_t write_capacity, bool diagnostics,
+    size_t read_batch, bool legacy_config_prefix, bool previous_config_prefix,
+    uint32_t read_batches_per_event_loop_turn) {
+  static const char* const environment[] = {
+      "PATH=/usr/bin:/bin", "TERM=xterm-256color", "HOME=/private/tmp"};
   DptySessionConfigV1 config = {};
   config.struct_size =
       legacy_config_prefix ? offsetof(DptySessionConfigV1, read_batch_bytes)
@@ -235,10 +234,89 @@ DptySessionHandle Create(Api* api, Events* events, const char* executable,
   config.diagnostics_enabled = diagnostics ? 1 : 0;
   config.read_batch_bytes = read_batch;
   config.read_batches_per_event_loop_turn = read_batches_per_event_loop_turn;
+  return config;
+}
+
+DptySessionHandle Create(Api* api, Events* events, const char* executable,
+                         const std::vector<const char*>& arguments,
+                         size_t high_water = 256 * 1024,
+                         size_t low_water = 128 * 1024,
+                         size_t write_capacity = 64 * 1024,
+                         bool diagnostics = false, size_t read_batch = 0,
+                         bool legacy_config_prefix = false,
+                         bool previous_config_prefix = false,
+                         uint32_t read_batches_per_event_loop_turn = 0) {
+  DptySessionConfigV1 config = BuildConfig(
+      events, executable, arguments, high_water, low_water, write_capacity,
+      diagnostics, read_batch, legacy_config_prefix, previous_config_prefix,
+      read_batches_per_event_loop_turn);
   DptySessionHandle session = 0;
   Expect(api->create(&config, &session) == DPTY_STATUS_OK,
          "session configuration is copied");
   return session;
+}
+
+void TestInjectedAllocationFailure(Api* api) {
+  const int failures_before = failures;
+  Expect(api->live_count() == 0,
+         "allocation fault starts without native owners");
+  const std::vector<const char*> arguments = {"sh", "-c", "exit 0"};
+  Events peer_events;
+  peer_events.api = api;
+  const DptySessionHandle peer =
+      Create(api, &peer_events, "/bin/sh", arguments);
+  Expect(peer != 0 && api->live_count() == 1,
+         "allocation fault retains one pre-existing peer");
+
+  Expect(api->fail_next_allocation() == DPTY_STATUS_OK,
+         "session allocation fault is armed");
+  Expect(api->fail_next_allocation() == DPTY_STATUS_WRONG_STATE,
+         "an armed allocation fault cannot be duplicated");
+  DptySessionConfigV1 invalid = {};
+  DptySessionHandle invalid_handle = 99;
+  Expect(api->create(&invalid, &invalid_handle) ==
+                 DPTY_STATUS_INVALID_ARGUMENT &&
+             invalid_handle == 0 && api->live_count() == 1,
+         "invalid input does not consume the allocation fault or peer");
+
+  Events rejected_events;
+  rejected_events.api = api;
+  DptySessionConfigV1 rejected_config =
+      BuildConfig(&rejected_events, "/bin/sh", arguments, 256 * 1024,
+                  128 * 1024, 64 * 1024, false, 0, false, false, 0);
+  DptySessionHandle rejected = 99;
+  const int32_t rejected_status = api->create(&rejected_config, &rejected);
+  DptyError error = {};
+  Expect(rejected_status == DPTY_STATUS_SYSTEM_ERROR && rejected == 0 &&
+             api->last_error(&error) == DPTY_STATUS_OK &&
+             error.status == DPTY_STATUS_SYSTEM_ERROR &&
+             error.system_error == ENOMEM && error.message != nullptr &&
+             error.message_length != 0 && error.message_length <= 128 &&
+             api->live_count() == 1,
+         "injected allocation fails typed with no partial native owner");
+
+  Events recovered_events;
+  recovered_events.api = api;
+  const DptySessionHandle recovered =
+      Create(api, &recovered_events, "/bin/sh", arguments);
+  Expect(recovered != 0 && api->live_count() == 2,
+         "consume-once allocation fault admits subsequent work");
+  Expect(api->start(peer) == DPTY_STATUS_OK &&
+             api->start(recovered) == DPTY_STATUS_OK,
+         "peer and recovered sessions start after the injected failure");
+  Expect(WaitFor(&peer_events, std::chrono::seconds(3),
+                 [](const Events& value) { return value.exited; }) &&
+             WaitFor(&recovered_events, std::chrono::seconds(3),
+                     [](const Events& value) { return value.exited; }),
+         "peer and recovered sessions both make forward progress");
+  Expect(api->destroy(peer) == DPTY_STATUS_OK &&
+             api->destroy(recovered) == DPTY_STATUS_OK &&
+             api->live_count() == 0,
+         "allocation fault recovery releases every native owner");
+  if (failures == failures_before) {
+    std::cout << "DPTY_ALLOCATION_FAULT_INJECTION_PASS injected=1 "
+                 "recovered_sessions=2 live_sessions=0\n";
+  }
 }
 
 void TestReadBatchConfiguration(Api* api) {
@@ -936,8 +1014,12 @@ int main(int argc, const char* argv[]) {
   api.process_snapshot = Lookup<decltype(api.process_snapshot)>(
       image, "dpty_session_get_process_snapshot");
   api.destroy = Lookup<decltype(api.destroy)>(image, "dpty_session_destroy");
+  api.last_error =
+      Lookup<decltype(api.last_error)>(image, "dpty_get_last_error");
   api.live_count =
       Lookup<decltype(api.live_count)>(image, "dpty_debug_live_session_count");
+  api.fail_next_allocation = Lookup<decltype(api.fail_next_allocation)>(
+      image, "dpty_debug_fail_next_session_allocation");
   Expect(api.version() == DPTY_ABI_VERSION, "PTY ABI version");
 
   DptySessionConfigV1 invalid = {};
@@ -946,6 +1028,7 @@ int main(int argc, const char* argv[]) {
       api.create(&invalid, &invalid_handle) == DPTY_STATUS_INVALID_ARGUMENT &&
           invalid_handle == 0,
       "invalid configuration is rejected before allocation");
+  TestInjectedAllocationFailure(&api);
   TestInteractiveSession(&api);
   TestReadBatchConfiguration(&api);
   TestExecFailure(&api);

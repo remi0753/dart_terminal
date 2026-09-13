@@ -7,6 +7,7 @@ void runMetalFailureRecoveryTests() {
   _testPreparationFailureRetriesWithoutRetiringCurrent();
   _testActivationFailureLeavesNoPartialPublishedDomain();
   _testRepeatedFailureExhaustsOneBoundedRequest();
+  _testIndependentOwnerSurvivesPeerExhaustion();
   _testRendererGenerationMustAdvanceStrictly();
 }
 
@@ -178,6 +179,82 @@ void _testRepeatedFailureExhaustsOneBoundedRequest() {
     'repeated preparation failure stops at the fixed attempt budget',
   );
   coordinator.dispose();
+}
+
+void _testIndependentOwnerSurvivesPeerExhaustion() {
+  final _FakeRecoveryDomain failedInitial = _FakeRecoveryDomain(
+    generation: 40,
+    failure: TerminalMetalFailureKind.commandExecution,
+    pinCount: 2,
+    activated: true,
+  );
+  final TerminalMetalFailureRecoveryCoordinator<_FakeRecoveryDomain>
+  failedOwner = TerminalMetalFailureRecoveryCoordinator<_FakeRecoveryDomain>(
+    initialDomain: failedInitial,
+    maximumAttempts: 1,
+    prepareReplacement: () => throw const TerminalMetalRecoveryException(
+      operation: 'injected peer create',
+      failure: TerminalMetalFailureKind.resourceAllocation,
+    ),
+    requestFullDamage: () => throw StateError('unexpected failed-owner damage'),
+    requestFullRedraw: () => throw StateError('unexpected failed-owner redraw'),
+  );
+  final _FakeRecoveryDomain peerInitial = _FakeRecoveryDomain(
+    generation: 50,
+    failure: TerminalMetalFailureKind.deviceLost,
+    pinCount: 3,
+    activated: true,
+  );
+  final _FakeRecoveryDomain peerReplacement = _FakeRecoveryDomain(
+    generation: 51,
+  );
+  var peerFullRequestCount = 0;
+  final TerminalMetalFailureRecoveryCoordinator<_FakeRecoveryDomain> peerOwner =
+      TerminalMetalFailureRecoveryCoordinator<_FakeRecoveryDomain>(
+        initialDomain: peerInitial,
+        prepareReplacement: () => peerReplacement,
+        requestFullDamage: () => peerFullRequestCount++,
+        requestFullRedraw: () => peerFullRequestCount++,
+      );
+
+  _expect(
+    failedOwner.observeCurrentFailure() && peerOwner.observeCurrentFailure(),
+    'independent owners each retain one typed recovery request',
+  );
+  final TerminalMetalRecoveryResult exhausted = failedOwner.processNewest();
+  _expect(
+    exhausted.disposition == TerminalMetalRecoveryDisposition.exhausted &&
+        identical(failedOwner.currentDomain, failedInitial) &&
+        failedInitial.abandonCount == 0 &&
+        peerOwner.pendingRecoveryCount == 1 &&
+        peerInitial.abandonCount == 0 &&
+        peerFullRequestCount == 0,
+    'one exhausted owner cannot retire or advance its pending peer',
+  );
+  final TerminalMetalRecoveryResult recovered = peerOwner.processNewest();
+  _expect(
+    recovered.isRecovered &&
+        recovered.rendererGeneration == 51 &&
+        recovered.abandonedPinCount == 3 &&
+        identical(peerOwner.currentDomain, peerReplacement) &&
+        peerInitial.abandonCount == 1 &&
+        peerInitial.pinCount == 0 &&
+        peerReplacement.activateCount == 1 &&
+        peerFullRequestCount == 2,
+    'the unaffected peer recovers and publishes exactly one complete domain',
+  );
+  failedOwner.dispose();
+  failedOwner.dispose();
+  peerOwner.dispose();
+  peerOwner.dispose();
+  _expect(
+    failedInitial.abandonCount == 1 &&
+        failedInitial.pinCount == 0 &&
+        peerReplacement.abandonCount == 1 &&
+        failedOwner.isDisposed &&
+        peerOwner.isDisposed,
+    'independent fault owners release all pins exactly once',
+  );
 }
 
 void _testRendererGenerationMustAdvanceStrictly() {

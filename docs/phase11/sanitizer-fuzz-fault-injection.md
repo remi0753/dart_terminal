@@ -6,7 +6,7 @@
 - Task: native ASan/UBSan, fuzz corpus, and fault injection
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: deterministic Dart fuzz corpus/property expansion (complete)
+- Current subtask: bounded native/Dart fault injection/recovery (complete)
 
 ## Purpose
 
@@ -350,3 +350,61 @@ sanitizer coverage.
   insensitive repository audit found `terminal` only in historical
   `docs/WORKLOG.md` prose and no Dart/native/build source name or content; this
   child made no change to the generic library.
+- 2026-09-13: Commit `2108a57` (`Expand deterministic parser fuzz recovery`)
+  recorded the fuzz/property child. The required post-commit ROADMAP and memo
+  reread found a clean worktree and selected bounded native/Dart fault
+  injection and recovery; aggregate closure remains its ordered successor.
+- 2026-09-13: The fault child selects the PTY session allocation boundary as
+  the uncovered native case. A compile-time testing-only, default-inert,
+  consume-once seam will fail the valid allocation after configuration copy.
+  The capability test must prove invalid input does not consume it, the failed
+  ABI call returns a zero handle and typed `ENOMEM`, a pre-existing peer remains
+  live, two subsequent valid children make progress, and final native live
+  ownership is zero. Product build-hook artifacts will not define the seam.
+- 2026-09-13: On the Dart side, existing parser reply tests already contain a
+  thrown transport and printable forward-progress assertion, while the Metal
+  coordinator tests cover preparation/activation retry and exact abandon. The
+  missing assertions are same-controller queue reuse after worker and callback
+  faults, plus independent renderer-owner isolation when one coordinator
+  exhausts its retry budget. These cases will be added to their focused suites
+  and composed with the parser fault case and native PTY capability into one
+  bounded `product-fault-injection` target. AppleScript/App Intents malformed,
+  queue, timeout, shutdown, and Dart typed-native failure paths are already
+  bidirectional; adding artificial product seams there would duplicate evidence
+  without closing another ownership boundary.
+- 2026-09-13: The PTY seam is compiled only when `DPTY_TESTING` is defined by
+  the ordinary capability and isolated sanitizer test builds. Its atomic arm
+  rejects a second arm, survives unrelated invalid configuration, and is
+  exchanged exactly once immediately before `Session` allocation. The test
+  observed typed `DPTY_STATUS_SYSTEM_ERROR`/`ENOMEM`, a zero rejected handle,
+  one unaffected pre-existing registry owner, two subsequently completed shell
+  sessions, and final `dpty_debug_live_session_count() == 0`. The marker was
+  `DPTY_ALLOCATION_FAULT_INJECTION_PASS injected=1 recovered_sessions=2
+  live_sessions=0`.
+- 2026-09-13: The current package and repository build-hook dylibs were audited
+  with `nm -gU`; neither exports
+  `dpty_debug_fail_next_session_allocation`. The production hook has no
+  `DPTY_TESTING` flag, so the fault API is absent from shipped native assets.
+- 2026-09-13: The Kitty controller test now injects worker backpressure, a
+  thrown worker request, and a thrown PTY reply callback into one owner before
+  accepting and storing a valid subsequent image. It proves zero queued jobs,
+  queued bytes, and pending transfers, stable failure counts, then idempotent
+  disposal with both image stores empty. The Metal test gives two coordinators
+  independent pins and pending requests, exhausts one in a single attempt,
+  recovers the peer to a newer domain with one full-damage/redraw pair, and
+  disposes both twice with every pin abandoned exactly once.
+- 2026-09-13: The new `make product-fault-injection` focused gate composes the
+  PTY allocation case, parser throwing-reply containment, Kitty queue reuse,
+  and Metal owner isolation. It passed with
+  `PRODUCT_FAULT_INJECTION_PASS native_boundaries=1 dart_boundaries=3`.
+  `make product-native-sanitizer` also passed all four owners and five suites
+  with 9/9 ASan artifacts and 7/9 UBSan-marker artifacts while executing the
+  new PTY capability case.
+- 2026-09-13: Final validation passed `git diff --check` and the exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate: all ordinary native
+  capabilities, generated/freshness, compatibility, application,
+  distribution, format (324 files, zero changes), analysis (no issues), and
+  Dart tests passed, ending with `dart_terminal tests passed`. The adjacent
+  `dart_appkit` worktree is clean, and a case-insensitive audit of its
+  `native`, `packages`, `scripts`, `test`, `tool`, `examples`, and `Makefile`
+  found no `terminal` or `dart_terminal` code/name occurrence.

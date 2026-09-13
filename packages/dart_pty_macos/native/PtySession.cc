@@ -42,6 +42,10 @@ constexpr uintptr_t kControlEventIdentifier = 1;
 thread_local DptyError g_last_error = {};
 thread_local std::string g_last_error_message;
 
+#if defined(DPTY_TESTING)
+std::atomic<bool> g_fail_next_session_allocation = false;
+#endif
+
 int32_t SetError(DptyStatus status, int32_t system_error, const char* message) {
   g_last_error_message = message == nullptr ? "" : message;
   g_last_error.status = status;
@@ -1398,6 +1402,13 @@ extern "C" __attribute__((visibility("default"))) int32_t dpty_session_create(
     if (!CopyConfig(config, &copied)) {
       return g_last_error.status;
     }
+#if defined(DPTY_TESTING)
+    if (g_fail_next_session_allocation.exchange(false,
+                                                std::memory_order_acq_rel)) {
+      return SetError(DPTY_STATUS_SYSTEM_ERROR, ENOMEM,
+                      "injected PTY session allocation failure");
+    }
+#endif
     std::shared_ptr<Session> session =
         std::make_shared<Session>(std::move(copied));
     const DptySessionHandle handle = g_registry.Insert(session);
@@ -1535,3 +1546,17 @@ extern "C" __attribute__((visibility("default"))) uint64_t
 dpty_debug_live_session_count(void) {
   return g_registry.live_count();
 }
+
+#if defined(DPTY_TESTING)
+extern "C" __attribute__((visibility("default"))) int32_t
+dpty_debug_fail_next_session_allocation(void) {
+  ClearError();
+  bool expected = false;
+  if (!g_fail_next_session_allocation.compare_exchange_strong(
+          expected, true, std::memory_order_acq_rel)) {
+    return SetError(DPTY_STATUS_WRONG_STATE, 0,
+                    "PTY session allocation fault is already armed");
+  }
+  return DPTY_STATUS_OK;
+}
+#endif
