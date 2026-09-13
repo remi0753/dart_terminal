@@ -80,6 +80,8 @@ import 'terminal_shell_integration.dart';
 import 'terminal_tab_metadata.dart';
 import 'terminal_tab_presentation.dart';
 import 'terminal_terminfo_environment.dart';
+import 'terminal_update_controller.dart';
+import 'terminal_update_feed.dart';
 
 final String terminalUsage = TerminalConfigurationReference().generateUsage();
 
@@ -170,6 +172,7 @@ final class TerminalOptions {
     this.configurationReloadController,
     this.settingsDocumentSession,
     this.localization,
+    this.updateService,
   });
 
   factory TerminalOptions.parse(
@@ -1012,6 +1015,7 @@ final class TerminalOptions {
   final TerminalConfigReloadController? configurationReloadController;
   final TerminalSettingsDocumentSession? settingsDocumentSession;
   final TerminalLocalization? localization;
+  final TerminalUpdateProductService? updateService;
 }
 
 final class TerminalApplication {
@@ -1115,6 +1119,7 @@ final class TerminalApplication {
         localization: localization,
         configurationReloadController: options.configurationReloadController,
         settingsDocumentSession: options.settingsDocumentSession,
+        updateService: options.updateService,
         runUserActionAcceptance: options.runtimeUserActionsTest,
         runConfigurationAcceptance: options.runtimeConfigurationTest,
         runThemeAcceptance: options.runtimeThemeTest,
@@ -2638,6 +2643,7 @@ final class TerminalApplication {
     required TerminalLocalization localization,
     TerminalConfigReloadController? configurationReloadController,
     TerminalSettingsDocumentSession? settingsDocumentSession,
+    TerminalUpdateProductService? updateService,
     bool runUserActionAcceptance = false,
     bool runConfigurationAcceptance = false,
     bool runThemeAcceptance = false,
@@ -2715,6 +2721,7 @@ final class TerminalApplication {
     TerminalCommandPalettePresenter? palettePresenter;
     TerminalSettingsInspectorPresenter? settingsPresenter;
     TerminalDiagnosticsPresenter? diagnosticsPresenter;
+    TerminalUpdatePresenter? updatePresenter;
     TerminalOsc52ConfirmationPresenter? osc52Presenter;
     TerminalActionDispatchScheduler? keyBindingActionScheduler;
     TerminalActionDispatcher? actionDispatcher;
@@ -2742,6 +2749,11 @@ final class TerminalApplication {
         <TerminalActionDispatchResult>[];
     final List<TerminalConfigReloadResult> configurationReloads =
         <TerminalConfigReloadResult>[];
+    final _TerminalUpdateAcceptanceService? updateAcceptanceService =
+        runUserActionAcceptance ? _TerminalUpdateAcceptanceService() : null;
+    final TerminalUpdateController updateController = TerminalUpdateController(
+      service: updateAcceptanceService ?? updateService,
+    );
     final Map<PaneId, TerminalKeyRouteResult> lastKeyRoutes =
         <PaneId, TerminalKeyRouteResult>{};
     final Map<PaneId, int> keyRouteCounts = <PaneId, int>{};
@@ -3943,6 +3955,9 @@ final class TerminalApplication {
       osc52Coordinator.dispose();
       await diagnosticsPresenter?.dispose();
       diagnosticsPresenter = null;
+      await updatePresenter?.dispose();
+      updatePresenter = null;
+      if (!updateController.isDisposed) await updateController.dispose();
       await settingsPresenter?.dispose();
       settingsPresenter = null;
       configurationReloadController?.dispose();
@@ -4783,6 +4798,23 @@ final class TerminalApplication {
             : null,
         onError: recordAsynchronousError,
       );
+      TerminalUpdateFocusTarget? activeUpdateTarget() {
+        final TerminalWindowState? activeWindow = state.activeWindow;
+        if (activeWindow == null) return null;
+        final TerminalTabState tab = activeWindow.selectedTab;
+        final Window? window = createdHierarchy.windowForTab(tab.id);
+        final TerminalNativePaneResources? resources = createdHierarchy
+            .resourcesForPane(tab.focusedPaneId);
+        if (window == null || resources == null) return null;
+        return TerminalUpdateFocusTarget(window: window, view: resources.view);
+      }
+
+      updatePresenter = TerminalUpdatePresenter(
+        controller: updateController,
+        focusTarget: activeUpdateTarget,
+        localization: localization,
+        onError: recordAsynchronousError,
+      );
       dispatcher = TerminalActionDispatcher(
         catalog: catalog,
         registrations: <TerminalActionRegistration>[
@@ -4804,6 +4836,16 @@ final class TerminalApplication {
                 diagnosticsPresenter?.hasAvailableTarget == true,
             handler: () async {
               await diagnosticsPresenter!.export();
+            },
+          ),
+          TerminalActionRegistration(
+            id: TerminalActionId.checkForUpdates,
+            isAvailable: () =>
+                productResourceDisposalFuture == null &&
+                !state.isDisposed &&
+                updatePresenter?.isDisposed == false,
+            handler: () async {
+              await updatePresenter!.openAndCheck();
             },
           ),
           if (configurationReloadController != null)
@@ -5446,6 +5488,9 @@ final class TerminalApplication {
           hierarchy: createdHierarchy,
           menu: menuProjection,
           palette: installedPalette,
+          updatePresenter: updatePresenter!,
+          updateController: updateController,
+          updateService: updateAcceptanceService!,
           sessions: sessions,
           allSessions: allSessions,
           owners: owners,
@@ -9611,6 +9656,9 @@ keybind = control+k=pane.focus-next
     required TerminalNativeHierarchyAdapter hierarchy,
     required TerminalAppKitMenuProjection menu,
     required TerminalCommandPalettePresenter palette,
+    required TerminalUpdatePresenter updatePresenter,
+    required TerminalUpdateController updateController,
+    required _TerminalUpdateAcceptanceService updateService,
     required Map<PaneId, TerminalSession> sessions,
     required List<TerminalSession> allSessions,
     required Map<PaneId, _TerminalHierarchyProductPane> owners,
@@ -9677,6 +9725,41 @@ keybind = control+k=pane.focus-next
     );
     await _waitForAsciiMarker(sessions.values.single, prompt);
     final int actionInputBaseline = terminalInputDeliveryCount();
+
+    await performMenuAction(
+      TerminalActionId.checkForUpdates,
+      keyEquivalent: '',
+      modifiers: 0,
+      completed: () =>
+          updatePresenter.isOpen &&
+          updateController.status == TerminalUpdateStatus.available,
+    );
+    _expectLifecycle(
+      updateService.checkCount == 1 &&
+          updatePresenter.renderedText?.contains(
+                '<b>Authenticated plain release note.</b>',
+              ) ==
+              true &&
+          updatePresenter.renderedText?.contains('https://') == false &&
+          terminalInputDeliveryCount() == actionInputBaseline,
+      'update action did not render authenticated release notes as plain text',
+    );
+    final TerminalUpdateOperationResult installResult = await updateController
+        .install();
+    _expectLifecycle(
+      installResult.disposition ==
+              TerminalUpdateOperationDisposition.completed &&
+          updateController.status == TerminalUpdateStatus.restartRequired &&
+          updateService.installCount == 1,
+      'update action did not prepare the authenticated candidate once',
+    );
+    await updatePresenter.dismiss();
+    _expectLifecycle(
+      !updatePresenter.isOpen &&
+          updatePresenter.terminalResponderRestoreCount == 1 &&
+          terminalInputDeliveryCount() == actionInputBaseline,
+      'update window did not restore terminal focus without PTY input',
+    );
 
     await performMenuAction(
       TerminalActionId.splitPaneRight,
@@ -9977,6 +10060,7 @@ keybind = control+k=pane.focus-next
             (TerminalSession session) =>
                 session.shutdownResult?.isClean == true,
           ) &&
+          updateService.disposeCount == 1 &&
           debugLiveTerminalTextInputClientCount() == 0 &&
           application.debugLiveObjectCount == 0,
       'user action Quit did not release all product owners exactly once',
@@ -9985,6 +10069,7 @@ keybind = control+k=pane.focus-next
       'TERMINAL_USER_ACTIONS_TEST windows=2 tabs=3 panes=4 '
       'created_panes=5 split_right=true split_down=true new_tab=true '
       'new_window=true palette=true command_availability=true '
+      'update=true update_plain_text=true update_zero_write=true '
       'retina_scale=true divider_command=true fixed_cell_metrics=true '
       'grid_resize=true '
       'menu_zero_write=true input_isolated=true close=true quit=true '
@@ -16737,6 +16822,50 @@ TerminalColorScheme _terminalColorScheme(TerminalThemeBrightness brightness) =>
       TerminalThemeBrightness.light => TerminalColorScheme.light,
       TerminalThemeBrightness.dark => TerminalColorScheme.dark,
     };
+
+final class _TerminalUpdateAcceptanceService
+    implements TerminalUpdateProductService {
+  static final TerminalUpdateRelease _availableRelease = TerminalUpdateRelease(
+    version: TerminalSemanticVersion.parse('0.2.0'),
+    build: 2,
+    minimumMacos: const TerminalMacosVersion(14, 0),
+    archiveUrl: Uri.parse(
+      'https://updates.example.invalid/DartTerminal-0.2.0.zip',
+    ),
+    archiveSize: 4096,
+    archiveSha256: List<String>.filled(64, 'd').join(),
+    releaseNotes: const <String>['<b>Authenticated plain release note.</b>'],
+  );
+
+  var checkCount = 0;
+  var installCount = 0;
+  var cancelCount = 0;
+  var disposeCount = 0;
+
+  @override
+  Future<TerminalUpdateRelease?> check() async {
+    checkCount++;
+    return _availableRelease;
+  }
+
+  @override
+  Future<void> prepareInstall(TerminalUpdateRelease release) async {
+    if (!identical(release, _availableRelease)) {
+      throw StateError('update acceptance received an unauthenticated release');
+    }
+    installCount++;
+  }
+
+  @override
+  void cancel() {
+    cancelCount++;
+  }
+
+  @override
+  void dispose() {
+    disposeCount++;
+  }
+}
 
 final class _TerminalNotificationAcceptancePost {
   const _TerminalNotificationAcceptancePost({

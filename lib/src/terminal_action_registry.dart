@@ -9,6 +9,7 @@ enum TerminalActionId {
   reloadConfiguration('application.reload-configuration'),
   toggleQuickTerminal('application.toggle-quick-terminal'),
   toggleSecureKeyboardEntry('application.toggle-secure-keyboard-entry'),
+  checkForUpdates('application.check-for-updates'),
   quitApplication('application.quit'),
   newWindow('window.new'),
   exportDiagnostics('file.export-diagnostics'),
@@ -296,6 +297,11 @@ final class TerminalActionCatalog {
         TerminalActionMenu.application,
       ),
       action(
+        TerminalActionId.checkForUpdates,
+        TerminalActionMenu.application,
+        restoresTerminalFocusAfterInvocation: false,
+      ),
+      action(
         TerminalActionId.quitApplication,
         TerminalActionMenu.application,
         shortcut: const TerminalActionShortcut(
@@ -475,6 +481,7 @@ TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
     TerminalActionMessageId.toggleQuickTerminal,
   TerminalActionId.toggleSecureKeyboardEntry =>
     TerminalActionMessageId.toggleSecureKeyboardEntry,
+  TerminalActionId.checkForUpdates => TerminalActionMessageId.checkForUpdates,
   TerminalActionId.quitApplication => TerminalActionMessageId.quitApplication,
   TerminalActionId.newWindow => TerminalActionMessageId.newWindow,
   TerminalActionId.exportDiagnostics =>

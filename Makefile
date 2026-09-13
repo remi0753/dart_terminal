@@ -158,7 +158,7 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	terminal-distribution-policy-test release-distribution-preflight \
 	release-distribution-credentials-check release-distribution-build \
 	release-distribution-audit release-distribution-verify \
-	terminal-update-feed-test terminal-update-transaction-test release-update-feed-credentials-check \
+	terminal-update-feed-test terminal-update-transaction-test terminal-update-controller-test release-update-feed-credentials-check \
 	release-update-feed \
 	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
 	release-aot-resource release-aot-shutdown-fault runtime-bundle-audit \
@@ -225,6 +225,7 @@ help:
 	@echo "  make release-distribution-verify     Sign, notarize, staple, and audit a distribution"
 	@echo "  make terminal-update-feed-test       Test canonical signed update feeds and release generation"
 	@echo "  make terminal-update-transaction-test  Test candidate validation and rollback recovery"
+	@echo "  make terminal-update-controller-test  Test update actions, status, and release-note UI"
 	@echo "  make release-update-feed             Generate and sign an atomic update-feed directory"
 	@echo "  make runtime-terminal-display-integration  Verify the live Metal terminal in both modes"
 	@echo "  make runtime-native-hierarchy-integration  Verify four-pane hierarchy and Close/Quit in both modes"
@@ -828,6 +829,9 @@ terminal-update-feed-test: dependencies
 
 terminal-update-transaction-test: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_update_transaction_test.dart
+
+terminal-update-controller-test: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_update_controller_test.dart
 
 release-update-feed-credentials-check:
 	@if [[ -z "$(UPDATE_ARCHIVE_URL)" || -z "$(UPDATE_VERSION)" || \

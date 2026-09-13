@@ -54,6 +54,10 @@ const TextViewConfiguration terminalDiagnosticsTextViewConfiguration =
       backgroundColor: TextViewColor.windowBackground(),
     );
 
+/// Read-only plain-text presentation for signed update state and release notes.
+const TextViewConfiguration terminalUpdateTextViewConfiguration =
+    terminalDiagnosticsTextViewConfiguration;
+
 /// Presentation used by the searchable effective-configuration inspector.
 const TextViewConfiguration terminalSettingsInspectorTextViewConfiguration =
     TextViewConfiguration(

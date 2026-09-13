@@ -17,6 +17,7 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testOsc52ConfirmationPresenterLifecycle();
   await _testSettingsInspectorPresenterLifecycle();
   await _testDiagnosticsPresenterLifecycle();
+  await _testUpdatePresenterLifecycle();
   await _testRtlApplicationComposition();
   await _testConfiguredWindowAndPaddingProjection();
   await _testPerWindowCreationFrameProjection();
@@ -29,6 +30,120 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testUpdatePresenterLifecycle() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final View terminalView = View(configuration: terminalBaseViewConfiguration);
+  final Window terminalWindow = Window(
+    frame: const Rect.fromLTWH(100, 90, 920, 580),
+    title: 'Terminal',
+    configuration: terminalWindowConfiguration,
+  )..contentView = terminalView;
+  terminalWindow
+    ..show()
+    ..makeFirstResponder(terminalView);
+  final _PresenterUpdateService service = _PresenterUpdateService();
+  final TerminalUpdateController controller = TerminalUpdateController(
+    service: service,
+  );
+  final TerminalUpdatePresenter presenter = TerminalUpdatePresenter(
+    controller: controller,
+    focusTarget: () =>
+        TerminalUpdateFocusTarget(window: terminalWindow, view: terminalView),
+    localization: TerminalLocalization.japanese,
+  );
+  final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+    catalog: TerminalActionCatalog.standard(
+      localization: TerminalLocalization.japanese,
+    ),
+    registrations: <TerminalActionRegistration>[
+      TerminalActionRegistration(
+        id: TerminalActionId.checkForUpdates,
+        handler: presenter.openAndCheck,
+      ),
+    ],
+  );
+  try {
+    _expect(
+      dispatcher.search('アップデート').first.definition.id ==
+          TerminalActionId.checkForUpdates,
+      'localized palette does not expose the shared update action',
+    );
+    final TerminalActionDispatchResult result = await dispatcher.dispatch(
+      TerminalActionId.checkForUpdates,
+    );
+    _expect(
+      result.disposition == TerminalActionDispatchDisposition.executed &&
+          presenter.isOpen &&
+          controller.status == TerminalUpdateStatus.available &&
+          presenter.activeWindow!.title == 'ソフトウェアアップデート' &&
+          presenter.renderedText!.contains('バージョン 0.2.0（ビルド 2）') &&
+          presenter.renderedText!.contains('<b>plain text only</b>') &&
+          service.checkCount == 1,
+      'shared action did not project authenticated plain-text release notes',
+    );
+    final int updateWindowHandle = bindings.handleFor(presenter.activeWindow!);
+    final int updateViewHandle = bindings.handleFor(presenter.activeView!);
+    _expect(
+      bindings.windowKeyEventRoutings[updateWindowHandle] == 1 &&
+          bindings.firstResponders[updateWindowHandle] == updateViewHandle,
+      'update presenter did not own one Dart-only read-only surface',
+    );
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      updateWindowHandle,
+      keyCode: 36,
+      characters: '\r',
+    );
+    await _waitForHierarchy(
+      () => controller.status == TerminalUpdateStatus.restartRequired,
+      'Return did not prepare the verified candidate',
+    );
+    _expect(
+      service.installCount == 1 &&
+          presenter.renderedText!.contains('再起動して完了してください') &&
+          !presenter.renderedText!.contains('https://'),
+      'prepared status leaked transport metadata or did not render',
+    );
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      updateWindowHandle,
+      keyCode: 53,
+      characters: '\u001b',
+    );
+    await _waitForHierarchy(
+      () => !presenter.isOpen,
+      'Escape did not close the update presenter',
+    );
+    _expect(
+      presenter.terminalResponderRestoreCount == 1 &&
+          bindings.firstResponders[bindings.handleFor(terminalWindow)] ==
+              bindings.handleFor(terminalView) &&
+          !bindings.objects.containsKey(updateWindowHandle) &&
+          !bindings.objects.containsKey(updateViewHandle),
+      'update close did not restore focus and release native owners',
+    );
+  } finally {
+    await presenter.dispose();
+    if (!terminalWindow.isClosed) terminalWindow.close();
+    terminalWindow.dispose();
+    terminalView.dispose();
+    await application.terminate();
+    await rawEvents.close();
+  }
+  _expect(
+    service.disposeCount == 1,
+    'update service ownership was not disposed exactly once',
+  );
 }
 
 Future<void> _testRoleAwareWindowProjection() async {
@@ -3300,6 +3415,39 @@ bool _sameNativeTextEditorStyles(
     }
   }
   return true;
+}
+
+final class _PresenterUpdateService implements TerminalUpdateProductService {
+  var checkCount = 0;
+  var installCount = 0;
+  var disposeCount = 0;
+
+  @override
+  Future<TerminalUpdateRelease?> check() async {
+    checkCount++;
+    return TerminalUpdateRelease(
+      version: TerminalSemanticVersion.parse('0.2.0'),
+      build: 2,
+      minimumMacos: const TerminalMacosVersion(14, 0),
+      archiveUrl: Uri.parse('https://updates.example.test/DartTerminal.zip'),
+      archiveSize: 4096,
+      archiveSha256: List<String>.filled(64, 'e').join(),
+      releaseNotes: const <String>['<b>plain text only</b>'],
+    );
+  }
+
+  @override
+  Future<void> prepareInstall(TerminalUpdateRelease release) async {
+    installCount++;
+  }
+
+  @override
+  void cancel() {}
+
+  @override
+  void dispose() {
+    disposeCount++;
+  }
 }
 
 final class _HierarchyNativeBindings

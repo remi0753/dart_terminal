@@ -67,6 +67,7 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `application.reload-configuration` | Reload Configuration | application | — |
 | `application.toggle-quick-terminal` | Toggle Quick Terminal | application | — |
 | `application.toggle-secure-keyboard-entry` | Secure Keyboard Entry | application | — |
+| `application.check-for-updates` | Check for Updates… | application | — |
 | `application.quit` | Quit Dart Terminal | application | `command+q` |
 | `window.new` | New Window | file | `command+n` |
 | `file.export-diagnostics` | Export Diagnostics… | file | `option+command+e` |

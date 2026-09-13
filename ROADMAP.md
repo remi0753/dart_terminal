@@ -1323,14 +1323,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] `dart_macos_runtime`の汎用atomic distribution signing／notarization基盤
   - [x] product最小entitlements、distribution audit、credential-independent negative gate
   - [x] credential-independent完了判定と実credential受け入れのfollow-up移管
-- [ ] update feed、署名検証、rollback
+- [x] update feed、署名検証、rollback
   （分割、鍵境界、完了条件は
   [`docs/phase11/signed-update-feed-rollback.md`](docs/phase11/signed-update-feed-rollback.md)
   を参照して順に実施する）
   - [x] feed／鍵／candidate／rollback contractとthreat inventory
   - [x] strict signed-feed codec、外部鍵による生成、pinned-key検証
   - [x] candidate bundle検証、atomic install transaction、rollback/recovery
-  - [ ] product action／release notes、受け入れ、文書／matrix、親項目完了判定
+  - [x] product action／release notes、受け入れ、文書／matrix、親項目完了判定
 - [ ] local crash report、hang sample、privacy-safe diagnostics
 - [ ] startup/input/render/parser/memory/power benchmark regression gate
 - [ ] 24/72 hour soak、sleep/wake、display attach/detach、memory pressure

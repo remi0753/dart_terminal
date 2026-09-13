@@ -21,6 +21,7 @@ enum TerminalActionMessageId {
   reloadConfiguration,
   toggleQuickTerminal,
   toggleSecureKeyboardEntry,
+  checkForUpdates,
   quitApplication,
   newWindow,
   exportDiagnostics,
@@ -272,6 +273,46 @@ final class TerminalLocalization {
       _ja ? 'フォーカス中のターミナルは利用できません。' : 'The focused terminal is unavailable.';
   String get terminalInspectorInstructions =>
       _ja ? 'Escで閉じる' : 'Press Esc to close';
+  String get updateWindowTitle => _ja ? 'ソフトウェアアップデート' : 'Software Update';
+  String updateStatus(String status) => switch ((language, status)) {
+    (TerminalLanguage.english, 'notConfigured') =>
+      'Updates are not configured for this build.',
+    (TerminalLanguage.english, 'idle') => 'Ready to check for updates.',
+    (TerminalLanguage.english, 'checking') => 'Checking for updates…',
+    (TerminalLanguage.english, 'available') =>
+      'An authenticated update is available.',
+    (TerminalLanguage.english, 'upToDate') => 'Dart Terminal is up to date.',
+    (TerminalLanguage.english, 'installing') =>
+      'Verifying and preparing the update…',
+    (TerminalLanguage.english, 'restartRequired') =>
+      'The verified update is ready. Restart to finish installation.',
+    (TerminalLanguage.english, 'cancelled') =>
+      'The update operation was cancelled.',
+    (TerminalLanguage.english, 'failed') =>
+      'The update could not be verified or prepared.',
+    (TerminalLanguage.english, 'disposed') => 'Updates are unavailable.',
+    (TerminalLanguage.japanese, 'notConfigured') => 'このビルドではアップデートが構成されていません。',
+    (TerminalLanguage.japanese, 'idle') => 'アップデートを確認できます。',
+    (TerminalLanguage.japanese, 'checking') => 'アップデートを確認中…',
+    (TerminalLanguage.japanese, 'available') => '認証済みアップデートがあります。',
+    (TerminalLanguage.japanese, 'upToDate') => 'Dart Terminalは最新です。',
+    (TerminalLanguage.japanese, 'installing') => 'アップデートを検証・準備中…',
+    (TerminalLanguage.japanese, 'restartRequired') =>
+      '検証済みアップデートの準備ができました。再起動して完了してください。',
+    (TerminalLanguage.japanese, 'cancelled') => 'アップデート操作をキャンセルしました。',
+    (TerminalLanguage.japanese, 'failed') => 'アップデートを検証または準備できませんでした。',
+    (TerminalLanguage.japanese, 'disposed') => 'アップデートは利用できません。',
+    _ => status,
+  };
+  String updateVersion(String version, int build) =>
+      _ja ? 'バージョン $version（ビルド $build）' : 'Version $version (build $build)';
+  String get updateReleaseNotesTitle => _ja ? 'リリースノート' : 'Release notes';
+  String get updateNoReleaseNotes => _ja ? '記載なし' : 'No release notes.';
+  String updateInstructions({required bool canInstall}) => _ja
+      ? (canInstall ? 'Returnで検証・準備    Escで閉じる' : 'Returnで再確認    Escで閉じる')
+      : (canInstall
+            ? 'Press Return to verify and prepare    Esc to close'
+            : 'Press Return to check again    Esc to close');
   String get diagnosticsSavePanelTitle =>
       _ja ? '診断情報を書き出す' : 'Export Diagnostics';
   String get diagnosticsSavePanelMessage => _ja
@@ -470,6 +511,10 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
           'Secure Keyboard Entry',
           <String>['secure', 'keyboard', 'password', 'input', 'privacy'],
         ),
+        TerminalActionMessageId.checkForUpdates: _action(
+          'Check for Updates…',
+          <String>['software', 'release', 'version', 'upgrade'],
+        ),
         TerminalActionMessageId.quitApplication: _action(
           'Quit Dart Terminal',
           <String>['exit', 'application'],
@@ -604,6 +649,12 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
         'セキュアキーボード入力',
         <String>['セキュア', 'キーボード', 'パスワード', 'プライバシー'],
       ),
+      TerminalActionMessageId.checkForUpdates: _action('アップデートを確認…', <String>[
+        'ソフトウェア',
+        'リリース',
+        'バージョン',
+        '更新',
+      ]),
       TerminalActionMessageId.quitApplication: _action(
         'Dart Terminalを終了',
         <String>['終了', 'アプリケーション'],

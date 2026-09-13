@@ -76,7 +76,7 @@ Future<TerminalLocalizationAuditResult> runTerminalLocalizationAudit({
     'lib/src/terminal_application.dart',
   );
   _expect(
-    'localization: localization'.allMatches(applicationSource).length == 10,
+    'localization: localization'.allMatches(applicationSource).length == 11,
     'production and runtime-acceptance localization injection count changed',
   );
 
@@ -252,6 +252,9 @@ const List<String> _catalogPhrases = <String>[
   'Open Terminal Inspector',
   'Export Diagnostics…',
   'Save content-free diagnostics without terminal text or paths.',
+  'Check for Updates…',
+  'Software Update',
+  'Release notes',
 ];
 
 const List<_SourceRule> _sourceRules = <_SourceRule>[
@@ -286,6 +289,7 @@ const List<_SourceRule> _sourceRules = <_SourceRule>[
       'Select Next Tab',
       'Open Terminal Inspector',
       'Export Diagnostics…',
+      'Check for Updates…',
     ],
   ),
   _SourceRule(
@@ -372,6 +376,23 @@ const List<_SourceRule> _sourceRules = <_SourceRule>[
       'Press Esc to close',
       'Export Diagnostics',
       'Save content-free diagnostics',
+    ],
+  ),
+  _SourceRule(
+    'lib/src/terminal_update_controller.dart',
+    requiredTokens: <String>[
+      '_localization.updateWindowTitle',
+      '_localization.updateStatus(',
+      '_localization.updateVersion(',
+      '_localization.updateReleaseNotesTitle',
+      '_localization.updateInstructions(',
+    ],
+    forbiddenPhrases: <String>[
+      'Software Update',
+      'Release notes',
+      'No release notes.',
+      'Press Return to verify and prepare',
+      'Press Return to check again',
     ],
   ),
   _SourceRule(

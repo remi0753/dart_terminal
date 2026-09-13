@@ -8,7 +8,7 @@ Future<void> runTerminalLocalizationAuditTests() async {
         projectRoot: Directory.fromUri(Platform.script.resolve('../')),
       );
   _expect(
-    result.sourceCount == 13 &&
+    result.sourceCount == 14 &&
         result.resourceFamilies == 4 &&
         result.resourceKeys == 21,
     'localization audit covers every declared source and resource family',

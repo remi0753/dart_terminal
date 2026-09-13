@@ -214,6 +214,7 @@ void _testStableStandardCatalog() {
               TerminalActionId.reloadConfiguration,
               TerminalActionId.toggleQuickTerminal,
               TerminalActionId.toggleSecureKeyboardEntry,
+              TerminalActionId.checkForUpdates,
               TerminalActionId.quitApplication,
             ].join(',') &&
         catalog
@@ -232,10 +233,15 @@ void _testStableStandardCatalog() {
                 .actionForId(TerminalActionId.toggleSecureKeyboardEntry)!
                 .shortcut ==
             null &&
+        catalog.actionForId(TerminalActionId.checkForUpdates)!.shortcut ==
+            null &&
+        !catalog
+            .actionForId(TerminalActionId.checkForUpdates)!
+            .restoresTerminalFocusAfterInvocation &&
         !catalog
             .actionForId(TerminalActionId.toggleQuickTerminal)!
             .restoresTerminalFocusAfterInvocation,
-    'Settings, reload, Quick Terminal, and Secure Keyboard Entry have shared application metadata',
+    'application utilities have stable shared menu metadata',
   );
 }
 

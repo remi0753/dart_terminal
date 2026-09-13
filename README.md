@@ -700,6 +700,21 @@ statusとissue 0のlogを確認し、appへticketをstaple・検証してGatekee
 archive／全code hashを束縛するmanifestだけがatomicに公開されます。失敗時は既存の
 last-good配布物を保持します。
 
+### ソフトウェアアップデート
+
+ApplicationメニューとCommand Paletteの`Check for Updates…`は同じ共有actionを使い、
+read-onlyのSoftware Update画面へ固定status、認証済みversion/build、boundedな平文
+release notesだけを表示します。Returnで再確認または検証済みcandidateの準備、Escで
+cancel／close／terminal focus復元を行い、操作やfeed内容をPTYへ書きません。
+
+checked-in buildにはproduction endpoint、private key、fixture trust rootを含めません。
+release buildがpinned public keyを使うproduct update serviceを明示注入しない限り、actionは
+`not configured`のままnetwork／filesystemへ触れません。signed feed、candidate監査、
+same-volume atomic replacement、health acknowledgement、last-good rollback、privacy境界、
+release運用の詳細は[software update reference](docs/reference/terminal-updates.md)を参照してください。
+実Developer IDとApple公証済みcandidateによる正の受け入れは低優先follow-upであり、
+credential-independent gateの成功をpublic release readinessとは扱いません。
+
 ## ローカルチェック
 
 ```shell
@@ -746,8 +761,9 @@ aggregate menu Quitでatomic teardownを通し、4つのPTYと全native resource
 Developer JIT/Release AOTの両runtimeで検証します。4つのsurfaceは1 pane 1 pending、
 4 work/4 ms turnの共有round-robin schedulerを使い、個別timerによる競合を避けます。
 user action suiteは通常起動と同じdispatcher、hierarchy、pane resource factory、Close/Quit
-経路を使い、native menuのSplit Right/New Tab/New Window/Close/Quitと、command paletteの
-Split Downを操作します。2 window/3 tab/5 paneの生成、各paneへのraw key/IME分離、
+経路を使い、native menuのCheck for Updates/Split Right/New Tab/New Window/Close/Quitと、
+command paletteのSplit Downを操作します。認証済み平文release notes、candidate準備、
+update操作のPTY write 0とfocus復元、2 window/3 tab/5 paneの生成、各paneへのraw key/IME分離、
 1 paneを閉じた後の4-pane階層、5つのPTY世代と全Metal/text-input/native handleの回収を
 Developer JIT/Release AOTで要求します。
 theme suiteはv7 appearance/geometry eventとv14 accessibility preference eventを通常製品へ

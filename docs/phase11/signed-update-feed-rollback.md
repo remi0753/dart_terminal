@@ -403,3 +403,55 @@ all four update children and this parent are complete.
   transaction/root tests green. The adjacent `dart_appkit` worktree remained
   clean. Long-duration and real Apple-service checks were skipped as authorized
   and are not blockers for this credential-independent child.
+- 2026-09-13: product integration adds one stable `application.check-for-updates`
+  action to the Application menu and command palette. Its lifecycle-owned
+  controller accepts only an injected product service, rejects overlapping
+  operations, invalidates late completion after cancel/dispose, and retains
+  only fixed status plus an already-authenticated release value. With no
+  production service, endpoint, or pinned key injected, the checked-in build is
+  explicitly `notConfigured` and performs no remote or install work.
+- 2026-09-13: selected a singleton read-only AppKit text view rather than a web
+  view or rich-text renderer. English/Japanese copy shows only fixed state,
+  version/build, and bounded plain feed lines; literal markup stays literal and
+  archive URLs are not rendered. Return checks or prepares once, while Escape
+  cancels/closes and restores the exact live terminal responder. Both paths
+  were verified to leave the PTY input count unchanged and to release native
+  owners on close/quit.
+- 2026-09-13: focused analysis passed for the controller, application wiring,
+  action/localization audits and tests. Controller tests passed unconfigured
+  inertness, authenticated check/install, single-flight cancellation, late
+  result rejection, disposal, and content-free failures. Fake-AppKit tests
+  passed Japanese action lookup, plain-note projection, Return/Escape routing,
+  focus restoration, and exact native/service cleanup. The localization audit
+  now covers 14 production owners and 11 application injection sites.
+- 2026-09-13: `CI=true DART_SUPPRESS_ANALYTICS=true make
+  runtime-user-actions-integration` passed the normal product hierarchy in both
+  Developer JIT and Release AOT. The same native menu/dispatcher route checked
+  and prepared one in-memory authenticated release, exposed no URL, wrote zero
+  update bytes to PTY, restored focus, and still completed the existing split,
+  divider, window/tab/pane, input-isolation, close, quit, and zero-owner checks.
+  This adapter is acceptance-only and contains no production key or network
+  fallback.
+- 2026-09-13: public update documentation now records the explicit-check data
+  flow, no background polling, trust/install/rollback boundary, content-free
+  persistence and diagnostics, external-key release operation, and fail-closed
+  unconfigured state. The matrix records the completed credential-independent
+  feature without claiming that an ad-hoc candidate is publicly distributable.
+  Per user direction, real Developer ID/Apple notarization/staple positive
+  acceptance and long-duration validation remain lower-priority follow-ups and
+  are not blockers.
+- 2026-09-13: the first exact main-gate attempt correctly rejected stale Phase
+  7 AppKit evidence after the shared action/native presenter test changed. The
+  canonical generator refreshed that evidence; the next attempt correctly
+  rejected its dependent compatibility coverage hash, which was refreshed by
+  its canonical generator. A subsequent run exposed the expected localization
+  audit unit count still at 13 and two directive-ordering infos; these were
+  updated to the audited 14 sources and sorted without weakening either audit.
+- 2026-09-13: the final exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`
+  passed 303-file formatting, analysis with no issues, all package/native,
+  generated-evidence, compatibility, privacy, distribution, update feed,
+  controller, candidate transaction, fault/recovery, and root suites. The
+  adjacent `dart_appkit` worktree is unchanged. Credential-independent product
+  integration and this update parent now satisfy their completion conditions;
+  only the explicitly deferred real Apple-service acceptance remains outside
+  this task.
