@@ -126,6 +126,9 @@ override PRODUCT_PERFORMANCE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/produc
 override PRODUCT_PERFORMANCE_BASELINE := $(PROJECT_ROOT)/benchmark/baselines/product-micro-macos-arm64-m1.json
 override PRODUCT_PERFORMANCE_COMPARATOR_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json
 override PRODUCT_RELATIVE_PERFORMANCE_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/product-relative-performance-macos-arm64-m1.json
+override PRODUCT_PERFORMANCE_MICRO_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)/product-performance-micro-result.json
+override PRODUCT_PERFORMANCE_RUNTIME_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)/product-performance-runtime-result.log
+override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)/product-performance-regression-result.json
 
 .PHONY: help dependencies test dpty-contract-check dpty-child-audit \
 	dpty-native-test dpty-dart-test \
@@ -151,7 +154,7 @@ override PRODUCT_RELATIVE_PERFORMANCE_EVIDENCE := $(PROJECT_ROOT)/benchmark/evid
 	terminal-compatibility-regressions-check terminal-compatibility-regression-coverage terminal-compatibility-regression-coverage-check \
 	product-damage-benchmark-build product-damage-benchmark \
 	product-performance-benchmark-build product-performance-benchmark \
-	product-performance-comparator-check \
+	product-performance-comparator-check product-performance-regression-gate \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
 	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-performance developer-jit-actions developer-jit-applescript developer-jit-system-automation developer-jit-native-content developer-jit-quick-terminal developer-jit-secure-keyboard-entry developer-jit-diagnostics developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
@@ -194,6 +197,7 @@ help:
 	@echo "  make product-damage-benchmark     Run the Release AOT 100,000-cell damage gate"
 	@echo "  make product-performance-benchmark  Run product microbenchmarks against the M1 baseline"
 	@echo "  make product-performance-comparator-check  Validate pinned Ghostty relative evidence"
+	@echo "  make product-performance-regression-gate  Run the complete Release AOT performance gate"
 	@echo "  make compatibility-inventory      Regenerate sequence inventory and summary"
 	@echo "  make compatibility-inventory-check  Validate the terminal sequence/mode inventory"
 	@echo "  make compatibility-manifest       Regenerate the implemented sequence manifest"
@@ -634,6 +638,23 @@ product-performance-benchmark: product-performance-benchmark-build
 product-performance-comparator-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run test/product_performance_comparator_test.dart
 	@cd $(PROJECT_ROOT) && $(DART) run test/ghostty_performance_capture_test.dart
+
+product-performance-regression-gate: product-performance-benchmark-build \
+	release-aot-build product-performance-comparator-check
+	@cd $(PROJECT_ROOT) && $(DART) run test/product_performance_regression_gate_test.dart
+	@mkdir -p $(PRODUCT_PARSER_BENCHMARK_DIR)
+	@$(PRODUCT_PERFORMANCE_BENCHMARK) \
+		--baseline=$(PRODUCT_PERFORMANCE_BASELINE) \
+		> $(PRODUCT_PERFORMANCE_MICRO_RESULT)
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
+		--suite=performance $(RELEASE_AOT_BUNDLE) \
+		> $(PRODUCT_PERFORMANCE_RUNTIME_RESULT)
+	@cd $(PROJECT_ROOT) && $(DART) run \
+		tool/product_performance_regression_gate.dart \
+		--product-micro=$(PRODUCT_PERFORMANCE_MICRO_RESULT) \
+		--product-runtime=$(PRODUCT_PERFORMANCE_RUNTIME_RESULT) \
+		--comparator=$(PRODUCT_PERFORMANCE_COMPARATOR_EVIDENCE) \
+		--output=$(PRODUCT_PERFORMANCE_AGGREGATE_RESULT)
 
 runtime-source-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/dart_only_source_audit.dart

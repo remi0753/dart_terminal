@@ -1340,7 +1340,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] Release AOT dSYM package、UUID／hash監査、atomic publication
   - [x] local Apple report discovery／明示raw copy、current-process hang sample
   - [x] product action／consent UI、両runtime受け入れ、文書／matrix、親項目完了判定
-- [ ] startup/input/render/parser/memory/power benchmark regression gate
+- [x] startup/input/render/parser/memory/power benchmark regression gate
   （分割、計測／baseline／privacy境界、完了条件は
   [`docs/phase11/product-performance-regression-gate.md`](docs/phase11/product-performance-regression-gate.md)
   を参照して順に実施する）
@@ -1354,7 +1354,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
       - [x] pinned Ghostty build／captureとpassing relative evidence
         - [x] verified pinned source／Zig acquisitionとclean ReleaseLocal build
         - [x] compatible capture harness／evidenceとpassing relative gate
-  - [ ] aggregate gate、文書／matrix更新、親項目完了判定
+  - [x] aggregate gate、文書／matrix更新、親項目完了判定
 - [ ] 24/72 hour soak、sleep/wake、display attach/detach、memory pressure
 - [ ] native ASan/UBSan、fuzz corpus、fault injection
 - [ ] Ghostty pinned matrix の P0/P1 gap burn-down

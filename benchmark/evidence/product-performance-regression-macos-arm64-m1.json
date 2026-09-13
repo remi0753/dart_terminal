@@ -1,0 +1,195 @@
+{
+  "format": "dart-terminal-product-performance-regression-result",
+  "version": 1,
+  "status": "pass",
+  "input_integrity": {
+    "product_micro_sha256": "1ac17d3ca8d8183855d485075b16778e2bf46397e1f4bc28efb10c3cf62807ce",
+    "product_runtime_sha256": "50288d17ec2935d139ab876387422cf5c77643fd079f74f1de9593bdaf475c01",
+    "comparator_evidence_sha256": "2a46ca992a2ac160391ed64ba2c3b6569f5c26df575cf65c74576c3d5c8628a9"
+  },
+  "environment": {
+    "os": "macos",
+    "abi": "macos_arm64",
+    "dart_sdk": "3.13.2",
+    "build_mode": "release-aot",
+    "hardware_model": "MacBookPro17,1",
+    "memory_bytes": 17179869184,
+    "os_build": "25G83",
+    "refresh_tier_hz": 60
+  },
+  "product": {
+    "baseline_id": "product-micro-macos-arm64-m1",
+    "micro_metrics": [
+      {
+        "id": "parser.product_mixed.throughput",
+        "unit": "MiB/s",
+        "sample_count": 5,
+        "min": 104.32892298001791,
+        "p50": 107.44344784602086,
+        "p95": 108.68557706494964,
+        "p99": 108.68557706494964,
+        "max": 108.68557706494964,
+        "hard_threshold": 100.0,
+        "baseline_threshold": 101.4576,
+        "passed": true
+      },
+      {
+        "id": "render.damage.capture_copy_latency",
+        "unit": "us",
+        "sample_count": 64,
+        "min": 338.0,
+        "p50": 434.0,
+        "p95": 594.0,
+        "p99": 658.0,
+        "max": 658.0,
+        "hard_threshold": 4000.0,
+        "baseline_threshold": 670.0,
+        "passed": true
+      },
+      {
+        "id": "render.damage.transfer_decode_ack_latency",
+        "unit": "us",
+        "sample_count": 64,
+        "min": 1087.0,
+        "p50": 1312.0,
+        "p95": 1446.0,
+        "p99": 1584.0,
+        "max": 1584.0,
+        "hard_threshold": 4000.0,
+        "baseline_threshold": 1721.2,
+        "passed": true
+      },
+      {
+        "id": "render.damage.end_to_end_latency",
+        "unit": "us",
+        "sample_count": 64,
+        "min": 1447.0,
+        "p50": 1750.0,
+        "p95": 2003.0,
+        "p99": 2202.0,
+        "max": 2202.0,
+        "hard_threshold": 8000.0,
+        "baseline_threshold": 2378.0,
+        "passed": true
+      },
+      {
+        "id": "input.key_to_pane_write_latency",
+        "unit": "ns",
+        "sample_count": 100000,
+        "min": 41.0,
+        "p50": 291.0,
+        "p95": 375.0,
+        "p99": 417.0,
+        "max": 360333.0,
+        "hard_threshold": 2000000.0,
+        "baseline_threshold": 812.5,
+        "passed": true
+      }
+    ],
+    "runtime_metrics": {
+      "startup_us": 575167,
+      "refresh_interval_us": 15380,
+      "input_p95_us": 915,
+      "visible_p95_us": 11945,
+      "visible_budget_us": 19380,
+      "frame_p95_us": 456,
+      "frame_budget_us": 10766,
+      "idle_rss_bytes": 113704960,
+      "workload_rss_bytes": 144310272,
+      "peak_rss_bytes": 144310272,
+      "rss_budget_bytes": 536870912,
+      "idle_cpu_basis_points": 18,
+      "occluded_cpu_basis_points": 13,
+      "aggregate_cpu_basis_points": 16,
+      "aggregate_cpu_budget_basis_points": 50
+    },
+    "fairness": true
+  },
+  "comparator": {
+    "id": "ghostty-d4d8f62-macos-arm64-m1",
+    "provenance": {
+      "product": "ghostty",
+      "revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
+      "zig_version": "0.16.0",
+      "build_command": "zig build -Doptimize=ReleaseFast",
+      "benchmark_build_command": "zig build -Demit-bench -Doptimize=ReleaseFast -Demit-macos-app=false",
+      "macos_configuration": "ReleaseLocal",
+      "project_local_patches": false,
+      "app_executable_sha256": "73744c9d8479d7326b1a95920ad6931c3eaed8500eafd97eb133eefd03e1f1dc",
+      "benchmark_executable_sha256": "0c6ea29728a6429e02a9326be40ccb8d7b36d80d743a90f19b7c599377dbbf23",
+      "capture_harness_sha256": "8ffd76cefcfb0f336dd51a2ddcf3f674fbdd761ad012405cba10bc4676c361e7"
+    },
+    "workload": {
+      "id": "phase11-ghostty-parity-v1",
+      "shell_fixture": "isolated-zsh-v1",
+      "configuration": "parity-minimal-v1",
+      "input_transport": "applescript-input-text",
+      "visibility_observer": "screencapturekit-window-pixel",
+      "input_samples": 7,
+      "parser_action": "terminal-parser",
+      "parser_warmup_runs": 2,
+      "parser_sample_count": 5,
+      "parser_statistic": "p50",
+      "parser_output_bytes": 134264777,
+      "parser_corpus_sha256": "e6d7ac297fc096a9cfbb6a00c7b9e8039a8b33d54630623bef7a73dbae539ce6",
+      "memory_output_bytes": 22048,
+      "resource_scope": "root-process",
+      "idle_window_count": 2,
+      "idle_window_us": 2000000,
+      "animation_enabled": false,
+      "raw_samples_retained": false
+    }
+  },
+  "policy": {
+    "product_hard_gates_required": true,
+    "product_baseline_gates_required": true,
+    "ordinary_product_absolute_gates_required": true,
+    "cross_pane_fairness_required": true,
+    "pinned_relative_gates_required": true,
+    "raw_samples_retained": false
+  },
+  "gates": {
+    "product_micro": true,
+    "ordinary_product": true,
+    "cross_pane_fairness": true,
+    "relative": [
+      {
+        "id": "input.visible_p95",
+        "unit": "us",
+        "operator": "<=",
+        "product": 11945.0,
+        "comparator": 193377.0,
+        "threshold": 241721.25,
+        "passed": true
+      },
+      {
+        "id": "parser.output_throughput",
+        "unit": "MiB/s",
+        "operator": ">=",
+        "product": 107.44344784602086,
+        "comparator": 98.80203570666741,
+        "threshold": 74.10152678000055,
+        "passed": true
+      },
+      {
+        "id": "idle.resident_memory",
+        "unit": "bytes",
+        "operator": "<=",
+        "product": 113704960.0,
+        "comparator": 119619584.0,
+        "threshold": 179429376.0,
+        "passed": true
+      },
+      {
+        "id": "idle.process_cpu",
+        "unit": "basis-points",
+        "operator": "<=",
+        "product": 16.0,
+        "comparator": 16.0,
+        "threshold": 24.0,
+        "passed": true
+      }
+    ],
+    "passed": true
+  }
+}

@@ -732,6 +732,7 @@ make product-parser-properties
 make phase9-protocol-properties
 make phase9-security-stress
 make product-parser-benchmark
+make product-performance-regression-gate
 make runtime-source-check
 make terminal-localization-check
 make test
@@ -747,6 +748,12 @@ make RUNTIME_ARCH=arm64 runtime-theme-integration
 make RUNTIME_ARCH=arm64 runtime-osc52-integration
 make RUNTIME_ARCH=arm64 runtime-restoration-integration
 ```
+
+`make product-performance-regression-gate` は Release AOT の実製品 parser、damage、
+key→PTY、通常windowのstartup/input/visible frame、短時間RSS/CPU、100 MiBのpane間
+fairnessを再計測し、固定M1 baselineとpinned Ghostty証跡へ同一実行内で照合します。
+入力結果のSHA-256だけをaggregate証跡へ束縛し、terminal内容、command、path、PID、
+timestamp、raw sampleは保持しません。比較対象の再captureは別の明示的なレビュー工程です。
 
 `make RUNTIME_ARCH=arm64 runtime-verify` は source check、両 mode の bundle audit、
 smoke、real-PTY live Metal display、native tab/4-pane hierarchy、通常製品のuser action、

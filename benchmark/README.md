@@ -45,6 +45,22 @@ application:
 make product-performance-comparator-check
 ```
 
+Run the complete Release AOT regression gate with:
+
+```sh
+make product-performance-regression-gate
+```
+
+This target builds the product microbenchmark and ordinary Release AOT app,
+runs the strict negative comparator/aggregate fixtures, captures fresh
+microbenchmark and runtime results under ignored `build/benchmarks/` storage,
+and binds their SHA-256 values to the checked pinned comparator. It fails if a
+product hard gate, accepted-product baseline, startup/input/visible/frame/
+memory/CPU gate, exact 100 MiB cross-pane fairness gate, compatibility check,
+or any of the four relative gates fails. The resulting aggregate document is
+content-free; the reviewed M1 acceptance artifact is
+[`evidence/product-performance-regression-macos-arm64-m1.json`](evidence/product-performance-regression-macos-arm64-m1.json).
+
 Its two JSON documents under `benchmark/evidence/` bind the exact upstream
 revision and Zig version to separate GUI-app, official benchmark, and local
 capture-source SHA-256 values. They also freeze the synthetic parser corpus,

@@ -822,3 +822,113 @@ Final validation on 2026-09-13:
 The compatible comparator codec, pinned build/capture, and memory/idle-power
 relative-comparison child are complete. The next ordered work is the aggregate
 performance gate and parent closure; no later soak or parity task has begun.
+
+### 2026-09-13 — Aggregate gate and parent-closure start
+
+- Purpose: provide one fail-closed command that builds and measures the current
+  Release AOT product, validates every product microbenchmark hard/baseline gate,
+  validates the ordinary-product startup/input/visible/frame/memory/CPU/fairness
+  contract, and compares the same fresh results with the checked pinned
+  comparator evidence.
+- Scope: add a strict aggregate-result codec/CLI and negative fixtures; wire a
+  Make target that captures fresh microbenchmark and runtime outputs into
+  ignored build storage; publish one reviewed content-free passing aggregate
+  artifact; update benchmark documentation, README, FEATURE_MATRIX, and the
+  parent ROADMAP state after all final gates pass.
+- Out of scope: rebuilding or recapturing Ghostty on every aggregate run,
+  changing any accepted baseline/threshold, long-duration soak, sanitizers/fuzz,
+  later parity burn-down, and daily-use validation. Apple notarization and
+  long-duration validation remain explicitly non-blocking by user direction.
+- Dependencies and risks: the task consumes the checked comparator and baseline
+  as immutable reviewed inputs and the existing Release AOT integration suite
+  as the ordinary-product authority. Metric output must remain content-free and
+  bounded; a malformed, stale, incompatible, missing, or failing input must not
+  produce a passing artifact. Runtime GUI sampling is noise-sensitive, so an
+  unexplained failing run is recorded and investigated rather than weakening a
+  gate.
+- Completion conditions: the aggregate target uses fresh outputs from this
+  invocation, every absolute/baseline/relative/fairness gate passes, hostile
+  fixtures reject false claims and schema drift, the reviewed artifact contains
+  no path/PID/timestamp/raw sample/terminal content, the exact main gate and
+  adjacent generic-library audit pass, documentation and matrix reflect the
+  executable contract, and both the child and performance parent are checked.
+- Verification plan: focused aggregate unit tests, comparator checks, an exact
+  `make product-performance-regression-gate` run, formatting/analysis,
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test`, `git diff --check`, and the
+  adjacent `dart_appkit` generic repository audit. Long-duration runs and Apple
+  service notarization are not part of this child.
+
+Aggregate implementation findings:
+
+- The first full `make product-performance-regression-gate` invocation failed
+  closed after its fresh microbenchmark passed. The ordinary Release AOT product
+  observed key-to-PTY admission p95 3,905 us, above the unchanged strict 2,000 us
+  budget; visible echo 11,042 us, frame work 419 us, RSS 145,096,704-byte peak,
+  and aggregate CPU 20 basis points remained within their gates. No aggregate
+  result was emitted from that run. This is being repeated unchanged as
+  explicitly requested; recurrence will be investigated rather than changing
+  the accepted budget.
+
+- Added `tool/product_performance_regression_gate.dart` as the version-1
+  aggregate authority. It strictly revalidates the five microbenchmark metric
+  distributions, exact hard/baseline threshold claims, fixed workload and
+  integrity inventories, one Release AOT runtime summary, fixed startup/input/
+  visible/frame/RSS/CPU bounds, fairness claim, product/comparator environment
+  and refresh-tier compatibility, and all four relative gates. Input source is
+  represented only by SHA-256; no raw output or source path enters the result.
+- `make product-performance-regression-gate` builds both Release AOT artifacts,
+  runs the comparator and aggregate hostile fixtures, overwrites ignored fresh
+  result files, runs the ordinary product performance/fairness suite, and only
+  then produces the aggregate result. The pinned external app is not launched
+  during this ordinary regression command; its exact checked evidence remains
+  the reviewed comparator authority.
+- The unchanged second full invocation passed. Product micro values included
+  parser minimum/p50 104.329/107.443 MiB/s, damage capture/transfer/end-to-end
+  p95 594/1,446/2,003 us, and key-to-pane-write p95 375 ns. The ordinary product
+  observed startup 575,167 us, key admission p95 915 us, visible echo p95
+  11,945 us against a 19,380 us budget, frame work p95 456 us against a
+  10,766 us budget, idle/workload/peak RSS 113,704,960/144,310,272/144,310,272
+  bytes, and aggregate CPU 16 basis points. Its 100 MiB cross-pane fairness
+  response ratio was 0.600x with 420 scheduler yields.
+- Relative comparison passed: visible response 11,945 us <= 241,721.25 us,
+  parser p50 107.443 MiB/s >= 74.102 MiB/s, idle RSS 113,704,960 <= 179,429,376
+  bytes, and aggregate CPU 16 <= 24 basis points. The accepted aggregate input
+  SHA-256 values are `1ac17d3ca8d8183855d485075b16778e2bf46397e1f4bc28efb10c3cf62807ce`
+  for micro output, `50288d17ec2935d139ab876387422cf5c77643fd079f74f1de9593bdaf475c01`
+  for runtime output, and
+  `2a46ca992a2ac160391ed64ba2c3b6569f5c26df575cf65c74576c3d5c8628a9`
+  for comparator evidence. The reviewed aggregate document is
+  `benchmark/evidence/product-performance-regression-macos-arm64-m1.json`.
+- The first exact main-gate run stopped at the generated Phase 6 compatibility
+  coverage freshness check after all preceding native/package checks passed.
+  The required README and FEATURE_MATRIX updates are hash-bound inputs to that
+  report, so it was regenerated by the official generator; review confirmed
+  that only those two hashes changed. This was not a compatibility behavior
+  failure.
+
+Aggregate completion validation:
+
+- `dart analyze tool/product_performance_regression_gate.dart
+  test/product_performance_regression_gate_test.dart`: passed with no issues.
+- `dart run test/product_performance_regression_gate_test.dart`: passed the
+  successful aggregate/privacy/hash case and negative failed-micro, false hard
+  claim, forged baseline, raw/extra field, fairness, startup, input, relative
+  RSS, incompatible environment, oversized-input, and checked-evidence cases.
+- `make product-performance-comparator-check`: passed the existing strict
+  comparator and capture regression inventories.
+- Unchanged retry of `make product-performance-regression-gate`: passed with
+  `absolute=true baseline=true fairness=true relative=true`; the output hashes
+  were independently recomputed and exactly match the reviewed aggregate
+  evidence.
+- Exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`: passed with exit 0;
+  319 files were already formatted, analysis reported no issues, and every
+  native, package, generated-artifact, privacy, and product test passed.
+- `git diff --check`: passed. The adjacent `dart_appkit` worktree was clean and
+  `dart run tool/generic_repository_audit.dart --check` passed with
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=140 text_files=139`; no generic-library
+  source was changed or given product-specific code.
+- Apple notarization and long-duration tests were not run by explicit user
+  direction. They are not completion dependencies for this aggregate child.
+
+All five ordered children now meet the product performance regression contract;
+the performance parent can close before the later reliability work begins.
