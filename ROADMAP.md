@@ -1331,6 +1331,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] strict signed-feed codec、外部鍵による生成、pinned-key検証
   - [x] candidate bundle検証、atomic install transaction、rollback/recovery
   - [x] product action／release notes、受け入れ、文書／matrix、親項目完了判定
+  - [x] 公開action件数と生成済み互換性証跡の整合を再確認
 - [ ] local crash report、hang sample、privacy-safe diagnostics
 - [ ] startup/input/render/parser/memory/power benchmark regression gate
 - [ ] 24/72 hour soak、sleep/wake、display attach/detach、memory pressure

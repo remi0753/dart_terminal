@@ -455,3 +455,13 @@ all four update children and this parent are complete.
   integration and this update parent now satisfy their completion conditions;
   only the explicitly deferred real Apple-service acceptance remains outside
   this task.
+- 2026-09-13: the mandatory post-commit README/ROADMAP/matrix reread found one
+  stale prose count: the product overview still said 30 shared actions while
+  the catalog, generated reference, tests, and matrix correctly reported 31.
+  Reopened the parent with an ordered reconciliation child before beginning the
+  crash/hang task; the README correction requires regeneration of its dependent
+  compatibility coverage hash and a fresh exact gate.
+- 2026-09-13: corrected the public overview to 31 actions, regenerated the
+  compatibility coverage report, and reran the exact main gate. Formatting,
+  analysis, every freshness/audit gate, and all package/native/root tests
+  passed. The reconciliation child and update parent are complete again.
