@@ -4,7 +4,7 @@
   "status": "open-actionable-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "2fc1905bd4ca5276168c03d9a7c4d12f9d42acae09d1d938f4b8c2ee8f86a9e6",
+    "sha256": "d2a3517560273dfeedcb2320ba349628fb5ff2a85830521ee1264658d30b7469",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "42aeace483c7a37f92318c15f1c9e4c77d2c59d001bc7eded8b4db4351b06da5"
+      "sha256": "51a21b2df5c23dbaea5d98864c873a4947a833b352da89d89602746ec484b201"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -105,6 +105,58 @@
     {
       "path": "test/terminal_screen_metal_compositor_test.dart",
       "sha256": "7f910099391e5966d790413cf729809d74a7d07a40aac40a716edd6853a9f187"
+    },
+    {
+      "path": "packages/dart_terminal_renderer_macos/lib/src/font_configuration.dart",
+      "sha256": "6bf4a65995e32d7af6ec4fcb2bc64e33234b1997925a250e79795a6ac245cbcc"
+    },
+    {
+      "path": "packages/dart_terminal_renderer_macos/lib/src/font_catalog.dart",
+      "sha256": "a8ff7decd217cecd0b673f7b2038b3253ffa443e4e2770430a7ef2bb37295b38"
+    },
+    {
+      "path": "packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.h",
+      "sha256": "24252f35ccfa7b36181d2221edfae073cf89666f0731d1d79dabf224d165cb93"
+    },
+    {
+      "path": "packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m",
+      "sha256": "8ed6c6457d3649506d76972d65b7e24cf59e00bcbe842705d122f40817b49350"
+    },
+    {
+      "path": "packages/dart_terminal_renderer_macos/native/test/TerminalRendererCapabilityTests.mm",
+      "sha256": "67426d9211ddd89731a3a044da3ad02b350a787278a1923fd06d26a4d5e30998"
+    },
+    {
+      "path": "packages/dart_terminal_renderer_macos/test/font_catalog_test.dart",
+      "sha256": "47fe928d112798b5fe745a418b532db460d40e43c00872513bae83ae7d506a39"
+    },
+    {
+      "path": "lib/src/terminal_config.dart",
+      "sha256": "ed69481ca4953d62ebcc07227550daf3a8744a21fb41c5f0f2e7c51cf97273df"
+    },
+    {
+      "path": "lib/src/terminal_product_configuration.dart",
+      "sha256": "d93b5ca2df9713167776836bc01866002b3114f165f3b738666717257d7a191d"
+    },
+    {
+      "path": "lib/src/terminal_diagnostics.dart",
+      "sha256": "d72b586ff6e6261412b1fb2b5f8786121f02165c1c15c0a213cb0339ff17a065"
+    },
+    {
+      "path": "lib/src/terminal_application.dart",
+      "sha256": "3a2c9de5515b3289817bc0eb9a725661bc64652e5c1eaa1bc111a995a6cd4d9c"
+    },
+    {
+      "path": "test/terminal_product_configuration_test.dart",
+      "sha256": "d6f95eee88a20fce1bfcc7915d1d4f302f24378c7d45876e02b65da50ccf6a64"
+    },
+    {
+      "path": "test/terminal_diagnostics_test.dart",
+      "sha256": "9dd1b13bcd1489c6453c6ac257c8518df68f564eab5c2b436b8703eeef90b443"
+    },
+    {
+      "path": "tool/runtime_integration_smoke.dart",
+      "sha256": "24af803cb3298c1c549075d6d12f389adb72467ccd00b903482c4658c395fcdd"
     }
   ],
   "totals": {
@@ -116,13 +168,13 @@
       "P1/P2": 1
     },
     "classifications": {
-      "accepted": 93,
+      "accepted": 94,
       "accepted-documented-difference": 2,
       "accepted-external-follow-up": 3,
-      "actionable-p1": 4
+      "actionable-p1": 3
     },
     "actionable_p0": 0,
-    "actionable_p1": 4,
+    "actionable_p1": 3,
     "silent_misbehavior": 0
   },
   "p0_closure": {
@@ -139,9 +191,10 @@
       "extended-rendition-and-selective-erase",
       "bounded-semantic-ranges",
       "versioned-snapshot-restore-oracle",
-      "cursor-cell-ligature-shaping-break"
+      "cursor-cell-ligature-shaping-break",
+      "font-axes-codepoint-overrides-fallback-diagnostics"
     ],
-    "remaining_actionable": 4
+    "remaining_actionable": 3
   },
   "rows": [
     {
@@ -619,14 +672,12 @@
     {
       "id": "TXT-08",
       "priority": "P1",
-      "phase": "4/8",
+      "phase": "4/8/11",
       "acceptance_sha256": "b35f8df88476e0a1f1be0cdf6d7c1bd8d582964b369481240e2bd2cf566d8920",
       "pinned_evidence_sha256": "4f3546fad38c778bb566ccdb65261ee5d6b606998f8155ddde8be371800734ec",
-      "current_sha256": "481070b8c3011436d248ab541c0164b325ef6b050edcd0ac415c0c8b090e09a6",
-      "classification": "actionable-p1",
-      "gap_ids": [
-        "font-axes-overrides-diagnostics"
-      ]
+      "current_sha256": "ffdda20e8cadc1e71bf121b49ef0b207c2150efdf5a59b0c3e2a7c7598040ee9",
+      "classification": "accepted",
+      "gap_ids": []
     },
     {
       "id": "TXT-09",
@@ -1245,18 +1296,6 @@
       "product_actionable": false,
       "silent_misbehavior": false,
       "reason": "Credential-independent distribution gates pass; positive signing and notarization needs external authority."
-    },
-    {
-      "id": "font-axes-overrides-diagnostics",
-      "kind": "actionable-product-gap",
-      "priority": "P1",
-      "row_ids": [
-        "TXT-08"
-      ],
-      "owner": "ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down",
-      "product_actionable": true,
-      "silent_misbehavior": false,
-      "reason": "Variable axes, codepoint override policy, and fallback diagnostics are absent."
     },
     {
       "id": "synthetic-cell-glyphs",

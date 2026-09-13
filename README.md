@@ -456,7 +456,8 @@ action ID、`unbind`/`passthrough`、既定binding、予約済みnative shortcut
 `font-codepoint-override`はinclusive Unicode scalar rangeと明示familyを最大256件受理します。
 同じstyle/tagは後の宣言が有効になり、重なるscalar rangeも後の宣言が優先されます。
 利用不能なaxis/family/glyphは通常のCoreText fallbackへ戻り、新しいpaneごとの不変font catalogに
-適用結果を記録します。
+適用結果を記録します。既存paneが元のcatalogを保持し、reload後の新しいwindow/tab/splitだけが
+新しいaxis/overrideを受け取る境界と、適用／利用不能診断をDeveloper JITとRelease AOTで検証します。
 `quick-terminal-shortcut`の既定値は`none`で、設定した場合だけsystem-wide shortcutを
 exclusiveに登録します。`quick-terminal-screen`は`main | mouse | macos-menu-bar`、animationは
 0から5秒で0なら即時表示、autohideは既定で有効です。shortcutをlive reloadした際に新しい

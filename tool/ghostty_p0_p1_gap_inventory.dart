@@ -120,7 +120,6 @@ const Map<String, String> _classifications = <String, String>{
   'REL-01': 'accepted-external-follow-up',
   'DIST-01': 'accepted-external-follow-up',
   'DIST-02': 'accepted-external-follow-up',
-  'TXT-08': 'actionable-p1',
   'TXT-10': 'actionable-p1',
   'REN-08': 'actionable-p1',
   'IN-10': 'actionable-p1',
@@ -132,7 +131,6 @@ const Map<String, List<String>> _rowGapIds = <String, List<String>>{
   'REL-01': <String>['physical-duration-reliability'],
   'DIST-01': <String>['intel-native-handoff'],
   'DIST-02': <String>['apple-service-acceptance'],
-  'TXT-08': <String>['font-axes-overrides-diagnostics'],
   'TXT-10': <String>['synthetic-cell-glyphs'],
   'REN-08': <String>['remaining-overlays-and-color-conversion'],
   'IN-10': <String>['option-click-and-semantic-selection'],
@@ -185,15 +183,6 @@ const List<_Gap> _gaps = <_Gap>[
     reason: 'Credential-independent distribution gates pass; positive signing and notarization needs external authority.',
   ),
   _Gap(
-    id: 'font-axes-overrides-diagnostics',
-    kind: 'actionable-product-gap',
-    priority: 'P1',
-    rowIds: <String>['TXT-08'],
-    owner: 'ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down',
-    productActionable: true,
-    reason: 'Variable axes, codepoint override policy, and fallback diagnostics are absent.',
-  ),
-  _Gap(
     id: 'synthetic-cell-glyphs',
     kind: 'actionable-product-gap',
     priority: 'P1',
@@ -244,6 +233,19 @@ const List<String> _evidencePaths = <String>[
   'test/terminal_snapshot_test.dart',
   'lib/src/terminal_renderer/terminal_screen_metal_compositor.dart',
   'test/terminal_screen_metal_compositor_test.dart',
+  'packages/dart_terminal_renderer_macos/lib/src/font_configuration.dart',
+  'packages/dart_terminal_renderer_macos/lib/src/font_catalog.dart',
+  'packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.h',
+  'packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m',
+  'packages/dart_terminal_renderer_macos/native/test/TerminalRendererCapabilityTests.mm',
+  'packages/dart_terminal_renderer_macos/test/font_catalog_test.dart',
+  'lib/src/terminal_config.dart',
+  'lib/src/terminal_product_configuration.dart',
+  'lib/src/terminal_diagnostics.dart',
+  'lib/src/terminal_application.dart',
+  'test/terminal_product_configuration_test.dart',
+  'test/terminal_diagnostics_test.dart',
+  'tool/runtime_integration_smoke.dart',
 ];
 
 final class GhosttyP0P1GapInventoryException implements Exception {
@@ -259,9 +261,9 @@ final class GhosttyP0P1GapInventoryResult {
   const GhosttyP0P1GapInventoryResult();
 
   int get rows => 102;
-  int get accepted => 93;
+  int get accepted => 94;
   int get actionableP0 => 0;
-  int get actionableP1 => 4;
+  int get actionableP1 => 3;
   int get documentedDifferences => 2;
   int get externalFollowUps => 3;
 
@@ -355,6 +357,58 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
       2 * 1024 * 1024,
     ).readAsStringSync(),
   );
+  validateGhosttyP1FontResolutionClosureSources(
+    rendererConfigurationSource: _regularFile(
+      root,
+      'packages/dart_terminal_renderer_macos/lib/src/font_configuration.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    rendererCatalogSource: _regularFile(
+      root,
+      'packages/dart_terminal_renderer_macos/lib/src/font_catalog.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    rendererNativeHeaderSource: _regularFile(
+      root,
+      'packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.h',
+      1024 * 1024,
+    ).readAsStringSync(),
+    rendererNativeSource: _regularFile(
+      root,
+      'packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    rendererNativeTestSource: _regularFile(
+      root,
+      'packages/dart_terminal_renderer_macos/native/test/TerminalRendererCapabilityTests.mm',
+      1024 * 1024,
+    ).readAsStringSync(),
+    rendererTestSource: _regularFile(
+      root,
+      'packages/dart_terminal_renderer_macos/test/font_catalog_test.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    productConfigurationSource: _regularFile(
+      root,
+      'lib/src/terminal_product_configuration.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    productDiagnosticsSource: _regularFile(
+      root,
+      'lib/src/terminal_diagnostics.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    productApplicationSource: _regularFile(
+      root,
+      'lib/src/terminal_application.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    runtimeSmokeSource: _regularFile(
+      root,
+      'tool/runtime_integration_smoke.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+  );
   final Map<String, int> priorities = <String, int>{};
   final Map<String, int> classifications = <String, int>{};
   final List<Map<String, Object?>> encodedRows = <Map<String, Object?>>[];
@@ -428,7 +482,7 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
           classification: classifications[classification] ?? 0,
       },
       'actionable_p0': 0,
-      'actionable_p1': 4,
+      'actionable_p1': 3,
       'silent_misbehavior': 0,
     },
     'p0_closure': <String, Object?>{
@@ -444,8 +498,9 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
         'bounded-semantic-ranges',
         'versioned-snapshot-restore-oracle',
         'cursor-cell-ligature-shaping-break',
+        'font-axes-codepoint-overrides-fallback-diagnostics',
       ],
-      'remaining_actionable': 4,
+      'remaining_actionable': 3,
     },
     'rows': encodedRows,
     'gaps': <Map<String, Object?>>[for (final _Gap gap in _gaps) gap.toJson()],
@@ -523,12 +578,12 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
         priorities['P1'] == 26 &&
         priorities['P1/P2'] == 1 &&
         totals['actionable_p0'] == 0 &&
-        totals['actionable_p1'] == 4 &&
+        totals['actionable_p1'] == 3 &&
         totals['silent_misbehavior'] == 0 &&
-        classifications['accepted'] == 93 &&
+        classifications['accepted'] == 94 &&
         classifications['accepted-documented-difference'] == 2 &&
         classifications['accepted-external-follow-up'] == 3 &&
-        classifications['actionable-p1'] == 4 &&
+        classifications['actionable-p1'] == 3 &&
         p0Closure['actionable_product_gaps'] == 0 &&
         p0Closure['known_silent_misbehavior'] == 0 &&
         p0Closure['documented_non_mutating_differences'] == 1 &&
@@ -538,11 +593,96 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
         (p1Closure['completed']! as List<Object?>).join(',') ==
             'extended-rendition-and-selective-erase,bounded-semantic-ranges,'
                 'versioned-snapshot-restore-oracle,'
-                'cursor-cell-ligature-shaping-break' &&
-        p1Closure['remaining_actionable'] == 4,
+                'cursor-cell-ligature-shaping-break,'
+                'font-axes-codepoint-overrides-fallback-diagnostics' &&
+        p1Closure['remaining_actionable'] == 3,
     'reviewed totals differ',
   );
   return const GhosttyP0P1GapInventoryResult();
+}
+
+void validateGhosttyP1FontResolutionClosureSources({
+  required String rendererConfigurationSource,
+  required String rendererCatalogSource,
+  required String rendererNativeHeaderSource,
+  required String rendererNativeSource,
+  required String rendererNativeTestSource,
+  required String rendererTestSource,
+  required String productConfigurationSource,
+  required String productDiagnosticsSource,
+  required String productApplicationSource,
+  required String runtimeSmokeSource,
+}) {
+  _expect(
+    rendererConfigurationSource.contains('maximumVariationsPerStyle = 16') &&
+        rendererConfigurationSource.contains(
+          'maximumCodepointOverrides = 256',
+        ) &&
+        rendererConfigurationSource.contains(
+          'maximumOverrideFamilyUtf8Bytes = 64 * 1024',
+        ) &&
+        rendererConfigurationSource.contains(
+          'for (int index = codepointOverrides.length - 1; index >= 0; index--)',
+        ) &&
+        rendererConfigurationSource.contains(
+          'class TerminalFontCatalogDiagnostics',
+        ),
+    'bounded font request/diagnostic contract differs',
+  );
+  _expect(
+    rendererCatalogSource.contains('dtr_font_catalog_create_configured') &&
+        rendererCatalogSource.contains('dtr_font_catalog_copy_diagnostics') &&
+        rendererNativeHeaderSource.contains(
+          '#define DTR_FONT_CATALOG_CONFIG_VERSION 1u',
+        ) &&
+        rendererNativeHeaderSource.contains(
+          '#define DTR_MAX_FONT_VARIATIONS_PER_STYLE 16u',
+        ) &&
+        rendererNativeHeaderSource.contains(
+          '#define DTR_MAX_FONT_CODEPOINT_OVERRIDES 256u',
+        ) &&
+        rendererNativeSource.contains('NSFontVariationAttribute') &&
+        rendererNativeSource.contains(
+          'for (NSInteger candidate = (NSInteger)_overrides.count - 1;',
+        ),
+    'versioned native font resolution contract differs',
+  );
+  _expect(
+    rendererNativeTestSource.contains(
+          'later overlapping codepoint override wins',
+        ) &&
+        rendererNativeTestSource.contains(
+          'mapped family without a glyph returns to normal CoreText fallback',
+        ) &&
+        rendererNativeTestSource.contains(
+          'diagnostics distinguish configured, applied, and unavailable work',
+        ) &&
+        rendererTestSource.contains(
+          'native diagnostics expose bounded source counts and face identities',
+        ),
+    'native and Dart font resolution regression evidence differs',
+  );
+  _expect(
+    productConfigurationSource.contains(
+          '_fontCatalogConfigurationFromSnapshot',
+        ) &&
+        productConfigurationSource.contains('_fontVariationsFromSnapshot') &&
+        productDiagnosticsSource.contains("'font_diagnostics'") &&
+        productDiagnosticsSource.contains("'postscript_name'") &&
+        productApplicationSource.contains(
+          'fontDiagnostics.unavailableVariationCount == 1',
+        ) &&
+        productApplicationSource.contains(
+          'fontDiagnostics.availableOverrideCount == 1',
+        ) &&
+        productApplicationSource.contains(
+          'font_configuration=true font_diagnostics=true',
+        ) &&
+        runtimeSmokeSource.contains(
+          'font_fallback=true font_configuration=true font_diagnostics=true',
+        ),
+    'product font projection/runtime evidence differs',
+  );
 }
 
 void validateGhosttyP1CursorLigatureClosureSources({

@@ -15,9 +15,9 @@ void runGhosttyP0P1GapInventoryTests() {
       );
   _expect(
     result.rows == 102 &&
-        result.accepted == 93 &&
+        result.accepted == 94 &&
         result.actionableP0 == 0 &&
-        result.actionableP1 == 4 &&
+        result.actionableP1 == 3 &&
         result.documentedDifferences == 2 &&
         result.externalFollowUps == 3,
     'reviewed result totals are exact',
@@ -28,12 +28,12 @@ void runGhosttyP0P1GapInventoryTests() {
   final List<Object?> gaps = report['gaps']! as List<Object?>;
   _expect(
     rows.length == 102 &&
-        gaps.length == 9 &&
+        gaps.length == 8 &&
         rows
                 .cast<Map<String, Object?>>()
                 .where((row) => row['classification'] == 'actionable-p1')
                 .length ==
-            4 &&
+            3 &&
         gaps
             .cast<Map<String, Object?>>()
             .where((gap) => gap['silent_misbehavior'] == true)
@@ -41,7 +41,7 @@ void runGhosttyP0P1GapInventoryTests() {
     'every row and reviewed gap is represented',
   );
   _expectFailure(
-    committed.replaceFirst('"actionable_p1": 4', '"actionable_p1": 5'),
+    committed.replaceFirst('"actionable_p1": 3', '"actionable_p1": 4'),
     generated,
     'stale actionable total',
   );
@@ -213,6 +213,79 @@ void runGhosttyP0P1GapInventoryTests() {
     ),
     'missing wide/grapheme atomicity regression',
   );
+  final String rendererConfigurationSource = File(
+    'packages/dart_terminal_renderer_macos/lib/src/font_configuration.dart',
+  ).readAsStringSync();
+  final String rendererCatalogSource = File(
+    'packages/dart_terminal_renderer_macos/lib/src/font_catalog.dart',
+  ).readAsStringSync();
+  final String rendererNativeHeaderSource = File(
+    'packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.h',
+  ).readAsStringSync();
+  final String rendererNativeSource = File(
+    'packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m',
+  ).readAsStringSync();
+  final String rendererNativeTestSource = File(
+    'packages/dart_terminal_renderer_macos/native/test/TerminalRendererCapabilityTests.mm',
+  ).readAsStringSync();
+  final String rendererTestSource = File(
+    'packages/dart_terminal_renderer_macos/test/font_catalog_test.dart',
+  ).readAsStringSync();
+  final String productConfigurationSource = File(
+    'lib/src/terminal_product_configuration.dart',
+  ).readAsStringSync();
+  final String productDiagnosticsSource = File(
+    'lib/src/terminal_diagnostics.dart',
+  ).readAsStringSync();
+  final String productApplicationSource = File(
+    'lib/src/terminal_application.dart',
+  ).readAsStringSync();
+  final String runtimeSmokeSource = File('tool/runtime_integration_smoke.dart')
+      .readAsStringSync();
+  validateGhosttyP1FontResolutionClosureSources(
+    rendererConfigurationSource: rendererConfigurationSource,
+    rendererCatalogSource: rendererCatalogSource,
+    rendererNativeHeaderSource: rendererNativeHeaderSource,
+    rendererNativeSource: rendererNativeSource,
+    rendererNativeTestSource: rendererNativeTestSource,
+    rendererTestSource: rendererTestSource,
+    productConfigurationSource: productConfigurationSource,
+    productDiagnosticsSource: productDiagnosticsSource,
+    productApplicationSource: productApplicationSource,
+    runtimeSmokeSource: runtimeSmokeSource,
+  );
+  _expectFontResolutionFailure(
+    rendererConfigurationSource.replaceFirst(
+      'maximumCodepointOverrides = 256',
+      'maximumCodepointOverrides = 255',
+    ),
+    rendererCatalogSource,
+    rendererNativeHeaderSource,
+    rendererNativeSource,
+    rendererNativeTestSource,
+    rendererTestSource,
+    productConfigurationSource,
+    productDiagnosticsSource,
+    productApplicationSource,
+    runtimeSmokeSource,
+    'missing codepoint-override capacity contract',
+  );
+  _expectFontResolutionFailure(
+    rendererConfigurationSource,
+    rendererCatalogSource,
+    rendererNativeHeaderSource,
+    rendererNativeSource,
+    rendererNativeTestSource,
+    rendererTestSource,
+    productConfigurationSource,
+    productDiagnosticsSource,
+    productApplicationSource,
+    runtimeSmokeSource.replaceAll(
+      'font_fallback=true font_configuration=true font_diagnostics=true',
+      'font_fallback=true',
+    ),
+    'missing two-runtime font acceptance marker',
+  );
 }
 
 void _expectFailure(String source, String expected, String message) {
@@ -313,6 +386,38 @@ void _expectCursorLigatureFailure(
     validateGhosttyP1CursorLigatureClosureSources(
       compositorSource: compositorSource,
       compositorTestSource: compositorTestSource,
+    );
+  } on GhosttyP0P1GapInventoryException {
+    return;
+  }
+  throw StateError('test failed: $message');
+}
+
+void _expectFontResolutionFailure(
+  String rendererConfigurationSource,
+  String rendererCatalogSource,
+  String rendererNativeHeaderSource,
+  String rendererNativeSource,
+  String rendererNativeTestSource,
+  String rendererTestSource,
+  String productConfigurationSource,
+  String productDiagnosticsSource,
+  String productApplicationSource,
+  String runtimeSmokeSource,
+  String message,
+) {
+  try {
+    validateGhosttyP1FontResolutionClosureSources(
+      rendererConfigurationSource: rendererConfigurationSource,
+      rendererCatalogSource: rendererCatalogSource,
+      rendererNativeHeaderSource: rendererNativeHeaderSource,
+      rendererNativeSource: rendererNativeSource,
+      rendererNativeTestSource: rendererNativeTestSource,
+      rendererTestSource: rendererTestSource,
+      productConfigurationSource: productConfigurationSource,
+      productDiagnosticsSource: productDiagnosticsSource,
+      productApplicationSource: productApplicationSource,
+      runtimeSmokeSource: runtimeSmokeSource,
     );
   } on GhosttyP0P1GapInventoryException {
     return;

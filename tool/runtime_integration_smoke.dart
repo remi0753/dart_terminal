@@ -2796,7 +2796,7 @@ keybind = command+d=pane.focus-next
               0 &&
           RegExp(
                 r'^TERMINAL_CONFIG_RELOAD disposition=applied generation=1 '
-                r'changes=17 live=2 new_session=15 diagnostics=0$',
+                r'changes=18 live=2 new_session=16 diagnostics=0$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
               1,
@@ -2806,7 +2806,8 @@ keybind = command+d=pane.focus-next
     _expect(
       RegExp(
             r'^TERMINAL_CONFIGURATION_TEST config_file=true palette=true '
-            r'font=true window=true padding=true accessibility_padding=true '
+            r'font=true font_configuration=true font_diagnostics=true '
+            r'window=true padding=true accessibility_padding=true '
             r'option_text=true '
             r'scrollback=true cursor=true '
             r'keybind_pane=true keybind_application=true unbind=true '
@@ -2860,7 +2861,7 @@ keybind = command+d=pane.focus-next
       'panes=4 keybinds=true save=true permissions=true reload=true '
       'settings_editor=true settings_visuals=true '
       'settings_initial_document=true settings_viewport_follow=true '
-      'font_fallback=true '
+      'font_fallback=true font_configuration=true font_diagnostics=true '
       'effective_config=true '
       'elapsed_ms=${observation.elapsed.inMilliseconds}',
     );

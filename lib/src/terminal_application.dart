@@ -11046,6 +11046,7 @@ keybind = control+k=pane.focus-next
     );
     stdout.writeln(
       'TERMINAL_CONFIGURATION_TEST config_file=true palette=true font=true '
+      'font_configuration=true font_diagnostics=true '
       'window=true padding=true accessibility_padding=true option_text=true '
       'scrollback=true cursor=true '
       'keybind_pane=true keybind_application=true unbind=true '

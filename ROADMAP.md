@@ -1384,11 +1384,11 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] bounded semantic prompt／command／output ranges
     - [x] versioned snapshot restore oracle
     - [x] cursor-cell ligature shaping break
-    - [ ] variable font axes／codepoint override／fallback diagnostics
+    - [x] variable font axes／codepoint override／fallback diagnostics
       - [x] bounded immutable font request／diagnostic contract
       - [x] versioned native ABI と CoreText axes／ordered override resolution
       - [x] typed config／Settings／product fallback diagnostics projection
-      - [ ] runtime evidence、文書／matrix更新、親項目完了判定
+      - [x] runtime evidence、文書／matrix更新、親項目完了判定
     - [ ] synthetic box／block／braille／Powerline glyph
     - [ ] image／search／inspector overlay、P3→sRGB conversion
     - [ ] Option-click cursor／semantic prompt-output selection

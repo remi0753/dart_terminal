@@ -7,7 +7,7 @@
 - Started: 2026-09-13
 - State: in progress
 - Current subtask: P1 gap burn-down — variable font axes/codepoint override/
-  fallback diagnostics, typed config/Settings/product projection (completed)
+  fallback diagnostics, runtime evidence/documentation/matrix closure (completed)
 
 ## Purpose
 
@@ -379,6 +379,45 @@ code/name containing `terminal` may be added to `dart_appkit`.
   `dart_appkit` content/name audit. Apple notarization and duration-only
   campaigns remain skipped as authorized.
 
+#### Current closure subtask — runtime evidence and matrix decision
+
+- **Purpose:** Prove that configured variation axes, ordered codepoint
+  overrides, and bounded fallback diagnostics operate through the ordinary
+  packaged product in both supported runtime modes, then close `TXT-08` only
+  against that executed evidence.
+- **Background:** The typed product projection is complete and its exact
+  repository gate passes, but the current Ghostty inventory correctly keeps
+  `TXT-08` actionable. The existing configuration integration launcher builds
+  and opens the normal Developer JIT and Release AOT applications and already
+  drives configuration reload plus fresh window/tab/split creation.
+- **Scope:** Extend or tighten the bounded configuration runtime observation so
+  it explicitly proves the configured font request, immutable old-pane/new-pane
+  boundary, native CoreText availability/unavailability diagnostics, and safe
+  diagnostics projection; run both arm64 runtime modes; update README,
+  `FEATURE_MATRIX.md`, generated compatibility evidence, task status, and the
+  parent font item; rerun focused/freshness and exact repository gates.
+- **Out of scope:** Duration-based daily use or soak, Apple notarization,
+  arbitrary installed third-party-font coverage, synthetic cell glyphs,
+  subsequent overlay/input gaps, and all changes or `terminal`-named code in
+  generic `dart_appkit`.
+- **Dependencies:** The committed product projection (`d9c662a`), the versioned
+  native font request/diagnostic ABI, `runtime-configuration-integration`, the
+  `TXT-08` matrix row, regression-coverage and Ghostty inventory generators,
+  and the existing privacy audit.
+- **Completion conditions:** Developer JIT and Release AOT both prove an
+  available override and an unavailable axis without changing old-pane font
+  state, the bounded product diagnostic contains no terminal text or configured
+  scalar value, `TXT-08` moves to accepted with fresh source/test/runtime
+  ownership, exact `make test` passes, `dart_appkit` remains clean, and the font
+  roadmap parent has no remaining child.
+- **Verification approach:** Run the bounded arm64 configuration integration
+  first, correct only failures that exercise this contract, then run focused
+  config/diagnostic/inventory checks, regenerate evidence in dependency order,
+  execute exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`, review the
+  complete diff, and repeat the content/name boundary audit. Authorized
+  notarization and duration-only campaigns are recorded as skipped, not as
+  blockers or positive evidence.
+
 ## Inventory and decisions
 
 - 2026-09-13: The pinned Ghostty matrix revision
@@ -663,6 +702,58 @@ code/name containing `terminal` may be added to `dart_appkit`.
   notarization and duration-only campaigns remain skipped as authorized. The
   next ordered subtask is bounded Developer-JIT/Release-AOT runtime evidence,
   documentation/matrix closure, and the parent completion decision.
+- 2026-09-14: The first bounded runtime-configuration run built, signed, and
+  launched the normal Developer JIT bundle, and the application itself exited
+  successfully after its font request/diagnostic assertions. The outer
+  launcher then rejected the accepted-reload line because it still required
+  the pre-font-schema totals `changes=17 new_session=15`; the application now
+  correctly reports two live plus 16 new-session changes, or 18 total. Release
+  AOT was not reached. This is a stale exact-output assertion, not an
+  application reload or font-resolution failure. The launcher will be updated
+  to the current totals and both application and launcher markers will state
+  the new font-configuration/diagnostic coverage explicitly before rerunning
+  both modes.
+- 2026-09-14: The corrected bounded
+  `make RUNTIME_ARCH=arm64 runtime-configuration-integration` run passed the
+  ordinary arm64 Developer JIT application in 1,408 ms and Release AOT
+  application in 754 ms. Both exact markers reported four independent panes,
+  configuration save/reload, Settings visuals, normal CoreText fallback,
+  `font_configuration=true`, and `font_diagnostics=true`. Inside each product
+  run, the original pane retained its configured `wght=450`/Menlo override
+  catalog while three fresh window/tab/split panes received the accepted
+  Menlo request with an intentionally unavailable `wght` axis and an available
+  box-drawing override; diagnostics reported one configured/unavailable axis
+  and one configured/available override without exposing scalar values. The
+  invalid save still caused no reload, and the accepted transaction reported
+  exactly two live plus 16 new-session changes.
+- 2026-09-14: The `TXT-08` closure evidence is bound to the immutable renderer
+  contract, versioned native ABI/CoreText implementation, native and Dart
+  regressions, product projection/diagnostics, and the exact two-runtime
+  acceptance markers. The matrix now states only the implemented bounds and
+  executed behavior. Its actionable gap is removed, leaving three actionable
+  P1 rows; generator totals become 94 accepted and three actionable with eight
+  reviewed gap records. Generated reports and the exact repository gate must
+  still be refreshed and pass before the roadmap parent is complete.
+- 2026-09-14: Focused static analysis reported `No issues found!`; the font
+  closure inventory test passed both exact-source validation and negatives for
+  a weakened override cap and missing runtime marker. Phase 7 AppKit,
+  compatibility regression coverage (9 cases, 417 split runs), and Ghostty
+  inventory freshness checks all passed after ordered regeneration. The final
+  exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed every native
+  package, generated/reference/localization and 190-key diagnostics privacy
+  check, compatibility/differential/application/terminfo/shell/distribution
+  gate, 330-file zero-change formatting, clean root analysis,
+  security/update/symbol suites, and aggregate tests, ending with
+  `dart_terminal tests passed`. The inventory reports 102 rows, 94 accepted,
+  zero actionable P0, and three actionable P1 rows.
+- 2026-09-14: Final `git diff --check` passed. The adjacent `dart_appkit`
+  worktree is clean; case-insensitive executable content and filename audits
+  across native, packages, scripts, test, tool, examples, and Makefile found no
+  `terminal`, `dart_terminal`, or `dart-terminal` occurrence outside excluded
+  docs/build/cache/git surfaces. No generic-library file changed. Apple
+  notarization and duration-only campaigns were skipped as authorized. All
+  four font children now pass, so the `TXT-08` roadmap parent is complete; the
+  next ordered P1 child is synthetic box/block/braille/Powerline glyphs.
 
 - 2026-09-13: The first focused analyzer rerun passed with `No issues found!`,
   and `dart run test/terminal_semantic_prompt_test.dart` exited 0 after its

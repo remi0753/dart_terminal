@@ -118,7 +118,11 @@ boundaries. `make RUNTIME_ARCH=arm64 runtime-diagnostics-integration` launches
 the ordinary Developer JIT and Release AOT applications and verifies live
 capture, focus handoff, menu/Command Palette routing, atomic canonical exports,
 redaction, consent-before-access, isolated raw crash/sample publication, zero
-PTY writes, singleton ownership, and teardown. Optional inspector checks remain
+PTY writes, singleton ownership, and teardown.
+
+`make RUNTIME_ARCH=arm64 runtime-configuration-integration` separately verifies
+configured axis and override availability diagnostics across immutable old/new
+pane catalogs in both modes. Optional inspector checks remain
 in the [Phase 10 checklist](../phase10/terminal-inspector-diagnostics-manual-checklist.md);
 incident UI checks are in the
 [local incident checklist](../phase11/local-incident-manual-checklist.md).
