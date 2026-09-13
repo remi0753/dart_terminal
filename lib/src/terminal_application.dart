@@ -71,7 +71,9 @@ import 'terminal_product_configuration.dart';
 import 'terminal_product_hierarchy_actions.dart';
 import 'terminal_prompt_navigation.dart';
 import 'terminal_quick_terminal.dart';
+import 'terminal_renderer/glyph_atlas.dart';
 import 'terminal_renderer/pane_work_scheduler.dart';
+import 'terminal_renderer/terminal_cell_glyph.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_restoration.dart';
 import 'terminal_restoration_lifecycle.dart';
@@ -14768,6 +14770,11 @@ keybind = control+k=pane.focus-next
       pane,
       surface,
     );
+    final bool cellGlyphs = await _exerciseSyntheticCellGlyphs(
+      session,
+      pane,
+      surface,
+    );
     final bool focus = await _exerciseFocusReporting(
       application,
       session,
@@ -14921,6 +14928,7 @@ keybind = control+k=pane.focus-next
           queryReports &&
           synchronizedOutput &&
           kittyGraphics &&
+          cellGlyphs &&
           focus &&
           mouse &&
           selection &&
@@ -14950,6 +14958,7 @@ keybind = control+k=pane.focus-next
           'input_matrix=$inputMatrix decrqss=$decrqss '
           'query_reports=$queryReports synchronized_output=$synchronizedOutput '
           'kitty_graphics=$kittyGraphics '
+          'cell_glyphs=$cellGlyphs '
           'focus=$focus mouse=$mouse '
           'selection=$selection '
           'close_scroll=$closeScroll '
@@ -14982,6 +14991,7 @@ keybind = control+k=pane.focus-next
       'input_matrix=$inputMatrix decrqss=$decrqss '
       'query_reports=$queryReports synchronized_output=$synchronizedOutput '
       'kitty_graphics=$kittyGraphics '
+      'cell_glyphs=$cellGlyphs '
       'focus=$focus mouse=$mouse '
       'selection=$selection '
       'close_scroll=$closeScroll '
@@ -14989,6 +14999,114 @@ keybind = control+k=pane.focus-next
       'cursor_color=$cursorColor '
       'accessibility=$accessibility '
       'font_size=${baseline.fontPointSize}',
+    );
+  }
+
+  static Future<bool> _exerciseSyntheticCellGlyphs(
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+  ) async {
+    const List<int> acceptedScalars = <int>[0x2500, 0x2588, 0x28ff, 0xe0b0];
+    const int adjacentUnsupported = 0xe0c0;
+    final TerminalLiveMetalSurfaceSnapshot before = surface.snapshot();
+    pane.insertText(
+      r"printf '\r\n__DT_CELL_GLYPH_START__A\342\224\200\342\226\210\342\243\277\356\202\260\356\203\200Z__DT_CELL_GLYPH_END__\r\n'",
+    );
+    await pane.submit();
+
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+      final Map<int, _TerminalAsciiPosition> positions =
+          <int, _TerminalAsciiPosition>{};
+      for (final int scalar in <int>[...acceptedScalars, adjacentUnsupported]) {
+        final _TerminalAsciiPosition? position = _findScalar(screen, scalar);
+        if (position != null) positions[scalar] = position;
+      }
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      if (positions.length == acceptedScalars.length + 1 &&
+          snapshot.acceptedFrameCount > before.acceptedFrameCount &&
+          snapshot.lastAcceptedModelRevision ==
+              snapshot.lastAppliedDamageGeneration) {
+        final double scale = surface.atlas.scale;
+        final TerminalFontCatalogMetrics metrics = surface.fontMetrics;
+        final int thickness = math.max(
+          1,
+          (metrics.underlineThickness * scale).round(),
+        );
+        var exactEntries = true;
+        final Set<TerminalCellGlyphFamily> families =
+            <TerminalCellGlyphFamily>{};
+        for (final int scalar in acceptedScalars) {
+          final _TerminalAsciiPosition position = positions[scalar]!;
+          final int flags = screen.widthFlagsAt(position.row, position.column);
+          final int left = (position.column * metrics.cellWidth * scale)
+              .round();
+          final int right = ((position.column + 1) * metrics.cellWidth * scale)
+              .round();
+          final int top = (position.row * metrics.cellHeight * scale).round();
+          final int bottom = ((position.row + 1) * metrics.cellHeight * scale)
+              .round();
+          final int lineThickness = thickness.clamp(
+            1,
+            math.min(right - left, bottom - top),
+          );
+          final TerminalCellGlyphRasterRequest request =
+              TerminalCellGlyphRasterRequest(
+                scalar: scalar,
+                cellWidth: right - left,
+                cellHeight: bottom - top,
+                lineThickness: lineThickness,
+              );
+          final TerminalGlyphAtlasEntry? entry = surface.atlas.lookupCellGlyph(
+            TerminalCellGlyphAtlasKey.fromRequest(
+              catalogGeneration: surface.atlas.catalogGeneration,
+              scale16_16: surface.atlas.scale16_16,
+              request: request,
+            ),
+          );
+          exactEntries =
+              exactEntries &&
+              flags & TerminalCellFlags.widthMask == TerminalCellFlags.narrow &&
+              flags & TerminalCellFlags.grapheme == 0 &&
+              entry != null &&
+              entry.isCellGlyph &&
+              entry.width == right - left &&
+              entry.height == bottom - top;
+          families.add(TerminalCellGlyphClassifier.classify(scalar)!.family);
+        }
+        final _TerminalAsciiPosition fallback = positions[adjacentUnsupported]!;
+        final int fallbackFlags = screen.widthFlagsAt(
+          fallback.row,
+          fallback.column,
+        );
+        final bool fontFallback =
+            !TerminalCellGlyphClassifier.supports(adjacentUnsupported) &&
+            fallbackFlags & TerminalCellFlags.widthMask ==
+                TerminalCellFlags.narrow &&
+            fallbackFlags & TerminalCellFlags.grapheme == 0;
+        if (exactEntries &&
+            families.length == TerminalCellGlyphFamily.values.length &&
+            fontFallback &&
+            surface.atlas.cellGlyphEntryCount >= acceptedScalars.length) {
+          stdout.writeln(
+            'TERMINAL_CELL_GLYPH_TEST box=true block=true braille=true '
+            'powerline=true accepted=4 exact_cells=true '
+            'font_fallback=true metal=true bounded=true',
+          );
+          return true;
+        }
+      }
+      _expectLifecycle(
+        session.isLive,
+        'display-test zsh exited before presenting synthetic cell glyphs',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw TimeoutException(
+      'display-test did not publish accepted synthetic cells and adjacent '
+      'font fallback through a current Metal frame',
     );
   }
 
@@ -18413,6 +18531,24 @@ keybind = control+k=pane.focus-next
       final int column = _asciiRow(screen, row).indexOf(pattern);
       if (column >= 0) {
         return _TerminalAsciiPosition(row: row, column: column);
+      }
+    }
+    return null;
+  }
+
+  static _TerminalAsciiPosition? _findScalar(
+    TerminalScreen screen,
+    int scalar,
+  ) {
+    for (int row = 0; row < screen.rows; row++) {
+      for (int column = 0; column < screen.columns; column++) {
+        final int flags = screen.widthFlagsAt(row, column);
+        if (flags & TerminalCellFlags.grapheme == 0 &&
+            flags & TerminalCellFlags.widthMask !=
+                TerminalCellFlags.continuation &&
+            screen.contentAt(row, column) == scalar) {
+          return _TerminalAsciiPosition(row: row, column: column);
+        }
       }
     }
     return null;

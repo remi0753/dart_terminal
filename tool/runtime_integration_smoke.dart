@@ -1308,6 +1308,14 @@ Future<void> _runTerminalDisplay(
   );
   _expect(
     observation.stdoutText.contains(
+      'TERMINAL_CELL_GLYPH_TEST box=true block=true braille=true '
+      'powerline=true accepted=4 exact_cells=true font_fallback=true '
+      'metal=true bounded=true',
+    ),
+    'terminal display launch omitted synthetic-cell Metal acceptance',
+  );
+  _expect(
+    observation.stdoutText.contains(
       'TERMINAL_DECRQSS_TEST selector=sgr default=true xterm=true '
       'exact=true bytes=9',
     ),
@@ -1434,7 +1442,7 @@ Future<void> _runTerminalDisplay(
     r'metal_default=true newest_frame=true frame_bounded=true '
     r'system_font=true mode_key=true text_input=true input_matrix=true '
     r'decrqss=true query_reports=true synchronized_output=true '
-    r'kitty_graphics=true '
+    r'kitty_graphics=true cell_glyphs=true '
     r'focus=true mouse=true selection=true '
     r'close_scroll=true scroll=true '
     r'hyperlink=true '

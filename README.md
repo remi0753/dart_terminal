@@ -302,6 +302,13 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
 - alpha8/straight-RGBA8を分離したbounded glyph atlas、決定論的配置、page/byte/
   entry上限、unpinned LRU、submission token pin、resource generation検証、
   矩形差分uploadと実CoreText文字コーパスの1x/2x pixel golden
+- Box Drawing 128、Block Elements 32、Braille 256、明示したPowerline 18の
+  合計434 scalarを、各grid edgeから独立に丸めたdevice-pixel cellへ描く決定論的
+  alpha raster。scale／幅／高さ／線幅を含む専用atlas keyで拡大を避け、色と既存layer
+  順を保持する。multi-scalar grapheme、wide cell、U+E0C0を含む隣接PUAとその他の
+  Nerd FontはCoreText fallbackのまま。1x/2x DTGI、CPU oracle／real Metal比較、
+  Developer JIT／Release AOTの実PTY製品受け入れは
+  [terminal rendering reference](docs/reference/terminal-rendering.md)に固定
 - build時にコンパイルしたMetal shader、全terminal layer用packed draw list、
   bounded texture array、3つのnative frame slot、即時backpressure、GPU完了retire、
   Dart encoder/facade、stable atlas slice bridge、CPU oracleとの1x/2x readback比較

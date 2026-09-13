@@ -4,7 +4,7 @@
   "status": "open-actionable-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "d2a3517560273dfeedcb2320ba349628fb5ff2a85830521ee1264658d30b7469",
+    "sha256": "bce4fd02e073858ab48a61f561e9e027939110a8957f0bece561a05b0057eb33",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "51a21b2df5c23dbaea5d98864c873a4947a833b352da89d89602746ec484b201"
+      "sha256": "59f54b4c8bec3fdf2971345cc6df60245ee88360530cb27797f822b66ca47488"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -99,12 +99,36 @@
       "sha256": "62819199caab115636af8c81373cc350e1bbae858344379c6fb35ce3c3011360"
     },
     {
+      "path": "docs/reference/terminal-rendering.md",
+      "sha256": "1c62fc622f79140829b9ccf10a73d93bcf3fd056f5b6fc2fdf52da3dedf2b1bd"
+    },
+    {
+      "path": "lib/src/terminal_renderer/terminal_cell_glyph.dart",
+      "sha256": "29c01f54ac839531de00d433c909b3ef4e4436212f1bc7644b52226d1bd2dbb2"
+    },
+    {
+      "path": "lib/src/terminal_renderer/glyph_atlas.dart",
+      "sha256": "68a18bb008d92ec05e62713bd70cd637bbe53680e4ad8d602abc98dc770f5b1a"
+    },
+    {
       "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
       "sha256": "70833e97c5fbd98619d4cd756919d2e9a03060bf82d25611435cd65b3ecd06d7"
     },
     {
+      "path": "test/terminal_cell_glyph_test.dart",
+      "sha256": "f295a07423fe6c547bb86438a1bb6c80c1b2c698c18e73148d94507f411fad4f"
+    },
+    {
       "path": "test/terminal_screen_metal_compositor_test.dart",
-      "sha256": "31bce0149a483891bd69b9dc0de3baa2b49c69f78d5d6cce31f46cb0a5f939cd"
+      "sha256": "7f63a245339159eb8623c1f17b7aac90cc98e01bd1537b24f8975e135afab858"
+    },
+    {
+      "path": "test/goldens/cell-glyphs/synthetic-corpus-1x.dtgi",
+      "sha256": "dfe94356493b698b6a2d4b916a7d340d0efb3e6492b6804385d0d752292d3930"
+    },
+    {
+      "path": "test/goldens/cell-glyphs/synthetic-corpus-2x.dtgi",
+      "sha256": "d104ea9df96eb2e2c4ab0fbd4694b8dda7b718f7494d47f00c862d8e6da8a58b"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/lib/src/font_configuration.dart",
@@ -144,7 +168,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "3a2c9de5515b3289817bc0eb9a725661bc64652e5c1eaa1bc111a995a6cd4d9c"
+      "sha256": "97f4652301749df9a8182edeebbc8f20a9115e2b0e9ccf479d2bc6a989e1fc4c"
     },
     {
       "path": "test/terminal_product_configuration_test.dart",
@@ -156,7 +180,7 @@
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
-      "sha256": "24af803cb3298c1c549075d6d12f389adb72467ccd00b903482c4658c395fcdd"
+      "sha256": "10394639f8e3d73007c8c2f6a53e68008051cd2b5011cfdd553f68be6f7c91bd"
     }
   ],
   "totals": {
@@ -168,13 +192,13 @@
       "P1/P2": 1
     },
     "classifications": {
-      "accepted": 94,
+      "accepted": 95,
       "accepted-documented-difference": 2,
       "accepted-external-follow-up": 3,
-      "actionable-p1": 3
+      "actionable-p1": 2
     },
     "actionable_p0": 0,
-    "actionable_p1": 3,
+    "actionable_p1": 2,
     "silent_misbehavior": 0
   },
   "p0_closure": {
@@ -192,9 +216,10 @@
       "bounded-semantic-ranges",
       "versioned-snapshot-restore-oracle",
       "cursor-cell-ligature-shaping-break",
-      "font-axes-codepoint-overrides-fallback-diagnostics"
+      "font-axes-codepoint-overrides-fallback-diagnostics",
+      "synthetic-cell-glyphs"
     ],
-    "remaining_actionable": 3
+    "remaining_actionable": 2
   },
   "rows": [
     {
@@ -655,7 +680,7 @@
       "phase": "4",
       "acceptance_sha256": "c033a644531daa51f83808a3191e40b7a3c57a752b4a872c69574b669dc5c48a",
       "pinned_evidence_sha256": "e2a646c44315b96caacecbd8e92700f40ca0492f6bdf481416417340f215c9e7",
-      "current_sha256": "fdaefb6eb72741a1aca3267593fb91839ecce60596c88070231d3d877ba28910",
+      "current_sha256": "784672b5efc902419c7deac34f18f52b408a8ecb5d5f77d6e35559092967bf90",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -695,11 +720,9 @@
       "phase": "4",
       "acceptance_sha256": "8a84486c6d25044d8034a68996b5e3086810d6bccd92a902358f029f94b0ced5",
       "pinned_evidence_sha256": "fab84bb49e798201ab7827de4443670aa8b7826ff5242f243fe26e98a5846ca1",
-      "current_sha256": "481070b8c3011436d248ab541c0164b325ef6b050edcd0ac415c0c8b090e09a6",
-      "classification": "actionable-p1",
-      "gap_ids": [
-        "synthetic-cell-glyphs"
-      ]
+      "current_sha256": "1b0159b6479de640d47428b8fc3e961ceb0ac3988d7e4f1b724ad2231e4b2562",
+      "classification": "accepted",
+      "gap_ids": []
     },
     {
       "id": "REN-01",
@@ -1296,18 +1319,6 @@
       "product_actionable": false,
       "silent_misbehavior": false,
       "reason": "Credential-independent distribution gates pass; positive signing and notarization needs external authority."
-    },
-    {
-      "id": "synthetic-cell-glyphs",
-      "kind": "actionable-product-gap",
-      "priority": "P1",
-      "row_ids": [
-        "TXT-10"
-      ],
-      "owner": "ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down",
-      "product_actionable": true,
-      "silent_misbehavior": false,
-      "reason": "Box, block, braille, and Powerline cell-filling synthetic glyphs are absent."
     },
     {
       "id": "remaining-overlays-and-color-conversion",

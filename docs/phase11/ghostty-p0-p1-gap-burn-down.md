@@ -890,6 +890,158 @@ preceding subtask is verified and committed.
   `terminal` matches, so no product-specific code or named source artifact was
   introduced into the generic library.
 
+#### Current closure subtask — synthetic-cell runtime evidence and parity records
+
+- **Purpose:** Bind the completed synthetic Box, Block, Braille, and accepted
+  Powerline implementation to reproducible 1x/2x image evidence and both
+  supported product runtimes, then close only the corresponding matrix gap and
+  roadmap parent.
+- **Background:** Commits `92b2632`, `a426749`, `a4bd787`, `51c41ea`, and
+  `bcd22b6` complete the bounded contract, all four raster families, and the
+  shared atlas/compositor path. The current gap inventory must remain open
+  until fresh source-controlled corpus evidence, Developer JIT, and Release AOT
+  acceptance all exercise that path.
+- **Scope:** Add deterministic 1x/2x source-controlled render fixtures and a
+  freshness/visual comparison test; extend the bounded runtime integration
+  acceptance with exact synthetic-cell and adjacent-font-fallback assertions;
+  run both product modes; update README and rendering reference documentation,
+  `FEATURE_MATRIX.md` rows TXT-06/TXT-10, compatibility coverage and the
+  generated Ghostty gap inventory in dependency order; mark this child and its
+  synthetic-glyph parent complete only after all gates pass.
+- **Out of scope:** Image/search/inspector overlays, P3 conversion,
+  Option-click/semantic selection, arbitrary geometric symbols or Nerd Font
+  PUA, font/layout/config changes, duration-only campaigns, Apple-service
+  notarization, and every change or `terminal`-named artifact in generic
+  `dart_appkit`.
+- **Dependencies:** The five committed implementation subtasks; existing DTGI
+  codec/comparator and Metal golden conventions; the product runtime smoke
+  launcher and exact-marker policy; matrix/gap/coverage generators; canonical
+  per-grid-line rounding; the pinned Ghostty revision and scalar inventory
+  already recorded in this memo.
+- **Completion conditions:** Checked-in 1x/2x images cover all four families
+  plus unsupported PUA fallback and compare exactly in the ordinary suite;
+  Developer JIT and Release AOT product runs each report and render the same
+  bounded feature without weakening existing assertions; docs and generated
+  reports state only observed coverage; TXT-10 and the synthetic portion of
+  TXT-06 become accepted with zero new silent gap; focused and exact full gates
+  pass; `dart_appkit` stays clean and generic.
+- **Verification approach:** Inventory existing golden/runtime/report ownership
+  before edits; implement the smallest deterministic corpus and runtime marker;
+  run focused image freshness/reference/Metal and runtime tests at 1x/2x, then
+  the bounded two-mode application target; update narrative sources before
+  regenerating dependent reports; run the exact repository gate, inspect all
+  source and binary fixture diffs, and repeat the adjacent-library content/name
+  audit before completion and commit.
+- 2026-09-14: Closure inventory found three existing version-one DTGI fixture
+  families: CPU reference layers, CoreText/atlas text, and Kitty CPU
+  composition. `TerminalScreenMetalCompositor` already exposes every retained
+  glyph entry and packed instance needed to reconstruct a device-pixel CPU
+  reference frame, while `TerminalMetalRenderer.renderRgba` supplies the same
+  frame's real Metal readback. The new fixture will therefore be compositor-
+  owned: exact checked-in CPU bytes remain deterministic, and the native result
+  must remain within the established one-channel-value Metal tolerance at 1x
+  and 2x. Its four rows will distinguish all four families by color, cover
+  representative Box/Block/Braille forms, all 18 accepted Powerline scalars,
+  blank Braille, and adjacent unsupported U+E0C0 through CoreText fallback.
+- 2026-09-14: The ordinary product `runtime-terminal-display-integration`
+  already launches the real AppKit window, live screen/session, CoreText atlas,
+  and Metal surface in Developer JIT and Release AOT. A bounded ASCII shell
+  command can emit the five relevant UTF-8 scalars by octal bytes so only its
+  output—not its command echo—contains them. Runtime acceptance can then bind
+  canonical screen positions to exact device-cell atlas keys, require all four
+  accepted family entries and a later accepted Metal frame, and prove adjacent
+  U+E0C0 remains classifier-unsupported. This extends the existing display gate
+  without adding another runtime option or external dependency.
+- 2026-09-14: Public parity ownership is concentrated in README's renderer and
+  local-check sections plus matrix rows `TXT-06` and `TXT-10`; no current
+  rendering reference page describes the synthetic allow-list or font-fallback
+  boundary. Closure will add one focused reference and link it from README.
+  The Ghostty inventory generator already owns exact matrix classification,
+  evidence hashes, completion lists, remaining actionable totals, and negative
+  source validation; it—not the unrelated parser sequence coverage report—is
+  the correct compatibility coverage owner for this renderer gap.
+- 2026-09-14: The checked-in compositor corpus is now 71,624 bytes at 1x
+  (SHA-256
+  `dfe94356493b698b6a2d4b916a7d340d0efb3e6492b6804385d0d752292d3930`)
+  and 285,995 bytes at 2x (SHA-256
+  `d104ea9df96eb2e2c4ab0fbd4694b8dda7b718f7494d47f00c862d8e6da8a58b`).
+  The focused compositor program regenerated both through its explicit writer,
+  then passed in ordinary non-writing mode: four colored rows yield 42
+  synthetic placements (Box 10, Block 8, Braille 6, Powerline 18), one
+  CoreText run for adjacent U+E0C0/ASCII fallback, byte-exact CPU-reference
+  DTGI comparison, and real Metal readback within the established per-channel
+  tolerance at both scales.
+- 2026-09-14: The first focused closure analysis found two missing type imports
+  in `terminal_application.dart`: the new runtime assertion referenced
+  `TerminalGlyphAtlasEntry` and `TerminalCellGlyphAtlasKey` but had imported
+  only the cell contract and live surface. Importing the existing atlas module
+  fixed both errors; the repeated focused format/analysis completed with zero
+  issues. No runtime or acceptance condition was weakened.
+- 2026-09-14: The bounded arm64 product display target passed on the real M1
+  window/PTY/CoreText/Metal path in both modes. Developer JIT reported
+  `RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS ... scale_16_16=131072
+  elapsed_ms=11674`; Release AOT reported the same accepted 2x scale and
+  `elapsed_ms=10449`. Each application emitted the exact content-free
+  `TERMINAL_CELL_GLYPH_TEST` marker after locating Box, Block, Braille,
+  Powerline, and adjacent U+E0C0 cells, resolving the four accepted cells to
+  exact rounded atlas keys, observing a current accepted Metal frame, and
+  retaining U+E0C0 on the normal fallback boundary. Existing display checks
+  and clean shutdown also passed.
+- 2026-09-14: README now links a focused rendering reference that records the
+  434-scalar allow-list, cell/atlas/layer ownership, fallback boundary, fixture
+  hashes, and reproduction commands. Matrix `TXT-06` now records the expanded
+  1x/2x corpus and `TXT-10` records the bounded implementation and executed
+  evidence. The fail-closed Ghostty closure validator binds classifier,
+  geometry families, atlas/compositor, exhaustive tests, both DTGI files, and
+  both runtime markers. After ordered regeneration its report has 102 rows,
+  95 accepted, zero actionable P0, two actionable P1 rows, seven reviewed gaps,
+  and no silent misbehavior; the focused report test and three new negative
+  drift cases passed.
+- 2026-09-14: The first final full-gate attempt stopped in the pre-existing
+  `dart_pty_macos` live-child completion test with a one-off `Bad state: No
+  element`; the same test had passed in both preceding full runs. The immediate
+  exact rerun passed that PTY test, confirming no repeat, then correctly stopped
+  because the Phase 7 AppKit acceptance artifact hashes the changed product
+  application/runtime display sources. Regenerating only
+  `test/corpus/appkit/phase7_acceptance_v1.json` restored that deterministic
+  dependency. Neither stop indicated a cell raster, compositor, Metal, or
+  runtime acceptance failure.
+- 2026-09-14: The resumed exact gate again passed the previously intermittent
+  live-child PTY case and the refreshed Phase 7 artifact, then stopped at the
+  compatibility regression coverage freshness check. The underlying nine-case
+  parser corpus still passed (`input_bytes=390`, `split_runs=417`); the report
+  includes `FEATURE_MATRIX.md` in its reviewed source identities, so closing
+  `TXT-06`/`TXT-10` intentionally made it stale. This is a generated-evidence
+  dependency, not a synthetic-cell or compatibility behavior failure. The
+  report must be regenerated before the focused freshness checks and exact gate
+  are repeated.
+- 2026-09-14: Regenerating the compatibility coverage report in the normal
+  macOS context succeeded. A sandboxed attempt had first failed before running
+  the generator because the Dart CLI could not update its home-directory
+  telemetry timestamp; no product or report file was changed by that failed
+  attempt. The focused coverage check then passed all nine cases and correctly
+  showed that its new report hash made the downstream Ghostty inventory stale,
+  so the inventory is regenerated next in dependency order.
+- 2026-09-14: Dependency-ordered regeneration completed with the compatibility
+  coverage report passing nine cases/417 split runs and the Ghostty inventory
+  passing 102 rows, 95 accepted rows, zero actionable P0, two actionable P1,
+  seven reviewed gaps, and zero silent misbehavior. The final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` then passed in the reviewed
+  source/evidence state: all native/package and generated-evidence gates,
+  332-file zero-change formatting, clean analysis, security/update/symbol
+  suites, the real Metal compositor regression, and the aggregate
+  `dart_terminal tests passed` marker completed successfully. `git diff
+  --check` passed; both checked-in fixture sizes and SHA-256 values match this
+  memo and the rendering reference.
+- 2026-09-14: Final adjacent-library audit found the `dart_appkit` worktree
+  clean. Case-insensitive executable-source/content and filename searches,
+  excluding docs/build/cache/git, returned zero `terminal` matches. This task
+  changed no generic-library file. Apple notarization and duration-only
+  campaigns remain skipped as authorized. All synthetic-cell child completion
+  conditions are met, so both the runtime-evidence child and its parent can be
+  marked complete; the next ordered item is image/search/inspector overlay and
+  P3-to-sRGB conversion.
+
 ## Inventory and decisions
 
 - 2026-09-13: The pinned Ghostty matrix revision

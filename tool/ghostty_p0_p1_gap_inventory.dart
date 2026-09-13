@@ -120,7 +120,6 @@ const Map<String, String> _classifications = <String, String>{
   'REL-01': 'accepted-external-follow-up',
   'DIST-01': 'accepted-external-follow-up',
   'DIST-02': 'accepted-external-follow-up',
-  'TXT-10': 'actionable-p1',
   'REN-08': 'actionable-p1',
   'IN-10': 'actionable-p1',
 };
@@ -131,7 +130,6 @@ const Map<String, List<String>> _rowGapIds = <String, List<String>>{
   'REL-01': <String>['physical-duration-reliability'],
   'DIST-01': <String>['intel-native-handoff'],
   'DIST-02': <String>['apple-service-acceptance'],
-  'TXT-10': <String>['synthetic-cell-glyphs'],
   'REN-08': <String>['remaining-overlays-and-color-conversion'],
   'IN-10': <String>['option-click-and-semantic-selection'],
 };
@@ -183,15 +181,6 @@ const List<_Gap> _gaps = <_Gap>[
     reason: 'Credential-independent distribution gates pass; positive signing and notarization needs external authority.',
   ),
   _Gap(
-    id: 'synthetic-cell-glyphs',
-    kind: 'actionable-product-gap',
-    priority: 'P1',
-    rowIds: <String>['TXT-10'],
-    owner: 'ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down',
-    productActionable: true,
-    reason: 'Box, block, braille, and Powerline cell-filling synthetic glyphs are absent.',
-  ),
-  _Gap(
     id: 'remaining-overlays-and-color-conversion',
     kind: 'actionable-product-gap',
     priority: 'P1',
@@ -231,8 +220,14 @@ const List<String> _evidencePaths = <String>[
   'lib/src/terminal_core/terminal_snapshot_restore_set_state.dart',
   'lib/src/terminal_core/terminal_session_metadata.dart',
   'test/terminal_snapshot_test.dart',
+  'docs/reference/terminal-rendering.md',
+  'lib/src/terminal_renderer/terminal_cell_glyph.dart',
+  'lib/src/terminal_renderer/glyph_atlas.dart',
   'lib/src/terminal_renderer/terminal_screen_metal_compositor.dart',
+  'test/terminal_cell_glyph_test.dart',
   'test/terminal_screen_metal_compositor_test.dart',
+  'test/goldens/cell-glyphs/synthetic-corpus-1x.dtgi',
+  'test/goldens/cell-glyphs/synthetic-corpus-2x.dtgi',
   'packages/dart_terminal_renderer_macos/lib/src/font_configuration.dart',
   'packages/dart_terminal_renderer_macos/lib/src/font_catalog.dart',
   'packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.h',
@@ -261,9 +256,9 @@ final class GhosttyP0P1GapInventoryResult {
   const GhosttyP0P1GapInventoryResult();
 
   int get rows => 102;
-  int get accepted => 94;
+  int get accepted => 95;
   int get actionableP0 => 0;
-  int get actionableP1 => 3;
+  int get actionableP1 => 2;
   int get documentedDifferences => 2;
   int get externalFollowUps => 3;
 
@@ -355,6 +350,43 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
       root,
       'test/terminal_screen_metal_compositor_test.dart',
       2 * 1024 * 1024,
+    ).readAsStringSync(),
+  );
+  validateGhosttyP1SyntheticCellGlyphClosureSources(
+    cellGlyphSource: _regularFile(
+      root,
+      'lib/src/terminal_renderer/terminal_cell_glyph.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    atlasSource: _regularFile(
+      root,
+      'lib/src/terminal_renderer/glyph_atlas.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    compositorSource: _regularFile(
+      root,
+      'lib/src/terminal_renderer/terminal_screen_metal_compositor.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    rasterTestSource: _regularFile(
+      root,
+      'test/terminal_cell_glyph_test.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    compositorTestSource: _regularFile(
+      root,
+      'test/terminal_screen_metal_compositor_test.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    productApplicationSource: _regularFile(
+      root,
+      'lib/src/terminal_application.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    runtimeSmokeSource: _regularFile(
+      root,
+      'tool/runtime_integration_smoke.dart',
+      1024 * 1024,
     ).readAsStringSync(),
   );
   validateGhosttyP1FontResolutionClosureSources(
@@ -482,7 +514,7 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
           classification: classifications[classification] ?? 0,
       },
       'actionable_p0': 0,
-      'actionable_p1': 3,
+      'actionable_p1': 2,
       'silent_misbehavior': 0,
     },
     'p0_closure': <String, Object?>{
@@ -499,8 +531,9 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
         'versioned-snapshot-restore-oracle',
         'cursor-cell-ligature-shaping-break',
         'font-axes-codepoint-overrides-fallback-diagnostics',
+        'synthetic-cell-glyphs',
       ],
-      'remaining_actionable': 3,
+      'remaining_actionable': 2,
     },
     'rows': encodedRows,
     'gaps': <Map<String, Object?>>[for (final _Gap gap in _gaps) gap.toJson()],
@@ -578,12 +611,12 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
         priorities['P1'] == 26 &&
         priorities['P1/P2'] == 1 &&
         totals['actionable_p0'] == 0 &&
-        totals['actionable_p1'] == 3 &&
+        totals['actionable_p1'] == 2 &&
         totals['silent_misbehavior'] == 0 &&
-        classifications['accepted'] == 94 &&
+        classifications['accepted'] == 95 &&
         classifications['accepted-documented-difference'] == 2 &&
         classifications['accepted-external-follow-up'] == 3 &&
-        classifications['actionable-p1'] == 3 &&
+        classifications['actionable-p1'] == 2 &&
         p0Closure['actionable_product_gaps'] == 0 &&
         p0Closure['known_silent_misbehavior'] == 0 &&
         p0Closure['documented_non_mutating_differences'] == 1 &&
@@ -594,8 +627,9 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
             'extended-rendition-and-selective-erase,bounded-semantic-ranges,'
                 'versioned-snapshot-restore-oracle,'
                 'cursor-cell-ligature-shaping-break,'
-                'font-axes-codepoint-overrides-fallback-diagnostics' &&
-        p1Closure['remaining_actionable'] == 3,
+                'font-axes-codepoint-overrides-fallback-diagnostics,'
+                'synthetic-cell-glyphs' &&
+        p1Closure['remaining_actionable'] == 2,
     'reviewed totals differ',
   );
   return const GhosttyP0P1GapInventoryResult();
@@ -710,6 +744,80 @@ void validateGhosttyP1CursorLigatureClosureSources({
         compositorTestSource.contains('cursorDrawn: false') &&
         compositorTestSource.contains('setCursorPresentation(visible: false)'),
     'cursor-cell shaping-break regression evidence differs',
+  );
+}
+
+void validateGhosttyP1SyntheticCellGlyphClosureSources({
+  required String cellGlyphSource,
+  required String atlasSource,
+  required String compositorSource,
+  required String rasterTestSource,
+  required String compositorTestSource,
+  required String productApplicationSource,
+  required String runtimeSmokeSource,
+}) {
+  _expect(
+    cellGlyphSource.contains('acceptedScalarCount = 434') &&
+        cellGlyphSource.contains('scalar >= 0x2500 && scalar <= 0x257f') &&
+        cellGlyphSource.contains('scalar >= 0x2580 && scalar <= 0x259f') &&
+        cellGlyphSource.contains('scalar >= 0x2800 && scalar <= 0x28ff') &&
+        cellGlyphSource.contains('scalar >= 0xe0b0 && scalar <= 0xe0bf') &&
+        cellGlyphSource.contains('rasterizeBoxDrawing(request)') &&
+        cellGlyphSource.contains('rasterizeBlockElement(request)') &&
+        cellGlyphSource.contains('rasterizeBraille(request)') &&
+        cellGlyphSource.contains('rasterizePowerline(request)'),
+    'bounded synthetic-cell classifier/raster contract differs',
+  );
+  _expect(
+    atlasSource.contains('class TerminalCellGlyphAtlasKey') &&
+        atlasSource.contains('final int cellWidth;') &&
+        atlasSource.contains('final int cellHeight;') &&
+        atlasSource.contains('final int lineThickness;') &&
+        atlasSource.contains('faceId: -2') &&
+        atlasSource.contains('ingestCellGlyph') &&
+        atlasSource.contains('_cellGlyphEntries.remove(cellGlyphKey)') &&
+        compositorSource.contains('_cellGlyphScalar') &&
+        compositorSource.contains('TerminalCellGlyphRasterizer.rasterize') &&
+        compositorSource.contains('cellGlyphCount: cellGlyphs.length'),
+    'shared atlas/compositor synthetic-cell integration differs',
+  );
+  _expect(
+    rasterTestSource.contains(
+          '_testEveryBoxDrawingScalarIsBoundedAndDeterministic',
+        ) &&
+        rasterTestSource.contains(
+          '_testEveryBlockElementIsBoundedAndDeterministic',
+        ) &&
+        rasterTestSource.contains('_testEveryBraillePatternUsesPinnedDots') &&
+        rasterTestSource.contains(
+          '_testAcceptedPowerlineGlyphsAreBoundedAndDeterministic',
+        ) &&
+        rasterTestSource.contains(
+          'classifier owns exactly the reviewed 434-scalar surface',
+        ) &&
+        compositorTestSource.contains(
+          'test/goldens/cell-glyphs/synthetic-corpus-',
+        ) &&
+        compositorTestSource.contains(
+          'fixture.composition.cellGlyphCount == 42',
+        ) &&
+        compositorTestSource.contains('_expectGpuNear(') &&
+        compositorTestSource.contains(
+          '_testSyntheticCellGlyphsLeaveGraphemeClustersFontOwned',
+        ),
+    'synthetic-cell exhaustive/golden/runtime regression evidence differs',
+  );
+  _expect(
+    productApplicationSource.contains('_exerciseSyntheticCellGlyphs') &&
+        productApplicationSource.contains(
+          'TERMINAL_CELL_GLYPH_TEST box=true block=true braille=true',
+        ) &&
+        productApplicationSource.contains('font_fallback=true metal=true') &&
+        runtimeSmokeSource.contains(
+          'TERMINAL_CELL_GLYPH_TEST box=true block=true braille=true',
+        ) &&
+        runtimeSmokeSource.contains('kitty_graphics=true cell_glyphs=true'),
+    'two-runtime synthetic-cell product acceptance marker differs',
   );
 }
 

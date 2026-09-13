@@ -15,9 +15,9 @@ void runGhosttyP0P1GapInventoryTests() {
       );
   _expect(
     result.rows == 102 &&
-        result.accepted == 94 &&
+        result.accepted == 95 &&
         result.actionableP0 == 0 &&
-        result.actionableP1 == 3 &&
+        result.actionableP1 == 2 &&
         result.documentedDifferences == 2 &&
         result.externalFollowUps == 3,
     'reviewed result totals are exact',
@@ -28,12 +28,12 @@ void runGhosttyP0P1GapInventoryTests() {
   final List<Object?> gaps = report['gaps']! as List<Object?>;
   _expect(
     rows.length == 102 &&
-        gaps.length == 8 &&
+        gaps.length == 7 &&
         rows
                 .cast<Map<String, Object?>>()
                 .where((row) => row['classification'] == 'actionable-p1')
                 .length ==
-            3 &&
+            2 &&
         gaps
             .cast<Map<String, Object?>>()
             .where((gap) => gap['silent_misbehavior'] == true)
@@ -41,7 +41,7 @@ void runGhosttyP0P1GapInventoryTests() {
     'every row and reviewed gap is represented',
   );
   _expectFailure(
-    committed.replaceFirst('"actionable_p1": 3', '"actionable_p1": 4'),
+    committed.replaceFirst('"actionable_p1": 2', '"actionable_p1": 3'),
     generated,
     'stale actionable total',
   );
@@ -242,6 +242,61 @@ void runGhosttyP0P1GapInventoryTests() {
   ).readAsStringSync();
   final String runtimeSmokeSource = File('tool/runtime_integration_smoke.dart')
       .readAsStringSync();
+  final String cellGlyphSource = File(
+    'lib/src/terminal_renderer/terminal_cell_glyph.dart',
+  ).readAsStringSync();
+  final String atlasSource = File('lib/src/terminal_renderer/glyph_atlas.dart')
+      .readAsStringSync();
+  final String rasterTestSource = File('test/terminal_cell_glyph_test.dart')
+      .readAsStringSync();
+  validateGhosttyP1SyntheticCellGlyphClosureSources(
+    cellGlyphSource: cellGlyphSource,
+    atlasSource: atlasSource,
+    compositorSource: compositorSource,
+    rasterTestSource: rasterTestSource,
+    compositorTestSource: compositorTestSource,
+    productApplicationSource: productApplicationSource,
+    runtimeSmokeSource: runtimeSmokeSource,
+  );
+  _expectSyntheticCellGlyphFailure(
+    cellGlyphSource.replaceFirst(
+      'acceptedScalarCount = 434',
+      'acceptedScalarCount = 433',
+    ),
+    atlasSource,
+    compositorSource,
+    rasterTestSource,
+    compositorTestSource,
+    productApplicationSource,
+    runtimeSmokeSource,
+    'weakened accepted scalar count',
+  );
+  _expectSyntheticCellGlyphFailure(
+    cellGlyphSource,
+    atlasSource,
+    compositorSource,
+    rasterTestSource,
+    compositorTestSource.replaceAll(
+      'test/goldens/cell-glyphs/synthetic-corpus-',
+      'test/goldens/cell-glyphs/missing-corpus-',
+    ),
+    productApplicationSource,
+    runtimeSmokeSource,
+    'missing 1x/2x checked-in corpus evidence',
+  );
+  _expectSyntheticCellGlyphFailure(
+    cellGlyphSource,
+    atlasSource,
+    compositorSource,
+    rasterTestSource,
+    compositorTestSource,
+    productApplicationSource,
+    runtimeSmokeSource.replaceAll(
+      'kitty_graphics=true cell_glyphs=true',
+      'kitty_graphics=true',
+    ),
+    'missing two-runtime synthetic-cell acceptance marker',
+  );
   validateGhosttyP1FontResolutionClosureSources(
     rendererConfigurationSource: rendererConfigurationSource,
     rendererCatalogSource: rendererCatalogSource,
@@ -386,6 +441,32 @@ void _expectCursorLigatureFailure(
     validateGhosttyP1CursorLigatureClosureSources(
       compositorSource: compositorSource,
       compositorTestSource: compositorTestSource,
+    );
+  } on GhosttyP0P1GapInventoryException {
+    return;
+  }
+  throw StateError('test failed: $message');
+}
+
+void _expectSyntheticCellGlyphFailure(
+  String cellGlyphSource,
+  String atlasSource,
+  String compositorSource,
+  String rasterTestSource,
+  String compositorTestSource,
+  String productApplicationSource,
+  String runtimeSmokeSource,
+  String message,
+) {
+  try {
+    validateGhosttyP1SyntheticCellGlyphClosureSources(
+      cellGlyphSource: cellGlyphSource,
+      atlasSource: atlasSource,
+      compositorSource: compositorSource,
+      rasterTestSource: rasterTestSource,
+      compositorTestSource: compositorTestSource,
+      productApplicationSource: productApplicationSource,
+      runtimeSmokeSource: runtimeSmokeSource,
     );
   } on GhosttyP0P1GapInventoryException {
     return;

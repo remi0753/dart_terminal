@@ -1,12 +1,23 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
-void main() => runTerminalScreenMetalCompositorTests();
+void main(List<String> arguments) {
+  if (arguments.length == 1 && arguments.single == '--write-cell-goldens') {
+    _writeSyntheticCellGlyphGoldens();
+    return;
+  }
+  if (arguments.isNotEmpty) {
+    throw ArgumentError.value(arguments, 'arguments', 'unsupported');
+  }
+  runTerminalScreenMetalCompositorTests();
+}
 
 void runTerminalScreenMetalCompositorTests() {
+  _testSyntheticCellGlyphGoldens();
   _testSyntheticCellGlyphsUseExactMetalCellsAndFontFallback();
   _testSyntheticCellGlyphsLeaveGraphemeClustersFontOwned();
   _testAnsiStylesBecomeMetalLayers();
@@ -26,6 +37,181 @@ void runTerminalScreenMetalCompositorTests() {
   _testContentRectangleOffsetsEveryLayer();
   _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder();
   _testKittyAnimationFrameUsesContentGenerationAndNativePixels();
+}
+
+void _testSyntheticCellGlyphGoldens() {
+  for (final int scale in <int>[1, 2]) {
+    final TerminalReferenceImage rendered = _renderSyntheticCellGlyphGolden(
+      scale,
+    );
+    final File fixture = File(
+      'test/goldens/cell-glyphs/synthetic-corpus-${scale}x.dtgi',
+    );
+    _expect(
+      fixture.existsSync(),
+      'checked-in synthetic cell ${scale}x golden exists',
+    );
+    final Uint8List expectedBytes = fixture.readAsBytesSync();
+    final Uint8List actualBytes = TerminalGoldenImageCodec.encode(rendered);
+    _expect(
+      _bytesEqual(expectedBytes, actualBytes),
+      'checked-in synthetic cell ${scale}x golden is byte exact',
+    );
+    TerminalGoldenImageComparator.compare(
+      TerminalGoldenImageCodec.decode(expectedBytes),
+      rendered,
+    ).requireMatch('synthetic cell glyph ${scale}x golden');
+  }
+}
+
+TerminalReferenceImage _renderSyntheticCellGlyphGolden(int scale) {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 4, columns: 24);
+  final String powerline = String.fromCharCodes(<int>[
+    for (int scalar = 0xe0b0; scalar <= 0xe0bf; scalar++) scalar,
+    0xe0d2,
+    0xe0d4,
+  ]);
+  _parse(
+    screens,
+    utf8.encode(
+      <String>[
+        '\x1b[38;2;80;180;255m┌─┬─┐╔═╦═╗',
+        '\x1b[38;2;80;255;120m█▉▊▋▌▍▎▏',
+        '\x1b[38;2;255;210;70m⠁⠃⠇⡇⣿⠀',
+        '\x1b[38;2;255;100;210m$powerline\x1b[0m\uE0C0Z',
+      ].join('\x1b[0m\r\n'),
+    ),
+  );
+  final _CompositionFixture fixture = _compose(
+    screens,
+    scale: scale.toDouble(),
+    cursorDrawn: false,
+  );
+  try {
+    final List<TerminalMetalInstance> glyphInstances = fixture
+        .composition
+        .instances
+        .where((TerminalMetalInstance instance) => instance.kind.isGlyph)
+        .toList(growable: false);
+    final List<TerminalGlyphAtlasEntry> entries =
+        fixture.composition.scheduledFrame.glyphEntries;
+    final Map<TerminalCellGlyphFamily, int> familyCounts =
+        <TerminalCellGlyphFamily, int>{};
+    for (final TerminalGlyphAtlasEntry entry in entries) {
+      final TerminalCellGlyphAtlasKey? key = entry.cellGlyphKey;
+      if (key == null) continue;
+      final TerminalCellGlyphFamily family =
+          TerminalCellGlyphClassifier.classify(key.scalar)!.family;
+      familyCounts.update(family, (int count) => count + 1, ifAbsent: () => 1);
+    }
+    _expect(
+      glyphInstances.length == entries.length &&
+          fixture.composition.cellGlyphCount == 42 &&
+          fixture.composition.shapedRunCount == 1 &&
+          familyCounts[TerminalCellGlyphFamily.boxDrawing] == 10 &&
+          familyCounts[TerminalCellGlyphFamily.blockElement] == 8 &&
+          familyCounts[TerminalCellGlyphFamily.braille] == 6 &&
+          familyCounts[TerminalCellGlyphFamily.powerline] == 18 &&
+          entries.any(
+            (TerminalGlyphAtlasEntry entry) =>
+                !entry.isCellGlyph && entry.key.faceId > 0,
+          ),
+      'synthetic golden covers every family and adjacent native font fallback '
+      'at ${scale}x',
+    );
+
+    final int backgroundRgba =
+        ((screens.palette.resolveToken(0, foreground: false) & 0x00ffffff) <<
+            8) |
+        0xff;
+    final int paddedWidth =
+        ((fixture.viewportWidth + scale - 1) ~/ scale) * scale;
+    final int frameHeight =
+        fixture.composition.scheduledFrame.frame.viewportHeight;
+    final int paddedHeight = ((frameHeight + scale - 1) ~/ scale) * scale;
+    final List<TerminalReferencePrimitive> primitives =
+        <TerminalReferencePrimitive>[];
+    for (int index = 0; index < entries.length; index++) {
+      final TerminalMetalInstance instance = glyphInstances[index];
+      final TerminalReferencePrimitive? primitive = fixture.atlas
+          .referencePrimitive(
+            entries[index],
+            x: instance.x,
+            y: instance.y,
+            maskColor: TerminalReferenceColor(instance.colorRgba),
+          );
+      if (primitive != null) primitives.add(primitive);
+    }
+    final TerminalReferenceImage deviceReference =
+        TerminalReferenceRenderer.render(
+          width: paddedWidth,
+          height: paddedHeight,
+          background: TerminalReferenceColor(backgroundRgba),
+          primitives: primitives,
+        );
+    final Uint8List referenceRgba = deviceReference.copyRgbaBytes();
+    final Uint8List nativeRgba = _padNativeFrame(
+      fixture.renderer.renderRgba(fixture.composition.scheduledFrame.frame),
+      sourceWidth: fixture.viewportWidth,
+      sourceHeight: frameHeight,
+      targetWidth: paddedWidth,
+      targetHeight: paddedHeight,
+      backgroundRgba: backgroundRgba,
+    );
+    _expectGpuNear(referenceRgba, nativeRgba, width: paddedWidth, scale: scale);
+    return TerminalReferenceImage.fromRgba(
+      width: paddedWidth,
+      height: paddedHeight,
+      scale: scale,
+      rgba: referenceRgba,
+    );
+  } finally {
+    fixture.dispose();
+  }
+}
+
+Uint8List _padNativeFrame(
+  Uint8List source, {
+  required int sourceWidth,
+  required int sourceHeight,
+  required int targetWidth,
+  required int targetHeight,
+  required int backgroundRgba,
+}) {
+  final Uint8List result = Uint8List(targetWidth * targetHeight * 4);
+  final List<int> background = <int>[
+    (backgroundRgba >>> 24) & 0xff,
+    (backgroundRgba >>> 16) & 0xff,
+    (backgroundRgba >>> 8) & 0xff,
+    backgroundRgba & 0xff,
+  ];
+  for (int offset = 0; offset < result.length; offset += 4) {
+    result.setRange(offset, offset + 4, background);
+  }
+  for (int row = 0; row < sourceHeight; row++) {
+    result.setRange(
+      row * targetWidth * 4,
+      row * targetWidth * 4 + sourceWidth * 4,
+      source,
+      row * sourceWidth * 4,
+    );
+  }
+  return result;
+}
+
+void _writeSyntheticCellGlyphGoldens() {
+  final Directory directory = Directory('test/goldens/cell-glyphs')
+    ..createSync(recursive: true);
+  for (final int scale in <int>[1, 2]) {
+    final File fixture = File(
+      '${directory.path}/synthetic-corpus-${scale}x.dtgi',
+    );
+    fixture.writeAsBytesSync(
+      TerminalGoldenImageCodec.encode(_renderSyntheticCellGlyphGolden(scale)),
+      flush: true,
+    );
+    stdout.writeln('wrote ${fixture.path}');
+  }
 }
 
 void _testSyntheticCellGlyphsUseExactMetalCellsAndFontFallback() {
@@ -1316,6 +1502,36 @@ final class _CompositionFixture {
     shapingCache.dispose();
     catalog.dispose();
   }
+}
+
+void _expectGpuNear(
+  Uint8List expected,
+  Uint8List actual, {
+  required int width,
+  required int scale,
+}) {
+  _expect(
+    expected.length == actual.length,
+    'synthetic GPU output byte length at ${scale}x',
+  );
+  for (int offset = 0; offset < expected.length; offset++) {
+    if ((expected[offset] - actual[offset]).abs() > 1) {
+      final int pixel = offset ~/ 4;
+      throw StateError(
+        'synthetic GPU/reference ${scale}x mismatch at '
+        '(${pixel % width}, ${pixel ~/ width}) channel ${offset % 4}: '
+        'expected ${expected[offset]}, actual ${actual[offset]}',
+      );
+    }
+  }
+}
+
+bool _bytesEqual(List<int> left, List<int> right) {
+  if (left.length != right.length) return false;
+  for (int index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
 }
 
 void _expect(bool condition, String message) {
