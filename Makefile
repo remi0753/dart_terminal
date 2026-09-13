@@ -144,6 +144,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check \
 	terminal-terminfo terminal-terminfo-check \
 	terminal-shell-integration terminal-shell-integration-check \
+	ghostty-p0-p1-gap-inventory ghostty-p0-p1-gap-inventory-check \
 	product-parser-corpus product-parser-properties phase9-protocol-properties phase9-security-stress \
 	product-native-sanitizer product-fault-injection product-sanitizer-fuzz-fault-gate \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
@@ -218,6 +219,8 @@ help:
 	@echo "  make terminal-terminfo-check       Reject stale or over-advertised terminfo resources"
 	@echo "  make terminal-shell-integration    Regenerate shell integration resource hashes"
 	@echo "  make terminal-shell-integration-check  Reject stale shell integration resources"
+	@echo "  make ghostty-p0-p1-gap-inventory  Regenerate the pinned P0/P1 gap inventory"
+	@echo "  make ghostty-p0-p1-gap-inventory-check  Reject stale pinned P0/P1 gap evidence"
 	@echo "  make vt-parser-table              Regenerate the Dart VT transition table"
 	@echo "  make vt-parser-table-check        Reject a stale generated parser table"
 	@echo "  make terminal-parser-trace        Regenerate the bounded parser trace"
@@ -593,13 +596,19 @@ terminal-shell-integration: dependencies
 terminal-shell-integration-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_shell_integration.dart --check
 
+ghostty-p0-p1-gap-inventory: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/ghostty_p0_p1_gap_inventory.dart --generate
+
+ghostty-p0-p1-gap-inventory-check: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run tool/ghostty_p0_p1_gap_inventory.dart --check
+
 terminal-localization-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_localization_audit.dart
 
 terminal-diagnostics-privacy-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_diagnostics_privacy_audit.dart
 
-test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check terminal-distribution-policy-test
+test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check ghostty-p0-p1-gap-inventory-check terminal-distribution-policy-test
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart

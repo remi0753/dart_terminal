@@ -13,6 +13,7 @@ import 'package:dart_terminal/src/terminal_session.dart';
 
 import 'font_shaping_test.dart';
 import 'frame_scheduler_test.dart';
+import 'ghostty_p0_p1_gap_inventory_test.dart';
 import 'ghostty_performance_capture_test.dart';
 import 'glyph_atlas_test.dart';
 import 'golden_image_test.dart';
@@ -158,6 +159,7 @@ Future<void> main() async {
   runTerminalDifferentialCorpusTests();
   runTerminalDifferentialEvidenceTests();
   runTerminalCompatibilityRegressionCoverageTests();
+  runGhosttyP0P1GapInventoryTests();
   runProductParserBenchmarkTests();
   await runProductPerformanceBenchmarkTests();
   runProductPerformanceComparatorTests();

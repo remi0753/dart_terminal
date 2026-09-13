@@ -1374,6 +1374,21 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] bounded native／Dart fault injection／recovery
   - [x] aggregate gate、文書／matrix更新、親項目完了判定
 - [ ] Ghostty pinned matrix の P0/P1 gap burn-down
+  （分割、pinned evidence／gap分類／完了条件は
+  [`docs/phase11/ghostty-p0-p1-gap-burn-down.md`](docs/phase11/ghostty-p0-p1-gap-burn-down.md)
+  を参照して順に実施する）
+  - [x] contract、pinned evidence、P0/P1 gap inventory
+  - [ ] P0 gap burn-down
+  - [ ] P1 gap burn-down
+    - [ ] underline color／overline／protected selective erase
+    - [ ] bounded semantic prompt／command／output ranges
+    - [ ] versioned snapshot restore oracle
+    - [ ] cursor-cell ligature shaping break
+    - [ ] variable font axes／codepoint override／fallback diagnostics
+    - [ ] synthetic box／block／braille／Powerline glyph
+    - [ ] image／search／inspector overlay、P3→sRGB conversion
+    - [ ] Option-click cursor／semantic prompt-output selection
+  - [ ] aggregate gate、文書／matrix更新、親項目完了判定
 - [ ] release candidate の daily-use program matrix
 
 終了条件:
