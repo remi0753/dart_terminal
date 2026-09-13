@@ -162,10 +162,13 @@ errors. Raw artifacts remain separate user-selected files.
   regular non-link file, remain within the dSYM, have a bounded size, and expose
   exactly the same UUID/architecture pairs as its source image.
 - The canonical manifest contains only format/version, bundle identifier,
-  application version, runtime mode, architecture set, relative code path,
-  source SHA-256, relative dSYM path, DWARF SHA-256, UUIDs, and bounded symbol
-  count. It contains no absolute paths, build host/user, timestamp, tool stderr,
-  signing identity, report data, or source file names.
+  application version, runtime mode, the conservative `function-symbols`
+  coverage classification, architecture set, relative code path, source
+  SHA-256, relative dSYM path, DWARF SHA-256, UUIDs, and bounded symbol count.
+  It contains no absolute paths, build host/user, timestamp, tool stderr,
+  signing identity, report data, or source file names. The coverage value does
+  not claim source-line mappings even when a future build happens to carry
+  richer DWARF.
 - Publication is an atomic sibling-directory replacement with last-good output
   preserved on every pre-publication failure. The product distribution archive
   and update candidate remain unchanged.
@@ -258,6 +261,66 @@ errors. Raw artifacts remain separate user-selected files.
 
 Subtasks are strictly ordered. The benchmark roadmap item cannot start until
 all four incident children and this parent are complete.
+
+## Progress log
+
+### 2026-09-13 — Release symbol package
+
+- Implemented the product-owned `terminal_release_symbols` library and CLI.
+  The CLI accepts only absolute application/output paths and invokes the fixed
+  system tools `/usr/bin/plutil`, `/usr/bin/xcrun` (`dwarfdump` and
+  `dsymutil`), `/usr/bin/shasum`, and `/usr/bin/nm` as argv vectors without a
+  shell. Each process has a three-minute timeout and 4 MiB output bound; its
+  stdout/stderr is reduced to a fixed result or error code rather than copied
+  into the manifest or machine line.
+- Validation binds the exact nine product code paths already audited by the
+  update transaction, the `dev.dart-terminal` identity, semantic application
+  version, Release AOT runtime manifest, and exact arm64 or arm64/x86_64
+  architecture order. The application and generated dSYM trees reject links,
+  unsupported nodes, case aliases, oversized inventories, missing/extra Mach-O
+  images, and executable files outside the reviewed inventory.
+- Every source is limited to 1 GiB; each generated dSYM tree is limited to
+  50,000 entries and 2 GiB and must contain exactly one regular DWARF object.
+  Source and dSYM UUID/architecture sets must be byte-for-byte equivalent.
+  Symbol counting is bounded to ten million, and source/DWARF SHA-256 values
+  are captured only after successful generation and UUID validation.
+- The deterministic JSON manifest uses an exact content-free allowlist and a
+  conservative `function-symbols` coverage classification. It contains no
+  timestamp, absolute path, host/user, signing identity, raw tool output,
+  incident data, or source-code path. It and the `dSYMs` directory are built in
+  a random sibling staging directory, then published by directory rename. An
+  existing output is restored when publication fails after its temporary move;
+  no bundle/update/distribution file is mutated.
+- Added focused fixture tests for thin and Universal manifests, deterministic
+  encoding, exact manifest keys, complete one-time code generation, missing and
+  extra images, links, input/output overlap, unknown executable placement,
+  UUID mismatch, and faults immediately before publication and after moving the
+  previous output. A further recovery case simulates a process interruption
+  that left only `.last-good`; the next attempt restores it before doing any new
+  symbol work and preserves it when that attempt fails. All eight focused
+  groups passed. Initial sandboxed test and real-build attempts could not write
+  the existing Clang Metal module cache; the identical commands passed in the
+  normal build environment.
+- `CI=true DART_SUPPRESS_ANALYTICS=true make release-aot-symbols` rebuilt and
+  audited the actual M1 Release AOT app, reran all focused tests, and reported
+  `TERMINAL_RELEASE_SYMBOLS code=9 architectures=1 symbols=31526`. The 3,579-byte
+  manifest lists exactly the nine reviewed relative paths, one arm64 UUID set
+  per source/dSYM pair, and no local absolute path. Generated symbols remain an
+  ignored `build/runtime/release-symbols` artifact and are not source-controlled
+  or included in the application/update.
+- The adjacent generic `dart_appkit` worktree remained clean and received no
+  product code. Real Developer ID/Apple notarization acceptance remains the
+  separately documented low-priority follow-up authorized by the user; this
+  symbol workflow neither depends on it nor represents notarization evidence.
+- The first complete root gate passed every executable test but reported two
+  non-failing directive-order lint infos in the newly edited export/import
+  lists. After applying the analyzer's deterministic ordering, focused analysis
+  reported no issues and the final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed all native/package
+  tests, generated-evidence freshness, formatting of 306 files, analysis with
+  no issues, security stress, and root tests including all eight symbol groups.
+  `git diff --check` also passed. No duration test was needed for this bounded
+  build artifact.
 
 ## Progress and findings
 

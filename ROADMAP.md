@@ -1337,7 +1337,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase11/local-crash-hang-diagnostics.md`](docs/phase11/local-crash-hang-diagnostics.md)
   を参照して順に実施する）
   - [x] contract、privacy、report／symbol inventory
-  - [ ] Release AOT dSYM package、UUID／hash監査、atomic publication
+  - [x] Release AOT dSYM package、UUID／hash監査、atomic publication
   - [ ] local Apple report discovery／明示raw copy、current-process hang sample
   - [ ] product action／consent UI、両runtime受け入れ、文書／matrix、親項目完了判定
 - [ ] startup/input/render/parser/memory/power benchmark regression gate

@@ -107,6 +107,8 @@ UPDATE_EXPIRES_UNIX_SECONDS ?=
 UPDATE_KEY_ID ?=
 UPDATE_PUBLIC_KEY ?=
 UPDATE_SIGNING_KEY ?=
+RELEASE_SYMBOLS_OUTPUT_DIR ?= \
+	$(PROJECT_ROOT)/build/runtime/release-symbols
 override RUNTIME_BUILDER := $(DART) run dart_macos_runtime:build \
 	--manifest $(APPLICATION_MANIFEST) --engine-root $(DART_ENGINE_ROOT)
 override RUNTIME_UNIVERSAL_ASSEMBLER := \
@@ -158,8 +160,9 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	terminal-distribution-policy-test release-distribution-preflight \
 	release-distribution-credentials-check release-distribution-build \
 	release-distribution-audit release-distribution-verify \
-	terminal-update-feed-test terminal-update-transaction-test terminal-update-controller-test release-update-feed-credentials-check \
+	terminal-update-feed-test terminal-update-transaction-test terminal-update-controller-test terminal-release-symbols-test release-update-feed-credentials-check \
 	release-update-feed \
+	release-aot-symbols \
 	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
 	release-aot-resource release-aot-shutdown-fault runtime-bundle-audit \
 	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-user-actions-integration runtime-applescript-integration runtime-system-automation-integration runtime-native-content-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-diagnostics-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-clipboard-integration runtime-lifecycle-integration \
@@ -227,6 +230,8 @@ help:
 	@echo "  make terminal-update-transaction-test  Test candidate validation and rollback recovery"
 	@echo "  make terminal-update-controller-test  Test update actions, status, and release-note UI"
 	@echo "  make release-update-feed             Generate and sign an atomic update-feed directory"
+	@echo "  make terminal-release-symbols-test   Test bounded symbol packaging and publication"
+	@echo "  make release-aot-symbols             Package UUID-verified symbols for the host AOT app"
 	@echo "  make runtime-terminal-display-integration  Verify the live Metal terminal in both modes"
 	@echo "  make runtime-native-hierarchy-integration  Verify four-pane hierarchy and Close/Quit in both modes"
 	@echo "  make runtime-user-actions-integration  Verify normal-product window/tab/split actions in both modes"
@@ -832,6 +837,14 @@ terminal-update-transaction-test: dependencies
 
 terminal-update-controller-test: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_update_controller_test.dart
+
+terminal-release-symbols-test: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_release_symbols_test.dart
+
+release-aot-symbols: release-aot-audit terminal-release-symbols-test
+	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_release_symbols.dart \
+		--application=$(RELEASE_AOT_BUNDLE) \
+		--output=$(RELEASE_SYMBOLS_OUTPUT_DIR)
 
 release-update-feed-credentials-check:
 	@if [[ -z "$(UPDATE_ARCHIVE_URL)" || -z "$(UPDATE_VERSION)" || \

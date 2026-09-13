@@ -225,6 +225,7 @@ export 'src/terminal_product_configuration.dart';
 export 'src/terminal_product_hierarchy_actions.dart';
 export 'src/terminal_prompt_navigation.dart';
 export 'src/terminal_quick_terminal.dart';
+export 'src/terminal_release_symbols.dart';
 export 'src/terminal_renderer/frame_scheduler.dart';
 export 'src/terminal_renderer/glyph_atlas.dart';
 export 'src/terminal_renderer/golden_image.dart'
