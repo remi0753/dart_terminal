@@ -267,6 +267,10 @@ final class TerminalScreenMetalCompositor {
     }
 
     for (int row = 0; row < model.rows; row++) {
+      final _TerminalCursorShapingBreak? cursorBreak = _cursorShapingBreak(
+        model,
+        row,
+      );
       var column = 0;
       while (column < model.columns) {
         final int widthFlags = model.widthFlagsAt(row, column);
@@ -303,6 +307,13 @@ final class TerminalScreenMetalCompositor {
         );
         int nextColumn = column;
         while (nextColumn < model.columns) {
+          if (nextColumn != runStart &&
+              cursorBreak != null &&
+              (nextColumn == cursorBreak.startColumn ||
+                  runStart == cursorBreak.startColumn &&
+                      nextColumn == cursorBreak.endColumn)) {
+            break;
+          }
           final int nextFlags = model.widthFlagsAt(row, nextColumn);
           final int nextWidth = nextFlags & TerminalCellFlags.widthMask;
           if (nextWidth == TerminalCellFlags.continuation) break;
@@ -1283,6 +1294,38 @@ final class TerminalScreenMetalCompositor {
     return (baseline - metrics.underlinePosition * scale).round();
   }
 
+  static _TerminalCursorShapingBreak? _cursorShapingBreak(
+    TerminalRenderModel model,
+    int row,
+  ) {
+    if (!model.cursorVisible || model.cursorRow != row) return null;
+    var column = model.cursorColumn;
+    if (column < 0 || column >= model.columns) {
+      throw StateError('visible cursor exceeds the render grid');
+    }
+    int flags = model.widthFlagsAt(row, column);
+    if ((flags & TerminalCellFlags.widthMask) ==
+        TerminalCellFlags.continuation) {
+      if (column == 0) {
+        throw StateError('visible cursor targets an orphan continuation');
+      }
+      column--;
+      flags = model.widthFlagsAt(row, column);
+      if ((flags & TerminalCellFlags.widthMask) != TerminalCellFlags.wide) {
+        throw StateError('visible cursor targets an orphan continuation');
+      }
+    }
+    if (model.contentAt(row, column) == 0 ||
+        flags & TerminalCellFlags.grapheme != 0) {
+      return null;
+    }
+    final int width = flags & TerminalCellFlags.widthMask;
+    return _TerminalCursorShapingBreak(
+      column,
+      column + (width == TerminalCellFlags.wide ? 2 : 1),
+    );
+  }
+
   static void _addClippedSolid(
     List<TerminalMetalInstance> output, {
     required TerminalMetalInstanceKind kind,
@@ -1324,6 +1367,13 @@ final class _TerminalPositionedGlyph {
   final int x;
   final int y;
   final int colorRgba;
+}
+
+final class _TerminalCursorShapingBreak {
+  const _TerminalCursorShapingBreak(this.startColumn, this.endColumn);
+
+  final int startColumn;
+  final int endColumn;
 }
 
 final class _TerminalKittyPositionedTile {

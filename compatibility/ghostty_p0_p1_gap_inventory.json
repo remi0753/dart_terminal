@@ -4,7 +4,7 @@
   "status": "open-actionable-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "c2118081c4b2f314a1184355b27da6b3682261d888b14532cb92a622f6ebc06f",
+    "sha256": "2fc1905bd4ca5276168c03d9a7c4d12f9d42acae09d1d938f4b8c2ee8f86a9e6",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "8d20c9b4642595bdf1fd8101f528d733cdc9893c1009e9328f7780313c02e033"
+      "sha256": "a4904e018202716db64eb5f0ff8fc2bfea7c06501c3154483f04f9721aff3242"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -97,6 +97,14 @@
     {
       "path": "test/terminal_snapshot_test.dart",
       "sha256": "62819199caab115636af8c81373cc350e1bbae858344379c6fb35ce3c3011360"
+    },
+    {
+      "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
+      "sha256": "c47a4ab3ead3b39445d378f3f46a9483bc3e75bf6a097698e2a93a00354643a5"
+    },
+    {
+      "path": "test/terminal_screen_metal_compositor_test.dart",
+      "sha256": "7f910099391e5966d790413cf729809d74a7d07a40aac40a716edd6853a9f187"
     }
   ],
   "totals": {
@@ -108,13 +116,13 @@
       "P1/P2": 1
     },
     "classifications": {
-      "accepted": 92,
+      "accepted": 93,
       "accepted-documented-difference": 2,
       "accepted-external-follow-up": 3,
-      "actionable-p1": 5
+      "actionable-p1": 4
     },
     "actionable_p0": 0,
-    "actionable_p1": 5,
+    "actionable_p1": 4,
     "silent_misbehavior": 0
   },
   "p0_closure": {
@@ -130,9 +138,10 @@
     "completed": [
       "extended-rendition-and-selective-erase",
       "bounded-semantic-ranges",
-      "versioned-snapshot-restore-oracle"
+      "versioned-snapshot-restore-oracle",
+      "cursor-cell-ligature-shaping-break"
     ],
-    "remaining_actionable": 5
+    "remaining_actionable": 4
   },
   "rows": [
     {
@@ -600,14 +609,12 @@
     {
       "id": "TXT-07",
       "priority": "P1",
-      "phase": "4/8",
+      "phase": "4/8/11",
       "acceptance_sha256": "f865b09ebe7d4bff3cd1348afee531173b40d206b69044bac6f88ef191cacc1a",
       "pinned_evidence_sha256": "01d0a694359b0277f2b25e8bc51f87ad32da2fe1a7085d1f7d5e2e57236ca78a",
-      "current_sha256": "6acfe1bc7f6a7e9debfe22b3a6c24c33053116c8e5ecc660fe3d9121771fe794",
-      "classification": "actionable-p1",
-      "gap_ids": [
-        "cursor-ligature-break"
-      ]
+      "current_sha256": "afdba779ce93a06e696fad2f6b55a32c21190dd7c2a82acc7d22a41db02f49ee",
+      "classification": "accepted",
+      "gap_ids": []
     },
     {
       "id": "TXT-08",
@@ -1238,18 +1245,6 @@
       "product_actionable": false,
       "silent_misbehavior": false,
       "reason": "Credential-independent distribution gates pass; positive signing and notarization needs external authority."
-    },
-    {
-      "id": "cursor-ligature-break",
-      "kind": "actionable-product-gap",
-      "priority": "P1",
-      "row_ids": [
-        "TXT-07"
-      ],
-      "owner": "ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down",
-      "product_actionable": true,
-      "silent_misbehavior": false,
-      "reason": "Ligature toggling passes, but shaping is not split at the cursor cell."
     },
     {
       "id": "font-axes-overrides-diagnostics",

@@ -15,9 +15,9 @@ void runGhosttyP0P1GapInventoryTests() {
       );
   _expect(
     result.rows == 102 &&
-        result.accepted == 92 &&
+        result.accepted == 93 &&
         result.actionableP0 == 0 &&
-        result.actionableP1 == 5 &&
+        result.actionableP1 == 4 &&
         result.documentedDifferences == 2 &&
         result.externalFollowUps == 3,
     'reviewed result totals are exact',
@@ -28,12 +28,12 @@ void runGhosttyP0P1GapInventoryTests() {
   final List<Object?> gaps = report['gaps']! as List<Object?>;
   _expect(
     rows.length == 102 &&
-        gaps.length == 10 &&
+        gaps.length == 9 &&
         rows
                 .cast<Map<String, Object?>>()
                 .where((row) => row['classification'] == 'actionable-p1')
                 .length ==
-            5 &&
+            4 &&
         gaps
             .cast<Map<String, Object?>>()
             .where((gap) => gap['silent_misbehavior'] == true)
@@ -41,7 +41,7 @@ void runGhosttyP0P1GapInventoryTests() {
     'every row and reviewed gap is represented',
   );
   _expectFailure(
-    committed.replaceFirst('"actionable_p1": 5', '"actionable_p1": 6'),
+    committed.replaceFirst('"actionable_p1": 4', '"actionable_p1": 5'),
     generated,
     'stale actionable total',
   );
@@ -187,6 +187,32 @@ void runGhosttyP0P1GapInventoryTests() {
     snapshotRestoreTestSource.replaceFirst('restored == 8', 'restored == 7'),
     'missing complete checked-in corpus coverage',
   );
+  final String compositorSource = File(
+    'lib/src/terminal_renderer/terminal_screen_metal_compositor.dart',
+  ).readAsStringSync();
+  final String compositorTestSource = File(
+    'test/terminal_screen_metal_compositor_test.dart',
+  ).readAsStringSync();
+  validateGhosttyP1CursorLigatureClosureSources(
+    compositorSource: compositorSource,
+    compositorTestSource: compositorTestSource,
+  );
+  _expectCursorLigatureFailure(
+    compositorSource.replaceAll(
+      '_cursorShapingBreak',
+      '_missingCursorShapingBreak',
+    ),
+    compositorTestSource,
+    'missing cursor shaping-break implementation',
+  );
+  _expectCursorLigatureFailure(
+    compositorSource,
+    compositorTestSource.replaceAll(
+      '_testCursorShapingBreakKeepsWideAndGraphemeCellsAtomic',
+      '_missingWideAndGraphemeAtomicityTest',
+    ),
+    'missing wide/grapheme atomicity regression',
+  );
 }
 
 void _expectFailure(String source, String expected, String message) {
@@ -271,6 +297,22 @@ void _expectSnapshotRestoreFailure(
       snapshotFormatterSource: snapshotFormatterSource,
       snapshotRestoreSource: snapshotRestoreSource,
       snapshotRestoreTestSource: snapshotRestoreTestSource,
+    );
+  } on GhosttyP0P1GapInventoryException {
+    return;
+  }
+  throw StateError('test failed: $message');
+}
+
+void _expectCursorLigatureFailure(
+  String compositorSource,
+  String compositorTestSource,
+  String message,
+) {
+  try {
+    validateGhosttyP1CursorLigatureClosureSources(
+      compositorSource: compositorSource,
+      compositorTestSource: compositorTestSource,
     );
   } on GhosttyP0P1GapInventoryException {
     return;

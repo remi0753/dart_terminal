@@ -1383,7 +1383,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] underline color／overline／protected selective erase
     - [x] bounded semantic prompt／command／output ranges
     - [x] versioned snapshot restore oracle
-    - [ ] cursor-cell ligature shaping break
+    - [x] cursor-cell ligature shaping break
     - [ ] variable font axes／codepoint override／fallback diagnostics
     - [ ] synthetic box／block／braille／Powerline glyph
     - [ ] image／search／inspector overlay、P3→sRGB conversion

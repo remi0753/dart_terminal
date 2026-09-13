@@ -6,7 +6,7 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 gap burn-down — versioned snapshot restore oracle
+- Current subtask: P1 gap burn-down — cursor-cell ligature shaping break
   (completed)
 
 ## Purpose
@@ -210,7 +210,112 @@ code/name containing `terminal` may be added to `dart_appkit`.
   `dart_appkit` content/name audit. Apple notarization and duration-only
   campaigns remain skipped as authorized.
 
+### Current P1 child — cursor-cell ligature shaping break
+
+- **Purpose:** Close the actionable `TXT-07` remainder by splitting the
+  visible cursor cell from otherwise compatible CoreText text runs, preventing
+  a ligature from hiding the individual character being edited while keeping
+  terminal cell geometry stable.
+- **Background:** The renderer package already shapes bounded whole runs with
+  ligatures on/off and a generation/style/feature/text-keyed LRU. The product
+  compositor groups adjacent nonblank cells by font style and foreground, but
+  does not currently treat the visible cursor as a run boundary, so a cursor
+  inside a ligature-capable sequence may leave the combined glyph intact.
+- **Scope:** Resolve the visible cursor to its owning canonical lead cell;
+  split a compatible text run immediately before and after that one scalar
+  cell (including its whole width when wide); preserve an atomic interned
+  grapheme rather than splitting inside it; keep the behavior independent of
+  cursor blink phase; exercise first/middle/last/invisible/other-row and
+  grapheme/wide boundaries through the real CoreText, atlas, frame encoder, and
+  native Metal acceptance path; bind the product source and regression to the
+  Ghostty gap inventory.
+- **Out of scope:** New user-facing font-shaping configuration, disabling
+  ligatures globally, changes to CoreText/native renderer ABI, variable font
+  axes, codepoint overrides, fallback diagnostics, synthetic glyphs, bidi
+  terminal layout, selection-run policy, IME model changes, or any change to
+  generic `dart_appkit`.
+- **Dependencies:** `TerminalRenderModel` cursor projection,
+  `TerminalScreenMetalCompositor` compatible-run construction,
+  `TerminalShapingCache`, canonical wide/continuation and grapheme flags,
+  cursor damage/frame scheduling, the existing real CoreText/Metal test
+  fixture, and pinned Ghostty `font/shaper/run.zig`, CoreText shaping tests,
+  renderer run options, and default cursor shaping-break policy.
+- **Completion conditions:** A visible cursor over the first, middle, or last
+  scalar cell yields two, three, or two bounded runs respectively and prevents
+  ligature formation across both cursor boundaries; hidden/off-row cursors
+  retain the original whole run; wide cells remain atomic and interned
+  graphemes are not internally divided; cursor motion changes only derived
+  shaping/frame output and never cell content, metrics, selection, PTY input,
+  or native ownership; `TXT-07` moves to accepted only after focused/native
+  regressions, regenerated evidence, and the exact repository gate.
+- **Verification approach:** Add direct compositor run-count and glyph-cluster
+  assertions using a ligature-capable baseline font, plus wide/grapheme and
+  visibility controls; run focused formatting/analysis and compositor/renderer
+  suites, regenerate compatibility and Ghostty evidence in dependency order,
+  run exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`, review the diff,
+  and confirm a clean code/name audit of `dart_appkit`. Apple notarization and
+  duration-only campaigns remain skipped as authorized.
+
 ## Inventory and decisions
+
+- 2026-09-13: The pinned Ghostty matrix revision
+  `d4d8f62262cb1a974a7d2470d5f79f811fab15e4` was re-read for this child.
+  `src/font/shaper/run.zig` (SHA-256
+  `db733c86a1c4454ee17bb838f6af889d3bffa0d693b6e09f22ab3765695462b7`)
+  passes the cursor column only for the visible viewport row and yields two
+  runs when the cursor is first/last or three when it is in the middle;
+  `src/font/shaper/coretext.zig` (SHA-256
+  `f5e541e4da646d9c972ee5e385da3aaa048c9003901e4dbda6969a68684652de`)
+  consumes those bounded runs; and `src/config/Config.zig` (SHA-256
+  `aa0d42cdab217728ef502ed7b36e681fca3c9ecd3232ae299cecdbefa27c0332`)
+  enables cursor shaping breaks by default. Ghostty deliberately leaves an
+  interned grapheme atomic. This product adopts the observable default without
+  copying Ghostty configuration or ownership into the renderer package.
+- 2026-09-13: Product inspection confirmed that the CoreText renderer package
+  already owns ligature features and a bounded text/style/feature/generation
+  cache. Only `TerminalScreenMetalCompositor` lacked the presentation-aware
+  run boundary. The implementation therefore resolves the visible cursor to a
+  canonical lead cell, isolates one scalar cell (or the complete two-column
+  wide cell), skips interned graphemes, and otherwise leaves text, cell
+  metrics, parser state, PTY input, cache policy, and the native ABI unchanged.
+  Blink-off presentation continues to use the same shaping boundaries because
+  terminal cursor visibility, not the current paint phase, owns the edit
+  location.
+- 2026-09-13: The first focused analyzer run found that the per-row boundary
+  variable had been inserted into the compositor's earlier background loop
+  instead of the text-run loop. Moving the declaration to the text-run owner
+  fixed the undefined reference; the following focused analysis passed with
+  `No issues found!`. The first native compositor regression then failed only
+  because a Times-Roman CJK fallback glyph exceeded that fixture's unusually
+  narrow canonical cell. Ligature assertions continue to use Times-Roman,
+  while wide/grapheme atomicity uses the product monospace catalog; the rerun
+  passed real CoreText shaping, atlas construction, frame encoding, and native
+  Metal readback.
+- 2026-09-13: Focused format reported four Dart files already formatted and
+  focused analysis again reported `No issues found!`. A later sandboxed rerun
+  of the compositor test could not acquire a Metal device and exited with the
+  typed `deviceUnavailable` status before any case executed. The identical
+  command was rerun in the normal macOS execution context and exited 0; this
+  environmental denial is not counted as a product failure or as acceptance by
+  itself.
+- 2026-09-13: Regression coverage and the Ghostty inventory were regenerated
+  in dependency order. Their freshness gates passed, and the inventory now
+  reports 102 rows, 93 accepted, zero actionable P0, four actionable P1, two
+  documented differences, and three external follow-ups. The focused inventory
+  test passed exact generated/committed identity and fail-closed negatives for
+  both the implementation boundary and wide/grapheme regression evidence.
+- 2026-09-13: Final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed all native package,
+  generated/freshness, compatibility, differential, application, terminfo,
+  shell, distribution, format (330 files, zero changes), analysis (no issues),
+  security, update, symbol, and aggregate Dart tests, ending with
+  `dart_terminal tests passed`. `git diff --check` passed. The adjacent
+  `dart_appkit` worktree is clean; case-insensitive executable content and
+  filename audits excluding docs/build/cache/git found zero `terminal`,
+  `dart_terminal`, or `dart-terminal` matches. No generic-library file changed.
+  Apple notarization and duration-only campaigns were skipped as authorized.
+  The next ordered child is variable font axes, codepoint override, and
+  fallback diagnostics.
 
 - 2026-09-13: The first focused analyzer rerun passed with `No issues found!`,
   and `dart run test/terminal_semantic_prompt_test.dart` exited 0 after its

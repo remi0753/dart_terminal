@@ -296,7 +296,9 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
 - generation-owned CoreText font catalog、actual/synthetic 4-style policy、
   CJK/color emoji fallback、bounded text resolveとcell/decorations metrics、
   versioned whole-run shaping、UTF-16 cluster mapping、Dart-owned byte/entry LRU、
-  batched 1x/2x CoreText alpha8/straight-RGBA8 glyph raster boundary
+  batched 1x/2x CoreText alpha8/straight-RGBA8 glyph raster boundary。表示中の
+  cursor scalar cellはcompatible runの前後で分離し、ligatureに隠れない一方、
+  wide cellとinterned graphemeはatomicに維持
 - alpha8/straight-RGBA8を分離したbounded glyph atlas、決定論的配置、page/byte/
   entry上限、unpinned LRU、submission token pin、resource generation検証、
   矩形差分uploadと実CoreText文字コーパスの1x/2x pixel golden

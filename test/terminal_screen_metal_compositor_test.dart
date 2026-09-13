@@ -13,6 +13,8 @@ void runTerminalScreenMetalCompositorTests() {
   _testInverseBackgroundAndConcealMapping();
   _testWrappedOverflowKeepsNewestPromptVisible();
   _testWideGraphemeUsesCanonicalGrid();
+  _testVisibleCursorBreaksLigatureShapingRuns();
+  _testCursorShapingBreakKeepsWideAndGraphemeCellsAtomic();
   _testCjkGlyphOriginsFollowCanonicalGrid();
   _testPreeditUsesTransientMetalLayers();
   _testSelectionProjectionUsesOverlayLayer();
@@ -761,6 +763,136 @@ void _testWideGraphemeUsesCanonicalGrid() {
   }
 }
 
+void _testVisibleCursorBreaksLigatureShapingRuns() {
+  for (final (int, int) example in const <(int, int)>[(0, 2), (1, 3), (2, 2)]) {
+    final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 6);
+    _parse(screens, ascii.encode('ffi'));
+    screens.activeScreen.setCursorPosition(0, example.$1);
+    final List<int> before = _screenContent(screens.activeScreen);
+    final _CompositionFixture fixture = _compose(
+      screens,
+      fontFamily: 'Times-Roman',
+    );
+    try {
+      final int glyphs = fixture.composition.instances
+          .where((TerminalMetalInstance instance) => instance.kind.isGlyph)
+          .length;
+      _expect(
+        fixture.composition.shapedRunCount == example.$2 &&
+            glyphs >= example.$2 &&
+            _screenContent(screens.activeScreen).toString() ==
+                before.toString(),
+        'visible cursor at ${example.$1} splits first/middle/last shaping '
+        'without changing terminal cells',
+      );
+      final Uint8List rgba = fixture.renderer.renderRgba(
+        fixture.composition.scheduledFrame.frame,
+      );
+      _expect(
+        rgba.any((int byte) => byte != 0),
+        'cursor-split ligature frame is accepted by native Metal',
+      );
+    } finally {
+      fixture.dispose();
+    }
+  }
+
+  final TerminalScreenSet blinking = TerminalScreenSet(rows: 1, columns: 6);
+  _parse(blinking, ascii.encode('ffi'));
+  blinking.activeScreen.setCursorPosition(0, 1);
+  final _CompositionFixture blinkOff = _compose(
+    blinking,
+    fontFamily: 'Times-Roman',
+    cursorDrawn: false,
+  );
+  try {
+    _expect(
+      blinkOff.composition.shapedRunCount == 3 &&
+          blinkOff.composition.instances.every(
+            (TerminalMetalInstance instance) =>
+                instance.kind != TerminalMetalInstanceKind.cursor,
+          ),
+      'cursor blink phase does not change cursor-cell shaping boundaries',
+    );
+  } finally {
+    blinkOff.dispose();
+  }
+
+  final TerminalScreenSet hidden = TerminalScreenSet(rows: 1, columns: 6);
+  _parse(hidden, ascii.encode('ffi'));
+  hidden.activeScreen
+    ..setCursorPosition(0, 1)
+    ..setCursorPresentation(visible: false);
+  final _CompositionFixture hiddenFixture = _compose(
+    hidden,
+    fontFamily: 'Times-Roman',
+  );
+  try {
+    final TerminalShapedText whole = hiddenFixture.catalog.shape('ffi');
+    _expect(
+      hiddenFixture.composition.shapedRunCount == 1 &&
+          whole.glyphs.any(
+            (TerminalShapedGlyph glyph) => glyph.utf16Length > 1,
+          ),
+      'terminal-hidden cursor preserves the whole ligature-capable run',
+    );
+  } finally {
+    hiddenFixture.dispose();
+  }
+
+  final TerminalScreenSet otherRow = TerminalScreenSet(rows: 2, columns: 6);
+  _parse(otherRow, ascii.encode('ffi'));
+  otherRow.activeScreen.setCursorPosition(1, 1);
+  final _CompositionFixture otherRowFixture = _compose(
+    otherRow,
+    fontFamily: 'Times-Roman',
+  );
+  try {
+    _expect(
+      otherRowFixture.composition.shapedRunCount == 1,
+      'cursor on another row does not split a ligature-capable run',
+    );
+  } finally {
+    otherRowFixture.dispose();
+  }
+}
+
+void _testCursorShapingBreakKeepsWideAndGraphemeCellsAtomic() {
+  final TerminalScreenSet wide = TerminalScreenSet(rows: 1, columns: 6);
+  _parse(wide, utf8.encode('日fi'));
+  wide.activeScreen.setCursorPosition(0, 1);
+  final List<int> wideBefore = _screenContent(wide.activeScreen);
+  final _CompositionFixture wideFixture = _compose(wide);
+  try {
+    _expect(
+      wideFixture.composition.shapedRunCount == 2 &&
+          wide.activeScreen.widthFlagsAt(0, 0) & TerminalCellFlags.widthMask ==
+              TerminalCellFlags.wide &&
+          wide.activeScreen.widthFlagsAt(0, 1) & TerminalCellFlags.widthMask ==
+              TerminalCellFlags.continuation &&
+          _screenContent(wide.activeScreen).toString() == wideBefore.toString(),
+      'cursor on a wide continuation isolates the complete lead-cell cluster',
+    );
+  } finally {
+    wideFixture.dispose();
+  }
+
+  final TerminalScreenSet grapheme = TerminalScreenSet(rows: 1, columns: 6);
+  _parse(grapheme, utf8.encode('e\u0301fi'));
+  grapheme.activeScreen.setCursorPosition(0, 0);
+  final _CompositionFixture graphemeFixture = _compose(grapheme);
+  try {
+    _expect(
+      grapheme.activeScreen.widthFlagsAt(0, 0) & TerminalCellFlags.grapheme !=
+              0 &&
+          graphemeFixture.composition.shapedRunCount == 1,
+      'cursor does not divide an interned grapheme shaping cluster',
+    );
+  } finally {
+    graphemeFixture.dispose();
+  }
+}
+
 void _testPreeditUsesTransientMetalLayers() {
   final TerminalScreenSet screens = TerminalScreenSet(rows: 2, columns: 6);
   _parse(screens, ascii.encode('12345'));
@@ -866,6 +998,7 @@ _CompositionFixture _compose(
   int contentOffsetY = 0,
   bool includeKittyImages = false,
   bool visualBellActive = false,
+  bool cursorDrawn = true,
   TerminalAccessibilityPresentation accessibilityPresentation =
       const TerminalAccessibilityPresentation.standard(),
 }) {
@@ -932,7 +1065,7 @@ _CompositionFixture _compose(
           contentViewportHeight: contentViewportHeight,
           presentation: TerminalFramePresentation(
             revision: 1,
-            cursorDrawn: true,
+            cursorDrawn: cursorDrawn,
             visualBellActive: visualBellActive,
             requiresFullRedraw: true,
           ),

@@ -120,7 +120,6 @@ const Map<String, String> _classifications = <String, String>{
   'REL-01': 'accepted-external-follow-up',
   'DIST-01': 'accepted-external-follow-up',
   'DIST-02': 'accepted-external-follow-up',
-  'TXT-07': 'actionable-p1',
   'TXT-08': 'actionable-p1',
   'TXT-10': 'actionable-p1',
   'REN-08': 'actionable-p1',
@@ -133,7 +132,6 @@ const Map<String, List<String>> _rowGapIds = <String, List<String>>{
   'REL-01': <String>['physical-duration-reliability'],
   'DIST-01': <String>['intel-native-handoff'],
   'DIST-02': <String>['apple-service-acceptance'],
-  'TXT-07': <String>['cursor-ligature-break'],
   'TXT-08': <String>['font-axes-overrides-diagnostics'],
   'TXT-10': <String>['synthetic-cell-glyphs'],
   'REN-08': <String>['remaining-overlays-and-color-conversion'],
@@ -185,15 +183,6 @@ const List<_Gap> _gaps = <_Gap>[
     owner: 'docs/phase11/developer-id-notarization.md',
     productActionable: false,
     reason: 'Credential-independent distribution gates pass; positive signing and notarization needs external authority.',
-  ),
-  _Gap(
-    id: 'cursor-ligature-break',
-    kind: 'actionable-product-gap',
-    priority: 'P1',
-    rowIds: <String>['TXT-07'],
-    owner: 'ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down',
-    productActionable: true,
-    reason: 'Ligature toggling passes, but shaping is not split at the cursor cell.',
   ),
   _Gap(
     id: 'font-axes-overrides-diagnostics',
@@ -253,6 +242,8 @@ const List<String> _evidencePaths = <String>[
   'lib/src/terminal_core/terminal_snapshot_restore_set_state.dart',
   'lib/src/terminal_core/terminal_session_metadata.dart',
   'test/terminal_snapshot_test.dart',
+  'lib/src/terminal_renderer/terminal_screen_metal_compositor.dart',
+  'test/terminal_screen_metal_compositor_test.dart',
 ];
 
 final class GhosttyP0P1GapInventoryException implements Exception {
@@ -268,9 +259,9 @@ final class GhosttyP0P1GapInventoryResult {
   const GhosttyP0P1GapInventoryResult();
 
   int get rows => 102;
-  int get accepted => 92;
+  int get accepted => 93;
   int get actionableP0 => 0;
-  int get actionableP1 => 5;
+  int get actionableP1 => 4;
   int get documentedDifferences => 2;
   int get externalFollowUps => 3;
 
@@ -352,6 +343,18 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
       1024 * 1024,
     ).readAsStringSync(),
   );
+  validateGhosttyP1CursorLigatureClosureSources(
+    compositorSource: _regularFile(
+      root,
+      'lib/src/terminal_renderer/terminal_screen_metal_compositor.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    compositorTestSource: _regularFile(
+      root,
+      'test/terminal_screen_metal_compositor_test.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+  );
   final Map<String, int> priorities = <String, int>{};
   final Map<String, int> classifications = <String, int>{};
   final List<Map<String, Object?>> encodedRows = <Map<String, Object?>>[];
@@ -425,7 +428,7 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
           classification: classifications[classification] ?? 0,
       },
       'actionable_p0': 0,
-      'actionable_p1': 5,
+      'actionable_p1': 4,
       'silent_misbehavior': 0,
     },
     'p0_closure': <String, Object?>{
@@ -440,8 +443,9 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
         'extended-rendition-and-selective-erase',
         'bounded-semantic-ranges',
         'versioned-snapshot-restore-oracle',
+        'cursor-cell-ligature-shaping-break',
       ],
-      'remaining_actionable': 5,
+      'remaining_actionable': 4,
     },
     'rows': encodedRows,
     'gaps': <Map<String, Object?>>[for (final _Gap gap in _gaps) gap.toJson()],
@@ -519,12 +523,12 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
         priorities['P1'] == 26 &&
         priorities['P1/P2'] == 1 &&
         totals['actionable_p0'] == 0 &&
-        totals['actionable_p1'] == 5 &&
+        totals['actionable_p1'] == 4 &&
         totals['silent_misbehavior'] == 0 &&
-        classifications['accepted'] == 92 &&
+        classifications['accepted'] == 93 &&
         classifications['accepted-documented-difference'] == 2 &&
         classifications['accepted-external-follow-up'] == 3 &&
-        classifications['actionable-p1'] == 5 &&
+        classifications['actionable-p1'] == 4 &&
         p0Closure['actionable_product_gaps'] == 0 &&
         p0Closure['known_silent_misbehavior'] == 0 &&
         p0Closure['documented_non_mutating_differences'] == 1 &&
@@ -533,11 +537,40 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
             'intel-native-handoff' &&
         (p1Closure['completed']! as List<Object?>).join(',') ==
             'extended-rendition-and-selective-erase,bounded-semantic-ranges,'
-                'versioned-snapshot-restore-oracle' &&
-        p1Closure['remaining_actionable'] == 5,
+                'versioned-snapshot-restore-oracle,'
+                'cursor-cell-ligature-shaping-break' &&
+        p1Closure['remaining_actionable'] == 4,
     'reviewed totals differ',
   );
   return const GhosttyP0P1GapInventoryResult();
+}
+
+void validateGhosttyP1CursorLigatureClosureSources({
+  required String compositorSource,
+  required String compositorTestSource,
+}) {
+  _expect(
+    compositorSource.contains('_cursorShapingBreak') &&
+        compositorSource.contains('_TerminalCursorShapingBreak') &&
+        compositorSource.contains('model.cursorVisible') &&
+        compositorSource.contains('TerminalCellFlags.continuation') &&
+        compositorSource.contains('TerminalCellFlags.grapheme'),
+    'cursor-cell shaping-break implementation contract differs',
+  );
+  _expect(
+    compositorTestSource.contains(
+          '_testVisibleCursorBreaksLigatureShapingRuns',
+        ) &&
+        compositorTestSource.contains(
+          '_testCursorShapingBreakKeepsWideAndGraphemeCellsAtomic',
+        ) &&
+        compositorTestSource.contains(
+          'const <(int, int)>[(0, 2), (1, 3), (2, 2)]',
+        ) &&
+        compositorTestSource.contains('cursorDrawn: false') &&
+        compositorTestSource.contains('setCursorPresentation(visible: false)'),
+    'cursor-cell shaping-break regression evidence differs',
+  );
 }
 
 void validateGhosttyP1SemanticRangeClosureSources({
