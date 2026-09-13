@@ -277,6 +277,7 @@ export 'src/terminal_renderer/terminal_damage.dart';
 export 'src/terminal_renderer/terminal_damage_transfer.dart';
 export 'src/terminal_renderer/terminal_kitty_reference_compositor.dart';
 export 'src/terminal_renderer/terminal_live_metal_surface.dart';
+export 'src/terminal_renderer/terminal_overlay.dart';
 export 'src/terminal_renderer/terminal_render_model.dart';
 export 'src/terminal_renderer/terminal_screen_metal_compositor.dart';
 export 'src/terminal_renderer/terminal_viewport_render_model.dart';

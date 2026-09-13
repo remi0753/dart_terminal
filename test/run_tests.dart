@@ -89,6 +89,7 @@ import 'terminal_native_content_test.dart';
 import 'terminal_native_hierarchy_test.dart';
 import 'terminal_osc52_policy_test.dart';
 import 'terminal_osc52_projection_test.dart';
+import 'terminal_overlay_contract_test.dart';
 import 'terminal_palette_test.dart';
 import 'terminal_paste_test.dart';
 import 'terminal_phase9_protocol_property_test.dart';
@@ -221,6 +222,7 @@ Future<void> main() async {
   runTerminalMouseRouterTests();
   runTerminalOsc52PolicyTests();
   runTerminalOsc52ProjectionTests();
+  runTerminalOverlayContractTests();
   runTerminalPhase9ProtocolPropertyTests();
   await runTerminalPhase9SecurityStressTests().timeout(
     const Duration(seconds: 30),

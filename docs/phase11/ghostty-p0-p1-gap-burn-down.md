@@ -6,8 +6,158 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 synthetic cell glyphs — glyph atlas and screen compositor
-  integration
+- Current subtask: P1 remaining overlays and P3 conversion — inventory and
+  bounded contract
+
+## Current P1 child — remaining overlays and P3 conversion
+
+- **Purpose:** Close the remaining renderer parity row by composing terminal
+  image, search, and inspector overlays through the existing bounded screen and
+  Metal ownership model, and by making extended-color input reach the renderer
+  through one explicit sRGB conversion policy.
+- **Background:** `REN-08` currently accepts the viewport hyperlink hit test
+  and non-mutating underline overlay, but explicitly leaves image, search,
+  inspector, and Display P3/sRGB behavior open. The synthetic-cell item is now
+  committed, leaving this and the following input item as the two actionable
+  P1 gaps.
+- **Scope:** Re-read pinned Ghostty image/overlay/color evidence; inventory
+  existing Kitty image placement, search, inspector, palette, reference
+  renderer, packed Metal instances, shaders, diagnostics/privacy, and product
+  runtime acceptance; define bounded non-mutating overlay and color contracts;
+  implement and verify each independent responsibility in roadmap order;
+  update public/matrix/generated evidence only after observed closure.
+- **Out of scope:** Option-click cursor positioning, semantic prompt/output
+  selection, arbitrary image protocols beyond the accepted Kitty subset,
+  transparency/background blur, HDR/wide-gamut output promises, duration-only
+  campaigns, Apple notarization, and every `terminal`-named file/symbol/content
+  addition to generic `dart_appkit`.
+- **Dependencies:** Existing bounded Kitty image storage and compositor image
+  layers; search model and inspector capture/export privacy contract; hyperlink,
+  selection, cursor, preedit, and synthetic-cell overlays; CPU reference and
+  real Metal golden/readback infrastructure; packed instance/shader ABI;
+  renderer resource generations; pinned Ghostty revision `d4d8f62`; `REN-08`
+  and the current 95-accepted/two-actionable gap inventory.
+- **Completion conditions:** Every accepted overlay has a single bounded state
+  owner, deterministic viewport projection and documented layer order; no
+  overlay mutates canonical terminal cells or leaks captured text; P3 input is
+  converted to the documented sRGB representation before blending with exact
+  alpha semantics; 1x/2x CPU/Metal and both product runtime modes cover the
+  feature; generated evidence is fresh; no silent renderer gap remains; the
+  adjacent `dart_appkit` worktree stays clean and generic.
+- **Verification approach:** Inventory before choosing the split; record all
+  decisions and failed attempts here; add ordered roadmap subtasks with isolated
+  completion gates; for each subtask run focused unit/native/Metal tests,
+  formatting and analysis, then the exact repository gate; commit it alone and
+  re-read the roadmap before advancing. Runtime/golden and documentation
+  closure are deferred to the final subtask so earlier implementation children
+  do not claim matrix acceptance prematurely.
+- **Ordered subtasks and individual completion conditions:**
+  1. **Bounded overlay projection and P3-to-sRGB color contract.** Add immutable
+     typed grid-overlay spans/projections with an aggregate hard cap, explicit
+     precedence, truncation metadata, and no text payload; add a straight-alpha
+     RGBA8 color-space value that converts Display P3 to canonical clipped sRGB
+     while leaving sRGB and alpha exact. Unit tests must cover bounds,
+     immutability, ordering/precedence metadata, published conversion vectors,
+     clipping, and alpha preservation. No compositor or product activation is
+     claimed in this child.
+  2. **Three-band Kitty image layer ordering.** Complete the already-bounded
+     image path by separating extreme-negative under-background placements,
+     ordinary negative under-text placements, and nonnegative over-text
+     placements without changing store/protocol ownership. CPU/native order,
+     clipping, z/generation ordering, atlas pins, and failure behavior must pass
+     at 1x/2x.
+  3. **Search-result projection and Metal highlight overlay.** Project bounded
+     stable search ranges into the current viewport, distinguish the selected
+     match, coalesce overlap deterministically, reject/stale-drop invalid input,
+     and compose non-mutating fills/borders without changing terminal cells or
+     PTY input.
+  4. **Privacy-safe inspector overlay.** Derive only contiguous hyperlink and
+     semantic prompt/input geometry from current metadata while the existing
+     inspector owner is active; skip semantic output, retain no text, clear on
+     focus/close/stale generation, and compose the bounded top overlay with
+     accessible differentiation.
+  5. **Canonical sRGB and alpha-blending parity.** Convert tagged Display P3
+     input once before packing/upload, use sRGB texture/target decoding and
+     linear source-over blending in Metal, and make the CPU oracle exactly model
+     the same straight-alpha contract. Native ABI/source audits and color-vector,
+     translucent-solid/mask/image, and 1x/2x readback tests must pass.
+  6. **Runtime evidence, documentation/matrix update, and parent decision.**
+     Exercise all three image bands plus search/inspector overlays and P3 input
+     through the real product in Developer JIT and Release AOT; add checked-in
+     1x/2x evidence, update README/rendering reference and `REN-08`, regenerate
+     dependent reports, pass the exact full gate and adjacent-library audit,
+     then close only this parent if every preceding child is complete.
+- 2026-09-14: The pinned checkout remains clean at exact revision
+  `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`. Relevant source identities are
+  `src/renderer/image.zig`
+  `96562bf9b0a6a4fd2104586076768a7d15db34957cffbb0417b78371658fb3ad`,
+  `Overlay.zig`
+  `8b4fd865afd5202d8e519e91c29d62e0d9af6d94b2f77be6c1c73c3d6437bf84`,
+  `generic.zig`
+  `ccdcca8ef11c3d94fe6823b836a1ed9fd57089c00879fd45b32f72aab8c7c0d5`,
+  `shaders.metal`
+  `8c261d95c1d951cc47aa18bb39343a1cfd9057cc19dce987b4b1c3367f5d8d85`,
+  and `Metal.zig`
+  `596686cd2e7666ed5f19108b18ee79ad8a7280305712b1a70dfe45f77457e1c9`.
+  Ghostty sorts Kitty placements by z and divides them at `minInt(i32)/2` and
+  zero into below-background, below-text, and above-text bands. Search selected
+  matches precede other matches and both precede normal cell colors. Its debug
+  overlay is a full transparent CPU image derived only from hyperlink and
+  semantic prompt/input metadata, uploaded through the image path above text.
+- 2026-09-14: Product inventory found that Kitty decoding/storage, immutable
+  viewport snapshots, color-atlas tiling, animation content generations,
+  eviction, pins, and negative/nonnegative text bracketing are already complete.
+  Phase 9 explicitly excluded the extreme-negative under-background band, and
+  the compositor currently reduces all z values to only `z < 0` or `z >= 0`.
+  Exact search over stable anchors is complete with query/scalar/match caps, but
+  only selection ranges can currently project to visible spans and no search
+  result reaches the compositor. The existing Terminal Inspector owns a
+  bounded content-free parser capture and separate read-only window; it does not
+  yet project hyperlink/semantic metadata onto its focused live surface.
+- 2026-09-14: All terminal palette, OSC, reference-image, glyph, and Kitty
+  bitmap inputs are currently documented as straight-alpha sRGB. The native
+  color atlas, offscreen target, and `MTKView` use untagged
+  `RGBA8Unorm`; the shader returns gamma-encoded channel values and fixed-function
+  blending therefore performs source-over in that encoded space. There is no
+  Display P3 tag or conversion boundary. This product will keep sRGB as its one
+  canonical output space, convert explicit Display P3 inputs to clipped sRGB
+  before packing, and use sRGB texture/target formats so blending occurs in
+  linear light while readback/goldens remain encoded RGBA8 sRGB.
+- 2026-09-14: The first contract child now provides an immutable
+  `TerminalGridOverlayProjection` whose spans contain only kind, viewport row,
+  and end-exclusive columns. Construction copies and canonically orders at most
+  4,096 spans by explicit paint precedence, binds them to one positive source
+  generation, and carries producer truncation metadata; it cannot retain search
+  query, terminal text, URL, command, or parser payload. The separate
+  `TerminalRenderColor` preserves straight-alpha sRGB bytes exactly and converts
+  tagged Display P3 through the fixed D65 linear matrix, destination-gamut
+  clipping, and sRGB transfer function while leaving alpha untouched. Bounded
+  buffer conversion validates complete RGBA pixels and a 64 MiB hard maximum.
+- 2026-09-14: Focused formatting changed only the two new Dart files. Focused
+  analysis reported no issues, and the standalone contract test exited zero
+  after checking immutable/canonical precedence, invalid geometry/generation,
+  aggregate span caps, neutral/clipped/orange conversion vectors, alpha
+  preservation, buffer copying, malformed length, non-byte input, and byte-cap
+  rejection. No compositor, Metal ABI, terminal cell, or product activation was
+  changed by this child.
+- 2026-09-14: The first exact repository gate completed successfully, including
+  every native capability suite, generated-evidence freshness check, 334-file
+  zero-change format pass, security stress, and aggregate Dart tests. Its root
+  analysis emitted one `directives_ordering` info for the new public export;
+  the export was moved into the existing renderer section and the exact gate
+  was rerun rather than accepting an informational diagnostic as clean.
+- 2026-09-14: The final exact gate
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed with 334 files already
+  formatted, root and package analyses reporting no issues, generated evidence
+  fresh, all native/plugin/security suites passing, and the final
+  `dart_terminal tests passed` marker. `git diff --check` was also clean.
+- 2026-09-14: The adjacent `/Users/remi/dart/dart_appkit` worktree is clean.
+  Its tracked-file inventory has no `terminal`-named path, and a tracked-source
+  search has no terminal-specific executable content. Ignored `build/` outputs
+  produced by earlier product builds and the vendored SDK cache contain product
+  binary/test names, but are untracked generated artifacts, were not modified
+  by this child, and are not part of the generic library source or publication.
+  No `dart_appkit` file was changed.
 
 ## Purpose
 
