@@ -2778,6 +2778,7 @@ final class TerminalApplication {
         ? _TerminalProductPerformanceObservation()
         : null;
     var diagnosticsExportSelectionIndex = 0;
+    var diagnosticsOverlayGeneration = 0;
     if (runDiagnosticsAcceptance && diagnosticsExportDirectory == null) {
       throw StateError(
         'diagnostics acceptance requires an isolated export directory',
@@ -4922,12 +4923,15 @@ final class TerminalApplication {
         final Window? window = createdHierarchy.windowForTab(tab.id);
         final TerminalNativePaneResources? resources = createdHierarchy
             .resourcesForPane(paneId);
+        final _TerminalHierarchyProductPane? owner = owners[paneId];
         if (pane == null ||
             session == null ||
             !pane.isLive ||
             !session.isLive ||
             window == null ||
-            resources == null) {
+            resources == null ||
+            owner == null ||
+            owner.surface.isDisposed) {
           return null;
         }
         return TerminalDiagnosticsFocusTarget(
@@ -4942,6 +4946,19 @@ final class TerminalApplication {
             session.beginDiagnosticsCapture(onEvent: observer);
           },
           endCapture: session.endDiagnosticsCapture,
+          beginOverlay: () {
+            owner.surface.updateInspectorOverlay(
+              generation: ++diagnosticsOverlayGeneration,
+              isActive: true,
+            );
+          },
+          endOverlay: () {
+            if (owner.surface.isDisposed) return;
+            owner.surface.updateInspectorOverlay(
+              generation: ++diagnosticsOverlayGeneration,
+              isActive: false,
+            );
+          },
           snapshot: () => captureDiagnosticsSnapshot(paneId),
         );
       }
@@ -6827,6 +6844,7 @@ final class TerminalApplication {
       () =>
           presenter.isOpen &&
           initialSession.diagnosticsCaptureEnabled &&
+          initialOwner.surface.snapshot().inspectorOverlayActive &&
           nativeActionInvocations.length == openInvocationBaseline + 1 &&
           actionDispatches.length == openDispatchBaseline + 1,
       'diagnostics inspector did not open and capture exactly once',
@@ -6846,7 +6864,8 @@ final class TerminalApplication {
 
     const String firstPrivateMarker = '__DT_DIAGNOSTICS_PRIVATE_ALPHA__';
     initialOwner.pane.insertText(
-      "printf '\\033[31m$firstPrivateMarker\\033[0m\\n'",
+      "printf '\\033]8;id=diagnostics;https://private.test\\a"
+      "\\033[31m$firstPrivateMarker\\033[0m\\033]8;;\\a\\n'",
     );
     await initialOwner.pane.submit();
     await _waitForAsciiMarker(initialSession, firstPrivateMarker);
@@ -6854,6 +6873,7 @@ final class TerminalApplication {
       () =>
           initialSession.captureParserDiagnostics().inspection.totalEventCount >
               0 &&
+          initialOwner.surface.snapshot().inspectorHyperlinkSpanCount > 0 &&
           (presenter.renderedText ?? '').contains('events_total'),
       'diagnostics inspector did not refresh from live parser events',
     );
@@ -6886,7 +6906,10 @@ final class TerminalApplication {
       () =>
           !initialSession.diagnosticsCaptureEnabled &&
           initialSession.captureParserDiagnostics().inspection.events.isEmpty &&
+          !initialOwner.surface.snapshot().inspectorOverlayActive &&
+          initialOwner.surface.snapshot().inspectorSpanCount == 0 &&
           focusedSession.diagnosticsCaptureEnabled &&
+          focusedOwner.surface.snapshot().inspectorOverlayActive &&
           presenter.capturedTargetIdentity == focusedSession.id &&
           presenter.captureHandoffCount >= 2,
       'diagnostics focus handoff did not clear old capture before new capture',
@@ -7197,6 +7220,8 @@ final class TerminalApplication {
           !presenter.isOpen &&
           !focusedSession.diagnosticsCaptureEnabled &&
           focusedSession.captureParserDiagnostics().inspection.events.isEmpty &&
+          !focusedOwner.surface.snapshot().inspectorOverlayActive &&
+          focusedOwner.surface.snapshot().inspectorSpanCount == 0 &&
           application.debugLiveObjectCount == handlesBeforeDismiss - 2 &&
           presenter.terminalResponderRestoreCount >= 1,
       'diagnostics close did not clear capture and restore native ownership',
@@ -7225,7 +7250,7 @@ final class TerminalApplication {
       'diagnostics product did not release all parser, PTY, or native owners',
     );
     stdout.writeln(
-      'TERMINAL_DIAGNOSTICS_TEST inspector=true singleton=true '
+      'TERMINAL_DIAGNOSTICS_TEST inspector=true overlay=true singleton=true '
       'capture=true focus_handoff=true parser_events=true redacted=true '
       'menu=true palette=true canonical=true atomic=true exports=2 '
       'incident_consent=true incident_singleton=true incident_exports=2 '

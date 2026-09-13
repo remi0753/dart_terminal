@@ -183,6 +183,15 @@ final class TerminalLiveMetalSurfaceSnapshot {
     this.searchCellCount = 0,
     this.selectedSearchSpanCount = 0,
     this.searchProjectionTruncated = false,
+    this.inspectorOverlayGeneration = 0,
+    this.inspectorOverlayActive = false,
+    this.inspectorProjectionGeneration = 0,
+    this.inspectorSemanticGeneration = 0,
+    this.inspectorSpanCount = 0,
+    this.inspectorHyperlinkSpanCount = 0,
+    this.inspectorPromptSpanCount = 0,
+    this.inspectorInputSpanCount = 0,
+    this.inspectorProjectionTruncated = false,
     this.hyperlinkHoverId = 0,
     this.hyperlinkHoverRow = -1,
     this.hyperlinkHoverColumn = -1,
@@ -256,6 +265,15 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int searchCellCount;
   final int selectedSearchSpanCount;
   final bool searchProjectionTruncated;
+  final int inspectorOverlayGeneration;
+  final bool inspectorOverlayActive;
+  final int inspectorProjectionGeneration;
+  final int inspectorSemanticGeneration;
+  final int inspectorSpanCount;
+  final int inspectorHyperlinkSpanCount;
+  final int inspectorPromptSpanCount;
+  final int inspectorInputSpanCount;
+  final bool inspectorProjectionTruncated;
   final int hyperlinkHoverId;
   final int hyperlinkHoverRow;
   final int hyperlinkHoverColumn;
@@ -457,7 +475,7 @@ final class TerminalLiveMetalSurface {
                       ? _preeditLayoutForModel(model)
                       : null,
                   selection: _selectionProjection,
-                  gridOverlay: _searchOverlayProjection,
+                  gridOverlay: _gridOverlayProjection,
                   kittyImages: screenSet.captureKittyImageViewport(),
                   hoveredHyperlinkId: _hyperlinkHover?.hyperlinkId ?? 0,
                 );
@@ -572,12 +590,18 @@ final class TerminalLiveMetalSurface {
   final TerminalSearchOverlayState _searchOverlayState =
       TerminalSearchOverlayState();
   TerminalGridOverlayProjection? _searchOverlayProjection;
+  final TerminalInspectorOverlayState _inspectorOverlayState =
+      TerminalInspectorOverlayState();
+  TerminalGridOverlayProjection? _inspectorOverlayProjection;
+  TerminalGridOverlayProjection? _gridOverlayProjection;
   TerminalHyperlinkHit? _hyperlinkHover;
   TerminalAccessibilityPresentation _accessibilityPresentation;
   TerminalViewportRenderModel? _viewportRenderModel;
   int _publishedViewportGeneration = 0;
   int _publishedSelectionGeneration = -1;
   int _publishedSearchGeneration = -1;
+  int _publishedInspectorOverlayGeneration = -1;
+  int _publishedInspectorSemanticGeneration = -1;
   int _publishedProjectionResourceGeneration = 0;
   int _publishedKittyStoreGeneration = 0;
   int _seenAccessibilityViewportGeneration = 0;
@@ -655,6 +679,26 @@ final class TerminalLiveMetalSurface {
       selectedMatchIndex: selectedMatchIndex,
     );
     if (!changed) return false;
+    _needsDrain = true;
+    _scheduleImmediate();
+    return true;
+  }
+
+  /// Activates or clears the content-free overlay owned by the diagnostics
+  /// presenter. Geometry is always re-derived from current screen metadata.
+  bool updateInspectorOverlay({
+    required int generation,
+    required bool isActive,
+  }) {
+    _requireLive();
+    final bool changed = _inspectorOverlayState.update(
+      generation: generation,
+      isActive: isActive,
+    );
+    if (!changed) return false;
+    _inspectorOverlayProjection = null;
+    _gridOverlayProjection = _currentCombinedGridOverlay();
+    if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
     _needsDrain = true;
     _scheduleImmediate();
     return true;
@@ -1086,6 +1130,25 @@ final class TerminalLiveMetalSurface {
               .length ??
           0,
       searchProjectionTruncated: _searchOverlayProjection?.isTruncated ?? false,
+      inspectorOverlayGeneration: _inspectorOverlayState.generation,
+      inspectorOverlayActive: _inspectorOverlayState.isActive,
+      inspectorProjectionGeneration:
+          _inspectorOverlayProjection?.sourceGeneration ?? 0,
+      inspectorSemanticGeneration: _publishedInspectorSemanticGeneration < 0
+          ? 0
+          : _publishedInspectorSemanticGeneration,
+      inspectorSpanCount: _inspectorOverlayProjection?.spanCount ?? 0,
+      inspectorHyperlinkSpanCount: _inspectorSpanCount(
+        TerminalGridOverlayKind.inspectorHyperlink,
+      ),
+      inspectorPromptSpanCount: _inspectorSpanCount(
+        TerminalGridOverlayKind.inspectorSemanticPrompt,
+      ),
+      inspectorInputSpanCount: _inspectorSpanCount(
+        TerminalGridOverlayKind.inspectorSemanticInput,
+      ),
+      inspectorProjectionTruncated:
+          _inspectorOverlayProjection?.isTruncated ?? false,
       hyperlinkHoverId: _hyperlinkHover?.hyperlinkId ?? 0,
       hyperlinkHoverRow: _hyperlinkHover?.row ?? -1,
       hyperlinkHoverColumn: _hyperlinkHover?.pointerColumn ?? -1,
@@ -1114,6 +1177,8 @@ final class TerminalLiveMetalSurface {
     if (_disposed) return;
     _disposed = true;
     _hyperlinkHover = null;
+    _inspectorOverlayProjection = null;
+    _gridOverlayProjection = null;
     _scheduler.pauseAnimation();
     _timer?.cancel();
     _timer = null;
@@ -1346,12 +1411,20 @@ final class TerminalLiveMetalSurface {
     final int viewportGeneration = viewport.generation;
     final int selectionGeneration = _selectionSnapshot?.generation ?? 0;
     final int searchGeneration = _searchOverlayState.generation;
+    final int inspectorOverlayGeneration = _inspectorOverlayState.generation;
+    final TerminalSemanticRangeSnapshot? semanticRanges =
+        _inspectorOverlayState.isActive
+        ? screenSet.semanticRangeSnapshot()
+        : null;
+    final int inspectorSemanticGeneration = semanticRanges?.generation ?? 0;
     final int resourceGeneration = atlas.resourceGeneration;
     final int kittyStoreGeneration =
         screenSet.activeKittyImages.stateGeneration;
     if (viewportGeneration == _publishedViewportGeneration &&
         selectionGeneration == _publishedSelectionGeneration &&
         searchGeneration == _publishedSearchGeneration &&
+        inspectorOverlayGeneration == _publishedInspectorOverlayGeneration &&
+        inspectorSemanticGeneration == _publishedInspectorSemanticGeneration &&
         resourceGeneration == _publishedProjectionResourceGeneration &&
         kittyStoreGeneration == _publishedKittyStoreGeneration) {
       return;
@@ -1368,13 +1441,37 @@ final class TerminalLiveMetalSurface {
         ? null
         : viewport.projectSelection(range);
     _searchOverlayProjection = _searchOverlayState.project(viewport);
+    _inspectorOverlayProjection = semanticRanges == null
+        ? null
+        : _inspectorOverlayState.project(viewport, semanticRanges);
+    _gridOverlayProjection = _currentCombinedGridOverlay();
     _publishedViewportGeneration = viewportGeneration;
     _publishedSelectionGeneration = selectionGeneration;
     _publishedSearchGeneration = searchGeneration;
+    _publishedInspectorOverlayGeneration = inspectorOverlayGeneration;
+    _publishedInspectorSemanticGeneration = inspectorSemanticGeneration;
     _publishedProjectionResourceGeneration = resourceGeneration;
     _publishedKittyStoreGeneration = kittyStoreGeneration;
     if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
   }
+
+  TerminalGridOverlayProjection? _currentCombinedGridOverlay() {
+    if (_searchOverlayProjection == null &&
+        _inspectorOverlayProjection == null) {
+      return null;
+    }
+    return TerminalGridOverlayProjection.combine(
+      sourceGeneration: screenSet.viewport.generation,
+      first: _searchOverlayProjection,
+      second: _inspectorOverlayProjection,
+    );
+  }
+
+  int _inspectorSpanCount(TerminalGridOverlayKind kind) =>
+      _inspectorOverlayProjection?.spans
+          .where((TerminalGridOverlaySpan span) => span.kind == kind)
+          .length ??
+      0;
 
   void _refreshAccessibilityPresentation() {
     final TerminalViewport viewport = screenSet.viewport;

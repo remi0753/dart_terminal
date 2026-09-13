@@ -10,8 +10,176 @@ void runTerminalOverlayContractTests() {
   _testSearchProjectionCoalescesAndPrioritizesSelection();
   _testSearchProjectionDropsUnavailableAnchors();
   _testSearchOverlayStateIsMonotonicAndContentFree();
+  _testInspectorProjectionUsesOnlyCurrentMetadata();
+  _testInspectorProjectionBoundsAndStateLifecycle();
+  _testOverlayCombinationPrioritizesTopKindsAndDropsStaleInput();
   _testDisplayP3ColorConversionVectorsAndAlpha();
   _testDisplayP3BufferConversionIsBoundedAndCopied();
+}
+
+void _testInspectorProjectionUsesOnlyCurrentMetadata() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 2, columns: 16);
+  final VtParser parser = VtParser(
+    sink: TerminalScreenParserSink.forScreenSet(screens),
+  );
+  void parse(String value) => parser.parse(Uint8List.fromList(value.codeUnits));
+  parse('\x1b]133;A\x07P\x1b]133;B\x07');
+  parse('\x1b]8;id=one;https://private-one.test\x07AB\x1b]8;;\x07');
+  parse('\x1b]8;id=two;https://private-two.test\x07C\x1b]8;;\x07D');
+  parse('\x1b]133;C\x07OUT\x1b]133;D\x07');
+
+  final TerminalGridOverlayProjection projection =
+      TerminalInspectorOverlayProjector.project(
+        viewport: screens.viewport,
+        semanticRanges: screens.semanticRangeSnapshot(),
+      );
+  _expect(
+    projection.spans.length == 4 &&
+        projection.spans[0] ==
+            TerminalGridOverlaySpan(
+              kind: TerminalGridOverlayKind.inspectorHyperlink,
+              row: 0,
+              startColumn: 1,
+              endColumn: 3,
+            ) &&
+        projection.spans[1] ==
+            TerminalGridOverlaySpan(
+              kind: TerminalGridOverlayKind.inspectorHyperlink,
+              row: 0,
+              startColumn: 3,
+              endColumn: 4,
+            ) &&
+        projection.spans[2] ==
+            TerminalGridOverlaySpan(
+              kind: TerminalGridOverlayKind.inspectorSemanticPrompt,
+              row: 0,
+              startColumn: 0,
+              endColumn: 1,
+            ) &&
+        projection.spans[3] ==
+            TerminalGridOverlaySpan(
+              kind: TerminalGridOverlayKind.inspectorSemanticInput,
+              row: 0,
+              startColumn: 1,
+              endColumn: 5,
+            ) &&
+        !projection.spans.any(
+          (TerminalGridOverlaySpan span) =>
+              span.startColumn >= 5 && span.endColumn <= 8,
+        ) &&
+        !projection.isTruncated,
+    'inspector projection groups hyperlink identities, projects prompt/input, '
+    'and excludes semantic output without resolving private payloads',
+  );
+}
+
+void _testInspectorProjectionBoundsAndStateLifecycle() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 8);
+  final int hyperlink = screens.hyperlinkTable.tryIntern(
+    uri: 'https://never-retained.test',
+  )!;
+  screens.primary.setNarrowCell(0, 0, 0x58, hyperlink: hyperlink);
+  screens.primary.setNarrowCell(0, 2, 0x59, hyperlink: hyperlink);
+  final TerminalSemanticRangeSnapshot snapshot = screens
+      .semanticRangeSnapshot();
+  final TerminalGridOverlayProjection scanned =
+      TerminalInspectorOverlayProjector.project(
+        viewport: screens.viewport,
+        semanticRanges: snapshot,
+        maximumScannedCells: 2,
+      );
+  _expect(
+    scanned.isTruncated &&
+        scanned.spans.length == 1 &&
+        scanned.spans.single.startColumn == 0 &&
+        scanned.spans.single.endColumn == 1,
+    'inspector hyperlink traversal stops at its hard cell-work bound',
+  );
+
+  final TerminalInspectorOverlayState state = TerminalInspectorOverlayState();
+  _expect(
+    state.update(generation: 1, isActive: true) &&
+        state.isActive &&
+        state.project(screens.viewport, snapshot) != null,
+    'inspector state activates without retaining metadata payloads',
+  );
+  _expect(
+    !state.update(generation: 1, isActive: true),
+    'an identical inspector activation generation is idempotent',
+  );
+  _expectFailure(
+    () => state.update(generation: 1, isActive: false),
+    'conflicting inspector activation cannot reuse a generation',
+  );
+  _expectFailure(
+    () => state.update(generation: 0, isActive: true),
+    'inspector activation generation cannot regress',
+  );
+  _expect(
+    state.update(generation: 2, isActive: false) &&
+        !state.isActive &&
+        state.project(screens.viewport, snapshot) == null,
+    'a newer inspector generation clears all geometry',
+  );
+}
+
+void _testOverlayCombinationPrioritizesTopKindsAndDropsStaleInput() {
+  TerminalGridOverlayProjection projection(
+    int generation,
+    TerminalGridOverlayKind kind,
+    int column,
+  ) => TerminalGridOverlayProjection(
+    sourceGeneration: generation,
+    spans: <TerminalGridOverlaySpan>[
+      TerminalGridOverlaySpan(
+        kind: kind,
+        row: 0,
+        startColumn: column,
+        endColumn: column + 1,
+      ),
+    ],
+  );
+  final TerminalGridOverlayProjection combined =
+      TerminalGridOverlayProjection.combine(
+        sourceGeneration: 4,
+        first: projection(4, TerminalGridOverlayKind.searchSelectedMatch, 0),
+        second: TerminalGridOverlayProjection(
+          sourceGeneration: 4,
+          spans: <TerminalGridOverlaySpan>[
+            TerminalGridOverlaySpan(
+              kind: TerminalGridOverlayKind.inspectorSemanticPrompt,
+              row: 0,
+              startColumn: 1,
+              endColumn: 2,
+            ),
+            TerminalGridOverlaySpan(
+              kind: TerminalGridOverlayKind.inspectorSemanticInput,
+              row: 0,
+              startColumn: 2,
+              endColumn: 3,
+            ),
+          ],
+        ),
+        maximumSpans: 2,
+      );
+  _expect(
+    combined.isTruncated &&
+        combined.spans.length == 2 &&
+        combined.spans[0].kind ==
+            TerminalGridOverlayKind.inspectorSemanticPrompt &&
+        combined.spans[1].kind ==
+            TerminalGridOverlayKind.inspectorSemanticInput,
+    'combined cap reserves higher-precedence top overlay geometry',
+  );
+  final TerminalGridOverlayProjection stale =
+      TerminalGridOverlayProjection.combine(
+        sourceGeneration: 5,
+        first: projection(4, TerminalGridOverlayKind.inspectorHyperlink, 0),
+      );
+  _expect(
+    stale.isEmpty && stale.isTruncated,
+    'stale viewport geometry is dropped instead of being repainted',
+  );
 }
 
 void _testSearchOverlayStateIsMonotonicAndContentFree() {

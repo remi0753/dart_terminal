@@ -32,7 +32,8 @@ void runTerminalScreenMetalCompositorTests() {
   _testPreeditUsesTransientMetalLayers();
   _testSelectionProjectionUsesOverlayLayer();
   _testSearchProjectionUsesOrderedMetalHighlights();
-  _testSearchProjectionRejectsInvalidKindsAndGeometry();
+  _testInspectorProjectionUsesDifferentiatedTopDecorations();
+  _testGridOverlayRejectsInvalidGeometry();
   _testHyperlinkHoverUsesDecorationLayer();
   _testAccessibleOverlaysUseContrastAndGeometry();
   _testPreeditRespectsRendererInstanceLimit();
@@ -119,13 +120,10 @@ void _testSearchProjectionUsesOrderedMetalHighlights() {
   }
 }
 
-void _testSearchProjectionRejectsInvalidKindsAndGeometry() {
-  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 2);
-  _expectThrows(
-    () => _compose(
-      screens,
-      gridOverlay: TerminalGridOverlayProjection(
-        sourceGeneration: 1,
+void _testInspectorProjectionUsesDifferentiatedTopDecorations() {
+  final TerminalGridOverlayProjection projection =
+      TerminalGridOverlayProjection(
+        sourceGeneration: 3,
         spans: <TerminalGridOverlaySpan>[
           TerminalGridOverlaySpan(
             kind: TerminalGridOverlayKind.inspectorHyperlink,
@@ -133,11 +131,113 @@ void _testSearchProjectionRejectsInvalidKindsAndGeometry() {
             startColumn: 0,
             endColumn: 1,
           ),
+          TerminalGridOverlaySpan(
+            kind: TerminalGridOverlayKind.inspectorSemanticPrompt,
+            row: 0,
+            startColumn: 1,
+            endColumn: 2,
+          ),
+          TerminalGridOverlaySpan(
+            kind: TerminalGridOverlayKind.inspectorSemanticInput,
+            row: 0,
+            startColumn: 2,
+            endColumn: 3,
+          ),
         ],
+      );
+  for (final double scale in <double>[1, 2]) {
+    final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 3);
+    final _CompositionFixture fixture = _compose(
+      screens,
+      scale: scale,
+      cursorDrawn: false,
+      accessibilityPresentation: const TerminalAccessibilityPresentation(
+        reduceMotion: false,
+        increaseContrast: false,
+        differentiateWithoutColor: true,
       ),
+      gridOverlay: projection,
+    );
+    try {
+      final List<TerminalMetalInstance> decorations = fixture
+          .composition
+          .instances
+          .where(
+            (TerminalMetalInstance instance) =>
+                instance.kind == TerminalMetalInstanceKind.decoration,
+          )
+          .toList(growable: false);
+      _expect(
+        decorations.length == 7 &&
+            decorations[0].colorRgba == 0x32d7ffff &&
+            decorations[1].colorRgba == 0xc678ddff &&
+            decorations[3].colorRgba == 0x98c379ff,
+        'hyperlink underline, prompt corner, and input outline remain '
+        'shape- and color-distinct at ${scale}x',
+      );
+      final Uint8List rendered = fixture.renderer.renderRgba(
+        fixture.composition.scheduledFrame.frame,
+      );
+      final int firstBoundary = (fixture.catalog.metrics.cellWidth * scale)
+          .round();
+      final int secondBoundary = (fixture.catalog.metrics.cellWidth * 2 * scale)
+          .round();
+      final int lastY =
+          (fixture.catalog.metrics.cellHeight * scale).round() - 1;
+      final int hyperlinkOffset =
+          (lastY * fixture.viewportWidth + firstBoundary ~/ 2) * 4;
+      final int promptOffset = (firstBoundary + 1) * 4;
+      final int inputOffset = (secondBoundary + 1) * 4;
+      _expect(
+        rendered[hyperlinkOffset] == 0x32 &&
+            rendered[hyperlinkOffset + 1] == 0xd7 &&
+            rendered[promptOffset] == 0xc6 &&
+            rendered[promptOffset + 1] == 0x78 &&
+            rendered[inputOffset] == 0x98 &&
+            rendered[inputOffset + 1] == 0xc3,
+        'real Metal readback preserves all inspector decoration identities '
+        'at ${scale}x',
+      );
+    } finally {
+      fixture.dispose();
+    }
+  }
+
+  final _CompositionFixture contrast = _compose(
+    TerminalScreenSet(rows: 1, columns: 3),
+    cursorDrawn: false,
+    accessibilityPresentation: const TerminalAccessibilityPresentation(
+      reduceMotion: false,
+      increaseContrast: true,
+      differentiateWithoutColor: false,
     ),
-    'search compositor rejects an unsupported overlay kind',
+    gridOverlay: projection,
   );
+  try {
+    final List<TerminalMetalInstance> decorations = contrast
+        .composition
+        .instances
+        .where(
+          (TerminalMetalInstance instance) =>
+              instance.kind == TerminalMetalInstanceKind.decoration,
+        )
+        .toList(growable: false);
+    _expect(
+      decorations.length == 7 &&
+          decorations.every(
+            (TerminalMetalInstance instance) =>
+                instance.colorRgba == 0xffffffff &&
+                (instance.width >= 2 || instance.height >= 2),
+          ),
+      'increase contrast uses opaque background-contrasting thick geometry',
+    );
+  } finally {
+    contrast.dispose();
+  }
+}
+
+void _testGridOverlayRejectsInvalidGeometry() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 2);
   _expectThrows(
     () => _compose(
       screens,
@@ -153,7 +253,7 @@ void _testSearchProjectionRejectsInvalidKindsAndGeometry() {
         ],
       ),
     ),
-    'search compositor rejects geometry outside its render model',
+    'grid overlay compositor rejects geometry outside its render model',
   );
 }
 

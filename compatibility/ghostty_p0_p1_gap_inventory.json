@@ -112,7 +112,7 @@
     },
     {
       "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
-      "sha256": "acad91e7c7c620f807c3b04b9b1a3f4d5a07aa5a659c12a857c2221f8ebacc33"
+      "sha256": "79f867680557e5df916b0bf692350fc955287e304cb26ce319db59060c528b76"
     },
     {
       "path": "test/terminal_cell_glyph_test.dart",
@@ -120,7 +120,7 @@
     },
     {
       "path": "test/terminal_screen_metal_compositor_test.dart",
-      "sha256": "703d9887d383028b3c413882856363ce16405d68b8d28a3b73ea73eccc22a47a"
+      "sha256": "cc284d2badcee984c6b1ac40eb0684412bc2cb4f5beec905e0e3b5b9a8841b7c"
     },
     {
       "path": "test/goldens/cell-glyphs/synthetic-corpus-1x.dtgi",
@@ -168,7 +168,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "97f4652301749df9a8182edeebbc8f20a9115e2b0e9ccf479d2bc6a989e1fc4c"
+      "sha256": "8de9066fcd7fcddb5eade4acc774b68fe02a76f47b03a098e79a3c3c7c43ea24"
     },
     {
       "path": "test/terminal_product_configuration_test.dart",
@@ -180,7 +180,7 @@
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
-      "sha256": "10394639f8e3d73007c8c2f6a53e68008051cd2b5011cfdd553f68be6f7c91bd"
+      "sha256": "9ed5dcf6e2e40423487342a5349cf09e9e85d03a31dfb03187b9d660c34efa03"
     }
   ],
   "totals": {

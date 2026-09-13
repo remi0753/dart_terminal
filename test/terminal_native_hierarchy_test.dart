@@ -1589,6 +1589,8 @@ Future<void> _testDiagnosticsPresenterLifecycle() async {
     downstream: secondSink,
     captureEnabled: false,
   );
+  final Map<String, int> overlayBegins = <String, int>{};
+  final Map<String, int> overlayEnds = <String, int>{};
   TerminalDiagnosticsFocusTarget target(
     String identity,
     VtParserInspector inspector,
@@ -1602,6 +1604,16 @@ Future<void> _testDiagnosticsPresenterLifecycle() async {
       inspector.beginCapture(onEvent: observer);
     },
     endCapture: inspector.endCapture,
+    beginOverlay: () {
+      overlayBegins.update(
+        identity,
+        (int count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    },
+    endOverlay: () {
+      overlayEnds.update(identity, (int count) => count + 1, ifAbsent: () => 1);
+    },
     snapshot: () => _diagnosticsPresenterSnapshot(inspector, sink),
   );
 
@@ -1650,6 +1662,8 @@ Future<void> _testDiagnosticsPresenterLifecycle() async {
           presenter.captureHandoffCount == 1 &&
           presenter.capturedTargetIdentity == 'first' &&
           firstInspector.captureEnabled &&
+          overlayBegins['first'] == 1 &&
+          overlayEnds['first'] == null &&
           presenter.activeWindow!.title == 'ターミナルインスペクタ' &&
           presenter.renderedText!.contains('"format":') &&
           presenter.renderedText!.contains('Escで閉じる'),
@@ -1678,8 +1692,11 @@ Future<void> _testDiagnosticsPresenterLifecycle() async {
           presenter.capturedTargetIdentity == 'second' &&
           !firstInspector.captureEnabled &&
           firstInspector.snapshot().events.isEmpty &&
-          secondInspector.captureEnabled,
-      'focus handoff did not clear the previous capture before enabling next',
+          secondInspector.captureEnabled &&
+          overlayEnds['first'] == 1 &&
+          overlayBegins['second'] == 1,
+      'focus handoff did not clear previous capture/overlay before enabling '
+      'the next target',
     );
 
     bindings.savePanelResult =
@@ -1745,6 +1762,7 @@ Future<void> _testDiagnosticsPresenterLifecycle() async {
     _expect(
       !secondInspector.captureEnabled &&
           secondInspector.snapshot().events.isEmpty &&
+          overlayEnds['second'] == 1 &&
           presenter.terminalResponderRestoreCount == 1 &&
           bindings.firstResponders[bindings.handleFor(terminalWindow)] ==
               bindings.handleFor(terminalView) &&

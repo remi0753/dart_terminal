@@ -95,6 +95,52 @@ final class TerminalGridOverlayProjection {
   );
   bool get isEmpty => spans.isEmpty;
 
+  /// Combines two already-bounded projections while reserving the shared cap
+  /// for higher-precedence overlay kinds. A projection from another viewport
+  /// generation is dropped and reported as truncated.
+  static TerminalGridOverlayProjection combine({
+    required int sourceGeneration,
+    TerminalGridOverlayProjection? first,
+    TerminalGridOverlayProjection? second,
+    int maximumSpans = defaultMaximumSpans,
+  }) {
+    RangeError.checkValueInInterval(
+      maximumSpans,
+      1,
+      TerminalGridOverlayProjection.maximumSpans,
+      'maximumSpans',
+    );
+    final List<TerminalGridOverlaySpan> candidates =
+        <TerminalGridOverlaySpan>[];
+    var isTruncated = false;
+    for (final TerminalGridOverlayProjection? projection
+        in <TerminalGridOverlayProjection?>[first, second]) {
+      if (projection == null) continue;
+      isTruncated = isTruncated || projection.isTruncated;
+      if (projection.sourceGeneration != sourceGeneration) {
+        isTruncated = true;
+        continue;
+      }
+      candidates.addAll(projection.spans);
+    }
+    candidates.sort((
+      TerminalGridOverlaySpan left,
+      TerminalGridOverlaySpan right,
+    ) {
+      final int precedence = right.kind.paintOrder.compareTo(
+        left.kind.paintOrder,
+      );
+      return precedence != 0 ? precedence : _compareSpans(left, right);
+    });
+    if (candidates.length > maximumSpans) isTruncated = true;
+    return TerminalGridOverlayProjection(
+      sourceGeneration: sourceGeneration,
+      spans: candidates.take(maximumSpans),
+      isTruncated: isTruncated,
+      maximumSpans: maximumSpans,
+    );
+  }
+
   static List<TerminalGridOverlaySpan> _copyCanonicalSpans(
     Iterable<TerminalGridOverlaySpan> source,
     int maximumSpans,
@@ -128,6 +174,188 @@ final class TerminalGridOverlayProjection {
     if (result != 0) return result;
     return left.endColumn.compareTo(right.endColumn);
   }
+}
+
+/// Projects current hyperlink and semantic prompt/input metadata for the
+/// diagnostics inspector without resolving any cell text or hyperlink target.
+abstract final class TerminalInspectorOverlayProjector {
+  static const int defaultMaximumScannedCells = 1048576;
+  static const int maximumScannedCells = 4194304;
+
+  static TerminalGridOverlayProjection project({
+    required TerminalViewport viewport,
+    required TerminalSemanticRangeSnapshot semanticRanges,
+    int maximumSpans = TerminalGridOverlayProjection.defaultMaximumSpans,
+    int maximumScannedCells = defaultMaximumScannedCells,
+  }) {
+    RangeError.checkValueInInterval(
+      maximumSpans,
+      1,
+      TerminalGridOverlayProjection.maximumSpans,
+      'maximumSpans',
+    );
+    RangeError.checkValueInInterval(
+      maximumScannedCells,
+      1,
+      TerminalInspectorOverlayProjector.maximumScannedCells,
+      'maximumScannedCells',
+    );
+    final int sourceGeneration = viewport.generation;
+    final List<TerminalGridOverlaySpan> hyperlinks =
+        <TerminalGridOverlaySpan>[];
+    final List<TerminalGridOverlaySpan> prompts = <TerminalGridOverlaySpan>[];
+    final List<TerminalGridOverlaySpan> inputs = <TerminalGridOverlaySpan>[];
+    var isTruncated = semanticRanges.isTruncated;
+    var scannedCells = 0;
+    var scanStopped = false;
+
+    void addHyperlink(int row, int startColumn, int endColumn) {
+      if (hyperlinks.length == maximumSpans) {
+        isTruncated = true;
+        return;
+      }
+      hyperlinks.add(
+        TerminalGridOverlaySpan(
+          kind: TerminalGridOverlayKind.inspectorHyperlink,
+          row: row,
+          startColumn: startColumn,
+          endColumn: endColumn,
+        ),
+      );
+    }
+
+    for (int row = 0; row < viewport.rows && !scanStopped; row++) {
+      var currentHyperlink = 0;
+      var runStart = 0;
+      for (int column = 0; column < viewport.columns; column++) {
+        if (scannedCells == maximumScannedCells) {
+          if (currentHyperlink != 0) addHyperlink(row, runStart, column);
+          isTruncated = true;
+          scanStopped = true;
+          break;
+        }
+        scannedCells++;
+        final int hyperlink = viewport.hyperlinkAt(row, column);
+        if (hyperlink == currentHyperlink) continue;
+        if (currentHyperlink != 0) addHyperlink(row, runStart, column);
+        currentHyperlink = hyperlink;
+        runStart = column;
+      }
+      if (!scanStopped && currentHyperlink != 0) {
+        addHyperlink(row, runStart, viewport.columns);
+      }
+    }
+
+    void addSemantic(
+      TerminalSemanticRange range,
+      TerminalGridOverlayKind kind,
+      List<TerminalGridOverlaySpan> destination,
+    ) {
+      final TerminalSelectionRange? selection = viewport.selectionRange(
+        range.start,
+        range.end,
+      );
+      final TerminalSelectionProjection? projection = selection == null
+          ? null
+          : viewport.projectSelection(selection);
+      if (projection == null) {
+        isTruncated = true;
+        return;
+      }
+      for (final TerminalSelectionSpan span in projection.spans) {
+        if (destination.length == maximumSpans) {
+          isTruncated = true;
+          return;
+        }
+        destination.add(
+          TerminalGridOverlaySpan(
+            kind: kind,
+            row: span.row,
+            startColumn: span.startColumn,
+            endColumn: span.endColumn,
+          ),
+        );
+      }
+    }
+
+    for (final TerminalSemanticRange range in semanticRanges.ranges) {
+      switch (range.kind) {
+        case TerminalSemanticRangeKind.prompt:
+          addSemantic(
+            range,
+            TerminalGridOverlayKind.inspectorSemanticPrompt,
+            prompts,
+          );
+        case TerminalSemanticRangeKind.command:
+          addSemantic(
+            range,
+            TerminalGridOverlayKind.inspectorSemanticInput,
+            inputs,
+          );
+        case TerminalSemanticRangeKind.output:
+          break;
+      }
+    }
+
+    final List<TerminalGridOverlaySpan> retained = <TerminalGridOverlaySpan>[];
+    void retain(List<TerminalGridOverlaySpan> source) {
+      final int remaining = maximumSpans - retained.length;
+      if (source.length > remaining) isTruncated = true;
+      retained.addAll(source.take(remaining));
+    }
+
+    // Semantic input and prompt geometry remains visible under hyperlink cap
+    // pressure. The final projection restores canonical paint order.
+    retain(_coalesceOverlaySpans(inputs));
+    retain(_coalesceOverlaySpans(prompts));
+    retain(hyperlinks);
+    return TerminalGridOverlayProjection(
+      sourceGeneration: sourceGeneration,
+      spans: retained,
+      isTruncated: isTruncated,
+      maximumSpans: maximumSpans,
+    );
+  }
+}
+
+/// Monotonic content-free activation owner for the diagnostics overlay.
+final class TerminalInspectorOverlayState {
+  int _generation = 0;
+  bool _isActive = false;
+
+  int get generation => _generation;
+  bool get isActive => _isActive;
+
+  bool update({required int generation, required bool isActive}) {
+    RangeError.checkValueInInterval(
+      generation,
+      1,
+      0x7fffffffffffffff,
+      'generation',
+    );
+    if (generation < _generation) {
+      throw StateError('inspector overlay generation regressed');
+    }
+    if (generation == _generation) {
+      if (isActive != _isActive) {
+        throw StateError('inspector overlay generation has conflicting state');
+      }
+      return false;
+    }
+    _generation = generation;
+    _isActive = isActive;
+    return true;
+  }
+
+  TerminalGridOverlayProjection? project(
+    TerminalViewport viewport,
+    TerminalSemanticRangeSnapshot semanticRanges,
+  ) => _isActive
+      ? TerminalInspectorOverlayProjector.project(
+          viewport: viewport,
+          semanticRanges: semanticRanges,
+        )
+      : null;
 }
 
 /// Projects stable exact-search matches into bounded current-viewport spans.

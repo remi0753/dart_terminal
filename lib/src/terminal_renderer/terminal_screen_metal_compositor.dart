@@ -1415,45 +1415,110 @@ final class TerminalScreenMetalCompositor {
       if (span.row >= model.rows || span.endColumn > model.columns) {
         throw StateError('grid overlay projection exceeds the render grid');
       }
-      final bool selected = switch (span.kind) {
-        TerminalGridOverlayKind.searchMatch => false,
-        TerminalGridOverlayKind.searchSelectedMatch => true,
-        _ => throw StateError('unsupported grid overlay kind for search'),
-      };
       final int left = _columnPixel(span.startColumn, metrics, scale);
       final int right = _columnPixel(span.endColumn, metrics, scale);
       final int top = _rowPixel(span.row, metrics, scale);
       final int bottom = _rowPixel(span.row + 1, metrics, scale);
-      _addClippedSolid(
-        overlays,
-        kind: TerminalMetalInstanceKind.selection,
-        x: left,
-        y: top,
-        width: right - left,
-        height: bottom - top,
-        colorRgba: selected
-            ? accessibilityPresentation.increaseContrast
-                  ? 0xffffff88
-                  : 0xffa00088
-            : accessibilityPresentation.increaseContrast
-            ? 0xffffff50
-            : 0xf5c54250,
-        viewportWidth: viewportWidth,
-        viewportHeight: viewportHeight,
+      final int thickness = math.max(
+        1,
+        (scale *
+                (accessibilityPresentation.increaseContrast ||
+                        accessibilityPresentation.differentiateWithoutColor
+                    ? 2
+                    : 1))
+            .round(),
       );
-      if (!selected) continue;
-      _addOutline(
-        decorations,
-        kind: TerminalMetalInstanceKind.decoration,
-        left: left,
-        top: top,
-        right: right,
-        bottom: bottom,
-        thickness: math.max(1, scale.round()),
-        colorRgba: _contrastingRgba(defaultBackground),
-        viewportWidth: viewportWidth,
-        viewportHeight: viewportHeight,
-      );
+      switch (span.kind) {
+        case TerminalGridOverlayKind.searchMatch:
+        case TerminalGridOverlayKind.searchSelectedMatch:
+          final bool selected =
+              span.kind == TerminalGridOverlayKind.searchSelectedMatch;
+          _addClippedSolid(
+            overlays,
+            kind: TerminalMetalInstanceKind.selection,
+            x: left,
+            y: top,
+            width: right - left,
+            height: bottom - top,
+            colorRgba: selected
+                ? accessibilityPresentation.increaseContrast
+                      ? 0xffffff88
+                      : 0xffa00088
+                : accessibilityPresentation.increaseContrast
+                ? 0xffffff50
+                : 0xf5c54250,
+            viewportWidth: viewportWidth,
+            viewportHeight: viewportHeight,
+          );
+          if (!selected) continue;
+          _addOutline(
+            decorations,
+            kind: TerminalMetalInstanceKind.decoration,
+            left: left,
+            top: top,
+            right: right,
+            bottom: bottom,
+            thickness: math.max(1, scale.round()),
+            colorRgba: _contrastingRgba(defaultBackground),
+            viewportWidth: viewportWidth,
+            viewportHeight: viewportHeight,
+          );
+        case TerminalGridOverlayKind.inspectorHyperlink:
+          _addClippedSolid(
+            decorations,
+            kind: TerminalMetalInstanceKind.decoration,
+            x: left,
+            y: bottom - thickness,
+            width: right - left,
+            height: thickness,
+            colorRgba: accessibilityPresentation.increaseContrast
+                ? _contrastingRgba(defaultBackground)
+                : 0x32d7ffff,
+            viewportWidth: viewportWidth,
+            viewportHeight: viewportHeight,
+          );
+        case TerminalGridOverlayKind.inspectorSemanticPrompt:
+          final int color = accessibilityPresentation.increaseContrast
+              ? _contrastingRgba(defaultBackground)
+              : 0xc678ddff;
+          _addClippedSolid(
+            decorations,
+            kind: TerminalMetalInstanceKind.decoration,
+            x: left,
+            y: top,
+            width: right - left,
+            height: thickness,
+            colorRgba: color,
+            viewportWidth: viewportWidth,
+            viewportHeight: viewportHeight,
+          );
+          _addClippedSolid(
+            decorations,
+            kind: TerminalMetalInstanceKind.decoration,
+            x: left,
+            y: top,
+            width: thickness,
+            height: bottom - top,
+            colorRgba: color,
+            viewportWidth: viewportWidth,
+            viewportHeight: viewportHeight,
+          );
+        case TerminalGridOverlayKind.inspectorSemanticInput:
+          _addOutline(
+            decorations,
+            kind: TerminalMetalInstanceKind.decoration,
+            left: left,
+            top: top,
+            right: right,
+            bottom: bottom,
+            thickness: thickness,
+            colorRgba: accessibilityPresentation.increaseContrast
+                ? _contrastingRgba(defaultBackground)
+                : 0x98c379ff,
+            viewportWidth: viewportWidth,
+            viewportHeight: viewportHeight,
+          );
+      }
     }
   }
 

@@ -1907,7 +1907,8 @@ Future<void> _runDiagnostics(_Options options, _Invocation invocation) async {
     );
     _expect(
       RegExp(
-            r'^TERMINAL_DIAGNOSTICS_TEST inspector=true singleton=true '
+            r'^TERMINAL_DIAGNOSTICS_TEST inspector=true overlay=true '
+            r'singleton=true '
             r'capture=true focus_handoff=true parser_events=true redacted=true '
             r'menu=true palette=true canonical=true atomic=true exports=2 '
             r'incident_consent=true incident_singleton=true incident_exports=2 '

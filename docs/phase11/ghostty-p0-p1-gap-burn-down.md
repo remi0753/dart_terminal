@@ -6,8 +6,8 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 remaining overlays and P3 conversion — search-result
-  projection and Metal highlight overlay
+- Current subtask: P1 remaining overlays and P3 conversion — privacy-safe
+  inspector overlay
 
 ## Current P1 child — remaining overlays and P3 conversion
 
@@ -271,6 +271,152 @@
   generic source/test/tool surfaces. `git diff --check` is clean. The search
   owner retains only stable ranges, scalar/count flags, one selected index, and
   generations; query and terminal text never enter the overlay or diagnostics.
+
+### Current child — privacy-safe inspector overlay
+
+- **Purpose:** Show the focused pane's current hyperlink and semantic
+  prompt/input geometry while the existing Terminal Inspector owns capture,
+  without retaining terminal text, URL targets, command content, or parser
+  payload in renderer state.
+- **Background:** The diagnostics presenter already owns exactly one read-only
+  Inspector window, follows hierarchy focus by stopping the previous parser
+  capture before starting the next, and clears capture when unavailable or
+  closed. Visible cells already expose integer hyperlink IDs, while the bounded
+  semantic tracker exposes stable prompt/command/output ranges. The generic
+  grid-overlay contract reserves three inspector kinds, but neither the live
+  surface nor compositor currently consumes them.
+- **Scope:** Add a bounded projector that groups contiguous visible hyperlink
+  IDs and projects prompt/command stable ranges while excluding output; add a
+  monotonic content-free activation state on each live surface; connect that
+  state to the existing diagnostics focus/capture lifecycle; clear the old
+  surface before focus handoff and clear on unavailable/close/dispose; reproject
+  on viewport or semantic generation changes; combine search and inspector
+  projections without exceeding the shared 4,096-span cap; render an
+  above-text differentiated outline/underline vocabulary; expose only
+  generations, counts, kinds, and truncation in diagnostic snapshots.
+- **Out of scope:** Inspector capture/export contents, parser event taxonomy,
+  hyperlink navigation/URL storage, semantic output highlighting, search UI,
+  P3/linear blending, runtime evidence or matrix acceptance, arbitrary debug
+  painting, and every change to generic `dart_appkit`.
+- **Dependencies:** `TerminalDiagnosticsPresenter` focus and close ownership;
+  `TerminalDiagnosticsFocusTarget`; viewport hyperlink metadata and stable
+  selection projection; bounded semantic snapshots; grid-overlay precedence and
+  cap; existing live-surface redraw scheduling and Metal decoration instances.
+- **Completion conditions:** Only the captured focused pane publishes an
+  inspector overlay; focus handoff and close clear the former pane before any
+  new publication; semantic output is absent; same-ID hyperlink runs and
+  overlapping/adjacent same-kind semantic spans coalesce deterministically;
+  stale or unavailable geometry is dropped and marked truncated; scan and span
+  work is hard-bounded; combined overlay remains capped; compositor produces
+  visibly distinct hyperlink/prompt/input top decorations at 1x/2x and honors
+  increase-contrast/differentiate-without-color; state retains no text/URL;
+  focused tests and the exact repository gate pass.
+- **Verification approach:** Extend overlay contract tests for grouping,
+  projection, output exclusion, truncation, stale/monotonic/clear behavior, and
+  combined-cap precedence; add compositor real-Metal 1x/2x geometry/readback
+  assertions; extend diagnostics product acceptance for open, focus handoff,
+  metadata-only snapshot counts, and close clearing; run focused format,
+  analysis, and tests, then regenerate declared evidence if stale, run the exact
+  full gate, audit the adjacent generic library, and record all results here.
+- 2026-09-14: Targeted inventory confirms `TerminalViewport.hyperlinkAt`
+  resolves current visible history or active-screen cell metadata without
+  resolving the hyperlink table's URI. `TerminalSemanticRangeSnapshot` is
+  bounded to 4,096 ranges and carries generation plus unavailable/evicted/limit
+  truncation metadata; its `command` kind is the shell input range required by
+  this child, while `output` must be skipped. Selection projection already
+  drops anchors that cannot resolve in the current viewport.
+- 2026-09-14: The diagnostics presenter is the correct activation authority:
+  `_synchronizeTarget` stops the old capture before starting the new one,
+  `synchronizeFocus` stops on unavailable focus, and `_close` stops capture
+  before disposing its native owners. The focus target will therefore carry
+  product callbacks that enable/refresh and clear its own live surface; the
+  presenter will invoke them in the same order as parser capture. This avoids a
+  second inspector owner in the renderer and makes focus/close clearing
+  deterministic.
+- 2026-09-14: The compositor currently receives one search-only projection and
+  rejects all inspector kinds. Search fills are intentionally beneath glyphs;
+  inspector geometry must instead add decoration instances after glyph/image
+  construction so it remains a top overlay without altering cells or text.
+- 2026-09-14: The first focused format pass changed only four of the eight Dart
+  files. Static analysis then found one test-only constructor error: the
+  accessibility value's named flags belong to its primary constructor, while
+  the `standard` constructor accepts no overrides. The fixture will use the
+  explicit three-flag constructor; no production accessibility API needs to be
+  widened.
+- 2026-09-14: After that correction, focused analysis passed. The first
+  sandboxed test run stopped before test code because Metal's compiler could
+  not write its user clang module cache; the required rerun with normal cache
+  access passed the overlay contract and native-hierarchy suites, then the real
+  Metal inspector pixel assertion failed at 1x. Instance count/order/color
+  assertions had already passed. The pixel fixture sampled the viewport's last
+  allocated row, which may be one pixel below the independently rounded cell
+  boundary when `ceil` sizes the viewport; exact pixels are being inspected
+  before correcting only that sampling geometry.
+- 2026-09-14: The corrected focused suites all pass, including exact inspector
+  decoration readback at 1x and 2x. The first Developer JIT diagnostics product
+  run then reached the Inspector and processed the private OSC 8 command, but
+  timed out on the newly combined hyperlink-plus-semantic-input predicate. Its
+  own machine output records `shell=unknown integrated=false`; this fixture
+  deliberately has no semantic shell integration, so it cannot produce prompt
+  or input ranges. Product acceptance will assert the explicitly emitted OSC 8
+  hyperlink plus activation/focus/close clearing; prompt/input classification
+  and output exclusion remain covered by the direct parser/projector contract.
+- 2026-09-14: The second Developer JIT run completed the in-app diagnostics
+  assertions and emitted the strengthened `overlay=true` acceptance marker,
+  but the outer smoke verifier rejected it because its anchored regular
+  expression still expected `inspector=true singleton=true` adjacently. The
+  verifier must include the new explicit overlay field; this is evidence-schema
+  freshness, not a runtime failure or a reason to remove the new assertion.
+- 2026-09-14: With the smoke marker synchronized, both real product modes pass:
+  Developer JIT reports `RUNTIME_DIAGNOSTICS_INTEGRATION_PASS` with two
+  diagnostics and two incident exports in 1,829 ms, and Release AOT reports the
+  same owned results in 958 ms. The exercised path opens one Inspector, derives
+  an OSC 8 overlay without publishing its URI, clears the old surface before a
+  pane focus handoff, activates the new surface, clears on close, restores
+  terminal focus, and releases every native/parser/PTY owner.
+- 2026-09-14: Final focused format and analysis are clean. Overlay contract,
+  diagnostics presenter lifecycle, and real Metal compositor suites pass; the
+  latter verifies 1x/2x colored hyperlink/prompt/input geometry plus opaque
+  thick background-contrasting geometry under Increase Contrast. The
+  diagnostics privacy audit passes with 190 schema keys, seven owners, and 11
+  top-level keys; the new live snapshot contains counts and generations only.
+- 2026-09-14: The first exact full repository gate passed native PTY, renderer,
+  AppleScript, App Intents, generated parser/config/keybinding/localization, and
+  diagnostics privacy checks, then correctly stopped at the Phase 7 AppKit
+  acceptance freshness guard. This child changed the product application,
+  diagnostics presenter lifecycle test, and runtime smoke marker hashed by that
+  inventory. Its canonical generator must run before continuing the gate; no
+  functional test failure remains at this point.
+- 2026-09-14: Canonical Phase 7 regeneration changed only its expected source
+  identities. The next exact gate stopped early in the unchanged
+  `dart_pty_macos` package: `live Dart child cannot steal native PTY completion`
+  observed no matching element, while every preceding PTY case passed. This is
+  outside the Inspector change set and is consistent with the previously
+  observed timing-sensitive test; the exact gate will be rerun unchanged before
+  treating it as a blocker or modifying PTY behavior.
+- 2026-09-14: The unchanged rerun passed that PTY case and every native,
+  analysis, generated AppKit/compatibility/differential/application, terminfo,
+  and shell-integration gate through the final Ghostty check. That check then
+  reported the expected stale inventory because this child changes hashed
+  overlay/compositor/application evidence. The canonical Ghostty generator is
+  now the only required freshness update before the final exact rerun.
+- 2026-09-14: Ghostty regeneration changed only the four expected hashes for
+  the screen compositor, compositor test, product application, and runtime
+  smoke verifier. The final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passes in the reviewed
+  state: all native capability packages and generated evidence are fresh, 334
+  Dart files require no formatting changes, package/root analysis reports no
+  issues, Ghostty remains 95 accepted with two parent P1 gaps, all security and
+  aggregate suites pass, and the run ends with `dart_terminal tests passed`.
+- 2026-09-14: Final adjacent-library audit reports a clean
+  `/Users/remi/dart/dart_appkit` worktree, no tracked path containing
+  `terminal`, and no terminal-specific string in tracked Dart/native/script or
+  manifest code. No generic-library file changed. `git diff --check` is clean.
+  Apple notarization and duration-only soak were not required for this child.
+- 2026-09-14: The first staging attempt was blocked before changing the index
+  because the workspace sandbox exposes `.git/index.lock` read-only. Source and
+  validation state are intact; staging/commit must be retried with repository
+  metadata write permission rather than changing the worktree.
 - 2026-09-14: The pinned checkout remains clean at exact revision
   `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`. Relevant source identities are
   `src/renderer/image.zig`

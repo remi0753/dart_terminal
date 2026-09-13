@@ -16,6 +16,8 @@ typedef TerminalDiagnosticsCaptureStarter = void Function(
 );
 typedef TerminalDiagnosticsCaptureStopper = void Function();
 
+void _ignoreDiagnosticsOverlayLifecycle() {}
+
 /// One currently focused live product pane without exposing its content.
 final class TerminalDiagnosticsFocusTarget {
   const TerminalDiagnosticsFocusTarget({
@@ -25,6 +27,8 @@ final class TerminalDiagnosticsFocusTarget {
     required this.isLive,
     required this.beginCapture,
     required this.endCapture,
+    this.beginOverlay = _ignoreDiagnosticsOverlayLifecycle,
+    this.endOverlay = _ignoreDiagnosticsOverlayLifecycle,
     required this.snapshot,
   });
 
@@ -34,6 +38,8 @@ final class TerminalDiagnosticsFocusTarget {
   final bool Function() isLive;
   final TerminalDiagnosticsCaptureStarter beginCapture;
   final TerminalDiagnosticsCaptureStopper endCapture;
+  final void Function() beginOverlay;
+  final void Function() endOverlay;
   final TerminalDiagnosticsSnapshotReader snapshot;
 
   bool get isAvailable =>
@@ -301,6 +307,16 @@ final class TerminalDiagnosticsPresenter {
     if (previous?.identity == target.identity) return;
     _stopCapture();
     target.beginCapture(_handleParserEvent);
+    try {
+      target.beginOverlay();
+    } on Object {
+      try {
+        target.endCapture();
+      } finally {
+        target.endOverlay();
+      }
+      rethrow;
+    }
     _capturedTarget = target;
     _captureHandoffCount++;
   }
@@ -325,7 +341,13 @@ final class TerminalDiagnosticsPresenter {
     _capturedTarget = null;
     _refreshEpoch++;
     _refreshScheduled = false;
-    target?.endCapture();
+    if (target != null) {
+      try {
+        target.endCapture();
+      } finally {
+        target.endOverlay();
+      }
+    }
   }
 
   void _render() {

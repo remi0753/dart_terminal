@@ -1406,7 +1406,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
       - [x] bounded overlay projection／P3-to-sRGB color contract
       - [x] three-band Kitty image layer ordering
       - [x] search-result projection／Metal highlight overlay
-      - [ ] privacy-safe inspector overlay
+      - [x] privacy-safe inspector overlay
       - [ ] canonical sRGB／alpha-blending native-reference parity
       - [ ] 1x／2x／real-Metal runtime evidence、文書／matrix更新、親項目完了判定
     - [ ] Option-click cursor／semantic prompt-output selection
