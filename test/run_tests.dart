@@ -1046,6 +1046,7 @@ void _testOptions() {
   );
   _expect(!options.runtimeOsc52Test, 'OSC 52 test defaults off');
   _expect(!options.runtimeDiagnosticsTest, 'diagnostics test defaults off');
+  _expect(!options.runtimePerformanceTest, 'performance test defaults off');
   _expect(
     options.runtimeDiagnosticsDirectory == null,
     'diagnostics export directory defaults off',
@@ -1632,6 +1633,41 @@ void _testOptions() {
       },
     ),
     'diagnostics and user-action tests are mutually exclusive',
+  );
+  final TerminalOptions performanceTestOptions = _parseOptions(
+    const <String>['--runtime-performance-test'],
+    environment: const <String, String>{'DT_RUNTIME_PERFORMANCE_TEST': '1'},
+  );
+  _expect(
+    performanceTestOptions.runtimePerformanceTest,
+    'gated ordinary-product performance test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-performance-test']),
+    'ordinary-product performance test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-performance-test',
+        '--runtime-performance-test',
+      ],
+      environment: const <String, String>{'DT_RUNTIME_PERFORMANCE_TEST': '1'},
+    ),
+    'duplicate ordinary-product performance test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-performance-test',
+        '--runtime-native-hierarchy-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_PERFORMANCE_TEST': '1',
+        'DT_RUNTIME_NATIVE_HIERARCHY_TEST': '1',
+      },
+    ),
+    'performance and hierarchy tests are mutually exclusive',
   );
   final TerminalOptions quickTerminalTestOptions = _parseOptions(
     const <String>['--runtime-quick-terminal-test'],

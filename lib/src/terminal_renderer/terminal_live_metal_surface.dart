@@ -32,6 +32,29 @@ typedef TerminalCaretGeometryPublisher = void Function(
   TerminalCaretRect rectangle,
 );
 
+typedef TerminalLiveMetalFrameObserver = void Function(
+  TerminalLiveMetalFrameObservation observation,
+);
+
+/// Optional content-free timing observation for product acceptance tooling.
+final class TerminalLiveMetalFrameObservation {
+  const TerminalLiveMetalFrameObservation({
+    required this.disposition,
+    required this.frameGeneration,
+    required this.buildMicroseconds,
+    required this.submissionMicroseconds,
+  });
+
+  final TerminalFrameAttemptDisposition disposition;
+  final int frameGeneration;
+  final int buildMicroseconds;
+  final int submissionMicroseconds;
+
+  bool get isAccepted =>
+      disposition == TerminalFrameAttemptDisposition.accepted;
+  int get totalWorkMicroseconds => buildMicroseconds + submissionMicroseconds;
+}
+
 final class TerminalCaretRect {
   const TerminalCaretRect({
     required this.x,
@@ -195,6 +218,7 @@ final class TerminalLiveMetalSurface {
     TerminalPaneWorkScheduler? paneWorkScheduler,
     TerminalLiveMetalSurfaceFatalError? onFatalError,
     TerminalCaretGeometryPublisher? onCaretGeometryChanged,
+    TerminalLiveMetalFrameObserver? onFrameAttempt,
     String fontFamily = defaultFontFamily,
     double fontPointSize = defaultFontPointSize,
     TerminalSyntheticStylePolicy syntheticStylePolicy =
@@ -261,6 +285,7 @@ final class TerminalLiveMetalSurface {
         paneWorkScheduler: paneWorkScheduler,
         onFatalError: onFatalError,
         onCaretGeometryChanged: onCaretGeometryChanged,
+        onFrameAttempt: onFrameAttempt,
         rendererConfig: rendererConfig,
         catalog: catalog,
         shapingCache: shapingCache,
@@ -293,6 +318,7 @@ final class TerminalLiveMetalSurface {
     required TerminalPaneWorkScheduler? paneWorkScheduler,
     required this.onFatalError,
     required this.onCaretGeometryChanged,
+    required this.onFrameAttempt,
     required this.rendererConfig,
     required TerminalFontCatalog catalog,
     required TerminalShapingCache shapingCache,
@@ -434,6 +460,7 @@ final class TerminalLiveMetalSurface {
   final TerminalPaneWorkScheduler? _paneWorkScheduler;
   final TerminalLiveMetalSurfaceFatalError? onFatalError;
   final TerminalCaretGeometryPublisher? onCaretGeometryChanged;
+  final TerminalLiveMetalFrameObserver? onFrameAttempt;
   final TerminalMetalRendererConfig rendererConfig;
   final TerminalGlyphAtlas atlas;
   final double horizontalPadding;
@@ -852,6 +879,12 @@ final class TerminalLiveMetalSurface {
     );
   }
 
+  /// Returns the current content-free native presentation state.
+  TerminalMetalRendererState rendererState() {
+    _requireLive();
+    return _recovery.currentDomain.renderer.state();
+  }
+
   /// Runs the native content-free selector/range/geometry/focus acceptance.
   void debugVerifyAccessibility() {
     _requireLive();
@@ -1173,7 +1206,27 @@ final class TerminalLiveMetalSurface {
 
   void _submitNewest() {
     for (int attempt = 0; attempt < 2; attempt++) {
+      final TerminalFrameSchedulerMetrics? before = onFrameAttempt == null
+          ? null
+          : _scheduler.metrics;
       final TerminalFrameAttemptResult result = _scheduler.submitNewest();
+      final TerminalLiveMetalFrameObserver? observer = onFrameAttempt;
+      if (observer != null && before != null) {
+        final TerminalFrameSchedulerMetrics after = _scheduler.metrics;
+        if (after.buildCount > before.buildCount) {
+          observer(
+            TerminalLiveMetalFrameObservation(
+              disposition: result.disposition,
+              frameGeneration: result.frameGeneration,
+              buildMicroseconds:
+                  after.buildTotalMicroseconds - before.buildTotalMicroseconds,
+              submissionMicroseconds:
+                  after.submissionTotalMicroseconds -
+                  before.submissionTotalMicroseconds,
+            ),
+          );
+        }
+      }
       switch (result.disposition) {
         case TerminalFrameAttemptDisposition.idle:
         case TerminalFrameAttemptDisposition.paused:

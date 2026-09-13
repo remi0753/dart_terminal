@@ -2036,6 +2036,23 @@ int main(int argc, const char* argv[]) {
                  text_input_take(text_client.client_id, nullptr, 0,
                                  &no_event_required) == DTR_STATUS_NOT_FOUND,
              "cancel leaves no raw or commit event behind");
+      acceptance.stage = 4;
+      Expect(da_view_perform_custom_operation(
+                 view_handle,
+                 reinterpret_cast<const uint8_t*>(&acceptance),
+                 sizeof(acceptance)) == DA_STATUS_OK,
+             "performance acceptance drives one repeatable raw key");
+      std::vector<uint8_t> performance_raw =
+          take_text_input_event(text_client.client_id);
+      DtrTextInputEventHeaderV1 performance_raw_header =
+          text_input_header(performance_raw);
+      Expect(performance_raw_header.kind ==
+                     DTR_TEXT_INPUT_EVENT_RAW_KEY_DOWN &&
+                 performance_raw_header.event_generation == 7 &&
+                 performance_raw_header.key_code == 126 &&
+                 text_input_take(text_client.client_id, nullptr, 0,
+                                 &no_event_required) == DTR_STATUS_NOT_FOUND,
+             "performance raw key is exact and leaves no queued event");
       text_client.operation = DTR_METAL_VIEW_OPERATION_TEXT_INPUT_DETACH;
       Expect(da_view_perform_custom_operation(
                  view_handle,

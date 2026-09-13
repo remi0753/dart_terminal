@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:dart_appkit/dart_appkit.dart'
     show dartAppKitCurrentEventProtocolVersion;
 
+import 'runtime_product_performance_result.dart';
+
 final class _SmokeException implements Exception {
   const _SmokeException(this.message);
 
@@ -40,6 +42,7 @@ enum _Suite {
   quickTerminal,
   secureKeyboardEntry,
   diagnostics,
+  performance,
   restoration,
   clipboard,
   lifecycle,
@@ -106,6 +109,7 @@ final class _ProcessObservation {
     required this.stderrText,
     required this.elapsed,
     required this.workerProcesses,
+    required this.milestones,
   });
 
   final int processId;
@@ -114,6 +118,7 @@ final class _ProcessObservation {
   final String stderrText;
   final Duration elapsed;
   final List<_WorkerProcessObservation> workerProcesses;
+  final Map<String, Duration> milestones;
 }
 
 final class _WorkerProcessObservation {
@@ -177,7 +182,7 @@ _Options _parseOptions(List<String> arguments) {
           '--suite must be smoke, display, hierarchy, actions, restoration, '
           'configuration, theme, shell-integration, desktop-signals, '
           'osc52, native-content, applescript, system-automation, quick-terminal, '
-          'secure-keyboard-entry, diagnostics, clipboard, lifecycle, traffic, resource, '
+          'secure-keyboard-entry, diagnostics, performance, clipboard, lifecycle, traffic, resource, '
           'fault, or all',
         );
       }
@@ -441,6 +446,7 @@ Future<_ProcessObservation> _launch(
   String expectedDiagnosticPhase = 'root-stopped',
   Duration timeout = const Duration(seconds: 12),
   bool throughLaunchServices = false,
+  Set<String> milestonePrefixes = const <String>{},
 }) async {
   final List<String> invocationArguments = invocation.arguments(
     applicationArguments,
@@ -515,9 +521,35 @@ Future<_ProcessObservation> _launch(
       environment: throughLaunchServices ? null : launchEnvironment,
       includeParentEnvironment: environmentKeysToRemove.isEmpty,
     );
-    final Future<String> launcherStdout = process.stdout
-        .transform(utf8.decoder)
-        .join();
+    final Map<String, Duration> milestones = <String, Duration>{};
+    void recordMilestones(String line) {
+      for (final String prefix in milestonePrefixes) {
+        if (!milestones.containsKey(prefix) &&
+            (line == prefix || line.startsWith('$prefix '))) {
+          milestones[prefix] = stopwatch.elapsed;
+        }
+      }
+    }
+
+    Future<String> captureStdout() async {
+      final StringBuffer output = StringBuffer();
+      var pendingLine = '';
+      await for (final String chunk in process.stdout.transform(utf8.decoder)) {
+        output.write(chunk);
+        pendingLine += chunk;
+        var newline = pendingLine.indexOf('\n');
+        while (newline >= 0) {
+          final String line = pendingLine.substring(0, newline).trimRight();
+          recordMilestones(line);
+          pendingLine = pendingLine.substring(newline + 1);
+          newline = pendingLine.indexOf('\n');
+        }
+      }
+      if (pendingLine.isNotEmpty) recordMilestones(pendingLine.trimRight());
+      return output.toString();
+    }
+
+    final Future<String> launcherStdout = captureStdout();
     final Future<String> launcherStderr = process.stderr
         .transform(utf8.decoder)
         .join();
@@ -618,6 +650,7 @@ Future<_ProcessObservation> _launch(
       stderrText: completedStderr,
       elapsed: stopwatch.elapsed,
       workerProcesses: workerProcesses,
+      milestones: Map<String, Duration>.unmodifiable(milestones),
     );
   } finally {
     if (captureDirectory != null && await captureDirectory.exists()) {
@@ -1493,7 +1526,7 @@ Future<void> _runNativeHierarchy(
     environment: const <String, String>{
       'DT_RUNTIME_NATIVE_HIERARCHY_TEST': '1',
     },
-    timeout: const Duration(seconds: 120),
+    timeout: const Duration(seconds: 240),
   );
   _expect(
     observation.status == 0,
@@ -1626,6 +1659,101 @@ Future<void> _runNativeHierarchy(
     'tabs=2 panes=4 baseline_us=$idleBaselineMicros '
     'flood_us=$floodLatencyMicros ratio_milli=$ratioMilli '
     'scheduler_yields=$schedulerYields '
+    'elapsed_ms=${observation.elapsed.inMilliseconds}',
+  );
+}
+
+Future<void> _runProductPerformance(
+  _Options options,
+  _Invocation invocation, {
+  required bool runFairness,
+}) async {
+  const String startupMarker =
+      'TERMINAL_PRODUCT_PERFORMANCE_STARTUP first_frame=true';
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>['--runtime-performance-test'],
+    environment: const <String, String>{'DT_RUNTIME_PERFORMANCE_TEST': '1'},
+    timeout: const Duration(seconds: 45),
+    milestonePrefixes: const <String>{startupMarker},
+  );
+  _expect(
+    observation.status == 0,
+    'product performance application exited with status '
+    '${observation.status}; stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'product performance application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  _expect(
+    RegExp(
+          '^${RegExp.escape(startupMarker)}\$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'product performance startup marker is missing or duplicated',
+  );
+  final Duration? startupElapsed = observation.milestones[startupMarker];
+  _expect(
+    startupElapsed != null,
+    'product performance startup milestone was not observed in process output',
+  );
+  late final RuntimeProductPerformanceResult result;
+  try {
+    result = RuntimeProductPerformanceResult.parse(
+      observation.stdoutText,
+      startupElapsed: startupElapsed!,
+      enforceLatencyBudgets: options.mode == _RuntimeMode.releaseAot,
+    );
+  } on FormatException catch (error) {
+    throw _SmokeException(
+      '${error.message}; stdout=${observation.stdoutText.trim()}',
+    );
+  }
+  _expect(
+    RegExp(
+          r'^TERMINAL_PRODUCT_PERFORMANCE_CLEANUP sessions=1 metal=1 '
+          r'text_clients=0 native_handles=0$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'product performance ownership cleanup is missing or malformed',
+  );
+  _expect(
+    RegExp(
+              r'^TERMINAL_SESSION_SHUTDOWN pane=1 session=1:1 '
+              r'process_id=[1-9][0-9]* disposition=clean '
+              r'termination_observed=true cleanup_completed=true$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1 &&
+        RegExp(
+              r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=1 disposition=clean$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1 &&
+        observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+    'product performance application did not release its ordinary owners',
+  );
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
+  );
+  if (runFairness) await _runNativeHierarchy(options, invocation);
+  stdout.writeln(
+    'RUNTIME_PRODUCT_PERFORMANCE_INTEGRATION_PASS '
+    'mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'startup_us=${result.startupMicroseconds} '
+    'refresh_interval_us=${result.refreshIntervalMicroseconds} '
+    'input_p95_us=${result.inputP95Microseconds} '
+    'visible_p95_us=${result.visibleP95Microseconds} '
+    'frame_p95_us=${result.frameP95Microseconds} fairness=true '
     'elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }
@@ -3993,6 +4121,13 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.hierarchy || options.suite == _Suite.all) {
       await _runNativeHierarchy(options, invocation);
+    }
+    if (options.suite == _Suite.performance || options.suite == _Suite.all) {
+      await _runProductPerformance(
+        options,
+        invocation,
+        runFairness: options.suite == _Suite.performance,
+      );
     }
     if (options.suite == _Suite.actions || options.suite == _Suite.all) {
       await _runUserActions(options, invocation);

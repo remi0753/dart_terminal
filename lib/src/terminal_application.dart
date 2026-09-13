@@ -163,6 +163,7 @@ final class TerminalOptions {
     this.runtimeSystemAutomationTest = false,
     this.runtimeDiagnosticsTest = false,
     this.runtimeDiagnosticsDirectory,
+    this.runtimePerformanceTest = false,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
@@ -221,6 +222,7 @@ final class TerminalOptions {
     var runtimeAppleScriptTest = false;
     var runtimeSystemAutomationTest = false;
     var runtimeDiagnosticsTest = false;
+    var runtimePerformanceTest = false;
     var runtimeRestorationTest = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
@@ -388,6 +390,15 @@ final class TerminalOptions {
           );
         }
         runtimeDiagnosticsTest = true;
+        continue;
+      }
+      if (argument == '--runtime-performance-test') {
+        if (runtimePerformanceTest) {
+          throw const FormatException(
+            '--runtime-performance-test may only be supplied once',
+          );
+        }
+        runtimePerformanceTest = true;
         continue;
       }
       if (argument == '--runtime-restoration-test') {
@@ -709,6 +720,39 @@ final class TerminalOptions {
         'diagnostics test cannot be combined with another runtime test',
       );
     }
+    if (runtimePerformanceTest &&
+        selectedEnvironment['DT_RUNTIME_PERFORMANCE_TEST'] != '1') {
+      throw const FormatException(
+        'performance test requires the integration-test gate',
+      );
+    }
+    if (runtimePerformanceTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeShellIntegrationTest ||
+            runtimeDesktopSignalsTest ||
+            runtimeOsc52Test ||
+            runtimeNativeContentTest ||
+            runtimeQuickTerminalTest ||
+            runtimeSecureKeyboardEntryTest ||
+            runtimeAppleScriptTest ||
+            runtimeSystemAutomationTest ||
+            runtimeDiagnosticsTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'performance test cannot be combined with another runtime test',
+      );
+    }
     if (runtimeSecureKeyboardEntryTest &&
         (selectedScenario != RuntimeLifecycleScenario.normal ||
             autoCloseAfter != null ||
@@ -962,6 +1006,7 @@ final class TerminalOptions {
       runtimeSystemAutomationTest: runtimeSystemAutomationTest,
       runtimeDiagnosticsTest: runtimeDiagnosticsTest,
       runtimeDiagnosticsDirectory: runtimeDiagnosticsDirectory,
+      runtimePerformanceTest: runtimePerformanceTest,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeShellExitTestScenario: selectedShellExitTest,
@@ -1008,6 +1053,7 @@ final class TerminalOptions {
   final bool runtimeSystemAutomationTest;
   final bool runtimeDiagnosticsTest;
   final String? runtimeDiagnosticsDirectory;
+  final bool runtimePerformanceTest;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
@@ -1105,6 +1151,7 @@ final class TerminalApplication {
         options.runtimeAppleScriptTest ||
         options.runtimeSystemAutomationTest ||
         options.runtimeDiagnosticsTest ||
+        options.runtimePerformanceTest ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -1139,6 +1186,7 @@ final class TerminalApplication {
         runSystemAutomationAcceptance: options.runtimeSystemAutomationTest,
         runDiagnosticsAcceptance: options.runtimeDiagnosticsTest,
         diagnosticsExportDirectory: options.runtimeDiagnosticsDirectory,
+        runPerformanceAcceptance: options.runtimePerformanceTest,
         osc52Clipboard: options.runtimeOsc52Test
             ? _MemoryTerminalOsc52Clipboard()
             : null,
@@ -2634,6 +2682,7 @@ final class TerminalApplication {
       !options.runtimeAppleScriptTest &&
       !options.runtimeSystemAutomationTest &&
       !options.runtimeDiagnosticsTest &&
+      !options.runtimePerformanceTest &&
       !options.runtimeRestorationTest &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
@@ -2663,6 +2712,7 @@ final class TerminalApplication {
     bool runSystemAutomationAcceptance = false,
     bool runDiagnosticsAcceptance = false,
     String? diagnosticsExportDirectory,
+    bool runPerformanceAcceptance = false,
     TerminalOsc52ClipboardPort? osc52Clipboard,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
@@ -2712,6 +2762,10 @@ final class TerminalApplication {
         TerminalPasteConfirmationGate();
     final Stopwatch pasteClock = Stopwatch()..start();
     final Completer<void> closed = Completer<void>();
+    final _TerminalProductPerformanceObservation? performanceObservation =
+        runPerformanceAcceptance
+        ? _TerminalProductPerformanceObservation()
+        : null;
     var diagnosticsExportSelectionIndex = 0;
     if (runDiagnosticsAcceptance && diagnosticsExportDirectory == null) {
       throw StateError(
@@ -2914,7 +2968,8 @@ final class TerminalApplication {
                   runSecureKeyboardEntryAcceptance ||
                   runAppleScriptAcceptance ||
                   runSystemAutomationAcceptance ||
-                  runDiagnosticsAcceptance;
+                  runDiagnosticsAcceptance ||
+                  runPerformanceAcceptance;
               final Map<String, String> shellEnvironment =
                   usesDeterministicShell
                   ? <String, String>{
@@ -3091,6 +3146,7 @@ final class TerminalApplication {
           );
         },
         onFatalError: recordAsynchronousError,
+        onFrameAttempt: performanceObservation?.recordFrameAttempt,
       );
       if (runUserActionAcceptance) {
         stdout.writeln(
@@ -3116,10 +3172,10 @@ final class TerminalApplication {
               }
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
               reconcileRequest?.call();
-              lastKeyRoutes[pane.id] = keyRouter.handleTerminalKeyEvent(
-                event,
-                pane,
-              );
+              final TerminalKeyRouteResult route = keyRouter
+                  .handleTerminalKeyEvent(event, pane);
+              lastKeyRoutes[pane.id] = route;
+              performanceObservation?.recordInputAdmission(route);
               keyRouteCounts.update(
                 pane.id,
                 (int count) => count + 1,
@@ -5356,7 +5412,18 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      if (runDiagnosticsAcceptance) {
+      if (runPerformanceAcceptance) {
+        await _exerciseProductPerformance(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          sessions: sessions,
+          owners: owners,
+          observation: performanceObservation!,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
+      } else if (runDiagnosticsAcceptance) {
         await _exerciseDiagnosticsProduct(
           application: application,
           state: state,
@@ -5602,6 +5669,23 @@ final class TerminalApplication {
         stdout.writeln(session.machineLine());
       }
       stdout.writeln(shutdown.machineLine());
+      if (runPerformanceAcceptance) {
+        _expectLifecycle(
+          shutdown.sessions.length == 1 &&
+              shutdown.isClean &&
+              owners.values.every(
+                (_TerminalHierarchyProductPane owner) =>
+                    owner.adaptersDisposed && owner.surface.isDisposed,
+              ) &&
+              debugLiveTerminalTextInputClientCount() == 0 &&
+              application.debugLiveObjectCount == 0,
+          'performance acceptance did not release ordinary product owners',
+        );
+        stdout.writeln(
+          'TERMINAL_PRODUCT_PERFORMANCE_CLEANUP sessions=1 metal=1 '
+          'text_clients=0 native_handles=0',
+        );
+      }
       desktopSignalCoordinator.dispose();
       notificationController.dispose();
       final Object? error = asynchronousError;
@@ -5614,6 +5698,259 @@ final class TerminalApplication {
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootStopped);
     }
     stdout.writeln('Dart Terminal shut down cleanly.');
+  }
+
+  static Future<void> _exerciseProductPerformance({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required Map<PaneId, TerminalSession> sessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required _TerminalProductPerformanceObservation observation,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    const int refreshSampleCount = 8;
+    const int inputSampleCount = 7;
+    const int visibleEchoSlackMicroseconds = 4000;
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          sessions.length == 1 &&
+          owners.length == 1,
+      'performance acceptance requires one ordinary product pane',
+    );
+    final TerminalTabState tab = state.activeWindow!.selectedTab;
+    final PaneId paneId = tab.focusedPaneId;
+    final TerminalPane pane = state.paneForId(paneId)!;
+    final TerminalSession session = sessions[paneId]!;
+    final _TerminalHierarchyProductPane owner = owners[paneId]!;
+    final Window window = hierarchy.windowForTab(tab.id)!;
+
+    await _waitForAsciiMarker(session, prompt);
+    final Stopwatch initialFrameDeadline = Stopwatch()..start();
+    while (initialFrameDeadline.elapsed < const Duration(seconds: 5) &&
+        (!observation.startupFramePublished ||
+            owner.surface.rendererState().lastPresentedFrameGeneration == 0 ||
+            owner.client.geometryGeneration == 0)) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    _expectLifecycle(
+      observation.startupFramePublished &&
+          owner.surface.snapshot().acceptedFrameCount > 0 &&
+          owner.surface.rendererState().lastPresentedFrameGeneration > 0 &&
+          owner.client.geometryGeneration > 0 &&
+          owner.isVisible,
+      'performance acceptance did not reach its first visible frame',
+    );
+
+    Future<int> measurePresentationRoundTrip() async {
+      final int presentedBefore = owner.surface
+          .rendererState()
+          .lastPresentedFrameGeneration;
+      final Stopwatch elapsed = Stopwatch()..start();
+      session.terminalScreenSet.activeScreen.requestFullSnapshot();
+      owner.notifyScreenChanged();
+      while (elapsed.elapsed < const Duration(seconds: 2) &&
+          owner.surface.rendererState().lastPresentedFrameGeneration <=
+              presentedBefore) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      elapsed.stop();
+      _expectLifecycle(
+        owner.surface.rendererState().lastPresentedFrameGeneration >
+            presentedBefore,
+        'performance refresh probe was not presented',
+      );
+      return math.max(1, elapsed.elapsedMicroseconds);
+    }
+
+    for (var warmup = 0; warmup < 3; warmup++) {
+      await measurePresentationRoundTrip();
+    }
+    observation.startFrameMeasurements();
+    final List<int> refreshMicroseconds = <int>[];
+    for (var sample = 0; sample < refreshSampleCount; sample++) {
+      refreshMicroseconds.add(await measurePresentationRoundTrip());
+    }
+    final List<int> frameWorkMicroseconds = observation
+        .finishFrameMeasurements();
+    final int refreshIntervalMicroseconds = _performancePercentile(
+      refreshMicroseconds,
+      50,
+    );
+    final int frameWorkP95Microseconds = _performancePercentile(
+      frameWorkMicroseconds,
+      95,
+    );
+    final int frameBudgetMicroseconds = refreshIntervalMicroseconds * 7 ~/ 10;
+
+    final List<int> inputAdmissionMicroseconds = <int>[];
+    final List<int> visibleEchoMicroseconds = <int>[];
+    for (var sample = 1; sample <= inputSampleCount; sample++) {
+      final String readyMarker = '__DT_PERFORMANCE_READY_${sample}__';
+      final String visibleMarker = '__DT_PERFORMANCE_VISIBLE_${sample}__';
+      pane.insertText(
+        "printf '\\r\\n__DT_PERFORMANCE_%s_${sample}__\\r\\n' READY; "
+        "IFS= read -rsk 3 bytes; "
+        "if [ \"\$bytes\" = \$'\\e[A' ] || "
+        "[ \"\$bytes\" = \$'\\eOA' ]; then "
+        "printf '\\r\\n__DT_PERFORMANCE_%s_${sample}__\\r\\n' VISIBLE; else "
+        "printf '\\r\\n__DT_PERFORMANCE_%s_${sample}__\\r\\n' MISMATCH; fi",
+      );
+      await pane.submit();
+      await _waitForAsciiMarkerPresented(
+        owner,
+        readyMarker,
+        timeout: const Duration(seconds: 5),
+      );
+      final int acceptedBeforeInput = owner.surface
+          .snapshot()
+          .acceptedFrameCount;
+      final Stopwatch visible = Stopwatch()..start();
+      inputAdmissionMicroseconds.add(
+        await observation.measureInputAdmission(
+          owner.client.debugRunPerformanceKey,
+        ),
+      );
+      final Stopwatch presentationDeadline = Stopwatch()..start();
+      var visiblePresented = false;
+      while (presentationDeadline.elapsed < const Duration(seconds: 5)) {
+        final TerminalLiveMetalSurfaceSnapshot snapshot = owner.surface
+            .snapshot();
+        visiblePresented =
+            _findAscii(session.terminalScreenSet.activeScreen, visibleMarker) !=
+                null &&
+            snapshot.acceptedFrameCount > acceptedBeforeInput;
+        if (visiblePresented) break;
+        _expectLifecycle(
+          session.isLive,
+          'performance session exited before presenting input response',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      _expectLifecycle(
+        visiblePresented,
+        'performance input response was not accepted by a visible frame',
+      );
+      visible.stop();
+      visibleEchoMicroseconds.add(math.max(1, visible.elapsedMicroseconds));
+      _expectLifecycle(
+        _findAscii(
+              session.terminalScreenSet.activeScreen,
+              '__DT_PERFORMANCE_MISMATCH_${sample}__',
+            ) ==
+            null,
+        'performance input fixture received non-exact key bytes',
+      );
+    }
+    final int inputAdmissionP95Microseconds = _performancePercentile(
+      inputAdmissionMicroseconds,
+      95,
+    );
+    final int visibleEchoP95Microseconds = _performancePercentile(
+      visibleEchoMicroseconds,
+      95,
+    );
+    final int visibleEchoBudgetMicroseconds =
+        refreshIntervalMicroseconds + visibleEchoSlackMicroseconds;
+
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final TerminalLiveMetalSurfaceSnapshot idleBefore = owner.surface
+        .snapshot();
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    final TerminalLiveMetalSurfaceSnapshot idleAfter = owner.surface.snapshot();
+    final int idleBuildDelta =
+        idleAfter.frameBuildCount - idleBefore.frameBuildCount;
+    final int idleFrameDelta =
+        idleAfter.acceptedFrameCount - idleBefore.acceptedFrameCount;
+
+    final int windowHandle = appkit_testing.nativeWindowHandleForTesting(
+      window,
+    );
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      5,
+      windowHandle,
+      windowHandle >> 32,
+      31000000,
+      0,
+      true,
+    ]);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final TerminalLiveMetalSurfaceSnapshot occludedBefore = owner.surface
+        .snapshot();
+    const String occludedMarker = '__DT_PERFORMANCE_OCCLUDED__';
+    pane.insertText("printf '\\r\\n$occludedMarker\\r\\n'");
+    await pane.submit();
+    await _waitForAsciiMarker(session, occludedMarker);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final TerminalLiveMetalSurfaceSnapshot occludedAfter = owner.surface
+        .snapshot();
+    final int occludedBuildDelta =
+        occludedAfter.frameBuildCount - occludedBefore.frameBuildCount;
+    final int occludedFrameDelta =
+        occludedAfter.acceptedFrameCount - occludedBefore.acceptedFrameCount;
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      5,
+      windowHandle,
+      windowHandle >> 32,
+      31000001,
+      0,
+      false,
+    ]);
+    await _waitForAsciiMarkerPresented(
+      owner,
+      occludedMarker,
+      timeout: const Duration(seconds: 5),
+    );
+    final bool resumeFrame =
+        owner.surface.snapshot().acceptedFrameCount >
+        occludedAfter.acceptedFrameCount;
+
+    final bool pendingBound = occludedAfter.pendingFrameCount <= 1;
+    stdout.writeln(
+      'TERMINAL_PRODUCT_PERFORMANCE_TEST refresh_samples=$refreshSampleCount '
+      'refresh_interval_us=$refreshIntervalMicroseconds '
+      'input_samples=$inputSampleCount '
+      'input_p95_us=$inputAdmissionP95Microseconds '
+      'visible_p95_us=$visibleEchoP95Microseconds '
+      'visible_budget_us=$visibleEchoBudgetMicroseconds '
+      'frame_samples=${frameWorkMicroseconds.length} '
+      'frame_p95_us=$frameWorkP95Microseconds '
+      'frame_budget_us=$frameBudgetMicroseconds '
+      'idle_build_delta=$idleBuildDelta idle_frame_delta=$idleFrameDelta '
+      'occluded_build_delta=$occludedBuildDelta '
+      'occluded_frame_delta=$occludedFrameDelta resume_frame=$resumeFrame '
+      'pending_bound=$pendingBound content_free=true',
+    );
+    _expectLifecycle(
+      refreshMicroseconds.length == refreshSampleCount &&
+          frameWorkMicroseconds.length >= refreshSampleCount &&
+          frameWorkMicroseconds.length <= refreshSampleCount + 2 &&
+          refreshIntervalMicroseconds > 0 &&
+          refreshIntervalMicroseconds <= 50000 &&
+          idleBuildDelta == 0 &&
+          idleFrameDelta == 0 &&
+          occludedBuildDelta == 0 &&
+          occludedFrameDelta == 0 &&
+          pendingBound &&
+          resumeFrame,
+      'ordinary product latency, frame, or suppression budget failed',
+    );
+    if (!closed.isCompleted) closed.complete();
+  }
+
+  static int _performancePercentile(List<int> samples, int percentile) {
+    _expectLifecycle(
+      samples.isNotEmpty && percentile > 0 && percentile <= 100,
+      'performance percentile input is invalid',
+    );
+    final List<int> sorted = List<int>.of(samples)..sort();
+    final int index = ((sorted.length * percentile + 99) ~/ 100) - 1;
+    return sorted[index];
   }
 
   static Future<void> _exerciseDiagnosticsProduct({
@@ -12470,7 +12807,7 @@ keybind = control+k=pane.focus-next
       await _waitForAsciiMarkerPresented(
         floodOwner,
         floodCompleteMarker,
-        timeout: const Duration(seconds: 90),
+        timeout: const Duration(seconds: 180),
       );
       final TerminalPaneWorkSchedulerSnapshot schedulerAfterFlood =
           createdPaneWorkScheduler.snapshot();
@@ -17347,6 +17684,79 @@ final class _TerminalDesktopSignalAcceptanceNativePort
       if (_application.dockBadgeLabel != label) return false;
     }
     return projected;
+  }
+}
+
+final class _TerminalProductPerformanceObservation {
+  final Stopwatch _clock = Stopwatch()..start();
+  final List<int> _frameWorkMicroseconds = <int>[];
+  Completer<int>? _pendingInputAdmission;
+  int _inputStartedMicroseconds = 0;
+  bool _collectFrameMeasurements = false;
+  bool startupFramePublished = false;
+
+  void recordFrameAttempt(TerminalLiveMetalFrameObservation observation) {
+    if (!observation.isAccepted) return;
+    if (!startupFramePublished) {
+      startupFramePublished = true;
+      stdout.writeln('TERMINAL_PRODUCT_PERFORMANCE_STARTUP first_frame=true');
+    }
+    if (!_collectFrameMeasurements) return;
+    if (_frameWorkMicroseconds.length >= 32) {
+      throw StateError('performance frame observation exceeded its bound');
+    }
+    _frameWorkMicroseconds.add(math.max(1, observation.totalWorkMicroseconds));
+  }
+
+  void recordInputAdmission(TerminalKeyRouteResult route) {
+    final Completer<int>? pending = _pendingInputAdmission;
+    if (pending == null || pending.isCompleted) return;
+    if (route.disposition != TerminalKeyRouteDisposition.encoded ||
+        route.encodedByteCount != 3) {
+      pending.completeError(
+        StateError('performance input was not admitted as one exact key'),
+      );
+      return;
+    }
+    pending.complete(
+      math.max(1, _clock.elapsedMicroseconds - _inputStartedMicroseconds),
+    );
+  }
+
+  void startFrameMeasurements() {
+    if (_collectFrameMeasurements) {
+      throw StateError('performance frame observation is already active');
+    }
+    _frameWorkMicroseconds.clear();
+    _collectFrameMeasurements = true;
+  }
+
+  List<int> finishFrameMeasurements() {
+    if (!_collectFrameMeasurements) {
+      throw StateError('performance frame observation is not active');
+    }
+    _collectFrameMeasurements = false;
+    if (_frameWorkMicroseconds.isEmpty) {
+      throw StateError('performance frame observation is empty');
+    }
+    return List<int>.unmodifiable(_frameWorkMicroseconds);
+  }
+
+  Future<int> measureInputAdmission(void Function() operation) async {
+    if (_pendingInputAdmission != null) {
+      throw StateError('performance input observation is already active');
+    }
+    final Completer<int> pending = Completer<int>();
+    _pendingInputAdmission = pending;
+    _inputStartedMicroseconds = _clock.elapsedMicroseconds;
+    try {
+      operation();
+      return await pending.future.timeout(const Duration(seconds: 2));
+    } finally {
+      if (identical(_pendingInputAdmission, pending)) {
+        _pendingInputAdmission = null;
+      }
+    }
   }
 }
 

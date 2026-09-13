@@ -151,7 +151,7 @@ override PRODUCT_PERFORMANCE_BASELINE := $(PROJECT_ROOT)/benchmark/baselines/pro
 	product-performance-benchmark-build product-performance-benchmark \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
-	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-actions developer-jit-applescript developer-jit-system-automation developer-jit-native-content developer-jit-quick-terminal developer-jit-secure-keyboard-entry developer-jit-diagnostics developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
+	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-performance developer-jit-actions developer-jit-applescript developer-jit-system-automation developer-jit-native-content developer-jit-quick-terminal developer-jit-secure-keyboard-entry developer-jit-diagnostics developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
 	developer-jit-resource developer-jit-shutdown-fault \
 	release-aot-build release-aot-run release-aot-audit \
 	release-aot-arm64-build release-aot-x86_64-build release-aot-thin-builds \
@@ -166,9 +166,9 @@ override PRODUCT_PERFORMANCE_BASELINE := $(PROJECT_ROOT)/benchmark/baselines/pro
 	terminal-update-feed-test terminal-update-transaction-test terminal-update-controller-test terminal-release-symbols-test terminal-incident-service-test release-update-feed-credentials-check \
 	release-update-feed \
 	release-aot-symbols \
-	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
+	release-aot-integration release-aot-display release-aot-hierarchy release-aot-performance release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
 	release-aot-resource release-aot-shutdown-fault runtime-bundle-audit \
-	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-user-actions-integration runtime-applescript-integration runtime-system-automation-integration runtime-native-content-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-diagnostics-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-clipboard-integration runtime-lifecycle-integration \
+	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-product-performance-integration runtime-user-actions-integration runtime-applescript-integration runtime-system-automation-integration runtime-native-content-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-diagnostics-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-clipboard-integration runtime-lifecycle-integration \
 	runtime-traffic-integration runtime-resource-integration \
 	runtime-shutdown-fault-integration runtime-verify clean
 
@@ -239,6 +239,7 @@ help:
 	@echo "  make terminal-incident-service-test  Test local report export and current-process sampling"
 	@echo "  make runtime-terminal-display-integration  Verify the live Metal terminal in both modes"
 	@echo "  make runtime-native-hierarchy-integration  Verify four-pane hierarchy and Close/Quit in both modes"
+	@echo "  make runtime-product-performance-integration  Gate ordinary-product latency, frames, and fairness"
 	@echo "  make runtime-user-actions-integration  Verify normal-product window/tab/split actions in both modes"
 	@echo "  make runtime-native-content-integration  Verify Quick Look, Services, drops, and context actions in both modes"
 	@echo "  make runtime-quick-terminal-integration  Verify Quick Terminal in both modes"
@@ -653,6 +654,10 @@ developer-jit-hierarchy: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
 		--suite=hierarchy $(DEVELOPER_JIT_BUNDLE)
 
+developer-jit-performance: developer-jit-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
+		--suite=performance $(DEVELOPER_JIT_BUNDLE)
+
 developer-jit-actions: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
 		--suite=actions $(DEVELOPER_JIT_BUNDLE)
@@ -894,6 +899,10 @@ release-aot-hierarchy: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=hierarchy $(RELEASE_AOT_BUNDLE)
 
+release-aot-performance: release-aot-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
+		--suite=performance $(RELEASE_AOT_BUNDLE)
+
 release-aot-actions: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=actions $(RELEASE_AOT_BUNDLE)
@@ -975,6 +984,9 @@ runtime-terminal-display-integration: \
 
 runtime-native-hierarchy-integration: \
 	developer-jit-hierarchy release-aot-hierarchy
+
+runtime-product-performance-integration: \
+	developer-jit-performance release-aot-performance
 
 runtime-user-actions-integration: \
 	developer-jit-actions release-aot-actions

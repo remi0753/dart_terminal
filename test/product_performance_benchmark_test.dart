@@ -2,14 +2,90 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../tool/product_performance_benchmark.dart';
+import '../tool/runtime_product_performance_result.dart';
 
 Future<void> main() => runProductPerformanceBenchmarkTests();
 
 Future<void> runProductPerformanceBenchmarkTests() async {
   _testMetricAndBaselineContract();
   _testBaselineFailures();
+  _testRuntimeProductPerformanceResult();
   _testCheckedBaselineContract();
   await _testShortProductWorkloads();
+}
+
+void _testRuntimeProductPerformanceResult() {
+  const String valid =
+      'TERMINAL_PRODUCT_PERFORMANCE_TEST refresh_samples=8 '
+      'refresh_interval_us=10000 input_samples=7 input_p95_us=100 '
+      'visible_p95_us=12000 visible_budget_us=14000 frame_samples=8 '
+      'frame_p95_us=6000 frame_budget_us=7000 idle_build_delta=0 '
+      'idle_frame_delta=0 occluded_build_delta=0 occluded_frame_delta=0 '
+      'resume_frame=true pending_bound=true content_free=true';
+  final RuntimeProductPerformanceResult result =
+      RuntimeProductPerformanceResult.parse(
+        'before\n$valid\nafter\n',
+        startupElapsed: const Duration(milliseconds: 800),
+      );
+  _expect(
+    result.startupMicroseconds == 800000 &&
+        result.refreshIntervalMicroseconds == 10000 &&
+        result.inputP95Microseconds == 100 &&
+        result.visibleP95Microseconds == 12000 &&
+        result.frameP95Microseconds == 6000,
+    'ordinary-product result parser accepts one exact passing line',
+  );
+  _expectThrows(
+    () => RuntimeProductPerformanceResult.parse(
+      '$valid extra=true',
+      startupElapsed: const Duration(milliseconds: 800),
+    ),
+    'ordinary-product result rejects extra fields',
+  );
+  _expectThrows(
+    () => RuntimeProductPerformanceResult.parse(
+      '$valid\n$valid',
+      startupElapsed: const Duration(milliseconds: 800),
+    ),
+    'ordinary-product result rejects duplicate lines',
+  );
+  _expectThrows(
+    () => RuntimeProductPerformanceResult.parse(
+      valid,
+      startupElapsed: const Duration(microseconds: 5000001),
+    ),
+    'ordinary-product result rejects startup over its fixed budget',
+  );
+  _expectThrows(
+    () => RuntimeProductPerformanceResult.parse(
+      valid.replaceFirst('input_p95_us=100', 'input_p95_us=2000'),
+      startupElapsed: const Duration(milliseconds: 800),
+    ),
+    'ordinary-product result rejects input at the strict 2 ms boundary',
+  );
+  _expectThrows(
+    () => RuntimeProductPerformanceResult.parse(
+      valid.replaceFirst('visible_p95_us=12000', 'visible_p95_us=14001'),
+      startupElapsed: const Duration(milliseconds: 800),
+    ),
+    'ordinary-product result rejects visible echo over one tier plus slack',
+  );
+  _expectThrows(
+    () => RuntimeProductPerformanceResult.parse(
+      valid.replaceFirst('frame_p95_us=6000', 'frame_p95_us=7000'),
+      startupElapsed: const Duration(milliseconds: 800),
+    ),
+    'ordinary-product result rejects frame work at the strict budget',
+  );
+  _expect(
+    RuntimeProductPerformanceResult.parse(
+          valid.replaceFirst('input_p95_us=100', 'input_p95_us=9000'),
+          startupElapsed: const Duration(seconds: 6),
+          enforceLatencyBudgets: false,
+        ).inputP95Microseconds ==
+        9000,
+    'Developer JIT validates structure without acting as release authority',
+  );
 }
 
 void _testMetricAndBaselineContract() {

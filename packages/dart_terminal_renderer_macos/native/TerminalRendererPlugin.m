@@ -2708,6 +2708,27 @@ static NSString* TextInputPlainString(id value) {
         return NO;
       [input unmarkText];
       return ![self hasMarkedText];
+    case 4: {
+      if ([self hasMarkedText]) return NO;
+      NSEvent* navigation =
+          [NSEvent keyEventWithType:NSEventTypeKeyDown
+                           location:NSZeroPoint
+                      modifierFlags:NSEventModifierFlagFunction
+                          timestamp:NSProcessInfo.processInfo.systemUptime
+                       windowNumber:self.window.windowNumber
+                            context:nil
+                         characters:@"\uf700"
+        charactersIgnoringModifiers:@"\uf700"
+                          isARepeat:NO
+                            keyCode:126];
+      self.terminalActiveKeyEvent = navigation;
+      self.terminalRawKeyPosted = NO;
+      [self doCommandBySelector:@selector(moveUp:)];
+      self.terminalActiveKeyEvent = nil;
+      const BOOL posted = self.terminalRawKeyPosted;
+      self.terminalRawKeyPosted = NO;
+      return posted;
+    }
     default:
       return NO;
   }
@@ -2843,7 +2864,7 @@ static int32_t PerformTerminalMetalViewOperation(
               DTR_METAL_VIEW_OPERATION_TEXT_INPUT_ACCEPTANCE ||
           acceptance.client_id != terminal_view.textInputClientId ||
           acceptance.reserved != 0 || acceptance.stage < 1 ||
-          acceptance.stage > 3) {
+          acceptance.stage > 4) {
         return DA_STATUS_INVALID_ARGUMENT;
       }
       return [terminal_view runTextInputAcceptanceStage:acceptance.stage]

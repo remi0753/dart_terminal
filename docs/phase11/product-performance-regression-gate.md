@@ -71,6 +71,8 @@ without moving a baseline merely to make a regression pass.
   evidence must name the exact executable/build provenance and workload.
 - Measuring build, code signing, notarization, dependency resolution, first-time
   shader compilation, Save panels, personal data, or background network work.
+  Apple notarization is also explicitly skipped by user direction because its
+  external turnaround is not suitable for this ordered implementation run.
 
 ## Metric and gate contract
 
@@ -205,3 +207,120 @@ children and this parent are complete.
   - exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`
   - `git diff --check`; adjacent `dart_appkit` remained clean and its tracked
     Dart/native source and filenames contain no case-insensitive `terminal`
+
+### 2026-09-13 — Ordinary-product latency/frame acceptance start
+
+- Goal: add an integration-test-only scenario to the same
+  `_runInteractiveHierarchyProduct` path used by an ordinary zero-config
+  launch. Measure process launch to the first accepted visible Metal frame,
+  native `NSTextInputClient` raw-key delivery to bounded PTY write admission,
+  that PTY response through parser/damage to a later accepted visible frame,
+  and CPU frame composition/submission work. Verify unchanged-visible and
+  occluded output do not create frames.
+- Reuse, rather than duplicate, the existing native-hierarchy exact 100 MiB
+  fairness acceptance. Its real four-pane PTY run already proves response
+  during flood, <=2x same-launch idle latency, scheduler yielding, one pending
+  frame per pane, and clean four-session/native teardown.
+- Scope is `dart_terminal`, its product-owned renderer capability, the runtime
+  integration driver, focused tests, Make targets, and this memo. The generic
+  adjacent `dart_appkit` repository remains out of scope and must stay clean;
+  no terminal-named or terminal-specific code will be added there.
+- Completion requires strict option/environment gating and mutual exclusion,
+  bounded content-free machine lines, negative parser/threshold tests, clean
+  Developer JIT and Release AOT ordinary-product teardown, the exact fairness
+  reuse in both modes, and final format/analyze/main tests. Startup and frame
+  budgets will be frozen from clean observed magnitudes; Release AOT is the
+  release gate authority while Developer JIT remains an ownership check.
+- The first Developer JIT attempt reached its first visible frame and cleanly
+  released the one ordinary pane, but the input probe timed out. Investigation
+  showed that the PTY's `writeEnqueued` diagnostic is intentionally emitted
+  only for tracked paste/EOF writes, while ordinary key input correctly uses
+  the untracked bounded `process.write` path. The probe now completes at the
+  synchronous return of the real key router/PTY write and also requires the
+  exact three-byte encoded route. This retains the intended key-to-admission
+  boundary without changing product input semantics merely for measurement.
+- The second Developer JIT attempt reached bounded PTY admission but the shell
+  fixture rejected the bytes as non-exact. The live zsh line editor can
+  legitimately select either application-cursor `ESC O A` or normal-cursor
+  `ESC [ A`, so the fixture accepts exactly those two three-byte encodings.
+  Repeating the run exposed the actual false failure: ready, visible, and
+  mismatch markers appeared literally in the shell's echoed command line, so
+  the screen searches could settle before command execution. Marker output now
+  uses `%s` placeholders; none of the completed marker strings occurs in the
+  submitted command. The measured route still requires one exact three-byte
+  admitted key and accepts no arbitrary bytes.
+- After the Developer ownership run passed, the first Release AOT gate failed
+  only the visible-response budget. The reused correctness helper deliberately
+  requested and waited for an additional full redraw after finding a marker,
+  so the timer included two presentations rather than the required response
+  presentation. The performance probe now snapshots accepted frames before
+  input and succeeds only when the marker exists and an accepted frame has
+  advanced after that snapshot. It neither requests nor counts an artificial
+  second frame.
+- The Release latency/frame process then passed its hard gates, but its reused
+  100 MiB hierarchy process twice exceeded the old 90-second flood-completion
+  wait (once through the combined target and once through the hierarchy target
+  alone). Both runs had already completed the timed sibling-pane response and
+  remained live; only total producer completion was pending. Because total
+  flood duration is not a performance threshold, the fixed 100 MiB workload,
+  `<=2x` response ratio, queue/frame bounds, and cleanup checks remain exact;
+  only the completion/launcher safety deadlines are raised to 180/240 seconds.
+- A subsequent Release sample quantified startup/input/refresh/frame work at
+  0.56 s, 1.510 ms p95, 16.668 ms, and 0.773 ms p95 respectively, while idle
+  and occluded build/submit deltas stayed zero. Visible response was still two
+  refreshes (32.964 ms): the untimed ready marker was found in the screen model
+  before its frame had settled, leaving that ready frame in flight when the
+  timed key began. The probe now waits for the ready marker's accepted frame
+  before taking the input baseline; the measured interval therefore begins
+  from an idle, visible surface and cannot count pre-existing work.
+- The corrected Release AOT run passed every hard gate: launch to first
+  accepted frame 723.428 ms, measured refresh 16.610 ms, native key through
+  bounded PTY admission 1.842 ms p95, input-to-visible accepted response
+  12.065 ms p95 (20.610 ms budget), and CPU frame build/submit 0.775 ms p95
+  (11.627 ms budget). Visible idle and occluded-output build/frame deltas were
+  all zero, pending frames stayed bounded, unocclusion resumed presentation,
+  and the one-session product process released all owners.
+- Its separately launched exact 100 MiB/four-pane acceptance also passed:
+  23.974 ms same-launch baseline, 28.165 ms response during flood, ratio 1.175,
+  326 scheduler yields, bounded frames, four clean sessions, and 69.649 s total
+  hierarchy runtime.
+
+### 2026-09-13 — Ordinary-product latency/frame acceptance completion
+
+- The launcher freezes a conservative 5-second per-launch startup cap for
+  Release AOT. Current clean Release samples are below 0.75 seconds, leaving
+  broad cold-start variance without turning the observed value into the gate.
+  The aggregate child will form the repeated p95; this child fails every
+  individual Release sample above the cap. Developer JIT validates the same
+  schema, exact routes, suppression, fairness, and ownership but does not act
+  as a release latency authority.
+- `RuntimeProductPerformanceResult` rejects missing, duplicated, malformed, or
+  extra result fields and independently recomputes visible/frame budgets. Its
+  negative fixtures fail startup above 5 seconds, input at the strict 2 ms
+  boundary, visible response beyond one measured refresh plus 4 ms, and frame
+  work at the strict 70% boundary.
+- The final `make runtime-product-performance-integration` passed both modes.
+  The final Developer run observed startup 1.240896 s, refresh 16.932 ms, input
+  11.202 ms p95, visible response 24.724 ms p95, and frame work 1.039 ms p95;
+  its exact fairness run was 27.304/30.563 ms (ratio 1.120) with 2,131 yields
+  and four clean sessions. The final Release run observed startup 736.103 ms,
+  refresh 16.656 ms, input 1.484 ms p95, visible response 12.431 ms p95, and
+  frame work 0.771 ms p95; its exact fairness run was 24.978/27.734 ms (ratio
+  1.111) with 1,381 yields and four clean sessions. Both ordinary one-pane
+  runs had zero idle/occluded frames and complete native-owner teardown.
+- Final verification passed:
+  - `make terminal-renderer-native-test terminal-renderer-dart-test`
+  - `dart run test/product_performance_benchmark_test.dart`, including strict
+    runtime-result negative thresholds and Developer-only structural parsing
+  - `make runtime-product-performance-integration`
+  - exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`
+  - `git diff --check`
+  - adjacent `dart_appkit` clean status, no case-insensitive `terminal` in its
+    Dart/native source or filenames, and
+    `dart run tool/generic_repository_audit.dart --check` with 140 paths and
+    139 text files
+- The first exact main-gate attempt correctly rejected stale Phase 7 evidence
+  after `terminal_application.dart` changed. Regeneration changed only its two
+  deterministic source hashes; the second exact main-gate run passed. Apple
+  notarization and long-duration endurance work were not run by user direction
+  and are not completion dependencies for this child.
