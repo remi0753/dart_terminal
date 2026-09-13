@@ -1753,7 +1753,14 @@ Future<void> _runProductPerformance(
     'refresh_interval_us=${result.refreshIntervalMicroseconds} '
     'input_p95_us=${result.inputP95Microseconds} '
     'visible_p95_us=${result.visibleP95Microseconds} '
-    'frame_p95_us=${result.frameP95Microseconds} fairness=true '
+    'frame_p95_us=${result.frameP95Microseconds} '
+    'idle_rss_bytes=${result.idleResidentBytes} '
+    'workload_rss_bytes=${result.workloadResidentBytes} '
+    'peak_rss_bytes=${result.peakResidentBytes} '
+    'idle_cpu_basis_points=${result.idleCpuBasisPoints} '
+    'occluded_cpu_basis_points=${result.occludedCpuBasisPoints} '
+    'aggregate_cpu_basis_points=${result.aggregateCpuBasisPoints} '
+    'fairness=true '
     'elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }

@@ -76,6 +76,7 @@ final class TerminalAppIntentsProductController {
        _dispatch = dispatch;
 
   static const int _maximumCounter = 0x7fffffff;
+  static const Duration productPollInterval = Duration(milliseconds: 250);
 
   final TerminalAppIntentsMacosSession _session;
   final TerminalAppIntentActionDispatch _dispatch;
@@ -137,6 +138,18 @@ final class TerminalAppIntentsProductController {
   }
 
   Future<void> _pollOnce() async {
+    TerminalAppIntentsMacosCommand? command;
+    try {
+      command = _session.takeCommand();
+      if (command == null) {
+        _refreshNativeSummary();
+        return;
+      }
+    } on Object catch (error, stackTrace) {
+      _recordFailure(TerminalAppIntentsProductFailure.nativeFailure);
+      onError?.call(error, stackTrace);
+      return;
+    }
     _polling = true;
     onStatusChanged?.call();
     try {
@@ -146,7 +159,7 @@ final class TerminalAppIntentsProductController {
         index++
       ) {
         if (_disposing || !_enabled) break;
-        final TerminalAppIntentsMacosCommand? command = _session.takeCommand();
+        if (index > 0) command = _session.takeCommand();
         if (command == null) break;
         final TerminalActionDispatchResult result = await _dispatch(
           _actionId(command.action),

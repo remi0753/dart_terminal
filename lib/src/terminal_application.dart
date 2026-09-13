@@ -65,6 +65,7 @@ import 'terminal_osc52_confirmation.dart';
 import 'terminal_osc52_projection.dart';
 import 'terminal_pane.dart';
 import 'terminal_pane_close_coordinator.dart';
+import 'terminal_process_resource_sampler.dart';
 import 'terminal_product_configuration.dart';
 import 'terminal_product_hierarchy_actions.dart';
 import 'terminal_prompt_navigation.dart';
@@ -5208,13 +5209,14 @@ final class TerminalApplication {
       applyNotificationConfiguration(
         automationConfiguration.macosNotifications,
       );
-      appIntentsPollTimer = Timer.periodic(const Duration(milliseconds: 16), (
-        _,
-      ) {
-        final TerminalAppIntentsProductController? controller =
-            appIntentsController;
-        if (controller != null) unawaited(controller.poll());
-      });
+      appIntentsPollTimer = Timer.periodic(
+        TerminalAppIntentsProductController.productPollInterval,
+        (_) {
+          final TerminalAppIntentsProductController? controller =
+              appIntentsController;
+          if (controller != null) unawaited(controller.poll());
+        },
+      );
       installedPalette = TerminalCommandPalettePresenter.withFocusTarget(
         dispatcher: dispatcher,
         focusTarget: () {
@@ -5713,6 +5715,14 @@ final class TerminalApplication {
     const int refreshSampleCount = 8;
     const int inputSampleCount = 7;
     const int visibleEchoSlackMicroseconds = 4000;
+    const Duration resourceWindow = Duration(seconds: 2);
+    const int resourceWindowMinimumMicroseconds = 2000000;
+    const int resourceWorkloadLines = 11024;
+    const int resourceWorkloadBytes = resourceWorkloadLines * 2;
+    const int residentMemoryBudgetBytes = 512 * 1024 * 1024;
+    const bool releasePerformanceAuthority = bool.fromEnvironment(
+      'dart.vm.product',
+    );
     _expectLifecycle(
       state.windowCount == 1 &&
           state.tabCount == 1 &&
@@ -5727,6 +5737,8 @@ final class TerminalApplication {
     final TerminalSession session = sessions[paneId]!;
     final _TerminalHierarchyProductPane owner = owners[paneId]!;
     final Window window = hierarchy.windowForTab(tab.id)!;
+    final TerminalCurrentProcessResourceSampler resourceSampler =
+        TerminalCurrentProcessResourceSampler();
 
     await _waitForAsciiMarker(session, prompt);
     final Stopwatch initialFrameDeadline = Stopwatch()..start();
@@ -5910,6 +5922,148 @@ final class TerminalApplication {
         owner.surface.snapshot().acceptedFrameCount >
         occludedAfter.acceptedFrameCount;
 
+    const String resourceReadyMarker = '__DT_RESOURCE_IDLE_READY__';
+    pane.insertText(
+      "printf '\\e[2 q\\r\\n__DT_RESOURCE_%s_READY__\\r\\n' IDLE",
+    );
+    await pane.submit();
+    await _waitForAsciiMarkerPresented(
+      owner,
+      resourceReadyMarker,
+      timeout: const Duration(seconds: 5),
+    );
+    _expectLifecycle(
+      !session.terminalScreenSet.activeScreen.cursorBlinking,
+      'performance resource window requires a non-animated cursor',
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    final TerminalLiveMetalSurfaceSnapshot resourceIdleFrameBefore = owner
+        .surface
+        .snapshot();
+    final TerminalProcessResourceSnapshot resourceIdleBefore = resourceSampler
+        .snapshot();
+    final Stopwatch resourceIdleClock = Stopwatch()..start();
+    await Future<void>.delayed(resourceWindow);
+    resourceIdleClock.stop();
+    final TerminalProcessResourceSnapshot resourceIdleAfter = resourceSampler
+        .snapshot();
+    final TerminalLiveMetalSurfaceSnapshot resourceIdleFrameAfter = owner
+        .surface
+        .snapshot();
+    final TerminalProcessResourceWindow idleResources =
+        TerminalProcessResourceWindow(
+          before: resourceIdleBefore,
+          after: resourceIdleAfter,
+          elapsedMicroseconds: resourceIdleClock.elapsedMicroseconds,
+        );
+    final int resourceIdleFrameDelta =
+        resourceIdleFrameAfter.acceptedFrameCount -
+        resourceIdleFrameBefore.acceptedFrameCount;
+
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      5,
+      windowHandle,
+      windowHandle >> 32,
+      32000000,
+      0,
+      true,
+    ]);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final TerminalLiveMetalSurfaceSnapshot resourceOccludedFrameBefore = owner
+        .surface
+        .snapshot();
+    final TerminalProcessResourceSnapshot resourceOccludedBefore =
+        resourceSampler.snapshot();
+    final Stopwatch resourceOccludedClock = Stopwatch()..start();
+    await Future<void>.delayed(resourceWindow);
+    resourceOccludedClock.stop();
+    final TerminalProcessResourceSnapshot resourceOccludedAfter =
+        resourceSampler.snapshot();
+    final TerminalLiveMetalSurfaceSnapshot resourceOccludedFrameAfter = owner
+        .surface
+        .snapshot();
+    final TerminalProcessResourceWindow occludedResources =
+        TerminalProcessResourceWindow(
+          before: resourceOccludedBefore,
+          after: resourceOccludedAfter,
+          elapsedMicroseconds: resourceOccludedClock.elapsedMicroseconds,
+        );
+    final int resourceOccludedFrameDelta =
+        resourceOccludedFrameAfter.acceptedFrameCount -
+        resourceOccludedFrameBefore.acceptedFrameCount;
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      5,
+      windowHandle,
+      windowHandle >> 32,
+      32000001,
+      0,
+      false,
+    ]);
+    final Stopwatch resourceResumeDeadline = Stopwatch()..start();
+    while (resourceResumeDeadline.elapsed < const Duration(seconds: 5) &&
+        owner.surface.snapshot().acceptedFrameCount <=
+            resourceOccludedFrameAfter.acceptedFrameCount) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    final bool resourceResumeFrame =
+        owner.surface.snapshot().acceptedFrameCount >
+        resourceOccludedFrameAfter.acceptedFrameCount;
+
+    const String workloadMarker = '__DT_RESOURCE_WORKLOAD_READY__';
+    pane.insertText(
+      "yes P | head -n $resourceWorkloadLines; "
+      "printf '\\r\\n__DT_RESOURCE_%s_READY__\\r\\n' WORKLOAD",
+    );
+    await pane.submit();
+    await _waitForAsciiMarkerPresented(
+      owner,
+      workloadMarker,
+      timeout: const Duration(seconds: 30),
+    );
+    final TerminalProcessResourceSnapshot workloadResources = resourceSampler
+        .snapshot();
+    final TerminalScrollback scrollback = session.terminalScreenSet.scrollback;
+    final int minimumRetainedScrollbackLines =
+        scrollback.maxLines - scrollback.pageRows + 1;
+    final int expectedScrollbackPages =
+        (scrollback.length + scrollback.pageRows - 1) ~/ scrollback.pageRows;
+    final bool resourceCountsBound =
+        state.windowCount == 1 &&
+        state.tabCount == 1 &&
+        state.paneCount == 1 &&
+        sessions.length == 1 &&
+        owners.length == 1 &&
+        scrollback.length >= minimumRetainedScrollbackLines &&
+        scrollback.length <= scrollback.maxLines &&
+        scrollback.pageCount == expectedScrollbackPages &&
+        scrollback.allocatedBytes > 0 &&
+        scrollback.allocatedBytes <= scrollback.maxBytes;
+
+    final int aggregateCpuMicroseconds =
+        idleResources.cpuMicroseconds + occludedResources.cpuMicroseconds;
+    final int aggregateWindowMicroseconds =
+        idleResources.elapsedMicroseconds +
+        occludedResources.elapsedMicroseconds;
+    final int aggregateCpuBasisPoints =
+        aggregateCpuMicroseconds * 10000 ~/ aggregateWindowMicroseconds;
+    final int peakResidentBytes = <int>[
+      resourceIdleBefore.peakResidentBytes,
+      resourceIdleAfter.peakResidentBytes,
+      workloadResources.peakResidentBytes,
+      resourceOccludedBefore.peakResidentBytes,
+      resourceOccludedAfter.peakResidentBytes,
+    ].reduce(math.max);
+    final bool residentMemoryBound =
+        idleResources.maximumResidentBytes <= residentMemoryBudgetBytes &&
+        workloadResources.currentResidentBytes <= residentMemoryBudgetBytes &&
+        occludedResources.maximumResidentBytes <= residentMemoryBudgetBytes &&
+        peakResidentBytes <= residentMemoryBudgetBytes;
+    final bool idleCpuBound =
+        aggregateCpuMicroseconds * 200 < aggregateWindowMicroseconds;
+
     final bool pendingBound = occludedAfter.pendingFrameCount <= 1;
     stdout.writeln(
       'TERMINAL_PRODUCT_PERFORMANCE_TEST refresh_samples=$refreshSampleCount '
@@ -5926,6 +6080,29 @@ final class TerminalApplication {
       'occluded_frame_delta=$occludedFrameDelta resume_frame=$resumeFrame '
       'pending_bound=$pendingBound content_free=true',
     );
+    stdout.writeln(
+      'TERMINAL_PRODUCT_RESOURCE_TEST idle_window_us='
+      '${idleResources.elapsedMicroseconds} idle_cpu_us='
+      '${idleResources.cpuMicroseconds} idle_cpu_basis_points='
+      '${idleResources.cpuBasisPoints} idle_rss_bytes='
+      '${idleResources.maximumResidentBytes} workload_bytes='
+      '$resourceWorkloadBytes workload_rss_bytes='
+      '${workloadResources.currentResidentBytes} peak_rss_bytes='
+      '$peakResidentBytes rss_budget_bytes=$residentMemoryBudgetBytes '
+      'scrollback_lines=${scrollback.length} scrollback_pages='
+      '${scrollback.pageCount} scrollback_allocated_bytes='
+      '${scrollback.allocatedBytes} scrollback_max_bytes='
+      '${scrollback.maxBytes} occluded_window_us='
+      '${occludedResources.elapsedMicroseconds} occluded_cpu_us='
+      '${occludedResources.cpuMicroseconds} occluded_cpu_basis_points='
+      '${occludedResources.cpuBasisPoints} occluded_rss_bytes='
+      '${occludedResources.maximumResidentBytes} aggregate_cpu_basis_points='
+      '$aggregateCpuBasisPoints idle_frame_delta=$resourceIdleFrameDelta '
+      'occluded_frame_delta=$resourceOccludedFrameDelta resume_frame='
+      '$resourceResumeFrame rss_bound=$residentMemoryBound cpu_bound='
+      '$idleCpuBound resource_counts_bound=$resourceCountsBound '
+      'panes=1 sessions=1 metal=1 content_free=true',
+    );
     _expectLifecycle(
       refreshMicroseconds.length == refreshSampleCount &&
           frameWorkMicroseconds.length >= refreshSampleCount &&
@@ -5939,6 +6116,21 @@ final class TerminalApplication {
           pendingBound &&
           resumeFrame,
       'ordinary product latency, frame, or suppression budget failed',
+    );
+    _expectLifecycle(
+      idleResources.elapsedMicroseconds >= resourceWindowMinimumMicroseconds &&
+          occludedResources.elapsedMicroseconds >=
+              resourceWindowMinimumMicroseconds &&
+          idleResources.cpuMicroseconds <= idleResources.elapsedMicroseconds &&
+          occludedResources.cpuMicroseconds <=
+              occludedResources.elapsedMicroseconds &&
+          resourceIdleFrameDelta == 0 &&
+          resourceOccludedFrameDelta == 0 &&
+          resourceResumeFrame &&
+          resourceCountsBound &&
+          (!releasePerformanceAuthority ||
+              (residentMemoryBound && idleCpuBound)),
+      'ordinary product resource or idle-power proxy budget failed',
     );
     if (!closed.isCompleted) closed.complete();
   }

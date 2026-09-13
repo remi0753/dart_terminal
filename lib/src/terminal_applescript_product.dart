@@ -456,7 +456,7 @@ final class TerminalAppleScriptProductSession {
     required TerminalAppleScriptTerminalTitleResolver titleForTerminal,
     required TerminalAppleScriptWorkingDirectoryResolver workingDirectoryFor,
     TerminalAppleScriptErrorHandler? onError,
-    this.pollInterval = const Duration(milliseconds: 16),
+    this.pollInterval = defaultPollInterval,
     this.maximumCommandsPerPoll = 4,
     Duration commandTimeout = const Duration(seconds: 30),
     bool startPolling = true,
@@ -485,6 +485,8 @@ final class TerminalAppleScriptProductSession {
       _pollTimer = Timer.periodic(pollInterval, (_) => _pollSafely());
     }
   }
+
+  static const Duration defaultPollInterval = Duration(milliseconds: 250);
 
   final TerminalApplicationState state;
   final TerminalAppleScriptNativePort _nativePort;

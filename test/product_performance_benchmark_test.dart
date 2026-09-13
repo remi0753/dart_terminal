@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../lib/src/terminal_process_resource_sampler.dart';
 import '../tool/product_performance_benchmark.dart';
 import '../tool/runtime_product_performance_result.dart';
 
@@ -9,6 +10,7 @@ Future<void> main() => runProductPerformanceBenchmarkTests();
 Future<void> runProductPerformanceBenchmarkTests() async {
   _testMetricAndBaselineContract();
   _testBaselineFailures();
+  _testProcessResourceSampler();
   _testRuntimeProductPerformanceResult();
   _testCheckedBaselineContract();
   await _testShortProductWorkloads();
@@ -22,9 +24,21 @@ void _testRuntimeProductPerformanceResult() {
       'frame_p95_us=6000 frame_budget_us=7000 idle_build_delta=0 '
       'idle_frame_delta=0 occluded_build_delta=0 occluded_frame_delta=0 '
       'resume_frame=true pending_bound=true content_free=true';
+  const String validResource =
+      'TERMINAL_PRODUCT_RESOURCE_TEST idle_window_us=2000000 '
+      'idle_cpu_us=1000 idle_cpu_basis_points=5 idle_rss_bytes=100 '
+      'workload_bytes=22048 workload_rss_bytes=120 peak_rss_bytes=130 '
+      'rss_budget_bytes=536870912 scrollback_lines=10000 '
+      'scrollback_pages=40 scrollback_allocated_bytes=1000 '
+      'scrollback_max_bytes=67108864 occluded_window_us=2000000 '
+      'occluded_cpu_us=1000 occluded_cpu_basis_points=5 '
+      'occluded_rss_bytes=110 aggregate_cpu_basis_points=5 '
+      'idle_frame_delta=0 occluded_frame_delta=0 resume_frame=true '
+      'rss_bound=true cpu_bound=true resource_counts_bound=true panes=1 '
+      'sessions=1 metal=1 content_free=true';
   final RuntimeProductPerformanceResult result =
       RuntimeProductPerformanceResult.parse(
-        'before\n$valid\nafter\n',
+        'before\n$valid\n$validResource\nafter\n',
         startupElapsed: const Duration(milliseconds: 800),
       );
   _expect(
@@ -32,59 +46,179 @@ void _testRuntimeProductPerformanceResult() {
         result.refreshIntervalMicroseconds == 10000 &&
         result.inputP95Microseconds == 100 &&
         result.visibleP95Microseconds == 12000 &&
-        result.frameP95Microseconds == 6000,
+        result.frameP95Microseconds == 6000 &&
+        result.idleCpuBasisPoints == 5 &&
+        result.workloadResidentBytes == 120 &&
+        result.aggregateCpuBasisPoints == 5,
     'ordinary-product result parser accepts one exact passing line',
   );
   _expectThrows(
     () => RuntimeProductPerformanceResult.parse(
-      '$valid extra=true',
+      '$valid extra=true\n$validResource',
       startupElapsed: const Duration(milliseconds: 800),
     ),
     'ordinary-product result rejects extra fields',
   );
   _expectThrows(
     () => RuntimeProductPerformanceResult.parse(
-      '$valid\n$valid',
+      '$valid\n$valid\n$validResource',
       startupElapsed: const Duration(milliseconds: 800),
     ),
     'ordinary-product result rejects duplicate lines',
   );
   _expectThrows(
     () => RuntimeProductPerformanceResult.parse(
-      valid,
+      '$valid\n$validResource',
       startupElapsed: const Duration(microseconds: 5000001),
     ),
     'ordinary-product result rejects startup over its fixed budget',
   );
   _expectThrows(
     () => RuntimeProductPerformanceResult.parse(
-      valid.replaceFirst('input_p95_us=100', 'input_p95_us=2000'),
+      '${valid.replaceFirst('input_p95_us=100', 'input_p95_us=2000')}\n'
+      '$validResource',
       startupElapsed: const Duration(milliseconds: 800),
     ),
     'ordinary-product result rejects input at the strict 2 ms boundary',
   );
   _expectThrows(
     () => RuntimeProductPerformanceResult.parse(
-      valid.replaceFirst('visible_p95_us=12000', 'visible_p95_us=14001'),
+      '${valid.replaceFirst('visible_p95_us=12000', 'visible_p95_us=14001')}\n'
+      '$validResource',
       startupElapsed: const Duration(milliseconds: 800),
     ),
     'ordinary-product result rejects visible echo over one tier plus slack',
   );
   _expectThrows(
     () => RuntimeProductPerformanceResult.parse(
-      valid.replaceFirst('frame_p95_us=6000', 'frame_p95_us=7000'),
+      '${valid.replaceFirst('frame_p95_us=6000', 'frame_p95_us=7000')}\n'
+      '$validResource',
       startupElapsed: const Duration(milliseconds: 800),
     ),
     'ordinary-product result rejects frame work at the strict budget',
   );
   _expect(
     RuntimeProductPerformanceResult.parse(
-          valid.replaceFirst('input_p95_us=100', 'input_p95_us=9000'),
+          '${valid.replaceFirst('input_p95_us=100', 'input_p95_us=9000')}\n'
+          '$validResource',
           startupElapsed: const Duration(seconds: 6),
           enforceLatencyBudgets: false,
         ).inputP95Microseconds ==
         9000,
     'Developer JIT validates structure without acting as release authority',
+  );
+  _expectThrows(
+    () => RuntimeProductPerformanceResult.parse(
+      valid,
+      startupElapsed: const Duration(milliseconds: 800),
+    ),
+    'ordinary-product result requires one resource line',
+  );
+  _expectThrows(
+    () => RuntimeProductPerformanceResult.parse(
+      '$valid\n$validResource extra=true',
+      startupElapsed: const Duration(milliseconds: 800),
+    ),
+    'ordinary-product resource result rejects extra fields',
+  );
+  _expectThrows(
+    () => RuntimeProductPerformanceResult.parse(
+      '$valid\n${validResource.replaceFirst('idle_cpu_basis_points=5', 'idle_cpu_basis_points=6')}',
+      startupElapsed: const Duration(milliseconds: 800),
+    ),
+    'ordinary-product result recomputes its CPU proxy ratio',
+  );
+  final String cpuBoundary = validResource
+      .replaceFirst(
+        'idle_cpu_us=1000 idle_cpu_basis_points=5',
+        'idle_cpu_us=10000 idle_cpu_basis_points=50',
+      )
+      .replaceFirst(
+        'occluded_cpu_us=1000 occluded_cpu_basis_points=5',
+        'occluded_cpu_us=10000 occluded_cpu_basis_points=50',
+      )
+      .replaceFirst(
+        'aggregate_cpu_basis_points=5',
+        'aggregate_cpu_basis_points=50',
+      )
+      .replaceFirst('cpu_bound=true', 'cpu_bound=false');
+  _expect(
+    RuntimeProductPerformanceResult.parse(
+          '$valid\n$cpuBoundary',
+          startupElapsed: const Duration(milliseconds: 800),
+          enforceLatencyBudgets: false,
+        ).aggregateCpuBasisPoints ==
+        50,
+    'Developer JIT accepts a truthful non-authoritative CPU gate result',
+  );
+  _expectThrows(
+    () => RuntimeProductPerformanceResult.parse(
+      '$valid\n$cpuBoundary',
+      startupElapsed: const Duration(milliseconds: 800),
+    ),
+    'Release authority rejects CPU at the strict 0.5 percent boundary',
+  );
+  final String memoryBoundary = validResource
+      .replaceFirst('workload_rss_bytes=120', 'workload_rss_bytes=536870913')
+      .replaceFirst('peak_rss_bytes=130', 'peak_rss_bytes=536870913')
+      .replaceFirst('rss_bound=true', 'rss_bound=false');
+  _expectThrows(
+    () => RuntimeProductPerformanceResult.parse(
+      '$valid\n$memoryBoundary',
+      startupElapsed: const Duration(milliseconds: 800),
+    ),
+    'Release authority rejects resident memory above the fixed cap',
+  );
+}
+
+void _testProcessResourceSampler() {
+  final TerminalProcessResourceSnapshot before =
+      const TerminalProcessResourceSnapshot(
+        cpuTimeMicroseconds: 100,
+        currentResidentBytes: 1000,
+        peakResidentBytes: 2000,
+      );
+  final TerminalProcessResourceWindow fixture = TerminalProcessResourceWindow(
+    before: before,
+    after: const TerminalProcessResourceSnapshot(
+      cpuTimeMicroseconds: 125,
+      currentResidentBytes: 1200,
+      peakResidentBytes: 2200,
+    ),
+    elapsedMicroseconds: 1000,
+  );
+  _expect(
+    fixture.cpuMicroseconds == 25 &&
+        fixture.cpuBasisPoints == 250 &&
+        fixture.maximumResidentBytes == 1200,
+    'resource window derives exact CPU and resident-memory values',
+  );
+  _expectThrows(
+    () => TerminalProcessResourceWindow(
+      before: before,
+      after: const TerminalProcessResourceSnapshot(
+        cpuTimeMicroseconds: 99,
+        currentResidentBytes: 1000,
+        peakResidentBytes: 2000,
+      ),
+      elapsedMicroseconds: 1000,
+    ),
+    'resource window rejects regressed process CPU time',
+  );
+  final TerminalCurrentProcessResourceSampler sampler =
+      TerminalCurrentProcessResourceSampler();
+  final TerminalProcessResourceSnapshot sampledBefore = sampler.snapshot();
+  var accumulator = 0;
+  for (var index = 0; index < 1000000; index++) {
+    accumulator = (accumulator + index) & 0x7fffffff;
+  }
+  final TerminalProcessResourceSnapshot sampledAfter = sampler.snapshot();
+  _expect(
+    accumulator != -1 &&
+        sampledAfter.cpuTimeMicroseconds >= sampledBefore.cpuTimeMicroseconds &&
+        sampledAfter.currentResidentBytes > 0 &&
+        sampledAfter.peakResidentBytes >= sampledAfter.currentResidentBytes,
+    'public local APIs provide a monotonic content-free process snapshot',
   );
 }
 

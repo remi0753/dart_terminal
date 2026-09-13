@@ -8,6 +8,7 @@ import 'package:dart_terminal_app_intents_macos/testing.dart';
 Future<void> main() => runTerminalSystemAutomationProductTests();
 
 Future<void> runTerminalSystemAutomationProductTests() async {
+  _testAutomationPollingBudget();
   await _testAppIntentsUseSharedActionsExactlyOnce();
   await _testAppIntentsRejectAndDisposeDeterministically();
   await _testNotificationLifecycleAndOpaqueFocus();
@@ -15,11 +16,22 @@ Future<void> runTerminalSystemAutomationProductTests() async {
   _testNotificationCapacityBound();
 }
 
+void _testAutomationPollingBudget() {
+  _expect(
+    TerminalAppIntentsProductController.productPollInterval ==
+            const Duration(milliseconds: 250) &&
+        TerminalAppleScriptProductSession.defaultPollInterval ==
+            const Duration(milliseconds: 250),
+    'product automation polling keeps its fixed idle-work budget',
+  );
+}
+
 Future<void> _testAppIntentsUseSharedActionsExactlyOnce() async {
   final _FakeAppIntentsBindings bindings = _FakeAppIntentsBindings();
   final TerminalAppIntentsMacosSession session =
       TerminalAppIntentsMacosSession.withBindings(bindings);
   final List<TerminalActionId> invoked = <TerminalActionId>[];
+  var statusChangeCount = 0;
   final TerminalActionCatalog catalog = TerminalActionCatalog.standard();
   final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
     catalog: catalog,
@@ -36,8 +48,15 @@ Future<void> _testAppIntentsUseSharedActionsExactlyOnce() async {
       TerminalAppIntentsProductController(
         session: session,
         dispatch: dispatcher.dispatch,
+        onStatusChanged: () => statusChangeCount++,
       );
   controller.applyEnabled(true);
+  final int enabledStatusChangeCount = statusChangeCount;
+  await controller.poll();
+  _expect(
+    statusChangeCount == enabledStatusChangeCount,
+    'an empty App Intents poll did not publish transient UI status work',
+  );
   final TerminalAppIntentsMacosSelfAutomation automation =
       TerminalAppIntentsMacosSelfAutomation.withBindings(bindings);
   for (final TerminalAppIntentAction action in TerminalAppIntentAction.values) {

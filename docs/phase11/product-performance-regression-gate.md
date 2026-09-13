@@ -324,3 +324,118 @@ children and this parent are complete.
   deterministic source hashes; the second exact main-gate run passed. Apple
   notarization and long-duration endurance work were not run by user direction
   and are not completion dependencies for this child.
+
+### 2026-09-13 — Memory and idle-power proxy start
+
+- Goal: extend the isolated ordinary-product scenario with fixed short-window
+  resident-memory, monotonic process CPU-time, and accepted-frame samples. The
+  Release AOT run is the absolute performance authority; Developer JIT checks
+  the same schema, public-API sampling, lifecycle, and fail-closed ownership.
+- Scope: the `dart_terminal` product process, its existing one-pane visible and
+  occluded scenario, a bounded content-free result line, strict launcher codec,
+  focused negative tests, and Make acceptance. No source or API is added to the
+  adjacent generic `dart_appkit` repository.
+- Out of scope: watts/joules, privileged `powermetrics`, private Apple APIs,
+  changing system settings, long-duration endurance work, signing, and Apple
+  notarization. Long-duration work and notarization are explicitly non-blocking
+  by user direction.
+- Dependencies and risks: the metric must sample only the current launched
+  product, use monotonic CPU time, distinguish idle and occluded fixed windows,
+  retain no PID/path/environment/raw terminal data, and avoid counting setup or
+  teardown. Cursor animation or in-flight presentation would invalidate an
+  unchanged-window sample, so each window begins only after the existing
+  visible-frame settling checks and also requires zero accepted-frame delta.
+- Completion: strict positive and boundary-negative codec tests pass; Release
+  AOT remains below a conservative fixed RSS cap, uses less than 0.5% aggregate
+  process CPU in unchanged visible and occluded windows, submits no frame in
+  either window, and releases every ordinary product owner. The exact main gate
+  and adjacent generic-library audit must pass before this child is checked.
+- The combined memory/comparator child was split before implementation because
+  they have independent evidence and completion conditions. Short-window
+  absolute gates run first. Compatible pinned comparator evidence and relative
+  gates remain strictly next and cannot be marked complete merely because the
+  executable is absent.
+- Inventory confirmed no `ghostty` or `zig` command and no
+  `/Applications/Ghostty.app` executable on this host. The repository contains
+  only the accepted-product micro baseline and differential fixtures, not a
+  compatible pinned performance result. This matches the earlier contract and
+  is not yet recorded as a blocker for the preceding absolute-gate subtask.
+- The adjacent `dart_appkit` worktree is clean. Its first official audit attempt
+  was prevented before execution when the sandbox denied Dart analytics-session
+  metadata access; the audit will be rerun with analytics suppressed during
+  final verification. This is an execution-environment issue, not a repository
+  audit failure.
+- Added a product-owned sampler using the public POSIX `getrusage(RUSAGE_SELF)`
+  CPU clock and Dart `ProcessInfo.currentRss`/`maxRss`. It retains only integer
+  CPU microseconds and resident bytes; allocation, unavailable data, regressed
+  CPU time, or malformed `timeval` values fail closed. No process identifier or
+  terminal data enters the result.
+- The ordinary-product probe first selects a steady non-blinking cursor, then
+  measures separate two-second visible and occluded unchanged windows. It also
+  emits 11,024 fixed two-byte lines (22,048 bytes) to fill bounded scrollback,
+  records exact page/line/allocation counts and root-process RSS, and resumes an
+  accepted frame after occlusion. Release AOT gates aggregate CPU strictly below
+  0.5%, zero accepted frames in both unchanged windows, and idle/workload/peak
+  RSS below a conservative 512 MiB cap.
+- The first Developer JIT product run exposed that scrollback evicts a complete
+  256-row page when its 10,000-line limit is crossed. The correct bounded full
+  state is therefore 9,745–10,000 retained lines with a mathematically matching
+  page count, not exactly 10,000 lines/40 pages. The observed 9,769 lines,
+  39 pages, and 21,275,904 allocated bytes were within both line and 64 MiB byte
+  caps. CPU sampling was also moved before the workload so pending parser/damage
+  work cannot contaminate an unchanged occluded window.
+- The first corrected Release AOT measurement passed memory and frame
+  suppression (127.0 MiB peak and zero accepted-frame deltas) but truthfully
+  failed the CPU gate at 1.75%. Read-only tracing found two product automation
+  timers polling native App Intents and AppleScript queues every 16 ms. Empty
+  App Intents polls also toggled transient status and refreshed diagnostics on
+  every tick. Empty polls now avoid that UI/status work, and both product queue
+  intervals are fixed at 250 ms, still far inside their 30-second command
+  timeout while bounding idle wakeups to four per second per integration.
+- After this correction, a clean direct Release AOT run passed with 109.2 MiB
+  idle RSS, 124.0 MiB workload RSS, 127.0 MiB peak RSS, 0.16% visible-idle CPU,
+  0.18% occluded CPU, 0.17% aggregate CPU, zero accepted frames in both windows,
+  exact bounded scrollback resources, and a successful resume frame. The same
+  strict machine result recomputes every ratio/claim and rejects missing,
+  duplicate, extra, inconsistent, over-cap, or 0.5%-boundary fixtures.
+
+### 2026-09-13 — Memory and idle-power proxy absolute-gate completion
+
+- The final combined runtime performance suite passed in both modes. Developer
+  JIT retained 144.1/174.8/177.4 MiB idle/workload/peak RSS and 0.45%/0.40%/
+  0.42% visible/occluded/aggregate CPU. Release AOT retained 109.4/129.2/
+  131.7 MiB and 0.19%/0.11%/0.15% respectively. Both modes held accepted-frame
+  deltas at zero in both fixed windows, resumed exactly through the ordinary
+  presentation path, retained 9,769 scrollback rows in 39 bounded pages, and
+  released every session, Metal surface, text client, worker, and native owner.
+- The exact 100 MiB sibling-pane fairness reuse also passed: Developer JIT was
+  28.187/30.020 ms (ratio 1.066, 922 scheduler yields, 75.065 s total) and
+  Release AOT was 25.766/26.151 ms (ratio 1.015, 1,784 yields, 151.839 s total).
+  Total transfer duration remains only a safety deadline, not a weakened
+  performance threshold.
+- Functional regression validation for the reduced polling wakeups passed
+  separately: AppleScript completed all ten commands in Developer JIT and
+  Release AOT, while App Intents retained three actions/three shortcuts and
+  exact shared-action delivery in both modes. Unit coverage fixes the 250 ms
+  interval and proves an empty App Intents poll emits no transient UI status.
+- Final validation passed:
+  - `dart analyze`
+  - `dart run test/product_performance_benchmark_test.dart`
+  - `dart run test/terminal_system_automation_product_test.dart`
+  - `make runtime-applescript-integration runtime-system-automation-integration`
+  - `make runtime-product-performance-integration`
+  - exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`
+  - `git diff --check`
+  - adjacent `dart_appkit` clean status and its official
+    `dart run tool/generic_repository_audit.dart --check` result of 140 paths and
+    139 text files
+- The first exact main-gate run correctly rejected stale Phase 7 evidence.
+  Regeneration changed only the two reviewed `terminal_application.dart`
+  SHA-256 entries, and the repeated exact gate passed. One generic audit command
+  was also initially invoked with the product directory as its working
+  directory and therefore correctly reported the product's terminal-specific
+  files; rerunning from `dart_appkit` passed. Neither failed attempt changed the
+  generic repository.
+- Apple notarization and long-duration endurance work were not run by explicit
+  user direction and are not dependencies of this completed absolute-gate
+  subtask. The compatible pinned comparator evidence subtask remains next.
