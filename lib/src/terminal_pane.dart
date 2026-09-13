@@ -640,6 +640,10 @@ final class TerminalPane {
   }
 
   void resize({required int rows, required int columns}) {
+    if (_state == TerminalPaneState.closing ||
+        _state == TerminalPaneState.closed) {
+      return;
+    }
     _session.resize(rows: rows, columns: columns);
   }
 

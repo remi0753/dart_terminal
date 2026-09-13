@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:dart_appkit/dart_appkit.dart'
     show dartAppKitCurrentEventProtocolVersion;
+import 'package:dart_terminal/dart_terminal.dart'
+    show TerminalActionId, TerminalActionMenu;
 
 import 'runtime_product_performance_result.dart';
 
@@ -447,6 +449,7 @@ Future<_ProcessObservation> _launch(
   String expectedDiagnosticPhase = 'root-stopped',
   Duration timeout = const Duration(seconds: 12),
   bool throughLaunchServices = false,
+  bool activateAfterLaunch = false,
   Set<String> milestonePrefixes = const <String>{},
 }) async {
   final List<String> invocationArguments = invocation.arguments(
@@ -554,6 +557,12 @@ Future<_ProcessObservation> _launch(
     final Future<String> launcherStderr = process.stderr
         .transform(utf8.decoder)
         .join();
+    final Future<bool>? applicationActivation = activateAfterLaunch
+        ? _activateApplicationWithLaunchServices(
+            invocation.bundleIdentifier,
+            diagnosticsDirectory,
+          )
+        : null;
     Future<String> completedOutput(
       String launcher,
       String? capturedPath,
@@ -591,6 +600,7 @@ Future<_ProcessObservation> _launch(
         await launcherStderr,
         capturedStderrPath,
       );
+      if (applicationActivation != null) await applicationActivation;
       throw _SmokeException(
         '${options.mode.name} application did not exit within '
         '${timeout.inSeconds} seconds; '
@@ -608,6 +618,13 @@ Future<_ProcessObservation> _launch(
       await launcherStderr,
       capturedStderrPath,
     );
+    if (applicationActivation != null) {
+      _expect(
+        await applicationActivation,
+        'bounded Launch Services activation failed; '
+        'stdout=${completedStdout.trim()} stderr=${completedStderr.trim()}',
+      );
+    }
     final int processId = throughLaunchServices
         ? await _runtimeDiagnosticProcessId(diagnosticsDirectory) ?? process.pid
         : process.pid;
@@ -661,6 +678,52 @@ Future<_ProcessObservation> _launch(
       await diagnosticsDirectory.delete(recursive: true);
     }
   }
+}
+
+Future<bool> _activateApplicationWithLaunchServices(
+  String bundleIdentifier,
+  Directory diagnosticsDirectory,
+) async {
+  final DateTime deadline = DateTime.now().add(const Duration(seconds: 3));
+  int? processIdentifier;
+  while (processIdentifier == null && DateTime.now().isBefore(deadline)) {
+    processIdentifier = await _runtimeDiagnosticProcessId(diagnosticsDirectory);
+    if (processIdentifier == null) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+  }
+  if (processIdentifier == null) return false;
+  await Future<void>.delayed(const Duration(milliseconds: 500));
+  final Process process;
+  try {
+    process = await Process.start('/usr/bin/open', <String>[
+      '-b',
+      bundleIdentifier,
+    ]);
+  } on ProcessException {
+    return false;
+  }
+  final Future<void> stdoutDone = process.stdout.drain<void>();
+  final Future<void> stderrDone = process.stderr.drain<void>();
+  late final int status;
+  try {
+    status = await process.exitCode.timeout(const Duration(seconds: 5));
+  } on TimeoutException {
+    process.kill(ProcessSignal.sigkill);
+    try {
+      await process.exitCode.timeout(const Duration(seconds: 1));
+    } on TimeoutException {
+      return false;
+    }
+    return false;
+  }
+  try {
+    await Future.wait<void>(<Future<void>>[stdoutDone, stderrDone])
+        .timeout(const Duration(seconds: 2));
+  } on Object {
+    return false;
+  }
+  return status == 0;
 }
 
 Future<int?> _runtimeDiagnosticProcessId(Directory directory) async {
@@ -1010,7 +1073,11 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
   );
   _expect(
     RegExp(
-          r'^NATIVE_ACTION_MENU installed=true sections=6 actions=30$',
+          '^NATIVE_ACTION_MENU installed=true '
+          'sections=${TerminalActionMenu.values.length} '
+          r'actions='
+          '${TerminalActionId.values.length}'
+          r'$',
           multiLine: true,
         ).allMatches(observation.stdoutText).length ==
         1,
@@ -2484,6 +2551,7 @@ Future<void> _runSecureKeyboardEntry(
       'DT_RUNTIME_SECURE_KEYBOARD_ENTRY_TEST': '1',
     },
     timeout: const Duration(seconds: 45),
+    activateAfterLaunch: true,
   );
   _expect(
     observation.status == 0,

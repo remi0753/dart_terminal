@@ -10,6 +10,8 @@ dependencies:
     path: ../dart_appkit/packages/dart_appkit
   dart_macos_runtime:
     path: ../dart_appkit/packages/dart_macos_runtime
+  dart_process_resource_macos:
+    path: packages/dart_process_resource_macos
   dart_pty_macos:
     path: packages/dart_pty_macos
   dart_terminal_applescript_macos:

@@ -782,6 +782,7 @@ make product-sanitizer-fuzz-fault-gate
 make product-parser-benchmark
 make product-performance-regression-gate
 make RUNTIME_ARCH=arm64 ghostty-p0-p1-gap-closure
+make RUNTIME_ARCH=arm64 release-candidate-daily-use-gate
 make runtime-source-check
 make terminal-localization-check
 make test
@@ -820,6 +821,15 @@ rowと全checked-in evidenceのfreshness、通常のnative/Dart/format/analyze g
 external follow-upで、actionable P0/P1とsilent misbehaviorは0です。後者5件を製品動作の
 成功と読み替えず、実Developer ID／Apple公証、Intel-host、物理・実時間soakはこのgateの
 対象外です。
+
+`make RUNTIME_ARCH=arm64 release-candidate-daily-use-gate` は、versioned matrixの
+8 program（7 clean agreementとmoshの非破壊な既知差分1件）と8 workflow family／31 gateを
+fail-closedに確認し、Universal distribution、Release AOT performance、sanitizer／fuzz／fault、
+pinned parity、および通常製品のDeveloper JIT／Release AOT受け入れを共有依存1回の直列graphで
+集約します。成功時点のblocker／crash／data-loss／security bug、actionable P0/P1、silent
+misbehaviorは全て0です。これはM1上のbounded automationとchecked-in program replayによる
+release-candidate判断であり、外部programのfresh launch、30日の日常利用、物理sleep／display
+変更／OS memory pressure、実Developer ID／Apple公証、Intel-native実行を合格済みとは主張しません。
 
 `make RUNTIME_ARCH=arm64 runtime-bounded-reliability-integration` は通常製品の同一
 window/pane/session/Metal surfaceで、sleep、重複screen-set通知、交互のwarning/critical
@@ -893,11 +903,13 @@ Intel-native の no-rebuild 実機受け入れだけが ROADMAP 上の低優先 
 
 Phase 0 の debug/JIT、release-AOT、worker-isolate、PTY、Metal、CoreText の native
 実装は歴史的な feasibility evidence として `docs/phase0` から参照します。applicationの
-`bin/`／`lib/` とruntime host buildはDart-onlyで、native実装は製品所有の
+`bin/`／`lib/` とruntime host buildは直接FFIを持たず、native／FFI境界は製品所有の
+`packages/dart_process_resource_macos`、
 `packages/dart_pty_macos`、`packages/dart_terminal_renderer_macos`、
 `packages/dart_terminal_applescript_macos`、`packages/dart_terminal_app_intents_macos`
-だけに閉じています。Phase 6 の外部application比較で使ったreview済みncurses fixtureと
-macOS activation helperはtest/tool専用で、製品bundleへcompile/linkしません。
+だけに閉じています。process resource packageは内容を保持せず現在processのCPU時間、RSS、
+open FD件数だけを返します。外部application比較で使うreview済みncurses fixture、macOS
+activation helper、Ghostty performance captureはtest/tool専用で、製品bundleへcompile/linkしません。
 parser/benchmarkなどの Dart-only harness は後続実装の比較資料として残しています。
 
 個別の再現方法と測定結果は [`docs/phase0`](docs/phase0)、設計判断は
@@ -919,6 +931,7 @@ lib/src/terminal_pane.dart           pane/session ID、owner、close状態
 lib/src/terminal_session.dart        persistent login shellとPTY入出力
 lib/src/terminal_renderer/           CoreText/atlas/Metalのlive製品表示
 lib/src/terminal_buffer.dart         lifecycle診断用のlegacy text projection
+packages/dart_process_resource_macos/ current-process CPU/RSS/FDの汎用FFI境界
 test/run_tests.dart                  UI 非依存部分の最小テスト
 ../dart_appkit/packages/              AppKit、runtime、PTY、renderer の公開 package
 ```

@@ -130,7 +130,8 @@ override PRODUCT_PERFORMANCE_MICRO_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)/pro
 override PRODUCT_PERFORMANCE_RUNTIME_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)/product-performance-runtime-result.log
 override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)/product-performance-regression-result.json
 
-.PHONY: help dependencies test dpty-contract-check dpty-child-audit \
+.PHONY: help dependencies test process-resource-dart-test \
+	dpty-contract-check dpty-child-audit \
 	dpty-native-test dpty-dart-test \
 	terminal-renderer-contract-check terminal-renderer-native-test \
 	terminal-renderer-dart-test \
@@ -146,6 +147,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-shell-integration terminal-shell-integration-check \
 	ghostty-p0-p1-gap-inventory ghostty-p0-p1-gap-inventory-check ghostty-p0-p1-gap-closure \
 	release-candidate-daily-use-matrix release-candidate-daily-use-matrix-check \
+	release-candidate-daily-use-gate \
 	product-parser-corpus product-parser-properties phase9-protocol-properties phase9-security-stress \
 	product-native-sanitizer product-fault-injection product-sanitizer-fuzz-fault-gate \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
@@ -184,6 +186,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 help:
 	@echo "Dart-only macOS application targets:"
 	@echo "  make test                         Format, analyze, and unit-test Dart source"
+	@echo "  make process-resource-dart-test  Test the generic macOS process sampler"
 	@echo "  make dpty-native-test             Test the product-owned PTY native asset"
 	@echo "  make dpty-dart-test               Test its Dart facade and build-hook asset"
 	@echo "  make terminal-renderer-native-test  Test the product renderer capability"
@@ -225,6 +228,7 @@ help:
 	@echo "  make ghostty-p0-p1-gap-closure  Run ordinary and two-mode product parity closure"
 	@echo "  make release-candidate-daily-use-matrix  Regenerate the bounded release-candidate matrix"
 	@echo "  make release-candidate-daily-use-matrix-check  Reject stale or unsafe release-candidate evidence"
+	@echo "  make release-candidate-daily-use-gate  Run the bounded release-candidate decision"
 	@echo "  make vt-parser-table              Regenerate the Dart VT transition table"
 	@echo "  make vt-parser-table-check        Reject a stale generated parser table"
 	@echo "  make terminal-parser-trace        Regenerate the bounded parser trace"
@@ -606,9 +610,7 @@ ghostty-p0-p1-gap-inventory: dependencies
 ghostty-p0-p1-gap-inventory-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/ghostty_p0_p1_gap_inventory.dart --check
 
-ghostty-p0-p1-gap-closure:
-	@$(MAKE) test
-	@$(MAKE) RUNTIME_ARCH=$(RUNTIME_ARCH) runtime-terminal-display-integration
+ghostty-p0-p1-gap-closure: test runtime-terminal-display-integration
 	@echo "GHOSTTY_P0_P1_GAP_CLOSURE_PASS ordinary=true runtime_modes=2"
 
 release-candidate-daily-use-matrix: dependencies
@@ -617,13 +619,30 @@ release-candidate-daily-use-matrix: dependencies
 release-candidate-daily-use-matrix-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/release_candidate_daily_use.dart --check
 
+release-candidate-daily-use-gate:
+	@$(MAKE) -j1 RUNTIME_ARCH=$(RUNTIME_ARCH) \
+		release-candidate-daily-use-matrix-check \
+		runtime-secure-keyboard-entry-integration \
+		release-aot-distribution-verify \
+		product-performance-regression-gate \
+		product-sanitizer-fuzz-fault-gate \
+		ghostty-p0-p1-gap-closure \
+		runtime-verify
+	@echo "RELEASE_CANDIDATE_DAILY_USE_PASS programs=8 clean=7 documented_program_gaps=1 workflows=8 gates=31 runtime_modes=2 release_blockers=0 bounded=true duration_claim=false notarization_claim=false intel_native_claim=false"
+
 terminal-localization-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_localization_audit.dart
 
 terminal-diagnostics-privacy-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_diagnostics_privacy_audit.dart
 
-test: dependencies dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check ghostty-p0-p1-gap-inventory-check release-candidate-daily-use-matrix-check terminal-distribution-policy-test
+process-resource-dart-test:
+	@cd $(PROJECT_ROOT)/packages/dart_process_resource_macos && $(DART) pub get
+	@cd $(PROJECT_ROOT)/packages/dart_process_resource_macos && $(DART) analyze
+	@cd $(PROJECT_ROOT)/packages/dart_process_resource_macos && \
+		$(DART) run test/run_tests.dart
+
+test: dependencies process-resource-dart-test dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check ghostty-p0-p1-gap-inventory-check release-candidate-daily-use-matrix-check terminal-distribution-policy-test
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart
@@ -649,12 +668,9 @@ product-fault-injection: dependencies dpty-native-test
 	@cd $(PROJECT_ROOT) && $(DART) run test/metal_failure_recovery_test.dart
 	@echo "PRODUCT_FAULT_INJECTION_PASS native_boundaries=1 dart_boundaries=3"
 
-product-sanitizer-fuzz-fault-gate:
-	@$(MAKE) test
-	@$(MAKE) product-parser-properties
-	@$(MAKE) product-native-sanitizer
-	@$(MAKE) product-fault-injection
-	@$(MAKE) RUNTIME_ARCH=$(RUNTIME_ARCH) runtime-shutdown-fault-integration
+product-sanitizer-fuzz-fault-gate: test product-parser-properties \
+	product-native-sanitizer product-fault-injection \
+	runtime-shutdown-fault-integration
 	@echo "PRODUCT_SANITIZER_FUZZ_FAULT_PASS native_suites=4 native_artifacts=9 fuzz_executions=1296 fault_boundaries=4 runtime_modes=2"
 
 product-parser-benchmark-build: dependencies

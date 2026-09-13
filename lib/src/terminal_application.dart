@@ -11609,12 +11609,13 @@ keybind = control+k=pane.focus-next
     );
 
     const String initialEchoOnMarker = '__DT_SECURE_INITIAL_ECHO_ON__';
+    const String echoOffMarker = '__DT_SECURE_ECHO_OFF__';
     ordinaryOwner.pane.insertText(
-      "stty echo; printf '\\n$initialEchoOnMarker\\n'",
+      "stty echo; printf '\\n$initialEchoOnMarker\\n'; "
+      "IFS= read -r _; stty -echo; printf '\\n$echoOffMarker\\n'",
     );
     await ordinaryOwner.pane.submit();
     await _waitForAsciiMarker(ordinarySession, initialEchoOnMarker);
-    await _waitForAsciiMarker(ordinarySession, prompt);
     await waitFor(
       () =>
           ordinaryOwner.pane.processSnapshot().terminalEchoEnabled == true &&
@@ -11637,8 +11638,7 @@ keybind = control+k=pane.focus-next
       'hidden indicator',
     );
 
-    const String echoOffMarker = '__DT_SECURE_ECHO_OFF__';
-    ordinaryOwner.pane.insertText("stty -echo; printf '\\n$echoOffMarker\\n'");
+    ordinaryOwner.pane.insertText('continue');
     await ordinaryOwner.pane.submit();
     await _waitForAsciiMarker(ordinarySession, echoOffMarker);
     await waitFor(() {
@@ -17186,6 +17186,14 @@ keybind = control+k=pane.focus-next
       selectionMarker,
       TerminalSelectionUnit.cell,
     );
+
+    // Selection publication is normally coalesced through the shared pane
+    // scheduler. Earlier acceptance stages can leave a later frame retry at
+    // the head of that queue, so advance this surface once before inspecting
+    // its native accessibility snapshot. This keeps the product scheduling
+    // path intact while making the acceptance barrier depend on completed
+    // publication instead of timer ordering.
+    surface.processPending();
 
     final TerminalSelectionRange? selection =
         selectionOwner.gesture.snapshot.range;

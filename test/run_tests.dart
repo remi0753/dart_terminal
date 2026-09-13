@@ -784,6 +784,11 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
     sessions.first.startCount == 1,
     'owner starts one session generation',
   );
+  first.resize(rows: 31, columns: 99);
+  _expect(
+    sessions.first.resizeCount == 1,
+    'running pane delegates native layout resize',
+  );
 
   _expect(
     first.requestClose() == TerminalPaneCloseDecision.confirmationRequired &&
@@ -815,6 +820,11 @@ Future<void> _testPaneIdentityOwnershipAndClosePolicy() async {
     first.requestClose() == TerminalPaneCloseDecision.allow &&
         first.state == TerminalPaneState.closing,
     'second consecutive close is allowed',
+  );
+  first.resize(rows: 32, columns: 100);
+  _expect(
+    sessions.first.resizeCount == 1,
+    'closing pane ignores display-recovery resize',
   );
   await owner.disposePane(first);
   await owner
@@ -3010,6 +3020,7 @@ final class _FakePaneSession implements TerminalPaneSession {
   var startCount = 0;
   var disposeCount = 0;
   var confirmationCount = 0;
+  var resizeCount = 0;
   var endOfFileCount = 0;
   var interruptCount = 0;
   var failStart = false;
@@ -3140,7 +3151,9 @@ final class _FakePaneSession implements TerminalPaneSession {
       );
 
   @override
-  void resize({required int rows, required int columns}) {}
+  void resize({required int rows, required int columns}) {
+    ++resizeCount;
+  }
 
   @override
   void showClipboardNotice(TerminalClipboardNotice notice) {

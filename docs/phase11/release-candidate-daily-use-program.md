@@ -6,7 +6,7 @@
 - Task: release candidate daily-use program matrix
 - Started: 2026-09-14
 - State: in progress
-- Current subtask: versioned matrix complete; bounded aggregate pending
+- Current subtask: bounded aggregate implementation and Phase 11 closure
 
 ## Purpose
 
@@ -216,3 +216,281 @@ not claim.
   targets, and ordinary-gate integration meet the second child's completion
   conditions. The bounded release-candidate aggregate remains deliberately
   unimplemented until the next ordered child.
+- 2026-09-14: Before changing the final gate, Make dependency review found
+  that the distribution, performance, and `runtime-verify` authorities already
+  use ordinary prerequisites, while the sanitizer/fuzz/fault and Ghostty parity
+  aggregates invoke overlapping child `make` processes from recipes. Naively
+  calling all five aggregate targets would run the ordinary gate four times and
+  repeat display/shutdown suites. The final implementation will preserve every
+  child target, child marker, and validation boundary, convert only those two
+  recursive recipes to equivalent dependency declarations, and invoke the six
+  reviewed authorities in one `make -j1` dependency graph. This makes shared
+  phony prerequisites execute once and guarantees that build/runtime outputs
+  are not produced concurrently. The final marker remains withheld until that
+  complete graph succeeds; credentialed notarization, Intel-native execution,
+  and physical/duration-only evidence remain explicit non-blocking exclusions.
+- 2026-09-14: The first final aggregate run stopped in the ordinary gate at
+  `terminal-renderer-native-test`. PTY native/Dart tests passed first, then the
+  renderer reported that its precompiled Metal renderer was not created and
+  every dependent view/readback/accessibility/input/frame assertion failed;
+  `release-candidate-daily-use-gate` correctly withheld all later child and
+  final markers. No product source, threshold, or evidence was changed in
+  response. Because the same native renderer gate passed immediately before
+  this child and this failure shape begins at the shared Metal fixture rather
+  than an aggregate dependency, the next diagnostic is one unchanged focused
+  rerun to distinguish transient GUI/GPU state from a reproducible regression.
+- 2026-09-14: The unchanged focused rerun failed identically inside the file
+  sandbox, while the same command passed immediately outside it with
+  `Terminal renderer capability contract passed`. The first intentional
+  device-failure injection had passed in the sandbox and the subsequent real
+  device creation was the first failure, confirming that WindowServer/Metal
+  access—not product behavior or the aggregate graph—caused the cascade. The
+  final GUI/Metal aggregate must therefore run outside the filesystem sandbox;
+  this grants no credential, signing, notary, network, or destructive action.
+- 2026-09-14: The sandbox-independent aggregate then passed the ordinary gate
+  and all three Release AOT build/audit paths, but its first arm64 smoke stopped
+  on a stale duplicated action-menu count. Product output is derived from the
+  standard catalog and correctly reports all 33 `TerminalActionId` values;
+  registry/localization/reference unit gates already require exact enum
+  coverage, while `runtime_integration_smoke.dart` still hard-coded 30 from the
+  earlier Universal-bundle task. The four divider actions were added later and
+  the smoke had not been rerun by the display-only parity aggregate. Rather
+  than replace one fragile number with another, the runtime oracle will derive
+  its exact expected section/action counts from the same public enums while
+  still requiring one and only one bundled-product observation. This is an
+  acceptance-oracle repair discovered by the current final aggregate, not a
+  product behavior or threshold change.
+- 2026-09-14: A standalone `dart format` reported zero changed files, then
+  returned failure only because unified analytics tried to update the
+  sandbox-external Dart telemetry session timestamp. No file was reformatted.
+  All normative formatter/analyzer invocations use `CI=true` and
+  `DART_SUPPRESS_ANALYTICS=true`; this failed invocation is not treated as code
+  validation and will not weaken or replace the exact repository gate.
+- 2026-09-14: After deriving the runtime expectation from
+  `TerminalActionMenu.values` and `TerminalActionId.values`, the unchanged
+  product bundle was rebuilt and the focused arm64 Release AOT smoke passed
+  with `RUNTIME_INTEGRATION_PASS ... launch_architecture=arm64
+  elapsed_ms=1741`. The affected Ghostty inventory and release-candidate matrix
+  hashes were regenerated in dependency order before the rerun.
+- 2026-09-14: The next full aggregate passed the ordinary gate, all three
+  distribution audits/smokes, absolute/baseline/fairness/relative performance,
+  1,296 fuzz executions, nine sanitizer artifacts, four fault boundaries, and
+  both shutdown-fault modes. The following Developer JIT display suite then
+  timed out only while waiting for the final content-free accessibility
+  acceptance to settle. Its preceding PTY, Metal, text input, graphics, search,
+  P3 color, glyph, pointer, selection, scroll, hyperlink, title, and cursor
+  observations all passed, and teardown remained clean. The final marker was
+  withheld. A focused unchanged display rerun will determine whether this was
+  transient load/UI interference; the aggregate ordering will be reconsidered
+  before any timing bound or acceptance behavior is changed.
+- 2026-09-14: The immediate unchanged focused Developer JIT display rerun
+  passed all real AppKit/PTY/Metal/accessibility behavior with
+  `RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS ... scale_16_16=131072
+  elapsed_ms=11915`. This confirms a transient settle failure rather than a
+  deterministic regression. The aggregate order and accessibility deadline
+  remain unchanged; one complete unchanged aggregate retry is required before
+  acceptance.
+- 2026-09-14: The unchanged aggregate retry passed both display modes and the
+  Ghostty parity aggregate, then `runtime-source-check` rejected the existing
+  `tool/macos_ghostty_performance_capture.swift`. That Phase 11 comparator
+  capture is a test/tool-only, product-owned ScreenCaptureKit/Apple Event
+  harness; it is not linked, bundled, imported by `bin/` or `lib/`, or owned by
+  generic `dart_appkit`. The source audit already has an exact reviewed-tool
+  boundary for `tool/terminal_differential_macos_activation.swift`, while the
+  comparator's ordinary tests bind its SHA-256 and content-free capture
+  contract. The correct repair is to add this one exact path to that closed
+  reviewed-tool set—not to permit arbitrary native sources or misclassify a
+  non-shipping comparator as a runtime native package.
+- 2026-09-14: After isolating the current-process POSIX FFI in the generic
+  product-owned `dart_process_resource_macos` package, its standalone analysis
+  and live CPU/RSS/file-descriptor test passed. The first root focused test and
+  source-audit attempts did not reach Dart code because the sandbox denied the
+  renderer build hook access to `/Users/remi/.cache/clang/ModuleCache`. As with
+  WindowServer/Metal access above, normative root verification must run outside
+  that sandbox; the package result itself is valid and no threshold changed.
+- 2026-09-14: With both ownership repairs applied, the aggregate passed the
+  generic sampler, ordinary, distribution, performance, sanitizer/fuzz/fault,
+  parity, source/bundle, smoke, display, hierarchy, bounded reliability, user
+  actions, AppleScript, system automation, native content, and Quick Terminal
+  authorities. Developer JIT Secure Keyboard Entry then began while the app
+  remained `application_active=false` and failed only to acquire its focused
+  target; no secure-input ownership was acquired, and PTY/worker/native teardown
+  was clean. This is a focus precondition failure compatible with external UI
+  interaction, not a permission/release leak. After an unchanged focused rerun,
+  the final graph should place the complete focus-sensitive runtime authority
+  before the long noninteractive performance/sanitizer work so elapsed load does
+  not unnecessarily widen the interference window.
+- 2026-09-14: The focused Secure Keyboard Entry rerun failed identically, so
+  ordering alone is insufficient. The suite launches the `.app` executable
+  directly even though its acceptance requires the app to become frontmost;
+  macOS may refuse a background executable's activation request. The existing
+  runtime harness already has a bounded Launch Services path (`open -W -n -F`)
+  that captures output, preserves environment/arguments, resolves the real
+  diagnostic PID, and is used by restoration. Secure Keyboard Entry will use
+  that user-equivalent launch path so its active/focused precondition is
+  explicit. Product policy remains fail-closed when inactive, the test-only
+  synthetic active/inactive transitions remain unchanged, and no Accessibility
+  permission or secure-input entitlement is introduced.
+- 2026-09-14: Launching the acceptance through `open -W -n -F` still left the
+  product inactive. A second discarded approach precompiled the existing
+  reviewed `NSRunningApplication.activate` helper before launch and invoked it
+  against the runtime diagnostic PID (rather than the `/usr/bin/arch` wrapper
+  PID); macOS still rejected background activation. Injecting both active and
+  focused protocol events let the scenario advance, but real Secure Event
+  Input correctly remained unavailable to the actually inactive application,
+  so that synthetic-focus approach was also removed. These failures confirm
+  that the product's fail-closed ownership policy is working and must not be
+  weakened to accommodate an external foreground-app race.
+- 2026-09-14: The retained solution waits up to three seconds for the
+  owner-only runtime diagnostic PID record, waits another 500 ms for window
+  creation, and asks Launch Services to reopen the already running exact bundle
+  identifier. The helper command has five-second exit and two-second stream
+  drain bounds, discards output, and fails the acceptance if activation cannot
+  be requested. This occurs while the product is live, unlike its normal
+  pre-window launch activation, and preserves real AppKit active/focus events
+  plus real Carbon Secure Event Input acquisition/release.
+- 2026-09-14: The first Developer JIT run with delayed Launch Services
+  activation passed active/focus and then transiently missed the initial PTY
+  ECHO-on settle. An immediate unchanged rerun completed every automatic,
+  manual, menu, palette, keybind, Settings, app-lifecycle, Quick Terminal,
+  indication, and cleanup assertion with
+  `RUNTIME_SECURE_KEYBOARD_ENTRY_INTEGRATION_PASS mode=developer-jit
+  elapsed_ms=3003`. The focused Release AOT run also passed with the same
+  marker and `elapsed_ms=2077`. No wait bound, Secure Input policy, or product
+  threshold changed. Regression coverage, Ghostty gap inventory, and the
+  release-candidate matrix were then regenerated in dependency order; the
+  matrix checker again reports 8 programs, 8 workflows, 31 gates, and zero
+  release blockers.
+- 2026-09-14: The final single-process Make DAG now schedules the existing
+  two-mode Secure Keyboard Entry target immediately after the matrix check.
+  Its later `runtime-verify` prerequisite is deduplicated by Make, so no gate or
+  assertion is skipped or repeated; only the focus-sensitive suite's position
+  moves ahead of distribution, performance, sanitizer, fuzz, and fault work.
+- 2026-09-14: The next aggregate passed Secure Input, the ordinary gate,
+  Universal distribution, performance, fuzz/sanitizers/faults, display parity,
+  source/bundle audits, smoke, both hierarchy/fairness modes, bounded
+  reliability, and Developer JIT user actions. Release AOT user actions then
+  received a real display-recovery event while pane 1 removal was awaiting its
+  PTY shutdown. `TerminalApplicationState.removePane` intentionally retains the
+  pane in the logical split tree until owned cleanup finishes, so recovery
+  reconciled its layout after `TerminalPane` had entered `closing`; the native
+  reactor correctly rejected that resize with wrong-state status 3. All five
+  PTYs still reached clean teardown, but the asynchronous error prevented the
+  application from completing and the 45-second harness bound stopped it.
+- 2026-09-14: A closing pane remains in the model only to preserve atomic
+  removal and shutdown ownership; it must no longer accept interaction or PTY
+  geometry. `TerminalPane.resize` now ignores only `closing` and `closed`
+  states, while running/starting/exited layout behavior remains unchanged. A
+  focused owner test proves a running resize delegates exactly once and a
+  display-recovery-style resize after close admission does not reach the
+  session. This fixes the race at the product lifecycle boundary without
+  weakening native PTY wrong-state enforcement or swallowing unrelated native
+  errors.
+- 2026-09-14: The first focused aggregate Dart-runner invocation after the
+  lifecycle fix stopped at the release-candidate freshness assertion before
+  reaching later tests. This is the intended fail-closed response because the
+  new source/test hashes had not yet been regenerated; evidence will be
+  regenerated in coverage, Ghostty, release-candidate dependency order before
+  rerunning the unchanged owner test.
+- 2026-09-14: The first regeneration attempt again hit the documented sandbox
+  denial for clang's Metal module cache and was rerun unchanged outside the
+  sandbox. After release-candidate freshness was restored, the Dart runner
+  reached the older Phase 7 AppKit acceptance hash and correctly reported that
+  it was stale as well. The complete regeneration order is therefore Phase 7
+  AppKit acceptance, compatibility coverage, Ghostty inventory, then the final
+  release-candidate matrix; no checker or source hash will be bypassed.
+- 2026-09-14: After the full dependency-ordered regeneration, the aggregate
+  Dart runner passed through `dart_terminal tests passed`, including the new
+  running-versus-closing resize ownership assertion. The exact failed runtime
+  target then passed unchanged with
+  `RUNTIME_USER_ACTIONS_INTEGRATION_PASS mode=release-aot windows=2 tabs=3
+  panes=4 elapsed_ms=1512`. The focused evidence confirms the recovery/close
+  race is repaired before the complete release-candidate graph is retried.
+- 2026-09-14: The aggregate retry passed Developer JIT Secure Input but the
+  Release AOT run again stopped at the initial ECHO-on setup. The PTY teardown
+  snapshot showed ECHO off despite the preceding `stty echo`: the interactive
+  zsh had already returned to its ZLE prompt and restored raw/no-echo mode
+  before the polling oracle sampled it. This explains the earlier intermittent
+  Developer JIT miss and the faster AOT recurrence; it is a deterministic-test
+  race rather than a product Secure Input failure.
+- 2026-09-14: The acceptance fixture now executes `stty echo`, prints the
+  content-free readiness marker, and blocks in portable shell `read` while
+  ECHO remains enabled. After the controller proves released ownership, the
+  test submits an explicit handshake; the same shell command then applies
+  `stty -echo` and prints the existing automatic-acquisition marker. This
+  removes timing dependence on prompt/ZLE transitions without changing any
+  deadline, product policy, or assertion, and still observes real PTY termios
+  plus real Carbon Secure Event Input transitions.
+- 2026-09-14: With the explicit PTY handshake, the two modes passed back to
+  back in one target: Developer JIT emitted the Secure Keyboard Entry marker at
+  `elapsed_ms=3057`, and Release AOT emitted it at `elapsed_ms=2027`. This
+  focused result covers the exact sequence that had intermittently failed and
+  is the prerequisite for another full aggregate attempt.
+- 2026-09-14: That aggregate passed both Secure Input modes, the ordinary,
+  distribution, performance, sanitizer/fuzz/fault, and Developer JIT display
+  gates. Release AOT display then reached every terminal behavior marker but
+  timed out at the final accessibility-publication settle; teardown was clean
+  and the release-candidate marker was withheld. This is the same isolated
+  settle symptom previously observed once in Developer JIT, now reproduced in
+  the other runtime mode only after the long aggregate workload.
+- 2026-09-14: Inspection found that the acceptance waits for the selection
+  product owner to advance, then relies solely on a shared pane-scheduler timer
+  to publish that selection into the native accessibility snapshot. Earlier
+  frame retries can validly remain coalesced in that scheduler, making the
+  three-second oracle depend on timer ordering rather than the publication it
+  is intended to inspect. The acceptance now advances the already requested
+  target surface once before polling, matching the existing text-input and
+  viewport-geometry acceptance pattern. It retains the normal coalesced request,
+  every visible/selection/cursor/native assertion, and all existing time bounds;
+  the focused two-mode display gate must prove the repair before another full
+  aggregate run.
+- 2026-09-14: The focused display authority passed consecutively in both modes
+  after dependency-ordered evidence regeneration. Developer JIT emitted
+  `RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS` at `elapsed_ms=11839`; Release
+  AOT emitted the same complete marker at `elapsed_ms=10434`. Both exercised
+  the real PTY, native AppKit window/view, Metal renderer, native accessibility
+  client, and clean teardown. The complete release-candidate graph remains the
+  required load-order regression proof.
+- 2026-09-14: The complete sandbox-independent release-candidate graph then
+  passed from a clean matrix check through its fixed final marker. It covered
+  all eight reviewed programs (seven clean agreements and the one owned
+  `less` hilite-mouse gap), eight workflow families, 31 gates, both runtime
+  modes, arm64/x86_64/Universal distribution audits and smokes, M1 performance,
+  1,296 fuzz executions, nine sanitizer artifacts, four fault boundaries, and
+  the complete two-mode runtime authority. Under aggregate load the repaired
+  display stages passed at `elapsed_ms=11287` for Developer JIT and
+  `elapsed_ms=10367` for Release AOT. The final result was
+  `RELEASE_CANDIDATE_DAILY_USE_PASS programs=8 clean=7
+  documented_program_gaps=1 workflows=8 gates=31 runtime_modes=2
+  release_blockers=0 bounded=true duration_claim=false
+  notarization_claim=false intel_native_claim=false`.
+- 2026-09-14: This bounded result does not claim a duration-only soak, Apple
+  notarization, or Intel-native hardware execution. Per the approved scope,
+  those remain lower-priority/post-goal external follow-ups and are not release
+  blockers. The aggregate found no crash, data-loss, security, silent P0/P1,
+  or other owned release-blocker class.
+- 2026-09-14: The exact ordinary repository gate was rerun independently after
+  the aggregate and passed. It analyzed the generic process sampler and root
+  package with no issues, reported 338 formatted files with zero changes,
+  passed every native/package/evidence/security/update/symbol and aggregate
+  Dart suite, and ended with `dart_terminal tests passed`. `git diff --check`
+  also passes.
+- 2026-09-14: The adjacent `/Users/remi/dart/dart_appkit` audit is clean:
+  `git status --short` has no entry, case-insensitive `terminal` matching has
+  zero tracked path results, and the same search across tracked Dart,
+  C/C++/Objective-C/Swift, shell, YAML/JSON/plist, and Make sources has zero
+  content results. No adjacent generic-library file changed. The one new FFI
+  boundary is the product-owned, generic `dart_process_resource_macos` package;
+  root application Dart imports only its typed API.
+- 2026-09-14: The final package-format check covered its three Dart files with
+  zero changes. A combined sandboxed freshness/source check then stopped at the
+  already documented clang Metal module-cache write denial before Dart code;
+  its unchanged sandbox-independent rerun passed with 8 programs, 8 workflows,
+  31 gates, zero release blockers, 703 audited files, zero application native
+  sources, and exactly one generic process-resource FFI package.
+- 2026-09-14: The first explicit staging command was denied only because the
+  filesystem sandbox exposes `.git` read-only and could not create
+  `index.lock`. The unchanged, explicit 24-path staging command succeeded with
+  repository write access. Its staged whitespace check is clean, and the
+  staged inventory contains only this final child’s product, generic package,
+  tests, generated evidence, documentation, and two ROADMAP state changes.

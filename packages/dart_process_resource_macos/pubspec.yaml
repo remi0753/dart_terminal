@@ -1,0 +1,7 @@
+name: dart_process_resource_macos
+description: Content-free current-process resource sampling for macOS Dart applications.
+version: 0.1.0-dev.1
+publish_to: none
+
+environment:
+  sdk: '>=3.13.2 <3.14.0'

@@ -1417,13 +1417,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
       - [x] native Option-click／semantic selection gesture integration
       - [x] dual-runtime evidence、文書／matrix更新、親項目完了判定
   - [x] aggregate gate、文書／matrix更新、親項目完了判定
-- [ ] release candidate の daily-use program matrix
+- [x] release candidate の daily-use program matrix
   （分割、program／workflow evidence、bounded duration境界、完了条件は
   [`docs/phase11/release-candidate-daily-use-program.md`](docs/phase11/release-candidate-daily-use-program.md)
   を参照して順に実施する）
   - [x] contract、program／evidence inventory、bounded-duration境界
   - [x] versioned daily-use matrix、fail-closed checker、通常gate統合
-  - [ ] bounded release-candidate aggregate、文書／matrix更新、Phase 11完了判定
+  - [x] bounded release-candidate aggregate、文書／matrix更新、Phase 11完了判定
 
 終了条件:
 

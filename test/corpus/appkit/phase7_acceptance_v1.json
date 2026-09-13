@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "32d91e145ac50899f7936551903e5394ff2a85990349b68436137ea0aabb266c"
+          "sha256": "a46461628a4d810de19f6493043187a32270f5853beede0c4198f814e2d48c65"
         },
         {
           "path": "lib/src/terminal_input/terminal_text_input_event_router.dart",
@@ -124,7 +124,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_pane.dart",
-          "sha256": "05e0a958de5015ca119f59ecfc8790598e79f93c3868548cb15a6154ed937b7e"
+          "sha256": "b28d57a36376d602d97455fb339dfd0683c02e25fe9acb4f82bac1713603b362"
         },
         {
           "path": "lib/src/terminal_native_hierarchy.dart",
@@ -187,7 +187,7 @@
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "32d91e145ac50899f7936551903e5394ff2a85990349b68436137ea0aabb266c"
+          "sha256": "a46461628a4d810de19f6493043187a32270f5853beede0c4198f814e2d48c65"
         }
       ],
       "unit_tests": [

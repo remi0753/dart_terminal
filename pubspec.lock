@@ -47,6 +47,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0-dev.1"
+  dart_process_resource_macos:
+    dependency: "direct main"
+    description:
+      path: "packages/dart_process_resource_macos"
+      relative: true
+    source: path
+    version: "0.1.0-dev.1"
   dart_pty_macos:
     dependency: "direct main"
     description:

@@ -38,6 +38,7 @@ Future<void> main() async {
       'test/corpus/applications/support/ncurses_resize_fixture.c',
     };
     const Set<String> reviewedToolNativeSources = <String>{
+      'tool/macos_ghostty_performance_capture.swift',
       'tool/terminal_differential_macos_activation.swift',
     };
     const Set<String> productPackageNativeRoots = <String>{
@@ -146,6 +147,31 @@ Future<void> main() async {
         'application source loads a native image directly: $path',
       );
     }
+
+    const String processResourcePackagePath =
+        'packages/dart_process_resource_macos/lib/src/'
+        'current_process_resources.dart';
+    final String processResourcePackage = await File(processResourcePackagePath)
+        .readAsString();
+    final String processResourceFacade = await File(
+      'lib/src/terminal_process_resource_sampler.dart',
+    ).readAsString();
+    _expect(
+      tracked.contains(processResourcePackagePath) &&
+          processResourcePackage.contains("import 'dart:ffi';") &&
+          processResourcePackage.contains('DynamicLibrary.process()') &&
+          processResourcePackage.contains('maximumDescriptorScanCount = 65536'),
+      'current-process FFI package boundary differs',
+    );
+    _expect(
+      processResourceFacade.contains(
+            "import 'package:dart_process_resource_macos/"
+            "dart_process_resource_macos.dart';",
+          ) &&
+          !processResourceFacade.contains("import 'dart:ffi';") &&
+          !processResourceFacade.contains('DynamicLibrary.'),
+      'application process-resource facade owns a native boundary',
+    );
 
     final String terminalApplication = await File(
       'lib/src/terminal_application.dart',
@@ -275,6 +301,7 @@ Future<void> main() async {
       'DART_ONLY_SOURCE_AUDIT_PASS tracked=${tracked.length} '
       'application_native_sources=0 '
       'product_package_native_sources=${productPackageNativeSources.length} '
+      'process_resource_ffi_packages=1 '
       'reviewed_test_native_sources=${reviewedTestNativeSources.length} '
       'reviewed_tool_native_sources=${reviewedToolNativeSources.length}',
     );
