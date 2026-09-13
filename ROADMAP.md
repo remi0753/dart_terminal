@@ -1360,7 +1360,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase11/bounded-system-reliability.md`](docs/phase11/bounded-system-reliability.md)
   を参照して順に実施する）
   - [x] contract、inventory、duration-only follow-up境界
-  - [ ] `dart_appkit` generic system-state event transport
+  - [x] `dart_appkit` generic system-state event transport
   - [ ] product sleep/wake／display recovery policy
   - [ ] product memory-pressure shedding／recovery
   - [ ] bounded aggregate受け入れ、文書／matrix、親項目完了判定

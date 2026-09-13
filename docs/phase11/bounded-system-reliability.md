@@ -186,3 +186,57 @@ marked as executed; it remains separately visible after the major goal.
 - Moved only elapsed-time evidence to a visible follow-up. Bounded transition,
   correctness, data-preservation, and resource checks remain mandatory in the
   normal Phase 11 order.
+
+### 2026-09-13 — Generic AppKit event transport implementation
+
+- Advanced the adjacent generic event protocol from v14 to v15 without changing
+  the C ABI. Added application-scoped events for `willSleep`/`didWake`, global
+  screen-set change, and normal/warning/critical public memory pressure. All
+  records keep zero source identity, zero operation ID, and monotonic time; v14
+  and older sinks reject the new event types before posting.
+- The native observer uses `NSWorkspaceWillSleepNotification`,
+  `NSWorkspaceDidWakeNotification`,
+  `NSApplicationDidChangeScreenParametersNotification`, and a main-queue
+  `DISPATCH_SOURCE_TYPE_MEMORYPRESSURE` source. Consecutive identical power and
+  pressure values are deduplicated. Screen-set notifications remain distinct so
+  the consuming product, rather than the generic bridge, owns coalescing.
+- Observer replacement occurs before every event-port registration and teardown
+  occurs before the event poster is disabled at bridge shutdown. No fabricated
+  initial power, display, or pressure state is emitted. A test-only internal
+  hook injects public dispatch flags into the same pressure mapping method.
+- Dart exposes closed generic enums, strict v15 decoding, and typed application
+  streams. The decoder rejects pre-v15 types, malformed lengths/enums, nonzero
+  source identity, and nonzero operation IDs; it performs no product reaction.
+- Focused verification first found two test-harness compatibility gaps: the
+  encoder's former out-of-range protocol probe still treated newly valid v15 as
+  invalid, and typed test subscriptions did not consume deliberately injected
+  decoder errors. Both probes were updated without weakening production
+  validation. Native bridge, shared encoder, Dart analysis, and Dart API tests
+  then passed.
+- The adjacent exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate
+  passed after documentation and formatting. It covered the generic repository
+  audit, header contracts, warnings-as-errors bridge/Runner builds, runtime and
+  package analysis/tests, application builders/publishers, examples, and
+  current/legacy FFI smoke. No duration-only test was needed for this transport.
+- The first consuming-product exact gate then correctly failed analysis because
+  its two exhaustive `AppKitEvent` switches did not yet enumerate the three new
+  sealed event types. The legacy fixture and ordinary hierarchy now accept them
+  explicitly without applying recovery behavior; this is the minimum transport
+  compatibility change, while the next ordered subtask remains the sole owner
+  of product sleep/wake and display policy.
+- With those switches exhaustive, the next exact-gate run reached the generated
+  Phase 7 AppKit acceptance freshness check and stopped because both recorded
+  instances of the changed `terminal_application.dart` source hash were stale.
+  This is expected provenance invalidation rather than a behavior failure;
+  regeneration changed only those two reviewed hashes and did not change any
+  criterion, fixture, or assertion.
+- The repeated consuming exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passed: all native
+  capability suites, generated evidence checks, 319-file format check, analyzer,
+  aggregate Dart tests, security stress, compatibility/differential/application
+  matrices, distribution checks, and current dependency builds completed with
+  exit 0. The adjacent implementation is committed at `bbc834b` with message
+  `Expose generic macOS system state events`; its worktree is clean.
+- This subtask is complete with transport only. The next ROADMAP item owns
+  product sleep/wake and display recovery; memory-pressure shedding remains the
+  following independent item.

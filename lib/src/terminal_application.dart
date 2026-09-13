@@ -1914,6 +1914,12 @@ final class TerminalApplication {
               // Product projection is installed only by the ordinary
               // hierarchy; isolated legacy fixtures safely ignore the value.
               break;
+            case ApplicationPowerStateChangedEvent() ||
+                ApplicationScreenSetChangedEvent() ||
+                ApplicationMemoryPressureChangedEvent():
+              // The isolated legacy fixture does not install product recovery
+              // policy and safely ignores generic system-state observations.
+              break;
             case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
               if (!hasVisibleWindows &&
                   !createdWindow.isClosed &&
@@ -5356,6 +5362,12 @@ final class TerminalApplication {
             break;
           case ApplicationAccessibilityDisplayPreferencesChangedEvent():
             // The dedicated accessibility projection owns application policy.
+            break;
+          case ApplicationPowerStateChangedEvent() ||
+              ApplicationScreenSetChangedEvent() ||
+              ApplicationMemoryPressureChangedEvent():
+            // Generic transport is accepted here; the next ordered reliability
+            // subtask installs the product recovery projection.
             break;
           case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
             if (hasVisibleWindows || state.isDisposed) break;
