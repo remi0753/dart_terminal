@@ -1345,7 +1345,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase11/product-performance-regression-gate.md`](docs/phase11/product-performance-regression-gate.md)
   を参照して順に実施する）
   - [x] contract、計測inventory、baseline／comparator policy
-  - [ ] Release AOT product parser／damage／input microbenchmark
+  - [x] Release AOT product parser／damage／input microbenchmark
   - [ ] 通常製品startup／visible input／frame／100 MiB fairness受け入れ
   - [ ] memory／idle-power proxy／pinned relative comparison
   - [ ] aggregate gate、文書／matrix更新、親項目完了判定

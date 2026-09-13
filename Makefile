@@ -122,6 +122,8 @@ override TERMINAL_DISTRIBUTION_POLICY_TOOL := \
 override PRODUCT_PARSER_BENCHMARK_DIR := $(PROJECT_ROOT)/build/benchmarks
 override PRODUCT_PARSER_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_parser_benchmark
 override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_damage_benchmark
+override PRODUCT_PERFORMANCE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_performance_benchmark
+override PRODUCT_PERFORMANCE_BASELINE := $(PROJECT_ROOT)/benchmark/baselines/product-micro-macos-arm64-m1.json
 
 .PHONY: help dependencies test dpty-contract-check dpty-child-audit \
 	dpty-native-test dpty-dart-test \
@@ -146,6 +148,7 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	phase7-appkit-acceptance phase7-appkit-acceptance-check \
 	terminal-compatibility-regressions-check terminal-compatibility-regression-coverage terminal-compatibility-regression-coverage-check \
 	product-damage-benchmark-build product-damage-benchmark \
+	product-performance-benchmark-build product-performance-benchmark \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
 	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-actions developer-jit-applescript developer-jit-system-automation developer-jit-native-content developer-jit-quick-terminal developer-jit-secure-keyboard-entry developer-jit-diagnostics developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
@@ -186,6 +189,7 @@ help:
 	@echo "  make phase9-security-stress       Stress modern authority and resource bounds"
 	@echo "  make product-parser-benchmark     Run the Release AOT 100 MiB/s parser gate"
 	@echo "  make product-damage-benchmark     Run the Release AOT 100,000-cell damage gate"
+	@echo "  make product-performance-benchmark  Run product microbenchmarks against the M1 baseline"
 	@echo "  make compatibility-inventory      Regenerate sequence inventory and summary"
 	@echo "  make compatibility-inventory-check  Validate the terminal sequence/mode inventory"
 	@echo "  make compatibility-manifest       Regenerate the implemented sequence manifest"
@@ -613,6 +617,14 @@ product-damage-benchmark-build: dependencies
 
 product-damage-benchmark: product-damage-benchmark-build
 	@$(PRODUCT_DAMAGE_BENCHMARK)
+
+product-performance-benchmark-build: dependencies
+	@mkdir -p $(PRODUCT_PARSER_BENCHMARK_DIR)
+	@cd $(PROJECT_ROOT) && $(DART) compile exe tool/product_performance_benchmark.dart \
+		-o $(PRODUCT_PERFORMANCE_BENCHMARK)
+
+product-performance-benchmark: product-performance-benchmark-build
+	@$(PRODUCT_PERFORMANCE_BENCHMARK) --baseline=$(PRODUCT_PERFORMANCE_BASELINE)
 
 runtime-source-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/dart_only_source_audit.dart

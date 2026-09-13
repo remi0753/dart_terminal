@@ -158,3 +158,50 @@ children and this parent are complete.
   accepted-product baseline. Product implementation and absolute measurements
   can proceed, but the relative-comparison child cannot complete without exact
   compatible comparator evidence.
+
+### 2026-09-13 — Release AOT product microbenchmarks
+
+- Added `tool/product_performance_benchmark.dart` as the version-1
+  `product-micro` result authority. It calls the real `VtParser`, the existing
+  100,000-cell `TerminalDamageCodec` capture/copy/isolate-decode path, and
+  `TerminalKeyEventRouter` through `TerminalPane.sendInput` into a bounded
+  write-admission fixture. The earlier standalone damage command now delegates
+  to a reusable result object without changing its machine-line contract.
+- Result JSON contains fixed environment/workload provenance, distributions,
+  gates, and content-free integrity counts only. It retains no raw samples,
+  terminal bytes/text, command, path, PID, timestamp, serial number, or hardware
+  UUID. Baselines are capped at 64 KiB and reject extra schema keys, invalid
+  numbers/tolerances, missing/extra metrics, or exact environment/provenance
+  incompatibility.
+- Six clean Release AOT runs on `MacBookPro17,1`, macOS arm64, 16 GiB, Dart
+  3.13.2 all passed the hard gates. Across runs, parser minimum was
+  108.94–110.44 MiB/s; damage capture p95 was 454–467 us; transfer/decode/ACK
+  p95 was 1,337–1,369 us; end-to-end p95 was 1,768–1,840 us; and key-to-write
+  p95 was 375–417 ns. The checked reference uses representative run-level
+  medians with explicit noise margins: parser p50 110.28 MiB/s (-8%); capture
+  p95 456 us (+25% + 100 us); transfer p95 1,351 us (+20% + 100 us);
+  end-to-end p95 1,815 us (+20% + 200 us); and input p95 375 ns (+50% +
+  250 ns). These relative gates do not replace the fixed hard budgets.
+- The first sandboxed executable attempt failed before result emission because
+  macOS denied read-only `sysctl` access. Re-running outside that sandbox
+  supplied only hardware model and physical-memory class and passed. This is an
+  execution-environment restriction, not a product benchmark failure.
+- The checked-baseline Make run passed with parser p50 109.79 MiB/s, damage
+  capture/transfer/end-to-end p95 467/1,354/1,809 us, and input p95 375 ns.
+  Integrity remained exact: 134,264,777 parsed bytes per sample, 1,704,904
+  damage bytes per iteration, 100,000 accepted key events/writes, 119-byte peak
+  in the 65,536-byte bounded queue, and zero rejection.
+- Final validation passed:
+  - `dart format --output=none --set-exit-if-changed bin lib test tool`
+  - `dart analyze` with no issues
+  - `dart run test/product_performance_benchmark_test.dart`, covering exact
+    result encoding, accepted and impossible baselines, unknown/oversized input,
+    invalid tolerance, environment/metric mismatch, and short real workloads
+  - `make product-parser-benchmark product-damage-benchmark`, preserving both
+    standalone Release AOT gates
+  - `make product-performance-benchmark`; the final accepted run observed
+    parser p50 109.97 MiB/s, damage capture/transfer/end-to-end p95
+    507/1,358/1,849 us, and input p95 375 ns
+  - exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`
+  - `git diff --check`; adjacent `dart_appkit` remained clean and its tracked
+    Dart/native source and filenames contain no case-insensitive `terminal`

@@ -1,0 +1,58 @@
+{
+  "format": "dart-terminal-product-benchmark-baseline",
+  "version": 1,
+  "id": "product-micro-macos-arm64-m1",
+  "environment": {
+    "os": "macos",
+    "abi": "macos_arm64",
+    "dart_sdk": "3.13.2",
+    "build_mode": "release-aot",
+    "hardware_model": "MacBookPro17,1",
+    "memory_bytes": 17179869184
+  },
+  "provenance": {
+    "workload": "phase11-product-micro-v1",
+    "parser_workload": "phase0-mixed-v1-product-vt-parser",
+    "parser_target_bytes": 134217728,
+    "parser_seed_bytes": 65591,
+    "damage_packet_version": 2,
+    "damage_rows": 200,
+    "damage_columns": 500,
+    "damage_iterations": 64,
+    "input_route": "terminal-key-router-pane-write-v1",
+    "input_iterations": 100000,
+    "measurement_policy_version": 1
+  },
+  "metrics": {
+    "parser.product_mixed.throughput": {
+      "stat": "p50",
+      "reference": 110.28,
+      "relative_tolerance": 0.08,
+      "absolute_slack": 0
+    },
+    "render.damage.capture_copy_latency": {
+      "stat": "p95",
+      "reference": 456,
+      "relative_tolerance": 0.25,
+      "absolute_slack": 100
+    },
+    "render.damage.transfer_decode_ack_latency": {
+      "stat": "p95",
+      "reference": 1351,
+      "relative_tolerance": 0.2,
+      "absolute_slack": 100
+    },
+    "render.damage.end_to_end_latency": {
+      "stat": "p95",
+      "reference": 1815,
+      "relative_tolerance": 0.2,
+      "absolute_slack": 200
+    },
+    "input.key_to_pane_write_latency": {
+      "stat": "p95",
+      "reference": 375,
+      "relative_tolerance": 0.5,
+      "absolute_slack": 250
+    }
+  }
+}

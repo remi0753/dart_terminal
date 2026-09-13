@@ -14,6 +14,49 @@ const int _maximumP95Micros = 4000;
 const int _expectedPacketBytes = 1704904;
 const bool _releaseAot = bool.fromEnvironment('dart.vm.product');
 
+final class ProductDamageBenchmarkResult {
+  const ProductDamageBenchmarkResult({
+    required this.captureMicros,
+    required this.transferMicros,
+    required this.endToEndMicros,
+    required this.transferredBytes,
+    required this.transferElapsedMicros,
+    required this.timedIterations,
+    required this.maximumP95Micros,
+  });
+
+  final List<int> captureMicros;
+  final List<int> transferMicros;
+  final List<int> endToEndMicros;
+  final int transferredBytes;
+  final int transferElapsedMicros;
+  final int timedIterations;
+  final int maximumP95Micros;
+
+  int get captureP95 => _percentile95(captureMicros);
+  int get transferP95 => _percentile95(transferMicros);
+  int get endToEndP95 => _percentile95(endToEndMicros);
+  int get captureMax => _maximum(captureMicros);
+  int get transferMax => _maximum(transferMicros);
+  double get transferMiBPerSecond =>
+      transferredBytes * 1000000 / transferElapsedMicros / (1024 * 1024);
+  bool get passed =>
+      transferredBytes == _expectedPacketBytes * timedIterations &&
+      captureP95 < maximumP95Micros &&
+      transferP95 < maximumP95Micros;
+
+  String machineLine() =>
+      'PRODUCT_DAMAGE_BENCHMARK_${passed ? 'PASS' : 'FAIL'} '
+      'mode=release-aot rows=$_rows columns=$_columns cells=$_cells '
+      'packet_bytes=$_expectedPacketBytes iterations=$timedIterations '
+      'capture_ttd_p95_us=$captureP95 capture_ttd_max_us=$captureMax '
+      'transfer_decode_ack_p95_us=$transferP95 '
+      'transfer_decode_ack_max_us=$transferMax '
+      'end_to_end_p95_us=$endToEndP95 transfer_mib_s='
+      '${transferMiBPerSecond.toStringAsFixed(2)} '
+      'maximum_p95_us=$maximumP95Micros';
+}
+
 @pragma('vm:entry-point')
 void _damageReceiver(SendPort parent) {
   final ReceivePort incoming = ReceivePort('product-damage-benchmark-receiver');
@@ -40,9 +83,23 @@ void _damageReceiver(SendPort parent) {
   });
 }
 
-Future<void> main() async {
-  if (!_releaseAot) {
-    throw StateError('product damage benchmark must run as Release AOT');
+Future<ProductDamageBenchmarkResult> runProductDamageBenchmark({
+  int warmupIterations = _warmupIterations,
+  int timedIterations = _timedIterations,
+  int maximumP95Micros = _maximumP95Micros,
+}) async {
+  if (warmupIterations < 0 || warmupIterations > 1024) {
+    throw RangeError.range(warmupIterations, 0, 1024, 'warmupIterations');
+  }
+  if (timedIterations <= 0 || timedIterations > 4096) {
+    throw RangeError.range(timedIterations, 1, 4096, 'timedIterations');
+  }
+  if (maximumP95Micros <= 0) {
+    throw RangeError.value(
+      maximumP95Micros,
+      'maximumP95Micros',
+      'must be positive',
+    );
   }
   final ReceivePort replies = ReceivePort('product-damage-benchmark-root');
   final StreamIterator<Object?> iterator = StreamIterator<Object?>(replies);
@@ -65,7 +122,7 @@ Future<void> main() async {
 
   for (
     int iteration = 0;
-    iteration < _warmupIterations + _timedIterations;
+    iteration < warmupIterations + timedIterations;
     iteration++
   ) {
     if (!screen.fullSnapshotRequired) screen.requestFullSnapshot();
@@ -91,7 +148,7 @@ Future<void> main() async {
       throw StateError('invalid product damage benchmark ACK');
     }
     screen.acknowledgeFullSnapshot();
-    if (iteration >= _warmupIterations) {
+    if (iteration >= warmupIterations) {
       final int transferElapsed = clock.elapsedMicroseconds - captureElapsed;
       captureMicros.add(captureElapsed);
       transferMicros.add(transferElapsed);
@@ -108,29 +165,24 @@ Future<void> main() async {
   await iterator.cancel();
   replies.close();
 
-  final int captureP95 = _percentile95(captureMicros);
-  final int transferP95 = _percentile95(transferMicros);
-  final int endToEndP95 = _percentile95(endToEndMicros);
-  final int captureMax = _maximum(captureMicros);
-  final int transferMax = _maximum(transferMicros);
-  final double transferMiBPerSecond =
-      transferredBytes * 1000000 / transferElapsedMicros / (1024 * 1024);
-  final bool passed =
-      transferredBytes == _expectedPacketBytes * _timedIterations &&
-      captureP95 < _maximumP95Micros &&
-      transferP95 < _maximumP95Micros;
-  stdout.writeln(
-    'PRODUCT_DAMAGE_BENCHMARK_${passed ? 'PASS' : 'FAIL'} '
-    'mode=release-aot rows=$_rows columns=$_columns cells=$_cells '
-    'packet_bytes=$_expectedPacketBytes iterations=$_timedIterations '
-    'capture_ttd_p95_us=$captureP95 capture_ttd_max_us=$captureMax '
-    'transfer_decode_ack_p95_us=$transferP95 '
-    'transfer_decode_ack_max_us=$transferMax '
-    'end_to_end_p95_us=$endToEndP95 transfer_mib_s='
-    '${transferMiBPerSecond.toStringAsFixed(2)} '
-    'maximum_p95_us=$_maximumP95Micros',
+  return ProductDamageBenchmarkResult(
+    captureMicros: List<int>.unmodifiable(captureMicros),
+    transferMicros: List<int>.unmodifiable(transferMicros),
+    endToEndMicros: List<int>.unmodifiable(endToEndMicros),
+    transferredBytes: transferredBytes,
+    transferElapsedMicros: transferElapsedMicros,
+    timedIterations: timedIterations,
+    maximumP95Micros: maximumP95Micros,
   );
-  if (!passed) exitCode = 1;
+}
+
+Future<void> main() async {
+  if (!_releaseAot) {
+    throw StateError('product damage benchmark must run as Release AOT');
+  }
+  final ProductDamageBenchmarkResult result = await runProductDamageBenchmark();
+  stdout.writeln(result.machineLine());
+  if (!result.passed) exitCode = 1;
 }
 
 int _percentile95(List<int> values) {
