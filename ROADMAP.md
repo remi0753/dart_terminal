@@ -1435,6 +1435,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - bounded daily-use／soak代替gateを通る。実時間30日／72時間の追加証跡は
   主要ゴール後の低優先follow-upとして追跡する。
 
+### 完了機能の回帰修正
+
+- [x] command paletteの選択境界とviewport追従の回帰修正
+  （実施時に
+  [`docs/phase7/command-palette-selection-viewport-regression.md`](docs/phase7/command-palette-selection-viewport-regression.md)
+  を参照する）
+
 ### 主要ゴール後の低優先 follow-up
 
 - [ ] 公開・未改変 runtime の Intel-native no-rebuild runtime handoff と追加互換性証跡

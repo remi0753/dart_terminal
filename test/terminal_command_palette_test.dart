@@ -104,7 +104,13 @@ Future<void> _testEditingNavigationAndInvocation() async {
   await keys.handle(_key(keyCode: 125));
   _expect(
     state.selectedAction?.definition.id == TerminalActionId.paste,
-    'physical Down Arrow wraps selection independently from text',
+    'physical Down Arrow moves selection independently from text',
+  );
+  await keys.handle(_key(keyCode: 125));
+  await keys.handle(_key(keyCode: 125));
+  _expect(
+    state.selectedAction?.definition.id == TerminalActionId.paste,
+    'physical Down Arrow stops at the final result',
   );
   final TerminalCommandPaletteKeyResult unavailable = await keys.handle(
     _key(keyCode: 36, characters: '\r'),
@@ -117,6 +123,12 @@ Future<void> _testEditingNavigationAndInvocation() async {
     'Return preserves the palette after an unavailable action',
   );
   await keys.handle(_key(keyCode: 126));
+  await keys.handle(_key(keyCode: 126));
+  await keys.handle(_key(keyCode: 126));
+  _expect(
+    state.selectedAction?.definition.id == TerminalActionId.copy,
+    'physical Up Arrow stops at the first result',
+  );
   final TerminalCommandPaletteKeyResult executed = await keys.handle(
     _key(keyCode: 76, characters: '\r'),
   );

@@ -589,9 +589,10 @@ Future<void> _testPaletteState() async {
   palette.setQuery('');
   palette.moveSelection(-1);
   _expect(
-    palette.selectedAction?.definition.id == TerminalActionId.paste,
-    'negative navigation wraps to the last result',
+    palette.selectedAction?.definition.id == TerminalActionId.copy,
+    'negative navigation stops at the first result',
   );
+  palette.moveSelection(1);
   final TerminalActionDispatchResult unavailable = await palette
       .invokeSelected();
   _expect(
@@ -600,6 +601,11 @@ Future<void> _testPaletteState() async {
     'unavailable selection remains open without invocation',
   );
   palette.moveSelection(1);
+  _expect(
+    palette.selectedAction?.definition.id == TerminalActionId.paste,
+    'positive navigation stops at the last result',
+  );
+  palette.moveSelection(-1);
   final TerminalActionDispatchResult executed = await palette.invokeSelected();
   _expect(
     executed.disposition == TerminalActionDispatchDisposition.executed &&

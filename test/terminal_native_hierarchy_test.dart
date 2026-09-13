@@ -16,6 +16,7 @@ Future<void> main() => runTerminalNativeHierarchyTests();
 Future<void> runTerminalNativeHierarchyTests() async {
   await _testApplicationThemeProjectionLifecycle();
   await _testOsc52ConfirmationPresenterLifecycle();
+  await _testCommandPaletteSelectionViewportFollow();
   await _testSettingsInspectorPresenterLifecycle();
   await _testDiagnosticsPresenterLifecycle();
   await _testIncidentPresenterLifecycle();
@@ -33,6 +34,77 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testCommandPaletteSelectionViewportFollow() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final View terminalView = View(configuration: terminalBaseViewConfiguration);
+  final Window terminalWindow = Window(
+    frame: const Rect.fromLTWH(100, 90, 640, 480),
+    title: 'Terminal',
+    configuration: terminalWindowConfiguration,
+  )..contentView = terminalView;
+  terminalWindow
+    ..show()
+    ..makeFirstResponder(terminalView);
+  final TerminalCommandPalettePresenter palette =
+      TerminalCommandPalettePresenter(
+        dispatcher: TerminalActionDispatcher(
+          catalog: TerminalActionCatalog.standard(),
+        ),
+        terminalWindow: terminalWindow,
+        terminalView: terminalView,
+      );
+  try {
+    await palette.open();
+    final int paletteViewHandle = bindings.textEditorConfigurations.keys.single;
+    final int initialRevealCount =
+        bindings.textEditorSelectionRevealCounts[paletteViewHandle]!;
+    final int finalIndex = palette.state.results.length - 1;
+    palette.state.moveSelection(palette.state.results.length + 4);
+    palette.refresh();
+    final String rendered = palette.renderedText!;
+    final String selectedLine =
+        '${TerminalLocalization.english.directionalSelectionMarker} '
+        '${palette.state.selectedAction!.definition.title}';
+    _expect(
+      !bindings
+              .textEditorConfigurations[paletteViewHandle]!
+              .initiallyEditable &&
+          bindings.textEditorSelectionStarts[paletteViewHandle] ==
+              rendered.indexOf(selectedLine) &&
+          bindings.textEditorSelectionLengths[paletteViewHandle] == 0 &&
+          bindings.textEditorSelectionRevealCounts[paletteViewHandle] ==
+              initialRevealCount + 1 &&
+          palette.state.selectedIndex == finalIndex,
+      'palette editor did not keep the clamped final command selected and visible',
+    );
+
+    final int finalRevealCount =
+        bindings.textEditorSelectionRevealCounts[paletteViewHandle]!;
+    palette.state.moveSelection(1);
+    palette.refresh();
+    _expect(
+      palette.state.selectedIndex == finalIndex &&
+          bindings.textEditorSelectionRevealCounts[paletteViewHandle] ==
+              finalRevealCount + 1,
+      'command palette did not remain at the final result',
+    );
+  } finally {
+    await palette.dispose();
+    if (!terminalWindow.isClosed) terminalWindow.close();
+    terminalWindow.dispose();
+    terminalView.dispose();
+    await application.terminate();
+    await rawEvents.close();
+  }
+  _expect(bindings.objects.isEmpty, 'command palette viewport owners leaked');
 }
 
 Future<void> _testDisplayRecoveryMigratesOneLogicalTabGroup() async {

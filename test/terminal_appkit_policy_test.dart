@@ -31,6 +31,11 @@ void runTerminalAppKitPolicyTests() {
         terminalBaseViewConfiguration == const ViewConfiguration() &&
         terminalCommandPaletteTextViewConfiguration ==
             const TextViewConfiguration() &&
+        terminalCommandPaletteEditorConfiguration ==
+            const TextEditorConfiguration(
+              font: TextViewFont.monospacedSystem(size: 18),
+              padding: TextViewPadding.all(20),
+            ) &&
         terminalSettingsInspectorTextViewConfiguration.view ==
             terminalBaseViewConfiguration &&
         terminalSettingsInspectorTextViewConfiguration.font.size ==

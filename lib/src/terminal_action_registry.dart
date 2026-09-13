@@ -839,7 +839,7 @@ final class TerminalCommandPaletteState {
       _selectedIndex = 0;
       return;
     }
-    _selectedIndex = (_selectedIndex + delta) % _results.length;
+    _selectedIndex = (_selectedIndex + delta).clamp(0, _results.length - 1);
   }
 
   void refresh() {

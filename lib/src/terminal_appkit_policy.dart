@@ -41,6 +41,19 @@ const TextViewConfiguration terminalCommandPaletteTextViewConfiguration =
       backgroundColor: TextViewColor.windowBackground(),
     );
 
+/// Scrollable read-only presentation used by the command palette.
+const TextEditorConfiguration terminalCommandPaletteEditorConfiguration =
+    TextEditorConfiguration(
+      view: terminalBaseViewConfiguration,
+      font: TextViewFont.monospacedSystem(
+        size: 18,
+        weight: TextViewFontWeight.regular,
+      ),
+      padding: TextViewPadding.all(20),
+      foregroundColor: TextViewColor.label(),
+      backgroundColor: TextViewColor.windowBackground(),
+    );
+
 /// Read-only presentation for the privacy-bounded terminal inspector.
 const TextViewConfiguration terminalDiagnosticsTextViewConfiguration =
     TextViewConfiguration(

@@ -152,7 +152,7 @@ final class TerminalCommandPalettePresenter {
 
   late final TerminalCommandPaletteKeyController _keys;
   Window? _window;
-  TextView? _view;
+  TextEditor? _view;
   StreamSubscription<WindowEvent>? _subscription;
   Future<void>? _closingFuture;
   TerminalActionDispatchResult? _lastDispatchResult;
@@ -163,7 +163,7 @@ final class TerminalCommandPalettePresenter {
   bool get isOpen => state.isOpen && _window != null;
   bool get isDisposed => _isDisposed;
   Window? get activeWindow => _window;
-  String? get renderedText => _view?.text;
+  String? get renderedText => _view?.snapshot.text;
   TerminalActionDispatchResult? get lastDispatchResult => _lastDispatchResult;
   int get dispatchCount => _dispatchCount;
   int get terminalResponderRestoreCount => _terminalResponderRestoreCount;
@@ -189,8 +189,8 @@ final class TerminalCommandPalettePresenter {
       existing.show();
       return;
     }
-    final TextView view = TextView(
-      configuration: terminalCommandPaletteTextViewConfiguration,
+    final TextEditor view = TextEditor(
+      configuration: terminalCommandPaletteEditorConfiguration,
     );
     Window? window;
     StreamSubscription<WindowEvent>? subscription;
@@ -335,7 +335,7 @@ final class TerminalCommandPalettePresenter {
   }
 
   void _render() {
-    final TextView? view = _view;
+    final TextEditor? view = _view;
     if (view == null || view.isDisposed || !state.isOpen) {
       return;
     }
@@ -343,11 +343,15 @@ final class TerminalCommandPalettePresenter {
       ..writeln(_localization.commandPaletteTitle)
       ..writeln('> ${state.query}')
       ..writeln();
+    var selectionOffset = 0;
     if (state.results.isEmpty) {
       output.writeln('  ${_localization.commandPaletteNoMatches}');
     } else {
       for (var index = 0; index < state.results.length; index++) {
         final TerminalActionSnapshot snapshot = state.results[index];
+        if (index == state.selectedIndex) {
+          selectionOffset = output.length;
+        }
         output
           ..write(
             index == state.selectedIndex
@@ -364,7 +368,14 @@ final class TerminalCommandPalettePresenter {
     output
       ..writeln()
       ..write(_localization.commandPaletteInstructions);
-    view.text = output.toString();
+    view
+      ..setDocument(
+        TextEditorDocument(
+          text: output.toString(),
+          selection: TextEditorSelection(start: selectionOffset),
+        ),
+      )
+      ..scrollSelectionToVisible();
   }
 
   Future<void> _close({
@@ -383,7 +394,7 @@ final class TerminalCommandPalettePresenter {
         _subscription = null;
         await subscription?.cancel();
         final Window? window = _window;
-        final TextView? view = _view;
+        final TextEditor? view = _view;
         _window = null;
         _view = null;
         if (window != null && !window.isDisposed) {
