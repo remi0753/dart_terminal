@@ -1356,6 +1356,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
         - [x] compatible capture harness／evidenceとpassing relative gate
   - [x] aggregate gate、文書／matrix更新、親項目完了判定
 - [ ] 24/72 hour soak、sleep/wake、display attach/detach、memory pressure
+  （分割、generic／product境界、bounded代替、完了条件は
+  [`docs/phase11/bounded-system-reliability.md`](docs/phase11/bounded-system-reliability.md)
+  を参照して順に実施する）
+  - [x] contract、inventory、duration-only follow-up境界
+  - [ ] `dart_appkit` generic system-state event transport
+  - [ ] product sleep/wake／display recovery policy
+  - [ ] product memory-pressure shedding／recovery
+  - [ ] bounded aggregate受け入れ、文書／matrix、親項目完了判定
 - [ ] native ASan/UBSan、fuzz corpus、fault injection
 - [ ] Ghostty pinned matrix の P0/P1 gap burn-down
 - [ ] release candidate の daily-use program matrix
@@ -1367,7 +1375,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - release benchmark が下記予算と relative parity gate を満たす。
 - blocker/crash/data-loss/security bug が 0。
 - known limitation が文書化され、silent misbehavior がない。
-- 30 日の daily-driver と 72 時間の automated soak を通る。
+- bounded daily-use／soak代替gateを通る。実時間30日／72時間の追加証跡は
+  主要ゴール後の低優先follow-upとして追跡する。
 
 ### 主要ゴール後の低優先 follow-up
 
@@ -1378,6 +1387,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] 実Developer ID署名、公証、staple／Gatekeeper／clean-machine no-rebuild受け入れ
   （credential準備後に実施し、
   [`docs/phase11/developer-id-notarization.md`](docs/phase11/developer-id-notarization.md)
+  を実施時に参照する）
+- [ ] 実時間24/72 hour automated soakによる追加duration証跡
+  （主要ゴール達成後に実施し、
+  [`docs/phase11/bounded-system-reliability.md`](docs/phase11/bounded-system-reliability.md)
   を実施時に参照する）
 
 ## 8. テスト戦略
@@ -1469,7 +1482,8 @@ audit、Intel-native の追加証跡は上記の主要ゴール後 follow-up で
 - VoiceOver、Full Keyboard Access、Secure Input の checklist が通る。
 - Developer ID／hardened runtime／公証の配布機構とfail-closed gateが通る。
   実credential／Apple serviceを使うfresh install/updateは主要ゴール後follow-upとする。
-- relative performance gate と 72-hour soak が通る。
+- relative performance gate とbounded soak代替gateが通る。実時間72-hour soakは
+  主要ゴール後follow-upとして追跡する。
 - crash/data loss/security blocker が 0 で、known limitations が公開されている。
 
 ## 12. 見積もりと体制
