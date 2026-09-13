@@ -5,8 +5,77 @@
 - Phase: 11
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
-- State: in progress
-- Current subtask: semantic pointer closure complete; aggregate gate pending
+- State: complete
+- Current subtask: aggregate closure complete
+
+## Active ordered subtask 4 — aggregate closure
+
+- **Purpose:** Make the zero-actionable pinned P0/P1 result a single named,
+  reproducible release gate, then close the Ghostty burn-down parent only when
+  its ordinary and native-product evidence still agrees.
+- **Background:** Commit `e26ef4b` completed the final P1 child. The mandatory
+  clean-tree roadmap reread identifies aggregate closure as the first unchecked
+  item. The version-1 inventory now classifies all 102 in-scope rows, reports
+  97 directly accepted rows, two documented differences, three approved
+  external follow-ups, zero actionable P0/P1, and zero silent misbehavior.
+  `make test` already checks inventory freshness, but there is not yet one
+  public target that also reruns the relevant two-mode real AppKit/PTY/Metal
+  acceptance.
+- **Scope:** Add one Make target that sequentially runs the exact ordinary
+  repository gate and both terminal-display runtime modes, then emits one fixed
+  content-free closure marker. Document that target and the precise accepted,
+  documented, deferred, and prohibited outcomes; update matrix wording only if
+  an existing row lacks that executable aggregate relationship; run the target,
+  review the boundary, and decide the roadmap parent.
+- **Out of scope:** Any new terminal behavior, changing the pinned Ghostty
+  revision, recapturing external comparators, live network activity, generic
+  `dart_appkit` changes, Apple notarization, Intel-host execution, and physical
+  or duration-only soak.
+- **Dependencies:** `make test` is the ordinary freshness/format/analyze/native/
+  Dart authority and already validates every hashed inventory input. The
+  existing `runtime-terminal-display-integration` target builds and launches
+  Developer JIT and Release AOT sequentially and observes the P1 render/font/
+  semantic-pointer product paths. The version-1 inventory remains the sole row
+  classification authority.
+- **Completion conditions:** The named target fails if either recursive gate
+  fails, and emits a fixed summary only after both succeed; README explains its
+  exact coverage and exclusions; matrix and generated evidence remain fresh;
+  the exact target passes; final diff and adjacent generic-library audits are
+  clean; no blocker/crash/data-loss/security/silent gap remains; and only then
+  are the aggregate child and Ghostty parent checked.
+- **Verification approach:** Add the target/help/phony contract without a new
+  duplicate implementation, run it exactly with CI/analytics controls and
+  arm64 runtime selection, retain its terminal marker and both runtime markers,
+  rerun `git diff --check`, audit the adjacent repository's status and tracked
+  paths/content, update this memo, and commit only aggregate closure. The target
+  deliberately reuses recursive Make sequentially because build outputs and
+  native GUI resources are shared.
+- 2026-09-14: The existing `test` target already composes every inventory input
+  freshness checker, native package suite, full Dart suite, formatting, and
+  analysis, while `runtime-terminal-display-integration` already owns the two
+  shipped runtime builds and their real GUI/PTY/Metal assertions. The aggregate
+  therefore adds no duplicate Dart gate implementation: the named Make target
+  runs those two authorities sequentially and emits
+  `GHOSTTY_P0_P1_GAP_CLOSURE_PASS ordinary=true runtime_modes=2` only after
+  both return success. README and `QA-02` state the exact row classifications
+  and keep documented/external outcomes distinct from passing product behavior.
+- 2026-09-14: The exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64
+  ghostty-p0-p1-gap-closure` invocation passed. Its ordinary child reported 102
+  rows / 97 accepted / zero actionable P0 / zero actionable P1 / zero silent
+  misbehavior, formatted 336 files with zero changes, found no analysis issue,
+  and ended with `dart_terminal tests passed`. The real product display child
+  passed Developer JIT in 12,008 ms and Release AOT in 10,774 ms at matching
+  Retina scale 131072 (16.16), then emitted the expected aggregate closure
+  marker with two runtime modes.
+- 2026-09-14: Final diff validation is clean and contains only the Make target,
+  public/matrix wording, regenerated compatibility hashes, and this task memo.
+  No runtime artifact is tracked. The adjacent `dart_appkit` worktree is clean,
+  with zero case-insensitive `terminal` match in tracked paths and tracked
+  Dart/native/script/manifest/Makefile content. Every aggregate completion
+  condition is satisfied, so both the aggregate child and Ghostty burn-down
+  parent can be completed. The next ordered Phase 11 item is the release
+  candidate daily-use program matrix.
 
 ## Current P1 child — Option-click cursor and semantic selection
 

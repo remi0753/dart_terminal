@@ -4,7 +4,7 @@
   "status": "closed-no-actionable-p0-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "63d03247cf0ca008d074401c170a54a26bfbd7d098c745cbe1dd3affd99c2eaf",
+    "sha256": "5346462024b72daafd1d6453411b66d25e2aefb4eb6d9b93a93fdcb27401394b",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "1d6efdc6f8a62c6c644b7210eb34a44aef7f8bdcd9e8f567404c7492e38a8f28"
+      "sha256": "d08c74495ff73b87f81cd392f486200ca55efaafee2c8e85c18ebc8ad8364887"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -1227,10 +1227,10 @@
     {
       "id": "QA-02",
       "priority": "P1",
-      "phase": "6/9",
+      "phase": "6/9/11",
       "acceptance_sha256": "7a94827fd0f75074555eb456e293b15dca0d8ee303baacd2750ad4b4eed3ad29",
       "pinned_evidence_sha256": "509044576ef06e4422ceca387ba2472b2949d1acaafd863531dd48d2d9f0b2bd",
-      "current_sha256": "cc4e5b4659068303b3573cfddf8f3bb329575572170474e23b321b65f1893b63",
+      "current_sha256": "cc6d812ff0ee3736f62f6ddd40324c0d76ca8e15a4136a7bc1747c939aaafcbb",
       "classification": "accepted-documented-difference",
       "gap_ids": [
         "ghostty-differential-activation",

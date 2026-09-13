@@ -144,7 +144,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check \
 	terminal-terminfo terminal-terminfo-check \
 	terminal-shell-integration terminal-shell-integration-check \
-	ghostty-p0-p1-gap-inventory ghostty-p0-p1-gap-inventory-check \
+	ghostty-p0-p1-gap-inventory ghostty-p0-p1-gap-inventory-check ghostty-p0-p1-gap-closure \
 	product-parser-corpus product-parser-properties phase9-protocol-properties phase9-security-stress \
 	product-native-sanitizer product-fault-injection product-sanitizer-fuzz-fault-gate \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
@@ -221,6 +221,7 @@ help:
 	@echo "  make terminal-shell-integration-check  Reject stale shell integration resources"
 	@echo "  make ghostty-p0-p1-gap-inventory  Regenerate the pinned P0/P1 gap inventory"
 	@echo "  make ghostty-p0-p1-gap-inventory-check  Reject stale pinned P0/P1 gap evidence"
+	@echo "  make ghostty-p0-p1-gap-closure  Run ordinary and two-mode product parity closure"
 	@echo "  make vt-parser-table              Regenerate the Dart VT transition table"
 	@echo "  make vt-parser-table-check        Reject a stale generated parser table"
 	@echo "  make terminal-parser-trace        Regenerate the bounded parser trace"
@@ -601,6 +602,11 @@ ghostty-p0-p1-gap-inventory: dependencies
 
 ghostty-p0-p1-gap-inventory-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/ghostty_p0_p1_gap_inventory.dart --check
+
+ghostty-p0-p1-gap-closure:
+	@$(MAKE) test
+	@$(MAKE) RUNTIME_ARCH=$(RUNTIME_ARCH) runtime-terminal-display-integration
+	@echo "GHOSTTY_P0_P1_GAP_CLOSURE_PASS ordinary=true runtime_modes=2"
 
 terminal-localization-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_localization_audit.dart

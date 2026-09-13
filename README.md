@@ -781,6 +781,7 @@ make phase9-security-stress
 make product-sanitizer-fuzz-fault-gate
 make product-parser-benchmark
 make product-performance-regression-gate
+make RUNTIME_ARCH=arm64 ghostty-p0-p1-gap-closure
 make runtime-source-check
 make terminal-localization-check
 make test
@@ -811,6 +812,14 @@ key→PTY、通常windowのstartup/input/visible frame、短時間RSS/CPU、100 
 fairnessを再計測し、固定M1 baselineとpinned Ghostty証跡へ同一実行内で照合します。
 入力結果のSHA-256だけをaggregate証跡へ束縛し、terminal内容、command、path、PID、
 timestamp、raw sampleは保持しません。比較対象の再captureは別の明示的なレビュー工程です。
+
+`make RUNTIME_ARCH=arm64 ghostty-p0-p1-gap-closure` は、102件のpinned P0/P1 matrix
+rowと全checked-in evidenceのfreshness、通常のnative/Dart/format/analyze gateを確認した後、
+同じ実AppKit／zsh PTY／Metal display受け入れをDeveloper JITとRelease AOTで直列実行します。
+現在は97件が直接accepted、2件が非破壊のdocumented difference、3件が明示承認済みの
+external follow-upで、actionable P0/P1とsilent misbehaviorは0です。後者5件を製品動作の
+成功と読み替えず、実Developer ID／Apple公証、Intel-host、物理・実時間soakはこのgateの
+対象外です。
 
 `make RUNTIME_ARCH=arm64 runtime-bounded-reliability-integration` は通常製品の同一
 window/pane/session/Metal surfaceで、sleep、重複screen-set通知、交互のwarning/critical

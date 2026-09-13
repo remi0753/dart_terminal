@@ -1373,7 +1373,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] deterministic Dart fuzz corpus／property expansion
   - [x] bounded native／Dart fault injection／recovery
   - [x] aggregate gate、文書／matrix更新、親項目完了判定
-- [ ] Ghostty pinned matrix の P0/P1 gap burn-down
+- [x] Ghostty pinned matrix の P0/P1 gap burn-down
   （分割、pinned evidence／gap分類／完了条件は
   [`docs/phase11/ghostty-p0-p1-gap-burn-down.md`](docs/phase11/ghostty-p0-p1-gap-burn-down.md)
   を参照して順に実施する）
@@ -1416,7 +1416,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
       - [x] bounded semantic click／cursor-movement core
       - [x] native Option-click／semantic selection gesture integration
       - [x] dual-runtime evidence、文書／matrix更新、親項目完了判定
-  - [ ] aggregate gate、文書／matrix更新、親項目完了判定
+  - [x] aggregate gate、文書／matrix更新、親項目完了判定
 - [ ] release candidate の daily-use program matrix
 
 終了条件:
