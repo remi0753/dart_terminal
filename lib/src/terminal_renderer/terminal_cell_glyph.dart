@@ -185,6 +185,15 @@ final class TerminalCellGlyphRaster {
 
 /// Deterministic raster entry points for product-owned cell glyph families.
 abstract final class TerminalCellGlyphRasterizer {
+  static TerminalCellGlyphRaster rasterize(
+    TerminalCellGlyphRasterRequest request,
+  ) => switch (request.spec.family) {
+    TerminalCellGlyphFamily.boxDrawing => rasterizeBoxDrawing(request),
+    TerminalCellGlyphFamily.blockElement => rasterizeBlockElement(request),
+    TerminalCellGlyphFamily.braille => rasterizeBraille(request),
+    TerminalCellGlyphFamily.powerline => rasterizePowerline(request),
+  };
+
   static TerminalCellGlyphRaster rasterizePowerline(
     TerminalCellGlyphRasterRequest request,
   ) {

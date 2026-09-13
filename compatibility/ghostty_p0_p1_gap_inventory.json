@@ -100,11 +100,11 @@
     },
     {
       "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
-      "sha256": "c47a4ab3ead3b39445d378f3f46a9483bc3e75bf6a097698e2a93a00354643a5"
+      "sha256": "70833e97c5fbd98619d4cd756919d2e9a03060bf82d25611435cd65b3ecd06d7"
     },
     {
       "path": "test/terminal_screen_metal_compositor_test.dart",
-      "sha256": "7f910099391e5966d790413cf729809d74a7d07a40aac40a716edd6853a9f187"
+      "sha256": "31bce0149a483891bd69b9dc0de3baa2b49c69f78d5d6cce31f46cb0a5f939cd"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/lib/src/font_configuration.dart",

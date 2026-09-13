@@ -1397,7 +1397,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
       - [x] box-drawing deterministic raster geometry
       - [x] block-element／braille deterministic raster geometry
       - [x] accepted geometric Powerline deterministic raster geometry
-      - [ ] glyph atlas／screen compositor integration
+      - [x] glyph atlas／screen compositor integration
       - [ ] 1x／2x／real-Metal runtime evidence、文書／matrix更新、親項目完了判定
     - [ ] image／search／inspector overlay、P3→sRGB conversion
     - [ ] Option-click cursor／semantic prompt-output selection

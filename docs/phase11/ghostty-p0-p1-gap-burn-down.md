@@ -6,8 +6,8 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 synthetic cell glyphs — accepted geometric Powerline
-  deterministic raster geometry
+- Current subtask: P1 synthetic cell glyphs — glyph atlas and screen compositor
+  integration
 
 ## Purpose
 
@@ -790,6 +790,105 @@ preceding subtask is verified and committed.
   source/content audit outside docs/build/cache/git and the filename audit both
   found zero case-insensitive `terminal` matches. No generic-library file
   changed.
+
+#### Current integration subtask — glyph atlas and screen compositor
+
+- **Purpose:** Route each supported, plain single-cell scalar through its
+  completed product-owned alpha raster and the ordinary Metal atlas/frame path,
+  bypassing CoreText only for the exact 434-scalar allow-list.
+- **Background:** All four pure-raster families are committed, but the screen
+  compositor still shapes every printable cell with CoreText. The existing
+  atlas has native font keys and a separate negative Kitty image identity; it
+  needs a typed, collision-free cell-raster namespace before compositor use.
+- **Scope:** Add a domain/scale/dimension/thickness-aware cell-atlas key and
+  index; share alpha page allocation, dirty upload, eviction, reset, build lease,
+  reference, and Metal bridge behavior; split compatible text runs at supported
+  scalar cells; rasterize/ingest unique misses; position masks at exact rounded
+  cell rectangles; expose a composition count; verify fallback, styles/colors,
+  clipping/insets, reset/eviction/pins, and native/reference parity.
+- **Out of scope:** New raster geometry, multi-scalar grapheme replacement,
+  preedit rewriting, source-controlled 1x/2x corpus artifacts, runtime JIT/AOT
+  acceptance, README/matrix/gap closure, image/search/inspector overlays,
+  terminal layout changes, and all `dart_appkit` changes.
+- **Dependencies:** Commits `92b2632`, `a426749`, `a4bd787`, and `51c41ea`;
+  `TerminalGlyphAtlas` alpha page ownership and Metal bridge; canonical
+  per-column/per-row rounding; style/color and cursor/selection layering;
+  compatible-run cluster boundaries; current compositor and atlas tests.
+- **Completion conditions:** The exact supported scalar in a plain narrow cell
+  becomes one cell-owned alpha glyph at exact device cell bounds and is absent
+  from CoreText shaping; adjacent unsupported PUA and multi-scalar graphemes
+  remain font-shaped; unique keys cannot collide with native or Kitty entries;
+  multiple rounded widths/heights, scale/reset, eviction, pins, clipping/inset,
+  foreground/style/overlay order, reference and real native Metal rendering
+  remain correct; focused and exact repository gates pass; `dart_appkit` stays
+  untouched and clean.
+- **Verification approach:** Refactor native insertion through one raw bounded
+  allocator, add typed cell-key unit tests for identity/reinsertion/reset/
+  eviction/pin/bridge behavior, add mixed supported/unsupported compositor
+  cases at 1x/2x and inset/native render assertions, run focused format/analyze/
+  atlas/compositor/raster tests, run the exact repository gate, review the diff,
+  and repeat the adjacent-library audit before marking this item complete.
+- 2026-09-14: Atlas integration now uses a typed key containing catalog and
+  fixed-scale domains plus scalar, exact rounded device width/height, and line
+  thickness. Its internal storage identity uses the reserved `faceId == -2`
+  namespace and a bounded mixed-radix encoding of the raster geometry; native
+  CoreText faces remain positive and Kitty tiles remain `faceId == -1`.
+  Cell masks reuse the ordinary alpha-page allocator, dirty uploads, LRU,
+  build/submission pins, reset invalidation, reference primitive, and Metal
+  bridge instead of adding a second resource lifetime.
+- 2026-09-14: The compositor now removes only supported plain width-one scalar
+  cells from CoreText runs. It computes the left/right and top/bottom edges with
+  the same per-grid-line rounding used by backgrounds, selections, and cursors,
+  so fractional metrics may select distinct width/height-aware atlas entries
+  without stretching one raster. The product raster line thickness is derived
+  from the scaled catalog underline thickness and clamped to the exact cell.
+  Styled foreground color and the existing decoration/selection/cursor/image
+  layer order remain independent. Supported bases inside interned multi-scalar
+  graphemes, wide cells, preedit text, unsupported private-use glyphs, and all
+  other text remain font-owned.
+- 2026-09-14: The first focused atlas test attempt reached the native Metal
+  build hook but the workspace sandbox denied writes below the user Clang
+  module cache (`~/.cache/clang/ModuleCache`). No test assertion ran and no
+  source changed. Repeating the same test with the required cache/device access
+  succeeded. Focused formatting and static analysis then completed with zero
+  issues; the atlas lifecycle test passed reinsertion, exact bytes, reference
+  masks, dimension-key separation, native/Kitty namespace coexistence, shared
+  LRU eviction, build-pin retention, index cleanup, reset, and stale-domain
+  rejection.
+- 2026-09-14: The focused screen compositor suite passed at both 1x and 2x.
+  Its new mixed row proves Box, Block, Braille, and accepted Powerline cells
+  produce four `faceId == -2` alpha entries at their exact independently
+  rounded cell rectangles, split two ordinary CoreText runs around them, keep
+  adjacent U+E0C0 in the positive native-face namespace, preserve an RGB
+  foreground and underline, apply content insets, and render through the real
+  native Metal path. A separate combining-mark case proves a classified base
+  inside an interned grapheme never enters the cell atlas.
+- 2026-09-14: The first exact repository gate stopped at the deterministic
+  Ghostty inventory stale check after all preceding native, generated,
+  compatibility, differential, application, terminfo, and shell-integration
+  checks had passed. The changed compositor and compositor test are hashed
+  evidence sources, so regenerating
+  `compatibility/ghostty_p0_p1_gap_inventory.json` is required even though this
+  integration subtask deliberately leaves `TXT-10` actionable until the
+  following runtime/evidence closure. The first generator attempt was again
+  sandbox-blocked only at the Clang module cache; the same generator completed
+  with cache access, and the checked-in hash now describes the reviewed
+  implementation and test.
+- 2026-09-14: After regenerating the deterministic inventory, the exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` repository gate passed. It
+  includes native capability/assets, generated references, compatibility and
+  differential evidence, application/terminfo/shell contracts, the synchronized
+  102-row Ghostty inventory, distribution policy, 332-file zero-change format,
+  whole-product analysis, all aggregate Dart/native/security/update/recovery
+  suites, the new atlas/compositor assertions, and the final
+  `dart_terminal tests passed` marker. `git diff --check` also passed.
+- 2026-09-14: Final boundary review found only this task's cell raster
+  dispatcher, typed atlas integration, compositor diversion, focused tests,
+  generated inventory hash update, memo, and roadmap state. The adjacent
+  `/Users/remi/dart/dart_appkit` worktree is clean. Case-insensitive content
+  and filename audits outside its docs/build/cache/git areas both found zero
+  `terminal` matches, so no product-specific code or named source artifact was
+  introduced into the generic library.
 
 ## Inventory and decisions
 

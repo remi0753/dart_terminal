@@ -17,6 +17,7 @@ void main(List<String> arguments) {
 }
 
 void runGlyphAtlasTests() {
+  _testCellGlyphEntriesShareAtlasLifecycle();
   _testGrowthIsolationAndUploads();
   _testIncrementalUploadRectangles();
   _testEntryLruAndPins();
@@ -26,6 +27,162 @@ void runGlyphAtlasTests() {
   _testKittyImageResourcePruningWaitsForPins();
   _testPressureReclamationDefersPinnedResources();
   _testTextGoldens();
+}
+
+void _testCellGlyphEntriesShareAtlasLifecycle() {
+  final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
+    catalogGeneration: 1,
+    limits: const TerminalGlyphAtlasLimits(
+      pageWidth: 32,
+      pageHeight: 32,
+      maximumAlphaPages: 1,
+      maximumColorPages: 1,
+      maximumEntries: 4,
+      maximumRetainedBytes: 32 * 32 * 5,
+      gutter: 1,
+    ),
+  );
+  final TerminalCellGlyphRasterRequest request = TerminalCellGlyphRasterRequest(
+    scalar: 0x2500,
+    cellWidth: 7,
+    cellHeight: 15,
+    lineThickness: 1,
+  );
+  final TerminalCellGlyphRaster raster = TerminalCellGlyphRasterizer.rasterize(
+    request,
+  );
+  final TerminalCellGlyphAtlasKey key = TerminalCellGlyphAtlasKey.fromRequest(
+    catalogGeneration: 1,
+    scale16_16: 1 << 16,
+    request: request,
+  );
+  final TerminalGlyphAtlasEntry cell = atlas.ingestCellGlyph(raster);
+  final TerminalGlyphAtlasEntry repeated = atlas.ingestCellGlyph(raster);
+  _expect(
+    identical(cell, repeated) &&
+        identical(atlas.lookupCellGlyph(key), cell) &&
+        cell.isCellGlyph &&
+        !cell.isKittyImage &&
+        cell.key.faceId == -2 &&
+        cell.cellGlyphKey == key &&
+        cell.format == TerminalGlyphAtlasFormat.alpha8 &&
+        _bytesEqual(atlas.copyEntryPixels(cell), raster.copyCoverage()) &&
+        atlas.referencePrimitive(cell, x: 3, y: 4) is TerminalReferenceMask,
+    'cell rasters reuse exact alpha atlas entries and reference primitives',
+  );
+
+  final TerminalCellGlyphRasterRequest widerRequest =
+      TerminalCellGlyphRasterRequest(
+        scalar: 0x2500,
+        cellWidth: 8,
+        cellHeight: 15,
+        lineThickness: 1,
+      );
+  final TerminalGlyphAtlasEntry wider = atlas.ingestCellGlyph(
+    TerminalCellGlyphRasterizer.rasterize(widerRequest),
+  );
+  final TerminalGlyphAtlasEntry native = atlas
+      .ingest(
+        _batch(<_RasterSpec>[
+          _RasterSpec.alpha(glyphId: 1, width: 2, height: 2, value: 80),
+        ]),
+      )
+      .single;
+  final TerminalGlyphAtlasEntry kitty = atlas.ingestKittyImageTile(
+    key: const TerminalKittyImageAtlasKey(
+      screenKindIndex: 0,
+      imageId: 1,
+      imageResourceGeneration: 1,
+      imageContentGeneration: 1,
+      placementGeneration: 1,
+      sourceX: 0,
+      sourceY: 0,
+      sourceWidth: 1,
+      sourceHeight: 1,
+      destinationX: 0,
+      destinationY: 0,
+      destinationWidth: 1,
+      destinationHeight: 1,
+      tileX: 0,
+      tileY: 0,
+      tileWidth: 1,
+      tileHeight: 1,
+      scale16_16: 1 << 16,
+    ),
+    rgba: Uint8List.fromList(const <int>[1, 2, 3, 255]),
+  );
+  _expect(
+    atlas.entryCount == 4 &&
+        atlas.cellGlyphEntryCount == 2 &&
+        cell.key != wider.key &&
+        cell.key != native.key &&
+        wider.key != native.key &&
+        cell.key != kitty.key &&
+        native.key.faceId > 0 &&
+        kitty.key.faceId == -1,
+    'dimension-aware cell identities cannot collide with native or Kitty keys',
+  );
+
+  final TerminalGlyphAtlas pressure = TerminalGlyphAtlas(
+    catalogGeneration: 1,
+    limits: const TerminalGlyphAtlasLimits(
+      pageWidth: 32,
+      pageHeight: 32,
+      maximumAlphaPages: 1,
+      maximumColorPages: 1,
+      maximumEntries: 2,
+      maximumRetainedBytes: 32 * 32 * 4,
+      gutter: 1,
+    ),
+  );
+  TerminalCellGlyphRaster cellRaster(int scalar) =>
+      TerminalCellGlyphRasterizer.rasterize(
+        TerminalCellGlyphRasterRequest(
+          scalar: scalar,
+          cellWidth: 7,
+          cellHeight: 15,
+          lineThickness: 1,
+        ),
+      );
+  final TerminalCellGlyphRaster firstRaster = cellRaster(0x2500);
+  final TerminalCellGlyphRaster secondRaster = cellRaster(0x2588);
+  final TerminalCellGlyphRaster thirdRaster = cellRaster(0x2801);
+  final TerminalGlyphAtlasEntry first = pressure.ingestCellGlyph(firstRaster);
+  final TerminalGlyphAtlasEntry second = pressure.ingestCellGlyph(secondRaster);
+  final TerminalCellGlyphAtlasKey firstKey = first.cellGlyphKey!;
+  final TerminalCellGlyphAtlasKey secondKey = second.cellGlyphKey!;
+  final TerminalGlyphAtlasBuildLease lease = pressure.beginBuildLease();
+  lease.retain(first);
+  pressure.ingestCellGlyph(thirdRaster);
+  _expect(
+    identical(pressure.lookupCellGlyph(firstKey), first) &&
+        pressure.lookupCellGlyph(secondKey) == null &&
+        pressure.cellGlyphEntryCount == 2 &&
+        pressure.evictionCount == 1,
+    'common LRU eviction retains pinned cell entries and removes their index',
+  );
+  lease.close();
+
+  final int oldGeneration = atlas.resourceGeneration;
+  atlas.reset(catalogGeneration: 2, scale: 2);
+  _expect(
+    atlas.entryCount == 0 &&
+        atlas.cellGlyphEntryCount == 0 &&
+        atlas.pageCount == 0 &&
+        atlas.resourceGeneration > oldGeneration,
+    'atlas reset clears every cell raster and page',
+  );
+  _expectThrows<StateError>(
+    () => atlas.validateEntry(
+      cell,
+      expectedResourceGeneration: atlas.resourceGeneration,
+    ),
+    'cell entries from an old reset domain are stale',
+  );
+  _expectThrows<StateError>(
+    () => atlas.lookupCellGlyph(key),
+    'cell keys from an old scale/catalog domain fail closed',
+  );
 }
 
 void _testPressureReclamationDefersPinnedResources() {

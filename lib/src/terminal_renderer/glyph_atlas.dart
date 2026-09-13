@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'reference_renderer.dart';
+import 'terminal_cell_glyph.dart';
 
 enum TerminalGlyphAtlasFormat { alpha8, rgba8Straight }
 
@@ -40,6 +41,58 @@ final class TerminalGlyphAtlasKey {
       catalogGeneration == other.catalogGeneration &&
       faceId == other.faceId &&
       glyphId == other.glyphId &&
+      scale16_16 == other.scale16_16;
+}
+
+/// Stable identity for one product-owned device-pixel cell glyph raster.
+final class TerminalCellGlyphAtlasKey {
+  const TerminalCellGlyphAtlasKey({
+    required this.catalogGeneration,
+    required this.scalar,
+    required this.cellWidth,
+    required this.cellHeight,
+    required this.lineThickness,
+    required this.scale16_16,
+  });
+
+  factory TerminalCellGlyphAtlasKey.fromRequest({
+    required int catalogGeneration,
+    required int scale16_16,
+    required TerminalCellGlyphRasterRequest request,
+  }) => TerminalCellGlyphAtlasKey(
+    catalogGeneration: catalogGeneration,
+    scalar: request.scalar,
+    cellWidth: request.cellWidth,
+    cellHeight: request.cellHeight,
+    lineThickness: request.lineThickness,
+    scale16_16: scale16_16,
+  );
+
+  final int catalogGeneration;
+  final int scalar;
+  final int cellWidth;
+  final int cellHeight;
+  final int lineThickness;
+  final int scale16_16;
+
+  @override
+  int get hashCode => Object.hash(
+    catalogGeneration,
+    scalar,
+    cellWidth,
+    cellHeight,
+    lineThickness,
+    scale16_16,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalCellGlyphAtlasKey &&
+      catalogGeneration == other.catalogGeneration &&
+      scalar == other.scalar &&
+      cellWidth == other.cellWidth &&
+      cellHeight == other.cellHeight &&
+      lineThickness == other.lineThickness &&
       scale16_16 == other.scale16_16;
 }
 
@@ -202,6 +255,7 @@ final class TerminalGlyphAtlasEntry {
     required this.entryId,
     required this.key,
     this.kittyImageKey,
+    this.cellGlyphKey,
     required this.format,
     required this.pageId,
     required this.pageGeneration,
@@ -222,6 +276,7 @@ final class TerminalGlyphAtlasEntry {
   final int entryId;
   final TerminalGlyphAtlasKey key;
   final TerminalKittyImageAtlasKey? kittyImageKey;
+  final TerminalCellGlyphAtlasKey? cellGlyphKey;
   final TerminalGlyphAtlasFormat format;
   final int pageId;
   final int pageGeneration;
@@ -238,6 +293,7 @@ final class TerminalGlyphAtlasEntry {
 
   bool get isEmpty => width == 0;
   bool get isKittyImage => kittyImageKey != null;
+  bool get isCellGlyph => cellGlyphKey != null;
   bool get isPinned => _pinCount != 0;
   int get pinCount => _pinCount;
 }
@@ -399,6 +455,8 @@ final class TerminalGlyphAtlas {
   final TerminalGlyphAtlasLimits limits;
   final Object _owner = Object();
   final Map<TerminalGlyphAtlasKey, TerminalGlyphAtlasEntry> _entries = {};
+  final Map<TerminalCellGlyphAtlasKey, TerminalGlyphAtlasEntry>
+  _cellGlyphEntries = <TerminalCellGlyphAtlasKey, TerminalGlyphAtlasEntry>{};
   final Map<TerminalKittyImageAtlasKey, TerminalGlyphAtlasEntry>
   _kittyImageEntries = <TerminalKittyImageAtlasKey, TerminalGlyphAtlasEntry>{};
   final List<_AtlasPage> _pages = [];
@@ -427,6 +485,7 @@ final class TerminalGlyphAtlas {
   int get resourceGeneration => _resourceGeneration;
   int get resetEpoch => _resetEpoch;
   int get entryCount => _entries.length;
+  int get cellGlyphEntryCount => _cellGlyphEntries.length;
   int get kittyImageEntryCount => _kittyImageEntries.length;
   int get pageCount => _pages.length;
   int get alphaPageCount => _pages
@@ -489,6 +548,61 @@ final class TerminalGlyphAtlas {
       }
     }
     return List.unmodifiable(result);
+  }
+
+  TerminalGlyphAtlasEntry? lookupCellGlyph(TerminalCellGlyphAtlasKey key) {
+    _validateCellGlyphKeyDomain(key);
+    final TerminalGlyphAtlasEntry? entry = _cellGlyphEntries[key];
+    if (entry == null) {
+      _missCount = _saturatingAtlasIncrement(_missCount);
+      return null;
+    }
+    _hitCount = _saturatingAtlasIncrement(_hitCount);
+    _touch(entry);
+    return entry;
+  }
+
+  TerminalGlyphAtlasEntry ingestCellGlyph(TerminalCellGlyphRaster raster) {
+    final TerminalCellGlyphAtlasKey key = TerminalCellGlyphAtlasKey.fromRequest(
+      catalogGeneration: _catalogGeneration,
+      scale16_16: _scale16_16,
+      request: raster.request,
+    );
+    _validateCellGlyphKeyDomain(key);
+    final TerminalGlyphAtlasEntry? existing = _cellGlyphEntries[key];
+    if (existing != null) {
+      if (existing.format != TerminalGlyphAtlasFormat.alpha8 ||
+          existing.width != raster.width ||
+          existing.height != raster.height ||
+          existing.rowStride != raster.rowStride ||
+          existing.originX != 0 ||
+          existing.originY != 0 ||
+          !_bytesEqual(copyEntryPixels(existing), raster.copyCoverage())) {
+        throw StateError('existing cell glyph key has different raster bytes');
+      }
+      _touch(existing);
+      return existing;
+    }
+    final TerminalGlyphAtlasKey storageKey = TerminalGlyphAtlasKey(
+      catalogGeneration: _catalogGeneration,
+      faceId: -2,
+      glyphId: _cellGlyphStorageId(key),
+      scale16_16: _scale16_16,
+    );
+    if (_entries.containsKey(storageKey)) {
+      throw StateError('cell glyph storage identity collision');
+    }
+    return _insertRaw(
+      key: storageKey,
+      cellGlyphKey: key,
+      format: TerminalGlyphAtlasFormat.alpha8,
+      width: raster.width,
+      height: raster.height,
+      rowStride: raster.rowStride,
+      originX: 0,
+      originY: 0,
+      pixels: raster.copyCoverage(),
+    );
   }
 
   TerminalGlyphAtlasEntry? lookupKittyImage(TerminalKittyImageAtlasKey key) {
@@ -814,6 +928,7 @@ final class TerminalGlyphAtlas {
     _catalogGeneration = catalogGeneration;
     _scale16_16 = scale16_16;
     _entries.clear();
+    _cellGlyphEntries.clear();
     _kittyImageEntries.clear();
     _pages.clear();
     _dirtyPageRects.clear();
@@ -824,24 +939,46 @@ final class TerminalGlyphAtlas {
   TerminalGlyphAtlasEntry _insert(
     TerminalGlyphAtlasKey key,
     TerminalRasterizedGlyph glyph,
-  ) {
-    final TerminalGlyphAtlasFormat format = _atlasFormat(glyph.format);
+  ) => _insertRaw(
+    key: key,
+    format: _atlasFormat(glyph.format),
+    width: glyph.width,
+    height: glyph.height,
+    rowStride: glyph.rowStride,
+    originX: glyph.originX,
+    originY: glyph.originY,
+    pixels: glyph.copyPixels(),
+    diagnosticIdentity: '${glyph.faceId}:${glyph.glyphId}',
+  );
+
+  TerminalGlyphAtlasEntry _insertRaw({
+    required TerminalGlyphAtlasKey key,
+    TerminalCellGlyphAtlasKey? cellGlyphKey,
+    required TerminalGlyphAtlasFormat format,
+    required int width,
+    required int height,
+    required int rowStride,
+    required int originX,
+    required int originY,
+    required Uint8List pixels,
+    String diagnosticIdentity = 'cell',
+  }) {
     final int bpp = _bytesPerPixel(format);
-    if ((glyph.width == 0) != (glyph.height == 0) ||
-        glyph.width > limits.pageWidth - limits.gutter * 2 ||
-        glyph.height > limits.pageHeight - limits.gutter * 2 ||
-        glyph.rowStride != glyph.width * bpp ||
-        glyph.byteLength != glyph.rowStride * glyph.height) {
+    if ((width == 0) != (height == 0) ||
+        width > limits.pageWidth - limits.gutter * 2 ||
+        height > limits.pageHeight - limits.gutter * 2 ||
+        rowStride != width * bpp ||
+        pixels.length != rowStride * height) {
       throw TerminalGlyphAtlasCapacityException(
-        'glyph ${glyph.faceId}:${glyph.glyphId} does not fit an atlas page',
+        'glyph $diagnosticIdentity does not fit an atlas page',
       );
     }
     _ensureEntryCapacity(format);
     _AtlasPage? page;
     _AtlasRect? allocation;
-    if (glyph.width != 0) {
-      final int allocationWidth = glyph.width + limits.gutter * 2;
-      final int allocationHeight = glyph.height + limits.gutter * 2;
+    if (width != 0) {
+      final int allocationWidth = width + limits.gutter * 2;
+      final int allocationHeight = height + limits.gutter * 2;
       while (true) {
         final _AtlasPlacement? placement = _findPlacement(
           format,
@@ -872,25 +1009,27 @@ final class TerminalGlyphAtlas {
       owner: _owner,
       entryId: _takeEntryId(),
       key: key,
+      cellGlyphKey: cellGlyphKey,
       format: format,
       pageId: page?.pageId ?? 0,
       pageGeneration: page?.pageGeneration ?? 0,
       x: allocation == null ? 0 : allocation.x + limits.gutter,
       y: allocation == null ? 0 : allocation.y + limits.gutter,
-      width: glyph.width,
-      height: glyph.height,
-      rowStride: glyph.rowStride,
-      originX: glyph.originX,
-      originY: glyph.originY,
+      width: width,
+      height: height,
+      rowStride: rowStride,
+      originX: originX,
+      originY: originY,
       allocation: allocation,
       lastUse: _takeUseClock(),
     );
     if (page != null && allocation != null) {
-      _copyRasterIntoPage(page, entry, glyph.copyPixels());
+      _copyRasterIntoPage(page, entry, pixels);
       page.entryIds.add(entry.entryId);
       _markDirty(page, _AtlasRect(entry.x, entry.y, entry.width, entry.height));
     }
     _entries[key] = entry;
+    if (cellGlyphKey != null) _cellGlyphEntries[cellGlyphKey] = entry;
     _incrementResourceGeneration();
     return entry;
   }
@@ -1067,6 +1206,10 @@ final class TerminalGlyphAtlas {
     _validateEntry(entry);
     if (entry.isPinned) throw StateError('cannot evict a pinned atlas entry');
     _entries.remove(entry.key);
+    final TerminalCellGlyphAtlasKey? cellGlyphKey = entry.cellGlyphKey;
+    if (cellGlyphKey != null) {
+      _cellGlyphEntries.remove(cellGlyphKey);
+    }
     final TerminalKittyImageAtlasKey? imageKey = entry.kittyImageKey;
     if (imageKey != null) {
       _kittyImageEntries.remove(imageKey);
@@ -1154,6 +1297,19 @@ final class TerminalGlyphAtlas {
     }
   }
 
+  void _validateCellGlyphKeyDomain(TerminalCellGlyphAtlasKey key) {
+    if (key.catalogGeneration != _catalogGeneration ||
+        key.scale16_16 != _scale16_16) {
+      throw StateError('cell glyph key belongs to another atlas domain');
+    }
+    TerminalCellGlyphRasterRequest(
+      scalar: key.scalar,
+      cellWidth: key.cellWidth,
+      cellHeight: key.cellHeight,
+      lineThickness: key.lineThickness,
+    );
+  }
+
   void _validateKittyImageKeyDomain(TerminalKittyImageAtlasKey key) {
     if (key.scale16_16 != _scale16_16) {
       throw StateError('Kitty image key belongs to another atlas domain');
@@ -1163,6 +1319,8 @@ final class TerminalGlyphAtlas {
   void _validateEntry(TerminalGlyphAtlasEntry entry) {
     if (!identical(entry._owner, _owner) ||
         !identical(_entries[entry.key], entry) ||
+        (entry.cellGlyphKey != null &&
+            !identical(_cellGlyphEntries[entry.cellGlyphKey], entry)) ||
         (entry.kittyImageKey != null &&
             !identical(_kittyImageEntries[entry.kittyImageKey], entry))) {
       throw StateError('atlas entry is stale or belongs to another atlas');
@@ -1182,6 +1340,14 @@ final class TerminalGlyphAtlas {
   }
 
   int _takeEntryId() => _takeCounter(() => _nextEntryId++, 'entry ID');
+
+  static int _cellGlyphStorageId(TerminalCellGlyphAtlasKey key) {
+    const int radix = TerminalCellGlyphRasterLimits.maximumDimension + 1;
+    return (((key.scalar * radix + key.cellWidth) * radix + key.cellHeight) *
+            radix) +
+        key.lineThickness;
+  }
+
   int _takeKittySyntheticGlyphId() {
     final int value = _nextKittySyntheticGlyphId--;
     if (value <= -0x7fffffffffffffff) {

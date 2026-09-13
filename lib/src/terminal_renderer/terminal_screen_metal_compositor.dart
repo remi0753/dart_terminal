@@ -13,6 +13,7 @@ import 'frame_scheduler.dart';
 import 'glyph_atlas.dart';
 import 'metal_atlas_bridge.dart';
 import 'reference_renderer.dart';
+import 'terminal_cell_glyph.dart';
 import 'terminal_render_model.dart';
 
 /// Signals that atlas uploads could not be published during this frame build.
@@ -32,6 +33,7 @@ final class TerminalScreenMetalComposition {
     required this.scheduledFrame,
     required Iterable<TerminalMetalInstance> instances,
     required this.shapedRunCount,
+    required this.cellGlyphCount,
     required this.renderedCellCount,
     required this.preeditCellCount,
     required this.hyperlinkHoverCellCount,
@@ -43,6 +45,7 @@ final class TerminalScreenMetalComposition {
   final TerminalScheduledMetalFrame scheduledFrame;
   final List<TerminalMetalInstance> instances;
   final int shapedRunCount;
+  final int cellGlyphCount;
   final int renderedCellCount;
   final int preeditCellCount;
   final int hyperlinkHoverCellCount;
@@ -144,6 +147,8 @@ final class TerminalScreenMetalCompositor {
     final List<TerminalMetalInstance> decorations = <TerminalMetalInstance>[];
     final List<TerminalMetalInstance> cursors = <TerminalMetalInstance>[];
     final List<_TerminalTextRun> textRuns = <_TerminalTextRun>[];
+    final List<_TerminalCellGlyphPlacement> cellGlyphs =
+        <_TerminalCellGlyphPlacement>[];
     var renderedCellCount = 0;
     var hyperlinkHoverCellCount = 0;
 
@@ -299,6 +304,25 @@ final class TerminalScreenMetalCompositor {
           model.backgroundAt(row, column),
           attributes,
         ).foregroundRgba;
+        final int? cellGlyphScalar = _cellGlyphScalar(
+          content,
+          widthFlags,
+          cellColumns,
+        );
+        if (cellGlyphScalar != null) {
+          cellGlyphs.add(
+            _cellGlyphPlacement(
+              scalar: cellGlyphScalar,
+              row: row,
+              column: column,
+              colorRgba: foregroundRgba,
+              metrics: metrics,
+              scale: scale,
+            ),
+          );
+          column += cellColumns;
+          continue;
+        }
         final int runStart = column;
         final _TerminalTextRunBuilder run = _TerminalTextRunBuilder(
           row: row,
@@ -338,6 +362,10 @@ final class TerminalScreenMetalCompositor {
           final int nextCellColumns = nextWidth == TerminalCellFlags.wide
               ? 2
               : 1;
+          if (_cellGlyphScalar(nextContent, nextFlags, nextCellColumns) !=
+              null) {
+            break;
+          }
           run.add(_cellText(nextContent, nextFlags), nextCellColumns);
           nextColumn += nextCellColumns;
         }
@@ -391,6 +419,20 @@ final class TerminalScreenMetalCompositor {
     }
 
     final List<_TerminalShapedRun> shapedRuns = <_TerminalShapedRun>[];
+    final Map<TerminalCellGlyphAtlasKey, TerminalCellGlyphRasterRequest>
+    missingCellGlyphs =
+        <TerminalCellGlyphAtlasKey, TerminalCellGlyphRasterRequest>{};
+    for (final _TerminalCellGlyphPlacement placement in cellGlyphs) {
+      final TerminalCellGlyphAtlasKey key =
+          TerminalCellGlyphAtlasKey.fromRequest(
+            catalogGeneration: catalog.generation,
+            scale16_16: atlas.scale16_16,
+            request: placement.request,
+          );
+      if (atlas.lookupCellGlyph(key) == null) {
+        missingCellGlyphs[key] = placement.request;
+      }
+    }
     final Map<TerminalGlyphAtlasKey, TerminalGlyphRasterRequest> missing =
         <TerminalGlyphAtlasKey, TerminalGlyphRasterRequest>{};
     for (final _TerminalTextRun run in textRuns) {
@@ -414,10 +456,15 @@ final class TerminalScreenMetalCompositor {
         }
       }
     }
-    if (missing.length > atlas.limits.maximumEntries) {
+    if (missing.length + missingCellGlyphs.length >
+        atlas.limits.maximumEntries) {
       throw const TerminalGlyphAtlasCapacityException(
         'visible glyph set exceeds the bounded atlas entry limit',
       );
+    }
+    for (final TerminalCellGlyphRasterRequest request
+        in missingCellGlyphs.values) {
+      atlas.ingestCellGlyph(TerminalCellGlyphRasterizer.rasterize(request));
     }
     final List<TerminalGlyphRasterRequest> requests = missing.values.toList();
     for (
@@ -444,6 +491,30 @@ final class TerminalScreenMetalCompositor {
     try {
       final List<_TerminalPositionedGlyph> positionedGlyphs =
           <_TerminalPositionedGlyph>[];
+      for (final _TerminalCellGlyphPlacement placement in cellGlyphs) {
+        final TerminalCellGlyphAtlasKey key =
+            TerminalCellGlyphAtlasKey.fromRequest(
+              catalogGeneration: catalog.generation,
+              scale16_16: atlas.scale16_16,
+              request: placement.request,
+            );
+        final TerminalGlyphAtlasEntry? entry = atlas.lookupCellGlyph(key);
+        if (entry == null) {
+          throw const TerminalGlyphAtlasCapacityException(
+            'visible cell glyph was evicted before frame encoding',
+          );
+        }
+        buildLease.retain(entry);
+        retainedEntries.add(entry);
+        positionedGlyphs.add(
+          _TerminalPositionedGlyph(
+            entry: entry,
+            x: placement.x,
+            y: placement.y,
+            colorRgba: placement.colorRgba,
+          ),
+        );
+      }
       for (final _TerminalShapedRun shapedRun in shapedRuns) {
         final int baseline =
             ((shapedRun.run.row * metrics.cellHeight + metrics.baseline) *
@@ -595,6 +666,7 @@ final class TerminalScreenMetalCompositor {
         ),
         instances: instances,
         shapedRunCount: shapedRuns.length,
+        cellGlyphCount: cellGlyphs.length,
         renderedCellCount: renderedCellCount,
         preeditCellCount: preedit?.cells.length ?? 0,
         hyperlinkHoverCellCount: hyperlinkHoverCellCount,
@@ -959,6 +1031,43 @@ final class TerminalScreenMetalCompositor {
     }
     TerminalUnicode.validateScalar(content);
     return String.fromCharCode(content);
+  }
+
+  static int? _cellGlyphScalar(int content, int widthFlags, int cellColumns) {
+    if (cellColumns != 1 || widthFlags & TerminalCellFlags.grapheme != 0) {
+      return null;
+    }
+    return TerminalCellGlyphClassifier.supports(content) ? content : null;
+  }
+
+  static _TerminalCellGlyphPlacement _cellGlyphPlacement({
+    required int scalar,
+    required int row,
+    required int column,
+    required int colorRgba,
+    required TerminalFontCatalogMetrics metrics,
+    required double scale,
+  }) {
+    final int left = _columnPixel(column, metrics, scale);
+    final int right = _columnPixel(column + 1, metrics, scale);
+    final int top = _rowPixel(row, metrics, scale);
+    final int bottom = _rowPixel(row + 1, metrics, scale);
+    final int width = right - left;
+    final int height = bottom - top;
+    final int thickness = math
+        .max(1, (metrics.underlineThickness * scale).round())
+        .clamp(1, math.min(width, height));
+    return _TerminalCellGlyphPlacement(
+      request: TerminalCellGlyphRasterRequest(
+        scalar: scalar,
+        cellWidth: width,
+        cellHeight: height,
+        lineThickness: thickness,
+      ),
+      x: left,
+      y: top,
+      colorRgba: colorRgba,
+    );
   }
 
   _TerminalCellColors _colors(
@@ -1364,6 +1473,20 @@ final class _TerminalPositionedGlyph {
   });
 
   final TerminalGlyphAtlasEntry entry;
+  final int x;
+  final int y;
+  final int colorRgba;
+}
+
+final class _TerminalCellGlyphPlacement {
+  const _TerminalCellGlyphPlacement({
+    required this.request,
+    required this.x,
+    required this.y,
+    required this.colorRgba,
+  });
+
+  final TerminalCellGlyphRasterRequest request;
   final int x;
   final int y;
   final int colorRgba;

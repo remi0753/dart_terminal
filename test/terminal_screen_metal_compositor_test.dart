@@ -7,6 +7,8 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 void main() => runTerminalScreenMetalCompositorTests();
 
 void runTerminalScreenMetalCompositorTests() {
+  _testSyntheticCellGlyphsUseExactMetalCellsAndFontFallback();
+  _testSyntheticCellGlyphsLeaveGraphemeClustersFontOwned();
   _testAnsiStylesBecomeMetalLayers();
   _testExtendedDecorationsUseIndependentColors();
   _testCursorColorUsesIndependentMetalLayer();
@@ -24,6 +26,125 @@ void runTerminalScreenMetalCompositorTests() {
   _testContentRectangleOffsetsEveryLayer();
   _testKittyImagesUseOrdinaryMetalAtlasAndTextOrder();
   _testKittyAnimationFrameUsesContentGenerationAndNativePixels();
+}
+
+void _testSyntheticCellGlyphsUseExactMetalCellsAndFontFallback() {
+  for (final double scale in <double>[1, 2]) {
+    final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 8);
+    _parse(
+      screens,
+      utf8.encode('A\x1b[38;2;10;20;30;4m─\x1b[0m█⣿\uE0B0\uE0C0Z'),
+    );
+    final _CompositionFixture fixture = _compose(
+      screens,
+      scale: scale,
+      contentOffsetX: 3,
+      contentOffsetY: 5,
+    );
+    try {
+      final List<TerminalGlyphAtlasEntry> retained =
+          fixture.composition.scheduledFrame.glyphEntries;
+      final List<TerminalGlyphAtlasEntry> cellEntries = retained
+          .where((TerminalGlyphAtlasEntry entry) => entry.isCellGlyph)
+          .toList(growable: false);
+      final List<TerminalGlyphAtlasEntry> fontEntries = retained
+          .where(
+            (TerminalGlyphAtlasEntry entry) =>
+                !entry.isCellGlyph && !entry.isKittyImage,
+          )
+          .toList(growable: false);
+      final List<TerminalMetalInstance> glyphs = fixture.composition.instances
+          .where((TerminalMetalInstance instance) => instance.kind.isGlyph)
+          .toList(growable: false);
+      final List<TerminalMetalInstance> syntheticInstances = glyphs
+          .take(cellEntries.length)
+          .toList(growable: false);
+      final List<int> columns = <int>[1, 2, 3, 4];
+      _expect(
+        fixture.composition.cellGlyphCount == 4 &&
+            fixture.composition.shapedRunCount == 2 &&
+            fixture.atlas.cellGlyphEntryCount >= 4 &&
+            cellEntries.length == 4 &&
+            fontEntries.isNotEmpty &&
+            fontEntries.every(
+              (TerminalGlyphAtlasEntry entry) => entry.key.faceId > 0,
+            ) &&
+            cellEntries.every(
+              (TerminalGlyphAtlasEntry entry) =>
+                  entry.key.faceId == -2 &&
+                  entry.format == TerminalGlyphAtlasFormat.alpha8,
+            ),
+        'accepted cell scalars bypass two font runs while adjacent PUA stays '
+        'in the native font namespace at ${scale}x',
+      );
+      for (int index = 0; index < columns.length; index++) {
+        final int column = columns[index];
+        final int left = (column * fixture.catalog.metrics.cellWidth * scale)
+            .round();
+        final int right =
+            ((column + 1) * fixture.catalog.metrics.cellWidth * scale).round();
+        final int bottom = (fixture.catalog.metrics.cellHeight * scale).round();
+        final TerminalGlyphAtlasEntry entry = cellEntries[index];
+        final TerminalMetalInstance instance = syntheticInstances[index];
+        _expect(
+          entry.width == right - left &&
+              entry.height == bottom &&
+              entry.cellGlyphKey!.cellWidth == right - left &&
+              entry.cellGlyphKey!.cellHeight == bottom &&
+              instance.x == left + 3 &&
+              instance.y == 5 &&
+              instance.width == right - left &&
+              instance.height == bottom,
+          'cell glyph at column $column owns its exact rounded device '
+          'rectangle at ${scale}x',
+        );
+      }
+      _expect(
+        syntheticInstances.first.colorRgba == 0x0a141eff &&
+            fixture.composition.instances.any(
+              (TerminalMetalInstance instance) =>
+                  instance.kind == TerminalMetalInstanceKind.decoration &&
+                  instance.colorRgba == 0x0a141eff,
+            ),
+        'synthetic masks preserve foreground color and independent decoration',
+      );
+      final Uint8List rgba = fixture.renderer.renderRgba(
+        fixture.composition.scheduledFrame.frame,
+      );
+      _expect(
+        rgba.length ==
+            fixture.viewportWidth *
+                fixture.composition.scheduledFrame.frame.viewportHeight *
+                4,
+        'mixed synthetic and font-owned glyphs render through native Metal at '
+        '${scale}x',
+      );
+    } finally {
+      fixture.dispose();
+    }
+  }
+}
+
+void _testSyntheticCellGlyphsLeaveGraphemeClustersFontOwned() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 3);
+  _parse(screens, utf8.encode('─\u0301'));
+  final _CompositionFixture fixture = _compose(screens);
+  try {
+    _expect(
+      screens.activeScreen.widthFlagsAt(0, 0) & TerminalCellFlags.grapheme !=
+              0 &&
+          fixture.composition.cellGlyphCount == 0 &&
+          fixture.composition.shapedRunCount == 1 &&
+          fixture.atlas.cellGlyphEntryCount == 0 &&
+          fixture.composition.scheduledFrame.glyphEntries.every(
+            (TerminalGlyphAtlasEntry entry) => !entry.isCellGlyph,
+          ),
+      'a supported base scalar inside an interned grapheme remains atomic and '
+      'font-owned',
+    );
+  } finally {
+    fixture.dispose();
+  }
 }
 
 void _testExtendedDecorationsUseIndependentColors() {
