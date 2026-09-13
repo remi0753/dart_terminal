@@ -7,6 +7,10 @@ void main() => runTerminalSemanticPromptTests();
 
 void runTerminalSemanticPromptTests() {
   _testExactPromptCommandOutputRanges();
+  _testSemanticLineAndOutputSelection();
+  _testSemanticOutputSelectionCombinesRetainedBlocks();
+  _testPromptCursorMoveResolution();
+  _testPromptCursorMoveBoundsAndOwnership();
   _testOpenRangeAndOutOfOrderLifecycle();
   _testRangeStorageAndQueryBounds();
   _testRangesSurviveHistoryAndReflowThenRejectEviction();
@@ -19,6 +23,230 @@ void runTerminalSemanticPromptTests() {
   _testBottomScrollMarkIsChunkIndependent();
   _testAlternateScreenAndResetOwnership();
   _testChunkAndTerminatorIndependence();
+}
+
+void _testSemanticLineAndOutputSelection() {
+  final _Harness harness = _Harness(rows: 3, columns: 20);
+  harness.parse(_osc('A'));
+  harness.parse(r'$ ');
+  harness.parse(_osc('B'));
+  harness.parse('echo');
+  harness.parse(_osc('C'));
+  harness.parse('result');
+  harness.parse(_osc('D'));
+
+  TerminalSelectionText? textAt(int column) {
+    final TerminalSelectionRange? range = harness.screens.viewport
+        .semanticLineSelectionAt(0, column);
+    return range == null
+        ? null
+        : harness.screens.viewport.extractSelection(range);
+  }
+
+  final TerminalSelectionRange? output = harness.screens.viewport
+      .semanticOutputSelectionAt(0, 8);
+  _expect(
+    textAt(0)?.text == r'$ ' &&
+        textAt(3)?.text == 'echo' &&
+        textAt(8)?.text == 'result' &&
+        output?.unit == TerminalSelectionUnit.semanticOutput &&
+        harness.screens.viewport.extractSelection(output!)?.text == 'result' &&
+        harness.screens.viewport.semanticOutputSelectionAt(0, 1) == null,
+    'semantic line selection clamps prompt, input, and output on one row',
+  );
+
+  final _Harness wide = _Harness(rows: 2, columns: 8);
+  wide.parse(_osc('A'));
+  wide.parse('>');
+  wide.parse(_osc('B'));
+  wide.parse('A界B');
+  final TerminalSelectionRange? lead = wide.screens.viewport
+      .semanticLineSelectionAt(0, 2);
+  final TerminalSelectionRange? continuation = wide.screens.viewport
+      .semanticLineSelectionAt(0, 3);
+  _expect(
+    lead != null &&
+        continuation != null &&
+        lead.start == continuation.start &&
+        lead.end == continuation.end &&
+        wide.screens.viewport.extractSelection(lead)?.text == 'A界B',
+    'wide continuation resolves to one semantic input selection',
+  );
+}
+
+void _testSemanticOutputSelectionCombinesRetainedBlocks() {
+  final _Harness harness = _Harness(rows: 6, columns: 12);
+  harness.parse(_osc('A'));
+  harness.parse(r'$ ');
+  harness.parse(_osc('B'));
+  harness.parse('one');
+  harness.parse(_osc('C'));
+  harness.parse('\r\nout1');
+  harness.parse(_osc('D'));
+  harness.parse(_osc('A'));
+  harness.parse(r'$ ');
+  harness.parse(_osc('B'));
+  harness.parse('two');
+  harness.parse(_osc('C'));
+  harness.parse('\r\nout2');
+  harness.parse(_osc('D'));
+
+  final TerminalSelectionRange first = harness.screens.viewport
+      .semanticOutputSelectionAt(1, 1)!;
+  final TerminalSelectionRange second = harness.screens.viewport
+      .semanticOutputSelectionAt(3, 1)!;
+  final TerminalSelectionRange forward = harness.screens.viewport
+      .combineSemanticOutputSelections(first, second)!;
+  final TerminalSelectionRange reverse = harness.screens.viewport
+      .combineSemanticOutputSelections(second, first)!;
+  final String forwardText = harness.screens.viewport
+      .extractSelection(forward)!
+      .text;
+  _expect(
+    !forward.isReversed &&
+        reverse.isReversed &&
+        forward.start == reverse.start &&
+        forward.end == reverse.end &&
+        forwardText.startsWith('out1') &&
+        forwardText.endsWith('out2') &&
+        forwardText.contains(r'$ two'),
+    'semantic output drag combines retained output blocks in either direction',
+  );
+
+  harness.screens.resize(rows: 6, columns: 6);
+  _expect(
+    harness.screens.viewport.isSelectionAvailable(forward) &&
+        harness.screens.viewport.extractSelection(forward)?.text == forwardText,
+    'combined stable output selection survives reflow exactly',
+  );
+}
+
+void _testPromptCursorMoveResolution() {
+  final _Harness harness = _Harness(rows: 3, columns: 12);
+  harness.parse(_osc('A'));
+  harness.parse(r'$ ');
+  harness.parse(_osc('B'));
+  harness.parse('abcdef');
+
+  TerminalPromptCursorMoveResolution result = harness.screens
+      .resolvePromptCursorMove(0, 4);
+  _expect(
+    result.disposition == TerminalPromptCursorMoveDisposition.move &&
+        result.plan?.direction == TerminalPromptCursorMoveDirection.left &&
+        result.plan?.count == 4 &&
+        result.plan?.encodedByteCount == 12 &&
+        result.plan?.semanticGeneration ==
+            harness.screens.semanticRangeSnapshot().generation,
+    'prompt click resolves a bounded left movement from the live cursor',
+  );
+
+  harness.screens.primary.setCursorPosition(0, 3);
+  result = harness.screens.resolvePromptCursorMove(0, 6);
+  _expect(
+    result.plan?.direction == TerminalPromptCursorMoveDirection.right &&
+        result.plan?.count == 3,
+    'retained input extent permits a right movement after cursor redraw',
+  );
+  _expect(
+    harness.screens.resolvePromptCursorMove(0, 3).disposition ==
+            TerminalPromptCursorMoveDisposition.noMovement &&
+        harness.screens.resolvePromptCursorMove(0, 1).rejectionReason ==
+            TerminalPromptCursorMoveRejectionReason.outsideInput,
+    'same-position click is silent and prompt cells are rejected',
+  );
+
+  final _Harness wrapped = _Harness(rows: 3, columns: 6);
+  wrapped.parse(_osc('A'));
+  wrapped.parse(r'$ ');
+  wrapped.parse(_osc('B'));
+  wrapped.parse('abcdef');
+  final TerminalPromptCursorMoveResolution wrappedMove = wrapped.screens
+      .resolvePromptCursorMove(0, 4);
+  final TerminalSelectionRange? wrappedInput = wrapped.screens.viewport
+      .semanticLineSelectionAt(1, 0);
+  _expect(
+    wrappedMove.plan?.direction == TerminalPromptCursorMoveDirection.left &&
+        wrappedMove.plan?.count == 4 &&
+        wrappedInput != null &&
+        wrapped.screens.viewport.extractSelection(wrappedInput)?.text ==
+            'abcdef',
+    'soft-wrapped input selection and movement retain one logical line',
+  );
+
+  final _Harness wide = _Harness(rows: 2, columns: 8);
+  wide.parse(_osc('A'));
+  wide.parse('>');
+  wide.parse(_osc('B'));
+  wide.parse('A界B');
+  final TerminalPromptCursorMoveResolution wideMove = wide.screens
+      .resolvePromptCursorMove(0, 3);
+  _expect(
+    wideMove.plan?.direction == TerminalPromptCursorMoveDirection.left &&
+        wideMove.plan?.count == 2,
+    'wide continuation normalizes to its lead and counts one logical cell',
+  );
+}
+
+void _testPromptCursorMoveBoundsAndOwnership() {
+  final _Harness bounded = _Harness(rows: 2, columns: 100);
+  bounded.parse(_osc('A'));
+  bounded.parse('>');
+  bounded.parse(_osc('B'));
+  bounded.parse(List<String>.filled(90, 'x').join());
+  final TerminalPromptCursorMoveResolution limited = bounded.screens
+      .resolvePromptCursorMove(0, 1);
+  _expect(
+    limited.rejectionReason ==
+            TerminalPromptCursorMoveRejectionReason.movementLimit &&
+        bounded.screens.resolvePromptCursorMove(0, 6, maxMovements: 85).plan !=
+            null,
+    'one prompt movement cannot exceed the 255-byte arrow payload cap',
+  );
+  _expectThrows(
+    () => bounded.screens.resolvePromptCursorMove(0, 1, maxMovements: 86),
+    'movement limits above the product hard maximum are rejected',
+  );
+  _expectThrows(
+    () => bounded.screens.viewport.semanticLineSelectionAt(0, 1, maxRanges: 0),
+    'semantic selection query bounds are validated before traversal',
+  );
+
+  final _Harness alternate = _Harness(rows: 2, columns: 8);
+  alternate.parse(_osc('B'));
+  alternate.parse('x');
+  alternate.screens.setAlternateMode47(true);
+  _expect(
+    alternate.screens.resolvePromptCursorMove(0, 0).rejectionReason ==
+        TerminalPromptCursorMoveRejectionReason.alternateScreen,
+    'alternate screens never synthesize prompt cursor movement',
+  );
+
+  final _Harness inactive = _Harness(rows: 2, columns: 8);
+  inactive.parse('plain');
+  _expect(
+    inactive.screens.resolvePromptCursorMove(0, 0).rejectionReason ==
+            TerminalPromptCursorMoveRejectionReason.inactiveInput &&
+        inactive.screens.resolvePromptCursorMove(-1, 0).rejectionReason ==
+            TerminalPromptCursorMoveRejectionReason.outsideViewport,
+    'unmarked and out-of-grid input fail closed',
+  );
+
+  final _Harness history = _Harness(
+    rows: 2,
+    columns: 8,
+    scrollback: TerminalScrollback(maxLines: 8, maxBytes: 4096, pageRows: 2),
+  );
+  history.parse('one\r\ntwo\r\nthree\r\n');
+  history.parse(_osc('A'));
+  history.parse('>');
+  history.parse(_osc('B'));
+  history.parse('x');
+  history.screens.viewport.scrollByRows(1);
+  _expect(
+    history.screens.resolvePromptCursorMove(1, 0).rejectionReason ==
+        TerminalPromptCursorMoveRejectionReason.historyViewport,
+    'history navigation cannot target the live shell cursor',
+  );
 }
 
 void _testExactPromptCommandOutputRanges() {
@@ -192,7 +420,8 @@ void _testRangesSurviveHistoryAndReflowThenRejectEviction() {
     unavailable.ranges.isEmpty &&
         unavailable.storedRangeCount == 2 &&
         unavailable.unavailableRangeCount == 2 &&
-        unavailable.isTruncated,
+        unavailable.isTruncated &&
+        evicted.screens.viewport.semanticOutputSelectionAt(0, 0) == null,
     'evicted logical epochs cannot alias recycled rows or produce partial ranges',
   );
 }

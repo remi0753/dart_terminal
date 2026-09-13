@@ -68,11 +68,11 @@
     },
     {
       "path": "lib/src/terminal_core/terminal_semantic_ranges.dart",
-      "sha256": "c86869b18296ff52526f5a2abb72d25d303fe2253fd9599d577058be3e410030"
+      "sha256": "9e59e99911037f2b7bdeac1ae00e5b4e581754b90abb472b9f626e9e9e26b7e2"
     },
     {
       "path": "test/terminal_semantic_prompt_test.dart",
-      "sha256": "1b917b957eb130a0ad6b3a02a89487ec5e916427b8b02964a6194375fef97f32"
+      "sha256": "d6fdab7de277927519c15157483a4016fe02f14e1a0149b6c826e43acdeb8c2f"
     },
     {
       "path": "lib/src/terminal_core/terminal_snapshot.dart",
@@ -196,7 +196,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "f1d3ca5a0b52bade02a8848a01dd15ccca8264aac3139e1866840833db353831"
+      "sha256": "3d2ed8e651df89fc8e099a982232c47ab19b4d7f48caad99516d07baf414d500"
     },
     {
       "path": "test/terminal_product_configuration_test.dart",

@@ -3,6 +3,76 @@ part of 'terminal_screen_set.dart';
 /// A privacy-safe semantic segment emitted by the shell integration lifecycle.
 enum TerminalSemanticRangeKind { prompt, command, output }
 
+enum TerminalPromptCursorMoveDirection { left, right }
+
+enum TerminalPromptCursorMoveDisposition { move, noMovement, rejected }
+
+enum TerminalPromptCursorMoveRejectionReason {
+  outsideViewport,
+  alternateScreen,
+  historyViewport,
+  inactiveInput,
+  unavailableInput,
+  differentLogicalLine,
+  outsideInput,
+  movementLimit,
+}
+
+/// One content-free, bounded cursor movement derived from retained OSC 133
+/// input boundaries and the live cursor position.
+final class TerminalPromptCursorMovePlan {
+  const TerminalPromptCursorMovePlan._({
+    required this.direction,
+    required this.count,
+    required this.semanticGeneration,
+    required this.screenGeneration,
+  });
+
+  static const int maximumCount = 85;
+
+  final TerminalPromptCursorMoveDirection direction;
+  final int count;
+  final int semanticGeneration;
+  final int screenGeneration;
+
+  int get encodedByteCount => count * 3;
+}
+
+final class TerminalPromptCursorMoveResolution {
+  const TerminalPromptCursorMoveResolution._({
+    required this.disposition,
+    required this.plan,
+    required this.rejectionReason,
+  });
+
+  const TerminalPromptCursorMoveResolution.move(
+    TerminalPromptCursorMovePlan plan,
+  ) : this._(
+        disposition: TerminalPromptCursorMoveDisposition.move,
+        plan: plan,
+        rejectionReason: null,
+      );
+
+  const TerminalPromptCursorMoveResolution.noMovement()
+    : this._(
+        disposition: TerminalPromptCursorMoveDisposition.noMovement,
+        plan: null,
+        rejectionReason: null,
+      );
+
+  const TerminalPromptCursorMoveResolution.rejected(
+    TerminalPromptCursorMoveRejectionReason reason,
+  ) : this._(
+        disposition: TerminalPromptCursorMoveDisposition.rejected,
+        plan: null,
+        rejectionReason: reason,
+      );
+
+  final TerminalPromptCursorMoveDisposition disposition;
+  final TerminalPromptCursorMovePlan? plan;
+  final TerminalPromptCursorMoveRejectionReason? rejectionReason;
+}
+
 /// One retained end-exclusive semantic segment over stable logical anchors.
 final class TerminalSemanticRange {
   const TerminalSemanticRange._({
@@ -315,6 +385,119 @@ final class _TerminalSemanticRangeTracker
     _nextCommandId++;
     return result;
   }
+}
+
+TerminalPromptCursorMoveResolution _resolvePromptCursorMove(
+  TerminalScreenSet screens,
+  int viewportRow,
+  int column, {
+  required int maxMovements,
+}) {
+  RangeError.checkValueInInterval(
+    maxMovements,
+    1,
+    TerminalPromptCursorMovePlan.maximumCount,
+    'maxMovements',
+  );
+  final TerminalViewport viewport = screens.viewport;
+  if (viewportRow < 0 ||
+      viewportRow >= viewport.rows ||
+      column < 0 ||
+      column >= viewport.columnsAt(viewportRow)) {
+    return const TerminalPromptCursorMoveResolution.rejected(
+      TerminalPromptCursorMoveRejectionReason.outsideViewport,
+    );
+  }
+  if (screens.usingAlternate) {
+    return const TerminalPromptCursorMoveResolution.rejected(
+      TerminalPromptCursorMoveRejectionReason.alternateScreen,
+    );
+  }
+  if (!viewport.atBottom || viewport.isHistoryRow(viewportRow)) {
+    return const TerminalPromptCursorMoveResolution.rejected(
+      TerminalPromptCursorMoveRejectionReason.historyViewport,
+    );
+  }
+  if (screens.semanticPrompt.shellState != TerminalSemanticShellState.input) {
+    return const TerminalPromptCursorMoveResolution.rejected(
+      TerminalPromptCursorMoveRejectionReason.inactiveInput,
+    );
+  }
+
+  final TerminalSemanticRangeSnapshot snapshot = screens
+      .semanticRangeSnapshot();
+  TerminalSemanticRange? input;
+  for (final TerminalSemanticRange range in snapshot.ranges.reversed) {
+    if (range.kind == TerminalSemanticRangeKind.command && !range.isComplete) {
+      input = range;
+      break;
+    }
+  }
+  if (input == null) {
+    return const TerminalPromptCursorMoveResolution.rejected(
+      TerminalPromptCursorMoveRejectionReason.unavailableInput,
+    );
+  }
+
+  final TerminalLogicalAnchor target = viewport.anchorAt(viewportRow, column);
+  final TerminalLogicalAnchor cursor = screens._semanticRanges._cursorBoundary(
+    TerminalScreenKind.primary,
+  );
+  if (target.logicalLineId != input.start.logicalLineId ||
+      target.logicalLineEpoch != input.start.logicalLineEpoch ||
+      cursor.logicalLineId != input.start.logicalLineId ||
+      cursor.logicalLineEpoch != input.start.logicalLineEpoch) {
+    return const TerminalPromptCursorMoveResolution.rejected(
+      TerminalPromptCursorMoveRejectionReason.differentLogicalLine,
+    );
+  }
+  final _DocumentBoundary? inputStart = _resolveDocumentBoundary(
+    viewport,
+    input.start,
+  );
+  final _DocumentBoundary? targetBoundary = _resolveDocumentBoundary(
+    viewport,
+    target,
+  );
+  final _DocumentBoundary? cursorBoundary = _resolveDocumentBoundary(
+    viewport,
+    cursor,
+  );
+  if (inputStart == null || targetBoundary == null || cursorBoundary == null) {
+    return const TerminalPromptCursorMoveResolution.rejected(
+      TerminalPromptCursorMoveRejectionReason.unavailableInput,
+    );
+  }
+  final _DocumentBoundary lineEnd = _logicalLineEnd(viewport, inputStart);
+  if (_compareDocumentBoundaries(targetBoundary, inputStart) < 0 ||
+      _compareDocumentBoundaries(targetBoundary, lineEnd) > 0 ||
+      _compareDocumentBoundaries(cursorBoundary, inputStart) < 0 ||
+      _compareDocumentBoundaries(cursorBoundary, lineEnd) > 0) {
+    return const TerminalPromptCursorMoveResolution.rejected(
+      TerminalPromptCursorMoveRejectionReason.outsideInput,
+    );
+  }
+
+  final int delta = target.cellOffset - cursor.cellOffset;
+  if (delta == 0) {
+    return const TerminalPromptCursorMoveResolution.noMovement();
+  }
+  final int count = delta.abs();
+  if (count > maxMovements) {
+    return const TerminalPromptCursorMoveResolution.rejected(
+      TerminalPromptCursorMoveRejectionReason.movementLimit,
+    );
+  }
+  return TerminalPromptCursorMoveResolution.move(
+    TerminalPromptCursorMovePlan._(
+      direction: delta < 0
+          ? TerminalPromptCursorMoveDirection.left
+          : TerminalPromptCursorMoveDirection.right,
+      count: count,
+      semanticGeneration: snapshot.generation,
+      screenGeneration: screens.primary.generation,
+    ),
+  );
 }
 
 final class _OpenSemanticRange {

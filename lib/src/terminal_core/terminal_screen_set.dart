@@ -222,6 +222,19 @@ final class TerminalScreenSet {
     screenKind: screenKind ?? activeKind,
     maxRanges: maxRanges,
   );
+
+  /// Resolves an Option-click target into one bounded shell cursor movement.
+  /// The caller owns gesture/modifier arbitration and byte encoding.
+  TerminalPromptCursorMoveResolution resolvePromptCursorMove(
+    int viewportRow,
+    int column, {
+    int maxMovements = TerminalPromptCursorMovePlan.maximumCount,
+  }) => _resolvePromptCursorMove(
+    this,
+    viewportRow,
+    column,
+    maxMovements: maxMovements,
+  );
   TerminalKittyViewportSnapshot captureKittyImageViewport() =>
       TerminalKittyViewportSnapshot.capture(this);
   Set<int> captureVisibleKittyImageIds() =>

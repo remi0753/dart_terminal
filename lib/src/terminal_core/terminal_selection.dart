@@ -1,6 +1,6 @@
 part of 'terminal_screen_set.dart';
 
-enum TerminalSelectionUnit { cell, word, logicalLine }
+enum TerminalSelectionUnit { cell, word, logicalLine, semanticOutput }
 
 final class TerminalSelectionSpan {
   TerminalSelectionSpan({
@@ -166,7 +166,8 @@ TerminalSelectionRange? _createSelectionRange(
   _DocumentBoundary end = reversed ? baseBoundary : extentBoundary;
   var boundaryLimited = false;
 
-  if (unit != TerminalSelectionUnit.cell) {
+  if (unit == TerminalSelectionUnit.word ||
+      unit == TerminalSelectionUnit.logicalLine) {
     final _DocumentCell? first;
     final _DocumentCell? last;
     if (_compareDocumentBoundaries(start, end) == 0) {
@@ -208,6 +209,215 @@ TerminalSelectionRange? _createSelectionRange(
     isReversed: reversed,
     isBoundaryLimited: boundaryLimited,
   );
+}
+
+TerminalSelectionRange? _semanticLineSelectionAt(
+  TerminalViewport viewport,
+  int viewportRow,
+  int column, {
+  required int maxRanges,
+}) {
+  RangeError.checkValueInInterval(
+    maxRanges,
+    1,
+    TerminalSemanticRangeSnapshot.maximumRanges,
+    'maxRanges',
+  );
+  final _DocumentCell? cell = _viewportCell(viewport, viewportRow, column);
+  if (cell == null) return null;
+  final TerminalSelectionRange? line = _createSelectionRange(
+    viewport,
+    cell.start.anchor,
+    cell.end.anchor,
+    unit: TerminalSelectionUnit.logicalLine,
+    maxWordScanCells: TerminalSelectionRange.defaultMaxWordScanCells,
+  );
+  if (line == null) return null;
+  final _ResolvedSemanticRange? semantic = _semanticRangeContainingCell(
+    viewport,
+    cell,
+    maxRanges: maxRanges,
+  );
+  if (semantic == null) return line;
+  final _DocumentBoundary lineStart = _resolveDocumentBoundary(
+    viewport,
+    line.start,
+  )!;
+  final _DocumentBoundary lineEnd = _resolveDocumentBoundary(
+    viewport,
+    line.end,
+  )!;
+  final _DocumentBoundary start =
+      _compareDocumentBoundaries(lineStart, semantic.start) >= 0
+      ? lineStart
+      : semantic.start;
+  final _DocumentBoundary end =
+      _compareDocumentBoundaries(lineEnd, semantic.end) <= 0
+      ? lineEnd
+      : semantic.end;
+  if (_compareDocumentBoundaries(start, end) >= 0) return null;
+  return _selectionRangeFromBoundaries(
+    viewport,
+    start,
+    end,
+    unit: TerminalSelectionUnit.logicalLine,
+    isReversed: false,
+    isBoundaryLimited: start.anchor != line.start || end.anchor != line.end,
+  );
+}
+
+TerminalSelectionRange? _semanticOutputSelectionAt(
+  TerminalViewport viewport,
+  int viewportRow,
+  int column, {
+  required int maxRanges,
+}) {
+  RangeError.checkValueInInterval(
+    maxRanges,
+    1,
+    TerminalSemanticRangeSnapshot.maximumRanges,
+    'maxRanges',
+  );
+  final _DocumentCell? cell = _viewportCell(viewport, viewportRow, column);
+  if (cell == null) return null;
+  final _ResolvedSemanticRange? semantic = _semanticRangeContainingCell(
+    viewport,
+    cell,
+    maxRanges: maxRanges,
+    kind: TerminalSemanticRangeKind.output,
+  );
+  if (semantic == null ||
+      _compareDocumentBoundaries(semantic.start, semantic.end) >= 0) {
+    return null;
+  }
+  final _DocumentCell? first = _cellAtOrAfterBoundary(viewport, semantic.start);
+  final _DocumentCell? last = _cellBeforeBoundary(viewport, semantic.end);
+  if (first == null ||
+      last == null ||
+      _compareDocumentBoundaries(first.start, semantic.start) < 0 ||
+      _compareDocumentBoundaries(last.end, semantic.end) > 0 ||
+      _compareDocumentBoundaries(first.start, last.end) >= 0) {
+    return null;
+  }
+  return _selectionRangeFromBoundaries(
+    viewport,
+    first.start,
+    last.end,
+    unit: TerminalSelectionUnit.semanticOutput,
+    isReversed: false,
+    isBoundaryLimited: false,
+    semanticRowFlags: TerminalRowFlags.output,
+  );
+}
+
+TerminalSelectionRange? _combineSemanticOutputSelections(
+  TerminalViewport viewport,
+  TerminalSelectionRange first,
+  TerminalSelectionRange second,
+) {
+  viewport._sync();
+  if (first.unit != TerminalSelectionUnit.semanticOutput ||
+      second.unit != TerminalSelectionUnit.semanticOutput ||
+      first.start.screenKind != second.start.screenKind ||
+      !viewport.isSelectionAvailable(first) ||
+      !viewport.isSelectionAvailable(second)) {
+    return null;
+  }
+  final _DocumentBoundary firstStart = _resolveDocumentBoundary(
+    viewport,
+    first.start,
+  )!;
+  final _DocumentBoundary firstEnd = _resolveDocumentBoundary(
+    viewport,
+    first.end,
+  )!;
+  final _DocumentBoundary secondStart = _resolveDocumentBoundary(
+    viewport,
+    second.start,
+  )!;
+  final _DocumentBoundary secondEnd = _resolveDocumentBoundary(
+    viewport,
+    second.end,
+  )!;
+  final bool secondBeforeFirst =
+      _compareDocumentBoundaries(secondStart, firstStart) < 0;
+  return _selectionRangeFromBoundaries(
+    viewport,
+    secondBeforeFirst ? secondStart : firstStart,
+    secondBeforeFirst ? firstEnd : secondEnd,
+    unit: TerminalSelectionUnit.semanticOutput,
+    isReversed: secondBeforeFirst,
+    isBoundaryLimited: false,
+    semanticRowFlags: TerminalRowFlags.output,
+  );
+}
+
+_DocumentCell? _viewportCell(
+  TerminalViewport viewport,
+  int viewportRow,
+  int column,
+) {
+  viewport._sync();
+  if (viewportRow < 0 || viewportRow >= viewport.rows || column < 0) {
+    return null;
+  }
+  final int sourceColumns = viewport.columnsAt(viewportRow);
+  if (column >= sourceColumns) return null;
+  final TerminalLogicalAnchor start = viewport.anchorAt(viewportRow, column);
+  final TerminalLogicalAnchor end = viewport.anchorAfter(viewportRow, column);
+  final _DocumentBoundary? startBoundary = _resolveDocumentBoundary(
+    viewport,
+    start,
+  );
+  final _DocumentBoundary? endBoundary = _resolveDocumentBoundary(
+    viewport,
+    end,
+  );
+  if (startBoundary == null ||
+      endBoundary == null ||
+      _compareDocumentBoundaries(startBoundary, endBoundary) >= 0) {
+    return null;
+  }
+  return _DocumentCell(
+    start: startBoundary,
+    end: endBoundary,
+    row: startBoundary.row,
+    cellIndex: startBoundary.cellIndex,
+  );
+}
+
+_ResolvedSemanticRange? _semanticRangeContainingCell(
+  TerminalViewport viewport,
+  _DocumentCell cell, {
+  required int maxRanges,
+  TerminalSemanticRangeKind? kind,
+}) {
+  final TerminalSemanticRangeSnapshot snapshot = viewport._screens
+      .semanticRangeSnapshot(maxRanges: maxRanges);
+  for (final TerminalSemanticRange range in snapshot.ranges.reversed) {
+    if (kind != null && range.kind != kind) continue;
+    final _DocumentBoundary? start = _resolveDocumentBoundary(
+      viewport,
+      range.start,
+    );
+    final _DocumentBoundary? end = _resolveDocumentBoundary(
+      viewport,
+      range.end,
+    );
+    if (start == null || end == null) continue;
+    if (_compareDocumentBoundaries(start, cell.start) <= 0 &&
+        _compareDocumentBoundaries(cell.end, end) <= 0) {
+      return _ResolvedSemanticRange(start, end);
+    }
+  }
+  return null;
+}
+
+final class _ResolvedSemanticRange {
+  const _ResolvedSemanticRange(this.start, this.end);
+
+  final _DocumentBoundary start;
+  final _DocumentBoundary end;
 }
 
 TerminalSelectionRange _selectionRangeFromBoundaries(

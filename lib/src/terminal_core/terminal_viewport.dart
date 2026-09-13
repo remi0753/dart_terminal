@@ -471,6 +471,33 @@ final class TerminalViewport {
     maxWordScanCells: maxWordScanCells,
   );
 
+  /// Selects one logical line, clamped to a retained semantic segment when the
+  /// target cell belongs to prompt, command input, or command output.
+  TerminalSelectionRange? semanticLineSelectionAt(
+    int viewportRow,
+    int column, {
+    int maxRanges = TerminalSemanticRangeSnapshot.defaultMaximumRanges,
+  }) =>
+      _semanticLineSelectionAt(this, viewportRow, column, maxRanges: maxRanges);
+
+  /// Selects the complete retained command-output segment under one cell.
+  TerminalSelectionRange? semanticOutputSelectionAt(
+    int viewportRow,
+    int column, {
+    int maxRanges = TerminalSemanticRangeSnapshot.defaultMaximumRanges,
+  }) => _semanticOutputSelectionAt(
+    this,
+    viewportRow,
+    column,
+    maxRanges: maxRanges,
+  );
+
+  /// Combines two retained output blocks for semantic output dragging.
+  TerminalSelectionRange? combineSemanticOutputSelections(
+    TerminalSelectionRange first,
+    TerminalSelectionRange second,
+  ) => _combineSemanticOutputSelections(this, first, second);
+
   /// Extracts retained text or returns null when either boundary was evicted.
   TerminalSelectionText? extractSelection(
     TerminalSelectionRange range, {

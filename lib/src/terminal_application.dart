@@ -19898,6 +19898,7 @@ final class _TerminalSelectionProductOwner {
   bool characterObserved = false;
   bool wordObserved = false;
   bool logicalLineObserved = false;
+  bool semanticOutputObserved = false;
   bool reverseObserved = false;
   bool shiftOverrideObserved = false;
   bool scrolledUp = false;
@@ -19958,6 +19959,8 @@ final class _TerminalSelectionProductOwner {
         wordObserved = true;
       case TerminalSelectionUnit.logicalLine:
         logicalLineObserved = true;
+      case TerminalSelectionUnit.semanticOutput:
+        semanticOutputObserved = true;
       case null:
         break;
     }

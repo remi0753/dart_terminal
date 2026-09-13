@@ -6,8 +6,193 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 remaining overlays and P3 conversion — runtime evidence,
-  documentation/matrix update, and parent decision
+- Current subtask: P1 Option-click cursor and semantic prompt/output selection
+
+## Current P1 child — Option-click cursor and semantic selection
+
+- **Purpose:** Close the final actionable pinned P1 input row by adding
+  terminal-local Option-click cursor positioning and bounded semantic
+  prompt/output selection to the existing AppKit mouse/selection ownership
+  path.
+- **Background:** The post-commit roadmap reread after `4460b61` identifies
+  `Option-click cursor／semantic prompt-output selection` as the first unchecked
+  item. Drag/drop, Services, Quick Look, character/word/line selection,
+  autoscroll, mouse-report arbitration, and stable semantic prompt/command/
+  output ranges already pass. The generated inventory now contains one and
+  only one actionable P1 row, `IN-10`.
+- **Scope:** Re-read pinned Ghostty mouse/semantic selection behavior; inventory
+  current native pointer modifier transport, product mouse arbitration,
+  viewport/stable-anchor selection, shell integration markers, PTY mode and
+  bounded write queues; define exact Option-click movement and semantic
+  prompt/output gestures; implement them without bypassing existing focus,
+  mouse-report, paste, or selection owners; add unit, native/product-runtime,
+  documentation, matrix, and generated evidence.
+- **Out of scope:** Drag/drop, Services, Quick Look, arbitrary shell command
+  parsing, shell-specific command text retention, public accessibility
+  automation, generic `dart_appkit` terminal policy, Apple notarization,
+  Intel-host evidence, and duration-only soak.
+- **Dependencies:** AppKit event protocol v15 modifier/button coordinates;
+  `TerminalMouseRouter` and native view gesture ownership; canonical grid and
+  viewport coordinate conversion; `TerminalSelectionGestureController` and
+  content-free `TerminalSemanticRangeSnapshot`; existing OSC 133 shell
+  integration; focused-pane PTY output queue and runtime display scenario.
+- **Completion conditions:** Option-click on a focused primary-screen shell
+  emits one bounded, mode-aware cursor movement without changing canonical
+  cells or duplicating local selection/mouse reports; stale/out-of-grid,
+  alternate-screen, active mouse-report, unsafe distance, and unavailable
+  targets fail closed. Semantic prompt/output selection resolves only current
+  retained stable ranges, distinguishes prompt/input/output boundaries, handles
+  history/reflow/wide cells, and becomes the ordinary non-mutating Metal local
+  selection with exact copy text. Native/product JIT/AOT evidence proves focus,
+  arbitration, exact PTY bytes, selection pixels, cleanup, and zero owner leak;
+  `IN-10` and the generated inventory close only after all checks pass.
+- **Verification approach:** Inventory before splitting or coding; document
+  exact choices and failures here; run focused mouse/selection/semantic/native
+  tests, Developer JIT and Release AOT product acceptance, generated freshness,
+  formatter/analyzer, exact full repository gate, and the adjacent generic
+  library audit. Commit every ordered subtask separately if the implementation
+  is divided.
+- 2026-09-14: The first resumed inventory command used the misspelled working
+  directory `/Users/remstehenden/dart/dart_terminal` and was rejected before a
+  process or filesystem mutation existed. The same read-only inventory was
+  rerun from the repository root; no source consequence remains.
+- 2026-09-14: The clean pinned Ghostty checkout at exact revision
+  `d4d8f62262cb1a974a7d2470d5f79f811fab15e4` now supplies direct behavior
+  evidence. `Surface.zig` invokes prompt clicking only after an undragged left
+  release with no selection, requires click support, a prompt-resident cursor,
+  and a click no earlier than the current prompt. `Screen.zig` counts only OSC
+  133 input cells over one logical soft-wrapped line and returns left/right
+  movements; application-cursor mode selects `SS3 D/C`, otherwise `CSI D/C`.
+  The newer `click_events=1/2` path emits one SGR press with absolute/relative
+  coordinates, but the product's deliberately privacy-safe OSC 133 subset does
+  not currently retain those producer options. The roadmap's Option-click
+  contract will therefore use the bounded arrow-key subset and must not invent
+  unsupported shell-event negotiation.
+- 2026-09-14: Pinned semantic selection evidence is independent of prompt
+  clicking. Ordinary single/double/triple click remains cell/word/line, while
+  Control-or-Super triple-click selects the complete semantic output block;
+  dragging expands only across other output blocks. Prompt and input cells do
+  not become output selection. The product already transports native Option,
+  Control, and Command/Super modifier bits through `TerminalMouseRouter`, owns
+  stable end-exclusive semantic prompt/command/output ranges, and has a single
+  viewport selection owner, but the gesture controller currently discards all
+  modifiers and maps every triple-click to logical-line selection.
+- **Ordered subtasks and individual completion conditions:**
+  1. **Bounded semantic click and cursor-movement core.** Add content-free
+     retained-range queries that resolve the semantic segment under one
+     viewport cell, clamp ordinary logical-line selection to prompt/input/
+     output boundaries, select a complete output block, and combine same-kind
+     blocks without exposing text. Add a primary/live-input cursor movement
+     plan over stable logical anchors with a hard encoded-byte-derived movement
+     cap and explicit rejection reasons. Unit tests must cover prompt/input/
+     output separation, hard/soft wrapping, history/reflow/wide cells, stale
+     anchors, alternate/history viewport, both directions, no-op, and bounds.
+     This child does not activate a native gesture or send PTY bytes.
+  2. **Native Option-click and semantic selection gesture integration.** Add a
+     single terminal-local gesture arbiter downstream of the existing generic
+     AppKit event decoder. An undragged exact-Option left click may encode one
+     accepted movement plan as ordinary/application-cursor left/right bytes;
+     all other gestures retain mouse-report/Shift override ownership. Ordinary
+     triple-click uses the clamped semantic line, and Control-or-Command
+     triple-click plus drag selects whole output blocks. Tests must prove
+     exactly-once routing, selection clearing/rendering, mode bytes, drag and
+     stale cancellation, reporting exclusion, the 256-byte input bound, and
+     cleanup without any `dart_appkit` change.
+  3. **Dual-runtime evidence, documentation/matrix update, and parent
+     decision.** Drive OSC 133, native modifiers/click counts, exact PTY bytes,
+     semantic selection pixels/copy text, reporting arbitration, and cleanup
+     through the ordinary product in Developer JIT and Release AOT. Update the
+     README/input reference and `IN-10`, regenerate the gap inventory and all
+     dependent evidence, run the exact full repository gate and adjacent
+     generic-library audit, then close only this child and parent when every
+     preceding completion condition passes.
+- 2026-09-14: The pinned source SHA-256 identities for this child are
+  `Surface.zig`
+  `2095e33bc2d4c914275076f031bd512d3d988e6036e9c5124bf3a08c62aaa136`,
+  `Screen.zig`
+  `6f72245f66e38afc3222bee6d108f79509dfeb3025f01c0e906eabbc66e6c5d9`,
+  `SelectionGesture.zig`
+  `f40dcfc77bf10cc68116612b2e3386dd00779b66cee35a9ad585884708e8ecca`,
+  and `semantic_prompt.zig`
+  `04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff`.
+  A combined hash/inventory read was launched from the Ghostty checkout, so its
+  repository-relative `compatibility/ghostty_p0_p1_gap_inventory.json` lookup
+  failed and stopped the later read-only clauses. Rerunning from Dart Terminal
+  confirms `IN-10` alone is `actionable-p1` with gap
+  `option-click-and-semantic-selection`; no mutation resulted.
+- 2026-09-14: Product input writes have a strict 256-byte per-event cap. Both
+  normal `CSI D/C` and application-cursor `SS3 D/C` arrows are three bytes, so
+  the click plan must cap one atomic movement at 85 arrows (255 bytes). The
+  active viewport already exposes stable one-cell anchors that normalize wide
+  continuations, live-grid cursor anchors independent of history navigation,
+  and retained-range availability after reflow/eviction. These are sufficient
+  for the first child without adding cell-semantic storage or changing the
+  generic AppKit wire protocol.
+- 2026-09-14: A cleanup patch initially used context that assumed a duplicated
+  semantic-kind parameter shown by overlapping inspection output. The actual
+  file contained one parameter, so `apply_patch` rejected the patch before any
+  write. A scoped reread confirmed the implementation and a later minimal patch
+  removed only the genuinely unused resolved-range payload.
+- 2026-09-14: Sandboxed `dart format` formatted the changed sources but then
+  could not update the user telemetry timestamp; sandboxed focused execution
+  also failed while the Metal build hook tried to create Clang module-cache
+  files under `~/.cache`. The test was rerun with the repository's established
+  external build-cache permission. Its first compile found the intentionally
+  exhaustive product-observation switch missing the new `semanticOutput` unit;
+  adding the observation case restored exhaustive handling. The next run found
+  that a semantic output beginning with the shell's CR/LF boundary selected a
+  leading newline. Pinned `selectOutput` begins at the first output cell and
+  trims the trailing unwritten area, so the resolver now uses the first and
+  last retained content cells inside the stable semantic range. The focused
+  test then passed.
+- 2026-09-14: The first child now exposes three content-free viewport
+  operations: a logical-line selection intersected with its current retained
+  prompt/input/output segment, a first-to-last-content-cell output-block
+  selection, and a stable combination of two output selections that records
+  reverse direction. No selected text is stored by these contracts; ordinary
+  extraction and Metal projection remain the only consumers. A distinct
+  `semanticOutput` unit makes exhaustive product observation possible without
+  changing selection rendering.
+- 2026-09-14: Prompt cursor planning requires primary ownership, bottom/live
+  viewport, OSC 133 input state, the newest incomplete command range, and one
+  shared stable logical-line identity for command start, cursor, and target.
+  It rejects prompt cells, stale/unavailable anchors, history, alternate,
+  different lines, and more than 85 movements; same-position clicks are an
+  explicit silent result. The plan contains only direction/count and source
+  generations. Native modifier arbitration and PTY byte emission remain
+  intentionally absent until the second child.
+- 2026-09-14: The non-writing formatter check was initially read as if it had
+  applied its reported change. A direct formatter pass was then run once,
+  followed by a non-writing check reporting seven files and zero changes. The
+  final focused semantic test passes after formatting; the stable selection/
+  search regression also passes. Coverage includes same-row prompt/input/
+  output separation, two hard-line output blocks and reverse combination,
+  reflow retention, soft-wrap, wide lead/continuation normalization, both
+  cursor directions, no-op, 85/86 boundary, out-of-grid, unmarked input,
+  alternate ownership, history navigation, and evicted-range rejection.
+- 2026-09-14: The first exact full gate passed PTY, renderer, AppleScript,
+  App Intents, generated references, localization, and privacy checks, then
+  correctly rejected the stale Phase 7 AppKit acceptance source hashes.
+  Regenerating only `test/corpus/appkit/phase7_acceptance_v1.json` restored its
+  deterministic four-criterion evidence. The resumed gate passed through the
+  application, terminfo, shell-integration, and differential gates, then
+  correctly rejected the stale Ghostty gap inventory hash. Regenerating only
+  `compatibility/ghostty_p0_p1_gap_inventory.json` retains 102 rows, 96
+  accepted, zero actionable P0, one actionable P1, and zero silent
+  misbehavior; `IN-10` deliberately remains actionable until native/runtime
+  integration is complete.
+- 2026-09-14: The exact full gate passes in the final first-child state:
+  deterministic generated evidence is fresh, formatting covers 334 files with
+  zero changes, analysis reports no issues, the complete aggregate Dart suite
+  ends with `dart_terminal tests passed`, and the Ghostty inventory remains
+  intentionally at 96 accepted / one actionable P1. `git diff --check` is
+  clean. The adjacent `/Users/remi/dart/dart_appkit` worktree is clean; its
+  tracked path inventory has no terminal-named path and its tracked executable
+  source/script/manifest/Makefile grep has zero case-insensitive `terminal`
+  match. Apple notarization and duration-only campaigns remain skipped as
+  authorized. The bounded semantic click/cursor-movement core child satisfies
+  all recorded completion conditions; native gesture activation is the next
+  ordered child.
 
 ## Current P1 child — remaining overlays and P3 conversion
 
