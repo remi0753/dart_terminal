@@ -23,6 +23,7 @@ import 'phase7_appkit_acceptance_test.dart';
 import 'product_parser_benchmark_test.dart';
 import 'product_parser_corpus_test.dart';
 import 'product_performance_benchmark_test.dart';
+import 'product_performance_comparator_test.dart';
 import 'reference_renderer_test.dart';
 import 'render_rebuild_coordinator_test.dart';
 import 'render_resource_rebuilder_test.dart';
@@ -154,6 +155,7 @@ Future<void> main() async {
   runTerminalCompatibilityRegressionCoverageTests();
   runProductParserBenchmarkTests();
   await runProductPerformanceBenchmarkTests();
+  runProductPerformanceComparatorTests();
   runProductParserCorpusTests();
   runGoldenImageTests();
   runKeybindActionReferenceTests();

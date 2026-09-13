@@ -439,3 +439,85 @@ children and this parent are complete.
 - Apple notarization and long-duration endurance work were not run by explicit
   user direction and are not dependencies of this completed absolute-gate
   subtask. The compatible pinned comparator evidence subtask remains next.
+
+### 2026-09-13 — Pinned comparator codec start
+
+- Goal: define a strict, bounded, content-free codec for an independently
+  captured Ghostty comparator result and a deterministic relative evaluator for
+  the ROADMAP parity rules. This child establishes fail-closed logic only; it
+  does not claim that a real comparator was run.
+- Scope: exact Ghostty revision/Zig/build/config/no-patch/executable-hash
+  provenance; same Mac/architecture/memory/refresh tier and fixed workload
+  compatibility; input-to-visible p95, parser/output throughput, idle root RSS,
+  and idle process CPU observations; typed relative outcomes; hostile and
+  boundary fixtures; and this memo/ROADMAP.
+- Out of scope: downloading or installing an unpinned executable, modifying or
+  linking Ghostty, fabricating measurements, and treating a synthetic unit
+  fixture as release evidence. The next ordered child alone owns a real pinned
+  build/capture and checked passing result.
+- Dependencies and risk: product and comparator measurements must use the same
+  hardware, OS family, architecture, memory class, refresh tier, shell/config,
+  generated input/output corpus, animation-disabled idle policy, and sampling
+  windows. Any missing/extra key, invalid number, oversized source, provenance
+  drift, or compatibility mismatch must fail before comparison.
+- Relative rules are the ROADMAP authority: input-to-visible p95 must be no more
+  than the larger of comparator +4 ms or comparator ×1.25; parser/output
+  throughput must be at least 0.75× comparator; refresh tier must match; and
+  idle root RSS and process CPU must each be no more than 1.5× comparator.
+- Completion: exact round-trip and every threshold boundary have positive and
+  negative tests; provenance/workload/environment mismatch and unknown schema
+  fail closed; formatting, analysis, focused tests, exact main gate, and the
+  adjacent generic-library audit pass; then only this codec child is checked.
+- Local inventory found no `ghostty`/`zig` command, Ghostty app, Homebrew Cask,
+  cached archive, Downloads artifact, compatible benchmark result, or alternate
+  repository branch containing one. Therefore the subsequent real-capture child
+  currently has an external-artifact blocker, but that does not prevent this
+  evaluator child from being completed first.
+
+### 2026-09-13 — Pinned comparator codec result
+
+- Implemented `tool/product_performance_comparator.dart`. Its decoder accepts no
+  more than 64 KiB and requires an exact schema for the macOS arm64 environment,
+  fixed workload, metrics, and unpatched Ghostty provenance. The authority is
+  revision `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`, Zig `0.16.0`, command
+  `zig build -Doptimize=ReleaseFast`, and configuration `ReleaseLocal`; exact
+  executable and harness SHA-256 values remain capture inputs rather than
+  hard-coded synthetic claims.
+- The evaluator first requires exact environment and workload equality, including
+  the 60/120 Hz refresh tier. It then applies all four relative gates: input p95
+  at `max(comparator + 4 ms, comparator × 1.25)`, parser/output throughput at
+  `>= 0.75×`, and idle root RSS and process CPU at `<= 1.5×`. Its bounded result
+  contains only provenance, aggregate metrics, thresholds, and decisions; raw
+  samples and command-line/user content are not retained.
+- Added `test/product_performance_comparator_test.dart` to the main test runner.
+  Tests cover both input-threshold branches, every exact passing boundary and
+  first failing value, strict key inventory, revision/patch/workload drift,
+  invalid metrics, oversized evidence, and refresh/workload incompatibility.
+- Considered allowing a partially compatible environment or a locally patched
+  comparator, but rejected both: either would make a relative result
+  irreproducible and permit an invalid parity claim. Synthetic fixtures are used
+  only to prove codec/evaluator behavior and are never accepted as release
+  evidence.
+
+Validation on 2026-09-13:
+
+- `dart analyze`: passed with no issues.
+- `dart run test/product_performance_comparator_test.dart`: passed.
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: passed (exit 0), including
+  dependency capability checks, generated/reference audits, formatting of 315
+  files with zero changes, analysis, and the complete product test runner.
+- In adjacent `../dart_appkit`,
+  `DART_SUPPRESS_ANALYTICS=true dart run tool/generic_repository_audit.dart --check`:
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=140 text_files=139`; its worktree was
+  clean. No terminal-named or terminal-specific code was added there.
+- Apple notarization and long-duration verification were not run by explicit
+  user direction and are not dependencies of this codec child.
+
+The codec child is complete. The next ordered child, a real pinned Ghostty build,
+capture, and passing relative result, is blocked in the current environment:
+neither the exact source/build artifact nor Zig `0.16.0` is locally available.
+Substituting another revision, downloading an unverified binary, or manufacturing
+measurements would violate the recorded comparator policy. A verified source at
+the pinned revision plus the exact Zig toolchain (or a provenance-complete,
+workload-compatible capture from this Mac) is required before that child can be
+completed; aggregate-gate closure must not proceed first.
