@@ -120,7 +120,6 @@ const Map<String, String> _classifications = <String, String>{
   'REL-01': 'accepted-external-follow-up',
   'DIST-01': 'accepted-external-follow-up',
   'DIST-02': 'accepted-external-follow-up',
-  'SCR-11': 'actionable-p1',
   'SCR-12': 'actionable-p1',
   'TXT-07': 'actionable-p1',
   'TXT-08': 'actionable-p1',
@@ -135,7 +134,6 @@ const Map<String, List<String>> _rowGapIds = <String, List<String>>{
   'REL-01': <String>['physical-duration-reliability'],
   'DIST-01': <String>['intel-native-handoff'],
   'DIST-02': <String>['apple-service-acceptance'],
-  'SCR-11': <String>['semantic-ranges'],
   'SCR-12': <String>['snapshot-restore'],
   'TXT-07': <String>['cursor-ligature-break'],
   'TXT-08': <String>['font-axes-overrides-diagnostics'],
@@ -189,15 +187,6 @@ const List<_Gap> _gaps = <_Gap>[
     owner: 'docs/phase11/developer-id-notarization.md',
     productActionable: false,
     reason: 'Credential-independent distribution gates pass; positive signing and notarization needs external authority.',
-  ),
-  _Gap(
-    id: 'semantic-ranges',
-    kind: 'actionable-product-gap',
-    priority: 'P1',
-    rowIds: <String>['SCR-11'],
-    owner: 'ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down',
-    productActionable: true,
-    reason: 'Row prompt hints exist, but bounded command and output ranges are incomplete.',
   ),
   _Gap(
     id: 'snapshot-restore',
@@ -266,6 +255,9 @@ const List<String> _evidencePaths = <String>[
   'compatibility/regression_coverage_report.json',
   'benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json',
   'benchmark/evidence/product-relative-performance-macos-arm64-m1.json',
+  'lib/src/terminal_core/terminal_semantic_prompt.dart',
+  'lib/src/terminal_core/terminal_semantic_ranges.dart',
+  'test/terminal_semantic_prompt_test.dart',
 ];
 
 final class GhosttyP0P1GapInventoryException implements Exception {
@@ -281,9 +273,9 @@ final class GhosttyP0P1GapInventoryResult {
   const GhosttyP0P1GapInventoryResult();
 
   int get rows => 102;
-  int get accepted => 90;
+  int get accepted => 91;
   int get actionableP0 => 0;
-  int get actionableP1 => 7;
+  int get actionableP1 => 6;
   int get documentedDifferences => 2;
   int get externalFollowUps => 3;
 
@@ -328,6 +320,23 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
     implementationManifestSource: _regularFile(
       root,
       'compatibility/implemented_sequence_manifest.json',
+      1024 * 1024,
+    ).readAsStringSync(),
+  );
+  validateGhosttyP1SemanticRangeClosureSources(
+    sequenceInventorySource: _regularFile(
+      root,
+      'compatibility/sequence_mode_inventory.json',
+      4 * 1024 * 1024,
+    ).readAsStringSync(),
+    semanticRangeSource: _regularFile(
+      root,
+      'lib/src/terminal_core/terminal_semantic_ranges.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    semanticRangeTestSource: _regularFile(
+      root,
+      'test/terminal_semantic_prompt_test.dart',
       1024 * 1024,
     ).readAsStringSync(),
   );
@@ -404,7 +413,7 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
           classification: classifications[classification] ?? 0,
       },
       'actionable_p0': 0,
-      'actionable_p1': 7,
+      'actionable_p1': 6,
       'silent_misbehavior': 0,
     },
     'p0_closure': <String, Object?>{
@@ -415,8 +424,11 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
       'external_follow_ups': <String>['intel-native-handoff'],
     },
     'p1_closure': <String, Object?>{
-      'completed': <String>['extended-rendition-and-selective-erase'],
-      'remaining_actionable': 7,
+      'completed': <String>[
+        'extended-rendition-and-selective-erase',
+        'bounded-semantic-ranges',
+      ],
+      'remaining_actionable': 6,
     },
     'rows': encodedRows,
     'gaps': <Map<String, Object?>>[for (final _Gap gap in _gaps) gap.toJson()],
@@ -494,24 +506,69 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
         priorities['P1'] == 26 &&
         priorities['P1/P2'] == 1 &&
         totals['actionable_p0'] == 0 &&
-        totals['actionable_p1'] == 7 &&
+        totals['actionable_p1'] == 6 &&
         totals['silent_misbehavior'] == 0 &&
-        classifications['accepted'] == 90 &&
+        classifications['accepted'] == 91 &&
         classifications['accepted-documented-difference'] == 2 &&
         classifications['accepted-external-follow-up'] == 3 &&
-        classifications['actionable-p1'] == 7 &&
+        classifications['actionable-p1'] == 6 &&
         p0Closure['actionable_product_gaps'] == 0 &&
         p0Closure['known_silent_misbehavior'] == 0 &&
         p0Closure['documented_non_mutating_differences'] == 1 &&
         p0Closure['matrix_blockers'] == 0 &&
         (p0Closure['external_follow_ups']! as List<Object?>).single ==
             'intel-native-handoff' &&
-        (p1Closure['completed']! as List<Object?>).single ==
-            'extended-rendition-and-selective-erase' &&
-        p1Closure['remaining_actionable'] == 7,
+        (p1Closure['completed']! as List<Object?>).join(',') ==
+            'extended-rendition-and-selective-erase,bounded-semantic-ranges' &&
+        p1Closure['remaining_actionable'] == 6,
     'reviewed totals differ',
   );
   return const GhosttyP0P1GapInventoryResult();
+}
+
+void validateGhosttyP1SemanticRangeClosureSources({
+  required String sequenceInventorySource,
+  required String semanticRangeSource,
+  required String semanticRangeTestSource,
+}) {
+  final Map<String, Object?> inventory = _jsonSource(
+    sequenceInventorySource,
+    'sequence inventory',
+  );
+  final Map<String, Object?> record = (inventory['records']! as List<Object?>)
+      .cast<Map<String, Object?>>()
+      .singleWhere((row) => row['id'] == 'ghostty:osc:osc-133');
+  final String notes = record['notes']! as String;
+  _expect(
+    record['support'] == 'partial' &&
+        record['disposition'] == 'execute' &&
+        (record['implementationEvidence']! as List<Object?>).contains(
+          'lib/src/terminal_core/terminal_semantic_ranges.dart#bounded-stable-anchor-ranges',
+        ) &&
+        (record['testEvidence']! as List<Object?>).contains(
+          'test/terminal_semantic_prompt_test.dart#bounded-semantic-ranges',
+        ) &&
+        notes.contains('A/B/C/D/I/L/N/P') &&
+        notes.contains('stable logical anchors') &&
+        notes.contains('command text are never decoded or retained'),
+    'OSC 133 semantic range inventory evidence differs',
+  );
+  _expect(
+    semanticRangeSource.contains('enum TerminalSemanticRangeKind') &&
+        semanticRangeSource.contains('class TerminalSemanticRangeSnapshot') &&
+        semanticRangeSource.contains('maximumStorageCapacity = 65536') &&
+        semanticRangeSource.contains('_resolveDocumentBoundary') &&
+        semanticRangeSource.contains('didResetSemanticPrompt'),
+    'bounded semantic range implementation contract differs',
+  );
+  _expect(
+    semanticRangeTestSource.contains('_testExactPromptCommandOutputRanges') &&
+        semanticRangeTestSource.contains(
+          '_testRangesSurviveHistoryAndReflowThenRejectEviction',
+        ) &&
+        semanticRangeTestSource.contains('_testRangeStorageAndQueryBounds'),
+    'semantic range regression evidence differs',
+  );
 }
 
 void validateGhosttyP1ExtendedRenditionClosureSources({

@@ -671,7 +671,19 @@ const Map<int, _Metadata> _oscMetadata = <int, _Metadata>{
     'OSC-133',
     'semantic_prompt.zig, OSC 133 semantic prompt parser',
     support: 'partial',
-    notes: 'The bounded A/B/C/D/I/L/N/P lifecycle projects privacy-safe shell state and row flags; I is line-feed scoped, L/N follow fresh-line semantics, and options are validated but never decoded or retained.',
+    notes:
+        'The bounded A/B/C/D/I/L/N/P lifecycle projects privacy-safe shell '
+        'state, row flags, and exact prompt/command/output ranges over stable '
+        'logical anchors; I is line-feed scoped, L/N follow fresh-line '
+        'semantics, evicted anchors are unavailable, and options and command '
+        'text are never decoded or retained.',
+    additionalImplementationEvidence: <String>[
+      'lib/src/terminal_core/terminal_semantic_prompt.dart#content-free-lifecycle',
+      'lib/src/terminal_core/terminal_semantic_ranges.dart#bounded-stable-anchor-ranges',
+    ],
+    additionalTestEvidence: <String>[
+      'test/terminal_semantic_prompt_test.dart#bounded-semantic-ranges',
+    ],
   ),
 };
 

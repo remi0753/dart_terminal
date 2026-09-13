@@ -15,9 +15,9 @@ void runGhosttyP0P1GapInventoryTests() {
       );
   _expect(
     result.rows == 102 &&
-        result.accepted == 90 &&
+        result.accepted == 91 &&
         result.actionableP0 == 0 &&
-        result.actionableP1 == 7 &&
+        result.actionableP1 == 6 &&
         result.documentedDifferences == 2 &&
         result.externalFollowUps == 3,
     'reviewed result totals are exact',
@@ -28,12 +28,12 @@ void runGhosttyP0P1GapInventoryTests() {
   final List<Object?> gaps = report['gaps']! as List<Object?>;
   _expect(
     rows.length == 102 &&
-        gaps.length == 12 &&
+        gaps.length == 11 &&
         rows
                 .cast<Map<String, Object?>>()
                 .where((row) => row['classification'] == 'actionable-p1')
                 .length ==
-            7 &&
+            6 &&
         gaps
             .cast<Map<String, Object?>>()
             .where((gap) => gap['silent_misbehavior'] == true)
@@ -41,7 +41,7 @@ void runGhosttyP0P1GapInventoryTests() {
     'every row and reviewed gap is represented',
   );
   _expectFailure(
-    committed.replaceFirst('"actionable_p1": 7', '"actionable_p1": 8'),
+    committed.replaceFirst('"actionable_p1": 6', '"actionable_p1": 7'),
     generated,
     'stale actionable total',
   );
@@ -129,6 +129,35 @@ void runGhosttyP0P1GapInventoryTests() {
     ),
     'missing DECSCA selector',
   );
+  final String semanticRangeSource = File(
+    'lib/src/terminal_core/terminal_semantic_ranges.dart',
+  ).readAsStringSync();
+  final String semanticRangeTestSource = File(
+    'test/terminal_semantic_prompt_test.dart',
+  ).readAsStringSync();
+  validateGhosttyP1SemanticRangeClosureSources(
+    sequenceInventorySource: sequenceInventory,
+    semanticRangeSource: semanticRangeSource,
+    semanticRangeTestSource: semanticRangeTestSource,
+  );
+  _expectSemanticRangeFailure(
+    sequenceInventory,
+    semanticRangeSource.replaceFirst(
+      'class TerminalSemanticRangeSnapshot',
+      'class MissingSemanticRangeSnapshot',
+    ),
+    semanticRangeTestSource,
+    'missing bounded semantic range contract',
+  );
+  _expectSemanticRangeFailure(
+    sequenceInventory,
+    semanticRangeSource,
+    semanticRangeTestSource.replaceAll(
+      '_testRangesSurviveHistoryAndReflowThenRejectEviction',
+      '_missingHistoryReflowEvictionTest',
+    ),
+    'missing history/reflow/eviction regression',
+  );
 }
 
 void _expectFailure(String source, String expected, String message) {
@@ -182,6 +211,24 @@ void _expectP1Failure(
     threw = true;
   }
   _expect(threw, message);
+}
+
+void _expectSemanticRangeFailure(
+  String sequenceInventory,
+  String semanticRangeSource,
+  String semanticRangeTestSource,
+  String message,
+) {
+  try {
+    validateGhosttyP1SemanticRangeClosureSources(
+      sequenceInventorySource: sequenceInventory,
+      semanticRangeSource: semanticRangeSource,
+      semanticRangeTestSource: semanticRangeTestSource,
+    );
+  } on GhosttyP0P1GapInventoryException {
+    return;
+  }
+  throw StateError('test failed: $message');
 }
 
 void _expect(bool condition, String message) {

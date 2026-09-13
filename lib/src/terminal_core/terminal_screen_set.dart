@@ -13,6 +13,7 @@ import 'terminal_style.dart';
 import 'terminal_unicode.dart';
 
 part 'terminal_selection.dart';
+part 'terminal_semantic_ranges.dart';
 part 'terminal_accessibility.dart';
 part 'terminal_kitty_image_viewport.dart';
 part 'terminal_viewport.dart';
@@ -39,7 +40,15 @@ final class TerminalScreenSet {
     TerminalCursorShape initialCursorShape = TerminalCursorShape.block,
     bool initialCursorBlinking = true,
     TerminalColorScheme initialColorScheme = TerminalColorScheme.dark,
+    int semanticRangeCapacity =
+        TerminalSemanticRangeSnapshot.defaultStorageCapacity,
   }) {
+    RangeError.checkValueInInterval(
+      semanticRangeCapacity,
+      1,
+      TerminalSemanticRangeSnapshot.maximumStorageCapacity,
+      'semanticRangeCapacity',
+    );
     final TerminalStyleTable sharedStyles = styleTable ?? TerminalStyleTable();
     final TerminalPalette sharedPalette = palette ?? TerminalPalette();
     final TerminalGraphemeTable sharedGraphemes =
@@ -88,6 +97,11 @@ final class TerminalScreenSet {
       initialColorScheme: initialColorScheme,
     );
     result._viewport = TerminalViewport._(result);
+    result._semanticRanges = _TerminalSemanticRangeTracker(
+      result,
+      capacity: semanticRangeCapacity,
+    );
+    result.semanticPrompt.attachObserver(result._semanticRanges);
     result._attachKittyImageObservers();
     return result;
   }
@@ -128,6 +142,7 @@ final class TerminalScreenSet {
   final TerminalKittyImageStore alternateKittyImages;
   final TerminalScrollbackAttachment _scrollbackAttachment;
   late final TerminalViewport _viewport;
+  late final _TerminalSemanticRangeTracker _semanticRanges;
 
   TerminalScreenKind _activeKind = TerminalScreenKind.primary;
   bool _mode1049Active = false;
@@ -199,6 +214,13 @@ final class TerminalScreenSet {
   int get resetGeneration => _resetGeneration;
   int get kittyKeyboardStackDepth => _activeKittyKeyboard.depth;
   TerminalViewport get viewport => _viewport;
+  TerminalSemanticRangeSnapshot semanticRangeSnapshot({
+    TerminalScreenKind? screenKind,
+    int maxRanges = TerminalSemanticRangeSnapshot.defaultMaximumRanges,
+  }) => _semanticRanges.snapshot(
+    screenKind: screenKind ?? activeKind,
+    maxRanges: maxRanges,
+  );
   TerminalKittyViewportSnapshot captureKittyImageViewport() =>
       TerminalKittyViewportSnapshot.capture(this);
   Set<int> captureVisibleKittyImageIds() =>

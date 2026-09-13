@@ -6,8 +6,8 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 gap burn-down — extended rendition and protected
-  selective erase (complete); next is bounded semantic ranges
+- Current subtask: P1 gap burn-down — bounded semantic prompt/command/output
+  ranges (complete); next is versioned snapshot restore oracle
 
 ## Purpose
 
@@ -123,7 +123,90 @@ code/name containing `terminal` may be added to `dart_appkit`.
      acceptance, update public/matrix documentation, audit `dart_appkit`, and
      close the parent only when all conditions pass.
 
+### Current P1 child — bounded semantic ranges
+
+- **Purpose:** Close the actionable `SCR-11` remainder by turning the existing
+  OSC 133 point-in-time prompt state and row hints into bounded, queryable
+  prompt/command/output regions that remain correct across scrolling, history,
+  resize/reflow, alternate-screen changes, reset, and eviction.
+- **Background:** OSC 8 hyperlink identity, selection/search, row semantic
+  flags, and previous/next prompt navigation already exist. The gap inventory
+  still classifies `SCR-11` as actionable because callers cannot obtain exact
+  command/output boundaries or a stable semantic range from the retained
+  logical terminal model.
+- **Scope:** Inspect the pinned Ghostty semantic prompt lifecycle; define a
+  bounded typed range/query contract over stable logical anchors; project OSC
+  133 A/B/C/D transitions into exact prompt, command, and output ownership;
+  preserve or deliberately invalidate ranges through history, reflow, screen
+  switches, reset, and eviction; add deterministic core, parser, selection,
+  and navigation regressions; update the machine-readable gap closure and
+  public/matrix documentation.
+- **Out of scope:** Option-click and semantic selection gestures (a later
+  ordered child), search-index redesign, shell integration changes unrelated
+  to OSC 133, persisted snapshot restore, copying Ghostty internals, unbounded
+  command text retention, and every change or `terminal`-named symbol in the
+  generic `dart_appkit` repository.
+- **Dependencies:** `TerminalSemanticPromptModel`, screen row flags and stable
+  logical anchors, screen-set history/reflow ownership, OSC 133 parser and
+  desktop-signal projection, selection/search/navigation consumers, the
+  pinned Ghostty revision `d4d8f622...`, and the current 102-row gap inventory.
+- **Completion conditions:** Every accepted OSC 133 lifecycle yields exact,
+  end-exclusive prompt/command/output ranges without retaining command text;
+  malformed/out-of-order input is bounded and deterministic; range identity
+  survives valid scroll/reflow operations and cannot alias evicted or reset
+  content; no regression occurs in selection, navigation, snapshot, or desktop
+  notification semantics; `SCR-11` moves from actionable to accepted only
+  after focused tests, regenerated evidence, and the exact repository gate.
+- **Verification approach:** Add table-driven lifecycle and malformed-order
+  tests, anchor/history/reflow/eviction tests, and consumer integration tests;
+  run focused format/analyze and relevant suites, regenerate compatibility and
+  Ghostty evidence in dependency order, then run exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test`. Apple notarization and
+  duration-only long-running campaigns remain explicitly skipped, not blockers.
+
 ## Inventory and decisions
+
+- 2026-09-13: The first focused analyzer rerun passed with `No issues found!`,
+  and `dart run test/terminal_semantic_prompt_test.dart` exited 0 after its
+  native build hooks. The new regression covers exact same-row boundaries,
+  incomplete and repeated lifecycle markers, fixed storage/query caps,
+  history/reflow identity, history eviction, primary/alternate ownership, and
+  RIS cleanup.
+- 2026-09-13: The range store is a fixed ring of stable logical anchors plus a
+  monotonic, content-free command ID. It retains neither OSC option payload nor
+  a copy of prompt, command, or output text. Query resolves both end-exclusive
+  anchors against the current history/screen document and omits a whole range
+  if either endpoint has been evicted, preventing recycled-row aliasing.
+- 2026-09-13: Compatibility evidence keeps OSC 133 classified `partial`
+  because option fields remain deliberately unretained, while recording the
+  completed A/B/C/D/I/L/N/P range projection. The Ghostty inventory binds the
+  generated record, implementation source, regression source, and updated
+  `SCR-11` matrix text before changing that row from actionable to accepted.
+- 2026-09-13: A repository-sandbox `dart format` invocation formatted the Dart
+  inputs successfully but then exited 1 while attempting to update the global
+  Dart telemetry-session timestamp. No source formatting failed. The command
+  will be repeated with analytics suppressed and the required permission;
+  this environmental failure is not accepted as verification.
+- 2026-09-13: The first Ghostty gap-inventory focused test failed only in its
+  negative fixture: `replaceFirst` renamed the test registration while leaving
+  the function declaration, so the source-presence validator correctly still
+  found the required regression name. The fixture now uses `replaceAll` to
+  remove both occurrences; product code and generated evidence were not
+  implicated.
+- 2026-09-13: An attempted parallel freshness check exposed a build-hook race:
+  `compatibility-inventory-check` and the Ghostty inventory check concurrently
+  rewrote the same `.dart_tool/lib` native-asset bundle, and the former could
+  not find the renderer dylib while applying install names. The Ghostty check
+  passed independently. Generator concurrency is outside this child; all Dart
+  build-hook checks are now run sequentially, and the failed freshness check
+  must pass on rerun before completion.
+- 2026-09-13: The first exact `make test` progressed through native capability,
+  parser/reference, localization, diagnostics, AppKit, and compatibility
+  regression checks, then correctly rejected the Phase 6 regression-coverage
+  report as stale because the regenerated OSC 133 inventory hash changed. This
+  is a required evidence dependency, not a product failure. Regenerate the
+  coverage report, then regenerate the Ghostty inventory that hashes it before
+  rerunning the exact gate.
 
 - 2026-09-13: Work began immediately after commit `db54f89` and a mandatory
   roadmap reread. The sanitizer/fuzz/fault parent is complete, the worktree is
@@ -401,3 +484,52 @@ code/name containing `terminal` may be added to `dart_appkit`.
   duration-only long-running tests were not executed, as explicitly authorized;
   neither is used to claim this product behavior. The next ordered child is
   bounded semantic prompt/command/output ranges.
+- 2026-09-13: After commit `41ad988` and the mandatory roadmap reread, the
+  semantic-range child began from a clean worktree. Current code keeps one
+  transient OSC 133 shell state and bounded per-row prompt/command/output bits;
+  those bits survive scrollback and are unioned across reflow, but they cannot
+  express a boundary within a row, correlate prompt/input/output segments, or
+  distinguish two commands sharing one physical/logical row. Selection already
+  provides end-exclusive `TerminalLogicalAnchor` resolution over history plus
+  live grids, including eviction rejection, so a second content store is neither
+  needed nor allowed.
+- 2026-09-13: The pinned Ghostty semantic parser was re-read at revision
+  `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`; its exact source SHA-256 is the
+  already-pinned
+  `04935466b4fd8b9e0e41e7d69bb72fc6ff6141111d9274d8bda927dcb41488ff`.
+  It recognizes A/B/C/D/I/L/N/P and exposes options including command-line
+  decoding, click behavior, and prompt kinds. This product continues to reject
+  command-text retention and option authority. The selected design stores only
+  bounded typed marker ranges over stable logical anchors, groups segments with
+  a content-free command ID, filters unresolved/evicted endpoints at query time,
+  and keeps existing row flags as the cheap rendering/navigation hint.
+- 2026-09-13: The first formatter invocation mistakenly included this Markdown
+  memo despite the earlier recorded warning about Dart-only inputs. It formatted
+  the six actual Dart files (two changed) and rejected only the memo as
+  non-Dart; no Markdown content changed. Subsequent formatting commands list
+  Dart paths or Dart directories only.
+- 2026-09-13: After regenerating the reviewed differential baseline report,
+  regression coverage, and Ghostty inventory in dependency order, final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed. It covered all native
+  capability packages, generated/freshness checks, compatibility and
+  differential evidence, application evidence, terminfo and shell integration,
+  the Ghostty inventory (`accepted=91`, `actionable_p1=6`), distribution policy,
+  formatter (327 files, zero changes), analyzer (`No issues found!`), security
+  stress, updater/rollback/symbol cases, and the aggregate suite ending with
+  `dart_terminal tests passed`. Focused semantic, compatibility-inventory, and
+  gap-inventory tests also exited 0; `git diff --check` passed.
+- 2026-09-13: The adjacent `dart_appkit` worktree remained clean. A
+  case-insensitive content audit outside documentation/build/cache/git paths and
+  a filename audit outside those same paths found no `terminal`,
+  `dart_terminal`, or `dart-terminal` occurrence. Historical consumer notes in
+  `docs/WORKLOG.md` were observed but are not executable code or product API and
+  were not modified. No Dart Terminal code or naming was added to the generic
+  library. Apple notarization and duration-only long-running campaigns were
+  skipped as authorized. The next ordered child is the versioned snapshot
+  restore oracle.
+- 2026-09-13: Final review corrected the matrix capacity wording from an
+  ambiguous "maximum 1024" to the implemented default 1024 and hard maximum
+  65,536. After regenerating the matrix-dependent coverage and Ghostty reports,
+  the exact full gate passed again in the final source/evidence state, including
+  327-file zero-change formatting, clean analysis, Ghostty totals 91 accepted
+  and six actionable P1 rows, and `dart_terminal tests passed`.

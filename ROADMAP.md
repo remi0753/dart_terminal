@@ -1381,7 +1381,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] P0 gap burn-down
   - [ ] P1 gap burn-down
     - [x] underline color／overline／protected selective erase
-    - [ ] bounded semantic prompt／command／output ranges
+    - [x] bounded semantic prompt／command／output ranges
     - [ ] versioned snapshot restore oracle
     - [ ] cursor-cell ligature shaping break
     - [ ] variable font axes／codepoint override／fallback diagnostics

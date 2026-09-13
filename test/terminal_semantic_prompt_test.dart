@@ -6,6 +6,11 @@ import 'package:dart_terminal/dart_terminal.dart';
 void main() => runTerminalSemanticPromptTests();
 
 void runTerminalSemanticPromptTests() {
+  _testExactPromptCommandOutputRanges();
+  _testOpenRangeAndOutOfOrderLifecycle();
+  _testRangeStorageAndQueryBounds();
+  _testRangesSurviveHistoryAndReflowThenRejectEviction();
+  _testRangeScreenAndResetOwnership();
   _testLifecycleProjectsPrivacySafeRowFlags();
   _testFreshLineAndNewCommandExtensions();
   _testInputUntilLineEndExtension();
@@ -14,6 +19,234 @@ void runTerminalSemanticPromptTests() {
   _testBottomScrollMarkIsChunkIndependent();
   _testAlternateScreenAndResetOwnership();
   _testChunkAndTerminatorIndependence();
+}
+
+void _testExactPromptCommandOutputRanges() {
+  final _Harness harness = _Harness(rows: 2, columns: 24);
+  harness.parse(_osc('A;cmdline=never-retained'));
+  harness.parse(r'$ ');
+  harness.parse(_osc('B'));
+  harness.parse('echo');
+  harness.parse(_osc('C'));
+  harness.parse('result');
+  harness.parse(_osc('D;7'));
+
+  final TerminalSemanticRangeSnapshot snapshot = harness.screens
+      .semanticRangeSnapshot();
+  _expect(
+    snapshot.ranges.length == 3 &&
+        snapshot.storedRangeCount == 3 &&
+        snapshot.unavailableRangeCount == 0 &&
+        snapshot.evictedRangeCount == 0 &&
+        !snapshot.limitReached &&
+        !snapshot.isTruncated,
+    'one complete lifecycle exposes three exact bounded ranges',
+  );
+  _expect(
+    snapshot.ranges
+                .map((TerminalSemanticRange range) => range.kind)
+                .join(',') ==
+            'TerminalSemanticRangeKind.prompt,'
+                'TerminalSemanticRangeKind.command,'
+                'TerminalSemanticRangeKind.output' &&
+        snapshot.ranges.every(
+          (TerminalSemanticRange range) =>
+              range.commandId == 1 && range.isComplete,
+        ),
+    'prompt, command, and output ranges retain one content-free command ID',
+  );
+  _expect(
+    _rangeText(harness.screens, snapshot.ranges[0]) == r'$ ' &&
+        _rangeText(harness.screens, snapshot.ranges[1]) == 'echo' &&
+        _rangeText(harness.screens, snapshot.ranges[2]) == 'result',
+    'same-row marker boundaries separate prompt, command, and output exactly',
+  );
+}
+
+void _testOpenRangeAndOutOfOrderLifecycle() {
+  final _Harness harness = _Harness(rows: 2, columns: 16);
+  harness.parse(_osc('C'));
+  harness.parse('out');
+  TerminalSemanticRangeSnapshot snapshot = harness.screens
+      .semanticRangeSnapshot();
+  _expect(
+    snapshot.ranges.length == 1 &&
+        snapshot.ranges.single.kind == TerminalSemanticRangeKind.output &&
+        snapshot.ranges.single.commandId == 1 &&
+        !snapshot.ranges.single.isComplete &&
+        _rangeText(harness.screens, snapshot.ranges.single) == 'out',
+    'out-of-order C starts one deterministic incomplete output range',
+  );
+
+  harness.parse(_osc('D'));
+  harness.parse(_osc('D'));
+  snapshot = harness.screens.semanticRangeSnapshot();
+  _expect(
+    snapshot.ranges.length == 1 &&
+        snapshot.ranges.single.isComplete &&
+        snapshot.generation > 1,
+    'D closes one open range and repeated D creates no synthetic segment',
+  );
+}
+
+void _testRangeStorageAndQueryBounds() {
+  final _Harness harness = _Harness(
+    rows: 2,
+    columns: 24,
+    semanticRangeCapacity: 4,
+  );
+  for (final String value in <String>['a', 'b', 'c']) {
+    harness.parse(_osc('A'));
+    harness.parse('>');
+    harness.parse(_osc('B'));
+    harness.parse(value);
+    harness.parse(_osc('D'));
+  }
+  final TerminalSemanticRangeSnapshot all = harness.screens
+      .semanticRangeSnapshot(maxRanges: 4);
+  _expect(
+    all.ranges.length == 4 &&
+        all.storedRangeCount == 4 &&
+        all.evictedRangeCount == 2 &&
+        all.ranges.first.commandId == 2 &&
+        all.ranges.last.commandId == 3 &&
+        all.isTruncated,
+    'fixed storage evicts whole oldest segments without retaining payload text',
+  );
+  final TerminalSemanticRangeSnapshot limited = harness.screens
+      .semanticRangeSnapshot(maxRanges: 2);
+  _expect(
+    limited.ranges.length == 2 &&
+        limited.ranges.every(
+          (TerminalSemanticRange range) => range.commandId == 3,
+        ) &&
+        limited.limitReached,
+    'query cap returns the newest resolvable segments and reports truncation',
+  );
+  _expectThrows(
+    () => TerminalScreenSet(rows: 1, columns: 1, semanticRangeCapacity: 0),
+    'zero semantic storage capacity is rejected before allocation',
+  );
+  _expectThrows(
+    () => harness.screens.semanticRangeSnapshot(maxRanges: 0),
+    'zero semantic query bound is rejected before allocation',
+  );
+}
+
+void _testRangesSurviveHistoryAndReflowThenRejectEviction() {
+  final TerminalScrollback history = TerminalScrollback(
+    maxLines: 8,
+    maxBytes: 16 * 1024,
+    pageRows: 2,
+  );
+  final _Harness harness = _Harness(rows: 3, columns: 8, scrollback: history);
+  harness.parse(_osc('A'));
+  harness.parse('>');
+  harness.parse(_osc('I'));
+  harness.parse('abcdef\r\n');
+  harness.parse('output');
+  harness.parse(_osc('D'));
+  harness.parse('\r\n1\r\n2\r\n3\r\n');
+
+  TerminalSemanticRangeSnapshot snapshot = harness.screens
+      .semanticRangeSnapshot();
+  _expect(
+    snapshot.ranges.length == 3 &&
+        snapshot.ranges[1].kind == TerminalSemanticRangeKind.command &&
+        snapshot.ranges[2].kind == TerminalSemanticRangeKind.output &&
+        snapshot.ranges[1].commandId == snapshot.ranges[2].commandId,
+    'I closes command and begins correlated output at the explicit line feed',
+  );
+  final List<String?> before = snapshot.ranges
+      .map((TerminalSemanticRange range) => _rangeText(harness.screens, range))
+      .toList(growable: false);
+  harness.screens.resize(rows: 3, columns: 4);
+  snapshot = harness.screens.semanticRangeSnapshot();
+  _expect(
+    snapshot.ranges.length == 3 &&
+        snapshot.ranges
+                .map(
+                  (TerminalSemanticRange range) =>
+                      _rangeText(harness.screens, range),
+                )
+                .toList(growable: false)
+                .join('|') ==
+            before.join('|'),
+    'stable range anchors preserve exact segment text through history reflow',
+  );
+
+  final _Harness evicted = _Harness(
+    rows: 2,
+    columns: 4,
+    scrollback: TerminalScrollback(maxLines: 1, maxBytes: 4096, pageRows: 1),
+  );
+  evicted.parse(_osc('A'));
+  evicted.parse('p');
+  evicted.parse(_osc('B'));
+  evicted.parse('c');
+  evicted.parse(_osc('D'));
+  evicted.parse('\r\n1\r\n2\r\n3\r\n4\r\n');
+  final TerminalSemanticRangeSnapshot unavailable = evicted.screens
+      .semanticRangeSnapshot();
+  _expect(
+    unavailable.ranges.isEmpty &&
+        unavailable.storedRangeCount == 2 &&
+        unavailable.unavailableRangeCount == 2 &&
+        unavailable.isTruncated,
+    'evicted logical epochs cannot alias recycled rows or produce partial ranges',
+  );
+}
+
+void _testRangeScreenAndResetOwnership() {
+  final _Harness harness = _Harness(rows: 2, columns: 8);
+  harness.parse(_osc('A'));
+  harness.parse('p');
+  harness.parse(_osc('D'));
+  harness.parse('\x1b[?47h');
+  harness.parse(_osc('C'));
+  harness.parse('a');
+  harness.parse(_osc('D'));
+  _expect(
+    harness.screens
+                .semanticRangeSnapshot(screenKind: TerminalScreenKind.primary)
+                .ranges
+                .length ==
+            1 &&
+        harness.screens
+                .semanticRangeSnapshot(screenKind: TerminalScreenKind.alternate)
+                .ranges
+                .length ==
+            1,
+    'primary and alternate range queries never join anchors across screens',
+  );
+  harness.parse('\x1bc');
+  final TerminalSemanticRangeSnapshot reset = harness.screens
+      .semanticRangeSnapshot();
+  _expect(
+    reset.ranges.isEmpty &&
+        reset.storedRangeCount == 0 &&
+        reset.evictedRangeCount == 0,
+    'RIS clears semantic ranges without retaining command text or stale IDs',
+  );
+}
+
+String? _rangeText(TerminalScreenSet screens, TerminalSemanticRange range) {
+  final TerminalSelectionRange? selection = screens.viewport.selectionRange(
+    range.start,
+    range.end,
+  );
+  return selection == null
+      ? null
+      : screens.viewport.extractSelection(selection)?.text;
+}
+
+void _expectThrows(void Function() callback, String message) {
+  try {
+    callback();
+  } on RangeError {
+    return;
+  }
+  throw StateError(message);
 }
 
 void _testFreshLineAndNewCommandExtensions() {
@@ -255,10 +488,13 @@ final class _Harness {
     required int rows,
     required int columns,
     TerminalScrollback? scrollback,
+    int semanticRangeCapacity =
+        TerminalSemanticRangeSnapshot.defaultStorageCapacity,
   }) : screens = TerminalScreenSet(
          rows: rows,
          columns: columns,
          scrollback: scrollback,
+         semanticRangeCapacity: semanticRangeCapacity,
        ) {
     sink = TerminalScreenParserSink.forScreenSet(screens);
     parser = VtParser(sink: sink);

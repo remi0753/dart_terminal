@@ -186,7 +186,7 @@ final class TerminalScreenParserSink
       case 0x0c:
         screenSet?.semanticPrompt.markCurrentRow(screen);
         screen.lineFeed();
-        screenSet?.semanticPrompt.completeLineFeed();
+        screenSet?.semanticPrompt.completeLineFeed(screen);
       case 0x0d:
         screen.carriageReturn();
       case 0x0e:
@@ -198,7 +198,7 @@ final class TerminalScreenParserSink
       case 0x85:
         screenSet?.semanticPrompt.markCurrentRow(screen);
         screen.nextLine();
-        screenSet?.semanticPrompt.completeLineFeed();
+        screenSet?.semanticPrompt.completeLineFeed(screen);
       case 0x88:
         screen.setTabStop(screen.cursorColumn);
       case 0x8d:
@@ -258,7 +258,7 @@ final class TerminalScreenParserSink
       case 0x45:
         screenSet?.semanticPrompt.markCurrentRow(screen);
         screen.nextLine();
-        screenSet?.semanticPrompt.completeLineFeed();
+        screenSet?.semanticPrompt.completeLineFeed(screen);
       case 0x48:
         screen.setTabStop(screen.cursorColumn);
       case 0x4d:

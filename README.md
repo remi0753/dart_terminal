@@ -136,7 +136,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
 - terminal output由来のdesktop signalを、pane/session所有権とglobal policyの下で投影する。
   legacy OSC 9 notificationとConEmu OSC 9;4 progress、Kitty OSC 99のplain UTF-8
   title/body・bounded ID/chunk subset、OSC 133 A/B/C/D/I/L/N/Pのcontent-free semantic
-  stateを扱う。通知は全pane合計3件/10秒（hard maximum 8）、sessionごと8 live ID、最大64
+  stateを扱う。OSC 133はcommand本文を別途保持せず、content-free command IDとstable
+  logical anchorによるexactなprompt/command/output rangeも固定容量・固定query上限で提供し、
+  history reflowではidentityを保ち、eviction/reset後はstale rangeを返さない。通知は全pane合計
+  3件/10秒（hard maximum 8）、sessionごと8 live ID、最大64
   sessionに制限し、同一IDをcoalesce、activeかつfocusedな出力を抑止する。attacker IDは
   native IDに使わず、RIS/pane closeで通知を取消し、focused paneのprogressだけをDock badgeへ
   投影する。`macos-notifications`はlive変更でき、非同期の現在設定／許可／delivery failureを

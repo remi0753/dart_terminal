@@ -16,19 +16,43 @@ enum TerminalSemanticPromptAction {
 /// Bounded shell lifecycle state derived from semantic prompt markers.
 enum TerminalSemanticShellState { unknown, prompt, input, commandOutput }
 
+/// Receives content-free lifecycle transitions from one semantic prompt model.
+abstract interface class TerminalSemanticPromptObserver {
+  void didApplySemanticPrompt(
+    TerminalSemanticPromptAction action,
+    TerminalScreen screen,
+  );
+
+  void didCompleteSemanticPromptLineFeed(TerminalScreen screen);
+
+  void didResetSemanticPrompt();
+}
+
 /// Owns transient semantic shell state and projects it onto existing row flags.
 ///
 /// Marker options are deliberately neither decoded nor retained. The model
 /// therefore cannot become a command-line, prompt-text, or exit-status store.
 final class TerminalSemanticPromptModel {
+  TerminalSemanticPromptModel();
+
   static const int maximumPayloadBytes = 256;
 
   TerminalSemanticShellState _shellState = TerminalSemanticShellState.unknown;
   bool _inputEndsAtLineFeed = false;
   int _generation = 1;
+  TerminalSemanticPromptObserver? _observer;
 
   TerminalSemanticShellState get shellState => _shellState;
   int get generation => _generation;
+
+  /// Attaches the single screen-set owner of semantic range projection.
+  void attachObserver(TerminalSemanticPromptObserver observer) {
+    final TerminalSemanticPromptObserver? current = _observer;
+    if (current != null && !identical(current, observer)) {
+      throw StateError('semantic prompt observer is already attached');
+    }
+    _observer = observer;
+  }
 
   /// Parses the bytes following `133;` without allocating a payload copy.
   static TerminalSemanticPromptAction? parse(
@@ -64,6 +88,7 @@ final class TerminalSemanticPromptModel {
   void apply(TerminalSemanticPromptAction action, TerminalScreen screen) {
     if (action == TerminalSemanticPromptAction.freshLine) {
       _moveToFreshLine(screen);
+      _observer?.didApplySemanticPrompt(action, screen);
       return;
     }
     if (action == TerminalSemanticPromptAction.promptStart ||
@@ -96,14 +121,16 @@ final class TerminalSemanticPromptModel {
         action != TerminalSemanticPromptAction.commandEnd) {
       markCurrentRow(screen);
     }
+    _observer?.didApplySemanticPrompt(action, screen);
   }
 
   /// Applies the `I` extension's end-of-line transition after LF/VT/FF/NEL.
-  void completeLineFeed() {
+  void completeLineFeed(TerminalScreen screen) {
     if (!_inputEndsAtLineFeed) return;
     _inputEndsAtLineFeed = false;
     _shellState = TerminalSemanticShellState.commandOutput;
     _generation++;
+    _observer?.didCompleteSemanticPromptLineFeed(screen);
   }
 
   /// Adds the active semantic class before content or a hard break is applied.
@@ -122,11 +149,13 @@ final class TerminalSemanticPromptModel {
   void reset() {
     if (_shellState == TerminalSemanticShellState.unknown &&
         !_inputEndsAtLineFeed) {
+      _observer?.didResetSemanticPrompt();
       return;
     }
     _shellState = TerminalSemanticShellState.unknown;
     _inputEndsAtLineFeed = false;
     _generation++;
+    _observer?.didResetSemanticPrompt();
   }
 
   static void _moveToFreshLine(TerminalScreen screen) {
