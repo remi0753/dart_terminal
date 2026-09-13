@@ -7,6 +7,7 @@ import 'package:ffi/ffi.dart';
 
 part 'shaping.dart';
 part 'raster.dart';
+part 'font_configuration.dart';
 
 const String _assetId =
     'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';

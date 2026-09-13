@@ -10,6 +10,8 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 external int _liveFontCatalogCount();
 
 void runFontCatalogTests() {
+  _testBoundedFontCatalogConfiguration();
+  _testContentFreeFontDiagnostics();
   _expect(_liveFontCatalogCount() == 0, 'catalog registry starts empty');
   final TerminalFontCatalog catalog = TerminalFontCatalog.open();
   try {
@@ -131,6 +133,247 @@ void runFontCatalogTests() {
     input.dispose();
   }
   _expect(_liveFontCatalogCount() == 0, 'all test catalogs are released');
+}
+
+void _testBoundedFontCatalogConfiguration() {
+  final TerminalFontVariationAxis regularWeight = TerminalFontVariationAxis(
+    'wght',
+    425,
+  );
+  final TerminalFontVariationAxis boldWeight = TerminalFontVariationAxis(
+    'wght',
+    725,
+  );
+  final TerminalFontCodepointOverride broad = TerminalFontCodepointOverride(
+    firstScalar: 0x2500,
+    lastScalar: 0x257f,
+    family: 'Menlo',
+  );
+  final TerminalFontCodepointOverride narrow = TerminalFontCodepointOverride(
+    firstScalar: 0x2500,
+    lastScalar: 0x2502,
+    family: 'Times-Roman',
+  );
+  final TerminalFontCatalogConfiguration configuration =
+      TerminalFontCatalogConfiguration(
+        regularVariations: <TerminalFontVariationAxis>[regularWeight],
+        boldVariations: <TerminalFontVariationAxis>[boldWeight],
+        codepointOverrides: <TerminalFontCodepointOverride>[broad, narrow],
+      );
+  _expect(
+    regularWeight.encodedTag == 0x77676874 &&
+        regularWeight == TerminalFontVariationAxis('wght', 425) &&
+        regularWeight != boldWeight &&
+        configuration.variationCount == 2 &&
+        configuration.overrideFamilyUtf8Bytes == 16 &&
+        !configuration.isEmpty &&
+        configuration.variationsFor(TerminalFontStyle.regular).single ==
+            regularWeight &&
+        configuration.variationsFor(TerminalFontStyle.bold).single ==
+            boldWeight &&
+        configuration.overrideForScalar(0x2501) == narrow &&
+        configuration.overrideForScalar(0x2520) == broad &&
+        configuration.overrideForScalar(0x41) == null &&
+        TerminalFontCatalogConfiguration.empty.isEmpty,
+    'font configuration is immutable, style-owned, and later-map-wins',
+  );
+  _expectThrows<UnsupportedError>(
+    () => configuration
+        .variationsFor(TerminalFontStyle.regular)
+        .add(TerminalFontVariationAxis('wdth', 100)),
+    'variation list is immutable',
+  );
+  _expectThrows<UnsupportedError>(
+    () => configuration.codepointOverrides.add(broad),
+    'override list is immutable',
+  );
+
+  for (final String invalidTag in <String>[
+    'wgt',
+    'weight',
+    'wg\u0000t',
+    '幅軸',
+  ]) {
+    _expectThrows<ArgumentError>(
+      () => TerminalFontVariationAxis(invalidTag, 1),
+      'invalid OpenType tag $invalidTag',
+    );
+  }
+  for (final double invalidValue in <double>[
+    double.nan,
+    double.infinity,
+    -65537,
+    65537,
+  ]) {
+    _expectThrows<RangeError>(
+      () => TerminalFontVariationAxis('wght', invalidValue),
+      'invalid variation coordinate $invalidValue',
+    );
+  }
+  _expectThrows<ArgumentError>(
+    () => TerminalFontCatalogConfiguration(
+      regularVariations: <TerminalFontVariationAxis>[
+        TerminalFontVariationAxis('wght', 400),
+        TerminalFontVariationAxis('wght', 500),
+      ],
+    ),
+    'duplicate axis tag in one style',
+  );
+  _expectThrows<RangeError>(
+    () => TerminalFontCatalogConfiguration(
+      regularVariations: List<TerminalFontVariationAxis>.generate(
+        TerminalFontCatalogConfiguration.maximumVariationsPerStyle + 1,
+        (int index) => TerminalFontVariationAxis(
+          String.fromCharCodes(<int>[
+            0x41 + index ~/ 10,
+            0x30 + index % 10,
+            0x78,
+            0x79,
+          ]),
+          index.toDouble(),
+        ),
+      ),
+    ),
+    'per-style variation cap',
+  );
+  for (final ({int first, int last}) range in <({int first, int last})>[
+    (first: -1, last: 1),
+    (first: 2, last: 1),
+    (first: 0xd800, last: 0xd800),
+    (first: 0xd7ff, last: 0xe000),
+    (first: 0x110000, last: 0x110000),
+  ]) {
+    _expectThrows<ArgumentError>(
+      () => TerminalFontCodepointOverride(
+        firstScalar: range.first,
+        lastScalar: range.last,
+        family: 'Menlo',
+      ),
+      'invalid scalar range ${range.first}..${range.last}',
+    );
+  }
+  _expectThrows<ArgumentError>(
+    () => TerminalFontCodepointOverride(
+      firstScalar: 0x41,
+      lastScalar: 0x41,
+      family: '',
+    ),
+    'empty override family',
+  );
+  _expectThrows<RangeError>(
+    () => TerminalFontCatalogConfiguration(
+      codepointOverrides: List<TerminalFontCodepointOverride>.filled(
+        TerminalFontCatalogConfiguration.maximumCodepointOverrides + 1,
+        broad,
+      ),
+    ),
+    'override entry cap',
+  );
+  final TerminalFontCodepointOverride maximumFamily =
+      TerminalFontCodepointOverride(
+        firstScalar: 0x41,
+        lastScalar: 0x41,
+        family: 'A' * TerminalFontCatalog.maximumFamilyBytes,
+      );
+  _expectThrows<RangeError>(
+    () => TerminalFontCatalogConfiguration(
+      codepointOverrides: List<TerminalFontCodepointOverride>.filled(
+        TerminalFontCatalogConfiguration.maximumOverrideFamilyUtf8Bytes ~/
+                TerminalFontCatalog.maximumFamilyBytes +
+            1,
+        maximumFamily,
+      ),
+    ),
+    'aggregate override family byte cap',
+  );
+}
+
+void _testContentFreeFontDiagnostics() {
+  final TerminalFontResolutionDiagnostic fallback =
+      TerminalFontResolutionDiagnostic(
+        source: TerminalFontResolutionSource.coreTextFallback,
+        faceId: 2,
+        flags:
+            TerminalResolvedFontFlags.fallback |
+            TerminalResolvedFontFlags.monospaced,
+        postscriptName: 'HiraginoSans-W3',
+        occurrenceCount: 3,
+      );
+  final TerminalFontCatalogDiagnostics diagnostics =
+      TerminalFontCatalogDiagnostics(
+        catalogGeneration: 9,
+        configuredVariationCount: 2,
+        appliedVariationCount: 1,
+        unavailableVariationCount: 1,
+        configuredOverrideCount: 2,
+        availableOverrideCount: 1,
+        unavailableOverrideCount: 1,
+        overrideMatchCount: 5,
+        overrideAppliedCount: 4,
+        overrideFallbackCount: 1,
+        coreTextFallbackCount: 3,
+        missingGlyphCount: 0,
+        resolutions: <TerminalFontResolutionDiagnostic>[fallback],
+      );
+  _expect(
+    diagnostics.catalogGeneration == 9 &&
+        diagnostics.resolutions.single.source ==
+            TerminalFontResolutionSource.coreTextFallback &&
+        diagnostics.resolutions.single.isFallback &&
+        !diagnostics.resolutions.single.hasMissingGlyph &&
+        diagnostics.resolutions.single.postscriptName == 'HiraginoSans-W3' &&
+        diagnostics.resolutions.single.occurrenceCount == 3,
+    'diagnostics expose only bounded counters and face identity',
+  );
+  _expectThrows<UnsupportedError>(
+    () => diagnostics.resolutions.add(fallback),
+    'diagnostic records are immutable',
+  );
+  _expectThrows<ArgumentError>(
+    () => TerminalFontCatalogDiagnostics(
+      catalogGeneration: 1,
+      configuredVariationCount: 1,
+      appliedVariationCount: 1,
+      unavailableVariationCount: 1,
+      configuredOverrideCount: 0,
+      availableOverrideCount: 0,
+      unavailableOverrideCount: 0,
+      overrideMatchCount: 0,
+      overrideAppliedCount: 0,
+      overrideFallbackCount: 0,
+      coreTextFallbackCount: 0,
+      missingGlyphCount: 0,
+    ),
+    'inconsistent diagnostic totals',
+  );
+  _expectThrows<ArgumentError>(
+    () => TerminalFontCatalogDiagnostics(
+      catalogGeneration: 1,
+      configuredVariationCount: 0,
+      appliedVariationCount: 0,
+      unavailableVariationCount: 0,
+      configuredOverrideCount: 0,
+      availableOverrideCount: 0,
+      unavailableOverrideCount: 0,
+      overrideMatchCount: 0,
+      overrideAppliedCount: 0,
+      overrideFallbackCount: 0,
+      coreTextFallbackCount: 1,
+      missingGlyphCount: 0,
+      resolutions: <TerminalFontResolutionDiagnostic>[fallback, fallback],
+    ),
+    'duplicate diagnostic identity',
+  );
+  _expectThrows<ArgumentError>(
+    () => TerminalFontResolutionDiagnostic(
+      source: TerminalFontResolutionSource.missingGlyph,
+      faceId: 1,
+      flags: 1 << 20,
+      postscriptName: 'Menlo-Regular',
+      occurrenceCount: 1,
+    ),
+    'unknown diagnostic flags',
+  );
 }
 
 void _expect(bool condition, String description) {

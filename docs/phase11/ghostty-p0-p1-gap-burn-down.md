@@ -6,8 +6,8 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 gap burn-down — cursor-cell ligature shaping break
-  (completed)
+- Current subtask: P1 gap burn-down — variable font axes/codepoint override/
+  fallback diagnostics, bounded immutable contract (completed)
 
 ## Purpose
 
@@ -256,6 +256,88 @@ code/name containing `terminal` may be added to `dart_appkit`.
   and confirm a clean code/name audit of `dart_appkit`. Apple notarization and
   duration-only campaigns remain skipped as authorized.
 
+### Current P1 child — variable axes, codepoint override, fallback diagnostics
+
+- **Purpose:** Close the actionable `TXT-08` remainder with one bounded,
+  immutable font request that applies validated OpenType variation axes,
+  chooses explicit font families for ordered Unicode scalar ranges, and
+  exposes content-free fallback/missing/override decisions to the product
+  diagnostics surface.
+- **Background:** The renderer package currently creates one regular CoreText
+  face plus actual/synthetic trait faces from a family, point size, and policy.
+  CoreText performs implicit fallback and copied shaped results already expose
+  per-face fallback, color, synthetic, missing, and monospace flags, but the
+  catalog cannot accept axes or explicit scalar mappings and does not retain
+  bounded aggregate resolution diagnostics. Product config projects only
+  family, size, and synthetic-style policy.
+- **Scope:** Define immutable typed axis tags/values, style-specific variation
+  sets, inclusive Unicode scalar-range font overrides with deterministic later
+  precedence, and content-free counters/face identities under hard entry/byte
+  caps; encode them through a versioned native boundary; apply axes to CoreText
+  descriptors; apply available override fonts to exact scalar spans before
+  normal CoreText fallback; fall back normally when an override family or
+  glyph is unavailable while reporting that outcome; add repeatable typed
+  product options and new-session projection; expose bounded counts and safe
+  PostScript identities in Settings/diagnostics; verify package, product,
+  configuration, rebuild, native Metal, and both runtime paths; bind the
+  sources and regressions into the Ghostty inventory.
+- **Out of scope:** Font download/install, arbitrary file paths, PostScript or
+  family-name logging from terminal output, glyph or codepoint text in exported
+  diagnostics, HarfBuzz, global font discovery redesign, synthetic box/block/
+  braille/Powerline drawing (the next ordered child), per-cell metric changes,
+  live mutation of an existing catalog, copying Ghostty configuration names or
+  structures, and every change or `terminal`-named symbol in generic
+  `dart_appkit`.
+- **Dependencies:** `TerminalFontCatalog` and its generation-owned CoreText
+  faces, version-one shape/raster copies, `TerminalShapingCache`, atomic render
+  resource rebuild, typed repeated config/provenance, Settings inspector,
+  privacy-safe renderer diagnostics, product hierarchy configuration, and
+  pinned Ghostty `font/CodepointMap.zig`, `font/face/coretext.zig`, and
+  `font/SharedGridSet.zig` at `d4d8f622...`.
+- **Completion conditions:** Invalid tags, nonfinite/out-of-range values,
+  surrogate/out-of-Unicode ranges, excessive counts/bytes, duplicate axis tags
+  in one style, and malformed native buffers fail before publication; accepted
+  axes change the requested CoreText face identity/variation state without
+  changing point size or cell ownership; later overlapping mappings win,
+  available mapped fonts are used only for covered scalars, and unavailable or
+  glyph-missing mappings return to normal fallback without tofu or silent
+  substitution; diagnostics remain bounded/content-free and distinguish
+  requested, applied, unavailable, normal fallback, and missing-glyph counts;
+  all configuration is immutable per catalog generation and a product reload
+  follows new-session policy; `TXT-08` becomes accepted only after focused,
+  native/runtime, freshness, and exact repository gates pass.
+- **Verification approach:** Add malformed/cap tests before native use; use a
+  macOS-installed variable system face and disjoint/overlapping family maps for
+  exact CoreText face and shaping assertions; cover fallback-to-default and
+  missing glyphs without retaining input text; exercise config file/include/
+  CLI/repeat order, Settings rendering, render rebuild, real Metal output, and
+  M1 Developer JIT/Release AOT; regenerate compatibility and Ghostty evidence
+  in dependency order; run exact `CI=true DART_SUPPRESS_ANALYTICS=true make
+  test`, review the diff, and repeat the clean `dart_appkit` audit. Apple
+  notarization and duration-only campaigns remain skipped as authorized.
+
+#### Ordered implementation subtasks
+
+1. **Bounded immutable font request/diagnostic contract:** Freeze typed
+   four-byte axis tags, values, style ownership, scalar ranges, ordered
+   override descriptors, and diagnostic fields/caps as immutable Dart-owned
+   values. No configuration is exposed to native creation until malformed,
+   duplicate, range, count, and byte-bound tests pass.
+2. **Versioned native ABI and CoreText variable axes/ordered codepoint
+   resolution:** Copy the complete validated contract across one native
+   boundary, apply it to base/trait/override faces, keep point/cell ownership
+   stable, implement later-entry precedence and safe default fallback, and
+   cover resolve/shape/raster behavior, diagnostics, malformed native input,
+   and resource cleanup.
+3. **Typed config, Settings, and product diagnostics projection:** Add bounded
+   repeatable options and provenance, immutable new-session configuration,
+   rebuild/catalog injection, safe Settings presentation, and content-free
+   diagnostics with no terminal text/codepoint disclosure.
+4. **Runtime evidence and closure:** Run real Metal and Developer JIT/Release
+   AOT acceptance, regenerate dependent reports, update public/matrix text,
+   move `TXT-08` from actionable to accepted, pass the exact repository gate,
+   audit `dart_appkit`, and complete the parent child.
+
 ## Inventory and decisions
 
 - 2026-09-13: The pinned Ghostty matrix revision
@@ -316,6 +398,77 @@ code/name containing `terminal` may be added to `dart_appkit`.
   Apple notarization and duration-only campaigns were skipped as authorized.
   The next ordered child is variable font axes, codepoint override, and
   fallback diagnostics.
+- 2026-09-14: After commit `c86e7dc` and the mandatory roadmap, README,
+  feature-matrix, and clean-worktree reread, `TXT-08` is the first unchecked
+  item. Its three visible features share the font-catalog owner but cross the
+  native ABI, CoreText, config/Settings, product rebuild, diagnostics, and
+  runtime evidence boundaries, so it is split into the four ordered subtasks
+  above before implementation. The current contract subtask must not apply
+  axes or mappings ahead of its own validation, and no synthetic-glyph work is
+  included.
+- 2026-09-14: Current native creation accepts only family UTF-8, point size,
+  and synthetic-style policy. A catalog owns four requested/trait faces and a
+  name-keyed fallback face registry; CoreText resolves fallback inside
+  attributed strings. Dart already copies fallback/color/synthetic/missing/
+  monospace flags per resolved face and shape run, but no bounded aggregate is
+  retained for Settings or diagnostics. Product config contains only
+  `font-family`, `font-size`, and `font-synthetic-style`, all immutable for new
+  sessions.
+- 2026-09-14: Pinned source identities are SHA-256
+  `282a2fa6f350ac60570e40b59cc0809efbba830f8986c196c69b89cd11c8dbf3`
+  for `font/CodepointMap.zig`,
+  `367be97710c61c81a07eb08e7106a7fdaa2c53714f188756fec750ff001eff05`
+  for `font/face/coretext.zig`, and
+  `27d0e0734e1e19952ad87edab3afdfaa56059c2ced3b7bdc368d9b391977c880`
+  for `font/SharedGridSet.zig`. The observable policies adopted here are
+  four-byte axis identifiers, immutable configured faces, inclusive scalar
+  mappings, later-entry precedence, and normal fallback when a mapped
+  descriptor cannot supply a usable face. Ghostty names and internal storage
+  are not copied.
+- 2026-09-14: A read-only Swift probe intended to identify a deterministic
+  installed variable system face was sandbox-blocked while creating the shared
+  Clang module cache; it made no product change or acceptance claim. The probe
+  will be repeated in the normal macOS execution context before choosing the
+  native test fixture.
+- 2026-09-14: The initial layer split was refined before code changes so a
+  valid nonempty request is never exposed to a native constructor that cannot
+  yet honor it. The first child now completes only immutable Dart request and
+  diagnostic values with fail-before-publication limits; the second child adds
+  and implements the copied ABI atomically.
+- 2026-09-14: The first focused analyzer run found that Dart's
+  `RangeError.range` accepts integer bounds even though variation coordinates
+  are doubles. Axis validation now uses `RangeError.value` after its explicit
+  finite and `-65536...65536` check; the rerun reported `No issues found!`.
+  The first package test then exposed a fixture arithmetic typo: `Menlo` plus
+  `Times-Roman` is 16 UTF-8 bytes, not 17. The implementation's recorded byte
+  count was correct; the assertion is corrected and an independent 65 KiB
+  aggregate-family negative was added before rerunning the full package.
+- 2026-09-14: A sandboxed package-test attempt stopped in the native build hook
+  because Metal could not write the shared Clang module cache. It did not reach
+  product tests and is not accepted as verification. All native/build-hook
+  reruns use the normal macOS execution context, consistent with earlier
+  renderer children.
+- 2026-09-14: The completed Dart-owned contract accepts at most 16 unique
+  printable four-byte OpenType tags per requested style (64 total), finite
+  coordinates in `-65536...65536`, 256 inclusive non-surrogate Unicode scalar
+  mappings, 1,024 UTF-8 bytes per family, and 64 KiB across mapped families.
+  Style lists and mappings are immutable; overlapping mappings resolve from
+  last to first. Diagnostic snapshots cap signed counters and 256 unique
+  `(resolution source, face ID)` records, require consistent applied/
+  unavailable totals, and contain only source class, flags, safe PostScript
+  identity, and occurrence count—never input text or scalar values.
+- 2026-09-14: Focused package formatting and analysis passed, and the complete
+  renderer package test runner passed its native asset hook plus all Dart
+  tests. Final exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed all
+  native packages, generated/freshness and compatibility evidence, application
+  and distribution gates, 330-file zero-change root formatting, clean root and
+  renderer-package analysis, security/update/symbol coverage, and aggregate
+  Dart tests ending with `dart_terminal tests passed`. `git diff --check`
+  passed. The adjacent `dart_appkit` worktree is clean and its case-insensitive
+  executable content/name audit outside docs/build/cache/git found zero
+  `terminal`, `dart_terminal`, or `dart-terminal` matches. Apple notarization
+  and duration-only campaigns remain skipped as authorized. The next ordered
+  subtask is the copied native ABI plus CoreText axis/override application.
 
 - 2026-09-13: The first focused analyzer rerun passed with `No issues found!`,
   and `dart run test/terminal_semantic_prompt_test.dart` exited 0 after its
