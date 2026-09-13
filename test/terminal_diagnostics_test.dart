@@ -264,6 +264,10 @@ TerminalDiagnosticsSnapshot _snapshot({
     osc52: TerminalDiagnosticsFeatureState.disabled,
     pendingOsc52Requests: 0,
     pendingNotificationRequests: 0,
+    localIncidentState: TerminalDiagnosticsIncidentState.idle,
+    localIncidentMatchingReports: 0,
+    localIncidentCompletedOperations: 0,
+    localIncidentFailures: 0,
   ),
 );
 

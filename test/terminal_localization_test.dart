@@ -259,6 +259,10 @@ void _testPresenterAndStatusMessages() {
         messages.diagnosticsSavePanelPrompt == '書き出す' &&
         messages.diagnosticsDefaultFileName ==
             'dart-terminal-diagnostics.json' &&
+        messages.incidentWindowTitle == 'ローカル障害診断' &&
+        messages.incidentCrashSavePanelMessage.contains('ファイルパス') &&
+        messages.incidentSampleSavePanelMessage.contains('1秒間') &&
+        messages.incidentSavePanelPrompt == '保存して続ける' &&
         messages.osc52Identity(pane: 2, session: 3, request: 4) ==
             'ペイン 2  セッション 3  要求 4' &&
         messages.osc52WriteClipboard(9).contains('9 UTF-8 bytes') &&

@@ -1,4 +1,4 @@
-# Terminal inspector and diagnostics reference
+# Terminal inspector and local diagnostics reference
 
 Dart Terminal provides a local, read-only inspector for the currently focused
 live pane and an explicitly requested JSON diagnostics export. It is intended
@@ -20,6 +20,28 @@ capture follows the focused pane. Moving focus clears the previous pane's
 retained records before starting an empty capture for the new pane. Closing the
 window, closing the pane, or terminating the application disables capture and
 clears retained records.
+
+## Local crash report and hang sample
+
+Two additional File actions create sensitive raw artifacts only after explicit
+local consent:
+
+- **File > Export Latest Crash Report…** (`file.export-latest-crash-report`)
+  opens a Save panel with a raw-data warning. Only after the user chooses
+  **Save and Continue** does Dart Terminal scan the non-recursive standard
+  Apple DiagnosticReports directory for an exact product `.ips` report and
+  copy the latest match to the selected `.ips` file.
+- **File > Capture Hang Sample…** (`file.capture-hang-sample`) shows the same
+  class of warning before invoking `/usr/bin/sample` directly, without a
+  shell, for the current Dart Terminal PID, one second, and one interval. The
+  validated result is published only as the selected `.sample.txt` file.
+
+Both actions are searchable in the Command Palette and may be assigned to a
+keybind. Neither has a default keyboard shortcut. Cancelling the Save panel
+causes no report-directory access, process sampling, or file write. The one
+read-only **Local Incident Diagnostics** window reports only fixed status,
+matching-report count, completed-save count, and failure count. Escape or
+window close cancels an active operation and restores terminal focus.
 
 ## Privacy boundary
 
@@ -44,6 +66,13 @@ writer. It is not retained in the report, UI status, logs, or machine-readable
 acceptance output. Dart Terminal does not upload the report or contact a
 support service.
 
+An explicitly exported `.ips` or `.sample.txt` file is intentionally outside
+this content-free boundary. It can contain stack traces, process and binary
+details, usernames, file paths, and other sensitive local context. Dart
+Terminal neither displays that raw content in the incident window nor adds it
+to ordinary diagnostics, logs, terminal state, or PTY traffic. There is no
+background scan, automatic attachment, upload, or remote symbolication.
+
 ## Format and limits
 
 The export is deterministic, indented UTF-8 JSON with one trailing newline:
@@ -64,16 +93,25 @@ classifications; an incomplete temporary file is removed and an existing
 destination is preserved until replacement succeeds.
 
 The local per-launch metadata described in [Runtime diagnostics](../../README.md#runtime-diagnostics)
-is a separate lifecycle record. Crash report discovery, hang sampling,
-symbolication, consent, signing, and update diagnostics remain Phase 11 work and
-are not silently added to this export.
+is a separate lifecycle record. Its `features` section gains only four reviewed
+incident fields: fixed state, bounded matching-report count, completed-operation
+count, and failure count. Raw report/sample data, report identity, paths, PID,
+timestamps, symbols, and errors are never silently added to this export.
+
+Release operators may generate a separate offline dSYM package whose exact
+source/dSYM architecture and UUID sets and SHA-256 hashes are verified. It is
+not bundled with the application or update, is never uploaded by the product,
+and does not claim source-line coverage when only function symbols exist.
 
 ## Verification
 
-`make terminal-diagnostics-privacy-check` freezes all 168 reviewed schema keys,
-the 11 top-level entries, the fixed privacy declaration, and six source-owner
+`make terminal-diagnostics-privacy-check` freezes all 172 reviewed schema keys,
+the 11 top-level entries, the fixed privacy declaration, and seven source-owner
 boundaries. `make RUNTIME_ARCH=arm64 runtime-diagnostics-integration` launches
 the ordinary Developer JIT and Release AOT applications and verifies live
 capture, focus handoff, menu/Command Palette routing, atomic canonical exports,
-redaction, and teardown. Optional visual checks are in the
-[manual checklist](../phase10/terminal-inspector-diagnostics-manual-checklist.md).
+redaction, consent-before-access, isolated raw crash/sample publication, zero
+PTY writes, singleton ownership, and teardown. Optional inspector checks remain
+in the [Phase 10 checklist](../phase10/terminal-inspector-diagnostics-manual-checklist.md);
+incident UI checks are in the
+[local incident checklist](../phase11/local-incident-manual-checklist.md).

@@ -13,6 +13,8 @@ enum TerminalActionId {
   quitApplication('application.quit'),
   newWindow('window.new'),
   exportDiagnostics('file.export-diagnostics'),
+  exportLatestCrashReport('file.export-latest-crash-report'),
+  captureHangSample('file.capture-hang-sample'),
   closeWindow('window.close'),
   newTab('tab.new'),
   selectPreviousTab('tab.select-previous'),
@@ -329,6 +331,16 @@ final class TerminalActionCatalog {
         ),
       ),
       action(
+        TerminalActionId.exportLatestCrashReport,
+        TerminalActionMenu.file,
+        restoresTerminalFocusAfterInvocation: false,
+      ),
+      action(
+        TerminalActionId.captureHangSample,
+        TerminalActionMenu.file,
+        restoresTerminalFocusAfterInvocation: false,
+      ),
+      action(
         TerminalActionId.closeWindow,
         TerminalActionMenu.file,
         shortcut: const TerminalActionShortcut(
@@ -486,6 +498,10 @@ TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
   TerminalActionId.newWindow => TerminalActionMessageId.newWindow,
   TerminalActionId.exportDiagnostics =>
     TerminalActionMessageId.exportDiagnostics,
+  TerminalActionId.exportLatestCrashReport =>
+    TerminalActionMessageId.exportLatestCrashReport,
+  TerminalActionId.captureHangSample =>
+    TerminalActionMessageId.captureHangSample,
   TerminalActionId.closeWindow => TerminalActionMessageId.closeWindow,
   TerminalActionId.copy => TerminalActionMessageId.copy,
   TerminalActionId.paste => TerminalActionMessageId.paste,

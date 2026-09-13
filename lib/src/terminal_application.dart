@@ -41,6 +41,8 @@ import 'terminal_core/vt_parser_inspector.dart';
 import 'terminal_desktop_signal_projection.dart';
 import 'terminal_diagnostics.dart';
 import 'terminal_diagnostics_presenter.dart';
+import 'terminal_incident_controller.dart';
+import 'terminal_incident_service.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_focus_reporter.dart';
 import 'terminal_input/terminal_hyperlink_interaction.dart';
@@ -173,6 +175,7 @@ final class TerminalOptions {
     this.settingsDocumentSession,
     this.localization,
     this.updateService,
+    this.incidentService,
   });
 
   factory TerminalOptions.parse(
@@ -1016,6 +1019,7 @@ final class TerminalOptions {
   final TerminalSettingsDocumentSession? settingsDocumentSession;
   final TerminalLocalization? localization;
   final TerminalUpdateProductService? updateService;
+  final TerminalIncidentService? incidentService;
 }
 
 final class TerminalApplication {
@@ -1120,6 +1124,7 @@ final class TerminalApplication {
         configurationReloadController: options.configurationReloadController,
         settingsDocumentSession: options.settingsDocumentSession,
         updateService: options.updateService,
+        incidentService: options.incidentService,
         runUserActionAcceptance: options.runtimeUserActionsTest,
         runConfigurationAcceptance: options.runtimeConfigurationTest,
         runThemeAcceptance: options.runtimeThemeTest,
@@ -2644,6 +2649,7 @@ final class TerminalApplication {
     TerminalConfigReloadController? configurationReloadController,
     TerminalSettingsDocumentSession? settingsDocumentSession,
     TerminalUpdateProductService? updateService,
+    TerminalIncidentService? incidentService,
     bool runUserActionAcceptance = false,
     bool runConfigurationAcceptance = false,
     bool runThemeAcceptance = false,
@@ -2721,6 +2727,7 @@ final class TerminalApplication {
     TerminalCommandPalettePresenter? palettePresenter;
     TerminalSettingsInspectorPresenter? settingsPresenter;
     TerminalDiagnosticsPresenter? diagnosticsPresenter;
+    TerminalIncidentPresenter? incidentPresenter;
     TerminalUpdatePresenter? updatePresenter;
     TerminalOsc52ConfirmationPresenter? osc52Presenter;
     TerminalActionDispatchScheduler? keyBindingActionScheduler;
@@ -2754,6 +2761,16 @@ final class TerminalApplication {
     final TerminalUpdateController updateController = TerminalUpdateController(
       service: updateAcceptanceService ?? updateService,
     );
+    final _TerminalIncidentAcceptanceContext? incidentAcceptance =
+        runDiagnosticsAcceptance
+        ? _TerminalIncidentAcceptanceContext.create(
+            Directory(diagnosticsExportDirectory!),
+          )
+        : null;
+    final TerminalIncidentController incidentController =
+        TerminalIncidentController(
+          service: incidentAcceptance?.service ?? incidentService,
+        );
     final Map<PaneId, TerminalKeyRouteResult> lastKeyRoutes =
         <PaneId, TerminalKeyRouteResult>{};
     final Map<PaneId, int> keyRouteCounts = <PaneId, int>{};
@@ -3955,6 +3972,10 @@ final class TerminalApplication {
       osc52Coordinator.dispose();
       await diagnosticsPresenter?.dispose();
       diagnosticsPresenter = null;
+      await incidentPresenter?.dispose();
+      incidentPresenter = null;
+      if (!incidentController.isDisposed) incidentController.dispose();
+      incidentAcceptance?.removeFixtures();
       await updatePresenter?.dispose();
       updatePresenter = null;
       if (!updateController.isDisposed) await updateController.dispose();
@@ -4748,6 +4769,15 @@ final class TerminalApplication {
                 ? 0
                 : 1,
             pendingNotificationRequests: notificationStatus.pendingRequestCount,
+            localIncidentState: TerminalDiagnosticsIncidentState.values.byName(
+              incidentController.status.name,
+            ),
+            localIncidentMatchingReports:
+                incidentController.snapshot.matchingReportCount,
+            localIncidentCompletedOperations:
+                incidentController.snapshot.completedOperationCount,
+            localIncidentFailures:
+                incidentController.snapshot.unsuccessfulOperationCount,
           ),
         );
       }
@@ -4798,6 +4828,41 @@ final class TerminalApplication {
             : null,
         onError: recordAsynchronousError,
       );
+      TerminalIncidentFocusTarget? activeIncidentTarget() {
+        final TerminalWindowState? activeWindow = state.activeWindow;
+        if (activeWindow == null) return null;
+        final TerminalTabState tab = activeWindow.selectedTab;
+        final Window? window = createdHierarchy.windowForTab(tab.id);
+        final TerminalNativePaneResources? resources = createdHierarchy
+            .resourcesForPane(tab.focusedPaneId);
+        if (window == null || resources == null) return null;
+        return TerminalIncidentFocusTarget(
+          window: window,
+          view: resources.view,
+        );
+      }
+
+      incidentPresenter = TerminalIncidentPresenter(
+        application: application,
+        controller: incidentController,
+        focusTarget: activeIncidentTarget,
+        localization: localization,
+        chooseSaveDestination: runDiagnosticsAcceptance
+            ? (SavePanelConfiguration configuration) {
+                if (configuration.allowedFileExtension == 'ips') {
+                  incidentAcceptance!.consentCount++;
+                  return SavePanelResult.selected(
+                    '${diagnosticsExportDirectory!}/incident-crash.ips',
+                  );
+                }
+                incidentAcceptance!.consentCount++;
+                return SavePanelResult.selected(
+                  '${diagnosticsExportDirectory!}/incident-hang.sample.txt',
+                );
+              }
+            : null,
+        onError: recordAsynchronousError,
+      );
       TerminalUpdateFocusTarget? activeUpdateTarget() {
         final TerminalWindowState? activeWindow = state.activeWindow;
         if (activeWindow == null) return null;
@@ -4836,6 +4901,24 @@ final class TerminalApplication {
                 diagnosticsPresenter?.hasAvailableTarget == true,
             handler: () async {
               await diagnosticsPresenter!.export();
+            },
+          ),
+          TerminalActionRegistration(
+            id: TerminalActionId.exportLatestCrashReport,
+            isAvailable: () =>
+                productResourceDisposalFuture == null &&
+                incidentPresenter?.canStart == true,
+            handler: () async {
+              await incidentPresenter!.exportLatestCrashReport();
+            },
+          ),
+          TerminalActionRegistration(
+            id: TerminalActionId.captureHangSample,
+            isAvailable: () =>
+                productResourceDisposalFuture == null &&
+                incidentPresenter?.canStart == true,
+            handler: () async {
+              await incidentPresenter!.captureHangSample();
             },
           ),
           TerminalActionRegistration(
@@ -5282,6 +5365,9 @@ final class TerminalApplication {
           menu: menuProjection,
           palette: installedPalette,
           presenter: diagnosticsPresenter!,
+          incidentPresenter: incidentPresenter!,
+          incidentController: incidentController,
+          incidentAcceptance: incidentAcceptance!,
           sessions: sessions,
           allSessions: allSessions,
           owners: owners,
@@ -5538,6 +5624,9 @@ final class TerminalApplication {
     required TerminalAppKitMenuProjection menu,
     required TerminalCommandPalettePresenter palette,
     required TerminalDiagnosticsPresenter presenter,
+    required TerminalIncidentPresenter incidentPresenter,
+    required TerminalIncidentController incidentController,
+    required _TerminalIncidentAcceptanceContext incidentAcceptance,
     required Map<PaneId, TerminalSession> sessions,
     required List<TerminalSession> allSessions,
     required Map<PaneId, _TerminalHierarchyProductPane> owners,
@@ -5682,6 +5771,124 @@ final class TerminalApplication {
       'diagnostics new-pane capture did not stay live and redacted',
     );
 
+    final int incidentInputBaseline = terminalInputDeliveryCount();
+    _expectLifecycle(
+      incidentAcceptance.consentCount == 0 &&
+          incidentAcceptance.store.accessCount == 0 &&
+          incidentAcceptance.processRunner.runCount == 0,
+      'incident fixture was accessed before explicit product consent',
+    );
+    final MenuItem crashItem = menu.itemForAction(
+      TerminalActionId.exportLatestCrashReport,
+    );
+    _expectLifecycle(
+      crashItem.isEnabled &&
+          crashItem.keyEquivalent.isEmpty &&
+          crashItem.modifiers.bits == 0,
+      'crash report action is unavailable or has an unexpected shortcut',
+    );
+    final int crashInvocationBaseline = nativeActionInvocations.length;
+    final int crashDispatchBaseline = actionDispatches.length;
+    crashItem.performAction();
+    final File crashExport = File('$exportDirectory/incident-crash.ips');
+    await waitFor(
+      () =>
+          nativeActionInvocations.length == crashInvocationBaseline + 1 &&
+          actionDispatches.length == crashDispatchBaseline + 1,
+      'consented crash report menu action was not dispatched exactly once',
+    );
+    _expectLifecycle(
+      incidentPresenter.lastOperationResult?.disposition ==
+          TerminalIncidentOperationDisposition.exported,
+      'consented crash report operation did not reach exported status; '
+      'status=${incidentController.status.name} '
+      'result=${incidentPresenter.lastOperationResult?.disposition.name} '
+      'discoveries=${incidentAcceptance.store.discoverCount} '
+      'exports=${incidentAcceptance.store.exportCount}',
+    );
+    _expectLifecycle(
+      crashExport.existsSync(),
+      'consented crash report was not atomically published',
+    );
+    final Window incidentWindow = incidentPresenter.activeWindow!;
+    final int incidentHandleCount = application.debugLiveObjectCount;
+    _expectLifecycle(
+      incidentAcceptance.consentCount == 1 &&
+          incidentAcceptance.store.discoverCount == 1 &&
+          incidentAcceptance.store.exportCount == 1 &&
+          incidentController.status == TerminalIncidentStatus.exported &&
+          incidentController.snapshot.matchingReportCount == 1 &&
+          incidentController.snapshot.completedOperationCount == 1 &&
+          incidentPresenter.renderedText?.contains(exportDirectory) == false &&
+          incidentPresenter.renderedText?.contains(
+                '__DT_INCIDENT_PRIVATE_CRASH__',
+              ) ==
+              false,
+      'crash report consent/status retained content or wrong fixed counts',
+    );
+
+    final MenuItem paletteItem = menu.itemForAction(
+      TerminalActionId.openCommandPalette,
+    );
+    paletteItem.performAction();
+    await waitFor(
+      () => palette.isOpen,
+      'incident acceptance could not open the command palette',
+    );
+    final Window incidentPaletteWindow = palette.activeWindow!;
+    _injectKeyEventForTesting(
+      application,
+      incidentPaletteWindow,
+      keyCode: 1,
+      modifiers: 0,
+      characters: 'capture hang sample',
+      charactersIgnoringModifiers: 'capture hang sample',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          palette.state.query == 'capture hang sample' &&
+          palette.state.selectedAction?.definition.id ==
+              TerminalActionId.captureHangSample &&
+          palette.state.selectedAction!.isEnabled,
+      'command palette did not discover the hang sample action',
+    );
+    _injectKeyEventForTesting(
+      application,
+      incidentPaletteWindow,
+      keyCode: 36,
+      modifiers: 0,
+      characters: '\r',
+      charactersIgnoringModifiers: '\r',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    final File sampleExport = File('$exportDirectory/incident-hang.sample.txt');
+    await waitFor(
+      () =>
+          !palette.isOpen &&
+          sampleExport.existsSync() &&
+          incidentPresenter.lastOperationResult?.disposition ==
+              TerminalIncidentOperationDisposition.sampled,
+      'consented hang sample palette action did not complete',
+    );
+    _expectLifecycle(
+      identical(incidentPresenter.activeWindow, incidentWindow) &&
+          application.debugLiveObjectCount == incidentHandleCount &&
+          incidentAcceptance.consentCount == 2 &&
+          incidentAcceptance.processRunner.runCount == 1 &&
+          incidentAcceptance.processRunner.lastArguments?.take(4).join(',') ==
+              '4242,1,1,-file' &&
+          incidentController.status == TerminalIncidentStatus.sampled &&
+          incidentController.snapshot.completedOperationCount == 2 &&
+          incidentPresenter.renderedText?.contains(exportDirectory) == false &&
+          incidentPresenter.renderedText?.contains(
+                '__DT_INCIDENT_PRIVATE_SAMPLE__',
+              ) ==
+              false &&
+          terminalInputDeliveryCount() == incidentInputBaseline,
+      'incident status was not singleton/content-free or leaked PTY input',
+    );
+
     final int terminalInputBaseline = terminalInputDeliveryCount();
     final MenuItem exportItem = menu.itemForAction(
       TerminalActionId.exportDiagnostics,
@@ -5707,10 +5914,10 @@ final class TerminalApplication {
       'diagnostics menu export did not atomically complete exactly once',
     );
 
-    final MenuItem paletteItem = menu.itemForAction(
+    final MenuItem diagnosticsPaletteItem = menu.itemForAction(
       TerminalActionId.openCommandPalette,
     );
-    paletteItem.performAction();
+    diagnosticsPaletteItem.performAction();
     await waitFor(
       () => palette.isOpen,
       'diagnostics acceptance could not open the command palette',
@@ -5771,6 +5978,24 @@ final class TerminalApplication {
             bytes.last == 0x0a &&
             !utf8.decode(bytes).contains(firstPrivateMarker) &&
             !utf8.decode(bytes).contains(secondPrivateMarker) &&
+            (decoded['features']!
+                    as Map<String, Object?>)['local_incident_state'] ==
+                'sampled' &&
+            (decoded['features']!
+                    as Map<
+                      String,
+                      Object?
+                    >)['local_incident_matching_reports'] ==
+                1 &&
+            (decoded['features']!
+                    as Map<
+                      String,
+                      Object?
+                    >)['local_incident_completed_operations'] ==
+                2 &&
+            (decoded['features']!
+                    as Map<String, Object?>)['local_incident_failures'] ==
+                0 &&
             utf8
                     .encode(
                       '${const JsonEncoder.withIndent('  ').convert(decoded)}\n',
@@ -5786,6 +6011,17 @@ final class TerminalApplication {
         'diagnostics export was noncanonical, oversized, or content-bearing',
       );
     }
+
+    final int handlesBeforeIncidentDismiss = application.debugLiveObjectCount;
+    await incidentPresenter.dismiss();
+    _expectLifecycle(
+      !incidentPresenter.isOpen &&
+          incidentPresenter.terminalResponderRestoreCount == 1 &&
+          application.debugLiveObjectCount ==
+              handlesBeforeIncidentDismiss - 2 &&
+          terminalInputDeliveryCount() == incidentInputBaseline,
+      'incident close did not restore focus and release native owners',
+    );
 
     final int handlesBeforeDismiss = application.debugLiveObjectCount;
     _injectKeyEventForTesting(
@@ -5817,6 +6053,7 @@ final class TerminalApplication {
       state.isDisposed &&
           hierarchy.isDisposed &&
           presenter.isDisposed &&
+          incidentPresenter.isDisposed &&
           allSessions.length == 2 &&
           allSessions.every(
             (TerminalSession session) =>
@@ -5832,6 +6069,8 @@ final class TerminalApplication {
       'TERMINAL_DIAGNOSTICS_TEST inspector=true singleton=true '
       'capture=true focus_handoff=true parser_events=true redacted=true '
       'menu=true palette=true canonical=true atomic=true exports=2 '
+      'incident_consent=true incident_singleton=true incident_exports=2 '
+      'incident_diagnostics=true '
       'terminal_write_delta=0 sessions_clean=2 text_clients=0 '
       'native_handles=0',
     );
@@ -16822,6 +17061,118 @@ TerminalColorScheme _terminalColorScheme(TerminalThemeBrightness brightness) =>
       TerminalThemeBrightness.light => TerminalColorScheme.light,
       TerminalThemeBrightness.dark => TerminalColorScheme.dark,
     };
+
+final class _TerminalIncidentAcceptanceContext {
+  _TerminalIncidentAcceptanceContext._({
+    required this.service,
+    required this.store,
+    required this.processRunner,
+    required this.fixtureDirectories,
+  });
+
+  factory _TerminalIncidentAcceptanceContext.create(Directory root) {
+    final Directory reports = Directory('${root.path}/.incident-reports')
+      ..createSync();
+    final Directory temporary = Directory('${root.path}/.incident-temporary')
+      ..createSync();
+    File('${reports.path}/dart_terminal-fixture.ips').writeAsStringSync(
+      '${jsonEncode(<String, Object?>{'bundleID': terminalUpdateProduct, 'app_name': terminalIncidentApplicationName})}\n__DT_INCIDENT_PRIVATE_CRASH__\n',
+      flush: true,
+    );
+    final _TerminalIncidentAcceptanceStore store =
+        _TerminalIncidentAcceptanceStore();
+    store.delegate = TerminalAppleCrashReportStore(
+      diagnosticReportsDirectory: reports,
+    );
+    final _TerminalIncidentAcceptanceProcessRunner processRunner =
+        _TerminalIncidentAcceptanceProcessRunner();
+    return _TerminalIncidentAcceptanceContext._(
+      service: TerminalLocalIncidentService(
+        reportStore: store,
+        temporaryParent: temporary,
+        processRunner: processRunner,
+        currentProcessId: 4242,
+      ),
+      store: store,
+      processRunner: processRunner,
+      fixtureDirectories: <Directory>[reports, temporary],
+    );
+  }
+
+  final TerminalIncidentService service;
+  final _TerminalIncidentAcceptanceStore store;
+  final _TerminalIncidentAcceptanceProcessRunner processRunner;
+  final List<Directory> fixtureDirectories;
+  int consentCount = 0;
+
+  void removeFixtures() {
+    for (final Directory directory in fixtureDirectories) {
+      if (directory.existsSync()) directory.deleteSync(recursive: true);
+    }
+  }
+}
+
+final class _TerminalIncidentAcceptanceStore
+    implements TerminalIncidentCrashReportStore {
+  _TerminalIncidentAcceptanceStore();
+
+  late final TerminalIncidentCrashReportStore delegate;
+  int get accessCount => discoverCount + exportCount;
+  int discoverCount = 0;
+  int exportCount = 0;
+
+  @override
+  Future<TerminalIncidentReportSelection> discover({
+    required TerminalIncidentCancellation cancellation,
+  }) async {
+    discoverCount++;
+    return delegate.discover(cancellation: cancellation);
+  }
+
+  @override
+  Future<void> export(
+    TerminalIncidentReportSelection selection,
+    File destination, {
+    required TerminalIncidentCancellation cancellation,
+  }) async {
+    exportCount++;
+    await delegate.export(selection, destination, cancellation: cancellation);
+  }
+}
+
+final class _TerminalIncidentAcceptanceProcessRunner
+    implements TerminalIncidentProcessRunner {
+  var runCount = 0;
+  List<String>? lastArguments;
+
+  @override
+  Future<TerminalIncidentProcessResult> run(
+    String executable,
+    List<String> arguments, {
+    required Duration timeout,
+    required int maximumOutputBytes,
+    required TerminalIncidentCancellation cancellation,
+  }) async {
+    runCount++;
+    lastArguments = List<String>.unmodifiable(arguments);
+    if (cancellation.isCancelled ||
+        executable != '/usr/bin/sample' ||
+        arguments.length != 5 ||
+        arguments[0] != '4242' ||
+        arguments[1] != '1' ||
+        arguments[2] != '1' ||
+        arguments[3] != '-file') {
+      return const TerminalIncidentProcessResult(
+        TerminalIncidentProcessDisposition.failed,
+      );
+    }
+    File(arguments[4])
+        .writeAsStringSync('__DT_INCIDENT_PRIVATE_SAMPLE__\n', flush: true);
+    return const TerminalIncidentProcessResult(
+      TerminalIncidentProcessDisposition.completed,
+    );
+  }
+}
 
 final class _TerminalUpdateAcceptanceService
     implements TerminalUpdateProductService {

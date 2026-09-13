@@ -166,6 +166,7 @@ export 'src/terminal_desktop_signal_projection.dart';
 export 'src/terminal_diagnostics.dart';
 export 'src/terminal_diagnostics_presenter.dart';
 export 'src/terminal_effective_config.dart';
+export 'src/terminal_incident_controller.dart';
 export 'src/terminal_incident_service.dart';
 export 'src/terminal_input/terminal_appkit_key_adapter.dart'
     show TerminalAppKitKeyAdapter;

@@ -45,7 +45,7 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 31個のstable application actionを共有するbounded searchable registry、動的な
+- 33個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
@@ -65,6 +65,14 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   text、command、cwd/path、argv/environment、clipboard/notification、hyperlink/image、
   timestamp/stable ID/raw errorを含めず、sibling temporary fileからatomic replaceする。
   privacy境界、失敗分類、検証方法は
+  [Terminal inspector and diagnostics reference](docs/reference/terminal-diagnostics.md)を参照
+- File > Export Latest Crash Report…とCapture Hang Sample…は、生のApple `.ips`または
+  現在のDart Terminalを1秒だけ採取した`.sample.txt`を、警告付きSave panelで明示選択した
+  ローカルファイルにだけ保存する。Saveを確定する前にはreport directoryも`/usr/bin/sample`も
+  使用せず、background scan、automatic upload、telemetryは行わない。singletonのread-only
+  status画面と通常diagnosticsへ残すのは固定状態とbounded countだけで、path、PID、timestamp、
+  stack、raw error、artifact内容は保持しない。Release AOTの9 code imageにはUUID/hashを照合した
+  offline dSYM packageを別途生成できる。詳細は
   [Terminal inspector and diagnostics reference](docs/reference/terminal-diagnostics.md)を参照
 - `application.toggle-quick-terminal`をmenu、command palette、任意のlocal keybind、
   opt-inのsystem-wide shortcutで共有するsingleton Quick Terminal。選択画面の現在の
@@ -595,8 +603,9 @@ revision、PID、開始/更新時刻、最後の lifecycle phase、outcome、exi
 ことを示すだけで、crash の断定ではありません。強制終了、電源断、ストレージ障害などでも
 同じ状態になり得ます。記録は端末内だけに留まり、自動送信、minidump、stack memory、
 symbolication は行いません。アプリ終了中であれば `Diagnostics` フォルダを削除でき、次回
-起動時に空の状態から再作成されます。crash/hang report、dSYM、利用者同意を含む完全な診断
-workflow は Phase 11 の範囲です。
+起動時に空の状態から再作成されます。生のcrash reportとhang sampleは、このmetadataとは
+分離された明示操作と警告付きSave panelからだけ保存できます。通常diagnosticsには固定状態と
+件数だけが入り、生のartifact、path、PID、timestamp、stack、raw errorは入りません。
 
 通常実行の標準出力には、typed pane/session ID、PTY process ID、および固定された
 lifecycle stageだけを持つ`TERMINAL_PANE_LIFECYCLE`と

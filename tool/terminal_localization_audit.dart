@@ -76,7 +76,7 @@ Future<TerminalLocalizationAuditResult> runTerminalLocalizationAudit({
     'lib/src/terminal_application.dart',
   );
   _expect(
-    'localization: localization'.allMatches(applicationSource).length == 11,
+    'localization: localization'.allMatches(applicationSource).length == 12,
     'production and runtime-acceptance localization injection count changed',
   );
 
@@ -255,6 +255,10 @@ const List<String> _catalogPhrases = <String>[
   'Check for Updates…',
   'Software Update',
   'Release notes',
+  'Export Latest Crash Report…',
+  'Capture Hang Sample…',
+  'Local Incident Diagnostics',
+  'Raw data is saved only to the explicitly selected location',
 ];
 
 const List<_SourceRule> _sourceRules = <_SourceRule>[
@@ -290,6 +294,8 @@ const List<_SourceRule> _sourceRules = <_SourceRule>[
       'Open Terminal Inspector',
       'Export Diagnostics…',
       'Check for Updates…',
+      'Export Latest Crash Report…',
+      'Capture Hang Sample…',
     ],
   ),
   _SourceRule(
@@ -396,6 +402,27 @@ const List<_SourceRule> _sourceRules = <_SourceRule>[
     ],
   ),
   _SourceRule(
+    'lib/src/terminal_incident_controller.dart',
+    requiredTokens: <String>[
+      '_localization.incidentCrashSavePanelTitle',
+      '_localization.incidentCrashSavePanelMessage',
+      '_localization.incidentSampleSavePanelTitle',
+      '_localization.incidentSampleSavePanelMessage',
+      '_localization.incidentWindowTitle',
+      '_localization.incidentStatus(',
+      '_localization.incidentWindowInstructions',
+    ],
+    forbiddenPhrases: <String>[
+      'Export Latest Crash Report',
+      'Capture Hang Sample',
+      'Local Incident Diagnostics',
+      'Crash reports are raw data',
+      'A hang sample is raw data',
+      'Raw data is saved only',
+      'Press Esc to cancel and close',
+    ],
+  ),
+  _SourceRule(
     'lib/src/terminal_osc52_confirmation.dart',
     requiredTokens: <String>[
       '_localization.osc52Title',
@@ -458,6 +485,7 @@ const List<_SourceRule> _sourceRules = <_SourceRule>[
       'TerminalAppKitContextMenuProjection.install(',
       'TerminalOsc52ConfirmationPresenter(',
       'TerminalDiagnosticsPresenter(',
+      'TerminalIncidentPresenter(',
       'TerminalSettingsInspectorPresenter(',
       'TerminalCommandPalettePresenter.withFocusTarget(',
       'TerminalAppKitMenuProjection.install(',

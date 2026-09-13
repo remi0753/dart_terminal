@@ -175,8 +175,24 @@ void _testStableStandardCatalog() {
                 .identity ==
             'option+command+e' &&
         catalog.actionForId(TerminalActionId.exportDiagnostics)!.menu ==
-            TerminalActionMenu.file,
-    'inspector and export actions own their reviewed shared shortcuts',
+            TerminalActionMenu.file &&
+        catalog.actionForId(TerminalActionId.exportLatestCrashReport)!.menu ==
+            TerminalActionMenu.file &&
+        catalog
+                .actionForId(TerminalActionId.exportLatestCrashReport)!
+                .shortcut ==
+            null &&
+        !catalog
+            .actionForId(TerminalActionId.exportLatestCrashReport)!
+            .restoresTerminalFocusAfterInvocation &&
+        catalog.actionForId(TerminalActionId.captureHangSample)!.menu ==
+            TerminalActionMenu.file &&
+        catalog.actionForId(TerminalActionId.captureHangSample)!.shortcut ==
+            null &&
+        !catalog
+            .actionForId(TerminalActionId.captureHangSample)!
+            .restoresTerminalFocusAfterInvocation,
+    'inspector, diagnostics, and incident actions own reviewed metadata',
   );
   _expect(
     catalog.actionForId(TerminalActionId.quickLook)!.shortcut!.identity ==

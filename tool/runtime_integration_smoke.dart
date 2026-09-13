@@ -1730,6 +1730,8 @@ Future<void> _runDiagnostics(_Options options, _Invocation invocation) async {
             r'^TERMINAL_DIAGNOSTICS_TEST inspector=true singleton=true '
             r'capture=true focus_handoff=true parser_events=true redacted=true '
             r'menu=true palette=true canonical=true atomic=true exports=2 '
+            r'incident_consent=true incident_singleton=true incident_exports=2 '
+            r'incident_diagnostics=true '
             r'terminal_write_delta=0 sessions_clean=2 text_clients=0 '
             r'native_handles=0$',
             multiLine: true,
@@ -1741,13 +1743,22 @@ Future<void> _runDiagnostics(_Options options, _Invocation invocation) async {
     final List<File> files = entries.whereType<File>().toList()
       ..sort((File left, File right) => left.path.compareTo(right.path));
     _expect(
-      files.length == 2 &&
+      files.length == 4 &&
           files[0].path.endsWith('/export-0.json') &&
           files[1].path.endsWith('/export-1.json') &&
+          files[2].path.endsWith('/incident-crash.ips') &&
+          files[3].path.endsWith('/incident-hang.sample.txt') &&
           entries.every(
             (FileSystemEntity entity) => !entity.path.endsWith('.tmp'),
           ),
-      'diagnostics export did not leave exactly two final atomic files',
+      'diagnostics/incident export did not leave four final atomic files',
+    );
+    _expect(
+      files[2].readAsStringSync().contains('__DT_INCIDENT_PRIVATE_CRASH__') &&
+          files[3].readAsStringSync().contains(
+            '__DT_INCIDENT_PRIVATE_SAMPLE__',
+          ),
+      'explicit incident exports did not preserve the selected raw artifact',
     );
     const List<String> expectedTopLevelKeys = <String>[
       'format',
@@ -1765,7 +1776,7 @@ Future<void> _runDiagnostics(_Options options, _Invocation invocation) async {
     final String expectedRuntime = options.mode == _RuntimeMode.releaseAot
         ? 'releaseAot'
         : 'developerJit';
-    for (final File file in files) {
+    for (final File file in files.take(2)) {
       final String text = file.readAsStringSync();
       final Object? decoded = jsonDecode(text);
       _expect(decoded is Map<String, Object?>, 'diagnostics root is not a map');
@@ -1795,6 +1806,24 @@ Future<void> _runDiagnostics(_Options options, _Invocation invocation) async {
             privacy['stable_identifiers'] == 'omitted' &&
             privacy['raw_errors'] == 'omitted' &&
             application['runtime'] == expectedRuntime &&
+            (report['features']!
+                    as Map<String, Object?>)['local_incident_state'] ==
+                'sampled' &&
+            (report['features']!
+                    as Map<
+                      String,
+                      Object?
+                    >)['local_incident_matching_reports'] ==
+                1 &&
+            (report['features']!
+                    as Map<
+                      String,
+                      Object?
+                    >)['local_incident_completed_operations'] ==
+                2 &&
+            (report['features']!
+                    as Map<String, Object?>)['local_incident_failures'] ==
+                0 &&
             hierarchy['panes'] == 2 &&
             hierarchy['live_panes'] == 2 &&
             (inspection['events_total']! as int) > 0 &&
@@ -1821,7 +1850,8 @@ Future<void> _runDiagnostics(_Options options, _Invocation invocation) async {
     stdout.writeln(
       'RUNTIME_DIAGNOSTICS_INTEGRATION_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
-      'exports=2 elapsed_ms=${observation.elapsed.inMilliseconds}',
+      'diagnostics_exports=2 incident_exports=2 '
+      'elapsed_ms=${observation.elapsed.inMilliseconds}',
     );
   } finally {
     if (exportDirectory.existsSync()) {

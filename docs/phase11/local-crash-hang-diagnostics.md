@@ -132,10 +132,11 @@ uploaded, logged, or attached without a direct user action.
 
 The product adds two shared File actions:
 
-1. **Export Latest Crash Report…** performs an on-demand bounded scan. If one
-   exact product report exists, a Save panel explains the sensitive content and
-   asks for a local `.ips` destination. Cancellation reads/copies nothing beyond
-   bounded identity discovery and writes nothing.
+1. **Export Latest Crash Report…** first opens a Save panel that explains the
+   sensitive content and asks for a local `.ips` destination. Only affirmative
+   **Save and Continue** consent performs the bounded exact-product scan and
+   raw copy. Cancellation performs no report-directory access and writes
+   nothing.
 2. **Capture Hang Sample…** opens the warning/Save panel before sampling. After
    confirmation, the external system sampler captures only the current process
    for the fixed bound and publishes the raw text to that destination.
@@ -263,6 +264,103 @@ Subtasks are strictly ordered. The benchmark roadmap item cannot start until
 all four incident children and this parent are complete.
 
 ## Progress log
+
+### 2026-09-13 — Product integration task start
+
+- After commit `325d6ea` (`Add private local incident capture`), reread
+  ROADMAP, README, FEATURE_MATRIX, this contract, and the existing shared
+  action/menu, diagnostics, update-window, localization, runtime-smoke, and
+  product disposal paths. The first incomplete child is the product
+  action/consent UI, diagnostics projection, two-runtime acceptance, and
+  documentation/matrix/parent closure. Benchmark work remains out of scope
+  until this child and parent are committed.
+- The integration will add two stable File actions, `Export Latest Crash
+  Report…` and `Capture Hang Sample…`, backed by one product-owned controller
+  and one singleton read-only status window. Each action must present a native
+  Save panel whose warning describes the raw sensitive content before the
+  service is allowed to discover/read a report or invoke `sample`. Cancelling
+  that panel is a successful no-access/no-write result.
+- Retained UI and general diagnostics state is limited to fixed operation
+  states and bounded counts. Raw bytes, names/paths, timestamps, process IDs,
+  UUIDs, tool output, and underlying error text remain outside the controller,
+  status window, diagnostics JSON, machine output, and action result. Closing,
+  quitting, or disposing cancels the active operation; late completion must not
+  recreate or mutate UI state. The shared dispatcher supplies an additional
+  outer single-flight boundary and both native actions must restore the
+  terminal responder without delivering PTY input.
+- Product acceptance will inject an isolated fake incident service and Save
+  destinations into the existing diagnostics suite, so both Developer JIT and
+  Release AOT prove menu/palette routing, consent-before-access, atomic product
+  lifecycle, singleton native ownership, cancellation, cleanup, and zero PTY
+  input without scanning personal DiagnosticReports or retaining a real
+  process sample. Authorized long-duration/manual sampling remains skipped and
+  non-blocking.
+
+### 2026-09-13 — Product integration implementation and runtime acceptance
+
+- Added two localized File actions with stable IDs, no default shortcut, menu
+  and Command Palette routing, dynamic availability, and exactly-once shared
+  dispatch. Both warnings and the **Save and Continue** destination choice run
+  before the controller may scan DiagnosticReports or invoke the sampler.
+- Added a product-owned single-flight controller and singleton read-only native
+  presenter. Retained state is restricted to the fixed operation enum plus
+  matching, completed, and failure counts. Escape, native close, pane loss,
+  quit, and disposal cancel ownership and prevent late completion from
+  recreating UI; terminal focus is restored without a PTY write.
+- Extended the version-1 general diagnostics `features` object with exactly four
+  allowlisted incident fields: fixed state and three bounded counts. The static
+  privacy audit now freezes 172 schema keys, 11 top-level entries, and seven
+  source-owner boundaries. Localization/action evidence now covers 33 actions,
+  15 production localization sources, 12 injection sites, four resource
+  families, and 21 paired resource keys.
+- The fake-AppKit acceptance covers Japanese discovery, both warning texts,
+  cancellation before raw access, exact crash/sample raw publication,
+  single-flight, singleton native ownership, fixed content-free rendering,
+  responder restoration, disposal, late completion rejection, and sentinel
+  isolation. The ordinary product diagnostics suite injects only a private
+  fixture report and fake current-PID sampler, then proves menu/palette routing,
+  two raw exports, two ordinary JSON exports, no private marker in UI/general
+  diagnostics, zero PTY input, clean sessions, and zero final native handles.
+- The first embedded Developer JIT run failed before the first copy boundary
+  with fixed `copy-failed` classification. Standalone service tests passed, and
+  the failure was isolated to the secure-random temporary-name dependency in
+  the embedded product. Replaced it with the same process-ID/monotonic ordinal
+  plus exclusive-create collision loop already used by product atomic saves.
+  This retains no-clobber behavior and atomic publication without requiring
+  random-device support. All 13 service groups then passed again.
+- `CI=true DART_SUPPRESS_ANALYTICS=true make developer-jit-diagnostics` passed
+  with two diagnostics and two incident exports in 1,813 ms. The corresponding
+  `make release-aot-diagnostics` gate passed in 1,009 ms. Both use isolated raw
+  sentinels; no personal Apple report was scanned and no real process sample was
+  retained. Long-duration/manual sampling remains skipped as authorized.
+
+### 2026-09-13 — Product integration final validation
+
+- Focused validation passed: `dart analyze`, all 13 incident-service groups,
+  native hierarchy/presenter lifecycle, diagnostics encoding, the 33-action
+  generated reference, 15-source localization audit, and 172-key/seven-owner
+  diagnostics privacy audit. `git diff --check` also passed.
+- The first exact main-gate attempt correctly found the Phase 7 AppKit source
+  hash evidence stale after the product/native acceptance changes. After
+  regenerating it, the second attempt found the compatibility coverage report's
+  README/FEATURE_MATRIX hashes stale. Regenerating that report changed only
+  expected SHA-256 fields. The third exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` run passed formatting of 309
+  files, all root/package analyses, native and Dart tests, all generated
+  freshness checks, privacy/security gates, incident/update/symbol fault tests,
+  and distribution policy tests.
+- A final `make RUNTIME_ARCH=arm64 runtime-diagnostics-integration` rebuilt and
+  passed the ordinary Developer JIT product in 1,754 ms and Release AOT product
+  in 956 ms. Each reported two ordinary diagnostics exports, two isolated raw
+  incident exports, content-free incident diagnostics, clean session teardown,
+  zero PTY writes, and zero final native handles.
+- The adjacent generic `dart_appkit` worktree is clean. Its tracked Dart/native
+  code and tracked filenames contain no case-insensitive `terminal` match, and
+  this task changed only `dart_terminal`. Public README/reference/matrix and the
+  optional manual checklist now distinguish content-free diagnostics from
+  sensitive explicit raw artifacts. Real crash creation, real sampling,
+  24/72-hour runs, and Apple notarization were not performed and are explicitly
+  non-blocking under the user's authorization.
 
 ### 2026-09-13 — Local report/sample service task start
 

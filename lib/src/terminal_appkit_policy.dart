@@ -58,6 +58,10 @@ const TextViewConfiguration terminalDiagnosticsTextViewConfiguration =
 const TextViewConfiguration terminalUpdateTextViewConfiguration =
     terminalDiagnosticsTextViewConfiguration;
 
+/// Read-only content-free local incident status presentation.
+const TextViewConfiguration terminalIncidentTextViewConfiguration =
+    terminalDiagnosticsTextViewConfiguration;
+
 /// Presentation used by the searchable effective-configuration inspector.
 const TextViewConfiguration terminalSettingsInspectorTextViewConfiguration =
     TextViewConfiguration(

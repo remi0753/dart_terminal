@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dart_appkit/dart_appkit.dart';
@@ -17,6 +18,7 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testOsc52ConfirmationPresenterLifecycle();
   await _testSettingsInspectorPresenterLifecycle();
   await _testDiagnosticsPresenterLifecycle();
+  await _testIncidentPresenterLifecycle();
   await _testUpdatePresenterLifecycle();
   await _testRtlApplicationComposition();
   await _testConfiguredWindowAndPaddingProjection();
@@ -30,6 +32,221 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testIncidentPresenterLifecycle() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final View terminalView = View(configuration: terminalBaseViewConfiguration);
+  final Window terminalWindow = Window(
+    frame: const Rect.fromLTWH(100, 90, 920, 580),
+    title: 'Terminal',
+    configuration: terminalWindowConfiguration,
+  )..contentView = terminalView;
+  terminalWindow
+    ..show()
+    ..makeFirstResponder(terminalView);
+  final Directory root = await Directory.systemTemp.createTemp(
+    'dart-terminal-incident-presenter-test-',
+  );
+  final Directory reports = Directory('${root.path}/reports')..createSync();
+  final Directory temporary = Directory('${root.path}/temporary')..createSync();
+  File('${reports.path}/fixture.ips').writeAsStringSync(
+    '${jsonEncode(<String, Object?>{'bundleID': terminalUpdateProduct, 'app_name': terminalIncidentApplicationName})}\n__INCIDENT_TEST_PRIVATE_CRASH__\n',
+    flush: true,
+  );
+  final _RecordingIncidentStore store = _RecordingIncidentStore(
+    TerminalAppleCrashReportStore(diagnosticReportsDirectory: reports),
+  );
+  final _PresenterIncidentProcessRunner processRunner =
+      _PresenterIncidentProcessRunner();
+  final TerminalIncidentController controller = TerminalIncidentController(
+    service: TerminalLocalIncidentService(
+      reportStore: store,
+      temporaryParent: temporary,
+      processRunner: processRunner,
+      currentProcessId: 5150,
+    ),
+  );
+  SavePanelResult nextSelection = SavePanelResult.cancelled();
+  SavePanelConfiguration? lastConfiguration;
+  var consentCount = 0;
+  final TerminalIncidentPresenter presenter = TerminalIncidentPresenter(
+    application: application,
+    controller: controller,
+    focusTarget: () =>
+        TerminalIncidentFocusTarget(window: terminalWindow, view: terminalView),
+    localization: TerminalLocalization.japanese,
+    chooseSaveDestination: (SavePanelConfiguration configuration) {
+      consentCount++;
+      lastConfiguration = configuration;
+      return nextSelection;
+    },
+  );
+  final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+    catalog: TerminalActionCatalog.standard(
+      localization: TerminalLocalization.japanese,
+    ),
+    registrations: <TerminalActionRegistration>[
+      TerminalActionRegistration(
+        id: TerminalActionId.exportLatestCrashReport,
+        isAvailable: () => presenter.canStart,
+        handler: presenter.exportLatestCrashReport,
+      ),
+      TerminalActionRegistration(
+        id: TerminalActionId.captureHangSample,
+        isAvailable: () => presenter.canStart,
+        handler: presenter.captureHangSample,
+      ),
+    ],
+  );
+  try {
+    _expect(
+      dispatcher.search('クラッシュ').first.definition.id ==
+              TerminalActionId.exportLatestCrashReport &&
+          dispatcher.search('ハング サンプル').first.definition.id ==
+              TerminalActionId.captureHangSample,
+      'localized catalog does not expose both incident actions',
+    );
+    final TerminalActionDispatchResult cancelled = await dispatcher.dispatch(
+      TerminalActionId.exportLatestCrashReport,
+    );
+    _expect(
+      cancelled.disposition == TerminalActionDispatchDisposition.executed &&
+          presenter.lastOperationResult?.disposition ==
+              TerminalIncidentOperationDisposition.cancelled &&
+          !presenter.isOpen &&
+          consentCount == 1 &&
+          store.accessCount == 0 &&
+          processRunner.runCount == 0 &&
+          lastConfiguration?.message.contains('スタックトレース') == true &&
+          lastConfiguration?.message.contains('ファイルパス') == true &&
+          lastConfiguration?.message.contains('プロセス情報') == true,
+      'cancelled consent accessed raw data or omitted the localized warning',
+    );
+
+    final File crash = File('${root.path}/selected-crash.ips');
+    nextSelection = SavePanelResult.selected(crash.path);
+    await dispatcher.dispatch(TerminalActionId.exportLatestCrashReport);
+    _expect(
+      crash.readAsStringSync().contains('__INCIDENT_TEST_PRIVATE_CRASH__') &&
+          store.discoverCount == 1 &&
+          store.exportCount == 1 &&
+          presenter.isOpen &&
+          presenter.activeWindow!.title == 'ローカル障害診断' &&
+          controller.status == TerminalIncidentStatus.exported &&
+          controller.snapshot.matchingReportCount == 1 &&
+          controller.snapshot.completedOperationCount == 1 &&
+          presenter.renderedText!.contains(root.path) == false &&
+          presenter.renderedText!.contains('__INCIDENT_TEST_PRIVATE_CRASH__') ==
+              false,
+      'consented crash export or content-free status is invalid',
+    );
+    final Window incidentWindow = presenter.activeWindow!;
+    final int incidentWindowHandle = bindings.handleFor(incidentWindow);
+    final int incidentViewHandle = bindings.handleFor(presenter.activeView!);
+    final int handleCount = application.debugLiveObjectCount;
+    await presenter.open();
+    _expect(
+      identical(presenter.activeWindow, incidentWindow) &&
+          application.debugLiveObjectCount == handleCount &&
+          bindings.firstResponders[incidentWindowHandle] ==
+              incidentViewHandle &&
+          bindings.windowKeyEventRoutings[incidentWindowHandle] == 1,
+      'incident status did not retain one Dart-only native owner pair',
+    );
+
+    final File sample = File('${root.path}/selected-hang.sample.txt');
+    nextSelection = SavePanelResult.selected(sample.path);
+    await dispatcher.dispatch(TerminalActionId.captureHangSample);
+    _expect(
+      sample.readAsStringSync().contains('__INCIDENT_TEST_PRIVATE_SAMPLE__') &&
+          processRunner.runCount == 1 &&
+          processRunner.lastArguments?.take(4).join(',') == '5150,1,1,-file' &&
+          controller.status == TerminalIncidentStatus.sampled &&
+          controller.snapshot.completedOperationCount == 2 &&
+          controller.snapshot.unsuccessfulOperationCount == 0 &&
+          presenter.renderedText!.contains(root.path) == false &&
+          presenter.renderedText!.contains(
+                '__INCIDENT_TEST_PRIVATE_SAMPLE__',
+              ) ==
+              false &&
+          lastConfiguration?.message.contains('1秒間') == true,
+      'sample action leaked raw state or violated its fixed process contract',
+    );
+
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      incidentWindowHandle,
+      keyCode: 53,
+      characters: '\u001b',
+    );
+    await _waitForHierarchy(
+      () => !presenter.isOpen,
+      'Escape did not close incident status',
+    );
+    _expect(
+      presenter.terminalResponderRestoreCount == 1 &&
+          bindings.firstResponders[bindings.handleFor(terminalWindow)] ==
+              bindings.handleFor(terminalView) &&
+          !bindings.objects.containsKey(incidentWindowHandle) &&
+          !bindings.objects.containsKey(incidentViewHandle),
+      'incident close did not restore focus and release native owners',
+    );
+
+    final File lateSample = File('${root.path}/late.sample.txt');
+    nextSelection = SavePanelResult.selected(lateSample.path);
+    processRunner.delayNext = true;
+    final Future<TerminalIncidentOperationResult> late = presenter
+        .captureHangSample();
+    await _waitForHierarchy(
+      () => processRunner.waiting,
+      'delayed sample did not reach the injected process boundary',
+    );
+    final int consentBeforeBusy = consentCount;
+    final TerminalIncidentOperationResult busy = await presenter
+        .exportLatestCrashReport();
+    _expect(
+      busy.disposition == TerminalIncidentOperationDisposition.busy &&
+          consentCount == consentBeforeBusy &&
+          store.accessCount == 2,
+      'overlapping action bypassed single-flight before native consent',
+    );
+    final TerminalIncidentOperationResult? retained =
+        presenter.lastOperationResult;
+    await presenter.dispose();
+    processRunner.release();
+    final TerminalIncidentOperationResult lateResult = await late;
+    _expect(
+      lateResult.disposition == TerminalIncidentOperationDisposition.cancelled,
+      'dispose did not classify the delayed service result as cancelled',
+    );
+    _expect(
+      presenter.isDisposed &&
+          !presenter.isOpen &&
+          identical(presenter.lastOperationResult, retained) &&
+          controller.status == TerminalIncidentStatus.disposed,
+      'dispose accepted a late result into retained UI state',
+    );
+    _expect(
+      !lateSample.existsSync(),
+      'dispose retained a cancelled raw artifact',
+    );
+  } finally {
+    await presenter.dispose();
+    if (!terminalWindow.isClosed) terminalWindow.close();
+    terminalWindow.dispose();
+    terminalView.dispose();
+    await application.terminate();
+    await rawEvents.close();
+    if (root.existsSync()) root.deleteSync(recursive: true);
+  }
 }
 
 Future<void> _testUpdatePresenterLifecycle() async {
@@ -1433,6 +1650,10 @@ TerminalDiagnosticsSnapshot _diagnosticsPresenterSnapshot(
     osc52: TerminalDiagnosticsFeatureState.disabled,
     pendingOsc52Requests: 0,
     pendingNotificationRequests: 0,
+    localIncidentState: TerminalDiagnosticsIncidentState.idle,
+    localIncidentMatchingReports: 0,
+    localIncidentCompletedOperations: 0,
+    localIncidentFailures: 0,
   ),
 );
 
@@ -3447,6 +3668,85 @@ final class _PresenterUpdateService implements TerminalUpdateProductService {
   @override
   void dispose() {
     disposeCount++;
+  }
+}
+
+final class _RecordingIncidentStore
+    implements TerminalIncidentCrashReportStore {
+  _RecordingIncidentStore(this.delegate);
+
+  final TerminalIncidentCrashReportStore delegate;
+  int discoverCount = 0;
+  int exportCount = 0;
+  int get accessCount => discoverCount + exportCount;
+
+  @override
+  Future<TerminalIncidentReportSelection> discover({
+    required TerminalIncidentCancellation cancellation,
+  }) async {
+    discoverCount++;
+    return delegate.discover(cancellation: cancellation);
+  }
+
+  @override
+  Future<void> export(
+    TerminalIncidentReportSelection selection,
+    File destination, {
+    required TerminalIncidentCancellation cancellation,
+  }) async {
+    exportCount++;
+    await delegate.export(selection, destination, cancellation: cancellation);
+  }
+}
+
+final class _PresenterIncidentProcessRunner
+    implements TerminalIncidentProcessRunner {
+  int runCount = 0;
+  List<String>? lastArguments;
+  bool delayNext = false;
+  bool waiting = false;
+  Completer<void>? _release;
+
+  void release() => _release?.complete();
+
+  @override
+  Future<TerminalIncidentProcessResult> run(
+    String executable,
+    List<String> arguments, {
+    required Duration timeout,
+    required int maximumOutputBytes,
+    required TerminalIncidentCancellation cancellation,
+  }) async {
+    runCount++;
+    lastArguments = List<String>.unmodifiable(arguments);
+    if (delayNext) {
+      delayNext = false;
+      waiting = true;
+      _release = Completer<void>();
+      await _release!.future;
+      waiting = false;
+      if (cancellation.isCancelled) {
+        return const TerminalIncidentProcessResult(
+          TerminalIncidentProcessDisposition.cancelled,
+        );
+      }
+    }
+    if (cancellation.isCancelled ||
+        executable != '/usr/bin/sample' ||
+        arguments.length != 5 ||
+        arguments[0] != '5150' ||
+        arguments[1] != '1' ||
+        arguments[2] != '1' ||
+        arguments[3] != '-file') {
+      return const TerminalIncidentProcessResult(
+        TerminalIncidentProcessDisposition.failed,
+      );
+    }
+    File(arguments[4])
+        .writeAsStringSync('__INCIDENT_TEST_PRIVATE_SAMPLE__\n', flush: true);
+    return const TerminalIncidentProcessResult(
+      TerminalIncidentProcessDisposition.completed,
+    );
   }
 }
 

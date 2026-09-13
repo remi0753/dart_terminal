@@ -38,6 +38,20 @@ enum TerminalDiagnosticsFeatureState {
   failed,
 }
 
+enum TerminalDiagnosticsIncidentState {
+  idle,
+  discovering,
+  exporting,
+  exported,
+  notFound,
+  unavailable,
+  sampling,
+  sampled,
+  cancelled,
+  failed,
+  disposed,
+}
+
 enum TerminalDiagnosticsExportDisposition { written, failed }
 
 enum TerminalDiagnosticsLimitKind { inspectorText, outputBytes }
@@ -563,9 +577,19 @@ final class TerminalDiagnosticsFeaturesSnapshot {
     required this.osc52,
     required this.pendingOsc52Requests,
     required this.pendingNotificationRequests,
+    required this.localIncidentState,
+    required this.localIncidentMatchingReports,
+    required this.localIncidentCompletedOperations,
+    required this.localIncidentFailures,
   }) {
     _nonnegative(pendingOsc52Requests, 'pendingOsc52Requests');
     _nonnegative(pendingNotificationRequests, 'pendingNotificationRequests');
+    _nonnegative(localIncidentMatchingReports, 'localIncidentMatchingReports');
+    _nonnegative(
+      localIncidentCompletedOperations,
+      'localIncidentCompletedOperations',
+    );
+    _nonnegative(localIncidentFailures, 'localIncidentFailures');
   }
 
   final TerminalDiagnosticsFeatureState secureInput;
@@ -576,6 +600,10 @@ final class TerminalDiagnosticsFeaturesSnapshot {
   final TerminalDiagnosticsFeatureState osc52;
   final int pendingOsc52Requests;
   final int pendingNotificationRequests;
+  final TerminalDiagnosticsIncidentState localIncidentState;
+  final int localIncidentMatchingReports;
+  final int localIncidentCompletedOperations;
+  final int localIncidentFailures;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'secure_input': secureInput.name,
@@ -586,6 +614,10 @@ final class TerminalDiagnosticsFeaturesSnapshot {
     'osc52': osc52.name,
     'pending_osc52_requests': pendingOsc52Requests,
     'pending_notification_requests': pendingNotificationRequests,
+    'local_incident_state': localIncidentState.name,
+    'local_incident_matching_reports': localIncidentMatchingReports,
+    'local_incident_completed_operations': localIncidentCompletedOperations,
+    'local_incident_failures': localIncidentFailures,
   };
 }
 

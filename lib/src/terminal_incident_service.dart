@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'terminal_update_feed.dart';
 
@@ -933,12 +932,12 @@ String? _directChildName(String parent, String child) {
   return relative;
 }
 
+int _nextIncidentTemporaryId = 0;
+
 String _incidentNonce() {
-  final Random random = Random.secure();
-  return List<int>.generate(
-    12,
-    (_) => random.nextInt(256),
-  ).map((int value) => value.toRadixString(16).padLeft(2, '0')).join();
+  final int id = _nextIncidentTemporaryId++;
+  if (_nextIncidentTemporaryId > 0x7fffffff) _nextIncidentTemporaryId = 0;
+  return '${pid.toRadixString(16)}-${id.toRadixString(16)}';
 }
 
 void _throwIfCancelled(TerminalIncidentCancellation cancellation) {

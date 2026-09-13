@@ -224,6 +224,73 @@ runTerminalDiagnosticsPrivacyAudit({Directory? projectRoot}) async {
     'clipboard',
   ], 'diagnostics presentation flow');
 
+  final String incident = _read(
+    root,
+    'lib/src/terminal_incident_controller.dart',
+  );
+  final String incidentStatus = _between(
+    incident,
+    'final class TerminalIncidentStatusSnapshot',
+    'typedef TerminalIncidentStatusListener',
+    'incident diagnostics status',
+  );
+  _requireAll(incidentStatus, const <String>[
+    'TerminalIncidentStatus status',
+    'final int matchingReportCount',
+    'final int completedOperationCount',
+    'final int unsuccessfulOperationCount',
+  ], 'incident diagnostics status');
+  _rejectAll(incidentStatus, const <String>[
+    'path',
+    'timestamp',
+    'processId',
+    'uuid',
+    'error',
+    'StackTrace',
+    'bytes',
+  ], 'incident diagnostics status');
+  final String incidentConsent = _between(
+    incident,
+    'Future<TerminalIncidentOperationResult> _runWithConsent(',
+    'void _render()',
+    'incident consent flow',
+  );
+  _requireOrdered(incidentConsent, const <String>[
+    '_chooseSaveDestination(configuration)',
+    'selection.path',
+    'await open()',
+    'await operation(',
+  ], 'incident consent flow');
+  _rejectAll(incidentConsent, const <String>[
+    'stdout',
+    'stderr',
+    'toString()',
+    'stackTrace',
+    'onError',
+  ], 'incident consent flow');
+  final String incidentRender = _between(
+    incident,
+    'void _render()',
+    'void _handleWindowEvent(',
+    'incident status presentation',
+  );
+  _requireAll(incidentRender, const <String>[
+    'controller.snapshot',
+    '_localization.incidentStatus(',
+    'snapshot.matchingReportCount',
+    'snapshot.completedOperationCount',
+    'snapshot.unsuccessfulOperationCount',
+  ], 'incident status presentation');
+  _rejectAll(incidentRender, const <String>[
+    'File(',
+    'selection',
+    'destination',
+    'timestamp',
+    'processId',
+    'uuid',
+    'StackTrace',
+  ], 'incident status presentation');
+
   final String inspector = _read(
     root,
     'lib/src/terminal_core/vt_parser_inspector.dart',
@@ -242,7 +309,7 @@ runTerminalDiagnosticsPrivacyAudit({Directory? projectRoot}) async {
 
   return TerminalDiagnosticsPrivacyAuditResult(
     schemaKeyCount: _expectedSchemaKeys.length,
-    ownerCount: 6,
+    ownerCount: 7,
     topLevelKeyCount: _expectedTopLevelKeys.length,
   );
 }
@@ -418,6 +485,10 @@ limits
 live_atlas_pins
 live_options
 live_panes
+local_incident_completed_operations
+local_incident_failures
+local_incident_matching_reports
+local_incident_state
 malformed
 metadata_bytes
 modes

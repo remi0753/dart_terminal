@@ -71,6 +71,8 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `application.quit` | Quit Dart Terminal | application | `command+q` |
 | `window.new` | New Window | file | `command+n` |
 | `file.export-diagnostics` | Export Diagnostics… | file | `option+command+e` |
+| `file.export-latest-crash-report` | Export Latest Crash Report… | file | — |
+| `file.capture-hang-sample` | Capture Hang Sample… | file | — |
 | `window.close` | Close Window | file | `command+w` |
 | `edit.copy` | Copy | edit | `command+c` |
 | `edit.paste` | Paste | edit | `command+v` |

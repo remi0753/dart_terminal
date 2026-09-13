@@ -25,6 +25,8 @@ enum TerminalActionMessageId {
   quitApplication,
   newWindow,
   exportDiagnostics,
+  exportLatestCrashReport,
+  captureHangSample,
   closeWindow,
   copy,
   paste,
@@ -320,6 +322,33 @@ final class TerminalLocalization {
       : 'Save content-free diagnostics without terminal text or paths.';
   String get diagnosticsSavePanelPrompt => _ja ? '書き出す' : 'Export';
   String get diagnosticsDefaultFileName => 'dart-terminal-diagnostics.json';
+  String get incidentWindowTitle =>
+      _ja ? 'ローカル障害診断' : 'Local Incident Diagnostics';
+  String get incidentCrashSavePanelTitle =>
+      _ja ? '最新のクラッシュレポートを書き出す' : 'Export Latest Crash Report';
+  String get incidentCrashSavePanelMessage => _ja
+      ? 'クラッシュレポートは生データで、スタックトレース、ファイルパス、プロセス情報を含む場合があります。選択したファイルにローカル保存する場合のみ続けてください。'
+      : 'Crash reports are raw data and may contain stack traces, file paths, and process details. Continue only to save one locally to the selected file.';
+  String get incidentSampleSavePanelTitle =>
+      _ja ? 'ハングサンプルを取得' : 'Capture Hang Sample';
+  String get incidentSampleSavePanelMessage => _ja
+      ? 'ハングサンプルは生データで、スタックトレース、ファイルパス、プロセス情報を含みます。現在のDart Terminalを1秒間取得し、選択したファイルにローカル保存する場合のみ続けてください。'
+      : 'A hang sample is raw data containing stack traces, file paths, and process details. Continue only to sample this Dart Terminal for one second and save it locally to the selected file.';
+  String get incidentSavePanelPrompt => _ja ? '保存して続ける' : 'Save and Continue';
+  String get incidentCrashDefaultFileName => 'dart-terminal-crash-report.ips';
+  String get incidentSampleDefaultFileName => 'dart-terminal-hang.sample.txt';
+  String get incidentLocalOnlyNotice => _ja
+      ? '生データは明示的に選択した場所にだけ保存され、送信されません。'
+      : 'Raw data is saved only to the explicitly selected location and is never uploaded.';
+  String incidentStatus(String status) =>
+      _ja ? '状態: ${_japaneseState(status)}' : 'Status: $status';
+  String incidentMatchingReports(int count) =>
+      _ja ? '一致したクラッシュレポート: $count' : 'Matching crash reports: $count';
+  String incidentCompletedOperations(int count) =>
+      _ja ? '完了した保存: $count' : 'Completed saves: $count';
+  String incidentFailures(int count) => _ja ? '失敗: $count' : 'Failures: $count';
+  String get incidentWindowInstructions =>
+      _ja ? 'Escでキャンセルして閉じる' : 'Press Esc to cancel and close';
   String settingsSaveState(String state) => switch ((language, state)) {
     (TerminalLanguage.english, 'unchanged') => 'UNCHANGED',
     (TerminalLanguage.english, 'modified') => 'MODIFIED',
@@ -478,6 +507,13 @@ final class TerminalLocalization {
     'unsupportedKey' => '非対応キー',
     'conflict' => '競合',
     'systemFailure' => 'システム失敗',
+    'idle' => '待機中',
+    'discovering' => 'レポートを検索中',
+    'exporting' => 'レポートを保存中',
+    'exported' => 'レポートを保存済み',
+    'notFound' => 'レポートなし',
+    'sampling' => 'ハングサンプルを取得中',
+    'sampled' => 'ハングサンプルを保存済み',
     _ => value,
   };
 }
@@ -526,6 +562,14 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
         TerminalActionMessageId.exportDiagnostics: _action(
           'Export Diagnostics…',
           <String>['save', 'support', 'privacy', 'json'],
+        ),
+        TerminalActionMessageId.exportLatestCrashReport: _action(
+          'Export Latest Crash Report…',
+          <String>['save', 'support', 'incident', 'privacy', 'crash'],
+        ),
+        TerminalActionMessageId.captureHangSample: _action(
+          'Capture Hang Sample…',
+          <String>['save', 'support', 'incident', 'privacy', 'sample'],
         ),
         TerminalActionMessageId.closeWindow: _action('Close Window', <String>[
           'close',
@@ -669,6 +713,14 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
         'プライバシー',
         'JSON',
       ]),
+      TerminalActionMessageId.exportLatestCrashReport: _action(
+        '最新のクラッシュレポートを書き出す…',
+        <String>['保存', 'サポート', '障害', 'プライバシー', 'クラッシュ'],
+      ),
+      TerminalActionMessageId.captureHangSample: _action(
+        'ハングサンプルを取得…',
+        <String>['保存', 'サポート', '障害', 'プライバシー', 'サンプル'],
+      ),
       TerminalActionMessageId.closeWindow: _action('ウインドウを閉じる', <String>[
         '閉じる',
         'ターミナル',
