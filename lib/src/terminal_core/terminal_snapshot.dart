@@ -51,6 +51,42 @@ final class TerminalSnapshotLimitException implements Exception {
       'TerminalSnapshotLimitException: $resource $actual exceeds $limit';
 }
 
+/// Immutable parser diagnostics optionally carried by a state snapshot.
+final class TerminalSnapshotParserCounters {
+  const TerminalSnapshotParserCounters({
+    required this.unsupportedControls,
+    required this.unsupportedSequences,
+    required this.cancel,
+    required this.limit,
+    required this.malformed,
+    required this.incomplete,
+    required this.repliesAccepted,
+    required this.repliesRejected,
+  });
+
+  factory TerminalSnapshotParserCounters.fromSink(
+    TerminalScreenParserSink sink,
+  ) => TerminalSnapshotParserCounters(
+    unsupportedControls: sink.unsupportedControlCount,
+    unsupportedSequences: sink.unsupportedSequenceCount,
+    cancel: sink.cancelCount,
+    limit: sink.limitCount,
+    malformed: sink.malformedCount,
+    incomplete: sink.incompleteCount,
+    repliesAccepted: sink.acceptedReplyCount,
+    repliesRejected: sink.rejectedReplyCount,
+  );
+
+  final int unsupportedControls;
+  final int unsupportedSequences;
+  final int cancel;
+  final int limit;
+  final int malformed;
+  final int incomplete;
+  final int repliesAccepted;
+  final int repliesRejected;
+}
+
 /// Produces a deterministic, line-oriented terminal-state test oracle.
 ///
 /// The format describes final semantic state. Mutation-path details such
@@ -70,8 +106,10 @@ final class TerminalSnapshotFormatter {
   String formatScreen(
     TerminalScreen screen, {
     TerminalScreenParserSink? parserSink,
+    TerminalSnapshotParserCounters? parserCounters,
   }) {
     _validateLimits();
+    _validateParserDiagnostics(parserSink, parserCounters);
     _validateScreenParserSink(screen, parserSink);
     _checkCount('rows', screen.rows, limits.maxRows);
     _checkCount('cells', screen.cellCount, limits.maxCells);
@@ -91,8 +129,13 @@ final class TerminalSnapshotFormatter {
       screen.palette,
     );
     _writeScreen(writer, 'screen', screen);
-    if (parserSink != null) {
-      _writeParserCounters(writer, parserSink);
+    final TerminalSnapshotParserCounters? counters =
+        parserCounters ??
+        (parserSink == null
+            ? null
+            : TerminalSnapshotParserCounters.fromSink(parserSink));
+    if (counters != null) {
+      _writeParserCounters(writer, counters);
     }
     writer.line('end');
     return writer.finish();
@@ -101,8 +144,10 @@ final class TerminalSnapshotFormatter {
   String formatScreenSet(
     TerminalScreenSet screens, {
     TerminalScreenParserSink? parserSink,
+    TerminalSnapshotParserCounters? parserCounters,
   }) {
     _validateLimits();
+    _validateParserDiagnostics(parserSink, parserCounters);
     if (parserSink != null && !identical(parserSink.screenSet, screens)) {
       throw ArgumentError.value(
         parserSink,
@@ -142,8 +187,13 @@ final class TerminalSnapshotFormatter {
     _writeHistory(writer, screens.scrollback, screens.graphemeTable);
     _writeScreen(writer, 'primary', screens.primary);
     _writeScreen(writer, 'alternate', screens.alternate);
-    if (parserSink != null) {
-      _writeParserCounters(writer, parserSink);
+    final TerminalSnapshotParserCounters? counters =
+        parserCounters ??
+        (parserSink == null
+            ? null
+            : TerminalSnapshotParserCounters.fromSink(parserSink));
+    if (counters != null) {
+      _writeParserCounters(writer, counters);
     }
     writer.line('end');
     return writer.finish();
@@ -200,6 +250,33 @@ final class TerminalSnapshotFormatter {
         parserSink,
         'parserSink',
         'must own the formatted standalone screen',
+      );
+    }
+  }
+
+  static void _validateParserDiagnostics(
+    TerminalScreenParserSink? parserSink,
+    TerminalSnapshotParserCounters? parserCounters,
+  ) {
+    if (parserSink != null && parserCounters != null) {
+      throw ArgumentError(
+        'parserSink and parserCounters are mutually exclusive',
+      );
+    }
+    final TerminalSnapshotParserCounters? counters = parserCounters;
+    if (counters != null &&
+        (counters.unsupportedControls < 0 ||
+            counters.unsupportedSequences < 0 ||
+            counters.cancel < 0 ||
+            counters.limit < 0 ||
+            counters.malformed < 0 ||
+            counters.incomplete < 0 ||
+            counters.repliesAccepted < 0 ||
+            counters.repliesRejected < 0)) {
+      throw ArgumentError.value(
+        parserCounters,
+        'parserCounters',
+        'must contain non-negative counters',
       );
     }
   }
@@ -458,15 +535,15 @@ final class TerminalSnapshotFormatter {
 
   static void _writeParserCounters(
     _SnapshotWriter writer,
-    TerminalScreenParserSink sink,
+    TerminalSnapshotParserCounters counters,
   ) {
     writer.line(
-      'parser unsupported_controls=${sink.unsupportedControlCount} '
-      'unsupported_sequences=${sink.unsupportedSequenceCount} '
-      'cancel=${sink.cancelCount} limit=${sink.limitCount} '
-      'malformed=${sink.malformedCount} incomplete=${sink.incompleteCount} '
-      'replies_accepted=${sink.acceptedReplyCount} '
-      'replies_rejected=${sink.rejectedReplyCount}',
+      'parser unsupported_controls=${counters.unsupportedControls} '
+      'unsupported_sequences=${counters.unsupportedSequences} '
+      'cancel=${counters.cancel} limit=${counters.limit} '
+      'malformed=${counters.malformed} incomplete=${counters.incomplete} '
+      'replies_accepted=${counters.repliesAccepted} '
+      'replies_rejected=${counters.repliesRejected}',
     );
   }
 

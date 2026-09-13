@@ -185,3 +185,45 @@ final class TerminalSessionMetadata {
     return false;
   }
 }
+
+/// Restores a fully validated metadata snapshot into a fresh owner.
+///
+/// This package-internal boundary exists so the text snapshot decoder does
+/// not have to replay bounded title-stack operations and accidentally lose
+/// null entries or stack order.
+void restoreTerminalSessionMetadataSnapshotState(
+  TerminalSessionMetadata metadata, {
+  required String? windowTitle,
+  required String? iconTitle,
+  required Uri? workingDirectory,
+  required List<String?> windowTitleStack,
+  required List<String?> iconTitleStack,
+}) {
+  if (windowTitle != null &&
+          !TerminalSessionMetadata.isSafeTitle(windowTitle) ||
+      iconTitle != null && !TerminalSessionMetadata.isSafeTitle(iconTitle) ||
+      workingDirectory != null &&
+          !TerminalSessionMetadata.isSafeWorkingDirectory(workingDirectory) ||
+      windowTitleStack.length > TerminalSessionMetadata.titleStackCapacity ||
+      iconTitleStack.length > TerminalSessionMetadata.titleStackCapacity ||
+      windowTitleStack.any(
+        (String? value) =>
+            value != null && !TerminalSessionMetadata.isSafeTitle(value),
+      ) ||
+      iconTitleStack.any(
+        (String? value) =>
+            value != null && !TerminalSessionMetadata.isSafeTitle(value),
+      )) {
+    throw StateError('invalid snapshot session metadata');
+  }
+  metadata._windowTitle = windowTitle;
+  metadata._iconTitle = iconTitle;
+  metadata._workingDirectory = workingDirectory;
+  metadata._windowTitleStack
+    ..clear()
+    ..addAll(windowTitleStack);
+  metadata._iconTitleStack
+    ..clear()
+    ..addAll(iconTitleStack);
+  metadata._generation++;
+}

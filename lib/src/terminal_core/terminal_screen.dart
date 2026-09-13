@@ -7,6 +7,7 @@ import 'terminal_unicode.dart';
 part 'terminal_palette.dart';
 part 'terminal_reflow.dart';
 part 'terminal_scrollback.dart';
+part 'terminal_snapshot_restore_state.dart';
 
 /// Version-one width and cell flag values from the packed-grid contract.
 abstract final class TerminalCellFlags {

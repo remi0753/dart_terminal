@@ -274,8 +274,9 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
 - session-owned screen set/parserへのraw PTY byte feed、従来text projectionとの
   single-subscription共存、generated replyのnative bounded write queue接続
 - historyとprimary/alternate grid、Unicode resource、mode/cursor/character-set/parser countを
-  網羅し、行・cell・resource・出力上限を持つversion 4 terminal-state snapshotと、
-  最初の相違位置・escaped contextを返すbounded comparison diagnostics
+  網羅し、行・cell・resource・入出力上限を持つversion 4 terminal-state snapshot、
+  fresh independent ownerへだけ構築してcanonicalなformat→restore→format完全一致を要求する
+  strict test/debug restore oracle、最初の相違位置・escaped contextを返すbounded comparison diagnostics
 - 厳密検証するbyte-exact product parser corpus manifest、shell/less/top/vimの
   review済み記録snapshotをwhole・全single split・bytewiseで再生する非書換えharness、
   固定seedのproperty testと境界別fuzz seed/mutation corpus

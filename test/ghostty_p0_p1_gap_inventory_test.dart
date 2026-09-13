@@ -15,9 +15,9 @@ void runGhosttyP0P1GapInventoryTests() {
       );
   _expect(
     result.rows == 102 &&
-        result.accepted == 91 &&
+        result.accepted == 92 &&
         result.actionableP0 == 0 &&
-        result.actionableP1 == 6 &&
+        result.actionableP1 == 5 &&
         result.documentedDifferences == 2 &&
         result.externalFollowUps == 3,
     'reviewed result totals are exact',
@@ -28,12 +28,12 @@ void runGhosttyP0P1GapInventoryTests() {
   final List<Object?> gaps = report['gaps']! as List<Object?>;
   _expect(
     rows.length == 102 &&
-        gaps.length == 11 &&
+        gaps.length == 10 &&
         rows
                 .cast<Map<String, Object?>>()
                 .where((row) => row['classification'] == 'actionable-p1')
                 .length ==
-            6 &&
+            5 &&
         gaps
             .cast<Map<String, Object?>>()
             .where((gap) => gap['silent_misbehavior'] == true)
@@ -41,7 +41,7 @@ void runGhosttyP0P1GapInventoryTests() {
     'every row and reviewed gap is represented',
   );
   _expectFailure(
-    committed.replaceFirst('"actionable_p1": 6', '"actionable_p1": 7'),
+    committed.replaceFirst('"actionable_p1": 5', '"actionable_p1": 6'),
     generated,
     'stale actionable total',
   );
@@ -158,6 +158,35 @@ void runGhosttyP0P1GapInventoryTests() {
     ),
     'missing history/reflow/eviction regression',
   );
+  final String snapshotFormatterSource = File(
+    'lib/src/terminal_core/terminal_snapshot.dart',
+  ).readAsStringSync();
+  final String snapshotRestoreSource = File(
+    'lib/src/terminal_core/terminal_snapshot_restore.dart',
+  ).readAsStringSync();
+  final String snapshotRestoreTestSource = File(
+    'test/terminal_snapshot_test.dart',
+  ).readAsStringSync();
+  validateGhosttyP1SnapshotRestoreClosureSources(
+    snapshotFormatterSource: snapshotFormatterSource,
+    snapshotRestoreSource: snapshotRestoreSource,
+    snapshotRestoreTestSource: snapshotRestoreTestSource,
+  );
+  _expectSnapshotRestoreFailure(
+    snapshotFormatterSource,
+    snapshotRestoreSource.replaceFirst(
+      'if (canonical != source)',
+      'if (false)',
+    ),
+    snapshotRestoreTestSource,
+    'missing canonical identity check',
+  );
+  _expectSnapshotRestoreFailure(
+    snapshotFormatterSource,
+    snapshotRestoreSource,
+    snapshotRestoreTestSource.replaceFirst('restored == 8', 'restored == 7'),
+    'missing complete checked-in corpus coverage',
+  );
 }
 
 void _expectFailure(String source, String expected, String message) {
@@ -224,6 +253,24 @@ void _expectSemanticRangeFailure(
       sequenceInventorySource: sequenceInventory,
       semanticRangeSource: semanticRangeSource,
       semanticRangeTestSource: semanticRangeTestSource,
+    );
+  } on GhosttyP0P1GapInventoryException {
+    return;
+  }
+  throw StateError('test failed: $message');
+}
+
+void _expectSnapshotRestoreFailure(
+  String snapshotFormatterSource,
+  String snapshotRestoreSource,
+  String snapshotRestoreTestSource,
+  String message,
+) {
+  try {
+    validateGhosttyP1SnapshotRestoreClosureSources(
+      snapshotFormatterSource: snapshotFormatterSource,
+      snapshotRestoreSource: snapshotRestoreSource,
+      snapshotRestoreTestSource: snapshotRestoreTestSource,
     );
   } on GhosttyP0P1GapInventoryException {
     return;

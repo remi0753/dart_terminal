@@ -4,7 +4,7 @@
   "status": "open-actionable-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "df8f9b721c05a3c2cfb1fda8a1f3f952d600110947bc2a5b0548dc0e1a193df5",
+    "sha256": "c2118081c4b2f314a1184355b27da6b3682261d888b14532cb92a622f6ebc06f",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "fb22b1483b2e6db5dde11e684a96b9dc9478472d5fb3e8c5350b17bf6ff1b08a"
+      "sha256": "8d20c9b4642595bdf1fd8101f528d733cdc9893c1009e9328f7780313c02e033"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -73,6 +73,30 @@
     {
       "path": "test/terminal_semantic_prompt_test.dart",
       "sha256": "1b917b957eb130a0ad6b3a02a89487ec5e916427b8b02964a6194375fef97f32"
+    },
+    {
+      "path": "lib/src/terminal_core/terminal_snapshot.dart",
+      "sha256": "9b7b3e5ed9fc8f4a6948caae70b0befa07c6350109c65a1d5bf1ae6b616b3e62"
+    },
+    {
+      "path": "lib/src/terminal_core/terminal_snapshot_restore.dart",
+      "sha256": "08bf31292e585626380af18d8eac810570362b4bda54b8d41926c8ed1349bd5e"
+    },
+    {
+      "path": "lib/src/terminal_core/terminal_snapshot_restore_state.dart",
+      "sha256": "bc225402f8d101ab34da09bd71d9b590509c5f35d0651f2066f8fb5fca559ba9"
+    },
+    {
+      "path": "lib/src/terminal_core/terminal_snapshot_restore_set_state.dart",
+      "sha256": "b8834dba2b6a861ec599308613d62b0b12f16cd20bf8fef39a8e10efcdba91ea"
+    },
+    {
+      "path": "lib/src/terminal_core/terminal_session_metadata.dart",
+      "sha256": "c035a56637083eb5fac49ab4a401d660a098c597fc732b585765c78f1da23d66"
+    },
+    {
+      "path": "test/terminal_snapshot_test.dart",
+      "sha256": "62819199caab115636af8c81373cc350e1bbae858344379c6fb35ce3c3011360"
     }
   ],
   "totals": {
@@ -84,13 +108,13 @@
       "P1/P2": 1
     },
     "classifications": {
-      "accepted": 91,
+      "accepted": 92,
       "accepted-documented-difference": 2,
       "accepted-external-follow-up": 3,
-      "actionable-p1": 6
+      "actionable-p1": 5
     },
     "actionable_p0": 0,
-    "actionable_p1": 6,
+    "actionable_p1": 5,
     "silent_misbehavior": 0
   },
   "p0_closure": {
@@ -105,9 +129,10 @@
   "p1_closure": {
     "completed": [
       "extended-rendition-and-selective-erase",
-      "bounded-semantic-ranges"
+      "bounded-semantic-ranges",
+      "versioned-snapshot-restore-oracle"
     ],
-    "remaining_actionable": 6
+    "remaining_actionable": 5
   },
   "rows": [
     {
@@ -383,14 +408,12 @@
     {
       "id": "SCR-12",
       "priority": "P1",
-      "phase": "3",
+      "phase": "3/11",
       "acceptance_sha256": "9580b5bd45a2e8762f1ad7c5cffe8d9a86df1d58347d27a899fa61440ba3ee6e",
       "pinned_evidence_sha256": "cab04c131ef078bd197e4ec6a79ccf9eececbbfbd804d9529fd7a79060004b84",
-      "current_sha256": "e384ff79492bcb2d8bd7960c4bff9b218a655eef716114ddfb1eb30dd106ce41",
-      "classification": "actionable-p1",
-      "gap_ids": [
-        "snapshot-restore"
-      ]
+      "current_sha256": "7a368fc2807a37ae4bb912149be37c195f6af0f217d88cce3c1a12fac1ee329a",
+      "classification": "accepted",
+      "gap_ids": []
     },
     {
       "id": "CAP-01",
@@ -1215,18 +1238,6 @@
       "product_actionable": false,
       "silent_misbehavior": false,
       "reason": "Credential-independent distribution gates pass; positive signing and notarization needs external authority."
-    },
-    {
-      "id": "snapshot-restore",
-      "kind": "actionable-product-gap",
-      "priority": "P1",
-      "row_ids": [
-        "SCR-12"
-      ],
-      "owner": "ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down",
-      "product_actionable": true,
-      "silent_misbehavior": false,
-      "reason": "The formatter is versioned and bounded, but the test and debug restore oracle is absent."
     },
     {
       "id": "cursor-ligature-break",

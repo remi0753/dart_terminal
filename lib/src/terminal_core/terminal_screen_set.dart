@@ -17,6 +17,7 @@ part 'terminal_semantic_ranges.dart';
 part 'terminal_accessibility.dart';
 part 'terminal_kitty_image_viewport.dart';
 part 'terminal_viewport.dart';
+part 'terminal_snapshot_restore_set_state.dart';
 
 enum TerminalScreenKind { primary, alternate }
 

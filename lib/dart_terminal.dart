@@ -123,13 +123,22 @@ export 'src/terminal_core/terminal_snapshot.dart'
     show
         TerminalSnapshotFormatLimits,
         TerminalSnapshotFormatter,
-        TerminalSnapshotLimitException;
+        TerminalSnapshotLimitException,
+        TerminalSnapshotParserCounters;
 export 'src/terminal_core/terminal_snapshot_comparison.dart'
     show
         TerminalSnapshotComparator,
         TerminalSnapshotComparison,
         TerminalSnapshotComparisonLimits,
         TerminalSnapshotMismatchException;
+export 'src/terminal_core/terminal_snapshot_restore.dart'
+    show
+        TerminalSnapshotRestoredKind,
+        TerminalSnapshotRestoreErrorKind,
+        TerminalSnapshotRestoreException,
+        TerminalSnapshotRestoreLimits,
+        TerminalSnapshotRestoreResult,
+        TerminalSnapshotRestorer;
 export 'src/terminal_core/terminal_style.dart'
     show TerminalStyleAttributes, TerminalStyleTable, TerminalUnderlineStyle;
 export 'src/terminal_core/terminal_unicode.dart'

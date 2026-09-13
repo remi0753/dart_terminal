@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dart_terminal/dart_terminal.dart';
@@ -15,6 +16,10 @@ void runTerminalSnapshotTests() {
   _testSnapshotComparisonExactMatchAndMismatch();
   _testSnapshotComparisonEndAndControlDiagnostics();
   _testSnapshotComparisonLimitsAndTypedFailure();
+  _testStandaloneSnapshotRestoreRoundTrip();
+  _testScreenSetSnapshotRestoreRoundTrip();
+  _testCheckedInSnapshotsRestoreExactly();
+  _testSnapshotRestoreRejectsMalformedOrNonCanonicalInput();
 }
 
 void _testStandaloneSnapshotIsExactAndReadable() {
@@ -459,6 +464,246 @@ void _testSnapshotComparisonLimitsAndTypedFailure() {
     129,
     128,
   );
+}
+
+void _testStandaloneSnapshotRestoreRoundTrip() {
+  final TerminalStyleTable styles = TerminalStyleTable();
+  final int style = styles.intern(
+    TerminalStyleAttributes.bold | TerminalStyleAttributes.italic,
+    underlineColor: 0x80112233,
+  );
+  final TerminalGraphemeTable graphemes = TerminalGraphemeTable();
+  final int grapheme = graphemes.intern(const <int>[0x65, 0x301]);
+  final TerminalHyperlinkTable hyperlinks = TerminalHyperlinkTable();
+  final int hyperlink = hyperlinks.tryIntern(
+    uri: 'https://example.test/a%20b',
+    explicitId: 'stable',
+  )!;
+  final TerminalScreen original = TerminalScreen(
+    rows: 2,
+    columns: 6,
+    styleTable: styles,
+    graphemeTable: graphemes,
+    hyperlinkTable: hyperlinks,
+  );
+  original.setNarrowCell(0, 0, 0x41, style: style, hyperlink: hyperlink);
+  original.setGraphemeCell(0, 1, grapheme, background: 0x80445566);
+  original.setWideCell(0, 2, 0x65e5);
+  original.setRowFlags(0, TerminalRowFlags.softWrapped);
+  original.setCursorPosition(1, 4);
+  original.saveCursor();
+  original.setMode(TerminalScreenMode.insert, true);
+  original.setCursorPresentation(
+    shape: TerminalCursorShape.bar,
+    visible: false,
+    blinking: false,
+  );
+  original.clearAllTabStops();
+  original.setTabStop(3);
+  const TerminalSnapshotParserCounters counters =
+      TerminalSnapshotParserCounters(
+        unsupportedControls: 1,
+        unsupportedSequences: 2,
+        cancel: 3,
+        limit: 4,
+        malformed: 5,
+        incomplete: 6,
+        repliesAccepted: 7,
+        repliesRejected: 8,
+      );
+  const TerminalSnapshotFormatter formatter = TerminalSnapshotFormatter();
+  final String snapshot = formatter.formatScreen(
+    original,
+    parserCounters: counters,
+  );
+  final TerminalSnapshotRestoreResult result = const TerminalSnapshotRestorer()
+      .restore(snapshot);
+
+  _expect(
+    result.kind == TerminalSnapshotRestoredKind.screen &&
+        result.screen != null &&
+        result.screenSet == null &&
+        result.parserCounters?.repliesRejected == 8 &&
+        result.format() == snapshot,
+    'standalone restore preserves exact canonical state and parser counters',
+  );
+  result.screen!.setNarrowCell(1, 0, 0x5a);
+  _expect(
+    original.contentAt(1, 0) == 0,
+    'restored standalone state has independent ownership',
+  );
+}
+
+void _testScreenSetSnapshotRestoreRoundTrip() {
+  final TerminalScreenSet original = TerminalScreenSet(
+    rows: 2,
+    columns: 5,
+    scrollback: TerminalScrollback(maxLines: 8, maxBytes: 65536, pageRows: 2),
+  );
+  original.metadata
+    ..setWindowTitle('first title')
+    ..saveTitles(2)
+    ..setWindowTitle('second title')
+    ..setIconTitle('icon')
+    ..saveTitles(1)
+    ..setWorkingDirectory(Uri.parse('file:///tmp/snapshot%20cwd'));
+  _writeRow(original.primary, 0, 'old!!');
+  original.primary.setRowFlags(0, TerminalRowFlags.output);
+  original.primary.setCursorPosition(1, 0);
+  original.primary.lineFeed();
+  _writeRow(original.primary, 1, 'live!');
+  original.viewport.scrollToTop();
+  original.setAlternateMode1049(true);
+  _writeRow(original.alternate, 0, 'alt!!');
+  final String snapshot = const TerminalSnapshotFormatter().formatScreenSet(
+    original,
+  );
+  final TerminalSnapshotRestoreResult result = const TerminalSnapshotRestorer()
+      .restore(snapshot);
+
+  _expect(
+    result.kind == TerminalSnapshotRestoredKind.screenSet &&
+        result.screen == null &&
+        result.screenSet!.usingAlternate &&
+        result.screenSet!.mode1049Active &&
+        result.screenSet!.viewport.primaryOffset == 1 &&
+        result.screenSet!.metadata.windowTitle == 'second title' &&
+        result.format() == snapshot,
+    'screen-set restore preserves buffers, history, viewport, and metadata',
+  );
+  result.screenSet!.metadata.setWindowTitle('restored only');
+  _expect(
+    original.metadata.windowTitle == 'second title',
+    'restored screen-set metadata has independent ownership',
+  );
+}
+
+void _testCheckedInSnapshotsRestoreExactly() {
+  final List<FileSystemEntity> entries =
+      Directory('test/corpus/parser/snapshots').listSync()
+        ..sort((FileSystemEntity a, FileSystemEntity b) {
+          return a.path.compareTo(b.path);
+        });
+  var restored = 0;
+  for (final FileSystemEntity entry in entries) {
+    if (entry is! File || !entry.path.endsWith('.snapshot')) continue;
+    final String snapshot = entry.readAsStringSync();
+    _expect(
+      const TerminalSnapshotRestorer().restore(snapshot).format() == snapshot,
+      'checked-in snapshot restores exactly: ${entry.path}',
+    );
+    restored++;
+  }
+  _expect(restored == 8, 'all eight checked-in parser snapshots are restored');
+}
+
+void _testSnapshotRestoreRejectsMalformedOrNonCanonicalInput() {
+  final String snapshot = const TerminalSnapshotFormatter().formatScreen(
+    TerminalScreen(rows: 1, columns: 2),
+  );
+  _expectRestoreFailure(
+    snapshot.replaceFirst('version=4', 'version=3'),
+    TerminalSnapshotRestoreErrorKind.unsupportedVersion,
+    'unsupported version',
+  );
+  _expectRestoreFailure(
+    snapshot.replaceFirst('version=4', 'version=04'),
+    TerminalSnapshotRestoreErrorKind.nonCanonical,
+    'non-canonical integer',
+  );
+  _expectRestoreFailure(
+    snapshot.substring(0, snapshot.length - 'end\n'.length),
+    TerminalSnapshotRestoreErrorKind.syntax,
+    'truncated snapshot',
+  );
+  _expectRestoreFailure(
+    '${snapshot}trailing\n',
+    TerminalSnapshotRestoreErrorKind.syntax,
+    'trailing data',
+  );
+  _expectRestoreFailure(
+    snapshot.replaceFirst('screen row=0 flags=-', 'screen row=0 flags=unknown'),
+    TerminalSnapshotRestoreErrorKind.syntax,
+    'unknown row flags',
+  );
+  const String emptyRow = 'screen row=0 flags=- logical=1:1+0 text="  "';
+  _expectRestoreFailure(
+    snapshot.replaceFirst(
+      emptyRow,
+      '$emptyRow\n'
+      'screen cell=0,0 content=U+0041 flags=narrow foreground=default '
+      'background=default style=1 hyperlink=0',
+    ),
+    TerminalSnapshotRestoreErrorKind.invariant,
+    'undefined resource',
+  );
+  _expectRestoreFailure(
+    snapshot.replaceFirst(
+      emptyRow,
+      '$emptyRow\n'
+      'screen cell=0,0 content=continuation flags=continuation '
+      'foreground=default background=default style=0 hyperlink=0',
+    ),
+    TerminalSnapshotRestoreErrorKind.invariant,
+    'invalid cell topology',
+  );
+  _expectRestoreFailure(
+    snapshot,
+    TerminalSnapshotRestoreErrorKind.limit,
+    'input bound',
+    restorer: TerminalSnapshotRestorer(
+      limits: TerminalSnapshotRestoreLimits(
+        maxInputCharacters: snapshot.length - 1,
+      ),
+    ),
+  );
+  _expectRestoreFailure(
+    snapshot,
+    TerminalSnapshotRestoreErrorKind.limit,
+    'format output bound',
+    restorer: TerminalSnapshotRestorer(
+      limits: TerminalSnapshotRestoreLimits(
+        format: TerminalSnapshotFormatLimits(
+          maxOutputCharacters: snapshot.length - 1,
+        ),
+      ),
+    ),
+  );
+  final String firstLine = snapshot.substring(0, snapshot.indexOf('\n'));
+  _expectRestoreFailure(
+    snapshot,
+    TerminalSnapshotRestoreErrorKind.limit,
+    'line bound',
+    restorer: TerminalSnapshotRestorer(
+      limits: TerminalSnapshotRestoreLimits(
+        maxLineCharacters: firstLine.length - 1,
+      ),
+    ),
+  );
+}
+
+void _expectRestoreFailure(
+  String source,
+  TerminalSnapshotRestoreErrorKind kind,
+  String description, {
+  TerminalSnapshotRestorer restorer = const TerminalSnapshotRestorer(),
+}) {
+  try {
+    restorer.restore(source);
+  } on TerminalSnapshotRestoreException catch (error) {
+    _expect(
+      error.kind == kind,
+      '$description expected $kind, got ${error.kind}: ${error.reason}',
+    );
+    _expect(
+      error.reason.length <= 80 &&
+          error.line >= 1 &&
+          !error.toString().contains(source),
+      '$description exposes only bounded diagnostics',
+    );
+    return;
+  }
+  throw StateError('Expected snapshot restore failure: $description');
 }
 
 String _parseSnapshot(Uint8List input, List<int> chunks) {

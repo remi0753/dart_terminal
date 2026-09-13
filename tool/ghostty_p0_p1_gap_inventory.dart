@@ -120,7 +120,6 @@ const Map<String, String> _classifications = <String, String>{
   'REL-01': 'accepted-external-follow-up',
   'DIST-01': 'accepted-external-follow-up',
   'DIST-02': 'accepted-external-follow-up',
-  'SCR-12': 'actionable-p1',
   'TXT-07': 'actionable-p1',
   'TXT-08': 'actionable-p1',
   'TXT-10': 'actionable-p1',
@@ -134,7 +133,6 @@ const Map<String, List<String>> _rowGapIds = <String, List<String>>{
   'REL-01': <String>['physical-duration-reliability'],
   'DIST-01': <String>['intel-native-handoff'],
   'DIST-02': <String>['apple-service-acceptance'],
-  'SCR-12': <String>['snapshot-restore'],
   'TXT-07': <String>['cursor-ligature-break'],
   'TXT-08': <String>['font-axes-overrides-diagnostics'],
   'TXT-10': <String>['synthetic-cell-glyphs'],
@@ -187,15 +185,6 @@ const List<_Gap> _gaps = <_Gap>[
     owner: 'docs/phase11/developer-id-notarization.md',
     productActionable: false,
     reason: 'Credential-independent distribution gates pass; positive signing and notarization needs external authority.',
-  ),
-  _Gap(
-    id: 'snapshot-restore',
-    kind: 'actionable-product-gap',
-    priority: 'P1',
-    rowIds: <String>['SCR-12'],
-    owner: 'ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down',
-    productActionable: true,
-    reason: 'The formatter is versioned and bounded, but the test and debug restore oracle is absent.',
   ),
   _Gap(
     id: 'cursor-ligature-break',
@@ -258,6 +247,12 @@ const List<String> _evidencePaths = <String>[
   'lib/src/terminal_core/terminal_semantic_prompt.dart',
   'lib/src/terminal_core/terminal_semantic_ranges.dart',
   'test/terminal_semantic_prompt_test.dart',
+  'lib/src/terminal_core/terminal_snapshot.dart',
+  'lib/src/terminal_core/terminal_snapshot_restore.dart',
+  'lib/src/terminal_core/terminal_snapshot_restore_state.dart',
+  'lib/src/terminal_core/terminal_snapshot_restore_set_state.dart',
+  'lib/src/terminal_core/terminal_session_metadata.dart',
+  'test/terminal_snapshot_test.dart',
 ];
 
 final class GhosttyP0P1GapInventoryException implements Exception {
@@ -273,9 +268,9 @@ final class GhosttyP0P1GapInventoryResult {
   const GhosttyP0P1GapInventoryResult();
 
   int get rows => 102;
-  int get accepted => 91;
+  int get accepted => 92;
   int get actionableP0 => 0;
-  int get actionableP1 => 6;
+  int get actionableP1 => 5;
   int get documentedDifferences => 2;
   int get externalFollowUps => 3;
 
@@ -337,6 +332,23 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
     semanticRangeTestSource: _regularFile(
       root,
       'test/terminal_semantic_prompt_test.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+  );
+  validateGhosttyP1SnapshotRestoreClosureSources(
+    snapshotFormatterSource: _regularFile(
+      root,
+      'lib/src/terminal_core/terminal_snapshot.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    snapshotRestoreSource: _regularFile(
+      root,
+      'lib/src/terminal_core/terminal_snapshot_restore.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    snapshotRestoreTestSource: _regularFile(
+      root,
+      'test/terminal_snapshot_test.dart',
       1024 * 1024,
     ).readAsStringSync(),
   );
@@ -413,7 +425,7 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
           classification: classifications[classification] ?? 0,
       },
       'actionable_p0': 0,
-      'actionable_p1': 6,
+      'actionable_p1': 5,
       'silent_misbehavior': 0,
     },
     'p0_closure': <String, Object?>{
@@ -427,8 +439,9 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
       'completed': <String>[
         'extended-rendition-and-selective-erase',
         'bounded-semantic-ranges',
+        'versioned-snapshot-restore-oracle',
       ],
-      'remaining_actionable': 6,
+      'remaining_actionable': 5,
     },
     'rows': encodedRows,
     'gaps': <Map<String, Object?>>[for (final _Gap gap in _gaps) gap.toJson()],
@@ -506,12 +519,12 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
         priorities['P1'] == 26 &&
         priorities['P1/P2'] == 1 &&
         totals['actionable_p0'] == 0 &&
-        totals['actionable_p1'] == 6 &&
+        totals['actionable_p1'] == 5 &&
         totals['silent_misbehavior'] == 0 &&
-        classifications['accepted'] == 91 &&
+        classifications['accepted'] == 92 &&
         classifications['accepted-documented-difference'] == 2 &&
         classifications['accepted-external-follow-up'] == 3 &&
-        classifications['actionable-p1'] == 6 &&
+        classifications['actionable-p1'] == 5 &&
         p0Closure['actionable_product_gaps'] == 0 &&
         p0Closure['known_silent_misbehavior'] == 0 &&
         p0Closure['documented_non_mutating_differences'] == 1 &&
@@ -519,8 +532,9 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
         (p0Closure['external_follow_ups']! as List<Object?>).single ==
             'intel-native-handoff' &&
         (p1Closure['completed']! as List<Object?>).join(',') ==
-            'extended-rendition-and-selective-erase,bounded-semantic-ranges' &&
-        p1Closure['remaining_actionable'] == 6,
+            'extended-rendition-and-selective-erase,bounded-semantic-ranges,'
+                'versioned-snapshot-restore-oracle' &&
+        p1Closure['remaining_actionable'] == 5,
     'reviewed totals differ',
   );
   return const GhosttyP0P1GapInventoryResult();
@@ -568,6 +582,51 @@ void validateGhosttyP1SemanticRangeClosureSources({
         ) &&
         semanticRangeTestSource.contains('_testRangeStorageAndQueryBounds'),
     'semantic range regression evidence differs',
+  );
+}
+
+void validateGhosttyP1SnapshotRestoreClosureSources({
+  required String snapshotFormatterSource,
+  required String snapshotRestoreSource,
+  required String snapshotRestoreTestSource,
+}) {
+  _expect(
+    snapshotFormatterSource.contains('static const int formatVersion = 4') &&
+        snapshotFormatterSource.contains(
+          'TerminalSnapshotParserCounters? parserCounters',
+        ) &&
+        snapshotFormatterSource.contains(
+          'parserSink and parserCounters are mutually exclusive',
+        ),
+    'versioned snapshot formatter restore contract differs',
+  );
+  _expect(
+    snapshotRestoreSource.contains('class TerminalSnapshotRestorer') &&
+        snapshotRestoreSource.contains('class TerminalSnapshotRestoreResult') &&
+        snapshotRestoreSource.contains(
+          'TerminalSnapshotRestoreErrorKind.nonCanonical',
+        ) &&
+        snapshotRestoreSource.contains('if (canonical != source)') &&
+        snapshotRestoreSource.contains('TerminalScreenSet(') &&
+        snapshotRestoreSource.contains('TerminalScreen(') &&
+        !snapshotRestoreSource.contains("import 'dart:io'"),
+    'strict fresh-owner snapshot restore implementation differs',
+  );
+  _expect(
+    snapshotRestoreTestSource.contains(
+          '_testStandaloneSnapshotRestoreRoundTrip',
+        ) &&
+        snapshotRestoreTestSource.contains(
+          '_testScreenSetSnapshotRestoreRoundTrip',
+        ) &&
+        snapshotRestoreTestSource.contains(
+          '_testCheckedInSnapshotsRestoreExactly',
+        ) &&
+        snapshotRestoreTestSource.contains('restored == 8') &&
+        snapshotRestoreTestSource.contains(
+          '_testSnapshotRestoreRejectsMalformedOrNonCanonicalInput',
+        ),
+    'snapshot restore regression evidence differs',
   );
 }
 

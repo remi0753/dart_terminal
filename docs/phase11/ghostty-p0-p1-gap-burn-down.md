@@ -6,8 +6,8 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 gap burn-down — bounded semantic prompt/command/output
-  ranges (complete); next is versioned snapshot restore oracle
+- Current subtask: P1 gap burn-down — versioned snapshot restore oracle
+  (completed)
 
 ## Purpose
 
@@ -163,6 +163,52 @@ code/name containing `terminal` may be added to `dart_appkit`.
   Ghostty evidence in dependency order, then run exact
   `CI=true DART_SUPPRESS_ANALYTICS=true make test`. Apple notarization and
   duration-only long-running campaigns remain explicitly skipped, not blockers.
+
+### Current P1 child — versioned snapshot restore oracle
+
+- **Purpose:** Close the actionable `SCR-12` remainder by accepting the exact
+  current readable snapshot format into a fresh terminal model, so tests and
+  debugging can prove `format → restore → format` identity and replay a
+  reviewed state without executing terminal input.
+- **Background:** `TerminalSnapshotFormatter` version 4 already emits bounded,
+  deterministic screen or screen-set state and the comparator reports a
+  bounded first difference. There is no decoder, so checked-in snapshots can
+  only be compared as text and cannot validate model invariants after import.
+- **Scope:** Define a typed restore result and typed syntax/version/limit
+  failure; preflight input and declared allocation bounds; parse the exact
+  version 4 grammar in canonical order; rebuild resources, cells, row/logical
+  identity, current/saved cursor and rendition, character sets, margins,
+  modes, tabs, history, metadata, buffer ownership, and viewport state into
+  fresh objects; preserve optional parser counters for byte-identical
+  reformatting; reject unknown, duplicate, noncanonical, truncated, and
+  invariant-breaking input atomically; add whole/split-like corpus round trips
+  and adversarial limit/topology regressions.
+- **Out of scope:** Restoring a live PTY/process, renderer/native handles,
+  notifications, Kitty decoded image bytes, application window/session
+  persistence, accepting historical formats before version 4, silently
+  migrating corrupt snapshots, or adding any Dart Terminal code/name to the
+  generic `dart_appkit` repository.
+- **Dependencies:** `TerminalSnapshotFormatter` version 4, the shared
+  style/grapheme/hyperlink/palette owners, packed screen and paged history
+  invariants, `TerminalScreenSet` ownership/viewport rules, parser diagnostic
+  counters, reviewed parser corpus snapshots, pinned Ghostty
+  `src/terminal/snapshot/` and `formatter.zig` behavior, and the current
+  Ghostty gap inventory.
+- **Completion conditions:** Every formatter-produced standalone and screen-set
+  snapshot within configured limits restores into fresh independent ownership
+  and reformats byte-for-byte; all eight checked-in product parser snapshots
+  restore and reformat exactly; malformed/version/limit/resource/topology and
+  trailing-data cases fail with bounded typed diagnostics before a result is
+  published; restore never mutates an existing terminal or performs I/O/native
+  work; `SCR-12` becomes accepted only after focused tests, evidence
+  regeneration, and the exact repository gate.
+- **Verification approach:** Add canonical round-trip tests for all represented
+  resources and state, parser-counter and corpus tests, mutation-independence
+  checks, and table-driven malformed/over-limit inputs; run format/analyze,
+  focused tests, generator freshness in dependency order, the exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test`, diff review, and a clean
+  `dart_appkit` content/name audit. Apple notarization and duration-only
+  campaigns remain skipped as authorized.
 
 ## Inventory and decisions
 
@@ -533,3 +579,94 @@ code/name containing `terminal` may be added to `dart_appkit`.
   the exact full gate passed again in the final source/evidence state, including
   327-file zero-change formatting, clean analysis, Ghostty totals 91 accepted
   and six actionable P1 rows, and `dart_terminal tests passed`.
+- 2026-09-13: Snapshot-restore investigation found one versioned canonical
+  format (`dart-terminal-state-snapshot`, version 4) with separate standalone
+  screen and screen-set grammars. The formatter bounds aggregate rows, packed
+  cells, style/grapheme/hyperlink resources, hyperlink bytes, and output
+  characters. It serializes shared palette/resources, sparse non-default
+  cells, logical row identity/offsets, current/saved screen state, history
+  policy, metadata stacks, active-buffer/viewport ownership, and optional
+  parser counters; generation/damage, live PTY/process/native ownership,
+  notification/image state, and the palette override layer below the visible
+  values are intentionally absent. Restore is therefore a strict test/debug
+  oracle for represented semantic state, not live-session continuation.
+- 2026-09-13: The pinned Ghostty revision was re-read from
+  `src/terminal/snapshot/main.zig`, `src/terminal/formatter.zig`, and
+  `src/terminal/snapshot/terminal.zig`. The locally retained source identities
+  are respectively SHA-256
+  `98d896cbabd9c7a76fb67bfb6b7f32a90ba329b190b16b01194ed8d174ddb29a`,
+  `9164d79db2362538176f6dd59274fbbec5520051e05e217b7b12024802dbbff4`,
+  and `dc4a6a4846450aa4251d3787670dc2f1879071ebd33315994c59e02367137dd4`.
+  Ghostty treats its snapshot as documented terminal state rather than generic
+  replay, decodes into owned empty screens, releases partial resources on
+  failure, validates exact ordering and trailing input, and resets derived
+  presentation/cache state. This supports a fresh-owner, exact, fail-closed
+  decoder rather than mutation of an existing session.
+- 2026-09-13: Chosen implementation uses a bounded lazy newline reader instead
+  of splitting the whole input, exact current-version/order parsing, typed
+  syntax/version/limit/invariant/noncanonical failures without source excerpts,
+  and a final canonical reformat comparison. Resources and rows are fully
+  staged before construction of a fresh `TerminalScreen` or
+  `TerminalScreenSet`; package-internal helpers restore packed arrays,
+  scrollback pages, metadata stacks, active-buffer state, and retained primary
+  viewport offset. Optional parser counts use an immutable value object so a
+  restored oracle never fabricates or owns a live parser sink.
+- 2026-09-13: History's formatter-visible logical offset is retained, but its
+  internal per-row logical-cell count is not serialized. Restore derives joined
+  soft-wrap counts from the following row offset (including the history/grid
+  boundary) and otherwise from the last explicit non-default cell. This is
+  sufficient for byte-exact v4 reformatting and current represented semantics;
+  changing the wire format to expose unrepresented mutation-only state would
+  require a later version and is deliberately outside this compatibility task.
+- 2026-09-13: A first direct `dart format` changed only the requested Dart
+  files, then the Dart CLI failed to update its global analytics timestamp
+  under the repository sandbox. The same issue recurred with the analytics
+  environment flag. Static analysis was rerun with the repository's required
+  local cache permission and passed with `No issues found!`; neither telemetry
+  failure is accepted as validation evidence.
+- 2026-09-13: The first focused restore test stopped before decoding because
+  its new hyperlink fixture used a literal space, which the existing safe URI
+  contract correctly rejects. The fixture now uses `%20`. The second run found
+  a decoder typo (`gl=` versus the canonical `gl:` character-set field), and
+  the third exposed that a valid one-row screen has canonical margins `0,0`
+  while the normal margin mutator requires a strictly ordered multi-row range.
+  The parser typo and the single-row/single-column restore boundary were fixed;
+  no existing formatter or screen contract was weakened.
+- 2026-09-13: Focused snapshot tests now pass standalone state with style,
+  grapheme, hyperlink, wide-cell, cursor/save, mode, presentation, tab, and
+  parser counters; screen-set state with history, both buffers, mode 1049,
+  retained viewport, cwd/title stacks; independent post-restore mutation; all
+  eight checked-in parser corpus snapshots; and typed rejection of unsupported
+  version, noncanonical numeric text, truncation, trailing input, unknown flags,
+  input limit, and line limit. The decoder performs no I/O; corpus file access
+  belongs only to the test harness.
+- 2026-09-13: After regenerating regression coverage and the Ghostty inventory
+  in dependency order, the first combined focused run passed the snapshot
+  suite and then stopped because the inventory validator still asserted the
+  preceding 91/6 accepted/actionable totals even though its generator correctly
+  emitted 92/5. The validator and its negative fixtures now require 92 accepted,
+  five actionable P1, ten gap records, and the snapshot restore completion
+  marker. The rerun passed exact generated/committed equality and both new
+  restore-evidence negatives.
+- 2026-09-13: The first complete repository gate passed every native,
+  compatibility, evidence, distribution, format (330 files, zero changes),
+  analysis, security, updater, and aggregate Dart test, ending with
+  `dart_terminal tests passed`. Final code review then identified one missing
+  early check: input could satisfy the decoder's input cap while exceeding the
+  formatter output cap used for the mandatory canonical comparison. Restore
+  now rejects that case as a typed limit failure before parsing and validates
+  every nested formatter limit. The focused suite passed the new case and the
+  Ghostty evidence was regenerated; because product source changed after the
+  first full pass, a second exact full gate is required for completion.
+- 2026-09-13: The final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` rerun passed in the reviewed
+  source/evidence state. It included all native capability packages, generated
+  and compatibility freshness, differential/application/distribution gates,
+  330-file zero-change formatting, clean analysis, typed restore resource and
+  topology negatives, all eight snapshot corpus round trips, security stress,
+  updater/rollback/symbol tests, and the aggregate marker
+  `dart_terminal tests passed`. `git diff --check` passed. The adjacent
+  `dart_appkit` worktree is clean; a case-insensitive executable-source/content
+  and filename audit excluding docs/build/cache/git found zero `terminal`,
+  `dart_terminal`, or `dart-terminal` matches. No generic-library file changed.
+  Apple notarization and duration-only campaigns were skipped as authorized.
