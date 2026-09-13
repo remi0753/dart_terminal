@@ -683,7 +683,8 @@ make release-distribution-preflight
 
 実配布 gate は、Keychain に有効な Developer ID Application identity と `notarytool` profile
 が存在する環境で次を実行します。password や API private key を Make 変数へ渡さず、profile
-名だけを指定します。
+名だけを指定します。現在は実credentialとApple公証の正の受け入れを主要ゴール後の
+低優先follow-upへ移しており、上記preflightの成功を署名済み・公証済み配布物とは扱いません。
 
 ```shell
 make release-distribution-verify \

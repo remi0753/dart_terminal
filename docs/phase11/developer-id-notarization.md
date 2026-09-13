@@ -109,9 +109,12 @@ machine behavior without weakening the local ad-hoc development path.
 - Product build/audit commands, generic and product fixture suites, exact gates,
   docs/matrix, and ROADMAP agree. A no-rebuild clean-machine or clean-account
   install, ordinary terminal/worker launch, replacement, and uninstall pass.
-- The parent remains incomplete if the real Developer ID/notary/clean-machine
-  evidence cannot be produced. Lack of credentials is recorded as a blocker,
-  never silently replaced by fixture or ad-hoc evidence.
+- The implementation parent may close when the credential-independent
+  mechanism, product policy, fail-closed gates, and documentation are complete
+  and an explicit user decision moves unavailable Apple-service acceptance to
+  a tracked follow-up. Lack of credentials is never silently replaced by
+  fixture or ad-hoc evidence, and no unsigned/unnotarized artifact is described
+  as ready for public distribution.
 
 ## Validation plan
 
@@ -156,16 +159,19 @@ machine behavior without weakening the local ad-hoc development path.
      and generated evidence reconciliation.
    - Completion: all credential-independent product gates and exact main test
      pass and are committed without claiming Developer ID/notary success.
-4. **Credentialed acceptance and closure**
-   - Use a real installed identity/profile to create, notarize, staple, assess,
-     archive, install, launch, replace, and uninstall the no-rebuild artifact.
-   - Completion: positive Apple-service and clean-destination evidence pass,
-     secrets remain absent, docs/matrix are reconciled, and the child plus
-     parent are committed complete. If credentials remain unavailable, record
-     the exact blocker and stop without starting the update-feed item.
+4. **Credential boundary disposition and closure**
+   - Prefer a real installed identity/profile to create, notarize, staple,
+     assess, archive, install, launch, replace, and uninstall the no-rebuild
+     artifact. If the user explicitly defers unavailable Apple-service
+     acceptance, move the whole coupled positive path to one tracked follow-up.
+   - Completion: either positive Apple-service and clean-destination evidence
+     pass, or the explicit deferral, remaining prerequisites, truthful release
+     limitation, and exact resume command are reconciled across docs/matrix/
+     ROADMAP. Secrets remain absent and fixtures are never called a release.
 
 Subtasks are strictly ordered. The update-feed roadmap item cannot begin until
-all four children and this parent are complete.
+all four implementation children and this parent are complete; a user-approved
+external-service acceptance follow-up does not claim that acceptance occurred.
 
 ## Progress and findings
 
@@ -336,3 +342,24 @@ all four children and this parent are complete.
   no-rebuild lifecycle evidence. The duration-test exemption does not remove
   this distribution authority boundary, so the child and parent remain
   unchecked and later ROADMAP work must not begin.
+- 2026-09-13: the user subsequently authorized skipping Apple notarization for
+  the current Phase 11 progression because credentials cannot be obtained
+  promptly. Developer ID signing, notarization, stapling, Gatekeeper, and
+  clean-destination positive acceptance share the same missing identity and
+  immutable artifact chain, so they are deferred together as one explicit
+  low-priority follow-up instead of fabricating partial acceptance.
+- 2026-09-13: the generic publisher, product empty-entitlement policy, exact
+  Universal preflight, full positive-path audit implementation, and exhaustive
+  credential-independent failure gates remain the completed deliverable. The
+  README and feature matrix explicitly state that no signed/notarized release
+  has been accepted. ROADMAP tracks the real no-rebuild Apple-service exercise
+  after the major goal, allowing the implementation parent to close and the
+  ordered update-feed item to begin without losing the outstanding evidence.
+- 2026-09-13: regenerated the compatibility regression coverage report through
+  its canonical target after README and FEATURE_MATRIX changed; only their
+  recorded hashes changed. The exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passed all package and
+  native capability tests, generated-evidence freshness, 296-file formatting,
+  analysis, distribution policy negatives, security stress, and root tests.
+  `git diff --check` passed. No duration-based soak was run or required for
+  this documentation/acceptance-boundary change.

@@ -1315,14 +1315,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] `dart_macos_runtime`の汎用target-architecture thin Release AOT build
   - [x] `dart_macos_runtime`の汎用atomic Universal release assembly
   - [x] product thin／Universal build、resource audit、runtime受け入れ、親項目完了判定
-- [ ] Developer ID signing、hardened runtime、notarization
+- [x] Developer ID signing、hardened runtime、notarization基盤
   （分割、credential境界、完了条件は
   [`docs/phase11/developer-id-notarization.md`](docs/phase11/developer-id-notarization.md)
   を参照して順に実施する）
   - [x] signing／hardened runtime／notarization contractとcredential inventory
   - [x] `dart_macos_runtime`の汎用atomic distribution signing／notarization基盤
   - [x] product最小entitlements、distribution audit、credential-independent negative gate
-  - [ ] 実Developer ID署名、公証、staple／Gatekeeper／clean-machine受け入れ、親項目完了判定
+  - [x] credential-independent完了判定と実credential受け入れのfollow-up移管
 - [ ] update feed、署名検証、rollback
 - [ ] local crash report、hang sample、privacy-safe diagnostics
 - [ ] startup/input/render/parser/memory/power benchmark regression gate
@@ -1333,7 +1333,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 終了条件:
 
-- signed/notarized build を clean machine へ install/update/uninstall できる。
+- Developer ID／hardened runtime／公証の配布機構とfail-closed gateが揃う。
+  実credential／Apple serviceを使う正の受け入れは低優先follow-upとして追跡する。
 - release benchmark が下記予算と relative parity gate を満たす。
 - blocker/crash/data-loss/security bug が 0。
 - known limitation が文書化され、silent misbehavior がない。
@@ -1344,6 +1345,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 - [ ] 公開・未改変 runtime の Intel-native no-rebuild runtime handoff と追加互換性証跡
   （主要ゴール達成後に実施し、
   [`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)
+  を実施時に参照する）
+- [ ] 実Developer ID署名、公証、staple／Gatekeeper／clean-machine no-rebuild受け入れ
+  （credential準備後に実施し、
+  [`docs/phase11/developer-id-notarization.md`](docs/phase11/developer-id-notarization.md)
   を実施時に参照する）
 
 ## 8. テスト戦略
@@ -1433,7 +1438,8 @@ audit、Intel-native の追加証跡は上記の主要ゴール後 follow-up で
 - windows/tabs/splits の create/restore/close で PTY、FD、isolate、GPU、handle leak がない。
 - parser/image/clipboard の security limit と fuzz gate が通る。
 - VoiceOver、Full Keyboard Access、Secure Input の checklist が通る。
-- signed/notarized Universal app の fresh install と update が通る。
+- Developer ID／hardened runtime／公証の配布機構とfail-closed gateが通る。
+  実credential／Apple serviceを使うfresh install/updateは主要ゴール後follow-upとする。
 - relative performance gate と 72-hour soak が通る。
 - crash/data loss/security blocker が 0 で、known limitations が公開されている。
 
