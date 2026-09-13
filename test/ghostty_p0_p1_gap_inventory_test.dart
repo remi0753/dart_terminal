@@ -15,9 +15,9 @@ void runGhosttyP0P1GapInventoryTests() {
       );
   _expect(
     result.rows == 102 &&
-        result.accepted == 95 &&
+        result.accepted == 96 &&
         result.actionableP0 == 0 &&
-        result.actionableP1 == 2 &&
+        result.actionableP1 == 1 &&
         result.documentedDifferences == 2 &&
         result.externalFollowUps == 3,
     'reviewed result totals are exact',
@@ -28,12 +28,12 @@ void runGhosttyP0P1GapInventoryTests() {
   final List<Object?> gaps = report['gaps']! as List<Object?>;
   _expect(
     rows.length == 102 &&
-        gaps.length == 7 &&
+        gaps.length == 6 &&
         rows
                 .cast<Map<String, Object?>>()
                 .where((row) => row['classification'] == 'actionable-p1')
                 .length ==
-            2 &&
+            1 &&
         gaps
             .cast<Map<String, Object?>>()
             .where((gap) => gap['silent_misbehavior'] == true)
@@ -41,7 +41,7 @@ void runGhosttyP0P1GapInventoryTests() {
     'every row and reviewed gap is represented',
   );
   _expectFailure(
-    committed.replaceFirst('"actionable_p1": 2', '"actionable_p1": 3'),
+    committed.replaceFirst('"actionable_p1": 1', '"actionable_p1": 2'),
     generated,
     'stale actionable total',
   );
@@ -247,6 +247,20 @@ void runGhosttyP0P1GapInventoryTests() {
   ).readAsStringSync();
   final String atlasSource = File('lib/src/terminal_renderer/glyph_atlas.dart')
       .readAsStringSync();
+  final String overlaySource = File(
+    'lib/src/terminal_renderer/terminal_overlay.dart',
+  ).readAsStringSync();
+  final String referenceRendererSource = File(
+    'lib/src/terminal_renderer/reference_renderer.dart',
+  ).readAsStringSync();
+  final String kittyControllerSource = File(
+    'lib/src/terminal_kitty_graphics_controller.dart',
+  ).readAsStringSync();
+  final String shaderSource = File(
+    'packages/dart_terminal_renderer_macos/native/TerminalShaders.metal',
+  ).readAsStringSync();
+  final String metalTestSource = File('test/metal_pipeline_test.dart')
+      .readAsStringSync();
   final String rasterTestSource = File('test/terminal_cell_glyph_test.dart')
       .readAsStringSync();
   validateGhosttyP1SyntheticCellGlyphClosureSources(
@@ -291,11 +305,52 @@ void runGhosttyP0P1GapInventoryTests() {
     rasterTestSource,
     compositorTestSource,
     productApplicationSource,
-    runtimeSmokeSource.replaceAll(
-      'kitty_graphics=true cell_glyphs=true',
-      'kitty_graphics=true',
-    ),
+    runtimeSmokeSource.replaceAll('cell_glyphs=true', 'cell_glyphs=false'),
     'missing two-runtime synthetic-cell acceptance marker',
+  );
+  validateGhosttyP1OverlayColorClosureSources(
+    kittyControllerSource: kittyControllerSource,
+    overlaySource: overlaySource,
+    atlasSource: atlasSource,
+    referenceRendererSource: referenceRendererSource,
+    compositorSource: compositorSource,
+    nativeRendererSource: rendererNativeSource,
+    shaderSource: shaderSource,
+    metalTestSource: metalTestSource,
+    productApplicationSource: productApplicationSource,
+    runtimeSmokeSource: runtimeSmokeSource,
+  );
+  _expectOverlayColorFailure(
+    kittyControllerSource,
+    overlaySource,
+    atlasSource,
+    referenceRendererSource,
+    compositorSource,
+    rendererNativeSource,
+    shaderSource,
+    metalTestSource.replaceFirst(
+      'test/goldens/overlay-color/closure-',
+      'test/goldens/overlay-color/missing-',
+    ),
+    productApplicationSource,
+    runtimeSmokeSource,
+    'missing checked-in overlay/color corpus evidence',
+  );
+  _expectOverlayColorFailure(
+    kittyControllerSource,
+    overlaySource,
+    atlasSource,
+    referenceRendererSource,
+    compositorSource,
+    rendererNativeSource,
+    shaderSource,
+    metalTestSource,
+    productApplicationSource,
+    runtimeSmokeSource.replaceFirst(
+      'search_overlay=true p3_color=true',
+      'search_overlay=true',
+    ),
+    'missing two-runtime search/P3 acceptance marker',
   );
   validateGhosttyP1FontResolutionClosureSources(
     rendererConfigurationSource: rendererConfigurationSource,
@@ -497,6 +552,38 @@ void _expectFontResolutionFailure(
       rendererTestSource: rendererTestSource,
       productConfigurationSource: productConfigurationSource,
       productDiagnosticsSource: productDiagnosticsSource,
+      productApplicationSource: productApplicationSource,
+      runtimeSmokeSource: runtimeSmokeSource,
+    );
+  } on GhosttyP0P1GapInventoryException {
+    return;
+  }
+  throw StateError('test failed: $message');
+}
+
+void _expectOverlayColorFailure(
+  String kittyControllerSource,
+  String overlaySource,
+  String atlasSource,
+  String referenceRendererSource,
+  String compositorSource,
+  String nativeRendererSource,
+  String shaderSource,
+  String metalTestSource,
+  String productApplicationSource,
+  String runtimeSmokeSource,
+  String message,
+) {
+  try {
+    validateGhosttyP1OverlayColorClosureSources(
+      kittyControllerSource: kittyControllerSource,
+      overlaySource: overlaySource,
+      atlasSource: atlasSource,
+      referenceRendererSource: referenceRendererSource,
+      compositorSource: compositorSource,
+      nativeRendererSource: nativeRendererSource,
+      shaderSource: shaderSource,
+      metalTestSource: metalTestSource,
       productApplicationSource: productApplicationSource,
       runtimeSmokeSource: runtimeSmokeSource,
     );

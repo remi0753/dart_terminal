@@ -6,8 +6,8 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 remaining overlays and P3 conversion — canonical sRGB
-  and alpha-blending native/reference parity
+- Current subtask: P1 remaining overlays and P3 conversion — runtime evidence,
+  documentation/matrix update, and parent decision
 
 ## Current P1 child — remaining overlays and P3 conversion
 
@@ -592,6 +592,185 @@
   Apple notarization and duration-only soak remain explicitly excluded. The
   canonical sRGB/linear-light parity child is complete; the next ordered work
   is the overlay/P3 1x/2x real-Metal runtime evidence and matrix-closure child.
+
+### Current child — overlay/P3 runtime evidence and parent closure
+
+- **Purpose:** Prove that all completed image/search/inspector/color children
+  are connected through the ordinary product owner rather than only isolated
+  contracts, then close `REN-08` and its roadmap parent without overstating
+  unrelated semantic-selection work.
+- **Background:** Three image bands, search and privacy-safe inspector
+  projections, and canonical P3-to-sRGB linear-light Metal rendering now pass
+  focused CPU/native tests. The checked-in Ghostty inventory intentionally
+  still classifies `REN-08` as actionable until one bounded product scenario
+  exercises these paths in Developer JIT and Release AOT and publishes reviewed
+  1x/2x evidence.
+- **Scope:** Inventory the existing runtime integration entrypoint and evidence
+  generators; extend the smallest existing renderer/product acceptance
+  scenario to create all three Kitty bands, active search and inspector spans,
+  and an explicitly tagged P3 atlas input; verify accepted real-Metal frames at
+  1x/2x with content-free counters/markers; run the same contract in Developer
+  JIT and Release AOT; update rendering docs, README, `REN-08`, generated
+  reports, and only this overlay parent; run exact full and adjacent-library
+  gates.
+- **Out of scope:** Option-click cursor positioning, semantic prompt/output
+  selection gestures, HDR/P3 framebuffer output, arbitrary screenshots or
+  captured terminal content, generic `dart_appkit` changes, Apple notarization,
+  and duration-only soak.
+- **Dependencies:** Product runtime smoke and evidence writers, live Metal
+  surface/compositor ownership, Kitty image store/controller, bounded
+  search/inspector overlay states, renderer metrics/diagnostics, DTGI codec,
+  Ghostty gap inventory and compatibility coverage freshness gates.
+- **Completion conditions:** One ordinary product scenario proves three image
+  bands, both overlay producers, a tagged P3 input, accepted real-Metal output,
+  exact 1x/2x scale identity, focus/close cleanup, and zero leaked PTY/renderer/
+  atlas/native ownership in Developer JIT and Release AOT; evidence is bounded,
+  checked in, content-free, and freshness-checked; `REN-08` is accepted; all six
+  children and the overlay/P3 parent are checked; exact full gate and adjacent
+  generic-library audit pass.
+- **Verification approach:** Preserve existing runtime markers unless a new
+  content-free field is necessary; add source/negative tests before evidence
+  generation; run focused scenario tests, Developer JIT, Release AOT, generated
+  report checks, format/analyze, exact `make test`, `git diff --check`, and the
+  tracked path/content audit for `/Users/remi/dart/dart_appkit`.
+- 2026-09-14: Previous child committed as `2a9f2a9` (`Use linear-light sRGB
+  rendering`). The post-commit worktree is clean. ROADMAP reread confirms this
+  runtime/matrix child is the first unchecked item; Option-click/semantic
+  selection remains the next independent P1 task and must not be included.
+- 2026-09-14: Runtime inventory found the ordinary terminal-display scenario
+  already drives Kitty multipart RGBA/PNG, scrolling/history, erase/delete,
+  animation, eviction, atlas cleanup, and accepted Metal frames, but its two
+  initial placements use only `z=-1` and `z=1`. It must add the exact
+  extreme-negative threshold band and update the later image/placement counts
+  without weakening cleanup checks. The same scenario already exposes
+  content-free live-surface search counters but never calls
+  `updateSearchResults`.
+- 2026-09-14: The diagnostics product scenario already proves inspector
+  activation, nonzero hyperlink/prompt/input overlay geometry, focus handoff,
+  close clear, zero PTY writes, two-session cleanup, and zero text-client/native
+  handles in both runtime modes. It should remain the inspector authority
+  rather than bypassing its presenter from the display scenario. No current
+  runtime scenario exercises a tagged Display P3 admission; this belongs in a
+  small bounded real-Metal color probe inside the ordinary product process
+  because Kitty protocol bytes themselves are defined as sRGB.
+- 2026-09-14: Existing 1x/2x goldens separately cover three image bands and
+  other reference layers, while search and inspector real-Metal tests are
+  transient only. Add one compact `overlay-color` DTGI pair that combines all
+  three image layers, normal/selected search fills, all inspector decoration
+  shapes, and a tagged P3 image at both scales. Its generator must compare the
+  CPU oracle to real Metal before writing, and ordinary tests must require
+  exact checked-in bytes plus the existing one-byte GPU tolerance.
+- 2026-09-14: The first focused `dart analyze` attempt after adding the runtime
+  probes did not reach source analysis because Dart tried to update
+  `/Users/remi/.dart-tool/dart-flutter-telemetry-session.json`, outside the
+  writable workspace. This is an environment/sandbox failure rather than a
+  diagnostic. Retry with `CI=true DART_SUPPRESS_ANALYTICS=true`; the failed
+  attempt made no source change beyond the preceding successful formatter run.
+- 2026-09-14: The suppressed focused analyzer then reached source analysis and
+  found one missing import for the product-local `TerminalRenderColorSpace`
+  enum used by the P3 runtime probe. The enum remains owned by the terminal
+  renderer overlay contract; importing that existing module fixes the wiring
+  without widening a package or generic-library API.
+- 2026-09-14: The first Developer-JIT product run stopped at the new third
+  Kitty band as intended by the strict counter check. Image id 94 was decoded
+  and retained (`images=3`) but the `a=T,z=-2147483648` command produced no
+  placement (`placements=2`, with two matching Metal images/placements/tiles).
+  Thus the failure precedes layer composition and is specific to the
+  transmit-and-place boundary input. Use `-1073741825`, the first value below
+  the accepted `-0x40000000` below-background threshold, to exercise the exact
+  classification boundary without depending on the i32-min command edge.
+- 2026-09-14: Retrying `a=T` with `z=-1073741825` retained the image but again
+  produced no placement, excluding the numeric threshold as the cause. The
+  existing successful fixture uses separate transmit and `a=p` commands for
+  ids 91/92, while the later `a=T` fixture is positioned only after an explicit
+  cursor move. Change id 94 to the same already-proven separate transmit/place
+  form so this test isolates layer classification rather than compound-action
+  cursor behavior.
+- 2026-09-14: Separate transmit/place failed identically and source inspection
+  located the actual blocker: `TerminalKittyGraphicsController._placeImage`
+  still returned `ENOTSUP` for every `z < -0x40000000`. Parsing, storage,
+  viewport classification, CPU composition, and Metal already accept the full
+  signed range, so this obsolete product-boundary guard made the completed
+  below-background band unreachable from the ordinary PTY path. Remove only
+  that guard; convert its controller negative test into exact acceptance of a
+  `belowBackground` placement while preserving virtual, relative, invalid
+  cursor, and missing-image rejection. Update the generated compatibility
+  source wording from unsupported to the three explicit bands.
+- 2026-09-14: Focused analysis of the controller change found that the mutable
+  store placement deliberately exposes only its signed `z`; `layer` belongs to
+  the immutable viewport projection. The acceptance assertion now compares the
+  stored z against `TerminalKittyViewportPlacement.backgroundLayerZLimit`,
+  while existing viewport/compositor tests remain the authority for its derived
+  layer. No production API was widened.
+- 2026-09-14: Focused analysis is now clean, and both the Kitty controller suite
+  and the combined 1x/2x CPU-versus-real-Metal overlay/color suite pass. The
+  ordinary terminal-display product scenario then passed in Developer JIT
+  (`scale_16_16=131072`, 11.900 s) and Release AOT
+  (`scale_16_16=131072`, 10.519 s). Those launches exercise the real PTY,
+  signed-z controller/store/viewport path, native window/live surface, normal
+  and selected search projections plus clear, and tagged P3 atlas conversion
+  with exact real-Metal pixels at both scales. Inspector activation/cleanup is
+  intentionally verified by the separate existing diagnostics product scenario
+  and is the next focused runtime rerun.
+- 2026-09-14: Both Developer-JIT and Release-AOT diagnostics product scenarios
+  pass (`diagnostics_exports=2`, `incident_exports=2`), retaining inspector
+  overlay activation, focus handoff/clear, redaction, atomic export, zero PTY
+  writes, and complete two-session owner cleanup. The first compatibility
+  inventory regeneration then wrote its canonical JSON but its summary parser
+  rejected the updated Kitty note at the existing 1,024-character cap. Shorten
+  only that prose to state the same three signed-z bands; do not raise the cap.
+- 2026-09-14: The shortened inventory and generated Phase 6 summary pass. The
+  first regression-coverage regeneration then stopped because its input
+  `compatibility/differential_baseline_report.json` still hashes the preceding
+  sequence inventory. Regenerate the reviewed in-process baseline first (its
+  ordinary no-argument mode), then retry coverage; this is a declared freshness
+  dependency and does not require an external Ghostty capture.
+- 2026-09-14: Reviewed baseline regeneration and compatibility coverage then
+  pass. The first Ghostty inventory generation reached the new closure audit
+  and rejected its combined atlas/reference/compositor condition because the
+  audit guessed `_srgbToLinear`, `_linearToSrgb`, and `_blendLinearStraight`;
+  the actual reviewed CPU oracle names are `_decodeSrgbByte`,
+  `_encodeSrgbByte`, and `_blendLinearSrgbChannel`. Correct the audit to those
+  exact existing symbols rather than changing implementation names.
+- 2026-09-14: The corrected closure audit, its two negative fixtures, all
+  compatibility freshness checks, and the generated Ghostty inventory pass at
+  102 rows, 96 accepted, zero actionable P0, and one actionable P1. The sole
+  remaining actionable row is the separately ordered Option-click/semantic
+  selection task; `REN-08` has no residual gap. The current CAP-11 matrix row
+  was also corrected from the obsolete Phase 9 extreme-z exclusion to the
+  product's three signed-z bands, then dependent coverage and gap reports were
+  regenerated again.
+- 2026-09-14: The exact final
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passes every native package,
+  generated/freshness, compatibility/differential/application/distribution,
+  formatting (334 files, zero changes), full analysis, real-Metal, security,
+  updater/rollback/symbol, and aggregate Dart test, ending with
+  `dart_terminal tests passed`. `git diff --check` is clean. Apple notarization
+  and duration-only campaigns remain skipped as authorized.
+- 2026-09-14: Final code review after that pass strengthened search acceptance
+  to require `acceptedFrameCount` to advance from the pre-overlay baseline, not
+  merely publish bounded projection counters. Both Developer JIT (11.852 s)
+  and Release AOT (10.556 s) pass the stricter real-Metal assertion. Phase 7 and
+  Ghostty source-hash evidence were regenerated and the focused gap suite
+  passes; because product source changed after the first aggregate run, one
+  second exact full gate is required before commit.
+- 2026-09-14: The second exact full gate passes in the strengthened final
+  source/evidence state, again formatting 334 files with zero changes,
+  reporting no analysis issues, retaining the 96 accepted / one actionable P1
+  inventory, and ending with `dart_terminal tests passed`. The final adjacent
+  `dart_appkit` status is clean and its tracked executable-code/content grep
+  again returns no terminal-named match. `git diff --check` is clean.
+- 2026-09-14: The first final `git add` attempt was denied before index mutation
+  because this session exposes `.git/index.lock` read-only inside the workspace
+  sandbox. Product files remain intact and unstaged. Retry only the requested
+  Git index/commit operations with the approved repository-level permission;
+  this is an environment constraint, not a source or verification failure.
+- 2026-09-14: The adjacent `/Users/remi/dart/dart_appkit` worktree is clean.
+  Its tracked path list has no terminal-named path, and a case-insensitive grep
+  over tracked Dart/native/script/manifest/Makefile code has zero `terminal`,
+  `dart_terminal`, or `dart-terminal` occurrence. This task changed no generic
+  library file. The runtime-evidence child and overlay/P3 parent satisfy every
+  recorded completion condition and may be closed.
 - 2026-09-14: The pinned checkout remains clean at exact revision
   `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`. Relevant source identities are
   `src/renderer/image.zig`

@@ -2778,8 +2778,8 @@ Map<String, Object?> _partialKittyApcRecord(_Gap gap) => <String, Object?>{
       'unsatisfied plans are atomic and pinned atlas tiles retire later. Real '
       'zsh PTY/Metal acceptance covers animation, 65-image pressure, and cleanup '
       'in both runtime modes. Non-Kitty APC is safe-ignore. File/shared-memory '
-      'transport, virtual/relative placement, and extreme negative z are '
-      'unsupported.',
+      'and virtual/relative placement are unsupported. Signed z maps to '
+      'below-background, below-text, or above-text.',
 };
 
 Map<String, Object?> _unsupportedMode(

@@ -4,7 +4,17 @@ import 'dart:typed_data';
 import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
-void main() => runMetalPipelineTests();
+void main(List<String> arguments) {
+  if (arguments.length == 1 &&
+      arguments.single == '--write-overlay-color-goldens') {
+    _writeOverlayColorGoldens();
+    return;
+  }
+  if (arguments.isNotEmpty) {
+    throw ArgumentError.value(arguments, 'arguments', 'unsupported');
+  }
+  runMetalPipelineTests();
+}
 
 void runMetalPipelineTests() {
   _testCanonicalSrgbNativeSourceContract();
@@ -12,9 +22,346 @@ void runMetalPipelineTests() {
     _testGpuAgainstReferenceGolden(scale);
   }
   _testDisplayP3TileConvertsBeforeMetalUpload();
+  _testOverlayColorClosureGoldens();
   _testEmptySameDomainResetSynchronization();
   _testKittyImageTileSurvivesRendererReplacement();
   _testBridgeLimitValidation();
+}
+
+void _testOverlayColorClosureGoldens() {
+  for (final int scale in <int>[1, 2]) {
+    final TerminalReferenceImage actual = _renderOverlayColorClosure(scale);
+    final File fixture = File(
+      'test/goldens/overlay-color/closure-${scale}x.dtgi',
+    );
+    _expect(fixture.existsSync(), 'checked-in overlay/color golden exists');
+    final Uint8List expectedBytes = fixture.readAsBytesSync();
+    final Uint8List actualBytes = TerminalGoldenImageCodec.encode(actual);
+    _expect(
+      _sameBytes(expectedBytes, actualBytes),
+      'checked-in overlay/color ${scale}x artifact is exact',
+    );
+    TerminalGoldenImageComparator.compare(
+      actual,
+      TerminalGoldenImageCodec.decode(expectedBytes),
+    ).requireMatch('checked-in overlay/color ${scale}x fixture');
+  }
+}
+
+void _writeOverlayColorGoldens() {
+  final Directory directory = Directory('test/goldens/overlay-color')
+    ..createSync(recursive: true);
+  for (final int scale in <int>[1, 2]) {
+    final File fixture = File('${directory.path}/closure-${scale}x.dtgi');
+    fixture.writeAsBytesSync(
+      TerminalGoldenImageCodec.encode(_renderOverlayColorClosure(scale)),
+      flush: true,
+    );
+    stdout.writeln('wrote ${fixture.path}');
+  }
+}
+
+TerminalReferenceImage _renderOverlayColorClosure(int scale) {
+  const int logicalWidth = 12;
+  const int logicalHeight = 8;
+  const int cellSize = 4;
+  final int atlasSide = 16 * scale;
+  final int tileSide = cellSize * scale;
+  final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
+    catalogGeneration: 1,
+    scale: scale.toDouble(),
+    limits: TerminalGlyphAtlasLimits(
+      pageWidth: atlasSide,
+      pageHeight: atlasSide,
+      maximumAlphaPages: 1,
+      maximumColorPages: 1,
+      maximumEntries: 3,
+      maximumRetainedBytes: atlasSide * atlasSide * 4,
+      gutter: 0,
+    ),
+  );
+  TerminalKittyImageAtlasKey key(int imageId) => TerminalKittyImageAtlasKey(
+    screenKindIndex: 0,
+    imageId: imageId,
+    imageResourceGeneration: 1,
+    imageContentGeneration: 1,
+    placementGeneration: imageId,
+    sourceX: 0,
+    sourceY: 0,
+    sourceWidth: cellSize,
+    sourceHeight: cellSize,
+    destinationX: 0,
+    destinationY: 0,
+    destinationWidth: cellSize,
+    destinationHeight: cellSize,
+    tileX: 0,
+    tileY: 0,
+    tileWidth: tileSide,
+    tileHeight: tileSide,
+    scale16_16: scale << 16,
+  );
+  final Uint8List belowBackgroundBytes = _solidRgbaPixels(
+    tileSide * tileSide,
+    const <int>[0x40, 0x60, 0x80, 0xc0],
+  );
+  final Uint8List belowTextBytes = _solidRgbaPixels(
+    tileSide * tileSide,
+    const <int>[0x20, 0xe0, 0x40, 0x80],
+  );
+  final Uint8List p3AboveTextBytes = _solidRgbaPixels(
+    tileSide * tileSide,
+    const <int>[0xff, 0x80, 0x00, 0xa0],
+  );
+  final TerminalGlyphAtlasEntry belowBackground = atlas.ingestKittyImageTile(
+    key: key(1),
+    rgba: belowBackgroundBytes,
+  );
+  final TerminalGlyphAtlasEntry belowText = atlas.ingestKittyImageTile(
+    key: key(2),
+    rgba: belowTextBytes,
+  );
+  final TerminalGlyphAtlasEntry aboveText = atlas.ingestKittyImageTile(
+    key: key(3),
+    rgba: p3AboveTextBytes,
+    inputColorSpace: TerminalRenderColorSpace.displayP3,
+  );
+  final TerminalMetalRenderer renderer = TerminalMetalRenderer.open(
+    config: TerminalMetalRendererConfig(
+      maximumViewportWidth: logicalWidth * scale,
+      maximumViewportHeight: logicalHeight * scale,
+      maximumInstances: 16,
+      atlasWidth: atlasSide,
+      atlasHeight: atlasSide,
+      maximumAlphaPages: 1,
+      maximumColorPages: 1,
+    ),
+  );
+  final TerminalGlyphAtlasMetalBridge bridge = TerminalGlyphAtlasMetalBridge(
+    atlas: atlas,
+    renderer: renderer,
+  );
+  try {
+    _expect(
+      bridge.synchronize() == TerminalGlyphAtlasSyncDisposition.synchronized,
+      'overlay/color atlas synchronizes at ${scale}x',
+    );
+    TerminalMetalInstance image(
+      TerminalGlyphAtlasEntry entry,
+      TerminalMetalImageLayer layer,
+    ) => bridge.imageInstance(entry, x: 0, y: 0, layer: layer)!;
+    final List<TerminalMetalInstance> instances = <TerminalMetalInstance>[
+      image(belowBackground, TerminalMetalImageLayer.belowBackground),
+      TerminalMetalInstance.solid(
+        kind: TerminalMetalInstanceKind.selection,
+        x: cellSize * scale,
+        y: 0,
+        width: cellSize * scale,
+        height: cellSize * scale,
+        colorRgba: 0xf5c54250,
+      ),
+      TerminalMetalInstance.solid(
+        kind: TerminalMetalInstanceKind.selection,
+        x: cellSize * 2 * scale,
+        y: 0,
+        width: cellSize * scale,
+        height: cellSize * scale,
+        colorRgba: 0xffa00088,
+      ),
+      image(belowText, TerminalMetalImageLayer.belowText),
+      image(aboveText, TerminalMetalImageLayer.aboveText),
+      ..._overlayDecorationInstances(scale, cellSize),
+    ];
+    final TerminalMetalFrame frame = TerminalMetalFrameEncoder.encode(
+      renderer: renderer,
+      frameGeneration: 1,
+      atlasGeneration: bridge.nativeAtlasGeneration,
+      viewportWidth: logicalWidth * scale,
+      viewportHeight: logicalHeight * scale,
+      scale16_16: scale << 16,
+      backgroundRgba: 0x101820ff,
+      instances: instances,
+    );
+    final TerminalReferenceImage expected = TerminalReferenceRenderer.render(
+      width: logicalWidth,
+      height: logicalHeight,
+      scale: scale,
+      background: const TerminalReferenceColor(0x101820ff),
+      primitives: <TerminalReferencePrimitive>[
+        TerminalReferenceBitmap(
+          layer: TerminalReferenceLayer.imageBelowBackground,
+          x: 0,
+          y: 0,
+          width: cellSize,
+          height: cellSize,
+          rowStride: cellSize * 4,
+          rgba: _solidRgbaPixels(cellSize * cellSize, const <int>[
+            0x40,
+            0x60,
+            0x80,
+            0xc0,
+          ]),
+        ),
+        const TerminalReferenceSolid(
+          layer: TerminalReferenceLayer.selection,
+          x: cellSize,
+          y: 0,
+          width: cellSize,
+          height: cellSize,
+          color: TerminalReferenceColor(0xf5c54250),
+        ),
+        const TerminalReferenceSolid(
+          layer: TerminalReferenceLayer.selection,
+          x: cellSize * 2,
+          y: 0,
+          width: cellSize,
+          height: cellSize,
+          color: TerminalReferenceColor(0xffa00088),
+        ),
+        TerminalReferenceBitmap(
+          layer: TerminalReferenceLayer.imageBelowText,
+          x: 0,
+          y: 0,
+          width: cellSize,
+          height: cellSize,
+          rowStride: cellSize * 4,
+          rgba: _solidRgbaPixels(cellSize * cellSize, const <int>[
+            0x20,
+            0xe0,
+            0x40,
+            0x80,
+          ]),
+        ),
+        TerminalReferenceBitmap(
+          layer: TerminalReferenceLayer.imageAboveText,
+          x: 0,
+          y: 0,
+          width: cellSize,
+          height: cellSize,
+          rowStride: cellSize * 4,
+          rgba: _solidRgbaPixels(cellSize * cellSize, const <int>[
+            0xff,
+            0x80,
+            0x00,
+            0xa0,
+          ]),
+          inputColorSpace: TerminalRenderColorSpace.displayP3,
+        ),
+        ..._overlayDecorationPrimitives(cellSize),
+      ],
+    );
+    _expectGpuNear(
+      expected.copyRgbaBytes(),
+      renderer.renderRgba(frame),
+      width: expected.width,
+      scale: scale,
+    );
+    return expected;
+  } finally {
+    bridge.abandonRenderer();
+    renderer.dispose();
+  }
+}
+
+List<TerminalMetalInstance> _overlayDecorationInstances(
+  int scale,
+  int cellSize,
+) {
+  TerminalMetalInstance decoration(
+    int x,
+    int y,
+    int width,
+    int height,
+    int color,
+  ) => TerminalMetalInstance.solid(
+    kind: TerminalMetalInstanceKind.decoration,
+    x: x * scale,
+    y: y * scale,
+    width: width * scale,
+    height: height * scale,
+    colorRgba: color,
+  );
+  return <TerminalMetalInstance>[
+    decoration(0, cellSize * 2 - 1, cellSize, 1, 0x32d7ffff),
+    decoration(cellSize, cellSize, cellSize, 1, 0xc678ddff),
+    decoration(cellSize, cellSize, 1, cellSize, 0xc678ddff),
+    decoration(cellSize * 2, cellSize, cellSize, 1, 0x98c379ff),
+    decoration(cellSize * 2, cellSize * 2 - 1, cellSize, 1, 0x98c379ff),
+    decoration(cellSize * 2, cellSize, 1, cellSize, 0x98c379ff),
+    decoration(cellSize * 3 - 1, cellSize, 1, cellSize, 0x98c379ff),
+  ];
+}
+
+List<TerminalReferencePrimitive> _overlayDecorationPrimitives(int cellSize) =>
+    <TerminalReferencePrimitive>[
+      TerminalReferenceSolid(
+        layer: TerminalReferenceLayer.decoration,
+        x: 0,
+        y: cellSize * 2 - 1,
+        width: cellSize,
+        height: 1,
+        color: TerminalReferenceColor(0x32d7ffff),
+      ),
+      TerminalReferenceSolid(
+        layer: TerminalReferenceLayer.decoration,
+        x: cellSize,
+        y: cellSize,
+        width: cellSize,
+        height: 1,
+        color: TerminalReferenceColor(0xc678ddff),
+      ),
+      TerminalReferenceSolid(
+        layer: TerminalReferenceLayer.decoration,
+        x: cellSize,
+        y: cellSize,
+        width: 1,
+        height: cellSize,
+        color: TerminalReferenceColor(0xc678ddff),
+      ),
+      TerminalReferenceSolid(
+        layer: TerminalReferenceLayer.decoration,
+        x: cellSize * 2,
+        y: cellSize,
+        width: cellSize,
+        height: 1,
+        color: TerminalReferenceColor(0x98c379ff),
+      ),
+      TerminalReferenceSolid(
+        layer: TerminalReferenceLayer.decoration,
+        x: cellSize * 2,
+        y: cellSize * 2 - 1,
+        width: cellSize,
+        height: 1,
+        color: TerminalReferenceColor(0x98c379ff),
+      ),
+      TerminalReferenceSolid(
+        layer: TerminalReferenceLayer.decoration,
+        x: cellSize * 2,
+        y: cellSize,
+        width: 1,
+        height: cellSize,
+        color: TerminalReferenceColor(0x98c379ff),
+      ),
+      TerminalReferenceSolid(
+        layer: TerminalReferenceLayer.decoration,
+        x: cellSize * 3 - 1,
+        y: cellSize,
+        width: 1,
+        height: cellSize,
+        color: TerminalReferenceColor(0x98c379ff),
+      ),
+    ];
+
+Uint8List _solidRgbaPixels(int pixelCount, List<int> rgba) =>
+    Uint8List.fromList(<int>[
+      for (int pixel = 0; pixel < pixelCount; pixel++) ...rgba,
+    ]);
+
+bool _sameBytes(List<int> left, List<int> right) {
+  if (left.length != right.length) return false;
+  for (int index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
 }
 
 void _testCanonicalSrgbNativeSourceContract() {

@@ -72,9 +72,11 @@ import 'terminal_product_hierarchy_actions.dart';
 import 'terminal_prompt_navigation.dart';
 import 'terminal_quick_terminal.dart';
 import 'terminal_renderer/glyph_atlas.dart';
+import 'terminal_renderer/metal_atlas_bridge.dart';
 import 'terminal_renderer/pane_work_scheduler.dart';
 import 'terminal_renderer/terminal_cell_glyph.dart';
 import 'terminal_renderer/terminal_live_metal_surface.dart';
+import 'terminal_renderer/terminal_overlay.dart';
 import 'terminal_restoration.dart';
 import 'terminal_restoration_lifecycle.dart';
 import 'terminal_secure_keyboard_entry.dart';
@@ -14795,6 +14797,12 @@ keybind = control+k=pane.focus-next
       pane,
       surface,
     );
+    final bool searchOverlay = await _exerciseSearchOverlay(
+      session,
+      pane,
+      surface,
+    );
+    final bool p3Color = _exerciseP3ColorRendering();
     final bool cellGlyphs = await _exerciseSyntheticCellGlyphs(
       session,
       pane,
@@ -14953,6 +14961,8 @@ keybind = control+k=pane.focus-next
           queryReports &&
           synchronizedOutput &&
           kittyGraphics &&
+          searchOverlay &&
+          p3Color &&
           cellGlyphs &&
           focus &&
           mouse &&
@@ -14983,6 +14993,7 @@ keybind = control+k=pane.focus-next
           'input_matrix=$inputMatrix decrqss=$decrqss '
           'query_reports=$queryReports synchronized_output=$synchronizedOutput '
           'kitty_graphics=$kittyGraphics '
+          'search_overlay=$searchOverlay p3_color=$p3Color '
           'cell_glyphs=$cellGlyphs '
           'focus=$focus mouse=$mouse '
           'selection=$selection '
@@ -15016,6 +15027,7 @@ keybind = control+k=pane.focus-next
       'input_matrix=$inputMatrix decrqss=$decrqss '
       'query_reports=$queryReports synchronized_output=$synchronizedOutput '
       'kitty_graphics=$kittyGraphics '
+      'search_overlay=$searchOverlay p3_color=$p3Color '
       'cell_glyphs=$cellGlyphs '
       'focus=$focus mouse=$mouse '
       'selection=$selection '
@@ -18168,6 +18180,9 @@ keybind = control+k=pane.focus-next
       "printf '\\033_Gm=0,q=2;"
       "DUlEQVR4nGNgYPj/HwADAgH/5ncLrgAAAABJRU5ErkJggg==\\033\\\\'; "
       "printf '\\033_Ga=p,i=92,p=2,c=1,r=1,C=1,z=1,q=2\\033\\\\'; "
+      "printf '\\033_Gi=94,q=2,f=32,s=1,v=1;CQoL/w==\\033\\\\'; "
+      "printf '\\033_Ga=p,i=94,p=3,c=1,r=1,C=1,"
+      "z=-1073741825,q=2\\033\\\\'; "
       "stty sane; printf '\\r\\n__DT_KITTY_GRAPHICS_QUERY_%s__\\r\\n' "
       '"\$query"',
     );
@@ -18182,11 +18197,12 @@ keybind = control+k=pane.focus-next
       final TerminalScreenSet screens = session.terminalScreenSet;
       if (screens.primaryKittyImages.imageById(91) != null &&
           screens.primaryKittyImages.imageById(92) != null &&
-          screens.primaryKittyImages.placementCount == 2 &&
-          snapshot.kittyImageCount == 2 &&
-          snapshot.kittyPlacementCount == 2 &&
-          snapshot.kittyTileCount == 2 &&
-          snapshot.kittyAtlasEntryCount >= 2 &&
+          screens.primaryKittyImages.imageById(94) != null &&
+          screens.primaryKittyImages.placementCount == 3 &&
+          snapshot.kittyImageCount == 3 &&
+          snapshot.kittyPlacementCount == 3 &&
+          snapshot.kittyTileCount == 3 &&
+          snapshot.kittyAtlasEntryCount >= 3 &&
           snapshot.acceptedFrameCount > baseline.acceptedFrameCount) {
         rendered = snapshot;
         break;
@@ -18224,7 +18240,7 @@ keybind = control+k=pane.focus-next
     final Stopwatch scrollDeadline = Stopwatch()..start();
     while (scrollDeadline.elapsed < const Duration(seconds: 5)) {
       final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
-      if (session.terminalScreenSet.primaryKittyImages.placementCount == 2 &&
+      if (session.terminalScreenSet.primaryKittyImages.placementCount == 3 &&
           session.terminalScreenSet
               .captureKittyImageViewport()
               .placements
@@ -18252,15 +18268,15 @@ keybind = control+k=pane.focus-next
           .captureKittyImageViewport()
           .placements
           .length;
-      if (historyPlacementCount == 2) break;
+      if (historyPlacementCount == 3) break;
     }
     surface.notifyViewportChanged();
     final Stopwatch historyDeadline = Stopwatch()..start();
     var historyVisible = false;
     while (historyDeadline.elapsed < const Duration(seconds: 5)) {
       final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
-      if (screens.captureKittyImageViewport().placements.length == 2 &&
-          snapshot.kittyPlacementCount == 2 &&
+      if (screens.captureKittyImageViewport().placements.length == 3 &&
+          snapshot.kittyPlacementCount == 3 &&
           snapshot.acceptedFrameCount > scrolled!.acceptedFrameCount) {
         historyVisible = true;
         break;
@@ -18295,7 +18311,7 @@ keybind = control+k=pane.focus-next
               acceptedBeforeErasePlacement + 1 &&
           session.kittyGraphicsController.pendingJobCount == 0 &&
           screens.primaryKittyImages.imageById(93) != null &&
-          screens.primaryKittyImages.placementCount == 3 &&
+          screens.primaryKittyImages.placementCount == 4 &&
           snapshot.kittyPlacementCount == 1 &&
           snapshot.kittyTileCount == 1) {
         eraseReady = true;
@@ -18354,7 +18370,7 @@ keybind = control+k=pane.focus-next
           session.kittyGraphicsController.acceptedCommandCount ==
               acceptedBeforeAnimation + 2 &&
           session.kittyGraphicsController.pendingJobCount == 0 &&
-          screens.primaryKittyImages.placementCount == 3 &&
+          screens.primaryKittyImages.placementCount == 4 &&
           observedAnimationFrames.length == 2 &&
           snapshot.kittyImageCount == 1 &&
           snapshot.kittyPlacementCount == 1 &&
@@ -18395,7 +18411,7 @@ keybind = control+k=pane.focus-next
       "printf '\\033_Ga=a,i=93,s=1\\033\\\\'; "
       "printf '\\033[2J\\033[H'; "
       "printf '__DT_KITTY_GRAPHICS_%s__\\r\\n' 'ERASED'; sleep 1; "
-      "printf '\\033_Ga=d,d=R,x=91,y=92,q=2\\033\\\\'; "
+      "printf '\\033_Ga=d,d=R,x=91,y=94,q=2\\033\\\\'; "
       "printf '__DT_KITTY_GRAPHICS_%s__\\r\\n' 'DELETED'",
     );
     await pane.submit();
@@ -18405,8 +18421,8 @@ keybind = control+k=pane.focus-next
     while (erasedDeadline.elapsed < const Duration(seconds: 5)) {
       final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
       if (screens.primaryKittyImages.imageById(93) == null &&
-          screens.primaryKittyImages.length == 2 &&
-          screens.primaryKittyImages.placementCount == 2 &&
+          screens.primaryKittyImages.length == 3 &&
+          screens.primaryKittyImages.placementCount == 3 &&
           snapshot.kittyPlacementCount == 0) {
         erased = true;
         break;
@@ -18517,9 +18533,214 @@ keybind = control+k=pane.focus-next
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
     stdout.writeln(
       'TERMINAL_KITTY_GRAPHICS_TEST query=true multipart_rgba=true '
-      'multipart_png=true placement=true z_order=true scroll=true '
+      'multipart_png=true placement=true z_order=true three_bands=true '
+      'scroll=true '
       'history=true erase=true delete=true animation=true eviction=true '
       'atlas_cleanup=true metal=true bounded=true',
+    );
+    return true;
+  }
+
+  static Future<bool> _exerciseSearchOverlay(
+    TerminalSession session,
+    TerminalPane pane,
+    TerminalLiveMetalSurface surface,
+  ) async {
+    const String marker = '__DT_SEARCH_OVERLAY_MATCH__';
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    pane.insertText("printf '\\r\\n$marker $marker\\r\\n'");
+    await pane.submit();
+    await _waitForAsciiMarker(session, marker);
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+
+    final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+    final int canonicalDigest = _screenCanonicalDigest(screen);
+    final searchResult = session.terminalScreenSet.viewport.search(marker);
+    _expectLifecycle(
+      searchResult != null &&
+          searchResult.matches.length >= 2 &&
+          !searchResult.isTruncated,
+      'search overlay fixture did not retain two bounded matches',
+    );
+    final TerminalLiveMetalSurfaceSnapshot baseline = surface.snapshot();
+    final int generation = baseline.searchGeneration + 1;
+    _expectLifecycle(
+      surface.updateSearchResults(
+        generation: generation,
+        result: searchResult,
+        selectedMatchIndex: 0,
+      ),
+      'search overlay publication did not advance its generation',
+    );
+
+    TerminalLiveMetalSurfaceSnapshot? rendered;
+    final Stopwatch renderDeadline = Stopwatch()..start();
+    while (renderDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      if (snapshot.searchGeneration == generation &&
+          snapshot.searchProjectionGeneration ==
+              session.terminalScreenSet.viewport.generation &&
+          snapshot.searchSpanCount >= 2 &&
+          snapshot.searchCellCount >= marker.length * 2 &&
+          snapshot.selectedSearchSpanCount == 1 &&
+          !snapshot.searchProjectionTruncated &&
+          snapshot.acceptedFrameCount > baseline.acceptedFrameCount &&
+          snapshot.pendingFrameCount <= 1 &&
+          snapshot.liveAtlasPinCount <= 3) {
+        rendered = snapshot;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      rendered != null && _screenCanonicalDigest(screen) == canonicalDigest,
+      'normal and selected search overlays did not reach bounded Metal '
+      'without mutating canonical cells',
+    );
+
+    final int clearGeneration = generation + 1;
+    _expectLifecycle(
+      surface.updateSearchResults(generation: clearGeneration, result: null),
+      'search overlay clear did not advance its generation',
+    );
+    TerminalLiveMetalSurfaceSnapshot? cleared;
+    final Stopwatch clearDeadline = Stopwatch()..start();
+    while (clearDeadline.elapsed < const Duration(seconds: 5)) {
+      final TerminalLiveMetalSurfaceSnapshot snapshot = surface.snapshot();
+      if (snapshot.searchGeneration == clearGeneration &&
+          snapshot.searchProjectionGeneration == 0 &&
+          snapshot.searchSpanCount == 0 &&
+          snapshot.searchCellCount == 0 &&
+          snapshot.selectedSearchSpanCount == 0 &&
+          snapshot.acceptedFrameCount > rendered!.acceptedFrameCount &&
+          snapshot.pendingFrameCount <= 1 &&
+          snapshot.liveAtlasPinCount <= 3) {
+        cleared = snapshot;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    _expectLifecycle(
+      cleared != null && _screenCanonicalDigest(screen) == canonicalDigest,
+      'search overlay clear did not reach bounded Metal without cell mutation',
+    );
+    stdout.writeln(
+      'TERMINAL_SEARCH_OVERLAY_TEST matches=true normal=true selected=true '
+      'metal=true clear=true canonical=true bounded=true',
+    );
+    return true;
+  }
+
+  static bool _exerciseP3ColorRendering() {
+    for (final int scale in <int>[1, 2]) {
+      final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
+        catalogGeneration: 1,
+        scale: scale.toDouble(),
+        limits: const TerminalGlyphAtlasLimits(
+          pageWidth: 8,
+          pageHeight: 8,
+          maximumAlphaPages: 1,
+          maximumColorPages: 1,
+          maximumEntries: 1,
+          maximumRetainedBytes: 8 * 8 * 4,
+          gutter: 0,
+        ),
+      );
+      final TerminalGlyphAtlasEntry entry = atlas.ingestKittyImageTile(
+        key: TerminalKittyImageAtlasKey(
+          screenKindIndex: 0,
+          imageId: scale,
+          imageResourceGeneration: 1,
+          imageContentGeneration: 1,
+          placementGeneration: 1,
+          sourceX: 0,
+          sourceY: 0,
+          sourceWidth: 1,
+          sourceHeight: 1,
+          destinationX: 0,
+          destinationY: 0,
+          destinationWidth: 1,
+          destinationHeight: 1,
+          tileX: 0,
+          tileY: 0,
+          tileWidth: scale,
+          tileHeight: scale,
+          scale16_16: scale << 16,
+        ),
+        rgba: Uint8List.fromList(<int>[
+          for (var pixel = 0; pixel < scale * scale; pixel++) ...const <int>[
+            0xff,
+            0x80,
+            0x00,
+            0xff,
+          ],
+        ]),
+        inputColorSpace: TerminalRenderColorSpace.displayP3,
+      );
+      final TerminalMetalRenderer renderer = TerminalMetalRenderer.open(
+        config: TerminalMetalRendererConfig(
+          maximumViewportWidth: scale,
+          maximumViewportHeight: scale,
+          maximumInstances: 1,
+          atlasWidth: 8,
+          atlasHeight: 8,
+          maximumAlphaPages: 1,
+          maximumColorPages: 1,
+        ),
+      );
+      final TerminalGlyphAtlasMetalBridge bridge =
+          TerminalGlyphAtlasMetalBridge(atlas: atlas, renderer: renderer);
+      try {
+        _expectLifecycle(
+          bridge.synchronize() ==
+              TerminalGlyphAtlasSyncDisposition.synchronized,
+          'tagged Display P3 tile did not synchronize at ${scale}x',
+        );
+        final TerminalMetalInstance? instance = bridge.imageInstance(
+          entry,
+          x: 0,
+          y: 0,
+          layer: TerminalMetalImageLayer.aboveText,
+        );
+        _expectLifecycle(
+          instance != null,
+          'tagged Display P3 tile did not produce a Metal instance',
+        );
+        final TerminalMetalFrame frame = TerminalMetalFrameEncoder.encode(
+          renderer: renderer,
+          frameGeneration: 1,
+          atlasGeneration: bridge.nativeAtlasGeneration,
+          viewportWidth: scale,
+          viewportHeight: scale,
+          scale16_16: scale << 16,
+          backgroundRgba: 0x000000ff,
+          instances: <TerminalMetalInstance>[instance!],
+        );
+        final Uint8List pixels = renderer.renderRgba(frame);
+        var exact = pixels.length == scale * scale * 4;
+        for (var offset = 0; exact && offset < pixels.length; offset += 4) {
+          exact =
+              pixels[offset] == 0xff &&
+              pixels[offset + 1] == 0x77 &&
+              pixels[offset + 2] == 0x00 &&
+              pixels[offset + 3] == 0xff;
+        }
+        _expectLifecycle(
+          exact &&
+              bridge.pendingUploadCount == 0 &&
+              atlas.pendingUploadPageCount == 0 &&
+              atlas.livePinCount == 0,
+          'tagged Display P3 tile did not render as exact canonical sRGB at '
+          '${scale}x',
+        );
+      } finally {
+        bridge.abandonRenderer();
+        renderer.dispose();
+      }
+    }
+    stdout.writeln(
+      'TERMINAL_P3_COLOR_TEST conversion=true alpha=true scales=2 '
+      'metal=true exact=true bounded=true',
     );
     return true;
   }

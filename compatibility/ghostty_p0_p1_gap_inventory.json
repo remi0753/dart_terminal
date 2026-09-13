@@ -4,7 +4,7 @@
   "status": "open-actionable-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "bce4fd02e073858ab48a61f561e9e027939110a8957f0bece561a05b0057eb33",
+    "sha256": "6ae2c747066b683c8ef825f62bde05356fa4bf6b96ac4a5a61d277a8f11f5af1",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -28,7 +28,7 @@
     },
     {
       "path": "compatibility/sequence_mode_inventory.json",
-      "sha256": "62fb70f940aca212b36f96c2b07cb71268a8b055972c64f86af5ac4788fe1272"
+      "sha256": "cfa975b03114f8fc4181b8aec304e122ae029b4baba9905d1b38b84e42d8d0dd"
     },
     {
       "path": "compatibility/implemented_sequence_manifest.json",
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "49c772ee018eb2a95f7b494e48a1a83bb23ae79872feb902ca536e69136148f1"
+      "sha256": "9f9aa4ae47b4a2603de39d70423f5f0431c2091e7bd777a1f1e0b677908d050f"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -100,11 +100,19 @@
     },
     {
       "path": "docs/reference/terminal-rendering.md",
-      "sha256": "ffe256b9750a4745863a2a23af0c7bdf5f4f6b25f6cb0d4b0cc55aa990256854"
+      "sha256": "5a2a892fb9b29c87fe3936a382e2ef442d27507caabc5c008e10f05f429a035c"
     },
     {
       "path": "lib/src/terminal_renderer/terminal_cell_glyph.dart",
       "sha256": "29c01f54ac839531de00d433c909b3ef4e4436212f1bc7644b52226d1bd2dbb2"
+    },
+    {
+      "path": "lib/src/terminal_renderer/terminal_overlay.dart",
+      "sha256": "cbb85c157bbc71abf2e0ff49abb3ca658a53ca4d9abf5689929f163ade20760c"
+    },
+    {
+      "path": "lib/src/terminal_renderer/reference_renderer.dart",
+      "sha256": "acf35a8abb477525101ea56aa81cfb897ca2f4c43f430536a7852828c6153adf"
     },
     {
       "path": "lib/src/terminal_renderer/glyph_atlas.dart",
@@ -115,6 +123,10 @@
       "sha256": "79f867680557e5df916b0bf692350fc955287e304cb26ce319db59060c528b76"
     },
     {
+      "path": "lib/src/terminal_kitty_graphics_controller.dart",
+      "sha256": "ff0f1f9d1bac336fa0b52ba1f3ebf67fc839d054b2dfc765910fa88383889575"
+    },
+    {
       "path": "test/terminal_cell_glyph_test.dart",
       "sha256": "f295a07423fe6c547bb86438a1bb6c80c1b2c698c18e73148d94507f411fad4f"
     },
@@ -123,12 +135,24 @@
       "sha256": "cc284d2badcee984c6b1ac40eb0684412bc2cb4f5beec905e0e3b5b9a8841b7c"
     },
     {
+      "path": "test/metal_pipeline_test.dart",
+      "sha256": "9392383867423814efe709eafb0bda06075ee294151fcf7e977860f31e41d63f"
+    },
+    {
       "path": "test/goldens/cell-glyphs/synthetic-corpus-1x.dtgi",
       "sha256": "fcb22fbdfcc70fcd9e9292c97c8342c14484c7ba608bd2dac0cc4b23861e7dcc"
     },
     {
       "path": "test/goldens/cell-glyphs/synthetic-corpus-2x.dtgi",
       "sha256": "c985379f3b075b987e7f65b0cf739dbefe59569f31b26f750919ef013b335eec"
+    },
+    {
+      "path": "test/goldens/overlay-color/closure-1x.dtgi",
+      "sha256": "59caaf1a008c5d795a09d6f8178db1c98951a63a23448bf2885dead488c829c6"
+    },
+    {
+      "path": "test/goldens/overlay-color/closure-2x.dtgi",
+      "sha256": "701a2caf0634009f7b1fa91c014a3c59346ccf6fd1568caa863b9a224506473c"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/lib/src/font_configuration.dart",
@@ -145,6 +169,10 @@
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m",
       "sha256": "a4bae4cff87271a0be27cd3543cf1d220aef4037fa6656ed1df14056a3a74246"
+    },
+    {
+      "path": "packages/dart_terminal_renderer_macos/native/TerminalShaders.metal",
+      "sha256": "a1152940cb332e0695bee9202db65be2285e0953ce0b468053fd9cef04e18d63"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/test/TerminalRendererCapabilityTests.mm",
@@ -168,7 +196,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "8de9066fcd7fcddb5eade4acc774b68fe02a76f47b03a098e79a3c3c7c43ea24"
+      "sha256": "f1d3ca5a0b52bade02a8848a01dd15ccca8264aac3139e1866840833db353831"
     },
     {
       "path": "test/terminal_product_configuration_test.dart",
@@ -180,7 +208,7 @@
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
-      "sha256": "9ed5dcf6e2e40423487342a5349cf09e9e85d03a31dfb03187b9d660c34efa03"
+      "sha256": "d5e4ce9444f9a27735195cd14ac7c92f7e05bc6027b7ebf5959b811a21ce9144"
     }
   ],
   "totals": {
@@ -192,13 +220,13 @@
       "P1/P2": 1
     },
     "classifications": {
-      "accepted": 95,
+      "accepted": 96,
       "accepted-documented-difference": 2,
       "accepted-external-follow-up": 3,
-      "actionable-p1": 2
+      "actionable-p1": 1
     },
     "actionable_p0": 0,
-    "actionable_p1": 2,
+    "actionable_p1": 1,
     "silent_misbehavior": 0
   },
   "p0_closure": {
@@ -217,9 +245,10 @@
       "versioned-snapshot-restore-oracle",
       "cursor-cell-ligature-shaping-break",
       "font-axes-codepoint-overrides-fallback-diagnostics",
-      "synthetic-cell-glyphs"
+      "synthetic-cell-glyphs",
+      "image-search-inspector-overlays-and-srgb"
     ],
-    "remaining_actionable": 2
+    "remaining_actionable": 1
   },
   "rows": [
     {
@@ -607,10 +636,10 @@
     {
       "id": "CAP-11",
       "priority": "P1",
-      "phase": "9",
+      "phase": "9/11",
       "acceptance_sha256": "c140917620983fde658e9a2d32e2de03d7d7079df59668a2e58b06142741d9cc",
       "pinned_evidence_sha256": "f4f23067447e108090815de8795789669f628a0a3478ace81b8e92e3da3fcbc6",
-      "current_sha256": "49288ca1561949a9812670fbf17904a2b850ef330da8ebc6f9630be96ca40379",
+      "current_sha256": "d745357b980ff7e5d2eb3bf15b51cb020c1d9080d0158585dab75171a0d9d7a2",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -797,14 +826,12 @@
     {
       "id": "REN-08",
       "priority": "P1",
-      "phase": "4/9",
+      "phase": "4/9/11",
       "acceptance_sha256": "805a76dcf4401e161a348c443ce244c045588008c113468391ca67c37853cb71",
       "pinned_evidence_sha256": "25542cf5dc2f6f67eaad479409a60d2d406a44f73f29bbf577959c49dbb9d263",
-      "current_sha256": "9edde8c9e2de28dd95317fa7ebb6f30ee2b368903158d949eb9a4e6d51e87370",
-      "classification": "actionable-p1",
-      "gap_ids": [
-        "remaining-overlays-and-color-conversion"
-      ]
+      "current_sha256": "b718c1fb1dbc00df046ac56813a7ef05890e2abc748bfda3ffe3b3fa9ced6981",
+      "classification": "accepted",
+      "gap_ids": []
     },
     {
       "id": "REN-09",
@@ -1319,18 +1346,6 @@
       "product_actionable": false,
       "silent_misbehavior": false,
       "reason": "Credential-independent distribution gates pass; positive signing and notarization needs external authority."
-    },
-    {
-      "id": "remaining-overlays-and-color-conversion",
-      "kind": "actionable-product-gap",
-      "priority": "P1",
-      "row_ids": [
-        "REN-08"
-      ],
-      "owner": "ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down",
-      "product_actionable": true,
-      "silent_misbehavior": false,
-      "reason": "Hyperlink overlay passes; image, search, inspector, and P3 conversion remain incomplete."
     },
     {
       "id": "option-click-and-semantic-selection",

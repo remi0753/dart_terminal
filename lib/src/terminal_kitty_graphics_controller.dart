@@ -655,15 +655,6 @@ final class TerminalKittyGraphicsController {
       );
       return;
     }
-    if (request.z < -0x40000000) {
-      _emitError(
-        replyCommand,
-        'ENOTSUP',
-        'extreme negative image z-index is not supported',
-        identitySource: identitySource,
-      );
-      return;
-    }
     final ({int width, int height})? cell = screenSet.logicalCellSize;
     if (cell == null) {
       _emitError(

@@ -2072,7 +2072,13 @@ Future<void> _testControllerPlacementActionsAndDelete() async {
   controller.enqueueCommand(_command('Ga=d,d=f,i=70'));
   await controller.waitForIdle();
   _expect(
-    screens.primaryKittyImages.placementCount == beforeErrors &&
+    screens.primaryKittyImages.placementCount == beforeErrors + 1 &&
+        screens.primaryKittyImages.placementSnapshot().any(
+          (TerminalKittyImagePlacement placement) =>
+              placement.imageId == 70 &&
+              placement.z <
+                  TerminalKittyViewportPlacement.backgroundLayerZLimit,
+        ) &&
         replies.any(
           (String value) => value.contains('ENOENT:image not found'),
         ) &&
@@ -2082,11 +2088,11 @@ Future<void> _testControllerPlacementActionsAndDelete() async {
         replies.any(
           (String value) => value.contains('relative image placement'),
         ) &&
-        replies.any((String value) => value.contains('extreme negative')) &&
         replies.any((String value) => value.contains('cursor movement')) &&
         replies.length == repliesBeforeErrors + 5 &&
         screens.primaryKittyImages.imageById(70)?.frameCount == 1,
-    'unsupported placement forms fail while lowercase frame delete is a silent no-op',
+    'extreme negative z reaches the below-background band while unsupported '
+    'placement forms fail and lowercase frame delete is a silent no-op',
   );
 
   final int repliesBeforeLowerDelete = replies.length;

@@ -1300,11 +1300,26 @@ Future<void> _runTerminalDisplay(
   _expect(
     observation.stdoutText.contains(
       'TERMINAL_KITTY_GRAPHICS_TEST query=true multipart_rgba=true '
-      'multipart_png=true placement=true z_order=true scroll=true '
+      'multipart_png=true placement=true z_order=true three_bands=true '
+      'scroll=true '
       'history=true erase=true delete=true animation=true eviction=true '
       'atlas_cleanup=true metal=true bounded=true',
     ),
     'terminal display launch omitted Kitty graphics product acceptance',
+  );
+  _expect(
+    observation.stdoutText.contains(
+      'TERMINAL_SEARCH_OVERLAY_TEST matches=true normal=true selected=true '
+      'metal=true clear=true canonical=true bounded=true',
+    ),
+    'terminal display launch omitted search-overlay product acceptance',
+  );
+  _expect(
+    observation.stdoutText.contains(
+      'TERMINAL_P3_COLOR_TEST conversion=true alpha=true scales=2 '
+      'metal=true exact=true bounded=true',
+    ),
+    'terminal display launch omitted tagged Display P3 Metal acceptance',
   );
   _expect(
     observation.stdoutText.contains(
@@ -1442,7 +1457,8 @@ Future<void> _runTerminalDisplay(
     r'metal_default=true newest_frame=true frame_bounded=true '
     r'system_font=true mode_key=true text_input=true input_matrix=true '
     r'decrqss=true query_reports=true synchronized_output=true '
-    r'kitty_graphics=true cell_glyphs=true '
+    r'kitty_graphics=true search_overlay=true p3_color=true '
+    r'cell_glyphs=true '
     r'focus=true mouse=true selection=true '
     r'close_scroll=true scroll=true '
     r'hyperlink=true '

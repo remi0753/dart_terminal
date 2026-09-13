@@ -120,7 +120,6 @@ const Map<String, String> _classifications = <String, String>{
   'REL-01': 'accepted-external-follow-up',
   'DIST-01': 'accepted-external-follow-up',
   'DIST-02': 'accepted-external-follow-up',
-  'REN-08': 'actionable-p1',
   'IN-10': 'actionable-p1',
 };
 
@@ -130,7 +129,6 @@ const Map<String, List<String>> _rowGapIds = <String, List<String>>{
   'REL-01': <String>['physical-duration-reliability'],
   'DIST-01': <String>['intel-native-handoff'],
   'DIST-02': <String>['apple-service-acceptance'],
-  'REN-08': <String>['remaining-overlays-and-color-conversion'],
   'IN-10': <String>['option-click-and-semantic-selection'],
 };
 
@@ -181,15 +179,6 @@ const List<_Gap> _gaps = <_Gap>[
     reason: 'Credential-independent distribution gates pass; positive signing and notarization needs external authority.',
   ),
   _Gap(
-    id: 'remaining-overlays-and-color-conversion',
-    kind: 'actionable-product-gap',
-    priority: 'P1',
-    rowIds: <String>['REN-08'],
-    owner: 'ROADMAP.md#phase-11-pinned-ghostty-gap-burn-down',
-    productActionable: true,
-    reason: 'Hyperlink overlay passes; image, search, inspector, and P3 conversion remain incomplete.',
-  ),
-  _Gap(
     id: 'option-click-and-semantic-selection',
     kind: 'actionable-product-gap',
     priority: 'P1',
@@ -222,16 +211,23 @@ const List<String> _evidencePaths = <String>[
   'test/terminal_snapshot_test.dart',
   'docs/reference/terminal-rendering.md',
   'lib/src/terminal_renderer/terminal_cell_glyph.dart',
+  'lib/src/terminal_renderer/terminal_overlay.dart',
+  'lib/src/terminal_renderer/reference_renderer.dart',
   'lib/src/terminal_renderer/glyph_atlas.dart',
   'lib/src/terminal_renderer/terminal_screen_metal_compositor.dart',
+  'lib/src/terminal_kitty_graphics_controller.dart',
   'test/terminal_cell_glyph_test.dart',
   'test/terminal_screen_metal_compositor_test.dart',
+  'test/metal_pipeline_test.dart',
   'test/goldens/cell-glyphs/synthetic-corpus-1x.dtgi',
   'test/goldens/cell-glyphs/synthetic-corpus-2x.dtgi',
+  'test/goldens/overlay-color/closure-1x.dtgi',
+  'test/goldens/overlay-color/closure-2x.dtgi',
   'packages/dart_terminal_renderer_macos/lib/src/font_configuration.dart',
   'packages/dart_terminal_renderer_macos/lib/src/font_catalog.dart',
   'packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.h',
   'packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m',
+  'packages/dart_terminal_renderer_macos/native/TerminalShaders.metal',
   'packages/dart_terminal_renderer_macos/native/test/TerminalRendererCapabilityTests.mm',
   'packages/dart_terminal_renderer_macos/test/font_catalog_test.dart',
   'lib/src/terminal_config.dart',
@@ -256,9 +252,9 @@ final class GhosttyP0P1GapInventoryResult {
   const GhosttyP0P1GapInventoryResult();
 
   int get rows => 102;
-  int get accepted => 95;
+  int get accepted => 96;
   int get actionableP0 => 0;
-  int get actionableP1 => 2;
+  int get actionableP1 => 1;
   int get documentedDifferences => 2;
   int get externalFollowUps => 3;
 
@@ -376,6 +372,58 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
     compositorTestSource: _regularFile(
       root,
       'test/terminal_screen_metal_compositor_test.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    productApplicationSource: _regularFile(
+      root,
+      'lib/src/terminal_application.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    runtimeSmokeSource: _regularFile(
+      root,
+      'tool/runtime_integration_smoke.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+  );
+  validateGhosttyP1OverlayColorClosureSources(
+    kittyControllerSource: _regularFile(
+      root,
+      'lib/src/terminal_kitty_graphics_controller.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    overlaySource: _regularFile(
+      root,
+      'lib/src/terminal_renderer/terminal_overlay.dart',
+      1024 * 1024,
+    ).readAsStringSync(),
+    atlasSource: _regularFile(
+      root,
+      'lib/src/terminal_renderer/glyph_atlas.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    referenceRendererSource: _regularFile(
+      root,
+      'lib/src/terminal_renderer/reference_renderer.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    compositorSource: _regularFile(
+      root,
+      'lib/src/terminal_renderer/terminal_screen_metal_compositor.dart',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    nativeRendererSource: _regularFile(
+      root,
+      'packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m',
+      2 * 1024 * 1024,
+    ).readAsStringSync(),
+    shaderSource: _regularFile(
+      root,
+      'packages/dart_terminal_renderer_macos/native/TerminalShaders.metal',
+      1024 * 1024,
+    ).readAsStringSync(),
+    metalTestSource: _regularFile(
+      root,
+      'test/metal_pipeline_test.dart',
       2 * 1024 * 1024,
     ).readAsStringSync(),
     productApplicationSource: _regularFile(
@@ -514,7 +562,7 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
           classification: classifications[classification] ?? 0,
       },
       'actionable_p0': 0,
-      'actionable_p1': 2,
+      'actionable_p1': 1,
       'silent_misbehavior': 0,
     },
     'p0_closure': <String, Object?>{
@@ -532,8 +580,9 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
         'cursor-cell-ligature-shaping-break',
         'font-axes-codepoint-overrides-fallback-diagnostics',
         'synthetic-cell-glyphs',
+        'image-search-inspector-overlays-and-srgb',
       ],
-      'remaining_actionable': 2,
+      'remaining_actionable': 1,
     },
     'rows': encodedRows,
     'gaps': <Map<String, Object?>>[for (final _Gap gap in _gaps) gap.toJson()],
@@ -611,12 +660,12 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
         priorities['P1'] == 26 &&
         priorities['P1/P2'] == 1 &&
         totals['actionable_p0'] == 0 &&
-        totals['actionable_p1'] == 2 &&
+        totals['actionable_p1'] == 1 &&
         totals['silent_misbehavior'] == 0 &&
-        classifications['accepted'] == 95 &&
+        classifications['accepted'] == 96 &&
         classifications['accepted-documented-difference'] == 2 &&
         classifications['accepted-external-follow-up'] == 3 &&
-        classifications['actionable-p1'] == 2 &&
+        classifications['actionable-p1'] == 1 &&
         p0Closure['actionable_product_gaps'] == 0 &&
         p0Closure['known_silent_misbehavior'] == 0 &&
         p0Closure['documented_non_mutating_differences'] == 1 &&
@@ -628,8 +677,9 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
                 'versioned-snapshot-restore-oracle,'
                 'cursor-cell-ligature-shaping-break,'
                 'font-axes-codepoint-overrides-fallback-diagnostics,'
-                'synthetic-cell-glyphs' &&
-        p1Closure['remaining_actionable'] == 2,
+                'synthetic-cell-glyphs,'
+                'image-search-inspector-overlays-and-srgb' &&
+        p1Closure['remaining_actionable'] == 1,
     'reviewed totals differ',
   );
   return const GhosttyP0P1GapInventoryResult();
@@ -816,8 +866,95 @@ void validateGhosttyP1SyntheticCellGlyphClosureSources({
         runtimeSmokeSource.contains(
           'TERMINAL_CELL_GLYPH_TEST box=true block=true braille=true',
         ) &&
-        runtimeSmokeSource.contains('kitty_graphics=true cell_glyphs=true'),
+        runtimeSmokeSource.contains('cell_glyphs=true'),
     'two-runtime synthetic-cell product acceptance marker differs',
+  );
+}
+
+void validateGhosttyP1OverlayColorClosureSources({
+  required String kittyControllerSource,
+  required String overlaySource,
+  required String atlasSource,
+  required String referenceRendererSource,
+  required String compositorSource,
+  required String nativeRendererSource,
+  required String shaderSource,
+  required String metalTestSource,
+  required String productApplicationSource,
+  required String runtimeSmokeSource,
+}) {
+  _expect(
+    !kittyControllerSource.contains(
+          'extreme negative image z-index is not supported',
+        ) &&
+        productApplicationSource.contains('z=-1073741825') &&
+        productApplicationSource.contains('three_bands=true') &&
+        runtimeSmokeSource.contains('three_bands=true'),
+    'ordinary PTY Kitty path does not expose all three signed-z bands',
+  );
+  _expect(
+    overlaySource.contains('searchMatch(10)') &&
+        overlaySource.contains('searchSelectedMatch(20)') &&
+        overlaySource.contains('inspectorHyperlink(30)') &&
+        overlaySource.contains('inspectorSemanticPrompt(31)') &&
+        overlaySource.contains('inspectorSemanticInput(32)') &&
+        overlaySource.contains('maximumSpans = 4096') &&
+        overlaySource.contains('enum TerminalRenderColorSpace') &&
+        overlaySource.contains('displayP3ToSrgbBuffer'),
+    'bounded search/inspector projection or tagged-color contract differs',
+  );
+  _expect(
+    atlasSource.contains('inputColorSpace') &&
+        atlasSource.contains('TerminalRenderColorSpace.displayP3') &&
+        atlasSource.contains('displayP3ToSrgbBuffer(rgba)') &&
+        referenceRendererSource.contains('_decodeSrgbByte') &&
+        referenceRendererSource.contains('_encodeSrgbByte') &&
+        referenceRendererSource.contains('_blendLinearSrgbChannel') &&
+        compositorSource.contains(
+          'TerminalMetalInstanceKind.imageBelowBackground',
+        ) &&
+        compositorSource.contains(
+          'TerminalGridOverlayKind.searchSelectedMatch',
+        ) &&
+        compositorSource.contains(
+          'TerminalGridOverlayKind.inspectorSemanticInput',
+        ),
+    'atlas/reference/compositor overlay and linear-light contract differs',
+  );
+  _expect(
+    'MTLPixelFormatRGBA8Unorm_sRGB'.allMatches(nativeRendererSource).length ==
+            4 &&
+        nativeRendererSource.contains(
+          'CGColorSpaceCreateWithName(kCGColorSpaceSRGB)',
+        ) &&
+        shaderSource.contains('dtr_srgb_to_linear') &&
+        shaderSource.contains('dtr_srgb_to_linear(encoded_color.rgb)'),
+    'native Metal canonical sRGB contract differs',
+  );
+  _expect(
+    metalTestSource.contains(
+          r'test/goldens/overlay-color/closure-${scale}x.dtgi',
+        ) &&
+        metalTestSource.contains(
+          '_testDisplayP3TileConvertsBeforeMetalUpload',
+        ) &&
+        metalTestSource.contains('_expectGpuNear(') &&
+        productApplicationSource.contains('_exerciseSearchOverlay') &&
+        productApplicationSource.contains('_exerciseP3ColorRendering') &&
+        productApplicationSource.contains(
+          'TERMINAL_SEARCH_OVERLAY_TEST matches=true normal=true selected=true',
+        ) &&
+        productApplicationSource.contains(
+          'TERMINAL_P3_COLOR_TEST conversion=true alpha=true scales=2',
+        ) &&
+        productApplicationSource.contains(
+          'TERMINAL_DIAGNOSTICS_TEST inspector=true overlay=true',
+        ) &&
+        runtimeSmokeSource.contains('search_overlay=true p3_color=true') &&
+        runtimeSmokeSource.contains(
+          'TERMINAL_DIAGNOSTICS_TEST inspector=true overlay=true',
+        ),
+    'checked-in 1x/2x or two-runtime overlay/color evidence differs',
   );
 }
 

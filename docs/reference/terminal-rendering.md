@@ -39,11 +39,13 @@ CoreText face IDs and Kitty image tiles, while sharing the normal bounded alpha
 atlas, uploads, LRU eviction, build/submission pins, reset, renderer recovery,
 and Metal frame lifetime.
 
-Foreground color is applied when the alpha mask becomes a glyph instance.
-Background, selection, images below text, glyphs, images above text,
-decorations, and cursor retain the established layer order. Underline,
-overline, strike, inverse, faint, hover, and selection behavior therefore stays
-independent of the synthetic geometry.
+Foreground color is applied when the alpha mask becomes a glyph instance. The
+complete order is frame clear, extreme-negative images below cell backgrounds,
+cell backgrounds, selection/search fills, ordinary-negative images below text,
+glyphs, nonnegative images above text, hyperlink/inspector/search decorations,
+and cursor. Underline, overline, strike, inverse, faint, hover, selection, and
+diagnostic behavior therefore stays independent of the synthetic geometry and
+never mutates canonical terminal cells.
 
 ## Canonical color and blending
 
@@ -79,16 +81,37 @@ atlas entries and packed positions with real Metal readback using the existing
 one-channel-value tolerance. Pure raster tests exhaustively cover all 434
 accepted scalars at representative odd/even 1x and 2x device grids.
 
+The compact overlay/color corpus combines all three Kitty image bands, normal
+and selected search fills, hyperlink and inspector prompt/input decorations,
+translucent linear-light source-over, and a tagged Display P3 image:
+
+- `test/goldens/overlay-color/closure-1x.dtgi` — 675 bytes, SHA-256
+  `59caaf1a008c5d795a09d6f8178db1c98951a63a23448bf2885dead488c829c6`
+- `test/goldens/overlay-color/closure-2x.dtgi` — 2,213 bytes, SHA-256
+  `701a2caf0634009f7b1fa91c014a3c59346ccf6fd1568caa863b9a224506473c`
+
+Its ordinary test requires exact checked-in CPU bytes and compares the same
+instances against real Metal. Search state retains only stable ranges and a
+selected index. Inspector state retains only bounded hyperlink and semantic
+prompt/input geometry; semantic output and text never enter its overlay.
+
 The bounded product acceptance emits the relevant UTF-8 bytes through a real
-PTY and verifies canonical screen cells, exact scale-aware atlas keys, adjacent
-font fallback, an accepted Metal frame, and clean teardown in Developer JIT and
-Release AOT. Re-run the focused and product evidence with:
+PTY and verifies canonical screen cells, all three signed-z image bands,
+normal/selected search presentation and clear, explicitly tagged P3 conversion
+at 1x/2x, exact scale-aware atlas keys, adjacent font fallback, accepted Metal
+frames, and clean teardown in Developer JIT and Release AOT. The diagnostics
+product scenario separately verifies inspector activation, focus handoff,
+privacy, clear, and owner teardown in both modes. Re-run the focused and product
+evidence with:
 
 ```shell
 dart run test/terminal_screen_metal_compositor_test.dart
+dart run test/metal_pipeline_test.dart
 make RUNTIME_ARCH=arm64 runtime-terminal-display-integration
+make RUNTIME_ARCH=arm64 runtime-diagnostics-integration
 ```
 
 Goldens are never rewritten by an ordinary test. A deliberate reviewed update
 uses `--write-cell-goldens`, followed by visual/diff review and the normal full
-repository gate.
+repository gate. The overlay/color pair similarly uses
+`--write-overlay-color-goldens`.

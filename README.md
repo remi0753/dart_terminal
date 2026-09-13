@@ -246,7 +246,8 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   narrow-ambiguous grapheme/width contractはmode 2027をpermanently setとして公開する
 - Kitty graphicsのbounded APC grammar、process-worker direct RGB/RGBA/PNG+zlib decode、
   multipart/FIFO reply、主/代替画面別のbounded image/placement store、ID/number replacement、
-  static put/transmit-and-place/delete、通常negative/positive z、scrollback/margin clip/erase/
+  static put/transmit-and-place/delete、signed zを極端negativeのcell background下・通常negativeの
+  text下・nonnegativeのtext上へ分ける3帯layer、scrollback/margin clip/erase/
   reflow/alternate/RIS lifecycle、animation frame transmit/edit/control/compose/delete、
   imageごと64 total frame・画面ごと256 extra frame/16 MiBのgeneration-safe state、
   visible imageだけを進めるmonotonic newest-only playback、hidden/occluded/synchronized/recovery
@@ -257,7 +258,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   実zsh PTYからDeveloper JIT/Release AOTの両方で受け入れる。transient/unplaced優先と
   immutable generation/ID tie-breakで他imageをwhole-resource evictionし、targetは除外、
   満たせない要求は既存stateを変えず拒否する。file/shared-memory transport、
-  virtual/relative/extreme-negative zは対応範囲外
+  virtual/relative placementは対応範囲外。searchの通常/選択matchとinspectorのhyperlink/
+  semantic prompt/inputは本文を保持・変更しないbounded overlayとして合成し、focus/closeで
+  clearする。canonical straight-alpha RGBA8 sRGB、tag付きDisplay P3の一回変換、linear-light
+  source-over、1x/2x CPU/Metal一致を固定DTGIと両runtime製品gateで検証する
 - Unicode 17 grapheme境界・幅判定、bounded grapheme intern、wide/continuation
   invariantとprimary historyを含むatomic resize/reflow
 - fixed-page SoA scrollback、独立line/byte cap、O(1) page eviction、primary
