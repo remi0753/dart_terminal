@@ -599,3 +599,50 @@ executable SHA-256, compatible capture, passing relative gate, and aggregate
 performance closure cannot be produced. The acquisition/build child and every
 parent remain unchecked. Apple notarization and long-duration tests are unrelated
 to this blocker and remain skipped as directed.
+
+### 2026-09-13 — Authorized comparator build resume
+
+- After receiving the documented warning that Xcode's `netrc` package
+  authorization provider may consult the user's existing credentials, the user
+  explicitly requested that the task resume. This authorizes the previously
+  blocked locked-package resolution attempt; it does not authorize displaying,
+  copying, modifying, or recording any credential content.
+- The product and comparator checkouts were clean and the previously verified
+  disposable Zig executable still reported `0.16.0`. Work resumes at the first
+  unchecked child: resolve only versions in Ghostty's `Package.resolved`, rerun
+  the unchanged pinned build, then verify configuration, architecture, code
+  identity, executable hash, and comparator checkout cleanliness.
+
+Resume findings:
+
+- The authorized locked resolution completed without exposing credential
+  content and selected only Sparkle `2.9.6` from Ghostty's committed package
+  resolution.
+- The unchanged `zig build -Doptimize=ReleaseFast` then completed with exit 0 and
+  produced `macos/build/ReleaseLocal/Ghostty.app`. The executable is a Universal
+  Mach-O containing `x86_64` and native `arm64`; macOS therefore selects the
+  required arm64 slice on this host.
+- The app identity is `com.mitchellh.ghostty`, its signature is ad-hoc with
+  hardened-runtime flag, its SDK is macOS 26.5, and the executable SHA-256 is
+  `73744c9d8479d7326b1a95920ad6931c3eaed8500eafd97eb133eefd03e1f1dc`.
+  The pinned checkout remained at the exact revision with no tracked or
+  untracked source changes.
+- The content-free `+version` probe exited 0 and reported Ghostty
+  `1.3.2-HEAD-+d4d8f62`, Zig `0.16.0`, `.ReleaseFast`, CoreText, Metal, and
+  kqueue. It also logged a non-fatal `SentryInitFailed`; no diagnostic upload or
+  performance claim was made, and the following workload must disable external
+  reporting in its isolated configuration/environment.
+- The adjacent generic-library audit passed again with 140 paths and 139 text
+  files, and the product diff whitespace check passed. The exact product main
+  gate remains to be run before this build child is completed.
+
+Build-child completion:
+
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed with exit 0, including
+  all dependency capability checks, generated/reference/privacy/distribution
+  audits, formatting of 315 files with zero changes, analysis with no issues,
+  and the complete product test runner.
+- The fixed comparator source/toolchain acquisition, clean ReleaseLocal build,
+  executable identity, and repository isolation requirements are satisfied. Only
+  this acquisition/build child is complete; no benchmark capture or relative
+  performance pass is claimed by this result.
