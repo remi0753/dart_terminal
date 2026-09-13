@@ -332,3 +332,74 @@ all four update children and this parent are complete.
   no private-key material, production fixture key, output path, or unrelated
   adjacent-repository change. The strict signed-feed/generation child is
   complete; candidate validation and rollback is next.
+- 2026-09-13: implemented the candidate/update transaction entirely in the
+  product package. The production downloader creates a fresh destination,
+  disables redirects, accepts only HTTP 200 over the feed's already validated
+  HTTPS URL, enforces declared and streamed byte counts plus idle/total timeout, and
+  verifies the signed SHA-256 through `/usr/bin/shasum` without buffering an up
+  to 1 GiB archive in Dart memory. A separately named file adapter provides the
+  same exact size/hash gate for deterministic offline acceptance; production
+  integration can depend on the downloader interface without selecting that
+  adapter.
+- 2026-09-13: the macOS candidate preparer rechecks the archive before use,
+  inventories ZIP paths before extraction, rejects traversal, absolute or
+  backslash paths, case-fold aliases, extra roots and unbounded inventory, and
+  extracts only into a fixed private sibling directory on the install volume.
+  The extracted tree rejects links, hard links, unsupported entries and path or
+  entry-count excess. It then requires the exact bundle ID/version/executable,
+  Release AOT schema-2 Universal manifest and code inventory, Developer ID and
+  pinned Team ID, hardened runtime, secure timestamps, staple validation and
+  Gatekeeper acceptance. The current generic runtime manifest has no build
+  number field, so build identity remains authenticated by the signed feed and
+  its exact archive hash while `CFBundleShortVersionString` is independently
+  matched inside the bundle; no generic runtime change is required.
+- 2026-09-13: added a strict 16 KiB canonical journal containing only product,
+  fixed relative names, opaque 128-bit transaction ID, phase, feed sequence,
+  version/build and archive hashes. It never persists URLs, release notes,
+  paths, terminal content, commands, environment, timestamps or raw errors.
+  The local storage writes and flushes a sibling temporary file before atomic
+  replacement, permits only the four fixed transaction names, and accepts a
+  product-owned bundle verifier callback for every current/backup decision.
+- 2026-09-13: the coordinator verifies both current and candidate before the
+  first installed-app mutation, journals `prepared`, then moves current to one
+  bounded last-good backup and candidate to current with journal transitions at
+  every boundary. A one-use opaque token is accepted only in `awaitingHealth`
+  after re-verifying the current candidate. Missing health on restart and
+  explicit rollback restore only the verified previous identity; malformed or
+  unverifiable topology fails closed without installing unknown bytes.
+- 2026-09-13: the first install-fault test expected candidate staging to be
+  removed even when failure was injected before a journal could be written.
+  That expectation was incorrect: pre-journal validation failure must leave the
+  installed app unchanged and may retain exactly one bounded, still-verified
+  staging candidate for retry. The assertion was corrected to distinguish this
+  pre-mutation state; post-journal failures and all interrupted recoveries still
+  remove staging and converge to one previous current app.
+- 2026-09-13: focused formatting and analysis passed. The standalone suite
+  passed exact candidate metadata/signature evidence, download redirect/status/
+  timeout/network/size/hash classifications, hostile ZIP inventory, canonical
+  journal/privacy, streamed offline copy and cleanup, one-use health commit,
+  explicit rollback, each install boundary, repeated recovery faults, and real
+  local atomic journal replacement/fixed-name moves. The dedicated
+  `make terminal-update-transaction-test` gate passed all eleven groups. The real
+  Developer ID/staple/Gatekeeper positive candidate remains unavailable under
+  the user-authorized Apple-service deferral; structurally valid evidence and
+  every credential-independent negative gate are covered without weakening the
+  production preparer.
+- 2026-09-13: source review found that a verifier callback alone would leave
+  production current/backup identity checks unspecified. The macOS preparer now
+  also exposes a fail-closed installed-application verifier using the same
+  plist, runtime-manifest, code-signing, Team ID, hardened runtime, timestamp,
+  staple and Gatekeeper checks. The transaction storage can bind that method as
+  its callback; tests keep using an isolated deterministic verifier. ZIP mode
+  inventory is also checked before extraction so link/device entries cannot be
+  used as an extraction-time escape before the post-extraction tree scan.
+- 2026-09-13: the first exact normal gate had one unrelated timing failure in
+  the pre-existing `live Dart child cannot steal native PTY completion` case
+  (`No element`). Its focused `make dpty-dart-test` rerun passed all cases, and
+  the exact full gate rerun then passed. After the final journal ordering and
+  ZIP-mode preflight review, the dedicated transaction gate and a second exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed: 301 files formatted,
+  analyzer clean, all package/native/generated/security/distribution/feed/
+  transaction/root tests green. The adjacent `dart_appkit` worktree remained
+  clean. Long-duration and real Apple-service checks were skipped as authorized
+  and are not blockers for this credential-independent child.
