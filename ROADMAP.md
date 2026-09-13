@@ -1365,6 +1365,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] product memory-pressure shedding／recovery
   - [x] bounded aggregate受け入れ、文書／matrix、親項目完了判定
 - [ ] native ASan/UBSan、fuzz corpus、fault injection
+  （分割、native境界／corpus／fault contract、完了条件は
+  [`docs/phase11/sanitizer-fuzz-fault-injection.md`](docs/phase11/sanitizer-fuzz-fault-injection.md)
+  を参照して順に実施する）
+  - [x] contract、native境界／corpus／fault inventory
+  - [ ] product-owned native ASan/UBSan capability gate
+  - [ ] deterministic Dart fuzz corpus／property expansion
+  - [ ] bounded native／Dart fault injection／recovery
+  - [ ] aggregate gate、文書／matrix更新、親項目完了判定
 - [ ] Ghostty pinned matrix の P0/P1 gap burn-down
 - [ ] release candidate の daily-use program matrix
 
