@@ -66,6 +66,7 @@ import 'terminal_focus_reporter_test.dart';
 import 'terminal_history_reflow_test.dart';
 import 'terminal_hyperlink_interaction_test.dart';
 import 'terminal_hyperlink_test.dart';
+import 'terminal_incident_service_test.dart';
 import 'terminal_input_matrix_test.dart';
 import 'terminal_key_binding_test.dart';
 import 'terminal_key_encoder_test.dart';
@@ -170,6 +171,7 @@ Future<void> main() async {
   runTerminalHistoryReflowTests();
   runTerminalHyperlinkInteractionTests();
   runTerminalHyperlinkTests();
+  await runTerminalIncidentServiceTests();
   runTerminalAccessibilitySnapshotTests();
   await runTerminalAccessibilityPresentationTests();
   await runTerminalActionMenuTests();

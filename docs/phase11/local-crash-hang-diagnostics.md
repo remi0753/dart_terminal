@@ -264,6 +264,95 @@ all four incident children and this parent are complete.
 
 ## Progress log
 
+### 2026-09-13 — Local report/sample service task start
+
+- After commit `d7b4b40` (`Package verified release symbols`), reread ROADMAP,
+  README, FEATURE_MATRIX, this task contract, the current product tree, and the
+  adjacent generic worktree. The first incomplete item is now the local Apple
+  report discovery/raw-copy and current-process sample service; product actions,
+  AppKit consent UI, diagnostics projection, and runtime acceptance remain the
+  next child and are not part of this implementation.
+- Selected a non-recursive scan of the fixed DiagnosticReports directory. Only
+  non-link regular `.ips` entries with a newline-terminated bounded first JSON
+  record are candidates. The record must contain exact `bundleID` value
+  `dev.dart-terminal` and exact `app_name` value `dart_terminal`. Other report
+  formats, filenames, malformed headers, wrong identities, links, and oversized
+  entries are ignored rather than guessed. Aggregate entry/header/match bounds
+  fail the scan to a fixed unavailable classification.
+- Latest ordering uses filesystem modification time and a deterministic internal
+  filename tie-break. Neither value nor the selected path/name is exposed by the
+  public selection object. Export revalidates the original size, modification,
+  change time, type, mode, and product header before and after streaming; a
+  changed source fails before the sibling temporary file can replace the
+  explicit `.ips` destination.
+- The sample adapter will invoke exactly `/usr/bin/sample <current-pid> 1 1
+  -file <private-temp>` without a shell. The PID is captured from the running
+  product (injectable only at the service boundary for deterministic tests),
+  while executable, duration, interval, and options are fixed. The private
+  workspace must be a fresh owner-only directory and is deleted after success,
+  cancellation, timeout, failure, disposal, or invalid output.
+- Public outcomes and errors remain content-free. Process stdout/stderr, source
+  and destination names/paths, timestamps, raw header values, sample/report
+  bytes, and underlying exception text are never retained in the selection,
+  operation result, machine output, or error classification. Tests will inject
+  the report directory, copy boundaries, process runner, current PID, temporary
+  parent, and cancellation/disposal timing.
+
+### 2026-09-13 — Local report/sample service implementation
+
+- Added a product-owned service, Apple report-store adapter, process-runner
+  port, cancellation token, and bounded public selection/outcome types. The
+  production maxima are 4,096 directory entries, 16 KiB per header, 4 MiB
+  aggregate header input, 256 matching reports, 64 MiB per raw artifact, and
+  64 KiB aggregate output per process stream. Raw copy has a 30-second total
+  deadline and sampling has a five-second process deadline around the fixed
+  one-second capture. Runtime validation prevents injected limits from
+  expanding these caps in Release AOT where assertions are absent.
+- Discovery reads only the first newline-terminated JSON record and snapshots
+  regular-file size, modification/change time, mode, and type around that read.
+  It never traverses the report directory or trusts a filename for identity.
+  Ready selections expose only availability and a bounded match count; the
+  selected name/path/revision remains library-private, is bound to one store,
+  and can authorize at most one export attempt.
+- Report export accepts only an absolute `.ips` path whose immediate parent is
+  a real directory and whose target is missing or regular. It reserves a unique
+  sibling exclusively, streams no more than the discovered size/cap, observes
+  cancellation and deadline, rechecks the source revision, validates the copied
+  product header, flushes, and atomically renames. Failure preserves an existing
+  destination and reports a fixed cleanup failure if sensitive staging cannot
+  be removed.
+- Hang capture accepts only an absolute `.sample.txt` destination, creates a
+  fresh owner-only workspace beneath the configured temporary parent, and
+  invokes `/usr/bin/sample` with exact argv `[current PID, 1, 1, -file,
+  private path]`. The system adapter counts but never decodes or retains
+  stdout/stderr. It kills on cancellation/timeout and reduces every completion
+  to one fixed enum before the service validates and atomically copies the raw
+  output. The created workspace is removed for every exit path; cleanup failure
+  cannot be reported as success.
+- Thirteen focused groups pass through both the direct Dart command and
+  `make terminal-incident-service-test`. They cover exact newest selection and
+  bytes, wrong bundle/process identity, extension/type/link/path escape,
+  malformed/unterminated/oversized input, directory/header/match limits,
+  cancellation, store and one-use selection authority, stale/mutated source,
+  existing-destination preservation, unsafe destination, exact sample argv/PID,
+  owner-only storage, every process disposition, missing/oversized/linked output,
+  exception sentinel isolation, pre-cancellation, disposal, real subprocess
+  output overflow/failure/timeout, and temporary cleanup.
+- One focused iteration initially failed because the linked-output fixture
+  correctly kept its deliberately external symlink target while the assertion
+  incorrectly required the whole injected temporary parent to be empty. The
+  corrected assertion separately proves removal of the workspace/link and
+  preservation of the external target; the rerun passes. No real user crash
+  report was scanned and no raw real-process sample was retained. Duration-based
+  or personal-data manual testing remains deferred as authorized and does not
+  block this deterministic service child.
+- Final focused analysis reported no issues. The exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passed formatting of 308
+  files, root/package analysis with no issues, all native and generated-evidence
+  gates, the 13 incident groups, security stress, updates, release symbols, and
+  all existing root tests. `git diff --check` passed, and the adjacent generic
+  worktree remained clean.
+
 ### 2026-09-13 — Release symbol package
 
 - Implemented the product-owned `terminal_release_symbols` library and CLI.

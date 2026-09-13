@@ -160,7 +160,7 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	terminal-distribution-policy-test release-distribution-preflight \
 	release-distribution-credentials-check release-distribution-build \
 	release-distribution-audit release-distribution-verify \
-	terminal-update-feed-test terminal-update-transaction-test terminal-update-controller-test terminal-release-symbols-test release-update-feed-credentials-check \
+	terminal-update-feed-test terminal-update-transaction-test terminal-update-controller-test terminal-release-symbols-test terminal-incident-service-test release-update-feed-credentials-check \
 	release-update-feed \
 	release-aot-symbols \
 	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
@@ -232,6 +232,7 @@ help:
 	@echo "  make release-update-feed             Generate and sign an atomic update-feed directory"
 	@echo "  make terminal-release-symbols-test   Test bounded symbol packaging and publication"
 	@echo "  make release-aot-symbols             Package UUID-verified symbols for the host AOT app"
+	@echo "  make terminal-incident-service-test  Test local report export and current-process sampling"
 	@echo "  make runtime-terminal-display-integration  Verify the live Metal terminal in both modes"
 	@echo "  make runtime-native-hierarchy-integration  Verify four-pane hierarchy and Close/Quit in both modes"
 	@echo "  make runtime-user-actions-integration  Verify normal-product window/tab/split actions in both modes"
@@ -840,6 +841,9 @@ terminal-update-controller-test: dependencies
 
 terminal-release-symbols-test: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_release_symbols_test.dart
+
+terminal-incident-service-test: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_incident_service_test.dart
 
 release-aot-symbols: release-aot-audit terminal-release-symbols-test
 	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_release_symbols.dart \
