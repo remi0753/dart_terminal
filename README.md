@@ -739,6 +739,7 @@ make product-parser-corpus
 make product-parser-properties
 make phase9-protocol-properties
 make phase9-security-stress
+make product-sanitizer-fuzz-fault-gate
 make product-parser-benchmark
 make product-performance-regression-gate
 make runtime-source-check
@@ -757,6 +758,14 @@ make RUNTIME_ARCH=arm64 runtime-theme-integration
 make RUNTIME_ARCH=arm64 runtime-osc52-integration
 make RUNTIME_ARCH=arm64 runtime-restoration-integration
 ```
+
+`make product-sanitizer-fuzz-fault-gate` は通常リポジトリgate、固定seedの12件の
+review済みfuzz seed／192 mutation／1,296 execution、4つのproduct-owned native
+ownerを通る9 artifactのASan/UBSan capability、PTY allocationとDart parser／Kitty
+queue／Metal ownerのbounded fault recovery、Developer JIT／Release AOTのshutdown
+faultを直列に検証します。sanitizer artifactとtest-only fault seamは配布物に含めず、
+隣接する汎用`dart_appkit`へ製品固有コードを追加しません。Apple公証と実時間
+24/72時間の検証は、このbounded correctness gateとは別の低優先follow-upです。
 
 `make product-performance-regression-gate` は Release AOT の実製品 parser、damage、
 key→PTY、通常windowのstartup/input/visible frame、短時間RSS/CPU、100 MiBのpane間

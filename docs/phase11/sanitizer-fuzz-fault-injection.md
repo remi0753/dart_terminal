@@ -5,8 +5,9 @@
 - Phase: 11
 - Task: native ASan/UBSan, fuzz corpus, and fault injection
 - Started: 2026-09-13
-- State: in progress
-- Current subtask: bounded native/Dart fault injection/recovery (complete)
+- State: complete
+- Current subtask: aggregate gate, documentation/matrix update, and parent
+  completion decision (complete)
 
 ## Purpose
 
@@ -408,3 +409,50 @@ sanitizer coverage.
   `dart_appkit` worktree is clean, and a case-insensitive audit of its
   `native`, `packages`, `scripts`, `test`, `tool`, `examples`, and `Makefile`
   found no `terminal` or `dart_terminal` code/name occurrence.
+- 2026-09-13: Aggregate closure began after rereading `README.md`,
+  `ROADMAP.md`, `FEATURE_MATRIX.md`, this task memo, the repository structure,
+  the relevant Make targets, and the clean worktree. The aggregate will run
+  the ordinary repository gate, fixed parser property/fuzz gate, isolated
+  native sanitizer gate, bounded native/Dart fault gate, and existing
+  Developer JIT plus Release AOT shutdown-fault integration sequentially.
+  Sequential recursive Make invocations avoid concurrent reuse of shared
+  native/runtime build outputs. The runtime check is a bounded correctness
+  check, not a duration-only soak; Apple notarization and real-time 24/72-hour
+  evidence remain outside this task as already-approved follow-ups.
+- 2026-09-13: The first aggregate attempt stopped during the ordinary `test`
+  prerequisite at `terminal-compatibility-regression-coverage-check` with
+  `coverage report is stale`. All preceding ordinary native/package,
+  generated-source, localization, diagnostics, AppKit-acceptance, and nine-case
+  compatibility regression checks passed. The failure appeared immediately
+  after the intentional `FEATURE_MATRIX.md` evidence update, so the next step
+  is to inspect and run the repository's canonical coverage-report generator;
+  the failed attempt did not reach fuzz, sanitizer, focused fault, or runtime
+  children and is not accepted as aggregate evidence.
+- 2026-09-13: `make terminal-compatibility-regression-coverage` regenerated
+  only the expected SHA-256 entries for `README.md` and `FEATURE_MATRIX.md`.
+  `git diff --check` then passed, confirming that the first failure was the
+  intended checked-in freshness contract rather than a product regression.
+- 2026-09-13: The complete
+  `CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64
+  product-sanitizer-fuzz-fault-gate` rerun passed. Its recursive ordinary
+  `make test` completed all native/package, generated/freshness,
+  compatibility/application/distribution, format (324 files, zero changes),
+  analysis (no issues), and Dart tests. The deterministic property marker was
+  `TERMINAL_PROPERTY_FUZZ_PASS seed=0x4d595df4 generated=96 seeds=12
+  mutations=192 executions=1296 parsed_bytes=95388 state_hash=733442573`.
+  Native sanitizers passed five suites across all four product owners and nine
+  artifacts (`asan_artifacts=9`, `ubsan_artifacts=7`), and focused faults
+  passed one native plus three Dart boundaries.
+- 2026-09-13: Both bounded shipped-runtime checks passed:
+  `RUNTIME_SHUTDOWN_FAULT_INTEGRATION_PASS` and
+  `RUNTIME_PTY_DEADLINE_INTEGRATION_PASS` were emitted for Developer JIT and
+  Release AOT. The aggregate ended with
+  `PRODUCT_SANITIZER_FUZZ_FAULT_PASS native_suites=4 native_artifacts=9
+  fuzz_executions=1296 fault_boundaries=4 runtime_modes=2`.
+- 2026-09-13: Final boundary audit found only the five intended tracked files
+  before roadmap closure, no untracked sanitizer/runtime output, and no diff
+  whitespace error. The adjacent `dart_appkit` worktree remains clean; the
+  case-insensitive code/name audit of `native`, `packages`, `scripts`, `test`,
+  `tool`, `examples`, and `Makefile` returned no `terminal` or `dart_terminal`
+  occurrence. No completion condition is outstanding; real-time campaigns and
+  Apple service acceptance remain explicitly separate low-priority follow-ups.

@@ -145,7 +145,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-terminfo terminal-terminfo-check \
 	terminal-shell-integration terminal-shell-integration-check \
 	product-parser-corpus product-parser-properties phase9-protocol-properties phase9-security-stress \
-	product-native-sanitizer product-fault-injection \
+	product-native-sanitizer product-fault-injection product-sanitizer-fuzz-fault-gate \
 	product-parser-benchmark-build product-parser-benchmark vt-parser-table vt-parser-table-check \
 	terminal-parser-trace terminal-parser-trace-check \
 	configuration-reference configuration-reference-check \
@@ -196,6 +196,7 @@ help:
 	@echo "  make phase9-security-stress       Stress modern authority and resource bounds"
 	@echo "  make product-native-sanitizer     Run isolated ASan/UBSan native capability gates"
 	@echo "  make product-fault-injection      Run bounded native/Dart ownership recovery faults"
+	@echo "  make product-sanitizer-fuzz-fault-gate  Run the complete bounded safety/recovery gate"
 	@echo "  make product-parser-benchmark     Run the Release AOT 100 MiB/s parser gate"
 	@echo "  make product-damage-benchmark     Run the Release AOT 100,000-cell damage gate"
 	@echo "  make product-performance-benchmark  Run product microbenchmarks against the M1 baseline"
@@ -623,6 +624,14 @@ product-fault-injection: dependencies dpty-native-test
 	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_kitty_graphics_controller_test.dart
 	@cd $(PROJECT_ROOT) && $(DART) run test/metal_failure_recovery_test.dart
 	@echo "PRODUCT_FAULT_INJECTION_PASS native_boundaries=1 dart_boundaries=3"
+
+product-sanitizer-fuzz-fault-gate:
+	@$(MAKE) test
+	@$(MAKE) product-parser-properties
+	@$(MAKE) product-native-sanitizer
+	@$(MAKE) product-fault-injection
+	@$(MAKE) RUNTIME_ARCH=$(RUNTIME_ARCH) runtime-shutdown-fault-integration
+	@echo "PRODUCT_SANITIZER_FUZZ_FAULT_PASS native_suites=4 native_artifacts=9 fuzz_executions=1296 fault_boundaries=4 runtime_modes=2"
 
 product-parser-benchmark-build: dependencies
 	@mkdir -p $(PRODUCT_PARSER_BENCHMARK_DIR)
