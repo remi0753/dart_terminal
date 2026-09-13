@@ -180,7 +180,16 @@ void _testResizeScaleAndFontPublication() {
         TerminalRenderFontConfiguration(
           generation: 2,
           family: 'Menlo',
-          pointSize: 16,
+          pointSize: 14,
+          catalogConfiguration: TerminalFontCatalogConfiguration(
+            codepointOverrides: <TerminalFontCodepointOverride>[
+              TerminalFontCodepointOverride(
+                firstScalar: 0x41,
+                lastScalar: 0x41,
+                family: 'Times',
+              ),
+            ],
+          ),
         );
     rebuilder.request(
       _target(
@@ -209,7 +218,10 @@ void _testResizeScaleAndFontPublication() {
     _expect(
       font.isPublished &&
           rebuilder.catalog.generation > initialCatalog.generation &&
-          rebuilder.catalog.metrics.pointSize == 16 &&
+          rebuilder.catalog.metrics.pointSize == 14 &&
+          rebuilder.catalog.configuration ==
+              replacementConfig.catalogConfiguration &&
+          rebuilder.catalog.diagnostics().configuredOverrideCount == 1 &&
           rebuilder.shapingCache.catalog.generation ==
               rebuilder.catalog.generation &&
           initialCache.isDisposed &&

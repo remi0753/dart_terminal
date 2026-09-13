@@ -77,12 +77,12 @@ Future<void> _testSearchRenderingAndReloadProjection() async {
   )..open();
   try {
     _expect(
-      state.effectiveSnapshot.entries.length == 47 &&
-          state.results.length == 47 &&
-          state.matchingEntryCount == 47 &&
+      state.effectiveSnapshot.entries.length == 52 &&
+          state.results.length == 52 &&
+          state.matchingEntryCount == 52 &&
           state.diagnostics.single.code == 'CFG_DEPRECATED_VALUE' &&
           state.diagnosticContext == 'effective configuration' &&
-          state.render().contains('Showing 1-8 of 47'),
+          state.render().contains('Showing 1-8 of 52'),
       'opening does not project every schema entry and startup diagnostic',
     );
 
@@ -105,6 +105,14 @@ Future<void> _testSearchRenderingAndReloadProjection() async {
           state.selectedEntry?.canonicalValue == null &&
           state.render().contains('Value: <none>'),
       'empty repeatable option is not searchable or inspectable',
+    );
+    state.setQuery('font codepoint override');
+    _expect(
+      state.selectedEntry?.option.name == 'font-codepoint-override' &&
+          state.selectedEntry?.canonicalValue == null &&
+          state.render().contains('U+<hex>[..U+<hex>]=<family>') &&
+          state.render().contains('Policy: new-session'),
+      'font override syntax and new-session policy are not inspectable',
     );
 
     final TerminalConfigReloadResult rejected = await controller.reload();

@@ -3144,6 +3144,7 @@ final class TerminalApplication {
         fontFamily: paneConfiguration.fontFamily,
         fontPointSize: paneConfiguration.fontSize,
         syntheticStylePolicy: paneConfiguration.terminalSyntheticStylePolicy,
+        fontCatalogConfiguration: paneConfiguration.fontCatalogConfiguration,
         horizontalPadding: paneConfiguration.windowPaddingHorizontal,
         verticalPadding: paneConfiguration.windowPaddingVertical,
         accessibilityPresentation:
@@ -4849,6 +4850,7 @@ final class TerminalApplication {
               ? TerminalDiagnosticsRendererSnapshot.unavailable()
               : TerminalDiagnosticsRendererSnapshot.fromLiveSurface(
                   owner.surface.snapshot(),
+                  fontDiagnostics: owner.surface.fontDiagnostics(),
                 ),
           configuration: TerminalDiagnosticsConfigurationSnapshot(
             schemaOptionCount: schema.options.length,
@@ -4939,6 +4941,46 @@ final class TerminalApplication {
           },
           endCapture: session.endDiagnosticsCapture,
           snapshot: () => captureDiagnosticsSnapshot(paneId),
+        );
+      }
+
+      String activeFontSettingsStatus() {
+        final PaneId? paneId = state.activeWindow?.selectedTab.focusedPaneId;
+        final _TerminalHierarchyProductPane? owner = paneId == null
+            ? null
+            : owners[paneId];
+        if (owner == null || owner.surface.isDisposed) {
+          return localization.settingsFontResolutionUnavailable;
+        }
+        final TerminalFontCatalogDiagnostics diagnostics = owner.surface
+            .fontDiagnostics();
+        final List<String> faceNames = diagnostics.resolutions
+            .map(
+              (TerminalFontResolutionDiagnostic resolution) =>
+                  String.fromCharCodes(
+                    resolution.postscriptName.runes.take(32),
+                  ),
+            )
+            .toSet()
+            .take(4)
+            .toList(growable: false);
+        final int remainingFaces =
+            diagnostics.resolutions.length - faceNames.length;
+        return localization.settingsFontResolutionStatus(
+          appliedVariations: diagnostics.appliedVariationCount,
+          configuredVariations: diagnostics.configuredVariationCount,
+          unavailableVariations: diagnostics.unavailableVariationCount,
+          availableOverrides: diagnostics.availableOverrideCount,
+          configuredOverrides: diagnostics.configuredOverrideCount,
+          unavailableOverrides: diagnostics.unavailableOverrideCount,
+          overrideMatches: diagnostics.overrideMatchCount,
+          overrideFallbacks: diagnostics.overrideFallbackCount,
+          coreTextFallbacks: diagnostics.coreTextFallbackCount,
+          missingGlyphs: diagnostics.missingGlyphCount,
+          faceSummary: faceNames.isEmpty
+              ? '-'
+              : '${faceNames.join(',')}'
+                    '${remainingFaces == 0 ? '' : '+$remainingFaces'}',
         );
       }
 
@@ -5267,7 +5309,8 @@ final class TerminalApplication {
               '${createdQuickTerminal.shortcutStatus.settingsLineFor(localization)}    '
               '${createdSecureKeyboardEntry.status.settingsLineFor(localization)}    '
               '${appIntentsController!.status.settingsLineFor(localization)}    '
-              '${notificationController.status.settingsLineFor(localization)}',
+              '${notificationController.status.settingsLineFor(localization)}    '
+              '${activeFontSettingsStatus()}',
         );
       }
       final TerminalProductConfiguration automationConfiguration =
@@ -7062,6 +7105,30 @@ final class TerminalApplication {
             decoded['privacy'] is Map<String, Object?> &&
             (decoded['privacy']! as Map<String, Object?>)['paths'] ==
                 'omitted' &&
+            (((decoded['renderer']!
+                        as Map<String, Object?>)['font_diagnostics']!
+                    as Map<String, Object?>)['available'] ==
+                true) &&
+            (((decoded['renderer']!
+                        as Map<String, Object?>)['font_diagnostics']!
+                    as Map<String, Object?>)['configured_variations'] ==
+                0) &&
+            (((decoded['renderer']!
+                        as Map<String, Object?>)['font_diagnostics']!
+                    as Map<String, Object?>)['configured_overrides'] ==
+                0) &&
+            (((decoded['renderer']!
+                            as Map<String, Object?>)['font_diagnostics']!
+                        as Map<String, Object?>)['resolution_records']
+                    as List<Object?>)
+                .every(
+                  (Object? record) =>
+                      record is Map<String, Object?> &&
+                      record['postscript_name'] is String &&
+                      !(record['postscript_name']! as String).contains(
+                        firstPrivateMarker,
+                      ),
+                ) &&
             bytes.length <=
                 TerminalDiagnosticsFormatter.maximumOutputUtf8Bytes &&
             bytes.isNotEmpty &&
@@ -9638,6 +9705,7 @@ final class TerminalApplication {
       settingsStatus.contains(
             localization.settingsSaveState(settings.state.saveState.name),
           ) &&
+          settingsStatus.contains('フォント: 軸 ') &&
           settingsStatus.contains('クイックターミナルのショートカット:') &&
           settingsStatus.contains('セキュアキーボード入力:') &&
           settingsStatus.contains('通知:') &&
@@ -10099,7 +10167,7 @@ final class TerminalApplication {
           actionDispatches.last.disposition ==
               TerminalActionDispatchDisposition.executed &&
           application.debugLiveObjectCount == nativeHandleBaseline + 6 &&
-          reloadController.effectiveSnapshot.schema.options.length == 47 &&
+          reloadController.effectiveSnapshot.schema.options.length == 52 &&
           settings.state.occurrences
                   .map(
                     (TerminalSettingsOptionOccurrence occurrence) =>
@@ -10107,7 +10175,7 @@ final class TerminalApplication {
                   )
                   .toSet()
                   .length ==
-              47 &&
+              52 &&
           initialFont.draftValue(settings.state.text) == 'SF Mono Terminal' &&
           reloadController.effectiveSnapshot.value(
                 TerminalProductConfigSchema.theme,
@@ -10566,6 +10634,8 @@ palette-2 = #43ba21
 font-family = Menlo
 font-size = 20
 font-synthetic-style = deny
+font-variation-regular = wght=800
+font-codepoint-override = U+2500..U+257F=Menlo
 window-width = 980
 window-height = 640
 window-padding-horizontal = 9
@@ -10614,7 +10684,7 @@ keybind = control+k=pane.focus-next
       appliedReload.disposition == TerminalConfigReloadDisposition.applied &&
           appliedReload.diagnostics.isEmpty &&
           appliedReload.changePlan!.liveChanges.length == 2 &&
-          appliedReload.changePlan!.newSessionChanges.length == 15 &&
+          appliedReload.changePlan!.newSessionChanges.length == 16 &&
           reloadController.acceptedGeneration == 1 &&
           configurationAuthority.acceptedGeneration == 1 &&
           configurationAuthority.liveGeneration == 1 &&
@@ -10810,6 +10880,13 @@ keybind = control+k=pane.focus-next
         !initialScreens.activeScreen.cursorBlinking &&
         initialOwner.surface.fontFamily.isEmpty &&
         initialOwner.surface.fontMetrics.pointSize == 18 &&
+        initialOwner.surface.fontCatalogConfiguration.variationCount == 1 &&
+        initialOwner
+                .surface
+                .fontCatalogConfiguration
+                .codepointOverrides
+                .length ==
+            1 &&
         initialOwner.surface.horizontalPadding == configuredHorizontalPadding &&
         initialOwner.surface.verticalPadding == configuredVerticalPadding;
     final bool reloadedResourcesProjected = reloadedPaneIds.every((
@@ -10821,6 +10898,8 @@ keybind = control+k=pane.focus-next
           paneConfigurations[paneId]!;
       final TerminalLiveMetalSurfaceSnapshot snapshot = owner.surface
           .snapshot();
+      final TerminalFontCatalogDiagnostics fontDiagnostics = owner.surface
+          .fontDiagnostics();
       return launchWorkingDirectories[paneId] == reloadedWorkingDirectory &&
           configuration.workingDirectory == reloadedWorkingDirectory &&
           screens.palette.defaultForeground == reloadedForeground &&
@@ -10835,6 +10914,13 @@ keybind = control+k=pane.focus-next
           owner.surface.fontMetrics.pointSize == 20 &&
           owner.surface.syntheticStylePolicy ==
               TerminalSyntheticStylePolicy.reject &&
+          owner.surface.fontCatalogConfiguration.variationCount == 1 &&
+          owner.surface.fontCatalogConfiguration.codepointOverrides.length ==
+              1 &&
+          fontDiagnostics.configuredVariationCount == 1 &&
+          fontDiagnostics.unavailableVariationCount == 1 &&
+          fontDiagnostics.configuredOverrideCount == 1 &&
+          fontDiagnostics.availableOverrideCount == 1 &&
           owner.surface.horizontalPadding == reloadedHorizontalPadding &&
           owner.surface.verticalPadding == reloadedVerticalPadding &&
           snapshot.contentOffsetX > 0 &&

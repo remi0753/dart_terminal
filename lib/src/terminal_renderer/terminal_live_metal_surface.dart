@@ -271,6 +271,7 @@ final class TerminalLiveMetalSurface {
     double fontPointSize = defaultFontPointSize,
     TerminalSyntheticStylePolicy syntheticStylePolicy =
         TerminalSyntheticStylePolicy.allow,
+    TerminalFontCatalogConfiguration? fontCatalogConfiguration,
     double horizontalPadding = 0,
     double verticalPadding = 0,
     TerminalMetalRendererConfig rendererConfig =
@@ -294,6 +295,8 @@ final class TerminalLiveMetalSurface {
       family: fontFamily,
       pointSize: fontPointSize,
       syntheticStylePolicy: syntheticStylePolicy,
+      configuration:
+          fontCatalogConfiguration ?? TerminalFontCatalogConfiguration.empty,
     );
     final TerminalShapingCache shapingCache = TerminalShapingCache(catalog);
     final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
@@ -593,6 +596,8 @@ final class TerminalLiveMetalSurface {
   String get fontFamily => _catalog.family;
   TerminalSyntheticStylePolicy get syntheticStylePolicy =>
       _catalog.syntheticStylePolicy;
+  TerminalFontCatalogConfiguration get fontCatalogConfiguration =>
+      _catalog.configuration;
   TerminalPreeditState get preeditState => _preeditModel.state;
   TerminalAccessibilityPresentation get accessibilityPresentation =>
       _accessibilityPresentation;
@@ -1041,6 +1046,12 @@ final class TerminalLiveMetalSurface {
   TerminalMetalRendererState rendererState() {
     _requireLive();
     return _recovery.currentDomain.renderer.state();
+  }
+
+  /// Returns bounded font resolution counters and safe face identities.
+  TerminalFontCatalogDiagnostics fontDiagnostics() {
+    _requireLive();
+    return _catalog.diagnostics();
   }
 
   /// Runs the native content-free selector/range/geometry/focus acceptance.

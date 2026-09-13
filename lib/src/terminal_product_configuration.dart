@@ -161,6 +161,7 @@ final class TerminalProductConfiguration {
     required this.fontFamily,
     required this.fontSize,
     required this.fontSyntheticStyle,
+    required this.fontCatalogConfiguration,
     required this.windowWidth,
     required this.windowHeight,
     required this.windowPaddingHorizontal,
@@ -203,6 +204,7 @@ final class TerminalProductConfiguration {
     fontSyntheticStyle: snapshot.value(
       TerminalProductConfigSchema.fontSyntheticStyle,
     ),
+    fontCatalogConfiguration: _fontCatalogConfigurationFromSnapshot(snapshot),
     windowWidth: snapshot.value(TerminalProductConfigSchema.windowWidth),
     windowHeight: snapshot.value(TerminalProductConfigSchema.windowHeight),
     windowPaddingHorizontal: snapshot.value(
@@ -272,6 +274,7 @@ final class TerminalProductConfiguration {
   final String fontFamily;
   final double fontSize;
   final TerminalConfiguredSyntheticStyle fontSyntheticStyle;
+  final TerminalFontCatalogConfiguration fontCatalogConfiguration;
   final double windowWidth;
   final double windowHeight;
   final double windowPaddingHorizontal;
@@ -396,6 +399,57 @@ final class TerminalProductConfiguration {
         TerminalConfiguredOptionKey.escape => TerminalOptionKeyBehavior.escape,
         TerminalConfiguredOptionKey.text => TerminalOptionKeyBehavior.text,
       };
+}
+
+TerminalFontCatalogConfiguration _fontCatalogConfigurationFromSnapshot(
+  TerminalConfigSnapshot snapshot,
+) => TerminalFontCatalogConfiguration(
+  regularVariations: _fontVariationsFromSnapshot(
+    snapshot,
+    TerminalProductConfigSchema.fontVariationRegular,
+  ),
+  boldVariations: _fontVariationsFromSnapshot(
+    snapshot,
+    TerminalProductConfigSchema.fontVariationBold,
+  ),
+  italicVariations: _fontVariationsFromSnapshot(
+    snapshot,
+    TerminalProductConfigSchema.fontVariationItalic,
+  ),
+  boldItalicVariations: _fontVariationsFromSnapshot(
+    snapshot,
+    TerminalProductConfigSchema.fontVariationBoldItalic,
+  ),
+  codepointOverrides: snapshot
+      .occurrences(TerminalProductConfigSchema.fontCodepointOverride)
+      .map(
+        (
+          TerminalResolvedConfigValue<TerminalConfiguredFontCodepointOverride>
+          occurrence,
+        ) => TerminalFontCodepointOverride(
+          firstScalar: occurrence.value.firstScalar,
+          lastScalar: occurrence.value.lastScalar,
+          family: occurrence.value.family,
+        ),
+      ),
+);
+
+List<TerminalFontVariationAxis> _fontVariationsFromSnapshot(
+  TerminalConfigSnapshot snapshot,
+  TerminalConfigRepeatedOption<TerminalConfiguredFontVariation> option,
+) {
+  final List<TerminalResolvedConfigValue<TerminalConfiguredFontVariation>>
+  occurrences = snapshot.occurrences(option);
+  final Set<String> retainedTags = <String>{};
+  final List<TerminalFontVariationAxis> reversed =
+      <TerminalFontVariationAxis>[];
+  for (int index = occurrences.length - 1; index >= 0; index--) {
+    final TerminalConfiguredFontVariation variation = occurrences[index].value;
+    if (retainedTags.add(variation.tag)) {
+      reversed.add(TerminalFontVariationAxis(variation.tag, variation.value));
+    }
+  }
+  return reversed.reversed.toList(growable: false);
 }
 
 TerminalProductPaletteConfiguration _paletteConfigurationFromSnapshot(

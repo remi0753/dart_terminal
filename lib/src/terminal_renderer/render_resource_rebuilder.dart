@@ -13,7 +13,9 @@ final class TerminalRenderFontConfiguration {
     this.family = 'Menlo',
     this.pointSize = 14,
     this.syntheticStylePolicy = TerminalSyntheticStylePolicy.allow,
-  }) {
+    TerminalFontCatalogConfiguration? catalogConfiguration,
+  }) : catalogConfiguration =
+           catalogConfiguration ?? TerminalFontCatalogConfiguration.empty {
     if (generation <= 0 || generation > 0x7fffffffffffffff) {
       throw RangeError.range(generation, 1, 0x7fffffffffffffff, 'generation');
     }
@@ -36,18 +38,21 @@ final class TerminalRenderFontConfiguration {
   final String family;
   final double pointSize;
   final TerminalSyntheticStylePolicy syntheticStylePolicy;
+  final TerminalFontCatalogConfiguration catalogConfiguration;
 
   bool matchesCatalog(TerminalFontCatalog catalog) =>
       !catalog.isDisposed &&
       catalog.family == family &&
       catalog.metrics.pointSize == pointSize &&
-      catalog.syntheticStylePolicy == syntheticStylePolicy;
+      catalog.syntheticStylePolicy == syntheticStylePolicy &&
+      catalog.configuration == catalogConfiguration;
 
   bool _sameAs(TerminalRenderFontConfiguration other) =>
       generation == other.generation &&
       family == other.family &&
       pointSize == other.pointSize &&
-      syntheticStylePolicy == other.syntheticStylePolicy;
+      syntheticStylePolicy == other.syntheticStylePolicy &&
+      catalogConfiguration == other.catalogConfiguration;
 }
 
 typedef TerminalRenderAtlasWarmup = void Function(
@@ -385,4 +390,5 @@ TerminalFontCatalog _openFontCatalog(TerminalRenderFontConfiguration config) =>
       family: config.family,
       pointSize: config.pointSize,
       syntheticStylePolicy: config.syntheticStylePolicy,
+      configuration: config.catalogConfiguration,
     );

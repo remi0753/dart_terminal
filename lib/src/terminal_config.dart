@@ -30,6 +30,111 @@ enum TerminalConfiguredTheme {
 
 enum TerminalConfiguredSyntheticStyle { allow, deny }
 
+/// One product-owned OpenType coordinate before renderer projection.
+final class TerminalConfiguredFontVariation {
+  factory TerminalConfiguredFontVariation(String tag, double value) {
+    final List<int> units = tag.codeUnits;
+    if (units.length != tagByteLength ||
+        units.any((int unit) => unit < 0x20 || unit > 0x7e)) {
+      throw ArgumentError.value(
+        tag,
+        'tag',
+        'must contain exactly four printable ASCII bytes',
+      );
+    }
+    if (!value.isFinite || value < minimumValue || value > maximumValue) {
+      throw RangeError.value(
+        value,
+        'value',
+        'must be finite and within $minimumValue...$maximumValue',
+      );
+    }
+    return TerminalConfiguredFontVariation._(tag, value);
+  }
+
+  const TerminalConfiguredFontVariation._(this.tag, this.value);
+
+  static const int tagByteLength = 4;
+  static const double minimumValue = -65536;
+  static const double maximumValue = 65536;
+
+  final String tag;
+  final double value;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalConfiguredFontVariation &&
+      tag == other.tag &&
+      value == other.value;
+
+  @override
+  int get hashCode => Object.hash(tag, value);
+}
+
+/// One product-owned inclusive Unicode scalar range and explicit font family.
+final class TerminalConfiguredFontCodepointOverride {
+  factory TerminalConfiguredFontCodepointOverride({
+    required int firstScalar,
+    required int lastScalar,
+    required String family,
+  }) {
+    if (!_isUnicodeScalar(firstScalar) ||
+        !_isUnicodeScalar(lastScalar) ||
+        firstScalar > lastScalar ||
+        firstScalar <= 0xdfff && lastScalar >= 0xd800) {
+      throw ArgumentError.value(
+        '$firstScalar..$lastScalar',
+        'range',
+        'must be one ordered inclusive Unicode scalar range',
+      );
+    }
+    final List<int> familyBytes = utf8.encode(family);
+    if (familyBytes.isEmpty ||
+        familyBytes.length > maximumFamilyBytes ||
+        familyBytes.contains(0) ||
+        _containsControl(family)) {
+      throw ArgumentError.value(
+        family,
+        'family',
+        'must be control-free UTF-8 within $maximumFamilyBytes bytes',
+      );
+    }
+    return TerminalConfiguredFontCodepointOverride._(
+      firstScalar,
+      lastScalar,
+      family,
+    );
+  }
+
+  const TerminalConfiguredFontCodepointOverride._(
+    this.firstScalar,
+    this.lastScalar,
+    this.family,
+  );
+
+  static const int maximumScalar = 0x10ffff;
+  static const int maximumFamilyBytes = 256;
+
+  final int firstScalar;
+  final int lastScalar;
+  final String family;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalConfiguredFontCodepointOverride &&
+      firstScalar == other.firstScalar &&
+      lastScalar == other.lastScalar &&
+      family == other.family;
+
+  @override
+  int get hashCode => Object.hash(firstScalar, lastScalar, family);
+
+  static bool _isUnicodeScalar(int value) =>
+      value >= 0 &&
+      value <= maximumScalar &&
+      (value < 0xd800 || value > 0xdfff);
+}
+
 enum TerminalConfiguredOptionKey { escape, text }
 
 enum TerminalConfiguredCursorShape { block, underline, bar }
@@ -760,6 +865,45 @@ abstract final class TerminalProductConfigSchema {
     formatter: _formatSyntheticStyle,
   );
 
+  static final TerminalConfigRepeatedOption<TerminalConfiguredFontVariation>
+  fontVariationRegular = _fontVariationOption(
+    name: 'font-variation-regular',
+    description: 'OpenType variation coordinate for the regular font face.',
+  );
+
+  static final TerminalConfigRepeatedOption<TerminalConfiguredFontVariation>
+  fontVariationBold = _fontVariationOption(
+    name: 'font-variation-bold',
+    description: 'OpenType variation coordinate for the bold font face.',
+  );
+
+  static final TerminalConfigRepeatedOption<TerminalConfiguredFontVariation>
+  fontVariationItalic = _fontVariationOption(
+    name: 'font-variation-italic',
+    description: 'OpenType variation coordinate for the italic font face.',
+  );
+
+  static final TerminalConfigRepeatedOption<TerminalConfiguredFontVariation>
+  fontVariationBoldItalic = _fontVariationOption(
+    name: 'font-variation-bold-italic',
+    description: 'OpenType variation coordinate for the bold italic font face.',
+  );
+
+  static final TerminalConfigRepeatedOption<
+    TerminalConfiguredFontCodepointOverride
+  >
+  fontCodepointOverride =
+      TerminalConfigRepeatedOption<TerminalConfiguredFontCodepointOverride>(
+        name: 'font-codepoint-override',
+        description:
+            'Explicit font family for one inclusive Unicode scalar range.',
+        valueSyntax: 'U+<hex>[..U+<hex>]=<family>',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
+        maximumOccurrences: 256,
+        parser: _parseFontCodepointOverride,
+        formatter: _formatFontCodepointOverride,
+      );
+
   static final TerminalConfigOption<double> windowWidth =
       TerminalConfigOption<double>(
         name: 'window-width',
@@ -1013,6 +1157,11 @@ abstract final class TerminalProductConfigSchema {
       fontFamily,
       fontSize,
       fontSyntheticStyle,
+      fontVariationRegular,
+      fontVariationBold,
+      fontVariationItalic,
+      fontVariationBoldItalic,
+      fontCodepointOverride,
       windowWidth,
       windowHeight,
       windowPaddingHorizontal,
@@ -2035,6 +2184,136 @@ _parseSyntheticStyle(String value) => switch (value) {
       hint: 'use `font-synthetic-style = allow` for the default behavior',
     ),
 };
+
+TerminalConfigRepeatedOption<TerminalConfiguredFontVariation>
+_fontVariationOption({required String name, required String description}) =>
+    TerminalConfigRepeatedOption<TerminalConfiguredFontVariation>(
+      name: name,
+      description: description,
+      valueSyntax: '<four-byte-tag>=<-65536..65536>',
+      applicationPolicy: TerminalConfigApplicationPolicy.newSession,
+      maximumOccurrences: 16,
+      parser: _parseFontVariation,
+      formatter: _formatFontVariation,
+    );
+
+TerminalConfigDecodeResult<TerminalConfiguredFontVariation> _parseFontVariation(
+  String value,
+) {
+  if (value.length < TerminalConfiguredFontVariation.tagByteLength + 2 ||
+      value.substring(TerminalConfiguredFontVariation.tagByteLength, 5) !=
+          '=') {
+    return const TerminalConfigDecodeResult<
+      TerminalConfiguredFontVariation
+    >.failure(
+      'font variation must be a four-byte tag followed by `=` and a coordinate',
+      hint: 'for example, use `wght=700`',
+    );
+  }
+  final String tag = value.substring(
+    0,
+    TerminalConfiguredFontVariation.tagByteLength,
+  );
+  final String coordinate = value.substring(
+    TerminalConfiguredFontVariation.tagByteLength + 1,
+  );
+  final double? parsed = double.tryParse(coordinate);
+  if (tag.codeUnits.length != TerminalConfiguredFontVariation.tagByteLength ||
+      tag.codeUnits.any((int unit) => unit < 0x20 || unit > 0x7e) ||
+      parsed == null ||
+      !parsed.isFinite ||
+      parsed < TerminalConfiguredFontVariation.minimumValue ||
+      parsed > TerminalConfiguredFontVariation.maximumValue) {
+    return const TerminalConfigDecodeResult<
+      TerminalConfiguredFontVariation
+    >.failure(
+      'font variation requires four printable ASCII bytes and a finite '
+      'coordinate in -65536..65536',
+      hint: 'for example, use `wght=700`',
+    );
+  }
+  return TerminalConfigDecodeResult<TerminalConfiguredFontVariation>.success(
+    TerminalConfiguredFontVariation(tag, parsed),
+  );
+}
+
+String _formatFontVariation(TerminalConfiguredFontVariation variation) =>
+    '${variation.tag}=${_formatDouble(variation.value)}';
+
+TerminalConfigDecodeResult<TerminalConfiguredFontCodepointOverride>
+_parseFontCodepointOverride(String value) {
+  final int separator = value.indexOf('=');
+  if (separator <= 0 || separator == value.length - 1) {
+    return const TerminalConfigDecodeResult<
+      TerminalConfiguredFontCodepointOverride
+    >.failure(
+      'font codepoint override requires a scalar range and font family',
+      hint: 'for example, use `U+2500..U+257F=Menlo`',
+    );
+  }
+  final RegExpMatch? range = RegExp(
+    r'^U\+([0-9A-Fa-f]{1,6})(?:\.\.U\+([0-9A-Fa-f]{1,6}))?$',
+  ).firstMatch(value.substring(0, separator));
+  if (range == null) {
+    return const TerminalConfigDecodeResult<
+      TerminalConfiguredFontCodepointOverride
+    >.failure(
+      'font codepoint override range must use `U+<hex>` or '
+      '`U+<hex>..U+<hex>`',
+      hint: 'for example, use `U+2500..U+257F=Menlo`',
+    );
+  }
+  final int first = int.parse(range.group(1)!, radix: 16);
+  final int last = int.parse(range.group(2) ?? range.group(1)!, radix: 16);
+  final String family = value.substring(separator + 1);
+  if (!TerminalConfiguredFontCodepointOverride._isUnicodeScalar(first) ||
+      !TerminalConfiguredFontCodepointOverride._isUnicodeScalar(last) ||
+      first > last ||
+      first <= 0xdfff && last >= 0xd800) {
+    return const TerminalConfigDecodeResult<
+      TerminalConfiguredFontCodepointOverride
+    >.failure(
+      'font codepoint override must be one ordered Unicode scalar range',
+      hint: 'exclude surrogate values U+D800..U+DFFF',
+    );
+  }
+  final List<int> familyBytes = utf8.encode(family);
+  if (familyBytes.isEmpty ||
+      familyBytes.length >
+          TerminalConfiguredFontCodepointOverride.maximumFamilyBytes ||
+      familyBytes.contains(0) ||
+      _containsControl(family)) {
+    return const TerminalConfigDecodeResult<
+      TerminalConfiguredFontCodepointOverride
+    >.failure(
+      'font codepoint override family must be control-free UTF-8 within '
+      '256 bytes',
+      hint: 'choose an explicit installed font family',
+    );
+  }
+  return TerminalConfigDecodeResult<
+    TerminalConfiguredFontCodepointOverride
+  >.success(
+    TerminalConfiguredFontCodepointOverride(
+      firstScalar: first,
+      lastScalar: last,
+      family: family,
+    ),
+  );
+}
+
+String _formatFontCodepointOverride(
+  TerminalConfiguredFontCodepointOverride override,
+) {
+  final String first = _formatUnicodeScalar(override.firstScalar);
+  final String range = override.firstScalar == override.lastScalar
+      ? first
+      : '$first..${_formatUnicodeScalar(override.lastScalar)}';
+  return '$range=${override.family}';
+}
+
+String _formatUnicodeScalar(int scalar) =>
+    'U+${scalar.toRadixString(16).toUpperCase().padLeft(4, '0')}';
 
 TerminalConfigDecodeResult<double> _parseWindowWidth(String value) =>
     _parseFiniteDouble(

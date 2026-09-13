@@ -158,7 +158,23 @@ void _testSettingsCatalogAndResourceDeclarations() {
             '‹\n\nD\nE\nT\nA\nI\nL' &&
         japanese
             .settingsInspectorDiagnostics(latestAttempt: true, count: 2)
-            .contains('最新の再読み込み試行'),
+            .contains('最新の再読み込み試行') &&
+        japanese
+            .settingsFontResolutionStatus(
+              appliedVariations: 1,
+              configuredVariations: 2,
+              unavailableVariations: 1,
+              availableOverrides: 1,
+              configuredOverrides: 2,
+              unavailableOverrides: 1,
+              overrideMatches: 3,
+              overrideFallbacks: 1,
+              coreTextFallbacks: 4,
+              missingGlyphs: 1,
+              faceSummary: 'Menlo-Regular',
+            )
+            .contains('フェイス Menlo-Regular') &&
+        japanese.settingsFontResolutionUnavailable.contains('利用不可'),
     'Settings shell and directional markers use the selected catalog',
   );
   for (final TerminalConfigOptionBase option

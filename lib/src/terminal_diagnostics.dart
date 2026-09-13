@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
+
 import 'terminal_core/terminal_mouse_modes.dart';
 import 'terminal_core/terminal_screen_parser_sink.dart';
 import 'terminal_core/terminal_screen_set.dart';
@@ -479,46 +481,77 @@ final class TerminalDiagnosticsRendererSnapshot {
       });
 
   factory TerminalDiagnosticsRendererSnapshot.fromLiveSurface(
-    TerminalLiveMetalSurfaceSnapshot snapshot,
-  ) => TerminalDiagnosticsRendererSnapshot._(<String, Object?>{
-    'available': true,
-    'disposed': snapshot.isDisposed,
-    'rows': snapshot.rows,
-    'columns': snapshot.columns,
-    'viewport_width': snapshot.viewportWidth,
-    'viewport_height': snapshot.viewportHeight,
-    'content_offset_x': snapshot.contentOffsetX,
-    'content_offset_y': snapshot.contentOffsetY,
-    'content_viewport_width': snapshot.contentViewportWidth,
-    'content_viewport_height': snapshot.contentViewportHeight,
-    'scale_16_16': snapshot.scale16_16,
-    'last_damage_generation': snapshot.lastAppliedDamageGeneration,
-    'last_model_revision': snapshot.lastAcceptedModelRevision,
-    'last_frame_generation': snapshot.lastAcceptedFrameGeneration,
-    'renderer_generation': snapshot.rendererGeneration,
-    'atlas_generation': snapshot.atlasResourceGeneration,
-    'frame_builds': snapshot.frameBuildCount,
-    'accepted_frames': snapshot.acceptedFrameCount,
-    'pending_frames': snapshot.pendingFrameCount,
-    'live_atlas_pins': snapshot.liveAtlasPinCount,
-    'kitty_atlas_entries': snapshot.kittyAtlasEntryCount,
-    'kitty_images': snapshot.kittyImageCount,
-    'kitty_placements': snapshot.kittyPlacementCount,
-    'kitty_tiles': snapshot.kittyTileCount,
-    'kitty_resource_evictions': snapshot.kittyResourceEvictionCount,
-    'kitty_evicted_bytes': snapshot.kittyEvictedBytes,
-    'kitty_evicted_placements': snapshot.kittyEvictedPlacementCount,
-    'kitty_atlas_evictions': snapshot.kittyAtlasEvictionCount,
-    'scheduled_work': snapshot.hasScheduledWork,
-    'synchronized_output_mode': snapshot.synchronizedOutputMode,
-    'synchronized_output_held': snapshot.synchronizedOutputHeld,
-    'synchronized_output_releases': snapshot.synchronizedOutputReleaseCount,
-    'synchronized_output_timeouts': snapshot.synchronizedOutputTimeoutCount,
-    'accessibility_generation': snapshot.accessibilityGeneration,
-    'reduce_motion': snapshot.reduceMotion,
-    'increase_contrast': snapshot.increaseContrast,
-    'differentiate_without_color': snapshot.differentiateWithoutColor,
-  });
+    TerminalLiveMetalSurfaceSnapshot snapshot, {
+    TerminalFontCatalogDiagnostics? fontDiagnostics,
+  }) {
+    final TerminalFontCatalogDiagnostics? font = fontDiagnostics;
+    return TerminalDiagnosticsRendererSnapshot._(<String, Object?>{
+      'available': true,
+      'disposed': snapshot.isDisposed,
+      'rows': snapshot.rows,
+      'columns': snapshot.columns,
+      'viewport_width': snapshot.viewportWidth,
+      'viewport_height': snapshot.viewportHeight,
+      'content_offset_x': snapshot.contentOffsetX,
+      'content_offset_y': snapshot.contentOffsetY,
+      'content_viewport_width': snapshot.contentViewportWidth,
+      'content_viewport_height': snapshot.contentViewportHeight,
+      'scale_16_16': snapshot.scale16_16,
+      'last_damage_generation': snapshot.lastAppliedDamageGeneration,
+      'last_model_revision': snapshot.lastAcceptedModelRevision,
+      'last_frame_generation': snapshot.lastAcceptedFrameGeneration,
+      'renderer_generation': snapshot.rendererGeneration,
+      'atlas_generation': snapshot.atlasResourceGeneration,
+      'frame_builds': snapshot.frameBuildCount,
+      'accepted_frames': snapshot.acceptedFrameCount,
+      'pending_frames': snapshot.pendingFrameCount,
+      'live_atlas_pins': snapshot.liveAtlasPinCount,
+      'kitty_atlas_entries': snapshot.kittyAtlasEntryCount,
+      'kitty_images': snapshot.kittyImageCount,
+      'kitty_placements': snapshot.kittyPlacementCount,
+      'kitty_tiles': snapshot.kittyTileCount,
+      'kitty_resource_evictions': snapshot.kittyResourceEvictionCount,
+      'kitty_evicted_bytes': snapshot.kittyEvictedBytes,
+      'kitty_evicted_placements': snapshot.kittyEvictedPlacementCount,
+      'kitty_atlas_evictions': snapshot.kittyAtlasEvictionCount,
+      'scheduled_work': snapshot.hasScheduledWork,
+      'synchronized_output_mode': snapshot.synchronizedOutputMode,
+      'synchronized_output_held': snapshot.synchronizedOutputHeld,
+      'synchronized_output_releases': snapshot.synchronizedOutputReleaseCount,
+      'synchronized_output_timeouts': snapshot.synchronizedOutputTimeoutCount,
+      'accessibility_generation': snapshot.accessibilityGeneration,
+      'reduce_motion': snapshot.reduceMotion,
+      'increase_contrast': snapshot.increaseContrast,
+      'differentiate_without_color': snapshot.differentiateWithoutColor,
+      'font_diagnostics': font == null
+          ? <String, Object?>{'available': false}
+          : <String, Object?>{
+              'available': true,
+              'catalog_generation': font.catalogGeneration,
+              'configured_variations': font.configuredVariationCount,
+              'applied_variations': font.appliedVariationCount,
+              'unavailable_variations': font.unavailableVariationCount,
+              'configured_overrides': font.configuredOverrideCount,
+              'available_overrides': font.availableOverrideCount,
+              'unavailable_overrides': font.unavailableOverrideCount,
+              'override_matches': font.overrideMatchCount,
+              'override_applied': font.overrideAppliedCount,
+              'override_fallbacks': font.overrideFallbackCount,
+              'coretext_fallbacks': font.coreTextFallbackCount,
+              'missing_glyphs': font.missingGlyphCount,
+              'resolution_records': <Map<String, Object?>>[
+                for (final TerminalFontResolutionDiagnostic resolution
+                    in font.resolutions)
+                  <String, Object?>{
+                    'source': resolution.source.name,
+                    'flags': resolution.flags,
+                    'postscript_name': resolution.postscriptName,
+                    'occurrences': resolution.occurrenceCount,
+                  },
+              ],
+            },
+    });
+  }
 
   final Map<String, Object?> _fields;
 

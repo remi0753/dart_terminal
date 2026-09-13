@@ -12,6 +12,7 @@ Future<void> runTerminalProductConfigurationTests() async {
   _testCompleteFileProfile();
   _testInvalidValuesRecoverIndependently();
   _testMacosFontAvailabilityFallback();
+  _testFontConfigurationGrammarAndProjection();
   _testCliPrecedenceAndCapacitySyntax();
   _testConsumerResourceFactoriesAndMappings();
   _testApplicationPoliciesAndSemanticChangePlan();
@@ -74,11 +75,158 @@ void _testMacosFontAvailabilityFallback() {
   );
 }
 
+void _testFontConfigurationGrammarAndProjection() {
+  final _ProfileMemoryFileSystem files = _ProfileMemoryFileSystem(
+    const <String, String>{
+      '/root': '''
+include = child
+font-variation-regular = wdth=90
+font-variation-regular = wght=500
+font-variation-bold = wght=650
+font-codepoint-override = U+2500..U+257F=Times
+''',
+      '/child': '''
+font-variation-regular = wght=300
+font-codepoint-override = U+2500..U+25FF=Menlo
+''',
+      '/invalid': '''
+font-variation-regular = wgt=2
+font-variation-bold = wght=nan
+font-variation-italic = wght=65537
+font-codepoint-override = U+D800=Menlo
+font-codepoint-override = U+110000=Menlo
+font-codepoint-override = U+2600..U+2500=Menlo
+font-codepoint-override = U+2500=
+''',
+    },
+  );
+  final TerminalConfigSnapshot snapshot =
+      TerminalConfigLoader(fileSystem: files).resolve(const <String>[
+        '--config=/root',
+        '--font-variation-regular=wght=800',
+        '--font-codepoint-override=U+2580..U+259F=Apple Symbols',
+      ], environment: const <String, String>{}).snapshot;
+  final List<TerminalResolvedConfigValue<TerminalConfiguredFontVariation>>
+  regular = snapshot.occurrences(
+    TerminalProductConfigSchema.fontVariationRegular,
+  );
+  final List<
+    TerminalResolvedConfigValue<TerminalConfiguredFontCodepointOverride>
+  >
+  overrides = snapshot.occurrences(
+    TerminalProductConfigSchema.fontCodepointOverride,
+  );
+  final TerminalProductConfiguration profile =
+      TerminalProductConfiguration.fromSnapshot(snapshot);
+  final TerminalFontCatalogConfiguration request =
+      profile.fontCatalogConfiguration;
+  _expect(
+    snapshot.diagnostics.isEmpty &&
+        regular.length == 4 &&
+        regular[0].value == TerminalConfiguredFontVariation('wght', 300) &&
+        regular[0].source.path == '/child' &&
+        regular[1].value == TerminalConfiguredFontVariation('wdth', 90) &&
+        regular[1].source.path == '/root' &&
+        regular[3].value == TerminalConfiguredFontVariation('wght', 800) &&
+        regular[3].source.kind == TerminalConfigSourceKind.commandLine &&
+        regular[3].source.line == 2 &&
+        overrides.length == 3 &&
+        overrides.last.source.kind == TerminalConfigSourceKind.commandLine &&
+        overrides.last.source.line == 3,
+    'font options preserve include/root/CLI order and occurrence provenance',
+  );
+  _expect(
+    request.variationCount == 3 &&
+        request
+                .variationsFor(TerminalFontStyle.regular)
+                .map(
+                  (TerminalFontVariationAxis axis) =>
+                      '${axis.tag}:${axis.value}',
+                )
+                .join(',') ==
+            'wdth:90.0,wght:800.0' &&
+        request.variationsFor(TerminalFontStyle.bold).single ==
+            TerminalFontVariationAxis('wght', 650) &&
+        request.codepointOverrides.length == 3 &&
+        request.overrideForScalar(0x2550)?.family == 'Times' &&
+        request.overrideForScalar(0x2588)?.family == 'Apple Symbols',
+    'product projection deduplicates axes by final occurrence and preserves override precedence',
+  );
+  _expectThrows(
+    () => regular.add(regular.first),
+    'font variation provenance is immutable',
+  );
+  _expectThrows(
+    () => request.codepointOverrides.add(request.codepointOverrides.first),
+    'projected font override request is immutable',
+  );
+
+  final TerminalConfigSnapshot invalid = TerminalConfigLoader(fileSystem: files)
+      .resolve(const <String>[
+        '--config=/invalid',
+      ], environment: const <String, String>{})
+      .snapshot;
+  _expect(
+    invalid.diagnostics.length == 7 &&
+        invalid.diagnostics.every(
+          (TerminalConfigDiagnostic diagnostic) =>
+              diagnostic.code == 'CFG_INVALID_VALUE' && diagnostic.hint != null,
+        ) &&
+        invalid
+            .occurrences(TerminalProductConfigSchema.fontVariationRegular)
+            .isEmpty &&
+        invalid
+            .occurrences(TerminalProductConfigSchema.fontCodepointOverride)
+            .isEmpty,
+    'malformed axes and scalar ranges fail independently before projection',
+  );
+  for (final String argument in const <String>[
+    '--font-variation-regular=wght=Infinity',
+    '--font-codepoint-override=U+DFFF=Menlo',
+  ]) {
+    _expectThrows(
+      () => TerminalConfigLoader().resolve(<String>[
+        '--no-config',
+        argument,
+      ], environment: const <String, String>{}),
+      'malformed CLI font configuration is a usage failure',
+    );
+  }
+
+  final String boundedText = List<String>.generate(
+    17,
+    (int index) =>
+        'font-variation-regular = '
+        '${index.toRadixString(36).padLeft(4, 'a')}=$index',
+  ).join('\n');
+  final TerminalConfigSnapshot bounded =
+      TerminalConfigLoader(
+        fileSystem: _ProfileMemoryFileSystem(<String, String>{
+          '/bounded': boundedText,
+        }),
+      ).resolve(const <String>[
+        '--config=/bounded',
+      ], environment: const <String, String>{}).snapshot;
+  _expect(
+    bounded
+                .occurrences(TerminalProductConfigSchema.fontVariationRegular)
+                .length ==
+            16 &&
+        bounded.diagnostics.single.code == 'CFG_REPEAT_LIMIT' &&
+        TerminalProductConfiguration.fromSnapshot(bounded)
+                .fontCatalogConfiguration
+                .variationCount ==
+            16,
+    'font variation input is capped before renderer request construction',
+  );
+}
+
 Future<void> _testAcceptedConfigurationAuthority() async {
   TerminalConfigSnapshot candidate = TerminalConfigLoader().resolve(
     const <String>[
       '--no-config',
       '--font-size=18',
+      '--font-variation-regular=wght=800',
       '--quick-terminal-shortcut=command+grave',
       '--quick-terminal-screen=mouse',
       '--quick-terminal-animation-duration=0',
@@ -121,6 +269,10 @@ Future<void> _testAcceptedConfigurationAuthority() async {
     authority.acceptedGeneration == 1 &&
         authority.liveGeneration == 1 &&
         authority.newSessionConfiguration.fontSize == 18 &&
+        authority.newSessionConfiguration.fontCatalogConfiguration
+                .variationsFor(TerminalFontStyle.regular)
+                .single ==
+            TerminalFontVariationAxis('wght', 800) &&
         authority.newSessionConfiguration.quickTerminalShortcut ==
             const TerminalKeyBindingChord(
               physicalKey: TerminalPhysicalKey.grave,
@@ -216,7 +368,7 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
                 'macos-applescript,'
                 'macos-secure-input-auto,macos-secure-input-indication,'
                 'macos-option-key,keybind' &&
-        schema.options.length == 47 &&
+        schema.options.length == 52 &&
         schema.options.every(
           (TerminalConfigOptionBase option) =>
               option.applicationPolicy ==
@@ -240,6 +392,7 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
     const <String>[
       '--no-config',
       '--font-size=18',
+      '--font-variation-regular=wght=800',
       '--quick-terminal-shortcut=command+grave',
       '--quick-terminal-screen=mouse',
       '--quick-terminal-animation-duration=0',
@@ -262,7 +415,8 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
     plan.changes
             .map((TerminalConfigChange change) => change.option.name)
             .join(',') ==
-        'font-size,quick-terminal-shortcut,quick-terminal-screen,'
+        'font-size,font-variation-regular,quick-terminal-shortcut,'
+            'quick-terminal-screen,'
             'quick-terminal-animation-duration,quick-terminal-autohide,'
             'macos-app-intents,macos-notifications,'
             'macos-applescript,'
@@ -280,7 +434,10 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
                 'macos-applescript,'
                 'macos-secure-input-auto,macos-secure-input-indication,'
                 'macos-option-key,keybind' &&
-        plan.newSessionChanges.single.option.name == 'font-size',
+        plan.newSessionChanges
+                .map((TerminalConfigChange change) => change.option.name)
+                .join(',') ==
+            'font-size,font-variation-regular',
     'change plan partitions options by declared application policy',
   );
 
@@ -367,16 +524,16 @@ void _testDefaultsAndSchemaInventory() {
   final TerminalProductConfiguration defaults =
       TerminalProductConfiguration.defaults;
   _expect(
-    TerminalProductConfigSchema.instance.options.length == 47 &&
+    TerminalProductConfigSchema.instance.options.length == 52 &&
         TerminalProductConfigSchema.instance.options
                 .map((TerminalConfigOptionBase option) => option.name)
                 .toSet()
                 .length ==
-            47 &&
+            52 &&
         TerminalProductConfigSchema.instance.options.every(
           (TerminalConfigOptionBase option) => option.description.isNotEmpty,
         ),
-    'product schema has 47 unique documented options',
+    'product schema has 52 unique documented options',
   );
   _expect(
     defaults.workingDirectory == null &&
@@ -398,6 +555,7 @@ void _testDefaultsAndSchemaInventory() {
         defaults.fontFamily.isEmpty &&
         defaults.fontSize == 14 &&
         defaults.fontSyntheticStyle == TerminalConfiguredSyntheticStyle.allow &&
+        defaults.fontCatalogConfiguration.isEmpty &&
         defaults.windowWidth == 920 &&
         defaults.windowHeight == 580 &&
         defaults.windowPaddingHorizontal == 0 &&
@@ -625,6 +783,9 @@ void _testCompleteFileProfile() {
     ..writeln('font-family = "JetBrains Mono"')
     ..writeln('font-size = 17.5')
     ..writeln('font-synthetic-style = deny')
+    ..writeln('font-variation-regular = wght=525')
+    ..writeln('font-variation-bold = wght=725')
+    ..writeln('font-codepoint-override = U+2500..U+257F=Menlo')
     ..writeln('window-width = 1200')
     ..writeln('window-height = 760')
     ..writeln('window-padding-horizontal = 12')
@@ -673,6 +834,9 @@ void _testCompleteFileProfile() {
         profile.fontFamily == 'JetBrains Mono' &&
         profile.fontSize == 17.5 &&
         profile.fontSyntheticStyle == TerminalConfiguredSyntheticStyle.deny &&
+        profile.fontCatalogConfiguration.variationCount == 2 &&
+        profile.fontCatalogConfiguration.codepointOverrides.single.family ==
+            'Menlo' &&
         profile.windowWidth == 1200 &&
         profile.windowHeight == 760 &&
         profile.windowPaddingHorizontal == 12 &&

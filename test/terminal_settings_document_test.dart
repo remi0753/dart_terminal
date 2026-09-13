@@ -42,9 +42,15 @@ void _testCompleteMissingAndSparseDocuments() {
         missingDocument.text.startsWith(
           '${TerminalSettingsDocumentComposer.generatedHeader}\n',
         ) &&
-        _representedSchemaNames(missingDocument.text).length == 47 &&
+        _representedSchemaNames(missingDocument.text).length == 52 &&
         missingDocument.text.contains('shell = /bin/zsh\n') &&
         missingDocument.text.contains('# working-directory = <path>\n') &&
+        missingDocument.text.contains(
+          '# font-variation-regular = <four-byte-tag>=<-65536..65536>\n',
+        ) &&
+        missingDocument.text.contains(
+          '# font-codepoint-override = U+<hex>[..U+<hex>]=<family>\n',
+        ) &&
         missingDocument.text.contains('# keybind = <modifier+key=target>\n') &&
         !missing.files.containsKey(missingDocument.rootPath),
     'missing root is not a complete non-persisted canonical scaffold',
@@ -172,7 +178,7 @@ void _testUnavailableAndInvalidUtf8() {
   final TerminalSettingsDocument document = session.open(snapshot);
   _expect(
     !document.canPersist &&
-        _representedSchemaNames(document.text).length == 47 &&
+        _representedSchemaNames(document.text).length == 52 &&
         session.save(document.text).disposition ==
             TerminalSettingsDocumentSaveDisposition.unavailable &&
         files.atomicWriteCount == 0,

@@ -2662,6 +2662,8 @@ palette-2 = #12ab34
 font-family = SF Mono Terminal
 font-size = 18
 font-synthetic-style = deny
+font-variation-regular = wght=450
+font-codepoint-override = U+2500..U+257F=Menlo
 window-width = 1110
 window-height = 710
 window-padding-horizontal = 18
@@ -2713,8 +2715,8 @@ keybind = command+d=pane.focus-next
           effectiveObservation.stderrText.isEmpty &&
           effectiveObservation.workerProcesses.isEmpty &&
           effectiveLines.first ==
-              'dart-terminal-effective-config version=1 options=47 '
-                  'entries=50 diagnostics=3' &&
+              'dart-terminal-effective-config version=1 options=52 '
+                  'entries=55 diagnostics=3' &&
           effectiveLines[1] == 'root path=${jsonEncode(configurationPath)}' &&
           effectiveTheme.contains('value="system"') &&
           effectiveTheme.contains('policy=new-session') &&

@@ -47,10 +47,17 @@ window close cancels an active operation and restores terminal focus.
 
 The inspector and exported version-1 report contain only reviewed enums,
 booleans, bounded counters, generations, dimensions, scale, resource counts,
-and redacted parser metadata. Printable characters are counted but not copied.
+safe installed-font PostScript names, and redacted parser metadata. Printable characters are counted but not copied.
 OSC, DCS, APC, and related string payloads contribute only their byte length.
 Recognized CSI/DCS headers may contain canonical numeric parameters and control
 bytes needed to identify a protocol action.
+
+The renderer's `font_diagnostics` object reports configured/applied/unavailable
+variation and override counts, override matches/fallbacks, normal CoreText
+fallbacks, missing glyphs, and at most 256 aggregate resolution records. Each
+record contains only a resolution class, reviewed flags, an installed face's
+PostScript name, and a count. It never includes shaped terminal text or the
+configured Unicode scalar/range that selected a face.
 
 The report never contains:
 
@@ -105,7 +112,7 @@ and does not claim source-line coverage when only function symbols exist.
 
 ## Verification
 
-`make terminal-diagnostics-privacy-check` freezes all 172 reviewed schema keys,
+`make terminal-diagnostics-privacy-check` freezes all 190 reviewed schema keys,
 the 11 top-level entries, the fixed privacy declaration, and seven source-owner
 boundaries. `make RUNTIME_ARCH=arm64 runtime-diagnostics-integration` launches
 the ordinary Developer JIT and Release AOT applications and verifies live

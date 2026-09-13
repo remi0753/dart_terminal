@@ -418,6 +418,9 @@ shell-integration = detect
 theme = system
 font-family = "JetBrains Mono"
 font-size = 15
+font-variation-regular = wght=500
+font-variation-bold = wght=700
+font-codepoint-override = U+2500..U+257F=Menlo
 palette-background = #101418
 palette-foreground = #d8dee9
 window-width = 1000
@@ -441,13 +444,19 @@ keybind = shift+control+k=pane.focus-next
 現在のschemaは`working-directory`、新しいsession用の絶対`shell` executableと
 `shell-integration = detect | none | zsh | bash | fish | nushell`に加え、`theme`、
 default foreground/background/cursor、
-ANSI palette 0–15、font family/size/synthetic style、初期window sizeとpadding、macOS Option keyの
+ANSI palette 0–15、font family/size/synthetic style、style別のOpenType variation axis、
+Unicode scalar rangeごとの明示的なfont family、初期window sizeとpadding、macOS Option keyの
 `escape`/`text`動作、scrollback line/byte cap、初期cursor shape/blinkを公開します。同じ名前を
 `--font-size=15`のようにcommand lineでも指定できます。解決済み設定は新しいwindow/tab/splitの
 各paneへ適用され、既存paneのmutable resourceを共有しません。`keybind`は複数回指定でき、
 exact physical key chordをpane actionまたはapplication actionへ割り当てます。構文、全key名、
 action ID、`unbind`/`passthrough`、既定binding、予約済みnative shortcutは
 [Keybindings and actions](docs/reference/keybindings-and-actions.md)を参照してください。
+`font-variation-{regular,bold,italic,bold-italic}`は4-byte OpenType tagごとに最大16件、
+`font-codepoint-override`はinclusive Unicode scalar rangeと明示familyを最大256件受理します。
+同じstyle/tagは後の宣言が有効になり、重なるscalar rangeも後の宣言が優先されます。
+利用不能なaxis/family/glyphは通常のCoreText fallbackへ戻り、新しいpaneごとの不変font catalogに
+適用結果を記録します。
 `quick-terminal-shortcut`の既定値は`none`で、設定した場合だけsystem-wide shortcutを
 exclusiveに登録します。`quick-terminal-screen`は`main | mouse | macos-menu-bar`、animationは
 0から5秒で0なら即時表示、autohideは既定で有効です。shortcutをlive reloadした際に新しい
@@ -475,7 +484,7 @@ scrollback、font、padding、window frameは書き換えません。自動file 
 
 Applicationメニューの`Settings…`（Command-,）、command palette、または非予約chordへ設定した
 `application.open-settings` actionから、root設定ファイルを編集するnative modal editorを開けます。
-最初のkey入力を待たず、新規・空・疎なファイルでも全47 optionを同じdocument内へ補完して表示し、
+最初のkey入力を待たず、新規・空・疎なファイルでも全52 optionを同じdocument内へ補完して表示し、
 右のcontext panelはcaret位置の
 current/draft value、構文、説明と、保存後に既存terminalへ即時反映されるか新規terminalから使われるかを
 表示します。line/source行や別のvalue入力欄は持たず、panelを閉じても右端の細いrailが残ります。
@@ -492,8 +501,10 @@ atomic保存し、上記のshared reload actionを1回実行します。NORMAL�
 editor ownerを解放してterminalのfirst responderを復元します。canonical provenance、include/CLI priority、
 全diagnosticの機械可読表示には引き続き`--show-config`を使用できます。
 Settingsのruntime statusにはQuick Terminal shortcutに加え、Secure Keyboard Entryの
-automatic/manual/disabled/failed mode、owned/yielded/released、および自動取得・indicator設定も表示します。
-AppleScriptの現在値とlive policyは同じ45-option document/context detailに表示されます。
+automatic/manual/disabled/failed mode、owned/yielded/released、自動取得・indicator設定、
+font axis/overrideの適用・利用不能・fallback・missing件数、および最大4個の長さを制限した
+安全なPostScript face名を表示します。terminal本文や設定したcodepoint値は診断へ含めません。
+AppleScriptの現在値とlive policyは同じ52-option document/context detailに表示されます。
 無効化するとscriptable collectionを空にして新規commandを拒否し、再有効化すると生存中の
 standard hierarchyを同じIDで再公開します。設定変更はmacOS Automation/TCC権限を付与、取消、resetしません。
 

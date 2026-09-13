@@ -376,6 +376,33 @@ final class TerminalLocalization {
   String settingsSearchStatus(String query) => _ja
       ? '/$query    ↑↓ 一致項目  Return 選択  Esc NORMAL'
       : '/$query    ↑↓ Match  Enter Select  Esc Normal';
+  String get settingsFontResolutionUnavailable =>
+      _ja ? 'フォント診断: 利用不可' : 'Font diagnostics: unavailable';
+  String settingsFontResolutionStatus({
+    required int appliedVariations,
+    required int configuredVariations,
+    required int unavailableVariations,
+    required int availableOverrides,
+    required int configuredOverrides,
+    required int unavailableOverrides,
+    required int overrideMatches,
+    required int overrideFallbacks,
+    required int coreTextFallbacks,
+    required int missingGlyphs,
+    required String faceSummary,
+  }) => _ja
+      ? 'フォント: 軸 $appliedVariations/$configuredVariations '
+            '(利用不可 $unavailableVariations)、上書き '
+            '$availableOverrides/$configuredOverrides '
+            '(利用不可 $unavailableOverrides、一致 $overrideMatches、'
+            'フォールバック $overrideFallbacks)、CoreTextフォールバック '
+            '$coreTextFallbacks、欠落 $missingGlyphs、フェイス $faceSummary'
+      : 'Font: axes $appliedVariations/$configuredVariations '
+            '(unavailable $unavailableVariations), overrides '
+            '$availableOverrides/$configuredOverrides '
+            '(unavailable $unavailableOverrides, matches $overrideMatches, '
+            'fallback $overrideFallbacks), CoreText fallback '
+            '$coreTextFallbacks, missing $missingGlyphs, faces $faceSummary';
   String get settingsNoSettingAtCursor =>
       _ja ? 'カーソル位置に設定項目はありません' : 'No setting at the cursor';
   String get settingsEmptyValue => _ja ? '<空>' : '<empty>';
@@ -822,6 +849,11 @@ final Map<String, String> _japaneseSettingsOptionDescriptions =
       'font-family': 'ターミナルの等幅フォント、または `system`。',
       'font-size': 'ターミナルのフォントサイズ（ポイント）。',
       'font-synthetic-style': '不足している太字・斜体フェイスの合成を許可するか。',
+      'font-variation-regular': '通常フェイスに適用するOpenTypeバリエーション座標。',
+      'font-variation-bold': '太字フェイスに適用するOpenTypeバリエーション座標。',
+      'font-variation-italic': '斜体フェイスに適用するOpenTypeバリエーション座標。',
+      'font-variation-bold-italic': '太字斜体フェイスに適用するOpenTypeバリエーション座標。',
+      'font-codepoint-override': 'Unicodeスカラー範囲へ明示的に割り当てるフォントファミリー。',
       'window-width': 'ターミナルウインドウの初期幅（論理ポイント）。',
       'window-height': 'ターミナルウインドウの初期高さ（論理ポイント）。',
       'window-padding-horizontal': 'ターミナル内容の左右余白（論理ポイント）。',

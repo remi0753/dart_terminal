@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal/src/terminal_session.dart';
+import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 Future<void> main() => runTerminalDiagnosticsTests();
 
@@ -36,6 +37,10 @@ void _testDeterministicPrivacySafeModel() {
       inspector: inspector,
       sink: sink,
     ),
+    renderer: TerminalDiagnosticsRendererSnapshot.fromLiveSurface(
+      _fontDiagnosticSurfaceSnapshot(),
+      fontDiagnostics: _fontDiagnostics(),
+    ),
   );
   const TerminalDiagnosticsFormatter formatter = TerminalDiagnosticsFormatter();
   final Uint8List first = formatter.encode(snapshot);
@@ -64,12 +69,33 @@ void _testDeterministicPrivacySafeModel() {
       report['parser']! as Map<String, Object?>;
   final Map<String, Object?> inspection =
       parserReport['inspection']! as Map<String, Object?>;
+  final Map<String, Object?> font =
+      (report['renderer']! as Map<String, Object?>)['font_diagnostics']!
+          as Map<String, Object?>;
+  final Map<String, Object?> face =
+      (font['resolution_records']! as List<Object?>).single
+          as Map<String, Object?>;
   _expect(
     report['format'] == TerminalDiagnosticsFormatter.formatName &&
         report['version'] == TerminalDiagnosticsFormatter.formatVersion &&
         inspection['printable_scalars'] == 21 &&
-        inspection['events_total'] == 2,
-    'versioned report retains only bounded parser metadata',
+        inspection['events_total'] == 2 &&
+        font['configured_variations'] == 2 &&
+        font['applied_variations'] == 1 &&
+        font['unavailable_variations'] == 1 &&
+        font['configured_overrides'] == 2 &&
+        font['available_overrides'] == 1 &&
+        font['unavailable_overrides'] == 1 &&
+        font['override_matches'] == 3 &&
+        font['override_applied'] == 2 &&
+        font['override_fallbacks'] == 1 &&
+        font['coretext_fallbacks'] == 4 &&
+        font['missing_glyphs'] == 1 &&
+        face.keys.join(',') == 'source,flags,postscript_name,occurrences' &&
+        face['source'] == 'requested' &&
+        face['postscript_name'] == 'Menlo-Regular' &&
+        !text.contains('U+2500'),
+    'versioned report retains only bounded parser and content-free font metadata',
   );
 }
 
@@ -226,6 +252,7 @@ Future<void> _testAtomicWriter() async {
 
 TerminalDiagnosticsSnapshot _snapshot({
   required TerminalDiagnosticsParserSnapshot parser,
+  TerminalDiagnosticsRendererSnapshot? renderer,
 }) => TerminalDiagnosticsSnapshot(
   application: TerminalDiagnosticsApplicationSnapshot(
     runtimeKind: TerminalDiagnosticsRuntimeKind.developerJit,
@@ -245,7 +272,7 @@ TerminalDiagnosticsSnapshot _snapshot({
   ),
   focusedPane: TerminalDiagnosticsFocusedPaneSnapshot.unavailable(),
   parser: parser,
-  renderer: TerminalDiagnosticsRendererSnapshot.unavailable(),
+  renderer: renderer ?? TerminalDiagnosticsRendererSnapshot.unavailable(),
   configuration: TerminalDiagnosticsConfigurationSnapshot(
     schemaOptionCount: 32,
     effectiveGeneration: 1,
@@ -270,6 +297,93 @@ TerminalDiagnosticsSnapshot _snapshot({
     localIncidentFailures: 0,
   ),
 );
+
+TerminalLiveMetalSurfaceSnapshot _fontDiagnosticSurfaceSnapshot() =>
+    TerminalLiveMetalSurfaceSnapshot(
+      isDisposed: false,
+      usesMacosSystemMonospaceFont: true,
+      fontPointSize: 14,
+      rows: 2,
+      columns: 3,
+      viewportWidth: 20,
+      viewportHeight: 30,
+      contentOffsetX: 0,
+      contentOffsetY: 0,
+      contentViewportWidth: 20,
+      contentViewportHeight: 30,
+      scale16_16: 65536,
+      lastAppliedDamageGeneration: 1,
+      lastAcceptedModelRevision: 1,
+      lastAcceptedFrameGeneration: 1,
+      rendererGeneration: 1,
+      atlasResourceGeneration: 1,
+      frameBuildCount: 1,
+      acceptedFrameCount: 1,
+      pendingFrameCount: 0,
+      liveAtlasPinCount: 0,
+      shapingCacheEntryCount: 0,
+      shapingCacheRetainedBytes: 0,
+      atlasEntryCount: 0,
+      atlasRetainedBytes: 0,
+      kittyAtlasEntryCount: 0,
+      kittyImageCount: 0,
+      kittyPlacementCount: 0,
+      kittyTileCount: 0,
+      kittyResourceEvictionCount: 0,
+      kittyEvictedBytes: 0,
+      kittyEvictedPlacementCount: 0,
+      kittyAtlasEvictionCount: 0,
+      hasScheduledWork: false,
+      isSystemSuspended: false,
+      pendingMemoryPressureLevel: null,
+      memoryPressureWarningCount: 0,
+      memoryPressureCriticalCount: 0,
+      memoryPressureDeferredCount: 0,
+      memoryPressureShapingEntryCount: 0,
+      memoryPressureAtlasEntryCount: 0,
+      memoryPressureAtlasReleasedBytes: 0,
+      synchronizedOutputMode: false,
+      synchronizedOutputHeld: false,
+      synchronizedOutputReleaseCount: 0,
+      synchronizedOutputTimeoutCount: 0,
+      accessibilityGeneration: 0,
+      accessibilityUtf16Length: 0,
+      accessibilityHasVisibleSelection: false,
+      accessibilitySelectionLength: 0,
+      accessibilityHasCursor: false,
+      accessibilityCursorRow: -1,
+      accessibilityCursorColumn: -1,
+      accessibilityContentOriginX: 0,
+      accessibilityContentOriginY: 0,
+      reduceMotion: false,
+      increaseContrast: false,
+      differentiateWithoutColor: false,
+    );
+
+TerminalFontCatalogDiagnostics _fontDiagnostics() =>
+    TerminalFontCatalogDiagnostics(
+      catalogGeneration: 7,
+      configuredVariationCount: 2,
+      appliedVariationCount: 1,
+      unavailableVariationCount: 1,
+      configuredOverrideCount: 2,
+      availableOverrideCount: 1,
+      unavailableOverrideCount: 1,
+      overrideMatchCount: 3,
+      overrideAppliedCount: 2,
+      overrideFallbackCount: 1,
+      coreTextFallbackCount: 4,
+      missingGlyphCount: 1,
+      resolutions: <TerminalFontResolutionDiagnostic>[
+        TerminalFontResolutionDiagnostic(
+          source: TerminalFontResolutionSource.requested,
+          faceId: 9,
+          flags: 0,
+          postscriptName: 'Menlo-Regular',
+          occurrenceCount: 2,
+        ),
+      ],
+    );
 
 final class _FakeDiagnosticsFiles implements TerminalDiagnosticsFileOperations {
   final Map<String, Uint8List> destinations = <String, Uint8List>{};

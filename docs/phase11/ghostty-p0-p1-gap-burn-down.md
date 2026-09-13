@@ -7,8 +7,7 @@
 - Started: 2026-09-13
 - State: in progress
 - Current subtask: P1 gap burn-down — variable font axes/codepoint override/
-  fallback diagnostics, versioned native ABI and CoreText resolution
-  (completed)
+  fallback diagnostics, typed config/Settings/product projection (completed)
 
 ## Purpose
 
@@ -339,6 +338,47 @@ code/name containing `terminal` may be added to `dart_appkit`.
    move `TXT-08` from actionable to accepted, pass the exact repository gate,
    audit `dart_appkit`, and complete the parent child.
 
+#### Current implementation subtask — typed product projection
+
+- **Purpose:** Make the validated renderer font request reachable from typed
+  product configuration, immutable for each new session, visible in Settings,
+  and observable through bounded content-free product diagnostics.
+- **Background:** The completed contract and native/CoreText children accept
+  immutable variation and scalar-range override requests and copy bounded
+  resolution diagnostics. The product schema still exposes only family, size,
+  and synthetic-style policy, while application-created catalogs always use
+  the renderer's empty request.
+- **Scope:** Add bounded repeatable product-owned variation and override value
+  types with source provenance; resolve layered duplicate axes by the final
+  occurrence; project them into the renderer DTO; include the immutable request
+  in render resource identity and every production catalog creation path; show
+  syntax/current values and a bounded runtime resolution summary in Settings;
+  add content-free fields to the exported diagnostics snapshot; update generated
+  configuration references and focused regressions.
+- **Out of scope:** Changing native ABI/CoreText policy, accepting font file
+  paths, displaying terminal text or configured scalar values in diagnostics,
+  synthetic cell glyph drawing, marking `TXT-08` accepted, runtime JIT/AOT
+  evidence, matrix regeneration, and all `dart_appkit` changes or
+  `terminal`-named generic-library code.
+- **Dependencies:** `TerminalConfigRepeatedOption` precedence/provenance,
+  `TerminalProductConfiguration`, `TerminalRenderFontConfiguration`,
+  `TerminalLiveMetalSurface`, the Settings inspector runtime-status provider,
+  `TerminalDiagnosticsSnapshot`, and the completed renderer
+  `TerminalFontCatalogConfiguration`/diagnostic contract.
+- **Completion conditions:** File/include/CLI values parse under explicit
+  entry/byte/range bounds; later duplicate style/tag occurrences win before the
+  duplicate-free renderer request is constructed; reloads affect only newly
+  created sessions; resource matching rebuilds on any request change; Settings
+  and exported diagnostics expose bounded counts/safe face identities without
+  terminal text or scalar disclosure; focused and exact repository gates pass.
+- **Verification approach:** Add parser/precedence/provenance, change-plan,
+  Settings/reference, product projection, rebuild/catalog, runtime snapshot,
+  and privacy-schema tests; run formatting and analysis, focused suites,
+  generated reference freshness, native sanitizer where ownership is crossed,
+  then exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` and a clean
+  `dart_appkit` content/name audit. Apple notarization and duration-only
+  campaigns remain skipped as authorized.
+
 ## Inventory and decisions
 
 - 2026-09-13: The pinned Ghostty matrix revision
@@ -536,6 +576,93 @@ code/name containing `terminal` may be added to `dart_appkit`.
   and duration-only campaigns were skipped as authorized. The next ordered
   subtask is typed product configuration, Settings, and product diagnostic
   projection.
+- 2026-09-14: Product inspection found that the existing repeatable-option
+  collector already preserves include/root/CLI order, per-occurrence source,
+  a fixed cap, and one deterministic discard warning. The product schema uses
+  four separate 16-occurrence variation options (regular, bold, italic, and
+  bold italic) plus one 256-occurrence scalar-range override option. This makes
+  the renderer's per-style cap structural; repeated tags are normalized by
+  final occurrence before constructing the renderer's duplicate-free request,
+  while every raw accepted occurrence and its provenance remains visible to
+  Settings.
+- 2026-09-14: A first sandboxed `dart format` mechanically formatted the two
+  changed Dart files that needed it, then exited nonzero only while trying to
+  update the SDK's global telemetry-session timestamp outside the repository.
+  No validation result is claimed from that invocation; formatting and all
+  focused checks will be rerun in the normal macOS execution context.
+- 2026-09-14: The product schema now has 52 options: four repeatable style-
+  specific variation coordinates (16 occurrences each) and one repeatable
+  inclusive scalar-range family override (256 occurrences). Tags are exactly
+  four printable ASCII bytes, coordinates are finite in
+  `-65536...65536`, ranges exclude surrogates and values above `U+10FFFF`, and
+  configured families are control-free UTF-8 within 256 bytes. The existing
+  repeat collector bounds aggregate mapped-family input at exactly 64 KiB.
+  Product projection walks each style in reverse to retain only the final
+  occurrence of a tag, then restores precedence order before constructing the
+  renderer's immutable, duplicate-free catalog request. Overlapping scalar
+  mappings remain ordered and later-wins in the renderer.
+- 2026-09-14: Normal product pane creation now injects that immutable request;
+  the render-resource configuration includes it in both catalog matching and
+  same-generation comparison. A config-only generation change therefore opens
+  a new catalog/cache/atlas domain even when family and point size are
+  unchanged. Existing panes retain their captured request after reload, while
+  subsequent split/tab/window panes receive the accepted new-session request.
+- 2026-09-14: Settings receives the five options, syntax, occurrence values,
+  provenance, Japanese descriptions, and new-session policy from the shared
+  schema. Its bounded runtime line requests font diagnostics only while
+  Settings is rendered, shows applied/configured/unavailable axis and override
+  counts, match/fallback/missing counts, and at most four 32-scalar face-name
+  projections. Ordinary high-frequency surface snapshots do not call the
+  native diagnostic copier. The diagnostics export requests it explicitly and
+  adds a reviewed `font_diagnostics` object with 190-key privacy audit coverage;
+  exported resolution records contain only class, flags, PostScript identity,
+  and occurrence count—never face handles, terminal text, or configured scalar
+  values.
+- 2026-09-14: Normal-context formatting completed with zero residual changes
+  and full `dart analyze` reported `No issues found!`. Focused product config,
+  Settings document/inspector/editor, effective-config, generated-reference,
+  localization, renderer diagnostics/privacy, and config-only CoreText/Metal
+  rebuild tests all exited 0. The generated configuration/CLI reference now
+  lists all 52 options. `DART_SUPPRESS_ANALYTICS=true make
+  product-native-sanitizer` passed four suites and nine artifacts, including
+  ASan+UBSan coverage of the renderer library and harness. Runtime
+  Developer-JIT/Release-AOT evidence remains reserved for the next ordered
+  closure subtask.
+- 2026-09-14: The first exact repository gate reached all native/package,
+  configuration-reference, localization, and 190-key diagnostics privacy
+  checks successfully, then stopped because the checked-in Phase 7 AppKit
+  acceptance hashes were stale after the intentional application and native-
+  hierarchy test edits. Regeneration changed only the repeated reviewed hashes
+  for those two files. A direct next-owner freshness check then confirmed the
+  compatibility regression coverage report was also stale; its parser corpus
+  still passed 9 cases, 390 input bytes, and 417 split runs. These are expected
+  evidence dependencies, not product failures; both reports are regenerated
+  before rerunning the exact gate.
+- 2026-09-14: The second exact gate passed the refreshed Phase 7 and
+  compatibility coverage reports, all configuration/localization/privacy
+  checks, differential evidence, application matrix/evidence/acceptance,
+  terminfo, and shell integration. It then stopped at the Ghostty P0/P1 gap
+  inventory freshness check because this task's reviewed README and
+  implementation/test hashes changed. The `TXT-08` classification must remain
+  actionable until the next runtime-closure subtask; only deterministic source
+  identities are regenerated here before another exact rerun.
+- 2026-09-14: After regenerating the Ghostty inventory with the unchanged
+  actionable `TXT-08` classification, the final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed in the reviewed
+  source/evidence state. It covered all native capability packages,
+  configuration/reference/localization and 190-key diagnostics privacy
+  checks, Phase 7 and compatibility freshness, differential and real-
+  application evidence, terminfo and shell integration, the 102-row Ghostty
+  inventory with 93 accepted and four actionable P1 rows, distribution,
+  330-file zero-change formatting, clean analysis, security/update/symbol
+  suites, and the aggregate `dart_terminal tests passed` marker.
+  `git diff --check` passed. The adjacent `dart_appkit` worktree remains clean;
+  case-insensitive executable content and filename audits of its native,
+  packages, scripts, test, tool, examples, and Makefile surfaces found no
+  `terminal`, `dart_terminal`, or `dart-terminal` occurrence. Apple
+  notarization and duration-only campaigns remain skipped as authorized. The
+  next ordered subtask is bounded Developer-JIT/Release-AOT runtime evidence,
+  documentation/matrix closure, and the parent completion decision.
 
 - 2026-09-13: The first focused analyzer rerun passed with `No issues found!`,
   and `dart run test/terminal_semantic_prompt_test.dart` exited 0 after its
