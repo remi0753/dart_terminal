@@ -6,8 +6,8 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 gap burn-down — synthetic box/block/braille/Powerline
-  glyphs (investigation and ordered split in progress)
+- Current subtask: P1 synthetic cell glyphs — Box Drawing deterministic raster
+  geometry
 
 ## Purpose
 
@@ -572,6 +572,91 @@ preceding subtask is verified and committed.
   `.git/index.lock`; no index or worktree content was changed. Staging and the
   required task commit are retried with Git metadata write permission and the
   same explicit six-file scope.
+
+#### Current raster subtask — Box Drawing
+
+- **Purpose:** Produce deterministic alpha geometry for every U+2500..U+257F
+  scalar on the validated device-pixel cell so horizontally and vertically
+  joined glyphs reach their shared cell edge without a transparent seam.
+- **Background:** Commit `92b2632` established the exact scalar, dimension,
+  thickness, byte-ownership, and complementary-rounding contract. No geometry
+  exists yet, so every classified Box Drawing scalar still needs a bounded
+  raster implementation before atlas integration can begin.
+- **Scope:** Port the pinned light/heavy/double edge topology and dash fallback;
+  implement clipped rectangle, diagonal-stroke, and curved-corner primitives;
+  cover arcs, diagonals, and half-lines; exhaustively test all 128 scalars at
+  odd/even representative 1x/2x grids and assert encoded edge ownership.
+- **Out of scope:** Block, braille, Powerline, atlas/compositor diversion,
+  golden files, real Metal acceptance, font metrics/configuration changes, and
+  all `dart_appkit` changes.
+- **Dependencies:** The committed raster request/result contract, pinned
+  `draw/box.zig` and `draw/common.zig` identities recorded above, Ghostty's
+  center/thickness formulas, and the existing aggregate test runner.
+- **Completion conditions:** All 128 scalars return exact-size alpha rasters;
+  light/heavy/double/dashed/arc/diagonal/half-line classes are nonempty; each
+  declared line direction owns a nonzero pixel on the exact corresponding cell
+  edge; joining representatives agree at both sides of a shared boundary; odd
+  and even dimensions stay clipped and deterministic; focused and exact full
+  repository gates pass; no generic-library content changes.
+- **Verification approach:** Use the pinned topology as a compact reviewed
+  table, table-drive exhaustive per-scalar/dimension determinism and edge tests,
+  add targeted thickness/double/dash/arc/diagonal assertions, run focused
+  format/analyze/tests, run the exact repository gate, inspect the final diff,
+  and repeat the adjacent-library audit before marking only this subtask done.
+- 2026-09-14: The first Box Drawing format/analyze/test command mistakenly
+  included this Markdown memo in the `dart format` arguments. Both intended
+  Dart files were formatted, then the formatter correctly rejected Markdown
+  as non-Dart input; chained analysis and tests did not run. No documentation
+  content was modified by the formatter. Verification is rerun with only the
+  two Dart paths.
+- 2026-09-14: The first focused analysis then found four static type errors at
+  the diagonal primitive calls: the validated integer line thickness had not
+  been converted to the canvas method's `double` distance domain. All four
+  calls now convert explicitly; tests did not run in the failed command and no
+  type contract was weakened.
+- 2026-09-14: After clean analysis, the first focused raster run failed a newly
+  added curved-corner join assertion. Inspection showed that the curve and
+  straight glyph owned the same nontransparent boundary pixel, but the test
+  incorrectly required their alpha magnitudes to be identical: the clipped
+  anti-aliased curve endpoint is partial coverage while the rectangle is fully
+  opaque. The assertion now compares the boundary ink mask, which is the seam
+  prevention contract, while retaining separate deterministic byte checks.
+- 2026-09-14: That binary-mask equality was also stricter than the join
+  contract: a curved stroke can cover additional boundary pixels as it becomes
+  tangent to the edge. The test now requires the arc boundary to contain every
+  straight-line join pixel, permitting additional deterministic curve
+  coverage. The curve itself was aligned more closely with the pinned cubic
+  contract using its two center-biased quarter-curve control points and 0.25
+  radius fraction.
+- 2026-09-14: The completed Box Drawing raster owns all 128 scalars. A compact
+  two-bit up/right/down/left table drives the pinned 109 straight/intersection
+  topologies; dedicated bounded branches cover twelve dashed glyphs, four
+  center-biased cubic arcs, and three anti-aliased diagonals. Light/heavy/double
+  rectangles preserve pinned center and intersection joins, dash sizing falls
+  back to a solid light center line when a device cell cannot hold every dash
+  and gap, every primitive clips to the validated cell, and internal raster
+  construction transfers its sole alpha allocation without a second 16 MiB
+  worst-case copy. A read-only validator compared all 128 committed topology
+  entries to the pinned Zig switch and reported
+  `BOX_TOPOLOGY_PINNED_MATCH_PASS entries=128 line_entries=109`.
+- 2026-09-14: Final focused formatting changed zero files, focused analysis
+  reported `No issues found!`, and the raster suite passed. It exhaustively
+  renders each scalar twice at 7x15/1px and 14x30/2px; checks exact dimensions,
+  nonempty/deterministic bytes, all 109 exact direction-edge masks, shared
+  light/heavy/double joins, thickness and double gaps, dashed gaps, curved
+  corner shape and straight-edge containment, diagonal corners, family
+  rejection, and the preceding scalar/limit/ownership contract.
+- 2026-09-14: The exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` repository gate passed in
+  the reviewed Box Drawing state. It covered every native capability package,
+  generated/compatibility/distribution evidence, 332-file zero-change format,
+  clean whole-product analysis, security/update/recovery suites, the aggregate
+  raster invocation, and ended with `dart_terminal tests passed`.
+- 2026-09-14: Final diff review and `git diff --check` passed with only the Box
+  Drawing raster/test, this memo, and its roadmap state pending. The adjacent
+  `dart_appkit` worktree is clean; both the case-insensitive executable-source
+  content audit outside docs/build/cache/git and filename audit returned no
+  `terminal` matches. No generic-library file changed.
 
 ## Inventory and decisions
 

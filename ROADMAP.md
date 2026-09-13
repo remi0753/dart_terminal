@@ -1394,7 +1394,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
       [`docs/phase11/ghostty-p0-p1-gap-burn-down.md`](docs/phase11/ghostty-p0-p1-gap-burn-down.md)
       を参照して順に実施する）
       - [x] bounded scalar classification／device-pixel raster contract
-      - [ ] box-drawing deterministic raster geometry
+      - [x] box-drawing deterministic raster geometry
       - [ ] block-element／braille deterministic raster geometry
       - [ ] accepted geometric Powerline deterministic raster geometry
       - [ ] glyph atlas／screen compositor integration
