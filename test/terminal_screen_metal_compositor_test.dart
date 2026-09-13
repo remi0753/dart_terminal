@@ -31,12 +31,130 @@ void runTerminalScreenMetalCompositorTests() {
   _testCjkGlyphOriginsFollowCanonicalGrid();
   _testPreeditUsesTransientMetalLayers();
   _testSelectionProjectionUsesOverlayLayer();
+  _testSearchProjectionUsesOrderedMetalHighlights();
+  _testSearchProjectionRejectsInvalidKindsAndGeometry();
   _testHyperlinkHoverUsesDecorationLayer();
   _testAccessibleOverlaysUseContrastAndGeometry();
   _testPreeditRespectsRendererInstanceLimit();
   _testContentRectangleOffsetsEveryLayer();
   _testKittyImagesUseThreeOrderedMetalBands();
   _testKittyAnimationFrameUsesContentGenerationAndNativePixels();
+}
+
+void _testSearchProjectionUsesOrderedMetalHighlights() {
+  for (final double scale in <double>[1, 2]) {
+    final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 3);
+    final TerminalGridOverlayProjection projection =
+        TerminalGridOverlayProjection(
+          sourceGeneration: 4,
+          spans: <TerminalGridOverlaySpan>[
+            TerminalGridOverlaySpan(
+              kind: TerminalGridOverlayKind.searchSelectedMatch,
+              row: 0,
+              startColumn: 1,
+              endColumn: 2,
+            ),
+            TerminalGridOverlaySpan(
+              kind: TerminalGridOverlayKind.searchMatch,
+              row: 0,
+              startColumn: 0,
+              endColumn: 2,
+            ),
+          ],
+        );
+    final _CompositionFixture fixture = _compose(
+      screens,
+      scale: scale,
+      gridOverlay: projection,
+      cursorDrawn: false,
+    );
+    try {
+      final List<TerminalMetalInstance> fills = fixture.composition.instances
+          .where(
+            (TerminalMetalInstance instance) =>
+                instance.kind == TerminalMetalInstanceKind.selection,
+          )
+          .toList(growable: false);
+      final List<TerminalMetalInstance> outline = fixture.composition.instances
+          .where(
+            (TerminalMetalInstance instance) =>
+                instance.kind == TerminalMetalInstanceKind.decoration,
+          )
+          .toList(growable: false);
+      final int firstBoundary = (fixture.catalog.metrics.cellWidth * scale)
+          .round();
+      final int secondBoundary = (fixture.catalog.metrics.cellWidth * 2 * scale)
+          .round();
+      _expect(
+        fills.length == 2 &&
+            fills[0].x == 0 &&
+            fills[0].width == secondBoundary &&
+            fills[1].x == firstBoundary &&
+            fills[1].width == secondBoundary - firstBoundary &&
+            outline.length == 4,
+        'normal then selected search fills and selected outline use exact '
+        'device-cell geometry at ${scale}x',
+      );
+      final Uint8List rendered = fixture.renderer.renderRgba(
+        fixture.composition.scheduledFrame.frame,
+      );
+      final int sampleY = fixture.viewportHeight ~/ 2;
+      final int normalOffset =
+          (sampleY * fixture.viewportWidth + firstBoundary ~/ 2) * 4;
+      final int selectedOffset =
+          (sampleY * fixture.viewportWidth +
+              firstBoundary +
+              (secondBoundary - firstBoundary) ~/ 2) *
+          4;
+      _expect(
+        !_samePixel(rendered, normalOffset, selectedOffset) &&
+            rendered[normalOffset + 3] == 255 &&
+            rendered[selectedOffset + 3] == 255,
+        'real Metal readback distinguishes selected search from normal search '
+        'at ${scale}x',
+      );
+    } finally {
+      fixture.dispose();
+    }
+  }
+}
+
+void _testSearchProjectionRejectsInvalidKindsAndGeometry() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 2);
+  _expectThrows(
+    () => _compose(
+      screens,
+      gridOverlay: TerminalGridOverlayProjection(
+        sourceGeneration: 1,
+        spans: <TerminalGridOverlaySpan>[
+          TerminalGridOverlaySpan(
+            kind: TerminalGridOverlayKind.inspectorHyperlink,
+            row: 0,
+            startColumn: 0,
+            endColumn: 1,
+          ),
+        ],
+      ),
+    ),
+    'search compositor rejects an unsupported overlay kind',
+  );
+  _expectThrows(
+    () => _compose(
+      screens,
+      gridOverlay: TerminalGridOverlayProjection(
+        sourceGeneration: 1,
+        spans: <TerminalGridOverlaySpan>[
+          TerminalGridOverlaySpan(
+            kind: TerminalGridOverlayKind.searchMatch,
+            row: 1,
+            startColumn: 0,
+            endColumn: 1,
+          ),
+        ],
+      ),
+    ),
+    'search compositor rejects geometry outside its render model',
+  );
 }
 
 void _testSyntheticCellGlyphGoldens() {
@@ -1307,6 +1425,7 @@ _CompositionFixture _compose(
   TerminalScreenSet screens, {
   TerminalPreeditLayout? preedit,
   TerminalSelectionProjection? selection,
+  TerminalGridOverlayProjection? gridOverlay,
   int hoveredHyperlinkId = 0,
   double scale = 1,
   String fontFamily = 'Menlo',
@@ -1389,6 +1508,7 @@ _CompositionFixture _compose(
           ),
           preedit: preedit,
           selection: selection,
+          gridOverlay: gridOverlay,
           kittyImages: includeKittyImages
               ? screens.captureKittyImageViewport()
               : null,
@@ -1543,6 +1663,21 @@ bool _bytesEqual(List<int> left, List<int> right) {
     if (left[index] != right[index]) return false;
   }
   return true;
+}
+
+bool _samePixel(List<int> bytes, int left, int right) =>
+    bytes[left] == bytes[right] &&
+    bytes[left + 1] == bytes[right + 1] &&
+    bytes[left + 2] == bytes[right + 2] &&
+    bytes[left + 3] == bytes[right + 3];
+
+void _expectThrows(void Function() operation, String message) {
+  try {
+    operation();
+  } on Object {
+    return;
+  }
+  throw StateError('test failed: $message');
 }
 
 void _expect(bool condition, String message) {

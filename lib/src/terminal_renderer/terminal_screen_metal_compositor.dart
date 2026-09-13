@@ -14,6 +14,7 @@ import 'glyph_atlas.dart';
 import 'metal_atlas_bridge.dart';
 import 'reference_renderer.dart';
 import 'terminal_cell_glyph.dart';
+import 'terminal_overlay.dart';
 import 'terminal_render_model.dart';
 
 /// Signals that atlas uploads could not be published during this frame build.
@@ -96,6 +97,7 @@ final class TerminalScreenMetalCompositor {
     required TerminalFramePresentation presentation,
     TerminalPreeditLayout? preedit,
     TerminalSelectionProjection? selection,
+    TerminalGridOverlayProjection? gridOverlay,
     TerminalKittyViewportSnapshot? kittyImages,
     int hoveredHyperlinkId = 0,
     int contentOffsetX = 0,
@@ -271,6 +273,20 @@ final class TerminalScreenMetalCompositor {
           );
         }
       }
+    }
+
+    if (gridOverlay != null) {
+      _addGridOverlay(
+        gridOverlay,
+        model: model,
+        overlays: overlays,
+        decorations: decorations,
+        metrics: metrics,
+        scale: scale,
+        defaultBackground: defaultBackground,
+        viewportWidth: contentWidth,
+        viewportHeight: contentHeight,
+      );
     }
 
     for (int row = 0; row < model.rows; row++) {
@@ -1382,6 +1398,63 @@ final class TerminalScreenMetalCompositor {
       viewportWidth: viewportWidth,
       viewportHeight: viewportHeight,
     );
+  }
+
+  void _addGridOverlay(
+    TerminalGridOverlayProjection projection, {
+    required TerminalRenderModel model,
+    required List<TerminalMetalInstance> overlays,
+    required List<TerminalMetalInstance> decorations,
+    required TerminalFontCatalogMetrics metrics,
+    required double scale,
+    required int defaultBackground,
+    required int viewportWidth,
+    required int viewportHeight,
+  }) {
+    for (final TerminalGridOverlaySpan span in projection.spans) {
+      if (span.row >= model.rows || span.endColumn > model.columns) {
+        throw StateError('grid overlay projection exceeds the render grid');
+      }
+      final bool selected = switch (span.kind) {
+        TerminalGridOverlayKind.searchMatch => false,
+        TerminalGridOverlayKind.searchSelectedMatch => true,
+        _ => throw StateError('unsupported grid overlay kind for search'),
+      };
+      final int left = _columnPixel(span.startColumn, metrics, scale);
+      final int right = _columnPixel(span.endColumn, metrics, scale);
+      final int top = _rowPixel(span.row, metrics, scale);
+      final int bottom = _rowPixel(span.row + 1, metrics, scale);
+      _addClippedSolid(
+        overlays,
+        kind: TerminalMetalInstanceKind.selection,
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+        colorRgba: selected
+            ? accessibilityPresentation.increaseContrast
+                  ? 0xffffff88
+                  : 0xffa00088
+            : accessibilityPresentation.increaseContrast
+            ? 0xffffff50
+            : 0xf5c54250,
+        viewportWidth: viewportWidth,
+        viewportHeight: viewportHeight,
+      );
+      if (!selected) continue;
+      _addOutline(
+        decorations,
+        kind: TerminalMetalInstanceKind.decoration,
+        left: left,
+        top: top,
+        right: right,
+        bottom: bottom,
+        thickness: math.max(1, scale.round()),
+        colorRgba: _contrastingRgba(defaultBackground),
+        viewportWidth: viewportWidth,
+        viewportHeight: viewportHeight,
+      );
+    }
   }
 
   static void _addOutline(

@@ -112,7 +112,7 @@
     },
     {
       "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
-      "sha256": "a955f7f1deb5f8871f08e3abd99afc68d2bbae77e1b1131c5e1404e3e7f078a1"
+      "sha256": "acad91e7c7c620f807c3b04b9b1a3f4d5a07aa5a659c12a857c2221f8ebacc33"
     },
     {
       "path": "test/terminal_cell_glyph_test.dart",
@@ -120,7 +120,7 @@
     },
     {
       "path": "test/terminal_screen_metal_compositor_test.dart",
-      "sha256": "06e57464060a782192312ada41bd19b346728b08aecc6f82f820310750371262"
+      "sha256": "703d9887d383028b3c413882856363ce16405d68b8d28a3b73ea73eccc22a47a"
     },
     {
       "path": "test/goldens/cell-glyphs/synthetic-corpus-1x.dtgi",

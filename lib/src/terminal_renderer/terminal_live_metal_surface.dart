@@ -19,6 +19,7 @@ import 'metal_failure_recovery.dart';
 import 'pane_work_scheduler.dart';
 import 'terminal_damage.dart';
 import 'terminal_damage_transfer.dart';
+import 'terminal_overlay.dart';
 import 'terminal_render_model.dart';
 import 'terminal_screen_metal_compositor.dart';
 import 'terminal_viewport_render_model.dart';
@@ -176,6 +177,12 @@ final class TerminalLiveMetalSurfaceSnapshot {
     this.selectionGeneration = 0,
     this.selectionSpanCount = 0,
     this.selectionCellCount = 0,
+    this.searchGeneration = 0,
+    this.searchProjectionGeneration = 0,
+    this.searchSpanCount = 0,
+    this.searchCellCount = 0,
+    this.selectedSearchSpanCount = 0,
+    this.searchProjectionTruncated = false,
     this.hyperlinkHoverId = 0,
     this.hyperlinkHoverRow = -1,
     this.hyperlinkHoverColumn = -1,
@@ -243,6 +250,12 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int selectionGeneration;
   final int selectionSpanCount;
   final int selectionCellCount;
+  final int searchGeneration;
+  final int searchProjectionGeneration;
+  final int searchSpanCount;
+  final int searchCellCount;
+  final int selectedSearchSpanCount;
+  final bool searchProjectionTruncated;
   final int hyperlinkHoverId;
   final int hyperlinkHoverRow;
   final int hyperlinkHoverColumn;
@@ -444,6 +457,7 @@ final class TerminalLiveMetalSurface {
                       ? _preeditLayoutForModel(model)
                       : null,
                   selection: _selectionProjection,
+                  gridOverlay: _searchOverlayProjection,
                   kittyImages: screenSet.captureKittyImageViewport(),
                   hoveredHyperlinkId: _hyperlinkHover?.hyperlinkId ?? 0,
                 );
@@ -555,11 +569,15 @@ final class TerminalLiveMetalSurface {
   TerminalCaretRect? _lastPublishedCaretRect;
   TerminalSelectionGestureSnapshot? _selectionSnapshot;
   TerminalSelectionProjection? _selectionProjection;
+  final TerminalSearchOverlayState _searchOverlayState =
+      TerminalSearchOverlayState();
+  TerminalGridOverlayProjection? _searchOverlayProjection;
   TerminalHyperlinkHit? _hyperlinkHover;
   TerminalAccessibilityPresentation _accessibilityPresentation;
   TerminalViewportRenderModel? _viewportRenderModel;
   int _publishedViewportGeneration = 0;
   int _publishedSelectionGeneration = -1;
+  int _publishedSearchGeneration = -1;
   int _publishedProjectionResourceGeneration = 0;
   int _publishedKittyStoreGeneration = 0;
   int _seenAccessibilityViewportGeneration = 0;
@@ -619,6 +637,24 @@ final class TerminalLiveMetalSurface {
     }
     if (previous?.generation == snapshot.generation) return false;
     _selectionSnapshot = snapshot;
+    _needsDrain = true;
+    _scheduleImmediate();
+    return true;
+  }
+
+  /// Publishes stable, content-free search ranges for viewport projection.
+  bool updateSearchResults({
+    required int generation,
+    required TerminalSearchResult? result,
+    int selectedMatchIndex = -1,
+  }) {
+    _requireLive();
+    final bool changed = _searchOverlayState.update(
+      generation: generation,
+      result: result,
+      selectedMatchIndex: selectedMatchIndex,
+    );
+    if (!changed) return false;
     _needsDrain = true;
     _scheduleImmediate();
     return true;
@@ -1036,6 +1072,20 @@ final class TerminalLiveMetalSurface {
       selectionGeneration: _selectionSnapshot?.generation ?? 0,
       selectionSpanCount: _selectionProjection?.spans.length ?? 0,
       selectionCellCount: _selectionProjection?.selectedCellCount ?? 0,
+      searchGeneration: _searchOverlayState.generation,
+      searchProjectionGeneration:
+          _searchOverlayProjection?.sourceGeneration ?? 0,
+      searchSpanCount: _searchOverlayProjection?.spanCount ?? 0,
+      searchCellCount: _searchOverlayProjection?.cellCount ?? 0,
+      selectedSearchSpanCount:
+          _searchOverlayProjection?.spans
+              .where(
+                (TerminalGridOverlaySpan span) =>
+                    span.kind == TerminalGridOverlayKind.searchSelectedMatch,
+              )
+              .length ??
+          0,
+      searchProjectionTruncated: _searchOverlayProjection?.isTruncated ?? false,
       hyperlinkHoverId: _hyperlinkHover?.hyperlinkId ?? 0,
       hyperlinkHoverRow: _hyperlinkHover?.row ?? -1,
       hyperlinkHoverColumn: _hyperlinkHover?.pointerColumn ?? -1,
@@ -1295,11 +1345,13 @@ final class TerminalLiveMetalSurface {
     final TerminalViewport viewport = screenSet.viewport;
     final int viewportGeneration = viewport.generation;
     final int selectionGeneration = _selectionSnapshot?.generation ?? 0;
+    final int searchGeneration = _searchOverlayState.generation;
     final int resourceGeneration = atlas.resourceGeneration;
     final int kittyStoreGeneration =
         screenSet.activeKittyImages.stateGeneration;
     if (viewportGeneration == _publishedViewportGeneration &&
         selectionGeneration == _publishedSelectionGeneration &&
+        searchGeneration == _publishedSearchGeneration &&
         resourceGeneration == _publishedProjectionResourceGeneration &&
         kittyStoreGeneration == _publishedKittyStoreGeneration) {
       return;
@@ -1315,8 +1367,10 @@ final class TerminalLiveMetalSurface {
     _selectionProjection = range == null
         ? null
         : viewport.projectSelection(range);
+    _searchOverlayProjection = _searchOverlayState.project(viewport);
     _publishedViewportGeneration = viewportGeneration;
     _publishedSelectionGeneration = selectionGeneration;
+    _publishedSearchGeneration = searchGeneration;
     _publishedProjectionResourceGeneration = resourceGeneration;
     _publishedKittyStoreGeneration = kittyStoreGeneration;
     if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();

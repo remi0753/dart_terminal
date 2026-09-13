@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../terminal_core/terminal_screen.dart';
+import '../terminal_core/terminal_screen_set.dart';
 
 /// Paint precedence for metadata-only terminal grid overlays.
 ///
@@ -127,6 +128,199 @@ final class TerminalGridOverlayProjection {
     if (result != 0) return result;
     return left.endColumn.compareTo(right.endColumn);
   }
+}
+
+/// Projects stable exact-search matches into bounded current-viewport spans.
+abstract final class TerminalSearchOverlayProjector {
+  static TerminalGridOverlayProjection project({
+    required TerminalViewport viewport,
+    required TerminalSearchResult result,
+    int selectedMatchIndex = -1,
+    int maximumSpans = TerminalGridOverlayProjection.defaultMaximumSpans,
+  }) {
+    RangeError.checkValueInInterval(
+      maximumSpans,
+      1,
+      TerminalGridOverlayProjection.maximumSpans,
+      'maximumSpans',
+    );
+    if (selectedMatchIndex < -1 ||
+        selectedMatchIndex >= result.matches.length) {
+      throw RangeError.range(
+        selectedMatchIndex,
+        -1,
+        result.matches.isEmpty ? -1 : result.matches.length - 1,
+        'selectedMatchIndex',
+      );
+    }
+
+    final int viewportGeneration = viewport.generation;
+    if (!viewport.isSearchResultCurrent(result)) {
+      return TerminalGridOverlayProjection(
+        sourceGeneration: viewportGeneration,
+        spans: const <TerminalGridOverlaySpan>[],
+        isTruncated: true,
+        maximumSpans: maximumSpans,
+      );
+    }
+    final List<TerminalGridOverlaySpan> ordinary = <TerminalGridOverlaySpan>[];
+    final List<TerminalGridOverlaySpan> selected = <TerminalGridOverlaySpan>[];
+    var retainedSpanCount = 0;
+    var isTruncated = result.isTruncated;
+    var capReached = false;
+
+    void addMatch(int matchIndex, TerminalGridOverlayKind kind) {
+      if (capReached) return;
+      final TerminalSelectionProjection? projection = viewport.projectSelection(
+        result.matches[matchIndex].range,
+      );
+      if (projection == null) {
+        isTruncated = true;
+        return;
+      }
+      final List<TerminalGridOverlaySpan> destination =
+          kind == TerminalGridOverlayKind.searchSelectedMatch
+          ? selected
+          : ordinary;
+      for (final TerminalSelectionSpan span in projection.spans) {
+        if (retainedSpanCount == maximumSpans) {
+          capReached = true;
+          isTruncated = true;
+          return;
+        }
+        destination.add(
+          TerminalGridOverlaySpan(
+            kind: kind,
+            row: span.row,
+            startColumn: span.startColumn,
+            endColumn: span.endColumn,
+          ),
+        );
+        retainedSpanCount++;
+      }
+    }
+
+    // Reserve visible geometry for the selected result before ordinary matches
+    // consume the bounded projection budget. Canonical paint order is restored
+    // by TerminalGridOverlayProjection after coalescing.
+    if (selectedMatchIndex >= 0) {
+      addMatch(selectedMatchIndex, TerminalGridOverlayKind.searchSelectedMatch);
+    }
+    for (int index = 0; index < result.matches.length && !capReached; index++) {
+      if (index == selectedMatchIndex) continue;
+      addMatch(index, TerminalGridOverlayKind.searchMatch);
+    }
+
+    return TerminalGridOverlayProjection(
+      sourceGeneration: viewportGeneration,
+      spans: <TerminalGridOverlaySpan>[
+        ..._coalesceOverlaySpans(ordinary),
+        ..._coalesceOverlaySpans(selected),
+      ],
+      isTruncated: isTruncated,
+      maximumSpans: maximumSpans,
+    );
+  }
+}
+
+/// Monotonic, content-free owner for live search overlay publication.
+final class TerminalSearchOverlayState {
+  int _generation = 0;
+  TerminalSearchResult? _result;
+  int _selectedMatchIndex = -1;
+
+  int get generation => _generation;
+  int get selectedMatchIndex => _selectedMatchIndex;
+  bool get isClear => _result == null;
+
+  bool update({
+    required int generation,
+    required TerminalSearchResult? result,
+    int selectedMatchIndex = -1,
+  }) {
+    RangeError.checkValueInInterval(
+      generation,
+      1,
+      0x7fffffffffffffff,
+      'generation',
+    );
+    if (generation < _generation) {
+      throw StateError('search overlay generation regressed');
+    }
+    if (result == null && selectedMatchIndex != -1) {
+      throw ArgumentError(
+        'cleared search overlay cannot retain a selected match index',
+      );
+    }
+    if (result != null &&
+        (selectedMatchIndex < -1 ||
+            selectedMatchIndex >= result.matches.length)) {
+      throw RangeError.range(
+        selectedMatchIndex,
+        -1,
+        result.matches.isEmpty ? -1 : result.matches.length - 1,
+        'selectedMatchIndex',
+      );
+    }
+    if (generation == _generation) {
+      if (!identical(result, _result) ||
+          selectedMatchIndex != _selectedMatchIndex) {
+        throw StateError('search overlay generation has conflicting state');
+      }
+      return false;
+    }
+    _generation = generation;
+    _result = result;
+    _selectedMatchIndex = selectedMatchIndex;
+    return true;
+  }
+
+  TerminalGridOverlayProjection? project(TerminalViewport viewport) {
+    final TerminalSearchResult? result = _result;
+    return result == null
+        ? null
+        : TerminalSearchOverlayProjector.project(
+            viewport: viewport,
+            result: result,
+            selectedMatchIndex: _selectedMatchIndex,
+          );
+  }
+}
+
+List<TerminalGridOverlaySpan> _coalesceOverlaySpans(
+  List<TerminalGridOverlaySpan> source,
+) {
+  if (source.length < 2) return source;
+  source.sort((TerminalGridOverlaySpan left, TerminalGridOverlaySpan right) {
+    int result = left.row.compareTo(right.row);
+    if (result != 0) return result;
+    result = left.startColumn.compareTo(right.startColumn);
+    if (result != 0) return result;
+    return left.endColumn.compareTo(right.endColumn);
+  });
+  final List<TerminalGridOverlaySpan> result = <TerminalGridOverlaySpan>[];
+  for (final TerminalGridOverlaySpan span in source) {
+    if (result.isEmpty) {
+      result.add(span);
+      continue;
+    }
+    final TerminalGridOverlaySpan previous = result.last;
+    if (previous.kind == span.kind &&
+        previous.row == span.row &&
+        span.startColumn <= previous.endColumn) {
+      if (span.endColumn > previous.endColumn) {
+        result[result.length - 1] = TerminalGridOverlaySpan(
+          kind: previous.kind,
+          row: previous.row,
+          startColumn: previous.startColumn,
+          endColumn: span.endColumn,
+        );
+      }
+      continue;
+    }
+    result.add(span);
+  }
+  return result;
 }
 
 enum TerminalRenderColorSpace { srgb, displayP3 }

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dart_terminal/dart_terminal.dart';
 
 void main() => runTerminalOverlayContractTests();
@@ -5,8 +7,135 @@ void main() => runTerminalOverlayContractTests();
 void runTerminalOverlayContractTests() {
   _testOverlayGeometryIsBoundedImmutableAndCanonical();
   _testOverlayGeometryRejectsInvalidAndExcessInput();
+  _testSearchProjectionCoalescesAndPrioritizesSelection();
+  _testSearchProjectionDropsUnavailableAnchors();
+  _testSearchOverlayStateIsMonotonicAndContentFree();
   _testDisplayP3ColorConversionVectorsAndAlpha();
   _testDisplayP3BufferConversionIsBoundedAndCopied();
+}
+
+void _testSearchOverlayStateIsMonotonicAndContentFree() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 4);
+  VtParser(sink: TerminalScreenParserSink.forScreenSet(screens))
+      .parse(Uint8List.fromList('find'.codeUnits));
+  final TerminalSearchResult result = screens.viewport.search('in')!;
+  final TerminalSearchOverlayState state = TerminalSearchOverlayState();
+  _expect(
+    state.update(generation: 1, result: result, selectedMatchIndex: 0) &&
+        state.generation == 1 &&
+        state.selectedMatchIndex == 0 &&
+        !state.isClear &&
+        state.project(screens.viewport)!.spanCount == 1,
+    'live search state publishes one generation without retaining query text',
+  );
+  _expect(
+    !state.update(generation: 1, result: result, selectedMatchIndex: 0),
+    'an identical live search generation is idempotent',
+  );
+  _expectFailure(
+    () => state.update(generation: 1, result: null),
+    'conflicting state cannot reuse a live search generation',
+  );
+  _expectFailure(
+    () => state.update(generation: 0, result: result, selectedMatchIndex: 0),
+    'live search generation cannot regress',
+  );
+  _expectFailure(
+    () => state.update(generation: 2, result: result, selectedMatchIndex: 1),
+    'invalid selected index fails before live search state changes',
+  );
+  _expect(
+    state.generation == 1 &&
+        state.update(generation: 2, result: null) &&
+        state.generation == 2 &&
+        state.selectedMatchIndex == -1 &&
+        state.isClear &&
+        state.project(screens.viewport) == null,
+    'a newer generation clears all projected search state',
+  );
+}
+
+void _testSearchProjectionCoalescesAndPrioritizesSelection() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 5);
+  VtParser(sink: TerminalScreenParserSink.forScreenSet(screens))
+      .parse(Uint8List.fromList('aaaaa'.codeUnits));
+  final TerminalSearchResult result = screens.viewport.search('aa')!;
+  final TerminalGridOverlayProjection projection =
+      TerminalSearchOverlayProjector.project(
+        viewport: screens.viewport,
+        result: result,
+        selectedMatchIndex: 2,
+      );
+  _expect(
+    result.matches.length == 4 &&
+        projection.sourceGeneration == screens.viewport.generation &&
+        projection.spans.length == 2 &&
+        projection.spans[0] ==
+            TerminalGridOverlaySpan(
+              kind: TerminalGridOverlayKind.searchMatch,
+              row: 0,
+              startColumn: 0,
+              endColumn: 5,
+            ) &&
+        projection.spans[1] ==
+            TerminalGridOverlaySpan(
+              kind: TerminalGridOverlayKind.searchSelectedMatch,
+              row: 0,
+              startColumn: 2,
+              endColumn: 4,
+            ) &&
+        projection.cellCount == 7 &&
+        !projection.isTruncated,
+    'overlapping matches coalesce by kind and selected paint remains last',
+  );
+
+  final TerminalGridOverlayProjection capped =
+      TerminalSearchOverlayProjector.project(
+        viewport: screens.viewport,
+        result: result,
+        selectedMatchIndex: 2,
+        maximumSpans: 1,
+      );
+  _expect(
+    capped.spans.length == 1 &&
+        capped.spans.single.kind ==
+            TerminalGridOverlayKind.searchSelectedMatch &&
+        capped.isTruncated,
+    'selected search geometry is reserved before ordinary cap pressure',
+  );
+  _expectFailure(
+    () => TerminalSearchOverlayProjector.project(
+      viewport: screens.viewport,
+      result: result,
+      selectedMatchIndex: result.matches.length,
+    ),
+    'invalid selected search index fails before projection',
+  );
+}
+
+void _testSearchProjectionDropsUnavailableAnchors() {
+  final TerminalScreenSet screens = TerminalScreenSet(
+    rows: 1,
+    columns: 2,
+    scrollback: TerminalScrollback(maxLines: 2, maxBytes: 1, pageRows: 1),
+  );
+  VtParser(sink: TerminalScreenParserSink.forScreenSet(screens))
+      .parse(Uint8List.fromList('AB'.codeUnits));
+  final TerminalSearchResult result = screens.viewport.search('AB')!;
+  screens.primary.printScalar(0x43);
+  final TerminalGridOverlayProjection projection =
+      TerminalSearchOverlayProjector.project(
+        viewport: screens.viewport,
+        result: result,
+        selectedMatchIndex: 0,
+      );
+  _expect(
+    result.matches.length == 1 &&
+        projection.isEmpty &&
+        projection.isTruncated &&
+        projection.sourceGeneration == screens.viewport.generation,
+    'evicted stable anchors are dropped and reported without stale geometry',
+  );
 }
 
 void _testOverlayGeometryIsBoundedImmutableAndCanonical() {

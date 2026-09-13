@@ -103,6 +103,9 @@ final class TerminalSearchMatch {
 final class TerminalSearchResult {
   TerminalSearchResult._({
     required List<TerminalSearchMatch> matches,
+    required this.sourceScreenKind,
+    required this.sourceScreenGeneration,
+    required this.sourceScrollbackGeneration,
     required this.scannedScalars,
     required this.scanLimitReached,
     required this.matchLimitReached,
@@ -115,6 +118,9 @@ final class TerminalSearchResult {
   static const int maximumMatches = 1000;
 
   final List<TerminalSearchMatch> matches;
+  final TerminalScreenKind sourceScreenKind;
+  final int sourceScreenGeneration;
+  final int sourceScrollbackGeneration;
   final int scannedScalars;
   final bool scanLimitReached;
   final bool matchLimitReached;
@@ -723,6 +729,9 @@ final class _TerminalSearchScanner {
 
   TerminalSearchResult result() => TerminalSearchResult._(
     matches: _matches,
+    sourceScreenKind: kind,
+    sourceScreenGeneration: viewport._screens.activeScreen.generation,
+    sourceScrollbackGeneration: viewport._screens.scrollback.generation,
     scannedScalars: _scannedScalars,
     scanLimitReached: _scanLimitReached,
     matchLimitReached: _matchLimitReached,

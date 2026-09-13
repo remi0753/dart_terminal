@@ -490,6 +490,14 @@ final class TerminalViewport {
   TerminalSelectionProjection? projectSelection(TerminalSelectionRange range) =>
       _projectSelection(this, range);
 
+  /// Whether an exact-search result still describes current retained content.
+  bool isSearchResultCurrent(TerminalSearchResult result) {
+    _sync();
+    return result.sourceScreenKind == _screens.activeKind &&
+        result.sourceScreenGeneration == _screens.activeScreen.generation &&
+        result.sourceScrollbackGeneration == _screens.scrollback.generation;
+  }
+
   /// Searches active retained logical lines without crossing hard boundaries.
   ///
   /// Returns null only when an explicit [start] boundary is unavailable.

@@ -6,8 +6,8 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 remaining overlays and P3 conversion — three-band Kitty
-  image layer ordering
+- Current subtask: P1 remaining overlays and P3 conversion — search-result
+  projection and Metal highlight overlay
 
 ## Current P1 child — remaining overlays and P3 conversion
 
@@ -190,6 +190,87 @@
   `terminal`, and no terminal-specific content in its tracked native,
   `dart_appkit`, runtime, script, example, tool, or test source. This child made
   no adjacent-library change. `git diff --check` is clean.
+
+### Current child — search-result projection and Metal highlight overlay
+
+- **Purpose:** Make the existing bounded exact-search result visible without
+  mutating canonical terminal cells, selection state, PTY input, or retained
+  query/text content.
+- **Background:** Search already returns at most 1,000 immutable matches over
+  stable end-exclusive logical anchors with scan/match truncation metadata.
+  Selection already projects the same range type into the current navigated
+  viewport, while the compositor has only selection/preedit/bell fills. The
+  new metadata-only overlay contract has explicit normal-then-selected search
+  precedence but is not yet produced or consumed.
+- **Scope:** Add a bounded projector from `TerminalSearchResult` to current
+  viewport overlay spans; prioritize and visually distinguish one selected
+  match; coalesce overlapping spans within each kind; mark scan/match/cap/stale
+  drops as truncated; accept monotonic content-free search generations on the
+  live surface; recompute on viewport/content changes; render normal/selected
+  fills plus a selected outline through ordinary solid Metal instances; expose
+  only counts/generations in snapshots.
+- **Out of scope:** Search query editing/UI/menu commands, replacement,
+  case/regex/fuzzy search, inspector overlays, P3/linear blending, accessibility
+  announcement copy, runtime screenshots, feature-matrix acceptance, and any
+  `dart_appkit` change.
+- **Dependencies:** Stable `TerminalSelectionRange` anchors and
+  `TerminalViewport.projectSelection`; `TerminalSearchResult` hard caps;
+  `TerminalGridOverlayProjection` 4,096-span cap and paint precedence; live
+  newest-frame redraw scheduling; existing selection/decorations Metal layers.
+- **Completion conditions:** Selected geometry is retained before ordinary
+  matches under cap pressure but paints after ordinary geometry; overlaps
+  coalesce deterministically; invalid selected indexes fail before state change;
+  unavailable anchors are dropped and reported via truncation; viewport changes
+  reproject without retaining text; compositor rejects out-of-grid or unsupported
+  overlay kinds; 1x/2x real Metal geometry/pixels and live monotonic generation,
+  clear, stale-drop, and diagnostics counts pass; exact full gate passes.
+- **Verification approach:** Extend the overlay contract test for projection
+  bounds, overlap, selection priority, scrolling, stale anchors, and invalid
+  indexes; add compositor 1x/2x instance/pixel tests; add live-surface state and
+  redraw tests; run focused format/analyze/tests followed by the exact gate and
+  adjacent-library audit; record failures before marking only this child done.
+- 2026-09-14: No product code currently calls terminal document search; only
+  the core API and tests do. This child therefore introduces a renderer/live
+  surface publication boundary but does not invent a query UI ahead of the
+  final runtime-evidence child. The projector will use the current viewport
+  generation as its source identity, allowing scroll/reflow reprojection while
+  stable anchors remain valid and stale-dropping only anchors that have actually
+  been evicted or switched to another screen.
+- 2026-09-14: Initial focused overlay and core-search tests passed, while the
+  1x compositor geometry assertion failed before pixel comparison. The test had
+  incorrectly assumed `round(cellWidth) * 2`; production correctly rounds each
+  grid boundary independently, so a fractional CoreText cell width makes that
+  assumption differ by a pixel. The assertion now derives the first and second
+  boundaries independently, matching the canonical compositor rule rather than
+  weakening the geometry check.
+- 2026-09-14: After the fixture correction, focused analysis and all three
+  focused suites pass. Contract coverage fixes four overlapping matches into
+  one normal span plus one selected span, reserves the selected span under a
+  one-span cap, rejects invalid selection indexes without mutation, rejects
+  conflicting/regressed live generations, clears on a newer generation, and
+  stale-drops a result after its source content changes. Existing exact-search
+  tests remain green. The compositor emits normal then selected fills and four
+  selected outline edges at independently rounded grid boundaries; real Metal
+  readback distinguishes them at both 1x and 2x, and unsupported kinds or
+  out-of-grid spans fail before a frame escapes.
+- 2026-09-14: The first exact full gate passed every preceding native,
+  compatibility, differential, application, terminfo, and shell check, then
+  stopped at the expected stale Ghostty inventory because its hashed compositor
+  evidence changed. Compatibility regression coverage remained fresh. The
+  Ghostty report therefore needs only its canonical regeneration before the
+  final rerun.
+- 2026-09-14: Canonical Ghostty regeneration updated only the expected hashed
+  renderer evidence. The final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passed with 334 files
+  already formatted, no analysis issues, fresh generated reports, all native
+  capability and Dart suites, security stress, and the final aggregate marker.
+  The inventory remains 95 accepted and two parent P1 gaps because matrix-level
+  acceptance is intentionally deferred to the runtime-evidence child.
+- 2026-09-14: Final adjacent audit found no `dart_appkit` worktree change, no
+  tracked terminal-named path, and no terminal-specific content in its tracked
+  generic source/test/tool surfaces. `git diff --check` is clean. The search
+  owner retains only stable ranges, scalar/count flags, one selected index, and
+  generations; query and terminal text never enter the overlay or diagnostics.
 - 2026-09-14: The pinned checkout remains clean at exact revision
   `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`. Relevant source identities are
   `src/renderer/image.zig`
