@@ -1390,6 +1390,15 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
       - [x] typed config／Settings／product fallback diagnostics projection
       - [x] runtime evidence、文書／matrix更新、親項目完了判定
     - [ ] synthetic box／block／braille／Powerline glyph
+      （分割、実施順、完了条件は
+      [`docs/phase11/ghostty-p0-p1-gap-burn-down.md`](docs/phase11/ghostty-p0-p1-gap-burn-down.md)
+      を参照して順に実施する）
+      - [x] bounded scalar classification／device-pixel raster contract
+      - [ ] box-drawing deterministic raster geometry
+      - [ ] block-element／braille deterministic raster geometry
+      - [ ] accepted geometric Powerline deterministic raster geometry
+      - [ ] glyph atlas／screen compositor integration
+      - [ ] 1x／2x／real-Metal runtime evidence、文書／matrix更新、親項目完了判定
     - [ ] image／search／inspector overlay、P3→sRGB conversion
     - [ ] Option-click cursor／semantic prompt-output selection
   - [ ] aggregate gate、文書／matrix更新、親項目完了判定

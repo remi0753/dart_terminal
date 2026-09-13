@@ -6,8 +6,8 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 gap burn-down — variable font axes/codepoint override/
-  fallback diagnostics, runtime evidence/documentation/matrix closure (completed)
+- Current subtask: P1 gap burn-down — synthetic box/block/braille/Powerline
+  glyphs (investigation and ordered split in progress)
 
 ## Purpose
 
@@ -417,6 +417,161 @@ code/name containing `terminal` may be added to `dart_appkit`.
   complete diff, and repeat the content/name boundary audit. Authorized
   notarization and duration-only campaigns are recorded as skipped, not as
   blockers or positive evidence.
+
+### Current P1 child — synthetic cell glyphs
+
+- **Purpose:** Render the reviewed box-drawing, block-element, braille, and
+  Powerline scalar families with cell-owned deterministic geometry so adjacent
+  cells meet without font side-bearing or raster seam gaps.
+- **Background:** CoreText/atlas fallback and the 1x/2x golden corpus are
+  complete, but `TXT-10` remains actionable and `TXT-06` explicitly defers
+  these families. The current compositor sends printable cells through font
+  resolve/shape/raster; no product synthetic-cell primitive owner has yet been
+  identified.
+- **Scope:** Re-read the pinned Ghostty sprite classification/drawing evidence;
+  inventory the product model/compositor/frame/native Metal pipeline; define a
+  bounded scalar-to-primitive contract and exact pixel rounding; implement only
+  the accepted families; preserve style/color/damage/selection/cursor behavior;
+  add 1x/2x and runtime evidence; update public/matrix/generated gap evidence.
+- **Out of scope:** General vector graphics, arbitrary Nerd Font private-use
+  glyphs outside the accepted Powerline set, image/search/inspector overlays,
+  P3 conversion, font-file parsing, terminal layout changes, and every change
+  or `terminal`-named symbol in generic `dart_appkit`.
+- **Dependencies:** Unicode scalar/cell-width ownership, compositor compatible
+  runs, glyph atlas/frame primitives, Metal encoding/shaders, color/style
+  projection, cursor/selection overlays, scale-aware metrics, existing 1x/2x
+  golden infrastructure, pinned Ghostty `font/sprite/draw/`, and the 94/3 gap
+  inventory produced after `TXT-08` closure.
+- **Completion conditions:** Every explicitly accepted scalar maps to bounded
+  deterministic cell geometry at 1x and 2x, adjacent fill/line edges have no
+  transparent seam, unsupported scalars continue through normal font fallback,
+  rendering remains cell-clipped and resource-safe across scale/rebuild, real
+  Metal Developer JIT/Release AOT evidence passes, `TXT-10` and the deferred
+  portion of `TXT-06` are updated only after exact evidence, and `dart_appkit`
+  remains generic and clean.
+- **Verification approach:** Establish the exact scalar/primitive inventory and
+  layer boundary first, record all subtask dependencies in this memo and
+  `ROADMAP.md` before implementation, then use table-driven geometry/raster
+  tests, existing golden comparisons, sanitizer/fault gates where native
+  ownership changes, bounded two-runtime application acceptance, ordered report
+  regeneration, exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`, and the
+  generic-library content/name audit. Apple notarization and duration-only
+  campaigns remain skipped as authorized.
+
+#### Ordered implementation split
+
+This child crosses Unicode classification, deterministic geometry, atlas
+ownership, the screen compositor, source-controlled images, and real Metal.
+It is therefore split before implementation into the following ordered,
+independently committed subtasks. A later subtask must not start until the
+preceding subtask is verified and committed.
+
+1. **Bounded scalar classification/device-pixel raster contract.** Define the
+   exact accepted scalar sets, immutable raster request/result types, dimension
+   and byte limits, clipping and rounding rules, and exhaustive boundary tests.
+   Complete when all accepted and adjacent unsupported scalars classify
+   deterministically and invalid dimensions fail closed; no compositor or atlas
+   behavior changes in this subtask.
+2. **Box-drawing deterministic raster geometry.** Implement U+2500..U+257F on
+   the bounded raster surface, including light/heavy/double, dashed, arc,
+   diagonal, and half-line variants. Complete when the whole range is
+   table-tested at representative odd/even 1x/2x device grids and every joining
+   edge required by the scalar reaches the exact cell boundary.
+3. **Block-element and braille deterministic raster geometry.** Implement
+   U+2580..U+259F and U+2800..U+28FF, including fractional, shade, quadrant, and
+   empty/full patterns. Complete when exhaustive scalar tests prove bounded
+   output and edge-filled blocks have no transparent cell seam at 1x/2x.
+4. **Accepted geometric Powerline deterministic raster geometry.** Implement
+   exactly the pinned geometric subset U+E0B0, E0B1, E0B2, E0B3, E0B4, E0B5,
+   E0B6, E0B7, E0B8, E0B9, E0BA, E0BB, E0BC, E0BD, E0BE, E0BF, E0D2, and
+   E0D4. Complete when filled/stroked geometry is bounded and adjacent stylized
+   private-use scalars remain classified as unsupported for normal-font
+   fallback.
+5. **Glyph-atlas/screen-compositor integration.** Add a collision-free,
+   scale-scoped alpha-atlas identity for product-owned cell rasters; divert only
+   supported single-cell scalars from CoreText runs; retain color, selection,
+   cursor, decoration, clipping, damage, reset, eviction, and frame lifetime
+   semantics. Complete when focused atlas/compositor tests prove font fallback
+   is bypassed only for accepted scalars and Metal/reference instances agree.
+6. **1x/2x/real-Metal evidence and closure.** Add source-controlled 1x/2x
+   corpus evidence, run Developer JIT and Release AOT Metal acceptance, update
+   README/rendering documentation, `FEATURE_MATRIX.md`, TXT-10/TXT-06, coverage,
+   and Ghostty gap reports in dependency order, run the exact repository gate,
+   and repeat the adjacent-library audit. Complete only when fresh evidence
+  supports closing this child and its parent.
+
+#### Synthetic-cell investigation findings
+
+- 2026-09-14: The pinned source remains revision
+  `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`. Relevant SHA-256 identities are
+  `font/sprite.zig`
+  `14876b4b92965dc342da974d7c02350d7ed9341d009436fe88256edad376eb15`,
+  `draw/box.zig`
+  `ee10346fb261a2cc104352ff235664f32204e845ff98772c48f3b6a63053a951`,
+  `draw/block.zig`
+  `b3f03cfffea07eb950517eecfe9b4ec396414decb5966e6bd4465f72612d12a5`,
+  `draw/braille.zig`
+  `8093913ed854b6d46a8b627c465d7f1ac7b2deedd35c208603f06c05bf9a6a8c`,
+  `draw/powerline.zig`
+  `91f897300bb8324c7f05da713d453d93624c4de89a9149e386bc7ace46c2a072`,
+  `draw/common.zig`
+  `e9715d969a60c109a4eea7f081ca8b6114e6d8126896ae13e9cbbcddba704319`,
+  and `canvas.zig`
+  `66d2dc1b99b2dc53e2ca9654e1ff45e1c271af3dc13ed169799dc87cf1492c6e`.
+- 2026-09-14: Ghostty registers the complete Box Drawing, Block Elements, and
+  Braille ranges, but only the 18 explicitly enumerated geometric Powerline
+  functions above. The remaining U+E0B0..U+E0D4 private-use scalars are
+  deliberately font-owned. Block fractions round against device-pixel cell
+  extents; full blocks cover the complete cell; braille derives dot width,
+  spacing, and margins from that same device grid.
+- 2026-09-14: Product inspection found no existing synthetic-cell owner. The
+  second compositor pass currently groups every visible printable cell into
+  compatible CoreText runs, rasterizes missing font glyphs, ingests them into
+  the alpha atlas, then places atlas masks on canonical grid origins. The atlas
+  and Metal bridge already support scale-scoped alpha coverage, dirty-page
+  synchronization, frame build leases, clipping, and reference rendering.
+  A product-owned bounded alpha raster can therefore reuse this pipeline; no
+  `dart_appkit` or shader change is required. Synthetic identities must be kept
+  distinct from native face/glyph IDs and existing negative Kitty image IDs.
+- 2026-09-14: The first scalar-contract formatting command completed its four
+  requested files, then the Dart CLI attempted to update
+  `/Users/remi/.dart-tool/dart-flutter-telemetry-session.json` despite
+  `DART_SUPPRESS_ANALYTICS=true` and was sandbox-denied. The chained analysis
+  and focused test therefore did not run. This telemetry failure is not test
+  evidence; verification is rerun with the normal local Dart cache permission.
+- 2026-09-14: The first ordered subtask now defines an exact 434-scalar
+  classifier: 128 Box Drawing, 32 Block Elements, 256 Braille Patterns, and the
+  18 pinned geometric Powerline scalars. Its immutable request contract bounds
+  width/height to 4096 device pixels, alpha storage to 16 MiB, line thickness
+  to the cell, and rejects unsupported scalars before allocation. Complementary
+  integer half-up fraction helpers intentionally overlap adjoining odd-sized
+  regions by one pixel, matching the reviewed no-gap rule. The raster result
+  owns a defensive, tightly packed alpha copy. Focused analysis reported
+  `No issues found!`; exhaustive classification, invalid-boundary, rounding,
+  and ownership tests passed with exit status zero.
+- 2026-09-14: The first exact repository gate ran all functional suites through
+  the final `dart_terminal tests passed` marker, but the analysis phase reported
+  one `directives_ordering` info because the new public export followed the
+  damage exports instead of preceding them alphabetically. This run is not
+  accepted as a passing gate. The export was moved to its canonical position;
+  no API or behavior changed, and the exact full gate is rerun.
+- 2026-09-14: The corrected exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passed: all native
+  packages, generated and compatibility evidence, distribution/security/update
+  suites, 332-file zero-change formatting, clean analysis, the exhaustive new
+  scalar contract test through the aggregate runner, and the final
+  `dart_terminal tests passed` marker completed successfully. This establishes
+  the first subtask only; no raster geometry or compositor behavior is claimed.
+- 2026-09-14: Final review found only the intended roadmap/memo, public export,
+  aggregate runner registration, scalar contract, and its focused test.
+  `git diff --check` passed. The adjacent `dart_appkit` worktree is clean; a
+  case-insensitive executable-source/content audit outside docs/build/cache/git
+  and a filename audit both found zero `terminal` matches. No generic-library
+  file changed.
+- 2026-09-14: The first staging attempt was sandbox-denied while creating
+  `.git/index.lock`; no index or worktree content was changed. Staging and the
+  required task commit are retried with Git metadata write permission and the
+  same explicit six-file scope.
 
 ## Inventory and decisions
 

@@ -45,6 +45,7 @@ import 'terminal_application_acceptance_test.dart';
 import 'terminal_application_evidence_test.dart';
 import 'terminal_application_matrix_test.dart';
 import 'terminal_application_state_test.dart';
+import 'terminal_cell_glyph_test.dart';
 import 'terminal_command_palette_test.dart';
 import 'terminal_compatibility_inventory_test.dart';
 import 'terminal_compatibility_regression_coverage_test.dart';
@@ -195,6 +196,7 @@ Future<void> main() async {
   runTerminalApplicationEvidenceTests();
   await runTerminalApplicationMatrixTests();
   await runTerminalApplicationStateTests();
+  runTerminalCellGlyphTests();
   await runTerminalNativeHierarchyTests();
   await runTerminalNativeContentTests();
   runTerminalInputMatrixTests();
