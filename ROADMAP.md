@@ -1328,7 +1328,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase11/signed-update-feed-rollback.md`](docs/phase11/signed-update-feed-rollback.md)
   を参照して順に実施する）
   - [x] feed／鍵／candidate／rollback contractとthreat inventory
-  - [ ] strict signed-feed codec、外部鍵による生成、pinned-key検証
+  - [x] strict signed-feed codec、外部鍵による生成、pinned-key検証
   - [ ] candidate bundle検証、atomic install transaction、rollback/recovery
   - [ ] product action／release notes、受け入れ、文書／matrix、親項目完了判定
 - [ ] local crash report、hang sample、privacy-safe diagnostics

@@ -96,6 +96,17 @@ DISTRIBUTION_ENTITLEMENTS ?= \
 DEVELOPER_ID_APPLICATION ?=
 DEVELOPER_TEAM_ID ?=
 NOTARY_KEYCHAIN_PROFILE ?=
+UPDATE_FEED_OUTPUT_DIR ?= $(PROJECT_ROOT)/build/runtime/update-feed
+UPDATE_ARCHIVE ?= $(DISTRIBUTION_OUTPUT_DIR)/DartTerminal.zip
+UPDATE_ARCHIVE_URL ?=
+UPDATE_VERSION ?=
+UPDATE_BUILD ?=
+UPDATE_MINIMUM_MACOS ?= 14.0
+UPDATE_SEQUENCE ?=
+UPDATE_EXPIRES_UNIX_SECONDS ?=
+UPDATE_KEY_ID ?=
+UPDATE_PUBLIC_KEY ?=
+UPDATE_SIGNING_KEY ?=
 override RUNTIME_BUILDER := $(DART) run dart_macos_runtime:build \
 	--manifest $(APPLICATION_MANIFEST) --engine-root $(DART_ENGINE_ROOT)
 override RUNTIME_UNIVERSAL_ASSEMBLER := \
@@ -147,6 +158,8 @@ override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_dam
 	terminal-distribution-policy-test release-distribution-preflight \
 	release-distribution-credentials-check release-distribution-build \
 	release-distribution-audit release-distribution-verify \
+	terminal-update-feed-test release-update-feed-credentials-check \
+	release-update-feed \
 	release-aot-integration release-aot-display release-aot-hierarchy release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-clipboard release-aot-lifecycle release-aot-traffic \
 	release-aot-resource release-aot-shutdown-fault runtime-bundle-audit \
 	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-user-actions-integration runtime-applescript-integration runtime-system-automation-integration runtime-native-content-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-diagnostics-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-clipboard-integration runtime-lifecycle-integration \
@@ -210,6 +223,8 @@ help:
 	@echo "  make release-aot-distribution-verify  Audit and smoke-test all release architectures"
 	@echo "  make release-distribution-preflight  Validate product signing policy without credentials"
 	@echo "  make release-distribution-verify     Sign, notarize, staple, and audit a distribution"
+	@echo "  make terminal-update-feed-test       Test canonical signed update feeds and release generation"
+	@echo "  make release-update-feed             Generate and sign an atomic update-feed directory"
 	@echo "  make runtime-terminal-display-integration  Verify the live Metal terminal in both modes"
 	@echo "  make runtime-native-hierarchy-integration  Verify four-pane hierarchy and Close/Quit in both modes"
 	@echo "  make runtime-user-actions-integration  Verify normal-product window/tab/split actions in both modes"
@@ -806,6 +821,33 @@ release-distribution-audit: release-distribution-build
 		--team-id=$(DEVELOPER_TEAM_ID)
 
 release-distribution-verify: test release-distribution-audit
+
+terminal-update-feed-test: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run test/terminal_update_feed_test.dart
+
+release-update-feed-credentials-check:
+	@if [[ -z "$(UPDATE_ARCHIVE_URL)" || -z "$(UPDATE_VERSION)" || \
+		-z "$(UPDATE_BUILD)" || -z "$(UPDATE_SEQUENCE)" || \
+		-z "$(UPDATE_EXPIRES_UNIX_SECONDS)" || -z "$(UPDATE_KEY_ID)" || \
+		-z "$(UPDATE_PUBLIC_KEY)" || -z "$(UPDATE_SIGNING_KEY)" ]]; then \
+		echo "UPDATE_ARCHIVE_URL, UPDATE_VERSION, UPDATE_BUILD, UPDATE_SEQUENCE, UPDATE_EXPIRES_UNIX_SECONDS, UPDATE_KEY_ID, UPDATE_PUBLIC_KEY, and UPDATE_SIGNING_KEY are required" >&2; \
+		exit 69; \
+	fi
+
+release-update-feed: terminal-update-feed-test \
+	release-update-feed-credentials-check
+	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_update_feed.dart \
+		"--archive=$(UPDATE_ARCHIVE)" \
+		"--archive-url=$(UPDATE_ARCHIVE_URL)" \
+		"--version=$(UPDATE_VERSION)" \
+		"--build=$(UPDATE_BUILD)" \
+		"--minimum-macos=$(UPDATE_MINIMUM_MACOS)" \
+		"--sequence=$(UPDATE_SEQUENCE)" \
+		"--expires-unix-seconds=$(UPDATE_EXPIRES_UNIX_SECONDS)" \
+		"--key-id=$(UPDATE_KEY_ID)" \
+		"--public-key=$(UPDATE_PUBLIC_KEY)" \
+		"--signing-key=$(UPDATE_SIGNING_KEY)" \
+		"--output-directory=$(UPDATE_FEED_OUTPUT_DIR)"
 
 release-aot-display: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \

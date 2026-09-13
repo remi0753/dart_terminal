@@ -120,6 +120,7 @@ import 'terminal_terminfo_environment_test.dart';
 import 'terminal_terminfo_test.dart';
 import 'terminal_text_input_event_router_test.dart';
 import 'terminal_unicode_test.dart';
+import 'terminal_update_feed_test.dart';
 import 'terminal_viewport_render_model_test.dart';
 import 'terminal_viewport_test.dart';
 import 'terminal_wide_grapheme_test.dart';
@@ -244,6 +245,7 @@ Future<void> main() async {
   runTerminalTerminfoTests();
   runTerminalTerminfoEnvironmentTests();
   runTerminalUnicodeTests();
+  await runTerminalUpdateFeedTests();
   runTerminalViewportTests();
   runTerminalViewportRenderModelTests();
   runTerminalWideGraphemeTests();

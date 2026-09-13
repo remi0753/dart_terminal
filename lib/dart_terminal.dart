@@ -276,3 +276,4 @@ export 'src/terminal_settings_inspector.dart';
 export 'src/terminal_shell_integration.dart';
 export 'src/terminal_tab_metadata.dart';
 export 'src/terminal_tab_presentation.dart';
+export 'src/terminal_update_feed.dart';

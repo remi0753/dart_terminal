@@ -105,8 +105,9 @@ notes are authenticated feed data and never executable content.
 
 The canonical feed is UTF-8 JSON with format `dart-terminal-update-feed`,
 version `1`, product `dev.dart-terminal`, channel `stable`, a positive
-monotonic `sequence`, an exact release-key ID, and one to 32 releases. Every
-release has exactly:
+monotonic `sequence`, an exact release-key ID, an expiry expressed as positive
+Unix seconds no more than 90 days ahead, and one to 32 releases. Every release
+has exactly:
 
 - `version`: canonical three-component semantic version without prerelease or
   build metadata in the stable channel;
@@ -128,10 +129,14 @@ numbers use canonical decimal form, strings use the repository's deterministic
 JSON encoder, and the file ends with one newline. Strict verification parses,
 validates, re-encodes, and byte-compares before checking the signature.
 
-The detached signature is versioned binary evidence carrying the algorithm,
-namespace `dart-terminal-update-v1`, key ID, and exact 64-byte Ed25519 signature.
-The public key is exactly 32 bytes. Unknown algorithms/namespaces/key IDs,
-wrong-length/non-canonical encodings, and signature mismatch fail closed.
+The detached signature uses the OpenSSH SSHSIG version 1 envelope and namespace
+`dart-terminal-update-v1`. The bounded ASCII armor must contain the exact pinned
+OpenSSH `ssh-ed25519` public-key blob, `sha512` message hash selector, and a
+64-byte Ed25519 signature. The feed's key ID must equal the pinned key ID and is
+also the sole allowed-signer identity passed to `/usr/bin/ssh-keygen -Y verify`.
+The decoded public key is exactly 32 bytes. Unknown algorithms/namespaces/key
+IDs, reserved data, wrong-length/non-canonical encodings, and signature mismatch
+fail closed.
 
 ## Selection and update state
 
@@ -286,3 +291,44 @@ all four update children and this parent are complete.
   This documentation-only contract changes no executable path and needs no
   duration test. The contract/threat-inventory child is complete; strict signed
   feed and release generation is next.
+- 2026-09-13: implemented the product-owned format/value model with exact
+  top-level and release fields, canonical UTF-8 JSON byte comparison, 256 KiB
+  feed cap, 32-release cap, strict stable semantic versions, monotonic build and
+  sequence rules, 90-day expiry, macOS compatibility, HTTPS/archive bounds,
+  exact product/Universal identity, SHA-256, and plain-text release-note limits.
+- 2026-09-13: selected the system OpenSSH SSHSIG implementation as the reviewed
+  Ed25519 boundary. Verification decodes and validates the version-1 envelope,
+  embedded pinned key, namespace, empty reserved field, SHA-512 selector,
+  algorithm, and signature length before invoking absolute
+  `/usr/bin/ssh-keygen -Y verify` with a temporary one-key allowed-signers file.
+  Process input/output, timeout, and temporary files are bounded; no shell or
+  trust-on-first-use path exists.
+- 2026-09-13: added an external-key release generator. It never reads or emits
+  the private key, hashes the supplied archive, constructs canonical feed bytes,
+  invokes OpenSSH signing, self-verifies with the separate public key, and then
+  atomically replaces a directory containing feed, signature, and path-free
+  evidence. Any signing/key mismatch before publication preserves last-good
+  output. Make exposes a fail-closed credential check and generation target;
+  absent release-key inputs do not fall back to fixture material.
+- 2026-09-13: the focused suite passed canonical/selection behavior,
+  noncanonical/unknown/malformed/expired/unsafe input, release bounds,
+  replay/version/build contradiction, genuine ephemeral Ed25519 success, exact
+  signed-byte mutation, wrong key/key-ID rejection, atomic generation,
+  last-good preservation, secret/path absence, and option validation. The only
+  failed attempt was an initial uppercase-hash negative fixture that lowercased
+  its own mutation; the fixture was corrected to literal uppercase bytes and
+  passed. A direct test invocation initially lacked `main`; the standalone
+  entrypoint was added and the focused command then passed.
+- 2026-09-13: the dedicated `make terminal-update-feed-test` first encountered
+  the sandbox's denied Clang module-cache write in an unrelated Metal build
+  hook; rerunning the exact target with normal host cache access passed all ten
+  groups. `make release-update-feed-credentials-check` without external release
+  values failed closed before signing with recipe status 69 (make status 2), as
+  intended.
+- 2026-09-13: after explicitly saving formatter output, the final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed 299-file formatting,
+  analysis, all generated-evidence, package/native, distribution, security, new
+  update-feed, and root gates. No long-duration test was needed. Review found
+  no private-key material, production fixture key, output path, or unrelated
+  adjacent-repository change. The strict signed-feed/generation child is
+  complete; candidate validation and rollback is next.
