@@ -8,7 +8,38 @@ void runTerminalSelectionGestureTests() {
   _testWideCellDragNormalizesBothVisualHalves();
   _testWordAndLogicalLineClickUnits();
   _testGestureOwnershipAndPersistentRange();
+  _testTransientCancellationPreservesSelection();
   _testReflowRetentionAndInvalidation();
+}
+
+void _testTransientCancellationPreservesSelection() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 6);
+  _setText(screens.primary, 0, 'abcdef');
+  final TerminalSelectionGestureController gesture =
+      TerminalSelectionGestureController(viewport: screens.viewport);
+  gesture.handle(
+    _intent(
+      TerminalLocalSelectionPhase.begin,
+      row: 0,
+      column: 1,
+      edge: TerminalPointerVerticalEdge.below,
+    ),
+  );
+  final int generation = gesture.snapshot.generation;
+  final TerminalSelectionGestureUpdate cancelled = gesture.cancelInteraction();
+  _expect(
+    cancelled.outcome == TerminalSelectionGestureOutcome.ended &&
+        cancelled.snapshot.generation == generation + 1 &&
+        !cancelled.snapshot.isActive &&
+        cancelled.snapshot.verticalEdge == TerminalPointerVerticalEdge.inside &&
+        _text(screens.viewport, cancelled.snapshot.range!) == 'b',
+    'transient cancellation did not preserve the stable selection range',
+  );
+  _expect(
+    gesture.cancelInteraction().outcome ==
+        TerminalSelectionGestureOutcome.ignored,
+    'inactive transient cancellation changed selection again',
+  );
 }
 
 void _testWideCellDragNormalizesBothVisualHalves() {

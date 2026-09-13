@@ -60,6 +60,11 @@ final class TerminalSelectionAutoscroller {
   int get tickCount => _tickCount;
   int get scrolledRowCount => _scrolledRowCount;
 
+  void cancel() {
+    _nextDeadlineMicros = null;
+    _armedEdge = TerminalPointerVerticalEdge.inside;
+  }
+
   TerminalSelectionAutoscrollUpdate observeGesture({
     required int monotonicMicros,
   }) {

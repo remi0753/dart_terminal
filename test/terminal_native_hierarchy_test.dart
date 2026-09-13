@@ -26,12 +26,168 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testRoleAwareWindowProjection();
   await _testInitialNativeContentLayoutProjection();
   await _testNewSplitInheritsNativeBackingScale();
+  await _testDisplayRecoveryMigratesOneLogicalTabGroup();
   await _testNativeDividerGestureSynchronizesLayout();
   await _testFocusedDividerCommandsUseCellGeometry();
   await _testRepeatedMultiWindowRestoredProjection();
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testDisplayRecoveryMigratesOneLogicalTabGroup() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final TerminalApplicationState state = TerminalApplicationState();
+  late final TerminalPaneConfiguration configuration;
+  configuration = TerminalPaneConfiguration(
+    sessionFactory: (
+      TerminalSessionId id, {
+      required void Function() onChanged,
+      required void Function() onTerminated,
+    }) => _HierarchyFakeSession(id),
+    onChanged: () {},
+    onExitRequested: () {},
+  );
+  final TerminalWindowState logicalWindow = await state.createWindow(
+    configuration,
+  );
+  final TerminalPane secondPane = await state.splitPane(
+    logicalWindow.selectedTab.focusedPaneId,
+    configuration,
+    axis: TerminalSplitAxis.horizontal,
+  );
+  final TerminalTabState secondTab = await state.createTab(
+    logicalWindow.id,
+    configuration,
+  );
+  state.selectTab(logicalWindow.id, secondTab.id);
+  final Map<PaneId, List<double>> scales = <PaneId, List<double>>{};
+  final TerminalScreenPlacement originalScreen = TerminalScreenPlacement(
+    displayId: 41,
+    frame: TerminalWindowFrame(left: -1920, top: 0, width: 1920, height: 1080),
+    visibleFrame: TerminalWindowFrame(
+      left: -1920,
+      top: 24,
+      width: 1920,
+      height: 1056,
+    ),
+  );
+  final TerminalNativeHierarchyAdapter adapter = TerminalNativeHierarchyAdapter(
+    state: state,
+    paneResourcesFactory: (TerminalPane pane) => TerminalNativePaneResources(
+      paneId: pane.id,
+      view: View(configuration: terminalBaseViewConfiguration),
+      onBackingScale: (double scale) {
+        scales.putIfAbsent(pane.id, () => <double>[]).add(scale);
+      },
+    ),
+    windowFrame: const Rect.fromLTWH(-1500, 100, 920, 580),
+    cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+    presentWindows: false,
+    windowPlacements: <TerminalWindowId, TerminalWindowPlacement>{
+      logicalWindow.id: TerminalWindowPlacement(
+        windowedFrame: TerminalWindowFrame(
+          left: -1500,
+          top: 100,
+          width: 920,
+          height: 580,
+        ),
+        screen: originalScreen,
+        fullscreen: false,
+      ),
+    },
+  );
+  const AppKitScreen destination = AppKitScreen(
+    displayId: 77,
+    frame: Rect.fromLTWH(0, 0, 1512, 982),
+    visibleFrame: Rect.fromLTWH(0, 23, 800, 577),
+  );
+  try {
+    adapter.reconcile();
+    final Window selected = adapter.windowForTab(secondTab.id)!;
+    final int handle = bindings.handleFor(selected);
+    rawEvents.add(<Object?>[
+      15,
+      7,
+      handle,
+      handle >> 32,
+      100000,
+      0,
+      true,
+      destination.displayId,
+      destination.frame.left,
+      destination.frame.top,
+      destination.frame.width,
+      destination.frame.height,
+      destination.visibleFrame.left,
+      destination.visibleFrame.top,
+      destination.visibleFrame.width,
+      destination.visibleFrame.height,
+    ]);
+    rawEvents.add(<Object?>[15, 6, handle, handle >> 32, 100001, 0, 2.0]);
+    _expect(
+      selected.screen == destination && selected.backingScaleFactor == 2,
+      'display recovery fixture did not update native screen/scale snapshots',
+    );
+    final TerminalNativeDisplayRecoveryResult result = adapter
+        .recoverDisplaySet(
+          fallbackScreen: const AppKitResolvedScreen(
+            screen: destination,
+            backingScaleFactor: 2,
+          ),
+        );
+    final TerminalWindowPlacement migrated = adapter.placementForWindow(
+      logicalWindow.id,
+    );
+    final Rect migratedFrame = Rect.fromLTWH(
+      migrated.windowedFrame.left,
+      migrated.windowedFrame.top,
+      migrated.windowedFrame.width,
+      migrated.windowedFrame.height,
+    );
+    _expect(
+      result.windowCount == 1 &&
+          result.migratedWindowCount == 1 &&
+          result.adjustedFrameCount == 1 &&
+          result.paneCount == 3 &&
+          migrated.screen?.displayId == destination.displayId &&
+          logicalWindow.tabIds.every(
+            (TerminalTabId tabId) =>
+                adapter.windowForTab(tabId)!.frame == migratedFrame,
+          ) &&
+          scales.values.every((List<double> values) => values.last == 2),
+      'display recovery did not migrate, converge, and scale the tab group',
+    );
+
+    const AppKitResolvedScreen unrelatedAttached = AppKitResolvedScreen(
+      screen: AppKitScreen(
+        displayId: 99,
+        frame: Rect.fromLTWH(1512, 0, 1920, 1080),
+        visibleFrame: Rect.fromLTWH(1512, 24, 1920, 1056),
+      ),
+      backingScaleFactor: 1,
+    );
+    final TerminalNativeDisplayRecoveryResult unchanged = adapter
+        .recoverDisplaySet(fallbackScreen: unrelatedAttached);
+    _expect(
+      unchanged.migratedWindowCount == 0 &&
+          unchanged.adjustedFrameCount == 0 &&
+          adapter.placementForWindow(logicalWindow.id) == migrated &&
+          identical(state.paneForId(secondPane.id), secondPane),
+      'attaching an unrelated display moved or replaced retained ownership',
+    );
+  } finally {
+    adapter.dispose();
+    await state.shutdown();
+    await application.terminate();
+    await rawEvents.close();
+  }
 }
 
 Future<void> _testIncidentPresenterLifecycle() async {

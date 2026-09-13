@@ -103,6 +103,21 @@ final class TerminalNativePaneResources {
   }
 }
 
+/// Content-free result of re-projecting live windows after a screen-set change.
+final class TerminalNativeDisplayRecoveryResult {
+  const TerminalNativeDisplayRecoveryResult({
+    required this.windowCount,
+    required this.migratedWindowCount,
+    required this.adjustedFrameCount,
+    required this.paneCount,
+  });
+
+  final int windowCount;
+  final int migratedWindowCount;
+  final int adjustedFrameCount;
+  final int paneCount;
+}
+
 /// Mirrors an AppKit-owned divider gesture into the authoritative split tree.
 ///
 /// A consumed gesture never reaches terminal mouse reporting or selection.
@@ -153,6 +168,10 @@ final class TerminalNativeSplitDividerGestureController {
 
   void cancel(TerminalTabId tabId) {
     _activeDividers.remove(tabId);
+  }
+
+  void cancelAll() {
+    _activeDividers.clear();
   }
 
   void dispose() {
@@ -596,7 +615,10 @@ final class TerminalNativeHierarchyAdapter {
     }
   }
 
-  void reconcile({Map<TerminalTabId, TerminalSplitLayoutSize>? tabSizes}) {
+  void reconcile({
+    Map<TerminalTabId, TerminalSplitLayoutSize>? tabSizes,
+    Map<TerminalWindowId, double>? windowBackingScales,
+  }) {
     _ensureCanReconcile();
     _reconciling = true;
     final Set<TerminalTabId> explicitTabSizeIds = tabSizes == null
@@ -762,8 +784,11 @@ final class TerminalNativeHierarchyAdapter {
 
       for (final TerminalTabState tab in logicalTabs.values) {
         final TerminalSplitLayout layout = layouts[tab.id]!;
+        final TerminalWindowState owner = tabOwners[tab.id]!;
         final double backingScaleFactor =
-            nextWindows[tab.id]!.backingScaleFactor ?? 1;
+            windowBackingScales?[owner.id] ??
+            nextWindows[tab.id]!.backingScaleFactor ??
+            1;
         for (final PaneId paneId in tab.paneIds) {
           final TerminalPaneLayoutRect? rectangle = layout.panes[paneId];
           nextPaneResources[paneId]!.applyBackingScale(backingScaleFactor);
@@ -865,6 +890,53 @@ final class TerminalNativeHierarchyAdapter {
       _explicitTabSizeReconciliations.removeAll(explicitTabSizeIds);
       _reconciling = false;
     }
+  }
+
+  /// Re-resolves every logical window from its current native screen snapshot.
+  ///
+  /// AppKit owns which screen a native window currently occupies. The product
+  /// owns migration/clamping and applies one authoritative placement and scale
+  /// to every tab/pane in that logical window.
+  TerminalNativeDisplayRecoveryResult recoverDisplaySet({
+    required AppKitResolvedScreen fallbackScreen,
+  }) {
+    _ensureCanReconcile();
+    final Map<TerminalWindowId, double> backingScales =
+        <TerminalWindowId, double>{};
+    var migrated = 0;
+    var adjusted = 0;
+    for (final TerminalWindowState logicalWindow in _state.windows) {
+      final Window? selected = _windows[logicalWindow.selectedTabId];
+      if (selected == null || selected.isDisposed) {
+        throw StateError(
+          'terminal window ${logicalWindow.id} is not projected for recovery',
+        );
+      }
+      final AppKitScreen observedScreen =
+          selected.screen ?? fallbackScreen.screen;
+      final double observedScale =
+          selected.backingScaleFactor ?? fallbackScreen.backingScaleFactor;
+      final TerminalWindowPlacement current = placementForWindow(
+        logicalWindow.id,
+      );
+      final TerminalWindowPlacement resolved =
+          TerminalWindowPlacementPolicy.resolveForAvailableScreens(
+            current,
+            <TerminalScreenPlacement>[_terminalScreen(observedScreen)],
+            fallbackDisplayId: observedScreen.displayId,
+          );
+      if (current.screen?.displayId != resolved.screen?.displayId) migrated++;
+      if (current.windowedFrame != resolved.windowedFrame) adjusted++;
+      _windowPlacements[logicalWindow.id] = resolved;
+      backingScales[logicalWindow.id] = observedScale;
+    }
+    reconcile(windowBackingScales: backingScales);
+    return TerminalNativeDisplayRecoveryResult(
+      windowCount: _state.windowCount,
+      migratedWindowCount: migrated,
+      adjustedFrameCount: adjusted,
+      paneCount: _state.paneCount,
+    );
   }
 
   String machineLine() {

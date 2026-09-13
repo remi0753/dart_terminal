@@ -13,9 +13,100 @@ void runFrameSchedulerTests() {
   _testBoundedCursorAndBellClock();
   _testKittyAnimationUsesNewestOnlySchedulerClock();
   _testVisibilityOcclusionPauseAndResume();
+  _testSystemSuspensionRetainsNewestUntilPresentable();
   _testOcclusionDuringBuildSupersedesBeforeSubmit();
   _testPresentationRevisionExhaustionDoesNotWrap();
   _testFrameGenerationExhaustionDoesNotWrap();
+}
+
+void _testSystemSuspensionRetainsNewestUntilPresentable() {
+  final _DamageSequence sequence = _DamageSequence(rows: 1, columns: 1);
+  final _FakeAnimationDriver animation = _FakeAnimationDriver();
+  final List<TerminalFramePresentation> presentations =
+      <TerminalFramePresentation>[];
+  final TerminalNewestFrameScheduler<_FakeFrame> scheduler =
+      TerminalNewestFrameScheduler<_FakeFrame>(
+        model: TerminalDamageRenderModel(),
+        animationDriver: animation,
+        buildFrame:
+            (
+              TerminalDamageRenderModel model, {
+              required int modelRevision,
+              required int frameGeneration,
+              required TerminalFramePresentation presentation,
+            }) {
+              presentations.add(presentation);
+              return _FakeFrame(
+                modelRevision,
+                frameGeneration,
+                model.contentAt(0, 0),
+                presentation,
+              );
+            },
+        submitFrame:
+            (
+              _FakeFrame frame, {
+              required int modelRevision,
+              required int frameGeneration,
+            }) => TerminalFrameSubmissionOutcome.accepted(
+              frameGeneration: frameGeneration,
+              submissionToken: frameGeneration,
+            ),
+      );
+  scheduler.applyDamage(
+    sequence.captureFull(),
+    availableResourceGeneration: 1,
+    monotonicMicros: 0,
+  );
+  _expect(
+    scheduler.submitNewest().isAccepted &&
+        !scheduler.advancePresentation(monotonicMicros: 0) &&
+        scheduler.nextPresentationDeadlineMicros == 10,
+    'system-suspension baseline was not presentable',
+  );
+  _expect(
+    scheduler.updateSystemSuspended(isSuspended: true, monotonicMicros: 1) &&
+        scheduler.isSystemSuspended &&
+        !scheduler.isPresentationActive &&
+        scheduler.nextPresentationDeadlineMicros == null &&
+        animation.pauseCount == 1,
+    'system suspension left presentation or animation active',
+  );
+  scheduler.applyDamage(
+    sequence.mutateAndCapture(0, 0, 0x42),
+    availableResourceGeneration: 1,
+    monotonicMicros: 2,
+  );
+  final int buildCountWhileSuspended = scheduler.buildCount;
+  _expect(
+    scheduler.submitNewest().disposition ==
+            TerminalFrameAttemptDisposition.paused &&
+        scheduler.buildCount == buildCountWhileSuspended &&
+        scheduler.pendingFrameCount == 1,
+    'system suspension built, submitted, or lost newest damage',
+  );
+  _expect(
+    scheduler.updateWindowState(isOccluded: true, monotonicMicros: 3) &&
+        scheduler.updateSystemSuspended(
+          isSuspended: false,
+          monotonicMicros: 4,
+        ) &&
+        !scheduler.isSystemSuspended &&
+        !scheduler.isPresentationActive &&
+        scheduler.submitNewest().disposition ==
+            TerminalFrameAttemptDisposition.paused,
+    'wake resumed an occluded window',
+  );
+  _expect(
+    scheduler.updateWindowState(isOccluded: false, monotonicMicros: 5) &&
+        scheduler.isPresentationActive &&
+        scheduler.submitNewest().isAccepted &&
+        presentations.length == 2 &&
+        presentations.last.requiresFullRedraw &&
+        scheduler.lastAcceptedModelRevision == 2 &&
+        scheduler.pendingFrameCount == 0,
+    'presentable wake did not submit one full redraw of newest state',
+  );
 }
 
 void _testKittyAnimationUsesNewestOnlySchedulerClock() {

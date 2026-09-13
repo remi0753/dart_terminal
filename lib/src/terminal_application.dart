@@ -80,6 +80,7 @@ import 'terminal_settings_document.dart';
 import 'terminal_settings_editor.dart';
 import 'terminal_settings_inspector.dart';
 import 'terminal_shell_integration.dart';
+import 'terminal_system_recovery.dart';
 import 'terminal_tab_metadata.dart';
 import 'terminal_tab_presentation.dart';
 import 'terminal_terminfo_environment.dart';
@@ -2781,6 +2782,7 @@ final class TerminalApplication {
     }
     TerminalNativeHierarchyAdapter? hierarchy;
     TerminalNativeSplitDividerGestureController? dividerGestureController;
+    TerminalSystemRecoveryController? systemRecoveryController;
     TerminalQuickTerminalController? quickTerminalController;
     TerminalSecureKeyboardEntryController? secureKeyboardEntryController;
     TerminalProductHierarchyActionCoordinator? actionCoordinator;
@@ -4057,6 +4059,8 @@ final class TerminalApplication {
       await menuProjection?.dispose();
       actionDispatcher = null;
       actionCoordinator?.dispose();
+      systemRecoveryController?.dispose();
+      systemRecoveryController = null;
       dividerGestureController?.dispose();
       dividerGestureController = null;
       for (final _TerminalHierarchyProductPane owner in owners.values.toList(
@@ -4369,6 +4373,43 @@ final class TerminalApplication {
       dividerGestureController = TerminalNativeSplitDividerGestureController(
         hierarchy: createdHierarchy,
         reconcile: reconcileInteractiveHierarchy,
+      );
+      systemRecoveryController = TerminalSystemRecoveryController(
+        suspendPresentation: () {
+          dividerGestureController?.cancelAll();
+          nativeContextGestures.clear();
+          for (final TerminalTabState tab in state.windows.expand(
+            (TerminalWindowState window) => window.tabs,
+          )) {
+            cancelHyperlinkInteraction(tab);
+          }
+          for (final _TerminalSelectionProductOwner selection
+              in selections.values) {
+            selection.suspendTransientInteraction();
+          }
+          for (final _TerminalHierarchyProductPane owner in owners.values) {
+            if (!owner.surface.isDisposed) {
+              owner.surface.updateSystemSuspended(true);
+            }
+          }
+        },
+        recoverDisplays: () {
+          final AppKitResolvedScreen fallback = application.resolveScreen(
+            AppKitScreenSelection.main,
+          );
+          createdHierarchy.recoverDisplaySet(fallbackScreen: fallback);
+          for (final _TerminalHierarchyProductPane owner in owners.values) {
+            owner.notifyScreenChanged();
+          }
+        },
+        resumePresentation: () {
+          for (final _TerminalHierarchyProductPane owner in owners.values) {
+            if (!owner.surface.isDisposed) {
+              owner.surface.updateSystemSuspended(false);
+            }
+          }
+        },
+        onError: recordAsynchronousError,
       );
       reconcileInteractiveHierarchy();
       if (runUserActionAcceptance) {
@@ -5364,10 +5405,10 @@ final class TerminalApplication {
             // The dedicated accessibility projection owns application policy.
             break;
           case ApplicationPowerStateChangedEvent() ||
-              ApplicationScreenSetChangedEvent() ||
-              ApplicationMemoryPressureChangedEvent():
-            // Generic transport is accepted here; the next ordered reliability
-            // subtask installs the product recovery projection.
+              ApplicationScreenSetChangedEvent():
+            systemRecoveryController?.handle(event);
+          case ApplicationMemoryPressureChangedEvent():
+            // The next ordered reliability subtask owns pressure policy.
             break;
           case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
             if (hasVisibleWindows || state.isDisposed) break;
@@ -11515,6 +11556,8 @@ keybind = control+k=pane.focus-next
     TerminalRestorationLifecycle? restoration;
     RuntimeLifecycleCoordinator? lifecycle;
     StreamSubscription<ApplicationReopenRequestedEvent>? reopenSubscription;
+    TerminalSystemRecoveryController? systemRecoveryController;
+    StreamSubscription<AppKitEvent>? systemRecoverySubscription;
     var lifecycleWasShutDown = false;
     Object? asynchronousError;
     StackTrace? asynchronousStackTrace;
@@ -11670,6 +11713,7 @@ keybind = control+k=pane.focus-next
         paneId: pane.id,
         view: view,
         onLayout: owner.applyLayout,
+        onBackingScale: owner.updateBackingScale,
         onDisposeAdapters: owner.disposeAdapters,
       );
     }
@@ -11735,6 +11779,45 @@ keybind = control+k=pane.focus-next
             TerminalRestorationStartDisposition.defaultCreated,
         'missing isolated persistence did not create a default generation',
       );
+
+      systemRecoveryController = TerminalSystemRecoveryController(
+        suspendPresentation: () {
+          for (final _TerminalHierarchyProductPane owner in owners.values) {
+            if (!owner.surface.isDisposed) {
+              owner.surface.updateSystemSuspended(true);
+            }
+          }
+        },
+        recoverDisplays: () {
+          final TerminalRestorationGeneration? current =
+              createdRestoration.current;
+          if (current == null || current.hierarchy.isDisposed) return;
+          current.hierarchy.recoverDisplaySet(
+            fallbackScreen: application.resolveScreen(
+              AppKitScreenSelection.main,
+            ),
+          );
+          for (final PaneId paneId in current.state.paneIds) {
+            owners[paneId]?.notifyScreenChanged();
+          }
+        },
+        resumePresentation: () {
+          for (final _TerminalHierarchyProductPane owner in owners.values) {
+            if (!owner.surface.isDisposed) {
+              owner.surface.updateSystemSuspended(false);
+            }
+          }
+        },
+        onError: recordAsynchronousError,
+      );
+      systemRecoverySubscription = application.events.listen((
+        AppKitEvent event,
+      ) {
+        if (event is ApplicationPowerStateChangedEvent ||
+            event is ApplicationScreenSetChangedEvent) {
+          systemRecoveryController?.handle(event);
+        }
+      }, onError: recordAsynchronousError);
 
       reopenSubscription = application.onReopenRequested.listen((
         ApplicationReopenRequestedEvent event,
@@ -11968,6 +12051,139 @@ keybind = control+k=pane.focus-next
       _expectLifecycle(
         migrationPlacementMatched && migrationTabsConverged && scaleObserved,
         'screen migration did not clamp the tab group with live scale state',
+      );
+
+      final PaneId recoveryPaneId = initialWindow.selectedTab.focusedPaneId;
+      final TerminalPane recoveryPane = initialState.paneForId(recoveryPaneId)!;
+      final TerminalSession recoverySession = sessions[recoveryPaneId]!;
+      final _TerminalHierarchyProductPane recoveryOwner =
+          owners[recoveryPaneId]!;
+      final TerminalLiveMetalSurface recoverySurface = recoveryOwner.surface;
+      final int recoveryAcceptedBaseline = recoverySurface
+          .snapshot()
+          .acceptedFrameCount;
+      final TerminalSystemRecoverySnapshot recoveryControllerBaseline =
+          systemRecoveryController.snapshot();
+      _injectApplicationPowerStateEventForTesting(
+        application,
+        state: AppKitApplicationPowerState.willSleep,
+        monotonicNanoseconds: 8000000000000100000,
+      );
+      _injectApplicationPowerStateEventForTesting(
+        application,
+        state: AppKitApplicationPowerState.willSleep,
+        monotonicNanoseconds: 8000000000000200000,
+      );
+      final Stopwatch suspendDeadline = Stopwatch()..start();
+      while ((!systemRecoveryController.snapshot().isPresentationSuspended ||
+              !recoverySurface.snapshot().isSystemSuspended) &&
+          suspendDeadline.elapsed < const Duration(seconds: 3)) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      final int acceptedAtSuspend = recoverySurface
+          .snapshot()
+          .acceptedFrameCount;
+      recoveryPane.insertText("printf '\r\n__DT_SYSTEM_RECOVERY_NEWEST__\r\n'");
+      await recoveryPane.submit();
+      await _waitForAsciiMarker(
+        recoverySession,
+        '__DT_SYSTEM_RECOVERY_NEWEST__',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      _expectLifecycle(
+        systemRecoveryController.snapshot().isPresentationSuspended &&
+            recoverySurface.snapshot().isSystemSuspended &&
+            !recoverySurface.snapshot().hasScheduledWork &&
+            recoverySurface.snapshot().acceptedFrameCount == acceptedAtSuspend,
+        'sleep accepted a frame or retained presentation work',
+      );
+
+      _injectApplicationScreenSetEventForTesting(
+        application,
+        monotonicNanoseconds: 8000000000000300000,
+      );
+      _injectApplicationScreenSetEventForTesting(
+        application,
+        monotonicNanoseconds: 8000000000000400000,
+      );
+      _injectApplicationPowerStateEventForTesting(
+        application,
+        state: AppKitApplicationPowerState.didWake,
+        monotonicNanoseconds: 8000000000000500000,
+      );
+      final Stopwatch recoveryDeadline = Stopwatch()..start();
+      while ((systemRecoveryController.snapshot().isPresentationSuspended ||
+              recoverySurface.snapshot().isSystemSuspended ||
+              recoverySurface.snapshot().acceptedFrameCount <=
+                  acceptedAtSuspend) &&
+          recoveryDeadline.elapsed < const Duration(seconds: 3)) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      checkAsynchronousError();
+      final TerminalSystemRecoverySnapshot recoverySnapshot =
+          systemRecoveryController.snapshot();
+      final TerminalLiveMetalSurfaceSnapshot recoveredSurface = recoverySurface
+          .snapshot();
+      final int acceptedEventDelta =
+          recoverySnapshot.acceptedEventCount -
+          recoveryControllerBaseline.acceptedEventCount;
+      final int coalescedEventDelta =
+          recoverySnapshot.coalescedEventCount -
+          recoveryControllerBaseline.coalescedEventCount;
+      final int suspendDelta =
+          recoverySnapshot.suspendCount -
+          recoveryControllerBaseline.suspendCount;
+      final int displayRecoveryDelta =
+          recoverySnapshot.displayRecoveryCount -
+          recoveryControllerBaseline.displayRecoveryCount;
+      final int resumeDelta =
+          recoverySnapshot.resumeCount - recoveryControllerBaseline.resumeCount;
+      final bool recoveryTabsConverged = initialWindow.tabIds.every(
+        (TerminalTabId tabId) =>
+            initial.hierarchy.windowForTab(tabId)!.frame ==
+            _appKitWindowFrame(
+              initial.hierarchy
+                  .placementForWindow(initialWindow.id)
+                  .windowedFrame,
+            ),
+      );
+      stdout.writeln(
+        'TERMINAL_SYSTEM_RECOVERY_OBSERVED '
+        'accepted_events=$acceptedEventDelta '
+        'coalesced_events=$coalescedEventDelta '
+        'suspends=$suspendDelta '
+        'display_recoveries=$displayRecoveryDelta '
+        'resumes=$resumeDelta '
+        'baseline_frames=$recoveryAcceptedBaseline '
+        'suspend_frames=$acceptedAtSuspend '
+        'recovered_frames=${recoveredSurface.acceptedFrameCount} '
+        'applied_revision=${recoveredSurface.lastAppliedDamageGeneration} '
+        'accepted_revision=${recoveredSurface.lastAcceptedModelRevision} '
+        'tabs_converged=$recoveryTabsConverged',
+      );
+      _expectLifecycle(
+        recoveryAcceptedBaseline > 0 &&
+            !recoverySnapshot.isSleeping &&
+            !recoverySnapshot.isPresentationSuspended &&
+            acceptedEventDelta == 3 &&
+            coalescedEventDelta >= 1 &&
+            suspendDelta == 1 &&
+            displayRecoveryDelta == 1 &&
+            resumeDelta == 1 &&
+            !recoveredSurface.isSystemSuspended &&
+            recoveredSurface.acceptedFrameCount > acceptedAtSuspend &&
+            recoveredSurface.lastAcceptedModelRevision ==
+                recoveredSurface.lastAppliedDamageGeneration &&
+            identical(initialState.paneForId(recoveryPaneId), recoveryPane) &&
+            identical(sessions[recoveryPaneId], recoverySession) &&
+            identical(owners[recoveryPaneId]!.surface, recoverySurface) &&
+            recoveryTabsConverged,
+        'wake did not redraw newest state with retained owner/tab placement',
+      );
+      stdout.writeln(
+        'TERMINAL_SYSTEM_RECOVERY_TEST later_turn=true sleep=true wake=true '
+        'screen_set=true coalesced=true stale_frames=0 owner_retained=true '
+        'newest_redrawn=true scheduled_while_sleeping=false',
       );
 
       final TerminalPane secondPane = await initialState.splitPane(
@@ -12246,6 +12462,8 @@ keybind = control+k=pane.focus-next
         'text_clients=0 native_handles=0',
       );
     } finally {
+      systemRecoveryController?.dispose();
+      await systemRecoverySubscription?.cancel();
       await reopenSubscription?.cancel();
       for (final _TerminalHierarchyProductPane owner
           in owners.values.toList(growable: false).reversed) {
@@ -16103,6 +16321,39 @@ keybind = control+k=pane.focus-next
     ]);
   }
 
+  static void _injectApplicationPowerStateEventForTesting(
+    AppKitApplication application, {
+    required AppKitApplicationPowerState state,
+    required int monotonicNanoseconds,
+  }) {
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      35,
+      0,
+      0,
+      monotonicNanoseconds,
+      0,
+      switch (state) {
+        AppKitApplicationPowerState.willSleep => 0,
+        AppKitApplicationPowerState.didWake => 1,
+      },
+    ]);
+  }
+
+  static void _injectApplicationScreenSetEventForTesting(
+    AppKitApplication application, {
+    required int monotonicNanoseconds,
+  }) {
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      36,
+      0,
+      0,
+      monotonicNanoseconds,
+      0,
+    ]);
+  }
+
   static void _injectApplicationAppearanceEventForTesting(
     AppKitApplication application, {
     required bool isDark,
@@ -18404,6 +18655,15 @@ final class _TerminalSelectionProductOwner {
     if (update.changed) surface.updateSelection(update.snapshot);
     autoscroller.observeGesture(monotonicMicros: _clock.elapsedMicroseconds);
     _schedule();
+  }
+
+  void suspendTransientInteraction() {
+    if (_disposed) return;
+    _timer?.cancel();
+    _timer = null;
+    autoscroller.cancel();
+    final TerminalSelectionGestureUpdate update = gesture.cancelInteraction();
+    if (update.changed) surface.updateSelection(update.snapshot);
   }
 
   void dispose() {

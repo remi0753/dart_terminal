@@ -579,6 +579,7 @@ final class TerminalNewestFrameScheduler<Frame> {
   int _lastAcceptedPresentationRevision = 0;
   bool _isWindowVisible = true;
   bool _isWindowOccluded = false;
+  bool _isSystemSuspended = false;
   bool _isSynchronizedOutputHeld = false;
   Object? _fullRedrawMarker;
   bool _pending = false;
@@ -602,7 +603,9 @@ final class TerminalNewestFrameScheduler<Frame> {
   int get lastAcceptedPresentationRevision => _lastAcceptedPresentationRevision;
   bool get isWindowVisible => _isWindowVisible;
   bool get isWindowOccluded => _isWindowOccluded;
-  bool get isPresentationActive => _isWindowVisible && !_isWindowOccluded;
+  bool get isSystemSuspended => _isSystemSuspended;
+  bool get isPresentationActive =>
+      _isWindowVisible && !_isWindowOccluded && !_isSystemSuspended;
   bool get isSynchronizedOutputHeld => _isSynchronizedOutputHeld;
   int? get nextPresentationDeadlineMicros {
     if (!isPresentationActive || _isSynchronizedOutputHeld) return null;
@@ -704,7 +707,8 @@ final class TerminalNewestFrameScheduler<Frame> {
       return false;
     }
     final bool wasActive = isPresentationActive;
-    final bool becomesActive = nextVisible && !nextOccluded;
+    final bool becomesActive =
+        nextVisible && !nextOccluded && !_isSystemSuspended;
     if (wasActive && !becomesActive) {
       presentationClock.pause(monotonicMicros: monotonicMicros);
       animationDriver?.pause();
@@ -718,6 +722,42 @@ final class TerminalNewestFrameScheduler<Frame> {
     }
     _isWindowVisible = nextVisible;
     _isWindowOccluded = nextOccluded;
+    if (!wasActive && becomesActive && model.isInitialized) {
+      _fullRedrawMarker = Object();
+      _pending = true;
+    }
+    return true;
+  }
+
+  /// Suspends all presentation independently of window visibility.
+  ///
+  /// Visibility changes observed while suspended are retained, but only a
+  /// currently visible and non-occluded window resumes presentation. The
+  /// newest initialized model is redrawn once after that transition.
+  bool updateSystemSuspended({
+    required bool isSuspended,
+    required int monotonicMicros,
+  }) {
+    presentationClock._validateTime(monotonicMicros);
+    if (_isSystemSuspended == isSuspended) {
+      presentationClock._observeTime(monotonicMicros);
+      return false;
+    }
+    final bool wasActive = isPresentationActive;
+    _isSystemSuspended = isSuspended;
+    final bool becomesActive = isPresentationActive;
+    if (wasActive && !becomesActive) {
+      presentationClock.pause(monotonicMicros: monotonicMicros);
+      animationDriver?.pause();
+    } else if (!wasActive && becomesActive) {
+      presentationClock.resume(
+        model.isInitialized ? model : null,
+        monotonicMicros: monotonicMicros,
+      );
+    } else {
+      presentationClock._observeTime(monotonicMicros);
+      if (isSuspended) animationDriver?.pause();
+    }
     if (!wasActive && becomesActive && model.isInitialized) {
       _fullRedrawMarker = Object();
       _pending = true;

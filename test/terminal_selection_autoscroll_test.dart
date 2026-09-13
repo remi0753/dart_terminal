@@ -6,7 +6,33 @@ void main() => runTerminalSelectionAutoscrollTests();
 void runTerminalSelectionAutoscrollTests() {
   _testOneDeadlineAndNoCatchUp();
   _testDirectionReversalAndStop();
+  _testExplicitCancellationDropsDeadline();
   _testBoundsAlternateAndValidation();
+}
+
+void _testExplicitCancellationDropsDeadline() {
+  final TerminalScreenSet screens = _historyScreens();
+  final TerminalSelectionGestureController gesture =
+      TerminalSelectionGestureController(viewport: screens.viewport);
+  final TerminalSelectionAutoscroller autoscroll =
+      TerminalSelectionAutoscroller(gesture: gesture);
+  gesture.handle(
+    _intent(
+      TerminalLocalSelectionPhase.begin,
+      row: 0,
+      edge: TerminalPointerVerticalEdge.above,
+    ),
+  );
+  autoscroll.observeGesture(monotonicMicros: 1);
+  _expect(
+    autoscroll.nextDeadlineMicros != null,
+    'fixture did not arm an autoscroll deadline',
+  );
+  autoscroll.cancel();
+  _expect(
+    autoscroll.nextDeadlineMicros == null,
+    'explicit cancellation retained an autoscroll deadline',
+  );
 }
 
 void _testOneDeadlineAndNoCatchUp() {

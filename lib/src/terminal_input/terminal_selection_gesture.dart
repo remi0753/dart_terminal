@@ -99,6 +99,17 @@ final class TerminalSelectionGestureController {
     return _result(TerminalSelectionGestureOutcome.cleared);
   }
 
+  /// Ends only the transient pointer gesture while preserving its selection.
+  TerminalSelectionGestureUpdate cancelInteraction() {
+    if (!_isActive) {
+      return _result(TerminalSelectionGestureOutcome.ignored);
+    }
+    _isActive = false;
+    _verticalEdge = TerminalPointerVerticalEdge.inside;
+    _advanceGeneration();
+    return _result(TerminalSelectionGestureOutcome.ended);
+  }
+
   TerminalSelectionGestureUpdate _begin(TerminalLocalSelectionIntent intent) {
     if (intent.clickCount < 1 || !_cellIsAvailable(intent.cell)) {
       return _result(TerminalSelectionGestureOutcome.ignored);

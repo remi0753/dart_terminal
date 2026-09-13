@@ -258,7 +258,7 @@ help:
 	@echo "  make runtime-shell-integration  Verify bundled zsh integration and disablement in both modes"
 	@echo "  make runtime-desktop-signals-integration  Verify bounded desktop signals in both modes"
 	@echo "  make runtime-osc52-integration     Verify bounded OSC 52 policy and confirmation in both modes"
-	@echo "  make runtime-restoration-integration  Verify fullscreen, migration, restoration, and reopen in both modes"
+	@echo "  make runtime-restoration-integration  Verify fullscreen, system recovery, restoration, and reopen in both modes"
 	@echo "  make runtime-clipboard-integration  Verify bounded Copy/Paste in both modes"
 	@echo "  make runtime-verify                Audit and integration-test both modes"
 

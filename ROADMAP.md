@@ -1361,7 +1361,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] contract、inventory、duration-only follow-up境界
   - [x] `dart_appkit` generic system-state event transport
-  - [ ] product sleep/wake／display recovery policy
+  - [x] product sleep/wake／display recovery policy
   - [ ] product memory-pressure shedding／recovery
   - [ ] bounded aggregate受け入れ、文書／matrix、親項目完了判定
 - [ ] native ASan/UBSan、fuzz corpus、fault injection

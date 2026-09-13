@@ -3129,6 +3129,18 @@ Future<void> _runRestoration(_Options options, _Invocation invocation) async {
     );
     _expect(
       RegExp(
+            r'^TERMINAL_SYSTEM_RECOVERY_TEST later_turn=true sleep=true '
+            r'wake=true screen_set=true coalesced=true stale_frames=0 '
+            r'owner_retained=true newest_redrawn=true '
+            r'scheduled_while_sleeping=false$',
+            multiLine: true,
+          ).allMatches(observation.stdoutText).length ==
+          1,
+      'bounded sleep/wake and screen-set recovery summary is missing or '
+      'malformed',
+    );
+    _expect(
+      RegExp(
                 r'^TERMINAL_SESSION_SHUTDOWN pane=([1-9]|1[0-6]) '
                 r'session=([1-9]|1[0-6]):1 '
                 r'process_id=[1-9][0-9]* disposition=clean '
@@ -3190,7 +3202,7 @@ Future<void> _runRestoration(_Options options, _Invocation invocation) async {
     stdout.writeln(
       'RUNTIME_RESTORATION_INTEGRATION_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
-      'generations=2 windows=2 tabs=4 panes=8 elapsed_ms='
+      'generations=2 windows=2 tabs=4 panes=8 system_recovery=true elapsed_ms='
       '${observation.elapsed.inMilliseconds}',
     );
   } finally {

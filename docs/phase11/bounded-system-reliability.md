@@ -240,3 +240,119 @@ marked as executed; it remains separately visible after the major goal.
 - This subtask is complete with transport only. The next ROADMAP item owns
   product sleep/wake and display recovery; memory-pressure shedding remains the
   following independent item.
+
+### 2026-09-13 — Product sleep/wake and display recovery task start
+
+- Re-read README, ROADMAP, FEATURE_MATRIX, this memo, the generic v15 event
+  contract, native hierarchy projection, newest-frame scheduler, live Metal
+  surface scheduling, and the existing Release AOT restoration acceptance.
+  The first incomplete item remains product sleep/wake and display recovery;
+  memory-pressure reclamation is deliberately left for the following ordered
+  subtask.
+- The implementation will remain entirely in `dart_terminal`. The completed
+  `dart_appkit` layer already supplies application-neutral power and screen-set
+  events plus each live `Window`'s current screen/backing scale, so this product
+  policy requires no generic-library edit and introduces no product identifier
+  there.
+- A fixed-state product controller will retain only monotonic timestamps and
+  pending booleans. It will coalesce native notifications onto a later Dart
+  turn, reject stale transitions, become inert after disposal, and never retain
+  terminal content or owner objects.
+- The renderer contract will gain an explicit system-suspension state. Entering
+  it pauses presentation/animation, cancels pending timers or shared-pane work,
+  clears only transient hover state, and keeps at most the existing newest
+  damage marker. Leaving it resumes only when the current window is visible and
+  non-occluded, requesting exactly one full redraw from canonical state.
+- Display recovery will read the current native screen/backing-scale snapshots,
+  resolve a fresh main-screen fallback, clamp a placement only when its display
+  is no longer represented, project every tab window in the logical group to
+  one placement, and apply the resolved scale before layout. It must not create
+  or close a pane, session, PTY, view, renderer domain, or native window.
+- Unit acceptance will cover stale/duplicate/coalesced/disposed controller
+  input, suspend/resume visibility semantics, deadline suppression, missing and
+  unchanged display placement, tab convergence, and backing-scale projection.
+  The existing bounded restoration product scenario will be extended in both
+  Developer JIT and Release AOT modes with synthetic v15 transitions; this is
+  evidence of product reaction, not a claim that the Mac slept or a cable was
+  physically attached or removed.
+
+### 2026-09-13 — Product sleep/wake and display recovery implementation
+
+- Added a constant-space `TerminalSystemRecoveryController` in the product
+  repository. Power and screen-set events retain only two last-observed
+  timestamps, pending booleans, state flags, and saturating counters. One later
+  Dart microtask coalesces synchronous native delivery after the callback
+  returns; screen work remains pending while asleep, stale signals are rejected
+  per source, and disposal makes an already scheduled callback inert.
+- Wired the ordinary application to the controller without changing
+  `dart_appkit`. Sleep cancels divider/context/hyperlink gestures, ends only the
+  active selection drag while preserving its stable selected range, cancels
+  autoscroll, and suspends every live Metal surface. PTYs, screen/scrollback,
+  selection, preedit, pane/session identity, and native owners remain intact.
+- Added an explicit system-suspension dimension to the newest-frame scheduler
+  and live Metal surface. Suspension pauses the presentation and Kitty
+  animation clocks, exposes no presentation deadline, cancels a surface timer
+  or shared pane-scheduler request, refuses manual render turns, and retains at
+  most the existing newest damage/full-redraw marker. Resume first publishes
+  current visibility/occlusion and therefore restarts only presentable panes;
+  the next accepted frame is a full redraw of the latest canonical revision.
+- Display recovery uses each logical window's selected native tab as the
+  authoritative current AppKit screen/scale and a freshly resolved main screen
+  only as the no-screen fallback. The existing placement policy migrates or
+  clamps the durable windowed frame, every native tab in the logical window is
+  converged, and the chosen backing scale is applied to every pane before its
+  layout. Attaching an unrelated display leaves an already valid placement
+  unchanged. A later per-window screen/scale event remains authoritative if
+  AppKit publishes it after the global notification.
+- The restoration acceptance now injects the same generic v15 power and
+  screen-set records used by production routing. It writes a marker through the
+  real PTY while suspended, proves accepted-frame count and scheduled work stay
+  unchanged, wakes, and requires the accepted renderer revision to equal the
+  latest applied revision while retaining the exact pane/session/surface and
+  tab-group geometry. Machine output contains counts only and never the marker
+  or persistence path.
+
+### 2026-09-13 — Product recovery verification and corrected trials
+
+- Focused controller, frame-scheduler, native-hierarchy, selection-gesture, and
+  autoscroll test runners passed. They cover later-turn ordering, duplicate and
+  stale input, disposal, hidden/occluded resume, no build while suspended,
+  newest full redraw, tab convergence, Retina scale projection, unrelated
+  display attach, stable selection preservation, and deadline cancellation.
+- An initial `dart test` invocation was unsuitable because this repository's
+  tests are executable Dart scripts and intentionally do not depend on
+  `package:test`; rerunning the same focused case with `dart run` passed.
+  A formatter invocation also accidentally included this Markdown memo and
+  failed parsing before code was affected. Subsequent formatter runs were
+  limited to Dart sources.
+- Two build-hook-backed focused tests were initially started concurrently.
+  They raced on the shared `.dart_tool/lib` native-asset output, and one saw an
+  incomplete non-Mach-O file. Both passed when rerun serially; native-asset
+  tests in this repository must not share that output concurrently.
+- The first real-product runs exposed that genuine AppKit screen-set events can
+  precede the synthetic sequence. Absolute lifetime counters and small fixture
+  timestamps therefore made the acceptance fail even though suspension,
+  redraw, owner retention, and teardown were correct. The test now compares
+  event/recovery deltas from a pre-sequence baseline and uses bounded positive
+  monotonic timestamps above any practical machine uptime. No production
+  policy or acceptance invariant was weakened.
+- `make runtime-restoration-integration` passed in both Developer JIT and
+  Release AOT. Each mode reported `system_recovery=true`; sleep admitted no
+  scheduled/accepted frame, wake accepted the newest canonical revision, both
+  restoration generations retained the required identities, all 16 real PTY
+  sessions shut down cleanly, and final text-client/native-handle counts were
+  zero.
+- A later confirmation attempt twice reached the pre-existing fullscreen step
+  with the application inactive and timed out before any injected system event.
+  This did not reproduce in the prior complete Developer JIT/Release AOT run,
+  did not execute the changed recovery path, and still cleaned the PTY, worker,
+  text client, and native handles. It is recorded as a foreground-focus
+  limitation of the fullscreen harness, not as sleep/wake evidence or a product
+  recovery failure; no acceptance result from either incomplete run is counted.
+- The exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passed after
+  regenerating only the reviewed Phase 7 source hashes. It formatted 321 files,
+  reported no analyzer issue, passed all native/package/unit/security/
+  compatibility/differential/application/distribution checks, and ended with
+  `dart_terminal tests passed`. Full-source analysis and `git diff --check`
+  also passed. No elapsed-time-only soak or physical sleep/display claim was
+  used.

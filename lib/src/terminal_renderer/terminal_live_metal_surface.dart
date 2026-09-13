@@ -120,6 +120,7 @@ final class TerminalLiveMetalSurfaceSnapshot {
     required this.kittyEvictedPlacementCount,
     required this.kittyAtlasEvictionCount,
     required this.hasScheduledWork,
+    required this.isSystemSuspended,
     required this.synchronizedOutputMode,
     required this.synchronizedOutputHeld,
     required this.synchronizedOutputReleaseCount,
@@ -175,6 +176,7 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int kittyEvictedPlacementCount;
   final int kittyAtlasEvictionCount;
   final bool hasScheduledWork;
+  final bool isSystemSuspended;
   final bool synchronizedOutputMode;
   final bool synchronizedOutputHeld;
   final int synchronizedOutputReleaseCount;
@@ -497,6 +499,7 @@ final class TerminalLiveMetalSurface {
   bool _needsDrain = false;
   bool _retryRequested = false;
   bool _processing = false;
+  bool _systemSuspended = false;
   bool _disposed = false;
   int _lastMonotonicMicros = 0;
   TerminalCaretRect? _lastPublishedCaretRect;
@@ -747,9 +750,50 @@ final class TerminalLiveMetalSurface {
     _scheduleImmediate();
   }
 
+  /// Stops or resumes presentation for an application sleep/wake transition.
+  ///
+  /// Canonical screen, selection, preedit, and pending newest damage remain
+  /// owned throughout suspension. Only transient hover and scheduled work are
+  /// discarded. Resume synchronizes the latest window state before deciding
+  /// whether this surface is eligible to present again.
+  void updateSystemSuspended(bool isSuspended) {
+    _requireLive();
+    if (_systemSuspended == isSuspended) return;
+    final int now = _clock.elapsedMicroseconds;
+    if (now < _lastMonotonicMicros) {
+      throw StateError('live Metal surface monotonic time regressed');
+    }
+    _lastMonotonicMicros = now;
+    if (isSuspended) {
+      _systemSuspended = true;
+      _hyperlinkHover = null;
+      _scheduler.updateSystemSuspended(isSuspended: true, monotonicMicros: now);
+      _timer?.cancel();
+      _timer = null;
+      _paneWorkScheduler?.cancel(sessionId);
+      _retryRequested = false;
+      return;
+    }
+
+    _publishWindowState(now);
+    _systemSuspended = false;
+    _scheduler.updateSystemSuspended(isSuspended: false, monotonicMicros: now);
+    if (_scheduler.isPresentationActive && _recovery.hasCurrentDomain) {
+      _recovery.currentDomain.renderer.requestPresentation();
+    }
+    _needsDrain = true;
+    _scheduleImmediate();
+  }
+
   /// Advances one bounded coalesced render turn outside AppKit callbacks.
   void processPending({int? monotonicMicros}) {
     _requireLive();
+    if (_systemSuspended) {
+      _timer?.cancel();
+      _timer = null;
+      _paneWorkScheduler?.cancel(sessionId);
+      return;
+    }
     if (_processing) {
       _needsDrain = true;
       return;
@@ -852,6 +896,7 @@ final class TerminalLiveMetalSurface {
       kittyAtlasEvictionCount: atlas.kittyImageEvictionCount,
       hasScheduledWork:
           _timer != null || (_paneWorkScheduler?.isPending(sessionId) ?? false),
+      isSystemSuspended: _systemSuspended,
       synchronizedOutputMode: screenSet.synchronizedOutputMode,
       synchronizedOutputHeld: _synchronizedPresentationGate.isHolding,
       synchronizedOutputReleaseCount: _synchronizedOutputReleaseCount,
@@ -1358,7 +1403,9 @@ final class TerminalLiveMetalSurface {
   }
 
   void _scheduleImmediate() {
-    if (!automaticScheduling || _disposed || _processing) return;
+    if (!automaticScheduling || _disposed || _processing || _systemSuspended) {
+      return;
+    }
     final TerminalPaneWorkScheduler? paneScheduler = _paneWorkScheduler;
     if (paneScheduler != null) {
       if (!paneScheduler.request(sessionId)) {
@@ -1371,7 +1418,7 @@ final class TerminalLiveMetalSurface {
   }
 
   void _scheduleNext(int now) {
-    if (!automaticScheduling || _disposed) return;
+    if (!automaticScheduling || _disposed || _systemSuspended) return;
     Duration? delay;
     final bool synchronizedOutputHeld = _synchronizedPresentationGate.isHolding;
     if (_retryRequested ||
