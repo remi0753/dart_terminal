@@ -6,7 +6,7 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: contract, pinned-evidence inventory, and gap classification
+- Current subtask: P0 gap burn-down (complete)
 
 ## Purpose
 
@@ -185,3 +185,48 @@ code/name containing `terminal` may be added to `dart_appkit`.
   ending with `dart_terminal tests passed`. No runtime or sanitizer artifact is
   tracked by this child; the next ordered child is the zero-actionable-P0
   closure, not P1 implementation.
+- 2026-09-13: After commit `42c2f7e` and the mandatory roadmap reread, the P0
+  child began from a clean worktree. The only P0-classified difference is
+  xterm mode 1001 in the mosh application cell: the captured sequence is reset
+  only, inventory support is `unsupported`/`reject`, acceptance records exactly
+  one variant, and both `screen_mutation` and `matrix_blocker` are false. The
+  other P0 row carrying a follow-up is `DIST-01`; its arm64/x86_64/Universal and
+  Rosetta product behavior is accepted, while an Intel-native host observation
+  remains separately and explicitly unverified. Neither item authorizes
+  inventing an enable handshake or treating external evidence as executed.
+- 2026-09-13: The first P0 negative test removed the exact mode-1001 inventory
+  owner and exposed an untyped `StateError` from `singleWhere` rather than the
+  inventory's bounded validation exception. Positive data still passed. The
+  validator now checks candidate cardinality first so missing or duplicate P0
+  ownership fails with the task-specific, content-free classification.
+- 2026-09-13: The next exact repository gate reached its format check after all
+  prerequisite evidence checks passed, then stopped because the cardinality
+  fix had not been run through focused format. `dart format` changed only the
+  expected wrapping in the inventory tool. This procedural failure is not
+  accepted as final evidence; the formatted source is retained for a clean
+  rerun.
+- 2026-09-13: The inventory checker now parses the canonical sequence record,
+  application acceptance, and regression coverage instead of relying only on
+  their hashes. It requires mode 1001 to remain one private rejected record
+  with no claimed implementation/test evidence; the application gap must be
+  exact, explicit, input-only, one-variant, non-mutating, and non-blocking; and
+  aggregate coverage must retain zero known P0 silent corruption and zero
+  blocking failures. The generated report exposes these facts under
+  `p0_closure` and keeps the Intel-native observation in an explicit external
+  follow-up list.
+- 2026-09-13: Focused positive and negative tests passed after the typed-error
+  correction. Mutating screen impact, removing the exact inventory owner, or
+  changing known P0 silent corruption to one now fails closed. Focused format,
+  analysis, generation freshness, and the marker with `actionable_p0=0` all
+  passed.
+- 2026-09-13: Final
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed all ordinary native,
+  package, generated/freshness, compatibility, application, distribution,
+  format (326 files, zero changes), analysis (no issues), and Dart tests,
+  ending with `dart_terminal tests passed`. Diff validation before the roadmap
+  status update found only the four intended implementation/evidence/memo
+  files and no whitespace issue; the roadmap is the fifth final file. The
+  adjacent `dart_appkit` worktree is clean and its case-insensitive code/name
+  audit contains no `terminal` or `dart_terminal` occurrence. P0 closure has
+  no remaining product work; the next ordered task is the first P1
+  implementation child, extended rendition and protected selective erase.

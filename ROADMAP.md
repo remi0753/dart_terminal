@@ -1378,7 +1378,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase11/ghostty-p0-p1-gap-burn-down.md`](docs/phase11/ghostty-p0-p1-gap-burn-down.md)
   を参照して順に実施する）
   - [x] contract、pinned evidence、P0/P1 gap inventory
-  - [ ] P0 gap burn-down
+  - [x] P0 gap burn-down
   - [ ] P1 gap burn-down
     - [ ] underline color／overline／protected selective erase
     - [ ] bounded semantic prompt／command／output ranges

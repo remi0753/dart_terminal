@@ -65,6 +65,47 @@ void runGhosttyP0P1GapInventoryTests() {
     ),
     'matrix revision drift',
   );
+  final String sequenceInventory = File(
+    'compatibility/sequence_mode_inventory.json',
+  ).readAsStringSync();
+  final String applicationAcceptance = File(
+    'compatibility/application_matrix_acceptance.json',
+  ).readAsStringSync();
+  final String regressionCoverage = File(
+    'compatibility/regression_coverage_report.json',
+  ).readAsStringSync();
+  validateGhosttyP0ClosureSources(
+    sequenceInventorySource: sequenceInventory,
+    applicationAcceptanceSource: applicationAcceptance,
+    regressionCoverageSource: regressionCoverage,
+  );
+  _expectP0Failure(
+    sequenceInventory,
+    applicationAcceptance.replaceFirst(
+      '"screen_mutation": false',
+      '"screen_mutation": true',
+    ),
+    regressionCoverage,
+    'screen-mutating documented difference',
+  );
+  _expectP0Failure(
+    sequenceInventory.replaceFirst(
+      '"id": "xterm:mode:xterm-hilite-mouse-tracking",',
+      '"id": "xterm:mode:unowned-hilite-mouse-tracking",',
+    ),
+    applicationAcceptance,
+    regressionCoverage,
+    'missing exact inventory owner',
+  );
+  _expectP0Failure(
+    sequenceInventory,
+    applicationAcceptance,
+    regressionCoverage.replaceFirst(
+      '"known_p0_silent_corruption": 0',
+      '"known_p0_silent_corruption": 1',
+    ),
+    'silent P0 regression',
+  );
 }
 
 void _expectFailure(String source, String expected, String message) {
@@ -79,6 +120,24 @@ void _expectFailure(String source, String expected, String message) {
 void _expectMatrixFailure(String source, String message) {
   try {
     parseGhosttyP0P1MatrixSource(source);
+  } on GhosttyP0P1GapInventoryException {
+    return;
+  }
+  throw StateError('test failed: $message');
+}
+
+void _expectP0Failure(
+  String inventory,
+  String application,
+  String regression,
+  String message,
+) {
+  try {
+    validateGhosttyP0ClosureSources(
+      sequenceInventorySource: inventory,
+      applicationAcceptanceSource: application,
+      regressionCoverageSource: regression,
+    );
   } on GhosttyP0P1GapInventoryException {
     return;
   }

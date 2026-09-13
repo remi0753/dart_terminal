@@ -313,6 +313,23 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
     matrixSource,
   );
   _validatePinnedEvidence(root, matrixSource);
+  validateGhosttyP0ClosureSources(
+    sequenceInventorySource: _regularFile(
+      root,
+      'compatibility/sequence_mode_inventory.json',
+      4 * 1024 * 1024,
+    ).readAsStringSync(),
+    applicationAcceptanceSource: _regularFile(
+      root,
+      'compatibility/application_matrix_acceptance.json',
+      1024 * 1024,
+    ).readAsStringSync(),
+    regressionCoverageSource: _regularFile(
+      root,
+      'compatibility/regression_coverage_report.json',
+      1024 * 1024,
+    ).readAsStringSync(),
+  );
   final Map<String, int> priorities = <String, int>{};
   final Map<String, int> classifications = <String, int>{};
   final List<Map<String, Object?>> encodedRows = <Map<String, Object?>>[];
@@ -389,6 +406,13 @@ String generateGhosttyP0P1GapInventory({Directory? repositoryRoot}) {
       'actionable_p1': 8,
       'silent_misbehavior': 0,
     },
+    'p0_closure': <String, Object?>{
+      'actionable_product_gaps': 0,
+      'known_silent_misbehavior': 0,
+      'documented_non_mutating_differences': 1,
+      'matrix_blockers': 0,
+      'external_follow_ups': <String>['intel-native-handoff'],
+    },
     'rows': encodedRows,
     'gaps': <Map<String, Object?>>[for (final _Gap gap in _gaps) gap.toJson()],
   };
@@ -454,6 +478,8 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
       totals['priorities']! as Map<String, Object?>;
   final Map<String, Object?> classifications =
       totals['classifications']! as Map<String, Object?>;
+  final Map<String, Object?> p0Closure =
+      report['p0_closure']! as Map<String, Object?>;
   _expect(
     totals['rows'] == 102 &&
         priorities['P0'] == 69 &&
@@ -466,10 +492,87 @@ GhosttyP0P1GapInventoryResult validateGhosttyP0P1GapInventorySource(
         classifications['accepted'] == 89 &&
         classifications['accepted-documented-difference'] == 2 &&
         classifications['accepted-external-follow-up'] == 3 &&
-        classifications['actionable-p1'] == 8,
+        classifications['actionable-p1'] == 8 &&
+        p0Closure['actionable_product_gaps'] == 0 &&
+        p0Closure['known_silent_misbehavior'] == 0 &&
+        p0Closure['documented_non_mutating_differences'] == 1 &&
+        p0Closure['matrix_blockers'] == 0 &&
+        (p0Closure['external_follow_ups']! as List<Object?>).single ==
+            'intel-native-handoff',
     'reviewed totals differ',
   );
   return const GhosttyP0P1GapInventoryResult();
+}
+
+void validateGhosttyP0ClosureSources({
+  required String sequenceInventorySource,
+  required String applicationAcceptanceSource,
+  required String regressionCoverageSource,
+}) {
+  final Map<String, Object?> inventory = _jsonSource(
+    sequenceInventorySource,
+    'sequence inventory',
+  );
+  final List<Map<String, Object?>> hiliteRecords =
+      (inventory['records']! as List<Object?>)
+          .cast<Map<String, Object?>>()
+          .where((row) => row['id'] == 'xterm:mode:xterm-hilite-mouse-tracking')
+          .toList(growable: false);
+  _expect(hiliteRecords.length == 1, 'mode 1001 inventory owner differs');
+  final Map<String, Object?> hiliteRecord = hiliteRecords.single;
+  final Map<String, Object?> selector =
+      hiliteRecord['selector']! as Map<String, Object?>;
+  _expect(
+    hiliteRecord['support'] == 'unsupported' &&
+        hiliteRecord['disposition'] == 'reject' &&
+        selector['kind'] == 'mode' &&
+        selector['private'] == true &&
+        selector['number'] == 1001 &&
+        (hiliteRecord['implementationEvidence']! as List<Object?>).isEmpty &&
+        (hiliteRecord['testEvidence']! as List<Object?>).isEmpty,
+    'mode 1001 inventory contract differs',
+  );
+
+  final Map<String, Object?> application = _jsonSource(
+    applicationAcceptanceSource,
+    'application acceptance',
+  );
+  final List<Object?> applicationGaps = application['gaps']! as List<Object?>;
+  _expect(applicationGaps.length == 1, 'P0 application gap total differs');
+  final Map<String, Object?> gap =
+      applicationGaps.single! as Map<String, Object?>;
+  _expect(
+    gap['id'] == 'hilite-mouse' &&
+        gap['disposition'] == 'explicit-unsupported' &&
+        gap['impact'] == 'input-events' &&
+        (gap['inventory_ids']! as List<Object?>).single ==
+            'xterm:mode:xterm-hilite-mouse-tracking' &&
+        gap['minimal_hex'] == '1b5b3f313030316c' &&
+        (gap['variants']! as List<Object?>).length == 1 &&
+        gap['screen_mutation'] == false &&
+        gap['matrix_blocker'] == false,
+    'mode 1001 application classification differs',
+  );
+
+  final Map<String, Object?> regression = _jsonSource(
+    regressionCoverageSource,
+    'regression coverage',
+  );
+  final Map<String, Object?> phaseExit =
+      regression['phase_exit']! as Map<String, Object?>;
+  final List<Object?> ownedGaps =
+      regression['owned_application_gaps']! as List<Object?>;
+  _expect(
+    phaseExit['known_p0_silent_corruption'] == 0 &&
+        phaseExit['blocking_failures'] == 0 &&
+        phaseExit['unsupported_sequences_classified'] == true &&
+        ownedGaps.length == 1 &&
+        (ownedGaps.single! as Map<String, Object?>)['id'] == 'hilite-mouse' &&
+        (ownedGaps.single! as Map<String, Object?>)['screen_mutation'] ==
+            false &&
+        (ownedGaps.single! as Map<String, Object?>)['matrix_blocker'] == false,
+    'P0 regression closure differs',
+  );
 }
 
 void _validatePinnedEvidence(Directory root, String matrixSource) {

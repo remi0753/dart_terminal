@@ -81,6 +81,15 @@
     "actionable_p1": 8,
     "silent_misbehavior": 0
   },
+  "p0_closure": {
+    "actionable_product_gaps": 0,
+    "known_silent_misbehavior": 0,
+    "documented_non_mutating_differences": 1,
+    "matrix_blockers": 0,
+    "external_follow_ups": [
+      "intel-native-handoff"
+    ]
+  },
   "rows": [
     {
       "id": "RT-01",
