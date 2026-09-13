@@ -31,8 +31,9 @@ native spike source was intentionally retired and is historical evidence only.
 
 - A bounded RGBA8 sRGB image with exact dimensions, scale, stride, and owned
   pixel storage.
-- Integer, source-over compositing for ordered solid rectangles, monochrome
-  coverage masks, and color bitmap layers.
+- Deterministic linear-light source-over compositing for ordered solid
+  rectangles, monochrome coverage masks, and color bitmap layers, with sRGB
+  decode/encode at the RGBA8 boundary.
 - Explicit terminal draw order: base background, cell backgrounds, selection,
   glyphs, decorations, cursor.
 - Clipping, scale conversion, input validation, and deterministic rendering.
@@ -45,8 +46,9 @@ native spike source was intentionally retired and is historical evidence only.
   are the next Phase 4 roadmap item.
 - Atlas allocation and Metal resources, shaders, drawables, scheduling, or
   product view attachment.
-- Image protocol layers, hyperlink/search/IME overlays, P3 conversion, and
-  antialiasing policy beyond accepting prepared 8-bit coverage or RGBA data.
+- Image protocol layers, hyperlink/search/IME overlays, and antialiasing policy
+  beyond accepting prepared 8-bit coverage or RGBA data. Tagged Display P3
+  admission was added later by the Phase 11 color-contract revision below.
 - Updating golden artifacts automatically from a passing/failing test.
 
 ## Dependencies and ownership
@@ -113,8 +115,8 @@ newline, Base64 whitespace, noncanonical padding, or trailing bytes.
   renders with exact scaled dimensions.
 - Base, background, selection, glyph, decoration, and cursor order is enforced
   independent of caller list order.
-- Alpha blending and coverage use documented integer rounding and do not vary
-  with platform floating-point behavior.
+- Alpha blending and coverage decode sRGB to linear light, apply straight-alpha
+  source-over, encode sRGB, and round only final RGBA8 storage.
 - All dimensions, pixel products, primitive counts, mask/bitmap strides, and
   encoded bytes have hard limits and checked arithmetic.
 - A golden round trip is byte exact; malformed/corrupt/oversized input is
@@ -135,6 +137,17 @@ newline, Base64 whitespace, noncanonical padding, or trailing bytes.
   `git diff --cached --check`, and `make runtime-source-check`.
 
 ## Investigation log
+
+### Phase 11 color-contract revision (2026-09-14)
+
+The original Phase 4 oracle blended encoded component bytes with integer
+arithmetic. Phase 11 corrected that historical limitation: tagged Display P3
+colors and bitmaps convert exactly once to clipped canonical sRGB, while sRGB
+inputs remain byte exact; composition decodes canonical sRGB, calculates
+straight-alpha source-over in linear light, unpremultiplies transparent output,
+and encodes final RGBA8 sRGB. Reference bitmaps convert only active pixels and
+preserve row-stride padding. Metal uses matching sRGB atlas/target formats and
+allows one output-byte of GPU rounding tolerance.
 
 - 2026-09-05: reread `README.md`, the complete roadmap and feature matrix,
   ADR-003/004, Phase 0 Metal/CoreText evidence, current terminal screen/style/
@@ -169,10 +182,10 @@ newline, Base64 whitespace, noncanonical padding, or trailing bytes.
   rectangles, monochrome coverage masks, and color RGBA bitmaps. Mask and
   bitmap constructors copy caller data and require exact bounded stride/length
   relationships.
-- Added an owned `TerminalReferenceImage` and a deterministic compositor. It
-  uses only integer source-over arithmetic with documented divide-by-255
-  rounding, clips logical coordinates, expands source pixels exactly at 1x–4x,
-  and enforces the terminal presentation order regardless of caller list order.
+- Added an owned `TerminalReferenceImage` and a deterministic compositor. Its
+  original integer source-over implementation was superseded by the Phase 11
+  linear-light contract above; clipping, exact 1x–4x expansion, and terminal
+  presentation order remain unchanged.
 - Image dimensions, logical dimensions, scale, pixel count, primitive count,
   source bytes, clipping domain, packed colors, opacity, and source shapes are
   validated before use. Output access returns copies or a bounds-checked packed
@@ -209,9 +222,10 @@ fixture, and comparison diagnostics are now the first unchecked child.
   cap; the typed assertion exception never embeds either full image and also
   bounds its caller-provided description.
 - Checked in reviewed fixed-scene 1x and 2x artifacts under
-  `test/goldens/reference/`. Tests regenerate bytes only in memory, compare
-  them exactly to the source-controlled artifacts, decode them, and compare
-  pixels; no test rewrite path exists.
+  `test/goldens/reference/`. Ordinary tests regenerate bytes only in memory,
+  compare them exactly to the source-controlled artifacts, decode them, and
+  compare pixels. A deliberate reviewed update uses the explicit
+  `--write-goldens` argument.
 
 - Focused tests cover byte-exact repeat encoding and ownership-preserving round
   trip; corrupt format/version/order/numeric spelling/pixel format/stride/

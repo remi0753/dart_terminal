@@ -5,6 +5,7 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'reference_renderer.dart';
 import 'terminal_cell_glyph.dart';
+import 'terminal_overlay.dart';
 
 enum TerminalGlyphAtlasFormat { alpha8, rgba8Straight }
 
@@ -620,6 +621,7 @@ final class TerminalGlyphAtlas {
   TerminalGlyphAtlasEntry ingestKittyImageTile({
     required TerminalKittyImageAtlasKey key,
     required Uint8List rgba,
+    TerminalRenderColorSpace inputColorSpace = TerminalRenderColorSpace.srgb,
   }) {
     _validateKittyImageKeyDomain(key);
     final int width = key.tileWidth;
@@ -633,18 +635,23 @@ final class TerminalGlyphAtlas {
         'Kitty image tile does not fit a color atlas page',
       );
     }
+    final Uint8List canonicalRgba = switch (inputColorSpace) {
+      TerminalRenderColorSpace.srgb => rgba,
+      TerminalRenderColorSpace.displayP3 =>
+        TerminalRenderColorConverter.displayP3ToSrgbBuffer(rgba),
+    };
     final TerminalGlyphAtlasEntry? existing = _kittyImageEntries[key];
     if (existing != null) {
       if (existing.width != width ||
           existing.height != height ||
           existing.rowStride != width * 4 ||
-          !_bytesEqual(copyEntryPixels(existing), rgba)) {
+          !_bytesEqual(copyEntryPixels(existing), canonicalRgba)) {
         throw StateError('existing Kitty atlas key has different pixel bytes');
       }
       _touch(existing);
       return existing;
     }
-    return _insertKittyImageTile(key, rgba);
+    return _insertKittyImageTile(key, canonicalRgba);
   }
 
   /// Removes stale whole-image Kitty tiles in deterministic entry order.

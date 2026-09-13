@@ -6,5 +6,5 @@ scale=2
 pixel-format=rgba8-srgb-straight
 row-stride=24
 payload-length=96
-checksum=fnv1a32:bbeb4c04
-pixels=gEAg/4BAIP///////////4RIjP+ESIz/gEAg/4BAIP///////////4RIjP+ESIz/Zmyy/2Zssv/N4B//zeAf/wZsUv8GbFL/Zmyy/2Zssv/N4B//zeAf/wZsUv8GbFL/
+checksum=fnv1a32:0db9c29c
+pixels=gEAg/4BAIP///////////7yKvf+8ir3/gEAg/4BAIP///////////7yKvf+8ir3/pabR/6Wm0f/n8F3/5/Bd/wemjP8Hpoz/pabR/6Wm0f/n8F3/5/Bd/wemjP8Hpoz/

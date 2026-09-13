@@ -7,12 +7,114 @@ import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 void main() => runMetalPipelineTests();
 
 void runMetalPipelineTests() {
+  _testCanonicalSrgbNativeSourceContract();
   for (final int scale in <int>[1, 2]) {
     _testGpuAgainstReferenceGolden(scale);
   }
+  _testDisplayP3TileConvertsBeforeMetalUpload();
   _testEmptySameDomainResetSynchronization();
   _testKittyImageTileSurvivesRendererReplacement();
   _testBridgeLimitValidation();
+}
+
+void _testCanonicalSrgbNativeSourceContract() {
+  final String native = File(
+    'packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m',
+  ).readAsStringSync();
+  final String shader = File(
+    'packages/dart_terminal_renderer_macos/native/TerminalShaders.metal',
+  ).readAsStringSync();
+  final String header = File(
+    'packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.h',
+  ).readAsStringSync();
+  _expect(
+    !RegExp(r'MTLPixelFormatRGBA8Unorm(?!_sRGB)').hasMatch(native) &&
+        'MTLPixelFormatRGBA8Unorm_sRGB'.allMatches(native).length == 4 &&
+        'LinearClearColorFromSrgbRgba'.allMatches(native).length == 3 &&
+        native.contains('CGColorSpaceCreateWithName(kCGColorSpaceSRGB)') &&
+        shader.contains('dtr_srgb_to_linear') &&
+        shader.contains('dtr_srgb_to_linear(encoded_color.rgb)') &&
+        header.contains('canonical sRGB, straight-alpha 0xRRGGBBAA'),
+    'native source keeps the canonical sRGB decode/blend/encode contract',
+  );
+}
+
+void _testDisplayP3TileConvertsBeforeMetalUpload() {
+  final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
+    catalogGeneration: 1,
+    limits: const TerminalGlyphAtlasLimits(
+      pageWidth: 8,
+      pageHeight: 8,
+      maximumAlphaPages: 1,
+      maximumColorPages: 1,
+      maximumEntries: 1,
+      maximumRetainedBytes: 8 * 8 * 4,
+      gutter: 0,
+    ),
+  );
+  const TerminalKittyImageAtlasKey key = TerminalKittyImageAtlasKey(
+    screenKindIndex: 0,
+    imageId: 1,
+    imageResourceGeneration: 1,
+    imageContentGeneration: 1,
+    placementGeneration: 1,
+    sourceX: 0,
+    sourceY: 0,
+    sourceWidth: 1,
+    sourceHeight: 1,
+    destinationX: 0,
+    destinationY: 0,
+    destinationWidth: 1,
+    destinationHeight: 1,
+    tileX: 0,
+    tileY: 0,
+    tileWidth: 1,
+    tileHeight: 1,
+    scale16_16: 1 << 16,
+  );
+  final TerminalGlyphAtlasEntry entry = atlas.ingestKittyImageTile(
+    key: key,
+    rgba: Uint8List.fromList(const <int>[0xff, 0x80, 0x00, 0xff]),
+    inputColorSpace: TerminalRenderColorSpace.displayP3,
+  );
+  final TerminalMetalRenderer renderer = _openSinglePixelRenderer();
+  try {
+    final TerminalGlyphAtlasMetalBridge bridge = TerminalGlyphAtlasMetalBridge(
+      atlas: atlas,
+      renderer: renderer,
+    );
+    _expect(
+      bridge.synchronize() == TerminalGlyphAtlasSyncDisposition.synchronized,
+      'canonical P3 tile reaches the native atlas',
+    );
+    final TerminalMetalInstance instance = bridge.imageInstance(
+      entry,
+      layer: TerminalMetalImageLayer.aboveText,
+      x: 0,
+      y: 0,
+    )!;
+    final TerminalMetalFrame frame = TerminalMetalFrameEncoder.encode(
+      renderer: renderer,
+      frameGeneration: 1,
+      atlasGeneration: bridge.nativeAtlasGeneration,
+      viewportWidth: 1,
+      viewportHeight: 1,
+      scale16_16: 1 << 16,
+      backgroundRgba: 0x000000ff,
+      instances: <TerminalMetalInstance>[instance],
+    );
+    final Uint8List pixels = renderer.renderRgba(frame);
+    _expect(
+      pixels.length == 4 &&
+          pixels[0] == 0xff &&
+          pixels[1] == 0x77 &&
+          pixels[2] == 0x00 &&
+          pixels[3] == 0xff,
+      'real Metal receives one clipped canonical sRGB conversion',
+    );
+  } finally {
+    renderer.dispose();
+  }
 }
 
 void _testKittyImageTileSurvivesRendererReplacement() {

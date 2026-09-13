@@ -6,8 +6,8 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 remaining overlays and P3 conversion — privacy-safe
-  inspector overlay
+- Current subtask: P1 remaining overlays and P3 conversion — canonical sRGB
+  and alpha-blending native/reference parity
 
 ## Current P1 child — remaining overlays and P3 conversion
 
@@ -417,6 +417,181 @@
   because the workspace sandbox exposes `.git/index.lock` read-only. Source and
   validation state are intact; staging/commit must be retried with repository
   metadata write permission rather than changing the worktree.
+
+### Current child — canonical sRGB and alpha-blending parity
+
+- **Purpose:** Make the renderer's declared straight-alpha sRGB contract true
+  at every CPU/native/Metal boundary, while accepting explicitly tagged Display
+  P3 input through exactly one clipped conversion before packing or upload.
+- **Background:** Terminal palette, OSC colors, glyph masks, reference images,
+  and Kitty RGBA bytes are currently treated as sRGB values, but the native
+  color atlas, offscreen target, and `MTKView` use untagged `RGBA8Unorm`.
+  Fragment output is therefore blended in encoded component space. The first
+  overlay child added reviewed P3-to-sRGB conversion values, but no renderer
+  producer consumes them yet and the CPU oracle must be audited against the
+  eventual Metal source-over semantics.
+- **Scope:** Inventory every color/bitmap producer and pixel-format creation;
+  introduce one explicit canonical-sRGB packing/upload boundary for tagged
+  colors and buffers; switch sampled color resources and render targets to sRGB
+  formats where required for linear-light fixed-function blending; preserve
+  alpha-mask semantics and straight-alpha public inputs; align the CPU oracle's
+  decode/blend/encode rounding with Metal; strengthen native fail-closed source
+  and ABI audits; add exact conversion, translucent solid/mask/image, and
+  overlapping-layer 1x/2x CPU/real-Metal tests.
+- **Out of scope:** HDR or wide-gamut output, Display P3 framebuffer claims,
+  ICC/profile negotiation, transparency/background blur, arbitrary image
+  formats, runtime screenshots and matrix acceptance (next child), changes to
+  generic `dart_appkit`, Apple notarization, and duration-only soak.
+- **Dependencies:** `TerminalRenderColor` conversion contract; palette/style and
+  Kitty upload paths; alpha/color atlas page ownership; packed Metal instance
+  ABI; Objective-C++ renderer texture/target setup and blend descriptor; Metal
+  shaders; deterministic reference compositor and golden/readback fixtures;
+  existing native capability/source audits.
+- **Completion conditions:** All accepted RGBA inputs are straight alpha in
+  canonical sRGB before native packing/upload; tagged P3 converts exactly once
+  with alpha unchanged; sRGB resources decode before shader math and the sRGB
+  destination encodes after linear source-over; alpha masks tint in the same
+  space; CPU/reference output matches real Metal within an explicitly reviewed
+  byte tolerance for translucent solid, mask, and image overlaps at 1x/2x;
+  opaque pixels remain exact; malformed or ABI/source format drift fails
+  closed; exact full gate and adjacent generic-library audit pass.
+- **Verification approach:** Record the complete format/blend inventory before
+  editing; add narrow conversion/packing tests first, then native format/source
+  assertions and CPU/Metal pixel vectors; run focused native and Dart suites,
+  format/analyze, the exact full gate, canonical evidence regeneration only when
+  declared stale, and the adjacent `dart_appkit` tracked path/content audit.
+- 2026-09-14: Pre-edit color inventory confirms one canonical public model:
+  palette/default/OSC/style colors, packed Metal instance colors, reference
+  colors, CoreText color glyph rasters, and Kitty-decoded RGBA are straight-alpha
+  RGBA8 sRGB. Alpha glyph pages are coverage-only `R8Unorm`. Color glyph and
+  Kitty pages share the color atlas and do not carry a runtime profile. The
+  explicit `TerminalRenderColor`/buffer converter is the sole accepted tagged
+  Display P3 input contract; no live terminal protocol claims that Kitty bytes
+  are P3.
+- 2026-09-14: Every native format creation was enumerated before editing. The
+  packed pipeline attachment, color-atlas array, bound `MTKView`, and synchronous
+  readback target are all `MTLPixelFormatRGBA8Unorm`; only the alpha atlas is
+  `MTLPixelFormatR8Unorm`. Both presentation and readback passes convert packed
+  clear bytes directly to normalized values. `TerminalShaders.metal` likewise
+  forwards normalized packed RGB and sampled color-atlas RGB without transfer
+  conversion. The blend descriptor correctly implements straight-alpha
+  source-over (`sourceAlpha`/`oneMinusSourceAlpha` for RGB and
+  `one`/`oneMinusSourceAlpha` for alpha), so changing the color resources to
+  sRGB plus decoding packed/clear colors is sufficient to move blending into
+  linear light without changing the packed ABI.
+- 2026-09-14: The CPU reference renderer currently quantizes mask coverage into
+  an 8-bit effective alpha and performs integer source-over on encoded channel
+  bytes. Its reference-layer 1x/2x goldens and the real-Metal parity suite
+  therefore encode the same gamma-space behavior. The new oracle will retain
+  straight alpha and final RGBA8 storage, but calculate coverage and source-over
+  in doubles after sRGB decode, unpremultiply by the resulting alpha, then sRGB
+  encode and round once at storage. Real-Metal comparison already permits one
+  byte of implementation rounding tolerance.
+- 2026-09-14: CoreText color glyph rasterization is the remaining producer-side
+  ambiguity: it creates a device RGB context while publishing bytes as sRGB.
+  It will use an explicit named sRGB color space. The bound `CAMetalLayer` will
+  also carry an explicit sRGB color space, while the public frame/instance
+  layout and version remain unchanged because no field or interpretation of
+  the already-declared sRGB byte contract changes.
+- 2026-09-14: The first focused reference-test launch did not reach test code:
+  the sandbox denied Dart's attempt to update
+  `~/.dart-tool/dart-flutter-telemetry-session.json` despite `CI=true` and
+  `DART_SUPPRESS_ANALYTICS=true`. Formatting had completed successfully. This
+  is an execution-environment write restriction, not a renderer failure; rerun
+  the identical test with the already established test-command permission.
+- 2026-09-14: The permitted focused reference run then reached the expected
+  stale gamma-space assertion: 50% white mask coverage over opaque black is no
+  longer encoded `0x80`; linear-light composition stores sRGB `0xbc`. This
+  confirms the new path is active. Update the assertion as a reviewed semantic
+  change and continue to the transparent-over-transparent vector.
+- 2026-09-14: The next stale vector was the low-valued translucent bitmap:
+  linear-light half blending maps encoded `(10,20,30)` over black to
+  `(5,12,19)`, not the former encoded-space `(5,10,15)`. The reviewed
+  straight-alpha transparent overlap is `(213,0,156,192)` for 50%-alpha red
+  over 50%-alpha blue. Both expectations retain final sRGB encoding and round
+  only the stored RGBA8 result.
+- 2026-09-14: Focused reference tests pass after those reviewed vectors, and
+  the canonical reference-layer 1x/2x fixtures were explicitly regenerated;
+  their exact codec test passes. The first atlas test then correctly reported
+  its checked-in text golden stale at `(18,11)`: expected gamma-space
+  `0x383c41ff`, actual linear-light `0x737475ff`. Because the oracle is shared,
+  regenerate the text, synthetic-cell, and Kitty reference golden families
+  through their existing explicit writers before rerunning exact comparisons.
+- 2026-09-14: Explicit golden writers regenerated reference layers, text atlas,
+  synthetic cell glyphs, and Kitty static/animation families at 1x/2x. The
+  animation fixtures were byte-stable; the other families changed only where
+  translucent coverage or layers exercise the shared oracle. The first native
+  test attempt stopped during Metal compilation because sandbox policy denied
+  Clang's module cache under `~/.cache/clang`; no test ran and no source changed.
+  Rerun the same bounded Make target with native build-cache permission.
+- 2026-09-14: The permitted native build compiles the sRGB Metal shader and
+  Objective-C implementation cleanly. Its two pixel assertions then report the
+  expected stale gamma-space constants (`nine visual kinds` and unchanged
+  color-atlas slice); all other native capability checks continue. Add bounded
+  per-channel diagnostics to `PixelNear`, capture the actual sRGB bytes, and
+  replace only those reviewed pixel vectors.
+- 2026-09-14: A diagnostic-only attempt to force all `PixelNear` calls with
+  boolean bitwise `&` was rejected at compile time by the repository's
+  `-Wbitwise-instead-of-logical -Werror` policy. No executable ran. Preserve
+  the useful packed-pixel diagnostic but invoke each check in a separate
+  statement so every vector is observed without suppressing the warning.
+- 2026-09-14: Warning-clean packed diagnostics captured the three changed
+  native vectors: translucent blue `0x1414bdff`, translucent red
+  `0xbd1414ff`, and the layered straight-alpha color-atlas sample
+  `0x06f106ff`. Opaque background, decoration, and cursor vectors remain byte
+  exact. These values are the sRGB encoding of linear-light Metal source-over;
+  retain the existing one-byte tolerance and update both the base and
+  post-atlas-generation assertions.
+- 2026-09-14: The updated native capability suite passes, including explicit
+  `RGBA8Unorm_sRGB`/`CAMetalLayer` color-space inspection and linear readback
+  vectors. Root real-Metal parity then passes at both 1x and 2x within the
+  existing one-byte tolerance; reference, codec, atlas/P3, synthetic-cell, and
+  Kitty focused suites also pass with regenerated fixtures.
+- 2026-09-14: A padded-row audit found that whole-buffer P3 conversion would
+  incorrectly interpret reference-bitmap stride padding as pixels. The
+  boundary now validates shape first, copies all bytes, and converts exactly
+  `width * height` pixels by row while leaving padding untouched; the focused
+  test uses a five-byte stride. A subsequent `dart format` formatted zero files
+  but again exited nonzero only while touching the sandboxed telemetry-session
+  file, so whitespace validation is rerun independently and tests use the
+  established permitted environment.
+- 2026-09-14: Root analysis is clean, and the strengthened focused Metal test
+  passes a fail-closed native source audit plus a tagged Display P3 tile through
+  atlas synchronization and real readback (`ff 77 00 ff`). The renderer-package
+  analysis/build hook passed, after which its facade readback test exposed two
+  remaining stale gamma-space constants (`0x880808ff`/`0x088808ff`); linear
+  source-over of 50% red/green over `0x101010` is the reviewed
+  `0xbc0909ff`/`0x09bc09ff` vector (with the existing one-byte GPU tolerance).
+- 2026-09-14: The renderer package rerun passes clean analysis, build-hook
+  asset validation, facade tests, and linear readback vectors. The first exact
+  repository gate passed all native renderer and preceding checks, then stopped
+  at `terminal-compatibility-regression-coverage-check` because its generated
+  report hashes the deliberately changed renderer/golden evidence and is now
+  stale. This is the expected freshness guard, not a behavioral failure;
+  regenerate that canonical report with its dedicated Make target, review the
+  diff, then rerun the exact gate from the start.
+- 2026-09-14: Compatibility regression coverage regeneration changed only the
+  recorded `README.md` digest. The second exact gate passed that freshness
+  check and all intervening compatibility/differential/application evidence,
+  then stopped at the later `ghostty-p0-p1-gap-inventory-check`: this report
+  intentionally hashes the renderer sources, reference document, and golden
+  corpus changed by this child. Regenerate it while retaining the still-open
+  overlay runtime-evidence classification, review, and rerun the exact gate.
+- 2026-09-14: Ghostty inventory regeneration changed only the expected digests
+  for compatibility coverage, the rendering reference, atlas/native sources,
+  and 1x/2x synthetic corpus; it deliberately retains two actionable P1 rows
+  because runtime overlay acceptance is the next child. The final exact gate
+  then passes every dependency/native/package/generated-evidence/distribution
+  check, formats 334 files with zero changes, reports clean root/package
+  analysis, passes all real-Metal and security/integration suites, and ends
+  with `dart_terminal tests passed`.
+- 2026-09-14: Final review confirms `git diff --check` is clean. The adjacent
+  `/Users/remi/dart/dart_appkit` worktree is clean; no tracked path contains
+  `terminal`, and the audited Dart/native/script/manifest code contains no
+  terminal-specific string. This child did not change the generic dependency.
+  Apple notarization and duration-only soak remain explicitly excluded. The
+  canonical sRGB/linear-light parity child is complete; the next ordered work
+  is the overlay/P3 1x/2x real-Metal runtime evidence and matrix-closure child.
 - 2026-09-14: The pinned checkout remains clean at exact revision
   `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`. Relevant source identities are
   `src/renderer/image.zig`

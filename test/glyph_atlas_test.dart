@@ -276,27 +276,32 @@ void _testKittyImageTilesShareAtlasLimitsAndPins() {
         tileHeight: 2,
         scale16_16: 1 << 16,
       );
-  final Uint8List red = Uint8List.fromList(<int>[
-    for (int index = 0; index < 4; index++) ...<int>[255, 0, 0, 255],
+  final Uint8List p3Orange = Uint8List.fromList(<int>[
+    for (int index = 0; index < 4; index++) ...<int>[255, 128, 0, 255],
+  ]);
+  final Uint8List canonicalOrange = Uint8List.fromList(<int>[
+    for (int index = 0; index < 4; index++) ...<int>[255, 119, 0, 255],
   ]);
   final Uint8List blue = Uint8List.fromList(<int>[
     for (int index = 0; index < 4; index++) ...<int>[0, 0, 255, 255],
   ]);
   final TerminalGlyphAtlasEntry first = atlas.ingestKittyImageTile(
     key: key(1),
-    rgba: red,
+    rgba: p3Orange,
+    inputColorSpace: TerminalRenderColorSpace.displayP3,
   );
   final TerminalGlyphAtlasEntry duplicate = atlas.ingestKittyImageTile(
     key: key(1),
-    rgba: Uint8List.fromList(red),
+    rgba: Uint8List.fromList(p3Orange),
+    inputColorSpace: TerminalRenderColorSpace.displayP3,
   );
   _expect(
     identical(first, duplicate) &&
         first.isKittyImage &&
         atlas.entryCount == 1 &&
         atlas.kittyImageEntryCount == 1 &&
-        _bytesEqual(atlas.copyEntryPixels(first), red),
-    'Kitty tiles are keyed separately and reuse exact color pixels',
+        _bytesEqual(atlas.copyEntryPixels(first), canonicalOrange),
+    'tagged P3 Kitty tiles convert once and reuse canonical sRGB pixels',
   );
   final TerminalGlyphAtlasBuildLease lease = atlas.beginBuildLease();
   lease.retain(first);

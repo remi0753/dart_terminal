@@ -37,6 +37,7 @@ enum TerminalMetalInstanceKind {
 
 enum TerminalMetalImageLayer { belowBackground, belowText, aboveText }
 
+/// Color pages contain canonical sRGB, straight-alpha RGBA8 bytes.
 enum TerminalMetalAtlasFormat {
   alpha8(1, 1),
   rgba8Straight(2, 4);
@@ -176,6 +177,7 @@ final class TerminalMetalInstance {
     required this.pageGeneration,
   });
 
+  /// [colorRgba] is canonical sRGB, straight-alpha `0xRRGGBBAA`.
   factory TerminalMetalInstance.solid({
     required TerminalMetalInstanceKind kind,
     required int x,
@@ -309,6 +311,8 @@ abstract final class TerminalMetalFrameEncoder {
   static const int headerBytes = 80;
   static const int instanceBytes = 48;
 
+  /// [backgroundRgba] and every instance color are canonical straight-alpha
+  /// sRGB values. Native rendering decodes them before linear-light blending.
   static TerminalMetalFrame encode({
     required TerminalMetalRenderer renderer,
     required int frameGeneration,

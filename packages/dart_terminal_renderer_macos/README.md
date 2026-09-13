@@ -34,6 +34,13 @@ boundaries, selection, cursor, cell geometry, and the nonnegative logical
 content origin; VoiceOver point/range/frame queries use only the native copy,
 reject padding/out-of-grid hits, and never synchronously enter Dart.
 
+Color glyph and image uploads are canonical straight-alpha RGBA8 sRGB; alpha
+glyph uploads are `R8Unorm` coverage. The native color atlas, correctness
+target, and drawable use sRGB Metal formats, packed colors and clear colors are
+decoded to linear light, and fixed-function source-over blends before the
+destination encodes back to sRGB. The `CAMetalLayer` is explicitly tagged sRGB.
+Callers must convert any wider-gamut input before this dependency boundary.
+
 Creation failures classify device, embedded shader/function/pipeline, and
 bounded resource allocation without publishing a handle. Runtime state keeps
 drawable misses transient while exposing a terminal command/device fault for

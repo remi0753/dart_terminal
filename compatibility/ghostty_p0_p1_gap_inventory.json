@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "59f54b4c8bec3fdf2971345cc6df60245ee88360530cb27797f822b66ca47488"
+      "sha256": "49c772ee018eb2a95f7b494e48a1a83bb23ae79872feb902ca536e69136148f1"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -100,7 +100,7 @@
     },
     {
       "path": "docs/reference/terminal-rendering.md",
-      "sha256": "1c62fc622f79140829b9ccf10a73d93bcf3fd056f5b6fc2fdf52da3dedf2b1bd"
+      "sha256": "ffe256b9750a4745863a2a23af0c7bdf5f4f6b25f6cb0d4b0cc55aa990256854"
     },
     {
       "path": "lib/src/terminal_renderer/terminal_cell_glyph.dart",
@@ -108,7 +108,7 @@
     },
     {
       "path": "lib/src/terminal_renderer/glyph_atlas.dart",
-      "sha256": "68a18bb008d92ec05e62713bd70cd637bbe53680e4ad8d602abc98dc770f5b1a"
+      "sha256": "3e3737815967db71dfbd0aca414563694a5b5148e6bab5748f2659b3127ff599"
     },
     {
       "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
@@ -124,11 +124,11 @@
     },
     {
       "path": "test/goldens/cell-glyphs/synthetic-corpus-1x.dtgi",
-      "sha256": "dfe94356493b698b6a2d4b916a7d340d0efb3e6492b6804385d0d752292d3930"
+      "sha256": "fcb22fbdfcc70fcd9e9292c97c8342c14484c7ba608bd2dac0cc4b23861e7dcc"
     },
     {
       "path": "test/goldens/cell-glyphs/synthetic-corpus-2x.dtgi",
-      "sha256": "d104ea9df96eb2e2c4ab0fbd4694b8dda7b718f7494d47f00c862d8e6da8a58b"
+      "sha256": "c985379f3b075b987e7f65b0cf739dbefe59569f31b26f750919ef013b335eec"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/lib/src/font_configuration.dart",
@@ -140,15 +140,15 @@
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.h",
-      "sha256": "64324ecf5b29d85ed40212c074cdc097a344ea694c98b7a9dec229ab8d16c826"
+      "sha256": "29f7aecad3d803373ab8357ff6dde63a3b7597d44bdb7133880e1c6d77b11718"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m",
-      "sha256": "3740edcd2a28fe8b1b6984296e9e725eb092edcd3d27ddc15da44813affd80dc"
+      "sha256": "a4bae4cff87271a0be27cd3543cf1d220aef4037fa6656ed1df14056a3a74246"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/test/TerminalRendererCapabilityTests.mm",
-      "sha256": "f8ed85cb48367e3aeb155251fab44d339f3d595a107ca23b00b4ecc5d2214d00"
+      "sha256": "d926e48e0f0c2771dca14624a571bafd59094ce1feee044e97f09bb948972ce5"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/test/font_catalog_test.dart",

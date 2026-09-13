@@ -19,6 +19,20 @@ static _Atomic uint32_t g_next_metal_test_failure =
 static const da_native_extension_services_v1* g_initialized_services = NULL;
 static DtrTextInputNotifyV1 g_text_input_notify = NULL;
 
+static double SrgbByteToLinear(uint32_t component) {
+  const double encoded = (component & 0xffu) / 255.0;
+  return encoded <= 0.04045
+             ? encoded / 12.92
+             : pow((encoded + 0.055) / 1.055, 2.4);
+}
+
+static MTLClearColor LinearClearColorFromSrgbRgba(uint32_t rgba) {
+  return MTLClearColorMake(SrgbByteToLinear(rgba >> 24),
+                           SrgbByteToLinear(rgba >> 16),
+                           SrgbByteToLinear(rgba >> 8),
+                           (rgba & 0xffu) / 255.0);
+}
+
 @interface DtrTextInputQueue : NSObject
 
 @property(nonatomic, strong) NSMutableArray<NSData*>* packets;
@@ -1050,7 +1064,8 @@ static DtrRasterizedGlyph* RasterizeGlyph(NSFont* font, uint32_t face_id,
     return nil;
   }
   CGColorSpaceRef color_space =
-      color ? CGColorSpaceCreateDeviceRGB() : CGColorSpaceCreateDeviceGray();
+      color ? CGColorSpaceCreateWithName(kCGColorSpaceSRGB)
+            : CGColorSpaceCreateDeviceGray();
   if (color_space == NULL) {
     return nil;
   }
@@ -1172,7 +1187,7 @@ static DtrRasterizedGlyph* RasterizeGlyph(NSFont* font, uint32_t face_id,
   descriptor.label = @"Dart Terminal packed pipeline";
   descriptor.vertexFunction = vertex;
   descriptor.fragmentFunction = fragment;
-  descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
+  descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm_sRGB;
   descriptor.colorAttachments[0].blendingEnabled = YES;
   descriptor.colorAttachments[0].sourceRGBBlendFactor =
       MTLBlendFactorSourceAlpha;
@@ -1368,7 +1383,7 @@ enum {
   alpha_descriptor.usage = MTLTextureUsageShaderRead;
   MTLTextureDescriptor* color_descriptor =
       [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:
-                                MTLPixelFormatRGBA8Unorm
+                                MTLPixelFormatRGBA8Unorm_sRGB
                                                          width:config.atlas_width
                                                         height:config.atlas_height
                                                      mipmapped:NO];
@@ -1501,7 +1516,20 @@ enum {
   _view = view;
   _everBound = YES;
   view.device = _device;
-  view.colorPixelFormat = MTLPixelFormatRGBA8Unorm;
+  view.colorPixelFormat = MTLPixelFormatRGBA8Unorm_sRGB;
+  CAMetalLayer* layer = (CAMetalLayer*)view.layer;
+  CGColorSpaceRef color_space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  if (layer == nil || color_space == NULL) {
+    if (color_space != NULL) {
+      CGColorSpaceRelease(color_space);
+    }
+    _view = nil;
+    _everBound = NO;
+    [_lock unlock];
+    return DTR_STATUS_RESOURCE_EXHAUSTED;
+  }
+  layer.colorspace = color_space;
+  CGColorSpaceRelease(color_space);
   view.terminalPipelines = _pipelines;
   view.terminalRenderer = self;
   view.terminalRendererGeneration = self.generation;
@@ -2024,11 +2052,8 @@ enum {
     pass.colorAttachments[0].loadAction = MTLLoadActionClear;
     pass.colorAttachments[0].storeAction = MTLStoreActionStore;
     const uint32_t background = header.background_rgba;
-    pass.colorAttachments[0].clearColor = MTLClearColorMake(
-        ((background >> 24) & 0xffu) / 255.0,
-        ((background >> 16) & 0xffu) / 255.0,
-        ((background >> 8) & 0xffu) / 255.0,
-        (background & 0xffu) / 255.0);
+    pass.colorAttachments[0].clearColor =
+        LinearClearColorFromSrgbRgba(background);
     const BOOL injected_encoding_failure = ConsumeMetalTestFailure(
         DTR_METAL_TEST_FAILURE_COMMAND_ENCODING);
     id<MTLCommandBuffer> command =
@@ -2143,7 +2168,7 @@ enum {
   }
   MTLTextureDescriptor* target_descriptor =
       [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:
-                                MTLPixelFormatRGBA8Unorm
+                                MTLPixelFormatRGBA8Unorm_sRGB
                                                          width:header.viewport_width
                                                         height:header.viewport_height
                                                      mipmapped:NO];
@@ -2160,10 +2185,8 @@ enum {
   pass.colorAttachments[0].loadAction = MTLLoadActionClear;
   pass.colorAttachments[0].storeAction = MTLStoreActionStore;
   const uint32_t background = header.background_rgba;
-  pass.colorAttachments[0].clearColor = MTLClearColorMake(
-      ((background >> 24) & 0xffu) / 255.0,
-      ((background >> 16) & 0xffu) / 255.0,
-      ((background >> 8) & 0xffu) / 255.0, (background & 0xffu) / 255.0);
+  pass.colorAttachments[0].clearColor =
+      LinearClearColorFromSrgbRgba(background);
   id<MTLRenderCommandEncoder> encoder =
       [command renderCommandEncoderWithDescriptor:pass];
   if (encoder == nil) {

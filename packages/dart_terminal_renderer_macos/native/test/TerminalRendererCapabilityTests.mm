@@ -63,6 +63,14 @@ bool PixelNear(const std::vector<uint8_t>& pixels, uint32_t width,
     const int difference = static_cast<int>(pixels[offset + channel]) -
                            static_cast<int>(expected[channel]);
     if (std::abs(difference) > tolerance) {
+      const uint32_t actual =
+          (static_cast<uint32_t>(pixels[offset]) << 24) |
+          (static_cast<uint32_t>(pixels[offset + 1]) << 16) |
+          (static_cast<uint32_t>(pixels[offset + 2]) << 8) |
+          static_cast<uint32_t>(pixels[offset + 3]);
+      std::cerr << "Pixel mismatch at (" << x << ',' << y << ") channel "
+                << channel << ": expected 0x" << std::hex << rgba
+                << ", actual 0x" << actual << std::dec << '\n';
       return false;
     }
   }
@@ -1449,12 +1457,20 @@ int main(int argc, const char* argv[]) {
                         static_cast<uint32_t>(metal_pixels.size()),
                         &metal_required) == DTR_STATUS_OK,
            "packed Metal frame renders to synchronous readback");
-    Expect(PixelNear(metal_pixels, 8, 7, 0, 0x202020ff) &&
-               PixelNear(metal_pixels, 8, 0, 0, 0x101090ff) &&
-               PixelNear(metal_pixels, 8, 2, 0, 0x901010ff) &&
-               PixelNear(metal_pixels, 8, 4, 0, 0x04e404ff) &&
-               PixelNear(metal_pixels, 8, 0, 4, 0x00ffffff) &&
-               PixelNear(metal_pixels, 8, 6, 4, 0xffffffff),
+    bool visual_pixels = true;
+    visual_pixels =
+        PixelNear(metal_pixels, 8, 7, 0, 0x202020ff) && visual_pixels;
+    visual_pixels =
+        PixelNear(metal_pixels, 8, 0, 0, 0x1414bdff) && visual_pixels;
+    visual_pixels =
+        PixelNear(metal_pixels, 8, 2, 0, 0xbd1414ff) && visual_pixels;
+    visual_pixels =
+        PixelNear(metal_pixels, 8, 4, 0, 0x06f106ff) && visual_pixels;
+    visual_pixels =
+        PixelNear(metal_pixels, 8, 0, 4, 0x00ffffff) && visual_pixels;
+    visual_pixels =
+        PixelNear(metal_pixels, 8, 6, 4, 0xffffffff) && visual_pixels;
+    Expect(visual_pixels,
            "nine visual kinds preserve three image bands and straight alpha");
 
     auto mutate_header = [&](std::vector<uint8_t> frame,
@@ -1553,7 +1569,7 @@ int main(int argc, const char* argv[]) {
                         static_cast<uint32_t>(generation_two_frame.size()),
                         generation_two_pixels.data(), generation_two_required,
                         &generation_two_required) == DTR_STATUS_OK &&
-               PixelNear(generation_two_pixels, 8, 4, 0, 0x04e404ff),
+               PixelNear(generation_two_pixels, 8, 4, 0, 0x06f106ff),
            "atlas advance preserves unchanged color texture slices");
     Expect(metal_upload(metal_summary.handle, &alpha_upload,
                         alpha_pixels.data()) == DTR_STATUS_STALE_GENERATION,
@@ -1666,6 +1682,14 @@ int main(int argc, const char* argv[]) {
                  view_handle, reinterpret_cast<const uint8_t*>(&binding),
                  sizeof(binding)) == DA_STATUS_OK,
              "opaque provider operation binds renderer to terminal view");
+      __unsafe_unretained CAMetalLayer* metal_layer =
+          static_cast<CAMetalLayer*>(view.layer);
+      const CGColorSpaceRef layer_color_space = metal_layer.colorspace;
+      Expect(view.colorPixelFormat == MTLPixelFormatRGBA8Unorm_sRGB &&
+                 layer_color_space != nullptr &&
+                 CFEqual(CGColorSpaceGetName(layer_color_space),
+                         kCGColorSpaceSRGB),
+             "bound drawable is explicitly canonical sRGB");
       Expect(view.delegate != nil && view.isPaused &&
                  view.enableSetNeedsDisplay && view.framebufferOnly,
              "bound view owns native on-demand presentation delegate");

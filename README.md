@@ -291,8 +291,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   parser traceを一つの決定論的coverage reportで照合し、通常`make test`でfreshnessを検証
 - Phase 0 mixed workloadを使うcapture-disabled product parserのRelease AOT
   100 MiB/s regression gate（同一seedのexact counter/integrity検証付き）
-- 1x/2xの決定論的integer alpha合成、固定layer順、solid/mask/color bitmapを扱う
-  Dart-only reference rendererと、checksum付きversion 1 golden image oracle
+- 1x/2xのcanonical sRGB decode→linear-light straight-alpha合成→encode、固定layer順、
+  solid/mask/color bitmapを扱うDart-only reference rendererと、checksum付きversion 1
+  golden image oracle。明示されたDisplay P3入力はreference/atlas境界で一度だけclipped
+  sRGBへ変換し、real MetalはsRGB atlas/targetと1 byte toleranceで同じ結果を検証
 - generation-owned CoreText font catalog、actual/synthetic 4-style policy、
   CJK/color emoji fallback、bounded text resolveとcell/decorations metrics、
   versioned whole-run shaping、UTF-16 cluster mapping、Dart-owned byte/entry LRU、
@@ -309,7 +311,8 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   Nerd FontはCoreText fallbackのまま。1x/2x DTGI、CPU oracle／real Metal比較、
   Developer JIT／Release AOTの実PTY製品受け入れは
   [terminal rendering reference](docs/reference/terminal-rendering.md)に固定
-- build時にコンパイルしたMetal shader、全terminal layer用packed draw list、
+- build時にコンパイルしたMetal shader、canonical sRGB／linear-light source-over、
+  全terminal layer用packed draw list、
   bounded texture array、3つのnative frame slot、即時backpressure、GPU完了retire、
   Dart encoder/facade、stable atlas slice bridge、CPU oracleとの1x/2x readback比較
 - ADR-003準拠のstrict damage codec v2（row/cell差分、cursor状態、monotonic BEL、

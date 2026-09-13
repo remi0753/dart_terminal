@@ -45,6 +45,23 @@ decorations, and cursor retain the established layer order. Underline,
 overline, strike, inverse, faint, hover, and selection behavior therefore stays
 independent of the synthetic geometry.
 
+## Canonical color and blending
+
+Palette, OSC, style, CoreText color-glyph, Kitty, packed-instance, and golden
+bytes are canonical straight-alpha RGBA8 sRGB. Explicitly tagged Display P3
+colors or bitmaps are converted once at the reference/atlas admission boundary
+through the fixed D65 matrix, clipped to sRGB gamut, and stored without the
+source tag; alpha is unchanged. Row padding is copied but never color-converted.
+
+Packed solid/mask colors are decoded by the Metal shader. Color-atlas textures,
+the offscreen correctness target, and the bound `MTKView` use
+`RGBA8Unorm_sRGB`; the native layer also declares the sRGB color space. Metal
+therefore samples and blends in linear light and encodes only on destination
+storage. The Dart oracle mirrors decode, straight-alpha source-over,
+unpremultiplication, encode, and final-byte rounding. Alpha masks remain
+coverage-only `R8Unorm`. Opaque colors are byte exact; real-Metal 1x/2x parity
+permits one byte per channel for GPU rounding.
+
 ## Reproducible evidence
 
 The checked-in version-one DTGI corpus contains four colored rows covering Box,
@@ -52,9 +69,9 @@ Block, Braille, all 18 accepted Powerline forms, blank Braille, and U+E0C0 font
 fallback:
 
 - `test/goldens/cell-glyphs/synthetic-corpus-1x.dtgi` — 71,624 bytes,
-  SHA-256 `dfe94356493b698b6a2d4b916a7d340d0efb3e6492b6804385d0d752292d3930`
+  SHA-256 `fcb22fbdfcc70fcd9e9292c97c8342c14484c7ba608bd2dac0cc4b23861e7dcc`
 - `test/goldens/cell-glyphs/synthetic-corpus-2x.dtgi` — 285,995 bytes,
-  SHA-256 `d104ea9df96eb2e2c4ab0fbd4694b8dda7b718f7494d47f00c862d8e6da8a58b`
+  SHA-256 `c985379f3b075b987e7f65b0cf739dbefe59569f31b26f750919ef013b335eec`
 
 Ordinary tests reconstruct each image through the CPU reference renderer,
 require byte-exact equality with the checked-in artifact, and compare the same

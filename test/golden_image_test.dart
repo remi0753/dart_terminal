@@ -4,7 +4,16 @@ import 'dart:typed_data';
 
 import 'package:dart_terminal/dart_terminal.dart';
 
-void main() => runGoldenImageTests();
+void main(List<String> arguments) {
+  if (arguments.length == 1 && arguments.single == '--write-goldens') {
+    _writeGoldens();
+    return;
+  }
+  if (arguments.isNotEmpty) {
+    throw ArgumentError.value(arguments, 'arguments', 'unsupported');
+  }
+  runGoldenImageTests();
+}
 
 void runGoldenImageTests() {
   _testExactCodecRoundTrip();
@@ -240,6 +249,17 @@ void _testCheckedInFixtures() {
       rendered,
       decoded,
     ).requireMatch('checked-in ${scale}x reference fixture');
+  }
+}
+
+void _writeGoldens() {
+  for (final int scale in <int>[1, 2]) {
+    final File fixture = File('test/goldens/reference/layers-${scale}x.dtgi');
+    fixture.writeAsBytesSync(
+      TerminalGoldenImageCodec.encode(_fixtureImage(scale: scale)),
+      flush: true,
+    );
+    stdout.writeln('wrote ${fixture.path}');
   }
 }
 

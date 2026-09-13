@@ -293,8 +293,8 @@ void _testTypedRendererReadback() {
       ],
     );
     final Uint8List rgba = renderer.renderRgba(frame);
-    _expectPixelNear(rgba, 0, 0x880808ff);
-    _expectPixelNear(rgba, 4, 0x088808ff);
+    _expectPixelNear(rgba, 0, 0xbc0909ff);
+    _expectPixelNear(rgba, 4, 0x09bc09ff);
     final TerminalMetalRendererState state = renderer.state();
     _expect(
       !state.isBound &&

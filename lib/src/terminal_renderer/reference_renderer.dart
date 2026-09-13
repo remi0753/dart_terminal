@@ -1,4 +1,7 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
+
+import 'terminal_overlay.dart';
 
 /// Draw order shared by the deterministic reference renderer and the native
 /// renderer contract.
@@ -17,6 +20,10 @@ enum TerminalReferenceLayer {
 final class TerminalReferenceColor {
   const TerminalReferenceColor(this.rgba)
     : assert(rgba >= 0 && rgba <= 0xffffffff);
+
+  /// Converts an explicitly tagged input once at the canonical sRGB boundary.
+  factory TerminalReferenceColor.fromRenderColor(TerminalRenderColor color) =>
+      TerminalReferenceColor(color.canonicalSrgbRgba);
 
   final int rgba;
 
@@ -126,7 +133,14 @@ final class TerminalReferenceBitmap extends TerminalReferencePrimitive {
     required this.rowStride,
     required List<int> rgba,
     this.opacity = 255,
-  }) : _rgba = _copyUint8List(rgba, 'rgba') {
+    TerminalRenderColorSpace inputColorSpace = TerminalRenderColorSpace.srgb,
+  }) : _rgba = _canonicalSrgbBitmap(
+         rgba,
+         inputColorSpace,
+         width,
+         height,
+         rowStride,
+       ) {
     _validateSourceShape(width, height, rowStride, _rgba.length, 4);
     RangeError.checkValueInInterval(opacity, 0, 255, 'opacity');
   }
@@ -146,7 +160,14 @@ final class TerminalReferenceBitmapSource {
     required this.height,
     required this.rowStride,
     required List<int> rgba,
-  }) : _rgba = _copyUint8List(rgba, 'rgba') {
+    TerminalRenderColorSpace inputColorSpace = TerminalRenderColorSpace.srgb,
+  }) : _rgba = _canonicalSrgbBitmap(
+         rgba,
+         inputColorSpace,
+         width,
+         height,
+         rowStride,
+       ) {
     _validateSourceShape(width, height, rowStride, _rgba.length, 4);
   }
 
@@ -532,63 +553,110 @@ abstract final class TerminalReferenceRenderer {
     if (coverage == 0 || source.alpha == 0) {
       return;
     }
-    final int sourceAlpha = _divide255(source.alpha * coverage);
+    final double sourceAlpha = (source.alpha / 255) * (coverage / 255);
     if (sourceAlpha == 0) {
       return;
     }
-    final int destinationAlpha = pixels[offset + 3];
-    final int inverseSourceAlpha = 255 - sourceAlpha;
-    final int alphaNumerator =
-        sourceAlpha * 255 + destinationAlpha * inverseSourceAlpha;
-    if (alphaNumerator == 0) {
+    final double destinationAlpha = pixels[offset + 3] / 255;
+    final double inverseSourceAlpha = 1 - sourceAlpha;
+    final double outputAlpha =
+        sourceAlpha + destinationAlpha * inverseSourceAlpha;
+    if (outputAlpha == 0) {
       pixels[offset] = 0;
       pixels[offset + 1] = 0;
       pixels[offset + 2] = 0;
       pixels[offset + 3] = 0;
       return;
     }
-    pixels[offset] = _blendChannel(
+    pixels[offset] = _blendLinearSrgbChannel(
       source.red,
       pixels[offset],
       sourceAlpha,
       destinationAlpha,
       inverseSourceAlpha,
-      alphaNumerator,
+      outputAlpha,
     );
-    pixels[offset + 1] = _blendChannel(
+    pixels[offset + 1] = _blendLinearSrgbChannel(
       source.green,
       pixels[offset + 1],
       sourceAlpha,
       destinationAlpha,
       inverseSourceAlpha,
-      alphaNumerator,
+      outputAlpha,
     );
-    pixels[offset + 2] = _blendChannel(
+    pixels[offset + 2] = _blendLinearSrgbChannel(
       source.blue,
       pixels[offset + 2],
       sourceAlpha,
       destinationAlpha,
       inverseSourceAlpha,
-      alphaNumerator,
+      outputAlpha,
     );
-    pixels[offset + 3] = _divide255(alphaNumerator);
+    pixels[offset + 3] = (outputAlpha * 255).round().clamp(0, 255);
   }
 
-  static int _blendChannel(
+  static int _blendLinearSrgbChannel(
     int source,
     int destination,
-    int sourceAlpha,
-    int destinationAlpha,
-    int inverseSourceAlpha,
-    int alphaNumerator,
+    double sourceAlpha,
+    double destinationAlpha,
+    double inverseSourceAlpha,
+    double outputAlpha,
   ) {
-    final int colorNumerator =
-        source * sourceAlpha * 255 +
-        destination * destinationAlpha * inverseSourceAlpha;
-    return (colorNumerator + alphaNumerator ~/ 2) ~/ alphaNumerator;
+    final double linear =
+        (_decodeSrgbByte(source) * sourceAlpha +
+            _decodeSrgbByte(destination) *
+                destinationAlpha *
+                inverseSourceAlpha) /
+        outputAlpha;
+    return _encodeSrgbByte(linear);
   }
 
-  static int _divide255(int value) => (value + 127) ~/ 255;
+  static double _decodeSrgbByte(int component) {
+    final double encoded = component / 255;
+    return encoded <= 0.04045
+        ? encoded / 12.92
+        : math.pow((encoded + 0.055) / 1.055, 2.4).toDouble();
+  }
+
+  static int _encodeSrgbByte(double linear) {
+    final double clipped = linear.clamp(0, 1);
+    final double encoded = clipped <= 0.0031308
+        ? clipped * 12.92
+        : 1.055 * math.pow(clipped, 1 / 2.4).toDouble() - 0.055;
+    return (encoded * 255).round().clamp(0, 255);
+  }
+}
+
+Uint8List _canonicalSrgbBitmap(
+  List<int> rgba,
+  TerminalRenderColorSpace inputColorSpace,
+  int width,
+  int height,
+  int rowStride,
+) {
+  _validateSourceShape(width, height, rowStride, rgba.length, 4);
+  final Uint8List canonical = _copyUint8List(rgba, 'rgba');
+  if (inputColorSpace == TerminalRenderColorSpace.srgb) return canonical;
+  if (canonical.length > TerminalRenderColorConverter.maximumBufferBytes) {
+    throw StateError('Display P3 color buffer limit exceeded');
+  }
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      final int offset = y * rowStride + x * 4;
+      final int converted = TerminalRenderColorConverter.displayP3ToSrgbRgba(
+        (canonical[offset] << 24) |
+            (canonical[offset + 1] << 16) |
+            (canonical[offset + 2] << 8) |
+            canonical[offset + 3],
+      );
+      canonical[offset] = converted >>> 24;
+      canonical[offset + 1] = converted >>> 16;
+      canonical[offset + 2] = converted >>> 8;
+      canonical[offset + 3] = converted;
+    }
+  }
+  return canonical;
 }
 
 final class _ClippedDeviceRect {

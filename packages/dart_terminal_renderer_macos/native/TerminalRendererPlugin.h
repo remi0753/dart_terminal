@@ -475,7 +475,7 @@ typedef struct DtrMetalAtlasResetV1 {
 
 // Version-one packed frame. Coordinates and sizes are device pixels in a
 // flipped top-left viewport. Instances are contiguous and ordered by terminal
-// layer. Colors are straight-alpha 0xRRGGBBAA.
+// layer. Colors are canonical sRGB, straight-alpha 0xRRGGBBAA.
 typedef struct DtrMetalFrameHeaderV1 {
   uint32_t magic;
   uint32_t version;

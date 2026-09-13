@@ -28,6 +28,12 @@ static float4 dtr_unpack_rgba(uint packed) {
          255.0;
 }
 
+static float3 dtr_srgb_to_linear(float3 encoded) {
+  const float3 low = encoded / 12.92;
+  const float3 high = pow((encoded + 0.055) / 1.055, float3(2.4));
+  return select(low, high, encoded > 0.04045);
+}
+
 vertex DtrVertexOutput dtr_terminal_vertex(
     uint vertex_id [[vertex_id]], uint instance_id [[instance_id]],
     const device DtrMetalInstanceV1* instances [[buffer(0)]],
@@ -44,7 +50,9 @@ vertex DtrVertexOutput dtr_terminal_vertex(
                            1.0 - pixel.y * 2.0 / viewport.y, 0.0, 1.0);
   output.atlas_position =
       float2(instance.atlas_origin) + corner * float2(instance.atlas_size);
-  output.color = dtr_unpack_rgba(instance.color_rgba);
+  const float4 encoded_color = dtr_unpack_rgba(instance.color_rgba);
+  output.color =
+      float4(dtr_srgb_to_linear(encoded_color.rgb), encoded_color.a);
   output.kind = instance.kind;
   output.page_index = instance.page_index;
   return output;

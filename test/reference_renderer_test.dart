@@ -10,8 +10,72 @@ void runReferenceRendererTests() {
   _testSharedSampledBitmapScaling();
   _testClippingAndScale();
   _testTransparentSourceOver();
+  _testTaggedColorAndBitmapCanonicalization();
   _testInputAndOutputOwnership();
   _testBoundsAndValidation();
+}
+
+void _testTaggedColorAndBitmapCanonicalization() {
+  _expect(
+    TerminalReferenceColor.fromRenderColor(
+          const TerminalRenderColor.displayP3(0xff80005a),
+        ).rgba ==
+        0xff77005a,
+    'tagged reference color converts to canonical sRGB exactly once',
+  );
+  final Uint8List bitmapBytes = Uint8List.fromList(const <int>[
+    0xff,
+    0x80,
+    0x00,
+    0xff,
+  ]);
+  final Uint8List sampledBytes = Uint8List.fromList(const <int>[
+    0xff,
+    0x80,
+    0x00,
+    0xff,
+    0x5a,
+  ]);
+  final TerminalReferenceImage image = TerminalReferenceRenderer.render(
+    width: 2,
+    height: 1,
+    primitives: <TerminalReferencePrimitive>[
+      TerminalReferenceBitmap(
+        layer: TerminalReferenceLayer.glyph,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        rowStride: 4,
+        rgba: bitmapBytes,
+        inputColorSpace: TerminalRenderColorSpace.displayP3,
+      ),
+      TerminalReferenceSampledBitmap(
+        layer: TerminalReferenceLayer.glyph,
+        x: 1,
+        y: 0,
+        width: 1,
+        height: 1,
+        source: TerminalReferenceBitmapSource(
+          width: 1,
+          height: 1,
+          rowStride: 5,
+          rgba: sampledBytes,
+          inputColorSpace: TerminalRenderColorSpace.displayP3,
+        ),
+        sourceX: 0,
+        sourceY: 0,
+        sourceWidth: 1,
+        sourceHeight: 1,
+      ),
+    ],
+  );
+  bitmapBytes.fillRange(0, bitmapBytes.length, 0);
+  sampledBytes.fillRange(0, sampledBytes.length, 0);
+  _expect(
+    image.pixelAt(0, 0) == 0xff7700ff && image.pixelAt(1, 0) == 0xff7700ff,
+    'tagged P3 bitmap forms convert pixels, preserve padding, and own bytes',
+  );
 }
 
 void _testSharedSampledBitmapScaling() {
@@ -170,12 +234,12 @@ void _testMaskAndBitmapBlending() {
     ],
   );
   _expect(
-    image.pixelAt(0, 0) == 0x808080ff,
-    'coverage uses deterministic divide-by-255 rounding',
+    image.pixelAt(0, 0) == 0xbcbcbcff,
+    'coverage blends in linear light before canonical sRGB encoding',
   );
   _expect(
-    image.pixelAt(1, 0) == 0x050a0fff,
-    'color bitmap uses straight-alpha source-over blending',
+    image.pixelAt(1, 0) == 0x050c13ff,
+    'color bitmap uses linear-light straight-alpha source-over blending',
   );
 }
 
@@ -250,8 +314,8 @@ void _testTransparentSourceOver() {
     ],
   );
   _expect(
-    image.pixelAt(0, 0) == 0xaa0055c0,
-    'straight-alpha output remains deterministic over transparent pixels',
+    image.pixelAt(0, 0) == 0xd5009cc0,
+    'linear-light straight-alpha output remains deterministic over transparency',
   );
 }
 
