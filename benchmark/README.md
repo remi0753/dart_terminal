@@ -38,6 +38,31 @@ against the checked M1 baseline with:
 make product-performance-benchmark
 ```
 
+The pinned Ghostty relative evidence is checked without launching an external
+application:
+
+```sh
+make product-performance-comparator-check
+```
+
+Its two JSON documents under `benchmark/evidence/` bind the exact upstream
+revision and Zig version to separate GUI-app, official benchmark, and local
+capture-source SHA-256 values. They also freeze the synthetic parser corpus,
+seven input observations, public ScreenCaptureKit pixel boundary, two short
+process-resource windows, and four relative gates. Raw samples, terminal text,
+commands, paths, process IDs, and timestamps are not retained.
+
+Regeneration is intentionally separate from the offline check. First build the
+unmodified pinned comparator and its `+terminal-parser` benchmark as documented
+in `docs/phase11/product-performance-regression-gate.md`, then collect fresh
+passing Release AOT product microbenchmark and runtime outputs. Run
+`tool/ghostty_performance_capture.dart` with absolute paths for
+`--ghostty-app`, `--ghostty-benchmark`, `--capture-source`, `--product-micro`,
+`--product-runtime`, `--output-evidence`, and `--output-relative`. The capture
+refuses an existing Ghostty instance, isolates configuration/cache/shell state,
+requires Screen Recording and Automation access, terminates its owned app, and
+fails closed on any identity, diagnostic, workload, or result mismatch.
+
 The Release AOT executable writes one
 `dart-terminal-product-benchmark-result` version-1 JSON document to stdout and
 one bounded status line to stderr. It records only fixed workload/environment

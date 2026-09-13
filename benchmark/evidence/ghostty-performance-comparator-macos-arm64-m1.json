@@ -1,0 +1,51 @@
+{
+  "format": "dart-terminal-performance-comparator-evidence",
+  "version": 1,
+  "id": "ghostty-d4d8f62-macos-arm64-m1",
+  "environment": {
+    "os": "macos",
+    "abi": "macos_arm64",
+    "hardware_model": "MacBookPro17,1",
+    "memory_bytes": 17179869184,
+    "os_build": "25G83",
+    "refresh_tier_hz": 60
+  },
+  "provenance": {
+    "product": "ghostty",
+    "revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
+    "zig_version": "0.16.0",
+    "build_command": "zig build -Doptimize=ReleaseFast",
+    "benchmark_build_command": "zig build -Demit-bench -Doptimize=ReleaseFast -Demit-macos-app=false",
+    "macos_configuration": "ReleaseLocal",
+    "project_local_patches": false,
+    "app_executable_sha256": "73744c9d8479d7326b1a95920ad6931c3eaed8500eafd97eb133eefd03e1f1dc",
+    "benchmark_executable_sha256": "0c6ea29728a6429e02a9326be40ccb8d7b36d80d743a90f19b7c599377dbbf23",
+    "capture_harness_sha256": "8ffd76cefcfb0f336dd51a2ddcf3f674fbdd761ad012405cba10bc4676c361e7"
+  },
+  "workload": {
+    "id": "phase11-ghostty-parity-v1",
+    "shell_fixture": "isolated-zsh-v1",
+    "configuration": "parity-minimal-v1",
+    "input_transport": "applescript-input-text",
+    "visibility_observer": "screencapturekit-window-pixel",
+    "input_samples": 7,
+    "parser_action": "terminal-parser",
+    "parser_warmup_runs": 2,
+    "parser_sample_count": 5,
+    "parser_statistic": "p50",
+    "parser_output_bytes": 134264777,
+    "parser_corpus_sha256": "e6d7ac297fc096a9cfbb6a00c7b9e8039a8b33d54630623bef7a73dbae539ce6",
+    "memory_output_bytes": 22048,
+    "resource_scope": "root-process",
+    "idle_window_count": 2,
+    "idle_window_us": 2000000,
+    "animation_enabled": false,
+    "raw_samples_retained": false
+  },
+  "metrics": {
+    "input_visible_p95_us": 193377,
+    "parser_output_throughput_mib_s": 98.80203570666741,
+    "idle_rss_bytes": 119619584,
+    "idle_cpu_basis_points": 16
+  }
+}

@@ -3,6 +3,8 @@ import 'dart:convert';
 const String pinnedGhosttyRevision = 'd4d8f62262cb1a974a7d2470d5f79f811fab15e4';
 const String pinnedGhosttyZigVersion = '0.16.0';
 const String pinnedGhosttyBuildCommand = 'zig build -Doptimize=ReleaseFast';
+const String pinnedGhosttyBenchmarkBuildCommand =
+    'zig build -Demit-bench -Doptimize=ReleaseFast -Demit-macos-app=false';
 const String pinnedGhosttyMacosConfiguration = 'ReleaseLocal';
 const String productRelativeWorkloadId = 'phase11-ghostty-parity-v1';
 const int _maximumEvidenceCharacters = 64 * 1024;
@@ -137,19 +139,24 @@ ProductPerformanceComparatorEvidence decodeProductPerformanceComparator(
     'revision',
     'zig_version',
     'build_command',
+    'benchmark_build_command',
     'macos_configuration',
     'project_local_patches',
-    'executable_sha256',
-    'harness_sha256',
+    'app_executable_sha256',
+    'benchmark_executable_sha256',
+    'capture_harness_sha256',
   }, 'comparator provenance');
   if (provenance['product'] != 'ghostty' ||
       provenance['revision'] != pinnedGhosttyRevision ||
       provenance['zig_version'] != pinnedGhosttyZigVersion ||
       provenance['build_command'] != pinnedGhosttyBuildCommand ||
+      provenance['benchmark_build_command'] !=
+          pinnedGhosttyBenchmarkBuildCommand ||
       provenance['macos_configuration'] != pinnedGhosttyMacosConfiguration ||
       provenance['project_local_patches'] != false ||
-      !_validSha256(provenance['executable_sha256']) ||
-      !_validSha256(provenance['harness_sha256'])) {
+      !_validSha256(provenance['app_executable_sha256']) ||
+      !_validSha256(provenance['benchmark_executable_sha256']) ||
+      !_validSha256(provenance['capture_harness_sha256'])) {
     throw const FormatException('comparator provenance is invalid');
   }
 
@@ -161,9 +168,17 @@ ProductPerformanceComparatorEvidence decodeProductPerformanceComparator(
     'id',
     'shell_fixture',
     'configuration',
+    'input_transport',
+    'visibility_observer',
     'input_samples',
+    'parser_action',
+    'parser_warmup_runs',
+    'parser_sample_count',
+    'parser_statistic',
     'parser_output_bytes',
+    'parser_corpus_sha256',
     'memory_output_bytes',
+    'resource_scope',
     'idle_window_count',
     'idle_window_us',
     'animation_enabled',
@@ -172,9 +187,17 @@ ProductPerformanceComparatorEvidence decodeProductPerformanceComparator(
   if (workload['id'] != productRelativeWorkloadId ||
       workload['shell_fixture'] != 'isolated-zsh-v1' ||
       workload['configuration'] != 'parity-minimal-v1' ||
+      workload['input_transport'] != 'applescript-input-text' ||
+      workload['visibility_observer'] != 'screencapturekit-window-pixel' ||
       workload['input_samples'] != 7 ||
+      workload['parser_action'] != 'terminal-parser' ||
+      workload['parser_warmup_runs'] != 2 ||
+      workload['parser_sample_count'] != 5 ||
+      workload['parser_statistic'] != 'p50' ||
       workload['parser_output_bytes'] != 134264777 ||
+      !_validSha256(workload['parser_corpus_sha256']) ||
       workload['memory_output_bytes'] != 22048 ||
+      workload['resource_scope'] != 'root-process' ||
       workload['idle_window_count'] != 2 ||
       workload['idle_window_us'] != 2000000 ||
       workload['animation_enabled'] != false ||

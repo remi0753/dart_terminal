@@ -646,3 +646,179 @@ Build-child completion:
   executable identity, and repository isolation requirements are satisfied. Only
   this acquisition/build child is complete; no benchmark capture or relative
   performance pass is claimed by this result.
+
+### 2026-09-13 — Compatible comparator capture start
+
+- Goal: capture real aggregate Ghostty input-to-visible, parser/output, idle RSS,
+  and idle CPU metrics on this Mac with the exact fixed workload and feed them
+  through the already tested relative evaluator together with a fresh Release
+  AOT product observation.
+- Scope: product-owned external harness and strict machine result, isolated zsh
+  and configuration, fixed 7-input/134,264,777-byte/22,048-byte/two-by-two-second
+  workload, public process and screen APIs, executable/harness hashes, negative
+  tests, checked content-free evidence, and the relative pass result.
+- Out of scope: modifying or linking Ghostty, retaining terminal content,
+  accessing user configuration/history, electrical-energy claims, first-run
+  shader/dependency timing, notarization, and long-duration testing.
+- Dependencies and risk: Ghostty's public benchmark entrypoints and macOS UI
+  automation must expose enough observable boundaries to measure the specified
+  metrics without a source patch. Parser-only and GUI-visible timings must not be
+  conflated; child-process memory must be included consistently; any inaccessible
+  boundary or workload mismatch fails closed rather than becoming an estimate.
+- Completion: capture/evaluator hostile tests pass, a provenance-complete real
+  Ghostty evidence document is generated, a fresh compatible Release AOT product
+  observation passes every relative threshold, full repository and generic
+  library gates pass, and the checked evidence contains no raw samples or user
+  content.
+
+Capture implementation findings:
+
+- Ghostty's GUI product and official `terminal-parser` benchmark are distinct
+  executables. The earlier single executable hash was therefore insufficient:
+  the strict provenance inventory now separates the unmodified ReleaseLocal app,
+  the official ReleaseFast benchmark executable, and the product-owned Swift
+  capture source. The workload also fixes parser action, two warmups, five timed
+  runs, p50, input transport, pixel observer, root-process resource scope, and
+  the exact shared-corpus hash.
+- The official benchmark build initially failed because the sandbox could not
+  create Zig manifests in the existing user cache. The same documented build was
+  rerun with the required filesystem access and completed without source changes;
+  `ghostty-bench` is native arm64 with SHA-256
+  `0c6ea29728a6429e02a9326be40ccb8d7b36d80d743a90f19b7c599377dbbf23`.
+- The first standalone UI helper attempt aborted in CoreGraphics initialization
+  before launching Ghostty. A command-line Swift process must initialize its
+  AppKit application singleton before calling the screen-capture preflight API;
+  the helper now establishes that public framework prerequisite explicitly.
+  No comparator metric or evidence was emitted by the failed attempt.
+- After initialization was corrected, fail-closed detection found the exact
+  isolated comparator process left by the abort; its full executable and fixed
+  argument identity were checked before it alone was terminated. The following
+  run completed the seven pixel observations and visible resource window, then
+  rejected the immediate boolean return from `NSRunningApplication.hide()`.
+  That return only reports whether the request was submitted, not the resulting
+  visibility state. The boundary now waits up to two seconds for the public
+  `isHidden` state and rejects only if the requested occlusion never occurs.
+- A retry immediately after that classified failure correctly refused to target
+  an existing app. Inspection showed it was again the exact isolated comparator:
+  asynchronous graceful termination had not completed before the helper exited.
+  Failure cleanup now uses `NSRunningApplication.forceTerminate()` for the
+  helper-owned instance, while the normal path still asks the fixture to exit and
+  verifies termination before result emission.
+- The corrected capture completed all input and resource measurements, but the
+  fixture's shell exit closed its window without terminating the menu-bar
+  application process. The helper now follows the fixture exit with a normal
+  `NSRunningApplication.terminate()` request and still requires observed process
+  termination; failure cleanup remains the bounded force-terminate fallback.
+- A full UI capture then passed with seven observed pixel transitions, two
+  resource windows, no raw sample retention, and clean application termination.
+  The first three fresh product microbenchmark attempts all retained every hard
+  gate but failed only the accepted-baseline damage-capture p95 (810, 700, and
+  734 us against 670 us). Because the current task had changed a private parser
+  seed helper to public for corpus reuse, that code-layout disturbance is being
+  removed before classifying the repeat as host noise or a regression. The
+  comparator generator now independently reproduces the reviewed seed and pins
+  its resulting whole-corpus SHA-256; the existing product benchmark source
+  shape and baseline remain unchanged.
+- Restoring the existing product benchmark source shape and rebuilding produced
+  a clean baseline pass: parser p50 107.64 MiB/s, damage capture/transfer/end-to-
+  end p95 633/1,524/2,149 us, and input p95 375 ns. This confirms the earlier
+  tail failures were induced by changing the integrated benchmark artifact, not
+  accepted as a reason to move the reference.
+- The first fresh Release AOT product process passed cleanup, input, frame, RSS,
+  and CPU gates but missed its visible-response budget once (29.617 ms versus
+  19.860 ms). An unchanged retry passed with startup 658.262 ms, input 0.993 ms,
+  visible response 9.026 ms against an approximately 19.5 ms budget, frame work
+  0.432 ms, idle RSS 120,487,936 bytes, and aggregate CPU 14 basis points. Its
+  separate 100 MiB/four-pane run also passed at 0.609x same-launch baseline with
+  675 scheduler yields and clean ownership teardown.
+- The successful launcher intentionally emits only its already validated bounded
+  final summary; internal application machine lines are included in the error
+  report only on failure. The relative input decoder therefore consumes the one
+  exact successful summary rather than requiring private intermediate output,
+  while the launcher remains the authority that validates the seven-input and
+  22,048-byte resource contracts before emitting it.
+- The first end-to-end generator run rejected the parser child before evidence
+  publication. Diagnosis found two exact upstream CLI facts: benchmark actions
+  require the `+terminal-parser` spelling, and the unmodified macOS build emits a
+  fixed content-free startup diagnostic ending in its known non-fatal
+  `SentryInitFailed`. Runs now use an isolated HOME/XDG cache/config and `C`
+  locale, require empty stdout, accept only the exact bounded pinned-version
+  diagnostic inventory on stderr, and reject any added or changed line. With an
+  isolated writable cache the final Sentry line can legitimately be absent, so
+  known fixed Sentry lines are optional and may interleave with asynchronous
+  initialization; after removing only those bounded lines, the seven pinned
+  startup lines must remain in exact order. No arbitrary stderr is accepted.
+- Replaying the exact 134,264,777-byte synthetic corpus in isolation identified
+  the remaining diagnostic: a successful Sentry initialization can emit the
+  fixed content-free line stating that its normal-session envelope contains no
+  crash and is discarded. The validator permits at most one of that exact line
+  and at most one known initialization-failure line, in any asynchronous
+  position; every other line remains rejected.
+- The next end-to-end pass completed both Ghostty workloads but rejected the
+  product summary because its public mode token is `release-aot`, not the Dart
+  enum spelling `releaseAot`. The strict decoder now uses the exact emitted
+  token; no evidence was published from the rejected run.
+- Before freezing evidence, memory-workload completion was strengthened from a
+  fixed delay to the exact isolated fixture title exposed by Ghostty's public
+  AppleScript dictionary. The 22,048-byte output must complete before occlusion
+  measurement begins. Swift compilation and UI capture children also have
+  bounded deadlines that kill only the just-launched child on timeout, avoiding
+  an orphaned comparator after a launcher failure.
+
+Capture completion:
+
+- One generator attempt after the memory-title strengthening failed closed in
+  the UI child without publishing evidence. The exact helper then passed as a
+  standalone process, and an unchanged full retry passed; this confirmed a
+  transient launch/automation failure rather than permission to relax the
+  capture contract.
+- The accepted pinned comparator run observed input-to-window-pixel p95
+  193,377 us, official `+terminal-parser` p50 98.802 MiB/s over five timed
+  134,264,777-byte runs after two warmups, visible idle RSS 119,619,584 bytes,
+  and 16 aggregate CPU basis points over the visible/hidden windows. The parser
+  corpus SHA-256 is
+  `e6d7ac297fc096a9cfbb6a00c7b9e8039a8b33d54630623bef7a73dbae539ce6`;
+  the final Swift source SHA-256 is
+  `8ffd76cefcfb0f336dd51a2ddcf3f674fbdd761ad012405cba10bc4676c361e7`.
+- The fresh product observation passed all four relative gates: visible input
+  9,026 us <= 241,721.25 us, parser p50 107.635 MiB/s >= 74.102 MiB/s, idle RSS
+  120,487,936 bytes <= 179,429,376 bytes, and aggregate CPU 14 <= 24 basis
+  points. The checked content-free documents are
+  `benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json` and
+  `benchmark/evidence/product-relative-performance-macos-arm64-m1.json`.
+- `tool/ghostty_performance_capture.dart` verifies the exact app/benchmark
+  hashes, builds the checked Swift source, uses bounded child lifetimes, creates
+  and removes the fixed parser corpus, validates fresh product results, and
+  atomically publishes only aggregate evidence. The offline
+  `make product-performance-comparator-check` gate verifies schema, hostile
+  boundaries, source freshness, four passing gates, and privacy exclusions.
+
+Final validation on 2026-09-13:
+
+- `dart analyze`: passed with no issues after directive ordering was corrected.
+- `dart run test/ghostty_performance_capture_test.dart` and
+  `dart run test/product_performance_comparator_test.dart`: passed, including
+  malformed/duplicate capture, false CPU aggregate, failed/non-native product,
+  exact provenance/workload, threshold boundaries, and checked-evidence tests.
+- `xcrun swiftc ... -warnings-as-errors`: passed for the capture helper.
+- `make product-performance-comparator-check`: passed.
+- Exact `CI=true DART_SUPPRESS_ANALYTICS=true make test`: passed with exit 0;
+  317 files were already formatted, analysis had no issues, and the complete
+  product/dependency/generated/privacy test inventory passed.
+- During final repetition, one unchanged `dart_pty_macos` timing case first
+  failed to find its expected diagnostic element; an unchanged rerun passed that
+  case. That rerun then correctly reported one newly edited test file as not yet
+  formatted because the main gate uses check-only formatting. After explicitly
+  formatting that file, the complete exact main gate passed. Neither transient
+  was bypassed or used to weaken a test.
+- The pinned Ghostty checkout remained clean at exact revision
+  `d4d8f62262cb1a974a7d2470d5f79f811fab15e4`. The adjacent `dart_appkit`
+  worktree was clean and its official audit passed with
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=140 text_files=139`; no generic-library
+  file was changed.
+- Apple notarization and long-duration verification were not run by explicit
+  user direction and are not dependencies of this capture child.
+
+The compatible comparator codec, pinned build/capture, and memory/idle-power
+relative-comparison child are complete. The next ordered work is the aggregate
+performance gate and parent closure; no later soak or parity task has begun.

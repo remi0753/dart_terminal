@@ -1347,13 +1347,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] contract、計測inventory、baseline／comparator policy
   - [x] Release AOT product parser／damage／input microbenchmark
   - [x] 通常製品startup／visible input／frame／100 MiB fairness受け入れ
-  - [ ] memory／idle-power proxy／pinned relative comparison
+  - [x] memory／idle-power proxy／pinned relative comparison
     - [x] 短時間RSS／process CPU／frame proxyと絶対値gate
-    - [ ] compatible pinned comparator証跡codecとrelative gate
+    - [x] compatible pinned comparator証跡codecとrelative gate
       - [x] strict comparator provenance／workload codecとnegative relative gate
-      - [ ] pinned Ghostty build／captureとpassing relative evidence
+      - [x] pinned Ghostty build／captureとpassing relative evidence
         - [x] verified pinned source／Zig acquisitionとclean ReleaseLocal build
-        - [ ] compatible capture harness／evidenceとpassing relative gate
+        - [x] compatible capture harness／evidenceとpassing relative gate
   - [ ] aggregate gate、文書／matrix更新、親項目完了判定
 - [ ] 24/72 hour soak、sleep/wake、display attach/detach、memory pressure
 - [ ] native ASan/UBSan、fuzz corpus、fault injection
