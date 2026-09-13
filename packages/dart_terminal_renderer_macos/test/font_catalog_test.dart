@@ -12,6 +12,7 @@ external int _liveFontCatalogCount();
 void runFontCatalogTests() {
   _testBoundedFontCatalogConfiguration();
   _testContentFreeFontDiagnostics();
+  _testConfiguredNativeFontCatalog();
   _expect(_liveFontCatalogCount() == 0, 'catalog registry starts empty');
   final TerminalFontCatalog catalog = TerminalFontCatalog.open();
   try {
@@ -133,6 +134,164 @@ void runFontCatalogTests() {
     input.dispose();
   }
   _expect(_liveFontCatalogCount() == 0, 'all test catalogs are released');
+}
+
+void _testConfiguredNativeFontCatalog() {
+  final TerminalFontCatalogConfiguration configuration =
+      TerminalFontCatalogConfiguration(
+        regularVariations: <TerminalFontVariationAxis>[
+          TerminalFontVariationAxis('wght', 800),
+          TerminalFontVariationAxis('ZZZZ', 1),
+        ],
+        codepointOverrides: <TerminalFontCodepointOverride>[
+          TerminalFontCodepointOverride(
+            firstScalar: 0x41,
+            lastScalar: 0x43,
+            family: 'Times-Roman',
+          ),
+          TerminalFontCodepointOverride(
+            firstScalar: 0x41,
+            lastScalar: 0x41,
+            family: 'Menlo',
+          ),
+          TerminalFontCodepointOverride(
+            firstScalar: 0x43,
+            lastScalar: 0x43,
+            family: 'Definitely Missing Font 12345',
+          ),
+          TerminalFontCodepointOverride(
+            firstScalar: 0x1f600,
+            lastScalar: 0x1f600,
+            family: 'Times-Roman',
+          ),
+        ],
+      );
+  final TerminalFontCatalog configured = TerminalFontCatalog.open(
+    family: '',
+    configuration: configuration,
+  );
+  final TerminalFontCatalog baseline = TerminalFontCatalog.open(family: '');
+  try {
+    _expect(
+      configured.configuration == configuration &&
+          configured.metrics.pointSize == 14 &&
+          configured.generation != baseline.generation,
+      'configured catalog owns one immutable native generation',
+    );
+    final TerminalResolvedFont resolvedA = configured.resolve('A');
+    final TerminalResolvedFont resolvedB = configured.resolve('B');
+    final TerminalResolvedFont resolvedC = configured.resolve('C');
+    final TerminalResolvedFont resolvedSmile = configured.resolve('😀');
+    _expect(
+      resolvedA.postscriptName.contains('Menlo') &&
+          resolvedB.postscriptName.contains('Times') &&
+          resolvedC.faceId ==
+              configured.faceIdForStyle(TerminalFontStyle.regular) &&
+          !resolvedC.hasMissingGlyph &&
+          !resolvedC.postscriptName.contains('Missing') &&
+          resolvedSmile.isFallback &&
+          resolvedSmile.hasColorGlyphs &&
+          !resolvedSmile.hasMissingGlyph &&
+          resolvedSmile.postscriptName.contains('AppleColorEmoji'),
+      'later ranges win and unusable mappings return to normal fallback',
+    );
+    final TerminalFontCatalogDiagnostics initial = configured.diagnostics();
+    _expect(
+      initial.catalogGeneration == configured.generation &&
+          initial.configuredVariationCount == 2 &&
+          initial.appliedVariationCount == 1 &&
+          initial.unavailableVariationCount == 1 &&
+          initial.configuredOverrideCount == 4 &&
+          initial.availableOverrideCount == 3 &&
+          initial.unavailableOverrideCount == 1 &&
+          initial.overrideMatchCount == 4 &&
+          initial.overrideAppliedCount == 2 &&
+          initial.overrideFallbackCount == 2 &&
+          initial.coreTextFallbackCount == 1 &&
+          initial.missingGlyphCount == 0 &&
+          initial.resolutions.length == 4 &&
+          initial.resolutions.any(
+            (TerminalFontResolutionDiagnostic record) =>
+                record.source ==
+                    TerminalFontResolutionSource.codepointOverride &&
+                record.postscriptName.contains('Menlo'),
+          ) &&
+          initial.resolutions.any(
+            (TerminalFontResolutionDiagnostic record) =>
+                record.source ==
+                    TerminalFontResolutionSource.codepointOverride &&
+                record.postscriptName.contains('Times'),
+          ) &&
+          initial.resolutions.any(
+            (TerminalFontResolutionDiagnostic record) =>
+                record.source == TerminalFontResolutionSource.requested,
+          ) &&
+          initial.resolutions.any(
+            (TerminalFontResolutionDiagnostic record) =>
+                record.source ==
+                    TerminalFontResolutionSource.coreTextFallback &&
+                record.postscriptName.contains('AppleColorEmoji'),
+          ),
+      'native diagnostics expose bounded source counts and face identities',
+    );
+
+    final TerminalShapedText shaped = configured.shape(
+      'ABC',
+      options: const TerminalShapingOptions(ligatures: false),
+    );
+    final TerminalGlyphRasterBatch raster = configured.rasterizeShaped(
+      shaped,
+      scale: 2,
+    );
+    _expect(
+      shaped.runs.length == 3 &&
+          shaped.faces.length == 3 &&
+          !shaped.hasMissingGlyph &&
+          raster.glyphs.length == 3 &&
+          raster.pixelByteLength > 0,
+      'configured faces preserve ownership through shape and raster copies',
+    );
+    final TerminalFontCatalogDiagnostics afterShape = configured.diagnostics();
+    _expect(
+      afterShape.overrideMatchCount == 7 &&
+          afterShape.overrideAppliedCount == 4 &&
+          afterShape.overrideFallbackCount == 3,
+      'successful shaping records each mapped scalar exactly once',
+    );
+
+    final TerminalRasterizedGlyph configuredM = configured
+        .rasterizeShaped(configured.shape('M'), scale: 2)
+        .glyphs
+        .single;
+    final TerminalRasterizedGlyph baselineM = baseline
+        .rasterizeShaped(baseline.shape('M'), scale: 2)
+        .glyphs
+        .single;
+    final int configuredCoverage = configuredM.copyPixels().fold<int>(
+      0,
+      (int total, int value) => total + value,
+    );
+    final int baselineCoverage = baselineM.copyPixels().fold<int>(
+      0,
+      (int total, int value) => total + value,
+    );
+    _expect(
+      configuredCoverage > baselineCoverage &&
+          configured.metrics.pointSize == baseline.metrics.pointSize,
+      'supported weight axis changes glyph ink without changing point size',
+    );
+  } finally {
+    configured.dispose();
+    baseline.dispose();
+  }
+  _expectThrows<StateError>(
+    configured.diagnostics,
+    'disposed configured catalog cannot expose diagnostics',
+  );
+  _expect(
+    _liveFontCatalogCount() == 0,
+    'configured and baseline catalogs release every native face',
+  );
 }
 
 void _testBoundedFontCatalogConfiguration() {

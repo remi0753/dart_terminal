@@ -286,6 +286,48 @@ extern const uint8_t dtr_metallib_start[]
 extern const uint8_t dtr_metallib_end[]
     __asm("section$end$__DATA$__dtrlib");
 
+static NSString* const DtrFontSourceAttribute =
+    @"dev.dart_terminal.font-resolution-source";
+static NSString* const DtrRequestedFontNameAttribute =
+    @"dev.dart_terminal.requested-font-name";
+static NSString* const DtrFontSyntheticAttribute =
+    @"dev.dart_terminal.font-synthetic";
+
+static NSFont* FontForRun(CTRunRef run);
+static uint32_t ShapedFontFlags(NSFont* requested_font, NSFont* resolved_font,
+                                BOOL synthetic, BOOL missing);
+
+@interface DtrFontOverride : NSObject
+
+@property(nonatomic) uint32_t firstScalar;
+@property(nonatomic) uint32_t lastScalar;
+@property(nonatomic, copy) NSString* family;
+@property(nonatomic, copy) NSArray* fonts;
+@property(nonatomic) uint32_t syntheticStyleBits;
+@property(nonatomic) BOOL available;
+
+- (NSFont*)fontForStyle:(uint32_t)style synthetic:(BOOL*)synthetic;
+
+@end
+
+@implementation DtrFontOverride
+
+- (NSFont*)fontForStyle:(uint32_t)style synthetic:(BOOL*)synthetic {
+  if (!self.available || style > DTR_FONT_STYLE_BOLD_ITALIC) {
+    return nil;
+  }
+  id candidate = self.fonts[style];
+  if (candidate == [NSNull null]) {
+    return nil;
+  }
+  if (synthetic != NULL) {
+    *synthetic = (self.syntheticStyleBits & (1u << style)) != 0;
+  }
+  return (NSFont*)candidate;
+}
+
+@end
+
 @interface DtrFontCatalog : NSObject
 
 @property(nonatomic, readonly) uint64_t generation;
@@ -297,12 +339,23 @@ extern const uint8_t dtr_metallib_end[]
 - (instancetype)initWithFamily:(NSString*)family
                       pointSize:(double)pointSize
                     generation:(uint64_t)generation
-                   policyFlags:(uint32_t)policyFlags;
+                   policyFlags:(uint32_t)policyFlags
+             variationsByStyle:(NSArray*)variationsByStyle
+              overrideRequests:(NSArray*)overrideRequests;
 - (NSFont*)fontForStyle:(uint32_t)style synthetic:(BOOL*)synthetic;
 - (uint32_t)faceIdForFont:(NSFont*)font;
 - (NSFont*)fontForFaceId:(uint32_t)faceId;
 - (uint32_t)faceIdForStyle:(uint32_t)style;
 - (BOOL)fillSummary:(DtrFontCatalogSummaryV1*)output handle:(uint64_t)handle;
+- (NSMutableAttributedString*)attributedStringForText:(NSString*)text
+                                                style:(uint32_t)style
+                                         featureFlags:(uint32_t)featureFlags
+                                            synthetic:(BOOL*)synthetic
+                                     recordDiagnostics:(BOOL)recordDiagnostics;
+- (void)recordLine:(CTLineRef)line requestedFont:(NSFont*)requestedFont;
+- (int32_t)copyDiagnostics:(DtrFontCatalogDiagnosticsV1*)output
+               resolutions:(DtrFontResolutionDiagnosticV1*)resolutions
+                   capacity:(uint32_t)capacity;
 
 @end
 
@@ -352,27 +405,79 @@ static NSString* PostScriptName(NSFont* font) {
   return name == NULL ? @"" : CFBridgingRelease(name);
 }
 
-@implementation DtrFontCatalog {
-  NSLock* _faceLock;
-  NSMutableDictionary<NSString*, NSNumber*>* _faceIds;
-  NSMutableDictionary<NSNumber*, NSFont*>* _fontsByFaceId;
-  uint32_t _nextFaceId;
+static NSString* FontIdentityKey(NSFont* font) {
+  NSMutableString* result = [PostScriptName(font) mutableCopy];
+  CFDictionaryRef copied = CTFontCopyVariation((__bridge CTFontRef)font);
+  NSDictionary* variations =
+      copied == NULL ? @{} : CFBridgingRelease(copied);
+  NSArray<NSNumber*>* keys = [variations.allKeys
+      sortedArrayUsingComparator:^NSComparisonResult(NSNumber* left,
+                                                     NSNumber* right) {
+        return [left compare:right];
+      }];
+  for (NSNumber* key in keys) {
+    NSNumber* value = variations[key];
+    [result appendFormat:@"|%08x=%.17g", key.unsignedIntValue,
+                         value.doubleValue];
+  }
+  return result;
 }
 
-- (instancetype)initWithFamily:(NSString*)family
-                      pointSize:(double)pointSize
-                    generation:(uint64_t)generation
-                   policyFlags:(uint32_t)policyFlags {
-  self = [super init];
-  if (self == nil) {
-    return nil;
+static NSFont* ApplyFontVariations(NSFont* font, NSArray* requests,
+                                   uint64_t* applied,
+                                   uint64_t* unavailable) {
+  if (requests.count == 0) {
+    return font;
   }
-  NSFont* regular = CreateRequestedFont(family, pointSize);
-  if (regular == nil) {
-    return nil;
+  CFArrayRef copied_axes = CTFontCopyVariationAxes((__bridge CTFontRef)font);
+  NSArray* axes = copied_axes == NULL ? @[] : CFBridgingRelease(copied_axes);
+  NSMutableSet<NSNumber*>* supported = [[NSMutableSet alloc] init];
+  for (NSDictionary* axis in axes) {
+    NSNumber* identifier =
+        axis[(__bridge NSString*)kCTFontVariationAxisIdentifierKey];
+    if (identifier != nil) {
+      [supported addObject:identifier];
+    }
   }
+  NSMutableDictionary<NSNumber*, NSNumber*>* values =
+      [[NSMutableDictionary alloc] init];
+  for (NSDictionary* request in requests) {
+    NSNumber* tag = request[@"tag"];
+    if ([supported containsObject:tag]) {
+      values[tag] = request[@"value"];
+    } else if (unavailable != NULL && *unavailable < INT64_MAX) {
+      (*unavailable)++;
+    }
+  }
+  if (values.count == 0) {
+    return font;
+  }
+  NSFontDescriptor* descriptor = [font.fontDescriptor
+      fontDescriptorByAddingAttributes:@{NSFontVariationAttribute : values}];
+  NSFont* varied = [NSFont fontWithDescriptor:descriptor size:font.pointSize];
+  if (varied == nil) {
+    if (unavailable != NULL) {
+      SaturatingAddMetric(unavailable, (uint64_t)values.count);
+    }
+    return font;
+  }
+  if (applied != NULL) {
+    SaturatingAddMetric(applied, (uint64_t)values.count);
+  }
+  return varied;
+}
+
+static NSArray* CreateStyleFonts(NSFont* regular, uint32_t policy_flags,
+                                 NSArray* variations_by_style,
+                                 uint32_t* available_bits,
+                                 uint32_t* synthetic_bits,
+                                 uint64_t* applied,
+                                 uint64_t* unavailable) {
   NSMutableArray* fonts = [[NSMutableArray alloc] initWithCapacity:4];
-  [fonts addObject:regular];
+  NSFont* configured_regular = ApplyFontVariations(
+      regular, variations_by_style[DTR_FONT_STYLE_REGULAR], applied,
+      unavailable);
+  [fonts addObject:configured_regular];
   uint32_t available = DTR_FONT_STYLE_BIT_REGULAR;
   uint32_t synthetic = 0;
   const CTFontSymbolicTraits requested_traits[3] = {
@@ -385,28 +490,128 @@ static NSString* PostScriptName(NSFont* font) {
     const uint32_t style = index + 1;
     if (font != nil) {
       available |= 1u << style;
-      [fonts addObject:font];
-    } else if ((policyFlags & DTR_FONT_POLICY_ALLOW_SYNTHETIC) != 0) {
+    } else if ((policy_flags & DTR_FONT_POLICY_ALLOW_SYNTHETIC) != 0) {
       synthetic |= 1u << style;
-      [fonts addObject:regular];
-    } else {
+      font = regular;
+    }
+    if (font == nil) {
       [fonts addObject:[NSNull null]];
+      for (id ignored in variations_by_style[style]) {
+        (void)ignored;
+        if (unavailable != NULL && *unavailable < INT64_MAX) {
+          (*unavailable)++;
+        }
+      }
+    } else {
+      [fonts addObject:ApplyFontVariations(
+                           font, variations_by_style[style], applied,
+                           unavailable)];
     }
   }
+  if (available_bits != NULL) {
+    *available_bits = available;
+  }
+  if (synthetic_bits != NULL) {
+    *synthetic_bits = synthetic;
+  }
+  return [fonts copy];
+}
+
+@implementation DtrFontCatalog {
+  NSLock* _faceLock;
+  NSMutableDictionary<NSString*, NSNumber*>* _faceIds;
+  NSMutableDictionary<NSNumber*, NSFont*>* _fontsByFaceId;
+  NSArray<DtrFontOverride*>* _overrides;
+  NSMutableDictionary<NSString*, NSMutableDictionary*>* _diagnosticRecords;
+  uint32_t _nextFaceId;
+  uint64_t _configuredVariationCount;
+  uint64_t _appliedVariationCount;
+  uint64_t _unavailableVariationCount;
+  uint64_t _configuredOverrideCount;
+  uint64_t _availableOverrideCount;
+  uint64_t _unavailableOverrideCount;
+  uint64_t _overrideMatchCount;
+  uint64_t _overrideAppliedCount;
+  uint64_t _overrideFallbackCount;
+  uint64_t _coretextFallbackCount;
+  uint64_t _missingGlyphCount;
+}
+
+- (instancetype)initWithFamily:(NSString*)family
+                      pointSize:(double)pointSize
+                    generation:(uint64_t)generation
+                   policyFlags:(uint32_t)policyFlags
+             variationsByStyle:(NSArray*)variationsByStyle
+              overrideRequests:(NSArray*)overrideRequests {
+  self = [super init];
+  if (self == nil) {
+    return nil;
+  }
+  NSFont* regular = CreateRequestedFont(family, pointSize);
+  if (regular == nil) {
+    return nil;
+  }
+  uint64_t configured_variations = 0;
+  for (NSArray* requests in variationsByStyle) {
+    configured_variations += requests.count;
+  }
+  uint64_t applied_variations = 0;
+  uint64_t unavailable_variations = 0;
+  uint32_t available = 0;
+  uint32_t synthetic = 0;
+  NSArray* fonts = CreateStyleFonts(
+      regular, policyFlags, variationsByStyle, &available, &synthetic,
+      &applied_variations, &unavailable_variations);
   _generation = generation;
   _pointSize = pointSize;
-  _fonts = [fonts copy];
+  _fonts = fonts;
   _availableStyleBits = available;
   _syntheticStyleBits = synthetic;
   _faceLock = [[NSLock alloc] init];
   _faceIds = [[NSMutableDictionary alloc] init];
   _fontsByFaceId = [[NSMutableDictionary alloc] init];
+  _diagnosticRecords = [[NSMutableDictionary alloc] init];
   _nextFaceId = 1;
+  _configuredVariationCount = configured_variations;
+  _appliedVariationCount = applied_variations;
+  _unavailableVariationCount = unavailable_variations;
+  _configuredOverrideCount = overrideRequests.count;
   for (id candidate in _fonts) {
     if (candidate != [NSNull null]) {
       [self faceIdForFont:(NSFont*)candidate];
     }
   }
+  NSMutableArray<DtrFontOverride*>* overrides =
+      [[NSMutableArray alloc] initWithCapacity:overrideRequests.count];
+  for (NSDictionary* request in overrideRequests) {
+    DtrFontOverride* override = [[DtrFontOverride alloc] init];
+    override.firstScalar = [request[@"first"] unsignedIntValue];
+    override.lastScalar = [request[@"last"] unsignedIntValue];
+    override.family = request[@"family"];
+    NSFont* override_regular = CreateRequestedFont(override.family, pointSize);
+    if (override_regular == nil) {
+      override.available = NO;
+      override.fonts = @[[NSNull null], [NSNull null], [NSNull null],
+                         [NSNull null]];
+      _unavailableOverrideCount++;
+    } else {
+      uint32_t override_available = 0;
+      uint32_t override_synthetic = 0;
+      override.available = YES;
+      override.fonts = CreateStyleFonts(
+          override_regular, policyFlags, variationsByStyle,
+          &override_available, &override_synthetic, NULL, NULL);
+      override.syntheticStyleBits = override_synthetic;
+      _availableOverrideCount++;
+      for (id candidate in override.fonts) {
+        if (candidate != [NSNull null]) {
+          [self faceIdForFont:(NSFont*)candidate];
+        }
+      }
+    }
+    [overrides addObject:override];
+  }
+  _overrides = [overrides copy];
   return self;
 }
 
@@ -425,7 +630,7 @@ static NSString* PostScriptName(NSFont* font) {
 }
 
 - (uint32_t)faceIdForFont:(NSFont*)font {
-  NSString* name = PostScriptName(font);
+  NSString* name = FontIdentityKey(font);
   [_faceLock lock];
   NSNumber* existing = _faceIds[name];
   if (existing != nil) {
@@ -517,6 +722,242 @@ static NSString* PostScriptName(NSFont* font) {
   output->bold_italic_face_id =
       [self faceIdForStyle:DTR_FONT_STYLE_BOLD_ITALIC];
   return YES;
+}
+
+- (NSMutableAttributedString*)attributedStringForText:(NSString*)text
+                                                style:(uint32_t)style
+                                         featureFlags:(uint32_t)featureFlags
+                                            synthetic:(BOOL*)synthetic
+                                     recordDiagnostics:(BOOL)recordDiagnostics {
+  BOOL requested_synthetic = NO;
+  NSFont* requested = [self fontForStyle:style synthetic:&requested_synthetic];
+  if (requested == nil) {
+    return nil;
+  }
+  if (synthetic != NULL) {
+    *synthetic = requested_synthetic;
+  }
+  NSMutableAttributedString* attributed =
+      [[NSMutableAttributedString alloc] initWithString:text
+                                             attributes:@{
+                                               (__bridge NSString*)
+                                                   kCTFontAttributeName :
+                                                   requested,
+                                               (__bridge NSString*)
+                                                   kCTLigatureAttributeName :
+                                                   @((featureFlags &
+                                                      DTR_SHAPE_FEATURE_LIGATURES) !=
+                                                             0
+                                                         ? 1
+                                                         : 0),
+                                               DtrFontSourceAttribute :
+                                                   @(DTR_FONT_RESOLUTION_REQUESTED),
+                                               DtrRequestedFontNameAttribute :
+                                                   FontIdentityKey(requested),
+                                               DtrFontSyntheticAttribute :
+                                                   @(requested_synthetic),
+                                             }];
+  uint64_t matches = 0;
+  uint64_t applied = 0;
+  uint64_t fallback = 0;
+  for (NSUInteger index = 0; index < text.length;) {
+    const unichar first = [text characterAtIndex:index];
+    NSUInteger scalar_length = 1;
+    uint32_t scalar = first;
+    if (CFStringIsSurrogateHighCharacter(first) && index + 1 < text.length) {
+      const unichar second = [text characterAtIndex:index + 1];
+      if (CFStringIsSurrogateLowCharacter(second)) {
+        scalar = CFStringGetLongCharacterForSurrogatePair(first, second);
+        scalar_length = 2;
+      }
+    }
+    DtrFontOverride* selected = nil;
+    for (NSInteger candidate = (NSInteger)_overrides.count - 1;
+         candidate >= 0; candidate--) {
+      DtrFontOverride* override = _overrides[(NSUInteger)candidate];
+      if (scalar >= override.firstScalar && scalar <= override.lastScalar) {
+        selected = override;
+        break;
+      }
+    }
+    if (selected != nil) {
+      matches++;
+      BOOL override_synthetic = NO;
+      NSFont* override_font =
+          [selected fontForStyle:style synthetic:&override_synthetic];
+      BOOL usable = NO;
+      if (override_font != nil) {
+        CTFontRef candidate = CTFontCreateForString(
+            (__bridge CTFontRef)override_font, (__bridge CFStringRef)text,
+            CFRangeMake((CFIndex)index, (CFIndex)scalar_length));
+        if (candidate != NULL) {
+          usable = [FontIdentityKey((__bridge NSFont*)candidate)
+              isEqualToString:FontIdentityKey(override_font)];
+          CFRelease(candidate);
+        }
+      }
+      if (usable) {
+        [attributed addAttributes:@{
+          (__bridge NSString*)kCTFontAttributeName : override_font,
+          DtrFontSourceAttribute :
+              @(DTR_FONT_RESOLUTION_CODEPOINT_OVERRIDE),
+          DtrRequestedFontNameAttribute : FontIdentityKey(override_font),
+          DtrFontSyntheticAttribute : @(override_synthetic),
+        }
+                            range:NSMakeRange(index, scalar_length)];
+        applied++;
+      } else {
+        fallback++;
+      }
+    }
+    index += scalar_length;
+  }
+  if (recordDiagnostics) {
+    [_faceLock lock];
+    SaturatingAddMetric(&_overrideMatchCount, matches);
+    SaturatingAddMetric(&_overrideAppliedCount, applied);
+    SaturatingAddMetric(&_overrideFallbackCount, fallback);
+    [_faceLock unlock];
+  }
+  return attributed;
+}
+
+- (void)recordLine:(CTLineRef)line requestedFont:(NSFont*)requestedFont {
+  CFArrayRef runs = CTLineGetGlyphRuns(line);
+  const CFIndex run_count = runs == NULL ? 0 : CFArrayGetCount(runs);
+  for (CFIndex index = 0; index < run_count; index++) {
+    CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(runs, index);
+    NSFont* resolved = FontForRun(run);
+    if (resolved == nil) {
+      continue;
+    }
+    BOOL missing = NO;
+    const CFIndex glyph_count = CTRunGetGlyphCount(run);
+    CGGlyph glyphs[256];
+    for (CFIndex start = 0; start < glyph_count; start += 256) {
+      const CFIndex remaining = glyph_count - start;
+      const CFIndex count = remaining < 256 ? remaining : 256;
+      CTRunGetGlyphs(run, CFRangeMake(start, count), glyphs);
+      for (CFIndex glyph = 0; glyph < count; glyph++) {
+        if (glyphs[glyph] == 0) {
+          missing = YES;
+        }
+      }
+    }
+    NSDictionary* attributes = (__bridge NSDictionary*)CTRunGetAttributes(run);
+    const BOOL synthetic =
+        [attributes[DtrFontSyntheticAttribute] boolValue];
+    const uint32_t requested_source =
+        [attributes[DtrFontSourceAttribute] unsignedIntValue];
+    NSString* assigned_name = attributes[DtrRequestedFontNameAttribute];
+    NSString* resolved_name = FontIdentityKey(resolved);
+    uint32_t source = requested_source;
+    if (missing) {
+      source = DTR_FONT_RESOLUTION_MISSING_GLYPH;
+    } else if (assigned_name == nil ||
+               ![resolved_name isEqualToString:assigned_name]) {
+      source = DTR_FONT_RESOLUTION_CORETEXT_FALLBACK;
+    }
+    const uint32_t flags =
+        ShapedFontFlags(requestedFont, resolved, synthetic, missing);
+    const uint32_t face_id = [self faceIdForFont:resolved];
+    [_faceLock lock];
+    if (source == DTR_FONT_RESOLUTION_CORETEXT_FALLBACK &&
+        _coretextFallbackCount < INT64_MAX) {
+      _coretextFallbackCount++;
+    }
+    if (source == DTR_FONT_RESOLUTION_MISSING_GLYPH &&
+        _missingGlyphCount < INT64_MAX) {
+      _missingGlyphCount++;
+    }
+    NSString* key = [NSString stringWithFormat:@"%u:%u", source, face_id];
+    NSMutableDictionary* record = _diagnosticRecords[key];
+    if (record == nil &&
+        _diagnosticRecords.count < DTR_MAX_FONT_RESOLUTION_DIAGNOSTICS) {
+      record = [@{
+        @"source" : @(source),
+        @"face" : @(face_id),
+        @"flags" : @(flags),
+        @"name" : PostScriptName(resolved),
+        @"count" : @0,
+      } mutableCopy];
+      _diagnosticRecords[key] = record;
+    }
+    if (record != nil) {
+      const uint64_t count = [record[@"count"] unsignedLongLongValue];
+      if (count < INT64_MAX) {
+        record[@"count"] = @(count + 1);
+      }
+    }
+    [_faceLock unlock];
+  }
+}
+
+- (int32_t)copyDiagnostics:(DtrFontCatalogDiagnosticsV1*)output
+               resolutions:(DtrFontResolutionDiagnosticV1*)resolutions
+                   capacity:(uint32_t)capacity {
+  if (output == NULL) {
+    return DTR_STATUS_INVALID_ARGUMENT;
+  }
+  if (output->struct_size != sizeof(DtrFontCatalogDiagnosticsV1) ||
+      output->version != DTR_FONT_CATALOG_DIAGNOSTICS_VERSION) {
+    return DTR_STATUS_UNSUPPORTED_VERSION;
+  }
+  if (capacity > DTR_MAX_FONT_RESOLUTION_DIAGNOSTICS ||
+      (capacity == 0) != (resolutions == NULL)) {
+    return DTR_STATUS_INVALID_ARGUMENT;
+  }
+  [_faceLock lock];
+  NSArray<NSMutableDictionary*>* records = [_diagnosticRecords.allValues
+      sortedArrayUsingComparator:^NSComparisonResult(NSDictionary* left,
+                                                     NSDictionary* right) {
+        const NSComparisonResult source = [left[@"source"]
+            compare:right[@"source"]];
+        return source == NSOrderedSame ? [left[@"face"] compare:right[@"face"]]
+                                       : source;
+      }];
+  if (capacity < records.count) {
+    [_faceLock unlock];
+    return DTR_STATUS_BUFFER_TOO_SMALL;
+  }
+  memset(output, 0, sizeof(*output));
+  output->struct_size = sizeof(*output);
+  output->version = DTR_FONT_CATALOG_DIAGNOSTICS_VERSION;
+  output->catalog_generation = self.generation;
+  output->configured_variation_count = _configuredVariationCount;
+  output->applied_variation_count = _appliedVariationCount;
+  output->unavailable_variation_count = _unavailableVariationCount;
+  output->configured_override_count = _configuredOverrideCount;
+  output->available_override_count = _availableOverrideCount;
+  output->unavailable_override_count = _unavailableOverrideCount;
+  output->override_match_count = _overrideMatchCount;
+  output->override_applied_count = _overrideAppliedCount;
+  output->override_fallback_count = _overrideFallbackCount;
+  output->coretext_fallback_count = _coretextFallbackCount;
+  output->missing_glyph_count = _missingGlyphCount;
+  output->resolution_count = (uint32_t)records.count;
+  for (uint32_t index = 0; index < records.count; index++) {
+    DtrFontResolutionDiagnosticV1* destination = &resolutions[index];
+    memset(destination, 0, sizeof(*destination));
+    destination->struct_size = sizeof(*destination);
+    destination->version = DTR_FONT_RESOLUTION_DIAGNOSTIC_VERSION;
+    NSDictionary* record = records[index];
+    destination->source = [record[@"source"] unsignedIntValue];
+    destination->face_id = [record[@"face"] unsignedIntValue];
+    destination->flags = [record[@"flags"] unsignedIntValue];
+    destination->occurrence_count =
+        [record[@"count"] unsignedLongLongValue];
+    NSData* name = [record[@"name"] dataUsingEncoding:NSUTF8StringEncoding];
+    if (name == nil || name.length == 0 ||
+        name.length > DTR_MAX_POSTSCRIPT_NAME_BYTES) {
+      [_faceLock unlock];
+      return DTR_STATUS_INTERNAL;
+    }
+    destination->postscript_name_length = (uint32_t)name.length;
+    memcpy(destination->postscript_name, name.bytes, name.length);
+  }
+  [_faceLock unlock];
+  return DTR_STATUS_OK;
 }
 
 @end
@@ -3070,6 +3511,129 @@ static NSString* DecodeUtf8(const uint8_t* bytes, uint32_t length,
                                 encoding:NSUTF8StringEncoding];
 }
 
+static BOOL IsUnicodeScalar(uint32_t value) {
+  return value <= 0x10ffffu && (value < 0xd800u || value > 0xdfffu);
+}
+
+static BOOL IsPrintableOpenTypeTag(uint32_t tag) {
+  for (uint32_t shift = 0; shift < 32; shift += 8) {
+    const uint32_t byte = (tag >> shift) & 0xffu;
+    if (byte < 0x20u || byte > 0x7eu) {
+      return NO;
+    }
+  }
+  return YES;
+}
+
+static int32_t DecodeFontCatalogConfiguration(
+    const DtrFontCatalogConfigV1* config, NSArray** variations_by_style,
+    NSArray** override_requests) {
+  if (config == NULL || variations_by_style == NULL ||
+      override_requests == NULL) {
+    return DTR_STATUS_INVALID_ARGUMENT;
+  }
+  if (config->struct_size != sizeof(DtrFontCatalogConfigV1) ||
+      config->version != DTR_FONT_CATALOG_CONFIG_VERSION) {
+    return DTR_STATUS_UNSUPPORTED_VERSION;
+  }
+  for (size_t index = 0; index < 3; index++) {
+    if (config->reserved[index] != 0) {
+      return DTR_STATUS_INVALID_ARGUMENT;
+    }
+  }
+  if (config->variation_count > DTR_MAX_FONT_VARIATIONS ||
+      config->variation_stride != sizeof(DtrFontVariationV1) ||
+      (config->variation_count == 0) != (config->variations == NULL) ||
+      config->override_count > DTR_MAX_FONT_CODEPOINT_OVERRIDES ||
+      config->override_stride != sizeof(DtrFontCodepointOverrideV1) ||
+      (config->override_count == 0) != (config->overrides == NULL) ||
+      config->family_byte_count > DTR_MAX_FONT_OVERRIDE_FAMILY_BYTES ||
+      (config->family_byte_count == 0) != (config->family_bytes == NULL) ||
+      (config->override_count == 0) != (config->family_byte_count == 0)) {
+    return DTR_STATUS_INVALID_ARGUMENT;
+  }
+  NSMutableArray* by_style = [[NSMutableArray alloc] initWithCapacity:4];
+  NSMutableArray<NSMutableSet<NSNumber*>*>* tags =
+      [[NSMutableArray alloc] initWithCapacity:4];
+  for (uint32_t style = 0; style < 4; style++) {
+    [by_style addObject:[[NSMutableArray alloc] init]];
+    [tags addObject:[[NSMutableSet alloc] init]];
+  }
+  uint32_t previous_style = 0;
+  for (uint32_t index = 0; index < config->variation_count; index++) {
+    const DtrFontVariationV1* variation = &config->variations[index];
+    if (variation->struct_size != sizeof(DtrFontVariationV1) ||
+        variation->version != DTR_FONT_VARIATION_VERSION) {
+      return DTR_STATUS_UNSUPPORTED_VERSION;
+    }
+    if (variation->style > DTR_FONT_STYLE_BOLD_ITALIC ||
+        (index > 0 && variation->style < previous_style) ||
+        !IsPrintableOpenTypeTag(variation->tag) ||
+        !isfinite(variation->value) || variation->value < -65536.0 ||
+        variation->value > 65536.0 || variation->reserved[0] != 0 ||
+        variation->reserved[1] != 0) {
+      return DTR_STATUS_INVALID_ARGUMENT;
+    }
+    NSMutableArray* style_variations = by_style[variation->style];
+    NSMutableSet<NSNumber*>* style_tags = tags[variation->style];
+    NSNumber* tag = @(variation->tag);
+    if (style_variations.count >= DTR_MAX_FONT_VARIATIONS_PER_STYLE ||
+        [style_tags containsObject:tag]) {
+      return DTR_STATUS_INVALID_ARGUMENT;
+    }
+    [style_tags addObject:tag];
+    [style_variations addObject:@{
+      @"tag" : tag,
+      @"value" : @(variation->value),
+    }];
+    previous_style = variation->style;
+  }
+  NSMutableArray* overrides =
+      [[NSMutableArray alloc] initWithCapacity:config->override_count];
+  uint32_t expected_offset = 0;
+  for (uint32_t index = 0; index < config->override_count; index++) {
+    const DtrFontCodepointOverrideV1* override = &config->overrides[index];
+    if (override->struct_size != sizeof(DtrFontCodepointOverrideV1) ||
+        override->version != DTR_FONT_CODEPOINT_OVERRIDE_VERSION) {
+      return DTR_STATUS_UNSUPPORTED_VERSION;
+    }
+    if (!IsUnicodeScalar(override->first_scalar) ||
+        !IsUnicodeScalar(override->last_scalar) ||
+        override->first_scalar > override->last_scalar ||
+        (override->first_scalar <= 0xdfffu &&
+         override->last_scalar >= 0xd800u) ||
+        override->family_offset != expected_offset ||
+        override->family_length == 0 ||
+        override->family_length > DTR_MAX_FONT_FAMILY_BYTES ||
+        override->family_length >
+            config->family_byte_count - expected_offset ||
+        override->reserved[0] != 0 || override->reserved[1] != 0) {
+      return DTR_STATUS_INVALID_ARGUMENT;
+    }
+    NSString* family = DecodeUtf8(config->family_bytes + expected_offset,
+                                  override->family_length, NO);
+    if (family == nil) {
+      return DTR_STATUS_INVALID_ARGUMENT;
+    }
+    [overrides addObject:@{
+      @"first" : @(override->first_scalar),
+      @"last" : @(override->last_scalar),
+      @"family" : family,
+    }];
+    expected_offset += override->family_length;
+  }
+  if (expected_offset != config->family_byte_count) {
+    return DTR_STATUS_INVALID_ARGUMENT;
+  }
+  NSMutableArray* copied_styles = [[NSMutableArray alloc] initWithCapacity:4];
+  for (NSArray* values in by_style) {
+    [copied_styles addObject:[values copy]];
+  }
+  *variations_by_style = [copied_styles copy];
+  *override_requests = [overrides copy];
+  return DTR_STATUS_OK;
+}
+
 static DtrFontCatalog* FontCatalogForHandle(uint64_t handle) {
   if (handle == 0) {
     return nil;
@@ -3133,6 +3697,19 @@ int32_t dtr_font_catalog_create(const uint8_t* family_utf8,
                                 uint32_t family_length, double point_size,
                                 uint32_t policy_flags,
                                 DtrFontCatalogSummaryV1* output) {
+  DtrFontCatalogConfigV1 config = {0};
+  config.struct_size = sizeof(config);
+  config.version = DTR_FONT_CATALOG_CONFIG_VERSION;
+  config.variation_stride = sizeof(DtrFontVariationV1);
+  config.override_stride = sizeof(DtrFontCodepointOverrideV1);
+  return dtr_font_catalog_create_configured(
+      family_utf8, family_length, point_size, policy_flags, &config, output);
+}
+
+int32_t dtr_font_catalog_create_configured(
+    const uint8_t* family_utf8, uint32_t family_length, double point_size,
+    uint32_t policy_flags, const DtrFontCatalogConfigV1* config,
+    DtrFontCatalogSummaryV1* output) {
   @autoreleasepool {
     const int32_t output_status = PrepareFontCatalogSummary(output);
     if (output_status != DTR_STATUS_OK) {
@@ -3147,6 +3724,13 @@ int32_t dtr_font_catalog_create(const uint8_t* family_utf8,
     if (family == nil) {
       return DTR_STATUS_INVALID_ARGUMENT;
     }
+    NSArray* variations_by_style = nil;
+    NSArray* override_requests = nil;
+    const int32_t config_status = DecodeFontCatalogConfiguration(
+        config, &variations_by_style, &override_requests);
+    if (config_status != DTR_STATUS_OK) {
+      return config_status;
+    }
     const uint64_t handle = atomic_fetch_add_explicit(
         &g_next_font_catalog_handle, 1, memory_order_relaxed);
     if (handle == 0 || handle == UINT64_MAX) {
@@ -3156,7 +3740,9 @@ int32_t dtr_font_catalog_create(const uint8_t* family_utf8,
         [[DtrFontCatalog alloc] initWithFamily:family
                                     pointSize:point_size
                                   generation:handle
-                                 policyFlags:policy_flags];
+                                 policyFlags:policy_flags
+                           variationsByStyle:variations_by_style
+                            overrideRequests:override_requests];
     if (catalog == nil) {
       return DTR_STATUS_NOT_FOUND;
     }
@@ -3218,12 +3804,15 @@ int32_t dtr_font_catalog_resolve(uint64_t handle, uint32_t style,
     if (requested_font == nil) {
       return DTR_STATUS_NOT_FOUND;
     }
-    NSDictionary* attributes = @{
-      (__bridge NSString*)kCTFontAttributeName : requested_font,
-      (__bridge NSString*)kCTLigatureAttributeName : @1,
-    };
-    NSAttributedString* attributed =
-        [[NSAttributedString alloc] initWithString:text attributes:attributes];
+    NSMutableAttributedString* attributed =
+        [catalog attributedStringForText:text
+                                   style:style
+                            featureFlags:DTR_SHAPE_FEATURE_LIGATURES
+                               synthetic:&synthetic
+                        recordDiagnostics:YES];
+    if (attributed == nil) {
+      return DTR_STATUS_NOT_FOUND;
+    }
     CTLineRef line = CTLineCreateWithAttributedString(
         (__bridge CFAttributedStringRef)attributed);
     if (line == NULL) {
@@ -3274,23 +3863,11 @@ int32_t dtr_font_catalog_resolve(uint64_t handle, uint32_t style,
       CFRelease(line);
       return DTR_STATUS_RESOURCE_EXHAUSTED;
     }
-    uint32_t flags = 0;
-    if (![resolved_name isEqualToString:PostScriptName(requested_font)]) {
-      flags |= DTR_RESOLVED_FONT_FALLBACK;
-    }
-    const CTFontSymbolicTraits traits = CTFontGetSymbolicTraits(resolved_font);
-    if ((traits & kCTFontColorGlyphsTrait) != 0) {
-      flags |= DTR_RESOLVED_FONT_COLOR_GLYPHS;
-    }
-    if ((traits & kCTFontMonoSpaceTrait) != 0) {
-      flags |= DTR_RESOLVED_FONT_MONOSPACED;
-    }
-    if (synthetic) {
-      flags |= DTR_RESOLVED_FONT_SYNTHETIC;
-    }
-    if (missing) {
-      flags |= DTR_RESOLVED_FONT_MISSING_GLYPH;
-    }
+    NSDictionary* first_attributes = (__bridge NSDictionary*)run_attributes;
+    const BOOL resolved_synthetic =
+        [first_attributes[DtrFontSyntheticAttribute] boolValue];
+    const uint32_t flags = ShapedFontFlags(
+        requested_font, resolved, resolved_synthetic, missing);
     output->catalog_generation = catalog.generation;
     output->face_id = [catalog faceIdForFont:resolved];
     output->flags = flags;
@@ -3302,6 +3879,7 @@ int32_t dtr_font_catalog_resolve(uint64_t handle, uint32_t style,
     memcpy(output->postscript_name, resolved_name_utf8.bytes,
            resolved_name_utf8.length);
     output->postscript_name[resolved_name_utf8.length] = 0;
+    [catalog recordLine:line requestedFont:requested_font];
     CFRelease(line);
     return DTR_STATUS_OK;
   }
@@ -3337,13 +3915,15 @@ int32_t dtr_font_catalog_shape(uint64_t handle, uint32_t style,
     if (requested_font == nil) {
       return DTR_STATUS_NOT_FOUND;
     }
-    NSDictionary* attributes = @{
-      (__bridge NSString*)kCTFontAttributeName : requested_font,
-      (__bridge NSString*)kCTLigatureAttributeName :
-          @((feature_flags & DTR_SHAPE_FEATURE_LIGATURES) != 0 ? 1 : 0),
-    };
-    NSAttributedString* attributed =
-        [[NSAttributedString alloc] initWithString:text attributes:attributes];
+    NSMutableAttributedString* attributed =
+        [catalog attributedStringForText:text
+                                   style:style
+                            featureFlags:feature_flags
+                               synthetic:&synthetic
+                        recordDiagnostics:output != NULL];
+    if (attributed == nil) {
+      return DTR_STATUS_NOT_FOUND;
+    }
     CTLineRef created_line = CTLineCreateWithAttributedString(
         (__bridge CFAttributedStringRef)attributed);
     if (created_line == NULL) {
@@ -3422,8 +4002,12 @@ int32_t dtr_font_catalog_shape(uint64_t handle, uint32_t style,
       if (face_id == 0) {
         return DTR_STATUS_RESOURCE_EXHAUSTED;
       }
+      NSDictionary* run_attributes =
+          (__bridge NSDictionary*)CTRunGetAttributes(run);
+      const BOOL run_synthetic =
+          [run_attributes[DtrFontSyntheticAttribute] boolValue];
       uint32_t flags = ShapedFontFlags(requested_font, resolved_font,
-                                       synthetic, missing);
+                                       run_synthetic, missing);
       NSNumber* face_key = @(face_id);
       NSNumber* face_index_number = face_indexes[face_key];
       if (face_index_number == nil) {
@@ -3573,8 +4157,12 @@ int32_t dtr_font_catalog_shape(uint64_t handle, uint32_t style,
       if (!fill_valid) {
         break;
       }
+      NSDictionary* run_attributes =
+          (__bridge NSDictionary*)CTRunGetAttributes(run);
+      const BOOL run_synthetic =
+          [run_attributes[DtrFontSyntheticAttribute] boolValue];
       uint32_t flags = ShapedFontFlags(requested_font, resolved_font,
-                                       synthetic, missing);
+                                       run_synthetic, missing);
       if ((CTRunGetStatus(run) & kCTRunStatusRightToLeft) != 0) {
         flags |= DTR_SHAPED_RUN_RIGHT_TO_LEFT;
       }
@@ -3605,7 +4193,23 @@ int32_t dtr_font_catalog_shape(uint64_t handle, uint32_t style,
     }
     memcpy(output, packed, (size_t)required);
     free(packed);
+    [catalog recordLine:line requestedFont:requested_font];
     return DTR_STATUS_OK;
+  }
+}
+
+int32_t dtr_font_catalog_copy_diagnostics(
+    uint64_t handle, DtrFontCatalogDiagnosticsV1* output,
+    DtrFontResolutionDiagnosticV1* resolutions,
+    uint32_t resolution_capacity) {
+  @autoreleasepool {
+    DtrFontCatalog* catalog = FontCatalogForHandle(handle);
+    if (catalog == nil) {
+      return DTR_STATUS_INVALID_HANDLE;
+    }
+    return [catalog copyDiagnostics:output
+                        resolutions:resolutions
+                            capacity:resolution_capacity];
   }
 }
 

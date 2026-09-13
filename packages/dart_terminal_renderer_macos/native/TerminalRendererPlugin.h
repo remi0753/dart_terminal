@@ -7,6 +7,11 @@
 
 #define DTR_ABI_VERSION 11u
 #define DTR_FONT_CATALOG_SUMMARY_VERSION 1u
+#define DTR_FONT_CATALOG_CONFIG_VERSION 1u
+#define DTR_FONT_VARIATION_VERSION 1u
+#define DTR_FONT_CODEPOINT_OVERRIDE_VERSION 1u
+#define DTR_FONT_CATALOG_DIAGNOSTICS_VERSION 1u
+#define DTR_FONT_RESOLUTION_DIAGNOSTIC_VERSION 1u
 #define DTR_RESOLVED_FONT_VERSION 1u
 #define DTR_SHAPE_BUFFER_VERSION 1u
 #define DTR_SHAPE_BUFFER_MAGIC 0x48535444u
@@ -15,6 +20,11 @@
 #define DTR_MAX_FONT_FAMILY_BYTES 1024u
 #define DTR_MAX_RESOLVE_TEXT_BYTES (1024u * 1024u)
 #define DTR_MAX_POSTSCRIPT_NAME_BYTES 127u
+#define DTR_MAX_FONT_VARIATIONS_PER_STYLE 16u
+#define DTR_MAX_FONT_VARIATIONS 64u
+#define DTR_MAX_FONT_CODEPOINT_OVERRIDES 256u
+#define DTR_MAX_FONT_OVERRIDE_FAMILY_BYTES (64u * 1024u)
+#define DTR_MAX_FONT_RESOLUTION_DIAGNOSTICS 256u
 #define DTR_MAX_SHAPE_RUNS 65536u
 #define DTR_MAX_SHAPE_FACES 4096u
 #define DTR_MAX_SHAPE_GLYPHS (1024u * 1024u)
@@ -193,6 +203,80 @@ typedef struct DtrResolvedFontV1 {
   uint32_t reserved[4];
   uint8_t postscript_name[DTR_MAX_POSTSCRIPT_NAME_BYTES + 1u];
 } DtrResolvedFontV1;
+
+typedef struct DtrFontVariationV1 {
+  uint32_t struct_size;
+  uint32_t version;
+  uint32_t style;
+  uint32_t tag;
+  double value;
+  uint32_t reserved[2];
+} DtrFontVariationV1;
+
+typedef struct DtrFontCodepointOverrideV1 {
+  uint32_t struct_size;
+  uint32_t version;
+  uint32_t first_scalar;
+  uint32_t last_scalar;
+  uint32_t family_offset;
+  uint32_t family_length;
+  uint32_t reserved[2];
+} DtrFontCodepointOverrideV1;
+
+// All pointers are borrowed only for the configured-create call. Variation
+// records are in canonical style order; override family slices are contiguous
+// and non-overlapping in entry order. No input pointer is retained.
+typedef struct DtrFontCatalogConfigV1 {
+  uint32_t struct_size;
+  uint32_t version;
+  const DtrFontVariationV1* variations;
+  uint32_t variation_count;
+  uint32_t variation_stride;
+  const DtrFontCodepointOverrideV1* overrides;
+  uint32_t override_count;
+  uint32_t override_stride;
+  const uint8_t* family_bytes;
+  uint32_t family_byte_count;
+  uint32_t reserved[3];
+} DtrFontCatalogConfigV1;
+
+typedef enum DtrFontResolutionSource {
+  DTR_FONT_RESOLUTION_REQUESTED = 0,
+  DTR_FONT_RESOLUTION_CODEPOINT_OVERRIDE = 1,
+  DTR_FONT_RESOLUTION_CORETEXT_FALLBACK = 2,
+  DTR_FONT_RESOLUTION_MISSING_GLYPH = 3,
+} DtrFontResolutionSource;
+
+typedef struct DtrFontCatalogDiagnosticsV1 {
+  uint32_t struct_size;
+  uint32_t version;
+  uint64_t catalog_generation;
+  uint64_t configured_variation_count;
+  uint64_t applied_variation_count;
+  uint64_t unavailable_variation_count;
+  uint64_t configured_override_count;
+  uint64_t available_override_count;
+  uint64_t unavailable_override_count;
+  uint64_t override_match_count;
+  uint64_t override_applied_count;
+  uint64_t override_fallback_count;
+  uint64_t coretext_fallback_count;
+  uint64_t missing_glyph_count;
+  uint32_t resolution_count;
+  uint32_t reserved[5];
+} DtrFontCatalogDiagnosticsV1;
+
+typedef struct DtrFontResolutionDiagnosticV1 {
+  uint32_t struct_size;
+  uint32_t version;
+  uint32_t source;
+  uint32_t face_id;
+  uint32_t flags;
+  uint32_t postscript_name_length;
+  uint64_t occurrence_count;
+  uint32_t reserved[2];
+  uint8_t postscript_name[DTR_MAX_POSTSCRIPT_NAME_BYTES + 1u];
+} DtrFontResolutionDiagnosticV1;
 
 enum {
   DTR_SHAPE_FEATURE_LIGATURES = 1u << 0,
@@ -618,6 +702,14 @@ __attribute__((visibility("default"))) int32_t dtr_font_catalog_create(
     const uint8_t* family_utf8, uint32_t family_length, double point_size,
     uint32_t policy_flags, DtrFontCatalogSummaryV1* output);
 
+// Creates a catalog from one fully copied and validated immutable request.
+// The legacy create entry point above is equivalent to an empty configuration.
+__attribute__((visibility("default"))) int32_t
+dtr_font_catalog_create_configured(
+    const uint8_t* family_utf8, uint32_t family_length, double point_size,
+    uint32_t policy_flags, const DtrFontCatalogConfigV1* config,
+    DtrFontCatalogSummaryV1* output);
+
 __attribute__((visibility("default"))) int32_t
 dtr_font_catalog_release(uint64_t handle);
 
@@ -649,6 +741,14 @@ __attribute__((visibility("default"))) int32_t dtr_font_catalog_rasterize(
     uint64_t handle, uint32_t scale_16_16,
     const DtrRasterRequestV1* requests, uint32_t request_count,
     uint8_t* output, uint32_t output_capacity, uint32_t* output_required);
+
+// Copies bounded content-free counters and face identities. No terminal text,
+// scalar value, or input pointer is retained or returned.
+__attribute__((visibility("default"))) int32_t
+dtr_font_catalog_copy_diagnostics(
+    uint64_t handle, DtrFontCatalogDiagnosticsV1* output,
+    DtrFontResolutionDiagnosticV1* resolutions,
+    uint32_t resolution_capacity);
 
 __attribute__((visibility("default"))) int32_t
 dtr_debug_live_font_catalog_count(void);

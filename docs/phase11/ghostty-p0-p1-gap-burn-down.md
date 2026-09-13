@@ -7,7 +7,8 @@
 - Started: 2026-09-13
 - State: in progress
 - Current subtask: P1 gap burn-down — variable font axes/codepoint override/
-  fallback diagnostics, bounded immutable contract (completed)
+  fallback diagnostics, versioned native ABI and CoreText resolution
+  (completed)
 
 ## Purpose
 
@@ -469,6 +470,72 @@ code/name containing `terminal` may be added to `dart_appkit`.
   `terminal`, `dart_terminal`, or `dart-terminal` matches. Apple notarization
   and duration-only campaigns remain skipped as authorized. The next ordered
   subtask is the copied native ABI plus CoreText axis/override application.
+- 2026-09-14: A read-only Swift probe in the normal macOS execution context
+  confirmed a deterministic variable-font fixture. The system monospaced face
+  `.AppleSystemUIFontMonospaced-Regular` exposes hidden `YAXS` plus public
+  `wght`; its weight axis range is approximately `294.673...900`. The system
+  `.SFNS-Regular` exposes four axes, while Menlo exposes none. Native and Dart
+  acceptance therefore use the empty-family system-monospaced request with a
+  `wght` coordinate, without depending on a separately installed font.
+- 2026-09-14: The first native build of the version-one configuration and
+  diagnostics ABI stopped at compile time under the existing pedantic warning
+  gate. New uses of Foundation's `MIN` macro expand to GNU statement
+  expressions, and an empty C initializer is a C23 extension. These are source
+  portability errors rather than runtime failures: metric additions now reuse
+  the existing saturating helper, the glyph chunk uses an explicit ternary,
+  and the legacy empty configuration uses the portable `{0}` initializer
+  before rerunning the same gate.
+- 2026-09-14: The native implementation keeps legacy catalog creation as an
+  empty-config wrapper and adds one version-one copied request. Exact record
+  sizes/strides, reserved fields, pointer/count pairs, canonical style order,
+  unique tags, scalar ranges, contiguous family slices, and all entry/byte
+  limits are rejected before handle publication. CoreText descriptors apply
+  supported axes to base, trait, and override faces; face identity includes the
+  variation dictionary so raster lookup cannot alias two configured faces.
+  Scalar overrides are selected last-to-first, cover the complete UTF-16
+  scalar span, and are applied only when the requested face itself supplies the
+  glyph. An unavailable family or glyph leaves the base attributes intact for
+  normal CoreText fallback.
+- 2026-09-14: The pedantic native gate then compiled and linked the new ABI and
+  passed. Its capability regression rejects unknown versions, wrong strides,
+  duplicate tags, and noncanonical family slices without a live handle; proves
+  system `wght` application plus one unknown axis; proves later overlapping
+  Menlo over Times precedence; proves unavailable-family fallback and
+  Times-to-color-emoji missing-glyph fallback; carries all selected faces
+  through resolve, shape, raster, and release; and copies bounded diagnostics
+  containing only source, flags, face ID, PostScript name, and count.
+- 2026-09-14: A direct Dart formatter run changed only the FFI source and then
+  failed while updating the SDK's global telemetry timestamp outside the
+  repository sandbox. The same files were formatted in the normal macOS
+  context. Focused package analysis reported `No issues found!`, and the full
+  renderer package runner passed its native asset hook plus all Dart tests.
+  Dart coverage additionally proves immutable configuration retention,
+  visible heavier `wght=800` raster ink at unchanged point size, exact native
+  diagnostic decoding, and disposed-generation rejection. The package README
+  now documents the catalog-level configuration, precedence/fallback policy,
+  and content-free diagnostic boundary; product configuration and Settings
+  remain deliberately deferred to the next ordered subtask.
+- 2026-09-14: `DART_SUPPRESS_ANALYTICS=true make product-native-sanitizer`
+  passed all four isolated native suites and all nine artifacts. The renderer
+  library and harness were both instrumented by AddressSanitizer and
+  UndefinedBehaviorSanitizer; the aggregate marker was
+  `PRODUCT_NATIVE_SANITIZER_PASS`. This is a bounded ownership/ABI check, not a
+  duration-based soak.
+- 2026-09-14: Final exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` passed in the reviewed
+  source state. It covered every native capability, package analysis/test,
+  generated and compatibility freshness, differential and real-application
+  evidence, terminfo and shell integration, the Ghostty inventory (102 rows,
+  93 accepted, four actionable P1), distribution policy, 330-file zero-change
+  formatting, clean root analysis, security/update/symbol coverage, and the
+  aggregate `dart_terminal tests passed` marker. `git diff --check` passed.
+  The adjacent `dart_appkit` worktree is clean; a case-insensitive content and
+  filename audit of its native, packages, scripts, test, tool, examples, and
+  Makefile surfaces found zero `terminal`, `dart_terminal`, or
+  `dart-terminal` matches. No generic-library file changed. Apple notarization
+  and duration-only campaigns were skipped as authorized. The next ordered
+  subtask is typed product configuration, Settings, and product diagnostic
+  projection.
 
 - 2026-09-13: The first focused analyzer rerun passed with `No issues found!`,
   and `dart run test/terminal_semantic_prompt_test.dart` exited 0 after its

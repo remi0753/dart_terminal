@@ -1386,7 +1386,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     - [x] cursor-cell ligature shaping break
     - [ ] variable font axes／codepoint override／fallback diagnostics
       - [x] bounded immutable font request／diagnostic contract
-      - [ ] versioned native ABI と CoreText axes／ordered override resolution
+      - [x] versioned native ABI と CoreText axes／ordered override resolution
       - [ ] typed config／Settings／product fallback diagnostics projection
       - [ ] runtime evidence、文書／matrix更新、親項目完了判定
     - [ ] synthetic box／block／braille／Powerline glyph

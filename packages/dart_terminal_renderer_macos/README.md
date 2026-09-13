@@ -94,9 +94,14 @@ timing totals/maxima, and accepted atlas upload count/bytes.
 presentation path. Dispose the renderer explicitly from its owner domain.
 
 Font work does not require AppKit initialization. Create a catalog with
-`TerminalFontCatalog.open()`, resolve whole grapheme/text units with `resolve`,
+`TerminalFontCatalog.open()`. An optional immutable
+`TerminalFontCatalogConfiguration` applies bounded OpenType axes separately to
+each requested style and ordered inclusive Unicode-scalar family overrides;
+later overlapping overrides win, while unavailable families or glyphs return
+to normal CoreText fallback. Resolve whole grapheme/text units with `resolve`,
 shape complete text units with `shape`, optionally retain repeated results in a
 bounded `TerminalShapingCache`, and call `dispose` from the owning worker
 domain. Use `rasterizeShaped` to batch unique face/glyph keys at the active
-backing scale. No native call retains a Dart pointer, and disposed resource
-generations cannot be reused.
+backing scale. `diagnostics()` copies bounded counters and resolution-source/
+PostScript-face aggregates without input text or codepoints. No native call
+retains a Dart pointer, and disposed resource generations cannot be reused.

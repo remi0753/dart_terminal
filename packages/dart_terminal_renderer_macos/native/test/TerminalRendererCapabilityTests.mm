@@ -136,6 +136,9 @@ int main(int argc, const char* argv[]) {
     using LiveCount = int32_t (*)();
     using FontCreate = int32_t (*)(const uint8_t*, uint32_t, double, uint32_t,
                                    DtrFontCatalogSummaryV1*);
+    using FontCreateConfigured = int32_t (*)(
+        const uint8_t*, uint32_t, double, uint32_t,
+        const DtrFontCatalogConfigV1*, DtrFontCatalogSummaryV1*);
     using FontRelease = int32_t (*)(uint64_t);
     using FontResolve = int32_t (*)(uint64_t, uint32_t, const uint8_t*,
                                     uint32_t, DtrResolvedFontV1*);
@@ -145,6 +148,9 @@ int main(int argc, const char* argv[]) {
     using FontRasterize = int32_t (*)(uint64_t, uint32_t,
                                       const DtrRasterRequestV1*, uint32_t,
                                       uint8_t*, uint32_t, uint32_t*);
+    using FontDiagnostics = int32_t (*)(
+        uint64_t, DtrFontCatalogDiagnosticsV1*,
+        DtrFontResolutionDiagnosticV1*, uint32_t);
     using MetalCreate = int32_t (*)(const DtrMetalRendererConfigV1*,
                                     DtrMetalRendererSummaryV1*);
     using MetalRelease = int32_t (*)(uint64_t);
@@ -170,6 +176,9 @@ int main(int argc, const char* argv[]) {
         Lookup<LiveCount>(image, "dtr_debug_live_view_count");
     const FontCreate font_create =
         Lookup<FontCreate>(image, "dtr_font_catalog_create");
+    const FontCreateConfigured font_create_configured =
+        Lookup<FontCreateConfigured>(image,
+                                     "dtr_font_catalog_create_configured");
     const FontRelease font_release =
         Lookup<FontRelease>(image, "dtr_font_catalog_release");
     const FontResolve font_resolve =
@@ -178,6 +187,8 @@ int main(int argc, const char* argv[]) {
         Lookup<FontShape>(image, "dtr_font_catalog_shape");
     const FontRasterize font_rasterize =
         Lookup<FontRasterize>(image, "dtr_font_catalog_rasterize");
+    const FontDiagnostics font_diagnostics = Lookup<FontDiagnostics>(
+        image, "dtr_font_catalog_copy_diagnostics");
     const LiveCount live_font_count =
         Lookup<LiveCount>(image, "dtr_debug_live_font_catalog_count");
     const MetalCreate metal_create =
@@ -717,6 +728,268 @@ int main(int argc, const char* argv[]) {
            "ligature feature changes glyph count and cluster span");
     Expect(font_release(times_summary.handle) == DTR_STATUS_OK,
            "ligature test catalog releases");
+
+    DtrFontVariationV1 configured_variations[2] = {};
+    for (DtrFontVariationV1& variation : configured_variations) {
+      variation.struct_size = sizeof(variation);
+      variation.version = DTR_FONT_VARIATION_VERSION;
+      variation.style = DTR_FONT_STYLE_REGULAR;
+    }
+    configured_variations[0].tag = 0x77676874u;
+    configured_variations[0].value = 800.0;
+    configured_variations[1].tag = 0x5a5a5a5au;
+    configured_variations[1].value = 1.0;
+    constexpr char kOverrideFamilies[] =
+        "Times-Roman"
+        "Menlo"
+        "Definitely Missing Font 12345"
+        "Times-Roman";
+    constexpr uint32_t kTimesLength = sizeof("Times-Roman") - 1;
+    constexpr uint32_t kMenloLength = sizeof("Menlo") - 1;
+    constexpr uint32_t kMissingLength =
+        sizeof("Definitely Missing Font 12345") - 1;
+    DtrFontCodepointOverrideV1 configured_overrides[4] = {};
+    for (DtrFontCodepointOverrideV1& override : configured_overrides) {
+      override.struct_size = sizeof(override);
+      override.version = DTR_FONT_CODEPOINT_OVERRIDE_VERSION;
+    }
+    configured_overrides[0].first_scalar = 'A';
+    configured_overrides[0].last_scalar = 'C';
+    configured_overrides[0].family_length = kTimesLength;
+    configured_overrides[1].first_scalar = 'A';
+    configured_overrides[1].last_scalar = 'A';
+    configured_overrides[1].family_offset = kTimesLength;
+    configured_overrides[1].family_length = kMenloLength;
+    configured_overrides[2].first_scalar = 'C';
+    configured_overrides[2].last_scalar = 'C';
+    configured_overrides[2].family_offset = kTimesLength + kMenloLength;
+    configured_overrides[2].family_length = kMissingLength;
+    configured_overrides[3].first_scalar = 0x1f600u;
+    configured_overrides[3].last_scalar = 0x1f600u;
+    configured_overrides[3].family_offset =
+        kTimesLength + kMenloLength + kMissingLength;
+    configured_overrides[3].family_length = kTimesLength;
+    DtrFontCatalogConfigV1 configured_request = {};
+    configured_request.struct_size = sizeof(configured_request);
+    configured_request.version = DTR_FONT_CATALOG_CONFIG_VERSION;
+    configured_request.variations = configured_variations;
+    configured_request.variation_count = 2;
+    configured_request.variation_stride = sizeof(DtrFontVariationV1);
+    configured_request.overrides = configured_overrides;
+    configured_request.override_count = 4;
+    configured_request.override_stride = sizeof(DtrFontCodepointOverrideV1);
+    configured_request.family_bytes =
+        reinterpret_cast<const uint8_t*>(kOverrideFamilies);
+    configured_request.family_byte_count = sizeof(kOverrideFamilies) - 1;
+
+    auto configured_create = [&](const DtrFontCatalogConfigV1* request,
+                                 DtrFontCatalogSummaryV1* output) {
+      memset(output, 0, sizeof(*output));
+      output->struct_size = sizeof(*output);
+      output->version = DTR_FONT_CATALOG_SUMMARY_VERSION;
+      return font_create_configured(nullptr, 0, 14.0,
+                                    DTR_FONT_POLICY_ALLOW_SYNTHETIC, request,
+                                    output);
+    };
+    DtrFontCatalogConfigV1 unsupported_config = configured_request;
+    unsupported_config.version = 99;
+    DtrFontCatalogSummaryV1 rejected_configured_summary = {};
+    Expect(font_create_configured != nullptr &&
+               configured_create(&unsupported_config,
+                                 &rejected_configured_summary) ==
+                   DTR_STATUS_UNSUPPORTED_VERSION &&
+               rejected_configured_summary.handle == 0,
+           "configured catalog rejects an unknown request version");
+    DtrFontCatalogConfigV1 invalid_stride = configured_request;
+    invalid_stride.variation_stride--;
+    Expect(configured_create(&invalid_stride, &rejected_configured_summary) ==
+                   DTR_STATUS_INVALID_ARGUMENT &&
+               rejected_configured_summary.handle == 0,
+           "configured catalog rejects an inexact record stride");
+    DtrFontVariationV1 duplicate_variations[2] = {
+        configured_variations[0], configured_variations[0]};
+    DtrFontCatalogConfigV1 duplicate_axis = configured_request;
+    duplicate_axis.variations = duplicate_variations;
+    Expect(configured_create(&duplicate_axis, &rejected_configured_summary) ==
+                   DTR_STATUS_INVALID_ARGUMENT &&
+               rejected_configured_summary.handle == 0,
+           "configured catalog rejects duplicate tags in one style");
+    DtrFontCodepointOverrideV1 noncanonical_overrides[4] = {
+        configured_overrides[0], configured_overrides[1],
+        configured_overrides[2], configured_overrides[3]};
+    noncanonical_overrides[0].family_offset = 1;
+    DtrFontCatalogConfigV1 noncanonical_families = configured_request;
+    noncanonical_families.overrides = noncanonical_overrides;
+    Expect(configured_create(&noncanonical_families,
+                             &rejected_configured_summary) ==
+                   DTR_STATUS_INVALID_ARGUMENT &&
+               rejected_configured_summary.handle == 0,
+           "configured catalog rejects noncanonical family slices");
+    Expect(live_font_count() == 1,
+           "malformed configured requests publish no catalog");
+
+    DtrFontCatalogSummaryV1 configured_summary = {};
+    Expect(configured_create(&configured_request, &configured_summary) ==
+                   DTR_STATUS_OK &&
+               configured_summary.handle != 0 &&
+               configured_summary.point_size == 14.0 &&
+               live_font_count() == 2,
+           "bounded configured system font catalog is published atomically");
+    auto resolve_configured = [&](char character,
+                                  DtrResolvedFontV1* output) {
+      memset(output, 0, sizeof(*output));
+      output->struct_size = sizeof(*output);
+      output->version = DTR_RESOLVED_FONT_VERSION;
+      const uint8_t byte = static_cast<uint8_t>(character);
+      return font_resolve(configured_summary.handle,
+                          DTR_FONT_STYLE_REGULAR, &byte, 1, output);
+    };
+    DtrResolvedFontV1 resolved_a = {};
+    DtrResolvedFontV1 resolved_b = {};
+    DtrResolvedFontV1 resolved_c = {};
+    DtrResolvedFontV1 resolved_smile = {};
+    Expect(resolve_configured('A', &resolved_a) == DTR_STATUS_OK &&
+               strstr(reinterpret_cast<const char*>(
+                          resolved_a.postscript_name),
+                      "Menlo") != nullptr,
+           "later overlapping codepoint override wins");
+    Expect(resolve_configured('B', &resolved_b) == DTR_STATUS_OK &&
+               strstr(reinterpret_cast<const char*>(
+                          resolved_b.postscript_name),
+                      "Times") != nullptr,
+           "covered scalar uses its explicit available family");
+    Expect(resolve_configured('C', &resolved_c) == DTR_STATUS_OK &&
+               strstr(reinterpret_cast<const char*>(
+                          resolved_c.postscript_name),
+                      "Missing") == nullptr &&
+               resolved_c.face_id == configured_summary.regular_face_id &&
+               (resolved_c.flags & DTR_RESOLVED_FONT_MISSING_GLYPH) == 0,
+           "unavailable later override returns to the requested font");
+    const uint8_t kSmile[] = {0xf0, 0x9f, 0x98, 0x80};
+    resolved_smile.struct_size = sizeof(resolved_smile);
+    resolved_smile.version = DTR_RESOLVED_FONT_VERSION;
+    Expect(font_resolve(configured_summary.handle, DTR_FONT_STYLE_REGULAR,
+                        kSmile, sizeof(kSmile), &resolved_smile) ==
+                   DTR_STATUS_OK &&
+               (resolved_smile.flags & DTR_RESOLVED_FONT_FALLBACK) != 0 &&
+               (resolved_smile.flags & DTR_RESOLVED_FONT_COLOR_GLYPHS) != 0 &&
+               (resolved_smile.flags & DTR_RESOLVED_FONT_MISSING_GLYPH) == 0 &&
+               strstr(reinterpret_cast<const char*>(
+                          resolved_smile.postscript_name),
+                      "AppleColorEmoji") != nullptr,
+           "mapped family without a glyph returns to normal CoreText fallback");
+
+    DtrFontCatalogDiagnosticsV1 diagnostics = {};
+    diagnostics.struct_size = sizeof(diagnostics);
+    diagnostics.version = DTR_FONT_CATALOG_DIAGNOSTICS_VERSION;
+    DtrFontResolutionDiagnosticV1 diagnostic_records
+        [DTR_MAX_FONT_RESOLUTION_DIAGNOSTICS] = {};
+    Expect(font_diagnostics != nullptr &&
+               font_diagnostics(configured_summary.handle, &diagnostics,
+                                diagnostic_records,
+                                DTR_MAX_FONT_RESOLUTION_DIAGNOSTICS) ==
+                   DTR_STATUS_OK &&
+               diagnostics.catalog_generation ==
+                   configured_summary.generation &&
+               diagnostics.configured_variation_count == 2 &&
+               diagnostics.applied_variation_count == 1 &&
+               diagnostics.unavailable_variation_count == 1 &&
+               diagnostics.configured_override_count == 4 &&
+               diagnostics.available_override_count == 3 &&
+               diagnostics.unavailable_override_count == 1 &&
+               diagnostics.override_match_count == 4 &&
+               diagnostics.override_applied_count == 2 &&
+               diagnostics.override_fallback_count == 2 &&
+               diagnostics.coretext_fallback_count == 1 &&
+               diagnostics.missing_glyph_count == 0 &&
+               diagnostics.resolution_count == 4,
+           "diagnostics distinguish configured, applied, and unavailable work");
+    bool saw_requested_resolution = false;
+    bool saw_menlo_override = false;
+    bool saw_times_override = false;
+    bool saw_coretext_fallback = false;
+    for (uint32_t index = 0; index < diagnostics.resolution_count; index++) {
+      const DtrFontResolutionDiagnosticV1& record =
+          diagnostic_records[index];
+      const char* name = reinterpret_cast<const char*>(record.postscript_name);
+      Expect(record.struct_size == sizeof(record) &&
+                 record.version == DTR_FONT_RESOLUTION_DIAGNOSTIC_VERSION &&
+                 record.face_id != 0 && record.occurrence_count == 1 &&
+                 record.postscript_name_length > 0 &&
+                 record.postscript_name_length <=
+                     DTR_MAX_POSTSCRIPT_NAME_BYTES &&
+                 record.postscript_name[record.postscript_name_length] == 0,
+             "diagnostic record is bounded and contains only face identity");
+      saw_requested_resolution |=
+          record.source == DTR_FONT_RESOLUTION_REQUESTED;
+      saw_menlo_override |=
+          record.source == DTR_FONT_RESOLUTION_CODEPOINT_OVERRIDE &&
+          strstr(name, "Menlo") != nullptr;
+      saw_times_override |=
+          record.source == DTR_FONT_RESOLUTION_CODEPOINT_OVERRIDE &&
+          strstr(name, "Times") != nullptr;
+      saw_coretext_fallback |=
+          record.source == DTR_FONT_RESOLUTION_CORETEXT_FALLBACK &&
+          strstr(name, "AppleColorEmoji") != nullptr;
+    }
+    Expect(saw_requested_resolution && saw_menlo_override &&
+               saw_times_override && saw_coretext_fallback,
+           "diagnostics classify requested, override, and fallback faces");
+    DtrFontCatalogDiagnosticsV1 small_diagnostics = {};
+    small_diagnostics.struct_size = sizeof(small_diagnostics);
+    small_diagnostics.version = DTR_FONT_CATALOG_DIAGNOSTICS_VERSION;
+    Expect(font_diagnostics(configured_summary.handle, &small_diagnostics,
+                            nullptr, 0) == DTR_STATUS_BUFFER_TOO_SMALL,
+           "diagnostic copy rejects a capacity below retained records");
+    DtrFontCatalogDiagnosticsV1 unsupported_diagnostics = {};
+    unsupported_diagnostics.struct_size = sizeof(unsupported_diagnostics);
+    unsupported_diagnostics.version = 99;
+    Expect(font_diagnostics(configured_summary.handle,
+                            &unsupported_diagnostics, diagnostic_records,
+                            DTR_MAX_FONT_RESOLUTION_DIAGNOSTICS) ==
+               DTR_STATUS_UNSUPPORTED_VERSION,
+           "diagnostic output version is mandatory");
+
+    constexpr char kConfiguredText[] = "ABC";
+    const std::vector<uint8_t> configured_shape = shape(
+        configured_summary.handle, DTR_FONT_STYLE_REGULAR, 0,
+        reinterpret_cast<const uint8_t*>(kConfiguredText),
+        sizeof(kConfiguredText) - 1);
+    const auto* configured_header =
+        reinterpret_cast<const DtrShapeHeaderV1*>(configured_shape.data());
+    const auto* configured_glyphs = reinterpret_cast<const DtrShapeGlyphV1*>(
+        configured_shape.data() + configured_header->glyphs_offset);
+    std::vector<DtrRasterRequestV1> configured_rasters;
+    for (uint32_t glyph = 0; glyph < configured_header->glyph_count; glyph++) {
+      DtrRasterRequestV1 request = {configured_glyphs[glyph].face_id,
+                                    configured_glyphs[glyph].glyph_id};
+      bool duplicate = false;
+      for (const DtrRasterRequestV1& existing : configured_rasters) {
+        duplicate |= existing.face_id == request.face_id &&
+                     existing.glyph_id == request.glyph_id;
+      }
+      if (!duplicate) configured_rasters.push_back(request);
+    }
+    const std::vector<uint8_t> configured_raster =
+        rasterize(configured_summary.handle, 1u << 16, configured_rasters);
+    const auto* configured_raster_header =
+        reinterpret_cast<const DtrRasterHeaderV1*>(configured_raster.data());
+    Expect(configured_header->run_count == 3 &&
+               configured_header->face_count == 3 &&
+               configured_raster_header->glyph_count ==
+                   configured_rasters.size() &&
+               configured_raster_header->pixel_bytes > 0,
+           "configured override faces survive shape and raster ownership");
+    Expect(font_release(configured_summary.handle) == DTR_STATUS_OK &&
+               live_font_count() == 1,
+           "configured catalog releases all copied faces");
+    diagnostics.struct_size = sizeof(diagnostics);
+    diagnostics.version = DTR_FONT_CATALOG_DIAGNOSTICS_VERSION;
+    Expect(font_diagnostics(configured_summary.handle, &diagnostics,
+                            diagnostic_records,
+                            DTR_MAX_FONT_RESOLUTION_DIAGNOSTICS) ==
+               DTR_STATUS_INVALID_HANDLE,
+           "released configured catalog cannot expose diagnostics");
 
     std::atomic<int> concurrent_failures{0};
     std::vector<std::thread> resolvers;

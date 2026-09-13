@@ -4,6 +4,16 @@ _Static_assert(sizeof(DtrFontCatalogSummaryV1) == 152,
                "font catalog summary ABI size");
 _Static_assert(sizeof(DtrResolvedFontV1) == 192,
                "resolved font ABI size");
+_Static_assert(sizeof(DtrFontVariationV1) == 32,
+               "font variation ABI size");
+_Static_assert(sizeof(DtrFontCodepointOverrideV1) == 32,
+               "font override ABI size");
+_Static_assert(sizeof(DtrFontCatalogConfigV1) == 64,
+               "font catalog config ABI size");
+_Static_assert(sizeof(DtrFontCatalogDiagnosticsV1) == 128,
+               "font diagnostics ABI size");
+_Static_assert(sizeof(DtrFontResolutionDiagnosticV1) == 168,
+               "font resolution diagnostic ABI size");
 _Static_assert(sizeof(DtrShapeHeaderV1) == 80, "shape header ABI size");
 _Static_assert(sizeof(DtrShapeRunV1) == 40, "shape run ABI size");
 _Static_assert(sizeof(DtrShapeFaceV1) == 144, "shape face ABI size");
@@ -52,6 +62,10 @@ int main(void) {
   int32_t (*catalog_create)(const uint8_t*, uint32_t, double, uint32_t,
                             DtrFontCatalogSummaryV1*) =
       dtr_font_catalog_create;
+  int32_t (*catalog_create_configured)(
+      const uint8_t*, uint32_t, double, uint32_t,
+      const DtrFontCatalogConfigV1*, DtrFontCatalogSummaryV1*) =
+      dtr_font_catalog_create_configured;
   int32_t (*catalog_release)(uint64_t) = dtr_font_catalog_release;
   void (*catalog_finalizer)(void*) = dtr_font_catalog_release_finalizer;
   int32_t (*catalog_resolve)(uint64_t, uint32_t, const uint8_t*, uint32_t,
@@ -63,6 +77,9 @@ int main(void) {
                                const DtrRasterRequestV1*, uint32_t, uint8_t*,
                                uint32_t, uint32_t*) =
       dtr_font_catalog_rasterize;
+  int32_t (*catalog_diagnostics)(uint64_t, DtrFontCatalogDiagnosticsV1*,
+                                 DtrFontResolutionDiagnosticV1*, uint32_t) =
+      dtr_font_catalog_copy_diagnostics;
   int32_t (*catalog_count)(void) = dtr_debug_live_font_catalog_count;
   int32_t (*renderer_create)(const DtrMetalRendererConfigV1*,
                              DtrMetalRendererSummaryV1*) =
@@ -87,9 +104,11 @@ int main(void) {
   int32_t (*renderer_count)(void) = dtr_debug_live_metal_renderer_count;
   int32_t (*renderer_fail_next)(uint32_t) = dtr_debug_metal_fail_next;
   return version == 0 || initialize == 0 || live_count == 0 ||
-         catalog_create == 0 || catalog_release == 0 ||
+         catalog_create == 0 || catalog_create_configured == 0 ||
+         catalog_release == 0 ||
          catalog_finalizer == 0 || catalog_resolve == 0 ||
-         catalog_shape == 0 || catalog_rasterize == 0 || catalog_count == 0 ||
+         catalog_shape == 0 || catalog_rasterize == 0 ||
+         catalog_diagnostics == 0 || catalog_count == 0 ||
          renderer_create == 0 || renderer_release == 0 ||
          renderer_finalizer == 0 ||
          renderer_reset == 0 ||
