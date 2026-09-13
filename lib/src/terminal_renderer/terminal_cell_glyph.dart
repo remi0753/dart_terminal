@@ -185,6 +185,117 @@ final class TerminalCellGlyphRaster {
 
 /// Deterministic raster entry points for product-owned cell glyph families.
 abstract final class TerminalCellGlyphRasterizer {
+  static TerminalCellGlyphRaster rasterizePowerline(
+    TerminalCellGlyphRasterRequest request,
+  ) {
+    if (request.spec.family != TerminalCellGlyphFamily.powerline) {
+      throw ArgumentError.value(
+        request.scalar,
+        'request',
+        'must classify as the accepted geometric Powerline subset',
+      );
+    }
+    final _TerminalCellGlyphCanvas canvas = _TerminalCellGlyphCanvas(request);
+    final double width = canvas.width.toDouble();
+    final double height = canvas.height.toDouble();
+    switch (request.scalar) {
+      case 0xe0b0:
+        canvas
+          ..polygon(<(double, double)>[
+            (0, 0),
+            (width, height / 2),
+            (0, height),
+          ])
+          ..rect(0, 0, 1, canvas.height);
+      case 0xe0b2:
+        canvas
+          ..polygon(<(double, double)>[
+            (0, 0),
+            (width, height / 2),
+            (0, height),
+          ])
+          ..rect(0, 0, 1, canvas.height)
+          ..flipHorizontal();
+      case 0xe0b1:
+        canvas.polyline(<(double, double)>[
+          (0, 0),
+          (width, height / 2),
+          (0, height),
+        ], request.lineThickness.toDouble());
+      case 0xe0b3:
+        canvas
+          ..polyline(<(double, double)>[
+            (0, 0),
+            (width, height / 2),
+            (0, height),
+          ], request.lineThickness.toDouble())
+          ..flipHorizontal();
+      case 0xe0b4:
+        canvas
+          ..polygon(_roundedSeparatorPath(canvas, stroked: false))
+          ..rect(0, 0, 1, canvas.height);
+      case 0xe0b6:
+        canvas
+          ..polygon(_roundedSeparatorPath(canvas, stroked: false))
+          ..rect(0, 0, 1, canvas.height)
+          ..flipHorizontal();
+      case 0xe0b5:
+        canvas.polyline(
+          _roundedSeparatorPath(canvas, stroked: true),
+          request.lineThickness.toDouble(),
+        );
+      case 0xe0b7:
+        canvas
+          ..polyline(
+            _roundedSeparatorPath(canvas, stroked: true),
+            request.lineThickness.toDouble(),
+          )
+          ..flipHorizontal();
+      case 0xe0b8:
+        canvas
+          ..polygon(<(double, double)>[(0, 0), (width, height), (0, height)])
+          ..rect(0, 0, 1, canvas.height);
+      case 0xe0ba:
+        canvas
+          ..polygon(<(double, double)>[(0, 0), (width, height), (0, height)])
+          ..rect(0, 0, 1, canvas.height)
+          ..flipHorizontal();
+      case 0xe0b9 || 0xe0bf:
+        canvas.line(
+          -0.5,
+          -0.5,
+          width + 0.5,
+          height + 0.5,
+          request.lineThickness.toDouble(),
+        );
+      case 0xe0bb || 0xe0bd:
+        canvas
+          ..line(
+            -0.5,
+            -0.5,
+            width + 0.5,
+            height + 0.5,
+            request.lineThickness.toDouble(),
+          )
+          ..flipHorizontal();
+      case 0xe0bc:
+        canvas
+          ..polygon(<(double, double)>[(0, 0), (width, 0), (0, height)])
+          ..rect(0, 0, 1, canvas.height);
+      case 0xe0be:
+        canvas
+          ..polygon(<(double, double)>[(0, 0), (width, 0), (0, height)])
+          ..rect(0, 0, 1, canvas.height)
+          ..flipHorizontal();
+      case 0xe0d2:
+        _drawPowerlineTrapezoids(canvas);
+      case 0xe0d4:
+        _drawPowerlineTrapezoids(canvas);
+        canvas.flipHorizontal();
+    }
+    return _finish(request, canvas);
+  }
+
   static TerminalCellGlyphRaster rasterizeBlockElement(
     TerminalCellGlyphRasterRequest request,
   ) {
@@ -444,6 +555,87 @@ abstract final class TerminalCellGlyphRasterizer {
       coverage: canvas.takeCoverage(),
     );
   }
+}
+
+List<(double, double)> _roundedSeparatorPath(
+  _TerminalCellGlyphCanvas canvas, {
+  required bool stroked,
+}) {
+  const double coefficient = 0.5522847498307936;
+  final double width = canvas.width.toDouble();
+  final double height = canvas.height.toDouble();
+  final double radius = math.min(width, height / 2);
+  final int steps = math.max(
+    8,
+    math.min(128, math.max(canvas.width, canvas.height)),
+  );
+  final double inset = stroked ? math.min(1, width) : 0;
+  final List<(double, double)> points = <(double, double)>[(0, 0)];
+  if (stroked) points.add((inset, 0));
+  _appendCubic(
+    points,
+    start: (inset, 0),
+    control1: (radius * coefficient, 0),
+    control2: (radius, radius - radius * coefficient),
+    end: (radius, radius),
+    steps: steps,
+  );
+  points.add((radius, height - radius));
+  _appendCubic(
+    points,
+    start: (radius, height - radius),
+    control1: (radius, height - radius + radius * coefficient),
+    control2: (radius * coefficient, height),
+    end: (inset, height),
+    steps: steps,
+  );
+  if (stroked) points.add((0, height));
+  return points;
+}
+
+void _appendCubic(
+  List<(double, double)> points, {
+  required (double, double) start,
+  required (double, double) control1,
+  required (double, double) control2,
+  required (double, double) end,
+  required int steps,
+}) {
+  for (int step = 1; step <= steps; step++) {
+    final double t = step / steps;
+    final double inverse = 1 - t;
+    points.add((
+      inverse * inverse * inverse * start.$1 +
+          3 * inverse * inverse * t * control1.$1 +
+          3 * inverse * t * t * control2.$1 +
+          t * t * t * end.$1,
+      inverse * inverse * inverse * start.$2 +
+          3 * inverse * inverse * t * control1.$2 +
+          3 * inverse * t * t * control2.$2 +
+          t * t * t * end.$2,
+    ));
+  }
+}
+
+void _drawPowerlineTrapezoids(_TerminalCellGlyphCanvas canvas) {
+  final double width = canvas.width.toDouble();
+  final double height = canvas.height.toDouble();
+  final double halfThickness = canvas.request.lineThickness / 2;
+  final double upperMiddle = height / 2 - halfThickness;
+  final double lowerMiddle = height / 2 + halfThickness;
+  canvas
+    ..polygon(<(double, double)>[
+      (0, 0),
+      (width, 0),
+      (width / 2, upperMiddle),
+      (0, upperMiddle),
+    ])
+    ..polygon(<(double, double)>[
+      (0, height),
+      (width, height),
+      (width / 2, lowerMiddle),
+      (0, lowerMiddle),
+    ]);
 }
 
 enum _CellHorizontalAlignment { left, right }
@@ -975,6 +1167,73 @@ final class _TerminalCellGlyphCanvas {
         if (alpha == 0) continue;
         final int offset = y * width + x;
         if (_coverage[offset] < alpha) _coverage[offset] = alpha;
+      }
+    }
+  }
+
+  void polyline(List<(double, double)> points, double thickness) {
+    if (points.length < 2) {
+      throw ArgumentError.value(points.length, 'points', 'must contain a line');
+    }
+    for (int index = 1; index < points.length; index++) {
+      line(
+        points[index - 1].$1,
+        points[index - 1].$2,
+        points[index].$1,
+        points[index].$2,
+        thickness,
+      );
+    }
+  }
+
+  void polygon(List<(double, double)> points) {
+    if (points.length < 3) {
+      throw ArgumentError.value(
+        points.length,
+        'points',
+        'must contain a polygon',
+      );
+    }
+    for (int y = 0; y < height; y++) {
+      final double sampleY = y + 0.5;
+      final List<double> intersections = <double>[];
+      for (int index = 0; index < points.length; index++) {
+        final (double, double) first = points[index];
+        final (double, double) second = points[(index + 1) % points.length];
+        if ((first.$2 <= sampleY && sampleY < second.$2) ||
+            (second.$2 <= sampleY && sampleY < first.$2)) {
+          final double t = (sampleY - first.$2) / (second.$2 - first.$2);
+          intersections.add(first.$1 + t * (second.$1 - first.$1));
+        }
+      }
+      intersections.sort();
+      for (int index = 1; index < intersections.length; index += 2) {
+        horizontalSpan(y, intersections[index - 1], intersections[index]);
+      }
+    }
+  }
+
+  void horizontalSpan(int y, double left, double right) {
+    final int first = math.max(0, left.floor());
+    final int last = math.min(width, right.ceil());
+    for (int x = first; x < last; x++) {
+      final double overlap =
+          math.min(right, x + 1) - math.max(left, x.toDouble());
+      final int alpha = (overlap.clamp(0.0, 1.0) * 255).round();
+      if (alpha == 0) continue;
+      final int offset = y * width + x;
+      if (_coverage[offset] < alpha) _coverage[offset] = alpha;
+    }
+  }
+
+  void flipHorizontal() {
+    for (int y = 0; y < height; y++) {
+      final int row = y * width;
+      for (int left = 0; left < width ~/ 2; left++) {
+        final int right = width - left - 1;
+        final int value = _coverage[row + left];
+        _coverage[row + left] = _coverage[row + right];
+        _coverage[row + right] = value;
       }
     }
   }

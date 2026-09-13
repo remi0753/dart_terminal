@@ -14,6 +14,8 @@ void runTerminalCellGlyphTests() {
   _testEveryBlockElementIsBoundedAndDeterministic();
   _testBlockElementFractionsShadesAndQuadrants();
   _testEveryBraillePatternUsesPinnedDots();
+  _testAcceptedPowerlineGlyphsAreBoundedAndDeterministic();
+  _testPowerlineMirrorsAndBoundaryGeometry();
 }
 
 void _testExactScalarClassification() {
@@ -625,10 +627,163 @@ void _testEveryBraillePatternUsesPinnedDots() {
   );
 }
 
+void _testAcceptedPowerlineGlyphsAreBoundedAndDeterministic() {
+  for (final (int, int, int) geometry in <(int, int, int)>[
+    (7, 15, 1),
+    (14, 30, 2),
+  ]) {
+    for (final int scalar in _acceptedPowerlineScalars) {
+      final TerminalCellGlyphRaster first = _powerlineRaster(
+        scalar,
+        width: geometry.$1,
+        height: geometry.$2,
+        thickness: geometry.$3,
+      );
+      final TerminalCellGlyphRaster second = _powerlineRaster(
+        scalar,
+        width: geometry.$1,
+        height: geometry.$2,
+        thickness: geometry.$3,
+      );
+      _expect(
+        first.width == geometry.$1 &&
+            first.height == geometry.$2 &&
+            first.rowStride == geometry.$1 &&
+            first.byteLength == geometry.$1 * geometry.$2 &&
+            _inkCount(first) > 0 &&
+            _bytesEqual(first.copyCoverage(), second.copyCoverage()),
+        'Powerline U+${scalar.toRadixString(16)} is bounded and '
+        'deterministic at ${geometry.$1}x${geometry.$2}',
+      );
+    }
+  }
+  for (final int scalar in <int>[0xe0af, 0xe0c0, 0xe0d1, 0xe0d3, 0xe0d5]) {
+    _expect(
+      TerminalCellGlyphClassifier.classify(scalar) == null,
+      'stylized adjacent PUA U+${scalar.toRadixString(16)} remains font-owned',
+    );
+  }
+  _expectThrows(
+    () => TerminalCellGlyphRasterizer.rasterizePowerline(
+      TerminalCellGlyphRasterRequest(
+        scalar: 0x2500,
+        cellWidth: 7,
+        cellHeight: 15,
+        lineThickness: 1,
+      ),
+    ),
+    'Powerline entry point rejects another classified family',
+  );
+}
+
+void _testPowerlineMirrorsAndBoundaryGeometry() {
+  const List<(int, int)> mirrorPairs = <(int, int)>[
+    (0xe0b0, 0xe0b2),
+    (0xe0b1, 0xe0b3),
+    (0xe0b4, 0xe0b6),
+    (0xe0b5, 0xe0b7),
+    (0xe0b8, 0xe0ba),
+    (0xe0b9, 0xe0bb),
+    (0xe0bc, 0xe0be),
+    (0xe0bd, 0xe0bf),
+    (0xe0d2, 0xe0d4),
+  ];
+  for (final (int, int) pair in mirrorPairs) {
+    for (final (int, int, int) geometry in <(int, int, int)>[
+      (7, 15, 1),
+      (14, 30, 2),
+    ]) {
+      _expect(
+        _isHorizontalMirror(
+          _powerlineRaster(
+            pair.$1,
+            width: geometry.$1,
+            height: geometry.$2,
+            thickness: geometry.$3,
+          ),
+          _powerlineRaster(
+            pair.$2,
+            width: geometry.$1,
+            height: geometry.$2,
+            thickness: geometry.$3,
+          ),
+        ),
+        'Powerline U+${pair.$1.toRadixString(16)}/'
+        'U+${pair.$2.toRadixString(16)} are exact horizontal mirrors at '
+        '${geometry.$1}x${geometry.$2}',
+      );
+    }
+  }
+
+  for (final int scalar in <int>[0xe0b0, 0xe0b4, 0xe0b8, 0xe0bc]) {
+    final TerminalCellGlyphRaster raster = _powerlineRaster(scalar);
+    _expect(
+      _edge(raster, _left).every((int alpha) => alpha == 0xff),
+      'filled Powerline U+${scalar.toRadixString(16)} owns its complete left '
+      'join boundary',
+    );
+  }
+  for (final int scalar in <int>[0xe0b2, 0xe0b6, 0xe0ba, 0xe0be]) {
+    final TerminalCellGlyphRaster raster = _powerlineRaster(scalar);
+    _expect(
+      _edge(raster, _right).every((int alpha) => alpha == 0xff),
+      'filled Powerline U+${scalar.toRadixString(16)} owns its complete right '
+      'join boundary',
+    );
+  }
+
+  final TerminalCellGlyphRaster filledChevron = _powerlineRaster(0xe0b0);
+  final TerminalCellGlyphRaster openChevron = _powerlineRaster(0xe0b1);
+  final TerminalCellGlyphRaster filledRounded = _powerlineRaster(0xe0b4);
+  final TerminalCellGlyphRaster openRounded = _powerlineRaster(0xe0b5);
+  _expect(
+    filledChevron.coverageAt(0, filledChevron.height ~/ 2) == 0xff &&
+        openChevron.coverageAt(0, openChevron.height ~/ 2) == 0 &&
+        _inkCount(filledChevron) > _inkCount(openChevron) &&
+        filledRounded.coverageAt(0, filledRounded.height ~/ 2) == 0xff &&
+        openRounded.coverageAt(0, openRounded.height ~/ 2) == 0 &&
+        _inkCount(filledRounded) > _inkCount(openRounded),
+    'filled and stroked chevron/rounded separators remain geometrically '
+    'distinct',
+  );
+  for (final int scalar in <int>[0xe0d2, 0xe0d4]) {
+    final TerminalCellGlyphRaster raster = _powerlineRaster(scalar);
+    _expect(
+      <int>[
+        for (int x = 0; x < raster.width; x++)
+          raster.coverageAt(x, raster.height ~/ 2),
+      ].every((int alpha) => alpha == 0),
+      'two-piece Powerline U+${scalar.toRadixString(16)} preserves its '
+      'center gap',
+    );
+  }
+}
+
 const int _up = 1;
 const int _right = 2;
 const int _down = 4;
 const int _left = 8;
+
+const List<int> _acceptedPowerlineScalars = <int>[
+  0xe0b0,
+  0xe0b1,
+  0xe0b2,
+  0xe0b3,
+  0xe0b4,
+  0xe0b5,
+  0xe0b6,
+  0xe0b7,
+  0xe0b8,
+  0xe0b9,
+  0xe0ba,
+  0xe0bb,
+  0xe0bc,
+  0xe0bd,
+  0xe0be,
+  0xe0bf,
+  0xe0d2,
+  0xe0d4,
+];
 
 // Independent pinned expectation, encoded as two-bit up/right/down/left
 // styles. Zero entries are the separately tested dashed/arc/diagonal glyphs.
@@ -804,6 +959,35 @@ TerminalCellGlyphRaster _brailleRaster(
     lineThickness: thickness,
   ),
 );
+
+TerminalCellGlyphRaster _powerlineRaster(
+  int scalar, {
+  int width = 7,
+  int height = 15,
+  int thickness = 1,
+}) => TerminalCellGlyphRasterizer.rasterizePowerline(
+  TerminalCellGlyphRasterRequest(
+    scalar: scalar,
+    cellWidth: width,
+    cellHeight: height,
+    lineThickness: thickness,
+  ),
+);
+
+bool _isHorizontalMirror(
+  TerminalCellGlyphRaster left,
+  TerminalCellGlyphRaster right,
+) {
+  if (left.width != right.width || left.height != right.height) return false;
+  for (int y = 0; y < left.height; y++) {
+    for (int x = 0; x < left.width; x++) {
+      if (left.coverageAt(x, y) != right.coverageAt(right.width - x - 1, y)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
 
 bool _coverageUnionIsFull(
   TerminalCellGlyphRaster first,

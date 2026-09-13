@@ -6,7 +6,7 @@
 - Task: Ghostty pinned matrix P0/P1 gap burn-down
 - Started: 2026-09-13
 - State: in progress
-- Current subtask: P1 synthetic cell glyphs — Block Elements and Braille
+- Current subtask: P1 synthetic cell glyphs — accepted geometric Powerline
   deterministic raster geometry
 
 ## Purpose
@@ -725,6 +725,71 @@ preceding subtask is verified and committed.
 - 2026-09-14: The adjacent `dart_appkit` worktree is clean. A case-insensitive
   executable-source/content audit outside docs/build/cache/git and a filename
   audit both found zero `terminal` matches. No generic-library file changed.
+
+#### Current raster subtask — geometric Powerline subset
+
+- **Purpose:** Produce deterministic device-pixel alpha geometry for exactly the
+  18 pinned Powerline scalars while ensuring the unimplemented stylized private
+  use glyphs remain font-owned fallback.
+- **Background:** The bounded contract and all public Box/Block/Braille ranges
+  are committed. Pinned `draw/powerline.zig` deliberately exposes only U+E0B0
+  through U+E0BF plus U+E0D2 and U+E0D4; classification already matches that
+  boundary, but these accepted scalars have no raster geometry yet.
+- **Scope:** Implement filled and stroked chevrons, four triangular corners and
+  paired diagonals, filled/stroked rounded separators, and the paired two-piece
+  trapezoid separators; add bounded polygon/polyline primitives and exhaustive
+  1x/2x determinism, mirror, edge, fill/stroke, and fallback-boundary tests.
+- **Out of scope:** Every other Powerline/Nerd Font PUA scalar, atlas/compositor
+  integration, image goldens, real Metal evidence, font/layout/configuration
+  changes, other geometric-symbol ranges, and all `dart_appkit` changes.
+- **Dependencies:** Commits `92b2632`, `a426749`, and `a4bd787`; the clipped
+  alpha canvas and anti-aliased line primitive; pinned Powerline source identity
+  above; the classifier's exact 18-scalar allow-list; aggregate raster tests.
+- **Completion conditions:** Each accepted scalar returns nonempty exact-size
+  deterministic output at odd/even 1x/2x grids; all nine mirrored pairs match
+  byte-for-byte after horizontal reflection; filled separators own their
+  intended complete boundary and open separators remain unfilled; no adjacent
+  stylized PUA scalar becomes product-owned; invalid family calls fail closed;
+  focused and exact full gates pass; `dart_appkit` remains untouched and clean.
+- **Verification approach:** Port only the reviewed functions onto bounded
+  polygon/polyline/cubic helpers, table-drive all 18 accepted scalars at both
+  device grids, assert every mirror pair and representative boundary/center
+  behavior, retain classifier negatives, run focused format/analyze/tests and
+  the exact repository gate, inspect the diff, and repeat the generic-library
+  audit before marking this subtask complete.
+- 2026-09-14: The Powerline raster entry point implements only the allow-listed
+  functions. Filled chevrons/corner triangles use scanline polygon coverage and
+  explicitly own their complete flat joining edge; open chevrons and rounded
+  separators reuse the bounded anti-aliased polyline; filled rounded separators
+  use the pinned two cubic arcs; diagonals reuse the Box Drawing line contract;
+  the extra separators use two independently filled trapezoids around the
+  requested line-thickness gap. Right-facing counterparts are produced by an
+  in-place bounded horizontal reflection, preventing parity drift between a
+  pair. Polygon scanlines compute per-device-column alpha overlap without an
+  unbounded supersampling multiplier.
+- 2026-09-14: A read-only source validator extracted every `pub fn drawE0...`
+  declaration from the pinned Powerline file and compared it with the committed
+  test allow-list, reporting
+  `POWERLINE_PINNED_SET_MATCH_PASS scalars=18 first=U+e0b0 last=U+e0d4`.
+  This confirms that stylized gaps in U+E0C0..U+E0D4 were not silently claimed.
+- 2026-09-14: Focused formatting and analysis passed with `No issues found!`;
+  the aggregate raster suite passed. It renders all 18 scalars twice at
+  7x15/1px and 14x30/2px, proves exact size/nonempty byte determinism, verifies
+  all nine horizontal mirror pairs byte-for-byte, asserts complete flat join
+  edges for eight filled separators, distinguishes filled/open chevron and
+  rounded forms, preserves the two-piece center gap, rechecks adjacent PUA
+  fallback, and rejects wrong-family requests.
+- 2026-09-14: The exact
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` repository gate passed in
+  the reviewed Powerline state, including native/generated/compatibility/
+  distribution evidence, 332-file zero-change format, clean whole-product
+  analysis, aggregate raster coverage, security/update/recovery suites, and
+  the final `dart_terminal tests passed` marker. `git diff --check` passed.
+- 2026-09-14: Final review found only this Powerline raster/test, memo, and
+  roadmap state. The adjacent `dart_appkit` worktree is clean; the executable
+  source/content audit outside docs/build/cache/git and the filename audit both
+  found zero case-insensitive `terminal` matches. No generic-library file
+  changed.
 
 ## Inventory and decisions
 
