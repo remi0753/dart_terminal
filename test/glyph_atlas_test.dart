@@ -24,7 +24,65 @@ void runGlyphAtlasTests() {
   _testResetAndValidation();
   _testKittyImageTilesShareAtlasLimitsAndPins();
   _testKittyImageResourcePruningWaitsForPins();
+  _testPressureReclamationDefersPinnedResources();
   _testTextGoldens();
+}
+
+void _testPressureReclamationDefersPinnedResources() {
+  final TerminalGlyphAtlas atlas = TerminalGlyphAtlas(
+    catalogGeneration: 1,
+    limits: const TerminalGlyphAtlasLimits(
+      pageWidth: 8,
+      pageHeight: 8,
+      maximumAlphaPages: 1,
+      maximumColorPages: 1,
+      maximumEntries: 8,
+      maximumRetainedBytes: 320,
+      gutter: 0,
+    ),
+  );
+  final List<TerminalGlyphAtlasEntry> entries = atlas.ingest(
+    _batch(<_RasterSpec>[
+      _RasterSpec.alpha(glyphId: 1, width: 2, height: 2, value: 100),
+      _RasterSpec.alpha(glyphId: 2, width: 2, height: 2, value: 200),
+    ]),
+  );
+  atlas.pinForSubmission(1, <TerminalGlyphAtlasEntry>[entries.first]);
+  final TerminalGlyphAtlasBuildLease lease = atlas.beginBuildLease();
+  final TerminalGlyphAtlasReclaimResult building = atlas
+      .reclaimUnpinnedResources();
+  _expect(
+    building.isDeferred &&
+        building.activeBuildLeaseCount == 1 &&
+        building.removedEntryCount == 0 &&
+        atlas.entryCount == 2,
+    'pressure reclamation mutated an atlas during a frame build',
+  );
+  lease.close();
+  final TerminalGlyphAtlasReclaimResult pinned = atlas
+      .reclaimUnpinnedResources();
+  _expect(
+    pinned.isDeferred &&
+        pinned.pinnedEntryCount == 1 &&
+        pinned.removedEntryCount == 1 &&
+        atlas.entryCount == 1 &&
+        identical(atlas.lookup(entries.first.key), entries.first) &&
+        atlas.lookup(entries.last.key) == null,
+    'pressure reclamation did not preserve only the submission-pinned entry',
+  );
+  atlas.completeSubmission(1);
+  final TerminalGlyphAtlasReclaimResult retired = atlas
+      .reclaimUnpinnedResources();
+  _expect(
+    !retired.isDeferred &&
+        retired.removedEntryCount == 1 &&
+        retired.releasedBytes > 0 &&
+        atlas.entryCount == 0 &&
+        atlas.pageCount == 0 &&
+        atlas.retainedBytes == 0 &&
+        atlas.livePinCount == 0,
+    'retirement did not make the final reproducible atlas resource reclaimable',
+  );
 }
 
 void _testKittyImageTilesShareAtlasLimitsAndPins() {

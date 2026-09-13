@@ -1697,6 +1697,16 @@ Future<void> _runProductPerformance(
         1,
     'product performance startup marker is missing or duplicated',
   );
+  _expect(
+    RegExp(
+          r'^TERMINAL_MEMORY_PRESSURE_TEST later_turn=true warning=true '
+          r'critical=true storm_coalesced=true pinned_safe=true '
+          r'canonical_retained=true lazy_rebuild=true capped=true ',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'product memory-pressure acceptance summary is missing or duplicated',
+  );
   final Duration? startupElapsed = observation.milestones[startupMarker];
   _expect(
     startupElapsed != null,

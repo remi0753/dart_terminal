@@ -80,6 +80,7 @@ import 'terminal_kitty_reference_compositor_test.dart';
 import 'terminal_live_metal_surface_font_test.dart';
 import 'terminal_localization_audit_test.dart';
 import 'terminal_localization_test.dart';
+import 'terminal_memory_pressure_test.dart';
 import 'terminal_mouse_encoder_test.dart';
 import 'terminal_mouse_router_test.dart';
 import 'terminal_native_content_test.dart';
@@ -225,6 +226,7 @@ Future<void> main() async {
   runTerminalLiveMetalSurfaceFontTests();
   runTerminalLocalizationTests();
   await runTerminalLocalizationAuditTests();
+  runTerminalMemoryPressureTests();
   runTerminalPaletteTests();
   await runTerminalPasteTests();
   runTerminalPreeditTests();

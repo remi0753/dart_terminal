@@ -36,6 +36,30 @@ typedef TerminalLiveMetalFrameObserver = void Function(
   TerminalLiveMetalFrameObservation observation,
 );
 
+enum TerminalMemoryPressureSheddingDisposition { ignored, applied, deferred }
+
+/// Content-free result from one owner-safe memory-pressure shedding attempt.
+final class TerminalMemoryPressureSheddingResult {
+  const TerminalMemoryPressureSheddingResult({
+    required this.disposition,
+    required this.level,
+    required this.shapingEntryCount,
+    required this.atlasEntryCount,
+    required this.atlasReleasedBytes,
+    required this.pinnedSubmissionCount,
+  });
+
+  final TerminalMemoryPressureSheddingDisposition disposition;
+  final AppKitMemoryPressureLevel level;
+  final int shapingEntryCount;
+  final int atlasEntryCount;
+  final int atlasReleasedBytes;
+  final int pinnedSubmissionCount;
+
+  bool get isDeferred =>
+      disposition == TerminalMemoryPressureSheddingDisposition.deferred;
+}
+
 /// Optional content-free timing observation for product acceptance tooling.
 final class TerminalLiveMetalFrameObservation {
   const TerminalLiveMetalFrameObservation({
@@ -111,6 +135,10 @@ final class TerminalLiveMetalSurfaceSnapshot {
     required this.acceptedFrameCount,
     required this.pendingFrameCount,
     required this.liveAtlasPinCount,
+    required this.shapingCacheEntryCount,
+    required this.shapingCacheRetainedBytes,
+    required this.atlasEntryCount,
+    required this.atlasRetainedBytes,
     required this.kittyAtlasEntryCount,
     required this.kittyImageCount,
     required this.kittyPlacementCount,
@@ -121,6 +149,13 @@ final class TerminalLiveMetalSurfaceSnapshot {
     required this.kittyAtlasEvictionCount,
     required this.hasScheduledWork,
     required this.isSystemSuspended,
+    required this.pendingMemoryPressureLevel,
+    required this.memoryPressureWarningCount,
+    required this.memoryPressureCriticalCount,
+    required this.memoryPressureDeferredCount,
+    required this.memoryPressureShapingEntryCount,
+    required this.memoryPressureAtlasEntryCount,
+    required this.memoryPressureAtlasReleasedBytes,
     required this.synchronizedOutputMode,
     required this.synchronizedOutputHeld,
     required this.synchronizedOutputReleaseCount,
@@ -167,6 +202,10 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int acceptedFrameCount;
   final int pendingFrameCount;
   final int liveAtlasPinCount;
+  final int shapingCacheEntryCount;
+  final int shapingCacheRetainedBytes;
+  final int atlasEntryCount;
+  final int atlasRetainedBytes;
   final int kittyAtlasEntryCount;
   final int kittyImageCount;
   final int kittyPlacementCount;
@@ -177,6 +216,13 @@ final class TerminalLiveMetalSurfaceSnapshot {
   final int kittyAtlasEvictionCount;
   final bool hasScheduledWork;
   final bool isSystemSuspended;
+  final AppKitMemoryPressureLevel? pendingMemoryPressureLevel;
+  final int memoryPressureWarningCount;
+  final int memoryPressureCriticalCount;
+  final int memoryPressureDeferredCount;
+  final int memoryPressureShapingEntryCount;
+  final int memoryPressureAtlasEntryCount;
+  final int memoryPressureAtlasReleasedBytes;
   final bool synchronizedOutputMode;
   final bool synchronizedOutputHeld;
   final int synchronizedOutputReleaseCount;
@@ -500,6 +546,7 @@ final class TerminalLiveMetalSurface {
   bool _retryRequested = false;
   bool _processing = false;
   bool _systemSuspended = false;
+  AppKitMemoryPressureLevel? _pendingMemoryPressureLevel;
   bool _disposed = false;
   int _lastMonotonicMicros = 0;
   TerminalCaretRect? _lastPublishedCaretRect;
@@ -526,6 +573,12 @@ final class TerminalLiveMetalSurface {
   int _lastKittyImageCount = 0;
   int _lastKittyPlacementCount = 0;
   int _lastKittyTileCount = 0;
+  int _memoryPressureWarningCount = 0;
+  int _memoryPressureCriticalCount = 0;
+  int _memoryPressureDeferredCount = 0;
+  int _memoryPressureShapingEntryCount = 0;
+  int _memoryPressureAtlasEntryCount = 0;
+  int _memoryPressureAtlasReleasedBytes = 0;
   int _prunedPrimaryKittyImageSetGeneration = 0;
   int _prunedAlternateKittyImageSetGeneration = 0;
   double _publishedAccessibilityCellWidth = 0;
@@ -785,6 +838,48 @@ final class TerminalLiveMetalSurface {
     _scheduleImmediate();
   }
 
+  /// Applies one product-owned pressure stage outside the AppKit callback.
+  ///
+  /// Shaping and hover are always reproducible. Atlas work is delayed while a
+  /// frame build or native submission owns an entry, then retried by the normal
+  /// bounded render turn. Canonical terminal and Kitty image state is never
+  /// mutated by this operation.
+  TerminalMemoryPressureSheddingResult shedMemoryPressure(
+    AppKitMemoryPressureLevel level,
+  ) {
+    _requireLive();
+    if (level == AppKitMemoryPressureLevel.normal) {
+      return const TerminalMemoryPressureSheddingResult(
+        disposition: TerminalMemoryPressureSheddingDisposition.ignored,
+        level: AppKitMemoryPressureLevel.normal,
+        shapingEntryCount: 0,
+        atlasEntryCount: 0,
+        atlasReleasedBytes: 0,
+        pinnedSubmissionCount: 0,
+      );
+    }
+    final AppKitMemoryPressureLevel? pending = _pendingMemoryPressureLevel;
+    if (pending == null ||
+        _pressureSeverity(level) > _pressureSeverity(pending)) {
+      _pendingMemoryPressureLevel = level;
+    }
+    final int shapingEntryCount = _shapingCache.entryCount;
+    _shapingCache.clear();
+    _memoryPressureShapingEntryCount = _boundedMetricSum(
+      _memoryPressureShapingEntryCount,
+      shapingEntryCount,
+    );
+    if (_hyperlinkHover != null) {
+      _hyperlinkHover = null;
+      if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
+    }
+    final TerminalMemoryPressureSheddingResult result =
+        _applyPendingMemoryPressure(shapingEntryCount: shapingEntryCount);
+    _needsDrain = true;
+    _scheduleImmediate();
+    return result;
+  }
+
   /// Advances one bounded coalesced render turn outside AppKit callbacks.
   void processPending({int? monotonicMicros}) {
     _requireLive();
@@ -821,6 +916,13 @@ final class TerminalLiveMetalSurface {
         return;
       }
       if (!_publishScaleIfReady()) {
+        _scheduler.pauseAnimation();
+        _retryRequested = true;
+        return;
+      }
+      final TerminalMemoryPressureSheddingResult pressure =
+          _applyPendingMemoryPressure();
+      if (pressure.isDeferred) {
         _scheduler.pauseAnimation();
         _retryRequested = true;
         return;
@@ -877,6 +979,10 @@ final class TerminalLiveMetalSurface {
       acceptedFrameCount: _scheduler.metrics.acceptedCount,
       pendingFrameCount: _scheduler.pendingFrameCount,
       liveAtlasPinCount: atlas.livePinCount,
+      shapingCacheEntryCount: _shapingCache.entryCount,
+      shapingCacheRetainedBytes: _shapingCache.retainedBytes,
+      atlasEntryCount: atlas.entryCount,
+      atlasRetainedBytes: atlas.retainedBytes,
       kittyAtlasEntryCount: atlas.kittyImageEntryCount,
       kittyImageCount: _lastKittyImageCount,
       kittyPlacementCount: _lastKittyPlacementCount,
@@ -897,6 +1003,13 @@ final class TerminalLiveMetalSurface {
       hasScheduledWork:
           _timer != null || (_paneWorkScheduler?.isPending(sessionId) ?? false),
       isSystemSuspended: _systemSuspended,
+      pendingMemoryPressureLevel: _pendingMemoryPressureLevel,
+      memoryPressureWarningCount: _memoryPressureWarningCount,
+      memoryPressureCriticalCount: _memoryPressureCriticalCount,
+      memoryPressureDeferredCount: _memoryPressureDeferredCount,
+      memoryPressureShapingEntryCount: _memoryPressureShapingEntryCount,
+      memoryPressureAtlasEntryCount: _memoryPressureAtlasEntryCount,
+      memoryPressureAtlasReleasedBytes: _memoryPressureAtlasReleasedBytes,
       synchronizedOutputMode: screenSet.synchronizedOutputMode,
       synchronizedOutputHeld: _synchronizedPresentationGate.isHolding,
       synchronizedOutputReleaseCount: _synchronizedOutputReleaseCount,
@@ -1006,6 +1119,96 @@ final class TerminalLiveMetalSurface {
     _boundScreen.requestFullSnapshot();
     _scheduler.requestFullRedraw();
     return true;
+  }
+
+  TerminalMemoryPressureSheddingResult _applyPendingMemoryPressure({
+    int shapingEntryCount = 0,
+  }) {
+    final AppKitMemoryPressureLevel? level = _pendingMemoryPressureLevel;
+    if (level == null) {
+      return const TerminalMemoryPressureSheddingResult(
+        disposition: TerminalMemoryPressureSheddingDisposition.ignored,
+        level: AppKitMemoryPressureLevel.normal,
+        shapingEntryCount: 0,
+        atlasEntryCount: 0,
+        atlasReleasedBytes: 0,
+        pinnedSubmissionCount: 0,
+      );
+    }
+    if (_systemSuspended || !_recovery.hasCurrentDomain) {
+      _memoryPressureDeferredCount = _boundedMetricSum(
+        _memoryPressureDeferredCount,
+        1,
+      );
+      return TerminalMemoryPressureSheddingResult(
+        disposition: TerminalMemoryPressureSheddingDisposition.deferred,
+        level: level,
+        shapingEntryCount: shapingEntryCount,
+        atlasEntryCount: 0,
+        atlasReleasedBytes: 0,
+        pinnedSubmissionCount: atlas.livePinCount,
+      );
+    }
+    final TerminalGlyphAtlasMetalBridge bridge = _recovery.currentDomain.bridge;
+    bridge.retireCompletedSubmissions();
+    if (atlas.livePinCount != 0 || atlas.activeBuildLeaseCount != 0) {
+      _memoryPressureDeferredCount = _boundedMetricSum(
+        _memoryPressureDeferredCount,
+        1,
+      );
+      return TerminalMemoryPressureSheddingResult(
+        disposition: TerminalMemoryPressureSheddingDisposition.deferred,
+        level: level,
+        shapingEntryCount: shapingEntryCount,
+        atlasEntryCount: 0,
+        atlasReleasedBytes: 0,
+        pinnedSubmissionCount: atlas.livePinCount,
+      );
+    }
+
+    final int atlasEntryCount = atlas.entryCount;
+    final int retainedBytes = atlas.retainedBytes;
+    if (level == AppKitMemoryPressureLevel.critical) {
+      atlas.reset(
+        catalogGeneration: _catalog.generation,
+        scale: _publishedScale,
+      );
+      _memoryPressureCriticalCount = _boundedMetricSum(
+        _memoryPressureCriticalCount,
+        1,
+      );
+    } else {
+      final TerminalGlyphAtlasReclaimResult reclaimed = atlas
+          .reclaimUnpinnedResources();
+      if (reclaimed.isDeferred) {
+        throw StateError('unpinned atlas reclamation changed ownership');
+      }
+      _memoryPressureWarningCount = _boundedMetricSum(
+        _memoryPressureWarningCount,
+        1,
+      );
+    }
+    final int releasedBytes = retainedBytes - atlas.retainedBytes;
+    _memoryPressureAtlasEntryCount = _boundedMetricSum(
+      _memoryPressureAtlasEntryCount,
+      atlasEntryCount,
+    );
+    _memoryPressureAtlasReleasedBytes = _boundedMetricSum(
+      _memoryPressureAtlasReleasedBytes,
+      releasedBytes,
+    );
+    _pendingMemoryPressureLevel = null;
+    _boundScreen.requestFullSnapshot();
+    if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
+    _needsDrain = true;
+    return TerminalMemoryPressureSheddingResult(
+      disposition: TerminalMemoryPressureSheddingDisposition.applied,
+      level: level,
+      shapingEntryCount: shapingEntryCount,
+      atlasEntryCount: atlasEntryCount,
+      atlasReleasedBytes: releasedBytes,
+      pinnedSubmissionCount: 0,
+    );
   }
 
   void _pruneStaleKittyAtlasResources() {
@@ -1492,6 +1695,13 @@ final class TerminalLiveMetalSurface {
       first >= 0x7fffffffffffffff - second
       ? 0x7fffffffffffffff
       : first + second;
+
+  static int _pressureSeverity(AppKitMemoryPressureLevel level) =>
+      switch (level) {
+        AppKitMemoryPressureLevel.normal => 0,
+        AppKitMemoryPressureLevel.warning => 1,
+        AppKitMemoryPressureLevel.critical => 2,
+      };
 }
 
 /// Projects active-screen Kitty animation state into the ordinary frame clock.

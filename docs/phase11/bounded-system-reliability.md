@@ -356,3 +356,138 @@ marked as executed; it remains separately visible after the major goal.
   `dart_terminal tests passed`. Full-source analysis and `git diff --check`
   also passed. No elapsed-time-only soak or physical sleep/display claim was
   used.
+
+### 2026-09-13 — Product memory-pressure task start
+
+- Re-read README, ROADMAP, FEATURE_MATRIX, this reliability contract, the
+  generic v15 event transport, the ordinary application event switch, live
+  Metal surface ownership, shaping LRU, CPU glyph/image atlas, native atlas
+  bridge, failure recovery, and the existing restoration acceptance after
+  commit `0b1e9c4`. The first incomplete ROADMAP item is product
+  memory-pressure shedding/recovery; aggregate repetition and parent closure
+  remain later work.
+- The purpose is to admit warning/critical pressure in constant space during
+  the generic callback, coalesce a synchronous storm to its highest severity,
+  and perform owner-safe work on a later Dart turn. The implementation remains
+  entirely in `dart_terminal`; `dart_appkit` already supplies the neutral typed
+  pressure event and needs no product-specific edit.
+- Scope is limited to reproducible or transient state: derived hyperlink
+  hover, the bounded whole-run shaping LRU, and the CPU/native glyph plus Kitty
+  tile atlas. Search does not retain a result cache in the current product, so
+  there is no search allocation to clear. The canonical screen, scrollback,
+  selection, active preedit, Kitty image stores/placements/animation state,
+  PTY input/output, queued replies, panes, sessions, views, and windows are
+  explicitly outside the shedding boundary.
+- Warning pressure will clear hover and shaping entries and request an
+  owner-safe atlas reclamation. Critical pressure uses the same data-preserving
+  path but requires a complete reproducible atlas reset and full redraw. A
+  submission/build pin or native backpressure must return a deferred result;
+  the product keeps one pending severity and retries from an ordinary render
+  turn instead of invalidating live resources.
+- The controller retains only a last monotonic timestamp, one pending severity,
+  one scheduled flag, and saturating content-free counters. It rejects stale
+  input, treats lower/equal queued severity as coalesced, permits a later normal
+  signal to close the pressure episode without recreating resources eagerly,
+  reports failures through the existing asynchronous error boundary, and is
+  inert after disposal.
+- Completion requires deterministic controller storms/stale/dispose/failure
+  tests; surface tests for shaping/hover reclamation, pinned deferral, lazy
+  redraw, canonical Kitty/selection/preedit/screen preservation, resource caps,
+  and teardown; both ordinary Developer JIT and Release AOT product acceptance;
+  formatting, analysis, generated-evidence checks, and the exact repository
+  gate. Wall-clock soak and privileged OS pressure injection remain out of
+  scope and non-blocking by user direction.
+
+### 2026-09-13 — Product memory-pressure implementation
+
+- Added `TerminalMemoryPressureController` in the product repository and wired
+  both the ordinary hierarchy and restoration acceptance to the existing
+  generic v15 AppKit event stream. Native delivery records only the latest
+  monotonic timestamp, highest pending severity, retry count, and saturating
+  content-free counters. One later Dart microtask performs policy work; a
+  same-turn warning/critical storm is reduced to critical, stale records are
+  rejected, a normal record closes the episode without eager allocation, and
+  disposal makes already-scheduled work inert.
+- Callback/allocation failure is retried through the same single bounded slot.
+  The attempt budget is fixed and validated in the range 1–16; exhaustion
+  publishes one error through the application's existing asynchronous-failure
+  boundary rather than growing a work or error queue.
+- Extended `TerminalGlyphAtlas` with deterministic unpinned-resource
+  reclamation. An active build lease defers the whole operation, native
+  submission pins retain exactly their live entries, and independent unpinned
+  entries are evicted in stable entry-ID order. The result exposes counts and
+  released bytes only.
+- Added owner-safe warning and critical stages to
+  `TerminalLiveMetalSurface`. Both clear the reproducible shaping LRU and
+  transient hyperlink hover. Warning reclaims unpinned atlas entries; critical
+  resets the fully reproducible glyph/Kitty tile atlas at the current catalog
+  generation and backing scale. Atlas work remains pending while suspended,
+  without a current renderer domain, during a build lease, or while a native
+  submission pin is live, and is retried from an ordinary bounded render turn.
+- Successful shedding requests a fresh snapshot and full redraw. Resources are
+  recreated lazily from canonical owners without replacing the Metal surface
+  or renderer identity. Screen cells, scrollback pages, stable selection,
+  active preedit, PTY state, Kitty image stores/placements/animation data, and
+  queued protocol replies are never part of the reclamation operation.
+- Extended the ordinary performance acceptance with real AppKit event routing,
+  PTY/session/surface owners, warmed shaping/atlas resources, warning and
+  critical storms, normal recovery, lazy accepted frames, exact canonical
+  screen digest and scrollback allocation retention, active-preedit retention,
+  identity checks, and atlas caps. Its driver now rejects a missing or duplicate
+  content-free memory-pressure summary. The restoration scenario has the same
+  canonical Kitty/preedit/screen checks, although its independent fullscreen
+  prerequisite can require a foreground desktop before those checks begin.
+- No file in `dart_appkit` changed for this subtask. All severity choices,
+  eviction policy, retry budget, fixtures, diagnostics, and acceptance values
+  remain injected or owned by `dart_terminal`.
+
+### 2026-09-13 — Product memory-pressure verification and corrected trials
+
+- `dart run test/terminal_memory_pressure_test.dart` passed storm coalescing,
+  stale/unrelated/normal handling, three-attempt transient allocation recovery,
+  two-attempt persistent failure exhaustion with one error, and disposed
+  scheduled-work suppression. `dart run test/glyph_atlas_test.dart` passed
+  active-build deferral, submission-pin retention, independent unpinned
+  eviction, retirement, released-byte accounting, zero-owner cleanup, and its
+  existing golden cases. Both are also included in the aggregate runner.
+- The first ordinary performance run exposed a real reentrant hierarchy bug:
+  an AppKit screen-set notification could call display recovery, whose pane
+  resize callback recursively entered hierarchy reconciliation. Product display
+  recovery now uses the existing reconciliation guard and refreshes presentation
+  after leaving it. This short correctness failure was fixed rather than waived
+  as duration-only evidence.
+- The next acceptance trial incorrectly treated screen generation as canonical
+  content identity. Memory shedding deliberately requests a full snapshot, so
+  that generation must advance. The test now uses a content-only digest over
+  dimensions, cursor, cell scalar/style/color/hyperlink data, and width flags;
+  it proves unchanged canonical content without rejecting the required redraw.
+- `CI=true DART_SUPPRESS_ANALYTICS=true make developer-jit-performance` and
+  `CI=true DART_SUPPRESS_ANALYTICS=true make release-aot-performance` both
+  passed. Each also passed its native-hierarchy fairness prerequisite, required
+  exactly one memory-pressure summary, exercised warning and critical storms,
+  accepted the lazy newest frame, retained canonical/session/surface owners,
+  respected caps, and completed exact PTY/worker/native cleanup.
+- A separate `make runtime-restoration-integration` confirmation stopped before
+  the pressure sequence at its pre-existing real fullscreen activation step:
+  the test window was not foreground and fullscreen remained inactive for its
+  eight-second bound. The locked desktop could not be foregrounded through UI
+  automation. The attempt cleaned all PTY/worker/native owners, but it is not
+  counted as pressure evidence; the two ordinary real-product modes above are
+  the executed product acceptance for this subtask.
+- The first exact main-gate attempt stopped at the expected stale Phase 7 source
+  hash for `terminal_application.dart`. Regeneration changed only the two
+  recorded occurrences of that SHA-256. A following attempt correctly found
+  one unformatted Dart source; the checker uses `--output=none`, so the file was
+  then explicitly formatted and the two hashes regenerated once more.
+- The final exact `CI=true DART_SUPPRESS_ANALYTICS=true make test` gate passed
+  with exit 0: generated evidence, 323-file format check, analyzer, aggregate
+  Dart tests, native capabilities, security stress, compatibility and
+  differential suites, application matrix, shell/terminfo, and distribution
+  checks all passed. `git diff --check` passed, the adjacent worktree is clean,
+  and its independent generic repository audit passed with 140 paths and 139
+  text files.
+- No real operating-system pressure was forced, no physical sleep/display
+  transition was claimed, and no 24/72-hour wall-clock soak was run. Those
+  duration-only or privileged activities remain the documented low-priority
+  follow-up and do not mask any reproducible correctness, ownership, teardown,
+  or cap failure in the completed bounded checks.

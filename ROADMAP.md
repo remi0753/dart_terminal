@@ -1362,7 +1362,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] contract、inventory、duration-only follow-up境界
   - [x] `dart_appkit` generic system-state event transport
   - [x] product sleep/wake／display recovery policy
-  - [ ] product memory-pressure shedding／recovery
+  - [x] product memory-pressure shedding／recovery
   - [ ] bounded aggregate受け入れ、文書／matrix、親項目完了判定
 - [ ] native ASan/UBSan、fuzz corpus、fault injection
 - [ ] Ghostty pinned matrix の P0/P1 gap burn-down

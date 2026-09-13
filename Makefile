@@ -247,7 +247,7 @@ help:
 	@echo "  make terminal-incident-service-test  Test local report export and current-process sampling"
 	@echo "  make runtime-terminal-display-integration  Verify the live Metal terminal in both modes"
 	@echo "  make runtime-native-hierarchy-integration  Verify four-pane hierarchy and Close/Quit in both modes"
-	@echo "  make runtime-product-performance-integration  Gate ordinary-product latency, frames, and fairness"
+	@echo "  make runtime-product-performance-integration  Gate latency, resources, and memory-pressure recovery"
 	@echo "  make runtime-user-actions-integration  Verify normal-product window/tab/split actions in both modes"
 	@echo "  make runtime-native-content-integration  Verify Quick Look, Services, drops, and context actions in both modes"
 	@echo "  make runtime-quick-terminal-integration  Verify Quick Terminal in both modes"

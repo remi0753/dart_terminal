@@ -328,6 +328,23 @@ final class TerminalGlyphAtlasMetrics {
   }
 }
 
+/// One deterministic pressure reclamation result without resource contents.
+final class TerminalGlyphAtlasReclaimResult {
+  const TerminalGlyphAtlasReclaimResult({
+    required this.removedEntryCount,
+    required this.pinnedEntryCount,
+    required this.activeBuildLeaseCount,
+    required this.releasedBytes,
+  });
+
+  final int removedEntryCount;
+  final int pinnedEntryCount;
+  final int activeBuildLeaseCount;
+  final int releasedBytes;
+
+  bool get isDeferred => pinnedEntryCount != 0 || activeBuildLeaseCount != 0;
+}
+
 final class TerminalGlyphAtlasUpload {
   TerminalGlyphAtlasUpload._({
     required this.resourceGeneration,
@@ -429,6 +446,7 @@ final class TerminalGlyphAtlas {
   int get hitCount => _hitCount;
   int get missCount => _missCount;
   int get livePinCount => _pins.length;
+  int get activeBuildLeaseCount => _activeBuildLeaseCount;
   int get pendingUploadPageCount => _dirtyPageRects.length;
   TerminalGlyphAtlasMetrics get metrics =>
       TerminalGlyphAtlasMetrics(hitCount: _hitCount, missCount: _missCount);
@@ -543,6 +561,46 @@ final class TerminalGlyphAtlas {
       removed++;
     }
     return (removedEntryCount: removed, pinnedEntryCount: pinned);
+  }
+
+  /// Removes every currently unpinned reproducible atlas entry.
+  ///
+  /// An active frame build defers the whole operation. Submission-pinned
+  /// entries are retained while independent unpinned entries are reclaimed in
+  /// stable identity order, allowing the owner to retry after retirement.
+  TerminalGlyphAtlasReclaimResult reclaimUnpinnedResources() {
+    if (_activeBuildLeaseCount != 0) {
+      return TerminalGlyphAtlasReclaimResult(
+        removedEntryCount: 0,
+        pinnedEntryCount: _entries.values
+            .where((TerminalGlyphAtlasEntry entry) => entry.isPinned)
+            .length,
+        activeBuildLeaseCount: _activeBuildLeaseCount,
+        releasedBytes: 0,
+      );
+    }
+    final int retainedBefore = _retainedBytes;
+    final List<TerminalGlyphAtlasEntry> candidates = _entries.values.toList()
+      ..sort(
+        (TerminalGlyphAtlasEntry left, TerminalGlyphAtlasEntry right) =>
+            left.entryId.compareTo(right.entryId),
+      );
+    var removed = 0;
+    var pinned = 0;
+    for (final TerminalGlyphAtlasEntry entry in candidates) {
+      if (entry.isPinned) {
+        pinned++;
+        continue;
+      }
+      _evict(entry);
+      removed++;
+    }
+    return TerminalGlyphAtlasReclaimResult(
+      removedEntryCount: removed,
+      pinnedEntryCount: pinned,
+      activeBuildLeaseCount: 0,
+      releasedBytes: retainedBefore - _retainedBytes,
+    );
   }
 
   void pinForSubmission(

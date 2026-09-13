@@ -58,6 +58,7 @@ import 'terminal_input/terminal_selection_autoscroll.dart';
 import 'terminal_input/terminal_selection_gesture.dart';
 import 'terminal_input/terminal_text_input_event_router.dart';
 import 'terminal_localization.dart';
+import 'terminal_memory_pressure.dart';
 import 'terminal_native_content.dart';
 import 'terminal_native_hierarchy.dart';
 import 'terminal_notification_product.dart';
@@ -2783,6 +2784,7 @@ final class TerminalApplication {
     TerminalNativeHierarchyAdapter? hierarchy;
     TerminalNativeSplitDividerGestureController? dividerGestureController;
     TerminalSystemRecoveryController? systemRecoveryController;
+    TerminalMemoryPressureController? memoryPressureController;
     TerminalQuickTerminalController? quickTerminalController;
     TerminalSecureKeyboardEntryController? secureKeyboardEntryController;
     TerminalProductHierarchyActionCoordinator? actionCoordinator;
@@ -4059,6 +4061,8 @@ final class TerminalApplication {
       await menuProjection?.dispose();
       actionDispatcher = null;
       actionCoordinator?.dispose();
+      memoryPressureController?.dispose();
+      memoryPressureController = null;
       systemRecoveryController?.dispose();
       systemRecoveryController = null;
       dividerGestureController?.dispose();
@@ -4397,7 +4401,14 @@ final class TerminalApplication {
           final AppKitResolvedScreen fallback = application.resolveScreen(
             AppKitScreenSelection.main,
           );
-          createdHierarchy.recoverDisplaySet(fallbackScreen: fallback);
+          if (hierarchyReconciliationInProgress) return;
+          hierarchyReconciliationInProgress = true;
+          try {
+            createdHierarchy.recoverDisplaySet(fallbackScreen: fallback);
+          } finally {
+            hierarchyReconciliationInProgress = false;
+          }
+          createdHierarchy.refreshPresentation();
           for (final _TerminalHierarchyProductPane owner in owners.values) {
             owner.notifyScreenChanged();
           }
@@ -4406,6 +4417,17 @@ final class TerminalApplication {
           for (final _TerminalHierarchyProductPane owner in owners.values) {
             if (!owner.surface.isDisposed) {
               owner.surface.updateSystemSuspended(false);
+            }
+          }
+        },
+        onError: recordAsynchronousError,
+      );
+      memoryPressureController = TerminalMemoryPressureController(
+        apply: (AppKitMemoryPressureLevel level) {
+          for (final _TerminalHierarchyProductPane owner
+              in owners.values.toList(growable: false)) {
+            if (!owner.surface.isDisposed) {
+              owner.surface.shedMemoryPressure(level);
             }
           }
         },
@@ -5408,8 +5430,7 @@ final class TerminalApplication {
               ApplicationScreenSetChangedEvent():
             systemRecoveryController?.handle(event);
           case ApplicationMemoryPressureChangedEvent():
-            // The next ordered reliability subtask owns pressure policy.
-            break;
+            memoryPressureController?.handle(event);
           case ApplicationReopenRequestedEvent(:final hasVisibleWindows):
             if (hasVisibleWindows || state.isDisposed) break;
             if (state.windows.any(
@@ -5474,6 +5495,7 @@ final class TerminalApplication {
           hierarchy: createdHierarchy,
           sessions: sessions,
           owners: owners,
+          memoryPressure: memoryPressureController!,
           observation: performanceObservation!,
           closed: closed,
           prompt: acceptancePrompt.trimRight(),
@@ -5761,6 +5783,7 @@ final class TerminalApplication {
     required TerminalNativeHierarchyAdapter hierarchy,
     required Map<PaneId, TerminalSession> sessions,
     required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required TerminalMemoryPressureController memoryPressure,
     required _TerminalProductPerformanceObservation observation,
     required Completer<void> closed,
     required String prompt,
@@ -6185,7 +6208,192 @@ final class TerminalApplication {
               (residentMemoryBound && idleCpuBound)),
       'ordinary product resource or idle-power proxy budget failed',
     );
+    await _exerciseMemoryPressureProduct(
+      application: application,
+      controller: memoryPressure,
+      pane: pane,
+      session: session,
+      owner: owner,
+    );
     if (!closed.isCompleted) closed.complete();
+  }
+
+  static Future<void> _exerciseMemoryPressureProduct({
+    required AppKitApplication application,
+    required TerminalMemoryPressureController controller,
+    required TerminalPane pane,
+    required TerminalSession session,
+    required _TerminalHierarchyProductPane owner,
+  }) async {
+    final TerminalLiveMetalSurface surface = owner.surface;
+    final TerminalLiveMetalSurfaceSnapshot before = surface.snapshot();
+    final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+    final TerminalScrollback scrollback = session.terminalScreenSet.scrollback;
+    final int screenDigest = _screenCanonicalDigest(screen);
+    final int scrollbackLength = scrollback.length;
+    final int scrollbackPageCount = scrollback.pageCount;
+    final int scrollbackAllocatedBytes = scrollback.allocatedBytes;
+    final int rendererGeneration = before.rendererGeneration;
+    final int preeditGeneration = surface.preeditState.generation + 1;
+    surface.updatePreedit(
+      generation: preeditGeneration,
+      text: 'memory-pressure-preedit',
+      selectionLocation: 6,
+      selectionLength: 8,
+    );
+    final Stopwatch preeditDeadline = Stopwatch()..start();
+    while (surface.snapshot().acceptedFrameCount <= before.acceptedFrameCount &&
+        preeditDeadline.elapsed < const Duration(seconds: 3)) {
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+    final TerminalLiveMetalSurfaceSnapshot warmed = surface.snapshot();
+    _expectLifecycle(
+      warmed.acceptedFrameCount > before.acceptedFrameCount &&
+          warmed.shapingCacheEntryCount > 0 &&
+          warmed.atlasEntryCount > 0 &&
+          warmed.atlasEntryCount <= surface.atlas.limits.maximumEntries &&
+          warmed.atlasRetainedBytes <=
+              surface.atlas.limits.maximumRetainedBytes,
+      'memory-pressure acceptance did not warm bounded reproducible caches',
+    );
+
+    _injectApplicationMemoryPressureEventForTesting(
+      application,
+      level: AppKitMemoryPressureLevel.normal,
+      monotonicNanoseconds: 8200000000000000000,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    final TerminalMemoryPressureSnapshot controllerBaseline = controller
+        .snapshot();
+    _injectApplicationMemoryPressureEventForTesting(
+      application,
+      level: AppKitMemoryPressureLevel.warning,
+      monotonicNanoseconds: 8200000000000100000,
+    );
+    _injectApplicationMemoryPressureEventForTesting(
+      application,
+      level: AppKitMemoryPressureLevel.warning,
+      monotonicNanoseconds: 8200000000000200000,
+    );
+    final Stopwatch warningDeadline = Stopwatch()..start();
+    while ((surface.snapshot().memoryPressureWarningCount <=
+                warmed.memoryPressureWarningCount ||
+            surface.snapshot().pendingMemoryPressureLevel != null ||
+            surface.snapshot().acceptedFrameCount <=
+                warmed.acceptedFrameCount ||
+            controller.snapshot().applicationCount <=
+                controllerBaseline.applicationCount) &&
+        warningDeadline.elapsed < const Duration(seconds: 3)) {
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+    final TerminalLiveMetalSurfaceSnapshot afterWarning = surface.snapshot();
+    _injectApplicationMemoryPressureEventForTesting(
+      application,
+      level: AppKitMemoryPressureLevel.critical,
+      monotonicNanoseconds: 8200000000000300000,
+    );
+    _injectApplicationMemoryPressureEventForTesting(
+      application,
+      level: AppKitMemoryPressureLevel.critical,
+      monotonicNanoseconds: 8200000000000400000,
+    );
+    final Stopwatch criticalDeadline = Stopwatch()..start();
+    while ((surface.snapshot().memoryPressureCriticalCount <=
+                warmed.memoryPressureCriticalCount ||
+            surface.snapshot().pendingMemoryPressureLevel != null ||
+            surface.snapshot().acceptedFrameCount <=
+                afterWarning.acceptedFrameCount ||
+            controller.snapshot().applicationCount <
+                controllerBaseline.applicationCount + 2) &&
+        criticalDeadline.elapsed < const Duration(seconds: 3)) {
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+    _injectApplicationMemoryPressureEventForTesting(
+      application,
+      level: AppKitMemoryPressureLevel.normal,
+      monotonicNanoseconds: 8200000000000500000,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    final TerminalMemoryPressureSnapshot controllerAfter = controller
+        .snapshot();
+    final TerminalLiveMetalSurfaceSnapshot after = surface.snapshot();
+    final int acceptedEventDelta =
+        controllerAfter.acceptedEventCount -
+        controllerBaseline.acceptedEventCount;
+    final int coalescedEventDelta =
+        controllerAfter.coalescedEventCount -
+        controllerBaseline.coalescedEventCount;
+    final bool preeditRetained =
+        surface.preeditState.generation == preeditGeneration &&
+        surface.preeditState.text == 'memory-pressure-preedit' &&
+        surface.preeditState.selectionLocation == 6 &&
+        surface.preeditState.selectionLength == 8;
+    stdout.writeln(
+      'TERMINAL_MEMORY_PRESSURE_OBSERVED '
+      'accepted_events=$acceptedEventDelta '
+      'coalesced_events=$coalescedEventDelta '
+      'applications=${controllerAfter.applicationCount - controllerBaseline.applicationCount} '
+      'recoveries=${controllerAfter.recoveryCount - controllerBaseline.recoveryCount} '
+      'warnings=${after.memoryPressureWarningCount - warmed.memoryPressureWarningCount} '
+      'criticals=${after.memoryPressureCriticalCount - warmed.memoryPressureCriticalCount} '
+      'deferrals=${after.memoryPressureDeferredCount - warmed.memoryPressureDeferredCount} '
+      'shaping_entries=${after.memoryPressureShapingEntryCount - warmed.memoryPressureShapingEntryCount} '
+      'atlas_entries=${after.memoryPressureAtlasEntryCount - warmed.memoryPressureAtlasEntryCount} '
+      'atlas_bytes=${after.memoryPressureAtlasReleasedBytes - warmed.memoryPressureAtlasReleasedBytes} '
+      'screen_retained=${_screenCanonicalDigest(screen) == screenDigest} '
+      'scrollback_retained=${scrollback.length == scrollbackLength && scrollback.pageCount == scrollbackPageCount && scrollback.allocatedBytes == scrollbackAllocatedBytes} '
+      'preedit_retained=$preeditRetained '
+      'newest=${after.lastAcceptedModelRevision == after.lastAppliedDamageGeneration}',
+    );
+    _expectLifecycle(
+      acceptedEventDelta == 3 &&
+          coalescedEventDelta >= 2 &&
+          controllerAfter.applicationCount ==
+              controllerBaseline.applicationCount + 2 &&
+          controllerAfter.recoveryCount ==
+              controllerBaseline.recoveryCount + 1 &&
+          controllerAfter.pendingLevel == null &&
+          controllerAfter.observedLevel == AppKitMemoryPressureLevel.normal &&
+          after.pendingMemoryPressureLevel == null &&
+          after.memoryPressureWarningCount ==
+              warmed.memoryPressureWarningCount + 1 &&
+          after.memoryPressureCriticalCount ==
+              warmed.memoryPressureCriticalCount + 1 &&
+          after.memoryPressureShapingEntryCount >
+              warmed.memoryPressureShapingEntryCount &&
+          after.memoryPressureAtlasEntryCount >
+              warmed.memoryPressureAtlasEntryCount &&
+          after.memoryPressureAtlasReleasedBytes >
+              warmed.memoryPressureAtlasReleasedBytes &&
+          after.atlasResourceGeneration > warmed.atlasResourceGeneration &&
+          after.rendererGeneration == rendererGeneration &&
+          after.atlasEntryCount <= surface.atlas.limits.maximumEntries &&
+          after.atlasRetainedBytes <=
+              surface.atlas.limits.maximumRetainedBytes &&
+          after.lastAcceptedModelRevision ==
+              after.lastAppliedDamageGeneration &&
+          _screenCanonicalDigest(screen) == screenDigest &&
+          scrollback.length == scrollbackLength &&
+          scrollback.pageCount == scrollbackPageCount &&
+          scrollback.allocatedBytes == scrollbackAllocatedBytes &&
+          preeditRetained &&
+          identical(owner.surface, surface) &&
+          identical(owner.pane, pane) &&
+          identical(owner.session, session),
+      'memory pressure changed canonical state or failed lazy cache recovery',
+    );
+    stdout.writeln(
+      'TERMINAL_MEMORY_PRESSURE_TEST later_turn=true warning=true '
+      'critical=true storm_coalesced=true pinned_safe=true '
+      'canonical_retained=true lazy_rebuild=true capped=true '
+      'accepted_events=$acceptedEventDelta '
+      'coalesced_events=$coalescedEventDelta '
+      'deferrals=${after.memoryPressureDeferredCount - warmed.memoryPressureDeferredCount} '
+      'shaping_entries=${after.memoryPressureShapingEntryCount - warmed.memoryPressureShapingEntryCount} '
+      'atlas_entries=${after.memoryPressureAtlasEntryCount - warmed.memoryPressureAtlasEntryCount} '
+      'atlas_bytes=${after.memoryPressureAtlasReleasedBytes - warmed.memoryPressureAtlasReleasedBytes}',
+    );
+    surface.clearPreedit(generation: preeditGeneration + 1);
   }
 
   static int _performancePercentile(List<int> samples, int percentile) {
@@ -11557,6 +11765,7 @@ keybind = control+k=pane.focus-next
     RuntimeLifecycleCoordinator? lifecycle;
     StreamSubscription<ApplicationReopenRequestedEvent>? reopenSubscription;
     TerminalSystemRecoveryController? systemRecoveryController;
+    TerminalMemoryPressureController? memoryPressureController;
     StreamSubscription<AppKitEvent>? systemRecoverySubscription;
     var lifecycleWasShutDown = false;
     Object? asynchronousError;
@@ -11810,12 +12019,25 @@ keybind = control+k=pane.focus-next
         },
         onError: recordAsynchronousError,
       );
+      memoryPressureController = TerminalMemoryPressureController(
+        apply: (AppKitMemoryPressureLevel level) {
+          for (final _TerminalHierarchyProductPane owner
+              in owners.values.toList(growable: false)) {
+            if (!owner.surface.isDisposed) {
+              owner.surface.shedMemoryPressure(level);
+            }
+          }
+        },
+        onError: recordAsynchronousError,
+      );
       systemRecoverySubscription = application.events.listen((
         AppKitEvent event,
       ) {
         if (event is ApplicationPowerStateChangedEvent ||
             event is ApplicationScreenSetChangedEvent) {
           systemRecoveryController?.handle(event);
+        } else if (event is ApplicationMemoryPressureChangedEvent) {
+          memoryPressureController?.handle(event);
         }
       }, onError: recordAsynchronousError);
 
@@ -12186,6 +12408,245 @@ keybind = control+k=pane.focus-next
         'newest_redrawn=true scheduled_while_sleeping=false',
       );
 
+      final int pressureImageId = 0x7fff0001;
+      final TerminalLogicalAnchor pressureImageAnchor = recoverySession
+          .terminalScreenSet
+          .viewport
+          .anchorAtScreenCell(TerminalScreenKind.primary, 0, 0);
+      final pressureImage = recoverySession.terminalScreenSet.primaryKittyImages
+          .store(
+            imageId: pressureImageId,
+            imageNumber: 0,
+            width: 2,
+            height: 2,
+            transient: false,
+            rgba: Uint8List.fromList(const <int>[
+              255,
+              0,
+              0,
+              255,
+              0,
+              255,
+              0,
+              255,
+              0,
+              0,
+              255,
+              255,
+              255,
+              255,
+              255,
+              255,
+            ]),
+          );
+      final pressurePlacement = recoverySession
+          .terminalScreenSet
+          .primaryKittyImages
+          .place(
+            imageId: pressureImageId,
+            imageNumber: 0,
+            placementId: pressureImageId,
+            logicalLineId: pressureImageAnchor.logicalLineId,
+            logicalLineEpoch: pressureImageAnchor.logicalLineEpoch,
+            logicalCellOffset: pressureImageAnchor.cellOffset,
+            sourceX: 0,
+            sourceY: 0,
+            sourceWidth: 0,
+            sourceHeight: 0,
+            cellOffsetX: 0,
+            cellOffsetY: 0,
+            columns: 1,
+            rows: 1,
+            z: 1,
+          );
+      _expectLifecycle(
+        pressureImage.image != null && pressurePlacement.placement != null,
+        'memory-pressure fixture did not create canonical Kitty semantics',
+      );
+      final int pressureImageResourceGeneration =
+          pressureImage.image!.resourceGeneration;
+      final int pressureStoreBytes =
+          recoverySession.terminalScreenSet.primaryKittyImages.retainedBytes;
+      final int pressureScreenDigest = _screenCanonicalDigest(
+        recoverySession.terminalScreenSet.primary,
+      );
+      final int pressurePreeditGeneration =
+          recoverySurface.preeditState.generation + 1;
+      recoverySurface.updatePreedit(
+        generation: pressurePreeditGeneration,
+        text: 'memory-pressure-preedit',
+        selectionLocation: 6,
+        selectionLength: 8,
+      );
+      recoveryOwner.notifyScreenChanged();
+      final int pressureWarmFrameBaseline = recoverySurface
+          .snapshot()
+          .acceptedFrameCount;
+      final Stopwatch pressureWarmDeadline = Stopwatch()..start();
+      while ((recoverySurface.snapshot().acceptedFrameCount <=
+                  pressureWarmFrameBaseline ||
+              recoverySurface.snapshot().kittyAtlasEntryCount == 0 ||
+              recoverySurface.snapshot().shapingCacheEntryCount == 0) &&
+          pressureWarmDeadline.elapsed < const Duration(seconds: 3)) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      checkAsynchronousError();
+      final TerminalLiveMetalSurfaceSnapshot pressureWarm = recoverySurface
+          .snapshot();
+      _injectApplicationMemoryPressureEventForTesting(
+        application,
+        level: AppKitMemoryPressureLevel.normal,
+        monotonicNanoseconds: 8100000000000000000,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      final TerminalMemoryPressureSnapshot pressureControllerBaseline =
+          memoryPressureController.snapshot();
+      _expectLifecycle(
+        pressureWarm.kittyAtlasEntryCount > 0 &&
+            pressureWarm.shapingCacheEntryCount > 0 &&
+            pressureWarm.atlasEntryCount <=
+                recoverySurface.atlas.limits.maximumEntries &&
+            pressureWarm.atlasRetainedBytes <=
+                recoverySurface.atlas.limits.maximumRetainedBytes,
+        'memory-pressure fixture did not warm bounded reproducible caches',
+      );
+
+      _injectApplicationMemoryPressureEventForTesting(
+        application,
+        level: AppKitMemoryPressureLevel.warning,
+        monotonicNanoseconds: 8100000000000100000,
+      );
+      _injectApplicationMemoryPressureEventForTesting(
+        application,
+        level: AppKitMemoryPressureLevel.warning,
+        monotonicNanoseconds: 8100000000000200000,
+      );
+      final Stopwatch warningDeadline = Stopwatch()..start();
+      while ((recoverySurface.snapshot().memoryPressureWarningCount <=
+                  pressureWarm.memoryPressureWarningCount ||
+              recoverySurface.snapshot().pendingMemoryPressureLevel != null ||
+              recoverySurface.snapshot().acceptedFrameCount <=
+                  pressureWarm.acceptedFrameCount ||
+              recoverySurface.snapshot().atlasEntryCount == 0 ||
+              memoryPressureController.snapshot().applicationCount ==
+                  pressureControllerBaseline.applicationCount) &&
+          warningDeadline.elapsed < const Duration(seconds: 3)) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      checkAsynchronousError();
+      final TerminalLiveMetalSurfaceSnapshot afterWarning = recoverySurface
+          .snapshot();
+
+      _injectApplicationMemoryPressureEventForTesting(
+        application,
+        level: AppKitMemoryPressureLevel.critical,
+        monotonicNanoseconds: 8100000000000300000,
+      );
+      _injectApplicationMemoryPressureEventForTesting(
+        application,
+        level: AppKitMemoryPressureLevel.critical,
+        monotonicNanoseconds: 8100000000000400000,
+      );
+      final Stopwatch criticalDeadline = Stopwatch()..start();
+      while ((recoverySurface.snapshot().memoryPressureCriticalCount <=
+                  pressureWarm.memoryPressureCriticalCount ||
+              recoverySurface.snapshot().pendingMemoryPressureLevel != null ||
+              recoverySurface.snapshot().acceptedFrameCount <=
+                  afterWarning.acceptedFrameCount ||
+              recoverySurface.snapshot().atlasEntryCount == 0 ||
+              memoryPressureController.snapshot().applicationCount <
+                  pressureControllerBaseline.applicationCount + 2) &&
+          criticalDeadline.elapsed < const Duration(seconds: 3)) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      _injectApplicationMemoryPressureEventForTesting(
+        application,
+        level: AppKitMemoryPressureLevel.normal,
+        monotonicNanoseconds: 8100000000000500000,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      checkAsynchronousError();
+      final TerminalMemoryPressureSnapshot pressureControllerSnapshot =
+          memoryPressureController.snapshot();
+      final TerminalLiveMetalSurfaceSnapshot afterCritical = recoverySurface
+          .snapshot();
+      final int pressureAcceptedDelta =
+          pressureControllerSnapshot.acceptedEventCount -
+          pressureControllerBaseline.acceptedEventCount;
+      final int pressureCoalescedDelta =
+          pressureControllerSnapshot.coalescedEventCount -
+          pressureControllerBaseline.coalescedEventCount;
+      final bool pressureKittyRetained =
+          recoverySession.terminalScreenSet.primaryKittyImages
+                  .imageById(pressureImageId)
+                  ?.resourceGeneration ==
+              pressureImageResourceGeneration &&
+          recoverySession.terminalScreenSet.primaryKittyImages.retainedBytes ==
+              pressureStoreBytes &&
+          recoverySession.terminalScreenSet.primaryKittyImages.placementCount ==
+              1;
+      final bool pressurePreeditRetained =
+          recoverySurface.preeditState.generation ==
+              pressurePreeditGeneration &&
+          recoverySurface.preeditState.text == 'memory-pressure-preedit' &&
+          recoverySurface.preeditState.selectionLocation == 6 &&
+          recoverySurface.preeditState.selectionLength == 8;
+      stdout.writeln(
+        'TERMINAL_MEMORY_PRESSURE_OBSERVED '
+        'accepted_events=$pressureAcceptedDelta '
+        'coalesced_events=$pressureCoalescedDelta '
+        'applications=${pressureControllerSnapshot.applicationCount - pressureControllerBaseline.applicationCount} '
+        'recoveries=${pressureControllerSnapshot.recoveryCount - pressureControllerBaseline.recoveryCount} '
+        'warnings=${afterCritical.memoryPressureWarningCount - pressureWarm.memoryPressureWarningCount} '
+        'criticals=${afterCritical.memoryPressureCriticalCount - pressureWarm.memoryPressureCriticalCount} '
+        'deferrals=${afterCritical.memoryPressureDeferredCount - pressureWarm.memoryPressureDeferredCount} '
+        'shaping_entries=${afterCritical.memoryPressureShapingEntryCount - pressureWarm.memoryPressureShapingEntryCount} '
+        'atlas_entries=${afterCritical.memoryPressureAtlasEntryCount - pressureWarm.memoryPressureAtlasEntryCount} '
+        'atlas_bytes=${afterCritical.memoryPressureAtlasReleasedBytes - pressureWarm.memoryPressureAtlasReleasedBytes} '
+        'kitty_retained=$pressureKittyRetained '
+        'preedit_retained=$pressurePreeditRetained',
+      );
+      _expectLifecycle(
+        pressureAcceptedDelta == 3 &&
+            pressureCoalescedDelta >= 2 &&
+            pressureControllerSnapshot.applicationCount ==
+                pressureControllerBaseline.applicationCount + 2 &&
+            pressureControllerSnapshot.recoveryCount ==
+                pressureControllerBaseline.recoveryCount + 1 &&
+            pressureControllerSnapshot.observedLevel ==
+                AppKitMemoryPressureLevel.normal &&
+            pressureControllerSnapshot.pendingLevel == null &&
+            afterCritical.pendingMemoryPressureLevel == null &&
+            afterCritical.memoryPressureWarningCount ==
+                pressureWarm.memoryPressureWarningCount + 1 &&
+            afterCritical.memoryPressureCriticalCount ==
+                pressureWarm.memoryPressureCriticalCount + 1 &&
+            afterCritical.memoryPressureShapingEntryCount >
+                pressureWarm.memoryPressureShapingEntryCount &&
+            afterCritical.memoryPressureAtlasEntryCount >
+                pressureWarm.memoryPressureAtlasEntryCount &&
+            afterCritical.memoryPressureAtlasReleasedBytes >
+                pressureWarm.memoryPressureAtlasReleasedBytes &&
+            afterCritical.atlasEntryCount <=
+                recoverySurface.atlas.limits.maximumEntries &&
+            afterCritical.atlasRetainedBytes <=
+                recoverySurface.atlas.limits.maximumRetainedBytes &&
+            pressureKittyRetained &&
+            pressurePreeditRetained &&
+            _screenCanonicalDigest(recoverySession.terminalScreenSet.primary) ==
+                pressureScreenDigest &&
+            identical(initialState.paneForId(recoveryPaneId), recoveryPane) &&
+            identical(sessions[recoveryPaneId], recoverySession) &&
+            identical(owners[recoveryPaneId]!.surface, recoverySurface),
+        'memory pressure changed canonical data or failed lazy cache recovery',
+      );
+      stdout.writeln(
+        'TERMINAL_MEMORY_PRESSURE_TEST later_turn=true warning=true '
+        'critical=true storm_coalesced=true pinned_safe=true '
+        'canonical_retained=true lazy_rebuild=true capped=true',
+      );
+      recoverySurface.clearPreedit(generation: pressurePreeditGeneration + 1);
+
       final TerminalPane secondPane = await initialState.splitPane(
         firstPaneId,
         configurationForPane(
@@ -12462,6 +12923,7 @@ keybind = control+k=pane.focus-next
         'text_clients=0 native_handles=0',
       );
     } finally {
+      memoryPressureController?.dispose();
       systemRecoveryController?.dispose();
       await systemRecoverySubscription?.cancel();
       await reopenSubscription?.cancel();
@@ -16354,6 +16816,26 @@ keybind = control+k=pane.focus-next
     ]);
   }
 
+  static void _injectApplicationMemoryPressureEventForTesting(
+    AppKitApplication application, {
+    required AppKitMemoryPressureLevel level,
+    required int monotonicNanoseconds,
+  }) {
+    appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+      application.eventProtocolVersion,
+      37,
+      0,
+      0,
+      monotonicNanoseconds,
+      0,
+      switch (level) {
+        AppKitMemoryPressureLevel.normal => 0,
+        AppKitMemoryPressureLevel.warning => 1,
+        AppKitMemoryPressureLevel.critical => 2,
+      },
+    ]);
+  }
+
   static void _injectApplicationAppearanceEventForTesting(
     AppKitApplication application, {
     required bool isDark,
@@ -17547,6 +18029,29 @@ keybind = control+k=pane.focus-next
       }
     }
     return null;
+  }
+
+  static int _screenCanonicalDigest(TerminalScreen screen) {
+    var digest = 0x4d595df4d0f33173;
+    void mix(int value) {
+      digest = ((digest ^ value) * 0x100000001b3) & 0x7fffffffffffffff;
+    }
+
+    mix(screen.rows);
+    mix(screen.columns);
+    mix(screen.cursorRow);
+    mix(screen.cursorColumn);
+    for (var row = 0; row < screen.rows; row++) {
+      for (var column = 0; column < screen.columns; column++) {
+        mix(screen.contentAt(row, column));
+        mix(screen.foregroundAt(row, column));
+        mix(screen.backgroundAt(row, column));
+        mix(screen.styleAt(row, column));
+        mix(screen.hyperlinkAt(row, column));
+        mix(screen.widthFlagsAt(row, column));
+      }
+    }
+    return digest;
   }
 
   static String _asciiRow(TerminalScreen screen, int row) =>
