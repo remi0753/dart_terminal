@@ -472,6 +472,12 @@ Unicode scalar rangeごとの明示的なfont family、初期window sizeとpaddi
 exact physical key chordをpane actionまたはapplication actionへ割り当てます。構文、全key名、
 action ID、`unbind`/`passthrough`、既定binding、予約済みnative shortcutは
 [Keybindings and actions](docs/reference/keybindings-and-actions.md)を参照してください。
+
+`background-opacity` は0（完全透過）から1（不透明）で指定し、既定値は1です。
+reload時は既存の全window/tab/split paneへ同時に反映され、その後に作るterminalや
+Quick Terminalも同じ値を使います。透過するのはterminalの既定backgroundのみで、
+文字、cursor、selection、明示ANSI cell background、画像、Settings、Command Paletteには
+透過度を適用しません。
 `font-variation-{regular,bold,italic,bold-italic}`は4-byte OpenType tagごとに最大16件、
 `font-codepoint-override`はinclusive Unicode scalar rangeと明示familyを最大256件受理します。
 同じstyle/tagは後の宣言が有効になり、重なるscalar rangeも後の宣言が優先されます。

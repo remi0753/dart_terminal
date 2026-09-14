@@ -3155,6 +3155,8 @@ final class TerminalApplication {
         fontCatalogConfiguration: paneConfiguration.fontCatalogConfiguration,
         horizontalPadding: paneConfiguration.windowPaddingHorizontal,
         verticalPadding: paneConfiguration.windowPaddingVertical,
+        backgroundOpacity:
+            configurationAuthority.newSessionConfiguration.backgroundOpacity,
         accessibilityPresentation:
             applicationAccessibilityProjection!.presentation,
         onCaretGeometryChanged: (TerminalCaretRect rectangle) {
@@ -4223,6 +4225,15 @@ final class TerminalApplication {
         configurationAuthority.applyReload(result);
         final TerminalProductConfiguration configuration =
             configurationAuthority.newSessionConfiguration;
+        for (final _TerminalHierarchyProductPane owner in owners.values.toList(
+          growable: false,
+        )) {
+          if (!owner.surface.isDisposed) {
+            owner.surface.updateBackgroundOpacity(
+              configuration.backgroundOpacity,
+            );
+          }
+        }
         final TerminalSecureKeyboardEntryController? secure =
             secureKeyboardEntryController;
         if (secure != null && !secure.isDisposed) {
@@ -9930,6 +9941,7 @@ final class TerminalApplication {
     const double configuredWindowHeight = 710;
     const double configuredHorizontalPadding = 18;
     const double configuredVerticalPadding = 11;
+    const double configuredBackgroundOpacity = 0.8;
     const int configuredScrollbackLines = 8;
     const int configuredScrollbackBytes = 1024 * 1024;
     const int reloadedForeground = 0x80a0b0c0;
@@ -9940,6 +9952,8 @@ final class TerminalApplication {
     const double reloadedWindowHeight = 640;
     const double reloadedHorizontalPadding = 9;
     const double reloadedVerticalPadding = 7;
+    const double reloadedBackgroundOpacity = 0.45;
+    const double finalBackgroundOpacity = 0.6;
     const int reloadedScrollbackLines = 12;
     const int reloadedScrollbackBytes = 2 * 1024 * 1024;
     const String reloadedWorkingDirectory = '/tmp';
@@ -10064,8 +10078,24 @@ final class TerminalApplication {
               TerminalSyntheticStylePolicy.reject &&
           initialOwner.surface.horizontalPadding ==
               configuredHorizontalPadding &&
-          initialOwner.surface.verticalPadding == configuredVerticalPadding,
+          initialOwner.surface.verticalPadding == configuredVerticalPadding &&
+          initialOwner.surface.backgroundOpacity == configuredBackgroundOpacity,
       'configured product did not project the resolved initial profile',
+    );
+    var invalidBackgroundOpacityRejected = false;
+    try {
+      initialOwner.surface.updateBackgroundOpacity(double.nan);
+    } on RangeError {
+      invalidBackgroundOpacityRejected = true;
+    }
+    _expectLifecycle(
+      invalidBackgroundOpacityRejected &&
+          !initialOwner.surface.updateBackgroundOpacity(
+            configuredBackgroundOpacity,
+          ) &&
+          initialOwner.surface.backgroundOpacity == configuredBackgroundOpacity,
+      'terminal surface did not reject invalid opacity or deduplicate the '
+      'current application-wide value',
     );
     await _waitForAsciiMarker(initialSession, prompt);
     await waitFor(() {
@@ -10131,7 +10161,12 @@ final class TerminalApplication {
           settings.activeView!.lineHighlight?.location ==
               settings.state.selection.start &&
           settings.activeView!.lineHighlight?.color ==
-              terminalSettingsCurrentLineColor,
+              terminalSettingsCurrentLineColor &&
+          !identical(initialSettingsWindow, nativeWindow) &&
+          initialOwner.surface.backgroundOpacity ==
+              configuredBackgroundOpacity &&
+          hierarchy.paneResourceCount == 1 &&
+          owners.length == 1,
       'Settings did not publish its initial document and visual state',
     );
     final int lastSettingsLocation = settings.state.occurrences.last.nameStart;
@@ -10478,6 +10513,14 @@ final class TerminalApplication {
       'configuration acceptance could not open the shared command palette',
     );
     final Window paletteWindow = palette.activeWindow!;
+    _expectLifecycle(
+      !identical(paletteWindow, nativeWindow) &&
+          initialOwner.surface.backgroundOpacity ==
+              configuredBackgroundOpacity &&
+          hierarchy.paneResourceCount == 1 &&
+          owners.length == 1,
+      'Command Palette entered the terminal surface opacity boundary',
+    );
     _injectKeyEventForTesting(
       application,
       paletteWindow,
@@ -10520,6 +10563,14 @@ final class TerminalApplication {
       'command-palette Settings dispatch stole focus or lost shared identity',
     );
     final Window reloadSettingsWindow = settings.activeWindow!;
+    _expectLifecycle(
+      !identical(reloadSettingsWindow, nativeWindow) &&
+          initialOwner.surface.backgroundOpacity ==
+              configuredBackgroundOpacity &&
+          hierarchy.paneResourceCount == 1 &&
+          owners.length == 1,
+      'Settings entered the terminal surface opacity boundary',
+    );
     _injectKeyEventForTesting(
       application,
       reloadSettingsWindow,
@@ -10674,6 +10725,7 @@ window-width = 980
 window-height = 640
 window-padding-horizontal = 9
 window-padding-vertical = 7
+background-opacity = 0.45
 macos-option-key = escape
 scrollback-lines = 12
 scrollback-bytes = 2MiB
@@ -10696,6 +10748,9 @@ keybind = control+k=pane.focus-next
       settings.activeView!.lineHighlight?.location == correctedCaret,
       'corrected INSERT caret did not update the current-line highlight',
     );
+    final int opacityFrameBaseline = initialOwner.surface
+        .snapshot()
+        .acceptedFrameCount;
     final int appliedDispatchBaseline = actionDispatches.length;
     _injectKeyEventForTesting(
       application,
@@ -10714,10 +10769,17 @@ keybind = control+k=pane.focus-next
       'corrected native Settings save/reload did not complete exactly once',
     );
     final TerminalConfigReloadResult appliedReload = configurationReloads.last;
+    await waitFor(
+      () =>
+          initialOwner.surface.backgroundOpacity == reloadedBackgroundOpacity &&
+          initialOwner.surface.snapshot().acceptedFrameCount >
+              opacityFrameBaseline,
+      'accepted live opacity did not reach the existing terminal frame',
+    );
     _expectLifecycle(
       appliedReload.disposition == TerminalConfigReloadDisposition.applied &&
           appliedReload.diagnostics.isEmpty &&
-          appliedReload.changePlan!.liveChanges.length == 2 &&
+          appliedReload.changePlan!.liveChanges.length == 3 &&
           appliedReload.changePlan!.newSessionChanges.length == 16 &&
           reloadController.acceptedGeneration == 1 &&
           configurationAuthority.acceptedGeneration == 1 &&
@@ -10743,6 +10805,7 @@ keybind = control+k=pane.focus-next
           initialOwner.surface.fontMetrics.pointSize == 18 &&
           initialOwner.surface.horizontalPadding ==
               configuredHorizontalPadding &&
+          initialOwner.surface.backgroundOpacity == reloadedBackgroundOpacity &&
           initialScreens.scrollback.maxLines == configuredScrollbackLines &&
           initialScreens.activeScreen.cursorShape == TerminalCursorShape.bar,
       'accepted reload did not preserve existing new-session resources',
@@ -10922,7 +10985,8 @@ keybind = control+k=pane.focus-next
                 .length ==
             1 &&
         initialOwner.surface.horizontalPadding == configuredHorizontalPadding &&
-        initialOwner.surface.verticalPadding == configuredVerticalPadding;
+        initialOwner.surface.verticalPadding == configuredVerticalPadding &&
+        initialOwner.surface.backgroundOpacity == reloadedBackgroundOpacity;
     final bool reloadedResourcesProjected = reloadedPaneIds.every((
       PaneId paneId,
     ) {
@@ -10957,6 +11021,7 @@ keybind = control+k=pane.focus-next
           fontDiagnostics.availableOverrideCount == 1 &&
           owner.surface.horizontalPadding == reloadedHorizontalPadding &&
           owner.surface.verticalPadding == reloadedVerticalPadding &&
+          owner.surface.backgroundOpacity == reloadedBackgroundOpacity &&
           snapshot.contentOffsetX > 0 &&
           snapshot.contentOffsetY > 0 &&
           snapshot.accessibilityGeneration > 0 &&
@@ -11001,7 +11066,11 @@ keybind = control+k=pane.focus-next
           initialResourcesRetained &&
           reloadedResourcesProjected &&
           windowPolicyProjected &&
-          independent,
+          independent &&
+          paneOwners.every(
+            (_TerminalHierarchyProductPane owner) =>
+                owner.surface.backgroundOpacity == reloadedBackgroundOpacity,
+          ),
       'reload did not retain existing resources or project independent '
       'new-session resources',
     );
@@ -11012,6 +11081,46 @@ keybind = control+k=pane.focus-next
         return !snapshot.isDisposed;
       }),
       'reload unexpectedly disposed a live Metal surface',
+    );
+    final PaneId activeOpacityPaneId =
+        state.activeWindow!.selectedTab.focusedPaneId;
+    final int finalOpacityFrameBaseline = owners[activeOpacityPaneId]!.surface
+        .snapshot()
+        .acceptedFrameCount;
+    final String finalOpacityConfiguration = correctedDraft.replaceFirst(
+      'background-opacity = 0.45',
+      'background-opacity = 0.6',
+    );
+    _expectLifecycle(
+      finalOpacityConfiguration != correctedDraft,
+      'configuration acceptance could not locate background opacity',
+    );
+    File(configurationPath)
+        .writeAsStringSync(finalOpacityConfiguration, flush: true);
+    await dispatch(TerminalActionId.reloadConfiguration);
+    await waitFor(
+      () =>
+          owners.values.every(
+            (_TerminalHierarchyProductPane owner) =>
+                owner.surface.backgroundOpacity == finalBackgroundOpacity,
+          ) &&
+          owners[activeOpacityPaneId]!.surface.snapshot().acceptedFrameCount >
+              finalOpacityFrameBaseline,
+      'live opacity reload did not reach every existing window, tab, and pane',
+    );
+    _expectLifecycle(
+      configurationReloads.length == 2 &&
+          configurationReloads.last.disposition ==
+              TerminalConfigReloadDisposition.applied &&
+          configurationReloads.last.changePlan!.liveChanges.length == 1 &&
+          configurationReloads.last.changePlan!.newSessionChanges.isEmpty &&
+          reloadController.acceptedGeneration == 2 &&
+          configurationAuthority.acceptedGeneration == 2 &&
+          configurationAuthority.liveGeneration == 2 &&
+          !owners[activeOpacityPaneId]!.surface.updateBackgroundOpacity(
+            finalBackgroundOpacity,
+          ),
+      'application-wide opacity reload was not one deduplicated live change',
     );
     final PaneId contractedPaneId = reloadedPaneIds.first;
     final TerminalPaneLocation contractedLocation = state.locationForPane(
@@ -11060,6 +11169,36 @@ keybind = control+k=pane.focus-next
     }, 'accessibility origin did not restore its configured padding');
     contractedSurface.debugVerifyAccessibility();
 
+    await dispatch(TerminalActionId.toggleQuickTerminal);
+    await waitFor(
+      () =>
+          state.quickTerminalWindow != null &&
+          state.windowCount == 3 &&
+          state.tabCount == 4 &&
+          state.paneCount == 5 &&
+          hierarchy.nativeWindowCount == 4 &&
+          hierarchy.paneResourceCount == 5 &&
+          sessions.length == 5 &&
+          owners.length == 5,
+      'configuration acceptance could not create the later Quick Terminal',
+    );
+    final TerminalWindowState quickWindow = state.quickTerminalWindow!;
+    final PaneId quickPaneId = quickWindow.selectedTab.focusedPaneId;
+    await _waitForAsciiMarker(sessions[quickPaneId]!, prompt);
+    _expectLifecycle(
+      quickWindow.role == TerminalWindowRole.quickTerminal &&
+          owners[quickPaneId]!.surface.backgroundOpacity ==
+              finalBackgroundOpacity &&
+          owners.values.every(
+            (_TerminalHierarchyProductPane owner) =>
+                owner.surface.backgroundOpacity == finalBackgroundOpacity,
+          ) &&
+          !settings.isOpen &&
+          !palette.isOpen,
+      'later Quick Terminal or an existing terminal surface diverged from the '
+      'shared opacity value',
+    );
+
     await dispatch(TerminalActionId.quitApplication);
     if (!closed.isCompleted) {
       await dispatch(TerminalActionId.quitApplication);
@@ -11069,7 +11208,7 @@ keybind = control+k=pane.focus-next
     _expectLifecycle(
       state.isDisposed &&
           hierarchy.isDisposed &&
-          allSessions.length == 4 &&
+          allSessions.length == 5 &&
           allSessions.every(
             (TerminalSession session) =>
                 session.shutdownResult?.isClean == true,
@@ -11088,15 +11227,15 @@ keybind = control+k=pane.focus-next
       'unavailable_fallback=true reload_rejected=true '
       'save_unavailable_rejected=true save_rejected=true save_applied=true '
       'permissions=true reload_applied=true '
-      'live_existing=true '
+      'live_existing=true background_opacity=true terminal_only=true '
       'new_session=true settings_menu=true settings_palette=true '
       'settings_singleton=true settings_search=true settings_edit=true '
       'settings_style_stable=true settings_disabled_lines=true '
       'settings_cursor_line=true settings_initial_document=true '
       'settings_viewport_follow=true '
       'settings_diagnostics=true '
-      'settings_reload=true settings_focus=true panes=4 independent=true '
-      'sessions_clean=4 text_clients=0 native_handles=0',
+      'settings_reload=true settings_focus=true panes=5 independent=true '
+      'quick_terminal=true sessions_clean=5 text_clients=0 native_handles=0',
     );
   }
 

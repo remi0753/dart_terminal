@@ -83,6 +83,13 @@ terminal本文を描画する背景色へ利用者指定の透過度を適用す
   custom view operationへ閉じる。これによりSettingsとCommand Paletteは影響を受けない。
 - 2026-09-14: opacityはdefault terminal backgroundにだけ適用する。明示cell backgroundまで
   透過するとANSI applicationの意図と可読性を変えるため採用しない。
+- 2026-09-14: interactive productのterminal surfaceはすべて1つの`createResources`を通り、
+  standard window/tab/splitとQuick Terminalが同じowner mapで管理されることを確認した。
+  新規surfaceはconfiguration authorityの最新opacityでattachし、accepted reloadはowner mapの
+  snapshotを走査して全live surfaceを同期更新する。破棄済みsurfaceは対象から外す。
+- 2026-09-14: SettingsとCommand Paletteはterminal hierarchyのowner/viewを作らない別windowで、
+  terminal renderer custom operationを受ける経路がない。product acceptanceで別window identity、
+  pane resource数の不変、terminal opacity値の不変を確認して非対象境界を固定する。
 
 ## 検証結果
 
@@ -138,6 +145,31 @@ terminal本文を描画する背景色へ利用者指定の透過度を適用す
   exit 0。formatは338 file変更なし、root/package analyzeはissueなし、renderer native/Dartを
   含む全native、unit、application、security、update、distributionのaggregate checkが成功した。
   第2subtaskのframe alphaとmacOS transparent surface contractを完了とする。
+- 2026-09-14: 第3subtask実装後の`dart analyze`はissueなし。最初のDeveloper JIT
+  configuration integrationは、fixtureに明示`background-opacity`行が1つ増えたのに
+  `--show-config`のentry数期待が55のままで停止した。実出力は53 option、56 entry、
+  opacity 0.8をlive/file provenanceで正しく公開していたため、期待entry数を56へ更新する。
+- 2026-09-14: entry数修正後の`make RUNTIME_ARCH=arm64 runtime-configuration-integration`は
+  exit 0。Developer JITとRelease AOTの両packaged runtimeで、初期0.8、既存一面への0.45
+  live reload、その後作った2 window/3 native tab/4 pane全体への0.6 live reload、後続
+  Quick Terminalへの0.6継承、Settings/Command Paletteの別owner境界、5 session/native handleの
+  clean teardownが成功した。
+- 2026-09-14: 第3subtaskの最初の`make test`はrendererを含むpackage/native check、
+  configuration reference、localization、privacy auditまで成功し、application source変更を入力に
+  持つPhase 7 AppKit acceptanceのfreshnessで停止した。受け入れ基準の変更はないため、
+  Phase 7 acceptance、Feature Matrix依存のcompatibility coverage、P0/P1 gap inventory、
+  daily-use matrixを依存順に再生成する。
+- 2026-09-14: 上記4証跡を正本から依存順に再生成した後の`make test`は
+  exit 0。configuration referenceは53 option（live 12、new-session 41）、formatは338 file
+  変更なし、root/package analyzeはissueなし、全native/package/unit/application/security/update/
+  distribution checkが成功した。第3subtaskと親taskの完了条件をすべて満たす。
+
+## 完了状態
+
+- schemaからnative windowまで、application-wideのterminal背景透過度を接続した。
+- 既存と後続のwindow/native tab/split pane/Quick Terminalはすべて同じlive値を使う。
+- SettingsとCommand Paletteはterminal renderer operationから分離され、透過度の対象外のままである。
+- 本task由来の未検証項目、追加ROADMAP項目、阻害要因はない。
 
 ## リスク・引き継ぎ
 

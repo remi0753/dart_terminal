@@ -2778,6 +2778,7 @@ scrollback-lines = 8
 scrollback-bytes = 1MiB
 cursor-shape = bar
 cursor-blink = false
+background-opacity = 0.8
 keybind = control+e=terminal.send-end-of-file
 keybind = control+d=unbind
 keybind = command+k=passthrough
@@ -2821,7 +2822,7 @@ keybind = command+d=pane.focus-next
           effectiveObservation.workerProcesses.isEmpty &&
           effectiveLines.first ==
               'dart-terminal-effective-config version=1 options=53 '
-                  'entries=55 diagnostics=3' &&
+                  'entries=56 diagnostics=3' &&
           effectiveLines[1] == 'root path=${jsonEncode(configurationPath)}' &&
           effectiveTheme.contains('value="system"') &&
           effectiveTheme.contains('policy=new-session') &&
@@ -2901,12 +2902,18 @@ keybind = command+d=pane.focus-next
               0 &&
           RegExp(
                 r'^TERMINAL_CONFIG_RELOAD disposition=applied generation=1 '
-                r'changes=18 live=2 new_session=16 diagnostics=0$',
+                r'changes=19 live=3 new_session=16 diagnostics=0$',
+                multiLine: true,
+              ).allMatches(observation.stdoutText).length ==
+              1 &&
+          RegExp(
+                r'^TERMINAL_CONFIG_RELOAD disposition=applied generation=2 '
+                r'changes=1 live=1 new_session=0 diagnostics=0$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
               1,
       'configured product did not suppress invalid-save reload or omitted the '
-      'one accepted reload transaction',
+      'two accepted reload transactions',
     );
     _expect(
       RegExp(
@@ -2920,15 +2927,16 @@ keybind = command+d=pane.focus-next
             r'unavailable_fallback=true reload_rejected=true '
             r'save_unavailable_rejected=true save_rejected=true '
             r'save_applied=true permissions=true reload_applied=true '
-            r'live_existing=true '
+            r'live_existing=true background_opacity=true terminal_only=true '
             r'new_session=true settings_menu=true settings_palette=true '
             r'settings_singleton=true settings_search=true settings_edit=true '
             r'settings_style_stable=true settings_disabled_lines=true '
             r'settings_cursor_line=true settings_initial_document=true '
             r'settings_viewport_follow=true '
             r'settings_diagnostics=true settings_reload=true '
-            r'settings_focus=true panes=4 independent=true '
-            r'sessions_clean=4 text_clients=0 native_handles=0$',
+            r'settings_focus=true panes=5 independent=true '
+            r'quick_terminal=true sessions_clean=5 text_clients=0 '
+            r'native_handles=0$',
             multiLine: true,
           ).allMatches(observation.stdoutText).length ==
           1,
@@ -2936,19 +2944,19 @@ keybind = command+d=pane.focus-next
     );
     _expect(
       RegExp(
-                r'^TERMINAL_SESSION_SHUTDOWN pane=[1-4] session=[1-4]:1 '
+                r'^TERMINAL_SESSION_SHUTDOWN pane=[1-5] session=[1-5]:1 '
                 r'process_id=[1-9][0-9]* disposition=clean '
                 r'termination_observed=true cleanup_completed=true$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
-              4 &&
+              5 &&
           RegExp(
-                r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=4 disposition=clean$',
+                r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=5 disposition=clean$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
               1 &&
           observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
-      'configured product did not cleanly release four pane generations',
+      'configured product did not cleanly release five pane generations',
     );
     _expect(
       !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
@@ -2963,11 +2971,11 @@ keybind = command+d=pane.focus-next
     stdout.writeln(
       'RUNTIME_CONFIGURATION_INTEGRATION_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
-      'panes=4 keybinds=true save=true permissions=true reload=true '
+      'panes=5 keybinds=true save=true permissions=true reload=true '
       'settings_editor=true settings_visuals=true '
       'settings_initial_document=true settings_viewport_follow=true '
       'font_fallback=true font_configuration=true font_diagnostics=true '
-      'effective_config=true '
+      'effective_config=true background_opacity=true '
       'elapsed_ms=${observation.elapsed.inMilliseconds}',
     );
   } finally {
