@@ -91,6 +91,7 @@ const List<_CriterionRequirement> _requirements = <_CriterionRequirement>[
         'lib/src/terminal_renderer/terminal_screen_metal_compositor.dart',
         <String>[
           'inactivePaneBackgroundBrightness',
+          'inactivePaneScrimRgb',
           'inactivePaneScrimOpacity',
         ],
       ),

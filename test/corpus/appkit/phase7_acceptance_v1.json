@@ -59,7 +59,7 @@
         },
         {
           "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
-          "sha256": "44f08798fcc232ec1f3d35d7c67b12bf7e0cf5f09524bc076ec702fc0012ee28"
+          "sha256": "5c28106976340a161ec4a70d7191e2011d1562bf8c564243124e2c664e985e64"
         },
         {
           "path": "lib/src/terminal_input/terminal_text_input_event_router.dart",
@@ -103,7 +103,7 @@
         {
           "path": "test/terminal_screen_metal_compositor_test.dart",
           "entrypoint": "runTerminalScreenMetalCompositorTests",
-          "sha256": "eb7060250e31b91edee2cd6e5b8efa80a23e8d414181149308ac4b2f9812f8b9"
+          "sha256": "3fa8ce4156a228875487a4211b6daa03c1659f15c7d71fd0d93878c19f7963e5"
         }
       ],
       "integration_tests": [

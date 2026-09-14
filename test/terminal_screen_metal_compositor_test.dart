@@ -120,9 +120,10 @@ void _testInactivePaneHidesCursorAndDimsBackgrounds() {
           scrim.width == inactive.viewportWidth &&
           scrim.height == inactive.viewportHeight &&
           scrim.colorRgba ==
-              (TerminalScreenMetalCompositor.inactivePaneScrimOpacity * 255)
-                  .round(),
-      'inactive pane ends with one black scrim over the complete viewport',
+              ((TerminalScreenMetalCompositor.inactivePaneScrimRgb << 8) |
+                  (TerminalScreenMetalCompositor.inactivePaneScrimOpacity * 255)
+                      .round()),
+      'inactive pane ends with one charcoal scrim over the complete viewport',
     );
 
     final Uint8List activePixels = transparentBlackActive.renderer.renderRgba(
@@ -139,13 +140,15 @@ void _testInactivePaneHidesCursorAndDimsBackgrounds() {
       activePixels[sampleOffset] == 0 &&
           activePixels[sampleOffset + 1] == 0 &&
           activePixels[sampleOffset + 2] == 0 &&
-          inactivePixels[sampleOffset] == 0 &&
-          inactivePixels[sampleOffset + 1] == 0 &&
-          inactivePixels[sampleOffset + 2] == 0 &&
+          inactivePixels[sampleOffset] > 0 &&
+          inactivePixels[sampleOffset] == inactivePixels[sampleOffset + 1] &&
+          inactivePixels[sampleOffset] == inactivePixels[sampleOffset + 2] &&
+          inactivePixels[sampleOffset] <=
+              (TerminalScreenMetalCompositor.inactivePaneScrimRgb & 0xff) &&
           inactivePixels[sampleOffset + 3] >
               activePixels[sampleOffset + 3] + 30,
-      'real Metal readback makes a transparent black inactive pane '
-      'materially more opaque and dark',
+      'real Metal readback gives transparent black a neutral charcoal tint '
+      'and materially reduces its transparency',
     );
   } finally {
     active.dispose();

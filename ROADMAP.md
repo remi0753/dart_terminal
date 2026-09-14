@@ -1458,6 +1458,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] active/inactive pane presentation contractとrenderer検証
   - [x] 全window・tab・paneへのfocus投影と両runtime受け入れ
   - [x] 黒／透過背景でも判別できるinactive pane全体の暗転強化
+  - [x] inactive paneへ濃いneutral gray tintを追加
 
 ### 主要ゴール後の低優先 follow-up
 

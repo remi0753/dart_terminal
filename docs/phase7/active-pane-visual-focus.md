@@ -22,7 +22,8 @@ cursorを描画する。このためsplit後も複数paneのcursorが同時に�
 - inactive中はterminal output、visual bell、image animationなどの表示更新を継続し、
   cursorの表示とblink deadlineだけを停止する。
 - inactive paneではframe clearとcell backgroundを暗くし、さらにterminal viewport全体へ
-  black scrimを重ねて、黒／透過背景でも文字、画像を含むpane全体をactive paneより暗くする。
+  neutral charcoal scrimを重ねて、黒／透過背景でも文字、画像を含むpane全体をactive paneより
+  暗くする。
 - main interactive productでwindow focus、selected tab、focused paneから唯一のactive
   surfaceを導出し、既存surfaceと新規surfaceの全てへlive投影する。
 - focusの獲得・喪失、key/text input、mouse操作、tab/window/pane構成変更に追従する。
@@ -44,7 +45,7 @@ cursorを描画する。このためsplit後も複数paneのcursorが同時に�
   `TerminalPresentationClock`
 - `TerminalScreenMetalCompositor`のframe background、cell background、cursor layer
 - 共有background opacity contract。active paneの設定値は変えず、inactive paneだけにfocus
-  presentationとして独立したblack scrimを合成する。
+  presentationとして独立したneutral charcoal scrimを合成する。
 
 ## 分割と実施順
 
@@ -69,6 +70,10 @@ cursorを描画する。このためsplit後も複数paneのcursorが同時に�
      decoration、Kitty imageを含む最終出力を一様に後退させる。
    - 専用のpacked Metal layerを追加し、Dart encoderとnative validatorのlayer順を一致させる。
    - compositor／renderer test、両runtime configuration、full testで検証する。
+4. **inactive paneへの濃いneutral gray tint追加**
+   - pure black 24% scrimを、より濃い32%のneutral charcoal grayへ調整する。
+   - transparent black上でもalpha差だけでなくRGB tintが生じることを実Metal pixelで検証する。
+   - active pane、cursor抑制、layer ordering、focus投影の契約は変更しない。
 
 各subtaskを上記順に実装・検証・記録・commitし、先行subtaskを完了するまで次へ進まない。
 
@@ -78,7 +83,7 @@ cursorを描画する。このためsplit後も複数paneのcursorが同時に�
 - active paneのblinking cursorだけがdeadline駆動され、inactive paneはcursor instanceを
   一切生成しない。
 - inactive paneのterminal viewport全体はactive paneより明確に暗く、blackかつ低opacityの
-  default backgroundでも最終black scrimが存在する。
+  default backgroundでも最終neutral charcoal scrimが濃いgray tintを加える。
 - active paneのbackground alphaは設定値どおりで、inactive focus presentationだけが
   独立したscrimを加える。
 - inactive paneも新しいPTY damageとcursor以外のpresentation animationを描画できる。
@@ -96,6 +101,39 @@ cursorを描画する。このためsplit後も複数paneのcursorが同時に�
 - `dart format`、`dart analyze`、関連test、`make test`を実行する。
 
 ## 調査記録
+
+### 2026-09-14 inactive charcoal tint follow-up着手時
+
+- user確認で、inactive paneへさらに黒／濃いgrayの色味を加える要望があった。
+- 現在のscrimはpure blackの24% alphaであり、透明blackでは背面を抑えるがscrim自体のRGBは
+  0のためneutral grayの色差を作らない。
+- neutral dark gray `#181818`を32% alphaで最終pane scrimへ使う。既存の背景RGB 82%暗転も
+  維持するため、文字・画像など明るいvisualはさらに後退し、transparent blackの空白部にも
+  わずかなcharcoal tintが加わる。
+- 対象範囲はcompositor定数、Metal pixel contract、README／FEATURE_MATRIX／生成済み証跡。
+  対象外は設定項目の追加、focus導出、native layer kind／shader／cursor clockの変更。
+- 完了条件はactive paneにscrimがないこと、inactive scrimが`#181818`／32%で全viewportの
+  最終layerであること、実Metal readbackでtransparent blackにneutral RGB tintと十分なalpha差が
+  現れること、両runtimeとfull testが成功することとする。
+- compositorへ`inactivePaneScrimRgb = 0x181818`を追加し、opacityを24%から32%へ変更した。
+  packed colorはcanonical straight-alpha `0x18181852`となり、native kind／layer順は既存の
+  `paneScrim`をそのまま使う。
+- testはscrimの全viewport geometryとexact packed colorに加え、20% transparent blackの
+  実Metal readbackでactive pixelはRGB 0、inactive pixelは等値かつ非0のneutral RGB、alphaは
+  activeより30段階超大きいことを要求するよう更新した。
+- `dart format`は変更Dart 3 files中1 fileを整形して成功した。
+- `DART_SUPPRESS_ANALYTICS=true dart run test/terminal_screen_metal_compositor_test.dart`:
+  成功。新しいcharcoal tint、alpha差、active側scrimなし、cursor非生成を確認した。
+- `make developer-jit-actions`初回: 失敗。rendererは起動して初期paneを生成したが、ログ上
+  `application_active=false`のままactive surfaceが0で、user-action acceptanceの
+  `initial terminal pane did not become the sole active surface`によりstatus 70で終了した。
+  今回の変更はscrim color／opacityとそのtestだけでfocus投影へ触れておらず、前回同gateは
+  成功している。AppKit activationの一時的な実行環境raceかを同command再実行で確認する。
+- 同じ`make developer-jit-actions`の2回目は成功し、2 window／3 tab／4 paneの操作と
+  active surface分離を完走した（elapsed 3405 ms）。初回は再現せず、AppKit activationの
+  一時的な実行環境raceと確認した。
+- `make release-aot-actions`: 成功。Developer JITと同じ2 window／3 tab／4 paneの操作を
+  完走した（elapsed 2114 ms）。
 
 ### 2026-09-14 inactive contrast follow-up着手時
 
@@ -322,5 +360,35 @@ cursorを描画する。このためsplit後も複数paneのcursorが同時に�
   staged差分は保持されており、通常user権限で同じcommitを再実行する。
 
 ### follow-up残課題・阻害要因
+
+なし。既存の主要ゴール後follow-up以外に未完了項目は追加していない。
+
+## 2026-09-14 inactive charcoal tint follow-up完了
+
+- inactive paneの最終scrimをpure black 24%からneutral charcoal `#181818` 32%へ変更した。
+  active paneの色／opacityは変更せず、inactive paneだけに濃いgray tintを加える。
+- transparent black 20%の実Metal pixel testを更新し、inactive pixelに等値・非0のneutral
+  RGBが生じ、alphaもactiveより30段階超大きくなることを確認した。scrimは引き続き全viewportの
+  最終layerであり、inactive cursor instanceは生成しない。
+- README、FEATURE_MATRIX、Phase 7 acceptance source requirementを更新した。compatibility
+  regression coverage、Phase 7 acceptance、Ghostty gap inventory、release-candidate matrixは
+  canonical generatorで再生成した。
+
+### charcoal tint最終検証結果
+
+- `dart format`（変更Dart 3 files）: 成功。
+- `DART_SUPPRESS_ANALYTICS=true dart run test/terminal_screen_metal_compositor_test.dart`:
+  成功。exact `0x18181852` scrim、実Metal RGB／alpha差、active側不変を確認した。
+- `make developer-jit-actions`: 2回目成功、
+  `RUNTIME_USER_ACTIONS_INTEGRATION_PASS ... windows=2 tabs=3 panes=4 elapsed_ms=3405`。
+  初回の一時的なAppKit activation raceは上記調査記録のとおりで、再現しなかった。
+- `make release-aot-actions`: 成功、
+  `RUNTIME_USER_ACTIONS_INTEGRATION_PASS ... windows=2 tabs=3 panes=4 elapsed_ms=2114`。
+- `make test`: 成功。338 Dart filesのformat 0 change、analysis issue 0、native renderer、
+  Phase 7 acceptance、互換性freshness、security stressを含め`dart_terminal tests passed`を確認。
+- `PHASE7_APPKIT_ACCEPTANCE_PASS`: criteria 4、source refs 14、unit tests 12、integration
+  tests 4、real-UI assertions 9。release blocker 0。
+
+### charcoal tint残課題・阻害要因
 
 なし。既存の主要ゴール後follow-up以外に未完了項目は追加していない。
