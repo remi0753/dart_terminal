@@ -1441,6 +1441,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase7/command-palette-selection-viewport-regression.md`](docs/phase7/command-palette-selection-viewport-regression.md)
   を参照する）
+- [x] terminal input ownershipに同期するContext DockのTerminal mode表示
+  （実施時に
+  [`docs/phase7/context-dock-terminal-mode.md`](docs/phase7/context-dock-terminal-mode.md)
+  を参照する）
 
 ### 完了機能の拡張
 

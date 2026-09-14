@@ -26,7 +26,7 @@
 - [ ] Search／Go Toの文字入力、Delete、Command-Aは現在modeのqueryだけを変え、modeを往復しても両queryを個別に保持する。
 - [ ] 空queryでReturnまたはCommand-Rightを押すとfolderがDock内で展開し、同じfolder上の再度のReturnで閉じる。自動`cd`やcommand実行は起きない。
 - [ ] Command-Leftでsubtreeを畳み、selectionがvisible parentへ戻る。
-- [ ] Escapeを1回押すとquery/resultを保持したままterminalへ戻る。再度Shift-Command-Fで同じcontextへ戻る。
+- [ ] Escapeを1回押すとquery/resultを保持したままterminalへ戻り、Dockが`Mode: Terminal`を表示する。再度Shift-Command-Fで同じcontextへ戻る。
 - [ ] Dock表示中でもterminal focusなら通常のterminal key、selection、scrollが従来どおり動作する。
 - [ ] 初回表示のDockは従来より広い380 ptで、狭いwindow、resize、divider drag、fullscreen、tab/pane切替、Dock hide/showでもterminalと重ならず、focused paneのcwdへ追従する。
 

@@ -23,12 +23,13 @@ directoryのtreeを表示したまま文字列で選択位置へ移るGo Toと�
 - Search result上のReturn／`Command+Right`は、選択pathがcurrent working directory配下ならMoveへ切り替え、ancestorを展開して
   tree rowを選択する。folderなら対象自体も展開し、直後からchildrenを操作できる。working directory外の広域resultは暗黙に
   tree rootやterminal cwdを変更せず、Searchと選択を維持する。
-- `Escape`はどのmodeでもqueryとtree contextを保持してterminalへ戻る。各native shortcutはterminal／Navigatorのどちらが
-  first responderでも同じshared actionをexactly once実行し、PTYへbyteを送らない。
+- `Escape`はどのmodeでもqueryとtree contextを保持してterminalへ戻り、可視Dockのmode copyを`Terminal`へ切り替える。各native shortcutは
+  terminal／Navigatorのどちらがfirst responderでも同じshared actionをexactly once実行し、PTYへbyteを送らない。
 
 ## UI／caret contract
 
-- Navigator documentに現在のmodeを文字で表示し、SearchとGo Toだけにmode固有のquery行を表示する。Moveではtree操作のhintを表示する。
+- Navigator documentに現在のinput modeを文字で表示し、terminal ownership中は`Terminal`、Navigator ownership中はSearch／Go To／Moveを
+  表示する。保持中のSearch／Go To query行またはMove hintはtree projectionの文脈として残す。
 - Search／Go ToでNavigatorがfirst responderの間だけnative text editorをeditableかつzero-length selectionにし、AppKit標準の
   insertion caret／blinkを使う。windowは`dartOnly` key routingのままなので、入力はnative documentを直接変更せずDart-owned
   bounded queryへ一度だけ適用される。

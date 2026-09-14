@@ -15,7 +15,8 @@ keyboardだけで探せるようにする。
 
 検索へ移った後の矢印入力がterminalとnavigatorのどちらへ届くかを曖昧にしない。表示状態とinput
 ownershipを分離し、`Shift+Command+F`でnavigatorへ移り、`Escape`またはstable action
-`view.focus-terminal`で1操作のうちにterminalへ戻る契約を先に固定する。
+`view.focus-terminal`で1操作のうちにterminalへ戻る契約を先に固定する。terminal ownership中の
+可視Dockは保持中のNavigator modeではなく`Mode: Terminal`を表示する。
 
 ## 背景と利用者が嬉しい場面
 
@@ -102,7 +103,7 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 - Navigatorで同じmode shortcutを再度押した場合はqueryとcaretを保持してfocusを再確認するだけで、terminalへtoggleしない。
   戻る方向は別の`view.focus-terminal` actionへ固定し、同じchordの状態依存挙動を避ける。
 - `Escape`はquery clearを先に要求せず、常に1回で`view.focus-terminal`を実行する。Dock、query、
-  results、selectionは残り、次の`Shift+Command+F`で同じ調査へ戻れる。
+  results、selectionは残り、mode copyだけが`Terminal`へ変わる。次の`Shift+Command+F`で同じ調査へ戻れる。
 - `view.focus-terminal`はmenu／Command Palette／設定可能なkeybindからも呼べるstable actionとする。
   Navigator-localなdefault keyは`Escape`とし、追加のglobal default chordは衝突監査なしに決めない。
 - Navigator focus中はsearch caretとactive selection／focus ringを明示し、terminal cursorはnon-input

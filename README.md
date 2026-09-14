@@ -71,8 +71,8 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   Move treeへrevealでき、folderなら展開するが、外部resultはrootを変更せずSearchに残る。Shift-Command-GのGo Toはtreeを保ち、
   current subtreeをbounded探索して必要なancestorだけをlazy展開し、一致rowへ選択を移す。Shift-Command-MのMoveはquery入力を止めて
   tree navigationだけを所有する。SearchとGo Toのqueryはpaneごとに独立して保持する。
-  Escapeでmodeとqueryを保ったまま
-  terminalへ戻り、矢印/Page/Command+矢印の操作中はPTY write 0を保つ
+  EscapeでNavigator modeとqueryを保ったままterminalへ戻り、Dockの表示は`Mode: Terminal`へ切り替わる。
+  矢印/Page/Command+矢印の操作中はPTY write 0を保つ
 - NavigatorのCommand-Cは選択したabsolute pathだけをcopyし、Option-Returnは既存paste
   admissionでshell literalにquoteした1 pathを改行なしで挿入してterminalへ戻る。自動cdや
   command実行はせず、stale/remote/alternate screen/foreground process/manual secure inputは

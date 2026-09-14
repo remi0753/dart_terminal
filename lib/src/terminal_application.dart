@@ -8474,9 +8474,14 @@ final class TerminalApplication {
       }, 'Context Dock toggle did not project the real plain-sh cwd tree');
       _expectLifecycle(
         contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            contextDockPresenter
+                .nativeEditorSnapshotForWindow(initialWindow.id)!
+                .text
+                .contains('Mode: Terminal') &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
                 dockToggleWriteBaseline,
-        'Context Dock toggle did not preserve terminal input ownership',
+        'Context Dock toggle did not preserve or identify terminal input '
+        'ownership',
       );
       final int navigatorZeroWriteBaseline =
           writeEnqueuedCounts[initialPaneId] ?? 0;
@@ -8821,8 +8826,17 @@ final class TerminalApplication {
       _expectLifecycle(
         contextDockState.snapshotForWindow(initialWindow.id)!.pane.query ==
                 "drop'2" &&
+            contextDockPresenter
+                .nativeEditorSnapshotForWindow(initialWindow.id)!
+                .text
+                .contains('Mode: Terminal') &&
+            contextDockPresenter
+                .nativeEditorSnapshotForWindow(initialWindow.id)!
+                .text
+                .contains("Search: drop'2") &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) == focusWriteBaseline,
-        'Navigator focus round-trip lost the query or wrote PTY bytes',
+        'Navigator focus round-trip did not identify terminal mode, lost the '
+        'query, or wrote PTY bytes',
       );
 
       initialPane.insertText("printf '\\r\\nNATIVE%s\\r\\n' 'CONTENTLOOKUP'");

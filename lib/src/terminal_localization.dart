@@ -165,6 +165,7 @@ final class TerminalLocalization {
       : 'NAVIGATOR INPUT · Esc returns to terminal';
   String get contextDockWorkingDirectory => _ja ? '現在地' : 'Working directory';
   String get contextDockMode => _ja ? 'モード' : 'Mode';
+  String get contextDockModeTerminal => _ja ? 'ターミナル' : 'Terminal';
   String get contextDockModeSearch => _ja ? '検索' : 'Search';
   String get contextDockModeGoTo => _ja ? '移動先' : 'Go To';
   String get contextDockModeMove => _ja ? 'ナビゲーション' : 'Move';

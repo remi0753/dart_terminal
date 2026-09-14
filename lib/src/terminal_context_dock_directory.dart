@@ -1751,14 +1751,17 @@ final class _TerminalContextDockDocument {
       '${localization.contextDockWorkingDirectory}: '
       '${directory?.workingDirectory ?? localization.contextDockUnknown}',
     );
-    line(
-      '${localization.contextDockMode}: '
-      '${switch (dock.pane.navigatorMode) {
-        TerminalContextDockNavigatorMode.search => localization.contextDockModeSearch,
-        TerminalContextDockNavigatorMode.goTo => localization.contextDockModeGoTo,
-        TerminalContextDockNavigatorMode.move => localization.contextDockModeMove,
-      }}',
-    );
+    final String displayedMode = dock.navigatorOwnsInput
+        ? switch (dock.pane.navigatorMode) {
+            TerminalContextDockNavigatorMode.search =>
+              localization.contextDockModeSearch,
+            TerminalContextDockNavigatorMode.goTo =>
+              localization.contextDockModeGoTo,
+            TerminalContextDockNavigatorMode.move =>
+              localization.contextDockModeMove,
+          }
+        : localization.contextDockModeTerminal;
+    line('${localization.contextDockMode}: $displayedMode');
     final int queryStart = navigator.length;
     navigator.write(switch (dock.pane.navigatorMode) {
       TerminalContextDockNavigatorMode.search =>

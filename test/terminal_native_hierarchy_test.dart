@@ -281,8 +281,18 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
         bindings.firstResponders[windowHandle] ==
             bindings.handleFor(adapter.resourcesForPane(pane.id)!.view) &&
         bindings.windowKeyEventRoutings[windowHandle] == 2 &&
-        bindings.textEditorEditable[editorHandle] == false,
-    'Escape returns first responder and key ownership to the live terminal',
+        bindings.textEditorEditable[editorHandle] == false &&
+        bindings.texts[editorHandle]!.contains('モード: ターミナル') &&
+        bindings.texts[editorHandle]!.contains('移動先: result-2'),
+    'Escape returns first responder and visible mode to the live terminal '
+    'while retaining the Navigator query',
+  );
+  await dispatcher.dispatch(TerminalActionId.goToFileOrFolder);
+  _expect(
+    bindings.textEditorEditable[editorHandle] == true &&
+        bindings.texts[editorHandle]!.contains('モード: 移動先') &&
+        bindings.texts[editorHandle]!.contains('移動先: result-2'),
+    're-entering the Navigator restores its retained mode and query',
   );
 
   final TerminalTabState secondTab = await state.createTab(
