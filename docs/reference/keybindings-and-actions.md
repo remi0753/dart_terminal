@@ -14,7 +14,7 @@ keybind = shift+control+k=pane.focus-next
 
 The left side is one physical key plus zero or more exact modifiers. Each modifier may appear once; the canonical order is `shift`, `control`, `option`, `command`. Names and action IDs are case-sensitive.
 
-Bindings are applied in include, including file, then command-line order. A later declaration of the same exact chord replaces an earlier declaration. Up to 1023 configured declarations are retained, in addition to 1 standard binding. One keybind value is limited to 512 UTF-16 units; the enclosing configuration also limits a line to 16384 units and all assignments to 4096.
+Bindings are applied in include, including file, then command-line order. A later declaration of the same exact chord replaces an earlier declaration. Up to 1015 configured declarations are retained, in addition to 9 standard bindings. One keybind value is limited to 512 UTF-16 units; the enclosing configuration also limits a line to 16384 units and all assignments to 4096.
 
 Invalid declarations are diagnosed independently and omitted. Application actions are dispatched without blocking key delivery. Busy, unavailable, or failed actions are consumed and never fall through as terminal bytes.
 
@@ -35,6 +35,14 @@ make RUNTIME_ARCH=arm64 developer-jit-run \
 | Chord | Target |
 | --- | --- |
 | `control+d` | `terminal.send-end-of-file` |
+| `command+left` | `pane.focus-left` |
+| `command+right` | `pane.focus-right` |
+| `command+up` | `pane.focus-up` |
+| `command+down` | `pane.focus-down` |
+| `shift+command+left` | `pane.move-divider-left` |
+| `shift+command+right` | `pane.move-divider-right` |
+| `shift+command+up` | `pane.move-divider-up` |
+| `shift+command+down` | `pane.move-divider-down` |
 
 ## Physical keys
 
@@ -85,12 +93,16 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `pane.toggle-zoom` | Toggle Pane Zoom | view | — |
 | `pane.equalize-splits` | Equalize Splits | view | — |
 | `view.open-terminal-inspector` | Open Terminal Inspector | view | `option+command+i` |
-| `pane.move-divider-left` | Move Split Divider Left | view | `command+left` |
-| `pane.move-divider-right` | Move Split Divider Right | view | `command+right` |
-| `pane.move-divider-up` | Move Split Divider Up | view | `command+up` |
-| `pane.move-divider-down` | Move Split Divider Down | view | `command+down` |
+| `pane.move-divider-left` | Move Split Divider Left | view | — |
+| `pane.move-divider-right` | Move Split Divider Right | view | — |
+| `pane.move-divider-up` | Move Split Divider Up | view | — |
+| `pane.move-divider-down` | Move Split Divider Down | view | — |
 | `pane.jump-to-previous-prompt` | Jump to Previous Prompt | view | — |
 | `pane.jump-to-next-prompt` | Jump to Next Prompt | view | — |
+| `pane.focus-left` | Focus Pane Left | window | — |
+| `pane.focus-right` | Focus Pane Right | window | — |
+| `pane.focus-up` | Focus Pane Up | window | — |
+| `pane.focus-down` | Focus Pane Down | window | — |
 | `pane.focus-previous` | Focus Previous Pane | window | — |
 | `pane.focus-next` | Focus Next Pane | window | — |
 | `tab.select-previous` | Select Previous Tab | window | — |
@@ -115,7 +127,3 @@ AppKit consumes these standard menu shortcuts before raw terminal key routing. A
 | `shift+command+d` | `pane.split-down` | Split Pane Down |
 | `control+command+d` | `pane.quick-look` | Quick Look |
 | `option+command+i` | `view.open-terminal-inspector` | Open Terminal Inspector |
-| `command+left` | `pane.move-divider-left` | Move Split Divider Left |
-| `command+right` | `pane.move-divider-right` | Move Split Divider Right |
-| `command+up` | `pane.move-divider-up` | Move Split Divider Up |
-| `command+down` | `pane.move-divider-down` | Move Split Divider Down |

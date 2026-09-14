@@ -160,6 +160,11 @@ const List<_CriterionRequirement> _requirements = <_CriterionRequirement>[
         applicationMarker: 'TERMINAL_ACTIVE_PANE_FOCUS_TEST',
         driverMarker: 'RUNTIME_USER_ACTIONS_INTEGRATION_PASS',
       ),
+      _UiRequirement(
+        suite: 'actions',
+        applicationMarker: 'TERMINAL_DIRECTIONAL_PANE_KEYBIND_TEST',
+        driverMarker: 'RUNTIME_USER_ACTIONS_INTEGRATION_PASS',
+      ),
     ],
   ),
   _CriterionRequirement(

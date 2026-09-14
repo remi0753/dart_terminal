@@ -1952,6 +1952,16 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
   );
   _expect(
     RegExp(
+          r'^TERMINAL_DIRECTIONAL_PANE_KEYBIND_TEST default_focus=true '
+          r'default_divider=true menu_unreserved=true active_projection=true '
+          r'pty_writes=0$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted exact directional pane keybind acceptance',
+  );
+  _expect(
+    RegExp(
               r'^TERMINAL_SESSION_SHUTDOWN pane=[1-5] session=[1-5]:1 '
               r'process_id=[1-9][0-9]* disposition=clean '
               r'termination_observed=true cleanup_completed=true$',
@@ -2952,6 +2962,15 @@ keybind = command+d=pane.focus-next
           ).allMatches(observation.stdoutText).length ==
           1,
       'configured product omitted exact projection acceptance',
+    );
+    _expect(
+      RegExp(
+            r'^TERMINAL_DIRECTIONAL_PANE_KEYBIND_CONFIGURATION_TEST '
+            r'live_override=true action=pane\.focus-left pty_writes=0$',
+            multiLine: true,
+          ).allMatches(observation.stdoutText).length ==
+          1,
+      'configured product omitted live directional keybind override evidence',
     );
     _expect(
       RegExp(

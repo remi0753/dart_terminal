@@ -171,7 +171,51 @@ Shift+Command+Left/Right/Up/Downへ移す。focusとdividerの全chordを既存`
   standard definitions増加後も既存profile／engine生成contractに回帰がないことを確認した。
 - 通常製品raw key／live reload、両runtime、generated reference freshnessは次subtaskで検証する。
 
+### 2026-09-14 通常製品へのlive投影、両runtime受け入れ、reference更新完了
+
+- 通常製品user-action acceptanceは実`TerminalTextInputEventRouter`／`TerminalKeyEventRouter`へ
+  Command+Left、Command+Right、Shift+Command+Rightを順に入力する。focusは右→左→右へ移り、
+  `isPaneActive`が正確に1 surfaceへ投影されるため、既存contractによりcursor表示／inactive tintも
+  同時に移る。dividerはShift付きchordで1 cell動き、font metrics／Retina scaleを維持したまま
+  左右gridが再quantizeされる。
+- 8 directional actionのnative menu itemはkey equivalentを持たないこと、3 raw keyが非nativeの
+  shared dispatcherでexactly once実行されること、`PtyDiagnosticStage.writeEnqueued`が0件である
+  ことを`TERMINAL_DIRECTIONAL_PANE_KEYBIND_TEST` markerへ固定した。
+- configuration acceptanceのSettings draftへ
+  `keybind = command+right=pane.focus-left`を追加した。live reload後の既存paneへCommand+Rightを
+  入力するとstandard `pane.focus-right`ではなく`pane.focus-left`が実行され、active presentationが
+  左paneへ移り、native invocation 0／PTY write 0になることを
+  `TERMINAL_DIRECTIONAL_PANE_KEYBIND_CONFIGURATION_TEST` markerへ固定した。
+- generated keybinding/action referenceは37 application action、9 standard binding、13 reserved
+  native shortcut、最大1015 configured declarationを共有authorityから出力する。configuration
+  referenceも同じ1015件へ更新した。
+- README／FEATURE_MATRIXはCommand+矢印の方向別focus、Shift+Command+矢印のdivider移動、
+  live overrideと37 actionへ更新した。Phase 7 acceptance corpusへ新markerを追加し、派生する
+  compatibility regression coverage、P0/P1 gap inventory、release-candidate matrixのhashも各generatorで
+  更新した。
+- 関連unit実行はkey binding、config、action registry、native hierarchy、product hierarchy action、
+  keybind reference、configuration referenceの7本が成功した。続けて指定した
+  `test/runtime_integration_smoke_test.dart`は存在せず実行できなかったため、正規の実製品driverである
+  `make runtime-user-actions-integration runtime-configuration-integration`を検証authorityとして使った。
+- `make runtime-user-actions-integration runtime-configuration-integration`: 成功。
+  Developer JIT user actions 3,873 ms、Release AOT user actions 2,183 ms、Developer JIT configuration
+  2,276 ms、Release AOT configuration 1,554 ms。両modeでdefault focus／divider、active投影、
+  menu非予約、live override、PTY write 0、clean resource回収を確認した。
+- Phase 7 corpus生成のsandbox内初回はClang module cache
+  `/Users/remi/.cache/clang/ModuleCache`へ書けず停止した。実AppKit／Metal検証と同じくsandbox外で
+  再実行し、`PHASE7_APPKIT_ACCEPTANCE_PASS ... ui_assertions=10`を確認した。
+- `KEYBIND_ACTION_REFERENCE_CHECK_PASS keys=105 pane_actions=4 application_actions=37
+  standard_bindings=9 reserved_shortcuts=13`: 成功。
+- `CONFIGURATION_REFERENCE_CHECK_PASS options=53 live=12 new_session=41 repeatable=6`: 成功。
+- 最初の`make test`はPhase 7 corpus更新後のcompatibility regression coverage hash staleで停止し、
+  正規generatorで更新した。次はP0/P1 gap inventory hash staleで停止したため同様に更新し、その依存先の
+  release-candidate matrixも再生成した。生成物の意味的な件数／分類は変えず、参照hashだけが追随した。
+- その後のaggregate Dart testは新UI marker追加に対する固定総数が9のままで停止した。
+  `test/phase7_appkit_acceptance_test.dart`を10へ更新し、単独test成功を確認した。
+- 最終`make test`: 成功。native package、generator freshness、compatibility、distribution、format
+  （338 files、変更0）、`dart analyze`（issue 0）、security stress、aggregate Dart suiteを完走し、
+  `dart_terminal tests passed`となった。
+
 ## 残課題・阻害要因
 
-- 次subtask: 通常製品raw key／live override受け入れとreference／evidence更新を行う。
-- 現時点の阻害要因はない。
+- 本タスクの残課題・阻害要因はない。

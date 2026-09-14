@@ -250,7 +250,9 @@ not claim.
 - 2026-09-14: The sandbox-independent aggregate then passed the ordinary gate
   and all three Release AOT build/audit paths, but its first arm64 smoke stopped
   on a stale duplicated action-menu count. Product output is derived from the
-  standard catalog and correctly reports all 33 `TerminalActionId` values;
+  standard catalog and correctly reported all 33 `TerminalActionId` values
+  present at that checkpoint (the later directional-focus work raises the
+  current catalog to 37);
   registry/localization/reference unit gates already require exact enum
   coverage, while `runtime_integration_smoke.dart` still hard-coded 30 from the
   earlier Universal-bundle task. The four divider actions were added later and

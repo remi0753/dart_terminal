@@ -3043,7 +3043,9 @@ final class TerminalApplication {
                       stdout.writeln(observation.machineLine());
                     },
                 nativeObserver: (TerminalSessionNativeObservation observation) {
-                  if (runNativeContentAcceptance &&
+                  if ((runNativeContentAcceptance ||
+                          runUserActionAcceptance ||
+                          runConfigurationAcceptance) &&
                       observation.event.stage ==
                           PtyDiagnosticStage.writeEnqueued) {
                     nativeContentWriteEnqueuedCounts.update(
@@ -5832,6 +5834,7 @@ final class TerminalApplication {
           terminalInputDeliveryCount: () => terminalInputDeliveryCount,
           lastKeyRoutes: lastKeyRoutes,
           keyRouteCounts: keyRouteCounts,
+          writeEnqueuedCounts: nativeContentWriteEnqueuedCounts,
           endOfFileActionCount: () => configurationEndOfFileActionCount,
           closed: closed,
           prompt: acceptancePrompt.trimRight(),
@@ -5852,6 +5855,9 @@ final class TerminalApplication {
           nativeActionInvocations: nativeActionInvocations,
           actionDispatches: actionDispatches,
           terminalInputDeliveryCount: () => terminalInputDeliveryCount,
+          lastKeyRoutes: lastKeyRoutes,
+          keyRouteCounts: keyRouteCounts,
+          writeEnqueuedCounts: nativeContentWriteEnqueuedCounts,
           reconcile: reconcileInteractiveHierarchy,
           closed: closed,
           prompt: acceptancePrompt.trimRight(),
@@ -9972,6 +9978,7 @@ final class TerminalApplication {
     required int Function() terminalInputDeliveryCount,
     required Map<PaneId, TerminalKeyRouteResult> lastKeyRoutes,
     required Map<PaneId, int> keyRouteCounts,
+    required Map<PaneId, int> writeEnqueuedCounts,
     required int Function() endOfFileActionCount,
     required Completer<void> closed,
     required String prompt,
@@ -10052,6 +10059,11 @@ final class TerminalApplication {
       );
       return lastKeyRoutes[paneId]!;
     }
+
+    int writeEnqueuedCount() => writeEnqueuedCounts.values.fold(
+      0,
+      (int total, int count) => total + count,
+    );
 
     _expectLifecycle(
       state.windowCount == 1 &&
@@ -10778,6 +10790,7 @@ keybind = control+e=unbind
 keybind = control+d=terminal.send-end-of-file
 keybind = command+k=passthrough
 keybind = control+k=pane.focus-next
+keybind = command+right=pane.focus-left
 ''';
     final int correctedCaret = correctedDraft.indexOf('font-size = 20');
     settings.activeView!.setDocument(
@@ -10973,6 +10986,39 @@ keybind = control+k=pane.focus-next
           nativeActionInvocations.length == applicationNativeBaseline &&
           terminalInputDeliveryCount() == applicationInputBaseline + 1,
       'configured application action did not use one non-native dispatch',
+    );
+    final _TerminalHierarchyProductPane nextOwner = owners[nextPaneId]!;
+    final int directionalDispatchBaseline = actionDispatches.length;
+    final int directionalNativeBaseline = nativeActionInvocations.length;
+    final int directionalInputBaseline = terminalInputDeliveryCount();
+    final int directionalWriteBaseline = writeEnqueuedCount();
+    final TerminalKeyRouteResult directionalOverrideResult = routeConfiguredKey(
+      nextOwner,
+      keyCode: 124,
+      modifiers: ModifierKeys.commandBit,
+      characters: '\uF703',
+      charactersIgnoringModifiers: '\uF703',
+    );
+    await waitFor(
+      () =>
+          initialTab.focusedPaneId == initialPaneId &&
+          owners[initialPaneId]!.surface.snapshot().isPaneActive &&
+          !nextOwner.surface.snapshot().isPaneActive &&
+          actionDispatches.length == directionalDispatchBaseline + 1,
+      'live Command+Right override did not focus the left pane exactly once',
+    );
+    _expectLifecycle(
+      directionalOverrideResult.disposition ==
+              TerminalKeyRouteDisposition.action &&
+          directionalOverrideResult.applicationAction ==
+              TerminalActionId.focusPaneLeft &&
+          actionDispatches.last.id == TerminalActionId.focusPaneLeft &&
+          actionDispatches.last.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          nativeActionInvocations.length == directionalNativeBaseline &&
+          terminalInputDeliveryCount() == directionalInputBaseline + 1 &&
+          writeEnqueuedCount() == directionalWriteBaseline,
+      'live directional override used native dispatch or wrote to the PTY',
     );
 
     await dispatch(TerminalActionId.newTab);
@@ -11280,6 +11326,10 @@ keybind = control+k=pane.focus-next
       'settings_reload=true settings_focus=true panes=5 independent=true '
       'quick_terminal=true sessions_clean=5 text_clients=0 native_handles=0',
     );
+    stdout.writeln(
+      'TERMINAL_DIRECTIONAL_PANE_KEYBIND_CONFIGURATION_TEST '
+      'live_override=true action=pane.focus-left pty_writes=0',
+    );
   }
 
   static Future<void> _exerciseUserActionProduct({
@@ -11297,6 +11347,9 @@ keybind = control+k=pane.focus-next
     required List<TerminalActionId> nativeActionInvocations,
     required List<TerminalActionDispatchResult> actionDispatches,
     required int Function() terminalInputDeliveryCount,
+    required Map<PaneId, TerminalKeyRouteResult> lastKeyRoutes,
+    required Map<PaneId, int> keyRouteCounts,
+    required Map<PaneId, int> writeEnqueuedCounts,
     required void Function() reconcile,
     required Completer<void> closed,
     required String prompt,
@@ -11318,6 +11371,11 @@ keybind = control+k=pane.focus-next
       final Set<PaneId> active = activePaneIds();
       return active.length == 1 && active.single == paneId;
     }
+
+    int writeEnqueuedCount() => writeEnqueuedCounts.values.fold(
+      0,
+      (int total, int count) => total + count,
+    );
 
     Future<void> waitFor(
       bool Function() predicate,
@@ -11361,6 +11419,36 @@ keybind = control+k=pane.focus-next
                 TerminalActionDispatchDisposition.executed,
         'user action ${id.stableName} did not use the shared dispatcher',
       );
+    }
+
+    TerminalKeyRouteResult routePaneKey(
+      _TerminalHierarchyProductPane owner, {
+      required int keyCode,
+      required int modifiers,
+      required String characters,
+    }) {
+      final PaneId paneId = owner.pane.id;
+      final int routeBaseline = keyRouteCounts[paneId] ?? 0;
+      final TerminalTextInputRouteResult textResult = owner.textRouter.route(
+        TerminalTextInputKeyEvent(
+          clientId: owner.client.clientId,
+          generation: owner.textRouter.lastGeneration + 1,
+          monotonicNanoseconds: eventTimestamp++,
+          kind: TerminalTextInputKeyKind.down,
+          keyCode: keyCode,
+          modifiers: ModifierKeys(modifiers),
+          isRepeat: false,
+          characters: characters,
+          charactersIgnoringModifiers: characters,
+        ),
+      );
+      _expectLifecycle(
+        textResult.disposition == TerminalTextInputRouteDisposition.rawKey &&
+            keyRouteCounts[paneId] == routeBaseline + 1 &&
+            lastKeyRoutes[paneId] != null,
+        'directional pane key did not cross the raw text-input/key router once',
+      );
+      return lastKeyRoutes[paneId]!;
     }
 
     _expectLifecycle(
@@ -11459,24 +11547,103 @@ keybind = control+k=pane.focus-next
       rightBefore.scale16_16 == leftBefore.scale16_16,
       'new split did not inherit the original pane Retina raster scale',
     );
-    await performMenuAction(
-      TerminalActionId.moveDividerRight,
-      keyEquivalent: '\uF703',
-      modifiers: ModifierKeys.commandBit,
-      completed: () =>
-          (resizedTab.splitTree.root as TerminalSplitBranch).fraction >
-          resizedRoot.fraction,
+    _expectLifecycle(
+      <TerminalActionId>[
+        TerminalActionId.focusPaneLeft,
+        TerminalActionId.focusPaneRight,
+        TerminalActionId.focusPaneUp,
+        TerminalActionId.focusPaneDown,
+        TerminalActionId.moveDividerLeft,
+        TerminalActionId.moveDividerRight,
+        TerminalActionId.moveDividerUp,
+        TerminalActionId.moveDividerDown,
+      ].every((TerminalActionId id) {
+        final MenuItem item = menu.itemForAction(id);
+        return item.keyEquivalent.isEmpty && item.modifiers.bits == 0;
+      }),
+      'directional pane actions retained a native menu shortcut',
     );
-    await waitFor(() {
-      final TerminalLiveMetalSurfaceSnapshot left = leftOwner.surface
-          .snapshot();
-      final TerminalLiveMetalSurfaceSnapshot right = rightOwner.surface
-          .snapshot();
-      return left.columns >= leftBefore.columns &&
-          right.columns <= rightBefore.columns &&
-          (left.columns > leftBefore.columns ||
-              right.columns < rightBefore.columns);
-    }, 'Command+Right terminal grids did not settle after viewport resize');
+    final int directionalNativeBaseline = nativeActionInvocations.length;
+    final int directionalDispatchBaseline = actionDispatches.length;
+    final int directionalInputBaseline = terminalInputDeliveryCount();
+    final int directionalWriteBaseline = writeEnqueuedCount();
+    final TerminalKeyRouteResult focusLeftResult = routePaneKey(
+      rightOwner,
+      keyCode: 123,
+      modifiers: ModifierKeys.commandBit,
+      characters: '\uF702',
+    );
+    await waitFor(
+      () =>
+          resizedTab.focusedPaneId == leftPaneId &&
+          hasOnlyActivePane(leftPaneId) &&
+          actionDispatches.length == directionalDispatchBaseline + 1,
+      'Command+Left did not move active focus to the left pane exactly once',
+    );
+    final TerminalKeyRouteResult focusRightResult = routePaneKey(
+      leftOwner,
+      keyCode: 124,
+      modifiers: ModifierKeys.commandBit,
+      characters: '\uF703',
+    );
+    await waitFor(
+      () =>
+          resizedTab.focusedPaneId == rightPaneId &&
+          hasOnlyActivePane(rightPaneId) &&
+          actionDispatches.length == directionalDispatchBaseline + 2,
+      'Command+Right did not move active focus to the right pane exactly once',
+    );
+    _expectLifecycle(
+      focusLeftResult.applicationAction == TerminalActionId.focusPaneLeft &&
+          focusRightResult.applicationAction ==
+              TerminalActionId.focusPaneRight &&
+          actionDispatches[directionalDispatchBaseline].id ==
+              TerminalActionId.focusPaneLeft &&
+          actionDispatches[directionalDispatchBaseline + 1].id ==
+              TerminalActionId.focusPaneRight &&
+          nativeActionInvocations.length == directionalNativeBaseline &&
+          terminalInputDeliveryCount() == directionalInputBaseline + 2 &&
+          writeEnqueuedCount() == directionalWriteBaseline,
+      'Command+arrow focus did not remain non-native and PTY-write-free',
+    );
+    final TerminalKeyRouteResult dividerRightResult = routePaneKey(
+      rightOwner,
+      keyCode: 124,
+      modifiers: ModifierKeys.shiftBit | ModifierKeys.commandBit,
+      characters: '\uF703',
+    );
+    await waitFor(
+      () =>
+          (resizedTab.splitTree.root as TerminalSplitBranch).fraction >
+              resizedRoot.fraction &&
+          actionDispatches.length == directionalDispatchBaseline + 3,
+      'Shift+Command+Right did not move the divider exactly once',
+    );
+    _expectLifecycle(
+      dividerRightResult.applicationAction ==
+              TerminalActionId.moveDividerRight &&
+          actionDispatches.last.id == TerminalActionId.moveDividerRight &&
+          actionDispatches.last.disposition ==
+              TerminalActionDispatchDisposition.executed &&
+          nativeActionInvocations.length == directionalNativeBaseline &&
+          terminalInputDeliveryCount() == directionalInputBaseline + 3 &&
+          writeEnqueuedCount() == directionalWriteBaseline,
+      'Shift+Command+arrow divider movement leaked to native menu or PTY',
+    );
+    final int hierarchyActionInputBaseline = terminalInputDeliveryCount();
+    await waitFor(
+      () {
+        final TerminalLiveMetalSurfaceSnapshot left = leftOwner.surface
+            .snapshot();
+        final TerminalLiveMetalSurfaceSnapshot right = rightOwner.surface
+            .snapshot();
+        return left.columns >= leftBefore.columns &&
+            right.columns <= rightBefore.columns &&
+            (left.columns > leftBefore.columns ||
+                right.columns < rightBefore.columns);
+      },
+      'Shift+Command+Right terminal grids did not settle after viewport resize',
+    );
     final TerminalLiveMetalSurfaceSnapshot leftAfter = leftOwner.surface
         .snapshot();
     final TerminalLiveMetalSurfaceSnapshot rightAfter = rightOwner.surface
@@ -11503,7 +11670,7 @@ keybind = control+k=pane.focus-next
               rightAfter.columns < rightBefore.columns) &&
           leftAfter.scale16_16 == leftBefore.scale16_16 &&
           rightAfter.scale16_16 == rightBefore.scale16_16,
-      'Command+Right did not resize terminal grids with bounded cell '
+      'Shift+Command+Right did not resize terminal grids with bounded cell '
       'quantization at fixed font and Retina scale: '
       'left=${leftBefore.viewportWidth}/${leftBefore.rows}x'
       '${leftBefore.columns}->${leftAfter.viewportWidth}/'
@@ -11607,7 +11774,7 @@ keybind = control+k=pane.focus-next
       'new window did not leave exactly one active terminal pane',
     );
     _expectLifecycle(
-      terminalInputDeliveryCount() == actionInputBaseline,
+      terminalInputDeliveryCount() == hierarchyActionInputBaseline,
       'menu or command-palette hierarchy action leaked into terminal input',
     );
 
@@ -11674,7 +11841,7 @@ keybind = control+k=pane.focus-next
       );
     }
     _expectLifecycle(
-      terminalInputDeliveryCount() - actionInputBaseline ==
+      terminalInputDeliveryCount() - hierarchyActionInputBaseline ==
           createdPaneIds.length * 2,
       'created panes did not each receive one physical key and one IME commit',
     );
@@ -11752,6 +11919,11 @@ keybind = control+k=pane.focus-next
       'inactive_cursor=true inactive_background=true '
       'application_focus=true window_focus=true tab_focus=true '
       'split_focus=true overlay_zero_active=true',
+    );
+    stdout.writeln(
+      'TERMINAL_DIRECTIONAL_PANE_KEYBIND_TEST default_focus=true '
+      'default_divider=true menu_unreserved=true active_projection=true '
+      'pty_writes=0',
     );
     stdout.writeln(
       'TERMINAL_USER_ACTIONS_TEST windows=2 tabs=3 panes=4 '

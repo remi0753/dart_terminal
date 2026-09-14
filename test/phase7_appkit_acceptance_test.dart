@@ -15,10 +15,10 @@ void runPhase7AppKitAcceptanceTests() {
         result.sourceReferences == 14 &&
         result.unitTests == 12 &&
         result.integrationTests == 4 &&
-        result.uiAssertions == 9 &&
+        result.uiAssertions == 10 &&
         result.machineLine() ==
             'PHASE7_APPKIT_ACCEPTANCE_PASS criteria=4 source_refs=14 '
-                'unit_tests=12 integration_tests=4 ui_assertions=9',
+                'unit_tests=12 integration_tests=4 ui_assertions=10',
     'reviewed Phase 7 layer totals are exact',
   );
   final Map<String, Object?> report =
