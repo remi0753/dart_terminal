@@ -133,10 +133,10 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 - PTYへhidden `find`／`ls`／`pwd`を注入する、shell promptやcommand outputをscreenからscrapeする、
   password／agent credentialを取得する方式は採用しない。alternate screen、running command、shell差、
   quoting、scrollback汚染のいずれにも安全な一般解にならないためである。
-- remote navigationはlocal navigator完了後の独立ROADMAP itemとする。明示したside-channel provider
-  （例: user-approved SFTP／remote helper capability）だけがconnection identity、authentication owner、
-  cancellation、path encoding、permission、disconnectを宣言して参加できる。capabilityがなければDockは
-  `Remote filesystem unavailable`を表示し、local resultを混ぜない。
+- remote navigationは保留し、現在のROADMAPでは追跡しない。将来userが再開を明示した場合にだけ、
+  明示したside-channel provider（例: user-approved SFTP／remote helper capability）のconnection identity、
+  authentication owner、cancellation、path encoding、permission、disconnectを独立taskとして設計する。
+  capabilityがなければDockは`Remote filesystem unavailable`を表示し、local resultを混ぜない。
 
 ## 対象外
 
@@ -194,12 +194,8 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
      privacy診断を既存policyへ統合する。
    - generated action reference、README、FEATURE_MATRIX、manual accessibility checklistを更新し、focused
      tests、full gate、Developer JIT／Release AOTの実AppKit／PTY／Metal受け入れを完了する。
-6. **SSH／remote session向けexplicit directory provider（別ROADMAP item）**
-   - local featureの完了後にremote connection authorityとtransportを別task memoへ具体化する。screen
-     scrapeやhidden PTY commandを使わず、local／remote resultの混在0を最初の受け入れ条件にする。
-
 各subtaskは上記順に実装、検証、記録、ROADMAP更新、commitする。先行subtaskが完了するまで次へ
-進まない。remote itemはlocal parentを完了してから着手する。
+進まない。SSH／remote providerは本計画の実施対象に含めない。
 
 ## 完了条件
 
@@ -232,9 +228,6 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
   Dock、search cancellation、copy／insertを通し、terminal write deltaと全owner baselineを照合する。
 - runtime acceptance: M1/arm64 Developer JITとRelease AOTで実zsh cwd、plain local `sh`のOS cwd fallback、
   tree／search、keyboard往復、resize／fullscreen、cleanupを同じscenarioで確認する。
-- remote itemではfake provider、disconnect／reconnect、permission、host identity change、path encoding、auth
-  cancellation、local result混在0を先に固定し、実remote受け入れはcredentialをrepositoryへ保存しない
-  manual／opt-in gateへ分離する。
 
 ## 検討した選択肢
 
@@ -284,16 +277,16 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 
 ## 今回の計画変更の検証
 
-- Markdown link、ROADMAP上の最初のunchecked task、subtask順、remote dependency順をread-only commandで
-  確認する。
+- Markdown link、ROADMAP上の最初のunchecked task、local subtask順、既存follow-upとの順序を
+  read-only commandで確認する。
 - `git diff --check`でwhitespace errorがないことを確認し、差分に本memoとROADMAP以外が含まれないことを
   照合する。
 - product codeを変更しないためDart test、analysis、Developer JIT／Release AOTは実行対象外とする。
 
 ### 2026-09-14 結果
 
-- ROADMAPのunchecked項目を抽出し、local Context Dock parentと5 subtaskが先頭、その直後に依存する
-  remote provider、続いて既存の低優先follow-up 3件となる順序を確認した。
+- ROADMAPのunchecked項目を抽出し、local Context Dock parentと5 subtaskが先頭、その後に既存の
+  低優先follow-up 3件となる順序を確認した。SSH／remote providerはuser指定によりROADMAPから外した。
 - ROADMAPから本memoへのrelative linkと、設計が参照する既存source／documentの存在を確認した。
 - tracked差分と新規memoのwhitespace checkは指摘0だった。変更対象はROADMAPと本memoだけであり、
   product code、generated artifact、README、FEATURE_MATRIXに差分はない。

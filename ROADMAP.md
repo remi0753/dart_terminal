@@ -1478,10 +1478,6 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [ ] working directory tree、metadata、pane追従のnative side-dock表示
   - [ ] current subtreeからsystem-wideへ連続するfile／folder search
   - [ ] path handoff、accessibility、privacy／performance gate、両runtime受け入れ
-- [ ] SSH／remote session向けexplicit directory provider
-  （local navigator完了後に
-  [`docs/phase7/context-dock-file-navigator.md`](docs/phase7/context-dock-file-navigator.md)
-  のremote境界を参照して実施する）
 
 ### 主要ゴール後の低優先 follow-up
 
