@@ -80,12 +80,17 @@ const List<_CriterionRequirement> _requirements = <_CriterionRequirement>[
   _CriterionRequirement(
     id: 'focused-input-and-menu-isolation',
     summary:
-        'focus, raw key, IME, and menu shortcuts never leak to another pane',
+        'focus presentation, raw key, IME, and menu shortcuts remain isolated',
     sources: <_SourceRequirement>[
       _SourceRequirement('lib/src/terminal_application.dart', <String>[
         'TerminalTextInputEventRouter(',
         'TerminalAppKitMenuProjection.install(',
+        'synchronizePaneFocusPresentation()',
       ]),
+      _SourceRequirement(
+        'lib/src/terminal_renderer/terminal_screen_metal_compositor.dart',
+        <String>['inactivePaneBackgroundBrightness'],
+      ),
       _SourceRequirement(
         'lib/src/terminal_input/terminal_text_input_event_router.dart',
         <String>['final class TerminalTextInputEventRouter'],
@@ -115,6 +120,14 @@ const List<_CriterionRequirement> _requirements = <_CriterionRequirement>[
         'test/terminal_product_hierarchy_actions_test.dart',
         'runTerminalProductHierarchyActionTests',
       ),
+      _TestRequirement(
+        'test/frame_scheduler_test.dart',
+        'runFrameSchedulerTests',
+      ),
+      _TestRequirement(
+        'test/terminal_screen_metal_compositor_test.dart',
+        'runTerminalScreenMetalCompositorTests',
+      ),
     ],
     integrationTests: <_TestRequirement>[
       _TestRequirement(
@@ -136,6 +149,11 @@ const List<_CriterionRequirement> _requirements = <_CriterionRequirement>[
       _UiRequirement(
         suite: 'actions',
         applicationMarker: 'TERMINAL_USER_ACTIONS_TEST',
+        driverMarker: 'RUNTIME_USER_ACTIONS_INTEGRATION_PASS',
+      ),
+      _UiRequirement(
+        suite: 'actions',
+        applicationMarker: 'TERMINAL_ACTIVE_PANE_FOCUS_TEST',
         driverMarker: 'RUNTIME_USER_ACTIONS_INTEGRATION_PASS',
       ),
     ],

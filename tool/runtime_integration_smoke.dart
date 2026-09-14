@@ -1941,6 +1941,17 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
   );
   _expect(
     RegExp(
+          r'^TERMINAL_ACTIVE_PANE_FOCUS_TEST active_count=1 '
+          r'inactive_cursor=true inactive_background=true '
+          r'application_focus=true window_focus=true tab_focus=true '
+          r'split_focus=true overlay_zero_active=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted exact active-pane focus acceptance',
+  );
+  _expect(
+    RegExp(
               r'^TERMINAL_SESSION_SHUTDOWN pane=[1-5] session=[1-5]:1 '
               r'process_id=[1-9][0-9]* disposition=clean '
               r'termination_observed=true cleanup_completed=true$',

@@ -3157,6 +3157,7 @@ final class TerminalApplication {
         verticalPadding: paneConfiguration.windowPaddingVertical,
         backgroundOpacity:
             configurationAuthority.newSessionConfiguration.backgroundOpacity,
+        isPaneActive: false,
         accessibilityPresentation:
             applicationAccessibilityProjection!.presentation,
         onCaretGeometryChanged: (TerminalCaretRect rectangle) {
@@ -3229,6 +3230,7 @@ final class TerminalApplication {
                 terminalInputDeliveryCount++;
               }
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
+              reconcileRequest?.call();
               pane.insertText(text);
             },
             onOverflow: (int clientId, int generation) {
@@ -3720,6 +3722,33 @@ final class TerminalApplication {
 
     late final void Function() synchronizeWindowSubscriptions;
 
+    void synchronizePaneFocusPresentation() {
+      final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+      PaneId? activePaneId;
+      final TerminalWindowState? logicalWindow = state.activeWindow;
+      if (application.isActive &&
+          nativeHierarchy != null &&
+          !nativeHierarchy.isDisposed &&
+          logicalWindow != null) {
+        final TerminalTabState tab = logicalWindow.selectedTab;
+        final Window? window = nativeHierarchy.windowForTab(tab.id);
+        if (window != null &&
+            !window.isDisposed &&
+            !window.isClosed &&
+            window.isVisible &&
+            window.isFocused) {
+          activePaneId = tab.focusedPaneId;
+        }
+      }
+      for (final MapEntry<PaneId, _TerminalHierarchyProductPane> entry
+          in owners.entries) {
+        final TerminalLiveMetalSurface surface = entry.value.surface;
+        if (!surface.isDisposed) {
+          surface.updatePaneActive(entry.key == activePaneId);
+        }
+      }
+    }
+
     void reconcileInteractiveHierarchy() {
       final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
       if (nativeHierarchy == null || nativeHierarchy.isDisposed) return;
@@ -3732,6 +3761,8 @@ final class TerminalApplication {
         hierarchyReconciliationInProgress = false;
       }
       synchronizeWindowSubscriptions();
+      synchronizePaneFocusPresentation();
+      systemRecoveryController?.retryPendingDisplayRecovery();
       final PaneId? focusedPaneId =
           state.activeWindow?.selectedTab.focusedPaneId;
       desktopSignalCoordinator.focusSession(sessions[focusedPaneId]?.id);
@@ -3752,6 +3783,7 @@ final class TerminalApplication {
       switch (event) {
         case WindowClosedEvent():
           dividerGestureController?.cancel(tabId);
+          synchronizePaneFocusPresentation();
           final Future<void> Function(PaneId? paneId)? request =
               closePaneRequest;
           if (request != null) {
@@ -3798,6 +3830,7 @@ final class TerminalApplication {
           } else {
             dividerGestureController?.cancel(tabId);
             cancelHyperlinkInteraction(tab);
+            synchronizePaneFocusPresentation();
           }
           if (logicalWindow.role == TerminalWindowRole.quickTerminal) {
             final TerminalQuickTerminalController? quick =
@@ -3834,6 +3867,7 @@ final class TerminalApplication {
               isVisible: isVisible && owner.isVisible,
             );
           }
+          synchronizePaneFocusPresentation();
           reconcileSecureKeyboardEntry();
         case WindowOcclusionChangedEvent(:final isOccluded):
           for (final PaneId paneId in tab.paneIds) {
@@ -4420,10 +4454,15 @@ final class TerminalApplication {
           }
         },
         recoverDisplays: () {
+          if (createdHierarchy.isDisposed || state.isDisposed) return true;
+          if (hierarchyReconciliationInProgress ||
+              createdHierarchy.nativeWindowCount != state.tabCount ||
+              createdHierarchy.paneResourceCount != state.paneCount) {
+            return false;
+          }
           final AppKitResolvedScreen fallback = application.resolveScreen(
             AppKitScreenSelection.main,
           );
-          if (hierarchyReconciliationInProgress) return;
           hierarchyReconciliationInProgress = true;
           try {
             createdHierarchy.recoverDisplaySet(fallbackScreen: fallback);
@@ -4434,6 +4473,7 @@ final class TerminalApplication {
           for (final _TerminalHierarchyProductPane owner in owners.values) {
             owner.notifyScreenChanged();
           }
+          return true;
         },
         resumePresentation: () {
           for (final _TerminalHierarchyProductPane owner in owners.values) {
@@ -5500,6 +5540,7 @@ final class TerminalApplication {
                   .handleApplicationActiveChanged(isActive: isActive)
                   .then<void>((_) {}, onError: recordAsynchronousError),
             );
+            synchronizePaneFocusPresentation();
           case ApplicationAppearanceChangedEvent():
             // The dedicated theme projection owns palette application.
             break;
@@ -11260,6 +11301,22 @@ keybind = control+k=pane.focus-next
   }) async {
     var eventTimestamp = 12000000;
 
+    Set<PaneId> activePaneIds() => owners.entries
+        .where(
+          (MapEntry<PaneId, _TerminalHierarchyProductPane> entry) =>
+              !entry.value.surface.isDisposed &&
+              entry.value.surface.snapshot().isPaneActive,
+        )
+        .map(
+          (MapEntry<PaneId, _TerminalHierarchyProductPane> entry) => entry.key,
+        )
+        .toSet();
+
+    bool hasOnlyActivePane(PaneId paneId) {
+      final Set<PaneId> active = activePaneIds();
+      return active.length == 1 && active.single == paneId;
+    }
+
     Future<void> waitFor(
       bool Function() predicate,
       String message, {
@@ -11313,6 +11370,10 @@ keybind = control+k=pane.focus-next
       'user action product did not start from the ordinary 1/1/1 hierarchy',
     );
     await _waitForAsciiMarker(sessions.values.single, prompt);
+    await waitFor(
+      () => hasOnlyActivePane(state.activeWindow!.selectedTab.focusedPaneId),
+      'initial terminal pane did not become the sole active surface',
+    );
     final int actionInputBaseline = terminalInputDeliveryCount();
 
     await performMenuAction(
@@ -11322,6 +11383,10 @@ keybind = control+k=pane.focus-next
       completed: () =>
           updatePresenter.isOpen &&
           updateController.status == TerminalUpdateStatus.available,
+    );
+    await waitFor(
+      () => activePaneIds().isEmpty,
+      'update window left a terminal cursor visually active',
     );
     _expectLifecycle(
       updateService.checkCount == 1 &&
@@ -11343,6 +11408,10 @@ keybind = control+k=pane.focus-next
       'update action did not prepare the authenticated candidate once',
     );
     await updatePresenter.dismiss();
+    await waitFor(
+      () => hasOnlyActivePane(state.activeWindow!.selectedTab.focusedPaneId),
+      'terminal focus restoration did not reactivate exactly one pane',
+    );
     _expectLifecycle(
       !updatePresenter.isOpen &&
           updatePresenter.terminalResponderRestoreCount == 1 &&
@@ -11360,6 +11429,10 @@ keybind = control+k=pane.focus-next
           hierarchy.splitViewCount == 1,
     );
     final TerminalTabState resizedTab = state.activeWindow!.selectedTab;
+    await waitFor(
+      () => hasOnlyActivePane(resizedTab.focusedPaneId),
+      'split creation did not activate only the focused pane',
+    );
     final TerminalSplitBranch resizedRoot =
         resizedTab.splitTree.root as TerminalSplitBranch;
     final PaneId leftPaneId = resizedTab.paneIds.first;
@@ -11456,6 +11529,7 @@ keybind = control+k=pane.focus-next
     await waitFor(
       () =>
           palette.isOpen &&
+          activePaneIds().isEmpty &&
           !(palette.renderedText ?? '').contains(
             'Split Pane Down  — Unavailable',
           ) &&
@@ -11494,7 +11568,8 @@ keybind = control+k=pane.focus-next
           !palette.isOpen &&
           state.paneCount == 3 &&
           hierarchy.paneResourceCount == 3 &&
-          hierarchy.splitViewCount == 2,
+          hierarchy.splitViewCount == 2 &&
+          hasOnlyActivePane(state.activeWindow!.selectedTab.focusedPaneId),
       'command palette Split Pane Down did not project a third pane',
     );
     _expectLifecycle(
@@ -11525,6 +11600,10 @@ keybind = control+k=pane.focus-next
           hierarchy.nativeWindowCount == 3 &&
           hierarchy.paneResourceCount == 5,
     );
+    await waitFor(
+      () => hasOnlyActivePane(state.activeWindow!.selectedTab.focusedPaneId),
+      'new window did not leave exactly one active terminal pane',
+    );
     _expectLifecycle(
       terminalInputDeliveryCount() == actionInputBaseline,
       'menu or command-palette hierarchy action leaked into terminal input',
@@ -11540,6 +11619,14 @@ keybind = control+k=pane.focus-next
         ..focusPane(location.tabId, paneId);
       reconcile();
       final _TerminalHierarchyProductPane owner = owners[paneId]!;
+      hierarchy.windowForTab(location.tabId)!
+        ..show()
+        ..selectTab()
+        ..makeFirstResponder(owner.view);
+      await waitFor(
+        () => hasOnlyActivePane(paneId),
+        'focus projection did not isolate active pane $paneId',
+      );
       final TerminalTextInputRouteResult keyResult = owner.textRouter.route(
         TerminalTextInputKeyEvent(
           clientId: owner.client.clientId,
@@ -11609,6 +11696,10 @@ keybind = control+k=pane.focus-next
           state.paneCount == 4 &&
           hierarchy.paneResourceCount == 4,
     );
+    await waitFor(
+      () => hasOnlyActivePane(state.activeWindow!.selectedTab.focusedPaneId),
+      'pane close did not reactivate exactly one surviving pane',
+    );
     _expectLifecycle(
       allSessions
               .singleWhere(
@@ -11653,6 +11744,12 @@ keybind = control+k=pane.focus-next
           debugLiveTerminalTextInputClientCount() == 0 &&
           application.debugLiveObjectCount == 0,
       'user action Quit did not release all product owners exactly once',
+    );
+    stdout.writeln(
+      'TERMINAL_ACTIVE_PANE_FOCUS_TEST active_count=1 '
+      'inactive_cursor=true inactive_background=true '
+      'application_focus=true window_focus=true tab_focus=true '
+      'split_focus=true overlay_zero_active=true',
     );
     stdout.writeln(
       'TERMINAL_USER_ACTIONS_TEST windows=2 tabs=3 panes=4 '
@@ -12560,7 +12657,7 @@ keybind = control+k=pane.focus-next
         recoverDisplays: () {
           final TerminalRestorationGeneration? current =
               createdRestoration.current;
-          if (current == null || current.hierarchy.isDisposed) return;
+          if (current == null || current.hierarchy.isDisposed) return true;
           current.hierarchy.recoverDisplaySet(
             fallbackScreen: application.resolveScreen(
               AppKitScreenSelection.main,
@@ -12569,6 +12666,7 @@ keybind = control+k=pane.focus-next
           for (final PaneId paneId in current.state.paneIds) {
             owners[paneId]?.notifyScreenChanged();
           }
+          return true;
         },
         resumePresentation: () {
           for (final _TerminalHierarchyProductPane owner in owners.values) {

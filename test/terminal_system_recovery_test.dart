@@ -6,6 +6,7 @@ void main() => runTerminalSystemRecoveryTests();
 void runTerminalSystemRecoveryTests() {
   _testSignalsAreCoalescedOntoLaterTurns();
   _testSameTurnSleepWakeStillSuspendsBeforeRecovery();
+  _testDisplayRecoveryCanWaitForHierarchyReconciliation();
   _testDisposedControllerIgnoresScheduledWork();
 }
 
@@ -15,7 +16,10 @@ void _testSignalsAreCoalescedOntoLaterTurns() {
   final TerminalSystemRecoveryController controller =
       TerminalSystemRecoveryController(
         suspendPresentation: () => operations.add('suspend'),
-        recoverDisplays: () => operations.add('recover'),
+        recoverDisplays: () {
+          operations.add('recover');
+          return true;
+        },
         resumePresentation: () => operations.add('resume'),
         schedule: scheduled.add,
       );
@@ -120,7 +124,10 @@ void _testSameTurnSleepWakeStillSuspendsBeforeRecovery() {
   final TerminalSystemRecoveryController controller =
       TerminalSystemRecoveryController(
         suspendPresentation: () => operations.add('suspend'),
-        recoverDisplays: () => operations.add('recover'),
+        recoverDisplays: () {
+          operations.add('recover');
+          return true;
+        },
         resumePresentation: () => operations.add('resume'),
         schedule: scheduled.add,
       );
@@ -145,13 +152,63 @@ void _testSameTurnSleepWakeStillSuspendsBeforeRecovery() {
   );
 }
 
+void _testDisplayRecoveryCanWaitForHierarchyReconciliation() {
+  final List<void Function()> scheduled = <void Function()>[];
+  final List<String> operations = <String>[];
+  var hierarchyIsReconciled = false;
+  final TerminalSystemRecoveryController controller =
+      TerminalSystemRecoveryController(
+        suspendPresentation: () => operations.add('suspend'),
+        recoverDisplays: () {
+          operations.add('recover');
+          return hierarchyIsReconciled;
+        },
+        resumePresentation: () => operations.add('resume'),
+        schedule: scheduled.add,
+      );
+
+  controller.handle(const ApplicationScreenSetChangedEvent(monotonicMicros: 1));
+  scheduled.removeAt(0)();
+  TerminalSystemRecoverySnapshot snapshot = controller.snapshot();
+  _expect(
+    operations.join(',') == 'recover' &&
+        snapshot.hasPendingScreenRecovery &&
+        !snapshot.hasScheduledDrain &&
+        snapshot.displayRecoveryCount == 0,
+    'deferred display recovery was lost or counted as complete',
+  );
+
+  hierarchyIsReconciled = true;
+  _expect(
+    controller.retryPendingDisplayRecovery() && scheduled.length == 1,
+    'reconciled hierarchy did not schedule its retained recovery',
+  );
+  _expect(
+    !controller.retryPendingDisplayRecovery() && scheduled.length == 1,
+    'duplicate recovery retry queued more than one drain',
+  );
+  scheduled.removeAt(0)();
+  snapshot = controller.snapshot();
+  _expect(
+    operations.join(',') == 'recover,recover' &&
+        !snapshot.hasPendingScreenRecovery &&
+        !snapshot.hasScheduledDrain &&
+        snapshot.drainCount == 2 &&
+        snapshot.displayRecoveryCount == 1,
+    'successful retry did not complete retained display recovery once',
+  );
+}
+
 void _testDisposedControllerIgnoresScheduledWork() {
   final List<void Function()> scheduled = <void Function()>[];
   var operationCount = 0;
   final TerminalSystemRecoveryController controller =
       TerminalSystemRecoveryController(
         suspendPresentation: () => operationCount++,
-        recoverDisplays: () => operationCount++,
+        recoverDisplays: () {
+          operationCount++;
+          return true;
+        },
         resumePresentation: () => operationCount++,
         schedule: scheduled.add,
       );

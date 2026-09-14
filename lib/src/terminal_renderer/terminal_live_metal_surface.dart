@@ -1091,7 +1091,7 @@ final class TerminalLiveMetalSurface {
         : null;
     return TerminalLiveMetalSurfaceSnapshot(
       isDisposed: _disposed,
-      isPaneActive: _desiredPaneActive,
+      isPaneActive: _scheduler.presentationClock.isPaneActive,
       usesMacosSystemMonospaceFont: _catalog.family.isEmpty,
       fontPointSize: _catalog.metrics.pointSize,
       rows: _boundScreen.rows,

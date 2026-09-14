@@ -170,7 +170,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   持つapplication-owned state model。AppKit adapterはnative tab group、再帰split view、
   first responder、resize/equalize/zoomに加え、native divider dragをmodel/layout/Metal
   viewport/terminal grid/PTY winsizeへ同期し、drag gestureをterminal mouse入力から分離する。
-  新規splitは最初のlayout前にwindowのRetina backing scaleを受け取る。focused session title、bounded tab rename/
+  新規splitは最初のlayout前にwindowのRetina backing scaleを受け取る。applicationがactiveで、
+  visibleかつfocusedなwindowのselected tabにあるfocused paneだけがcursorを表示・点滅し、
+  ほかのpaneはcursorを消してterminal背景のRGBだけを控えめに暗くする。背景alpha、PTY更新、
+  visual bell、画像animationは維持する。focused session title、bounded tab rename/
   color、local OSC 7 cwdのproxy iconを投影する。新しいtab/splitは信頼済みlocal cwdを
   継承する。zero-configの通常起動もこの階層を使い、menu/paletteからwindow/tab/splitを
   追加できる。2 tab/4 live paneの実製品gateで実zsh cwd、key/IME分離と

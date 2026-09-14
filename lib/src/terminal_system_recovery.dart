@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dart_appkit/dart_appkit.dart';
 
 typedef TerminalSystemRecoverySchedule = void Function(void Function() work);
+typedef TerminalSystemDisplayRecovery = bool Function();
 typedef TerminalSystemRecoveryError = void Function(
   Object error,
   StackTrace stackTrace,
@@ -54,7 +55,7 @@ final class TerminalSystemRecoverySnapshot {
 final class TerminalSystemRecoveryController {
   TerminalSystemRecoveryController({
     required void Function() suspendPresentation,
-    required void Function() recoverDisplays,
+    required TerminalSystemDisplayRecovery recoverDisplays,
     required void Function() resumePresentation,
     TerminalSystemRecoverySchedule schedule = scheduleMicrotask,
     TerminalSystemRecoveryError? onError,
@@ -67,7 +68,7 @@ final class TerminalSystemRecoveryController {
   static const int maximumCounterValue = 0x7fffffffffffffff;
 
   final void Function() _suspendPresentation;
-  final void Function() _recoverDisplays;
+  final TerminalSystemDisplayRecovery _recoverDisplays;
   final void Function() _resumePresentation;
   final TerminalSystemRecoverySchedule _schedule;
   final TerminalSystemRecoveryError? _onError;
@@ -156,6 +157,23 @@ final class TerminalSystemRecoveryController {
     _pendingScreenRecovery = false;
   }
 
+  /// Retries display work that an owner deferred while its hierarchy changed.
+  ///
+  /// A native screen-set callback may race an asynchronous window, tab, or
+  /// pane mutation. The owner returns `false` from [recoverDisplays] while its
+  /// logical and native hierarchies differ, then calls this method after its
+  /// next successful reconciliation.
+  bool retryPendingDisplayRecovery() {
+    if (_disposed ||
+        _scheduled ||
+        _isSleeping ||
+        (!_pendingWake && !_pendingScreenRecovery)) {
+      return false;
+    }
+    _scheduleDrain();
+    return true;
+  }
+
   TerminalSystemRecoveryEventDisposition _coalesced() {
     _coalescedEventCount = _increment(_coalescedEventCount);
     return TerminalSystemRecoveryEventDisposition.coalesced;
@@ -195,9 +213,9 @@ final class TerminalSystemRecoveryController {
 
     final bool recoverAfterWake = _pendingWake;
     if (recoverAfterWake || _pendingScreenRecovery) {
+      if (!_recoverDisplays()) return;
       _pendingWake = false;
       _pendingScreenRecovery = false;
-      _recoverDisplays();
       _displayRecoveryCount = _increment(_displayRecoveryCount);
     }
     if (recoverAfterWake && _isPresentationSuspended) {
