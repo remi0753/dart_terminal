@@ -254,6 +254,71 @@ const List<_CriterionRequirement> _requirements = <_CriterionRequirement>[
       ),
     ],
   ),
+  _CriterionRequirement(
+    id: 'context-dock-directory-navigation',
+    summary: 'a native sibling Dock provides bounded local tree, search, and explicit path handoff',
+    sources: <_SourceRequirement>[
+      _SourceRequirement('lib/src/terminal_context_dock.dart', <String>[
+        'final class TerminalContextDockState',
+        'final class TerminalContextDockKeyController',
+      ]),
+      _SourceRequirement(
+        'lib/src/terminal_context_dock_directory.dart',
+        <String>[
+          'final class TerminalContextDockDirectoryController',
+          'final class TerminalContextDockDirectoryPresenter',
+          'TerminalContextDockDirectoryStatus.privacyUnavailable',
+        ],
+      ),
+      _SourceRequirement('lib/src/terminal_directory_snapshot.dart', <String>[
+        'final class TerminalWorkingDirectoryResolver',
+        'final class TerminalDirectorySnapshotService',
+      ]),
+      _SourceRequirement('lib/src/terminal_file_search.dart', <String>[
+        'abstract final class TerminalFileSearchLimits',
+        'final class TerminalFileSearchService',
+      ]),
+      _SourceRequirement(
+        'lib/src/terminal_context_dock_path_handoff.dart',
+        <String>[
+          'abstract final class TerminalContextDockPrivacyPolicy',
+          'final class TerminalContextDockPathHandoffController',
+          'appendTrailingSeparator: false',
+        ],
+      ),
+    ],
+    unitTests: <_TestRequirement>[
+      _TestRequirement(
+        'test/terminal_context_dock_test.dart',
+        'runTerminalContextDockTests',
+      ),
+      _TestRequirement(
+        'test/terminal_directory_snapshot_test.dart',
+        'runTerminalDirectorySnapshotTests',
+      ),
+      _TestRequirement(
+        'test/terminal_file_search_test.dart',
+        'runTerminalFileSearchTests',
+      ),
+      _TestRequirement(
+        'test/terminal_native_content_test.dart',
+        'runTerminalNativeContentTests',
+      ),
+    ],
+    integrationTests: <_TestRequirement>[
+      _TestRequirement(
+        'test/terminal_native_hierarchy_test.dart',
+        'runTerminalNativeHierarchyTests',
+      ),
+    ],
+    uiAssertions: <_UiRequirement>[
+      _UiRequirement(
+        suite: 'nativeContent',
+        applicationMarker: 'TERMINAL_NATIVE_CONTENT_TEST',
+        driverMarker: 'RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS',
+      ),
+    ],
+  ),
 ];
 
 String generatePhase7AppKitAcceptance({Directory? repositoryRoot}) {

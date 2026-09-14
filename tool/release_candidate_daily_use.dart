@@ -379,7 +379,7 @@ String generateReleaseCandidateDailyUseMatrix({Directory? repositoryRoot}) {
     phase7['format'] == 'dart-terminal-phase7-appkit-acceptance' &&
         phase7['version'] == 1 &&
         phase7['status'] == 'covered' &&
-        _array(phase7['criteria'], 'phase7.criteria').length == 4,
+        _array(phase7['criteria'], 'phase7.criteria').length == 5,
     'AppKit acceptance evidence differs',
   );
   final Map<String, Object?> fuzz = _json(

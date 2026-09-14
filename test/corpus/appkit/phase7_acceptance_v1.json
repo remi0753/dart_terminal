@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "a5085f9ad4c7cbf0148382355bd19e370cfc1fb93396044da9a8ca36107bf9af"
+          "sha256": "690867dc00b3b58f950924af73d027ecb7b495094fd30174b827683e7b5e21a3"
         },
         {
           "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
@@ -211,7 +211,7 @@
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "a5085f9ad4c7cbf0148382355bd19e370cfc1fb93396044da9a8ca36107bf9af"
+          "sha256": "690867dc00b3b58f950924af73d027ecb7b495094fd30174b827683e7b5e21a3"
         }
       ],
       "unit_tests": [
@@ -240,14 +240,77 @@
           "driver_marker": "RUNTIME_NATIVE_HIERARCHY_INTEGRATION_PASS"
         }
       ]
+    },
+    {
+      "id": "context-dock-directory-navigation",
+      "summary": "a native sibling Dock provides bounded local tree, search, and explicit path handoff",
+      "status": "covered",
+      "sources": [
+        {
+          "path": "lib/src/terminal_context_dock.dart",
+          "sha256": "39812a3f2eec5b804732df6ca4931bbd60e103a9b37640592c9d605e5f9d9215"
+        },
+        {
+          "path": "lib/src/terminal_context_dock_directory.dart",
+          "sha256": "1683f8b9e7b2dd22bbc670fff9ac5096961fb7e9aa62a2b1fcc80c93e0bd898c"
+        },
+        {
+          "path": "lib/src/terminal_directory_snapshot.dart",
+          "sha256": "497b1e3550de0f3da15977568211f9afa6618ef5b3f67778e1b4e5e6980005f8"
+        },
+        {
+          "path": "lib/src/terminal_file_search.dart",
+          "sha256": "0335548ca997757f5f79ea082677134b44056e1459ffc5d1755237712bfe70b5"
+        },
+        {
+          "path": "lib/src/terminal_context_dock_path_handoff.dart",
+          "sha256": "64e27cf60d5783b66a6ce6a85a1ca37d1ca73323fdab8ae928b93e0674a04588"
+        }
+      ],
+      "unit_tests": [
+        {
+          "path": "test/terminal_context_dock_test.dart",
+          "entrypoint": "runTerminalContextDockTests",
+          "sha256": "a39f4db01feb6937d9d75c3289b8001c0043d2e019793a65330ea8f772ef9ff0"
+        },
+        {
+          "path": "test/terminal_directory_snapshot_test.dart",
+          "entrypoint": "runTerminalDirectorySnapshotTests",
+          "sha256": "aa11105ec1e953a3d27786ef2acb1ea713a1ed6b6d137b61a28f25e383f054ac"
+        },
+        {
+          "path": "test/terminal_file_search_test.dart",
+          "entrypoint": "runTerminalFileSearchTests",
+          "sha256": "33c10c62d8e0f365e381241748eb9db1afdc1edc2cda877c3a85d923dc8dbec1"
+        },
+        {
+          "path": "test/terminal_native_content_test.dart",
+          "entrypoint": "runTerminalNativeContentTests",
+          "sha256": "7441fe9826be117223608872ab94921cc17cde78fef3207a0bdb7953c1102926"
+        }
+      ],
+      "integration_tests": [
+        {
+          "path": "test/terminal_native_hierarchy_test.dart",
+          "entrypoint": "runTerminalNativeHierarchyTests",
+          "sha256": "1131e6a0a69950f05c2cca71b2c4e346055c228acfc8c4cc4419701b0ec53cc5"
+        }
+      ],
+      "ui_assertions": [
+        {
+          "suite": "nativeContent",
+          "application_marker": "TERMINAL_NATIVE_CONTENT_TEST",
+          "driver_marker": "RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS"
+        }
+      ]
     }
   ],
   "totals": {
-    "criteria": 4,
-    "source_references": 14,
-    "unit_tests": 12,
-    "integration_tests": 4,
-    "ui_assertions": 10,
+    "criteria": 5,
+    "source_references": 19,
+    "unit_tests": 16,
+    "integration_tests": 5,
+    "ui_assertions": 11,
     "blocking_failures": 0
   }
 }

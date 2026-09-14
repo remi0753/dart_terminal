@@ -1,0 +1,54 @@
+# Directory Navigator manual acceptance checklist
+
+- Status: manual verification checklist
+- Date: 2026-09-14
+- Scope: macOS standard windowのContext Dock／Directory Navigator
+- Automated companion: `make RUNTIME_ARCH=arm64 runtime-native-content-integration`
+
+この確認票は、APIから判定できないVoiceOverの読み上げ品質、Full Keyboard Accessの実際のfocus ring、
+外観設定、resize/fullscreenの視認性を確認する。terminal text、command、path、clipboard内容を記録せず、
+確認結果にはOS version、architecture、Developer JIT／Release AOT、pass/failだけを残す。
+
+## 準備
+
+1. local standard windowを開き、空白、apostrophe、Unicode、dotfile、folder、symlinkを含む一時directoryへ移動する。
+2. password、token、private filenameを含まないfixtureだけを使う。SSH／remote providerは本確認の対象外とする。
+3. Developer JITとRelease AOTで同じ項目を実行する。AppKit Accessibility InspectorまたはVoiceOverを使う場合も
+   内容のscreen recordingや診断exportは保存しない。
+
+## Keyboard-onlyとfocus ownership
+
+- [ ] Terminal focus中にShift-Command-Fを1回押すと右Dockが現れ、queryが選択される。terminalへ文字は入らない。
+- [ ] 文字入力、Delete、Command-Aはqueryだけを変え、Up/Down/Page Up/Page Downはresult selectionだけを動かす。
+- [ ] 空queryでReturnまたはCommand-Rightを押すとfolderがDock内で展開し、自動`cd`やcommand実行は起きない。
+- [ ] Command-Leftでsubtreeを畳み、selectionがvisible parentへ戻る。
+- [ ] Escapeを1回押すとquery/resultを保持したままterminalへ戻る。再度Shift-Command-Fで同じcontextへ戻る。
+- [ ] Dock表示中でもterminal focusなら通常のterminal key、selection、scrollが従来どおり動作する。
+- [ ] 狭いwindow、resize、divider drag、fullscreen、tab/pane切替、Dock hide/showでterminalとDockが重ならず、focused paneのcwdへ追従する。
+
+## Tree、search、path handoff
+
+- [ ] 空queryではdotfileを含むfile/folderがfolder-firstで表示され、選択項目のkind、permission、owner/group、size、mtime、symlink targetが読める。
+- [ ] query入力直後にcurrent subtreeの結果が現れ、後からRecent locations／Chosen locations／System indexのcoverageが同じlistへ追加される。
+- [ ] Spotlightやpermissionが利用不能なscopeは`Unavailable`／`Partial`と表示され、0件と混同しない。
+- [ ] Command-Cは選択absolute pathだけをclipboardへcopyし、focusをNavigatorに残す。terminalへのwriteはない。
+- [ ] Option-Returnは空白、apostrophe、Unicodeを含むpathを1 shell wordとして挿入し、改行を送らずterminalへfocusを戻す。
+- [ ] folder/fileを選択しただけではPTY write、自動`cd`、自動実行、Finder起動が発生しない。
+- [ ] alternate-screen applicationまたはforeground command中はInsert quoted pathがunavailableで、入力を送らない。
+- [ ] manual Secure Keyboard Entry中、およびECHO-off foreground process中はcwd/result/detailが消え、検索へfocusできない。解除後は再取得される。
+
+## VoiceOverとFull Keyboard Access
+
+- [ ] VoiceOverはDockを`Directory Navigator`というread-only text areaとして到達可能にし、terminalとは別のsiblingとして読む。
+- [ ] title、input owner、working directory、Search query、tree/search rows、coverage、Path actions、Detailsがvisual orderと同じ順で読まれる。
+- [ ] result移動時にselected rowが読み上げられ、folder markerだけに依存せず名前と末尾`/`でfolderを区別できる。
+- [ ] terminal/Navigatorのfocus移動が読み上げられ、terminal cursorとNavigator selectionを同時にactiveと誤認しない。
+- [ ] Full Keyboard Accessを有効にしてもShift-Command-F、Escape、Command-C、Option-Return、tree/search navigationがmouseなしで完結する。
+- [ ] EnglishとJapaneseの両localeでaction、status、coverage、privacy、path actionの意味が欠落せず、path自体は翻訳・並び替えされない。
+
+## Appearance、cleanup、記録
+
+- [ ] Light/Dark、Increase Contrast、Differentiate Without Colorでselection/focus/disabled stateを色だけに依存せず区別できる。
+- [ ] Reduce MotionでDock操作に不要なanimationが加わらず、focus/resultの意味が変わらない。
+- [ ] Dock hide、tab/window close、app Quit後に残留window、filesystem activity、Spotlight process、Secure Keyboard Entry ownerがない。
+- [ ] 結果記録にはfixture path、query、clipboard、terminal outputを含めず、失敗時も操作とvisible stateの要約だけを残す。

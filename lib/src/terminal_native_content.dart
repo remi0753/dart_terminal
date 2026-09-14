@@ -631,6 +631,7 @@ abstract final class TerminalExternalContentAdmission {
     int maxUtf8Bytes = maximumUtf8Bytes,
     int maxFilePathUtf8Bytes = maximumFilePathUtf8Bytes,
     int maxFilePaths = maximumFilePaths,
+    bool appendTrailingSeparator = true,
   }) {
     _checkMaximum(maxUtf8Bytes);
     RangeError.checkValueInInterval(
@@ -665,7 +666,8 @@ abstract final class TerminalExternalContentAdmission {
         );
       }
       final int quoteCount = "'".allMatches(path).length;
-      final int quotedBytes = pathBytes + 2 + quoteCount * 3 + 1;
+      final int quotedBytes =
+          pathBytes + 2 + quoteCount * 3 + (appendTrailingSeparator ? 1 : 0);
       if (encodedBytes + quotedBytes > maxUtf8Bytes) {
         return const TerminalExternalContentResult.rejected(
           TerminalExternalContentDisposition.tooLarge,
@@ -684,7 +686,8 @@ abstract final class TerminalExternalContentAdmission {
       serialized
         ..write("'")
         ..write(path.replaceAll("'", "'\\''"))
-        ..write("' ");
+        ..write("'");
+      if (appendTrailingSeparator) serialized.write(' ');
     }
     return TerminalExternalContentResult.admitted(
       TerminalExternalContent._(

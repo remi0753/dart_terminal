@@ -4,6 +4,7 @@ import 'package:dart_appkit/dart_appkit.dart';
 
 import 'terminal_application_state.dart';
 import 'terminal_context_dock.dart';
+import 'terminal_context_dock_path_handoff.dart';
 import 'terminal_directory_snapshot.dart';
 import 'terminal_file_search.dart';
 import 'terminal_localization.dart';
@@ -24,6 +25,9 @@ abstract final class TerminalContextDockDirectoryLimits {
 
 typedef TerminalContextDockWorkingDirectoryResolver =
     TerminalWorkingDirectoryResolution Function(PaneId paneId, int generation);
+typedef TerminalContextDockPaneObservationPolicy = bool Function(PaneId paneId);
+typedef TerminalContextDockPathHandoffSnapshotResolver =
+    TerminalContextDockPathHandoffSnapshot? Function(TerminalWindowId windowId);
 
 enum TerminalContextDockDirectoryStatus {
   loading,
@@ -32,6 +36,7 @@ enum TerminalContextDockDirectoryStatus {
   empty,
   unavailable,
   remoteUnavailable,
+  privacyUnavailable,
 }
 
 final class TerminalContextDockDirectoryRow {
@@ -94,11 +99,13 @@ final class TerminalContextDockDirectoryController {
         const TerminalDirectorySnapshotService(),
     TerminalFileSearchService searchService = const TerminalFileSearchService(),
     Iterable<String> Function()? explicitSearchRoots,
+    TerminalContextDockPaneObservationPolicy? canObservePane,
     void Function()? onChanged,
   }) : _resolveWorkingDirectory = resolveWorkingDirectory,
        _snapshotService = snapshotService,
        _searchService = searchService,
        _explicitSearchRoots = explicitSearchRoots ?? _noSearchRoots,
+       _canObservePane = canObservePane ?? _alwaysObservePane,
        _onChanged = onChanged;
 
   final TerminalApplicationState applicationState;
@@ -107,6 +114,7 @@ final class TerminalContextDockDirectoryController {
   final TerminalDirectorySnapshotService _snapshotService;
   final TerminalFileSearchService _searchService;
   final Iterable<String> Function() _explicitSearchRoots;
+  final TerminalContextDockPaneObservationPolicy _canObservePane;
   final void Function()? _onChanged;
   final Map<TerminalWindowId, _TerminalContextDockDirectoryWindowState>
   _windows = <TerminalWindowId, _TerminalContextDockDirectoryWindowState>{};
@@ -133,6 +141,31 @@ final class TerminalContextDockDirectoryController {
     final _TerminalContextDockDirectoryWindowState? window = _windows[windowId];
     if (window == null) return null;
     return _project(window);
+  }
+
+  TerminalContextDockPathSelection? selectedPathForWindow(
+    TerminalWindowId windowId,
+  ) {
+    if (_isDisposed || dockState.isDisposed) return null;
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+      windowId,
+    );
+    final _TerminalContextDockDirectoryWindowState? window = _windows[windowId];
+    if (dock == null ||
+        window == null ||
+        dock.targetPaneId != window.paneId ||
+        !dock.navigatorOwnsInput) {
+      return null;
+    }
+    final TerminalContextDockDirectorySnapshot projection = _project(window);
+    final int selected = dock.pane.selectedResultIndex;
+    if (selected < 0 || selected >= projection.rows.length) return null;
+    return TerminalContextDockPathSelection(
+      windowId: windowId,
+      paneId: window.paneId,
+      generation: projection.generation,
+      entry: projection.rows[selected].entry,
+    );
   }
 
   /// Coalesces high-frequency terminal output into one cwd observation.
@@ -187,6 +220,10 @@ final class TerminalContextDockDirectoryController {
             .snapshotForWindow(logicalWindow.id);
         if (dock == null || !dock.isVisible) {
           _windows.remove(logicalWindow.id)?.cancel();
+          continue;
+        }
+        if (!_readCanObservePane(dock.targetPaneId)) {
+          _replacePrivacyUnavailable(logicalWindow.id, dock.targetPaneId);
           continue;
         }
         TerminalWorkingDirectoryResolution? resolution;
@@ -307,10 +344,40 @@ final class TerminalContextDockDirectoryController {
           paneId: paneId,
           generation: ++_generation,
           resolution: null,
+          privacyRestricted: false,
         );
     _windows[windowId] = next;
     _publishResultCount(next);
     _onChanged?.call();
+  }
+
+  void _replacePrivacyUnavailable(TerminalWindowId windowId, PaneId paneId) {
+    final _TerminalContextDockDirectoryWindowState? retained =
+        _windows[windowId];
+    if (retained?.paneId == paneId && retained?.privacyRestricted == true) {
+      _publishResultCount(retained!);
+      return;
+    }
+    retained?.cancel();
+    final _TerminalContextDockDirectoryWindowState next =
+        _TerminalContextDockDirectoryWindowState(
+          windowId: windowId,
+          paneId: paneId,
+          generation: ++_generation,
+          resolution: null,
+          privacyRestricted: true,
+        );
+    _windows[windowId] = next;
+    _publishResultCount(next);
+    _onChanged?.call();
+  }
+
+  bool _readCanObservePane(PaneId paneId) {
+    try {
+      return _canObservePane(paneId);
+    } on Object {
+      return false;
+    }
   }
 
   void _startLoad(
@@ -622,6 +689,9 @@ final class TerminalContextDockDirectoryController {
     _TerminalContextDockDirectoryWindowState window,
     List<TerminalContextDockDirectoryRow> rows,
   ) {
+    if (window.privacyRestricted) {
+      return TerminalContextDockDirectoryStatus.privacyUnavailable;
+    }
     final TerminalWorkingDirectoryResolution? resolution = window.resolution;
     if (resolution == null ||
         resolution.disposition ==
@@ -677,6 +747,7 @@ final class TerminalContextDockDirectoryController {
   }
 
   static Iterable<String> _noSearchRoots() => const <String>[];
+  static bool _alwaysObservePane(PaneId _) => true;
 }
 
 final class _TerminalContextDockDirectoryWindowState {
@@ -685,12 +756,14 @@ final class _TerminalContextDockDirectoryWindowState {
     required this.paneId,
     required this.generation,
     required this.resolution,
+    this.privacyRestricted = false,
   });
 
   final TerminalWindowId windowId;
   final PaneId paneId;
   final int generation;
   TerminalWorkingDirectoryResolution? resolution;
+  final bool privacyRestricted;
   TerminalDirectorySnapshot? rootSnapshot;
   final Map<String, TerminalDirectorySnapshot> childSnapshots =
       <String, TerminalDirectorySnapshot>{};
@@ -739,8 +812,10 @@ final class TerminalContextDockDirectoryPresenter {
     required this.localization,
     required Window? Function(TerminalTabId tabId) windowForTab,
     required View? Function(PaneId paneId) terminalViewForPane,
+    TerminalContextDockPathHandoffSnapshotResolver? pathHandoffSnapshot,
   }) : _windowForTab = windowForTab,
-       _terminalViewForPane = terminalViewForPane;
+       _terminalViewForPane = terminalViewForPane,
+       _pathHandoffSnapshot = pathHandoffSnapshot ?? _noPathHandoffSnapshot;
 
   final TerminalApplicationState applicationState;
   final TerminalContextDockState dockState;
@@ -748,6 +823,7 @@ final class TerminalContextDockDirectoryPresenter {
   final TerminalLocalization localization;
   final Window? Function(TerminalTabId tabId) _windowForTab;
   final View? Function(PaneId paneId) _terminalViewForPane;
+  final TerminalContextDockPathHandoffSnapshotResolver _pathHandoffSnapshot;
   final Map<TerminalWindowId, _TerminalContextDockNativeResources> _resources =
       <TerminalWindowId, _TerminalContextDockNativeResources>{};
   final Map<TerminalWindowId, TerminalSplitLayoutSize> _fullSizes =
@@ -756,6 +832,12 @@ final class TerminalContextDockDirectoryPresenter {
 
   bool get isDisposed => _isDisposed;
   int get resourceCount => _resources.length;
+
+  TextEditorSnapshot? nativeEditorSnapshotForWindow(TerminalWindowId windowId) {
+    if (_isDisposed) return null;
+    final TextEditor? editor = _resources[windowId]?.editor;
+    return editor == null || editor.isDisposed ? null : editor.snapshot;
+  }
 
   bool get canFocusNavigator {
     if (_isDisposed || applicationState.isDisposed || dockState.isDisposed) {
@@ -941,7 +1023,12 @@ final class TerminalContextDockDirectoryPresenter {
     TerminalContextDockDirectorySnapshot? directory,
   ) {
     final _TerminalContextDockDocument document =
-        _TerminalContextDockDocument.build(localization, dock, directory);
+        _TerminalContextDockDocument.build(
+          localization,
+          dock,
+          directory,
+          _pathHandoffSnapshot(dock.windowId),
+        );
     if (resources.document?.text != document.text ||
         resources.document?.selection != document.selection) {
       resources.editor.setDocument(
@@ -1023,6 +1110,10 @@ final class TerminalContextDockDirectoryPresenter {
   void _ensureAlive() {
     if (_isDisposed) throw StateError('Context Dock presenter is disposed');
   }
+
+  static TerminalContextDockPathHandoffSnapshot? _noPathHandoffSnapshot(
+    TerminalWindowId _,
+  ) => null;
 }
 
 final class _TerminalContextDockNativeResources {
@@ -1069,6 +1160,7 @@ final class _TerminalContextDockDocument {
     TerminalLocalization localization,
     TerminalContextDockWindowSnapshot dock,
     TerminalContextDockDirectorySnapshot? directory,
+    TerminalContextDockPathHandoffSnapshot? handoff,
   ) {
     final StringBuffer buffer = StringBuffer();
     void line([String value = '']) => buffer.writeln(value);
@@ -1135,6 +1227,15 @@ final class _TerminalContextDockDocument {
           '${_searchSource(localization, coverage.source)}: '
           '${_coverage(localization, coverage.disposition)}',
         );
+      }
+    }
+    if (handoff != null) {
+      line();
+      line(localization.contextDockPathActions);
+      if (handoff.canCopy) line(localization.contextDockCopyPathHint);
+      if (handoff.canInsert) line(localization.contextDockInsertPathHint);
+      if (!handoff.canInsert) {
+        line(_pathBlock(localization, handoff.block));
       }
     }
     line();
@@ -1212,6 +1313,8 @@ final class _TerminalContextDockDocument {
     TerminalContextDockDirectoryStatus.empty => localization.contextDockEmpty,
     TerminalContextDockDirectoryStatus.remoteUnavailable =>
       localization.contextDockRemoteUnavailable,
+    TerminalContextDockDirectoryStatus.privacyUnavailable =>
+      localization.contextDockPrivacyUnavailable,
     TerminalContextDockDirectoryStatus.partial =>
       localization.contextDockPartial(0),
     TerminalContextDockDirectoryStatus.ready => localization.contextDockEmpty,
@@ -1254,6 +1357,32 @@ final class _TerminalContextDockDocument {
       localization.contextDockCoveragePartial,
     TerminalFileSearchCoverageDisposition.unavailable =>
       localization.contextDockCoverageUnavailable,
+  };
+
+  static String _pathBlock(
+    TerminalLocalization localization,
+    TerminalContextDockPathInsertionBlock block,
+  ) => switch (block) {
+    TerminalContextDockPathInsertionBlock.none =>
+      localization.contextDockPathActionsReady,
+    TerminalContextDockPathInsertionBlock.navigatorInactive =>
+      localization.contextDockPathActionsNavigatorInactive,
+    TerminalContextDockPathInsertionBlock.noSelection =>
+      localization.contextDockPathActionsNoSelection,
+    TerminalContextDockPathInsertionBlock.staleTarget =>
+      localization.contextDockPathActionsStale,
+    TerminalContextDockPathInsertionBlock.remote =>
+      localization.contextDockPathActionsRemote,
+    TerminalContextDockPathInsertionBlock.secureInput =>
+      localization.contextDockPathActionsSecure,
+    TerminalContextDockPathInsertionBlock.alternateScreen =>
+      localization.contextDockPathActionsAlternate,
+    TerminalContextDockPathInsertionBlock.foregroundProcess =>
+      localization.contextDockPathActionsForeground,
+    TerminalContextDockPathInsertionBlock.busy =>
+      localization.contextDockPathActionsBusy,
+    TerminalContextDockPathInsertionBlock.disposed =>
+      localization.contextDockPathActionsStale,
   };
 
   static String _permissions(int mode) {

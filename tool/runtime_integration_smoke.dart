@@ -2440,7 +2440,10 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
   _expect(
     RegExp(
           r'^TERMINAL_NATIVE_CONTENT_TEST context=true '
-          r'mouse_zero_write=true quick_look=true services_selection=true '
+          r'mouse_zero_write=true navigator_tree=true navigator_search=true '
+          r'navigator_copy=true navigator_insert=true '
+          r'navigator_zero_write=true navigator_privacy=true '
+          r'navigator_accessibility=true quick_look=true services_selection=true '
           r'service_confirmation=true service_exact=true '
           r'drop_text_exact=true drop_files_exact=true folder_tabs=true '
           r'folder_windows=true cwd_exact=true focus=true close=true '
@@ -2479,7 +2482,7 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
   stdout.writeln(
     'RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS mode=${options.mode.name} '
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
-    'services_manifest=true exact_pty=true sessions=4 '
+    'services_manifest=true navigator=true exact_pty=true sessions=4 '
     'elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }

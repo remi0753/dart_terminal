@@ -696,6 +696,8 @@ enum TerminalContextDockKeyDisposition {
   querySelectionRequested,
   selectionChanged,
   treeIntentRequested,
+  pathCopyDispatched,
+  pathInsertionRequested,
   terminalFocusDispatched,
   overflow,
 }
@@ -779,6 +781,11 @@ final class TerminalContextDockKeyController {
           return _move(windowId, -pageStep);
         case TerminalPhysicalKey.pageDown:
           return _move(windowId, pageStep);
+        case TerminalPhysicalKey.enter:
+          return const TerminalContextDockKeyResult(
+            disposition: TerminalContextDockKeyDisposition.treeIntentRequested,
+            treeIntent: TerminalContextDockTreeIntent.expand,
+          );
         default:
           break;
       }
@@ -795,6 +802,14 @@ final class TerminalContextDockKeyController {
             disposition:
                 TerminalContextDockKeyDisposition.querySelectionRequested,
           );
+        case TerminalPhysicalKey.keyC:
+          final TerminalActionDispatchResult result = await dispatcher.dispatch(
+            TerminalActionId.copy,
+          );
+          return TerminalContextDockKeyResult(
+            disposition: TerminalContextDockKeyDisposition.pathCopyDispatched,
+            dispatchResult: result,
+          );
         case TerminalPhysicalKey.arrowLeft:
           return const TerminalContextDockKeyResult(
             disposition: TerminalContextDockKeyDisposition.treeIntentRequested,
@@ -808,6 +823,15 @@ final class TerminalContextDockKeyController {
         default:
           break;
       }
+    }
+    if (key.physicalKey == TerminalPhysicalKey.enter &&
+        key.modifiers.option &&
+        !key.modifiers.command &&
+        !key.modifiers.control &&
+        !key.modifiers.shift) {
+      return const TerminalContextDockKeyResult(
+        disposition: TerminalContextDockKeyDisposition.pathInsertionRequested,
+      );
     }
     if (!key.modifiers.command &&
         !key.modifiers.control &&

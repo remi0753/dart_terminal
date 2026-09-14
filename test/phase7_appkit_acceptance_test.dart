@@ -11,14 +11,14 @@ void runPhase7AppKitAcceptanceTests() {
   validatePhase7AppKitAcceptanceSource(committed, expectedSource: generated);
   final Phase7AppKitAcceptanceResult result = runPhase7AppKitAcceptanceChecks();
   _expect(
-    result.criteria == 4 &&
-        result.sourceReferences == 14 &&
-        result.unitTests == 12 &&
-        result.integrationTests == 4 &&
-        result.uiAssertions == 10 &&
+    result.criteria == 5 &&
+        result.sourceReferences == 19 &&
+        result.unitTests == 16 &&
+        result.integrationTests == 5 &&
+        result.uiAssertions == 11 &&
         result.machineLine() ==
-            'PHASE7_APPKIT_ACCEPTANCE_PASS criteria=4 source_refs=14 '
-                'unit_tests=12 integration_tests=4 ui_assertions=10',
+            'PHASE7_APPKIT_ACCEPTANCE_PASS criteria=5 source_refs=19 '
+                'unit_tests=16 integration_tests=5 ui_assertions=11',
     'reviewed Phase 7 layer totals are exact',
   );
   final Map<String, Object?> report =

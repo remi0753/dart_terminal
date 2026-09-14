@@ -138,6 +138,9 @@ runTerminalDiagnosticsPrivacyAudit({Directory? projectRoot}) async {
   ], 'application diagnostics assembly');
   _rejectAll(applicationSnapshot, const <String>[
     '.workingDirectory',
+    '.contextDock',
+    '.query',
+    '.path',
     '.processId',
     '.failure',
     'Platform.environment',
@@ -307,9 +310,66 @@ runTerminalDiagnosticsPrivacyAudit({Directory? projectRoot}) async {
     'disabled parser capture must forward before returning',
   );
 
+  final String contextDockDirectory = _read(
+    root,
+    'lib/src/terminal_context_dock_directory.dart',
+  );
+  _requireAll(contextDockDirectory, const <String>[
+    'int get activeOperationCount',
+    'TerminalContextDockDirectoryStatus.privacyUnavailable',
+    'retained?.cancel();',
+    'window.cancelSearch();',
+    'TerminalContextDockLimits.maximumResults',
+  ], 'Context Dock filesystem lifecycle');
+  _rejectAll(contextDockDirectory, const <String>[
+    '.listSync(',
+    '.statSync(',
+    '.readAsStringSync(',
+    'Process.run(',
+    'runInShell: true',
+  ], 'Context Dock filesystem lifecycle');
+
+  final String fileSearch = _read(root, 'lib/src/terminal_file_search.dart');
+  _requireAll(fileSearch, const <String>[
+    'static const int maximumResults = 512;',
+    'static const int maximumDirectories = 512;',
+    'static const int maximumScannedEntries = 4096;',
+    'static const int maximumRetainedPathUtf8Bytes = 1024 * 1024;',
+    'static const Duration deadline = Duration(seconds: 3);',
+    "Process.start('/usr/bin/mdfind'",
+    'maximumSystemIndexOutputBytes',
+    '_directoryOperation?.cancel();',
+  ], 'Context Dock bounded search');
+  _rejectAll(fileSearch, const <String>[
+    '.listSync(',
+    '.statSync(',
+    'Process.run(',
+    'runInShell: true',
+    "Directory('/')",
+  ], 'Context Dock bounded search');
+
+  final String pathHandoff = _read(
+    root,
+    'lib/src/terminal_context_dock_path_handoff.dart',
+  );
+  _requireAll(pathHandoff, const <String>[
+    'appendTrailingSeparator: false',
+    'target.insertionBlock',
+    '_pasteController.submit(',
+    'process.disposition == TerminalPaneProcessDisposition.idleShell',
+    'secureInput!.manualRequested',
+  ], 'Context Dock explicit path handoff');
+  _rejectAll(pathHandoff, const <String>[
+    'Process.run(',
+    'Process.start(',
+    '.sendInput(',
+    "'cd ",
+    'workingDirectorySnapshot()',
+  ], 'Context Dock explicit path handoff');
+
   return TerminalDiagnosticsPrivacyAuditResult(
     schemaKeyCount: _expectedSchemaKeys.length,
-    ownerCount: 7,
+    ownerCount: 10,
     topLevelKeyCount: _expectedTopLevelKeys.length,
   );
 }

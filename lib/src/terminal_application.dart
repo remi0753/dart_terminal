@@ -29,6 +29,7 @@ import 'terminal_config_reload.dart';
 import 'terminal_configuration_reference.dart';
 import 'terminal_context_dock.dart';
 import 'terminal_context_dock_directory.dart';
+import 'terminal_context_dock_path_handoff.dart';
 import 'terminal_core/terminal_desktop_signals.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
@@ -2774,9 +2775,9 @@ final class TerminalApplication {
           metadataForPane: (PaneId paneId) =>
               sessions[paneId]?.terminalScreenSet.metadata,
         );
-    final _TerminalClipboard clipboard = _AppKitTerminalClipboard(
-      application.generalPasteboard,
-    );
+    final _TerminalClipboard clipboard = runNativeContentAcceptance
+        ? _MemoryTerminalClipboard()
+        : _AppKitTerminalClipboard(application.generalPasteboard);
     final TerminalPasteConfirmationGate pasteConfirmationGate =
         TerminalPasteConfirmationGate();
     final Stopwatch pasteClock = Stopwatch()..start();
@@ -2798,6 +2799,7 @@ final class TerminalApplication {
     TerminalContextDockDirectoryPresenter? contextDockPresenter;
     TerminalContextDockActionCoordinator? contextDockActionCoordinator;
     TerminalContextDockKeyController? contextDockKeyController;
+    TerminalContextDockPathHandoffController? contextDockPathHandoffController;
     TerminalNativeSplitDividerGestureController? dividerGestureController;
     TerminalSystemRecoveryController? systemRecoveryController;
     TerminalMemoryPressureController? memoryPressureController;
@@ -2858,6 +2860,8 @@ final class TerminalApplication {
     final Map<PaneId, int> nativeContentWriteEnqueuedCounts = <PaneId, int>{};
     final List<TerminalExternalPasteResult> nativeContentPasteResults =
         <TerminalExternalPasteResult>[];
+    final List<TerminalContextDockPathHandoffResult>
+    contextDockPathHandoffResults = <TerminalContextDockPathHandoffResult>[];
     final List<String> nativeContentQuickLookTexts = <String>[];
     var terminalInputDeliveryCount = 0;
     var configurationEndOfFileActionCount = 0;
@@ -3435,6 +3439,49 @@ final class TerminalApplication {
       return paneId == null ? null : state.paneForId(paneId);
     }
 
+    bool contextDockCanObservePane(PaneId paneId) {
+      final TerminalPane? pane = state.paneForId(paneId);
+      if (pane == null || !pane.isLive) return false;
+      return TerminalContextDockPrivacyPolicy.canObserve(
+        paneId: paneId,
+        process: pane.processSnapshot(),
+        secureInput: secureKeyboardEntryController?.status,
+      );
+    }
+
+    TerminalContextDockPathTarget? contextDockPathTarget(
+      TerminalWindowId windowId,
+      PaneId paneId,
+    ) {
+      final TerminalWindowState? window = state.activeWindow;
+      final TerminalPane? pane = state.paneForId(paneId);
+      final TerminalSession? session = sessions[paneId];
+      final TerminalContextDockDirectorySnapshot? directory =
+          contextDockDirectoryController?.snapshotForWindow(windowId);
+      if (window == null ||
+          window.id != windowId ||
+          window.role != TerminalWindowRole.standard ||
+          window.selectedTab.focusedPaneId != paneId ||
+          pane == null ||
+          !pane.isLive ||
+          session == null ||
+          !owners.containsKey(paneId)) {
+        return null;
+      }
+      final TerminalPaneProcessSnapshot process = pane.processSnapshot();
+      return TerminalContextDockPathTarget(
+        paneId: paneId,
+        identity: pane,
+        isLocal:
+            directory?.workingDirectory != null &&
+            directory?.status !=
+                TerminalContextDockDirectoryStatus.remoteUnavailable,
+        secureInputActive: !contextDockCanObservePane(paneId),
+        usingAlternateScreen: session.terminalScreenSet.usingAlternate,
+        processDisposition: process.disposition,
+      );
+    }
+
     TerminalSecureKeyboardEntryTarget? activeSecureKeyboardEntryTarget() {
       final TerminalWindowState? logicalWindow = state.activeWindow;
       final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
@@ -3472,6 +3519,30 @@ final class TerminalApplication {
     }
 
     secureReconcileRequest = reconcileSecureKeyboardEntry;
+
+    void enforceContextDockPrivacy() {
+      final TerminalWindowState? window = state.activeWindow;
+      final TerminalContextDockState? dock = contextDockState;
+      final TerminalContextDockDirectoryPresenter? presenter =
+          contextDockPresenter;
+      if (window == null || dock == null || presenter == null) return;
+      final TerminalContextDockWindowSnapshot? snapshot = dock
+          .snapshotForWindow(window.id);
+      if (snapshot == null ||
+          !snapshot.navigatorOwnsInput ||
+          contextDockCanObservePane(snapshot.targetPaneId)) {
+        return;
+      }
+      final TerminalContextDockFocusRequest request =
+          TerminalContextDockFocusRequest(
+            windowId: snapshot.windowId,
+            paneId: snapshot.targetPaneId,
+            stateGeneration: snapshot.generation,
+            querySelectionGeneration: snapshot.pane.querySelectionGeneration,
+          );
+      presenter.focusTerminal(request);
+      dock.focusTerminal(snapshot.windowId, snapshot.targetPaneId);
+    }
 
     _TerminalSelectionProductOwner? activeSelection() {
       final PaneId? paneId = state.activeWindow?.selectedTab.focusedPaneId;
@@ -3768,6 +3839,7 @@ final class TerminalApplication {
       hierarchyReconciliationInProgress = true;
       try {
         contextDockState?.synchronize(state);
+        enforceContextDockPrivacy();
         contextDockDirectoryController?.synchronize();
         nativeHierarchy.reconcile();
       } finally {
@@ -4039,6 +4111,23 @@ final class TerminalApplication {
                   intent,
                 );
               }
+              if (result.disposition ==
+                  TerminalContextDockKeyDisposition.pathInsertionRequested) {
+                final TerminalContextDockPathHandoffController? handoff =
+                    contextDockPathHandoffController;
+                if (handoff != null) {
+                  unawaited(
+                    handoff.insertPath(logicalWindow.id).then<void>((
+                      TerminalContextDockPathHandoffResult handoffResult,
+                    ) {
+                      if (runNativeContentAcceptance) {
+                        contextDockPathHandoffResults.add(handoffResult);
+                      }
+                      reconcileRequest?.call();
+                    }, onError: recordAsynchronousError),
+                  );
+                }
+              }
             }, onError: recordAsynchronousError),
           );
       }
@@ -4137,6 +4226,8 @@ final class TerminalApplication {
       await menuProjection?.dispose();
       actionDispatcher = null;
       contextDockKeyController = null;
+      contextDockPathHandoffController?.dispose();
+      contextDockPathHandoffController = null;
       contextDockActionCoordinator?.dispose();
       contextDockActionCoordinator = null;
       contextDockDirectoryController?.dispose();
@@ -4454,6 +4545,7 @@ final class TerminalApplication {
                 launchWorkingDirectory: session.initialWorkingDirectory,
               );
             },
+            canObservePane: contextDockCanObservePane,
             onChanged: () {
               reconcileRequest?.call();
               final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -4473,6 +4565,8 @@ final class TerminalApplication {
                 hierarchy?.windowForTab(tabId),
             terminalViewForPane: (PaneId paneId) =>
                 hierarchy?.resourcesForPane(paneId)?.view,
+            pathHandoffSnapshot: (TerminalWindowId windowId) =>
+                contextDockPathHandoffController?.snapshotForWindow(windowId),
           );
       contextDockPresenter = createdDockPresenter;
 
@@ -4626,6 +4720,56 @@ final class TerminalApplication {
       secureKeyboardEntryController = createdSecureKeyboardEntry;
       reconcileSecureKeyboardEntry();
       stdout.writeln(createdSecureKeyboardEntry.status.machineLine());
+      final TerminalExternalPasteController<PaneId> contextDockPasteController =
+          TerminalExternalPasteController<PaneId>(
+            resolveTarget: (PaneId paneId) {
+              final TerminalWindowState? window = state.activeWindow;
+              if (window == null) return null;
+              final TerminalContextDockPathTarget? target =
+                  contextDockPathTarget(window.id, paneId);
+              final TerminalPane? pane = state.paneForId(paneId);
+              if (target == null ||
+                  target.insertionBlock !=
+                      TerminalContextDockPathInsertionBlock.none ||
+                  pane == null ||
+                  !identical(target.identity, pane)) {
+                return null;
+              }
+              return TerminalExternalPasteTarget(
+                identity: pane,
+                bracketedPasteMode: pane.bracketedPasteMode,
+                pasteInProgress: pane.pasteInProgress,
+                showNotice: pane.showClipboardNotice,
+                paste: pane.paste,
+              );
+            },
+            monotonicMicros: () => pasteClock.elapsedMicroseconds,
+          );
+      final TerminalContextDockPathHandoffController createdPathHandoff =
+          TerminalContextDockPathHandoffController(
+            dockState: createdContextDockState,
+            resolveSelection: createdDockDirectory.selectedPathForWindow,
+            resolveTarget: contextDockPathTarget,
+            writeClipboard: clipboard.writeText,
+            pasteController: contextDockPasteController,
+            focusTerminal: (TerminalWindowId windowId, PaneId paneId) async {
+              final TerminalContextDockWindowSnapshot? dock =
+                  createdContextDockState.snapshotForWindow(windowId);
+              if (dock == null ||
+                  dock.targetPaneId != paneId ||
+                  !dock.navigatorOwnsInput) {
+                return false;
+              }
+              final TerminalActionDispatcher? dispatcher = actionDispatcher;
+              if (dispatcher == null) return false;
+              final TerminalActionDispatchResult result = await dispatcher
+                  .dispatch(TerminalActionId.focusTerminal);
+              return result.disposition ==
+                  TerminalActionDispatchDisposition.executed;
+            },
+            onClipboardWritten: pasteConfirmationGate.clear,
+          );
+      contextDockPathHandoffController = createdPathHandoff;
       osc52Presenter = TerminalOsc52ConfirmationPresenter(
         focusTarget: () {
           final TerminalWindowState? activeWindow = state.activeWindow;
@@ -4693,9 +4837,15 @@ final class TerminalApplication {
             dockState: createdContextDockState,
             focusNavigator: createdDockPresenter.focusNavigator,
             focusTerminal: createdDockPresenter.focusTerminal,
-            canFocusNavigator: () =>
-                productResourceDisposalFuture == null &&
-                createdDockPresenter.canFocusNavigator,
+            canFocusNavigator: () {
+              final TerminalWindowState? activeWindow = state.activeWindow;
+              return productResourceDisposalFuture == null &&
+                  activeWindow != null &&
+                  contextDockCanObservePane(
+                    activeWindow.selectedTab.focusedPaneId,
+                  ) &&
+                  createdDockPresenter.canFocusNavigator;
+            },
             onChanged: () {
               reconcileInteractiveHierarchy();
               final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -5371,6 +5521,13 @@ final class TerminalApplication {
           TerminalActionRegistration(
             id: TerminalActionId.copy,
             isAvailable: () {
+              final TerminalWindowState? window = state.activeWindow;
+              final TerminalContextDockWindowSnapshot? dock = window == null
+                  ? null
+                  : createdContextDockState.snapshotForWindow(window.id);
+              if (dock?.navigatorOwnsInput == true) {
+                return createdPathHandoff.snapshotForWindow(window!.id).canCopy;
+              }
               final TerminalSelectionText? selected = activeSelection()
                   ?.selectedText();
               return selected != null &&
@@ -5378,6 +5535,18 @@ final class TerminalApplication {
                   !selected.isTruncated;
             },
             handler: () {
+              final TerminalWindowState? window = state.activeWindow;
+              final TerminalContextDockWindowSnapshot? dock = window == null
+                  ? null
+                  : createdContextDockState.snapshotForWindow(window.id);
+              if (dock?.navigatorOwnsInput == true) {
+                final TerminalContextDockPathHandoffResult result =
+                    createdPathHandoff.copyPath(window!.id);
+                if (runNativeContentAcceptance) {
+                  contextDockPathHandoffResults.add(result);
+                }
+                return;
+              }
               final TerminalSelectionText? selected = activeSelection()
                   ?.selectedText();
               if (selected != null && selected.text.isNotEmpty) {
@@ -5781,6 +5950,13 @@ final class TerminalApplication {
           pasteResults: nativeContentPasteResults,
           writeEnqueuedCounts: nativeContentWriteEnqueuedCounts,
           quickLookTexts: nativeContentQuickLookTexts,
+          contextDockState: createdContextDockState,
+          contextDockDirectory: createdDockDirectory,
+          contextDockPresenter: createdDockPresenter,
+          contextDockPathHandoff: createdPathHandoff,
+          contextDockPathHandoffResults: contextDockPathHandoffResults,
+          clipboard: clipboard,
+          reconcile: reconcileInteractiveHierarchy,
           closed: closed,
           prompt: acceptancePrompt.trimRight(),
         );
@@ -8066,6 +8242,14 @@ final class TerminalApplication {
     required List<TerminalExternalPasteResult> pasteResults,
     required Map<PaneId, int> writeEnqueuedCounts,
     required List<String> quickLookTexts,
+    required TerminalContextDockState contextDockState,
+    required TerminalContextDockDirectoryController contextDockDirectory,
+    required TerminalContextDockDirectoryPresenter contextDockPresenter,
+    required TerminalContextDockPathHandoffController contextDockPathHandoff,
+    required List<TerminalContextDockPathHandoffResult>
+    contextDockPathHandoffResults,
+    required _TerminalClipboard clipboard,
+    required void Function() reconcile,
     required Completer<void> closed,
     required String prompt,
   }) async {
@@ -8171,7 +8355,8 @@ final class TerminalApplication {
       final TerminalActionDispatchResult result = await dispatcher.dispatch(id);
       _expectLifecycle(
         result.disposition == TerminalActionDispatchDisposition.executed,
-        'native content action ${id.stableName} did not execute',
+        'native content action ${id.stableName} did not execute: '
+        '${result.disposition.name} ${result.error ?? ''}',
       );
     }
 
@@ -8179,15 +8364,15 @@ final class TerminalApplication {
       'dart-terminal-native-content-',
     );
     try {
-      final Directory tabDirectory = Directory(
-        '${fixtureRoot.path}/service-tab',
-      )..createSync();
+      final String fixtureRootPath = fixtureRoot.resolveSymbolicLinksSync();
+      final Directory tabDirectory = Directory('$fixtureRootPath/service-tab')
+        ..createSync();
       final Directory windowDirectory = Directory(
-        '${fixtureRoot.path}/service-window',
+        '$fixtureRootPath/service-window',
       )..createSync();
-      final File firstDroppedFile = File('${fixtureRoot.path}/drop one.txt')
+      final File firstDroppedFile = File('$fixtureRootPath/drop one.txt')
         ..writeAsStringSync('one');
-      final File secondDroppedFile = File("${fixtureRoot.path}/drop'2.txt")
+      final File secondDroppedFile = File("$fixtureRootPath/drop'2.txt")
         ..writeAsStringSync('two');
 
       _expectLifecycle(
@@ -8209,6 +8394,261 @@ final class TerminalApplication {
       final _TerminalSelectionProductOwner selection =
           selections[initialPaneId]!;
       await _waitForAsciiMarker(initialSession, prompt);
+
+      final _MemoryTerminalClipboard contextDockClipboard =
+          clipboard as _MemoryTerminalClipboard;
+      final Window contextDockWindow = hierarchy.windowForTab(initialTab.id)!;
+      final String quotedFixtureRoot =
+          TerminalExternalContentAdmission.filePaths(
+            <String>[fixtureRootPath],
+            maxFilePaths: 1,
+            appendTrailingSeparator: false,
+          ).content!.text;
+      initialPane.insertText(
+        "printf '\\033[?2004l\\r\\n__DT_NAV_ZSH_READY__\\r\\n'; "
+        'stty echo icanon; exec /bin/sh -i',
+      );
+      await initialPane.submit();
+      await _waitForAsciiMarker(initialSession, '__DT_NAV_ZSH_READY__');
+      await waitFor(
+        () => !initialSession.bracketedPasteMode,
+        'plain local sh fixture retained zsh bracketed-paste mode',
+      );
+      await waitFor(() {
+        final TerminalPaneProcessSnapshot process = initialPane
+            .processSnapshot();
+        return process.disposition ==
+                TerminalPaneProcessDisposition.idleShell &&
+            process.terminalEchoEnabled == true;
+      }, 'plain local sh did not expose an echo-on idle-shell boundary');
+      initialPane.insertText(
+        "cd $quotedFixtureRoot && "
+        "printf '\\r\\n__DT_NAV_CWD_READY__\\r\\n'",
+      );
+      await initialPane.submit();
+      await _waitForAsciiMarker(initialSession, '__DT_NAV_CWD_READY__');
+      await waitFor(
+        () =>
+            initialSession.workingDirectorySnapshot()?.path == fixtureRootPath,
+        'plain local sh cwd was not observable through the PTY capability',
+      );
+      reconcile();
+
+      final int navigatorZeroWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
+      final TerminalPaneProcessSnapshot navigatorProcess = initialPane
+          .processSnapshot();
+      _expectLifecycle(
+        dispatcher.snapshot(TerminalActionId.searchFilesAndFolders).isEnabled,
+        'Context Dock search was unavailable after plain-sh reconcile: '
+        'presenter=${contextDockPresenter.canFocusNavigator} '
+        'process=${navigatorProcess.disposition.name} '
+        'echo=${navigatorProcess.terminalEchoEnabled}',
+      );
+      await dispatch(TerminalActionId.searchFilesAndFolders);
+      await waitFor(() {
+        final TerminalContextDockWindowSnapshot? dock = contextDockState
+            .snapshotForWindow(initialWindow.id);
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        return dock?.navigatorOwnsInput == true &&
+            directory?.workingDirectory == fixtureRootPath &&
+            directory!.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == secondDroppedFile.path,
+            );
+      }, 'Context Dock did not project the real plain-sh cwd tree');
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 2,
+        modifiers: 0,
+        characters: "drop'2",
+        charactersIgnoringModifiers: "drop'2",
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(() {
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        return directory?.isSearch == true &&
+            directory!.rows.length == 1 &&
+            directory.rows.single.entry.path == secondDroppedFile.path;
+      }, 'Context Dock query did not replace the tree with its local result');
+      final TextEditorSnapshot navigatorEditor = contextDockPresenter
+          .nativeEditorSnapshotForWindow(initialWindow.id)!;
+      _expectLifecycle(
+        !navigatorEditor.isEditable &&
+            !navigatorEditor.hasMarkedText &&
+            navigatorEditor.text.contains('Directory Navigator') &&
+            navigatorEditor.text.contains("drop'2.txt") &&
+            navigatorEditor.text.contains(secondDroppedFile.path) &&
+            navigatorEditor.selection.start > 0 &&
+            contextDockWindow.keyEventRouting ==
+                KeyEventRouting.dartAndAppKit &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                navigatorZeroWriteBaseline,
+        'native Navigator omitted its read-only accessible document or wrote '
+        'PTY bytes while searching',
+      );
+
+      final int copyResultBaseline = contextDockPathHandoffResults.length;
+      final int copyClipboardBaseline = contextDockClipboard.writeCount;
+      await dispatch(TerminalActionId.copy);
+      _expectLifecycle(
+        contextDockPathHandoffResults.length == copyResultBaseline + 1 &&
+            contextDockPathHandoffResults.last.disposition ==
+                TerminalContextDockPathHandoffDisposition.copied &&
+            contextDockClipboard.writeCount == copyClipboardBaseline + 1 &&
+            contextDockClipboard.text == secondDroppedFile.path &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                navigatorZeroWriteBaseline &&
+            contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput,
+        'Copy Path did not preserve the exact raw path and zero-write focus',
+      );
+
+      initialPane.insertText('if [ -f ');
+      final int insertionWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
+      final int insertionResultBaseline = contextDockPathHandoffResults.length;
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 36,
+        modifiers: ModifierKeys.optionBit,
+        characters: '\r',
+        charactersIgnoringModifiers: '\r',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(
+        () =>
+            contextDockPathHandoffResults.length == insertionResultBaseline + 1,
+        'Option-Return path insertion did not settle',
+      );
+      _expectLifecycle(
+        contextDockPathHandoffResults.last.disposition ==
+                TerminalContextDockPathHandoffDisposition.inserted &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                insertionWriteBaseline + 1 &&
+            contextDockState.snapshotForWindow(initialWindow.id)!.inputOwner ==
+                TerminalContextDockInputOwner.terminal &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly,
+        'Option-Return did not write exactly once and restore terminal focus',
+      );
+      initialPane.insertText(
+        " ]; then printf '\\r\\n__DT_NAV_PATH_%s__\\r\\n' EXACT; "
+        "else printf '\\r\\n__DT_NAV_PATH_%s__\\r\\n' MISMATCH; fi",
+      );
+      await initialPane.submit();
+      await _waitForAsciiMarker(initialSession, '__DT_NAV_PATH_EXACT__');
+      _expectLifecycle(
+        _findAscii(
+              initialSession.terminalScreenSet.activeScreen,
+              '__DT_NAV_PATH_MISMATCH__',
+            ) ==
+            null,
+        'inserted Navigator path did not survive shell-literal evaluation',
+      );
+
+      await dispatch(TerminalActionId.searchFilesAndFolders);
+      initialSession.terminalScreenSet.setAlternateMode1049(true);
+      reconcile();
+      final int alternateResultBaseline = contextDockPathHandoffResults.length;
+      final int alternateWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 36,
+        modifiers: ModifierKeys.optionBit,
+        characters: '\r',
+        charactersIgnoringModifiers: '\r',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(
+        () =>
+            contextDockPathHandoffResults.length == alternateResultBaseline + 1,
+        'alternate-screen insertion rejection did not settle',
+      );
+      _expectLifecycle(
+        contextDockPathHandoffResults.last.disposition ==
+                TerminalContextDockPathHandoffDisposition.unavailable &&
+            contextDockPathHandoffResults.last.block ==
+                TerminalContextDockPathInsertionBlock.alternateScreen &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) == alternateWriteBaseline,
+        'alternate-screen Navigator insertion was not a zero-write rejection',
+      );
+      initialSession.terminalScreenSet.setAlternateMode1049(false);
+      await dispatch(TerminalActionId.focusTerminal);
+
+      initialPane.insertText(
+        "stty -echo; printf '\\r\\n__DT_NAV_ECHO_OFF__\\r\\n'; "
+        "sleep 2; stty echo; printf '\\r\\n__DT_NAV_ECHO_ON__\\r\\n'",
+      );
+      await initialPane.submit();
+      await _waitForAsciiMarker(initialSession, '__DT_NAV_ECHO_OFF__');
+      await waitFor(() {
+        final TerminalPaneProcessSnapshot process = initialPane
+            .processSnapshot();
+        return process.terminalEchoEnabled == false &&
+            process.disposition ==
+                TerminalPaneProcessDisposition.foregroundProcess;
+      }, 'foreground command did not expose the protected ECHO-off boundary');
+      reconcile();
+      contextDockDirectory.synchronize();
+      final TerminalContextDockDirectorySnapshot protectedDirectory =
+          contextDockDirectory.snapshotForWindow(initialWindow.id)!;
+      _expectLifecycle(
+        protectedDirectory.status ==
+                TerminalContextDockDirectoryStatus.privacyUnavailable &&
+            protectedDirectory.workingDirectory == null &&
+            protectedDirectory.rows.isEmpty &&
+            contextDockDirectory.activeOperationCount == 0 &&
+            !dispatcher
+                .snapshot(TerminalActionId.searchFilesAndFolders)
+                .isEnabled,
+        'protected input retained filesystem state or Navigator focus access',
+      );
+
+      await _waitForAsciiMarker(initialSession, '__DT_NAV_ECHO_ON__');
+      await waitFor(
+        () =>
+            initialPane.processSnapshot().disposition ==
+            TerminalPaneProcessDisposition.idleShell,
+        'plain sh did not restore the idle-shell Navigator boundary',
+      );
+      reconcile();
+      await dispatch(TerminalActionId.searchFilesAndFolders);
+      await waitFor(
+        () => contextDockState
+            .snapshotForWindow(initialWindow.id)!
+            .navigatorOwnsInput,
+        'Navigator focus did not recover after protected input',
+      );
+      final int focusWriteBaseline = writeEnqueuedCounts[initialPaneId] ?? 0;
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 53,
+        modifiers: 0,
+        characters: '\u001b',
+        charactersIgnoringModifiers: '\u001b',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(
+        () =>
+            contextDockState.snapshotForWindow(initialWindow.id)!.inputOwner ==
+            TerminalContextDockInputOwner.terminal,
+        'Navigator Escape did not restore terminal input ownership',
+      );
+      _expectLifecycle(
+        contextDockState.snapshotForWindow(initialWindow.id)!.pane.query ==
+                "drop'2" &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) == focusWriteBaseline,
+        'Navigator focus round-trip lost the query or wrote PTY bytes',
+      );
+
       initialPane.insertText("printf '\\r\\nNATIVE%s\\r\\n' 'CONTENTLOOKUP'");
       await initialPane.submit();
       await _waitForAsciiMarker(initialSession, lookupWord);
@@ -8538,6 +8978,9 @@ final class TerminalApplication {
       );
       stdout.writeln(
         'TERMINAL_NATIVE_CONTENT_TEST context=true mouse_zero_write=true '
+        'navigator_tree=true navigator_search=true navigator_copy=true '
+        'navigator_insert=true navigator_zero_write=true '
+        'navigator_privacy=true navigator_accessibility=true '
         'quick_look=true services_selection=true service_confirmation=true '
         'service_exact=true drop_text_exact=true drop_files_exact=true '
         'folder_tabs=true folder_windows=true cwd_exact=true focus=true '

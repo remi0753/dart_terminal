@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dart_appkit/dart_appkit.dart';
@@ -11,6 +12,76 @@ Future<void> runTerminalContextDockTests() async {
   await _testActionFocusOwnershipAndAvailability();
   await _testNavigatorKeyRoutingNeverFallsThrough();
   await _testDirectoryTreeFollowsPaneAndCancelsHiddenWork();
+  _testPrivacyPolicyDistinguishesIdleLineEditing();
+  await _testPathHandoffPolicyAndExactPayload();
+}
+
+void _testPrivacyPolicyDistinguishesIdleLineEditing() {
+  const PaneId paneId = PaneId(1);
+  const TerminalSessionId sessionId = TerminalSessionId(
+    paneId: paneId,
+    generation: 1,
+  );
+  TerminalPaneProcessSnapshot process({required bool foreground}) =>
+      TerminalPaneProcessSnapshot.available(
+        sessionId: sessionId,
+        childProcessId: 10,
+        owningProcessGroup: 10,
+        foregroundProcessGroup: foreground ? 11 : 10,
+        terminalEchoEnabled: false,
+      );
+  TerminalSecureKeyboardEntryStatus secure({required bool manual}) =>
+      TerminalSecureKeyboardEntryStatus(
+        mode: manual
+            ? TerminalSecureKeyboardEntryMode.manual
+            : TerminalSecureKeyboardEntryMode.automatic,
+        manualRequested: manual,
+        automaticEnabled: true,
+        indicationEnabled: true,
+        applicationActive: true,
+        desired: true,
+        ownedEnabled: true,
+        systemEnabled: true,
+        lastOsStatus: 0,
+        targetIdentity: paneId,
+        terminalEchoEnabled: false,
+        failure: null,
+      );
+
+  _expect(
+    TerminalContextDockPrivacyPolicy.canObserve(
+      paneId: paneId,
+      process: process(foreground: false),
+      secureInput: secure(manual: false),
+    ),
+    'automatic ECHO-off from idle shell line editing keeps Navigator usable',
+  );
+  _expect(
+    !TerminalContextDockPrivacyPolicy.canObserve(
+      paneId: paneId,
+      process: process(foreground: true),
+      secureInput: secure(manual: false),
+    ),
+    'automatic ECHO-off with a foreground process hides filesystem context',
+  );
+  _expect(
+    !TerminalContextDockPrivacyPolicy.canObserve(
+      paneId: paneId,
+      process: process(foreground: false),
+      secureInput: secure(manual: true),
+    ),
+    'manual secure input hides filesystem context even at an idle shell',
+  );
+  _expect(
+    !TerminalContextDockPrivacyPolicy.canObserve(
+      paneId: paneId,
+      process: TerminalPaneProcessSnapshot.unavailable(
+        sessionId: sessionId,
+        terminalEchoEnabled: true,
+      ),
+    ),
+    'unavailable process identity fails closed for filesystem observation',
+  );
 }
 
 Future<void> _testWindowPaneStateAndBounds() async {
@@ -145,6 +216,8 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
       TerminalWorkingDirectoryResolver();
   String root = '/root';
   bool remote = false;
+  bool canObserve = true;
+  var resolutionCount = 0;
   final TerminalContextDockDirectoryController controller =
       TerminalContextDockDirectoryController(
         applicationState: harness.state,
@@ -163,6 +236,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
           ),
         ),
         resolveWorkingDirectory: (PaneId paneId, int generation) {
+          resolutionCount++;
           final TerminalPaneProcessSnapshot process = harness.state
               .paneForId(paneId)!
               .processSnapshot();
@@ -177,6 +251,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
             launchWorkingDirectory: root,
           );
         },
+        canObservePane: (_) => canObserve,
       );
 
   controller.synchronize();
@@ -249,6 +324,22 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
         snapshot.rows.single.entry.name == 'other.txt',
     'focused pane change cancels the old owner and projects the new pane cwd',
   );
+
+  final int resolutionBaseline = resolutionCount;
+  canObserve = false;
+  controller.synchronize();
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.status == TerminalContextDockDirectoryStatus.privacyUnavailable &&
+        snapshot.workingDirectory == null &&
+        snapshot.rows.isEmpty &&
+        controller.activeOperationCount == 0 &&
+        resolutionCount == resolutionBaseline,
+    'protected input cancels work and exposes neither cwd nor retained rows',
+  );
+  canObserve = true;
+  controller.synchronize();
+  await _waitUntil(() => controller.activeOperationCount == 0);
 
   remote = true;
   controller.synchronize();
@@ -509,13 +600,18 @@ Future<void> _testNavigatorKeyRoutingNeverFallsThrough() async {
         focusTerminal: terminalFocus.add,
       );
   final Completer<void> busyGate = Completer<void>();
+  var holdCopy = false;
+  var copyCount = 0;
   final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
     catalog: TerminalActionCatalog.standard(),
     registrations: <TerminalActionRegistration>[
       ...coordinator.registrations(),
       TerminalActionRegistration(
         id: TerminalActionId.copy,
-        handler: () => busyGate.future,
+        handler: () {
+          copyCount++;
+          return holdCopy ? busyGate.future : null;
+        },
       ),
     ],
   );
@@ -600,6 +696,31 @@ Future<void> _testNavigatorKeyRoutingNeverFallsThrough() async {
             TerminalContextDockTreeIntent.expand,
     'Command-Left and Command-Right remain navigator tree intents',
   );
+  _expect(
+    (await route(
+              _key(
+                keyCode: 8,
+                characters: 'c',
+                modifiers: const ModifierKeys(ModifierKeys.commandBit),
+              ),
+            )).disposition ==
+            TerminalContextDockKeyDisposition.pathCopyDispatched &&
+        copyCount == 1,
+    'Command-C dispatches the shared Copy action exactly once',
+  );
+  _expect(
+    (await route(_key(keyCode: 36, characters: '\r'))).treeIntent ==
+            TerminalContextDockTreeIntent.expand &&
+        (await route(
+              _key(
+                keyCode: 36,
+                characters: '\r',
+                modifiers: const ModifierKeys(ModifierKeys.optionBit),
+              ),
+            )).disposition ==
+            TerminalContextDockKeyDisposition.pathInsertionRequested,
+    'Return expands a folder and Option-Return requests explicit insertion',
+  );
   await route(
     _key(
       keyCode: 7,
@@ -613,6 +734,7 @@ Future<void> _testNavigatorKeyRoutingNeverFallsThrough() async {
     'unsupported and release events remain consumed while navigator owns input',
   );
 
+  holdCopy = true;
   final Future<TerminalActionDispatchResult> busy = dispatcher.dispatch(
     TerminalActionId.copy,
   );
@@ -656,6 +778,249 @@ Future<void> _testNavigatorKeyRoutingNeverFallsThrough() async {
   coordinator.dispose();
   dock.dispose();
   await harness.state.shutdown();
+}
+
+Future<void> _testPathHandoffPolicyAndExactPayload() async {
+  final _Harness harness = _Harness();
+  final TerminalWindowState window = await harness.createWindow();
+  final PaneId paneId = window.selectedTab.focusedPaneId;
+  final TerminalContextDockState dock = TerminalContextDockState()
+    ..synchronize(harness.state);
+  void focusNavigator() {
+    final TerminalContextDockFocusRequest request = dock.requestSearchFocus(
+      window.id,
+      paneId,
+    );
+    _expect(dock.confirmNavigatorInput(request), 'navigator focus is current');
+    dock.setResultCount(window.id, 1);
+  }
+
+  focusNavigator();
+  final _PathHandoffHarness handoff = _PathHandoffHarness(
+    windowId: window.id,
+    paneId: paneId,
+  );
+  final TerminalExternalPasteController<PaneId> paste =
+      TerminalExternalPasteController<PaneId>(
+        resolveTarget: handoff.resolvePasteTarget,
+      );
+  final TerminalContextDockPathHandoffController controller =
+      TerminalContextDockPathHandoffController(
+        dockState: dock,
+        resolveSelection: handoff.resolveSelection,
+        resolveTarget: handoff.resolveTarget,
+        writeClipboard: handoff.writeClipboard,
+        pasteController: paste,
+        focusTerminal: (TerminalWindowId windowId, PaneId targetPaneId) async {
+          if (windowId != window.id || targetPaneId != paneId) return false;
+          handoff.focusCount++;
+          dock.focusTerminal(windowId, targetPaneId);
+          return true;
+        },
+        onClipboardWritten: () => handoff.clipboardResetCount++,
+      );
+
+  final TerminalContextDockPathHandoffSnapshot ready = controller
+      .snapshotForWindow(window.id);
+  _expect(
+    ready.canCopy &&
+        ready.canInsert &&
+        ready.block == TerminalContextDockPathInsertionBlock.none,
+    'one selected local path is ready for both explicit actions',
+  );
+  _expect(
+    controller.copyPath(window.id).disposition ==
+            TerminalContextDockPathHandoffDisposition.copied &&
+        handoff.clipboardText == handoff.path &&
+        handoff.clipboardResetCount == 1 &&
+        handoff.writes.isEmpty &&
+        dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
+    'copy writes only the raw path and neither writes PTY bytes nor changes focus',
+  );
+  final TerminalContextDockPathHandoffResult inserted = await controller
+      .insertPath(window.id);
+  _expect(
+    inserted.disposition ==
+            TerminalContextDockPathHandoffDisposition.inserted &&
+        handoff.writes.single == "'/tmp/a b'\\''c'" &&
+        handoff.focusCount == 1 &&
+        !dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
+    'insert sends one shell-quoted word without whitespace and restores terminal focus',
+  );
+
+  for (final TerminalContextDockPathInsertionBlock expected
+      in <TerminalContextDockPathInsertionBlock>[
+        TerminalContextDockPathInsertionBlock.secureInput,
+        TerminalContextDockPathInsertionBlock.alternateScreen,
+        TerminalContextDockPathInsertionBlock.foregroundProcess,
+        TerminalContextDockPathInsertionBlock.remote,
+      ]) {
+    focusNavigator();
+    handoff
+      ..secure = expected == TerminalContextDockPathInsertionBlock.secureInput
+      ..alternate =
+          expected == TerminalContextDockPathInsertionBlock.alternateScreen
+      ..processDisposition =
+          expected == TerminalContextDockPathInsertionBlock.foregroundProcess
+          ? TerminalPaneProcessDisposition.foregroundProcess
+          : TerminalPaneProcessDisposition.idleShell
+      ..local = expected != TerminalContextDockPathInsertionBlock.remote;
+    final int writeBaseline = handoff.writes.length;
+    final TerminalContextDockPathHandoffResult blocked = await controller
+        .insertPath(window.id);
+    _expect(
+      blocked.disposition ==
+              TerminalContextDockPathHandoffDisposition.unavailable &&
+          blocked.block == expected &&
+          handoff.writes.length == writeBaseline &&
+          dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
+      '$expected blocks insertion with zero PTY bytes and retains navigator focus',
+    );
+    if (expected == TerminalContextDockPathInsertionBlock.secureInput) {
+      _expect(
+        !controller.snapshotForWindow(window.id).canCopy,
+        'secure input also hides retained path copy authority',
+      );
+    }
+  }
+
+  handoff
+    ..secure = false
+    ..alternate = false
+    ..processDisposition = TerminalPaneProcessDisposition.idleShell
+    ..local = true
+    ..blockPaste = true;
+  final Completer<void> release = Completer<void>();
+  handoff.pasteRelease = release;
+  final Future<TerminalContextDockPathHandoffResult> first = controller
+      .insertPath(window.id);
+  await handoff.pasteStarted.future;
+  _expect(
+    controller.snapshotForWindow(window.id).block ==
+            TerminalContextDockPathInsertionBlock.busy &&
+        (await controller.insertPath(window.id)).disposition ==
+            TerminalContextDockPathHandoffDisposition.busy,
+    'one in-flight insertion rejects a concurrent request before transport',
+  );
+  release.complete();
+  _expect(
+    (await first).disposition ==
+        TerminalContextDockPathHandoffDisposition.inserted,
+    'the admitted in-flight insertion completes exactly once',
+  );
+
+  controller.dispose();
+  controller.dispose();
+  _expect(
+    controller.isDisposed &&
+        controller.copyPath(window.id).disposition ==
+            TerminalContextDockPathHandoffDisposition.disposed,
+    'disposed path handoff rejects retained actions',
+  );
+  dock.dispose();
+  await harness.state.shutdown();
+}
+
+final class _PathHandoffHarness {
+  _PathHandoffHarness({required this.windowId, required this.paneId});
+
+  final TerminalWindowId windowId;
+  final PaneId paneId;
+  final Object identity = Object();
+  final String path = "/tmp/a b'c";
+  final List<String> writes = <String>[];
+  String? clipboardText;
+  int clipboardResetCount = 0;
+  int focusCount = 0;
+  bool local = true;
+  bool secure = false;
+  bool alternate = false;
+  bool blockPaste = false;
+  TerminalPaneProcessDisposition processDisposition =
+      TerminalPaneProcessDisposition.idleShell;
+  Completer<void> pasteStarted = Completer<void>();
+  Completer<void>? pasteRelease;
+
+  TerminalContextDockPathSelection? resolveSelection(
+    TerminalWindowId candidate,
+  ) => candidate == windowId
+      ? TerminalContextDockPathSelection(
+          windowId: windowId,
+          paneId: paneId,
+          generation: 1,
+          entry: TerminalDirectoryEntrySnapshot(
+            name: "a b'c",
+            path: path,
+            kind: TerminalDirectoryEntryKind.file,
+            isHidden: false,
+            metadata:
+                const TerminalDirectoryEntryMetadataSnapshot.unavailable(),
+          ),
+        )
+      : null;
+
+  TerminalContextDockPathTarget? resolveTarget(
+    TerminalWindowId candidateWindow,
+    PaneId candidatePane,
+  ) => candidateWindow == windowId && candidatePane == paneId
+      ? TerminalContextDockPathTarget(
+          paneId: paneId,
+          identity: identity,
+          isLocal: local,
+          secureInputActive: secure,
+          usingAlternateScreen: alternate,
+          processDisposition: processDisposition,
+        )
+      : null;
+
+  TerminalExternalPasteTarget? resolvePasteTarget(PaneId candidate) {
+    final TerminalContextDockPathTarget? target = resolveTarget(
+      windowId,
+      candidate,
+    );
+    if (target == null ||
+        target.insertionBlock != TerminalContextDockPathInsertionBlock.none) {
+      return null;
+    }
+    return TerminalExternalPasteTarget(
+      identity: identity,
+      bracketedPasteMode: false,
+      pasteInProgress: false,
+      showNotice: (_) {},
+      paste: (TerminalPastePlan plan) async {
+        if (blockPaste) {
+          if (pasteStarted.isCompleted) {
+            pasteStarted = Completer<void>();
+          }
+          pasteStarted.complete();
+          await pasteRelease?.future;
+        }
+        final List<int> bytes = <int>[];
+        final TerminalPasteChunkEncoder encoder = plan.encoder();
+        for (
+          Uint8List? chunk = encoder.nextChunk();
+          chunk != null;
+          chunk = encoder.nextChunk()
+        ) {
+          bytes.addAll(chunk);
+        }
+        writes.add(utf8.decode(bytes));
+        return TerminalPasteTransferResult(
+          disposition: TerminalPasteTransferDisposition.completed,
+          encodedBytes: bytes.length,
+          completedChunks: 1,
+          backpressureCount: 0,
+          maximumQueuedBytes: bytes.length,
+          concurrentInputRejections: 0,
+        );
+      },
+    );
+  }
+
+  int writeClipboard(String text) {
+    clipboardText = text;
+    return 1;
+  }
 }
 
 final class _Harness {

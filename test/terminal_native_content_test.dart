@@ -337,6 +337,17 @@ void _testShellSafeFilePathAdmission() {
         result.content!.utf8Bytes == result.content!.text.codeUnits.length,
     'every file path is one literal shell word with a trailing separator',
   );
+  final TerminalExternalContentResult single =
+      TerminalExternalContentAdmission.filePaths(
+        const <String>["/private/tmp/it's-safe"],
+        maxFilePaths: 1,
+        appendTrailingSeparator: false,
+      );
+  _expect(
+    single.content?.text == "'/private/tmp/it'\\''s-safe'" &&
+        single.content?.utf8Bytes == single.content?.text.codeUnits.length,
+    'single-path handoff is one quoted word without trailing whitespace',
+  );
   for (final String path in <String>[
     'relative/path',
     '/private/tmp/line\nbreak',

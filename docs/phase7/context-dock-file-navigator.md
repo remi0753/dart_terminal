@@ -1,6 +1,6 @@
 # Context Dock and file/folder navigator roadmap
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-14
 - Scope: completed Phase 7 application UXに続く追加機能
 - Related: UI-02、UI-05、UI-09、AX-01、AX-02、CFG-06、SEC-01、SEC-04
@@ -159,9 +159,10 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
   local path変換。remote URIはdescriptive stateのままにする。
 - existing Services／drop／paste policy: shell-literal quoting、large／control input admission、still-live pane
   resolution。Navigatorは新しいunbounded write pathを作らない。
-- Secure Keyboard Entry: ECHO-offまたはsecure-input ownerがactiveな間はnavigator focusとpath insertionを
-  unavailableにし、terminal first responderを保持する。Dockの既存snapshotは更新を止め、privacy-safeな
-  unavailable stateを表示する。
+- Secure Keyboard Entry: explicit manual secure input、またはECHO-offのowning-shell command／foreground
+  process中はnavigator focusとpath insertionをunavailableにし、terminal first responderを保持する。zsh／shが
+  idle line editingでECHOを切る場合は利用可能性を維持する。遮断時はDockの既存snapshotと進行中operationを破棄し、
+  privacy-safeなunavailable stateを表示する。
 - reusable AppKit split/sidebar、outline/list、search-field、accessibility primitiveが不足する場合は、
   generic APIだけを`dart_appkit`へ先に追加し、productのcwd／search policyは本repositoryに残す。
 
@@ -628,3 +629,113 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 - 実環境のSpotlight収録内容はmachine stateに依存するため結果を固定assertしていない。shellを介さない固定executable／argvはsource review、
   query expressionとprovider contractはunit testで検証した。実際のDeveloper JIT／Release AOT UI、path handoff、accessibility、secure-input、
   privacy／performanceの最終監査は次のuncheckedサブタスクで扱う。
+
+### 2026-09-14 第5サブタスク着手
+
+- 目的: Directory Navigatorを参照専用surfaceから、安全な明示操作で選択pathを再利用できる完成機能へ仕上げ、keyboard-only、
+  accessibility、privacy／performance、通常製品runtimeの受け入れ証跡を揃えてparent featureを完了可能にする。
+- 範囲: 選択pathのplain-text copy、existing shell-literal／paste admissionを通る改行なしのterminal挿入、still-live target再解決、
+  file／folder Return動作、secure-input／foreground TUIでのfail-closed availability、PTY write exactness、native accessibility projection、
+  owner cleanup、generated references、README、FEATURE_MATRIX、manual checklist、focused／full gate、Developer JIT／Release AOT受け入れ。
+- 対象外: 自動`cd`／Return送信、file content preview／編集、Finder起動、terminal command line読取り、remote path handoff、SSH provider、
+  filesystem watcher、Linux／Windows UI、Spotlight収録範囲の保証。
+- 依存関係: Context Dock state／Directory controller／native presenter、application action coordinator、selected row generation、existing
+  paste／drop／Services shell-literal quotingとbracketed-paste policy、secure keyboard entry owner、alternate-screen／foreground process state、
+  `dart_appkit` accessibility API、Phase 7 acceptance／localization／privacy／release-candidate evidence generators。
+- 完了条件: selectionのみでは0 byte、copyはclipboardだけ、明示insertだけがsafe quoted payloadをstill-live focused local paneへexactly once
+  書きterminal focusへ戻る。remote／stale／secure／TUIではinsert不可で0 byteとなる。全操作がmouseなしで到達でき、role／label／value／
+  selected／focused stateが公開され、hide／close／shutdown後にnative／search ownerが残らない。文書とgenerated referenceがproductに一致し、
+  focused test、format、analysis、freshness、full `make test`、Developer JIT／Release AOT scenarioが成功する。
+- 検証方針: fake clipboard／terminal write／first responder／secure-input／alternate-screenでcopy・insert・stale target・exact payload・0-byte経路を
+  固定する。fake AppKit accessibilityとteardownを検証し、bounded searchのlatency／operation／retained-state contractをprivacy auditへ追加する。
+  最後に通常productを両runtimeで起動し、cwd tree、search、keyboard往復、path handoff、resize、cleanupを同じscenarioで記録する。
+
+#### 途中検証と失敗記録
+
+- `DART_SUPPRESS_ANALYTICS=true dart format ...`は対象9ファイルのformatを完了した後、SDK telemetryの
+  `/Users/remi/.dart-tool/dart-flutter-telemetry-session.json`更新がworkspace sandboxに拒否されて終了code 1に
+  なった。source format自体は完了しており、同じ制約を受ける解析とtestは許可済みnative cache環境で再実行した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart analyze`: `No issues found!`。
+- `terminal_context_dock_test.dart`と`terminal_native_content_test.dart`のfocused実行: 成功。
+- 最初のDeveloper JIT native-content acceptanceはplain `sh`のcwd markerまでは進んだが、fixtureが
+  `/var/folders/...`、kernel cwd capabilityがcanonical `/private/var/folders/...`を返したため文字列比較で停止した。
+  filesystem ownerの誤りではなくmacOS temp path aliasをfixtureが正規化していなかったことが原因であり、作成直後に
+  `resolveSymbolicLinksSync()`した実体pathをfixture全体のauthorityにして再実行する。
+- 2回目のDeveloper JIT acceptanceはcanonical cwd観測を通過した後、search action availabilityで停止した。
+  processのECHOは既にonだったがSecure Keyboard Entry projectionが直前のzsh stateを保持しており、fixtureがprocess state変化後の
+  product reconcileを省略していたことが原因だった。通常製品と同じreconcileを明示してsecure／Dock projectionを揃えてからactionを
+  dispatchするよう修正した。
+- 3回目はplain `sh`移行直後のECHO-on待機が不定に失敗した。interactive zshがline editor用に変更したtermiosを
+  `exec /bin/sh -i`へ引き継ぐタイミングへ依存していたため、plain-shell fixture境界で`stty echo icanon`を明示してOS cwd fallbackを
+  検証する前提を決定的にした。これは製品processへhidden commandを送る実装ではなく、明示されたruntime test fixture内だけの設定である。
+- 4回目の診断で、plain `sh`も次のpromptを読み始めるとECHO-offへ戻ることを実確認した。ECHO-offだけをprivacy signalにすると
+  zsh／shの通常line editingでもNavigatorが常時使用不能になるため、判定を精密化した。explicit manual Secure Keyboard Entryは
+  process stateにかかわらず遮断し、automatic ECHO-offはowning-shell commandまたは別foreground processの時に遮断する。idle shellの
+  line editingだけは観測を許可する。runtime privacy fixtureはECHO-off foreground `sleep`中にsnapshot／operationを消すことで、password
+  helper／TUI相当のfail-closed境界を検証する。
+- privacy policy精密化後のDeveloper JIT acceptanceはtree、search、native read-only document、raw path copy、Option-Returnの1 writeまで
+  成功したが、exact path判定で停止した。command line自体に`__DT_NAV_PATH_MISMATCH__`というfixture文字列を含めていたため、成功branchの
+  出力とcommand表示を区別できない誤検出だった。markerを`%s`引数で分割し、実行結果だけがcomplete markerになるよう修正した。
+- marker分割後はcomplete markerが出ず、zshから`exec sh`したfixtureがDEC bracketed-paste modeを解除していないことを確認した。
+  Navigator insertionは既存paste transportに従って正しくbracket wrapperを付けた一方、plain shはその制御列を編集機能として解釈しない。
+  shell切替fixtureが`CSI ? 2004 l`を明示し、emulator stateと受け手shell capabilityを一致させるよう修正した。
+- bracketed-paste解除後も成功markerが出なかったためfixture commandを再確認し、inserted pathとtest終端`]`の間の空白が欠けていたことを
+  発見した。path payloadはexactly onceで正しく届いており、後続fixture suffixだけが`'/path']`という別operandを作っていた。終端前の
+  空白を修正し、shell-literal結果そのものを判定できる形にした。
+- 空白修正後はexact pathとforeground ECHO-off privacy消去まで成功し、復帰時の`echo == true` assertionだけが停止した。plain shは
+  fixture内でECHOを戻した後、次のidle prompt用line editingで再びECHO-offにするためである。精密化したproduct policyどおり、復帰条件は
+  `idleShell`へ変更し、その状態でsearch actionが再び有効になることを後続dispatchで検証する。
+- 文書／監査更新後の最初のlocalization auditは、catalogが実際に使うmacOS glyph表記`⌘C`／`⌥↩`に対し、audit側で
+  `Command-C`／`Option-Return`という別表記を要求したため停止した。catalog/UIは変更せず、監査tokenを実際のlocalized copyへ一致させた。
+- Phase 7 acceptanceへ第5 criteriaを追加した後、daily-use matrix generatorがcriteria数4を固定していたため、生成前の
+  evidence validationで停止した。Phase 7 generator testの期待markerとdaily-use側のschema assertionをcriteria数5／新しい
+  source・test・UI assertion数へ更新し、古いacceptance shapeを誤って受理しないようにした。
+
+### 2026-09-14 第5サブタスク結果
+
+#### 実装と設計判断
+
+- `TerminalContextDockPathHandoffController`を追加した。Command-Cはnavigatorが保持するgeneration-boundな選択entryの
+  absolute pathだけをclipboardへ書き、PTYへ送らない。Option-Returnは選択とactive window／focused pane／live ownerを再解決し、
+  existing file-path admission、shell-literal quoting、paste transportを通した1 pathだけを改行なしで送る。paste完了後にshared
+  `view.focus-terminal` actionでterminalへ戻るため、stale focusを独自に推測しない。
+- insertionはlocal idle shellだけで有効にした。remote／unknown cwd、stale target、manual secure input、alternate screen、owning-shell
+  command／別foreground process、busy／disposedではfail closedにし、選択やReturnだけでは`cd`、改行、commandを送らない。copyもmanual
+  secure input中は無効にし、protected pathをclipboardへ出さない。通常foreground中のcopyは明示clipboard操作として残すが、ECHO-offで
+  privacy policyが発動した時点で選択snapshot自体が消える。
+- privacy policyはexplicit manual secure inputと、ECHO-offのowning-shell command／foreground processを保護対象にする。通常のinteractive
+  zsh／shがidle line editingでECHOを無効にする状態は観測可能とし、Navigatorが常時使用不能になる誤判定を避ける。保護状態へ入ると進行中
+  tree／searchをcancelし、cwd、rows、detailを破棄した`privacyUnavailable`へ置き換え、terminal first responderを復元する。
+- read-only native `TextEditor`のvalueとselectionへtitle、input owner、cwd、query、source／coverage、tree/search row、path action
+  availability、detailをvisual orderどおり投影した。navigator focus中のselected rowとquery selectionを標準native accessibility stateで
+  公開し、hide／window close／shutdownではpath handoff、search、directory、native editor/split ownerの順序付きcleanupへ統合した。
+- runtime native-content scenarioを拡張し、実zshからplain interactive `sh`へ移行してOS cwd fallback、dotfileを含むtree、search、read-only
+  native document、raw path copy、apostropheを含むquoted pathのexactly-once insertion、alternate-screen 0 write、ECHO-off foreground中の
+  privacy消去、idle復帰、Escapeでquery保持、全owner回収を同じ通常製品上で検証する。fixtureはshell capabilityに合わせてbracketed-pasteを
+  明示解除するが、製品からhidden commandを注入する経路は追加していない。
+- README、FEATURE_MATRIX、English／Japanese catalog、localization／diagnostics privacy audit、Phase 7 acceptance、runtime marker、manual
+  checklistを完成機能へ合わせた。一般diagnostics/exportのallowlistへcwd、query、file名、path、metadata、coverageは追加していない。
+  directory/searchは既存のentry／byte／depth／deadline capとgeneration cancellationを維持し、path handoffは1 path／1 MiB以内かつ既存の
+  bounded paste transportだけを使う。SSH／remote providerは計画どおり実装・追跡していない。
+
+#### 検証結果と残る外部確認
+
+- format: 346 Dart file、変更0。`CI=true DART_SUPPRESS_ANALYTICS=true dart analyze`: `No issues found!`。
+- focused: `terminal_context_dock_test.dart`、`terminal_native_content_test.dart`、`terminal_diagnostics_privacy_audit_test.dart`、
+  `phase7_appkit_acceptance_test.dart`が成功した。path copy／insert、apostrophe／空白quote、stale／remote／secure／alternate／foreground／busy、
+  terminal focus、0-byte routing、idle-shell privacy exception、native read-only projectionとcleanupを含む。
+- static/generated: keybind referenceは105 key、4 pane action、40 application action、9 standard binding、14 reserved shortcutでfresh。
+  localization auditは16 source／4 resource family／21 resource key、privacy auditは190 schema key／10 owner／11 top-level keyで成功した。
+  Phase 7 acceptanceは5 criteria／19 source reference／16 unit test／5 integration test／11 UI assertionで成功した。
+- runtime: `make RUNTIME_ARCH=arm64 developer-jit-native-content`は
+  `RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS ... navigator=true exact_pty=true sessions=4 elapsed_ms=5434`、
+  `make RUNTIME_ARCH=arm64 release-aot-native-content`は同markerで`elapsed_ms=4143`として成功した。どちらもnative architectureで実
+  AppKit／PTY／Metalと4 session cleanupを通した。
+- generated dependency chainはcompatibility regression coverage、Ghostty P0/P1 gap inventory、release-candidate daily-use matrixを正規
+  generatorで更新した。判定はactionable P0/P1 0、release blocker 0のままである。最終
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test`は全native／Dart／compatibility／application／distribution gateを通過し、
+  `dart_terminal tests passed`で終了した。
+- VoiceOverの読み上げ品質、Full Keyboard Accessの実focus ring、Light/Dark・Increase Contrast・Differentiate Without Color・Reduce
+  Motionの視認性はOS UIを人が判断する外部確認である。自動acceptanceを完了条件の根拠としつつ、実機確認手順とprivacy-safeな記録条件を
+  [`context-dock-directory-navigator-manual-checklist.md`](context-dock-directory-navigator-manual-checklist.md)へ残した。これは未実装作業や
+  release blockerではなく、環境依存の補助確認である。

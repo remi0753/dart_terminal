@@ -173,6 +173,31 @@ final class TerminalLocalization {
   String get contextDockCoverageComplete => _ja ? '完了' : 'Complete';
   String get contextDockCoveragePartial => _ja ? '一部' : 'Partial';
   String get contextDockCoverageUnavailable => _ja ? '利用不可' : 'Unavailable';
+  String get contextDockPrivacyUnavailable =>
+      _ja ? '保護入力中はナビゲータを一時停止します' : 'Navigator paused during protected input';
+  String get contextDockPathActions => _ja ? 'パス操作' : 'Path actions';
+  String get contextDockCopyPathHint => _ja ? '⌘C パスをコピー' : '⌘C Copy path';
+  String get contextDockInsertPathHint =>
+      _ja ? '⌥↩ 引用済みパスを挿入' : '⌥↩ Insert quoted path';
+  String get contextDockPathActionsReady => _ja ? '使用できます' : 'Available';
+  String get contextDockPathActionsNavigatorInactive =>
+      _ja ? '検索フォーカスへ移動すると使用できます' : 'Focus the navigator to use path actions';
+  String get contextDockPathActionsNoSelection =>
+      _ja ? 'ファイルまたはフォルダを選択してください' : 'Select a file or folder';
+  String get contextDockPathActionsStale =>
+      _ja ? '対象のターミナルは利用できません' : 'Target terminal is unavailable';
+  String get contextDockPathActionsRemote =>
+      _ja ? 'リモートパス操作は利用できません' : 'Remote path actions are unavailable';
+  String get contextDockPathActionsSecure =>
+      _ja ? '保護入力中は挿入できません' : 'Insertion is unavailable during protected input';
+  String get contextDockPathActionsAlternate => _ja
+      ? '代替画面では挿入できません'
+      : 'Insertion is unavailable on the alternate screen';
+  String get contextDockPathActionsForeground => _ja
+      ? '実行中のプロセスには挿入できません'
+      : 'Insertion is unavailable while a process is running';
+  String get contextDockPathActionsBusy =>
+      _ja ? '前の挿入を処理中です' : 'An insertion is already in progress';
   String get contextDockUnknown => _ja ? '不明' : 'Unknown';
   String get contextDockLoading => _ja ? '読み込み中…' : 'Loading…';
   String get contextDockLoadingInline => _ja ? '（読み込み中）' : '(loading)';

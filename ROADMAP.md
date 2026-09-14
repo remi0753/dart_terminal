@@ -1469,7 +1469,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 追加機能
 
-- [ ] focused paneに追従するContext Dockとlocal file／folder navigator
+- [x] focused paneに追従するContext Dockとlocal file／folder navigator
   （分割、input ownership、filesystem境界、完了条件は
   [`docs/phase7/context-dock-file-navigator.md`](docs/phase7/context-dock-file-navigator.md)
   を参照して順に実施する）
@@ -1477,7 +1477,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] trusted local cwd観測とbounded・cancellable directory snapshot
   - [x] working directory tree、metadata、pane追従のnative side-dock表示
   - [x] current subtreeからsystem-wideへ連続するfile／folder search
-  - [ ] path handoff、accessibility、privacy／performance gate、両runtime受け入れ
+  - [x] path handoff、accessibility、privacy／performance gate、両runtime受け入れ
 
 ### 主要ゴール後の低優先 follow-up
 

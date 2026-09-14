@@ -59,6 +59,19 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   有効になる。実製品gateではmenuとpaletteから2 window/3 tab/5 paneを生成し、Retina
   scale継承、divider command後の固定font metricsとgrid resize、terminal write 0、
   各paneの入力分離を両runtimeで検証する
+- terminalに重ならない右側のContext DockとDirectory Navigator。通常時はfocused local
+  paneのtrusted working directory、dotfileを含むfile/folder tree、lazy subtree、permission・
+  owner・size・mtime・symlink metadataをread-only native text surfaceへ表示する。
+  Shift-Command-Fでqueryへ移り、同じlistがcurrent subtree、recent location、明示root、
+  Spotlight metadata indexのprogressive検索結果へ切り替わる。source/coverageとpartial・
+  unavailableを区別し、filesystem rootを暗黙にwalkしない。Escapeでqueryを保ったまま
+  terminalへ戻り、矢印/Page/Command+矢印の操作中はPTY write 0を保つ
+- NavigatorのCommand-Cは選択したabsolute pathだけをcopyし、Option-Returnは既存paste
+  admissionでshell literalにquoteした1 pathを改行なしで挿入してterminalへ戻る。自動cdや
+  command実行はせず、stale/remote/alternate screen/foreground process/manual secure inputは
+  fail closedになる。filesystem path・query・resultはdiagnosticsへ含めない。操作とVoiceOver/
+  Full Keyboard Accessの実機確認は
+  [Directory Navigator manual checklist](docs/phase7/context-dock-directory-navigator-manual-checklist.md)を参照
 - focused live paneだけを追跡するsingle-windowのread-only Terminal Inspector。
   printable textはcountのみ、string payloadはlengthのみを保持し、focus移譲時とclose時に
   旧captureをclearする。View > Open Terminal Inspector（Option-Command-I）と
@@ -806,6 +819,7 @@ make RUNTIME_ARCH=arm64 runtime-terminal-display-integration
 make RUNTIME_ARCH=arm64 runtime-native-hierarchy-integration
 make RUNTIME_ARCH=arm64 runtime-bounded-reliability-integration
 make RUNTIME_ARCH=arm64 runtime-user-actions-integration
+make RUNTIME_ARCH=arm64 runtime-native-content-integration
 make RUNTIME_ARCH=arm64 runtime-applescript-integration
 make RUNTIME_ARCH=arm64 runtime-system-automation-integration
 make RUNTIME_ARCH=arm64 runtime-configuration-integration
