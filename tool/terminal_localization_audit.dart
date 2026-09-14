@@ -76,7 +76,7 @@ Future<TerminalLocalizationAuditResult> runTerminalLocalizationAudit({
     'lib/src/terminal_application.dart',
   );
   _expect(
-    'localization: localization'.allMatches(applicationSource).length == 12,
+    'localization: localization'.allMatches(applicationSource).length == 13,
     'production and runtime-acceptance localization injection count changed',
   );
 
@@ -262,6 +262,8 @@ const List<String> _catalogPhrases = <String>[
   'Capture Hang Sample…',
   'Local Incident Diagnostics',
   'Raw data is saved only to the explicitly selected location',
+  'Directory Navigator',
+  'Remote directory browsing is not available',
 ];
 
 const List<_SourceRule> _sourceRules = <_SourceRule>[
@@ -480,6 +482,21 @@ const List<_SourceRule> _sourceRules = <_SourceRule>[
     'lib/src/terminal_native_hierarchy.dart',
     requiredTokens: <String>['TerminalLocalization.english.applicationName'],
     forbiddenPhrases: <String>['Dart Terminal —'],
+  ),
+  _SourceRule(
+    'lib/src/terminal_context_dock_directory.dart',
+    requiredTokens: <String>[
+      'localization.contextDockTitle',
+      'localization.contextDockWorkingDirectory',
+      'localization.contextDockRemoteUnavailable',
+      'localization.contextDockDetails',
+    ],
+    forbiddenPhrases: <String>[
+      'Directory Navigator',
+      'Working directory',
+      'Remote directory browsing is not available',
+      'Metadata unavailable',
+    ],
   ),
   _SourceRule(
     'lib/src/terminal_application.dart',

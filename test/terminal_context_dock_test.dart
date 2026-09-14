@@ -10,6 +10,7 @@ Future<void> runTerminalContextDockTests() async {
   await _testWindowPaneStateAndBounds();
   await _testActionFocusOwnershipAndAvailability();
   await _testNavigatorKeyRoutingNeverFallsThrough();
+  await _testDirectoryTreeFollowsPaneAndCancelsHiddenWork();
 }
 
 Future<void> _testWindowPaneStateAndBounds() async {
@@ -25,6 +26,7 @@ Future<void> _testWindowPaneStateAndBounds() async {
     dock.windowCount == 1 &&
         snapshot.targetPaneId == firstPane &&
         !snapshot.isVisible &&
+        snapshot.width == TerminalContextDockLimits.defaultWidth &&
         snapshot.inputOwner == TerminalContextDockInputOwner.terminal,
     'a new window starts hidden while terminal retains input',
   );
@@ -42,12 +44,14 @@ Future<void> _testWindowPaneStateAndBounds() async {
   dock
     ..setQuery(window.id, 'alpha', requireNavigatorInput: true)
     ..setResultCount(window.id, 4)
-    ..moveSelection(window.id, 2);
+    ..moveSelection(window.id, 2)
+    ..setWidth(window.id, 412);
   snapshot = dock.snapshotForWindow(window.id)!;
   _expect(
     snapshot.pane.query == 'alpha' &&
         snapshot.pane.resultCount == 4 &&
-        snapshot.pane.selectedResultIndex == 2,
+        snapshot.pane.selectedResultIndex == 2 &&
+        snapshot.width == 412,
     'bounded query and result selection belong to the target pane',
   );
 
@@ -76,6 +80,10 @@ Future<void> _testWindowPaneStateAndBounds() async {
       'x' * (TerminalContextDockLimits.maximumQueryUnits + 1),
     ),
     'oversize query is rejected atomically',
+  );
+  _expectThrows<ArgumentError>(
+    () => dock.setWidth(window.id, TerminalContextDockLimits.maximumWidth + 1),
+    'oversize Dock width is rejected',
   );
   _expectThrows<ArgumentError>(
     () => dock.setQuery(window.id, 'bad\nquery'),
@@ -120,6 +128,185 @@ Future<void> _testWindowPaneStateAndBounds() async {
   dock.dispose();
   dock.dispose();
   _expect(dock.isDisposed, 'state disposal is idempotent');
+}
+
+Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
+  final _Harness harness = _Harness();
+  final TerminalWindowState window = await harness.createWindow();
+  final PaneId firstPane = window.selectedTab.focusedPaneId;
+  final TerminalContextDockState dock = TerminalContextDockState()
+    ..synchronize(harness.state)
+    ..toggleVisibility(window.id, firstPane);
+  final _ContextDockDirectoryFileSystem files =
+      _ContextDockDirectoryFileSystem();
+  const TerminalWorkingDirectoryResolver workingDirectoryResolver =
+      TerminalWorkingDirectoryResolver();
+  String root = '/root';
+  bool remote = false;
+  final TerminalContextDockDirectoryController controller =
+      TerminalContextDockDirectoryController(
+        applicationState: harness.state,
+        dockState: dock,
+        snapshotService: TerminalDirectorySnapshotService(fileSystem: files),
+        resolveWorkingDirectory: (PaneId paneId, int generation) {
+          final TerminalPaneProcessSnapshot process = harness.state
+              .paneForId(paneId)!
+              .processSnapshot();
+          return workingDirectoryResolver.resolve(
+            sessionId: process.sessionId,
+            generation: generation,
+            processSnapshot: process,
+            reportedWorkingDirectory: remote
+                ? Uri.parse('file://host.example/remote')
+                : null,
+            processWorkingDirectory: null,
+            launchWorkingDirectory: root,
+          );
+        },
+      );
+
+  controller.synchronize();
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  TerminalContextDockDirectorySnapshot snapshot = controller.snapshotForWindow(
+    window.id,
+  )!;
+  _expect(
+    snapshot.status == TerminalContextDockDirectoryStatus.ready &&
+        snapshot.workingDirectory == '/root' &&
+        snapshot.rows.map((value) => value.entry.name).join(',') ==
+            'folder,.hidden,readme.md' &&
+        dock.snapshotForWindow(window.id)!.pane.resultCount == 3,
+    'root tree is folder-first, includes dotfiles, and publishes selection bounds',
+  );
+  _expect(
+    controller.handleTreeIntent(
+      window.id,
+      TerminalContextDockTreeIntent.expand,
+    ),
+    'selected folder accepts a lazy expansion intent',
+  );
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.rows.map((value) => value.entry.name).join(',') ==
+            'folder,nested.txt,.hidden,readme.md' &&
+        snapshot.rows[1].depth == 1 &&
+        snapshot.rows[1].entry.metadata.size == 7,
+    'expanded folder loads one child level and retains metadata',
+  );
+
+  final TerminalPane secondPane = await harness.state.splitPane(
+    firstPane,
+    harness.configuration(),
+    axis: TerminalSplitAxis.horizontal,
+  );
+  await secondPane.start();
+  root = '/other';
+  controller.synchronize();
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.paneId == secondPane.id &&
+        snapshot.workingDirectory == '/other' &&
+        snapshot.rows.single.entry.name == 'other.txt',
+    'focused pane change cancels the old owner and projects the new pane cwd',
+  );
+
+  remote = true;
+  controller.synchronize();
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.status == TerminalContextDockDirectoryStatus.remoteUnavailable &&
+        snapshot.rows.isEmpty,
+    'remote authority never falls back to the local launch directory',
+  );
+
+  remote = false;
+  root = '/slow';
+  controller.synchronize();
+  await files.slowListStarted.future;
+  _expect(
+    controller.activeOperationCount == 1,
+    'new cwd starts one owned snapshot operation',
+  );
+  dock.toggleVisibility(window.id, secondPane.id);
+  controller.synchronize();
+  _expect(
+    controller.activeOperationCount == 0 &&
+        controller.snapshotForWindow(window.id) == null,
+    'hiding the Dock cancels and releases its filesystem operation',
+  );
+  files.releaseSlowList.complete();
+  await Future<void>.delayed(Duration.zero);
+
+  controller.dispose();
+  dock.dispose();
+  await harness.state.shutdown();
+}
+
+Future<void> _waitUntil(bool Function() condition) async {
+  for (var attempt = 0; attempt < 100; attempt++) {
+    if (condition()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+  throw StateError('timed out waiting for Context Dock operation');
+}
+
+final class _ContextDockDirectoryFileSystem
+    implements TerminalDirectoryFileSystem {
+  final Completer<void> slowListStarted = Completer<void>();
+  final Completer<void> releaseSlowList = Completer<void>();
+
+  @override
+  Stream<TerminalDirectoryFileSystemEntry> list(String rootPath) async* {
+    if (rootPath == '/slow') {
+      slowListStarted.complete();
+      await releaseSlowList.future;
+      return;
+    }
+    if (rootPath == '/root') {
+      yield const TerminalDirectoryFileSystemEntry(
+        name: 'readme.md',
+        path: '/root/readme.md',
+        kind: TerminalDirectoryEntryKind.file,
+      );
+      yield const TerminalDirectoryFileSystemEntry(
+        name: '.hidden',
+        path: '/root/.hidden',
+        kind: TerminalDirectoryEntryKind.file,
+      );
+      yield const TerminalDirectoryFileSystemEntry(
+        name: 'folder',
+        path: '/root/folder',
+        kind: TerminalDirectoryEntryKind.directory,
+      );
+      return;
+    }
+    if (rootPath == '/root/folder') {
+      yield const TerminalDirectoryFileSystemEntry(
+        name: 'nested.txt',
+        path: '/root/folder/nested.txt',
+        kind: TerminalDirectoryEntryKind.file,
+      );
+      return;
+    }
+    if (rootPath == '/other') {
+      yield const TerminalDirectoryFileSystemEntry(
+        name: 'other.txt',
+        path: '/other/other.txt',
+        kind: TerminalDirectoryEntryKind.file,
+      );
+    }
+  }
+
+  @override
+  Future<TerminalDirectoryFileSystemMetadata> metadata(
+    TerminalDirectoryFileSystemEntry entry,
+  ) async => TerminalDirectoryFileSystemMetadata(
+    mode: entry.kind == TerminalDirectoryEntryKind.directory ? 0x1ed : 0x1a4,
+    size: entry.name == 'nested.txt' ? 7 : 3,
+    modifiedMicrosecondsSinceEpoch: 1,
+  );
 }
 
 Future<void> _testActionFocusOwnershipAndAvailability() async {

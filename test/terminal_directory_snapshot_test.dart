@@ -434,6 +434,38 @@ Future<void> _testHardEntryAndPathByteBounds() async {
         TerminalDirectorySnapshotLimits.fileSystemWatcherCapacity == 0,
     'one-shot snapshot layer retains no cache or filesystem watcher owner',
   );
+  final TerminalDirectorySnapshot requestBounded =
+      await TerminalDirectorySnapshotService(
+            fileSystem: _GeneratedDirectoryFileSystem(
+              count: 3,
+              nameForIndex: (int index) => 'bounded-$index',
+            ),
+          )
+          .start(
+            TerminalDirectorySnapshotRequest(
+              rootPath: '/root',
+              generation: 39,
+              maximumEntries: 2,
+              maximumTotalPathUtf8Bytes: 1024,
+            ),
+          )
+          .result;
+  _expect(
+    requestBounded.entries.length == 2 &&
+        requestBounded.disposition ==
+            TerminalDirectorySnapshotDisposition.partial &&
+        requestBounded.issues.single.kind ==
+            TerminalDirectoryIssueKind.entryLimitReached,
+    'a caller may select a smaller budget without weakening hard limits',
+  );
+  _expectThrows<ArgumentError>(
+    () => TerminalDirectorySnapshotRequest(
+      rootPath: '/root',
+      generation: 39,
+      maximumEntries: TerminalDirectorySnapshotLimits.maximumEntries + 1,
+    ),
+    'request entry budgets cannot exceed the hard maximum',
+  );
   final TerminalDirectorySnapshot entries =
       await TerminalDirectorySnapshotService(
             fileSystem: _GeneratedDirectoryFileSystem(

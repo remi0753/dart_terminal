@@ -23,6 +23,7 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testUpdatePresenterLifecycle();
   await _testRtlApplicationComposition();
   await _testConfiguredWindowAndPaddingProjection();
+  await _testContextDockNativeSiblingFocusAndWidth();
   await _testPerWindowCreationFrameProjection();
   await _testRoleAwareWindowProjection();
   await _testInitialNativeContentLayoutProjection();
@@ -35,6 +36,206 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testNativeHierarchyProjectionAndLifecycle();
   await _testRestorationPersistenceAndReopenLifecycle();
   await _testNativeTerminationReplyAndHierarchyCleanup();
+}
+
+Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalPaneConfiguration configuration = TerminalPaneConfiguration(
+    sessionFactory: (
+      TerminalSessionId id, {
+      required void Function() onChanged,
+      required void Function() onTerminated,
+    }) => _HierarchyFakeSession(id),
+    onChanged: () {},
+    onExitRequested: () {},
+  );
+  final TerminalWindowState logicalWindow = await state.createWindow(
+    configuration,
+  );
+  final TerminalPane pane = state.paneForId(
+    logicalWindow.selectedTab.focusedPaneId,
+  )!;
+  await pane.start();
+  final TerminalContextDockState dock = TerminalContextDockState()
+    ..synchronize(state)
+    ..toggleVisibility(logicalWindow.id, pane.id);
+  const TerminalWorkingDirectoryResolver resolver =
+      TerminalWorkingDirectoryResolver();
+  final TerminalContextDockDirectoryController directory =
+      TerminalContextDockDirectoryController(
+        applicationState: state,
+        dockState: dock,
+        resolveWorkingDirectory: (PaneId paneId, int generation) {
+          final TerminalPaneProcessSnapshot process = state
+              .paneForId(paneId)!
+              .processSnapshot();
+          return resolver.resolve(
+            sessionId: process.sessionId,
+            generation: generation,
+            processSnapshot: process,
+            reportedWorkingDirectory: Uri.parse('file://remote.example/work'),
+            processWorkingDirectory: null,
+            launchWorkingDirectory: '/local-must-not-win',
+          );
+        },
+      )..synchronize();
+  late final TerminalNativeHierarchyAdapter adapter;
+  late final TerminalContextDockDirectoryPresenter presenter;
+  TerminalPaneLayoutRect? paneLayout;
+  presenter = TerminalContextDockDirectoryPresenter(
+    applicationState: state,
+    dockState: dock,
+    directoryController: directory,
+    localization: TerminalLocalization.japanese,
+    windowForTab: (TerminalTabId tabId) => adapter.windowForTab(tabId),
+    terminalViewForPane: (PaneId paneId) =>
+        adapter.resourcesForPane(paneId)?.view,
+  );
+  final TerminalSplitLayoutSize fullSize = TerminalSplitLayoutSize(
+    width: 800,
+    height: 500,
+  );
+  void reconcile() {
+    adapter.reconcile(
+      tabSizes: <TerminalTabId, TerminalSplitLayoutSize>{
+        logicalWindow.selectedTabId: fullSize,
+      },
+    );
+    presenter.afterHierarchyReconcile();
+  }
+
+  adapter = TerminalNativeHierarchyAdapter(
+    state: state,
+    paneResourcesFactory: (TerminalPane pane) => TerminalNativePaneResources(
+      paneId: pane.id,
+      view: View(configuration: terminalBaseViewConfiguration),
+      onLayout: (TerminalPaneLayoutRect? rectangle, {required bool visible}) {
+        paneLayout = visible ? rectangle : null;
+      },
+    ),
+    windowFrame: const Rect.fromLTWH(100, 90, 800, 500),
+    cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+    presentWindows: false,
+    tabLayoutSizeResolver: presenter.resolveTerminalLayoutSize,
+    tabRootDecorator: presenter.decorateRoot,
+  );
+  reconcile();
+  final Window nativeWindow = adapter.windowForTab(
+    logicalWindow.selectedTabId,
+  )!;
+  final int windowHandle = bindings.handleFor(nativeWindow);
+  final TwoPaneSplitView outer = nativeWindow.contentView! as TwoPaneSplitView;
+  final TextEditor editor = outer.secondView! as TextEditor;
+  _expect(
+    paneLayout?.width == 479 &&
+        bindings.texts[bindings.handleFor(editor)]!.contains('リモートディレクトリ') &&
+        presenter.resourceCount == 1,
+    'visible Dock is a native right sibling and shrinks only terminal layout',
+  );
+
+  late final TerminalActionDispatcher dispatcher;
+  final TerminalContextDockActionCoordinator actions =
+      TerminalContextDockActionCoordinator(
+        applicationState: state,
+        dockState: dock,
+        focusNavigator: presenter.focusNavigator,
+        focusTerminal: presenter.focusTerminal,
+        canFocusNavigator: () => presenter.canFocusNavigator,
+        onChanged: reconcile,
+      );
+  dispatcher = TerminalActionDispatcher(
+    catalog: TerminalActionCatalog.standard(),
+    registrations: actions.registrations(),
+  );
+  final TerminalContextDockKeyController keys =
+      TerminalContextDockKeyController(
+        state: dock,
+        dispatcher: dispatcher,
+        onChanged: reconcile,
+      );
+  _expect(
+    (await dispatcher.dispatch(TerminalActionId.searchFilesAndFolders))
+            .disposition ==
+        TerminalActionDispatchDisposition.executed,
+    'search action focuses the projected navigator',
+  );
+  _expect(
+    bindings.firstResponders[windowHandle] == bindings.handleFor(editor) &&
+        bindings.windowKeyEventRoutings[windowHandle] == 0,
+    'navigator focus enables window key events without targeting the PTY view',
+  );
+  final TerminalContextDockKeyResult escaped = await keys.handle(
+    logicalWindow.id,
+    const AppKitKeyEvent(
+      windowHandle: 1,
+      monotonicMicros: 1,
+      kind: AppKitKeyEventKind.down,
+      keyCode: 53,
+      modifiers: ModifierKeys(0),
+      isRepeat: false,
+      characters: '',
+      charactersIgnoringModifiers: '',
+    ),
+  );
+  _expect(
+    escaped.disposition ==
+            TerminalContextDockKeyDisposition.terminalFocusDispatched &&
+        bindings.firstResponders[windowHandle] ==
+            bindings.handleFor(adapter.resourcesForPane(pane.id)!.view) &&
+        bindings.windowKeyEventRoutings[windowHandle] == 2,
+    'Escape returns first responder and key ownership to the live terminal',
+  );
+
+  final TerminalTabState secondTab = await state.createTab(
+    logicalWindow.id,
+    configuration,
+  );
+  await state.paneForId(secondTab.focusedPaneId)!.start();
+  state.selectTab(logicalWindow.id, secondTab.id);
+  dock.synchronize(state);
+  directory.synchronize();
+  reconcile();
+  final Window selectedNativeWindow = adapter.windowForTab(secondTab.id)!;
+  _expect(
+    identical(selectedNativeWindow.contentView, outer) &&
+        !identical(nativeWindow.contentView, outer) &&
+        dock.snapshotForWindow(logicalWindow.id)!.targetPaneId ==
+            secondTab.focusedPaneId,
+    'one logical Dock is reparented only to the selected native tab',
+  );
+
+  bindings.splitViewFractions[bindings.handleFor(outer)] = 0.5;
+  reconcile();
+  _expect(
+    (dock.snapshotForWindow(logicalWindow.id)!.width - 399.5).abs() < 0.001 &&
+        (paneLayout!.width - 399.5).abs() < 0.001,
+    'native divider observation is retained as bounded logical Dock width '
+    '(dock=${dock.snapshotForWindow(logicalWindow.id)!.width}, '
+    'pane=${paneLayout!.width})',
+  );
+  await dispatcher.dispatch(TerminalActionId.toggleContextDock);
+  _expect(
+    paneLayout?.width == 800 &&
+        selectedNativeWindow.contentView is! TwoPaneSplitView,
+    'hiding the Dock restores the full terminal viewport',
+  );
+
+  actions.dispose();
+  directory.dispose();
+  adapter.dispose();
+  presenter.dispose();
+  dock.dispose();
+  await state.shutdown();
+  await application.terminate();
+  await rawEvents.close();
+  _expect(bindings.objects.isEmpty, 'Context Dock native resources leaked');
 }
 
 Future<void> _testCommandPaletteSelectionViewportFollow() async {

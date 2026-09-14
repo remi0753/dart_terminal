@@ -470,6 +470,9 @@ final class TerminalDirectorySnapshotRequest {
     this.deadline = TerminalDirectorySnapshotLimits.defaultDeadline,
     this.metadataConcurrency =
         TerminalDirectorySnapshotLimits.maximumMetadataConcurrency,
+    this.maximumEntries = TerminalDirectorySnapshotLimits.maximumEntries,
+    this.maximumTotalPathUtf8Bytes =
+        TerminalDirectorySnapshotLimits.maximumTotalPathUtf8Bytes,
   }) {
     if (generation <= 0) {
       throw ArgumentError.value(generation, 'generation', 'must be positive');
@@ -487,12 +490,31 @@ final class TerminalDirectorySnapshotRequest {
         'must be in bounds',
       );
     }
+    if (maximumEntries <= 0 ||
+        maximumEntries > TerminalDirectorySnapshotLimits.maximumEntries) {
+      throw ArgumentError.value(
+        maximumEntries,
+        'maximumEntries',
+        'must be in bounds',
+      );
+    }
+    if (maximumTotalPathUtf8Bytes <= 0 ||
+        maximumTotalPathUtf8Bytes >
+            TerminalDirectorySnapshotLimits.maximumTotalPathUtf8Bytes) {
+      throw ArgumentError.value(
+        maximumTotalPathUtf8Bytes,
+        'maximumTotalPathUtf8Bytes',
+        'must be in bounds',
+      );
+    }
   }
 
   final String rootPath;
   final int generation;
   final Duration deadline;
   final int metadataConcurrency;
+  final int maximumEntries;
+  final int maximumTotalPathUtf8Bytes;
 }
 
 final class TerminalDirectorySnapshotOperation {
@@ -581,16 +603,13 @@ final class TerminalDirectorySnapshotService {
           issues.add(TerminalDirectoryIssueKind.duplicateEntry);
           continue;
         }
-        if (candidates.length >=
-            TerminalDirectorySnapshotLimits.maximumEntries) {
+        if (candidates.length >= request.maximumEntries) {
           omitted++;
           issues.add(TerminalDirectoryIssueKind.entryLimitReached);
           break;
         }
         final int candidateBytes = utf8.encode(candidate.path).length;
-        if (pathBytes >
-            TerminalDirectorySnapshotLimits.maximumTotalPathUtf8Bytes -
-                candidateBytes) {
+        if (pathBytes > request.maximumTotalPathUtf8Bytes - candidateBytes) {
           omitted++;
           issues.add(TerminalDirectoryIssueKind.pathByteLimitReached);
           break;

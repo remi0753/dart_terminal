@@ -41,6 +41,21 @@ typedef TerminalNativeTabPresentationBuilder = TerminalTabPresentation Function(
   TerminalTabState tab,
 );
 
+/// Resolves the terminal-owned layout inside a possibly decorated tab root.
+typedef TerminalNativeTabLayoutSizeResolver = TerminalSplitLayoutSize Function(
+  TerminalWindowState window,
+  TerminalTabState tab,
+  TerminalSplitLayoutSize fullSize,
+);
+
+/// Wraps one terminal tree in a product-owned sibling surface.
+typedef TerminalNativeTabRootDecorator = View Function(
+  TerminalWindowState window,
+  TerminalTabState tab,
+  View terminalRoot,
+  TerminalSplitLayoutSize fullSize,
+);
+
 /// Native resources with one-to-one ownership by a logical terminal pane.
 final class TerminalNativePaneResources {
   TerminalNativePaneResources({
@@ -198,6 +213,8 @@ final class TerminalNativeHierarchyAdapter {
     this.presentWindows = true,
     TerminalNativeTabTitleBuilder? titleBuilder,
     TerminalNativeTabPresentationBuilder? presentationBuilder,
+    TerminalNativeTabLayoutSizeResolver? tabLayoutSizeResolver,
+    TerminalNativeTabRootDecorator? tabRootDecorator,
   }) : _state = state,
        _paneResourcesFactory = paneResourcesFactory,
        _windowFrame = windowFrame,
@@ -219,7 +236,9 @@ final class TerminalNativeHierarchyAdapter {
                        title: titleBuilder(window, tab),
                        color: null,
                        representedFilePath: null,
-                     )) {
+                     )),
+       _tabLayoutSizeResolver = tabLayoutSizeResolver,
+       _tabRootDecorator = tabRootDecorator {
     if (!dividerThickness.isFinite || dividerThickness < 0) {
       throw ArgumentError.value(
         dividerThickness,
@@ -253,6 +272,8 @@ final class TerminalNativeHierarchyAdapter {
   final TerminalSplitLayoutSize _cellSize;
   final Map<TerminalWindowId, TerminalWindowPlacement> _windowPlacements;
   final TerminalNativeTabPresentationBuilder _presentationBuilder;
+  final TerminalNativeTabLayoutSizeResolver? _tabLayoutSizeResolver;
+  final TerminalNativeTabRootDecorator? _tabRootDecorator;
   final double dividerThickness;
   final KeyEventRouting keyEventRouting;
   final bool defersCloseRequests;
@@ -759,6 +780,8 @@ final class TerminalNativeHierarchyAdapter {
           <TerminalTabId, TerminalWindowState>{};
       final Map<TerminalTabId, TerminalSplitLayout> layouts =
           <TerminalTabId, TerminalSplitLayout>{};
+      final Map<TerminalTabId, TerminalSplitLayoutSize> fullContentSizes =
+          <TerminalTabId, TerminalSplitLayoutSize>{};
       final Set<PaneId> livePaneIds = <PaneId>{};
       for (final TerminalWindowState window in logicalWindows) {
         _windowPlacements.putIfAbsent(
@@ -849,15 +872,19 @@ final class TerminalNativeHierarchyAdapter {
       for (final MapEntry<TerminalTabId, TerminalTabState> entry
           in logicalTabs.entries) {
         final TerminalTabState tab = entry.value;
-        final TerminalWindowPlacement placement = placementForWindow(
-          tabOwners[tab.id]!.id,
+        final TerminalWindowState owner = tabOwners[tab.id]!;
+        final TerminalWindowPlacement placement = placementForWindow(owner.id);
+        final TerminalSplitLayoutSize fullSize = _contentLayoutSize(
+          tab.id,
+          nextWindows[tab.id]!,
+          placement,
         );
+        fullContentSizes[tab.id] = fullSize;
+        final TerminalSplitLayoutSize availableSize =
+            _tabLayoutSizeResolver?.call(owner, tab, fullSize) ?? fullSize;
+        _validateDecoratedLayoutSize(availableSize, fullSize, tab.id);
         layouts[tab.id] = tab.splitTree.layout(
-          availableSize: _contentLayoutSize(
-            tab.id,
-            nextWindows[tab.id]!,
-            placement,
-          ),
+          availableSize: availableSize,
           cellSize: _cellSize,
           dividerThickness: dividerThickness,
           zoomedPaneId: tab.zoomedPaneId,
@@ -876,9 +903,20 @@ final class TerminalNativeHierarchyAdapter {
           nextPaneResources,
           nextSplitViews,
         );
+        final View decoratedRoot =
+            _tabRootDecorator?.call(
+              tabOwners[tab.id]!,
+              tab,
+              root,
+              fullContentSizes[tab.id]!,
+            ) ??
+            root;
+        if (decoratedRoot.isDisposed) {
+          throw StateError('decorated tab root for ${tab.id} is disposed');
+        }
         final Window window = nextWindows[tab.id]!;
-        if (!identical(window.contentView, root)) {
-          window.contentView = root;
+        if (!identical(window.contentView, decoratedRoot)) {
+          window.contentView = decoratedRoot;
         }
       }
 
@@ -1248,6 +1286,24 @@ final class TerminalNativeHierarchyAdapter {
           width: placement.windowedFrame.width,
           height: placement.windowedFrame.height,
         );
+  }
+
+  static void _validateDecoratedLayoutSize(
+    TerminalSplitLayoutSize value,
+    TerminalSplitLayoutSize fullSize,
+    TerminalTabId tabId,
+  ) {
+    if (!value.width.isFinite ||
+        !value.height.isFinite ||
+        value.width <= 0 ||
+        value.height <= 0 ||
+        value.width > fullSize.width ||
+        value.height > fullSize.height) {
+      throw StateError(
+        'decorated terminal layout for $tabId must be finite, positive, and '
+        'contained by the native content size',
+      );
+    }
   }
 
   View _buildNode(

@@ -27,6 +27,8 @@ import 'terminal_command_palette.dart';
 import 'terminal_config.dart';
 import 'terminal_config_reload.dart';
 import 'terminal_configuration_reference.dart';
+import 'terminal_context_dock.dart';
+import 'terminal_context_dock_directory.dart';
 import 'terminal_core/terminal_desktop_signals.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
@@ -41,6 +43,7 @@ import 'terminal_core/vt_parser_inspector.dart';
 import 'terminal_desktop_signal_projection.dart';
 import 'terminal_diagnostics.dart';
 import 'terminal_diagnostics_presenter.dart';
+import 'terminal_directory_snapshot.dart';
 import 'terminal_incident_controller.dart';
 import 'terminal_incident_service.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
@@ -2790,6 +2793,11 @@ final class TerminalApplication {
       );
     }
     TerminalNativeHierarchyAdapter? hierarchy;
+    TerminalContextDockState? contextDockState;
+    TerminalContextDockDirectoryController? contextDockDirectoryController;
+    TerminalContextDockDirectoryPresenter? contextDockPresenter;
+    TerminalContextDockActionCoordinator? contextDockActionCoordinator;
+    TerminalContextDockKeyController? contextDockKeyController;
     TerminalNativeSplitDividerGestureController? dividerGestureController;
     TerminalSystemRecoveryController? systemRecoveryController;
     TerminalMemoryPressureController? memoryPressureController;
@@ -3086,6 +3094,7 @@ final class TerminalApplication {
               !hierarchyReconciliationInProgress) {
             nativeHierarchy.refreshPresentation();
           }
+          contextDockDirectoryController?.scheduleSynchronize();
           appleScriptSession?.scheduleReconcile();
           final TerminalAppKitMenuProjection? menu = menuProjection;
           if (menu != null && !menu.isDisposed) menu.refresh();
@@ -3758,10 +3767,13 @@ final class TerminalApplication {
       reconcileSecureKeyboardEntry();
       hierarchyReconciliationInProgress = true;
       try {
+        contextDockState?.synchronize(state);
+        contextDockDirectoryController?.synchronize();
         nativeHierarchy.reconcile();
       } finally {
         hierarchyReconciliationInProgress = false;
       }
+      contextDockPresenter?.afterHierarchyReconcile();
       synchronizeWindowSubscriptions();
       synchronizePaneFocusPresentation();
       systemRecoveryController?.retryPendingDisplayRecovery();
@@ -4013,7 +4025,22 @@ final class TerminalApplication {
                 nativeHierarchy.windowForTab(tabId)?.backingScaleFactor ?? 1,
           );
         case AppKitKeyEvent():
-          break;
+          final TerminalContextDockKeyController? keys =
+              contextDockKeyController;
+          if (keys == null) break;
+          unawaited(
+            keys.handle(logicalWindow.id, event).then<void>((
+              TerminalContextDockKeyResult result,
+            ) {
+              final TerminalContextDockTreeIntent? intent = result.treeIntent;
+              if (intent != null) {
+                contextDockDirectoryController?.handleTreeIntent(
+                  logicalWindow.id,
+                  intent,
+                );
+              }
+            }, onError: recordAsynchronousError),
+          );
       }
     }
 
@@ -4109,6 +4136,11 @@ final class TerminalApplication {
       await palettePresenter?.dispose();
       await menuProjection?.dispose();
       actionDispatcher = null;
+      contextDockKeyController = null;
+      contextDockActionCoordinator?.dispose();
+      contextDockActionCoordinator = null;
+      contextDockDirectoryController?.dispose();
+      contextDockDirectoryController = null;
       actionCoordinator?.dispose();
       memoryPressureController?.dispose();
       memoryPressureController = null;
@@ -4125,6 +4157,10 @@ final class TerminalApplication {
       if (nativeHierarchy != null && !nativeHierarchy.isDisposed) {
         nativeHierarchy.dispose();
       }
+      contextDockPresenter?.dispose();
+      contextDockPresenter = null;
+      contextDockState?.dispose();
+      contextDockState = null;
       for (final _TerminalHierarchyProductPane owner in owners.values) {
         if (!owner.adaptersDisposed) owner.disposeAdapters();
       }
@@ -4395,6 +4431,51 @@ final class TerminalApplication {
         initialWindow.selectedTab.focusedPaneId,
       )!;
 
+      final TerminalContextDockState createdContextDockState =
+          TerminalContextDockState()..synchronize(state);
+      contextDockState = createdContextDockState;
+      const TerminalWorkingDirectoryResolver workingDirectoryResolver =
+          TerminalWorkingDirectoryResolver();
+      final TerminalContextDockDirectoryController createdDockDirectory =
+          TerminalContextDockDirectoryController(
+            applicationState: state,
+            dockState: createdContextDockState,
+            resolveWorkingDirectory: (PaneId paneId, int generation) {
+              final TerminalSession session =
+                  sessions[paneId] ??
+                  (throw StateError('Context Dock session is unavailable'));
+              return workingDirectoryResolver.resolve(
+                sessionId: session.id,
+                generation: generation,
+                processSnapshot: session.processSnapshot(),
+                reportedWorkingDirectory:
+                    session.terminalScreenSet.metadata.workingDirectory,
+                processWorkingDirectory: session.workingDirectorySnapshot(),
+                launchWorkingDirectory: session.initialWorkingDirectory,
+              );
+            },
+            onChanged: () {
+              reconcileRequest?.call();
+              final TerminalAppKitMenuProjection? menu = menuProjection;
+              if (menu != null && !menu.isDisposed) menu.refresh();
+              final TerminalCommandPalettePresenter? palette = palettePresenter;
+              if (palette != null && !palette.isDisposed) palette.refresh();
+            },
+          );
+      contextDockDirectoryController = createdDockDirectory;
+      final TerminalContextDockDirectoryPresenter createdDockPresenter =
+          TerminalContextDockDirectoryPresenter(
+            applicationState: state,
+            dockState: createdContextDockState,
+            directoryController: createdDockDirectory,
+            localization: localization,
+            windowForTab: (TerminalTabId tabId) =>
+                hierarchy?.windowForTab(tabId),
+            terminalViewForPane: (PaneId paneId) =>
+                hierarchy?.resourcesForPane(paneId)?.view,
+          );
+      contextDockPresenter = createdDockPresenter;
+
       final TerminalNativeHierarchyAdapter createdHierarchy =
           TerminalNativeHierarchyAdapter(
             state: state,
@@ -4424,6 +4505,9 @@ final class TerminalApplication {
             ),
             dividerThickness: 1,
             defersCloseRequests: true,
+            tabLayoutSizeResolver:
+                createdDockPresenter.resolveTerminalLayoutSize,
+            tabRootDecorator: createdDockPresenter.decorateRoot,
             presentationBuilder:
                 (TerminalWindowState window, TerminalTabState tab) =>
                     presentationResolver.resolve(
@@ -4603,6 +4687,24 @@ final class TerminalApplication {
             },
           );
       actionCoordinator = createdActions;
+      final TerminalContextDockActionCoordinator createdDockActions =
+          TerminalContextDockActionCoordinator(
+            applicationState: state,
+            dockState: createdContextDockState,
+            focusNavigator: createdDockPresenter.focusNavigator,
+            focusTerminal: createdDockPresenter.focusTerminal,
+            canFocusNavigator: () =>
+                productResourceDisposalFuture == null &&
+                createdDockPresenter.canFocusNavigator,
+            onChanged: () {
+              reconcileInteractiveHierarchy();
+              final TerminalAppKitMenuProjection? menu = menuProjection;
+              if (menu != null && !menu.isDisposed) menu.refresh();
+              final TerminalCommandPalettePresenter? palette = palettePresenter;
+              if (palette != null && !palette.isDisposed) palette.refresh();
+            },
+          );
+      contextDockActionCoordinator = createdDockActions;
       final TerminalAppleScriptProductCommandExecutor appleScriptExecutor =
           TerminalAppleScriptProductCommandExecutor(
             state: state,
@@ -5312,9 +5414,22 @@ final class TerminalApplication {
           ),
           ...promptNavigationActions.registrations(),
           ...createdActions.registrations(),
+          ...createdDockActions.registrations(),
         ],
       );
       actionDispatcher = dispatcher;
+      contextDockKeyController = TerminalContextDockKeyController(
+        state: createdContextDockState,
+        dispatcher: dispatcher,
+        onChanged: () {
+          createdDockDirectory.synchronize();
+          reconcileInteractiveHierarchy();
+          final TerminalAppKitMenuProjection? menu = menuProjection;
+          if (menu != null && !menu.isDisposed) menu.refresh();
+          final TerminalCommandPalettePresenter? palette = palettePresenter;
+          if (palette != null && !palette.isDisposed) palette.refresh();
+        },
+      );
       appIntentsController = TerminalAppIntentsProductController(
         session: TerminalAppIntentsMacos.open(),
         dispatch: dispatcher.dispatch,

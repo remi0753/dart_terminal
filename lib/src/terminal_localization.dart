@@ -155,6 +155,44 @@ final class TerminalLocalization {
 
   String get applicationName => 'Dart Terminal';
 
+  String get contextDockTitle => _ja ? 'ディレクトリナビゲータ' : 'Directory Navigator';
+  String get contextDockTerminalOwnsInput =>
+      _ja ? 'ターミナル入力 · ⇧⌘Fで検索' : 'TERMINAL INPUT · ⇧⌘F to search';
+  String get contextDockNavigatorOwnsInput => _ja
+      ? 'ナビゲータ入力 · Escでターミナルへ戻る'
+      : 'NAVIGATOR INPUT · Esc returns to terminal';
+  String get contextDockWorkingDirectory => _ja ? '現在地' : 'Working directory';
+  String get contextDockSearch => _ja ? '検索' : 'Search';
+  String get contextDockUnknown => _ja ? '不明' : 'Unknown';
+  String get contextDockLoading => _ja ? '読み込み中…' : 'Loading…';
+  String get contextDockLoadingInline => _ja ? '（読み込み中）' : '(loading)';
+  String get contextDockEmpty => _ja ? '項目はありません' : 'No items';
+  String get contextDockUnavailable =>
+      _ja ? 'このディレクトリを参照できません' : 'This directory is unavailable';
+  String get contextDockUnavailableInline => _ja ? '（参照不可）' : '(unavailable)';
+  String get contextDockRemoteUnavailable => _ja
+      ? 'リモートディレクトリの参照は現在利用できません'
+      : 'Remote directory browsing is not available';
+  String contextDockPartial(int omittedCount) => _ja
+      ? '一部のみ表示（省略: $omittedCount）'
+      : 'Partial results ($omittedCount omitted)';
+  String get contextDockDetails => _ja ? '詳細' : 'Details';
+  String get contextDockNoSelection => _ja ? '選択なし' : 'No selection';
+  String get contextDockName => _ja ? '名前' : 'Name';
+  String get contextDockKind => _ja ? '種類' : 'Kind';
+  String get contextDockPath => _ja ? 'パス' : 'Path';
+  String get contextDockPermissions => _ja ? '権限' : 'Permissions';
+  String get contextDockSize => _ja ? 'サイズ' : 'Size';
+  String get contextDockModified => _ja ? '更新日時' : 'Modified';
+  String get contextDockOwner => _ja ? '所有者' : 'Owner';
+  String get contextDockLinkTarget => _ja ? 'リンク先' : 'Link target';
+  String get contextDockMetadataUnavailable =>
+      _ja ? 'メタデータを取得できません' : 'Metadata unavailable';
+  String get contextDockFolder => _ja ? 'フォルダ' : 'Folder';
+  String get contextDockFile => _ja ? 'ファイル' : 'File';
+  String get contextDockSymbolicLink => _ja ? 'シンボリックリンク' : 'Symbolic link';
+  String get contextDockOther => _ja ? 'その他' : 'Other';
+
   String get directionalSelectionMarker =>
       textDirection == TerminalTextDirection.rightToLeft ? '‹' : '›';
 

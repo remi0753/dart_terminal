@@ -414,6 +414,36 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 - native Dockは未実装であるためDeveloper JIT／Release AOTのvisual acceptanceはこのsubtaskでは未実施で、次の
   native side-dock subtaskへ残す。SSH／remote filesystem機能は計画どおり実装していない。
 
+### 2026-09-14 第3サブタスク着手
+
+- 目的: 第1サブタスクのwindow-owned stateと第2サブタスクのlocal directory providerを通常製品へ接続し、
+  terminalへ重ならない右側のnative Dockとしてfocused paneのcwd、tree、selection metadataを常時参照できる
+  ようにする。
+- 範囲: selected tabのterminal rootを左、Dockを右に置くhideable／resizable native split、bounded width復元、
+  native read-only tree surface、breadcrumb相当のtrusted cwd header、loading／empty／partial／permission／unknown／
+  remote-unavailable state、folderのkeyboard lazy expand／collapse、selection detail、localization、pane／tab／window／
+  cwd generation追従、snapshot cancel／cleanup、terminal viewport縮小、通常action registrationとfirst responder往復。
+- 対象外: non-empty queryの実検索、recent／opened／system index、path copy／insert、Secure Keyboard Entryによる
+  navigation抑止の最終統合、完成README／FEATURE_MATRIX、Developer JIT／Release AOTの最終製品受け入れ。これらは
+  後続subtaskの順序を維持する。
+- 依存関係: `TerminalContextDockState`／key controller、`TerminalDirectorySnapshotService`、`TerminalSession`の
+  generation-bound cwd、`TerminalNativeHierarchyAdapter`のtab root／layout projection、`TwoPaneSplitView`、native
+  `TextEditor`、existing action dispatcher／menu／palette／window event routing。
+- 設計前提: `dart_appkit`にはoutline／search-field専用primitiveがまだない。新しいproduct固有native widgetを
+  generic packageへ追加せず、既存のscrollable native `TextEditor`へDart-owned tree document、style、selected-line
+  highlightをatomic projectionする。query editingはwindow key eventを第1サブタスクのkey controllerへ渡し、実検索は
+  次subtaskまでtree contextを維持する。
+- リスク: native tabはtabごとに`NSWindow`を持つ一方、Dock stateはlogical window ownerである。1 logical windowにつき
+  1つのDock view／outer splitだけを所有し、selected native tabへだけreparentする。layout計算前にDock幅をterminal
+  available sizeから差し引き、native dividerから観測した幅だけをbounded stateへ戻す。非選択tab、hidden Dock、closed
+  paneへstale view／snapshotを残さない。
+- 完了条件: toggle／search actionが通常製品でavailableになり、表示時だけ右Dockがterminal幅を取り、hide時は全幅を
+  返す。focused pane／cwd変更で古いoperationがcancelされ、tree、dotfile、主要metadata、folder expansion、typed
+  unavailable stateがgeneration-safeに投影される。Navigator ownership中のkeyはwindow routeで消費されPTYへ届かず、
+  Escapeはstill-live terminal viewへ戻る。window／pane closeとshutdown後にsplit、editor、timer、snapshot ownerが残らない。
+- 検証方針: pure directory-tree owner test、fake AppKitでroot decoration／width／first responder／key routing／cleanup、
+  native hierarchy callback regression、localization、format／analysis／generated freshness／full `make test`を実行する。
+
 ### 2026-09-14 計画着手時
 
 - `main`はcleanで`origin/main`と同じ`31d6634`にあり、user指定に従い
@@ -459,3 +489,65 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 - tracked差分と新規memoのwhitespace checkは指摘0だった。変更対象はROADMAPと本memoだけであり、
   product code、generated artifact、README、FEATURE_MATRIXに差分はない。
 - 今回は計画のみの変更なので、Dart test、analysis、Developer JIT／Release AOTは実行していない。
+
+### 2026-09-14 第3サブタスク結果
+
+#### 実装と設計判断
+
+- `TerminalNativeHierarchyAdapter`へproduct-neutralなtab layout-size resolverとtab-root decoratorを追加した。
+  hidden／非選択tabは従来のterminal rootとfull content sizeをそのまま使い、visibleなselected tabだけをterminal rootと
+  read-only native `TextEditor`のhorizontal `TwoPaneSplitView`へ構成する。terminal tree自体のownership／dispose順は
+  hierarchyに残し、outer splitとeditorだけをContext Dock presenterが所有する。
+- Dock幅はlogical windowごとに320 ptを既定値として保持し、220–640 ptへ制限した。幅不足時はterminal 240 ptを優先して
+  Dockを投影せず、表示可能な場合はdivider 1 ptとDock幅をterminal available sizeから引く。native divider fractionは次の
+  reconcileで読み戻してstateへ保持し、hide時はterminalへfull widthを返す。native tab切替時は1 logical windowにつき1組の
+  split／editorをselected native tabへだけreparentする。
+- `TerminalContextDockDirectoryController`を追加し、visibleなstandard windowのfocused paneだけについてtrusted cwdを
+  generationごとに再解決する。rootは最大512件／path合計512 KiB、展開folderは1件あたり最大128件／128 KiB、paneごとの
+  展開状態は32 folder、windowごとのchild snapshotも32件、flattened rowは512件へ制限した。folder展開は既存one-level
+  snapshotを明示要求時だけ開始し、collapse、cwd／pane／window変更、hide、disposeで該当operationをcancelする。
+- 通常のterminal outputごとに`proc_pidinfo`とdirectory projectionを同期実行しないよう、cwd再観測はcontroller-ownedの
+  75 ms単一timerへcoalesceする。hierarchy mutationやDock action時は即時同期する。filesystem watcherと永続cacheはまだ
+  持たず、第2サブタスクで決めたbackground ownerなしの境界を維持した。
+- native documentはtrusted cwd、入力owner、query、folder-first tree、dotfile、folder／file／symlink／other marker、
+  loading／empty／partial／unavailable／remote-unavailable、選択項目のpath／kind／mode由来permissions／size／mtime／
+  optional uid／gid／symlink targetを英語／日本語で投影する。permission failureを含むmetadata failureは固定表示へ縮退し、
+  terminal textやcommand injectionは使わない。
+- `Shift+Command+F`のshared actionはDockを表示してnative editorへfirst responderを移し、その後にだけnavigator input
+  ownershipを確定する。navigator中のwindow key eventは既存key controllerへ渡し、上下／Page Up／Page Down、query、
+  `Command+Left／Right` lazy collapse／expandをPTYへ渡さない。`Escape`はshared focus action経由でstill-live focused paneの
+  terminal viewへfirst responderと`appKitOnly` routingを戻す。pane／tab切替中もwindow-owned ownershipを維持する。
+- 次subtaskを先取りするrecursive／system-wide search providerは実装していない。non-empty queryは現在読み込み済みtreeの
+  bounded rowだけをfilterするUI projectionであり、未展開subtreeを探索しない。次subtaskでこのquery surfaceをcurrent
+  subtreeからsystem-wideへ連続するsearch ownerへ差し替える。
+- `TerminalDirectorySnapshotRequest`へhard maximum以下のrequest-local entry／path-byte capを追加した。既存callerのdefault
+  contractは不変で、Dockだけがより小さい予算を指定する。localization auditは新しいpresenterを16番目の監査sourceとして
+  登録し、production localization injection 13件を固定した。
+- SSH／remote filesystem providerは追加していない。remote host付きのsafe OSC 7は`remoteUnavailable`を表示し、local
+  launch cwdや同名pathへfallbackしない。
+
+#### 検証と失敗記録
+
+- focused `terminal_context_dock_test.dart`: 成功。bounded width、root order、dotfile、metadata、lazy child、focused pane／cwd
+  追従、remote拒否、hidden時cancel／late completionを検証した。
+- focused `terminal_native_hierarchy_test.dart`: 成功。right sibling composition、terminal viewport縮小／復元、Japanese
+  remote state、navigator first responderとwindow routing、Escape復帰、native divider幅保持、logical window内のnative tab
+  reparent、shutdown後のnative handle 0件を検証した。
+- 初回focused testはsandbox外のClang module cacheへMetal build hookが書けず停止した。承認済みのtest実行権限で再実行し、
+  product failureではないことを確認した。その後test fixtureで非const constructorをconst指定したcompile errorを修正した。
+  divider testではstateへ観測幅399.5 ptを保存した直後も古いimmutable snapshotの320 ptで同一reconcileをlayoutしていたため、
+  native width capture後にstate snapshotを再取得するよう修正した。
+- 初回full gateは新しい`localization: localization` injectionで静的監査の固定件数が変わり停止した。新presenterのcatalog
+  ownership rule、必須phrase、source countと合わせて更新し、単体auditは
+  `TERMINAL_LOCALIZATION_AUDIT_PASS sources=16 resource_families=4 resource_keys=21`で成功した。
+- 続くfull gateはreview対象source hash変更によりPhase 7 acceptance freshnessで停止した。承認済みsource／test hashだけを
+  再生成し、その依存連鎖でstaleになったGhostty gap inventoryとrelease-candidate daily-use matrixも順にcheckして再生成した。
+  判定はaccepted 97、actionable P0/P1 0、release blockers 0のまま変わっていない。
+- 最終`CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。343 Dart fileのformat変更0、analysis指摘0、focused testを含む
+  package／native／compatibility／differential／application／terminfo／shell integration／distribution全gateを通過し、最後に
+  `dart_terminal tests passed`を確認した。
+- 最終確認時の`dart format`へ誤ってMarkdown 2ファイルも渡したため、Dart source 2件のformatは変更0で完了した後に
+  Markdown parse errorを返した。対象をDart sourceだけに限定してfocused 3 testと`dart analyze`を再実行し、すべて成功した。
+  request-local snapshot budgetも2件上限／3件入力でpartialになることとhard maximum超過拒否を追加検証した。
+- Developer JIT／Release AOTの完成製品visual acceptanceは本subtaskの対象外として未実施である。system-wide search、path
+  handoff、accessibilityの最終監査、privacy／performance gate、両runtime受け入れはROADMAPの後続unchecked taskに残る。

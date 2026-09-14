@@ -10,6 +10,9 @@ abstract final class TerminalContextDockLimits {
   static const int maximumQueryUnits = 256;
   static const int maximumResults = 512;
   static const int defaultPageStep = 10;
+  static const double minimumWidth = 220;
+  static const double defaultWidth = 320;
+  static const double maximumWidth = 640;
 }
 
 final class TerminalContextDockLimitException implements Exception {
@@ -56,6 +59,7 @@ final class TerminalContextDockWindowSnapshot {
     required this.windowId,
     required this.targetPaneId,
     required this.isVisible,
+    required this.width,
     required this.inputOwner,
     required this.generation,
     required this.pane,
@@ -64,6 +68,7 @@ final class TerminalContextDockWindowSnapshot {
   final TerminalWindowId windowId;
   final PaneId targetPaneId;
   final bool isVisible;
+  final double width;
   final TerminalContextDockInputOwner inputOwner;
   final int generation;
   final TerminalContextDockPaneSnapshot pane;
@@ -247,6 +252,20 @@ final class TerminalContextDockState {
     _validate();
   }
 
+  /// Retains one bounded native divider result for this logical window.
+  void setWidth(TerminalWindowId windowId, double width) {
+    if (!width.isFinite ||
+        width < TerminalContextDockLimits.minimumWidth ||
+        width > TerminalContextDockLimits.maximumWidth) {
+      throw ArgumentError.value(width, 'width', 'must be in Dock bounds');
+    }
+    final _TerminalContextDockWindowState window = _requireWindow(windowId);
+    if ((window.width - width).abs() <= 1e-9) return;
+    window.width = width;
+    window.generation++;
+    _validate();
+  }
+
   void setQuery(
     TerminalWindowId windowId,
     String value, {
@@ -336,6 +355,23 @@ final class TerminalContextDockState {
     return true;
   }
 
+  void setSelectedResultIndex(TerminalWindowId windowId, int index) {
+    final _TerminalContextDockWindowState window = _requireWindow(windowId);
+    final _TerminalContextDockPaneState pane = window.targetPane;
+    if (index < 0 || index >= pane.resultCount) {
+      throw RangeError.range(
+        index,
+        0,
+        pane.resultCount == 0 ? 0 : pane.resultCount - 1,
+        'index',
+      );
+    }
+    if (pane.selectedResultIndex == index) return;
+    pane.selectedResultIndex = index;
+    window.generation++;
+    _validate();
+  }
+
   void dispose() {
     if (_isDisposed) return;
     _isDisposed = true;
@@ -375,6 +411,7 @@ final class TerminalContextDockState {
       windowId: window.windowId,
       targetPaneId: window.targetPaneId,
       isVisible: window.isVisible,
+      width: window.width,
       inputOwner: window.inputOwner,
       generation: window.generation,
       pane: TerminalContextDockPaneSnapshot(
@@ -413,6 +450,11 @@ final class TerminalContextDockState {
       if (window.navigatorOwnsInput && !window.isVisible) {
         throw StateError('hidden Context Dock cannot own input');
       }
+      if (!window.width.isFinite ||
+          window.width < TerminalContextDockLimits.minimumWidth ||
+          window.width > TerminalContextDockLimits.maximumWidth) {
+        throw StateError('Context Dock width is outside policy bounds');
+      }
       for (final _TerminalContextDockPaneState pane in window.panes.values) {
         _validateQuery(pane.query);
         if (pane.resultCount < 0 ||
@@ -449,6 +491,7 @@ final class _TerminalContextDockWindowState {
   final Map<PaneId, _TerminalContextDockPaneState> panes;
   PaneId targetPaneId;
   bool isVisible = false;
+  double width = TerminalContextDockLimits.defaultWidth;
   TerminalContextDockInputOwner inputOwner =
       TerminalContextDockInputOwner.terminal;
   int generation = 1;
