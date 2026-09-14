@@ -8434,7 +8434,7 @@ final class TerminalApplication {
       );
       reconcile();
 
-      final int navigatorZeroWriteBaseline =
+      final int dockToggleWriteBaseline =
           writeEnqueuedCounts[initialPaneId] ?? 0;
       final TerminalPaneProcessSnapshot navigatorProcess = initialPane
           .processSnapshot();
@@ -8445,6 +8445,28 @@ final class TerminalApplication {
         'process=${navigatorProcess.disposition.name} '
         'echo=${navigatorProcess.terminalEchoEnabled}',
       );
+      await dispatch(TerminalActionId.toggleContextDock);
+      await waitFor(() {
+        final TerminalContextDockWindowSnapshot? dock = contextDockState
+            .snapshotForWindow(initialWindow.id);
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        return dock?.isVisible == true &&
+            dock!.inputOwner == TerminalContextDockInputOwner.terminal &&
+            directory?.workingDirectory == fixtureRootPath &&
+            directory!.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == secondDroppedFile.path,
+            );
+      }, 'Context Dock toggle did not project the real plain-sh cwd tree');
+      _expectLifecycle(
+        contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                dockToggleWriteBaseline,
+        'Context Dock toggle did not preserve terminal input ownership',
+      );
+      final int navigatorZeroWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
       await dispatch(TerminalActionId.searchFilesAndFolders);
       await waitFor(() {
         final TerminalContextDockWindowSnapshot? dock = contextDockState
@@ -8483,8 +8505,7 @@ final class TerminalApplication {
             navigatorEditor.text.contains("drop'2.txt") &&
             navigatorEditor.text.contains(secondDroppedFile.path) &&
             navigatorEditor.selection.start > 0 &&
-            contextDockWindow.keyEventRouting ==
-                KeyEventRouting.dartAndAppKit &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.dartOnly &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
                 navigatorZeroWriteBaseline,
         'native Navigator omitted its read-only accessible document or wrote '

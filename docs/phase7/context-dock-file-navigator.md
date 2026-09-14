@@ -129,7 +129,9 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 ### SSH／remote pane
 
 - remote OSC 7のhost/pathは表示上のremote identityには使えてもlocal filesystem access authorityには
-  しない。同名local pathへfallbackしない。
+  しない。同名local pathへfallbackしない。ただしlocal interactive shell自身がforegroundを保持し、同じchild PIDの
+  kernel cwdを取得できる場合、machine hostname付きOSC 7はremote sessionではなくlocal shell hookのhost aliasとして扱う。
+  別foreground processが所有する時はこの例外を適用しない。
 - PTYへhidden `find`／`ls`／`pwd`を注入する、shell promptやcommand outputをscreenからscrapeする、
   password／agent credentialを取得する方式は採用しない。alternate screen、running command、shell差、
   quoting、scrollback汚染のいずれにも安全な一般解にならないためである。
@@ -337,7 +339,7 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
   観測し、focused paneへgeneration付きのtrusted local cwdを返せるようにする。そのcwd直下はAppKit main
   threadを塞がないbounded／cancellable snapshotとして取得し、後続native treeが安全にlazy展開できる
   provider contractを作る。
-- 範囲: local OSC 7、owning shell cwd、trusted launch cwdの優先resolver、remote OSC 7のlocal fallback拒否、
+- 範囲: local OSC 7、owning shell cwd、trusted launch cwdの優先resolver、remote OSC 7のlocal fallback拒否とlocal shell hostname alias、
   macOS PTY child cwdの専用native snapshot、absolute／UTF-8／control／bidi path validation、非再帰directory
   listing、dotfile、file／folder／symlink種別、permission／owner／group／size／mtime／symlink target、
   entry／metadata concurrency／deadline上限、typed partial／unavailable state、generationとcancel owner、fake
@@ -373,8 +375,9 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
   返さない。
 - `TerminalWorkingDirectoryResolver`はcurrent session identityを必須とし、accepted local OSC 7、同じchild PIDの
   owning-shell snapshot、trusted launch cwdの順に解決する。absolute pathをlexical normalizeし、UTF-8 byte上限、
-  control、bidi、NUL、rootより上への`..`を拒否する。remote hostを持つsafe OSC 7は
-  `remoteUnavailable`で即時終了し、同名local process／launch pathを混ぜない。
+  control、bidi、NUL、rootより上への`..`を拒否する。remote hostを持つsafe OSC 7は、別foreground processがある場合や
+  same-PID kernel cwdを証明できない場合に`remoteUnavailable`とし、同名local process／launch pathを混ぜない。local shell自身が
+  foregroundを保持する時だけkernel cwdを優先し、後発のuser hookがmachine hostnameを送る通常zshでもlocal treeを維持する。
 - `TerminalDirectorySnapshotService`をone-shotのasync filesystem providerとして追加した。任意のtrusted rootの直下
   だけを`followLinks: false`で列挙するため、同じprimitiveをfolder展開時に呼ぶことでlazy subtreeになる。folder、
   file、symlink、otherとdotfileを保持し、folder-first／case-folded name／exact nameの順で決定的にsortする。
@@ -524,8 +527,8 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 - `TerminalDirectorySnapshotRequest`へhard maximum以下のrequest-local entry／path-byte capを追加した。既存callerのdefault
   contractは不変で、Dockだけがより小さい予算を指定する。localization auditは新しいpresenterを16番目の監査sourceとして
   登録し、production localization injection 13件を固定した。
-- SSH／remote filesystem providerは追加していない。remote host付きのsafe OSC 7は`remoteUnavailable`を表示し、local
-  launch cwdや同名pathへfallbackしない。
+- SSH／remote filesystem providerは追加していない。実remote foregroundのhost付きOSC 7は`remoteUnavailable`を表示し、local
+  launch cwdや同名pathへfallbackしない。local owning shellのmachine hostname aliasだけはsame-PID kernel cwdで識別する。
 
 #### 検証と失敗記録
 

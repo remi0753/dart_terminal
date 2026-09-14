@@ -58,6 +58,33 @@ void _testWorkingDirectoryAuthorityPriority() {
     sessionId: sessionId,
     generation: 8,
     processSnapshot: process,
+    reportedWorkingDirectory: Uri.parse('file://MacBook_Pro/tmp/advertised'),
+    processWorkingDirectory: PtyWorkingDirectorySnapshot.available(
+      processId: 42,
+      path: '/tmp/local-process',
+    ),
+    launchWorkingDirectory: '/tmp/local-launch',
+  );
+  _expect(
+    resolved.isAvailable &&
+        resolved.path == '/tmp/local-process' &&
+        resolved.source == TerminalWorkingDirectorySource.owningShell &&
+        resolved.issues.contains(
+          TerminalWorkingDirectoryIssueKind.nonLocalReportedDirectory,
+        ),
+    'matching kernel cwd keeps a local owning shell usable when a later user '
+    'OSC 7 hook reports its machine hostname',
+  );
+
+  resolved = resolver.resolve(
+    sessionId: sessionId,
+    generation: 9,
+    processSnapshot: TerminalPaneProcessSnapshot.available(
+      sessionId: sessionId,
+      childProcessId: 42,
+      owningProcessGroup: 42,
+      foregroundProcessGroup: 43,
+    ),
     reportedWorkingDirectory: Uri.parse('file://remote.example/tmp/remote'),
     processWorkingDirectory: PtyWorkingDirectorySnapshot.available(
       processId: 42,
@@ -69,13 +96,16 @@ void _testWorkingDirectoryAuthorityPriority() {
     resolved.disposition ==
             TerminalWorkingDirectoryDisposition.remoteUnavailable &&
         resolved.path == null &&
-        resolved.source == null,
-    'remote OSC 7 blocks every local cwd fallback',
+        resolved.source == null &&
+        resolved.issues.contains(
+          TerminalWorkingDirectoryIssueKind.nonLocalReportedDirectory,
+        ),
+    'non-local OSC 7 from a foreground process blocks local cwd fallbacks',
   );
 
   resolved = resolver.resolve(
     sessionId: sessionId,
-    generation: 9,
+    generation: 10,
     processSnapshot: process,
     reportedWorkingDirectory: null,
     processWorkingDirectory: PtyWorkingDirectorySnapshot.available(
@@ -92,7 +122,7 @@ void _testWorkingDirectoryAuthorityPriority() {
 
   resolved = resolver.resolve(
     sessionId: sessionId,
-    generation: 10,
+    generation: 11,
     processSnapshot: process,
     reportedWorkingDirectory: null,
     processWorkingDirectory: PtyWorkingDirectorySnapshot.available(
@@ -112,7 +142,7 @@ void _testWorkingDirectoryAuthorityPriority() {
 
   resolved = resolver.resolve(
     sessionId: sessionId,
-    generation: 11,
+    generation: 12,
     processSnapshot: process,
     reportedWorkingDirectory: null,
     processWorkingDirectory: PtyWorkingDirectorySnapshot.available(
@@ -131,7 +161,7 @@ void _testWorkingDirectoryAuthorityPriority() {
 
   resolved = resolver.resolve(
     sessionId: sessionId,
-    generation: 12,
+    generation: 13,
     processSnapshot: TerminalPaneProcessSnapshot.nonLive(staleSessionId),
     reportedWorkingDirectory: null,
     processWorkingDirectory: null,
@@ -146,7 +176,7 @@ void _testWorkingDirectoryAuthorityPriority() {
 
   resolved = resolver.resolve(
     sessionId: sessionId,
-    generation: 13,
+    generation: 14,
     processSnapshot: process,
     reportedWorkingDirectory: null,
     processWorkingDirectory: null,
@@ -404,6 +434,24 @@ Future<void> _testFailureAndCancellation() async {
     cancelled.entries.isEmpty,
     'late metadata completion cannot mutate a cancelled immutable snapshot',
   );
+
+  final _CancelErrorListFileSystem cancelError = _CancelErrorListFileSystem();
+  final TerminalDirectorySnapshotOperation cancelErrorOperation =
+      TerminalDirectorySnapshotService(fileSystem: cancelError).start(
+        TerminalDirectorySnapshotRequest(rootPath: '/root', generation: 34),
+      );
+  await cancelError.listening.future;
+  cancelErrorOperation.cancel();
+  final TerminalDirectorySnapshot cancelErrorSnapshot =
+      await cancelErrorOperation.result;
+  await Future<void>.delayed(Duration.zero);
+  _expect(
+    cancelErrorSnapshot.disposition ==
+            TerminalDirectorySnapshotDisposition.cancelled &&
+        cancelError.cancelCount == 1,
+    'a late directory-stream cancellation error is consumed as cleanup state',
+  );
+  await cancelError.close();
 
   final _BlockingListFileSystem slow = _BlockingListFileSystem();
   final TerminalDirectorySnapshot deadline =
@@ -713,6 +761,39 @@ final class _BlockingListFileSystem implements TerminalDirectoryFileSystem {
   Future<TerminalDirectoryFileSystemMetadata> metadata(
     TerminalDirectoryFileSystemEntry entry,
   ) async => const TerminalDirectoryFileSystemMetadata(size: 1);
+}
+
+final class _CancelErrorListFileSystem implements TerminalDirectoryFileSystem {
+  _CancelErrorListFileSystem() {
+    _controller = StreamController<TerminalDirectoryFileSystemEntry>(
+      onListen: () => listening.complete(),
+      onCancel: () {
+        cancelCount++;
+        return Future<void>.error(
+          const FileSystemException(
+            'root disappeared during cancellation',
+            '/must-not-be-retained-in-result',
+            OSError('gone', 2),
+          ),
+        );
+      },
+    );
+  }
+
+  final Completer<void> listening = Completer<void>();
+  late final StreamController<TerminalDirectoryFileSystemEntry> _controller;
+  int cancelCount = 0;
+
+  Future<void> close() => _controller.close();
+
+  @override
+  Stream<TerminalDirectoryFileSystemEntry> list(String rootPath) =>
+      _controller.stream;
+
+  @override
+  Future<TerminalDirectoryFileSystemMetadata> metadata(
+    TerminalDirectoryFileSystemEntry entry,
+  ) async => throw StateError('metadata is unreachable');
 }
 
 final class _GeneratedDirectoryFileSystem

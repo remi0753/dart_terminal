@@ -36,6 +36,7 @@ enum TerminalWorkingDirectoryDisposition {
 enum TerminalWorkingDirectoryIssueKind {
   sessionMismatch,
   unsafeReportedDirectory,
+  nonLocalReportedDirectory,
   processUnavailable,
   processIdentityMismatch,
   unsafeProcessDirectory,
@@ -87,20 +88,15 @@ final class TerminalWorkingDirectoryResolver {
       return _unavailable(sessionId, generation, issues);
     }
 
+    var hasNonLocalReportedDirectory = false;
     final Uri? reported = reportedWorkingDirectory;
     if (reported != null) {
       if (!TerminalSessionMetadata.isSafeWorkingDirectory(reported)) {
         issues.add(TerminalWorkingDirectoryIssueKind.unsafeReportedDirectory);
       } else if (reported.host.isNotEmpty &&
           reported.host.toLowerCase() != 'localhost') {
-        return TerminalWorkingDirectoryResolution._(
-          sessionId: sessionId,
-          generation: generation,
-          disposition: TerminalWorkingDirectoryDisposition.remoteUnavailable,
-          path: null,
-          source: null,
-          issues: issues,
-        );
+        hasNonLocalReportedDirectory = true;
+        issues.add(TerminalWorkingDirectoryIssueKind.nonLocalReportedDirectory);
       } else {
         final String? local = TerminalTabPresentationResolver.localFilePath(
           reported,
@@ -133,16 +129,42 @@ final class TerminalWorkingDirectoryResolver {
       final String? normalized = TerminalLocalPathPolicy.normalizeAbsolute(
         processDirectory.path,
       );
-      if (normalized != null) {
-        return _available(
-          sessionId,
-          generation,
-          normalized,
-          TerminalWorkingDirectorySource.owningShell,
-          issues,
-        );
+      if (normalized == null) {
+        issues.add(TerminalWorkingDirectoryIssueKind.unsafeProcessDirectory);
+      } else {
+        final bool owningShellKeepsForeground =
+            processSnapshot.disposition ==
+                TerminalPaneProcessDisposition.idleShell ||
+            processSnapshot.disposition ==
+                TerminalPaneProcessDisposition.owningShellCommand;
+        if (!hasNonLocalReportedDirectory || owningShellKeepsForeground) {
+          return _available(
+            sessionId,
+            generation,
+            normalized,
+            TerminalWorkingDirectorySource.owningShell,
+            issues,
+          );
+        }
       }
-      issues.add(TerminalWorkingDirectoryIssueKind.unsafeProcessDirectory);
+    }
+
+    // A local interactive shell can emit its machine hostname in OSC 7. User
+    // startup hooks may run after the bundled localhost hook, so the last
+    // descriptive URI is not sufficient to classify the PTY as remote. A
+    // same-PID kernel cwd proves local ownership while the shell keeps the
+    // foreground process group. If another foreground process owns the PTY,
+    // retain the non-local URI as a remote boundary and never expose the
+    // shell's local cwd or launch fallback as though it were the remote cwd.
+    if (hasNonLocalReportedDirectory) {
+      return TerminalWorkingDirectoryResolution._(
+        sessionId: sessionId,
+        generation: generation,
+        disposition: TerminalWorkingDirectoryDisposition.remoteUnavailable,
+        path: null,
+        source: null,
+        issues: issues,
+      );
     }
 
     final String? launch = TerminalLocalPathPolicy.normalizeAbsolute(
@@ -646,7 +668,22 @@ final class TerminalDirectorySnapshotService {
         );
       }
     } finally {
-      if (iterator != null) unawaited(iterator.cancel());
+      if (iterator != null) {
+        try {
+          // Cancellation is deliberately not part of the snapshot deadline,
+          // but its late failure must still be observed. Real directory
+          // streams can report ENOENT here when a generation is cancelled at
+          // the same time as its root disappears.
+          unawaited(
+            iterator.cancel().then<void>(
+              (_) {},
+              onError: (Object _, StackTrace _) {},
+            ),
+          );
+        } on Object {
+          // A synchronous cancellation failure is also cleanup-only state.
+        }
+      }
     }
 
     if (token.reason == _TerminalDirectoryStop.cancelled) {

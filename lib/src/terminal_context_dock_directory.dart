@@ -861,7 +861,14 @@ final class TerminalContextDockDirectoryPresenter {
     TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
       window.id,
     );
-    if (!_shouldShow(window, tab, fullSize, dock)) return fullSize;
+    if (!_shouldShow(window, tab, fullSize, dock)) {
+      final _TerminalContextDockNativeResources? resources =
+          _resources[window.id];
+      if (resources?.attachedTabId == tab.id) {
+        resources!.projectedVisible = false;
+      }
+      return fullSize;
+    }
     final _TerminalContextDockNativeResources? resources =
         _resources[window.id];
     if (resources != null && resources.positioned) {
@@ -889,17 +896,31 @@ final class TerminalContextDockDirectoryPresenter {
       window.id,
     );
     if (!_shouldShow(window, tab, fullSize, dock)) return terminalRoot;
+    final TerminalContextDockWindowSnapshot visibleDock = dock!;
     final _TerminalContextDockNativeResources resources = _resources
         .putIfAbsent(window.id, _TerminalContextDockNativeResources.new);
+    final bool rootAttachmentChanged =
+        !identical(resources.split.firstView, terminalRoot) ||
+        !identical(resources.split.secondView, resources.editor);
+    final bool inputOwnerProjectionChanged =
+        !resources.projectedVisible ||
+        resources.attachedTabId != tab.id ||
+        resources.attachedPaneId != visibleDock.targetPaneId ||
+        rootAttachmentChanged;
     _publishDocument(
       resources,
-      dock!,
+      visibleDock,
       directoryController.snapshotForWindow(window.id),
     );
-    resources.split.setChildren(first: terminalRoot, second: resources.editor);
+    if (rootAttachmentChanged) {
+      resources.split.setChildren(
+        first: terminalRoot,
+        second: resources.editor,
+      );
+    }
     final double usable =
         fullSize.width - TerminalContextDockDirectoryLimits.dividerThickness;
-    final double dockWidth = _effectiveDockWidth(dock.width, fullSize);
+    final double dockWidth = _effectiveDockWidth(visibleDock.width, fullSize);
     resources.split.setPosition(
       fraction: (usable - dockWidth) / usable,
       firstMinimumExtent:
@@ -908,7 +929,10 @@ final class TerminalContextDockDirectoryPresenter {
     );
     resources
       ..positioned = true
-      ..attachedTabId = tab.id;
+      ..projectedVisible = true
+      ..attachedTabId = tab.id
+      ..attachedPaneId = visibleDock.targetPaneId
+      ..inputOwnerProjectionPending |= inputOwnerProjectionChanged;
     return resources.split;
   }
 
@@ -930,7 +954,7 @@ final class TerminalContextDockDirectoryPresenter {
       throw StateError('Context Dock native window is unavailable');
     }
     window
-      ..keyEventRouting = KeyEventRouting.dartAndAppKit
+      ..keyEventRouting = KeyEventRouting.dartOnly
       ..makeFirstResponder(resources.editor);
     final _TerminalContextDockDocument document = resources.document!;
     resources.editor.setSelection(document.querySelection);
@@ -994,15 +1018,37 @@ final class TerminalContextDockDirectoryPresenter {
           nativeWindow.keyEventRouting = KeyEventRouting.appKitOnly;
         }
       }
-      if (resources == null || dock?.navigatorOwnsInput != true) continue;
+      if (resources == null) continue;
+      if (dock?.isVisible != true) {
+        resources
+          ..projectedVisible = false
+          ..navigatorTabId = null
+          ..inputOwnerProjectionPending = false;
+        continue;
+      }
       final TerminalTabId selectedTabId = logicalWindow.selectedTabId;
-      if (resources.navigatorTabId == selectedTabId) continue;
+      final bool navigatorOwnsInput = dock!.navigatorOwnsInput;
+      final bool navigatorTargetChanged =
+          navigatorOwnsInput && resources.navigatorTabId != selectedTabId;
+      if (!resources.inputOwnerProjectionPending && !navigatorTargetChanged) {
+        continue;
+      }
       final Window? selectedWindow = _windowForTab(selectedTabId);
       if (selectedWindow == null || selectedWindow.isDisposed) continue;
-      selectedWindow
-        ..keyEventRouting = KeyEventRouting.dartAndAppKit
-        ..makeFirstResponder(resources.editor);
-      resources.navigatorTabId = selectedTabId;
+      if (navigatorOwnsInput) {
+        selectedWindow
+          ..keyEventRouting = KeyEventRouting.dartOnly
+          ..makeFirstResponder(resources.editor);
+        resources.navigatorTabId = selectedTabId;
+      } else {
+        final View? terminalView = _terminalViewForPane(dock.targetPaneId);
+        if (terminalView == null || terminalView.isDisposed) continue;
+        selectedWindow
+          ..keyEventRouting = KeyEventRouting.appKitOnly
+          ..makeFirstResponder(terminalView);
+        resources.navigatorTabId = null;
+      }
+      resources.inputOwnerProjectionPending = false;
     }
   }
 
@@ -1131,9 +1177,12 @@ final class _TerminalContextDockNativeResources {
   final TwoPaneSplitView split;
   _TerminalContextDockDocument? document;
   TerminalTabId? attachedTabId;
+  PaneId? attachedPaneId;
   TerminalTabId? navigatorTabId;
   int lastAppliedQuerySelectionGeneration = -1;
   bool positioned = false;
+  bool projectedVisible = false;
+  bool inputOwnerProjectionPending = false;
 
   void dispose() {
     if (!split.isDisposed) split.dispose();

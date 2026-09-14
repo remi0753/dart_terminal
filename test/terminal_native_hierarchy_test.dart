@@ -168,8 +168,9 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   );
   _expect(
     bindings.firstResponders[windowHandle] == bindings.handleFor(editor) &&
-        bindings.windowKeyEventRoutings[windowHandle] == 0,
-    'navigator focus enables window key events without targeting the PTY view',
+        bindings.windowKeyEventRoutings[windowHandle] == 1,
+    'navigator focus sends key events only to Dart without targeting the PTY '
+    'or read-only AppKit editor',
   );
   final TerminalContextDockKeyResult escaped = await keys.handle(
     logicalWindow.id,
@@ -225,6 +226,34 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     paneLayout?.width == 800 &&
         selectedNativeWindow.contentView is! TwoPaneSplitView,
     'hiding the Dock restores the full terminal viewport',
+  );
+  await dispatcher.dispatch(TerminalActionId.toggleContextDock);
+  _expect(
+    identical(selectedNativeWindow.contentView, outer) &&
+        bindings.firstResponders[bindings.handleFor(selectedNativeWindow)] ==
+            bindings.handleFor(
+              adapter.resourcesForPane(secondTab.focusedPaneId)!.view,
+            ) &&
+        bindings.windowKeyEventRoutings[bindings.handleFor(
+              selectedNativeWindow,
+            )] ==
+            2,
+    'showing the Dock without search restores the terminal first responder '
+    'after native root reparenting',
+  );
+  final int outerHandle = bindings.handleFor(outer);
+  final int stableChildAttachmentCount =
+      bindings.splitViewChildrenSetCounts[outerHandle]!;
+  reconcile();
+  _expect(
+    bindings.splitViewChildrenSetCounts[outerHandle] ==
+            stableChildAttachmentCount &&
+        bindings.firstResponders[bindings.handleFor(selectedNativeWindow)] ==
+            bindings.handleFor(
+              adapter.resourcesForPane(secondTab.focusedPaneId)!.view,
+            ),
+    'an unchanged Dock reconcile does not detach its terminal child or lose '
+    'the first responder',
   );
 
   actions.dispose();

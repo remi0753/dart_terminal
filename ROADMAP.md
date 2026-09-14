@@ -1478,6 +1478,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] working directory tree、metadata、pane追従のnative side-dock表示
   - [x] current subtreeからsystem-wideへ連続するfile／folder search
   - [x] path handoff、accessibility、privacy／performance gate、両runtime受け入れ
+  - [x] 通常Developer JIT起動のdirectory表示・検索・first responder回帰修正
+    （実施時に
+    [`docs/phase7/context-dock-developer-run-regression.md`](docs/phase7/context-dock-developer-run-regression.md)
+    を参照する）
 
 ### 主要ゴール後の低優先 follow-up
 
