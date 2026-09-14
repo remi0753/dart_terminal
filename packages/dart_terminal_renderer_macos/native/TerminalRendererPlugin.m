@@ -1244,6 +1244,7 @@ static DtrRasterizedGlyph* RasterizeGlyph(NSFont* font, uint32_t face_id,
 @property(nonatomic) uint64_t terminalAccessibilityValueNotificationCount;
 @property(nonatomic) uint64_t terminalAccessibilitySelectionNotificationCount;
 @property(nonatomic) uint64_t terminalAccessibilityFocusNotificationCount;
+@property(nonatomic) double terminalBackgroundOpacity;
 
 - (BOOL)attachTextInputClient:(uint64_t)clientId;
 - (BOOL)updateTextInputGeometry:(DtrTextInputGeometryV1)geometry;
@@ -1254,6 +1255,7 @@ static DtrRasterizedGlyph* RasterizeGlyph(NSFont* font, uint32_t face_id,
                  columnBoundaries:(const uint32_t*)columnBoundaries
                              text:(const uint8_t*)text;
 - (BOOL)runAccessibilityAcceptance:(uint64_t)generation;
+- (void)applyTerminalBackgroundPresentation;
 
 @end
 
@@ -2299,6 +2301,8 @@ static NSString* TextInputPlainString(id value) {
     self.paused = YES;
     self.enableSetNeedsDisplay = YES;
     self.framebufferOnly = YES;
+    self.terminalBackgroundOpacity = 1.0;
+    self.layer.opaque = YES;
     self.delegate = nil;
     self.terminalMarkedText = [[NSAttributedString alloc] initWithString:@""];
     self.terminalMarkedSelection = NSMakeRange(0, 0);
@@ -2324,6 +2328,25 @@ static NSString* TextInputPlainString(id value) {
 
 - (BOOL)isFlipped {
   return YES;
+}
+
+- (BOOL)isOpaque {
+  return self.terminalBackgroundOpacity >= 1.0;
+}
+
+- (void)viewDidMoveToWindow {
+  [super viewDidMoveToWindow];
+  [self applyTerminalBackgroundPresentation];
+}
+
+- (void)applyTerminalBackgroundPresentation {
+  const BOOL opaque = self.terminalBackgroundOpacity >= 1.0;
+  self.layer.opaque = opaque;
+  NSWindow* window = self.window;
+  if (window == nil) return;
+  window.opaque = opaque;
+  window.backgroundColor = opaque ? NSColor.windowBackgroundColor
+                                  : NSColor.clearColor;
 }
 
 - (BOOL)acceptsFirstResponder {
@@ -3434,6 +3457,28 @@ static int32_t PerformTerminalMetalViewOperation(
       return [terminal_view runAccessibilityAcceptance:acceptance.generation]
                  ? DA_STATUS_OK
                  : DA_STATUS_INTERNAL_ERROR;
+    }
+    case DTR_METAL_VIEW_OPERATION_BACKGROUND_PRESENTATION: {
+      if (payload_length != sizeof(DtrMetalBackgroundPresentationV1)) {
+        return DA_STATUS_INVALID_ARGUMENT;
+      }
+      DtrMetalBackgroundPresentationV1 presentation;
+      memcpy(&presentation, payload, sizeof(presentation));
+      if (presentation.struct_size != sizeof(presentation) ||
+          presentation.version !=
+              DTR_METAL_BACKGROUND_PRESENTATION_VERSION ||
+          presentation.operation !=
+              DTR_METAL_VIEW_OPERATION_BACKGROUND_PRESENTATION ||
+          presentation.reserved != 0 ||
+          !isfinite(presentation.background_opacity) ||
+          presentation.background_opacity < 0.0 ||
+          presentation.background_opacity > 1.0) {
+        return DA_STATUS_INVALID_ARGUMENT;
+      }
+      terminal_view.terminalBackgroundOpacity =
+          presentation.background_opacity;
+      [terminal_view applyTerminalBackgroundPresentation];
+      return DA_STATUS_OK;
     }
     default:
       return DA_STATUS_INVALID_ARGUMENT;

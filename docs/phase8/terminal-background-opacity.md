@@ -120,6 +120,24 @@ terminal本文を描画する背景色へ利用者指定の透過度を適用す
   338 file変更なし、root analyzeはissueなし、native/package/unit/security/update/distribution
   checksを含む全aggregateが成功した。第1subtaskのschema、Settings document、profile、
   localization、reload分類と生成freshnessを完了とする。
+- 2026-09-14: 第2subtaskのDart対象をsandbox内でformatし、5 file中compositor 1 fileの
+  整形を適用した。整形後、Dart telemetry fileのmtime更新が`Operation not permitted`と
+  なりcommand自体はexit 1となった。code formattingの失敗ではなくsandbox境界によるため、
+  analytics無効化と通常cache権限を持つaggregate testでformatと終了statusを再確認する。
+- 2026-09-14: compositor focused testはexit 0。opacity 0.5がframeのdefault clearのalphaのみを
+  0x80へ変え、明示ANSI cell backgroundを0xffのまま保つこと、および範囲外・NaNの
+  拒否を確認した。
+- 2026-09-14: `make terminal-renderer-native-test terminal-renderer-dart-test`はexit 0。ABI 12、
+  custom operationのsize/version/operation/reserved/range検証、viewとlayerのnon-opaque化、window
+  attach後のclear/non-opaque化、opacity 1へのopaque復帰、Dart payload encoderを確認した。
+- 2026-09-14: 第2subtaskの`make test`はformat/analyze、全native/package/unit、および
+  application acceptanceまで成功後、renderer ABI source更新を入力に持つP0/P1 gap inventoryの
+  freshnessで停止した。受け入れ件数やgap判定の変更ではないため、正本からinventoryと
+  それに依存するdaily-use matrixを順に再生成する。
+- 2026-09-14: inventoryとdaily-use matrixを依存順に再生成した後の`make test`は
+  exit 0。formatは338 file変更なし、root/package analyzeはissueなし、renderer native/Dartを
+  含む全native、unit、application、security、update、distributionのaggregate checkが成功した。
+  第2subtaskのframe alphaとmacOS transparent surface contractを完了とする。
 
 ## リスク・引き継ぎ
 

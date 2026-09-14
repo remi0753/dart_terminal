@@ -305,6 +305,7 @@ final class TerminalLiveMetalSurface {
     TerminalFontCatalogConfiguration? fontCatalogConfiguration,
     double horizontalPadding = 0,
     double verticalPadding = 0,
+    double backgroundOpacity = 1,
     TerminalMetalRendererConfig rendererConfig =
         const TerminalMetalRendererConfig(),
     TerminalAccessibilityPresentation accessibilityPresentation =
@@ -312,6 +313,7 @@ final class TerminalLiveMetalSurface {
   }) {
     _validateViewport(logicalWidth, logicalHeight);
     _validatePadding(horizontalPadding, verticalPadding);
+    _validateBackgroundOpacity(backgroundOpacity);
     if (!automaticScheduling && paneWorkScheduler != null) {
       throw ArgumentError.value(
         paneWorkScheduler,
@@ -344,6 +346,7 @@ final class TerminalLiveMetalSurface {
         throw const TerminalMetalCompositionBackpressureException();
       }
       renderer.bindToView(view);
+      TerminalRendererMacos.setBackgroundOpacity(view, backgroundOpacity);
       final TerminalAccessibilityClient accessibilityClient =
           TerminalAccessibilityClient(view);
       final TerminalMetalRendererRecoveryDomain domain =
@@ -360,6 +363,7 @@ final class TerminalLiveMetalSurface {
         logicalHeight: logicalHeight,
         horizontalPadding: horizontalPadding,
         verticalPadding: verticalPadding,
+        backgroundOpacity: backgroundOpacity,
         backingScaleFactor: backingScaleFactor,
         isVisible: isVisible,
         isOccluded: isOccluded,
@@ -393,6 +397,7 @@ final class TerminalLiveMetalSurface {
     required double logicalHeight,
     required this.horizontalPadding,
     required this.verticalPadding,
+    required double backgroundOpacity,
     required double backingScaleFactor,
     required bool isVisible,
     required bool isOccluded,
@@ -414,6 +419,7 @@ final class TerminalLiveMetalSurface {
        _accessibilityClient = accessibilityClient,
        _logicalWidth = logicalWidth,
        _logicalHeight = logicalHeight,
+       _backgroundOpacity = backgroundOpacity,
        _desiredScale = backingScaleFactor,
        _publishedScale = backingScaleFactor,
        _desiredVisible = isVisible,
@@ -460,6 +466,7 @@ final class TerminalLiveMetalSurface {
                   styleTable: screenSet.styleTable,
                   palette: screenSet.palette,
                   graphemeTable: screenSet.graphemeTable,
+                  backgroundOpacity: _backgroundOpacity,
                   accessibilityPresentation: _accessibilityPresentation,
                 ).compose(
                   _visibleRenderModel(model),
@@ -567,6 +574,7 @@ final class TerminalLiveMetalSurface {
   double _logicalHeight;
   double _desiredScale;
   double _publishedScale;
+  double _backgroundOpacity;
   late int _viewportWidth;
   late int _viewportHeight;
   late int _contentOffsetX;
@@ -643,6 +651,7 @@ final class TerminalLiveMetalSurface {
   TerminalPreeditState get preeditState => _preeditModel.state;
   TerminalAccessibilityPresentation get accessibilityPresentation =>
       _accessibilityPresentation;
+  double get backgroundOpacity => _backgroundOpacity;
 
   double get _contentLogicalWidth =>
       _logicalWidth - _effectiveHorizontalPadding * 2;
@@ -742,6 +751,19 @@ final class TerminalLiveMetalSurface {
       reduceMotion: presentation.reduceMotion,
       monotonicMicros: _lastMonotonicMicros,
     );
+    if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
+    _needsDrain = true;
+    _scheduleImmediate();
+    return true;
+  }
+
+  /// Atomically applies the shared terminal-only presentation opacity.
+  bool updateBackgroundOpacity(double opacity) {
+    _requireLive();
+    _validateBackgroundOpacity(opacity);
+    if (_backgroundOpacity == opacity) return false;
+    TerminalRendererMacos.setBackgroundOpacity(view, opacity);
+    _backgroundOpacity = opacity;
     if (_scheduler.model.isInitialized) _scheduler.requestFullRedraw();
     _needsDrain = true;
     _scheduleImmediate();
@@ -1847,6 +1869,12 @@ final class TerminalLiveMetalSurface {
     }
     if (horizontal < 0 || vertical < 0) {
       throw ArgumentError('terminal padding must be non-negative');
+    }
+  }
+
+  static void _validateBackgroundOpacity(double opacity) {
+    if (!opacity.isFinite || opacity < 0 || opacity > 1) {
+      throw RangeError.range(opacity, 0, 1, 'backgroundOpacity');
     }
   }
 

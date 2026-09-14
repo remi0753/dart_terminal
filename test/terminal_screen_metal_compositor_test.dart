@@ -24,6 +24,7 @@ void runTerminalScreenMetalCompositorTests() {
   _testExtendedDecorationsUseIndependentColors();
   _testCursorColorUsesIndependentMetalLayer();
   _testInverseBackgroundAndConcealMapping();
+  _testBackgroundOpacityOnlyChangesBaseClear();
   _testWrappedOverflowKeepsNewestPromptVisible();
   _testWideGraphemeUsesCanonicalGrid();
   _testVisibleCursorBreaksLigatureShapingRuns();
@@ -40,6 +41,47 @@ void runTerminalScreenMetalCompositorTests() {
   _testContentRectangleOffsetsEveryLayer();
   _testKittyImagesUseThreeOrderedMetalBands();
   _testKittyAnimationFrameUsesContentGenerationAndNativePixels();
+}
+
+void _testBackgroundOpacityOnlyChangesBaseClear() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 2);
+  screens.primary.setNarrowCell(0, 1, 0x58, background: 2);
+  final _CompositionFixture fixture = _compose(
+    screens,
+    backgroundOpacity: 0.5,
+    cursorDrawn: false,
+  );
+  try {
+    final ByteData frame = ByteData.sublistView(
+      fixture.composition.scheduledFrame.frame.copyBytes(),
+    );
+    final List<TerminalMetalInstance> backgrounds = fixture
+        .composition
+        .instances
+        .where(
+          (TerminalMetalInstance instance) =>
+              instance.kind == TerminalMetalInstanceKind.cellBackground,
+        )
+        .toList(growable: false);
+    final int expectedBaseRgb =
+        (screens.palette.resolveToken(0, foreground: false) & 0x00ffffff) << 8;
+    _expect(
+      frame.getUint32(52, Endian.little) == (expectedBaseRgb | 0x80) &&
+          backgrounds.length == 1 &&
+          (backgrounds.single.colorRgba & 0xff) == 0xff,
+      'opacity changes only the base frame clear and keeps explicit cell '
+      'backgrounds opaque',
+    );
+  } finally {
+    fixture.dispose();
+  }
+
+  for (final double invalid in <double>[-0.01, 1.01, double.nan]) {
+    _expectThrows(
+      () => _compose(screens, backgroundOpacity: invalid),
+      'compositor accepts invalid background opacity $invalid',
+    );
+  }
 }
 
 void _testSearchProjectionUsesOrderedMetalHighlights() {
@@ -1536,6 +1578,7 @@ _CompositionFixture _compose(
   bool includeKittyImages = false,
   bool visualBellActive = false,
   bool cursorDrawn = true,
+  double backgroundOpacity = 1,
   TerminalAccessibilityPresentation accessibilityPresentation =
       const TerminalAccessibilityPresentation.standard(),
 }) {
@@ -1590,6 +1633,7 @@ _CompositionFixture _compose(
           styleTable: screens.styleTable,
           palette: screens.palette,
           graphemeTable: screens.graphemeTable,
+          backgroundOpacity: backgroundOpacity,
           accessibilityPresentation: accessibilityPresentation,
         ).compose(
           model,

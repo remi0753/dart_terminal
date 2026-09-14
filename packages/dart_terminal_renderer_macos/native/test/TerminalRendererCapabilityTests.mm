@@ -229,8 +229,8 @@ int main(int argc, const char* argv[]) {
         image, "dtr_debug_live_text_input_client_count");
     Expect(version != nullptr && version() == DTR_ABI_VERSION,
            "renderer ABI version");
-    Expect(DTR_ABI_VERSION == 11,
-           "terminal accessibility content origin requires renderer ABI v11");
+    Expect(DTR_ABI_VERSION == 12,
+           "terminal background presentation requires renderer ABI v12");
 
     DtrFontCatalogSummaryV1 unsupported_summary = {};
     unsupported_summary.struct_size = sizeof(unsupported_summary);
@@ -1647,6 +1647,29 @@ int main(int argc, const char* argv[]) {
       Expect(view.framebufferOnly, "drawable is framebuffer only");
       Expect(view.delegate == nil, "view starts without a render delegate");
       Expect(view.isFlipped, "view uses top-left coordinates");
+      Expect(view.isOpaque && view.layer.opaque,
+             "terminal view starts with an opaque presentation");
+
+      DtrMetalBackgroundPresentationV1 background_presentation = {};
+      background_presentation.struct_size =
+          sizeof(background_presentation) - 1;
+      background_presentation.version =
+          DTR_METAL_BACKGROUND_PRESENTATION_VERSION;
+      background_presentation.operation =
+          DTR_METAL_VIEW_OPERATION_BACKGROUND_PRESENTATION;
+      background_presentation.background_opacity = 0.5;
+      Expect(da_view_perform_custom_operation(
+                 view_handle,
+                 reinterpret_cast<const uint8_t*>(&background_presentation),
+                 sizeof(background_presentation)) == DA_STATUS_INVALID_ARGUMENT,
+             "background presentation rejects a malformed packet");
+      background_presentation.struct_size = sizeof(background_presentation);
+      Expect(da_view_perform_custom_operation(
+                 view_handle,
+                 reinterpret_cast<const uint8_t*>(&background_presentation),
+                 sizeof(background_presentation)) == DA_STATUS_OK &&
+                 !view.isOpaque && !view.layer.opaque,
+             "background presentation can become transparent before attach");
 
       DtrMetalRendererConfigV1 presentation_config = metal_config;
       presentation_config.maximum_viewport_width = 4096;
@@ -1713,8 +1736,32 @@ int main(int argc, const char* argv[]) {
               dart_appkit::ThreadDomain::kAppKitMain, &lookup_status));
       Expect(lookup_status == DA_STATUS_OK && owner.window.contentView == view,
              "window owns the attached renderer view");
+      Expect(!owner.window.opaque &&
+                 owner.window.backgroundColor.alphaComponent == 0.0,
+             "window attach inherits the transparent terminal presentation");
       Expect(owner.window.firstResponder == view,
              "attached renderer becomes first responder");
+
+      background_presentation.background_opacity = NAN;
+      Expect(da_view_perform_custom_operation(
+                 view_handle,
+                 reinterpret_cast<const uint8_t*>(&background_presentation),
+                 sizeof(background_presentation)) == DA_STATUS_INVALID_ARGUMENT,
+             "background presentation rejects non-finite opacity");
+      background_presentation.background_opacity = 1.01;
+      Expect(da_view_perform_custom_operation(
+                 view_handle,
+                 reinterpret_cast<const uint8_t*>(&background_presentation),
+                 sizeof(background_presentation)) == DA_STATUS_INVALID_ARGUMENT,
+             "background presentation rejects out-of-range opacity");
+      background_presentation.background_opacity = 1.0;
+      Expect(da_view_perform_custom_operation(
+                 view_handle,
+                 reinterpret_cast<const uint8_t*>(&background_presentation),
+                 sizeof(background_presentation)) == DA_STATUS_OK &&
+                 view.isOpaque && view.layer.opaque && owner.window.opaque &&
+                 owner.window.backgroundColor.alphaComponent == 1.0,
+             "terminal view and window return to opaque presentation");
 
       [owner.window orderFront:nil];
       CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.01, false);

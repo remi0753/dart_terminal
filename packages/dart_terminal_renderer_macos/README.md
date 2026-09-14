@@ -61,7 +61,7 @@ Applications declare the following native capability in their runtime manifest:
   "id": "dart_terminal_renderer_macos",
   "package": "dart_terminal_renderer_macos",
   "library": "libdart_terminal_renderer_macos.dylib",
-  "abiVersion": 11,
+  "abiVersion": 12,
   "abiVersionSymbol": "dtr_abi_version",
   "initializerSymbol": "dtr_initialize"
 }
@@ -69,6 +69,10 @@ Applications declare the following native capability in their runtime manifest:
 
 Call `TerminalRendererMacos.initialize()` after attaching the AppKit
 application, then use `TerminalRendererMacos.createView()`.
+`TerminalRendererMacos.setBackgroundOpacity` applies the shared terminal-only
+opacity to the Metal layer and its owning window; ordinary AppKit views are not
+affected. The value is finite and bounded to 0 through 1, and may be applied
+before or after the view joins a window.
 
 Attach `TerminalTextInputClient` to that view when the owning window uses
 `KeyEventRouting.appKitOnly`. Listen to its typed event stream and publish the

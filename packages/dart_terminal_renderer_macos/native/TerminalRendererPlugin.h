@@ -5,7 +5,7 @@
 
 #include "dart_appkit_native_extension.h"
 
-#define DTR_ABI_VERSION 11u
+#define DTR_ABI_VERSION 12u
 #define DTR_FONT_CATALOG_SUMMARY_VERSION 1u
 #define DTR_FONT_CATALOG_CONFIG_VERSION 1u
 #define DTR_FONT_VARIATION_VERSION 1u
@@ -38,6 +38,7 @@
 #define DTR_METAL_ATLAS_UPLOAD_VERSION 1u
 #define DTR_METAL_FRAME_VERSION 1u
 #define DTR_METAL_VIEW_BINDING_VERSION 1u
+#define DTR_METAL_BACKGROUND_PRESENTATION_VERSION 1u
 #define DTR_METAL_SUBMISSION_VERSION 1u
 #define DTR_METAL_RENDERER_STATE_VERSION 3u
 #define DTR_METAL_FRAME_MAGIC 0x46525444u
@@ -94,6 +95,7 @@ enum {
   DTR_METAL_VIEW_OPERATION_TEXT_INPUT_MATRIX = 6,
   DTR_METAL_VIEW_OPERATION_ACCESSIBILITY_SNAPSHOT = 7,
   DTR_METAL_VIEW_OPERATION_ACCESSIBILITY_ACCEPTANCE = 8,
+  DTR_METAL_VIEW_OPERATION_BACKGROUND_PRESENTATION = 9,
 };
 
 enum {
@@ -520,6 +522,16 @@ typedef struct DtrMetalViewBindingV1 {
   uint64_t renderer_handle;
   uint64_t renderer_generation;
 } DtrMetalViewBindingV1;
+
+// Opaque provider operation that configures only the terminal Metal view and
+// its owning window for the frame header's straight-alpha background clear.
+typedef struct DtrMetalBackgroundPresentationV1 {
+  uint32_t struct_size;
+  uint32_t version;
+  uint32_t operation;
+  uint32_t reserved;
+  double background_opacity;
+} DtrMetalBackgroundPresentationV1;
 
 typedef struct DtrTextInputClientV1 {
   uint32_t struct_size;

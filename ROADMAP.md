@@ -1449,7 +1449,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase8/terminal-background-opacity.md`](docs/phase8/terminal-background-opacity.md)
   を参照して順に実施する）
   - [x] typed schema、Settings document、product configuration
-  - [ ] Metal frame alphaとmacOS transparent surface contract
+  - [x] Metal frame alphaとmacOS transparent surface contract
   - [ ] 既存／新規の全window・tab・paneへのlive投影と両runtime受け入れ
 
 ### 主要ゴール後の低優先 follow-up

@@ -70,6 +70,7 @@ final class TerminalScreenMetalCompositor {
     required this.styleTable,
     required this.palette,
     required this.graphemeTable,
+    this.backgroundOpacity = 1,
     this.accessibilityPresentation =
         const TerminalAccessibilityPresentation.standard(),
   }) {
@@ -77,6 +78,11 @@ final class TerminalScreenMetalCompositor {
         !identical(bridge.atlas, atlas) ||
         atlas.catalogGeneration != catalog.generation) {
       throw ArgumentError('Metal composition resources do not share a domain');
+    }
+    if (!backgroundOpacity.isFinite ||
+        backgroundOpacity < 0 ||
+        backgroundOpacity > 1) {
+      throw RangeError.range(backgroundOpacity, 0, 1, 'backgroundOpacity');
     }
   }
 
@@ -87,6 +93,7 @@ final class TerminalScreenMetalCompositor {
   final TerminalStyleTable styleTable;
   final TerminalPalette palette;
   final TerminalGraphemeTable graphemeTable;
+  final double backgroundOpacity;
   final TerminalAccessibilityPresentation accessibilityPresentation;
 
   TerminalScreenMetalComposition compose(
@@ -135,8 +142,12 @@ final class TerminalScreenMetalCompositor {
 
     final double scale = atlas.scale;
     final TerminalFontCatalogMetrics metrics = catalog.metrics;
-    final int defaultBackground = _rgba(
+    final int opaqueDefaultBackground = _rgba(
       palette.resolveToken(0, foreground: false),
+    );
+    final int frameBackground = _withAlpha(
+      opaqueDefaultBackground,
+      (backgroundOpacity * 255).round(),
     );
     final List<TerminalMetalInstance> backgrounds = <TerminalMetalInstance>[];
     final List<TerminalMetalInstance> overlays = <TerminalMetalInstance>[];
@@ -181,7 +192,7 @@ final class TerminalScreenMetalCompositor {
         );
         final int top = _rowPixel(row, metrics, scale);
         final int bottom = _rowPixel(row + 1, metrics, scale);
-        if (colors.backgroundRgba != defaultBackground) {
+        if (colors.backgroundRgba != opaqueDefaultBackground) {
           _addClippedSolid(
             backgrounds,
             kind: TerminalMetalInstanceKind.cellBackground,
@@ -283,7 +294,7 @@ final class TerminalScreenMetalCompositor {
         decorations: decorations,
         metrics: metrics,
         scale: scale,
-        defaultBackground: defaultBackground,
+        defaultBackground: opaqueDefaultBackground,
         viewportWidth: contentWidth,
         viewportHeight: contentHeight,
       );
@@ -402,7 +413,7 @@ final class TerminalScreenMetalCompositor {
           right: contentWidth,
           bottom: contentHeight,
           thickness: math.max(2, scale.round() * 2),
-          colorRgba: _contrastingRgba(defaultBackground),
+          colorRgba: _contrastingRgba(opaqueDefaultBackground),
           viewportWidth: contentWidth,
           viewportHeight: contentHeight,
         );
@@ -642,7 +653,7 @@ final class TerminalScreenMetalCompositor {
           model,
           row: preedit?.caretRow ?? model.cursorRow,
           column: preedit?.caretColumn ?? model.cursorColumn,
-          fallback: defaultBackground,
+          fallback: opaqueDefaultBackground,
         );
         _addCursorAt(
           cursors,
@@ -688,7 +699,7 @@ final class TerminalScreenMetalCompositor {
         viewportWidth: viewportWidth,
         viewportHeight: viewportHeight,
         scale16_16: atlas.scale16_16,
-        backgroundRgba: defaultBackground,
+        backgroundRgba: frameBackground,
         instances: instances,
       );
       return TerminalScreenMetalComposition(
@@ -1169,6 +1180,9 @@ final class TerminalScreenMetalCompositor {
 
   static int _rgba(int taggedRgb, {int alpha = 0xff}) =>
       ((taggedRgb & 0x00ffffff) << 8) | alpha;
+
+  static int _withAlpha(int rgba, int alpha) =>
+      (rgba & 0xffffff00) | (alpha & 0xff);
 
   static int _columnPixel(
     int column,
