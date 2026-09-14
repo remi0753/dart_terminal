@@ -113,6 +113,12 @@ Shift+Command+Left/Right/Up/Downへ移す。focusとdividerの全chordを既存`
   上書きできないため不採用。8 chordをstandard configurable bindingとして所有する。
 - 方向候補はwrapしない。同方向にpaneがないとき別端へ飛ぶと空間navigationと一致せず、
   誤操作時にactive paneが大きく移るためfail closedを採用する。
+- divider actionをView menuから削除せず、native `TerminalActionShortcut`だけを外す。これにより
+  menu／Command Paletteからの実行可能性を保ったまま、raw chordの所有権を設定可能な
+  keybinding engineへ一本化できる。
+- standard bindingへ8件を追加しても既存の総定義上限1024は変更しない。設定可能件数はschemaが
+  `maximumDefinitionCount - standardDefinitionCount`で導出するため、1023件から1015件へ自動で
+  調整される。
 
 ## 検証結果
 
@@ -139,7 +145,33 @@ Shift+Command+Left/Right/Up/Downへ移す。focusとdividerの全chordを既存`
 - generated keybinding referenceとcurrent product acceptanceは後続subtaskでshortcut ownershipを
   確定後に一度だけ更新する。現subtaskの検証は生成物を参照しない関連unit/native testで完了した。
 
+### 2026-09-14 focus／divider shortcutの設定可能な既定keybindへの移行完了
+
+- divider 4 actionのnative menu shortcutを外した。focus 4 actionと合わせて8 actionともmenu上の
+  key equivalentを持たず、AppKitのnative shortcut予約対象ではなくなった。
+- standard definitionsを9件へ増やし、Command+Left/Right/Up/Downを
+  `pane.focus-left|right|up|down`、Shift+Command+Left/Right/Up/Downを
+  `pane.move-divider-left|right|up|down`へ割り当てた。Control+Dの既存EOF bindingは維持した。
+- parserがcatalogのnative shortcutから予約chordを導出する既存contractにより、Command+矢印と
+  Shift+Command+矢印はconfig file／CLIの`keybind`で受理される。`unbind`、別application action、
+  `passthrough`へのordered overrideをunit testで確認した。
+- 初回の`dart analyze`／`dart run`はworkspace外の
+  `/Users/remi/.dart-tool/dart-flutter-telemetry-session.json`更新をsandboxが拒否して停止した。
+  `dart analyze`は`DART_SUPPRESS_ANALYTICS=true`、testは`CI=true
+  DART_SUPPRESS_ANALYTICS=true`として再実行し、製品コード由来でない環境制約を回避した。
+- `dart format`（変更5 files）: 成功、3 test filesを整形。
+- `DART_SUPPRESS_ANALYTICS=true dart analyze`: 成功、issue 0。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart run test/terminal_key_binding_test.dart`: 成功。
+  9 defaults、exact modifier、別actionへの上書き、unbind、passthroughを確認した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart run test/terminal_config_test.dart`: 成功。
+  両directional chordがnative reserved扱いされず、typed occurrenceになることを確認した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart run test/terminal_action_registry_test.dart`: 成功。
+  8 actionのmenu shortcut非所有を確認した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart run test/terminal_product_configuration_test.dart`: 成功。
+  standard definitions増加後も既存profile／engine生成contractに回帰がないことを確認した。
+- 通常製品raw key／live reload、両runtime、generated reference freshnessは次subtaskで検証する。
+
 ## 残課題・阻害要因
 
-- 次subtask: focus／divider shortcutをnative予約からconfigurable standard bindingへ移行する。
-- その後、通常製品raw key／live override受け入れとreference／evidence更新を行う。
+- 次subtask: 通常製品raw key／live override受け入れとreference／evidence更新を行う。
+- 現時点の阻害要因はない。

@@ -385,7 +385,7 @@ final class TerminalKeyBindingEngine {
 
   static const int maximumDefinitionCount =
       TerminalKeyBindingLimits.maximumDefinitionCount;
-  static const int standardDefinitionCount = 1;
+  static const int standardDefinitionCount = 9;
   static const List<TerminalKeyBindingDefinition> standardDefinitions =
       <TerminalKeyBindingDefinition>[
         TerminalKeyBindingDefinition.action(
@@ -394,6 +394,66 @@ final class TerminalKeyBindingEngine {
             control: true,
           ),
           action: TerminalKeyBindingAction.sendEndOfFile,
+        ),
+        TerminalKeyBindingDefinition.applicationAction(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.arrowLeft,
+            command: true,
+          ),
+          applicationAction: TerminalActionId.focusPaneLeft,
+        ),
+        TerminalKeyBindingDefinition.applicationAction(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.arrowRight,
+            command: true,
+          ),
+          applicationAction: TerminalActionId.focusPaneRight,
+        ),
+        TerminalKeyBindingDefinition.applicationAction(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.arrowUp,
+            command: true,
+          ),
+          applicationAction: TerminalActionId.focusPaneUp,
+        ),
+        TerminalKeyBindingDefinition.applicationAction(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.arrowDown,
+            command: true,
+          ),
+          applicationAction: TerminalActionId.focusPaneDown,
+        ),
+        TerminalKeyBindingDefinition.applicationAction(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.arrowLeft,
+            shift: true,
+            command: true,
+          ),
+          applicationAction: TerminalActionId.moveDividerLeft,
+        ),
+        TerminalKeyBindingDefinition.applicationAction(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.arrowRight,
+            shift: true,
+            command: true,
+          ),
+          applicationAction: TerminalActionId.moveDividerRight,
+        ),
+        TerminalKeyBindingDefinition.applicationAction(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.arrowUp,
+            shift: true,
+            command: true,
+          ),
+          applicationAction: TerminalActionId.moveDividerUp,
+        ),
+        TerminalKeyBindingDefinition.applicationAction(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.arrowDown,
+            shift: true,
+            command: true,
+          ),
+          applicationAction: TerminalActionId.moveDividerDown,
         ),
       ];
 

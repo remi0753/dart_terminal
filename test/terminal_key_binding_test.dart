@@ -40,7 +40,7 @@ void _testOrderedConfigurationOverrides() {
         ],
       );
   _expect(
-    engine.definitionCount == 5 &&
+    engine.definitionCount == 13 &&
         engine.resolve(_event(TerminalPhysicalKey.keyD, control: true)).kind ==
             TerminalKeyBindingResolutionKind.noMatch &&
         engine
@@ -148,6 +148,27 @@ void _testStandardAndExactResolution() {
         controlD.action == TerminalKeyBindingAction.sendEndOfFile,
     'standard Control-D resolves to the tracked EOF action',
   );
+  const List<(TerminalPhysicalKey, bool, TerminalActionId)>
+  directionalBindings = <(TerminalPhysicalKey, bool, TerminalActionId)>[
+    (TerminalPhysicalKey.arrowLeft, false, TerminalActionId.focusPaneLeft),
+    (TerminalPhysicalKey.arrowRight, false, TerminalActionId.focusPaneRight),
+    (TerminalPhysicalKey.arrowUp, false, TerminalActionId.focusPaneUp),
+    (TerminalPhysicalKey.arrowDown, false, TerminalActionId.focusPaneDown),
+    (TerminalPhysicalKey.arrowLeft, true, TerminalActionId.moveDividerLeft),
+    (TerminalPhysicalKey.arrowRight, true, TerminalActionId.moveDividerRight),
+    (TerminalPhysicalKey.arrowUp, true, TerminalActionId.moveDividerUp),
+    (TerminalPhysicalKey.arrowDown, true, TerminalActionId.moveDividerDown),
+  ];
+  _expect(
+    directionalBindings.every(
+      ((TerminalPhysicalKey, bool, TerminalActionId) binding) =>
+          engine
+              .resolve(_event(binding.$1, command: true, shift: binding.$2))
+              .applicationAction ==
+          binding.$3,
+    ),
+    'Command+arrow focuses panes and Shift+Command+arrow moves dividers',
+  );
   _expect(
     engine
             .resolve(
@@ -207,10 +228,47 @@ void _testOverrideUnbindAndPassthrough() {
     ],
   );
   _expect(
-    unbound.activeBindingCount == 0 &&
+    unbound.activeBindingCount == 8 &&
         unbound.resolve(_event(TerminalPhysicalKey.keyD, control: true)).kind ==
             TerminalKeyBindingResolutionKind.noMatch,
     'unbind removes the inherited binding and leaves no match',
+  );
+
+  const TerminalKeyBindingChord commandRight = TerminalKeyBindingChord(
+    physicalKey: TerminalPhysicalKey.arrowRight,
+    command: true,
+  );
+  const TerminalKeyBindingChord shiftCommandRight = TerminalKeyBindingChord(
+    physicalKey: TerminalPhysicalKey.arrowRight,
+    shift: true,
+    command: true,
+  );
+  final TerminalKeyBindingEngine directionalOverrides =
+      TerminalKeyBindingEngine.standardWithOrderedOverrides(
+        const <TerminalKeyBindingDefinition>[
+          TerminalKeyBindingDefinition.applicationAction(
+            chord: commandRight,
+            applicationAction: TerminalActionId.focusPaneDown,
+          ),
+          TerminalKeyBindingDefinition.passthrough(chord: shiftCommandRight),
+        ],
+      );
+  _expect(
+    directionalOverrides
+                .resolve(_event(TerminalPhysicalKey.arrowRight, command: true))
+                .applicationAction ==
+            TerminalActionId.focusPaneDown &&
+        directionalOverrides
+                .resolve(
+                  _event(
+                    TerminalPhysicalKey.arrowRight,
+                    shift: true,
+                    command: true,
+                  ),
+                )
+                .kind ==
+            TerminalKeyBindingResolutionKind.passthrough,
+    'directional pane defaults are replaceable and can pass through',
   );
 
   final TerminalKeyBindingEngine passthrough =

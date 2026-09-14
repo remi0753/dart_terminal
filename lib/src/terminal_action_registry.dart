@@ -425,36 +425,11 @@ final class TerminalActionCatalog {
       action(
         TerminalActionId.moveDividerLeft,
         TerminalActionMenu.view,
-        shortcut: const TerminalActionShortcut(
-          keyEquivalent: '\uF702',
-          command: true,
-        ),
         separatorBefore: true,
       ),
-      action(
-        TerminalActionId.moveDividerRight,
-        TerminalActionMenu.view,
-        shortcut: const TerminalActionShortcut(
-          keyEquivalent: '\uF703',
-          command: true,
-        ),
-      ),
-      action(
-        TerminalActionId.moveDividerUp,
-        TerminalActionMenu.view,
-        shortcut: const TerminalActionShortcut(
-          keyEquivalent: '\uF700',
-          command: true,
-        ),
-      ),
-      action(
-        TerminalActionId.moveDividerDown,
-        TerminalActionMenu.view,
-        shortcut: const TerminalActionShortcut(
-          keyEquivalent: '\uF701',
-          command: true,
-        ),
-      ),
+      action(TerminalActionId.moveDividerRight, TerminalActionMenu.view),
+      action(TerminalActionId.moveDividerUp, TerminalActionMenu.view),
+      action(TerminalActionId.moveDividerDown, TerminalActionMenu.view),
       action(TerminalActionId.jumpToPreviousPrompt, TerminalActionMenu.view),
       action(TerminalActionId.jumpToNextPrompt, TerminalActionMenu.view),
       action(TerminalActionId.focusPaneLeft, TerminalActionMenu.window),

@@ -31,6 +31,10 @@ keybind = control+not-a-key=passthrough
 keybind = control+x=application.not-real
 keybind = control+y=terminal.send-suspend-signal
 ''',
+      '/directional': '''
+keybind = command+right=unbind
+keybind = shift+command+right=pane.focus-left
+''',
       '/bounded': '''
 item = one
 item = two
@@ -123,6 +127,28 @@ item = three
                 .action ==
             TerminalKeyBindingAction.sendSuspendSignal,
     'invalid, reserved, and unknown keybinds recover independently',
+  );
+
+  final TerminalConfigSnapshot directional =
+      TerminalConfigLoader(fileSystem: files).resolve(const <String>[
+        '--config=/directional',
+      ], environment: const <String, String>{}).snapshot;
+  final List<TerminalResolvedConfigValue<TerminalKeyBindingDefinition>>
+  directionalOccurrences = directional.occurrences(
+    TerminalProductConfigSchema.keybind,
+  );
+  _expect(
+    directional.diagnostics.isEmpty &&
+        directionalOccurrences.length == 2 &&
+        directionalOccurrences.first.value.chord.configName ==
+            'command+right' &&
+        directionalOccurrences.first.value.directive ==
+            TerminalKeyBindingDirective.unbind &&
+        directionalOccurrences.last.value.chord.configName ==
+            'shift+command+right' &&
+        directionalOccurrences.last.value.applicationAction ==
+            TerminalActionId.focusPaneLeft,
+    'directional pane defaults can be overridden by configuration',
   );
 
   final TerminalConfigRepeatedOption<String> item =

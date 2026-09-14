@@ -224,24 +224,17 @@ void _testStableStandardCatalog() {
     'Quick Look uses the standard macOS dictionary lookup chord',
   );
   _expect(
-    catalog.actionForId(TerminalActionId.moveDividerLeft)!.shortcut!.identity ==
-            'command+\uF702' &&
-        catalog
-                .actionForId(TerminalActionId.moveDividerRight)!
-                .shortcut!
-                .identity ==
-            'command+\uF703' &&
-        catalog
-                .actionForId(TerminalActionId.moveDividerUp)!
-                .shortcut!
-                .identity ==
-            'command+\uF700' &&
-        catalog
-                .actionForId(TerminalActionId.moveDividerDown)!
-                .shortcut!
-                .identity ==
-            'command+\uF701',
-    'divider movement uses the four native Command+arrow equivalents',
+    <TerminalActionId>[
+      TerminalActionId.focusPaneLeft,
+      TerminalActionId.focusPaneRight,
+      TerminalActionId.focusPaneUp,
+      TerminalActionId.focusPaneDown,
+      TerminalActionId.moveDividerLeft,
+      TerminalActionId.moveDividerRight,
+      TerminalActionId.moveDividerUp,
+      TerminalActionId.moveDividerDown,
+    ].every((TerminalActionId id) => catalog.actionForId(id)!.shortcut == null),
+    'directional pane actions leave shortcut ownership to configurable keybindings',
   );
   _expect(
     catalog
