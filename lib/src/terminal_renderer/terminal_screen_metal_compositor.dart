@@ -99,6 +99,9 @@ final class TerminalScreenMetalCompositor {
   /// Keeps inactive panes legible while making their background subordinate.
   static const double inactivePaneBackgroundBrightness = 0.82;
 
+  /// Dims the complete inactive viewport, including black/transparent clears.
+  static const double inactivePaneScrimOpacity = 0.24;
+
   TerminalScreenMetalComposition compose(
     TerminalRenderModel model, {
     required int frameGeneration,
@@ -696,7 +699,7 @@ final class TerminalScreenMetalCompositor {
             ...decorations,
             ...cursors,
           ];
-      final List<TerminalMetalInstance> instances =
+      final List<TerminalMetalInstance> translatedContentInstances =
           contentOffsetX == 0 && contentOffsetY == 0
           ? contentInstances
           : contentInstances
@@ -708,6 +711,22 @@ final class TerminalScreenMetalCompositor {
                   ),
                 )
                 .toList(growable: false);
+      final List<TerminalMetalInstance> instances = presentation.isPaneActive
+          ? translatedContentInstances
+          : <TerminalMetalInstance>[
+              ...translatedContentInstances,
+              TerminalMetalInstance.solid(
+                kind: TerminalMetalInstanceKind.paneScrim,
+                x: 0,
+                y: 0,
+                width: viewportWidth,
+                height: viewportHeight,
+                colorRgba: _withAlpha(
+                  0x000000ff,
+                  (inactivePaneScrimOpacity * 255).round(),
+                ),
+              ),
+            ];
       final TerminalMetalFrame frame = TerminalMetalFrameEncoder.encode(
         renderer: bridge.renderer,
         frameGeneration: frameGeneration,

@@ -21,8 +21,8 @@ cursorを描画する。このためsplit後も複数paneのcursorが同時に�
 - renderer presentationへactive/inactive pane状態を追加する。
 - inactive中はterminal output、visual bell、image animationなどの表示更新を継続し、
   cursorの表示とblink deadlineだけを停止する。
-- inactive paneではframe clearとcell backgroundを同じ規則で控えめに暗くし、既存の
-  background alphaを保持する。
+- inactive paneではframe clearとcell backgroundを暗くし、さらにterminal viewport全体へ
+  black scrimを重ねて、黒／透過背景でも文字、画像を含むpane全体をactive paneより暗くする。
 - main interactive productでwindow focus、selected tab、focused paneから唯一のactive
   surfaceを導出し、既存surfaceと新規surfaceの全てへlive投影する。
 - focusの獲得・喪失、key/text input、mouse操作、tab/window/pane構成変更に追従する。
@@ -43,7 +43,8 @@ cursorを描画する。このためsplit後も複数paneのcursorが同時に�
 - `TerminalLiveMetalSurface`、`TerminalNewestFrameScheduler`、
   `TerminalPresentationClock`
 - `TerminalScreenMetalCompositor`のframe background、cell background、cursor layer
-- 共有background opacity contract。暗転でalphaを増減させてはならない。
+- 共有background opacity contract。active paneの設定値は変えず、inactive paneだけにfocus
+  presentationとして独立したblack scrimを合成する。
 
 ## 分割と実施順
 
@@ -61,6 +62,13 @@ cursorを描画する。このためsplit後も複数paneのcursorが同時に�
      paletteはterminal surfaceではないため暗転対象にしない。
    - resource生成、key/text/mouse focus変更、reconcile、close/restore後にも再計算する。
    - 複数window/tab/paneのproduct acceptanceをDeveloper JITとRelease AOTで通す。
+3. **黒／透過背景でも判別できるinactive pane全体の暗転強化**
+   - 既存のRGB暗転では変化しないblack backgroundと、背面が透けて差が弱い低opacityを
+     viewport全体の最終black scrimで補う。
+   - active paneは従来どおりの色とopacityを維持し、inactive paneだけでglyph、selection、
+     decoration、Kitty imageを含む最終出力を一様に後退させる。
+   - 専用のpacked Metal layerを追加し、Dart encoderとnative validatorのlayer順を一致させる。
+   - compositor／renderer test、両runtime configuration、full testで検証する。
 
 各subtaskを上記順に実装・検証・記録・commitし、先行subtaskを完了するまで次へ進まない。
 
@@ -69,9 +77,10 @@ cursorを描画する。このためsplit後も複数paneのcursorが同時に�
 - application全体で、現在input可能なterminal paneだけにcursorが表示される。
 - active paneのblinking cursorだけがdeadline駆動され、inactive paneはcursor instanceを
   一切生成しない。
-- inactive paneのterminal背景はactive paneより控えめに暗く、frame clearとANSI cell
-  backgroundの両方へ一貫して適用される。
-- 暗転前後でbackground alphaが同一であり、設定済みopacityを壊さない。
+- inactive paneのterminal viewport全体はactive paneより明確に暗く、blackかつ低opacityの
+  default backgroundでも最終black scrimが存在する。
+- active paneのbackground alphaは設定値どおりで、inactive focus presentationだけが
+  独立したscrimを加える。
 - inactive paneも新しいPTY damageとcursor以外のpresentation animationを描画できる。
 - window/tab/paneの作成、選択、分割、focus移動、非focus化にliveで追従する。
 - unit/native test、静的解析、関連integration、full testが通る。
@@ -80,13 +89,52 @@ cursorを描画する。このためsplit後も複数paneのcursorが同時に�
 
 - `test/frame_scheduler_test.dart`でinactive cursor、deadline停止、reactivationを検証する。
 - `test/terminal_screen_metal_compositor_test.dart`でcursor instance非生成、背景RGB暗転、
-  alpha保持を検証する。
+  active側alpha保持、inactiveだけの全viewport最終scrimを検証する。
 - live surface testでfocus変更がfull redrawを要求し、最新frameへ反映されることを検証する。
 - product acceptanceで複数window/tab/paneのうちactive surfaceが常に最大1つであることを
   markerとassertionで確認し、両runtime configurationから実行する。
 - `dart format`、`dart analyze`、関連test、`make test`を実行する。
 
 ## 調査記録
+
+### 2026-09-14 inactive contrast follow-up着手時
+
+- user確認で、black backgroundと低いbackground opacityの組み合わせではactive/inactiveの
+  差がほとんど判別できないことが判明した。
+- 既存処理は背景RGBへ82%を乗算してalphaを保存する。blackは`0 * 0.82 = 0`のため色が
+  変わらず、低opacityでは背面の寄与が残るため暗転のsignalがさらに弱い。
+- 背景だけを調整してもglyph、selection、decoration、Kitty imageは同じ明るさのままであり、
+  pane全体のfocus hierarchyを示すには不十分と判断した。
+- packed instanceは非減少のlayer順をDart encoderとnative validatorの両方で検査する。
+  cursor kindの流用は「inactive paneはcursor instanceを生成しない」契約を壊すため、solid
+  `paneScrim`をcursorより後の専用layerとして追加する。
+- scrimはinactive時だけviewport全体へ最後に1枚配置する。blackの24% alphaを採用し、
+  active paneの色／opacityは不変、inactive paneの既存RGB暗転は維持する。
+- 対象外はfocus導出、cursor clock、設定schema、pane divider／window chromeの変更。
+  完了条件はblack／低opacityでもscrimが存在し、全visual layerの後に配置され、activeでは
+  存在しないこと、既存cursor分離と両runtime受け入れを維持することとする。
+- 初回`dart format`は対象5 fileのうち2 fileを整形した後、sandbox外の
+  `~/.dart-tool/dart-flutter-telemetry-session.json`のmtime更新を拒否されstatus 1になった。
+  source整形自体とは別のsandbox境界なので、analytics抑止付きcommandで再検証する。
+- analytics抑止付きformatterも5 file、0 changeを確認後に同じtelemetry mtimeでstatus 1に
+  なった。通常user権限で同commandを再実行し、5 file、0 change、status 0を確認した。
+- compositor testのsandbox内初回実行はMetal build hookが
+  `~/.cache/clang/ModuleCache`へ書き込めず失敗した。shader／test failureではないため、
+  通常user権限で同commandを再実行する。
+- package単体のMetal renderer testもsandbox内では同じClang module cache境界で失敗した。
+  Dart/nativeの新しいlayer番号を直接検証するため、こちらも通常user権限で再実行する。
+- `paneScrim`をnative value 10／layer order 9として追加し、cursorを含む既存全layerより後の
+  solid primitiveとしてDart encoderとnative validatorを一致させた。shaderのsolid color
+  pathはkind固有分岐を必要としないため変更していない。
+- compositorはcontent offset適用後に、inactive時だけviewport原点から全幅・全高のscrimを
+  追加する。paddingを含むpane surface全体を覆い、active時はinstance数も色も変えない。
+- `DART_SUPPRESS_ANALYTICS=true dart run test/terminal_screen_metal_compositor_test.dart`を
+  通常user権限で再実行し成功した。20% opacityのblack clearについて実Metal readbackの
+  inactive alphaがactiveより30段階超大きいこと、RGBはblackのまま、scrimが最後の全viewport
+  instanceであることを確認した。
+- `DART_SUPPRESS_ANALYTICS=true dart run packages/dart_terminal_renderer_macos/test/
+  metal_renderer_test.dart`を通常user権限で再実行し成功した。scrimのnative value、最終layer
+  order、atlas非参照のsolid contractを確認した。
 
 ### 2026-09-14 着手時
 
@@ -237,3 +285,42 @@ cursorを描画する。このためsplit後も複数paneのcursorが同時に�
 ## 残課題・阻害要因（完了時）
 
 なし。既存の主要ゴール後follow-up以外に新しいROADMAP項目は追加していない。
+
+## 2026-09-14 inactive contrast follow-up完了
+
+- inactive paneの既存82%背景RGB暗転に加え、cursorより後の最終layerへ24% black scrimを
+  1枚追加した。scrimはcontent insetやpaddingも含むMetal viewport全体を覆う。
+- active paneにはscrimを生成せず、設定済みbackground opacityと全visual colorをそのまま
+  維持する。inactive paneではblack／低opacityでもscrimが背面の透過を抑え、glyph、selection、
+  decoration、Kitty image、visual bellを含む最終出力全体を一様に暗くする。
+- Dart packed encoderとObjective-C native validatorへnative value 10／layer order 9を追加し、
+  solid colorを処理する既存Metal shader pathを使用した。cursor instanceの意味は流用していない。
+- README、FEATURE_MATRIX、Phase 7 acceptance source requirementを更新し、compatibility
+  regression coverage、Phase 7 acceptance、Ghostty gap inventory、release-candidate matrixを
+  canonical generatorで再生成した。
+
+### follow-up最終検証結果
+
+- `dart format --output=none --set-exit-if-changed`（変更Dart 5 files）: 0 change、成功。
+- `DART_SUPPRESS_ANALYTICS=true dart analyze`: issue 0、成功。
+- `DART_SUPPRESS_ANALYTICS=true dart run test/terminal_screen_metal_compositor_test.dart`:
+  成功。active側scrimなし、inactive側の最終全viewport scrim、transparent blackの実Metal
+  pixel差、既存背景RGB暗転とcursor非生成を確認した。
+- `DART_SUPPRESS_ANALYTICS=true dart run packages/dart_terminal_renderer_macos/test/
+  metal_renderer_test.dart`: 成功。新しいnative kindとlayer順、solid contractを確認した。
+- `make developer-jit-actions`: 成功、
+  `RUNTIME_USER_ACTIONS_INTEGRATION_PASS ... windows=2 tabs=3 panes=4 elapsed_ms=3168`。
+- `make release-aot-actions`: 成功、
+  `RUNTIME_USER_ACTIONS_INTEGRATION_PASS ... windows=2 tabs=3 panes=4 elapsed_ms=2200`。
+- `make test`: 成功。338 Dart filesはformat 0 change、analysis issue 0、renderer native
+  capability／Dart test、Phase 7 acceptance、全freshness check、security stressを含め、最後に
+  `dart_terminal tests passed`を確認した。
+- `PHASE7_APPKIT_ACCEPTANCE_PASS`: criteria 4、source refs 14、unit tests 12、integration
+  tests 4、real-UI assertions 9。release blockerは0のまま。
+- `git diff --check`: 実装差分確認時に成功。最終文書更新後もcommit前に再確認する。
+- 初回`git commit`はfilesystem sandboxが`.git/index.lock`の作成を拒否して失敗した。
+  staged差分は保持されており、通常user権限で同じcommitを再実行する。
+
+### follow-up残課題・阻害要因
+
+なし。既存の主要ゴール後follow-up以外に未完了項目は追加していない。

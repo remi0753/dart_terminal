@@ -16,7 +16,8 @@ enum TerminalMetalInstanceKind {
   colorGlyph(4, 5),
   imageAboveText(9, 6),
   decoration(5, 7),
-  cursor(6, 8);
+  cursor(6, 8),
+  paneScrim(10, 9);
 
   const TerminalMetalInstanceKind(this.nativeValue, this.layerOrder);
 

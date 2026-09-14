@@ -68,6 +68,13 @@ void _testEncoderValidationAndOwnership() {
         ),
     'three image factories preserve distinct ordered color-atlas kinds',
   );
+  _expect(
+    TerminalMetalInstanceKind.paneScrim.nativeValue == 10 &&
+        TerminalMetalInstanceKind.paneScrim.layerOrder >
+            TerminalMetalInstanceKind.cursor.layerOrder &&
+        !TerminalMetalInstanceKind.paneScrim.isAtlasBacked,
+    'pane scrim is a final solid layer after the cursor',
+  );
   _expectThrows(
     () => TerminalMetalInstance.solid(
       kind: TerminalMetalInstanceKind.imageBelowText,

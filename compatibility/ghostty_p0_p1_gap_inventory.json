@@ -4,7 +4,7 @@
   "status": "closed-no-actionable-p0-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "ffb6b9f3dd8c6e78c5a68d269cd821b29db91da762201ccde132f8c34e4fb858",
+    "sha256": "cda030935a9af63db4cd352e8456aad3377b9ed62a34d31bdac961012161bdb4",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "b707939194d1c6d9d5512a3f090776b810fd1f6ba8d66ff8e6ebca8fb686f231"
+      "sha256": "f674c60c3b2ecb1e76ff286b177c7e41c23742ecb45d433ebd14ab5b852387bf"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -120,7 +120,7 @@
     },
     {
       "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
-      "sha256": "9953cd4dcc77838792154dee887327412dfff8f043d1b6a0331afd98c7eb2412"
+      "sha256": "44f08798fcc232ec1f3d35d7c67b12bf7e0cf5f09524bc076ec702fc0012ee28"
     },
     {
       "path": "lib/src/terminal_kitty_graphics_controller.dart",
@@ -132,7 +132,7 @@
     },
     {
       "path": "test/terminal_screen_metal_compositor_test.dart",
-      "sha256": "0ca2a76fadf287b86c0f4cb1b930a30975c16be9e614f862aa91f692f9f0f4a9"
+      "sha256": "eb7060250e31b91edee2cd6e5b8efa80a23e8d414181149308ac4b2f9812f8b9"
     },
     {
       "path": "test/metal_pipeline_test.dart",
@@ -164,11 +164,11 @@
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.h",
-      "sha256": "47ec4de8910fcb60eca9c0a972622808f8f5295bc615e8a4a617c8f2e747d8bc"
+      "sha256": "d0f655c12a155e77f8933e2eb173df406b39477595bdd29389b05807c48e753b"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m",
-      "sha256": "5e743df40d2aa43f532e8bf69fefbc0784ea329aeb98fab2036192aaf7515b67"
+      "sha256": "0db7b28bddbc19ebeafec8687ad7c08c11e82e21d074bff082f6c5a87621cfd9"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalShaders.metal",
@@ -790,7 +790,7 @@
       "phase": "4",
       "acceptance_sha256": "98f40572b0a0fc92e039d0c6a11bd2d1ee4f257bfec038031e03eac1f870db85",
       "pinned_evidence_sha256": "4090c0301b12ce5b4785deee03b338c56423649a43fb9951f939afe91c8a17b4",
-      "current_sha256": "3d0b51c73aa1fb7f832a8e0fc54a92e06d409fa7a3734691e81ff79d24408e42",
+      "current_sha256": "c18bd17da3b805ea2b3d39c6acb9718d95223a43a0b540f7fd0c37029f219c28",
       "classification": "accepted",
       "gap_ids": []
     },

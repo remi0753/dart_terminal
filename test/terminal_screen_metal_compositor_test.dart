@@ -53,6 +53,18 @@ void _testInactivePaneHidesCursorAndDimsBackgrounds() {
     backgroundOpacity: 0.5,
     isPaneActive: false,
   );
+  final TerminalScreenSet blackScreens = TerminalScreenSet(rows: 1, columns: 2);
+  final _CompositionFixture transparentBlackActive = _compose(
+    blackScreens,
+    backgroundOpacity: 0.2,
+    cursorDrawn: false,
+  );
+  final _CompositionFixture transparentBlackInactive = _compose(
+    blackScreens,
+    backgroundOpacity: 0.2,
+    cursorDrawn: false,
+    isPaneActive: false,
+  );
   try {
     int frameBackground(_CompositionFixture fixture) => ByteData.sublistView(
       fixture.composition.scheduledFrame.frame.copyBytes(),
@@ -78,6 +90,7 @@ void _testInactivePaneHidesCursorAndDimsBackgrounds() {
     final int inactiveFrameBackground = frameBackground(inactive);
     final int activeCellBackground = cellBackground(active);
     final int inactiveCellBackground = cellBackground(inactive);
+    final TerminalMetalInstance scrim = inactive.composition.instances.last;
     _expect(
       inactiveFrameBackground == dim(activeFrameBackground) &&
           (inactiveFrameBackground & 0xff) == (activeFrameBackground & 0xff) &&
@@ -96,9 +109,49 @@ void _testInactivePaneHidesCursorAndDimsBackgrounds() {
           ),
       'inactive pane emits no cursor instance while active pane does',
     );
+    _expect(
+      active.composition.instances.every(
+            (TerminalMetalInstance instance) =>
+                instance.kind != TerminalMetalInstanceKind.paneScrim,
+          ) &&
+          scrim.kind == TerminalMetalInstanceKind.paneScrim &&
+          scrim.x == 0 &&
+          scrim.y == 0 &&
+          scrim.width == inactive.viewportWidth &&
+          scrim.height == inactive.viewportHeight &&
+          scrim.colorRgba ==
+              (TerminalScreenMetalCompositor.inactivePaneScrimOpacity * 255)
+                  .round(),
+      'inactive pane ends with one black scrim over the complete viewport',
+    );
+
+    final Uint8List activePixels = transparentBlackActive.renderer.renderRgba(
+      transparentBlackActive.composition.scheduledFrame.frame,
+    );
+    final Uint8List inactivePixels = transparentBlackInactive.renderer
+        .renderRgba(transparentBlackInactive.composition.scheduledFrame.frame);
+    final int sampleOffset =
+        (transparentBlackActive.viewportWidth *
+                transparentBlackActive.viewportHeight -
+            1) *
+        4;
+    _expect(
+      activePixels[sampleOffset] == 0 &&
+          activePixels[sampleOffset + 1] == 0 &&
+          activePixels[sampleOffset + 2] == 0 &&
+          inactivePixels[sampleOffset] == 0 &&
+          inactivePixels[sampleOffset + 1] == 0 &&
+          inactivePixels[sampleOffset + 2] == 0 &&
+          inactivePixels[sampleOffset + 3] >
+              activePixels[sampleOffset + 3] + 30,
+      'real Metal readback makes a transparent black inactive pane '
+      'materially more opaque and dark',
+    );
   } finally {
     active.dispose();
     inactive.dispose();
+    transparentBlackActive.dispose();
+    transparentBlackInactive.dispose();
   }
 }
 

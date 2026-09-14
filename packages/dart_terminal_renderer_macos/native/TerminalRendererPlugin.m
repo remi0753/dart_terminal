@@ -1805,6 +1805,9 @@ enum {
       case DTR_METAL_INSTANCE_CURSOR:
         layer = 8;
         break;
+      case DTR_METAL_INSTANCE_PANE_SCRIM:
+        layer = 9;
+        break;
       default:
         return DTR_STATUS_INVALID_ARGUMENT;
     }

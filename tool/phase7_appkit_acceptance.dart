@@ -89,7 +89,10 @@ const List<_CriterionRequirement> _requirements = <_CriterionRequirement>[
       ]),
       _SourceRequirement(
         'lib/src/terminal_renderer/terminal_screen_metal_compositor.dart',
-        <String>['inactivePaneBackgroundBrightness'],
+        <String>[
+          'inactivePaneBackgroundBrightness',
+          'inactivePaneScrimOpacity',
+        ],
       ),
       _SourceRequirement(
         'lib/src/terminal_input/terminal_text_input_event_router.dart',
