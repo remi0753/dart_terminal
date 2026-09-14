@@ -97,11 +97,11 @@ final class TerminalScreenMetalCompositor {
   final TerminalAccessibilityPresentation accessibilityPresentation;
 
   /// Keeps inactive panes legible while making their background subordinate.
-  static const double inactivePaneBackgroundBrightness = 0.82;
+  static const double inactivePaneBackgroundBrightness = 0.68;
 
   /// Neutral charcoal keeps black/transparent inactive panes distinguishable.
   static const int inactivePaneScrimRgb = 0x181818;
-  static const double inactivePaneScrimOpacity = 0.32;
+  static const double inactivePaneScrimOpacity = 0.58;
 
   TerminalScreenMetalComposition compose(
     TerminalRenderModel model, {
