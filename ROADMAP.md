@@ -1467,6 +1467,22 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] focus／divider shortcutの設定可能な既定keybindへの移行
   - [x] 通常製品へのlive投影、両runtime受け入れ、reference更新
 
+### 追加機能
+
+- [ ] focused paneに追従するContext Dockとlocal file／folder navigator
+  （分割、input ownership、filesystem境界、完了条件は
+  [`docs/phase7/context-dock-file-navigator.md`](docs/phase7/context-dock-file-navigator.md)
+  を参照して順に実施する）
+  - [ ] window-owned Context Dock state、action、keyboard focus contract
+  - [ ] trusted local cwd観測とbounded・cancellable directory snapshot
+  - [ ] working directory tree、metadata、pane追従のnative side-dock表示
+  - [ ] current subtreeからsystem-wideへ連続するfile／folder search
+  - [ ] path handoff、accessibility、privacy／performance gate、両runtime受け入れ
+- [ ] SSH／remote session向けexplicit directory provider
+  （local navigator完了後に
+  [`docs/phase7/context-dock-file-navigator.md`](docs/phase7/context-dock-file-navigator.md)
+  のremote境界を参照して実施する）
+
 ### 主要ゴール後の低優先 follow-up
 
 - [ ] 公開・未改変 runtime の Intel-native no-rebuild runtime handoff と追加互換性証跡
