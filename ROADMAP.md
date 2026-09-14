@@ -1451,6 +1451,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] typed schema、Settings document、product configuration
   - [x] Metal frame alphaとmacOS transparent surface contract
   - [x] 既存／新規の全window・tab・paneへのlive投影と両runtime受け入れ
+- [ ] active paneのカーソル表示とinactive paneの視覚的な区別
+  （分割、適用境界、完了条件は
+  [`docs/phase7/active-pane-visual-focus.md`](docs/phase7/active-pane-visual-focus.md)
+  を参照して順に実施する）
+  - [x] active/inactive pane presentation contractとrenderer検証
+  - [ ] 全window・tab・paneへのfocus投影と両runtime受け入れ
 
 ### 主要ゴール後の低優先 follow-up
 

@@ -11,12 +11,112 @@ void runFrameSchedulerTests() {
   _testSynchronizedPresentationGate();
   _testSynchronizedOutputBlocksBuildAndRetainsNewest();
   _testBoundedCursorAndBellClock();
+  _testInactivePaneSuppressesOnlyCursorPresentation();
   _testKittyAnimationUsesNewestOnlySchedulerClock();
   _testVisibilityOcclusionPauseAndResume();
   _testSystemSuspensionRetainsNewestUntilPresentable();
   _testOcclusionDuringBuildSupersedesBeforeSubmit();
   _testPresentationRevisionExhaustionDoesNotWrap();
   _testFrameGenerationExhaustionDoesNotWrap();
+}
+
+void _testInactivePaneSuppressesOnlyCursorPresentation() {
+  final _DamageSequence sequence = _DamageSequence(rows: 1, columns: 2);
+  final List<TerminalFramePresentation> presentations =
+      <TerminalFramePresentation>[];
+  final TerminalNewestFrameScheduler<_FakeFrame> scheduler =
+      TerminalNewestFrameScheduler<_FakeFrame>(
+        model: TerminalDamageRenderModel(),
+        presentationClock: TerminalPresentationClock(
+          cursorOnDuration: const Duration(microseconds: 10),
+          cursorOffDuration: const Duration(microseconds: 20),
+        ),
+        buildFrame:
+            (
+              TerminalDamageRenderModel model, {
+              required int modelRevision,
+              required int frameGeneration,
+              required TerminalFramePresentation presentation,
+            }) {
+              presentations.add(presentation);
+              return _FakeFrame(
+                modelRevision,
+                frameGeneration,
+                0,
+                presentation,
+              );
+            },
+        submitFrame:
+            (
+              _FakeFrame frame, {
+              required int modelRevision,
+              required int frameGeneration,
+            }) => TerminalFrameSubmissionOutcome.accepted(
+              frameGeneration: frameGeneration,
+              submissionToken: frameGeneration,
+            ),
+      );
+  scheduler.applyDamage(
+    sequence.captureFull(),
+    availableResourceGeneration: 1,
+    monotonicMicros: 0,
+  );
+  scheduler.submitNewest();
+  _expect(
+    presentations.single.isPaneActive &&
+        presentations.single.cursorDrawn &&
+        scheduler.nextPresentationDeadlineMicros == 10,
+    'active pane starts the visible cursor blink phase',
+  );
+
+  _expect(
+    scheduler.updatePaneActive(isActive: false, monotonicMicros: 1) &&
+        !scheduler.presentationClock.isPaneActive &&
+        scheduler.isPresentationActive &&
+        scheduler.nextPresentationDeadlineMicros == null &&
+        scheduler.pendingFrameCount == 1,
+    'inactive pane suppresses cursor deadline without pausing presentation',
+  );
+  scheduler.submitNewest();
+  _expect(
+    !presentations.last.isPaneActive &&
+        !presentations.last.cursorDrawn &&
+        presentations.last.requiresFullRedraw &&
+        !scheduler.advancePresentation(monotonicMicros: 100),
+    'inactive pane emits no cursor phase or delayed blink work',
+  );
+
+  scheduler.applyDamage(
+    sequence.mutatePresentation(
+      (TerminalScreen screen) => TerminalScreenParserSink(screen).execute(0x07),
+    ),
+    availableResourceGeneration: 1,
+    monotonicMicros: 101,
+  );
+  scheduler.submitNewest();
+  _expect(
+    !presentations.last.cursorDrawn &&
+        presentations.last.visualBellActive &&
+        scheduler.nextPresentationDeadlineMicros == 100101,
+    'inactive pane keeps non-cursor presentation work active',
+  );
+
+  _expect(
+    scheduler.updatePaneActive(isActive: true, monotonicMicros: 102) &&
+        scheduler.nextPresentationDeadlineMicros == 112,
+    'reactivation starts one fresh visible cursor epoch',
+  );
+  scheduler.submitNewest();
+  _expect(
+    presentations.last.isPaneActive &&
+        presentations.last.cursorDrawn &&
+        presentations.last.requiresFullRedraw,
+    'reactivated pane redraws the newest model with its cursor visible',
+  );
+  _expect(
+    !scheduler.updatePaneActive(isActive: true, monotonicMicros: 103),
+    'duplicate pane activity is deduplicated',
+  );
 }
 
 void _testSystemSuspensionRetainsNewestUntilPresentable() {

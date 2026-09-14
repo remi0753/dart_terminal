@@ -116,6 +116,7 @@ final class TerminalGridSize {
 final class TerminalLiveMetalSurfaceSnapshot {
   const TerminalLiveMetalSurfaceSnapshot({
     required this.isDisposed,
+    this.isPaneActive = true,
     required this.usesMacosSystemMonospaceFont,
     required this.fontPointSize,
     required this.rows,
@@ -198,6 +199,7 @@ final class TerminalLiveMetalSurfaceSnapshot {
   });
 
   final bool isDisposed;
+  final bool isPaneActive;
   final bool usesMacosSystemMonospaceFont;
   final double fontPointSize;
   final int rows;
@@ -306,6 +308,7 @@ final class TerminalLiveMetalSurface {
     double horizontalPadding = 0,
     double verticalPadding = 0,
     double backgroundOpacity = 1,
+    bool isPaneActive = true,
     TerminalMetalRendererConfig rendererConfig =
         const TerminalMetalRendererConfig(),
     TerminalAccessibilityPresentation accessibilityPresentation =
@@ -364,6 +367,7 @@ final class TerminalLiveMetalSurface {
         horizontalPadding: horizontalPadding,
         verticalPadding: verticalPadding,
         backgroundOpacity: backgroundOpacity,
+        isPaneActive: isPaneActive,
         backingScaleFactor: backingScaleFactor,
         isVisible: isVisible,
         isOccluded: isOccluded,
@@ -398,6 +402,7 @@ final class TerminalLiveMetalSurface {
     required this.horizontalPadding,
     required this.verticalPadding,
     required double backgroundOpacity,
+    required bool isPaneActive,
     required double backingScaleFactor,
     required bool isVisible,
     required bool isOccluded,
@@ -420,6 +425,8 @@ final class TerminalLiveMetalSurface {
        _logicalWidth = logicalWidth,
        _logicalHeight = logicalHeight,
        _backgroundOpacity = backgroundOpacity,
+       _desiredPaneActive = isPaneActive,
+       _publishedPaneActive = isPaneActive,
        _desiredScale = backingScaleFactor,
        _publishedScale = backingScaleFactor,
        _desiredVisible = isVisible,
@@ -507,6 +514,9 @@ final class TerminalLiveMetalSurface {
     if (_accessibilityPresentation.reduceMotion) {
       scheduler.updateReduceMotion(reduceMotion: true, monotonicMicros: 0);
     }
+    if (!isPaneActive) {
+      scheduler.updatePaneActive(isActive: false, monotonicMicros: 0);
+    }
     recovery = TerminalMetalFailureRecoveryCoordinator(
       initialDomain: initialDomain,
       prepareReplacement: () => TerminalMetalRendererRecoveryDomain.prepare(
@@ -575,6 +585,8 @@ final class TerminalLiveMetalSurface {
   double _desiredScale;
   double _publishedScale;
   double _backgroundOpacity;
+  bool _desiredPaneActive;
+  bool _publishedPaneActive;
   late int _viewportWidth;
   late int _viewportHeight;
   late int _contentOffsetX;
@@ -652,6 +664,7 @@ final class TerminalLiveMetalSurface {
   TerminalAccessibilityPresentation get accessibilityPresentation =>
       _accessibilityPresentation;
   double get backgroundOpacity => _backgroundOpacity;
+  bool get isPaneActive => _desiredPaneActive;
 
   double get _contentLogicalWidth =>
       _logicalWidth - _effectiveHorizontalPadding * 2;
@@ -903,6 +916,17 @@ final class TerminalLiveMetalSurface {
     _scheduleImmediate();
   }
 
+  /// Updates pane focus without pausing terminal damage or non-cursor
+  /// presentation work.
+  bool updatePaneActive(bool isActive) {
+    _requireLive();
+    if (_desiredPaneActive == isActive) return false;
+    _desiredPaneActive = isActive;
+    _needsDrain = true;
+    _scheduleImmediate();
+    return true;
+  }
+
   void notifyScreenChanged() {
     _requireLive();
     _needsDrain = true;
@@ -1011,6 +1035,7 @@ final class TerminalLiveMetalSurface {
     _retryRequested = false;
     try {
       _publishWindowState(now);
+      _publishPaneActive(now);
       final bool synchronizedOutputReleased = _synchronizeSynchronizedOutput(
         now,
       );
@@ -1066,6 +1091,7 @@ final class TerminalLiveMetalSurface {
         : null;
     return TerminalLiveMetalSurfaceSnapshot(
       isDisposed: _disposed,
+      isPaneActive: _desiredPaneActive,
       usesMacosSystemMonospaceFont: _catalog.family.isEmpty,
       fontPointSize: _catalog.metrics.pointSize,
       rows: _boundScreen.rows,
@@ -1231,6 +1257,15 @@ final class TerminalLiveMetalSurface {
         _retryRequested = true;
       }
     }
+  }
+
+  void _publishPaneActive(int now) {
+    if (_publishedPaneActive == _desiredPaneActive) return;
+    _scheduler.updatePaneActive(
+      isActive: _desiredPaneActive,
+      monotonicMicros: now,
+    );
+    _publishedPaneActive = _desiredPaneActive;
   }
 
   bool _retireAndRecover() {

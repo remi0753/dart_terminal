@@ -96,6 +96,9 @@ final class TerminalScreenMetalCompositor {
   final double backgroundOpacity;
   final TerminalAccessibilityPresentation accessibilityPresentation;
 
+  /// Keeps inactive panes legible while making their background subordinate.
+  static const double inactivePaneBackgroundBrightness = 0.82;
+
   TerminalScreenMetalComposition compose(
     TerminalRenderModel model, {
     required int frameGeneration,
@@ -145,10 +148,16 @@ final class TerminalScreenMetalCompositor {
     final int opaqueDefaultBackground = _rgba(
       palette.resolveToken(0, foreground: false),
     );
-    final int frameBackground = _withAlpha(
+    final int configuredFrameBackground = _withAlpha(
       opaqueDefaultBackground,
       (backgroundOpacity * 255).round(),
     );
+    final int frameBackground = presentation.isPaneActive
+        ? configuredFrameBackground
+        : _scaleRgbPreservingAlpha(
+            configuredFrameBackground,
+            inactivePaneBackgroundBrightness,
+          );
     final List<TerminalMetalInstance> backgrounds = <TerminalMetalInstance>[];
     final List<TerminalMetalInstance> overlays = <TerminalMetalInstance>[];
     final List<TerminalMetalInstance> glyphInstances =
@@ -200,7 +209,12 @@ final class TerminalScreenMetalCompositor {
             y: top,
             width: right - left,
             height: bottom - top,
-            colorRgba: colors.backgroundRgba,
+            colorRgba: presentation.isPaneActive
+                ? colors.backgroundRgba
+                : _scaleRgbPreservingAlpha(
+                    colors.backgroundRgba,
+                    inactivePaneBackgroundBrightness,
+                  ),
             viewportWidth: contentWidth,
             viewportHeight: contentHeight,
           );
@@ -648,7 +662,9 @@ final class TerminalScreenMetalCompositor {
         }
       }
 
-      if (presentation.cursorDrawn && model.cursorVisible) {
+      if (presentation.isPaneActive &&
+          presentation.cursorDrawn &&
+          model.cursorVisible) {
         final int cursorBackground = _cursorBackgroundRgba(
           model,
           row: preedit?.caretRow ?? model.cursorRow,
@@ -1161,6 +1177,13 @@ final class TerminalScreenMetalCompositor {
       foregroundRgba: _rgba(foreground, alpha: faint ? 0x80 : 0xff),
       backgroundRgba: _rgba(background),
     );
+  }
+
+  static int _scaleRgbPreservingAlpha(int rgba, double brightness) {
+    final int red = (((rgba >>> 24) & 0xff) * brightness).round();
+    final int green = (((rgba >>> 16) & 0xff) * brightness).round();
+    final int blue = (((rgba >>> 8) & 0xff) * brightness).round();
+    return red << 24 | green << 16 | blue << 8 | (rgba & 0xff);
   }
 
   static TerminalFontStyle _fontStyle(int attributes) {

@@ -25,6 +25,7 @@ void runTerminalScreenMetalCompositorTests() {
   _testCursorColorUsesIndependentMetalLayer();
   _testInverseBackgroundAndConcealMapping();
   _testBackgroundOpacityOnlyChangesBaseClear();
+  _testInactivePaneHidesCursorAndDimsBackgrounds();
   _testWrappedOverflowKeepsNewestPromptVisible();
   _testWideGraphemeUsesCanonicalGrid();
   _testVisibleCursorBreaksLigatureShapingRuns();
@@ -41,6 +42,64 @@ void runTerminalScreenMetalCompositorTests() {
   _testContentRectangleOffsetsEveryLayer();
   _testKittyImagesUseThreeOrderedMetalBands();
   _testKittyAnimationFrameUsesContentGenerationAndNativePixels();
+}
+
+void _testInactivePaneHidesCursorAndDimsBackgrounds() {
+  final TerminalScreenSet screens = TerminalScreenSet(rows: 1, columns: 2);
+  screens.primary.setNarrowCell(0, 1, 0x58, background: 2);
+  final _CompositionFixture active = _compose(screens, backgroundOpacity: 0.5);
+  final _CompositionFixture inactive = _compose(
+    screens,
+    backgroundOpacity: 0.5,
+    isPaneActive: false,
+  );
+  try {
+    int frameBackground(_CompositionFixture fixture) => ByteData.sublistView(
+      fixture.composition.scheduledFrame.frame.copyBytes(),
+    ).getUint32(52, Endian.little);
+    int cellBackground(_CompositionFixture fixture) => fixture
+        .composition
+        .instances
+        .singleWhere(
+          (TerminalMetalInstance instance) =>
+              instance.kind == TerminalMetalInstanceKind.cellBackground,
+        )
+        .colorRgba;
+    int dim(int rgba) {
+      final double factor =
+          TerminalScreenMetalCompositor.inactivePaneBackgroundBrightness;
+      return (((rgba >>> 24) & 0xff) * factor).round() << 24 |
+          (((rgba >>> 16) & 0xff) * factor).round() << 16 |
+          (((rgba >>> 8) & 0xff) * factor).round() << 8 |
+          (rgba & 0xff);
+    }
+
+    final int activeFrameBackground = frameBackground(active);
+    final int inactiveFrameBackground = frameBackground(inactive);
+    final int activeCellBackground = cellBackground(active);
+    final int inactiveCellBackground = cellBackground(inactive);
+    _expect(
+      inactiveFrameBackground == dim(activeFrameBackground) &&
+          (inactiveFrameBackground & 0xff) == (activeFrameBackground & 0xff) &&
+          inactiveCellBackground == dim(activeCellBackground) &&
+          (inactiveCellBackground & 0xff) == (activeCellBackground & 0xff),
+      'inactive pane dims base and ANSI backgrounds while preserving alpha',
+    );
+    _expect(
+      active.composition.instances.any(
+            (TerminalMetalInstance instance) =>
+                instance.kind == TerminalMetalInstanceKind.cursor,
+          ) &&
+          inactive.composition.instances.every(
+            (TerminalMetalInstance instance) =>
+                instance.kind != TerminalMetalInstanceKind.cursor,
+          ),
+      'inactive pane emits no cursor instance while active pane does',
+    );
+  } finally {
+    active.dispose();
+    inactive.dispose();
+  }
 }
 
 void _testBackgroundOpacityOnlyChangesBaseClear() {
@@ -1578,6 +1637,7 @@ _CompositionFixture _compose(
   bool includeKittyImages = false,
   bool visualBellActive = false,
   bool cursorDrawn = true,
+  bool isPaneActive = true,
   double backgroundOpacity = 1,
   TerminalAccessibilityPresentation accessibilityPresentation =
       const TerminalAccessibilityPresentation.standard(),
@@ -1649,6 +1709,7 @@ _CompositionFixture _compose(
             cursorDrawn: cursorDrawn,
             visualBellActive: visualBellActive,
             requiresFullRedraw: true,
+            isPaneActive: isPaneActive,
           ),
           preedit: preedit,
           selection: selection,

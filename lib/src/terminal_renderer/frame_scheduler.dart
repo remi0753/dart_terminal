@@ -108,12 +108,14 @@ final class TerminalFramePresentation {
     required this.cursorDrawn,
     required this.visualBellActive,
     required this.requiresFullRedraw,
+    this.isPaneActive = true,
   });
 
   final int revision;
   final bool cursorDrawn;
   final bool visualBellActive;
   final bool requiresFullRedraw;
+  final bool isPaneActive;
 }
 
 enum TerminalSynchronizedPresentationDisposition {
@@ -252,6 +254,7 @@ final class TerminalPresentationClock {
 
   int _revision;
   bool _running = true;
+  bool _isPaneActive = true;
   bool _cursorDrawn = false;
   bool _cursorBlinking = false;
   bool _cursorVisible = false;
@@ -268,7 +271,8 @@ final class TerminalPresentationClock {
 
   int get revision => _revision;
   bool get isRunning => _running;
-  bool get cursorDrawn => _running && _cursorDrawn;
+  bool get isPaneActive => _isPaneActive;
+  bool get cursorDrawn => _running && _isPaneActive && _cursorDrawn;
   bool get visualBellActive => _running && _visualBellActive;
   bool get reduceMotion => _reduceMotion;
   int get lastVisualBellGeneration => _lastVisualBellGeneration;
@@ -305,7 +309,7 @@ final class TerminalPresentationClock {
     _cursorColumn = model.cursorColumn;
     _cursorShape = model.cursorShape;
 
-    if (_running) {
+    if (_running && _isPaneActive) {
       if (!_cursorVisible) {
         _cursorDrawn = false;
         _cursorDeadlineMicros = null;
@@ -319,6 +323,9 @@ final class TerminalPresentationClock {
           cursorOnDuration.inMicroseconds,
         );
       }
+    } else if (!_isPaneActive) {
+      _cursorDrawn = false;
+      _cursorDeadlineMicros = null;
     }
 
     if (model.visualBellGeneration > _lastVisualBellGeneration) {
@@ -348,6 +355,32 @@ final class TerminalPresentationClock {
       _visualBellActive = false;
       _visualBellDeadlineMicros = null;
     }
+    return true;
+  }
+
+  /// Changes only the pane-level cursor presentation policy.
+  ///
+  /// Inactive panes remain presentable for terminal damage, visual bells, and
+  /// image animation. Their cursor phase owns no deadline. Reactivation starts
+  /// a fresh visible phase from the newest synchronized terminal model.
+  bool updatePaneActive({
+    required bool isActive,
+    required int monotonicMicros,
+  }) {
+    _validateTime(monotonicMicros);
+    _observeTime(monotonicMicros);
+    if (_isPaneActive == isActive) return false;
+    _isPaneActive = isActive;
+    _advanceRevision();
+    if (!_running || !isActive) {
+      _cursorDrawn = false;
+      _cursorDeadlineMicros = null;
+      return true;
+    }
+    _cursorDrawn = _cursorVisible;
+    _cursorDeadlineMicros = _cursorVisible && _cursorBlinking
+        ? _boundedDeadline(monotonicMicros, cursorOnDuration.inMicroseconds)
+        : null;
     return true;
   }
 
@@ -427,8 +460,8 @@ final class TerminalPresentationClock {
     _cursorColumn = model.cursorColumn;
     _cursorShape = model.cursorShape;
     _lastVisualBellGeneration = model.visualBellGeneration;
-    _cursorDrawn = _cursorVisible;
-    _cursorDeadlineMicros = _cursorVisible && _cursorBlinking
+    _cursorDrawn = _isPaneActive && _cursorVisible;
+    _cursorDeadlineMicros = _isPaneActive && _cursorVisible && _cursorBlinking
         ? _boundedDeadline(monotonicMicros, cursorOnDuration.inMicroseconds)
         : null;
     return true;
@@ -440,6 +473,7 @@ final class TerminalPresentationClock {
         cursorDrawn: cursorDrawn,
         visualBellActive: visualBellActive,
         requiresFullRedraw: requiresFullRedraw,
+        isPaneActive: _isPaneActive,
       );
 
   void _validateTime(int monotonicMicros) {
@@ -685,6 +719,23 @@ final class TerminalNewestFrameScheduler<Frame> {
       monotonicMicros: monotonicMicros,
     );
     if (changed && model.isInitialized) _pending = true;
+    return changed;
+  }
+
+  /// Invalidates the newest frame when pane focus changes without pausing
+  /// other presentation work owned by the surface.
+  bool updatePaneActive({
+    required bool isActive,
+    required int monotonicMicros,
+  }) {
+    final bool changed = presentationClock.updatePaneActive(
+      isActive: isActive,
+      monotonicMicros: monotonicMicros,
+    );
+    if (changed && model.isInitialized) {
+      _fullRedrawMarker = Object();
+      _pending = true;
+    }
     return changed;
   }
 
