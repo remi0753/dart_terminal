@@ -212,12 +212,7 @@ final class TerminalContextDockState {
     );
     final _TerminalContextDockPaneState pane = window.panes[paneId]!;
     window.isVisible = true;
-    if (pane.navigatorMode != mode) {
-      pane
-        ..navigatorMode = mode
-        ..resultCount = 0
-        ..selectedResultIndex = -1;
-    }
+    _setNavigatorMode(pane, mode);
     window.generation++;
     _validate();
     return TerminalContextDockFocusRequest(
@@ -236,6 +231,21 @@ final class TerminalContextDockState {
     paneId,
     TerminalContextDockNavigatorMode.search,
   );
+
+  /// Switches an already-focused Navigator without another native focus hop.
+  void setNavigatorMode(
+    TerminalWindowId windowId,
+    TerminalContextDockNavigatorMode mode, {
+    bool requireNavigatorInput = false,
+  }) {
+    final _TerminalContextDockWindowState window = _requireWindow(windowId);
+    if (requireNavigatorInput && !window.navigatorOwnsInput) {
+      throw StateError('Context Dock navigator does not own input');
+    }
+    if (!_setNavigatorMode(window.targetPane, mode)) return;
+    window.generation++;
+    _validate();
+  }
 
   /// Transfers input only when no hierarchy or Dock mutation made the request
   /// stale while native focus was being acquired.
@@ -458,6 +468,18 @@ final class TerminalContextDockState {
         querySelectionGeneration: pane.querySelectionGeneration,
       ),
     );
+  }
+
+  static bool _setNavigatorMode(
+    _TerminalContextDockPaneState pane,
+    TerminalContextDockNavigatorMode mode,
+  ) {
+    if (pane.navigatorMode == mode) return false;
+    pane
+      ..navigatorMode = mode
+      ..resultCount = 0
+      ..selectedResultIndex = -1;
+    return true;
   }
 
   void _validateQuery(String value) {

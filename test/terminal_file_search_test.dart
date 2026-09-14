@@ -7,9 +7,68 @@ Future<void> main() => runTerminalFileSearchTests();
 Future<void> runTerminalFileSearchTests() async {
   _testQueryAndMetadataExpression();
   await _testProgressiveScopeRankingAndDedupe();
+  await _testCurrentSubtreeScopeSkipsWiderProviders();
   await _testCurrentResultsPublishBeforeSystemIndex();
   await _testUnavailableIndexAndResultCap();
   await _testCancellationRejectsLateDirectoryWork();
+}
+
+Future<void> _testCurrentSubtreeScopeSkipsWiderProviders() async {
+  final _CountingSystemIndex index = _CountingSystemIndex();
+  final TerminalFileSearchSnapshot result =
+      await TerminalFileSearchService(
+            directorySnapshots: TerminalDirectorySnapshotService(
+              fileSystem: _SearchDirectoryFileSystem(
+                const <String, List<TerminalDirectoryFileSystemEntry>>{
+                  '/cwd': <TerminalDirectoryFileSystemEntry>[
+                    TerminalDirectoryFileSystemEntry(
+                      name: 'target',
+                      path: '/cwd/target',
+                      kind: TerminalDirectoryEntryKind.file,
+                    ),
+                  ],
+                  '/recent': <TerminalDirectoryFileSystemEntry>[
+                    TerminalDirectoryFileSystemEntry(
+                      name: 'target-recent',
+                      path: '/recent/target-recent',
+                      kind: TerminalDirectoryEntryKind.file,
+                    ),
+                  ],
+                },
+              ),
+            ),
+            systemIndex: index,
+            pathSnapshot: _pathSnapshot,
+          )
+          .start(
+            TerminalFileSearchRequest(
+              query: TerminalFileSearchQuery.parse('target'),
+              currentRoot: '/cwd',
+              generation: 5,
+              scope: TerminalFileSearchScope.currentSubtree,
+              recentRoots: const <String>['/recent'],
+              explicitRoots: const <String>['/chosen'],
+            ),
+          )
+          .result;
+  _expect(
+    result.isComplete &&
+        result.results.length == 1 &&
+        result.results.single.entry.path == '/cwd/target' &&
+        index.startCount == 0 &&
+        result.coverage
+            .where(
+              (TerminalFileSearchCoverage coverage) =>
+                  coverage.source != TerminalFileSearchSource.currentSubtree,
+            )
+            .every(
+              (TerminalFileSearchCoverage coverage) =>
+                  coverage.rootCount == 0 &&
+                  coverage.disposition ==
+                      TerminalFileSearchCoverageDisposition.complete,
+            ),
+    'current-subtree scope never reads recent, explicit, or system providers',
+  );
 }
 
 Future<void> _testCurrentResultsPublishBeforeSystemIndex() async {
@@ -363,6 +422,21 @@ final class _ImmediateSystemIndex implements TerminalSystemFileIndex {
   @override
   TerminalSystemFileIndexOperation start(TerminalFileSearchQuery query) =>
       _ImmediateSystemIndexOperation(snapshot);
+}
+
+final class _CountingSystemIndex implements TerminalSystemFileIndex {
+  int startCount = 0;
+
+  @override
+  TerminalSystemFileIndexOperation start(TerminalFileSearchQuery query) {
+    startCount++;
+    return _ImmediateSystemIndexOperation(
+      TerminalSystemFileIndexSnapshot(
+        disposition: TerminalSystemFileIndexDisposition.complete,
+        paths: const <String>['/system/target'],
+      ),
+    );
+  }
 }
 
 final class _ImmediateSystemIndexOperation

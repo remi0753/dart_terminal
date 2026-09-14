@@ -75,6 +75,8 @@ final class TerminalFileSearchQuery {
 
 enum TerminalFileSearchSource { currentSubtree, recent, explicit, systemIndex }
 
+enum TerminalFileSearchScope { everywhere, currentSubtree }
+
 enum TerminalFileSearchCoverageDisposition {
   searching,
   complete,
@@ -134,6 +136,7 @@ final class TerminalFileSearchRequest {
     required this.query,
     required this.currentRoot,
     required this.generation,
+    this.scope = TerminalFileSearchScope.everywhere,
     Iterable<String> recentRoots = const <String>[],
     Iterable<String> explicitRoots = const <String>[],
   }) : recentRoots = _safeRoots(recentRoots, excluding: currentRoot),
@@ -152,6 +155,7 @@ final class TerminalFileSearchRequest {
   final TerminalFileSearchQuery query;
   final String currentRoot;
   final int generation;
+  final TerminalFileSearchScope scope;
   final List<String> recentRoots;
   final List<String> explicitRoots;
 
@@ -453,19 +457,23 @@ final class _TerminalFileSearchOwner {
       await _searchRoots(<String>[
         request.currentRoot,
       ], TerminalFileSearchSource.currentSubtree);
-      if (!_cancelled) {
-        await _searchRoots(
-          request.recentRoots,
-          TerminalFileSearchSource.recent,
-        );
+      if (request.scope == TerminalFileSearchScope.currentSubtree) {
+        _completeUnusedSources();
+      } else {
+        if (!_cancelled) {
+          await _searchRoots(
+            request.recentRoots,
+            TerminalFileSearchSource.recent,
+          );
+        }
+        if (!_cancelled) {
+          await _searchRoots(
+            request.explicitRoots,
+            TerminalFileSearchSource.explicit,
+          );
+        }
+        if (!_cancelled) await _searchSystemIndex();
       }
-      if (!_cancelled) {
-        await _searchRoots(
-          request.explicitRoots,
-          TerminalFileSearchSource.explicit,
-        );
-      }
-      if (!_cancelled) await _searchSystemIndex();
       if (_cancelled) {
         for (final TerminalFileSearchSource source
             in TerminalFileSearchSource.values) {
@@ -485,6 +493,19 @@ final class _TerminalFileSearchOwner {
       _directoryOperation = null;
       _indexOperation = null;
     }
+  }
+
+  void _completeUnusedSources() {
+    for (final TerminalFileSearchSource source
+        in const <TerminalFileSearchSource>[
+          TerminalFileSearchSource.recent,
+          TerminalFileSearchSource.explicit,
+          TerminalFileSearchSource.systemIndex,
+        ]) {
+      _rootCounts[source] = 0;
+      _coverage[source] = TerminalFileSearchCoverageDisposition.complete;
+    }
+    _publish();
   }
 
   Future<void> _searchRoots(

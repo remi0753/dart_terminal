@@ -134,7 +134,8 @@ final class TerminalContextDockDirectoryController {
     (int count, _TerminalContextDockDirectoryWindowState window) =>
         count +
         window.operations.length +
-        (window.searchOperation == null ? 0 : 1),
+        (window.searchOperation == null ? 0 : 1) +
+        (window.goToOperation == null ? 0 : 1),
   );
 
   TerminalContextDockDirectorySnapshot? snapshotForWindow(
@@ -247,6 +248,7 @@ final class TerminalContextDockDirectoryController {
           _ensureExpandedLoads(retained);
           _ensureSearch(retained, dock);
           _publishResultCount(retained);
+          _ensureGoTo(retained, dock);
           continue;
         }
         retained?.cancel();
@@ -264,6 +266,7 @@ final class TerminalContextDockDirectoryController {
           _ensureSearch(next, dock);
         }
         _publishResultCount(next);
+        _ensureGoTo(next, dock);
         _onChanged?.call();
       }
     } finally {
@@ -280,10 +283,13 @@ final class TerminalContextDockDirectoryController {
       windowId,
     );
     final _TerminalContextDockDirectoryWindowState? window = _windows[windowId];
-    if (dock == null ||
-        window == null ||
-        dock.pane.navigatorMode == TerminalContextDockNavigatorMode.search) {
+    if (dock == null || window == null) {
       return false;
+    }
+    if (dock.pane.navigatorMode == TerminalContextDockNavigatorMode.search &&
+        dock.pane.searchQuery.isNotEmpty) {
+      return intent != TerminalContextDockTreeIntent.collapse &&
+          _activateSearchResult(window, dock);
     }
     final TerminalContextDockDirectorySnapshot projection = _project(window);
     final int selected = dock.pane.selectedResultIndex;
@@ -337,6 +343,35 @@ final class TerminalContextDockDirectoryController {
         if (collapsePath == null) return false;
         return collapse(collapsePath);
     }
+  }
+
+  bool _activateSearchResult(
+    _TerminalContextDockDirectoryWindowState window,
+    TerminalContextDockWindowSnapshot dock,
+  ) {
+    if (!dock.navigatorOwnsInput) return false;
+    final TerminalContextDockDirectorySnapshot projection = _project(window);
+    final int selected = dock.pane.selectedResultIndex;
+    if (selected < 0 || selected >= projection.rows.length) return false;
+    final TerminalContextDockDirectoryRow row = projection.rows[selected];
+    final _TerminalContextDockPendingReveal? reveal = _prepareReveal(
+      window,
+      row.entry,
+      expectedMode: TerminalContextDockNavigatorMode.move,
+      sourceQuery: dock.pane.searchQuery,
+      expandTarget: row.isDirectory,
+    );
+    if (reveal == null) return false;
+    dockState.setNavigatorMode(
+      window.windowId,
+      TerminalContextDockNavigatorMode.move,
+      requireNavigatorInput: true,
+    );
+    window
+      ..cancelSearch()
+      ..pendingReveal = reveal;
+    _publishAndNotify(window);
+    return true;
   }
 
   void dispose() {
@@ -540,6 +575,103 @@ final class TerminalContextDockDirectoryController {
           TerminalContextDockNavigatorMode.search &&
       dockState.snapshotForWindow(window.windowId)?.pane.searchQuery == query;
 
+  void _ensureGoTo(
+    _TerminalContextDockDirectoryWindowState window,
+    TerminalContextDockWindowSnapshot dock,
+  ) {
+    final String queryText = dock.pane.goToQuery;
+    if (dock.pane.navigatorMode != TerminalContextDockNavigatorMode.goTo ||
+        queryText.isEmpty ||
+        window.resolution?.isAvailable != true) {
+      window
+        ..cancelGoTo()
+        ..appliedGoToQuery = null;
+      return;
+    }
+    if (window.appliedGoToQuery == queryText ||
+        (window.pendingReveal?.expectedMode ==
+                TerminalContextDockNavigatorMode.goTo &&
+            window.pendingReveal?.sourceQuery == queryText) ||
+        (window.goToQuery == queryText && window.goToOperation != null)) {
+      return;
+    }
+    window
+      ..cancelGoTo()
+      ..appliedGoToQuery = null;
+    final TerminalFileSearchQuery query = TerminalFileSearchQuery.parse(
+      queryText,
+    );
+    if (query.isEmpty) return;
+    final int generation = ++_generation;
+    window
+      ..goToQuery = queryText
+      ..goToGeneration = generation;
+    late final TerminalFileSearchOperation operation;
+    operation = _searchService.start(
+      TerminalFileSearchRequest(
+        query: query,
+        currentRoot: window.resolution!.path!,
+        generation: generation,
+        scope: TerminalFileSearchScope.currentSubtree,
+      ),
+    );
+    window.goToOperation = operation;
+    unawaited(
+      operation.result.then<void>(
+        (TerminalFileSearchSnapshot snapshot) {
+          if (!_acceptsGoTo(window, operation, generation, queryText)) return;
+          window.goToOperation = null;
+          final TerminalFileSearchResult? match = snapshot.results.isEmpty
+              ? null
+              : snapshot.results.first;
+          if (match == null) {
+            window.appliedGoToQuery = queryText;
+          } else {
+            final _TerminalContextDockPendingReveal? reveal = _prepareReveal(
+              window,
+              match.entry,
+              expectedMode: TerminalContextDockNavigatorMode.goTo,
+              sourceQuery: queryText,
+              expandTarget: false,
+            );
+            if (reveal == null) {
+              window.appliedGoToQuery = queryText;
+            } else {
+              window.pendingReveal = reveal;
+            }
+          }
+          _publishAndNotify(window);
+        },
+        onError: (Object _, StackTrace _) {
+          if (!_acceptsGoTo(window, operation, generation, queryText)) return;
+          window
+            ..goToOperation = null
+            ..appliedGoToQuery = queryText;
+          _publishAndNotify(window);
+        },
+      ),
+    );
+  }
+
+  bool _acceptsGoTo(
+    _TerminalContextDockDirectoryWindowState window,
+    TerminalFileSearchOperation operation,
+    int generation,
+    String query,
+  ) {
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+      window.windowId,
+    );
+    return !_isDisposed &&
+        identical(_windows[window.windowId], window) &&
+        identical(window.goToOperation, operation) &&
+        window.goToGeneration == generation &&
+        window.goToQuery == query &&
+        dock?.targetPaneId == window.paneId &&
+        dock?.pane.navigatorMode == TerminalContextDockNavigatorMode.goTo &&
+        dock?.pane.goToQuery == query;
+  }
+
   void _recordRecentRoot(String path) {
     _recentRoots.remove(path);
     _recentRoots.insert(0, path);
@@ -582,6 +714,7 @@ final class TerminalContextDockDirectoryController {
       dockState.setResultCount(window.windowId, count);
     }
     _applyVisibleGoTo(window);
+    _advancePendingReveal(window);
   }
 
   void _applyVisibleGoTo(_TerminalContextDockDirectoryWindowState window) {
@@ -590,11 +723,15 @@ final class TerminalContextDockDirectoryController {
     );
     if (dock == null ||
         dock.pane.navigatorMode != TerminalContextDockNavigatorMode.goTo) {
-      window.appliedVisibleGoToQuery = null;
+      window.appliedGoToQuery = null;
       return;
     }
     final String queryText = dock.pane.goToQuery;
-    if (queryText.isEmpty || window.appliedVisibleGoToQuery == queryText) {
+    if (queryText.isEmpty ||
+        window.appliedGoToQuery == queryText ||
+        (window.pendingReveal?.expectedMode ==
+                TerminalContextDockNavigatorMode.goTo &&
+            window.pendingReveal?.sourceQuery == queryText)) {
       return;
     }
     final TerminalFileSearchQuery query = TerminalFileSearchQuery.parse(
@@ -610,7 +747,202 @@ final class TerminalContextDockDirectoryController {
     if (dock.pane.selectedResultIndex != match) {
       dockState.setSelectedResultIndex(window.windowId, match);
     }
-    window.appliedVisibleGoToQuery = queryText;
+    window
+      ..cancelGoTo()
+      ..appliedGoToQuery = queryText;
+  }
+
+  _TerminalContextDockPendingReveal? _prepareReveal(
+    _TerminalContextDockDirectoryWindowState window,
+    TerminalDirectoryEntrySnapshot entry, {
+    required TerminalContextDockNavigatorMode expectedMode,
+    required String sourceQuery,
+    required bool expandTarget,
+  }) {
+    final String? root = window.resolution?.path;
+    if (root == null ||
+        sourceQuery.isEmpty ||
+        TerminalLocalPathPolicy.normalizeAbsolute(entry.path) != entry.path ||
+        !_isDescendant(entry.path, root)) {
+      return null;
+    }
+    final List<String> ancestors = _directoryAncestors(root, entry.path);
+    final Set<String> expanded =
+        _expandedByPane[window.paneId] ?? const <String>{};
+    final Set<String> requiredExpansions = <String>{...ancestors};
+    if (expandTarget && entry.kind == TerminalDirectoryEntryKind.directory) {
+      requiredExpansions.add(entry.path);
+    }
+    final int additional = requiredExpansions
+        .where((String path) => !expanded.contains(path))
+        .length;
+    if (expanded.length + additional >
+        TerminalContextDockDirectoryLimits.maximumExpandedDirectoriesPerPane) {
+      return null;
+    }
+    return _TerminalContextDockPendingReveal(
+      rootPath: root,
+      target: entry,
+      ancestorDirectories: ancestors,
+      expectedMode: expectedMode,
+      sourceQuery: sourceQuery,
+      expandTarget: expandTarget,
+    );
+  }
+
+  void _advancePendingReveal(_TerminalContextDockDirectoryWindowState window) {
+    final _TerminalContextDockPendingReveal? reveal = window.pendingReveal;
+    if (reveal == null) return;
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+      window.windowId,
+    );
+    final String? retainedQuery = switch (reveal.expectedMode) {
+      TerminalContextDockNavigatorMode.search => dock?.pane.searchQuery,
+      TerminalContextDockNavigatorMode.goTo => dock?.pane.goToQuery,
+      TerminalContextDockNavigatorMode.move => dock?.pane.searchQuery,
+    };
+    if (dock == null ||
+        dock.targetPaneId != window.paneId ||
+        dock.pane.navigatorMode != reveal.expectedMode ||
+        retainedQuery != reveal.sourceQuery ||
+        window.resolution?.path != reveal.rootPath) {
+      window.pendingReveal = null;
+      return;
+    }
+
+    final List<TerminalContextDockDirectoryRow> rows = _project(window).rows;
+    final Set<String> expanded = _expandedByPane.putIfAbsent(
+      window.paneId,
+      () => <String>{},
+    );
+    for (final String ancestor in reveal.ancestorDirectories) {
+      if (expanded.contains(ancestor)) {
+        final TerminalDirectorySnapshot? snapshot =
+            window.childSnapshots[ancestor];
+        if (snapshot == null) {
+          _startLoad(window, ancestor, isRoot: false);
+          if (!window.operations.containsKey(ancestor)) {
+            _failPendingReveal(window, reveal);
+          }
+          return;
+        }
+        if (snapshot.disposition ==
+            TerminalDirectorySnapshotDisposition.unavailable) {
+          _failPendingReveal(window, reveal);
+          return;
+        }
+        continue;
+      }
+      final int rowIndex = rows.indexWhere(
+        (TerminalContextDockDirectoryRow row) => row.entry.path == ancestor,
+      );
+      if (rowIndex < 0 || !rows[rowIndex].isDirectory) {
+        final TerminalDirectorySnapshot? parent = _snapshotContaining(
+          window,
+          ancestor,
+          reveal.rootPath,
+        );
+        if (parent != null) _failPendingReveal(window, reveal);
+        return;
+      }
+      if (expanded.length >=
+          TerminalContextDockDirectoryLimits
+              .maximumExpandedDirectoriesPerPane) {
+        _failPendingReveal(window, reveal);
+        return;
+      }
+      expanded.add(ancestor);
+      _startLoad(window, ancestor, isRoot: false);
+      if (!window.operations.containsKey(ancestor) &&
+          !window.childSnapshots.containsKey(ancestor)) {
+        expanded.remove(ancestor);
+        _failPendingReveal(window, reveal);
+      }
+      return;
+    }
+
+    final int targetIndex = rows.indexWhere(
+      (TerminalContextDockDirectoryRow row) =>
+          row.entry.path == reveal.target.path,
+    );
+    if (targetIndex < 0) {
+      final TerminalDirectorySnapshot? parent = _snapshotContaining(
+        window,
+        reveal.target.path,
+        reveal.rootPath,
+      );
+      if (parent != null) _failPendingReveal(window, reveal);
+      return;
+    }
+    final TerminalContextDockDirectoryRow targetRow = rows[targetIndex];
+    if (reveal.expandTarget) {
+      if (!targetRow.isDirectory) {
+        _failPendingReveal(window, reveal);
+        return;
+      }
+      if (!expanded.contains(reveal.target.path)) {
+        if (expanded.length >=
+            TerminalContextDockDirectoryLimits
+                .maximumExpandedDirectoriesPerPane) {
+          _failPendingReveal(window, reveal);
+          return;
+        }
+        expanded.add(reveal.target.path);
+        _startLoad(window, reveal.target.path, isRoot: false);
+        if (!window.operations.containsKey(reveal.target.path) &&
+            !window.childSnapshots.containsKey(reveal.target.path)) {
+          expanded.remove(reveal.target.path);
+          _failPendingReveal(window, reveal);
+          return;
+        }
+      }
+    }
+    dockState.setSelectedResultIndex(window.windowId, targetIndex);
+    window.pendingReveal = null;
+    if (reveal.expectedMode == TerminalContextDockNavigatorMode.goTo) {
+      window.appliedGoToQuery = reveal.sourceQuery;
+    }
+  }
+
+  void _failPendingReveal(
+    _TerminalContextDockDirectoryWindowState window,
+    _TerminalContextDockPendingReveal reveal,
+  ) {
+    if (!identical(window.pendingReveal, reveal)) return;
+    window.pendingReveal = null;
+    if (reveal.expectedMode == TerminalContextDockNavigatorMode.goTo) {
+      window.appliedGoToQuery = reveal.sourceQuery;
+    }
+  }
+
+  static TerminalDirectorySnapshot? _snapshotContaining(
+    _TerminalContextDockDirectoryWindowState window,
+    String path,
+    String root,
+  ) {
+    final String parent = _parentPath(path);
+    return parent == root ? window.rootSnapshot : window.childSnapshots[parent];
+  }
+
+  static List<String> _directoryAncestors(String root, String target) {
+    final String relative = root == '/'
+        ? target.substring(1)
+        : target.substring(root.length + 1);
+    final List<String> components = relative.split('/');
+    final List<String> ancestors = <String>[];
+    var current = root;
+    for (var index = 0; index < components.length - 1; index++) {
+      current = current == '/'
+          ? '/${components[index]}'
+          : '$current/${components[index]}';
+      ancestors.add(current);
+    }
+    return ancestors;
+  }
+
+  static String _parentPath(String path) {
+    final int separator = path.lastIndexOf('/');
+    return separator <= 0 ? '/' : path.substring(0, separator);
   }
 
   TerminalContextDockDirectorySnapshot _project(
@@ -821,7 +1153,11 @@ final class _TerminalContextDockDirectoryWindowState {
   int? searchGeneration;
   TerminalFileSearchOperation? searchOperation;
   TerminalFileSearchSnapshot? searchSnapshot;
-  String? appliedVisibleGoToQuery;
+  String? goToQuery;
+  int? goToGeneration;
+  TerminalFileSearchOperation? goToOperation;
+  String? appliedGoToQuery;
+  _TerminalContextDockPendingReveal? pendingReveal;
 
   bool matches(
     TerminalContextDockWindowSnapshot dock,
@@ -833,6 +1169,9 @@ final class _TerminalContextDockDirectoryWindowState {
 
   void cancel() {
     cancelSearch();
+    cancelGoTo();
+    pendingReveal = null;
+    appliedGoToQuery = null;
     for (final TerminalDirectorySnapshotOperation operation
         in operations.values) {
       operation.cancel();
@@ -849,6 +1188,34 @@ final class _TerminalContextDockDirectoryWindowState {
     searchQuery = null;
     searchGeneration = null;
   }
+
+  void cancelGoTo() {
+    goToOperation?.cancel();
+    goToOperation = null;
+    goToQuery = null;
+    goToGeneration = null;
+    if (pendingReveal?.expectedMode == TerminalContextDockNavigatorMode.goTo) {
+      pendingReveal = null;
+    }
+  }
+}
+
+final class _TerminalContextDockPendingReveal {
+  _TerminalContextDockPendingReveal({
+    required this.rootPath,
+    required this.target,
+    required Iterable<String> ancestorDirectories,
+    required this.expectedMode,
+    required this.sourceQuery,
+    required this.expandTarget,
+  }) : ancestorDirectories = List<String>.unmodifiable(ancestorDirectories);
+
+  final String rootPath;
+  final TerminalDirectoryEntrySnapshot target;
+  final List<String> ancestorDirectories;
+  final TerminalContextDockNavigatorMode expectedMode;
+  final String sourceQuery;
+  final bool expandTarget;
 }
 
 /// Native sibling Dock projection. The terminal hierarchy retains ownership of

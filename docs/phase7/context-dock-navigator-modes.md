@@ -1,6 +1,6 @@
 # Context Dock Navigator modes and tree reveal
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-15
 - Scope: Directory NavigatorのSearch／Go To／Move mode、native caret、検索結果からtree操作へ戻る経路
 - Related: UI-05、AX-01、AX-02、IN-09、SEC-01
@@ -145,3 +145,67 @@ directoryのtreeを表示したまま文字列で選択位置へ移るGo Toと�
 - `git diff --check`: 成功。
 
 第一subtaskの完了条件を満たした。deep Go ToおよびSearch resultからtreeへのrevealは未実装であり、次subtaskとして追跡を継続する。
+
+### 2026-09-15 Search／Go To resultからtreeへのreveal 着手
+
+- 第一subtaskはcommit `7a66034`（`Add Context Dock navigator modes and caret`）で完了した。
+- 次の順序付きsubtaskでは、既存search serviceの境界とcancellation contractを確認してcurrent-root-only Go Toを追加する。
+- Search resultのactivationは既存tree intent経路を利用し、選択pathがresolved working directory配下であることを再検証してからMoveへ切り替える。
+  ancestor loadが完了するまでpending revealを保持し、pane／cwd／mode／query／generationが変化した結果は適用しない。
+- 対象外result、expanded-directory上限超過、filesystem errorではtree、mode、selectionを部分変更せずfail closedにする。
+
+#### 実装中の検証記録
+
+- current-subtree scopeのsearch testは成功した。Context Dock testの初回実行は、新しいSearch activation testでNavigator ownershipを取得した後、
+  既存のhide cancellation検証がterminalへfocusを戻さず`toggleVisibility`を呼んだためpolicyどおり拒否された。hide検証の直前で
+  `focusTerminal`を明示し、実際のUI操作と同じownership contractに修正した。
+- Developer JIT native-contentの初回実行は、新しいGo To検証後にSearchへ戻した直後、非同期search resultの再投影を待たずに既存の
+  alternate-screen path action検証へ進んだため、期待したselected pathがまだなく失敗した。Searchのretained queryに対応するpathが再選択されるまで
+  generation-bound projectionを待つ条件を追加した。機能上のPTY誤送信ではなく、統合fixtureの非同期境界不足だった。
+
+### 2026-09-15 Search／Go To resultからtreeへのreveal 実装結果
+
+- file search requestに`everywhere`（既定）と`currentSubtree` scopeを追加した。Go Toは後者だけを使い、recent、explicit、Spotlightを
+  起動しない。Searchの従来範囲、source ranking、coverage表示は変更していない。
+- visible tree matchは即座に選択し、visibleでなければcurrent subtreeのbounded search完了時に最上位matchをreveal対象にする。
+  rootからtarget parentまでの各ancestorは、親snapshot内でdirectoryとして観測できた場合だけ1段ずつexpanded setへ追加してlazy loadする。
+  Go Toのfolder target自体は展開せず、Return／Command-Rightで明示的に開く。
+- non-empty Search結果のReturn／Command-Rightをactivation経路へ接続した。targetがnormalizedかつ現在のresolved working directoryの
+  descendantなら、既存Navigator focusを保ったままMoveへ切り替え、ancestorをrevealしてtargetを選択する。folder targetは同時に展開し、
+  child load後もfolder rowのselectionを保持する。Search queryは保持される。
+- Searchのempty queryでは従来どおりtree intentを処理するため、Searchへfocusした直後でもReturnによるfolder開閉ができる。
+- external Search result、stale pane／cwd／mode／query、ancestor kind mismatch、unavailable snapshot、32 expanded-directory cap、32 retained-child
+  snapshot capはfail closedにする。capは必要ancestorとfolder targetを事前計算し、収まらない場合はSearch mode／result／selectionを変えない。
+- pending revealとGo To operationはpane／cwd replacement、query／mode変更、Dock hide、privacy boundary、window close、disposeで破棄する。
+  late resultはoperation identity、generation、pane、mode、queryを再検証して拒否する。
+- product native-content fixtureを拡張し、実plain `sh` cwdでSearch native caret、current-root fileのSearch→Move、collapsed subtree内の
+  deep Go To、Go To folderのReturn展開とchild表示を実行する。各経路でPTY write countが増えないことをDeveloper JIT／Release AOT双方で固定した。
+
+#### 自動検証結果
+
+- `terminal_file_search_test.dart`: 成功。current-subtree scopeがrecent／explicit／system indexを一度も呼ばず、coverageをroot 0で確定する。
+- `terminal_context_dock_test.dart`: 成功。visible／deep Go To、2段ancestor lazy expansion、external result拒否、Search folder→Move＋target展開、
+  nearest ancestor collapse、32 expansion capの変更前拒否、pane／cwd／hide cancellationを検証した。
+- `terminal_native_hierarchy_test.dart`: 成功。Search／Go Toのeditable zero-length caret、Move／terminalのread-only、selection scroll後のcaret保持を検証した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart analyze`: 成功、issue 0。全346 Dart fileのformat gateは変更0。
+- canonical generator／freshness 5種: 成功。application actions 42、reserved shortcuts 17、Phase 7 criteria 5／source refs 19／unit tests 16／
+  integration tests 5／UI assertions 11、regression cases 9、actionable P0/P1 gap 0、release blocker 0。
+- `make RUNTIME_ARCH=arm64 developer-jit-native-content`: 成功、`RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS`、elapsed 4419 ms。
+- `make RUNTIME_ARCH=arm64 release-aot-native-content`: 成功、`RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS`、elapsed 3339 ms。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。format、analysis、native package、privacy、localization、Phase 7、compatibility、
+  differential、application、distributionを含む全gateが`dart_terminal tests passed`で終了した。
+- `git diff --check`: 成功。
+
+#### 通常GUIの目視確認
+
+- macOSのlock解除後、同名bundleの古いDeveloper JIT processをユーザーの既存processとして残し、この変更を含む最新Release AOT appを
+  path指定で確認した。`Shift+Command+F`で`Mode: Search`へ切り替わり、Directory Navigatorがsettableなfirst responderになった。
+  empty queryと`lib` queryの末尾でinsertion caretのvisible／invisible phaseを別々のframeで確認し、固定Detailsも同時に表示された。
+- `Shift+Command+G`ではSearch queryと独立したempty Go To inputが表示され、`docs`入力で可視folder rowへselectionが移動した。
+  さらに折り畳まれた状態から`context-dock-navigator-modes.md`を入力すると、`docs/`、`phase7/`が順に展開され、対象fileが
+  highlightされた。working-directory tree projectionと固定Detailsは維持された。
+- `Shift+Command+M`では`Mode: Move`とtree操作hintが表示され、Directory Navigatorはfirst responderのままread-onlyになり、
+  query caretが消えた。CUAの単独矢印／Escape／Option修飾key aliasはautomation serverが`keyNotFound`で拒否したため、その入力自体は
+  通常GUIへ送れなかったが、同一native event経路のMove navigation、Escape focus復帰、Dock toggleはfocused test、native hierarchy、
+  Developer JIT／Release AOT product scenarioで成功している。
+- 確認用Release AOT appだけを`Command+Q`で終了した。先に起動されていたDeveloper JIT appは終了していない。実装／表示上のblockerはない。

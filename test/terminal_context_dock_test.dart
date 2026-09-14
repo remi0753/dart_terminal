@@ -12,8 +12,99 @@ Future<void> runTerminalContextDockTests() async {
   await _testActionFocusOwnershipAndAvailability();
   await _testNavigatorKeyRoutingNeverFallsThrough();
   await _testDirectoryTreeFollowsPaneAndCancelsHiddenWork();
+  await _testDirectoryRevealRejectsExpansionCap();
   _testPrivacyPolicyDistinguishesIdleLineEditing();
   await _testPathHandoffPolicyAndExactPayload();
+}
+
+Future<void> _testDirectoryRevealRejectsExpansionCap() async {
+  final _Harness harness = _Harness();
+  final TerminalWindowState window = await harness.createWindow();
+  final PaneId paneId = window.selectedTab.focusedPaneId;
+  final TerminalContextDockState dock = TerminalContextDockState()
+    ..synchronize(harness.state)
+    ..toggleVisibility(window.id, paneId);
+  final TerminalDirectorySnapshotService snapshots =
+      TerminalDirectorySnapshotService(fileSystem: _CapDirectoryFileSystem());
+  const TerminalWorkingDirectoryResolver workingDirectoryResolver =
+      TerminalWorkingDirectoryResolver();
+  final TerminalContextDockDirectoryController controller =
+      TerminalContextDockDirectoryController(
+        applicationState: harness.state,
+        dockState: dock,
+        snapshotService: snapshots,
+        searchService: TerminalFileSearchService(
+          directorySnapshots: snapshots,
+          systemIndex: const _ContextDockSystemIndex(),
+        ),
+        resolveWorkingDirectory: (PaneId candidate, int generation) {
+          final TerminalPaneProcessSnapshot process = harness.state
+              .paneForId(candidate)!
+              .processSnapshot();
+          return workingDirectoryResolver.resolve(
+            sessionId: process.sessionId,
+            generation: generation,
+            processSnapshot: process,
+            reportedWorkingDirectory: null,
+            processWorkingDirectory: null,
+            launchWorkingDirectory: '/cap',
+          );
+        },
+      );
+  controller.synchronize();
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  for (
+    var index = 0;
+    index <
+        TerminalContextDockDirectoryLimits.maximumExpandedDirectoriesPerPane;
+    index++
+  ) {
+    dock.setSelectedResultIndex(window.id, index);
+    _expect(
+      controller.handleTreeIntent(
+        window.id,
+        TerminalContextDockTreeIntent.expand,
+      ),
+      'fixture directory $index fills one bounded expansion slot',
+    );
+    await _waitUntil(() => controller.activeOperationCount == 0);
+  }
+  _expect(
+    dock.confirmNavigatorInput(
+      dock.requestNavigatorFocus(
+        window.id,
+        paneId,
+        TerminalContextDockNavigatorMode.search,
+      ),
+    ),
+    'cap test transfers input to Search',
+  );
+  dock.setQuery(window.id, 'target');
+  controller.synchronize();
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  final TerminalContextDockDirectorySnapshot before = controller
+      .snapshotForWindow(window.id)!;
+  _expect(
+    before.isSearch &&
+        before.rows.single.entry.path == '/cap/zz-branch/target.txt' &&
+        !controller.handleTreeIntent(
+          window.id,
+          TerminalContextDockTreeIntent.toggle,
+        ),
+    'reveal beyond the expansion cap is rejected before changing mode',
+  );
+  final TerminalContextDockDirectorySnapshot after = controller
+      .snapshotForWindow(window.id)!;
+  _expect(
+    dock.snapshotForWindow(window.id)!.pane.navigatorMode ==
+            TerminalContextDockNavigatorMode.search &&
+        after.isSearch &&
+        after.rows.single.entry.path == '/cap/zz-branch/target.txt',
+    'cap rejection retains Search result, selection, and tree authority',
+  );
+  controller.dispose();
+  dock.dispose();
+  await harness.state.shutdown();
 }
 
 void _testPrivacyPolicyDistinguishesIdleLineEditing() {
@@ -324,9 +415,9 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   snapshot = controller.snapshotForWindow(window.id)!;
   _expect(
     snapshot.rows.map((value) => value.entry.name).join(',') ==
-            'folder,nested.txt,.hidden,readme.md' &&
+            'folder,deep,nested.txt,.hidden,readme.md' &&
         snapshot.rows[1].depth == 1 &&
-        snapshot.rows[1].entry.metadata.size == 7,
+        snapshot.rows[2].entry.metadata.size == 7,
     'expanded folder loads one child level and retains metadata',
   );
   _expect(
@@ -357,10 +448,15 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
     'Return toggle leaves a selected file unchanged',
   );
   dock.setSelectedResultIndex(window.id, 0);
-  dock.requestNavigatorFocus(
-    window.id,
-    firstPane,
-    TerminalContextDockNavigatorMode.search,
+  _expect(
+    dock.confirmNavigatorInput(
+      dock.requestNavigatorFocus(
+        window.id,
+        firstPane,
+        TerminalContextDockNavigatorMode.search,
+      ),
+    ),
+    'Search takes generation-checked Navigator input ownership',
   );
   dock.setQuery(window.id, 'readme');
   controller.synchronize();
@@ -377,26 +473,33 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
         ),
     'non-empty query progressively replaces tree rows with merged search rows',
   );
+  final int externalResult = snapshot.rows.indexWhere(
+    (TerminalContextDockDirectoryRow row) =>
+        row.entry.path == '/indexed/readme-global.md',
+  );
+  dock.setSelectedResultIndex(window.id, externalResult);
   _expect(
     !controller.handleTreeIntent(
-      window.id,
-      TerminalContextDockTreeIntent.toggle,
-    ),
-    'Return toggle does not mutate tree expansion while search is active',
+          window.id,
+          TerminalContextDockTreeIntent.toggle,
+        ) &&
+        dock.snapshotForWindow(window.id)!.pane.navigatorMode ==
+            TerminalContextDockNavigatorMode.search,
+    'an external Search result cannot replace the working-directory root',
   );
   dock.setQuery(window.id, '');
   controller.synchronize();
   snapshot = controller.snapshotForWindow(window.id)!;
   _expect(
     !snapshot.isSearch &&
-        snapshot.rows.length == 4 &&
+        snapshot.rows.length == 5 &&
         snapshot.rows.first.isExpanded,
     'clearing query restores the retained tree expansion context',
   );
-  dock.requestNavigatorFocus(
+  dock.setNavigatorMode(
     window.id,
-    firstPane,
     TerminalContextDockNavigatorMode.goTo,
+    requireNavigatorInput: true,
   );
   dock.setQuery(window.id, 'readme');
   controller.synchronize();
@@ -413,14 +516,87 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
             'readme.md',
     'Go To moves selection to a visible match without replacing the tree',
   );
-  dock.requestNavigatorFocus(
-    window.id,
-    firstPane,
-    TerminalContextDockNavigatorMode.move,
+  dock.setSelectedResultIndex(window.id, 0);
+  _expect(
+    controller.handleTreeIntent(
+      window.id,
+      TerminalContextDockTreeIntent.collapse,
+    ),
+    'the visible folder can be collapsed before a deep Go To',
+  );
+  dock.setQuery(window.id, 'target');
+  controller.synchronize();
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  snapshot = controller.snapshotForWindow(window.id)!;
+  final int deepTarget = dock
+      .snapshotForWindow(window.id)!
+      .pane
+      .selectedResultIndex;
+  _expect(
+    !snapshot.isSearch &&
+        snapshot.rows[deepTarget].entry.path ==
+            '/root/folder/deep/target.txt' &&
+        snapshot.rows
+            .firstWhere(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == '/root/folder',
+            )
+            .isExpanded &&
+        snapshot.rows
+            .firstWhere(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == '/root/folder/deep',
+            )
+            .isExpanded,
+    'deep Go To lazily expands observed ancestors and reveals the match',
   );
   _expect(
-    dock.snapshotForWindow(window.id)!.pane.searchQuery.isEmpty &&
-        dock.snapshotForWindow(window.id)!.pane.goToQuery == 'readme' &&
+    controller.handleTreeIntent(
+      window.id,
+      TerminalContextDockTreeIntent.collapse,
+    ),
+    'collapse on the selected deep file closes its nearest expanded ancestor',
+  );
+  dock.setNavigatorMode(
+    window.id,
+    TerminalContextDockNavigatorMode.search,
+    requireNavigatorInput: true,
+  );
+  dock.setQuery(window.id, 'deep');
+  controller.synchronize();
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  _expect(
+    controller.handleTreeIntent(
+      window.id,
+      TerminalContextDockTreeIntent.toggle,
+    ),
+    'Return activates a current-root Search directory in the tree',
+  );
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  snapshot = controller.snapshotForWindow(window.id)!;
+  final int revealedDirectory = dock
+      .snapshotForWindow(window.id)!
+      .pane
+      .selectedResultIndex;
+  _expect(
+    dock.snapshotForWindow(window.id)!.pane.navigatorMode ==
+            TerminalContextDockNavigatorMode.move &&
+        snapshot.rows[revealedDirectory].entry.path == '/root/folder/deep' &&
+        snapshot.rows[revealedDirectory].isExpanded &&
+        snapshot.rows.any(
+          (TerminalContextDockDirectoryRow row) =>
+              row.entry.path == '/root/folder/deep/target.txt',
+        ),
+    'Search activation enters Move, selects the directory, and expands it',
+  );
+  dock.setNavigatorMode(
+    window.id,
+    TerminalContextDockNavigatorMode.move,
+    requireNavigatorInput: true,
+  );
+  _expect(
+    dock.snapshotForWindow(window.id)!.pane.searchQuery == 'deep' &&
+        dock.snapshotForWindow(window.id)!.pane.goToQuery == 'target' &&
         !controller.snapshotForWindow(window.id)!.isSearch,
     'Move retains mode queries while exposing only the current tree',
   );
@@ -475,6 +651,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
     controller.activeOperationCount == 1,
     'new cwd starts one owned snapshot operation',
   );
+  dock.focusTerminal(window.id, secondPane.id);
   dock.toggleVisibility(window.id, secondPane.id);
   controller.synchronize();
   _expect(
@@ -530,8 +707,21 @@ final class _ContextDockDirectoryFileSystem
     }
     if (rootPath == '/root/folder') {
       yield const TerminalDirectoryFileSystemEntry(
+        name: 'deep',
+        path: '/root/folder/deep',
+        kind: TerminalDirectoryEntryKind.directory,
+      );
+      yield const TerminalDirectoryFileSystemEntry(
         name: 'nested.txt',
         path: '/root/folder/nested.txt',
+        kind: TerminalDirectoryEntryKind.file,
+      );
+      return;
+    }
+    if (rootPath == '/root/folder/deep') {
+      yield const TerminalDirectoryFileSystemEntry(
+        name: 'target.txt',
+        path: '/root/folder/deep/target.txt',
         kind: TerminalDirectoryEntryKind.file,
       );
       return;
@@ -553,6 +743,46 @@ final class _ContextDockDirectoryFileSystem
     size: entry.name == 'nested.txt' ? 7 : 3,
     modifiedMicrosecondsSinceEpoch: 1,
   );
+}
+
+final class _CapDirectoryFileSystem implements TerminalDirectoryFileSystem {
+  @override
+  Stream<TerminalDirectoryFileSystemEntry> list(String rootPath) async* {
+    if (rootPath == '/cap') {
+      for (
+        var index = 0;
+        index <
+            TerminalContextDockDirectoryLimits
+                .maximumExpandedDirectoriesPerPane;
+        index++
+      ) {
+        final String name = 'dir${index.toString().padLeft(2, '0')}';
+        yield TerminalDirectoryFileSystemEntry(
+          name: name,
+          path: '/cap/$name',
+          kind: TerminalDirectoryEntryKind.directory,
+        );
+      }
+      yield const TerminalDirectoryFileSystemEntry(
+        name: 'zz-branch',
+        path: '/cap/zz-branch',
+        kind: TerminalDirectoryEntryKind.directory,
+      );
+      return;
+    }
+    if (rootPath == '/cap/zz-branch') {
+      yield const TerminalDirectoryFileSystemEntry(
+        name: 'target.txt',
+        path: '/cap/zz-branch/target.txt',
+        kind: TerminalDirectoryEntryKind.file,
+      );
+    }
+  }
+
+  @override
+  Future<TerminalDirectoryFileSystemMetadata> metadata(
+    TerminalDirectoryFileSystemEntry entry,
+  ) async => const TerminalDirectoryFileSystemMetadata(size: 1, mode: 0x1ed);
 }
 
 final class _ContextDockSystemIndex implements TerminalSystemFileIndex {

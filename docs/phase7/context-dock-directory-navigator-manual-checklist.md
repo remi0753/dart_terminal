@@ -21,7 +21,7 @@
 - [ ] Terminal focus中にOption-Shift-Cを押すたびDockだけが表示／非表示になり、terminalへ文字や制御byteが入らない。
 - [ ] Navigator focus中のOption-Shift-Cはterminalへfocusを安全に戻してDockを閉じ、再度押すとquery／tree contextを保持して表示する。
 - [ ] Terminal focus中にShift-Command-Fを1回押すと右Dockが現れ、Search query末尾にnativeの入力caretが表示され、2回以上点滅する。terminalへ文字は入らない。
-- [ ] Shift-Command-GでGo Toへ移るとtreeを保ったまま独立queryを入力でき、表示中の一致file/folderへselectionが移る。
+- [ ] Shift-Command-GでGo Toへ移るとtreeを保ったまま独立queryを入力でき、current subtree内の深い一致file/folderまで必要なancestorだけが開いてselectionが移る。対象folderはReturnまで閉じている。
 - [ ] Shift-Command-MでMoveへ移るとquery caretが消え、文字、Delete、Command-AはqueryもPTYも変更せず、Up/Down/Page Up/Page Downだけがselectionを動かす。
 - [ ] Search／Go Toの文字入力、Delete、Command-Aは現在modeのqueryだけを変え、modeを往復しても両queryを個別に保持する。
 - [ ] 空queryでReturnまたはCommand-Rightを押すとfolderがDock内で展開し、同じfolder上の再度のReturnで閉じる。自動`cd`やcommand実行は起きない。
@@ -34,6 +34,7 @@
 
 - [ ] 空queryではdotfileを含むfile/folderがfolder-firstで表示され、選択項目のkind、permission、owner/group、size、mtime、symlink targetが読める。
 - [ ] query入力直後にcurrent subtreeの結果が現れ、後からRecent locations／Chosen locations／System indexのcoverageが同じlistへ追加される。
+- [ ] current working directory配下のSearch resultでReturn／Command-Rightを押すとMove treeへrevealされ、folderは展開されて直下を続けて操作できる。外部resultではSearch、root、selectionが変わらない。
 - [ ] 数百件のtree/search resultでも上段だけがscrollし、下段のPath actions／Detailsは常に見える。Up/Down/Page移動で同じ固定領域の選択情報だけが更新される。
 - [ ] Spotlightやpermissionが利用不能なscopeは`Unavailable`／`Partial`と表示され、0件と混同しない。
 - [ ] Command-Cは選択absolute pathだけをclipboardへcopyし、focusをNavigatorに残す。terminalへのwriteはない。
@@ -44,7 +45,7 @@
 
 ## VoiceOverとFull Keyboard Access
 
-- [ ] VoiceOverはDock上段を`Directory Navigator`というread-only text areaとして到達可能にし、terminalとは別のsiblingとして読む。
+- [ ] VoiceOverはDock上段を`Directory Navigator`というnative text areaとして到達可能にし、terminalとは別のsiblingとして読む。Search／Go To入力中だけeditable、Move／terminal focus中はread-onlyと伝わる。
 - [ ] title、input owner、working directory、Search query、tree/search rows、coverageを上段で、Path actions、Detailsを下段の非focus text viewでvisual orderどおり読める。
 - [ ] result移動時にselected rowが読み上げられ、folder markerだけに依存せず名前と末尾`/`でfolderを区別できる。
 - [ ] terminal/Navigatorのfocus移動が読み上げられ、terminal cursorとNavigator selectionを同時にactiveと誤認しない。

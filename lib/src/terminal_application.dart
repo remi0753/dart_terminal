@@ -8367,6 +8367,11 @@ final class TerminalApplication {
       final String fixtureRootPath = fixtureRoot.resolveSymbolicLinksSync();
       final Directory tabDirectory = Directory('$fixtureRootPath/service-tab')
         ..createSync();
+      final Directory goToDirectory = Directory(
+        '${tabDirectory.path}/go-to-folder',
+      )..createSync();
+      final File goToChild = File('${goToDirectory.path}/child.txt')
+        ..writeAsStringSync('child');
       final Directory windowDirectory = Directory(
         '$fixtureRootPath/service-window',
       )..createSync();
@@ -8555,19 +8560,50 @@ final class TerminalApplication {
       final String navigatorDetails = contextDockPresenter
           .nativeDetailsTextForWindow(initialWindow.id)!;
       _expectLifecycle(
-        !navigatorEditor.isEditable &&
+        navigatorEditor.isEditable &&
             !navigatorEditor.hasMarkedText &&
             navigatorEditor.text.contains('Directory Navigator') &&
+            navigatorEditor.text.contains('Mode: Search') &&
             navigatorEditor.text.contains("drop'2.txt") &&
             !navigatorEditor.text.contains(secondDroppedFile.path) &&
             navigatorDetails.contains(secondDroppedFile.path) &&
             navigatorDetails.contains("drop'2.txt") &&
-            navigatorEditor.selection.start > 0 &&
+            navigatorEditor.selection.start == navigatorEditor.selection.end &&
             contextDockWindow.keyEventRouting == KeyEventRouting.dartOnly &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
                 navigatorZeroWriteBaseline,
-        'native Navigator did not separate its scrollable result document '
-        'from pinned details or wrote PTY bytes while searching',
+        'native Search did not expose its insertion caret, separate its '
+        'scrollable results from pinned details, or preserve zero PTY writes',
+      );
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 36,
+        modifiers: 0,
+        characters: '\r',
+        charactersIgnoringModifiers: '\r',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(() {
+        final TerminalContextDockWindowSnapshot? dock = contextDockState
+            .snapshotForWindow(initialWindow.id);
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        final int selected = dock?.pane.selectedResultIndex ?? -1;
+        return dock?.pane.navigatorMode ==
+                TerminalContextDockNavigatorMode.move &&
+            directory?.isSearch == false &&
+            selected >= 0 &&
+            directory!.rows[selected].entry.path == secondDroppedFile.path;
+      }, 'Search Return did not reveal its current-root file in Move');
+      _expectLifecycle(
+        contextDockPresenter
+                    .nativeEditorSnapshotForWindow(initialWindow.id)!
+                    .isEditable ==
+                false &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                navigatorZeroWriteBaseline,
+        'Search activation retained a caret in Move or wrote PTY bytes',
       );
 
       final int copyResultBaseline = contextDockPathHandoffResults.length;
@@ -8630,7 +8666,68 @@ final class TerminalApplication {
         'inserted Navigator path did not survive shell-literal evaluation',
       );
 
+      final int goToWriteBaseline = writeEnqueuedCounts[initialPaneId] ?? 0;
+      await dispatch(TerminalActionId.goToFileOrFolder);
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 5,
+        modifiers: 0,
+        characters: 'go-to-folder',
+        charactersIgnoringModifiers: 'go-to-folder',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(() {
+        final TerminalContextDockWindowSnapshot? dock = contextDockState
+            .snapshotForWindow(initialWindow.id);
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        final int selected = dock?.pane.selectedResultIndex ?? -1;
+        return dock?.pane.navigatorMode ==
+                TerminalContextDockNavigatorMode.goTo &&
+            directory?.isSearch == false &&
+            selected >= 0 &&
+            directory!.rows[selected].entry.path == goToDirectory.path &&
+            !directory.rows[selected].isExpanded;
+      }, 'Go To did not reveal its deep current-subtree directory');
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 36,
+        modifiers: 0,
+        characters: '\r',
+        charactersIgnoringModifiers: '\r',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(() {
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        return directory?.rows.any(
+                  (TerminalContextDockDirectoryRow row) =>
+                      row.entry.path == goToDirectory.path && row.isExpanded,
+                ) ==
+                true &&
+            directory!.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == goToChild.path,
+            );
+      }, 'Return did not expand the Go To directory and expose its child');
+      _expectLifecycle(
+        (writeEnqueuedCounts[initialPaneId] ?? 0) == goToWriteBaseline,
+        'Go To reveal and folder expansion wrote bytes to the terminal',
+      );
+
       await dispatch(TerminalActionId.searchFilesAndFolders);
+      await waitFor(() {
+        final TerminalContextDockWindowSnapshot? dock = contextDockState
+            .snapshotForWindow(initialWindow.id);
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        final int selected = dock?.pane.selectedResultIndex ?? -1;
+        return directory?.isSearch == true &&
+            selected >= 0 &&
+            directory!.rows[selected].entry.path == secondDroppedFile.path;
+      }, 'retained Search did not restore its selected path');
       initialSession.terminalScreenSet.setAlternateMode1049(true);
       reconcile();
       final int alternateResultBaseline = contextDockPathHandoffResults.length;

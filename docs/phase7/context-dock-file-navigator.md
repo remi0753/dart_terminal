@@ -80,8 +80,8 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 | Search／Go To owns input | printable／Delete／Command+A | modeごとの独立queryだけを編集 | 0 byte |
 | Move owns input | printable／Delete／Command+A | queryを変更せず消費 | 0 byte |
 | Navigator owns input | Up／Down、Page Up／Down | result selectionだけを移動 | 0 byte |
-| Navigator owns input | Return | tree時だけselected folderをcollapse／expand | 0 byte |
-| Navigator owns input | Command+Left／Right | tree時だけfolderまたはancestorをcollapse／selected folderをexpand | 0 byte |
+| Navigator owns input | Return | tree folderをcollapse／expand。Searchのcurrent-root resultはMove treeへrevealし、folderならexpand | 0 byte |
+| Navigator owns input | Command+Left／Right | treeのfolder／ancestorをcollapse／expand。SearchのCommand-Rightはcurrent-root resultをreveal | 0 byte |
 | Navigator owns input | `Escape`または`view.focus-terminal` | 現在のstill-live focused paneをfirst responderへ戻す | 0 byte |
 
 追加の契約:
@@ -94,6 +94,11 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
   捕捉し、terminal bytesへfall throughしないようにする。
 - Search／Go Toではnative editorをeditableかつDart-only key routingにし、zero-length selectionをquery末尾へ置いてAppKit標準の
   点滅caretを表示する。Moveでは同じeditorをfirst responderに保ちながらread-onlyへ戻し、文字編集の見かけを出さない。
+- Go Toはwide Searchと別のcurrent-subtree-only bounded operationを使い、現在visibleなmatchを優先する。deep matchはrootから順に
+  実際にdirectoryとして観測できたancestorだけを1段ずつlazy展開してselectionへrevealし、対象folder自体はReturnまで閉じたままにする。
+- Search resultのReturn／Command-Rightはnormalized pathが現在のresolved working directory配下の場合だけMoveへ切り替える。ancestorを
+  同じbounded手順でrevealし、対象folderも展開する。外部result、stale query／cwd、permission failure、expanded-directory上限超過では
+  mode、root、selectionを維持してfail closedとし、自動`cd`やshell commandを実行しない。
 - Navigatorで同じmode shortcutを再度押した場合はqueryとcaretを保持してfocusを再確認するだけで、terminalへtoggleしない。
   戻る方向は別の`view.focus-terminal` actionへ固定し、同じchordの状態依存挙動を避ける。
 - `Escape`はquery clearを先に要求せず、常に1回で`view.focus-terminal`を実行する。Dock、query、

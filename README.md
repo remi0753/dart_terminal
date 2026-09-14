@@ -67,8 +67,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   shared actionを実行する。tree上のfolderはReturnで開閉でき、Command-Right／Leftでも展開／折り畳みできる。
   Shift-Command-FでSearchへ移るとquery末尾にnativeの点滅caretが現れ、同じlistがcurrent subtree、recent location、明示root、
   Spotlight metadata indexのprogressive検索結果へ切り替わる。source/coverageとpartial・
-  unavailableを区別し、filesystem rootを暗黙にwalkしない。Shift-Command-GのGo Toはtreeを保ったまま一致rowへ選択を移し、
-  Shift-Command-MのMoveはquery入力を止めてtree navigationだけを所有する。SearchとGo Toのqueryはpaneごとに独立して保持する。
+  unavailableを区別し、filesystem rootを暗黙にwalkしない。current working directory配下のSearch結果はReturn／Command-Rightで
+  Move treeへrevealでき、folderなら展開するが、外部resultはrootを変更せずSearchに残る。Shift-Command-GのGo Toはtreeを保ち、
+  current subtreeをbounded探索して必要なancestorだけをlazy展開し、一致rowへ選択を移す。Shift-Command-MのMoveはquery入力を止めて
+  tree navigationだけを所有する。SearchとGo Toのqueryはpaneごとに独立して保持する。
   Escapeでmodeとqueryを保ったまま
   terminalへ戻り、矢印/Page/Command+矢印の操作中はPTY write 0を保つ
 - NavigatorのCommand-Cは選択したabsolute pathだけをcopyし、Option-Returnは既存paste
