@@ -1,6 +1,6 @@
 # Context Dock and file/folder navigator roadmap
 
-- Status: planned
+- Status: in progress
 - Date: 2026-09-14
 - Scope: completed Phase 7 application UXに続く追加機能
 - Related: UI-02、UI-05、UI-09、AX-01、AX-02、CFG-06、SEC-01、SEC-04
@@ -245,6 +245,90 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
    不採用。remoteは明示side-channel capabilityへ分離する。
 
 ## 調査記録
+
+### 2026-09-14 第1サブタスク着手
+
+- 目的: Context Dockのvisibility、focused pane context、terminal／navigator input ownershipを
+  filesystemやnative viewから独立したpure Dart stateとして固定し、後続UIが同じ契約を投影できるように
+  する。3つのstable actionとNavigator-owned key controllerも同じ段階で定義する。
+- 範囲: window／pane generationに追従するbounded state、query／selectionの最小contract、
+  `view.search-files-and-folders`、`view.focus-terminal`、`view.toggle-context-dock`、English／Japanese copy、
+  `Shift+Command+F` native reservation、Escape／editing／Up／Down／Page Up／Page Down／tree expansion request、
+  action coordinatorのavailability／focus callback／dispose、generated action reference、unit test。
+- 対象外: native right-side layout、filesystem enumeration／cwd fallback、実検索ranking、path copy／insert、
+  Secure Keyboard Entryとの製品統合、README／FEATURE_MATRIX上の完成機能表示、実runtime acceptance。これらは
+  後続subtaskの順序を維持する。
+- 依存関係: `TerminalApplicationState`のactive window／selected tab／focused live pane、
+  `TerminalActionCatalog`のnative shortcut precedence、`TerminalAppKitKeyAdapter`のphysical key変換、既存
+  Command Paletteのindependent key ownership／terminal focus restoration contract。
+- リスク: native viewがまだない段階でactionを通常製品へ登録すると利用者に空のDockを見せるため、catalogと
+  reusable coordinatorだけを追加し、product registrationはnative side-dock subtaskまで行わない。native
+  shortcutはcatalogに現れるためgenerated referenceとreserved chordを同じcommitで更新する。
+- 完了条件: stateのwindow／pane cleanupとhard cap、Dock表示とinput ownerの独立性、search focusの再要求、
+  Escapeからshared `view.focus-terminal`のexactly-once dispatch、Navigator-owned keyのPTY payload非生成、
+  unavailable／busy／failure時のfail-closed、action metadata／localization／reference freshnessをtestで固定する。
+- 検証方針: 新規focused unit test、action registry／localization／keybind referenceの関連test、format、analysis、
+  full `make test`を順に実行する。native UIとproduct registrationが対象外なのでDeveloper JIT／Release AOTの
+  visual acceptanceはこのsubtaskでは実行しない。
+
+### 2026-09-14 第1サブタスク実装結果
+
+- `lib/src/terminal_context_dock.dart`へwindow-owned state authorityを追加した。standard windowだけを保持し、
+  selected tabのfocused live paneをtargetにする。query、result count、selection、query selection generationは
+  paneごとに保持し、pane／window closeとapplication shutdownで対応stateを除去する。queryは256 UTF-16
+  code unit、resultは512件、page moveは10件を既定上限とし、window／pane総数は既存application state上限へ
+  従う。
+- visibilityとinput ownerを別stateにした。toggleはterminal ownershipを保ったまま表示でき、search requestは
+  Dockを先に表示してgeneration-boundなnative focus callbackが成功した後だけnavigator ownershipを確定する。
+  terminal focus callbackが失敗した場合もnavigator ownershipを保持し、どちらの失敗も入力先を推測して変更
+  しないfail-closed contractとした。
+- `view.toggle-context-dock`、`view.search-files-and-folders`、`view.focus-terminal`をstable action catalogへ追加し、
+  English／Japanese titleとsearch keywordをlocalization catalogへ追加した。`Shift+Command+F`はnative menu
+  shortcutとして予約し、search actionだけはdispatch後にterminal focusを自動復元しない。native Dockがない
+  現段階では通常製品のdispatcherへcoordinatorを登録せず、menu／palette上はunavailableに留める。
+- Navigator key controllerはfirst responder中のeventを専有する。printable text、Backspace、Command+A、
+  Up／Down、Page Up／Down、exact Command+Left／Rightをtyped resultへ変換し、Escapeはshared
+  `view.focus-terminal` actionをdispatchする。unsupported key、key-up、busy／unavailable Escapeも消費するため、
+  navigator ownership中にPTY encoderへfall throughする経路はない。Shift付きnavigationは無修飾／exact
+  Command操作として扱わない。
+- focused testは複数window／paneの分離とcleanup、hard capのatomic rejection、search再focus時のquery保持、
+  toggleとinput ownershipの独立性、navigator／terminal focus callback failure、action availability、busy action、
+  query editing、selection clamp、tree intent、全navigator-owned eventのPTY write 0を検証する。共通test runnerと
+  localization auditへ追加し、action／keybind generated referenceも更新した。
+- READMEは完成機能としての説明を追加せず、stable action catalogの事実上の件数だけ37から40へ更新した。
+  生成artifactのsource hash連鎖によりcompatibility regression coverage、Ghostty gap inventory、daily-use matrixを
+  各既定generatorで更新した。意味上の互換性判定、gap、release blockerの数は変化していない。
+
+#### 検討と引き継ぎ
+
+- 1つのfocus toggle actionは採用せず、検索へ入るactionとterminalへ戻るactionを分離した。これにより
+  `Shift+Command+F`の意味は現在のfirst responderに依存せず、Navigator内で再実行した場合もquery selection
+  generationを進めるだけになる。
+- native presenterはhierarchy／focus mutation後にcoordinatorの`synchronize()`を呼び、FocusRequestのwindow、
+  pane、state generationをnative handle解決時にも照合する必要がある。Navigator viewへ届いたkeyは本controller
+  だけへ渡し、`notOwned`が返るまでterminal text-input routeへ渡してはならない。
+- native side-dock、filesystem state、secure-input admission、visual／accessibility focus表現は未実装であり、
+  ROADMAP上の後続subtaskへ残す。このsubtaskでは空のnative UIを公開しないため、Developer JIT／Release AOTの
+  visual acceptanceは対象外のままである。
+
+#### 検証と失敗記録
+
+- 最初のsandbox内`dart format`はsourceのformat自体を完了した後、SDK telemetry logのworkspace外書き込みで
+  `PathAccessException`になった。最初のfocused testもClang ModuleCacheとtelemetry pathのsandbox制約で失敗
+  した。いずれもsource／test failureではなく、同じcommandを許可済みnative cache環境で再実行して成功した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart run test/terminal_context_dock_test.dart`: 成功。
+- `terminal_action_registry_test.dart`、`terminal_localization_test.dart`、`terminal_key_binding_test.dart`、
+  `keybind_action_reference_test.dart`、`terminal_config_test.dart`の各focused実行: すべて成功。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart run test/terminal_localization_audit_test.dart`: 成功。15 source、
+  4 resource family、21 resource keyを監査した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart analyze`: `No issues found!`。
+- 初回の`make test`はREADME hashを追うregression coverage freshnessで、再実行はその連鎖を追うGhostty gap
+  inventory、次の再実行はdaily-use matrix freshnessで順に停止した。各artifactを
+  `make terminal-compatibility-regression-coverage`、`make ghostty-p0-p1-gap-inventory`、
+  `make release-candidate-daily-use-matrix`で再生成した。
+- 生成後の`CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。format 340 filesで変更0、analysis指摘0、
+  compatibility／differential／application／terminfo／shell integration／distribution gateを通過し、最後に
+  `dart_terminal tests passed`を確認した。
 
 ### 2026-09-14 計画着手時
 

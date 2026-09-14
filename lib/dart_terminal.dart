@@ -25,6 +25,7 @@ export 'src/terminal_command_palette.dart';
 export 'src/terminal_config.dart';
 export 'src/terminal_config_reload.dart';
 export 'src/terminal_configuration_reference.dart';
+export 'src/terminal_context_dock.dart';
 export 'src/terminal_core/streaming_utf8_decoder.dart'
     show StreamingUtf8Decoder, Utf8ScalarSink;
 export 'src/terminal_core/terminal_desktop_signals.dart'

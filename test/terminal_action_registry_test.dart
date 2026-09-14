@@ -147,6 +147,9 @@ void _testStableStandardCatalog() {
             .map((TerminalActionDefinition action) => action.id)
             .join(',') ==
         <TerminalActionId>[
+          TerminalActionId.toggleContextDock,
+          TerminalActionId.searchFilesAndFolders,
+          TerminalActionId.focusTerminal,
           TerminalActionId.quickLook,
           TerminalActionId.togglePaneZoom,
           TerminalActionId.equalizeSplits,
@@ -158,7 +161,25 @@ void _testStableStandardCatalog() {
           TerminalActionId.jumpToPreviousPrompt,
           TerminalActionId.jumpToNextPrompt,
         ].join(','),
-    'view menu contains stable prompt navigation actions in catalog order',
+    'view menu contains stable Context Dock and pane actions in catalog order',
+  );
+  _expect(
+    catalog
+                .actionForId(TerminalActionId.searchFilesAndFolders)!
+                .shortcut!
+                .identity ==
+            'shift+command+f' &&
+        !catalog
+            .actionForId(TerminalActionId.searchFilesAndFolders)!
+            .restoresTerminalFocusAfterInvocation &&
+        catalog.actionForId(TerminalActionId.focusTerminal)!.shortcut == null &&
+        catalog.actionForId(TerminalActionId.toggleContextDock)!.shortcut ==
+            null &&
+        TerminalActionCatalog.standard(
+              localization: TerminalLocalization.japanese,
+            ).actionForId(TerminalActionId.focusTerminal)!.title ==
+            'ターミナルにフォーカス',
+    'Context Dock actions own reviewed focus and shortcut metadata',
   );
   _expect(
     catalog
@@ -517,6 +538,11 @@ void _testSearchOrderingAndBounds() {
     dispatcher.search('dropdown global shortcut').first.definition.id ==
         TerminalActionId.toggleQuickTerminal,
     'Quick Terminal is searchable by its global presentation vocabulary',
+  );
+  _expect(
+    dispatcher.search('file folder path').first.definition.id ==
+        TerminalActionId.searchFilesAndFolders,
+    'file and folder search is discoverable through the shared palette',
   );
   _expect(
     dispatcher.search('password privacy').first.definition.id ==

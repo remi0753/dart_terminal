@@ -38,6 +38,9 @@ enum TerminalActionMessageId {
   quickLook,
   togglePaneZoom,
   equalizeSplits,
+  toggleContextDock,
+  searchFilesAndFolders,
+  focusTerminal,
   openTerminalInspector,
   moveDividerLeft,
   moveDividerRight,
@@ -648,6 +651,18 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
           'Equalize Splits',
           <String>['balance', 'resize', 'panes'],
         ),
+        TerminalActionMessageId.toggleContextDock: _action(
+          'Toggle Context Dock',
+          <String>['show', 'hide', 'sidebar', 'navigator'],
+        ),
+        TerminalActionMessageId.searchFilesAndFolders: _action(
+          'Search Files and Folders',
+          <String>['directory', 'navigator', 'path', 'find'],
+        ),
+        TerminalActionMessageId.focusTerminal: _action(
+          'Focus Terminal',
+          <String>['keyboard', 'input', 'return', 'escape'],
+        ),
         TerminalActionMessageId.openTerminalInspector: _action(
           'Open Terminal Inspector',
           <String>['parser', 'diagnostics', 'state', 'debug'],
@@ -806,6 +821,20 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
         '均等',
         'サイズ変更',
         'ペイン',
+      ]),
+      TerminalActionMessageId.toggleContextDock: _action(
+        'コンテキストDockの表示を切り替え',
+        <String>['表示', '非表示', 'サイドバー', 'ナビゲータ'],
+      ),
+      TerminalActionMessageId.searchFilesAndFolders: _action(
+        'ファイルとフォルダを検索',
+        <String>['ディレクトリ', 'ナビゲータ', 'パス', '検索'],
+      ),
+      TerminalActionMessageId.focusTerminal: _action('ターミナルにフォーカス', <String>[
+        'キーボード',
+        '入力',
+        '戻る',
+        'Escape',
       ]),
       TerminalActionMessageId.openTerminalInspector: _action(
         'ターミナルインスペクタを開く',

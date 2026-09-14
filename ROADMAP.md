@@ -1473,7 +1473,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （分割、input ownership、filesystem境界、完了条件は
   [`docs/phase7/context-dock-file-navigator.md`](docs/phase7/context-dock-file-navigator.md)
   を参照して順に実施する）
-  - [ ] window-owned Context Dock state、action、keyboard focus contract
+  - [x] window-owned Context Dock state、action、keyboard focus contract
   - [ ] trusted local cwd観測とbounded・cancellable directory snapshot
   - [ ] working directory tree、metadata、pane追従のnative side-dock表示
   - [ ] current subtreeからsystem-wideへ連続するfile／folder search

@@ -55,6 +55,7 @@ import 'terminal_compatibility_surface_test.dart';
 import 'terminal_config_reload_test.dart';
 import 'terminal_config_test.dart';
 import 'terminal_configuration_reference_test.dart';
+import 'terminal_context_dock_test.dart';
 import 'terminal_core_test.dart';
 import 'terminal_damage_copy_test.dart';
 import 'terminal_damage_test.dart';
@@ -213,6 +214,7 @@ Future<void> main() async {
   runTerminalConfigTests();
   await runTerminalConfigReloadTests();
   runTerminalConfigurationReferenceTests();
+  await runTerminalContextDockTests();
   await runTerminalEffectiveConfigTests();
   runTerminalKeyBindingTests();
   runTerminalKeyEncoderTests();

@@ -32,6 +32,9 @@ enum TerminalActionId {
   jumpToNextPrompt('pane.jump-to-next-prompt'),
   togglePaneZoom('pane.toggle-zoom'),
   equalizeSplits('pane.equalize-splits'),
+  toggleContextDock('view.toggle-context-dock'),
+  searchFilesAndFolders('view.search-files-and-folders'),
+  focusTerminal('view.focus-terminal'),
   openTerminalInspector('view.open-terminal-inspector'),
   moveDividerLeft('pane.move-divider-left'),
   moveDividerRight('pane.move-divider-right'),
@@ -400,6 +403,18 @@ final class TerminalActionCatalog {
           command: true,
         ),
       ),
+      action(TerminalActionId.toggleContextDock, TerminalActionMenu.view),
+      action(
+        TerminalActionId.searchFilesAndFolders,
+        TerminalActionMenu.view,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'f',
+          shift: true,
+          command: true,
+        ),
+        restoresTerminalFocusAfterInvocation: false,
+      ),
+      action(TerminalActionId.focusTerminal, TerminalActionMenu.view),
       action(
         TerminalActionId.quickLook,
         TerminalActionMenu.view,
@@ -498,6 +513,11 @@ TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
   TerminalActionId.quickLook => TerminalActionMessageId.quickLook,
   TerminalActionId.togglePaneZoom => TerminalActionMessageId.togglePaneZoom,
   TerminalActionId.equalizeSplits => TerminalActionMessageId.equalizeSplits,
+  TerminalActionId.toggleContextDock =>
+    TerminalActionMessageId.toggleContextDock,
+  TerminalActionId.searchFilesAndFolders =>
+    TerminalActionMessageId.searchFilesAndFolders,
+  TerminalActionId.focusTerminal => TerminalActionMessageId.focusTerminal,
   TerminalActionId.openTerminalInspector =>
     TerminalActionMessageId.openTerminalInspector,
   TerminalActionId.moveDividerLeft => TerminalActionMessageId.moveDividerLeft,
