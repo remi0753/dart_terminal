@@ -24,12 +24,13 @@
 - [ ] Command-Leftでsubtreeを畳み、selectionがvisible parentへ戻る。
 - [ ] Escapeを1回押すとquery/resultを保持したままterminalへ戻る。再度Shift-Command-Fで同じcontextへ戻る。
 - [ ] Dock表示中でもterminal focusなら通常のterminal key、selection、scrollが従来どおり動作する。
-- [ ] 狭いwindow、resize、divider drag、fullscreen、tab/pane切替、Dock hide/showでterminalとDockが重ならず、focused paneのcwdへ追従する。
+- [ ] 初回表示のDockは従来より広い380 ptで、狭いwindow、resize、divider drag、fullscreen、tab/pane切替、Dock hide/showでもterminalと重ならず、focused paneのcwdへ追従する。
 
 ## Tree、search、path handoff
 
 - [ ] 空queryではdotfileを含むfile/folderがfolder-firstで表示され、選択項目のkind、permission、owner/group、size、mtime、symlink targetが読める。
 - [ ] query入力直後にcurrent subtreeの結果が現れ、後からRecent locations／Chosen locations／System indexのcoverageが同じlistへ追加される。
+- [ ] 数百件のtree/search resultでも上段だけがscrollし、下段のPath actions／Detailsは常に見える。Up/Down/Page移動で同じ固定領域の選択情報だけが更新される。
 - [ ] Spotlightやpermissionが利用不能なscopeは`Unavailable`／`Partial`と表示され、0件と混同しない。
 - [ ] Command-Cは選択absolute pathだけをclipboardへcopyし、focusをNavigatorに残す。terminalへのwriteはない。
 - [ ] Option-Returnは空白、apostrophe、Unicodeを含むpathを1 shell wordとして挿入し、改行を送らずterminalへfocusを戻す。
@@ -39,8 +40,8 @@
 
 ## VoiceOverとFull Keyboard Access
 
-- [ ] VoiceOverはDockを`Directory Navigator`というread-only text areaとして到達可能にし、terminalとは別のsiblingとして読む。
-- [ ] title、input owner、working directory、Search query、tree/search rows、coverage、Path actions、Detailsがvisual orderと同じ順で読まれる。
+- [ ] VoiceOverはDock上段を`Directory Navigator`というread-only text areaとして到達可能にし、terminalとは別のsiblingとして読む。
+- [ ] title、input owner、working directory、Search query、tree/search rows、coverageを上段で、Path actions、Detailsを下段の非focus text viewでvisual orderどおり読める。
 - [ ] result移動時にselected rowが読み上げられ、folder markerだけに依存せず名前と末尾`/`でfolderを区別できる。
 - [ ] terminal/Navigatorのfocus移動が読み上げられ、terminal cursorとNavigator selectionを同時にactiveと誤認しない。
 - [ ] Full Keyboard Accessを有効にしてもShift-Command-F、Escape、Command-C、Option-Return、tree/search navigationがmouseなしで完結する。

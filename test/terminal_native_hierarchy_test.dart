@@ -80,12 +80,21 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
             sessionId: process.sessionId,
             generation: generation,
             processSnapshot: process,
-            reportedWorkingDirectory: Uri.parse('file://remote.example/work'),
+            reportedWorkingDirectory: Uri.parse('file:///root'),
             processWorkingDirectory: null,
             launchWorkingDirectory: '/local-must-not-win',
           );
         },
+        snapshotService: const TerminalDirectorySnapshotService(
+          fileSystem: _LargeContextDockDirectoryFileSystem(),
+        ),
       )..synchronize();
+  await _waitForHierarchy(
+    () =>
+        directory.snapshotForWindow(logicalWindow.id)?.rows.length ==
+        TerminalContextDockLimits.maximumResults,
+    'Context Dock did not retain its maximum bounded row set',
+  );
   late final TerminalNativeHierarchyAdapter adapter;
   late final TerminalContextDockDirectoryPresenter presenter;
   TerminalPaneLayoutRect? paneLayout;
@@ -97,6 +106,12 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     windowForTab: (TerminalTabId tabId) => adapter.windowForTab(tabId),
     terminalViewForPane: (PaneId paneId) =>
         adapter.resourcesForPane(paneId)?.view,
+    pathHandoffSnapshot: (_) => const TerminalContextDockPathHandoffSnapshot(
+      block: TerminalContextDockPathInsertionBlock.none,
+      canCopy: true,
+      canInsert: true,
+      path: '/root/result-000.txt',
+    ),
   );
   final TerminalSplitLayoutSize fullSize = TerminalSplitLayoutSize(
     width: 800,
@@ -132,12 +147,42 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   )!;
   final int windowHandle = bindings.handleFor(nativeWindow);
   final TwoPaneSplitView outer = nativeWindow.contentView! as TwoPaneSplitView;
-  final TextEditor editor = outer.secondView! as TextEditor;
+  final TwoPaneSplitView content = outer.secondView! as TwoPaneSplitView;
+  final TextEditor editor = content.firstView! as TextEditor;
+  final TextView details = content.secondView! as TextView;
+  final int outerHandle = bindings.handleFor(outer);
+  final int contentHandle = bindings.handleFor(content);
+  final int editorHandle = bindings.handleFor(editor);
+  final int detailsHandle = bindings.handleFor(details);
+  final double expectedContentFraction =
+      (499 - TerminalContextDockDirectoryLimits.preferredDetailsHeight) / 499;
   _expect(
-    paneLayout?.width == 479 &&
-        bindings.texts[bindings.handleFor(editor)]!.contains('リモートディレクトリ') &&
+    paneLayout?.width == 419 &&
+        bindings.splitViewAxes[outerHandle] == 0 &&
+        bindings.splitViewAxes[contentHandle] == 1 &&
+        bindings.splitViewChildren[contentHandle]![0] == editorHandle &&
+        bindings.splitViewChildren[contentHandle]![1] == detailsHandle &&
+        (bindings.splitViewFractions[contentHandle]! - expectedContentFraction)
+                .abs() <
+            0.001 &&
+        bindings.viewConfigurations[detailsHandle]!.acceptsFirstResponder ==
+            false &&
+        bindings.texts[editorHandle]!.contains('result-511.txt') &&
+        !bindings.texts[editorHandle]!.contains('/root/result-000.txt') &&
+        bindings.texts[detailsHandle]!.contains('/root/result-000.txt') &&
+        bindings.texts[detailsHandle]!.contains('パス操作') &&
         presenter.resourceCount == 1,
-    'visible Dock is a native right sibling and shrinks only terminal layout',
+    'visible Dock uses the wider default and separates a bounded scrollable '
+    'list from passive pinned details',
+  );
+  bindings.splitViewFractions[contentHandle] = 0.9;
+  reconcile();
+  _expect(
+    (bindings.splitViewFractions[contentHandle]! - expectedContentFraction)
+                .abs() <
+            0.001 &&
+        identical(content.secondView, details),
+    'reconcile restores the pinned details height without replacing its view',
   );
 
   late final TerminalActionDispatcher dispatcher;
@@ -167,10 +212,26 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     'search action focuses the projected navigator',
   );
   _expect(
-    bindings.firstResponders[windowHandle] == bindings.handleFor(editor) &&
+    bindings.firstResponders[windowHandle] == editorHandle &&
         bindings.windowKeyEventRoutings[windowHandle] == 1,
     'navigator focus sends key events only to Dart without targeting the PTY '
     'or read-only AppKit editor',
+  );
+  final int selectionRevealBaseline =
+      bindings.textEditorSelectionRevealCounts[editorHandle]!;
+  dock.setSelectedResultIndex(
+    logicalWindow.id,
+    TerminalContextDockLimits.maximumResults - 1,
+  );
+  reconcile();
+  _expect(
+    bindings.texts[detailsHandle]!.contains('/root/result-511.txt') &&
+        bindings.textEditorSelectionStarts[editorHandle]! > 0 &&
+        bindings.textEditorSelectionRevealCounts[editorHandle] ==
+            selectionRevealBaseline + 1 &&
+        identical(content.secondView, details),
+    'moving through a long list scrolls only the navigator and updates the '
+    'same pinned details view',
   );
   final TerminalContextDockKeyResult escaped = await keys.handle(
     logicalWindow.id,
@@ -241,13 +302,16 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     'showing the Dock without search restores the terminal first responder '
     'after native root reparenting',
   );
-  final int outerHandle = bindings.handleFor(outer);
   final int stableChildAttachmentCount =
       bindings.splitViewChildrenSetCounts[outerHandle]!;
+  final int stableContentAttachmentCount =
+      bindings.splitViewChildrenSetCounts[contentHandle]!;
   reconcile();
   _expect(
     bindings.splitViewChildrenSetCounts[outerHandle] ==
             stableChildAttachmentCount &&
+        bindings.splitViewChildrenSetCounts[contentHandle] ==
+            stableContentAttachmentCount &&
         bindings.firstResponders[bindings.handleFor(selectedNativeWindow)] ==
             bindings.handleFor(
               adapter.resourcesForPane(secondTab.focusedPaneId)!.view,
@@ -4159,6 +4223,36 @@ Future<void> _waitForHierarchy(
     await Future<void>.delayed(Duration.zero);
   }
   _expect(predicate(), description);
+}
+
+final class _LargeContextDockDirectoryFileSystem
+    implements TerminalDirectoryFileSystem {
+  const _LargeContextDockDirectoryFileSystem();
+
+  @override
+  Stream<TerminalDirectoryFileSystemEntry> list(String rootPath) async* {
+    for (
+      var index = 0;
+      index < TerminalContextDockLimits.maximumResults;
+      index++
+    ) {
+      final String name = 'result-${index.toString().padLeft(3, '0')}.txt';
+      yield TerminalDirectoryFileSystemEntry(
+        name: name,
+        path: '$rootPath/$name',
+        kind: TerminalDirectoryEntryKind.file,
+      );
+    }
+  }
+
+  @override
+  Future<TerminalDirectoryFileSystemMetadata> metadata(
+    TerminalDirectoryFileSystemEntry entry,
+  ) async => TerminalDirectoryFileSystemMetadata(
+    mode: 0x1a4,
+    size: entry.name.length,
+    modifiedMicrosecondsSinceEpoch: 1,
+  );
 }
 
 final class _SettingsMemoryFileSystem

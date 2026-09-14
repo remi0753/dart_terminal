@@ -8498,18 +8498,22 @@ final class TerminalApplication {
       }, 'Context Dock query did not replace the tree with its local result');
       final TextEditorSnapshot navigatorEditor = contextDockPresenter
           .nativeEditorSnapshotForWindow(initialWindow.id)!;
+      final String navigatorDetails = contextDockPresenter
+          .nativeDetailsTextForWindow(initialWindow.id)!;
       _expectLifecycle(
         !navigatorEditor.isEditable &&
             !navigatorEditor.hasMarkedText &&
             navigatorEditor.text.contains('Directory Navigator') &&
             navigatorEditor.text.contains("drop'2.txt") &&
-            navigatorEditor.text.contains(secondDroppedFile.path) &&
+            !navigatorEditor.text.contains(secondDroppedFile.path) &&
+            navigatorDetails.contains(secondDroppedFile.path) &&
+            navigatorDetails.contains("drop'2.txt") &&
             navigatorEditor.selection.start > 0 &&
             contextDockWindow.keyEventRouting == KeyEventRouting.dartOnly &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
                 navigatorZeroWriteBaseline,
-        'native Navigator omitted its read-only accessible document or wrote '
-        'PTY bytes while searching',
+        'native Navigator did not separate its scrollable result document '
+        'from pinned details or wrote PTY bytes while searching',
       );
 
       final int copyResultBaseline = contextDockPathHandoffResults.length;

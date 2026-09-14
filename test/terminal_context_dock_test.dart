@@ -97,6 +97,7 @@ Future<void> _testWindowPaneStateAndBounds() async {
     dock.windowCount == 1 &&
         snapshot.targetPaneId == firstPane &&
         !snapshot.isVisible &&
+        TerminalContextDockLimits.defaultWidth == 380 &&
         snapshot.width == TerminalContextDockLimits.defaultWidth &&
         snapshot.inputOwner == TerminalContextDockInputOwner.terminal,
     'a new window starts hidden while terminal retains input',

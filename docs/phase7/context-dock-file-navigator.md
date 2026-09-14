@@ -32,16 +32,18 @@ ownershipを分離し、`Shift+Command+F`でnavigatorへ移り、`Escape`また�
 
 ### 配置と通常表示
 
-- Context Dockはterminalの上へ重ならず、windowの右側でterminal contentと並ぶ。hide時はterminal
-  が空いた幅を取り戻し、再表示時は利用者が最後に選んだbounded widthを復元する。
+- Context Dockはterminalの上へ重ならず、windowの右側でterminal contentと並ぶ。新規windowの
+  既定幅は380 ptとする。hide時はterminalが空いた幅を取り戻し、再表示時は利用者が最後に選んだ
+  bounded widthを復元する。
 - Dockはwindowごとに1つだけ所有し、selected tabのfocused live paneへ追従する。paneごとのtree
   expansion、browse location、query、selection、scroll位置はbounded stateとして保持し、pane close
   と同時に解放する。
 - headerは対象pane、trusted working directory、local／remote／unknown capabilityを常に示す。
   breadcrumbからparent、back、forward、working directoryへkeyboardで戻れる。
 - queryが空ならworking directoryをrootにしたfile＋folder treeを表示する。dotfileも既定で表示し、
-  folderはlazy展開する。rowは名前と種類を優先し、選択entryのpermission、owner／group、size、mtime、
-  symlink targetなどは下部のcompact detailへ置く。読めないentryは消さず理由を示す。
+  folderはlazy展開する。header、query、row、coverageは上段のbounded scroll領域へ置き、名前と種類を
+  優先する。選択entryのpath action、permission、owner／group、size、mtime、symlink targetなどは
+  多数のrowがあっても見失わない下段の固定compact detailへ置く。読めないentryは消さず理由を示す。
 - Context Dockは後からprocessやsystem stateを載せられるmodule boundaryを持つが、空のtabや未実装の
   placeholderは出さない。本taskで利用者へ公開するmoduleはDirectoryだけとする。
 
@@ -501,8 +503,8 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 - `TerminalNativeHierarchyAdapter`へproduct-neutralなtab layout-size resolverとtab-root decoratorを追加した。
   hidden／非選択tabは従来のterminal rootとfull content sizeをそのまま使い、visibleなselected tabだけをterminal rootと
   read-only native `TextEditor`のhorizontal `TwoPaneSplitView`へ構成する。terminal tree自体のownership／dispose順は
-  hierarchyに残し、outer splitとeditorだけをContext Dock presenterが所有する。
-- Dock幅はlogical windowごとに320 ptを既定値として保持し、220–640 ptへ制限した。幅不足時はterminal 240 ptを優先して
+  hierarchyに残し、outer splitとDock内部のvertical split、上段editor、下段details viewをContext Dock presenterが所有する。
+- Dock幅はlogical windowごとに380 ptを既定値として保持し、220–640 ptへ制限した。幅不足時はterminal 240 ptを優先して
   Dockを投影せず、表示可能な場合はdivider 1 ptとDock幅をterminal available sizeから引く。native divider fractionは次の
   reconcileで読み戻してstateへ保持し、hide時はterminalへfull widthを返す。native tab切替時は1 logical windowにつき1組の
   split／editorをselected native tabへだけreparentする。
@@ -513,10 +515,10 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 - 通常のterminal outputごとに`proc_pidinfo`とdirectory projectionを同期実行しないよう、cwd再観測はcontroller-ownedの
   75 ms単一timerへcoalesceする。hierarchy mutationやDock action時は即時同期する。filesystem watcherと永続cacheはまだ
   持たず、第2サブタスクで決めたbackground ownerなしの境界を維持した。
-- native documentはtrusted cwd、入力owner、query、folder-first tree、dotfile、folder／file／symlink／other marker、
-  loading／empty／partial／unavailable／remote-unavailable、選択項目のpath／kind／mode由来permissions／size／mtime／
-  optional uid／gid／symlink targetを英語／日本語で投影する。permission failureを含むmetadata failureは固定表示へ縮退し、
-  terminal textやcommand injectionは使わない。
+- native documentは上段のscrollable editorへtrusted cwd、入力owner、query、folder-first tree、dotfile、folder／file／symlink／
+  other marker、loading／empty／partial／unavailable／remote-unavailableを投影する。下段のfirst responderにならない固定details
+  viewへ選択項目のpath／kind／mode由来permissions／size／mtime／optional uid／gid／symlink targetとpath actionを投影する。
+  permission failureを含むmetadata failureは固定表示へ縮退し、terminal textやcommand injectionは使わない。
 - `Shift+Command+F`のshared actionはDockを表示してnative editorへfirst responderを移し、その後にだけnavigator input
   ownershipを確定する。navigator中のwindow key eventは既存key controllerへ渡し、上下／Page Up／Page Down、query、
   `Command+Left／Right` lazy collapse／expandをPTYへ渡さない。`Escape`はshared focus action経由でstill-live focused paneの

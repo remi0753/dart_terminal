@@ -20,6 +20,9 @@ abstract final class TerminalContextDockDirectoryLimits {
   static const int maximumChildPathBytes = 128 * 1024;
   static const double dividerThickness = 1;
   static const double minimumTerminalWidth = 240;
+  static const double preferredDetailsHeight = 210;
+  static const double minimumNavigatorHeight = 120;
+  static const double minimumDetailsHeight = 140;
   static const Duration terminalChangeDebounce = Duration(milliseconds: 75);
 }
 
@@ -803,7 +806,8 @@ final class _TerminalContextDockDirectoryWindowState {
 }
 
 /// Native sibling Dock projection. The terminal hierarchy retains ownership of
-/// terminal pane/split views; this presenter owns only the outer split/editor.
+/// terminal pane/split views; this presenter owns only the outer/inner Dock
+/// splits and its navigator/details views.
 final class TerminalContextDockDirectoryPresenter {
   TerminalContextDockDirectoryPresenter({
     required this.applicationState,
@@ -837,6 +841,12 @@ final class TerminalContextDockDirectoryPresenter {
     if (_isDisposed) return null;
     final TextEditor? editor = _resources[windowId]?.editor;
     return editor == null || editor.isDisposed ? null : editor.snapshot;
+  }
+
+  String? nativeDetailsTextForWindow(TerminalWindowId windowId) {
+    if (_isDisposed) return null;
+    final TextView? details = _resources[windowId]?.details;
+    return details == null || details.isDisposed ? null : details.text;
   }
 
   bool get canFocusNavigator {
@@ -899,9 +909,10 @@ final class TerminalContextDockDirectoryPresenter {
     final TerminalContextDockWindowSnapshot visibleDock = dock!;
     final _TerminalContextDockNativeResources resources = _resources
         .putIfAbsent(window.id, _TerminalContextDockNativeResources.new);
+    resources.attachContent();
     final bool rootAttachmentChanged =
         !identical(resources.split.firstView, terminalRoot) ||
-        !identical(resources.split.secondView, resources.editor);
+        !identical(resources.split.secondView, resources.contentSplit);
     final bool inputOwnerProjectionChanged =
         !resources.projectedVisible ||
         resources.attachedTabId != tab.id ||
@@ -915,9 +926,19 @@ final class TerminalContextDockDirectoryPresenter {
     if (rootAttachmentChanged) {
       resources.split.setChildren(
         first: terminalRoot,
-        second: resources.editor,
+        second: resources.contentSplit,
       );
     }
+    final double contentUsableHeight =
+        fullSize.height - TerminalContextDockDirectoryLimits.dividerThickness;
+    final double detailsHeight = _effectiveDetailsHeight(fullSize);
+    resources.contentSplit.setPosition(
+      fraction: (contentUsableHeight - detailsHeight) / contentUsableHeight,
+      firstMinimumExtent:
+          TerminalContextDockDirectoryLimits.minimumNavigatorHeight,
+      secondMinimumExtent:
+          TerminalContextDockDirectoryLimits.minimumDetailsHeight,
+    );
     final double usable =
         fullSize.width - TerminalContextDockDirectoryLimits.dividerThickness;
     final double dockWidth = _effectiveDockWidth(visibleDock.width, fullSize);
@@ -1075,11 +1096,17 @@ final class TerminalContextDockDirectoryPresenter {
           directory,
           _pathHandoffSnapshot(dock.windowId),
         );
-    if (resources.document?.text != document.text ||
+    if (resources.document?.navigatorText != document.navigatorText ||
         resources.document?.selection != document.selection) {
       resources.editor.setDocument(
-        TextEditorDocument(text: document.text, selection: document.selection),
+        TextEditorDocument(
+          text: document.navigatorText,
+          selection: document.selection,
+        ),
       );
+    }
+    if (resources.document?.detailsText != document.detailsText) {
+      resources.details.text = document.detailsText;
     }
     final int? selectedLine = document.selectedLineStart;
     resources.editor.setLineHighlight(
@@ -1137,9 +1164,13 @@ final class TerminalContextDockDirectoryPresenter {
 
   static bool _hasRoom(TerminalSplitLayoutSize fullSize) =>
       fullSize.width >=
-      TerminalContextDockDirectoryLimits.minimumTerminalWidth +
-          TerminalContextDockLimits.minimumWidth +
-          TerminalContextDockDirectoryLimits.dividerThickness;
+          TerminalContextDockDirectoryLimits.minimumTerminalWidth +
+              TerminalContextDockLimits.minimumWidth +
+              TerminalContextDockDirectoryLimits.dividerThickness &&
+      fullSize.height >=
+          TerminalContextDockDirectoryLimits.minimumNavigatorHeight +
+              TerminalContextDockDirectoryLimits.minimumDetailsHeight +
+              TerminalContextDockDirectoryLimits.dividerThickness;
 
   static double _effectiveDockWidth(
     double requested,
@@ -1152,6 +1183,16 @@ final class TerminalContextDockDirectoryPresenter {
             TerminalContextDockDirectoryLimits.dividerThickness,
       )
       .toDouble();
+
+  static double _effectiveDetailsHeight(TerminalSplitLayoutSize fullSize) =>
+      TerminalContextDockDirectoryLimits.preferredDetailsHeight
+          .clamp(
+            TerminalContextDockDirectoryLimits.minimumDetailsHeight,
+            fullSize.height -
+                TerminalContextDockDirectoryLimits.minimumNavigatorHeight -
+                TerminalContextDockDirectoryLimits.dividerThickness,
+          )
+          .toDouble();
 
   void _ensureAlive() {
     if (_isDisposed) throw StateError('Context Dock presenter is disposed');
@@ -1171,9 +1212,23 @@ final class _TerminalContextDockNativeResources {
           initiallyEditable: false,
         ),
       ),
+      details = TextView(
+        configuration: const TextViewConfiguration(
+          view: ViewConfiguration(
+            acceptsFirstResponder: false,
+            autoresizesWidth: true,
+            autoresizesHeight: true,
+          ),
+          font: TextViewFont.monospacedSystem(size: 12),
+          padding: TextViewPadding.all(10),
+        ),
+      ),
+      contentSplit = TwoPaneSplitView(axis: SplitViewAxis.vertical),
       split = TwoPaneSplitView(axis: SplitViewAxis.horizontal);
 
   final TextEditor editor;
+  final TextView details;
+  final TwoPaneSplitView contentSplit;
   final TwoPaneSplitView split;
   _TerminalContextDockDocument? document;
   TerminalTabId? attachedTabId;
@@ -1184,22 +1239,32 @@ final class _TerminalContextDockNativeResources {
   bool projectedVisible = false;
   bool inputOwnerProjectionPending = false;
 
+  void attachContent() {
+    if (contentSplit.firstView == null && contentSplit.secondView == null) {
+      contentSplit.setChildren(first: editor, second: details);
+    }
+  }
+
   void dispose() {
     if (!split.isDisposed) split.dispose();
+    if (!contentSplit.isDisposed) contentSplit.dispose();
+    if (!details.isDisposed) details.dispose();
     if (!editor.isDisposed) editor.dispose();
   }
 }
 
 final class _TerminalContextDockDocument {
   const _TerminalContextDockDocument({
-    required this.text,
+    required this.navigatorText,
+    required this.detailsText,
     required this.selection,
     required this.querySelection,
     required this.selectedLineStart,
     required this.selectedResultIndex,
   });
 
-  final String text;
+  final String navigatorText;
+  final String detailsText;
   final TextEditorSelection selection;
   final TextEditorSelection querySelection;
   final int? selectedLineStart;
@@ -1211,8 +1276,8 @@ final class _TerminalContextDockDocument {
     TerminalContextDockDirectorySnapshot? directory,
     TerminalContextDockPathHandoffSnapshot? handoff,
   ) {
-    final StringBuffer buffer = StringBuffer();
-    void line([String value = '']) => buffer.writeln(value);
+    final StringBuffer navigator = StringBuffer();
+    void line([String value = '']) => navigator.writeln(value);
     line(localization.contextDockTitle);
     line(
       dock.navigatorOwnsInput
@@ -1223,10 +1288,10 @@ final class _TerminalContextDockDocument {
       '${localization.contextDockWorkingDirectory}: '
       '${directory?.workingDirectory ?? localization.contextDockUnknown}',
     );
-    final int queryStart = buffer.length;
-    buffer.write('${localization.contextDockSearch}: ');
-    final int queryValueStart = buffer.length;
-    buffer.write(dock.pane.query);
+    final int queryStart = navigator.length;
+    navigator.write('${localization.contextDockSearch}: ');
+    final int queryValueStart = navigator.length;
+    navigator.write(dock.pane.query);
     line();
     line();
     final List<TerminalContextDockDirectoryRow> rows =
@@ -1243,7 +1308,7 @@ final class _TerminalContextDockDocument {
         line(_searchSource(localization, row.searchSource!));
         previousSource = row.searchSource;
       }
-      if (index == selectedIndex) selectedLineStart = buffer.length;
+      if (index == selectedIndex) selectedLineStart = navigator.length;
       final String marker = switch (row.entry.kind) {
         TerminalDirectoryEntryKind.directory => row.isExpanded ? '▾' : '▸',
         TerminalDirectoryEntryKind.file => '·',
@@ -1278,58 +1343,61 @@ final class _TerminalContextDockDocument {
         );
       }
     }
+    final StringBuffer details = StringBuffer();
+    void detailLine([String value = '']) => details.writeln(value);
     if (handoff != null) {
-      line();
-      line(localization.contextDockPathActions);
-      if (handoff.canCopy) line(localization.contextDockCopyPathHint);
-      if (handoff.canInsert) line(localization.contextDockInsertPathHint);
-      if (!handoff.canInsert) {
-        line(_pathBlock(localization, handoff.block));
+      detailLine(localization.contextDockPathActions);
+      if (handoff.canCopy) detailLine(localization.contextDockCopyPathHint);
+      if (handoff.canInsert) {
+        detailLine(localization.contextDockInsertPathHint);
       }
+      if (!handoff.canInsert) {
+        detailLine(_pathBlock(localization, handoff.block));
+      }
+      detailLine();
     }
-    line();
-    line(localization.contextDockDetails);
+    detailLine(localization.contextDockDetails);
     final TerminalContextDockDirectoryRow? selected =
         selectedIndex >= 0 && selectedIndex < rows.length
         ? rows[selectedIndex]
         : null;
     if (selected == null) {
-      line(localization.contextDockNoSelection);
+      detailLine(localization.contextDockNoSelection);
     } else {
       final TerminalDirectoryEntrySnapshot entry = selected.entry;
-      line('${localization.contextDockName}: ${entry.name}');
-      line(
+      detailLine('${localization.contextDockName}: ${entry.name}');
+      detailLine(
         '${localization.contextDockKind}: ${_kind(localization, entry.kind)}',
       );
-      line('${localization.contextDockPath}: ${entry.path}');
+      detailLine('${localization.contextDockPath}: ${entry.path}');
       final TerminalDirectoryEntryMetadataSnapshot metadata = entry.metadata;
       if (metadata.disposition ==
           TerminalDirectoryMetadataDisposition.unavailable) {
-        line(localization.contextDockMetadataUnavailable);
+        detailLine(localization.contextDockMetadataUnavailable);
       } else {
         if (metadata.mode != null) {
-          line(
+          detailLine(
             '${localization.contextDockPermissions}: '
             '${_permissions(metadata.mode!)}',
           );
         }
         if (metadata.size != null) {
-          line('${localization.contextDockSize}: ${metadata.size} B');
+          detailLine('${localization.contextDockSize}: ${metadata.size} B');
         }
         if (metadata.modifiedMicrosecondsSinceEpoch != null) {
-          line(
+          detailLine(
             '${localization.contextDockModified}: '
             '${DateTime.fromMicrosecondsSinceEpoch(metadata.modifiedMicrosecondsSinceEpoch!).toLocal().toIso8601String()}',
           );
         }
         if (metadata.ownerUserId != null || metadata.ownerGroupId != null) {
-          line(
+          detailLine(
             '${localization.contextDockOwner}: '
             '${metadata.ownerUserId ?? '-'}:${metadata.ownerGroupId ?? '-'}',
           );
         }
         if (metadata.symlinkTarget != null) {
-          line(
+          detailLine(
             '${localization.contextDockLinkTarget}: '
             '${metadata.symlinkTarget}',
           );
@@ -1345,7 +1413,8 @@ final class _TerminalContextDockDocument {
         ? TextEditorSelection(start: selectedLineStart)
         : TextEditorSelection(start: queryStart);
     return _TerminalContextDockDocument(
-      text: buffer.toString(),
+      navigatorText: navigator.toString(),
+      detailsText: details.toString(),
       selection: selection,
       querySelection: querySelection,
       selectedLineStart: selectedLineStart,

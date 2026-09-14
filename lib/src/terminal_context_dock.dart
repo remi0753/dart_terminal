@@ -11,7 +11,7 @@ abstract final class TerminalContextDockLimits {
   static const int maximumResults = 512;
   static const int defaultPageStep = 10;
   static const double minimumWidth = 220;
-  static const double defaultWidth = 320;
+  static const double defaultWidth = 380;
   static const double maximumWidth = 640;
 }
 

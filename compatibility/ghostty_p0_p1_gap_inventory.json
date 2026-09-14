@@ -4,7 +4,7 @@
   "status": "closed-no-actionable-p0-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "eb9af5f58f3a3dbf3099c7b740163b538626a00229eea7c60c1e1787b8489890",
+    "sha256": "12453e6e29de63b9061ae18cf92fff35666dc6994d4563822bcd11b0fd1ca10f",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "fc503317effa18e1bff12fbe47f2b116822125d50b55197aa52d5f2d51ee0124"
+      "sha256": "6d8fdbaa842bb57a7ed278be49691d9a8d225ad8de461d290f2cfe6069022bb5"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -196,7 +196,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "ee8c33ff91ba1f3b67f60a9d4265a4a4a413809aa9ba41c5863f6848e7ff1e3e"
+      "sha256": "03e4fd5c53ed2e60fae39483ad8067658632e0f54520ee13e818ab8d374004cf"
     },
     {
       "path": "lib/src/terminal_input/terminal_prompt_click.dart",
@@ -980,7 +980,7 @@
       "phase": "7",
       "acceptance_sha256": "86c812860101d538069d21ea622ee7e1492a50281a409617f3555d61a1621cf8",
       "pinned_evidence_sha256": "d06b113165de042a70c8650386ba0118223e7e40c23fc3c96b5f541d1a712c80",
-      "current_sha256": "bce51568f6c7f604adcaaad4485ca07c07699d1a5ac1a890d5fd6315966c1071",
+      "current_sha256": "dad646e158fcccdfee2f553ee3f8cb855baf672468f5bffce767d793df7e73cf",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -1130,7 +1130,7 @@
       "phase": "5/10",
       "acceptance_sha256": "9bc981b4f5521c79b9ef92287cc6480273c2cc59f23610bf9a6e46aa95ef44e1",
       "pinned_evidence_sha256": "9b115a1996d98de375e09ece7db4100580384189a66c5521f11a200adb2a1070",
-      "current_sha256": "217a899cd45b9392e4acf35ea97ffb671a11aa703a2302a952f0a57f2ec9ea14",
+      "current_sha256": "f50886f7982393f148e377646d0fcf73b07142bc17d9483105dacc2a319faa40",
       "classification": "accepted",
       "gap_ids": []
     },
