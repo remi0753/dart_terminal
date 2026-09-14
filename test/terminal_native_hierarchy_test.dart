@@ -193,7 +193,10 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
         focusNavigator: presenter.focusNavigator,
         focusTerminal: presenter.focusTerminal,
         canFocusNavigator: () => presenter.canFocusNavigator,
-        onChanged: reconcile,
+        onChanged: () {
+          directory.synchronize();
+          reconcile();
+        },
       );
   dispatcher = TerminalActionDispatcher(
     catalog: TerminalActionCatalog.standard(),
@@ -213,10 +216,15 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   );
   _expect(
     bindings.firstResponders[windowHandle] == editorHandle &&
-        bindings.windowKeyEventRoutings[windowHandle] == 1,
+        bindings.windowKeyEventRoutings[windowHandle] == 1 &&
+        bindings.textEditorEditable[editorHandle] == true &&
+        bindings.textEditorSelectionLengths[editorHandle] == 0 &&
+        bindings.texts[editorHandle]!.contains('モード: 検索'),
     'navigator focus sends key events only to Dart without targeting the PTY '
-    'or read-only AppKit editor',
+    'while the native editor exposes a zero-length blinking search caret',
   );
+  final int searchCaretStart =
+      bindings.textEditorSelectionStarts[editorHandle]!;
   final int selectionRevealBaseline =
       bindings.textEditorSelectionRevealCounts[editorHandle]!;
   dock.setSelectedResultIndex(
@@ -226,12 +234,33 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   reconcile();
   _expect(
     bindings.texts[detailsHandle]!.contains('/root/result-511.txt') &&
-        bindings.textEditorSelectionStarts[editorHandle]! > 0 &&
+        bindings.textEditorSelectionStarts[editorHandle] == searchCaretStart &&
+        bindings.textEditorSelectionLengths[editorHandle] == 0 &&
         bindings.textEditorSelectionRevealCounts[editorHandle] ==
             selectionRevealBaseline + 1 &&
         identical(content.secondView, details),
     'moving through a long list scrolls only the navigator and updates the '
     'same pinned details view',
+  );
+  await dispatcher.dispatch(TerminalActionId.moveInDirectoryNavigator);
+  _expect(
+    bindings.firstResponders[windowHandle] == editorHandle &&
+        bindings.windowKeyEventRoutings[windowHandle] == 1 &&
+        bindings.textEditorEditable[editorHandle] == false &&
+        bindings.texts[editorHandle]!.contains('モード: ナビゲーション') &&
+        bindings.texts[editorHandle]!.contains('移動: ↑↓ 選択'),
+    'Move retains navigator ownership but removes the query caret',
+  );
+  await dispatcher.dispatch(TerminalActionId.goToFileOrFolder);
+  dock.setQuery(logicalWindow.id, 'result-2', requireNavigatorInput: true);
+  reconcile();
+  _expect(
+    bindings.firstResponders[windowHandle] == editorHandle &&
+        bindings.textEditorEditable[editorHandle] == true &&
+        bindings.textEditorSelectionLengths[editorHandle] == 0 &&
+        bindings.texts[editorHandle]!.contains('モード: 移動先') &&
+        bindings.texts[editorHandle]!.contains('移動先: result-2'),
+    'Go To keeps the current tree and exposes its own native input caret',
   );
   final TerminalContextDockKeyResult escaped = await keys.handle(
     logicalWindow.id,
@@ -251,7 +280,8 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
             TerminalContextDockKeyDisposition.terminalFocusDispatched &&
         bindings.firstResponders[windowHandle] ==
             bindings.handleFor(adapter.resourcesForPane(pane.id)!.view) &&
-        bindings.windowKeyEventRoutings[windowHandle] == 2,
+        bindings.windowKeyEventRoutings[windowHandle] == 2 &&
+        bindings.textEditorEditable[editorHandle] == false,
     'Escape returns first responder and key ownership to the live terminal',
   );
 
@@ -299,6 +329,8 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
         (dock.snapshotForWindow(logicalWindow.id)!.width - 399.5).abs() <
             0.001 &&
         dock.snapshotForWindow(logicalWindow.id)!.navigatorOwnsInput &&
+        bindings.textEditorEditable[editorHandle] == true &&
+        bindings.textEditorSelectionLengths[editorHandle] == 0 &&
         bindings.firstResponders[bindings.handleFor(selectedNativeWindow)] ==
             editorHandle &&
         bindings.windowKeyEventRoutings[bindings.handleFor(

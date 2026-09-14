@@ -45,7 +45,7 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 40個のstable application actionを共有するbounded searchable registry、動的な
+- 42個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
@@ -65,9 +65,11 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   path操作は下段の固定read-only領域へ表示する。
   Option-Shift-CでDockだけを表示／非表示にし、terminal／Navigatorのどちらが入力中でも同じ
   shared actionを実行する。tree上のfolderはReturnで開閉でき、Command-Right／Leftでも展開／折り畳みできる。
-  Shift-Command-Fでqueryへ移り、同じlistがcurrent subtree、recent location、明示root、
+  Shift-Command-FでSearchへ移るとquery末尾にnativeの点滅caretが現れ、同じlistがcurrent subtree、recent location、明示root、
   Spotlight metadata indexのprogressive検索結果へ切り替わる。source/coverageとpartial・
-  unavailableを区別し、filesystem rootを暗黙にwalkしない。Escapeでqueryを保ったまま
+  unavailableを区別し、filesystem rootを暗黙にwalkしない。Shift-Command-GのGo Toはtreeを保ったまま一致rowへ選択を移し、
+  Shift-Command-MのMoveはquery入力を止めてtree navigationだけを所有する。SearchとGo Toのqueryはpaneごとに独立して保持する。
+  Escapeでmodeとqueryを保ったまま
   terminalへ戻り、矢印/Page/Command+矢印の操作中はPTY write 0を保つ
 - NavigatorのCommand-Cは選択したabsolute pathだけをcopyし、Option-Returnは既存paste
   admissionでshell literalにquoteした1 pathを改行なしで挿入してterminalへ戻る。自動cdや

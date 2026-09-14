@@ -110,7 +110,9 @@ Future<void> _testWindowPaneStateAndBounds() async {
   _expect(
     dock.snapshotForWindow(window.id)!.isVisible &&
         !dock.snapshotForWindow(window.id)!.navigatorOwnsInput &&
-        dock.confirmNavigatorInput(request),
+        dock.confirmNavigatorInput(request) &&
+        dock.snapshotForWindow(window.id)!.pane.navigatorMode ==
+            TerminalContextDockNavigatorMode.search,
     'search visibility precedes generation-bound navigator ownership',
   );
   dock
@@ -125,6 +127,49 @@ Future<void> _testWindowPaneStateAndBounds() async {
         snapshot.pane.selectedResultIndex == 2 &&
         snapshot.width == 412,
     'bounded query and result selection belong to the target pane',
+  );
+
+  final TerminalContextDockFocusRequest goToRequest = dock
+      .requestNavigatorFocus(
+        window.id,
+        firstPane,
+        TerminalContextDockNavigatorMode.goTo,
+      );
+  _expect(dock.confirmNavigatorInput(goToRequest), 'Go To focus is current');
+  dock.setQuery(window.id, 'beta', requireNavigatorInput: true);
+  snapshot = dock.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.pane.navigatorMode == TerminalContextDockNavigatorMode.goTo &&
+        snapshot.pane.query == 'beta' &&
+        snapshot.pane.searchQuery == 'alpha' &&
+        snapshot.pane.goToQuery == 'beta',
+    'Search and Go To retain independent pane-local queries',
+  );
+  final TerminalContextDockFocusRequest moveRequest = dock
+      .requestNavigatorFocus(
+        window.id,
+        firstPane,
+        TerminalContextDockNavigatorMode.move,
+      );
+  _expect(dock.confirmNavigatorInput(moveRequest), 'Move focus is current');
+  _expect(
+    dock.snapshotForWindow(window.id)!.pane.query.isEmpty,
+    'Move exposes no editable query',
+  );
+  _expectThrows<StateError>(
+    () => dock.setQuery(window.id, 'not accepted'),
+    'Move rejects direct query mutation',
+  );
+  final TerminalContextDockFocusRequest restoredSearch = dock
+      .requestNavigatorFocus(
+        window.id,
+        firstPane,
+        TerminalContextDockNavigatorMode.search,
+      );
+  _expect(
+    dock.confirmNavigatorInput(restoredSearch) &&
+        dock.snapshotForWindow(window.id)!.pane.query == 'alpha',
+    'returning to Search restores its retained query',
   );
 
   final TerminalPane second = await harness.state.splitPane(
@@ -312,6 +357,11 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
     'Return toggle leaves a selected file unchanged',
   );
   dock.setSelectedResultIndex(window.id, 0);
+  dock.requestNavigatorFocus(
+    window.id,
+    firstPane,
+    TerminalContextDockNavigatorMode.search,
+  );
   dock.setQuery(window.id, 'readme');
   controller.synchronize();
   await _waitUntil(() => controller.activeOperationCount == 0);
@@ -342,6 +392,37 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
         snapshot.rows.length == 4 &&
         snapshot.rows.first.isExpanded,
     'clearing query restores the retained tree expansion context',
+  );
+  dock.requestNavigatorFocus(
+    window.id,
+    firstPane,
+    TerminalContextDockNavigatorMode.goTo,
+  );
+  dock.setQuery(window.id, 'readme');
+  controller.synchronize();
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    !snapshot.isSearch &&
+        snapshot
+                .rows[dock
+                    .snapshotForWindow(window.id)!
+                    .pane
+                    .selectedResultIndex]
+                .entry
+                .name ==
+            'readme.md',
+    'Go To moves selection to a visible match without replacing the tree',
+  );
+  dock.requestNavigatorFocus(
+    window.id,
+    firstPane,
+    TerminalContextDockNavigatorMode.move,
+  );
+  _expect(
+    dock.snapshotForWindow(window.id)!.pane.searchQuery.isEmpty &&
+        dock.snapshotForWindow(window.id)!.pane.goToQuery == 'readme' &&
+        !controller.snapshotForWindow(window.id)!.isSearch,
+    'Move retains mode queries while exposing only the current tree',
   );
 
   final TerminalPane secondPane = await harness.state.splitPane(
@@ -543,6 +624,10 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
 
   _expect(
     dispatcher.snapshot(TerminalActionId.searchFilesAndFolders).isEnabled &&
+        dispatcher.snapshot(TerminalActionId.goToFileOrFolder).isEnabled &&
+        dispatcher
+            .snapshot(TerminalActionId.moveInDirectoryNavigator)
+            .isEnabled &&
         dispatcher.snapshot(TerminalActionId.toggleContextDock).isEnabled &&
         !dispatcher.snapshot(TerminalActionId.focusTerminal).isEnabled,
     'only valid initial Context Dock actions are available',
@@ -571,8 +656,21 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
     navigatorFocus.length == 2 &&
         snapshot.navigatorOwnsInput &&
         snapshot.pane.query == 'retained' &&
-        snapshot.pane.querySelectionGeneration > firstSelectionGeneration,
-    'repeated search reselects the retained query without toggling focus',
+        snapshot.pane.querySelectionGeneration == firstSelectionGeneration,
+    'repeated search preserves the retained query and caret without toggling focus',
+  );
+  await _expectExecuted(dispatcher, TerminalActionId.goToFileOrFolder);
+  dock.setQuery(window.id, 'folder', requireNavigatorInput: true);
+  await _expectExecuted(dispatcher, TerminalActionId.moveInDirectoryNavigator);
+  snapshot = dock.snapshotForWindow(window.id)!;
+  _expect(
+    navigatorFocus.length == 4 &&
+        snapshot.navigatorOwnsInput &&
+        snapshot.pane.navigatorMode == TerminalContextDockNavigatorMode.move &&
+        snapshot.pane.query.isEmpty &&
+        snapshot.pane.searchQuery == 'retained' &&
+        snapshot.pane.goToQuery == 'folder',
+    'Go To and Move switch modes while retaining their pane-local queries',
   );
 
   failTerminalFocus = true;
@@ -588,7 +686,8 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
   _expect(
     snapshot.isVisible &&
         !snapshot.navigatorOwnsInput &&
-        snapshot.pane.query == 'retained' &&
+        snapshot.pane.searchQuery == 'retained' &&
+        snapshot.pane.goToQuery == 'folder' &&
         terminalFocus.length == 1,
     'focus-terminal preserves Dock visibility and query state',
   );
@@ -607,6 +706,10 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
   canFocusNavigator = false;
   _expect(
     !dispatcher.snapshot(TerminalActionId.searchFilesAndFolders).isEnabled &&
+        !dispatcher.snapshot(TerminalActionId.goToFileOrFolder).isEnabled &&
+        !dispatcher
+            .snapshot(TerminalActionId.moveInDirectoryNavigator)
+            .isEnabled &&
         (await dispatcher.dispatch(TerminalActionId.searchFilesAndFolders))
                 .disposition ==
             TerminalActionDispatchDisposition.unavailable,
@@ -702,6 +805,42 @@ Future<void> _testNavigatorKeyRoutingNeverFallsThrough() async {
         TerminalContextDockKeyDisposition.querySelectionRequested,
     'Command-A requests whole-query selection',
   );
+
+  await _expectExecuted(dispatcher, TerminalActionId.goToFileOrFolder);
+  await route(_key(keyCode: 5, characters: 'g'));
+  _expect(
+    dock.snapshotForWindow(window.id)!.pane.navigatorMode ==
+            TerminalContextDockNavigatorMode.goTo &&
+        dock.snapshotForWindow(window.id)!.pane.searchQuery == 'a' &&
+        dock.snapshotForWindow(window.id)!.pane.goToQuery == 'g',
+    'Go To input edits only its independent query',
+  );
+  await _expectExecuted(dispatcher, TerminalActionId.moveInDirectoryNavigator);
+  final TerminalContextDockKeyResult moveText = await route(
+    _key(keyCode: 6, characters: 'z'),
+  );
+  final TerminalContextDockKeyResult moveBackspace = await route(
+    _key(keyCode: 51),
+  );
+  final TerminalContextDockKeyResult moveSelectAll = await route(
+    _key(
+      keyCode: 0,
+      characters: 'a',
+      modifiers: const ModifierKeys(ModifierKeys.commandBit),
+    ),
+  );
+  _expect(
+    moveText.disposition == TerminalContextDockKeyDisposition.consumed &&
+        moveBackspace.disposition ==
+            TerminalContextDockKeyDisposition.consumed &&
+        moveSelectAll.disposition ==
+            TerminalContextDockKeyDisposition.consumed &&
+        dock.snapshotForWindow(window.id)!.pane.query.isEmpty &&
+        dock.snapshotForWindow(window.id)!.pane.searchQuery == 'a' &&
+        dock.snapshotForWindow(window.id)!.pane.goToQuery == 'g',
+    'Move consumes editing keys without mutating either query or the PTY',
+  );
+  await _expectExecuted(dispatcher, TerminalActionId.searchFilesAndFolders);
 
   dock.setResultCount(window.id, 30);
   await route(_key(keyCode: 125));

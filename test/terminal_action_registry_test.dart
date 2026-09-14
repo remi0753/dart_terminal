@@ -149,6 +149,8 @@ void _testStableStandardCatalog() {
         <TerminalActionId>[
           TerminalActionId.toggleContextDock,
           TerminalActionId.searchFilesAndFolders,
+          TerminalActionId.goToFileOrFolder,
+          TerminalActionId.moveInDirectoryNavigator,
           TerminalActionId.focusTerminal,
           TerminalActionId.quickLook,
           TerminalActionId.togglePaneZoom,
@@ -171,6 +173,22 @@ void _testStableStandardCatalog() {
             'shift+command+f' &&
         !catalog
             .actionForId(TerminalActionId.searchFilesAndFolders)!
+            .restoresTerminalFocusAfterInvocation &&
+        catalog
+                .actionForId(TerminalActionId.goToFileOrFolder)!
+                .shortcut!
+                .identity ==
+            'shift+command+g' &&
+        !catalog
+            .actionForId(TerminalActionId.goToFileOrFolder)!
+            .restoresTerminalFocusAfterInvocation &&
+        catalog
+                .actionForId(TerminalActionId.moveInDirectoryNavigator)!
+                .shortcut!
+                .identity ==
+            'shift+command+m' &&
+        !catalog
+            .actionForId(TerminalActionId.moveInDirectoryNavigator)!
             .restoresTerminalFocusAfterInvocation &&
         catalog.actionForId(TerminalActionId.focusTerminal)!.shortcut == null &&
         catalog
@@ -543,9 +561,16 @@ void _testSearchOrderingAndBounds() {
     'Quick Terminal is searchable by its global presentation vocabulary',
   );
   _expect(
-    dispatcher.search('file folder path').first.definition.id ==
+    dispatcher.search('search files folders find').first.definition.id ==
         TerminalActionId.searchFilesAndFolders,
     'file and folder search is discoverable through the shared palette',
+  );
+  _expect(
+    dispatcher.search('go to file folder jump').first.definition.id ==
+            TerminalActionId.goToFileOrFolder &&
+        dispatcher.search('move directory tree browse').first.definition.id ==
+            TerminalActionId.moveInDirectoryNavigator,
+    'Go To and Move modes are discoverable through the shared palette',
   );
   _expect(
     dispatcher.search('password privacy').first.definition.id ==

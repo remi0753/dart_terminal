@@ -1469,7 +1469,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 追加機能
 
-- [x] focused paneに追従するContext Dockとlocal file／folder navigator
+- [ ] focused paneに追従するContext Dockとlocal file／folder navigator
   （分割、input ownership、filesystem境界、完了条件は
   [`docs/phase7/context-dock-file-navigator.md`](docs/phase7/context-dock-file-navigator.md)
   を参照して順に実施する）
@@ -1489,6 +1489,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] Context Dockの既定toggle shortcutとReturnによるfolder開閉
     （実施時に
     [`docs/phase7/context-dock-toggle-shortcut-folder-collapse.md`](docs/phase7/context-dock-toggle-shortcut-folder-collapse.md)
+    を参照する）
+  - [x] NavigatorのSearch／Go To／Move modeとnative input caret
+    （実施時に
+    [`docs/phase7/context-dock-navigator-modes.md`](docs/phase7/context-dock-navigator-modes.md)
+    を参照する）
+  - [ ] Search／Go To resultからworking-directory treeへのrevealとfolder展開
+    （実施時に
+    [`docs/phase7/context-dock-navigator-modes.md`](docs/phase7/context-dock-navigator-modes.md)
     を参照する）
 
 ### 主要ゴール後の低優先 follow-up

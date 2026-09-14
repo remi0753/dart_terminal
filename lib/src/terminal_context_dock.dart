@@ -34,23 +34,38 @@ final class TerminalContextDockLimitException implements Exception {
 
 enum TerminalContextDockInputOwner { terminal, navigator }
 
+enum TerminalContextDockNavigatorMode { search, goTo, move }
+
 enum TerminalContextDockTreeIntent { collapse, expand, toggle }
 
 /// Immutable search/list state retained independently for one terminal pane.
 final class TerminalContextDockPaneSnapshot {
   const TerminalContextDockPaneSnapshot({
     required this.paneId,
-    required this.query,
+    required this.navigatorMode,
+    required this.searchQuery,
+    required this.goToQuery,
     required this.resultCount,
     required this.selectedResultIndex,
     required this.querySelectionGeneration,
   });
 
   final PaneId paneId;
-  final String query;
+  final TerminalContextDockNavigatorMode navigatorMode;
+  final String searchQuery;
+  final String goToQuery;
   final int resultCount;
   final int selectedResultIndex;
   final int querySelectionGeneration;
+
+  String get query => switch (navigatorMode) {
+    TerminalContextDockNavigatorMode.search => searchQuery,
+    TerminalContextDockNavigatorMode.goTo => goToQuery,
+    TerminalContextDockNavigatorMode.move => '',
+  };
+
+  bool get acceptsQuery =>
+      navigatorMode != TerminalContextDockNavigatorMode.move;
 }
 
 /// Immutable window-owned Context Dock presentation and input state.
@@ -182,13 +197,14 @@ final class TerminalContextDockState {
     return changed;
   }
 
-  /// Makes the Dock visible and requests selection of the active query.
+  /// Makes the Dock visible and requests native focus for one navigator mode.
   ///
   /// Input remains with its current owner until [confirmNavigatorInput]
   /// proves that the generation-bound native focus request succeeded.
-  TerminalContextDockFocusRequest requestSearchFocus(
+  TerminalContextDockFocusRequest requestNavigatorFocus(
     TerminalWindowId windowId,
     PaneId paneId,
+    TerminalContextDockNavigatorMode mode,
   ) {
     final _TerminalContextDockWindowState window = _requireTarget(
       windowId,
@@ -196,7 +212,12 @@ final class TerminalContextDockState {
     );
     final _TerminalContextDockPaneState pane = window.panes[paneId]!;
     window.isVisible = true;
-    pane.querySelectionGeneration++;
+    if (pane.navigatorMode != mode) {
+      pane
+        ..navigatorMode = mode
+        ..resultCount = 0
+        ..selectedResultIndex = -1;
+    }
     window.generation++;
     _validate();
     return TerminalContextDockFocusRequest(
@@ -206,6 +227,15 @@ final class TerminalContextDockState {
       querySelectionGeneration: pane.querySelectionGeneration,
     );
   }
+
+  TerminalContextDockFocusRequest requestSearchFocus(
+    TerminalWindowId windowId,
+    PaneId paneId,
+  ) => requestNavigatorFocus(
+    windowId,
+    paneId,
+    TerminalContextDockNavigatorMode.search,
+  );
 
   /// Transfers input only when no hierarchy or Dock mutation made the request
   /// stale while native focus was being acquired.
@@ -277,9 +307,12 @@ final class TerminalContextDockState {
     }
     _validateQuery(value);
     final _TerminalContextDockPaneState pane = window.targetPane;
+    if (!pane.acceptsQuery) {
+      throw StateError('Move mode does not accept a query');
+    }
     if (pane.query == value) return;
     pane
-      ..query = value
+      ..setQuery(value)
       ..resultCount = 0
       ..selectedResultIndex = -1;
     window.generation++;
@@ -310,6 +343,7 @@ final class TerminalContextDockState {
 
   void requestQuerySelection(TerminalWindowId windowId) {
     final _TerminalContextDockWindowState window = _requireNavigator(windowId);
+    if (!window.targetPane.acceptsQuery) return;
     window.targetPane.querySelectionGeneration++;
     window.generation++;
     _validate();
@@ -416,7 +450,9 @@ final class TerminalContextDockState {
       generation: window.generation,
       pane: TerminalContextDockPaneSnapshot(
         paneId: pane.paneId,
-        query: pane.query,
+        navigatorMode: pane.navigatorMode,
+        searchQuery: pane.searchQuery,
+        goToQuery: pane.goToQuery,
         resultCount: pane.resultCount,
         selectedResultIndex: pane.selectedResultIndex,
         querySelectionGeneration: pane.querySelectionGeneration,
@@ -456,7 +492,8 @@ final class TerminalContextDockState {
         throw StateError('Context Dock width is outside policy bounds');
       }
       for (final _TerminalContextDockPaneState pane in window.panes.values) {
-        _validateQuery(pane.query);
+        _validateQuery(pane.searchQuery);
+        _validateQuery(pane.goToQuery);
         if (pane.resultCount < 0 ||
             pane.resultCount > TerminalContextDockLimits.maximumResults ||
             (pane.resultCount == 0 && pane.selectedResultIndex != -1) ||
@@ -505,10 +542,35 @@ final class _TerminalContextDockPaneState {
   _TerminalContextDockPaneState(this.paneId);
 
   final PaneId paneId;
-  String query = '';
+  TerminalContextDockNavigatorMode navigatorMode =
+      TerminalContextDockNavigatorMode.move;
+  String searchQuery = '';
+  String goToQuery = '';
   int resultCount = 0;
   int selectedResultIndex = -1;
   int querySelectionGeneration = 0;
+
+  String get query => switch (navigatorMode) {
+    TerminalContextDockNavigatorMode.search => searchQuery,
+    TerminalContextDockNavigatorMode.goTo => goToQuery,
+    TerminalContextDockNavigatorMode.move => '',
+  };
+
+  bool get acceptsQuery =>
+      navigatorMode != TerminalContextDockNavigatorMode.move;
+
+  void setQuery(String value) {
+    switch (navigatorMode) {
+      case TerminalContextDockNavigatorMode.search:
+        searchQuery = value;
+        return;
+      case TerminalContextDockNavigatorMode.goTo:
+        goToQuery = value;
+        return;
+      case TerminalContextDockNavigatorMode.move:
+        throw StateError('Move mode does not accept a query');
+    }
+  }
 }
 
 typedef TerminalContextDockFocusRequester = void Function(
@@ -545,8 +607,18 @@ final class TerminalContextDockActionCoordinator {
       <TerminalActionRegistration>[
         TerminalActionRegistration(
           id: TerminalActionId.searchFilesAndFolders,
-          isAvailable: _canSearch,
+          isAvailable: _canEnterNavigator,
           handler: _search,
+        ),
+        TerminalActionRegistration(
+          id: TerminalActionId.goToFileOrFolder,
+          isAvailable: _canEnterNavigator,
+          handler: _goTo,
+        ),
+        TerminalActionRegistration(
+          id: TerminalActionId.moveInDirectoryNavigator,
+          isAvailable: _canEnterNavigator,
+          handler: _moveInNavigator,
         ),
         TerminalActionRegistration(
           id: TerminalActionId.focusTerminal,
@@ -569,7 +641,8 @@ final class TerminalContextDockActionCoordinator {
     _isDisposed = true;
   }
 
-  bool _canSearch() => _activeTarget() != null && _readCanFocusNavigator();
+  bool _canEnterNavigator() =>
+      _activeTarget() != null && _readCanFocusNavigator();
 
   bool _canReturnToTerminal() {
     final _TerminalContextDockTarget? target = _activeTarget();
@@ -582,14 +655,20 @@ final class TerminalContextDockActionCoordinator {
 
   bool _canToggle() => _activeTarget() != null;
 
-  void _search() {
+  void _search() => _focusMode(TerminalContextDockNavigatorMode.search);
+
+  void _goTo() => _focusMode(TerminalContextDockNavigatorMode.goTo);
+
+  void _moveInNavigator() => _focusMode(TerminalContextDockNavigatorMode.move);
+
+  void _focusMode(TerminalContextDockNavigatorMode mode) {
     synchronize();
     final _TerminalContextDockTarget target = _requireActiveTarget();
     if (!_readCanFocusNavigator()) {
       throw StateError('Context Dock navigator focus is unavailable');
     }
     final TerminalContextDockFocusRequest requested = dockState
-        .requestSearchFocus(target.windowId, target.paneId);
+        .requestNavigatorFocus(target.windowId, target.paneId, mode);
     _onChanged?.call();
     final _TerminalContextDockTarget? projected = _activeTarget();
     final TerminalContextDockWindowSnapshot? projectedDock = dockState
@@ -600,6 +679,7 @@ final class TerminalContextDockActionCoordinator {
         projectedDock == null ||
         !projectedDock.isVisible ||
         projectedDock.targetPaneId != requested.paneId ||
+        projectedDock.pane.navigatorMode != mode ||
         projectedDock.pane.querySelectionGeneration !=
             requested.querySelectionGeneration) {
       throw StateError('Context Dock navigator projection became stale');
@@ -785,6 +865,11 @@ final class TerminalContextDockKeyController {
     if (_hasNoRoutingModifiers(key)) {
       switch (key.physicalKey) {
         case TerminalPhysicalKey.backspace:
+          if (!snapshot.pane.acceptsQuery) {
+            return const TerminalContextDockKeyResult(
+              disposition: TerminalContextDockKeyDisposition.consumed,
+            );
+          }
           if (state.deleteLastQueryScalar(windowId)) onChanged?.call();
           return const TerminalContextDockKeyResult(
             disposition: TerminalContextDockKeyDisposition.queryUpdated,
@@ -812,6 +897,11 @@ final class TerminalContextDockKeyController {
         !key.modifiers.shift) {
       switch (key.physicalKey) {
         case TerminalPhysicalKey.keyA:
+          if (!snapshot.pane.acceptsQuery) {
+            return const TerminalContextDockKeyResult(
+              disposition: TerminalContextDockKeyDisposition.consumed,
+            );
+          }
           state.requestQuerySelection(windowId);
           onChanged?.call();
           return const TerminalContextDockKeyResult(
@@ -851,6 +941,7 @@ final class TerminalContextDockKeyController {
     }
     if (!key.modifiers.command &&
         !key.modifiers.control &&
+        snapshot.pane.acceptsQuery &&
         key.text.isNotEmpty &&
         key.text.runes.every(
           (int scalar) => scalar >= 0x20 && scalar != 0x7f,

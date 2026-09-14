@@ -74,8 +74,11 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 | --- | --- | --- | --- |
 | Terminal owns input | 通常のtext／navigation key | 従来どおりfocused paneへencode | 従来どおり |
 | Terminal／Navigator owns input | `Option+Shift+C` | Dock visibilityをtoggle。非表示時はterminalへfocusを戻す | 0 byte |
-| Terminal owns input | `Shift+Command+F` | Dockを表示しqueryへfocus、queryを全選択 | 0 byte |
-| Navigator owns input | printable／Delete／Command+A | queryを編集して結果を更新 | 0 byte |
+| Terminal owns input | `Shift+Command+F` | Dockを表示してSearchへfocusし、query末尾に点滅caretを表示 | 0 byte |
+| Terminal owns input | `Shift+Command+G` | Dockを表示してGo Toへfocusし、treeを保ったまま一致rowへ移動 | 0 byte |
+| Terminal owns input | `Shift+Command+M` | Dockを表示してMoveへfocusし、tree navigationだけを有効化 | 0 byte |
+| Search／Go To owns input | printable／Delete／Command+A | modeごとの独立queryだけを編集 | 0 byte |
+| Move owns input | printable／Delete／Command+A | queryを変更せず消費 | 0 byte |
 | Navigator owns input | Up／Down、Page Up／Down | result selectionだけを移動 | 0 byte |
 | Navigator owns input | Return | tree時だけselected folderをcollapse／expand | 0 byte |
 | Navigator owns input | Command+Left／Right | tree時だけfolderまたはancestorをcollapse／selected folderをexpand | 0 byte |
@@ -85,10 +88,13 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 
 - `Option+Shift+C`はstable action `view.toggle-context-dock`のnative menu shortcutとし、terminal／Navigatorの
   first responderより先にexactly onceで捕捉する。Navigatorからhideする場合はstill-live terminalへinputを戻してからDockを閉じる。
-- `Shift+Command+F`はstable action `view.search-files-and-folders`としてView menu、Command
+- `Shift+Command+F`、`Shift+Command+G`、`Shift+Command+M`はそれぞれstable action
+  `view.search-files-and-folders`、`view.goto-file-or-folder`、`view.move-in-directory-navigator`としてView menu、Command
   Palette、keybind referenceで共有する。native shortcutがどのfirst responderからもexactly onceで
   捕捉し、terminal bytesへfall throughしないようにする。
-- Navigatorで再度`Shift+Command+F`を押した場合はqueryを全選択するだけで、terminalへtoggleしない。
+- Search／Go Toではnative editorをeditableかつDart-only key routingにし、zero-length selectionをquery末尾へ置いてAppKit標準の
+  点滅caretを表示する。Moveでは同じeditorをfirst responderに保ちながらread-onlyへ戻し、文字編集の見かけを出さない。
+- Navigatorで同じmode shortcutを再度押した場合はqueryとcaretを保持してfocusを再確認するだけで、terminalへtoggleしない。
   戻る方向は別の`view.focus-terminal` actionへ固定し、同じchordの状態依存挙動を避ける。
 - `Escape`はquery clearを先に要求せず、常に1回で`view.focus-terminal`を実行する。Dock、query、
   results、selectionは残り、次の`Shift+Command+F`で同じ調査へ戻れる。

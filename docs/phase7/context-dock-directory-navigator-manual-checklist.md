@@ -20,8 +20,10 @@
 
 - [ ] Terminal focus中にOption-Shift-Cを押すたびDockだけが表示／非表示になり、terminalへ文字や制御byteが入らない。
 - [ ] Navigator focus中のOption-Shift-Cはterminalへfocusを安全に戻してDockを閉じ、再度押すとquery／tree contextを保持して表示する。
-- [ ] Terminal focus中にShift-Command-Fを1回押すと右Dockが現れ、queryが選択される。terminalへ文字は入らない。
-- [ ] 文字入力、Delete、Command-Aはqueryだけを変え、Up/Down/Page Up/Page Downはresult selectionだけを動かす。
+- [ ] Terminal focus中にShift-Command-Fを1回押すと右Dockが現れ、Search query末尾にnativeの入力caretが表示され、2回以上点滅する。terminalへ文字は入らない。
+- [ ] Shift-Command-GでGo Toへ移るとtreeを保ったまま独立queryを入力でき、表示中の一致file/folderへselectionが移る。
+- [ ] Shift-Command-MでMoveへ移るとquery caretが消え、文字、Delete、Command-AはqueryもPTYも変更せず、Up/Down/Page Up/Page Downだけがselectionを動かす。
+- [ ] Search／Go Toの文字入力、Delete、Command-Aは現在modeのqueryだけを変え、modeを往復しても両queryを個別に保持する。
 - [ ] 空queryでReturnまたはCommand-Rightを押すとfolderがDock内で展開し、同じfolder上の再度のReturnで閉じる。自動`cd`やcommand実行は起きない。
 - [ ] Command-Leftでsubtreeを畳み、selectionがvisible parentへ戻る。
 - [ ] Escapeを1回押すとquery/resultを保持したままterminalへ戻る。再度Shift-Command-Fで同じcontextへ戻る。

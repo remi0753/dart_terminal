@@ -280,7 +280,9 @@ final class TerminalContextDockDirectoryController {
       windowId,
     );
     final _TerminalContextDockDirectoryWindowState? window = _windows[windowId];
-    if (dock == null || window == null || dock.pane.query.isNotEmpty) {
+    if (dock == null ||
+        window == null ||
+        dock.pane.navigatorMode == TerminalContextDockNavigatorMode.search) {
       return false;
     }
     final TerminalContextDockDirectorySnapshot projection = _project(window);
@@ -466,8 +468,10 @@ final class TerminalContextDockDirectoryController {
     _TerminalContextDockDirectoryWindowState window,
     TerminalContextDockWindowSnapshot dock,
   ) {
-    final String queryText = dock.pane.query;
-    if (queryText.isEmpty || window.resolution?.isAvailable != true) {
+    final String queryText = dock.pane.searchQuery;
+    if (dock.pane.navigatorMode != TerminalContextDockNavigatorMode.search ||
+        queryText.isEmpty ||
+        window.resolution?.isAvailable != true) {
       window.cancelSearch();
       return;
     }
@@ -532,7 +536,9 @@ final class TerminalContextDockDirectoryController {
       identical(window.searchOperation, operation) &&
       window.searchGeneration == generation &&
       window.searchQuery == query &&
-      dockState.snapshotForWindow(window.windowId)?.pane.query == query;
+      dockState.snapshotForWindow(window.windowId)?.pane.navigatorMode ==
+          TerminalContextDockNavigatorMode.search &&
+      dockState.snapshotForWindow(window.windowId)?.pane.searchQuery == query;
 
   void _recordRecentRoot(String path) {
     _recentRoots.remove(path);
@@ -575,6 +581,36 @@ final class TerminalContextDockDirectoryController {
     if (dock.pane.resultCount != count) {
       dockState.setResultCount(window.windowId, count);
     }
+    _applyVisibleGoTo(window);
+  }
+
+  void _applyVisibleGoTo(_TerminalContextDockDirectoryWindowState window) {
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+      window.windowId,
+    );
+    if (dock == null ||
+        dock.pane.navigatorMode != TerminalContextDockNavigatorMode.goTo) {
+      window.appliedVisibleGoToQuery = null;
+      return;
+    }
+    final String queryText = dock.pane.goToQuery;
+    if (queryText.isEmpty || window.appliedVisibleGoToQuery == queryText) {
+      return;
+    }
+    final TerminalFileSearchQuery query = TerminalFileSearchQuery.parse(
+      queryText,
+    );
+    if (query.isEmpty) return;
+    final List<TerminalContextDockDirectoryRow> rows = _project(window).rows;
+    final int match = rows.indexWhere(
+      (TerminalContextDockDirectoryRow row) =>
+          query.matches(row.entry.name, row.entry.path),
+    );
+    if (match < 0) return;
+    if (dock.pane.selectedResultIndex != match) {
+      dockState.setSelectedResultIndex(window.windowId, match);
+    }
+    window.appliedVisibleGoToQuery = queryText;
   }
 
   TerminalContextDockDirectorySnapshot _project(
@@ -585,8 +621,9 @@ final class TerminalContextDockDirectoryController {
     );
     final TerminalWorkingDirectoryResolution? resolution = window.resolution;
     final TerminalDirectorySnapshot? root = window.rootSnapshot;
-    final String query = dock?.pane.query ?? '';
+    final String query = dock?.pane.searchQuery ?? '';
     if (resolution?.isAvailable == true &&
+        dock?.pane.navigatorMode == TerminalContextDockNavigatorMode.search &&
         query.isNotEmpty &&
         !TerminalFileSearchQuery.parse(query).isEmpty) {
       final TerminalFileSearchSnapshot? search = window.searchSnapshot;
@@ -784,6 +821,7 @@ final class _TerminalContextDockDirectoryWindowState {
   int? searchGeneration;
   TerminalFileSearchOperation? searchOperation;
   TerminalFileSearchSnapshot? searchSnapshot;
+  String? appliedVisibleGoToQuery;
 
   bool matches(
     TerminalContextDockWindowSnapshot dock,
@@ -985,11 +1023,15 @@ final class TerminalContextDockDirectoryPresenter {
     if (window == null || window.isDisposed || window.isClosed) {
       throw StateError('Context Dock native window is unavailable');
     }
+    final TerminalContextDockWindowSnapshot dock =
+        dockState.snapshotForWindow(request.windowId) ??
+        (throw StateError('Context Dock state is unavailable'));
+    _setEditorEditable(resources, dock.pane.acceptsQuery);
     window
       ..keyEventRouting = KeyEventRouting.dartOnly
       ..makeFirstResponder(resources.editor);
     final _TerminalContextDockDocument document = resources.document!;
-    resources.editor.setSelection(document.querySelection);
+    resources.editor.setSelection(document.queryCaret);
     resources.editor.scrollSelectionToVisible();
     resources.lastAppliedQuerySelectionGeneration =
         request.querySelectionGeneration;
@@ -1017,7 +1059,12 @@ final class TerminalContextDockDirectoryPresenter {
     window
       ..keyEventRouting = KeyEventRouting.appKitOnly
       ..makeFirstResponder(terminalView);
-    _resources[request.windowId]?.navigatorTabId = null;
+    final _TerminalContextDockNativeResources? resources =
+        _resources[request.windowId];
+    if (resources != null) {
+      _setEditorEditable(resources, false);
+      resources.navigatorTabId = null;
+    }
   }
 
   /// Repairs tab reparenting/key routing after the hierarchy has reconciled.
@@ -1052,6 +1099,7 @@ final class TerminalContextDockDirectoryPresenter {
       }
       if (resources == null) continue;
       if (dock?.isVisible != true) {
+        _setEditorEditable(resources, false);
         resources
           ..projectedVisible = false
           ..navigatorTabId = null
@@ -1068,6 +1116,7 @@ final class TerminalContextDockDirectoryPresenter {
       final Window? selectedWindow = _windowForTab(selectedTabId);
       if (selectedWindow == null || selectedWindow.isDisposed) continue;
       if (navigatorOwnsInput) {
+        _setEditorEditable(resources, dock.pane.acceptsQuery);
         selectedWindow
           ..keyEventRouting = KeyEventRouting.dartOnly
           ..makeFirstResponder(resources.editor);
@@ -1078,6 +1127,7 @@ final class TerminalContextDockDirectoryPresenter {
         selectedWindow
           ..keyEventRouting = KeyEventRouting.appKitOnly
           ..makeFirstResponder(terminalView);
+        _setEditorEditable(resources, false);
         resources.navigatorTabId = null;
       }
       resources.inputOwnerProjectionPending = false;
@@ -1107,6 +1157,10 @@ final class TerminalContextDockDirectoryPresenter {
           directory,
           _pathHandoffSnapshot(dock.windowId),
         );
+    _setEditorEditable(
+      resources,
+      dock.navigatorOwnsInput && dock.pane.acceptsQuery,
+    );
     if (resources.document?.navigatorText != document.navigatorText ||
         resources.document?.selection != document.selection) {
       resources.editor.setDocument(
@@ -1135,12 +1189,40 @@ final class TerminalContextDockDirectoryPresenter {
     );
     if (resources.document?.selectedResultIndex !=
             document.selectedResultIndex &&
-        dock.navigatorOwnsInput &&
-        resources.lastAppliedQuerySelectionGeneration ==
+        dock.navigatorOwnsInput) {
+      if (dock.pane.acceptsQuery && document.selectedLineStart != null) {
+        final TextEditorSelection retained =
+            resources.editor.snapshot.selection;
+        resources.editor
+          ..setSelection(
+            TextEditorSelection(start: document.selectedLineStart!),
+          )
+          ..scrollSelectionToVisible()
+          ..setSelection(retained);
+      } else {
+        resources.editor.scrollSelectionToVisible();
+      }
+    }
+    if (dock.navigatorOwnsInput &&
+        dock.pane.acceptsQuery &&
+        resources.lastAppliedQuerySelectionGeneration !=
             dock.pane.querySelectionGeneration) {
-      resources.editor.scrollSelectionToVisible();
+      resources.editor
+        ..setSelection(document.querySelection)
+        ..scrollSelectionToVisible();
+      resources.lastAppliedQuerySelectionGeneration =
+          dock.pane.querySelectionGeneration;
     }
     resources.document = document;
+  }
+
+  static void _setEditorEditable(
+    _TerminalContextDockNativeResources resources,
+    bool editable,
+  ) {
+    if (resources.editorEditable == editable) return;
+    resources.editor.isEditable = editable;
+    resources.editorEditable = editable;
   }
 
   void _captureNativeWidth(
@@ -1246,6 +1328,7 @@ final class _TerminalContextDockNativeResources {
   PaneId? attachedPaneId;
   TerminalTabId? navigatorTabId;
   int lastAppliedQuerySelectionGeneration = -1;
+  bool editorEditable = false;
   bool positioned = false;
   bool projectedVisible = false;
   bool inputOwnerProjectionPending = false;
@@ -1269,6 +1352,7 @@ final class _TerminalContextDockDocument {
     required this.navigatorText,
     required this.detailsText,
     required this.selection,
+    required this.queryCaret,
     required this.querySelection,
     required this.selectedLineStart,
     required this.selectedResultIndex,
@@ -1277,6 +1361,7 @@ final class _TerminalContextDockDocument {
   final String navigatorText;
   final String detailsText;
   final TextEditorSelection selection;
+  final TextEditorSelection queryCaret;
   final TextEditorSelection querySelection;
   final int? selectedLineStart;
   final int selectedResultIndex;
@@ -1299,10 +1384,24 @@ final class _TerminalContextDockDocument {
       '${localization.contextDockWorkingDirectory}: '
       '${directory?.workingDirectory ?? localization.contextDockUnknown}',
     );
+    line(
+      '${localization.contextDockMode}: '
+      '${switch (dock.pane.navigatorMode) {
+        TerminalContextDockNavigatorMode.search => localization.contextDockModeSearch,
+        TerminalContextDockNavigatorMode.goTo => localization.contextDockModeGoTo,
+        TerminalContextDockNavigatorMode.move => localization.contextDockModeMove,
+      }}',
+    );
     final int queryStart = navigator.length;
-    navigator.write('${localization.contextDockSearch}: ');
+    navigator.write(switch (dock.pane.navigatorMode) {
+      TerminalContextDockNavigatorMode.search =>
+        '${localization.contextDockSearch}: ',
+      TerminalContextDockNavigatorMode.goTo =>
+        '${localization.contextDockGoTo}: ',
+      TerminalContextDockNavigatorMode.move => localization.contextDockMoveHint,
+    });
     final int queryValueStart = navigator.length;
-    navigator.write(dock.pane.query);
+    if (dock.pane.acceptsQuery) navigator.write(dock.pane.query);
     line();
     line();
     final List<TerminalContextDockDirectoryRow> rows =
@@ -1419,14 +1518,20 @@ final class _TerminalContextDockDocument {
       start: queryValueStart,
       length: dock.pane.query.length,
     );
+    final TextEditorSelection queryCaret = TextEditorSelection(
+      start: queryValueStart + dock.pane.query.length,
+    );
     final TextEditorSelection selection =
-        dock.navigatorOwnsInput && selectedLineStart != null
+        dock.navigatorOwnsInput && dock.pane.acceptsQuery
+        ? queryCaret
+        : dock.navigatorOwnsInput && selectedLineStart != null
         ? TextEditorSelection(start: selectedLineStart)
         : TextEditorSelection(start: queryStart);
     return _TerminalContextDockDocument(
       navigatorText: navigator.toString(),
       detailsText: details.toString(),
       selection: selection,
+      queryCaret: queryCaret,
       querySelection: querySelection,
       selectedLineStart: selectedLineStart,
       selectedResultIndex: selectedIndex,

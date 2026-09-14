@@ -34,6 +34,8 @@ enum TerminalActionId {
   equalizeSplits('pane.equalize-splits'),
   toggleContextDock('view.toggle-context-dock'),
   searchFilesAndFolders('view.search-files-and-folders'),
+  goToFileOrFolder('view.goto-file-or-folder'),
+  moveInDirectoryNavigator('view.move-in-directory-navigator'),
   focusTerminal('view.focus-terminal'),
   openTerminalInspector('view.open-terminal-inspector'),
   moveDividerLeft('pane.move-divider-left'),
@@ -422,6 +424,26 @@ final class TerminalActionCatalog {
         ),
         restoresTerminalFocusAfterInvocation: false,
       ),
+      action(
+        TerminalActionId.goToFileOrFolder,
+        TerminalActionMenu.view,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'g',
+          shift: true,
+          command: true,
+        ),
+        restoresTerminalFocusAfterInvocation: false,
+      ),
+      action(
+        TerminalActionId.moveInDirectoryNavigator,
+        TerminalActionMenu.view,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'm',
+          shift: true,
+          command: true,
+        ),
+        restoresTerminalFocusAfterInvocation: false,
+      ),
       action(TerminalActionId.focusTerminal, TerminalActionMenu.view),
       action(
         TerminalActionId.quickLook,
@@ -525,6 +547,9 @@ TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
     TerminalActionMessageId.toggleContextDock,
   TerminalActionId.searchFilesAndFolders =>
     TerminalActionMessageId.searchFilesAndFolders,
+  TerminalActionId.goToFileOrFolder => TerminalActionMessageId.goToFileOrFolder,
+  TerminalActionId.moveInDirectoryNavigator =>
+    TerminalActionMessageId.moveInDirectoryNavigator,
   TerminalActionId.focusTerminal => TerminalActionMessageId.focusTerminal,
   TerminalActionId.openTerminalInspector =>
     TerminalActionMessageId.openTerminalInspector,

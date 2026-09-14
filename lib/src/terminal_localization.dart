@@ -40,6 +40,8 @@ enum TerminalActionMessageId {
   equalizeSplits,
   toggleContextDock,
   searchFilesAndFolders,
+  goToFileOrFolder,
+  moveInDirectoryNavigator,
   focusTerminal,
   openTerminalInspector,
   moveDividerLeft,
@@ -162,7 +164,14 @@ final class TerminalLocalization {
       ? 'ナビゲータ入力 · Escでターミナルへ戻る'
       : 'NAVIGATOR INPUT · Esc returns to terminal';
   String get contextDockWorkingDirectory => _ja ? '現在地' : 'Working directory';
+  String get contextDockMode => _ja ? 'モード' : 'Mode';
+  String get contextDockModeSearch => _ja ? '検索' : 'Search';
+  String get contextDockModeGoTo => _ja ? '移動先' : 'Go To';
+  String get contextDockModeMove => _ja ? 'ナビゲーション' : 'Move';
   String get contextDockSearch => _ja ? '検索' : 'Search';
+  String get contextDockGoTo => _ja ? '移動先' : 'Go to';
+  String get contextDockMoveHint =>
+      _ja ? '移動: ↑↓ 選択  ↩ 開く／閉じる' : 'Move: ↑↓ Select  ↩ Open/Close';
   String get contextDockCoverage => _ja ? '検索範囲' : 'Coverage';
   String get contextDockSearchCurrentSubtree =>
       _ja ? '現在地のサブツリー' : 'Current subtree';
@@ -732,6 +741,14 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
           'Search Files and Folders',
           <String>['directory', 'navigator', 'path', 'find'],
         ),
+        TerminalActionMessageId.goToFileOrFolder: _action(
+          'Go To File or Folder',
+          <String>['directory', 'navigator', 'path', 'jump'],
+        ),
+        TerminalActionMessageId.moveInDirectoryNavigator: _action(
+          'Move in Directory Navigator',
+          <String>['directory', 'navigator', 'tree', 'browse'],
+        ),
         TerminalActionMessageId.focusTerminal: _action(
           'Focus Terminal',
           <String>['keyboard', 'input', 'return', 'escape'],
@@ -902,6 +919,14 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
       TerminalActionMessageId.searchFilesAndFolders: _action(
         'ファイルとフォルダを検索',
         <String>['ディレクトリ', 'ナビゲータ', 'パス', '検索'],
+      ),
+      TerminalActionMessageId.goToFileOrFolder: _action(
+        'ファイルまたはフォルダへ移動',
+        <String>['ディレクトリ', 'ナビゲータ', 'パス', '移動'],
+      ),
+      TerminalActionMessageId.moveInDirectoryNavigator: _action(
+        'ディレクトリナビゲータ内を移動',
+        <String>['ディレクトリ', 'ナビゲータ', 'ツリー', '閲覧'],
       ),
       TerminalActionMessageId.focusTerminal: _action('ターミナルにフォーカス', <String>[
         'キーボード',

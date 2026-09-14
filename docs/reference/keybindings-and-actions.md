@@ -91,6 +91,8 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `pane.split-down` | Split Pane Down | shell | `shift+command+d` |
 | `view.toggle-context-dock` | Toggle Context Dock | view | `shift+option+c` |
 | `view.search-files-and-folders` | Search Files and Folders | view | `shift+command+f` |
+| `view.goto-file-or-folder` | Go To File or Folder | view | `shift+command+g` |
+| `view.move-in-directory-navigator` | Move in Directory Navigator | view | `shift+command+m` |
 | `view.focus-terminal` | Focus Terminal | view | — |
 | `pane.quick-look` | Quick Look | view | `control+command+d` |
 | `pane.toggle-zoom` | Toggle Pane Zoom | view | — |
@@ -130,5 +132,7 @@ AppKit consumes these standard menu shortcuts before raw terminal key routing. A
 | `shift+command+d` | `pane.split-down` | Split Pane Down |
 | `shift+option+c` | `view.toggle-context-dock` | Toggle Context Dock |
 | `shift+command+f` | `view.search-files-and-folders` | Search Files and Folders |
+| `shift+command+g` | `view.goto-file-or-folder` | Go To File or Folder |
+| `shift+command+m` | `view.move-in-directory-navigator` | Move in Directory Navigator |
 | `control+command+d` | `pane.quick-look` | Quick Look |
 | `option+command+i` | `view.open-terminal-inspector` | Open Terminal Inspector |
