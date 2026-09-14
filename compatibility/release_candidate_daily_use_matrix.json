@@ -95,7 +95,7 @@
     },
     {
       "path": "tool/terminal_localization_audit.dart",
-      "sha256": "417bf56c1b89fae06a78b5606a0e8392dc1a8b8e5e5004e9dd2bc62fd5a54a24"
+      "sha256": "230a95ef19a02cd26119b3cf9fff1bbc12f058c7c3c22a9803f80639f3d3904d"
     },
     {
       "path": "tool/native_sanitizer_gate.dart",
@@ -111,7 +111,7 @@
     },
     {
       "path": "test/run_tests.dart",
-      "sha256": "cf90225791ac7dea6eb3a1aa8f6d5c08b291496af0d7eb13985c737a431021e8"
+      "sha256": "54b0a8dd9e5207fc50dff8fef24da5bc08f10c5f757eba576054a5afe8e9ce22"
     },
     {
       "path": "tool/release_candidate_daily_use.dart",

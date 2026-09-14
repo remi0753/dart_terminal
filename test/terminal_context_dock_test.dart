@@ -139,6 +139,8 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
     ..toggleVisibility(window.id, firstPane);
   final _ContextDockDirectoryFileSystem files =
       _ContextDockDirectoryFileSystem();
+  final TerminalDirectorySnapshotService snapshots =
+      TerminalDirectorySnapshotService(fileSystem: files);
   const TerminalWorkingDirectoryResolver workingDirectoryResolver =
       TerminalWorkingDirectoryResolver();
   String root = '/root';
@@ -147,7 +149,19 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
       TerminalContextDockDirectoryController(
         applicationState: harness.state,
         dockState: dock,
-        snapshotService: TerminalDirectorySnapshotService(fileSystem: files),
+        snapshotService: snapshots,
+        searchService: TerminalFileSearchService(
+          directorySnapshots: snapshots,
+          systemIndex: const _ContextDockSystemIndex(),
+          pathSnapshot: (String path) async => TerminalDirectoryEntrySnapshot(
+            name: path.substring(path.lastIndexOf('/') + 1),
+            path: path,
+            kind: TerminalDirectoryEntryKind.file,
+            isHidden: false,
+            metadata:
+                const TerminalDirectoryEntryMetadataSnapshot.unavailable(),
+          ),
+        ),
         resolveWorkingDirectory: (PaneId paneId, int generation) {
           final TerminalPaneProcessSnapshot process = harness.state
               .paneForId(paneId)!
@@ -193,6 +207,30 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
         snapshot.rows[1].depth == 1 &&
         snapshot.rows[1].entry.metadata.size == 7,
     'expanded folder loads one child level and retains metadata',
+  );
+  dock.setQuery(window.id, 'readme');
+  controller.synchronize();
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.isSearch &&
+        snapshot.rows.length == 2 &&
+        snapshot.rows.map((value) => value.searchSource).toSet().containsAll(
+          const <TerminalFileSearchSource>{
+            TerminalFileSearchSource.currentSubtree,
+            TerminalFileSearchSource.systemIndex,
+          },
+        ),
+    'non-empty query progressively replaces tree rows with merged search rows',
+  );
+  dock.setQuery(window.id, '');
+  controller.synchronize();
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    !snapshot.isSearch &&
+        snapshot.rows.length == 4 &&
+        snapshot.rows.first.isExpanded,
+    'clearing query restores the retained tree expansion context',
   );
 
   final TerminalPane secondPane = await harness.state.splitPane(
@@ -307,6 +345,29 @@ final class _ContextDockDirectoryFileSystem
     size: entry.name == 'nested.txt' ? 7 : 3,
     modifiedMicrosecondsSinceEpoch: 1,
   );
+}
+
+final class _ContextDockSystemIndex implements TerminalSystemFileIndex {
+  const _ContextDockSystemIndex();
+
+  @override
+  TerminalSystemFileIndexOperation start(TerminalFileSearchQuery query) =>
+      const _ContextDockSystemIndexOperation();
+}
+
+final class _ContextDockSystemIndexOperation
+    implements TerminalSystemFileIndexOperation {
+  const _ContextDockSystemIndexOperation();
+
+  @override
+  Future<TerminalSystemFileIndexSnapshot> get result async =>
+      TerminalSystemFileIndexSnapshot(
+        disposition: TerminalSystemFileIndexDisposition.complete,
+        paths: const <String>['/indexed/readme-global.md'],
+      );
+
+  @override
+  void cancel() {}
 }
 
 Future<void> _testActionFocusOwnershipAndAvailability() async {

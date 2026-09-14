@@ -551,3 +551,80 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
   request-local snapshot budgetも2件上限／3件入力でpartialになることとhard maximum超過拒否を追加検証した。
 - Developer JIT／Release AOTの完成製品visual acceptanceは本subtaskの対象外として未実施である。system-wide search、path
   handoff、accessibilityの最終監査、privacy／performance gate、両runtime受け入れはROADMAPの後続unchecked taskに残る。
+
+### 2026-09-14 第4サブタスク着手
+
+- 目的: empty queryのworking-directory treeと同じlist surfaceを、文字入力だけでcurrent subtreeからwider local scopeへ
+  progressiveに広がるfile／folder name searchへ切り替え、現在地以外のpathもmode選択なしで発見できるようにする。
+- 範囲: bounded query parser、current cwd subtree、観測済みrecent cwd、macOS metadata index、明示fallback rootを同じ
+  generation-owned operationへ統合する。source／coverage／partial／index unavailableを表示し、dedupe、deterministic ranking、
+  rapid query／cwd／pane／hide cancellation、symlink非追跡、result／scan／depth／byte／deadline／process-output capを実装する。
+- 対象外: file content検索、filesystem rootの常時walk、Spotlight非収録scopeの完全性保証、検索結果pathのcopy／terminal挿入、
+  secure input最終統合、README／FEATURE_MATRIX、Developer JIT／Release AOTの最終受け入れ、SSH／remote search。
+- 依存関係: `TerminalContextDockState` query generation、trusted local cwd、one-level snapshot service、Directory controllerの
+  lifecycle、native document projection、`/usr/bin/mdfind`のshellを介さないargv／NUL-delimited output、existing typed
+  filesystem metadataとpath safety policy。
+- 設計判断: queryは空白区切りANDとquoted phraseをbounded tokenへparseする。まずcwdをBFSで直接探索し、次に重複しない
+  recent／explicit root、最後にOS metadata indexを追加する。system index queryはbasename metadataだけへ固定してuser文字列を
+  escapeし、任意predicate／shell syntaxにしない。全providerの結果はsafe absolute pathで再検証し、同一pathを一度だけ公開する。
+- 完了条件: query入力でtree contextを保持したままsearch結果へ切り替わり、sourceとcoverageが段階的に見える。query clearで
+  retained expansionを使うtreeへ戻る。stale／cancelled result、remote pane、hidden Dockはbackground searchを残さず、結果数は
+  512以内である。index unavailableと結果0は異なるstateとなり、同順位は決定的path orderになる。
+- 検証方針: fake directory／system indexでparser、progress order、ranking、dedupe、unavailable、cancel／late completion、huge
+  directoryとhard capsを検証する。real `mdfind`は環境依存結果をassertせず、argv／parser adapterをfake process境界で検証する。
+  focused test、format、analysis、freshness check、full `make test`を実施する。
+
+#### 検証中の失敗記録
+
+- 初回full `CI=true DART_SUPPRESS_ANALYTICS=true make test`は、Dart／native／compatibility／Phase 7 acceptanceを含む
+  先行gateを通過した後、`RELEASE_CANDIDATE_DAILY_USE_MATRIX_FAIL`で停止した。今回追加したsearch source／testに対して
+  release-candidate daily-use matrixのsource hashが古いためであり、product test failureではない。生成commandで証跡を更新し、
+  freshnessを含むfull gateを再実行する。
+- deadline後もUIにsearching coverageが残る差分レビュー上の不備を修正した後、sandbox内のfocused再検証はformat変更0の後、
+  Dart telemetry sessionとClang Metal module cacheへの書き込み拒否でtest起動が停止した。`dart analyze`の解析本体は
+  `No issues found!`だったがtelemetry更新失敗によりexit 1となったため成功扱いにせず、analytics抑止と承認済みcache権限で
+  同じfocused test／analysisを再実行する。
+
+### 2026-09-14 第4サブタスク結果
+
+#### 実装と設計判断
+
+- `TerminalFileSearchService`を追加し、1 operation内でcurrent cwd subtree、重複しないrecent cwd、明示された追加root、macOS
+  metadata indexの順に探索する。各scope完了時とlocal walk 16 directoryごとに同じresult listをprogressive更新し、pathを
+  dedupeして、basename完全一致、prefix、substring、source、depth、pathの順で決定的に順位付けする。empty queryではserviceを
+  起動せず、従来のworking-directory treeを表示する。
+- query parserは空白区切りANDとdouble-quoted phraseを扱い、小文字化した最大16 term、1 term 64 UTF-16 unitへ制限する。
+  current／recent／explicit scopeはone-level directory snapshotをBFSで再利用し、symlinkを辿らない。全operation共通で最大512
+  directory、4096 scanned entry、depth 12、512 result、retained path 1 MiB、3秒deadlineを適用する。recentとexplicitは各8 root、
+  各directory listingは最大128 entry／128 KiB／500 msに制限した。
+- system-wide補助には`/usr/bin/mdfind`をshellなしの固定argvで起動し、user termはbasename predicateの値としてbackslash、quote、
+  wildcardをescapeする。NUL-delimited stdoutは1 MiB／256 path、1.2秒で打ち切り、返却pathはsafe normalized absolute path、
+  basename、query一致、実在kindを再検証してから採用する。Spotlight unavailableは結果0と区別し、未収録scopeを完全探索したとは
+  表示しない。filesystem rootをfallbackでwalkする処理は追加していない。
+- Directory controllerはlogical window／focused pane／query／cwd generationにsearch operationを結び付け、query変更、pane／cwd変更、
+  Dock hide、window破棄、disposeでcancelする。late progressはidentityとgenerationで拒否する。内部deadlineで終了した受理対象snapshotは
+  残りのsearching coverageをpartialへ確定し、UIが永久に検索中にならない。query clear時はsearch snapshotだけを破棄し、既存の
+  lazy tree expansion snapshotへ即座に戻す。
+- native Dock documentは結果を同じlist／selection surfaceへ出し、Current subtree、Recent locations、Chosen locations、System indexの
+  source見出しと、Searching／Complete／Partial／Unavailableのcoverageを英語／日本語で示す。検索結果をterminal inputへ挿入・実行する
+  actionはまだ持たず、read-only補足情報という境界を維持した。
+- SSH／remote searchは実装していない。remote working directoryではlocal fallbackや`mdfind`を起動せず、既存のremote-unavailable
+  表示を維持する。
+
+#### 検証結果と残る境界
+
+- `terminal_file_search_test.dart`: 成功。AND／quoted phrase／term cap、metadata wildcard escape、current→recent→explicit→systemの
+  progressive merge、exact-name ranking、path dedupe、local resultのindex待機中公開、index unavailableと0件の区別、misbehaving
+  providerに対するaggregate 512 result cap、cancel後のlate result拒否とcoverage確定を検証した。
+- `terminal_context_dock_test.dart`: 成功。expanded working-directory treeからquery searchへ切り替わり、current subtreeとsystem indexの
+  結果が同じsnapshotへ統合され、query clear後に4 rowとroot expansionが復元されることを検証した。既存のfocused pane／cwd／remote／
+  hidden cancellationも継続して成功した。
+- localization auditは`TERMINAL_LOCALIZATION_AUDIT_PASS sources=16 resource_families=4 resource_keys=21`、focused後の
+  `dart analyze`は`No issues found!`で成功した。Phase 7 freshness checkもcriteria 4、source refs 14、unit tests 12、integration tests 4、
+  UI assertions 10で成功した。
+- staleだったrelease-candidate daily-use matrixを管理commandで再生成した。最終
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test`はDart 345 fileのformat変更0、analysis指摘0、localization／privacy／Phase 7／
+  compatibility／differential／application／distributionを含む全gateを通過し、`dart_terminal tests passed`で終了した。
+- 実環境のSpotlight収録内容はmachine stateに依存するため結果を固定assertしていない。shellを介さない固定executable／argvはsource review、
+  query expressionとprovider contractはunit testで検証した。実際のDeveloper JIT／Release AOT UI、path handoff、accessibility、secure-input、
+  privacy／performanceの最終監査は次のuncheckedサブタスクで扱う。

@@ -71,6 +71,7 @@ import 'terminal_differential_evidence_test.dart';
 import 'terminal_differential_harness_test.dart';
 import 'terminal_directory_snapshot_test.dart';
 import 'terminal_effective_config_test.dart';
+import 'terminal_file_search_test.dart';
 import 'terminal_focus_reporter_test.dart';
 import 'terminal_history_reflow_test.dart';
 import 'terminal_hyperlink_interaction_test.dart';
@@ -259,6 +260,7 @@ Future<void> main() async {
   await runTerminalDiagnosticsTests();
   await runTerminalDiagnosticsPrivacyAuditTests();
   await runTerminalDirectorySnapshotTests();
+  await runTerminalFileSearchTests();
   await runTerminalSettingsInspectorTests();
   runTerminalSettingsDocumentTests();
   runTerminalSettingsEditorTests();

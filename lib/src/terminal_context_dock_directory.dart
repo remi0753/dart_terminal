@@ -5,6 +5,7 @@ import 'package:dart_appkit/dart_appkit.dart';
 import 'terminal_application_state.dart';
 import 'terminal_context_dock.dart';
 import 'terminal_directory_snapshot.dart';
+import 'terminal_file_search.dart';
 import 'terminal_localization.dart';
 import 'terminal_pane.dart';
 
@@ -40,6 +41,7 @@ final class TerminalContextDockDirectoryRow {
     required this.isExpanded,
     required this.isLoadingChildren,
     required this.childUnavailable,
+    this.searchSource,
   });
 
   final TerminalDirectoryEntrySnapshot entry;
@@ -47,6 +49,7 @@ final class TerminalContextDockDirectoryRow {
   final bool isExpanded;
   final bool isLoadingChildren;
   final bool childUnavailable;
+  final TerminalFileSearchSource? searchSource;
 
   bool get isDirectory => entry.kind == TerminalDirectoryEntryKind.directory;
 }
@@ -63,6 +66,8 @@ final class TerminalContextDockDirectorySnapshot {
     required Iterable<TerminalContextDockDirectoryRow> rows,
     required this.omittedEntryCount,
     required this.issueCount,
+    this.searchCoverage = const <TerminalFileSearchCoverage>[],
+    this.isSearch = false,
   }) : rows = List<TerminalContextDockDirectoryRow>.unmodifiable(rows);
 
   final TerminalWindowId windowId;
@@ -74,6 +79,8 @@ final class TerminalContextDockDirectorySnapshot {
   final List<TerminalContextDockDirectoryRow> rows;
   final int omittedEntryCount;
   final int issueCount;
+  final List<TerminalFileSearchCoverage> searchCoverage;
+  final bool isSearch;
 }
 
 /// Owns generation-safe local cwd and lazy one-level snapshot operations.
@@ -85,19 +92,26 @@ final class TerminalContextDockDirectoryController {
     resolveWorkingDirectory,
     TerminalDirectorySnapshotService snapshotService =
         const TerminalDirectorySnapshotService(),
+    TerminalFileSearchService searchService = const TerminalFileSearchService(),
+    Iterable<String> Function()? explicitSearchRoots,
     void Function()? onChanged,
   }) : _resolveWorkingDirectory = resolveWorkingDirectory,
        _snapshotService = snapshotService,
+       _searchService = searchService,
+       _explicitSearchRoots = explicitSearchRoots ?? _noSearchRoots,
        _onChanged = onChanged;
 
   final TerminalApplicationState applicationState;
   final TerminalContextDockState dockState;
   final TerminalContextDockWorkingDirectoryResolver _resolveWorkingDirectory;
   final TerminalDirectorySnapshotService _snapshotService;
+  final TerminalFileSearchService _searchService;
+  final Iterable<String> Function() _explicitSearchRoots;
   final void Function()? _onChanged;
   final Map<TerminalWindowId, _TerminalContextDockDirectoryWindowState>
   _windows = <TerminalWindowId, _TerminalContextDockDirectoryWindowState>{};
   final Map<PaneId, Set<String>> _expandedByPane = <PaneId, Set<String>>{};
+  final List<String> _recentRoots = <String>[];
   int _generation = 0;
   Timer? _scheduledSynchronization;
   bool _synchronizing = false;
@@ -107,7 +121,9 @@ final class TerminalContextDockDirectoryController {
   int get activeOperationCount => _windows.values.fold<int>(
     0,
     (int count, _TerminalContextDockDirectoryWindowState window) =>
-        count + window.operations.length,
+        count +
+        window.operations.length +
+        (window.searchOperation == null ? 0 : 1),
   );
 
   TerminalContextDockDirectorySnapshot? snapshotForWindow(
@@ -187,7 +203,9 @@ final class TerminalContextDockDirectoryController {
             _windows[logicalWindow.id];
         if (retained != null && retained.matches(dock, resolution)) {
           retained.resolution = resolution;
+          if (resolution.isAvailable) _recordRecentRoot(resolution.path!);
           _ensureExpandedLoads(retained);
+          _ensureSearch(retained, dock);
           _publishResultCount(retained);
           continue;
         }
@@ -201,7 +219,9 @@ final class TerminalContextDockDirectoryController {
             );
         _windows[logicalWindow.id] = next;
         if (resolution.isAvailable) {
+          _recordRecentRoot(resolution.path!);
           _startLoad(next, resolution.path!, isRoot: true);
+          _ensureSearch(next, dock);
         }
         _publishResultCount(next);
         _onChanged?.call();
@@ -276,6 +296,7 @@ final class TerminalContextDockDirectoryController {
     _scheduledSynchronization = null;
     _clearWindows();
     _expandedByPane.clear();
+    _recentRoots.clear();
   }
 
   void _replaceUnavailable(TerminalWindowId windowId, PaneId paneId) {
@@ -363,6 +384,89 @@ final class TerminalContextDockDirectoryController {
     }
   }
 
+  void _ensureSearch(
+    _TerminalContextDockDirectoryWindowState window,
+    TerminalContextDockWindowSnapshot dock,
+  ) {
+    final String queryText = dock.pane.query;
+    if (queryText.isEmpty || window.resolution?.isAvailable != true) {
+      window.cancelSearch();
+      return;
+    }
+    if (window.searchQuery == queryText &&
+        (window.searchOperation != null || window.searchSnapshot != null)) {
+      return;
+    }
+    window.cancelSearch();
+    final TerminalFileSearchQuery query = TerminalFileSearchQuery.parse(
+      queryText,
+    );
+    if (query.isEmpty) return;
+    final int generation = ++_generation;
+    window
+      ..searchQuery = queryText
+      ..searchGeneration = generation;
+    late final TerminalFileSearchOperation operation;
+    operation = _searchService.start(
+      TerminalFileSearchRequest(
+        query: query,
+        currentRoot: window.resolution!.path!,
+        generation: generation,
+        recentRoots: _recentRoots,
+        explicitRoots: _explicitSearchRoots(),
+      ),
+      onProgress: (TerminalFileSearchSnapshot snapshot) {
+        if (!_acceptsSearch(window, operation, generation, queryText)) return;
+        window.searchSnapshot = snapshot;
+        _publishAndNotify(window);
+      },
+    );
+    window.searchOperation = operation;
+    unawaited(
+      operation.result.then<void>(
+        (TerminalFileSearchSnapshot snapshot) {
+          if (!_acceptsSearch(window, operation, generation, queryText)) {
+            return;
+          }
+          window.searchOperation = null;
+          window.searchSnapshot = snapshot;
+          _publishAndNotify(window);
+        },
+        onError: (Object _, StackTrace _) {
+          if (!_acceptsSearch(window, operation, generation, queryText)) {
+            return;
+          }
+          window.searchOperation = null;
+          _publishAndNotify(window);
+        },
+      ),
+    );
+  }
+
+  bool _acceptsSearch(
+    _TerminalContextDockDirectoryWindowState window,
+    TerminalFileSearchOperation operation,
+    int generation,
+    String query,
+  ) =>
+      !_isDisposed &&
+      identical(_windows[window.windowId], window) &&
+      identical(window.searchOperation, operation) &&
+      window.searchGeneration == generation &&
+      window.searchQuery == query &&
+      dockState.snapshotForWindow(window.windowId)?.pane.query == query;
+
+  void _recordRecentRoot(String path) {
+    _recentRoots.remove(path);
+    _recentRoots.insert(0, path);
+    if (_recentRoots.length > TerminalFileSearchLimits.maximumAdditionalRoots) {
+      _recentRoots.removeRange(
+        TerminalFileSearchLimits.maximumAdditionalRoots,
+        _recentRoots.length,
+      );
+    }
+  }
+
   void _collapse(_TerminalContextDockDirectoryWindowState window, String path) {
     final Set<String>? expanded = _expandedByPane[window.paneId];
     if (expanded == null) return;
@@ -403,6 +507,62 @@ final class TerminalContextDockDirectoryController {
     );
     final TerminalWorkingDirectoryResolution? resolution = window.resolution;
     final TerminalDirectorySnapshot? root = window.rootSnapshot;
+    final String query = dock?.pane.query ?? '';
+    if (resolution?.isAvailable == true &&
+        query.isNotEmpty &&
+        !TerminalFileSearchQuery.parse(query).isEmpty) {
+      final TerminalFileSearchSnapshot? search = window.searchSnapshot;
+      final List<TerminalContextDockDirectoryRow> searchRows =
+          <TerminalContextDockDirectoryRow>[
+            for (final TerminalFileSearchResult result
+                in search?.results ?? const <TerminalFileSearchResult>[])
+              TerminalContextDockDirectoryRow(
+                entry: result.entry,
+                depth: 0,
+                isExpanded: false,
+                isLoadingChildren: false,
+                childUnavailable: false,
+                searchSource: result.source,
+              ),
+          ];
+      final bool coverageIssue =
+          search?.coverage.any(
+            (TerminalFileSearchCoverage value) =>
+                value.disposition ==
+                    TerminalFileSearchCoverageDisposition.partial ||
+                value.disposition ==
+                    TerminalFileSearchCoverageDisposition.unavailable,
+          ) ??
+          false;
+      return TerminalContextDockDirectorySnapshot(
+        windowId: window.windowId,
+        paneId: window.paneId,
+        generation: window.generation,
+        status: search == null || (!search.isComplete && searchRows.isEmpty)
+            ? TerminalContextDockDirectoryStatus.loading
+            : coverageIssue
+            ? TerminalContextDockDirectoryStatus.partial
+            : searchRows.isEmpty
+            ? TerminalContextDockDirectoryStatus.empty
+            : TerminalContextDockDirectoryStatus.ready,
+        workingDirectory: resolution?.path,
+        workingDirectorySource: resolution?.source,
+        rows: searchRows,
+        omittedEntryCount: search?.omittedResultCount ?? 0,
+        issueCount:
+            search?.coverage
+                .where(
+                  (TerminalFileSearchCoverage value) =>
+                      value.disposition ==
+                      TerminalFileSearchCoverageDisposition.unavailable,
+                )
+                .length ??
+            0,
+        searchCoverage:
+            search?.coverage ?? const <TerminalFileSearchCoverage>[],
+        isSearch: true,
+      );
+    }
     final List<TerminalContextDockDirectoryRow> rows =
         <TerminalContextDockDirectoryRow>[];
     var omitted = 0;
@@ -431,6 +591,7 @@ final class TerminalContextDockDirectoryController {
               childUnavailable:
                   child?.disposition ==
                   TerminalDirectorySnapshotDisposition.unavailable,
+              searchSource: null,
             ),
           );
           if (isExpanded &&
@@ -444,24 +605,14 @@ final class TerminalContextDockDirectoryController {
 
       append(root, 0);
     }
-    final String query = dock?.pane.query.toLowerCase() ?? '';
-    final List<TerminalContextDockDirectoryRow> visibleRows = query.isEmpty
-        ? rows
-        : rows
-              .where(
-                (TerminalContextDockDirectoryRow row) =>
-                    row.entry.name.toLowerCase().contains(query) ||
-                    row.entry.path.toLowerCase().contains(query),
-              )
-              .toList(growable: false);
     return TerminalContextDockDirectorySnapshot(
       windowId: window.windowId,
       paneId: window.paneId,
       generation: window.generation,
-      status: _status(window, visibleRows),
+      status: _status(window, rows),
       workingDirectory: resolution?.path,
       workingDirectorySource: resolution?.source,
-      rows: visibleRows,
+      rows: rows,
       omittedEntryCount: omitted,
       issueCount: issues,
     );
@@ -524,6 +675,8 @@ final class TerminalContextDockDirectoryController {
     }
     _windows.clear();
   }
+
+  static Iterable<String> _noSearchRoots() => const <String>[];
 }
 
 final class _TerminalContextDockDirectoryWindowState {
@@ -543,6 +696,10 @@ final class _TerminalContextDockDirectoryWindowState {
       <String, TerminalDirectorySnapshot>{};
   final Map<String, TerminalDirectorySnapshotOperation> operations =
       <String, TerminalDirectorySnapshotOperation>{};
+  String? searchQuery;
+  int? searchGeneration;
+  TerminalFileSearchOperation? searchOperation;
+  TerminalFileSearchSnapshot? searchSnapshot;
 
   bool matches(
     TerminalContextDockWindowSnapshot dock,
@@ -553,6 +710,7 @@ final class _TerminalContextDockDirectoryWindowState {
       resolution?.path == next.path;
 
   void cancel() {
+    cancelSearch();
     for (final TerminalDirectorySnapshotOperation operation
         in operations.values) {
       operation.cancel();
@@ -560,6 +718,14 @@ final class _TerminalContextDockDirectoryWindowState {
     operations.clear();
     childSnapshots.clear();
     rootSnapshot = null;
+  }
+
+  void cancelSearch() {
+    searchOperation?.cancel();
+    searchOperation = null;
+    searchSnapshot = null;
+    searchQuery = null;
+    searchGeneration = null;
   }
 }
 
@@ -926,8 +1092,16 @@ final class _TerminalContextDockDocument {
         directory?.rows ?? const <TerminalContextDockDirectoryRow>[];
     final int selectedIndex = dock.pane.selectedResultIndex;
     int? selectedLineStart;
+    TerminalFileSearchSource? previousSource;
     for (var index = 0; index < rows.length; index++) {
       final TerminalContextDockDirectoryRow row = rows[index];
+      if (directory?.isSearch == true &&
+          row.searchSource != previousSource &&
+          row.searchSource != null) {
+        if (previousSource != null) line();
+        line(_searchSource(localization, row.searchSource!));
+        previousSource = row.searchSource;
+      }
       if (index == selectedIndex) selectedLineStart = buffer.length;
       final String marker = switch (row.entry.kind) {
         TerminalDirectoryEntryKind.directory => row.isExpanded ? '▾' : '▸',
@@ -951,6 +1125,17 @@ final class _TerminalContextDockDocument {
         TerminalContextDockDirectoryStatus.partial) {
       line();
       line(localization.contextDockPartial(directory!.omittedEntryCount));
+    }
+    if (directory?.isSearch == true && directory!.searchCoverage.isNotEmpty) {
+      line();
+      line(localization.contextDockCoverage);
+      for (final TerminalFileSearchCoverage coverage
+          in directory.searchCoverage) {
+        line(
+          '${_searchSource(localization, coverage.source)}: '
+          '${_coverage(localization, coverage.disposition)}',
+        );
+      }
     }
     line();
     line(localization.contextDockDetails);
@@ -1043,6 +1228,32 @@ final class _TerminalContextDockDocument {
     TerminalDirectoryEntryKind.symbolicLink =>
       localization.contextDockSymbolicLink,
     TerminalDirectoryEntryKind.other => localization.contextDockOther,
+  };
+
+  static String _searchSource(
+    TerminalLocalization localization,
+    TerminalFileSearchSource source,
+  ) => switch (source) {
+    TerminalFileSearchSource.currentSubtree =>
+      localization.contextDockSearchCurrentSubtree,
+    TerminalFileSearchSource.recent => localization.contextDockSearchRecent,
+    TerminalFileSearchSource.explicit => localization.contextDockSearchExplicit,
+    TerminalFileSearchSource.systemIndex =>
+      localization.contextDockSearchSystemIndex,
+  };
+
+  static String _coverage(
+    TerminalLocalization localization,
+    TerminalFileSearchCoverageDisposition disposition,
+  ) => switch (disposition) {
+    TerminalFileSearchCoverageDisposition.searching =>
+      localization.contextDockCoverageSearching,
+    TerminalFileSearchCoverageDisposition.complete =>
+      localization.contextDockCoverageComplete,
+    TerminalFileSearchCoverageDisposition.partial =>
+      localization.contextDockCoveragePartial,
+    TerminalFileSearchCoverageDisposition.unavailable =>
+      localization.contextDockCoverageUnavailable,
   };
 
   static String _permissions(int mode) {

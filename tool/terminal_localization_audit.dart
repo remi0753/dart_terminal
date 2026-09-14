@@ -264,6 +264,8 @@ const List<String> _catalogPhrases = <String>[
   'Raw data is saved only to the explicitly selected location',
   'Directory Navigator',
   'Remote directory browsing is not available',
+  'Current subtree',
+  'System index',
 ];
 
 const List<_SourceRule> _sourceRules = <_SourceRule>[
@@ -490,12 +492,17 @@ const List<_SourceRule> _sourceRules = <_SourceRule>[
       'localization.contextDockWorkingDirectory',
       'localization.contextDockRemoteUnavailable',
       'localization.contextDockDetails',
+      'localization.contextDockSearchCurrentSubtree',
+      'localization.contextDockSearchSystemIndex',
+      'localization.contextDockCoverageUnavailable',
     ],
     forbiddenPhrases: <String>[
       'Directory Navigator',
       'Working directory',
       'Remote directory browsing is not available',
       'Metadata unavailable',
+      'Current subtree',
+      'System index',
     ],
   ),
   _SourceRule(

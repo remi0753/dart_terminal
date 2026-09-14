@@ -163,6 +163,16 @@ final class TerminalLocalization {
       : 'NAVIGATOR INPUT · Esc returns to terminal';
   String get contextDockWorkingDirectory => _ja ? '現在地' : 'Working directory';
   String get contextDockSearch => _ja ? '検索' : 'Search';
+  String get contextDockCoverage => _ja ? '検索範囲' : 'Coverage';
+  String get contextDockSearchCurrentSubtree =>
+      _ja ? '現在地のサブツリー' : 'Current subtree';
+  String get contextDockSearchRecent => _ja ? '最近の現在地' : 'Recent locations';
+  String get contextDockSearchExplicit => _ja ? '指定した場所' : 'Chosen locations';
+  String get contextDockSearchSystemIndex => _ja ? 'システム索引' : 'System index';
+  String get contextDockCoverageSearching => _ja ? '検索中' : 'Searching';
+  String get contextDockCoverageComplete => _ja ? '完了' : 'Complete';
+  String get contextDockCoveragePartial => _ja ? '一部' : 'Partial';
+  String get contextDockCoverageUnavailable => _ja ? '利用不可' : 'Unavailable';
   String get contextDockUnknown => _ja ? '不明' : 'Unknown';
   String get contextDockLoading => _ja ? '読み込み中…' : 'Loading…';
   String get contextDockLoadingInline => _ja ? '（読み込み中）' : '(loading)';
