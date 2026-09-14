@@ -153,6 +153,22 @@ Future<void> main(List<String> arguments) async {
           !idleSnapshot.hasExited,
       'fake idle process snapshot is available',
     );
+    _expect(
+      process.workingDirectorySnapshot().isAvailable &&
+          process.workingDirectorySnapshot().processId == process.pid &&
+          process.workingDirectorySnapshot().path == '/private/tmp',
+      'fake owning-shell cwd is available only through its explicit API',
+    );
+    fake.workingDirectorySystemError = 13;
+    final PtyWorkingDirectorySnapshot unavailableCwd = process
+        .workingDirectorySnapshot();
+    _expect(
+      !unavailableCwd.isAvailable &&
+          unavailableCwd.path == null &&
+          unavailableCwd.systemError == 13,
+      'fake cwd observation failure does not retain a path',
+    );
+    fake.workingDirectorySystemError = 0;
     fake.terminalEchoEnabled = false;
     final PtyProcessSnapshot echoDisabledSnapshot = process.processSnapshot();
     _expect(
@@ -252,13 +268,14 @@ Future<void> main(List<String> arguments) async {
   });
 
   await _test('real Dart listener callback and process lifecycle', () async {
-    _expect(_abiVersion() == 6, 'native asset ABI');
+    _expect(_abiVersion() == 7, 'native asset ABI');
     final PtyProcess process = await startPty(
       PtyCommand(
         executable: '/bin/sh',
         arguments: const <String>[
           '-c',
-          'printf "__DPTY_DART__%s:%s" "\$DPTY_DART_ENV" "\$PWD"; exit 9',
+          'printf "__DPTY_DART__%s:%s" "\$DPTY_DART_ENV" "\$PWD"; '
+              'sleep 0.2; exit 9',
         ],
         environment: const <String, String>{'DPTY_DART_ENV': 'ok'},
         includeParentEnvironment: false,
@@ -282,6 +299,13 @@ Future<void> main(List<String> arguments) async {
           snapshot.terminalEchoEnabled == true &&
           !snapshot.hasExited,
       'real idle shell process snapshot crosses the FFI boundary',
+    );
+    final PtyWorkingDirectorySnapshot cwd = process.workingDirectorySnapshot();
+    _expect(
+      cwd.isAvailable &&
+          cwd.processId == process.pid &&
+          cwd.path == '/private/tmp',
+      'real owning-shell cwd crosses the dedicated native boundary',
     );
     final PtyExit exit = await process.exit.timeout(const Duration(seconds: 4));
     final String output = utf8.decode(await outputFuture);

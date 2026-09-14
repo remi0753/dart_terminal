@@ -1,9 +1,11 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <libproc.h>
 #include <poll.h>
 #include <signal.h>
 #include <sys/event.h>
 #include <sys/ioctl.h>
+#include <sys/proc_info.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <termios.h>
@@ -448,6 +450,54 @@ class Session final : public std::enable_shared_from_this<Session> {
     } else {
       output->terminal_attributes_error = errno == 0 ? ENOTTY : errno;
     }
+    return DPTY_STATUS_OK;
+  }
+
+  int32_t GetWorkingDirectorySnapshot(
+      DptyWorkingDirectorySnapshotV1* output) const {
+    if (output == nullptr ||
+        output->struct_size < sizeof(DptyWorkingDirectorySnapshotV1) ||
+        output->abi_version != DPTY_ABI_VERSION) {
+      return SetError(DPTY_STATUS_INVALID_ARGUMENT, EINVAL,
+                      "PTY working directory snapshot buffer is incompatible");
+    }
+    output->child_pid = 0;
+    output->path_length = 0;
+    output->system_error = 0;
+    output->has_exited = 0;
+    std::memset(output->path, 0, sizeof(output->path));
+
+    const std::lock_guard<std::mutex> lock(mutex_);
+    output->has_exited = state_ == State::kFinished ? 1 : 0;
+    const pid_t child = child_pid_;
+    output->child_pid = child > 0 ? child : 0;
+    if (child <= 0 || state_ != State::kRunning) {
+      output->system_error = ENXIO;
+      return DPTY_STATUS_OK;
+    }
+
+    struct proc_vnodepathinfo information = {};
+    errno = 0;
+    const int copied = proc_pidinfo(child, PROC_PIDVNODEPATHINFO, 0,
+                                    &information, sizeof(information));
+    if (copied != static_cast<int>(sizeof(information))) {
+      output->system_error = errno == 0 ? EIO : errno;
+      return DPTY_STATUS_OK;
+    }
+    const char* path = information.pvi_cdir.vip_path;
+    const size_t length = strnlen(path, sizeof(information.pvi_cdir.vip_path));
+    if (length == 0) {
+      output->system_error = ENOENT;
+      return DPTY_STATUS_OK;
+    }
+    if (length >= sizeof(information.pvi_cdir.vip_path) ||
+        length >= sizeof(output->path)) {
+      output->system_error = ENAMETOOLONG;
+      return DPTY_STATUS_OK;
+    }
+    std::memcpy(output->path, path, length);
+    output->path[length] = '\0';
+    output->path_length = length;
     return DPTY_STATUS_OK;
   }
 
@@ -1510,6 +1560,16 @@ dpty_session_get_process_snapshot(DptySessionHandle session,
   const std::shared_ptr<Session> value = LookupSession(session);
   return value == nullptr ? DPTY_STATUS_INVALID_HANDLE
                           : value->GetProcessSnapshot(out_snapshot);
+}
+
+extern "C" __attribute__((visibility("default"))) int32_t
+dpty_session_get_working_directory_snapshot(
+    DptySessionHandle session, DptyWorkingDirectorySnapshotV1* out_snapshot) {
+  ClearError();
+  const std::shared_ptr<Session> value = LookupSession(session);
+  return value == nullptr
+             ? DPTY_STATUS_INVALID_HANDLE
+             : value->GetWorkingDirectorySnapshot(out_snapshot);
 }
 
 extern "C" __attribute__((visibility("default"))) int32_t

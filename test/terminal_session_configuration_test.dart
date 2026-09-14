@@ -80,6 +80,40 @@ Future<void> runTerminalSessionConfigurationTests() async {
     await first.dispose();
     await second.dispose();
   }
+  await _testWorkingDirectoryExposure();
+}
+
+Future<void> _testWorkingDirectoryExposure() async {
+  final FakePtyBackend backend = FakePtyBackend();
+  final TerminalSession session = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(3), generation: 1),
+    ptyBackend: backend,
+    initialWorkingDirectory: '/private/tmp/launch-root',
+    onChanged: () {},
+    onTerminated: () {},
+  );
+  try {
+    _expect(
+      session.initialWorkingDirectory == '/private/tmp/launch-root' &&
+          session.workingDirectorySnapshot() == null,
+      'launch cwd is exposed while a non-live session has no process cwd',
+    );
+    await session.start();
+    backend.processes.single.workingDirectoryPath = '/private/tmp/live-root';
+    final snapshot = session.workingDirectorySnapshot();
+    _expect(
+      snapshot?.isAvailable == true &&
+          snapshot?.processId == backend.processes.single.pid &&
+          snapshot?.path == '/private/tmp/live-root',
+      'live session exposes its generation-owned PTY process cwd',
+    );
+  } finally {
+    await session.dispose();
+  }
+  _expect(
+    session.workingDirectorySnapshot() == null,
+    'disposed session does not expose stale process cwd',
+  );
 }
 
 void _expect(bool condition, String description) {

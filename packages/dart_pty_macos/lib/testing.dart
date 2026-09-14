@@ -85,6 +85,8 @@ final class FakePtyProcess implements PtyProcess {
   int foregroundProcessGroupSystemError = 0;
   bool terminalEchoEnabled = true;
   int terminalAttributesSystemError = 0;
+  String workingDirectoryPath = '/private/tmp';
+  int workingDirectorySystemError = 0;
 
   @override
   Stream<Uint8List> get output => _output.stream;
@@ -118,6 +120,22 @@ final class FakePtyProcess implements PtyProcess {
           ? terminalEchoEnabled
           : null,
       terminalAttributesSystemError: terminalAttributesSystemError,
+    );
+  }
+
+  @override
+  PtyWorkingDirectorySnapshot workingDirectorySnapshot() {
+    _requireRunning();
+    if (workingDirectorySystemError != 0) {
+      return PtyWorkingDirectorySnapshot.unavailable(
+        processId: pid,
+        systemError: workingDirectorySystemError,
+        hasExited: false,
+      );
+    }
+    return PtyWorkingDirectorySnapshot.available(
+      processId: pid,
+      path: workingDirectoryPath,
     );
   }
 

@@ -59,6 +59,8 @@ struct Api {
   int32_t (*stats)(DptySessionHandle, DptySessionStatsV1*) = nullptr;
   int32_t (*process_snapshot)(DptySessionHandle,
                               DptyProcessSnapshotV1*) = nullptr;
+  int32_t (*working_directory_snapshot)(
+      DptySessionHandle, DptyWorkingDirectorySnapshotV1*) = nullptr;
   int32_t (*destroy)(DptySessionHandle) = nullptr;
   int32_t (*last_error)(DptyError*) = nullptr;
   uint64_t (*live_count)() = nullptr;
@@ -411,6 +413,16 @@ void TestInteractiveSession(Api* api) {
              shell_snapshot.terminal_attributes_error == 0 &&
              shell_snapshot.has_exited == 0,
          "idle shell owns its process group and starts with echo enabled");
+  DptyWorkingDirectorySnapshotV1 shell_cwd = {};
+  shell_cwd.struct_size = sizeof(shell_cwd);
+  shell_cwd.abi_version = DPTY_ABI_VERSION;
+  Expect(api->working_directory_snapshot(session, &shell_cwd) ==
+                 DPTY_STATUS_OK &&
+             shell_cwd.child_pid == shell_snapshot.child_pid &&
+             shell_cwd.path_length == std::strlen("/private/tmp") &&
+             shell_cwd.system_error == 0 && shell_cwd.has_exited == 0 &&
+             std::strcmp(shell_cwd.path, "/private/tmp") == 0,
+         "owning shell cwd is available through the explicit path API");
 
   std::vector<uint8_t> oversized(64 * 1024 + 1, 'w');
   Expect(api->write(session, oversized.data(), oversized.size()) ==
@@ -430,6 +442,22 @@ void TestInteractiveSession(Api* api) {
   Expect(WaitForMarker(&events, "__DPTY_CWD__/private/tmp",
                        std::chrono::seconds(3)),
          "working directory is applied");
+  Expect(Write(api, session, "cd /; print -r -- __DPTY_CWD_CHANGED__\n") ==
+             DPTY_STATUS_OK,
+         "shell cwd change is queued");
+  Expect(WaitForMarker(&events, "__DPTY_CWD_CHANGED__",
+                       std::chrono::seconds(3)),
+         "shell cwd change completes");
+  DptyWorkingDirectorySnapshotV1 changed_cwd = {};
+  changed_cwd.struct_size = sizeof(changed_cwd);
+  changed_cwd.abi_version = DPTY_ABI_VERSION;
+  Expect(api->working_directory_snapshot(session, &changed_cwd) ==
+                 DPTY_STATUS_OK &&
+             changed_cwd.child_pid == shell_snapshot.child_pid &&
+             changed_cwd.path_length == std::strlen("/") &&
+             changed_cwd.system_error == 0 && changed_cwd.has_exited == 0 &&
+             std::strcmp(changed_cwd.path, "/") == 0,
+         "owning shell cwd observation follows a plain shell cd");
   DptyProcessSnapshotV1 no_echo_snapshot = {};
   no_echo_snapshot.struct_size = sizeof(no_echo_snapshot);
   no_echo_snapshot.abi_version = DPTY_ABI_VERSION;
@@ -591,6 +619,14 @@ void TestInteractiveSession(Api* api) {
              exited_snapshot.terminal_echo_enabled == 0 &&
              exited_snapshot.terminal_attributes_error == ENXIO,
          "exited snapshot is content-free and unavailable");
+  DptyWorkingDirectorySnapshotV1 exited_cwd = {};
+  exited_cwd.struct_size = sizeof(exited_cwd);
+  exited_cwd.abi_version = DPTY_ABI_VERSION;
+  Expect(api->working_directory_snapshot(session, &exited_cwd) ==
+                 DPTY_STATUS_OK &&
+             exited_cwd.path_length == 0 && exited_cwd.system_error == ENXIO &&
+             exited_cwd.has_exited == 1,
+         "exited cwd snapshot is typed unavailable without a stale path");
   Expect(api->destroy(session) == DPTY_STATUS_OK,
          "finished session is destroyed");
   const uint8_t byte = 0;
@@ -599,6 +635,9 @@ void TestInteractiveSession(Api* api) {
   Expect(api->process_snapshot(session, &exited_snapshot) ==
              DPTY_STATUS_INVALID_HANDLE,
          "destroyed process snapshot generation is stale");
+  Expect(api->working_directory_snapshot(session, &exited_cwd) ==
+             DPTY_STATUS_INVALID_HANDLE,
+         "destroyed cwd snapshot generation is stale");
   errno = 0;
   Expect(waitpid(static_cast<pid_t>(child_pid), nullptr, WNOHANG) == -1 &&
              errno == ECHILD,
@@ -1013,6 +1052,9 @@ int main(int argc, const char* argv[]) {
   api.stats = Lookup<decltype(api.stats)>(image, "dpty_session_get_stats");
   api.process_snapshot = Lookup<decltype(api.process_snapshot)>(
       image, "dpty_session_get_process_snapshot");
+  api.working_directory_snapshot =
+      Lookup<decltype(api.working_directory_snapshot)>(
+          image, "dpty_session_get_working_directory_snapshot");
   api.destroy = Lookup<decltype(api.destroy)>(image, "dpty_session_destroy");
   api.last_error =
       Lookup<decltype(api.last_error)>(image, "dpty_get_last_error");

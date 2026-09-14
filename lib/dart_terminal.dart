@@ -184,6 +184,7 @@ export 'src/terminal_core/vt_parser_trace.dart'
 export 'src/terminal_desktop_signal_projection.dart';
 export 'src/terminal_diagnostics.dart';
 export 'src/terminal_diagnostics_presenter.dart';
+export 'src/terminal_directory_snapshot.dart';
 export 'src/terminal_effective_config.dart';
 export 'src/terminal_incident_controller.dart';
 export 'src/terminal_incident_service.dart';

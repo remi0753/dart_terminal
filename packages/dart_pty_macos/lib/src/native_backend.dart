@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
@@ -8,7 +9,7 @@ import 'package:ffi/ffi.dart';
 import 'api.dart';
 
 const String _assetId = 'package:dart_pty_macos/dart_pty_macos.dart';
-const int _abiVersion = 6;
+const int _abiVersion = 7;
 const int _statusOk = 0;
 const int _statusBackpressured = 4;
 const int _eventStarted = 1;
@@ -155,6 +156,29 @@ final class _NativeProcessSnapshot extends Struct {
   external int terminalAttributesError;
 }
 
+final class _NativeWorkingDirectorySnapshot extends Struct {
+  @Size()
+  external int structSize;
+
+  @Uint32()
+  external int abiVersion;
+
+  @Int64()
+  external int childPid;
+
+  @Size()
+  external int pathLength;
+
+  @Int32()
+  external int systemError;
+
+  @Int32()
+  external int hasExited;
+
+  @Array(PtyWorkingDirectorySnapshot.maximumPathUtf8Bytes + 1)
+  external Array<Uint8> path;
+}
+
 @Native<Uint32 Function()>(symbol: 'dpty_abi_version', assetId: _assetId)
 external int _nativeAbiVersion();
 
@@ -232,6 +256,15 @@ external int _sessionGetProcessSnapshot(
   Pointer<_NativeProcessSnapshot> snapshot,
 );
 
+@Native<Int32 Function(Uint64, Pointer<_NativeWorkingDirectorySnapshot>)>(
+  symbol: 'dpty_session_get_working_directory_snapshot',
+  assetId: _assetId,
+)
+external int _sessionGetWorkingDirectorySnapshot(
+  int session,
+  Pointer<_NativeWorkingDirectorySnapshot> snapshot,
+);
+
 @Native<Int32 Function(Uint64)>(
   symbol: 'dpty_session_destroy',
   assetId: _assetId,
@@ -280,6 +313,14 @@ typedef _SessionProcessSnapshotDart = int Function(
   int,
   Pointer<_NativeProcessSnapshot>,
 );
+typedef _SessionWorkingDirectorySnapshotNative = Int32 Function(
+  Uint64,
+  Pointer<_NativeWorkingDirectorySnapshot>,
+);
+typedef _SessionWorkingDirectorySnapshotDart = int Function(
+  int,
+  Pointer<_NativeWorkingDirectorySnapshot>,
+);
 
 final class _PtyFunctions {
   _PtyFunctions.nativeAssets()
@@ -295,6 +336,7 @@ final class _PtyFunctions {
       sessionForceClose = _sessionForceClose,
       sessionGetStats = _sessionGetStats,
       sessionGetProcessSnapshot = _sessionGetProcessSnapshot,
+      sessionGetWorkingDirectorySnapshot = _sessionGetWorkingDirectorySnapshot,
       sessionDestroy = _sessionDestroy;
 
   _PtyFunctions.dynamic(DynamicLibrary library)
@@ -346,6 +388,11 @@ final class _PtyFunctions {
             _SessionProcessSnapshotNative,
             _SessionProcessSnapshotDart
           >('dpty_session_get_process_snapshot'),
+      sessionGetWorkingDirectorySnapshot = library
+          .lookupFunction<
+            _SessionWorkingDirectorySnapshotNative,
+            _SessionWorkingDirectorySnapshotDart
+          >('dpty_session_get_working_directory_snapshot'),
       sessionDestroy = library
           .lookupFunction<_SessionHandleNative, _SessionHandleDart>(
             'dpty_session_destroy',
@@ -363,6 +410,7 @@ final class _PtyFunctions {
   final _SessionHandleDart sessionForceClose;
   final _SessionStatsDart sessionGetStats;
   final _SessionProcessSnapshotDart sessionGetProcessSnapshot;
+  final _SessionWorkingDirectorySnapshotDart sessionGetWorkingDirectorySnapshot;
   final _SessionHandleDart sessionDestroy;
 }
 
@@ -759,6 +807,52 @@ final class _MacosPtyProcess implements PtyProcess {
             : null,
         terminalAttributesSystemError: value.terminalAttributesError,
       );
+    } finally {
+      calloc.free(snapshot);
+    }
+  }
+
+  @override
+  PtyWorkingDirectorySnapshot workingDirectorySnapshot() {
+    _requireRunning();
+    final Pointer<_NativeWorkingDirectorySnapshot> snapshot =
+        calloc<_NativeWorkingDirectorySnapshot>();
+    try {
+      snapshot.ref
+        ..structSize = sizeOf<_NativeWorkingDirectorySnapshot>()
+        ..abiVersion = _abiVersion;
+      _checkStatus(
+        _functions.sessionGetWorkingDirectorySnapshot(_handle, snapshot),
+        'PTY working directory snapshot',
+      );
+      final _NativeWorkingDirectorySnapshot value = snapshot.ref;
+      final int? processId = value.childPid > 0 ? value.childPid : null;
+      if (value.hasExited != 0 ||
+          value.systemError != 0 ||
+          value.pathLength <= 0 ||
+          value.pathLength > PtyWorkingDirectorySnapshot.maximumPathUtf8Bytes) {
+        return PtyWorkingDirectorySnapshot.unavailable(
+          processId: processId,
+          systemError: value.systemError == 0 ? -1 : value.systemError,
+          hasExited: value.hasExited != 0,
+        );
+      }
+      try {
+        final List<int> bytes = <int>[
+          for (var index = 0; index < value.pathLength; index++)
+            value.path[index],
+        ];
+        return PtyWorkingDirectorySnapshot.available(
+          processId: processId!,
+          path: utf8.decode(bytes, allowMalformed: false),
+        );
+      } on Object {
+        return PtyWorkingDirectorySnapshot.unavailable(
+          processId: processId,
+          systemError: -1,
+          hasExited: false,
+        );
+      }
     } finally {
       calloc.free(snapshot);
     }

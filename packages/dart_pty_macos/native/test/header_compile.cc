@@ -5,13 +5,17 @@
 static_assert(std::is_standard_layout_v<DptySessionConfigV1>);
 static_assert(std::is_standard_layout_v<DptySessionStatsV1>);
 static_assert(std::is_standard_layout_v<DptyProcessSnapshotV1>);
+static_assert(std::is_standard_layout_v<DptyWorkingDirectorySnapshotV1>);
 static_assert(std::is_standard_layout_v<DptyError>);
 
 int main() {
   auto* create = &dpty_session_create;
   auto* force_close = &dpty_session_force_close;
   auto* get_process_snapshot = &dpty_session_get_process_snapshot;
+  auto* get_working_directory_snapshot =
+      &dpty_session_get_working_directory_snapshot;
   auto* destroy = &dpty_session_destroy;
   return create == nullptr || force_close == nullptr ||
-         get_process_snapshot == nullptr || destroy == nullptr;
+         get_process_snapshot == nullptr ||
+         get_working_directory_snapshot == nullptr || destroy == nullptr;
 }

@@ -21217,6 +21217,10 @@ final class _ExitNotificationSuppressingPtyProcess implements PtyProcess {
   PtyProcessSnapshot processSnapshot() => _delegate.processSnapshot();
 
   @override
+  PtyWorkingDirectorySnapshot workingDirectorySnapshot() =>
+      _delegate.workingDirectorySnapshot();
+
+  @override
   PtyWriteResult write(Uint8List bytes) => _delegate.write(bytes);
 
   @override

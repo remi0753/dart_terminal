@@ -4,7 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define DPTY_ABI_VERSION 6u
+#define DPTY_ABI_VERSION 7u
+#define DPTY_WORKING_DIRECTORY_CAPACITY 4096u
 
 #if defined(__cplusplus)
 extern "C" {
@@ -155,6 +156,19 @@ typedef struct DptyProcessSnapshotV1 {
   int32_t terminal_attributes_error;
 } DptyProcessSnapshotV1;
 
+// Explicit path-bearing snapshot of the owning child process cwd. This is not
+// part of content-free diagnostics or DptyProcessSnapshotV1. `path_length`
+// excludes the terminating NUL and is zero when `system_error` is nonzero.
+typedef struct DptyWorkingDirectorySnapshotV1 {
+  size_t struct_size;
+  uint32_t abi_version;
+  int64_t child_pid;
+  size_t path_length;
+  int32_t system_error;
+  int32_t has_exited;
+  char path[DPTY_WORKING_DIRECTORY_CAPACITY];
+} DptyWorkingDirectorySnapshotV1;
+
 typedef struct DptyError {
   int32_t status;
   int32_t system_error;
@@ -206,6 +220,10 @@ __attribute__((visibility("default"))) int32_t dpty_session_get_stats(
 __attribute__((visibility("default"))) int32_t
 dpty_session_get_process_snapshot(DptySessionHandle session,
                                   DptyProcessSnapshotV1* out_snapshot);
+
+__attribute__((visibility("default"))) int32_t
+dpty_session_get_working_directory_snapshot(
+    DptySessionHandle session, DptyWorkingDirectorySnapshotV1* out_snapshot);
 
 // Valid only after EXIT or ERROR and after all OUTPUT records are acknowledged.
 __attribute__((visibility("default"))) int32_t

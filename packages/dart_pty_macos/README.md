@@ -5,7 +5,7 @@ applications. Native code owns only `forkpty`, the audited child `execve` path,
 master-FD readiness, bounded byte queues, resize/signals, close escalation, and
 child reaping. Dart owns session policy and terminal semantics.
 
-The v6 `dpty_*` C ABI provides:
+The v7 `dpty_*` C ABI provides:
 
 - copied argv, environment, working directory, and initial size before fork;
 - an isolated C child branch using only audited async-signal-safe operations;
@@ -16,6 +16,8 @@ The v6 `dpty_*` C ABI provides:
 - foreground process-group signals, `TIOCSWINSZ`, SIGHUP/grace/SIGKILL close;
 - a content-free on-demand child/owning/foreground process-group and terminal
   echo-mode snapshot;
+- a separate, explicit owning-child working-directory snapshot which never
+  enters the content-free diagnostics stream;
 - idempotent, nonblocking immediate force close before or during graceful close;
 - opt-in, content-free write/control/reap diagnostics with tracked-write IDs;
 - bounded reactor turns so continuous output cannot starve writes or close;
@@ -55,6 +57,13 @@ per-field syscall errors, and exit state. It never inspects process names,
 arguments, environment, working directories, or terminal content. A consumer
 can distinguish the owning shell group from a foreground job while treating
 an unavailable field conservatively.
+
+`PtyProcess.workingDirectorySnapshot()` is intentionally a different,
+path-bearing capability. On macOS it reads the still-owned child identity with
+`proc_pidinfo(PROC_PIDVNODEPATHINFO)`, returns the PID beside a bounded UTF-8
+absolute path, and returns only a typed system error after exit or lookup
+failure. Product code must match that PID to its current session generation
+before treating the path as filesystem authority.
 
 `PtyProcess.writeTracked()` returns an opaque request ID for correlating queue
 admission, reactor dequeue, and `write(2)` completion. Passing

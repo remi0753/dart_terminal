@@ -293,6 +293,8 @@ final class TerminalSession implements TerminalPaneSession {
   final Duration finalShutdownTimeout;
   final Duration cleanupStepTimeout;
 
+  String get initialWorkingDirectory => _workingDirectory;
+
   final TerminalBuffer buffer = TerminalBuffer();
   late final TerminalScreenSet terminalScreenSet;
   late final TerminalScreenParserSink terminalParserSink;
@@ -486,6 +488,21 @@ final class TerminalSession implements TerminalPaneSession {
       );
     } on Object {
       return TerminalPaneProcessSnapshot.unavailable(sessionId: id);
+    }
+  }
+
+  /// Reads the owning local shell cwd through the explicit PTY capability.
+  ///
+  /// The path is never copied into content-free process diagnostics. A null
+  /// result means the session no longer has a live process owner.
+  PtyWorkingDirectorySnapshot? workingDirectorySnapshot() {
+    if (!_live) return null;
+    final PtyProcess? process = _process;
+    if (process == null) return null;
+    try {
+      return process.workingDirectorySnapshot();
+    } on Object {
+      return null;
     }
   }
 

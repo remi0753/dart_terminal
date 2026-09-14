@@ -330,6 +330,90 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
   compatibility／differential／application／terminfo／shell integration／distribution gateを通過し、最後に
   `dart_terminal tests passed`を確認した。
 
+### 2026-09-14 第2サブタスク着手
+
+- 目的: shell pluginがOSC 7を送らないplain local `sh`でも、owning shellのOS cwdを補助authorityとして
+  観測し、focused paneへgeneration付きのtrusted local cwdを返せるようにする。そのcwd直下はAppKit main
+  threadを塞がないbounded／cancellable snapshotとして取得し、後続native treeが安全にlazy展開できる
+  provider contractを作る。
+- 範囲: local OSC 7、owning shell cwd、trusted launch cwdの優先resolver、remote OSC 7のlocal fallback拒否、
+  macOS PTY child cwdの専用native snapshot、absolute／UTF-8／control／bidi path validation、非再帰directory
+  listing、dotfile、file／folder／symlink種別、permission／owner／group／size／mtime／symlink target、
+  entry／metadata concurrency／deadline上限、typed partial／unavailable state、generationとcancel owner、fake
+  filesystemおよびtemporary fixture test。
+- 対象外: native Dock表示、tree rowのexpand state、filesystem watcher、recursive subtree search、Spotlight等の
+  system index、path copy／insert、remote filesystem provider、Secure Keyboard EntryとのUI連動。これらは
+  後続subtaskの順序を維持する。
+- 依存関係: `TerminalSessionMetadata`と`TerminalTabPresentationResolver.localFilePath`のlocal `file:` trust、
+  `TerminalPaneProcessSnapshot.childProcessId`のowning session identity、`dart_pty_macos`のnative session owner、
+  Dart async `Directory.list`／`FileStat`、第1サブタスクのpane generation／cleanup contract。
+- リスク: process cwdはpathというsensitive dataなので既存content-free process diagnosticsへ混ぜず、明示した
+  working-directory APIだけから取得する。remote OSC authorityがあるpaneへlocal child／launch cwdを混ぜない。
+  symlinkはentryとして表示してもfollowせず、1 snapshotは直下だけに限定する。Dart I/O自体を中断できない
+  metadata callはlate completionをgeneration／cancel tokenで破棄し、同時実行数とdeadlineを固定する。
+- 完了条件: priorityとremote拒否が決定的で、PID／session generation mismatchを受け入れず、native／fake cwd
+  observationがtypedに失敗する。directory snapshotはunsafe／escape path、duplicate、permission、vanish、
+  symlink、entry cap、deadline、explicit cancellationをbounded resultへ還元し、cancel後のlate resultを公開
+  しない。focused tests、package native tests、format、analysis、generated freshness、full `make test`を通す。
+- 検証方針: pure resolver／fake filesystem test、temporary directoryでdotfileとsymlinkを使うreal adapter test、
+  `dart_pty_macos` native capabilityとDart FFI test、session fallback test、関連metadata／presentation test、full
+  gateを順に実行する。native Dockが対象外なのでDeveloper JIT／Release AOTのvisual acceptanceは実行しない。
+
+### 2026-09-14 第2サブタスク実装結果
+
+- `dart_pty_macos` ABIをv7へ更新し、既存のcontent-free process snapshotとは別の明示的な
+  `PtyProcess.workingDirectorySnapshot()`を追加した。native側はsession mutex下でstill-owned child PIDを確定し、
+  `proc_pidinfo(PROC_PIDVNODEPATHINFO)`から最大4,095 UTF-8 byteのabsolute cwdを同じcallで返す。終了済み、lookup
+  failure、過長pathはpathを残さずtyped system errorにする。診断event、process snapshot、loggerにはcwdを追加
+  していない。
+- native capability testでは初期`/private/tmp`に加え、interactive shellへ通常の`cd /`を送った後にcwd snapshotが
+  `/`へ追従することを固定した。Dart package testはpluginを使わない`/bin/sh -c`の実childでもPIDとcwdが一致する
+  ことを確認する。fake backendと`TerminalSession`にも同じAPIを投影し、non-live／disposed sessionはstale pathを
+  返さない。
+- `TerminalWorkingDirectoryResolver`はcurrent session identityを必須とし、accepted local OSC 7、同じchild PIDの
+  owning-shell snapshot、trusted launch cwdの順に解決する。absolute pathをlexical normalizeし、UTF-8 byte上限、
+  control、bidi、NUL、rootより上への`..`を拒否する。remote hostを持つsafe OSC 7は
+  `remoteUnavailable`で即時終了し、同名local process／launch pathを混ぜない。
+- `TerminalDirectorySnapshotService`をone-shotのasync filesystem providerとして追加した。任意のtrusted rootの直下
+  だけを`followLinks: false`で列挙するため、同じprimitiveをfolder展開時に呼ぶことでlazy subtreeになる。folder、
+  file、symlink、otherとdotfileを保持し、folder-first／case-folded name／exact nameの順で決定的にsortする。
+- 1 snapshotはretained entry 2,048、scan 4,096、retained path合計1 MiB、name 1,024 byte、symlink target
+  4,096 byte、issue 128件、metadata同時実行16、既定deadline 1.5秒／最大5秒へ制限した。結果はgenerationを持つ
+  immutableなcomplete／partial／unavailable／cancelled stateで、unsafe child、duplicate、permission、vanish、
+  mount detach、metadata failure、各cap、deadlineをtyped issueに還元する。explicit cancelはentryを公開せず、
+  Dart I/Oのlate completionも完成済み結果を変更しない。
+- このone-shot層自身のcache capacityとfilesystem watcher capacityはともに0とした。hidden Dockを含むUI lifecycleに
+  先行してbackground ownerを作らず、cache、event coalescing、watcherは次のnative tree ownerで別のbounded policyを
+  持たせる。real temporary fixtureはtop-level snapshotでnested fileとself-loop symlinkを辿らず、subdirectoryを
+  明示要求した時だけnested fileを返すことを検証する。
+- real `dart:io` adapterが返すmetadataはmode、size、mtimeとsymlink targetである。owner／group IDはprovider DTO上で
+  optional fieldとして固定しfake境界を検証したが、Dart `FileStat`がuid／gidを公開しないためreal adapterではnullに
+  なる。native treeのdetail表示を実装する次subtaskで、main threadを塞がないnative metadata enrichmentを追加する。
+
+#### 検証と失敗記録
+
+- 最初の`dart analyze`でnullable PIDの比較、`dart:convert` import不足、export順序の3件を検出して修正した。test追加後
+  にfake field／method名の衝突とrunner import順序も検出して修正し、以降のanalysisは指摘0になった。
+- sandbox内で環境変数なしに実行した`dart format`はformat自体を終えた後、workspace外のDart telemetry session file
+  のmtime更新を拒否されて停止した。以降は`CI=true DART_SUPPRESS_ANALYTICS=true`を付け、format checkは変更0、
+  `dart analyze`は`No issues found!`で成功した。
+- `terminal_directory_snapshot_test.dart`: 成功。authority priority／remote拒否／identity mismatch、unsafe path、
+  deterministic order、dotfile、optional metadata、permission、duplicate／escape、vanish、mount detach、cancel／late
+  completion、deadline、entry／path byte cap、real temporary directory、lazy subtree、symlink非追跡を検証した。
+- `terminal_session_configuration_test.dart`: 成功。launch cwd、live PTY cwd、dispose後のstale拒否を検証した。
+- `make dpty-native-test`: 成功。ABI/header、initial cwd、plain `cd`追従、終了後／stale handle errorを含むnative
+  capability contractを通した。
+- `make dpty-dart-test`: 成功。fakeと実`/bin/sh`のcwd snapshot、FFI、lifecycleを含むpackage gateを通した。
+- 初回のfull gateは`terminal_application.dart`／`terminal_session.dart`のhash変更によりPhase 7 acceptance freshnessで
+  停止した。`make phase7-appkit-acceptance`でreview済みsource hashだけを更新した。次回はその連鎖によるGhostty gap
+  inventory freshnessで停止したため、`make ghostty-p0-p1-gap-inventory`と
+  `make release-candidate-daily-use-matrix`を再生成した。判定数、gap、release blocker数は変わっていない。
+- 生成後の`CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。342 Dart fileのformat変更0、analysis指摘0、
+  PTY／renderer／AppleScript／App Intents／compatibility／differential／application／terminfo／shell integration／
+  distribution gateを通過し、最後に`dart_terminal tests passed`を確認した。
+- native Dockは未実装であるためDeveloper JIT／Release AOTのvisual acceptanceはこのsubtaskでは未実施で、次の
+  native side-dock subtaskへ残す。SSH／remote filesystem機能は計画どおり実装していない。
+
 ### 2026-09-14 計画着手時
 
 - `main`はcleanで`origin/main`と同じ`31d6634`にあり、user指定に従い

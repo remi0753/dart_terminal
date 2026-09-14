@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 const String dartPtyMacosLibraryName = 'libdart_pty_macos.dylib';
@@ -249,6 +250,49 @@ final class PtyProcessSnapshot {
       terminalEchoEnabled != null && terminalAttributesSystemError == 0;
 }
 
+/// Same-call observation of the owning child process working directory.
+///
+/// This is an explicit path-bearing capability and is intentionally separate
+/// from [PtyProcessSnapshot] and content-free diagnostic events.
+final class PtyWorkingDirectorySnapshot {
+  PtyWorkingDirectorySnapshot.available({
+    required int processId,
+    required String path,
+  }) : processId = processId,
+       path = path,
+       systemError = 0,
+       hasExited = false {
+    if (processId <= 0) {
+      throw ArgumentError.value(processId, 'processId', 'must be positive');
+    }
+    if (!path.startsWith('/') ||
+        path.contains('\u0000') ||
+        utf8.encode(path).length > maximumPathUtf8Bytes) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'must be an absolute bounded path without NUL',
+      );
+    }
+  }
+
+  const PtyWorkingDirectorySnapshot.unavailable({
+    required this.processId,
+    required this.systemError,
+    required this.hasExited,
+  }) : path = null;
+
+  static const int maximumPathUtf8Bytes = 4095;
+
+  final int? processId;
+  final String? path;
+  final int systemError;
+  final bool hasExited;
+
+  bool get isAvailable =>
+      processId != null && path != null && systemError == 0 && !hasExited;
+}
+
 abstract interface class PtyProcess {
   int get pid;
   Stream<Uint8List> get output;
@@ -257,6 +301,7 @@ abstract interface class PtyProcess {
   PtyStats? get finalStats;
 
   PtyProcessSnapshot processSnapshot();
+  PtyWorkingDirectorySnapshot workingDirectorySnapshot();
 
   PtyWriteResult write(Uint8List bytes);
   PtyWriteReceipt writeTracked(Uint8List bytes);
