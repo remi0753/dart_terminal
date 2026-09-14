@@ -802,6 +802,18 @@ abstract final class TerminalProductConfigSchema {
         formatter: _formatColor,
       );
 
+  static final TerminalConfigOption<double>
+  backgroundOpacity = TerminalConfigOption<double>(
+    name: 'background-opacity',
+    description:
+        'Shared terminal background opacity; 0 is transparent and 1 is opaque.',
+    valueSyntax: '<0..1>',
+    applicationPolicy: TerminalConfigApplicationPolicy.live,
+    defaultValue: 1,
+    parser: _parseBackgroundOpacity,
+    formatter: _formatDouble,
+  );
+
   static final TerminalConfigOption<int> paletteCursor =
       TerminalConfigOption<int>(
         name: 'palette-cursor',
@@ -1152,6 +1164,7 @@ abstract final class TerminalProductConfigSchema {
       theme,
       paletteForeground,
       paletteBackground,
+      backgroundOpacity,
       paletteCursor,
       ...ansiPalette,
       fontFamily,
@@ -2166,6 +2179,14 @@ TerminalConfigDecodeResult<double> _parseFontSize(String value) =>
       minimum: 4,
       maximum: 128,
       description: 'font size',
+    );
+
+TerminalConfigDecodeResult<double> _parseBackgroundOpacity(String value) =>
+    _parseFiniteDouble(
+      value,
+      minimum: 0,
+      maximum: 1,
+      description: 'background opacity',
     );
 
 TerminalConfigDecodeResult<TerminalConfiguredSyntheticStyle>

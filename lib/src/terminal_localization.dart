@@ -845,6 +845,7 @@ final Map<String, String> _japaneseSettingsOptionDescriptions =
       'theme': '基本テーマ: system、light、dark。',
       'palette-foreground': 'ターミナルの既定の前景色。',
       'palette-background': 'ターミナルの既定の背景色。',
+      'background-opacity': '全ターミナル画面で共有する背景の透過度。0で完全透明、1で不透明。',
       'palette-cursor': 'ターミナルのカーソル色。',
       'font-family': 'ターミナルの等幅フォント、または `system`。',
       'font-size': 'ターミナルのフォントサイズ（ポイント）。',

@@ -226,6 +226,7 @@ Future<void> _testAcceptedConfigurationAuthority() async {
     const <String>[
       '--no-config',
       '--font-size=18',
+      '--background-opacity=0.65',
       '--font-variation-regular=wght=800',
       '--quick-terminal-shortcut=command+grave',
       '--quick-terminal-screen=mouse',
@@ -269,6 +270,7 @@ Future<void> _testAcceptedConfigurationAuthority() async {
     authority.acceptedGeneration == 1 &&
         authority.liveGeneration == 1 &&
         authority.newSessionConfiguration.fontSize == 18 &&
+        authority.newSessionConfiguration.backgroundOpacity == 0.65 &&
         authority.newSessionConfiguration.fontCatalogConfiguration
                 .variationsFor(TerminalFontStyle.regular)
                 .single ==
@@ -306,6 +308,7 @@ Future<void> _testAcceptedConfigurationAuthority() async {
   candidate = TerminalConfigLoader().resolve(const <String>[
     '--no-config',
     '--font-size=20',
+    '--background-opacity=0.65',
     '--quick-terminal-shortcut=command+grave',
     '--quick-terminal-screen=mouse',
     '--quick-terminal-animation-duration=0',
@@ -362,13 +365,13 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
       .toList(growable: false);
   _expect(
     live.map((TerminalConfigOptionBase option) => option.name).join(',') ==
-            'quick-terminal-shortcut,quick-terminal-screen,'
+            'background-opacity,quick-terminal-shortcut,quick-terminal-screen,'
                 'quick-terminal-animation-duration,quick-terminal-autohide,'
                 'macos-app-intents,macos-notifications,'
                 'macos-applescript,'
                 'macos-secure-input-auto,macos-secure-input-indication,'
                 'macos-option-key,keybind' &&
-        schema.options.length == 52 &&
+        schema.options.length == 53 &&
         schema.options.every(
           (TerminalConfigOptionBase option) =>
               option.applicationPolicy ==
@@ -392,6 +395,7 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
     const <String>[
       '--no-config',
       '--font-size=18',
+      '--background-opacity=0.5',
       '--font-variation-regular=wght=800',
       '--quick-terminal-shortcut=command+grave',
       '--quick-terminal-screen=mouse',
@@ -415,7 +419,8 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
     plan.changes
             .map((TerminalConfigChange change) => change.option.name)
             .join(',') ==
-        'font-size,font-variation-regular,quick-terminal-shortcut,'
+        'background-opacity,font-size,font-variation-regular,'
+            'quick-terminal-shortcut,'
             'quick-terminal-screen,'
             'quick-terminal-animation-duration,quick-terminal-autohide,'
             'macos-app-intents,macos-notifications,'
@@ -428,7 +433,7 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
     plan.liveChanges
                 .map((TerminalConfigChange change) => change.option.name)
                 .join(',') ==
-            'quick-terminal-shortcut,quick-terminal-screen,'
+            'background-opacity,quick-terminal-shortcut,quick-terminal-screen,'
                 'quick-terminal-animation-duration,quick-terminal-autohide,'
                 'macos-app-intents,macos-notifications,'
                 'macos-applescript,'
@@ -524,16 +529,16 @@ void _testDefaultsAndSchemaInventory() {
   final TerminalProductConfiguration defaults =
       TerminalProductConfiguration.defaults;
   _expect(
-    TerminalProductConfigSchema.instance.options.length == 52 &&
+    TerminalProductConfigSchema.instance.options.length == 53 &&
         TerminalProductConfigSchema.instance.options
                 .map((TerminalConfigOptionBase option) => option.name)
                 .toSet()
                 .length ==
-            52 &&
+            53 &&
         TerminalProductConfigSchema.instance.options.every(
           (TerminalConfigOptionBase option) => option.description.isNotEmpty,
         ),
-    'product schema has 52 unique documented options',
+    'product schema has 53 unique documented options',
   );
   _expect(
     defaults.workingDirectory == null &&
@@ -544,6 +549,7 @@ void _testDefaultsAndSchemaInventory() {
         defaults.palette.foreground == 0x80e5e5e5 &&
         defaults.palette.background == 0x80000000 &&
         defaults.palette.cursor == 0x80e5e5e5 &&
+        defaults.backgroundOpacity == 1 &&
         _listEquals(
           defaults.palette.ansiColors,
           TerminalProductConfigSchema.defaultAnsiColors,
@@ -773,6 +779,7 @@ void _testCompleteFileProfile() {
     ..writeln('theme = system')
     ..writeln('palette-foreground = #112233 # configured foreground')
     ..writeln('palette-background = #010203')
+    ..writeln('background-opacity = 0.625')
     ..writeln('palette-cursor = #abcdef');
   for (var index = 0; index < 16; index += 1) {
     config.writeln(
@@ -826,6 +833,7 @@ void _testCompleteFileProfile() {
         profile.palette.foreground == 0x80112233 &&
         profile.palette.background == 0x80010203 &&
         profile.palette.cursor == 0x80abcdef &&
+        profile.backgroundOpacity == 0.625 &&
         profile.palette.ansiColors[15] == 0x8000000f &&
         profile.palette.foregroundIsExplicit &&
         profile.palette.backgroundIsExplicit &&
@@ -881,6 +889,7 @@ theme = unknown
 shell = zsh
 shell-integration = automatic
 palette-foreground = red
+background-opacity = -0.01
 palette-0 = #ffff
 font-family =
 font-size = nan
@@ -915,7 +924,7 @@ clipboard-write = enabled
   final TerminalProductConfiguration recovered =
       TerminalProductConfiguration.fromSnapshot(snapshot);
   _expect(
-    snapshot.diagnostics.length == 28 &&
+    snapshot.diagnostics.length == 29 &&
         snapshot.diagnostics.every(
           (TerminalConfigDiagnostic diagnostic) =>
               diagnostic.code == 'CFG_INVALID_VALUE' &&
@@ -927,6 +936,7 @@ clipboard-write = enabled
   _expect(
     recovered.palette.foreground ==
             TerminalProductConfiguration.defaults.palette.foreground &&
+        recovered.backgroundOpacity == 1 &&
         recovered.shellExecutable == '/bin/zsh' &&
         recovered.shellIntegration ==
             TerminalConfiguredShellIntegration.detect &&
@@ -961,6 +971,7 @@ void _testCliPrecedenceAndCapacitySyntax() {
       '/profile': '''
 font-family = Menlo
 font-size = 15
+background-opacity = 0.25
 scrollback-bytes = 1024B
 cursor-blink = false
 ''',
@@ -971,6 +982,7 @@ cursor-blink = false
         '--config=/profile',
         '--font-family=system',
         '--font-size=18',
+        '--background-opacity=0.75',
         '--scrollback-bytes=2MiB',
         '--cursor-blink=true',
       ], environment: const <String, String>{}).snapshot;
@@ -979,6 +991,7 @@ cursor-blink = false
   _expect(
     profile.fontFamily.isEmpty &&
         profile.fontSize == 18 &&
+        profile.backgroundOpacity == 0.75 &&
         profile.scrollbackBytes == 2 * 1024 * 1024 &&
         profile.cursorBlink &&
         snapshot.resolved(TerminalProductConfigSchema.fontSize).source.kind ==
@@ -988,6 +1001,7 @@ cursor-blink = false
   for (final String invalid in <String>[
     '--palette-background=#12345g',
     '--font-size=Infinity',
+    '--background-opacity=1.01',
     '--scrollback-bytes=1MB',
     '--scrollback-lines=1000001',
     '--quick-terminal-shortcut=command+comma',

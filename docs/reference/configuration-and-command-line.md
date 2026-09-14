@@ -28,6 +28,7 @@ Resolution is bounded to 32 files, include depth 8, 1048576 bytes per file, 1638
 | <code>theme</code> | <code>--theme=VALUE</code> | <code>system|light|dark</code> | <code>system</code> | new-session | once | Base theme: system, light, or dark. |
 | <code>palette-foreground</code> | <code>--palette-foreground=VALUE</code> | <code>#RRGGBB</code> | <code>#e5e5e5</code> | new-session | once | Default terminal foreground color. |
 | <code>palette-background</code> | <code>--palette-background=VALUE</code> | <code>#RRGGBB</code> | <code>#000000</code> | new-session | once | Default terminal background color. |
+| <code>background-opacity</code> | <code>--background-opacity=VALUE</code> | <code>&lt;0..1&gt;</code> | <code>1</code> | live | once | Shared terminal background opacity; 0 is transparent and 1 is opaque. |
 | <code>palette-cursor</code> | <code>--palette-cursor=VALUE</code> | <code>#RRGGBB</code> | <code>#e5e5e5</code> | new-session | once | Terminal cursor color. |
 | <code>palette-0</code> | <code>--palette-0=VALUE</code> | <code>#RRGGBB</code> | <code>#000000</code> | new-session | once | ANSI palette color 0. |
 | <code>palette-1</code> | <code>--palette-1=VALUE</code> | <code>#RRGGBB</code> | <code>#cd0000</code> | new-session | once | ANSI palette color 1. |

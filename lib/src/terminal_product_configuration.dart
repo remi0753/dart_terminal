@@ -158,6 +158,7 @@ final class TerminalProductConfiguration {
     required this.shellIntegration,
     required this.theme,
     required this.palette,
+    required this.backgroundOpacity,
     required this.fontFamily,
     required this.fontSize,
     required this.fontSyntheticStyle,
@@ -199,6 +200,9 @@ final class TerminalProductConfiguration {
     ),
     theme: snapshot.value(TerminalProductConfigSchema.theme),
     palette: _paletteConfigurationFromSnapshot(snapshot),
+    backgroundOpacity: snapshot.value(
+      TerminalProductConfigSchema.backgroundOpacity,
+    ),
     fontFamily: snapshot.value(TerminalProductConfigSchema.fontFamily),
     fontSize: snapshot.value(TerminalProductConfigSchema.fontSize),
     fontSyntheticStyle: snapshot.value(
@@ -271,6 +275,7 @@ final class TerminalProductConfiguration {
   final TerminalConfiguredShellIntegration shellIntegration;
   final TerminalConfiguredTheme theme;
   final TerminalProductPaletteConfiguration palette;
+  final double backgroundOpacity;
   final String fontFamily;
   final double fontSize;
   final TerminalConfiguredSyntheticStyle fontSyntheticStyle;

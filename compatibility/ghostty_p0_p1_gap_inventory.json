@@ -4,7 +4,7 @@
   "status": "closed-no-actionable-p0-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "4c1015d2a8d1ce70f7e6c053846509884cffd247b35eedf5d8826da168a35370",
+    "sha256": "2b936bb4baf0df492eb464bcc545e781cd8c0246833c2eadc70787cf85c42258",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "33557c8a72f268505b6db8f14feb6445e487b6bdd9e3cca09cbc30ebf3d81491"
+      "sha256": "453e3472ab0adcd2f53ac53861a2b4c9a3e1b00d53be14145e3d5c62fab9891a"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -184,11 +184,11 @@
     },
     {
       "path": "lib/src/terminal_config.dart",
-      "sha256": "ed69481ca4953d62ebcc07227550daf3a8744a21fb41c5f0f2e7c51cf97273df"
+      "sha256": "36f80cc9c6cb97f1ce136914379a07977635ca4e1e0930cae24a97ca6c4a2402"
     },
     {
       "path": "lib/src/terminal_product_configuration.dart",
-      "sha256": "d93b5ca2df9713167776836bc01866002b3114f165f3b738666717257d7a191d"
+      "sha256": "2893b82e1a527641462e0cb65646313a13715a1d1599672d8b200169db6fb6c6"
     },
     {
       "path": "lib/src/terminal_diagnostics.dart",
@@ -196,7 +196,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "a46461628a4d810de19f6493043187a32270f5853beede0c4198f814e2d48c65"
+      "sha256": "34bbe3d33a5964efe350aaf58ca1c6fe39fba9aea9f59e7a62bd6e27fb5a42ee"
     },
     {
       "path": "lib/src/terminal_input/terminal_prompt_click.dart",
@@ -216,7 +216,7 @@
     },
     {
       "path": "test/terminal_product_configuration_test.dart",
-      "sha256": "d6f95eee88a20fce1bfcc7915d1d4f302f24378c7d45876e02b65da50ccf6a64"
+      "sha256": "1e736a55e3baa5580bedf57a0efe57efe33662c11b556ac5f8ba163da9fa9471"
     },
     {
       "path": "test/terminal_diagnostics_test.dart",
@@ -228,7 +228,7 @@
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
-      "sha256": "cbdafcd77a8e8049f4611c38c9c888523fd447239e6fbe132eb99a6fbb05682f"
+      "sha256": "bb657de7a178919f228cf27ffe67e4c28482f5c879a44f1f1786676fd352a080"
     }
   ],
   "totals": {
@@ -1050,7 +1050,7 @@
       "phase": "8/10",
       "acceptance_sha256": "6584c37c28f8ba7259838f2998b7b39a79b43b155daf39e6ac9f5935e0754b2d",
       "pinned_evidence_sha256": "ac336d9e6755c35fca45f8f3632ec2cfb7cb44e6e425c00c3b94917d4c41dc25",
-      "current_sha256": "b8eafa6e09a8c95d45c411379f352acbfe09da039903318adfe8fcfede7e208f",
+      "current_sha256": "abc1ffc2f10339f3e2af413c4a2c00b8010a84c11ea4f9f2c98e01e3e44b9153",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -1090,7 +1090,7 @@
       "phase": "8/10",
       "acceptance_sha256": "57fb81269d34c0d7efd1e3ed3ff1a3964fc5fc9a60592d4bf705dca55b612466",
       "pinned_evidence_sha256": "3231d3e055f5f5a6c28f853b187c617394540a5135f6718322cfb20573ae0205",
-      "current_sha256": "20a9635687a297da7e467544351f330a6c47b868b87649e2c676c48b75e46965",
+      "current_sha256": "2ece463a0678f095b3db02f95d5b6ae738f41e528efc5f4e13db519251390fdf",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -1120,7 +1120,7 @@
       "phase": "8/10",
       "acceptance_sha256": "964bf094986b0be1fa60a1a30fe13c3b6525d44b1cf951c6efb7d08e4e459bbf",
       "pinned_evidence_sha256": "ae24e3cba64ac97560537bade728a8c5513e50f071719f0a48877c6ab8e5605f",
-      "current_sha256": "b00df054b38139e34335e9cdf6886e99f6ff95beaf6d443ab64891cffee02381",
+      "current_sha256": "ba7805abe37f3892e2ddff4398d6ad71501ed7d85051102a20652ed538f6aa0a",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -1159,8 +1159,8 @@
       "priority": "P0",
       "phase": "10/11",
       "acceptance_sha256": "25d57b12eb3f56e44bf6fa4c25a91ccaa18c1d1b7d5c08bc23828041e5911b6a",
-      "pinned_evidence_sha256": "45f027cf84250f60cf599467666c912b2fecccf4f48a5478e4ecaa86e8f8438e",
-      "current_sha256": "bf8d75c1074e8ebe0239402cd1bf96d8a4f8c95f8a81a8b1d6d0f99ca62d0387",
+      "pinned_evidence_sha256": "ac336d9e6755c35fca45f8f3632ec2cfb7cb44e6e425c00c3b94917d4c41dc25",
+      "current_sha256": "d1960bb90187a1a797b9184a10e9860425d891ee48ee8feb00a991abc23d4e42",
       "classification": "accepted",
       "gap_ids": []
     },

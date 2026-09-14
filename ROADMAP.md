@@ -1442,6 +1442,16 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase7/command-palette-selection-viewport-regression.md`](docs/phase7/command-palette-selection-viewport-regression.md)
   を参照する）
 
+### 完了機能の拡張
+
+- [ ] 全terminal surfaceで共有する背景透過度設定
+  （分割、適用境界、完了条件は
+  [`docs/phase8/terminal-background-opacity.md`](docs/phase8/terminal-background-opacity.md)
+  を参照して順に実施する）
+  - [x] typed schema、Settings document、product configuration
+  - [ ] Metal frame alphaとmacOS transparent surface contract
+  - [ ] 既存／新規の全window・tab・paneへのlive投影と両runtime受け入れ
+
 ### 主要ゴール後の低優先 follow-up
 
 - [ ] 公開・未改変 runtime の Intel-native no-rebuild runtime handoff と追加互換性証跡
