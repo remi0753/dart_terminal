@@ -397,6 +397,122 @@ final class TerminalNativeHierarchyAdapter {
     return true;
   }
 
+  /// Whether the selected tab has a projected pane in [direction].
+  bool canFocusPane(TerminalPaneFocusDirection direction) =>
+      _focusedPaneTarget(direction) != null;
+
+  /// Focuses the closest projected pane in [direction] without wrapping.
+  ///
+  /// The caller reconciles after a successful mutation so first responder,
+  /// Metal focus presentation, menus, and the command palette advance once.
+  bool focusPane(TerminalPaneFocusDirection direction) {
+    _ensureCanReconcile();
+    final TerminalTabState? tab = _state.activeWindow?.selectedTab;
+    if (tab == null) return false;
+    final PaneId? target = _focusedPaneTarget(direction);
+    if (target == null) return false;
+    _state.focusPane(tab.id, target);
+    return true;
+  }
+
+  PaneId? _focusedPaneTarget(TerminalPaneFocusDirection direction) {
+    if (_disposed || _reconciling || _state.isDisposed) return null;
+    final TerminalTabState? tab = _state.activeWindow?.selectedTab;
+    if (tab == null || tab.isZoomed) return null;
+    final TerminalSplitLayout? layout = _layouts[tab.id];
+    final TerminalPaneLayoutRect? focused = layout?.panes[tab.focusedPaneId];
+    if (layout == null || focused == null) return null;
+
+    _TerminalDirectionalPaneCandidate? best;
+    for (var index = 0; index < tab.paneIds.length; index++) {
+      final PaneId paneId = tab.paneIds[index];
+      if (paneId == tab.focusedPaneId) continue;
+      final TerminalPaneLayoutRect? candidate = layout.panes[paneId];
+      if (candidate == null) continue;
+      final _TerminalDirectionalPaneCandidate? scored =
+          _directionalPaneCandidate(
+            direction,
+            focused,
+            candidate,
+            paneId,
+            index,
+          );
+      if (scored != null && (best == null || scored.isBetterThan(best))) {
+        best = scored;
+      }
+    }
+    return best?.paneId;
+  }
+
+  static _TerminalDirectionalPaneCandidate? _directionalPaneCandidate(
+    TerminalPaneFocusDirection direction,
+    TerminalPaneLayoutRect focused,
+    TerminalPaneLayoutRect candidate,
+    PaneId paneId,
+    int visualIndex,
+  ) {
+    const double epsilon = 1e-9;
+    final double focusedRight = focused.left + focused.width;
+    final double focusedBottom = focused.top + focused.height;
+    final double candidateRight = candidate.left + candidate.width;
+    final double candidateBottom = candidate.top + candidate.height;
+    late final double primaryDistance;
+    late final double focusedCrossStart;
+    late final double focusedCrossEnd;
+    late final double candidateCrossStart;
+    late final double candidateCrossEnd;
+    switch (direction) {
+      case TerminalPaneFocusDirection.left:
+        if (candidateRight > focused.left + epsilon) return null;
+        primaryDistance = focused.left - candidateRight;
+        focusedCrossStart = focused.top;
+        focusedCrossEnd = focusedBottom;
+        candidateCrossStart = candidate.top;
+        candidateCrossEnd = candidateBottom;
+      case TerminalPaneFocusDirection.right:
+        if (candidate.left < focusedRight - epsilon) return null;
+        primaryDistance = candidate.left - focusedRight;
+        focusedCrossStart = focused.top;
+        focusedCrossEnd = focusedBottom;
+        candidateCrossStart = candidate.top;
+        candidateCrossEnd = candidateBottom;
+      case TerminalPaneFocusDirection.up:
+        if (candidateBottom > focused.top + epsilon) return null;
+        primaryDistance = focused.top - candidateBottom;
+        focusedCrossStart = focused.left;
+        focusedCrossEnd = focusedRight;
+        candidateCrossStart = candidate.left;
+        candidateCrossEnd = candidateRight;
+      case TerminalPaneFocusDirection.down:
+        if (candidate.top < focusedBottom - epsilon) return null;
+        primaryDistance = candidate.top - focusedBottom;
+        focusedCrossStart = focused.left;
+        focusedCrossEnd = focusedRight;
+        candidateCrossStart = candidate.left;
+        candidateCrossEnd = candidateRight;
+    }
+    final bool crossOverlaps =
+        candidateCrossEnd > focusedCrossStart + epsilon &&
+        focusedCrossEnd > candidateCrossStart + epsilon;
+    final double crossGap = crossOverlaps
+        ? 0
+        : candidateCrossEnd <= focusedCrossStart
+        ? focusedCrossStart - candidateCrossEnd
+        : candidateCrossStart - focusedCrossEnd;
+    final double crossCenterDistance =
+        ((candidateCrossStart + candidateCrossEnd) / 2 -
+                (focusedCrossStart + focusedCrossEnd) / 2)
+            .abs();
+    return _TerminalDirectionalPaneCandidate(
+      paneId: paneId,
+      crossOverlaps: crossOverlaps,
+      primaryDistance: primaryDistance,
+      crossGap: crossGap,
+      crossCenterDistance: crossCenterDistance,
+      visualIndex: visualIndex,
+    );
+  }
+
   _TerminalFocusedDividerMove? _focusedDividerMove(
     TerminalSplitDividerDirection direction,
   ) {
@@ -1303,6 +1419,40 @@ final class TerminalNativeHierarchyAdapter {
     color: null,
     representedFilePath: null,
   );
+}
+
+final class _TerminalDirectionalPaneCandidate {
+  const _TerminalDirectionalPaneCandidate({
+    required this.paneId,
+    required this.crossOverlaps,
+    required this.primaryDistance,
+    required this.crossGap,
+    required this.crossCenterDistance,
+    required this.visualIndex,
+  });
+
+  final PaneId paneId;
+  final bool crossOverlaps;
+  final double primaryDistance;
+  final double crossGap;
+  final double crossCenterDistance;
+  final int visualIndex;
+
+  bool isBetterThan(_TerminalDirectionalPaneCandidate other) {
+    if (crossOverlaps != other.crossOverlaps) return crossOverlaps;
+    final int primary = _compare(primaryDistance, other.primaryDistance);
+    if (primary != 0) return primary < 0;
+    final int gap = _compare(crossGap, other.crossGap);
+    if (gap != 0) return gap < 0;
+    final int center = _compare(crossCenterDistance, other.crossCenterDistance);
+    if (center != 0) return center < 0;
+    return visualIndex < other.visualIndex;
+  }
+
+  static int _compare(double left, double right) {
+    if ((left - right).abs() <= 1e-9) return 0;
+    return left < right ? -1 : 1;
+  }
 }
 
 final class _TerminalFocusedDividerMove {

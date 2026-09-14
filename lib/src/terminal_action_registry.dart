@@ -21,6 +21,10 @@ enum TerminalActionId {
   selectNextTab('tab.select-next'),
   splitPaneRight('pane.split-right'),
   splitPaneDown('pane.split-down'),
+  focusPaneLeft('pane.focus-left'),
+  focusPaneRight('pane.focus-right'),
+  focusPaneUp('pane.focus-up'),
+  focusPaneDown('pane.focus-down'),
   focusPreviousPane('pane.focus-previous'),
   focusNextPane('pane.focus-next'),
   quickLook('pane.quick-look'),
@@ -453,6 +457,10 @@ final class TerminalActionCatalog {
       ),
       action(TerminalActionId.jumpToPreviousPrompt, TerminalActionMenu.view),
       action(TerminalActionId.jumpToNextPrompt, TerminalActionMenu.view),
+      action(TerminalActionId.focusPaneLeft, TerminalActionMenu.window),
+      action(TerminalActionId.focusPaneRight, TerminalActionMenu.window),
+      action(TerminalActionId.focusPaneUp, TerminalActionMenu.window),
+      action(TerminalActionId.focusPaneDown, TerminalActionMenu.window),
       action(TerminalActionId.focusPreviousPane, TerminalActionMenu.window),
       action(TerminalActionId.focusNextPane, TerminalActionMenu.window),
       action(
@@ -524,6 +532,10 @@ TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
   TerminalActionId.jumpToPreviousPrompt =>
     TerminalActionMessageId.jumpToPreviousPrompt,
   TerminalActionId.jumpToNextPrompt => TerminalActionMessageId.jumpToNextPrompt,
+  TerminalActionId.focusPaneLeft => TerminalActionMessageId.focusPaneLeft,
+  TerminalActionId.focusPaneRight => TerminalActionMessageId.focusPaneRight,
+  TerminalActionId.focusPaneUp => TerminalActionMessageId.focusPaneUp,
+  TerminalActionId.focusPaneDown => TerminalActionMessageId.focusPaneDown,
   TerminalActionId.focusPreviousPane =>
     TerminalActionMessageId.focusPreviousPane,
   TerminalActionId.focusNextPane => TerminalActionMessageId.focusNextPane,

@@ -45,6 +45,10 @@ enum TerminalActionMessageId {
   moveDividerDown,
   jumpToPreviousPrompt,
   jumpToNextPrompt,
+  focusPaneLeft,
+  focusPaneRight,
+  focusPaneUp,
+  focusPaneDown,
   focusPreviousPane,
   focusNextPane,
   selectPreviousTab,
@@ -672,6 +676,23 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
           'Jump to Next Prompt',
           <String>['scroll', 'history', 'shell', 'forward'],
         ),
+        TerminalActionMessageId.focusPaneLeft: _action(
+          'Focus Pane Left',
+          <String>['navigate', 'pane', 'left'],
+        ),
+        TerminalActionMessageId.focusPaneRight: _action(
+          'Focus Pane Right',
+          <String>['navigate', 'pane', 'right'],
+        ),
+        TerminalActionMessageId.focusPaneUp: _action('Focus Pane Up', <String>[
+          'navigate',
+          'pane',
+          'up',
+        ]),
+        TerminalActionMessageId.focusPaneDown: _action(
+          'Focus Pane Down',
+          <String>['navigate', 'pane', 'down'],
+        ),
         TerminalActionMessageId.focusPreviousPane: _action(
           'Focus Previous Pane',
           <String>['navigate', 'back'],
@@ -818,6 +839,26 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
         'スクロール',
         '履歴',
         '次',
+      ]),
+      TerminalActionMessageId.focusPaneLeft: _action('左のペインにフォーカス', <String>[
+        '移動',
+        'ペイン',
+        '左',
+      ]),
+      TerminalActionMessageId.focusPaneRight: _action('右のペインにフォーカス', <String>[
+        '移動',
+        'ペイン',
+        '右',
+      ]),
+      TerminalActionMessageId.focusPaneUp: _action('上のペインにフォーカス', <String>[
+        '移動',
+        'ペイン',
+        '上',
+      ]),
+      TerminalActionMessageId.focusPaneDown: _action('下のペインにフォーカス', <String>[
+        '移動',
+        'ペイン',
+        '下',
       ]),
       TerminalActionMessageId.focusPreviousPane: _action(
         '前のペインにフォーカス',

@@ -162,6 +162,30 @@ void _testStableStandardCatalog() {
   );
   _expect(
     catalog
+            .actionsForMenu(TerminalActionMenu.window)
+            .map((TerminalActionDefinition action) => action.id)
+            .join(',') ==
+        <TerminalActionId>[
+          TerminalActionId.focusPaneLeft,
+          TerminalActionId.focusPaneRight,
+          TerminalActionId.focusPaneUp,
+          TerminalActionId.focusPaneDown,
+          TerminalActionId.focusPreviousPane,
+          TerminalActionId.focusNextPane,
+          TerminalActionId.selectPreviousTab,
+          TerminalActionId.selectNextTab,
+        ].join(','),
+    'window menu contains directional and ordered focus actions',
+  );
+  _expect(
+    TerminalActionCatalog.standard(localization: TerminalLocalization.japanese)
+            .actionForId(TerminalActionId.focusPaneRight)!
+            .title ==
+        '右のペインにフォーカス',
+    'directional pane focus uses localized catalog copy',
+  );
+  _expect(
+    catalog
                 .actionForId(TerminalActionId.openTerminalInspector)!
                 .shortcut!
                 .identity ==

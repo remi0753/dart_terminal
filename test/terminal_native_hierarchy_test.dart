@@ -29,6 +29,7 @@ Future<void> runTerminalNativeHierarchyTests() async {
   await _testNewSplitInheritsNativeBackingScale();
   await _testDisplayRecoveryMigratesOneLogicalTabGroup();
   await _testNativeDividerGestureSynchronizesLayout();
+  await _testDirectionalPaneFocusUsesProjectedGeometry();
   await _testFocusedDividerCommandsUseCellGeometry();
   await _testRepeatedMultiWindowRestoredProjection();
   await _testNativeHierarchyProjectionAndLifecycle();
@@ -666,6 +667,111 @@ Future<void> _testRoleAwareWindowProjection() async {
       bindings.windowShowCounts[ordinaryHandle] == 2 &&
           bindings.windowShowCounts[quickHandle] == null,
       'generic reopen presentation excludes product-managed windows',
+    );
+  } finally {
+    adapter.dispose();
+    await state.shutdown();
+    await application.terminate();
+    await rawEvents.close();
+  }
+}
+
+Future<void> _testDirectionalPaneFocusUsesProjectedGeometry() async {
+  final StreamController<Object?> rawEvents =
+      StreamController<Object?>.broadcast(sync: true);
+  final _HierarchyNativeBindings bindings = _HierarchyNativeBindings();
+  final AppKitApplication application = await attachApplicationForTesting(
+    bindings: bindings,
+    events: rawEvents.stream,
+  );
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalPaneConfiguration configuration = TerminalPaneConfiguration(
+    sessionFactory: (
+      TerminalSessionId id, {
+      required void Function() onChanged,
+      required void Function() onTerminated,
+    }) => _HierarchyFakeSession(id),
+    onChanged: () {},
+    onExitRequested: () {},
+  );
+  final TerminalWindowState window = await state.createWindow(configuration);
+  final TerminalTabState tab = window.selectedTab;
+  final PaneId topLeft = tab.focusedPaneId;
+  final TerminalPane topRight = await state.splitPane(
+    topLeft,
+    configuration,
+    axis: TerminalSplitAxis.horizontal,
+  );
+  final TerminalPane bottomRight = await state.splitPane(
+    topRight.id,
+    configuration,
+    axis: TerminalSplitAxis.vertical,
+  );
+  final TerminalPane bottomLeft = await state.splitPane(
+    topLeft,
+    configuration,
+    axis: TerminalSplitAxis.vertical,
+  );
+  final TerminalNativeHierarchyAdapter adapter = TerminalNativeHierarchyAdapter(
+    state: state,
+    paneResourcesFactory: (TerminalPane pane) => TerminalNativePaneResources(
+      paneId: pane.id,
+      view: View(configuration: terminalBaseViewConfiguration),
+    ),
+    windowFrame: const Rect.fromLTWH(100, 90, 801, 481),
+    cellSize: TerminalSplitLayoutSize(width: 8, height: 16),
+    presentWindows: false,
+  );
+  try {
+    _expect(
+      TerminalPaneFocusDirection.values.every(
+        (TerminalPaneFocusDirection direction) =>
+            !adapter.canFocusPane(direction),
+      ),
+      'directional focus became available before layout projection',
+    );
+    adapter.reconcile();
+    state.focusPane(tab.id, topLeft);
+    adapter.reconcile();
+    _expect(
+      !adapter.canFocusPane(TerminalPaneFocusDirection.left) &&
+          !adapter.canFocusPane(TerminalPaneFocusDirection.up) &&
+          adapter.canFocusPane(TerminalPaneFocusDirection.right) &&
+          adapter.canFocusPane(TerminalPaneFocusDirection.down),
+      'top-left pane did not expose only its projected directions',
+    );
+    _expect(
+      adapter.focusPane(TerminalPaneFocusDirection.right) &&
+          tab.focusedPaneId == topRight.id,
+      'right focus did not select the aligned top-right pane',
+    );
+    adapter.reconcile();
+    _expect(
+      adapter.focusPane(TerminalPaneFocusDirection.down) &&
+          tab.focusedPaneId == bottomRight.id,
+      'down focus did not select the aligned bottom-right pane',
+    );
+    adapter.reconcile();
+    _expect(
+      adapter.focusPane(TerminalPaneFocusDirection.left) &&
+          tab.focusedPaneId == bottomLeft.id,
+      'left focus did not select the aligned bottom-left pane',
+    );
+    adapter.reconcile();
+    _expect(
+      adapter.focusPane(TerminalPaneFocusDirection.up) &&
+          tab.focusedPaneId == topLeft,
+      'up focus did not select the aligned top-left pane',
+    );
+    adapter.reconcile();
+    state.setPaneZoom(tab.id, topLeft);
+    adapter.reconcile();
+    _expect(
+      TerminalPaneFocusDirection.values.every(
+        (TerminalPaneFocusDirection direction) =>
+            !adapter.canFocusPane(direction),
+      ),
+      'directional focus remained available while one pane was zoomed',
     );
   } finally {
     adapter.dispose();

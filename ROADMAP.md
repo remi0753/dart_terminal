@@ -1459,6 +1459,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] 全window・tab・paneへのfocus投影と両runtime受け入れ
   - [x] 黒／透過背景でも判別できるinactive pane全体の暗転強化
   - [x] inactive paneへ濃いneutral gray tintを追加
+- [ ] 方向別pane focus shortcutと上書き可能なdivider keybind
+  （分割、適用境界、完了条件は
+  [`docs/phase7/directional-pane-focus-keybindings.md`](docs/phase7/directional-pane-focus-keybindings.md)
+  を参照して順に実施する）
+  - [x] split layoutに基づく4方向pane focus action
+  - [ ] focus／divider shortcutの設定可能な既定keybindへの移行
+  - [ ] 通常製品へのlive投影、両runtime受け入れ、reference更新
 
 ### 主要ゴール後の低優先 follow-up
 

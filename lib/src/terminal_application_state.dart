@@ -67,6 +67,8 @@ enum TerminalSplitPlacement { before, after }
 
 enum TerminalSplitDividerDirection { left, right, up, down }
 
+enum TerminalPaneFocusDirection { left, right, up, down }
+
 enum TerminalPaneFocusTraversal { previous, next }
 
 /// Product role of one logical terminal window.

@@ -15,6 +15,12 @@ typedef TerminalProductDividerMovementAvailability = bool Function(
 typedef TerminalProductDividerMover = bool Function(
   TerminalSplitDividerDirection direction,
 );
+typedef TerminalProductPaneFocusAvailability = bool Function(
+  TerminalPaneFocusDirection direction,
+);
+typedef TerminalProductPaneFocuser = bool Function(
+  TerminalPaneFocusDirection direction,
+);
 
 /// Terminal-owned user actions over the logical and native hierarchy.
 ///
@@ -28,12 +34,16 @@ final class TerminalProductHierarchyActionCoordinator {
     required TerminalProductHierarchyReconciler reconcile,
     required TerminalProductDividerMovementAvailability canMoveDivider,
     required TerminalProductDividerMover moveDivider,
+    required TerminalProductPaneFocusAvailability canFocusPane,
+    required TerminalProductPaneFocuser focusPane,
     TerminalProductHierarchyMutationAdmission? canMutate,
     void Function()? onChanged,
   }) : _configurationFactory = configurationFactory,
        _reconcile = reconcile,
        _canMoveDivider = canMoveDivider,
        _moveDivider = moveDivider,
+       _canFocusPane = canFocusPane,
+       _focusPane = focusPane,
        _canMutate = canMutate,
        _onChanged = onChanged;
 
@@ -42,6 +52,8 @@ final class TerminalProductHierarchyActionCoordinator {
   final TerminalProductHierarchyReconciler _reconcile;
   final TerminalProductDividerMovementAvailability _canMoveDivider;
   final TerminalProductDividerMover _moveDivider;
+  final TerminalProductPaneFocusAvailability _canFocusPane;
+  final TerminalProductPaneFocuser _focusPane;
   final TerminalProductHierarchyMutationAdmission? _canMutate;
   final void Function()? _onChanged;
   bool _disposed = false;
@@ -145,6 +157,30 @@ final class TerminalProductHierarchyActionCoordinator {
           handler: () => _moveSplitDivider(TerminalSplitDividerDirection.down),
         ),
         TerminalActionRegistration(
+          id: TerminalActionId.focusPaneLeft,
+          isAvailable: () =>
+              _canFocusPaneDirection(TerminalPaneFocusDirection.left),
+          handler: () => _focusPaneDirection(TerminalPaneFocusDirection.left),
+        ),
+        TerminalActionRegistration(
+          id: TerminalActionId.focusPaneRight,
+          isAvailable: () =>
+              _canFocusPaneDirection(TerminalPaneFocusDirection.right),
+          handler: () => _focusPaneDirection(TerminalPaneFocusDirection.right),
+        ),
+        TerminalActionRegistration(
+          id: TerminalActionId.focusPaneUp,
+          isAvailable: () =>
+              _canFocusPaneDirection(TerminalPaneFocusDirection.up),
+          handler: () => _focusPaneDirection(TerminalPaneFocusDirection.up),
+        ),
+        TerminalActionRegistration(
+          id: TerminalActionId.focusPaneDown,
+          isAvailable: () =>
+              _canFocusPaneDirection(TerminalPaneFocusDirection.down),
+          handler: () => _focusPaneDirection(TerminalPaneFocusDirection.down),
+        ),
+        TerminalActionRegistration(
           id: TerminalActionId.focusPreviousPane,
           isAvailable: _hasSplitPane,
           handler: () => _traversePane(TerminalPaneFocusTraversal.previous),
@@ -198,6 +234,9 @@ final class TerminalProductHierarchyActionCoordinator {
 
   bool _canMoveSplitDivider(TerminalSplitDividerDirection direction) =>
       _isMutable && _canMoveDivider(direction);
+
+  bool _canFocusPaneDirection(TerminalPaneFocusDirection direction) =>
+      _isMutable && _canFocusPane(direction);
 
   bool get _isMutable =>
       !_disposed && !state.isDisposed && (_canMutate?.call() ?? true);
@@ -265,6 +304,13 @@ final class TerminalProductHierarchyActionCoordinator {
   void _moveSplitDivider(TerminalSplitDividerDirection direction) {
     if (!_moveDivider(direction)) {
       throw StateError('split divider is no longer movable');
+    }
+    _project();
+  }
+
+  void _focusPaneDirection(TerminalPaneFocusDirection direction) {
+    if (!_focusPane(direction)) {
+      throw StateError('directional pane focus is no longer available');
     }
     _project();
   }

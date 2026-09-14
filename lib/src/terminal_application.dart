@@ -4587,6 +4587,8 @@ final class TerminalApplication {
             reconcile: reconcileInteractiveHierarchy,
             canMoveDivider: createdHierarchy.canMoveFocusedDivider,
             moveDivider: createdHierarchy.moveFocusedDivider,
+            canFocusPane: createdHierarchy.canFocusPane,
+            focusPane: createdHierarchy.focusPane,
             canMutate: () =>
                 productResourceDisposalFuture == null &&
                 !createdPaneCloseCoordinator.removalInProgress &&
