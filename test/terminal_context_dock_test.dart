@@ -284,6 +284,34 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
         snapshot.rows[1].entry.metadata.size == 7,
     'expanded folder loads one child level and retains metadata',
   );
+  _expect(
+    controller.handleTreeIntent(
+          window.id,
+          TerminalContextDockTreeIntent.toggle,
+        ) &&
+        controller.snapshotForWindow(window.id)!.rows.length == 3 &&
+        !controller.snapshotForWindow(window.id)!.rows.first.isExpanded &&
+        dock.snapshotForWindow(window.id)!.pane.selectedResultIndex == 0,
+    'Return toggle closes an expanded folder and retains its row selection',
+  );
+  _expect(
+    controller.handleTreeIntent(
+      window.id,
+      TerminalContextDockTreeIntent.toggle,
+    ),
+    'Return toggle reopens a collapsed folder',
+  );
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  snapshot = controller.snapshotForWindow(window.id)!;
+  dock.setSelectedResultIndex(window.id, snapshot.rows.length - 1);
+  _expect(
+    !controller.handleTreeIntent(
+      window.id,
+      TerminalContextDockTreeIntent.toggle,
+    ),
+    'Return toggle leaves a selected file unchanged',
+  );
+  dock.setSelectedResultIndex(window.id, 0);
   dock.setQuery(window.id, 'readme');
   controller.synchronize();
   await _waitUntil(() => controller.activeOperationCount == 0);
@@ -298,6 +326,13 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
           },
         ),
     'non-empty query progressively replaces tree rows with merged search rows',
+  );
+  _expect(
+    !controller.handleTreeIntent(
+      window.id,
+      TerminalContextDockTreeIntent.toggle,
+    ),
+    'Return toggle does not mutate tree expansion while search is active',
   );
   dock.setQuery(window.id, '');
   controller.synchronize();
@@ -475,6 +510,7 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
   var failNavigatorFocus = false;
   var failTerminalFocus = false;
   var changed = 0;
+  var mutateDuringProjection = false;
   final TerminalContextDockActionCoordinator coordinator =
       TerminalContextDockActionCoordinator(
         applicationState: harness.state,
@@ -492,7 +528,13 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
           terminalFocus.add(request);
         },
         canFocusNavigator: () => canFocusNavigator,
-        onChanged: () => changed++,
+        onChanged: () {
+          changed++;
+          if (mutateDuringProjection) {
+            mutateDuringProjection = false;
+            dock.setResultCount(window.id, 3);
+          }
+        },
       );
   final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
     catalog: TerminalActionCatalog.standard(),
@@ -505,6 +547,7 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
         !dispatcher.snapshot(TerminalActionId.focusTerminal).isEnabled,
     'only valid initial Context Dock actions are available',
   );
+  mutateDuringProjection = true;
   await _expectExecuted(dispatcher, TerminalActionId.searchFilesAndFolders);
   TerminalContextDockWindowSnapshot snapshot = dock.snapshotForWindow(
     window.id,
@@ -515,8 +558,10 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
         navigatorFocus.length == 1 &&
         navigatorFocus.single.windowId == window.id &&
         navigatorFocus.single.paneId == paneId &&
+        snapshot.pane.resultCount == 3 &&
         dispatcher.snapshot(TerminalActionId.focusTerminal).isEnabled,
-    'search action makes the Dock visible and transfers input exactly once',
+    'search refreshes a benign projection generation before transferring '
+    'input exactly once',
   );
   dock.setQuery(window.id, 'retained', requireNavigatorInput: true);
   final int firstSelectionGeneration = snapshot.pane.querySelectionGeneration;
@@ -711,7 +756,7 @@ Future<void> _testNavigatorKeyRoutingNeverFallsThrough() async {
   );
   _expect(
     (await route(_key(keyCode: 36, characters: '\r'))).treeIntent ==
-            TerminalContextDockTreeIntent.expand &&
+            TerminalContextDockTreeIntent.toggle &&
         (await route(
               _key(
                 keyCode: 36,
@@ -720,7 +765,7 @@ Future<void> _testNavigatorKeyRoutingNeverFallsThrough() async {
               ),
             )).disposition ==
             TerminalContextDockKeyDisposition.pathInsertionRequested,
-    'Return expands a folder and Option-Return requests explicit insertion',
+    'Return toggles a folder and Option-Return requests explicit insertion',
   );
   await route(
     _key(

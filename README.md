@@ -63,6 +63,8 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   local paneのtrusted working directory、dotfileを含むfile/folder tree、lazy subtreeを上段の
   bounded scroll領域へ表示し、選択file/folderのpermission・owner・size・mtime・symlink metadataと
   path操作は下段の固定read-only領域へ表示する。
+  Option-Shift-CでDockだけを表示／非表示にし、terminal／Navigatorのどちらが入力中でも同じ
+  shared actionを実行する。tree上のfolderはReturnで開閉でき、Command-Right／Leftでも展開／折り畳みできる。
   Shift-Command-Fでqueryへ移り、同じlistがcurrent subtree、recent location、明示root、
   Spotlight metadata indexのprogressive検索結果へ切り替わる。source/coverageとpartial・
   unavailableを区別し、filesystem rootを暗黙にwalkしない。Escapeでqueryを保ったまま

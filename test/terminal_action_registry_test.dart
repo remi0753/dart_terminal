@@ -173,13 +173,16 @@ void _testStableStandardCatalog() {
             .actionForId(TerminalActionId.searchFilesAndFolders)!
             .restoresTerminalFocusAfterInvocation &&
         catalog.actionForId(TerminalActionId.focusTerminal)!.shortcut == null &&
-        catalog.actionForId(TerminalActionId.toggleContextDock)!.shortcut ==
-            null &&
+        catalog
+                .actionForId(TerminalActionId.toggleContextDock)!
+                .shortcut!
+                .identity ==
+            'shift+option+c' &&
         TerminalActionCatalog.standard(
               localization: TerminalLocalization.japanese,
             ).actionForId(TerminalActionId.focusTerminal)!.title ==
             'ターミナルにフォーカス',
-    'Context Dock actions own reviewed focus and shortcut metadata',
+    'Context Dock actions own reviewed focus and distinct shortcuts',
   );
   _expect(
     catalog

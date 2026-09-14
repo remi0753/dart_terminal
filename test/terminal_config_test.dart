@@ -27,6 +27,7 @@ keybind = control+d=unbind
 ''',
       '/invalid': '''
 keybind = command+d=pane.focus-next
+keybind = shift+option+c=passthrough
 keybind = control+not-a-key=passthrough
 keybind = control+x=application.not-real
 keybind = control+y=terminal.send-suspend-signal
@@ -115,7 +116,7 @@ item = three
       ], environment: const <String, String>{})
       .snapshot;
   _expect(
-    invalid.diagnostics.length == 3 &&
+    invalid.diagnostics.length == 4 &&
         invalid.diagnostics.every(
           (TerminalConfigDiagnostic diagnostic) =>
               diagnostic.code == 'CFG_INVALID_VALUE' && diagnostic.hint != null,

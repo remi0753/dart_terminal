@@ -34,7 +34,7 @@ final class TerminalContextDockLimitException implements Exception {
 
 enum TerminalContextDockInputOwner { terminal, navigator }
 
-enum TerminalContextDockTreeIntent { collapse, expand }
+enum TerminalContextDockTreeIntent { collapse, expand, toggle }
 
 /// Immutable search/list state retained independently for one terminal pane.
 final class TerminalContextDockPaneSnapshot {
@@ -588,9 +588,25 @@ final class TerminalContextDockActionCoordinator {
     if (!_readCanFocusNavigator()) {
       throw StateError('Context Dock navigator focus is unavailable');
     }
-    final TerminalContextDockFocusRequest request = dockState
+    final TerminalContextDockFocusRequest requested = dockState
         .requestSearchFocus(target.windowId, target.paneId);
     _onChanged?.call();
+    final _TerminalContextDockTarget? projected = _activeTarget();
+    final TerminalContextDockWindowSnapshot? projectedDock = dockState
+        .snapshotForWindow(target.windowId);
+    if (projected == null ||
+        projected.windowId != requested.windowId ||
+        projected.paneId != requested.paneId ||
+        projectedDock == null ||
+        !projectedDock.isVisible ||
+        projectedDock.targetPaneId != requested.paneId ||
+        projectedDock.pane.querySelectionGeneration !=
+            requested.querySelectionGeneration) {
+      throw StateError('Context Dock navigator projection became stale');
+    }
+    final TerminalContextDockFocusRequest request = _focusRequest(
+      projectedDock,
+    );
     _focusNavigator(request);
     final _TerminalContextDockTarget? current = _activeTarget();
     if (current == null ||
@@ -784,7 +800,7 @@ final class TerminalContextDockKeyController {
         case TerminalPhysicalKey.enter:
           return const TerminalContextDockKeyResult(
             disposition: TerminalContextDockKeyDisposition.treeIntentRequested,
-            treeIntent: TerminalContextDockTreeIntent.expand,
+            treeIntent: TerminalContextDockTreeIntent.toggle,
           );
         default:
           break;

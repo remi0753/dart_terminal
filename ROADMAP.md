@@ -1486,6 +1486,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （実施時に
     [`docs/phase7/context-dock-pinned-details-layout.md`](docs/phase7/context-dock-pinned-details-layout.md)
     を参照する）
+  - [x] Context Dockの既定toggle shortcutとReturnによるfolder開閉
+    （実施時に
+    [`docs/phase7/context-dock-toggle-shortcut-folder-collapse.md`](docs/phase7/context-dock-toggle-shortcut-folder-collapse.md)
+    を参照する）
 
 ### 主要ゴール後の低優先 follow-up
 

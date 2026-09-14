@@ -73,14 +73,18 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 | 状態 | 主な入力 | 結果 | PTY write |
 | --- | --- | --- | --- |
 | Terminal owns input | 通常のtext／navigation key | 従来どおりfocused paneへencode | 従来どおり |
+| Terminal／Navigator owns input | `Option+Shift+C` | Dock visibilityをtoggle。非表示時はterminalへfocusを戻す | 0 byte |
 | Terminal owns input | `Shift+Command+F` | Dockを表示しqueryへfocus、queryを全選択 | 0 byte |
 | Navigator owns input | printable／Delete／Command+A | queryを編集して結果を更新 | 0 byte |
 | Navigator owns input | Up／Down、Page Up／Down | result selectionだけを移動 | 0 byte |
-| Navigator owns input | Command+Left／Right | tree時だけfolderをcollapse／expand | 0 byte |
+| Navigator owns input | Return | tree時だけselected folderをcollapse／expand | 0 byte |
+| Navigator owns input | Command+Left／Right | tree時だけfolderまたはancestorをcollapse／selected folderをexpand | 0 byte |
 | Navigator owns input | `Escape`または`view.focus-terminal` | 現在のstill-live focused paneをfirst responderへ戻す | 0 byte |
 
 追加の契約:
 
+- `Option+Shift+C`はstable action `view.toggle-context-dock`のnative menu shortcutとし、terminal／Navigatorの
+  first responderより先にexactly onceで捕捉する。Navigatorからhideする場合はstill-live terminalへinputを戻してからDockを閉じる。
 - `Shift+Command+F`はstable action `view.search-files-and-folders`としてView menu、Command
   Palette、keybind referenceで共有する。native shortcutがどのfirst responderからもexactly onceで
   捕捉し、terminal bytesへfall throughしないようにする。
@@ -100,8 +104,9 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 
 ## Navigatorでのpath操作
 
-- selectionだけではterminalへbytesを送らない。ReturnはfolderをDock内でbrowse／expandし、fileは
-  detailを開く。terminal processのcwdを暗黙には変更しない。
+- selectionだけではterminalへbytesを送らない。Returnはselected folderをDock内でbrowse／expandし、
+  展開済みなら同じfolderをcollapseする。fileではtree stateを変えずdetail表示だけを維持する。
+  terminal processのcwdを暗黙には変更しない。
 - Command+Cは選択pathをplain textとしてcopyする。Option+Returnは既存のpaste admissionと
   shell-literal quotingを使い、改行を付けずにstill-live focused terminalへpathだけを挿入してから
   terminal focusへ戻る。remote providerは接続先のpath／shell contractを別途満たすまでこのactionを

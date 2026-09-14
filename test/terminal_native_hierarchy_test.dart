@@ -282,15 +282,41 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     '(dock=${dock.snapshotForWindow(logicalWindow.id)!.width}, '
     'pane=${paneLayout!.width})',
   );
+  final int childAttachmentCountBeforeHide =
+      bindings.splitViewChildrenSetCounts[outerHandle]!;
   await dispatcher.dispatch(TerminalActionId.toggleContextDock);
   _expect(
     paneLayout?.width == 800 &&
         selectedNativeWindow.contentView is! TwoPaneSplitView,
     'hiding the Dock restores the full terminal viewport',
   );
+  bindings.splitViewFractions[outerHandle] = 0.2;
+  await dispatcher.dispatch(TerminalActionId.searchFilesAndFolders);
+  _expect(
+    identical(selectedNativeWindow.contentView, outer) &&
+        bindings.splitViewChildrenSetCounts[outerHandle] ==
+            childAttachmentCountBeforeHide + 1 &&
+        (dock.snapshotForWindow(logicalWindow.id)!.width - 399.5).abs() <
+            0.001 &&
+        dock.snapshotForWindow(logicalWindow.id)!.navigatorOwnsInput &&
+        bindings.firstResponders[bindings.handleFor(selectedNativeWindow)] ==
+            editorHandle &&
+        bindings.windowKeyEventRoutings[bindings.handleFor(
+              selectedNativeWindow,
+            )] ==
+            1,
+    'search from a hidden Dock ignores detached divider state, reattaches its '
+    'children, and focuses the navigator',
+  );
+  await dispatcher.dispatch(TerminalActionId.focusTerminal);
+  await dispatcher.dispatch(TerminalActionId.toggleContextDock);
+  final int childAttachmentCountBeforeToggleShow =
+      bindings.splitViewChildrenSetCounts[outerHandle]!;
   await dispatcher.dispatch(TerminalActionId.toggleContextDock);
   _expect(
     identical(selectedNativeWindow.contentView, outer) &&
+        bindings.splitViewChildrenSetCounts[outerHandle] ==
+            childAttachmentCountBeforeToggleShow + 1 &&
         bindings.firstResponders[bindings.handleFor(selectedNativeWindow)] ==
             bindings.handleFor(
               adapter.resourcesForPane(secondTab.focusedPaneId)!.view,
@@ -299,8 +325,8 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
               selectedNativeWindow,
             )] ==
             2,
-    'showing the Dock without search restores the terminal first responder '
-    'after native root reparenting',
+    'showing the Dock reattaches its native children and restores the terminal '
+    'first responder after native root reparenting',
   );
   final int stableChildAttachmentCount =
       bindings.splitViewChildrenSetCounts[outerHandle]!;

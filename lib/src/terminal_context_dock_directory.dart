@@ -291,8 +291,28 @@ final class TerminalContextDockDirectoryController {
       window.paneId,
       () => <String>{},
     );
+    bool collapse(String path) {
+      _collapse(window, path);
+      _publishResultCount(window);
+      final List<TerminalContextDockDirectoryRow> rows = _project(window).rows;
+      final int parentIndex = rows.indexWhere(
+        (TerminalContextDockDirectoryRow value) => value.entry.path == path,
+      );
+      if (parentIndex >= 0 && rows.isNotEmpty) {
+        dockState.setSelectedResultIndex(windowId, parentIndex);
+      }
+      _onChanged?.call();
+      return true;
+    }
+
     switch (intent) {
       case TerminalContextDockTreeIntent.expand:
+      case TerminalContextDockTreeIntent.toggle:
+        if (intent == TerminalContextDockTreeIntent.toggle &&
+            row.isDirectory &&
+            expanded.contains(row.entry.path)) {
+          return collapse(row.entry.path);
+        }
         if (!row.isDirectory || expanded.contains(row.entry.path)) {
           return false;
         }
@@ -313,19 +333,7 @@ final class TerminalContextDockDirectoryController {
           collapsePath = _nearestExpandedAncestor(row.entry.path, expanded);
         }
         if (collapsePath == null) return false;
-        _collapse(window, collapsePath);
-        _publishResultCount(window);
-        final List<TerminalContextDockDirectoryRow> rows = _project(window)
-            .rows;
-        final int parentIndex = rows.indexWhere(
-          (TerminalContextDockDirectoryRow value) =>
-              value.entry.path == collapsePath,
-        );
-        if (parentIndex >= 0 && rows.isNotEmpty) {
-          dockState.setSelectedResultIndex(windowId, parentIndex);
-        }
-        _onChanged?.call();
-        return true;
+        return collapse(collapsePath);
     }
   }
 
@@ -881,7 +889,9 @@ final class TerminalContextDockDirectoryPresenter {
     }
     final _TerminalContextDockNativeResources? resources =
         _resources[window.id];
-    if (resources != null && resources.positioned) {
+    if (resources != null &&
+        resources.positioned &&
+        resources.projectedVisible) {
       _captureNativeWidth(window.id, resources, fullSize);
       dock = dockState.snapshotForWindow(window.id);
     }
@@ -911,6 +921,7 @@ final class TerminalContextDockDirectoryPresenter {
         .putIfAbsent(window.id, _TerminalContextDockNativeResources.new);
     resources.attachContent();
     final bool rootAttachmentChanged =
+        !resources.projectedVisible ||
         !identical(resources.split.firstView, terminalRoot) ||
         !identical(resources.split.secondView, resources.contentSplit);
     final bool inputOwnerProjectionChanged =

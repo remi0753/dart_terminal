@@ -89,7 +89,7 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `tab.new` | New Tab | shell | `command+t` |
 | `pane.split-right` | Split Pane Right | shell | `command+d` |
 | `pane.split-down` | Split Pane Down | shell | `shift+command+d` |
-| `view.toggle-context-dock` | Toggle Context Dock | view | — |
+| `view.toggle-context-dock` | Toggle Context Dock | view | `shift+option+c` |
 | `view.search-files-and-folders` | Search Files and Folders | view | `shift+command+f` |
 | `view.focus-terminal` | Focus Terminal | view | — |
 | `pane.quick-look` | Quick Look | view | `control+command+d` |
@@ -128,6 +128,7 @@ AppKit consumes these standard menu shortcuts before raw terminal key routing. A
 | `command+t` | `tab.new` | New Tab |
 | `command+d` | `pane.split-right` | Split Pane Right |
 | `shift+command+d` | `pane.split-down` | Split Pane Down |
+| `shift+option+c` | `view.toggle-context-dock` | Toggle Context Dock |
 | `shift+command+f` | `view.search-files-and-folders` | Search Files and Folders |
 | `control+command+d` | `pane.quick-look` | Quick Look |
 | `option+command+i` | `view.open-terminal-inspector` | Open Terminal Inspector |

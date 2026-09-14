@@ -18,9 +18,11 @@
 
 ## Keyboard-onlyとfocus ownership
 
+- [ ] Terminal focus中にOption-Shift-Cを押すたびDockだけが表示／非表示になり、terminalへ文字や制御byteが入らない。
+- [ ] Navigator focus中のOption-Shift-Cはterminalへfocusを安全に戻してDockを閉じ、再度押すとquery／tree contextを保持して表示する。
 - [ ] Terminal focus中にShift-Command-Fを1回押すと右Dockが現れ、queryが選択される。terminalへ文字は入らない。
 - [ ] 文字入力、Delete、Command-Aはqueryだけを変え、Up/Down/Page Up/Page Downはresult selectionだけを動かす。
-- [ ] 空queryでReturnまたはCommand-Rightを押すとfolderがDock内で展開し、自動`cd`やcommand実行は起きない。
+- [ ] 空queryでReturnまたはCommand-Rightを押すとfolderがDock内で展開し、同じfolder上の再度のReturnで閉じる。自動`cd`やcommand実行は起きない。
 - [ ] Command-Leftでsubtreeを畳み、selectionがvisible parentへ戻る。
 - [ ] Escapeを1回押すとquery/resultを保持したままterminalへ戻る。再度Shift-Command-Fで同じcontextへ戻る。
 - [ ] Dock表示中でもterminal focusなら通常のterminal key、selection、scrollが従来どおり動作する。

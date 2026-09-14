@@ -8436,6 +8436,14 @@ final class TerminalApplication {
 
       final int dockToggleWriteBaseline =
           writeEnqueuedCounts[initialPaneId] ?? 0;
+      _expectLifecycle(
+        dispatcher.catalog
+                .actionForId(TerminalActionId.toggleContextDock)!
+                .shortcut!
+                .identity ==
+            'shift+option+c',
+        'Context Dock toggle did not expose its default native shortcut',
+      );
       final TerminalPaneProcessSnapshot navigatorProcess = initialPane
           .processSnapshot();
       _expectLifecycle(
@@ -8480,6 +8488,52 @@ final class TerminalApplication {
                   row.entry.path == secondDroppedFile.path,
             );
       }, 'Context Dock did not project the real plain-sh cwd tree');
+      final TerminalContextDockDirectorySnapshot treeBeforeToggle =
+          contextDockDirectory.snapshotForWindow(initialWindow.id)!;
+      final int treeRowCountBeforeToggle = treeBeforeToggle.rows.length;
+      final String toggledFolderPath = treeBeforeToggle.rows.first.entry.path;
+      _expectLifecycle(
+        treeBeforeToggle.rows.first.isDirectory,
+        'Context Dock product fixture did not select a folder for Return toggle',
+      );
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 36,
+        modifiers: 0,
+        characters: '\r',
+        charactersIgnoringModifiers: '\r',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(() {
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        return directory?.rows.first.entry.path == toggledFolderPath &&
+            directory!.rows.first.isExpanded;
+      }, 'Return did not expand the selected Context Dock folder');
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 36,
+        modifiers: 0,
+        characters: '\r',
+        charactersIgnoringModifiers: '\r',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(() {
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        final TerminalContextDockWindowSnapshot? dock = contextDockState
+            .snapshotForWindow(initialWindow.id);
+        return directory?.rows.length == treeRowCountBeforeToggle &&
+            directory!.rows.first.entry.path == toggledFolderPath &&
+            !directory.rows.first.isExpanded &&
+            dock?.pane.selectedResultIndex == 0;
+      }, 'second Return did not collapse and retain the selected folder');
+      _expectLifecycle(
+        (writeEnqueuedCounts[initialPaneId] ?? 0) == navigatorZeroWriteBaseline,
+        'Return folder toggle wrote bytes to the terminal',
+      );
       _injectKeyEventForTesting(
         application,
         contextDockWindow,

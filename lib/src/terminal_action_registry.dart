@@ -403,7 +403,15 @@ final class TerminalActionCatalog {
           command: true,
         ),
       ),
-      action(TerminalActionId.toggleContextDock, TerminalActionMenu.view),
+      action(
+        TerminalActionId.toggleContextDock,
+        TerminalActionMenu.view,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'c',
+          shift: true,
+          option: true,
+        ),
+      ),
       action(
         TerminalActionId.searchFilesAndFolders,
         TerminalActionMenu.view,
