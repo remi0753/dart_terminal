@@ -395,3 +395,73 @@ Input: Terminal
 - 最終文言修正後の最初の再stageはworkspace sandboxが`.git/index.lock`作成を拒否して失敗した。
   同じ対象fileだけを許可済みのrepository contextで再stageし、既存staged fileへ混入がないことを
   `git diff --cached --name-status`で再確認した。
+
+## 実装記録
+
+### 2026-09-16 — bounded native snapshotとDart model着手
+
+- 目的: distinct foreground process groupについて、実行中jobのmember、primary executable、process
+  argv、monotonic startをsession authorityからboundedに取得し、UIに依存しないtyped Dart modelまでを
+  完成する。ユーザー向け表示名はDirectory Navigatorと区別して`Process Inspector`に固定する。
+- 背景: 現行ABI v7の`DptyProcessSnapshotV1`はclose policy用content-free snapshot、
+  `DptyWorkingDirectorySnapshotV1`はowning shell cwdだけを返す。path／argvを前者へ混ぜず、別の明示
+  capabilityが必要である。
+- 範囲: public C ABI、`PtySession`のbefore／after foreground PGID検証、macOS process group observation、
+  Dart FFI／public immutable model、fake backend、native／Dart package test、snapshot latency計測。
+- 対象外: Context Dock content切替、polling、native presentation、localization、accessibility、製品runtime
+  acceptance。これらはROADMAPの後続subtaskで実施する。
+- 依存関係: ABI v7 handle registry、session mutex、`tcgetpgrp`、`libproc`、`KERN_PROCARGS2`、
+  `mach_absolute_time`、既存package test／native sanitizer gate。
+- 完了条件: idle／exit／stale、simple command、pipeline、leader fallback、process/member/text hard cap、
+  partial field failure、invalid UTF-8、zeroization境界、Dart validation、p95 latencyをtestで固定し、既存
+  content-free snapshot／cwd／lifecycleを退行させない。
+- 検証方針: header compile、native capability test、Dart fake／real PTY test、format／analyze、既存package
+  aggregate、32-member benchmark、diff reviewを行う。p95が5 msを超える場合はUI接続可能とはせず、
+  sampling worker化を同subtask内で解決する。
+- 着手時branchは`codex/context-file-navigator-roadmap`、HEADは`59deb76`、working treeはcleanだった。
+
+### 2026-09-16 — bounded native snapshot実装の判明事項
+
+- content-freeな`DptyProcessSnapshotV1`を変更せず、ABI v8に独立した
+  `DptyForegroundJobSnapshotV1`／`dpty_session_get_foreground_job_snapshot`を追加した。session handleから
+  before／afterのchild、owning PGID、foreground PGIDを検証し、任意PIDをcallerから指定できない境界に
+  した。非distinct、終了、raceではpath／argv／member bufferを返さない。
+- retained snapshotはmember 32、name 256 UTF-8 byte、path 16 KiB、argv 128件／packed 64 KiB／1件
+  16 KiBに制限した。primaryはlive group leader、leader消失時はmonotonic start、PIDの順で選び、先頭へ
+  並べ替える。33-process pipelineでは32件と明示的な1件以上のomissionになった。
+- `proc_listpgrppids(pgid, nullptr, 0)`の戻り値は対象group countとして利用できず、このhostでは789という
+  process列挙の容量hintを返した。最初の実装はこれをgroup totalと誤解してnative testが失敗した。
+  hintへ32件のrace marginを加え、64K PIDで上限を設けたtemporary bufferで実列挙し、その戻り値だけを
+  group totalとするよう修正した。temporary allocation failureは`ENOMEM`のtyped unavailableになる。
+- `proc_pidpath`を16 KiB ABI fieldへ直接書いた最初の実装ではNUL境界を検証できず`EOVERFLOW`になった。
+  `PROC_PIDPATHINFO_MAXSIZE`のzero-initialized temporary bufferへ取得し、bounded lengthを確認してからABI
+  fieldへcopyするよう修正した。
+- 列挙bufferのcapacityをretained member上限として誤使用した途中版は33件目を32件配列の外へ書き得た。
+  33-process testが`member_count == 33`を検出したため、retained判定を
+  `DPTY_FOREGROUND_PROCESS_LIMIT`へ修正した。ASan／UBSanを含むnative sanitizer gateで再検証した。
+- `KERN_PROCARGS2`は`argc`個だけをparseし、environment領域をcopyしない。64 KiBを超えるkernel blockは
+  `E2BIG`とtruncated、invalid UTF-8 argumentはDart decoderでそのargumentだけを破棄し、field issueと
+  truncationを付ける。native argv／path temporary bufferとDart FFI snapshotは利用後にzeroizeする。
+- test-only buildだけにpath／argvの`EPERM`とpost-observation `ESTALE` injectionを追加した。permissionは
+  member／timingを保つfield-local partial、staleは全contentをclearすることをnative testで固定した。
+
+### 2026-09-16 — bounded snapshot検証経過
+
+- 最初の`dart format`は対象4 fileのformat自体は完了したが、sandbox外の
+  `/Users/remi/.dart-tool/dart-flutter-telemetry-session.json`のmtime更新を拒否されexit 1になった。同じ
+  commandの再実行も2 fileをformat後に同じ理由でexit 1となった。sourceのformat結果は`dart analyze`で
+  検証し、telemetry fileは変更していない。
+- 最初のnative compileは、このSDKで宣言されない`explicit_bzero`とPGIDのsignedness warningを
+  `-Werror`で検出した。volatile byte loopの`SecureZero`と明示型変換へ直した。
+- `make dpty-native-test`はsimple foreground process、2-process pipeline、leader exit、33-process cap、
+  path／argv permission、stale、exit後content clear、既存PTY lifecycleを通過した。最終64回の32-member
+  retained snapshot計測はp50 273 us／p95 459 usで、5 ms gateを満たした。測定値は同一hostのdebug test artifactで
+  あり、製品telemetryへ出さない。
+- `make dpty-dart-test`はanalyzeと全package testを通過した。実interactive zshから通常pipeline、Perlで
+  生成したinvalid UTF-8 argv、70,000 byte argvを起動し、FFI modelが通常content、field-local malformed、
+  field-local oversizeへそれぞれ縮退することを確認した。fake backendとpublic modelのhard limit／immutable
+  copyも通過した。
+- `make product-native-sanitizer`はPTYを含む9 artifactのASan／UBSan gateを通過した。
+- 最終aggregate再実行では`make dpty-native-test`成功後、sandbox内の`make dpty-dart-test`がsourceではなく
+  上記telemetry session mtimeで停止した。workspace外への同じmetadata更新だけを許可して再実行し、analyze
+  と全testが成功した。`git diff --check`はwhitespace errorなしだった。

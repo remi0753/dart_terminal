@@ -119,6 +119,139 @@ Future<void> main(List<String> arguments) async {
     });
   });
 
+  await _test('foreground job model enforces bounded immutable content', () {
+    final PtyForegroundProcessSnapshot member = PtyForegroundProcessSnapshot(
+      processId: 4100,
+      startTimeSeconds: 1,
+      startTimeMicroseconds: 2,
+      startAbsoluteTime: 3,
+      elapsedMicroseconds: 4,
+      name: 'sleep',
+    );
+    final List<PtyForegroundProcessSnapshot> sourceMembers =
+        <PtyForegroundProcessSnapshot>[member];
+    final List<String> sourceArguments = <String>['sleep', '30'];
+    final PtyForegroundJobSnapshot snapshot = PtyForegroundJobSnapshot(
+      disposition: PtyForegroundJobDisposition.available,
+      childProcessId: 4000,
+      owningProcessGroup: 4000,
+      foregroundProcessGroup: 4100,
+      sampledAbsoluteTime: 7,
+      jobElapsedMicroseconds: 4,
+      members: sourceMembers,
+      totalMemberCount: 1,
+      omittedMemberCount: 0,
+      memberIssueCount: 0,
+      primaryIndex: 0,
+      observationSystemError: 0,
+      executablePath: '/bin/sleep',
+      executablePathSystemError: 0,
+      arguments: sourceArguments,
+      totalArgumentCount: 2,
+      omittedArgumentCount: 0,
+      argumentsTruncated: false,
+      argumentsSystemError: 0,
+      hasExited: false,
+    );
+    sourceMembers.clear();
+    sourceArguments.clear();
+    _expect(
+      snapshot.members.single.processId == 4100 &&
+          snapshot.arguments.length == 2 &&
+          snapshot.primaryProcess == member,
+      'foreground model owns immutable member and argument copies',
+    );
+    _expectThrows<UnsupportedError>(() => snapshot.members.clear());
+    _expectThrows<UnsupportedError>(() => snapshot.arguments.clear());
+    _expectThrows<ArgumentError>(
+      () => PtyForegroundProcessSnapshot(
+        processId: 4100,
+        startTimeSeconds: 1,
+        startTimeMicroseconds: Duration.microsecondsPerSecond,
+        startAbsoluteTime: 3,
+        elapsedMicroseconds: 4,
+        name: 'sleep',
+      ),
+    );
+    _expectThrows<ArgumentError>(
+      () => PtyForegroundJobSnapshot(
+        disposition: PtyForegroundJobDisposition.available,
+        childProcessId: 4000,
+        owningProcessGroup: 4000,
+        foregroundProcessGroup: 4100,
+        sampledAbsoluteTime: 7,
+        jobElapsedMicroseconds: 4,
+        members: List<PtyForegroundProcessSnapshot>.filled(
+          PtyForegroundJobSnapshot.maximumMembers + 1,
+          member,
+        ),
+        totalMemberCount: PtyForegroundJobSnapshot.maximumMembers + 1,
+        omittedMemberCount: 0,
+        memberIssueCount: 0,
+        primaryIndex: 0,
+        observationSystemError: 0,
+        executablePath: '/bin/sleep',
+        executablePathSystemError: 0,
+        arguments: const <String>['sleep'],
+        totalArgumentCount: 1,
+        omittedArgumentCount: 0,
+        argumentsTruncated: false,
+        argumentsSystemError: 0,
+        hasExited: false,
+      ),
+    );
+    _expectThrows<ArgumentError>(
+      () => PtyForegroundJobSnapshot(
+        disposition: PtyForegroundJobDisposition.available,
+        childProcessId: 4000,
+        owningProcessGroup: 4000,
+        foregroundProcessGroup: 4100,
+        sampledAbsoluteTime: 7,
+        jobElapsedMicroseconds: 4,
+        members: <PtyForegroundProcessSnapshot>[member],
+        totalMemberCount: 1,
+        omittedMemberCount: 0,
+        memberIssueCount: 0,
+        primaryIndex: 0,
+        observationSystemError: 0,
+        executablePath: 'bin/sleep',
+        executablePathSystemError: 0,
+        arguments: const <String>['sleep'],
+        totalArgumentCount: 1,
+        omittedArgumentCount: 0,
+        argumentsTruncated: false,
+        argumentsSystemError: 0,
+        hasExited: false,
+      ),
+    );
+    _expectThrows<ArgumentError>(
+      () => PtyForegroundJobSnapshot(
+        disposition: PtyForegroundJobDisposition.available,
+        childProcessId: 4000,
+        owningProcessGroup: 4000,
+        foregroundProcessGroup: 4100,
+        sampledAbsoluteTime: 7,
+        jobElapsedMicroseconds: 4,
+        members: <PtyForegroundProcessSnapshot>[member],
+        totalMemberCount: 1,
+        omittedMemberCount: 0,
+        memberIssueCount: 0,
+        primaryIndex: 0,
+        observationSystemError: 0,
+        executablePath: '/bin/sleep',
+        executablePathSystemError: 0,
+        arguments: <String>[
+          List<String>.filled(16385, 'x', growable: false).join(),
+        ],
+        totalArgumentCount: 1,
+        omittedArgumentCount: 0,
+        argumentsTruncated: false,
+        argumentsSystemError: 0,
+        hasExited: false,
+      ),
+    );
+  });
+
   await _test('deterministic fake backend lifecycle', () async {
     final FakePtyBackend backend = FakePtyBackend(autoExitOnClose: false);
     final PtyCommand command = PtyCommand(
@@ -159,6 +292,17 @@ Future<void> main(List<String> arguments) async {
           process.workingDirectorySnapshot().path == '/private/tmp',
       'fake owning-shell cwd is available only through its explicit API',
     );
+    _expect(
+      process is PtyForegroundJobObserver,
+      'fake process exposes the explicit foreground job capability',
+    );
+    final PtyForegroundJobObserver foregroundObserver =
+        process as PtyForegroundJobObserver;
+    _expect(
+      foregroundObserver.foregroundJobSnapshot().disposition ==
+          PtyForegroundJobDisposition.notDistinct,
+      'fake idle shell does not expose process content',
+    );
     fake.workingDirectorySystemError = 13;
     final PtyWorkingDirectorySnapshot unavailableCwd = process
         .workingDirectorySnapshot();
@@ -192,6 +336,18 @@ Future<void> main(List<String> arguments) async {
     _expect(
       process.processSnapshot().hasDistinctForegroundProcess,
       'fake distinct foreground process is classified',
+    );
+    final PtyForegroundJobSnapshot foregroundJob = foregroundObserver
+        .foregroundJobSnapshot();
+    _expect(
+      foregroundJob.isAvailable &&
+          foregroundJob.foregroundProcessGroup == process.pid + 1 &&
+          foregroundJob.members.length == 1 &&
+          foregroundJob.primaryProcess?.name == 'fake-process' &&
+          foregroundJob.executablePath == '/usr/bin/fake-process' &&
+          foregroundJob.arguments.single == 'fake-process' &&
+          foregroundJob.jobElapsedMicroseconds == 1,
+      'fake foreground job exposes bounded path argv and timing',
     );
     fake.foregroundProcessGroupSystemError = 6;
     final PtyProcessSnapshot unavailableSnapshot = process.processSnapshot();
@@ -268,7 +424,7 @@ Future<void> main(List<String> arguments) async {
   });
 
   await _test('real Dart listener callback and process lifecycle', () async {
-    _expect(_abiVersion() == 7, 'native asset ABI');
+    _expect(_abiVersion() == 8, 'native asset ABI');
     final PtyProcess process = await startPty(
       PtyCommand(
         executable: '/bin/sh',
@@ -307,6 +463,14 @@ Future<void> main(List<String> arguments) async {
           cwd.path == '/private/tmp',
       'real owning-shell cwd crosses the dedicated native boundary',
     );
+    _expect(
+      process is PtyForegroundJobObserver &&
+          (process as PtyForegroundJobObserver)
+                  .foregroundJobSnapshot()
+                  .disposition ==
+              PtyForegroundJobDisposition.notDistinct,
+      'real owning process group does not leak shell path or argv',
+    );
     final PtyExit exit = await process.exit.timeout(const Duration(seconds: 4));
     final String output = utf8.decode(await outputFuture);
     _expect(exit.exitCode == 9 && exit.signal == null, 'real exit code');
@@ -317,6 +481,153 @@ Future<void> main(List<String> arguments) async {
     _expect(process.finalStats?.hasExited ?? false, 'real stats finalized');
     await process.dispose();
     _expect(_liveSessionCount() == 0, 'real native session is released');
+  });
+
+  await _test('real foreground job content crosses the Dart boundary', () async {
+    final PtyProcess process = await startPty(
+      PtyCommand(
+        executable: '/bin/zsh',
+        arguments: const <String>['-f', '-i'],
+        environment: const <String, String>{'TERM': 'xterm-256color'},
+      ),
+    );
+    final StreamSubscription<Uint8List> subscription = process.output.listen(
+      (_) {},
+    );
+    final PtyForegroundJobObserver observer =
+        process as PtyForegroundJobObserver;
+    PtyForegroundJobSnapshot? foregroundJob;
+    _expect(
+      process.write(Uint8List.fromList(utf8.encode('sleep 30 | cat\n'))) ==
+          PtyWriteResult.accepted,
+      'real foreground pipeline is queued',
+    );
+    await _waitFor(() {
+      final PtyProcessSnapshot processSnapshot = process.processSnapshot();
+      if (!processSnapshot.hasDistinctForegroundProcess) {
+        return false;
+      }
+      final PtyForegroundJobSnapshot candidate = observer
+          .foregroundJobSnapshot();
+      if (!candidate.isAvailable || candidate.members.length < 2) {
+        return false;
+      }
+      foregroundJob = candidate;
+      return true;
+    }, 'real foreground job snapshot');
+    final PtyForegroundJobSnapshot snapshot = foregroundJob!;
+    _expect(
+      snapshot.childProcessId == process.pid &&
+          snapshot.owningProcessGroup == process.pid &&
+          snapshot.foregroundProcessGroup != process.pid &&
+          snapshot.primaryIndex == 0 &&
+          snapshot.primaryProcess?.processId ==
+              snapshot.foregroundProcessGroup &&
+          snapshot.primaryProcess?.hasMonotonicStart == true &&
+          snapshot.executablePath?.contains('sleep') == true &&
+          snapshot.arguments.length >= 2 &&
+          snapshot.arguments[0] == 'sleep' &&
+          snapshot.arguments[1] == '30' &&
+          snapshot.jobElapsedMicroseconds >= 0,
+      'path argv identity and monotonic timing are decoded without shell parsing',
+    );
+    process.sendSignal(PtySignal.interrupt);
+    await _waitFor(
+      () => !process.processSnapshot().hasDistinctForegroundProcess,
+      'terminal ownership to return to the shell',
+    );
+
+    foregroundJob = null;
+    _expect(
+      process.write(
+            Uint8List.fromList(
+              utf8.encode(
+                "/usr/bin/perl -e 'exec {\"/bin/sleep\"} \"\\xFF\", \"30\"'\n",
+              ),
+            ),
+          ) ==
+          PtyWriteResult.accepted,
+      'invalid UTF-8 argv probe is queued',
+    );
+    await _waitFor(() {
+      if (!process.processSnapshot().hasDistinctForegroundProcess) {
+        return false;
+      }
+      final PtyForegroundJobSnapshot candidate = observer
+          .foregroundJobSnapshot();
+      if (!candidate.isAvailable ||
+          candidate.executablePath?.contains('sleep') != true) {
+        return false;
+      }
+      foregroundJob = candidate;
+      return true;
+    }, 'invalid UTF-8 foreground argv snapshot');
+    final PtyForegroundJobSnapshot malformedArguments = foregroundJob!;
+    _expect(
+      malformedArguments.argumentsSystemError != 0 &&
+          malformedArguments.argumentsTruncated &&
+          malformedArguments.totalArgumentCount == 2 &&
+          malformedArguments.omittedArgumentCount == 1 &&
+          malformedArguments.arguments.single == '30',
+      'invalid UTF-8 argument is rejected without losing valid process fields',
+    );
+    process.sendSignal(PtySignal.interrupt);
+    await _waitFor(
+      () => !process.processSnapshot().hasDistinctForegroundProcess,
+      'terminal ownership after invalid UTF-8 probe',
+    );
+
+    foregroundJob = null;
+    _expect(
+      process.write(
+            Uint8List.fromList(
+              utf8.encode(
+                "/usr/bin/perl -e '\$x = \"x\" x 70000; "
+                "exec {\"/bin/sleep\"} \$x, \"30\"'\n",
+              ),
+            ),
+          ) ==
+          PtyWriteResult.accepted,
+      'oversize argv probe is queued',
+    );
+    await _waitFor(() {
+      if (!process.processSnapshot().hasDistinctForegroundProcess) {
+        return false;
+      }
+      final PtyForegroundJobSnapshot candidate = observer
+          .foregroundJobSnapshot();
+      if (!candidate.isAvailable ||
+          candidate.executablePath?.contains('sleep') != true) {
+        return false;
+      }
+      foregroundJob = candidate;
+      return true;
+    }, 'oversize foreground argv snapshot');
+    final PtyForegroundJobSnapshot oversizeArguments = foregroundJob!;
+    _expect(
+      oversizeArguments.argumentsSystemError != 0 &&
+          oversizeArguments.argumentsTruncated &&
+          oversizeArguments.arguments.isEmpty &&
+          oversizeArguments.executablePath?.contains('sleep') == true &&
+          oversizeArguments.primaryProcess != null,
+      'oversize argv fails closed while retaining non-argument fields',
+    );
+    process.sendSignal(PtySignal.interrupt);
+    await _waitFor(
+      () => !process.processSnapshot().hasDistinctForegroundProcess,
+      'terminal ownership after oversize argv probe',
+    );
+
+    _expect(
+      process.write(Uint8List.fromList(utf8.encode('exit 0\n'))) ==
+          PtyWriteResult.accepted,
+      'interactive shell exit is queued',
+    );
+    final PtyExit exit = await process.exit.timeout(const Duration(seconds: 4));
+    await subscription.cancel();
+    await process.dispose();
+    _expect(exit.exitCode == 0, 'interactive foreground test exits cleanly');
+    _expect(_liveSessionCount() == 0, 'foreground test session is released');
   });
 
   await _test(

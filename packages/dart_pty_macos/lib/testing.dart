@@ -47,7 +47,7 @@ final class FakePtyBackend implements PtyBackend {
   }
 }
 
-final class FakePtyProcess implements PtyProcess {
+final class FakePtyProcess implements PtyProcess, PtyForegroundJobObserver {
   FakePtyProcess({
     required this.pid,
     required PtySize initialSize,
@@ -87,6 +87,7 @@ final class FakePtyProcess implements PtyProcess {
   int terminalAttributesSystemError = 0;
   String workingDirectoryPath = '/private/tmp';
   int workingDirectorySystemError = 0;
+  PtyForegroundJobSnapshot? foregroundJobSnapshotOverride;
 
   @override
   Stream<Uint8List> get output => _output.stream;
@@ -136,6 +137,61 @@ final class FakePtyProcess implements PtyProcess {
     return PtyWorkingDirectorySnapshot.available(
       processId: pid,
       path: workingDirectoryPath,
+    );
+  }
+
+  @override
+  PtyForegroundJobSnapshot foregroundJobSnapshot() {
+    _requireRunning();
+    final PtyProcessSnapshot process = processSnapshot();
+    final PtyForegroundJobSnapshot? override = foregroundJobSnapshotOverride;
+    if (override != null) return override;
+    if (!process.isAvailable) {
+      return _foregroundJobUnavailable(
+        childProcessId: process.childPid,
+        owningProcessGroup: process.childProcessGroup,
+        foregroundProcessGroup: process.foregroundProcessGroup,
+        systemError: process.foregroundProcessGroupSystemError,
+      );
+    }
+    if (!process.hasDistinctForegroundProcess) {
+      return _foregroundJobUnavailable(
+        disposition: PtyForegroundJobDisposition.notDistinct,
+        childProcessId: process.childPid,
+        owningProcessGroup: process.childProcessGroup,
+        foregroundProcessGroup: process.foregroundProcessGroup,
+      );
+    }
+    final int foreground = process.foregroundProcessGroup!;
+    final PtyForegroundProcessSnapshot member = PtyForegroundProcessSnapshot(
+      processId: foreground,
+      startTimeSeconds: 1,
+      startTimeMicroseconds: 0,
+      startAbsoluteTime: 1,
+      elapsedMicroseconds: 1,
+      name: 'fake-process',
+    );
+    return PtyForegroundJobSnapshot(
+      disposition: PtyForegroundJobDisposition.available,
+      childProcessId: process.childPid,
+      owningProcessGroup: process.childProcessGroup,
+      foregroundProcessGroup: foreground,
+      sampledAbsoluteTime: 2,
+      jobElapsedMicroseconds: 1,
+      members: <PtyForegroundProcessSnapshot>[member],
+      totalMemberCount: 1,
+      omittedMemberCount: 0,
+      memberIssueCount: 0,
+      primaryIndex: 0,
+      observationSystemError: 0,
+      executablePath: '/usr/bin/fake-process',
+      executablePathSystemError: 0,
+      arguments: const <String>['fake-process'],
+      totalArgumentCount: 1,
+      omittedArgumentCount: 0,
+      argumentsTruncated: false,
+      argumentsSystemError: 0,
+      hasExited: false,
     );
   }
 
@@ -257,3 +313,33 @@ final class FakePtyProcess implements PtyProcess {
     }
   }
 }
+
+PtyForegroundJobSnapshot _foregroundJobUnavailable({
+  PtyForegroundJobDisposition disposition =
+      PtyForegroundJobDisposition.unavailable,
+  int? childProcessId,
+  int? owningProcessGroup,
+  int? foregroundProcessGroup,
+  int systemError = 0,
+}) => PtyForegroundJobSnapshot(
+  disposition: disposition,
+  childProcessId: childProcessId,
+  owningProcessGroup: owningProcessGroup,
+  foregroundProcessGroup: foregroundProcessGroup,
+  sampledAbsoluteTime: 0,
+  jobElapsedMicroseconds: 0,
+  members: const <PtyForegroundProcessSnapshot>[],
+  totalMemberCount: 0,
+  omittedMemberCount: 0,
+  memberIssueCount: 0,
+  primaryIndex: -1,
+  observationSystemError: systemError,
+  executablePath: null,
+  executablePathSystemError: 0,
+  arguments: const <String>[],
+  totalArgumentCount: 0,
+  omittedArgumentCount: 0,
+  argumentsTruncated: false,
+  argumentsSystemError: 0,
+  hasExited: disposition == PtyForegroundJobDisposition.exited,
+);

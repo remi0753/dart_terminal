@@ -9,7 +9,7 @@ import 'package:ffi/ffi.dart';
 import 'api.dart';
 
 const String _assetId = 'package:dart_pty_macos/dart_pty_macos.dart';
-const int _abiVersion = 7;
+const int _abiVersion = 8;
 const int _statusOk = 0;
 const int _statusBackpressured = 4;
 const int _eventStarted = 1;
@@ -179,6 +179,115 @@ final class _NativeWorkingDirectorySnapshot extends Struct {
   external Array<Uint8> path;
 }
 
+final class _NativeForegroundProcess extends Struct {
+  @Int64()
+  external int processId;
+
+  @Uint64()
+  external int startTimeSeconds;
+
+  @Uint32()
+  external int startTimeMicroseconds;
+
+  @Uint64()
+  external int startAbsoluteTime;
+
+  @Uint64()
+  external int elapsedMicroseconds;
+
+  @Size()
+  external int nameLength;
+
+  @Int32()
+  external int informationError;
+
+  @Int32()
+  external int resourceUsageError;
+
+  @Array(PtyForegroundProcessSnapshot.maximumNameUtf8Bytes + 1)
+  external Array<Uint8> name;
+}
+
+final class _NativeForegroundJobSnapshot extends Struct {
+  @Size()
+  external int structSize;
+
+  @Uint32()
+  external int abiVersion;
+
+  @Uint32()
+  external int disposition;
+
+  @Int64()
+  external int childPid;
+
+  @Int64()
+  external int owningProcessGroup;
+
+  @Int64()
+  external int foregroundProcessGroup;
+
+  @Uint64()
+  external int sampledAbsoluteTime;
+
+  @Uint64()
+  external int jobElapsedMicroseconds;
+
+  @Uint32()
+  external int memberCount;
+
+  @Uint32()
+  external int totalMemberCount;
+
+  @Uint32()
+  external int omittedMemberCount;
+
+  @Uint32()
+  external int memberIssueCount;
+
+  @Int32()
+  external int primaryIndex;
+
+  @Int32()
+  external int observationError;
+
+  @Int32()
+  external int executablePathError;
+
+  @Int32()
+  external int argumentsError;
+
+  @Int32()
+  external int hasExited;
+
+  @Uint32()
+  external int argumentCount;
+
+  @Uint32()
+  external int totalArgumentCount;
+
+  @Uint32()
+  external int omittedArgumentCount;
+
+  @Uint32()
+  external int argumentsTruncated;
+
+  @Size()
+  external int executablePathLength;
+
+  @Size()
+  external int argumentBytesLength;
+
+  @Array(PtyForegroundJobSnapshot.maximumMembers)
+  external Array<_NativeForegroundProcess> members;
+
+  @Array(PtyForegroundJobSnapshot.maximumExecutablePathUtf8Bytes + 1)
+  external Array<Uint8> executablePath;
+
+  @Array(PtyForegroundJobSnapshot.maximumArgumentBytes)
+  external Array<Uint8> arguments;
+}
+
 @Native<Uint32 Function()>(symbol: 'dpty_abi_version', assetId: _assetId)
 external int _nativeAbiVersion();
 
@@ -265,6 +374,15 @@ external int _sessionGetWorkingDirectorySnapshot(
   Pointer<_NativeWorkingDirectorySnapshot> snapshot,
 );
 
+@Native<Int32 Function(Uint64, Pointer<_NativeForegroundJobSnapshot>)>(
+  symbol: 'dpty_session_get_foreground_job_snapshot',
+  assetId: _assetId,
+)
+external int _sessionGetForegroundJobSnapshot(
+  int session,
+  Pointer<_NativeForegroundJobSnapshot> snapshot,
+);
+
 @Native<Int32 Function(Uint64)>(
   symbol: 'dpty_session_destroy',
   assetId: _assetId,
@@ -321,6 +439,14 @@ typedef _SessionWorkingDirectorySnapshotDart = int Function(
   int,
   Pointer<_NativeWorkingDirectorySnapshot>,
 );
+typedef _SessionForegroundJobSnapshotNative = Int32 Function(
+  Uint64,
+  Pointer<_NativeForegroundJobSnapshot>,
+);
+typedef _SessionForegroundJobSnapshotDart = int Function(
+  int,
+  Pointer<_NativeForegroundJobSnapshot>,
+);
 
 final class _PtyFunctions {
   _PtyFunctions.nativeAssets()
@@ -337,6 +463,7 @@ final class _PtyFunctions {
       sessionGetStats = _sessionGetStats,
       sessionGetProcessSnapshot = _sessionGetProcessSnapshot,
       sessionGetWorkingDirectorySnapshot = _sessionGetWorkingDirectorySnapshot,
+      sessionGetForegroundJobSnapshot = _sessionGetForegroundJobSnapshot,
       sessionDestroy = _sessionDestroy;
 
   _PtyFunctions.dynamic(DynamicLibrary library)
@@ -393,6 +520,11 @@ final class _PtyFunctions {
             _SessionWorkingDirectorySnapshotNative,
             _SessionWorkingDirectorySnapshotDart
           >('dpty_session_get_working_directory_snapshot'),
+      sessionGetForegroundJobSnapshot = library
+          .lookupFunction<
+            _SessionForegroundJobSnapshotNative,
+            _SessionForegroundJobSnapshotDart
+          >('dpty_session_get_foreground_job_snapshot'),
       sessionDestroy = library
           .lookupFunction<_SessionHandleNative, _SessionHandleDart>(
             'dpty_session_destroy',
@@ -411,6 +543,7 @@ final class _PtyFunctions {
   final _SessionStatsDart sessionGetStats;
   final _SessionProcessSnapshotDart sessionGetProcessSnapshot;
   final _SessionWorkingDirectorySnapshotDart sessionGetWorkingDirectorySnapshot;
+  final _SessionForegroundJobSnapshotDart sessionGetForegroundJobSnapshot;
   final _SessionHandleDart sessionDestroy;
 }
 
@@ -583,6 +716,175 @@ PtyDiagnosticEvent _decodeDiagnostic(
   };
 }
 
+PtyForegroundJobDisposition _decodeForegroundDisposition(int value) =>
+    switch (value) {
+      1 => PtyForegroundJobDisposition.available,
+      2 => PtyForegroundJobDisposition.notDistinct,
+      3 => PtyForegroundJobDisposition.unavailable,
+      4 => PtyForegroundJobDisposition.stale,
+      5 => PtyForegroundJobDisposition.exited,
+      _ => PtyForegroundJobDisposition.unavailable,
+    };
+
+String _decodeBoundedUtf8(Array<Uint8> source, int length, int maximum) {
+  if (length < 0 || length > maximum) {
+    throw const FormatException('native PTY text length is invalid');
+  }
+  return utf8.decode(<int>[
+    for (var index = 0; index < length; ++index) source[index],
+  ], allowMalformed: false);
+}
+
+PtyForegroundJobSnapshot _decodeForegroundJobSnapshot(
+  _NativeForegroundJobSnapshot value,
+) {
+  if (value.memberCount > PtyForegroundJobSnapshot.maximumMembers ||
+      value.argumentCount > PtyForegroundJobSnapshot.maximumArguments ||
+      value.executablePathLength >
+          PtyForegroundJobSnapshot.maximumExecutablePathUtf8Bytes ||
+      value.argumentBytesLength >
+          PtyForegroundJobSnapshot.maximumArgumentBytes) {
+    return _unavailableForegroundJobSnapshot(systemError: -1);
+  }
+
+  final List<PtyForegroundProcessSnapshot> members =
+      <PtyForegroundProcessSnapshot>[];
+  for (var index = 0; index < value.memberCount; ++index) {
+    final _NativeForegroundProcess native = value.members[index];
+    var informationError = native.informationError;
+    var name = '';
+    try {
+      name = _decodeBoundedUtf8(
+        native.name,
+        native.nameLength,
+        PtyForegroundProcessSnapshot.maximumNameUtf8Bytes,
+      );
+    } on Object {
+      informationError = informationError == 0 ? -1 : informationError;
+    }
+    members.add(
+      PtyForegroundProcessSnapshot(
+        processId: native.processId,
+        startTimeSeconds: native.startTimeSeconds,
+        startTimeMicroseconds: native.startTimeMicroseconds,
+        startAbsoluteTime: native.startAbsoluteTime,
+        elapsedMicroseconds: native.elapsedMicroseconds,
+        name: name,
+        informationSystemError: informationError,
+        resourceUsageSystemError: native.resourceUsageError,
+      ),
+    );
+  }
+
+  String? executablePath;
+  var executablePathError = value.executablePathError;
+  if (value.executablePathLength != 0) {
+    try {
+      executablePath = _decodeBoundedUtf8(
+        value.executablePath,
+        value.executablePathLength,
+        PtyForegroundJobSnapshot.maximumExecutablePathUtf8Bytes,
+      );
+    } on Object {
+      executablePathError = executablePathError == 0 ? -1 : executablePathError;
+    }
+  }
+
+  final List<String> arguments = <String>[];
+  var argumentsError = value.argumentsError;
+  var argumentsMalformed = false;
+  var offset = 0;
+  for (var index = 0; index < value.argumentCount; ++index) {
+    var end = offset;
+    while (end < value.argumentBytesLength && value.arguments[end] != 0) {
+      ++end;
+    }
+    if (end >= value.argumentBytesLength) {
+      argumentsMalformed = true;
+      break;
+    }
+    try {
+      arguments.add(
+        utf8.decode(<int>[
+          for (var byteIndex = offset; byteIndex < end; ++byteIndex)
+            value.arguments[byteIndex],
+        ], allowMalformed: false),
+      );
+    } on Object {
+      argumentsMalformed = true;
+    }
+    offset = end + 1;
+  }
+  if (argumentsMalformed) {
+    argumentsError = argumentsError == 0 ? -1 : argumentsError;
+  }
+  final int totalArgumentCount = value.totalArgumentCount < arguments.length
+      ? arguments.length
+      : value.totalArgumentCount;
+
+  try {
+    return PtyForegroundJobSnapshot(
+      disposition: _decodeForegroundDisposition(value.disposition),
+      childProcessId: value.childPid > 0 ? value.childPid : null,
+      owningProcessGroup: value.owningProcessGroup > 0
+          ? value.owningProcessGroup
+          : null,
+      foregroundProcessGroup: value.foregroundProcessGroup > 0
+          ? value.foregroundProcessGroup
+          : null,
+      sampledAbsoluteTime: value.sampledAbsoluteTime,
+      jobElapsedMicroseconds: value.jobElapsedMicroseconds,
+      members: members,
+      totalMemberCount: value.totalMemberCount < members.length
+          ? members.length
+          : value.totalMemberCount,
+      omittedMemberCount:
+          (value.totalMemberCount < members.length
+              ? members.length
+              : value.totalMemberCount) -
+          members.length,
+      memberIssueCount: value.memberIssueCount,
+      primaryIndex: value.primaryIndex,
+      observationSystemError: value.observationError,
+      executablePath: executablePath,
+      executablePathSystemError: executablePathError,
+      arguments: arguments,
+      totalArgumentCount: totalArgumentCount,
+      omittedArgumentCount: totalArgumentCount - arguments.length,
+      argumentsTruncated: value.argumentsTruncated != 0 || argumentsMalformed,
+      argumentsSystemError: argumentsError,
+      hasExited: value.hasExited != 0,
+    );
+  } on Object {
+    return _unavailableForegroundJobSnapshot(systemError: -1);
+  }
+}
+
+PtyForegroundJobSnapshot _unavailableForegroundJobSnapshot({
+  required int systemError,
+}) => PtyForegroundJobSnapshot(
+  disposition: PtyForegroundJobDisposition.unavailable,
+  childProcessId: null,
+  owningProcessGroup: null,
+  foregroundProcessGroup: null,
+  sampledAbsoluteTime: 0,
+  jobElapsedMicroseconds: 0,
+  members: const <PtyForegroundProcessSnapshot>[],
+  totalMemberCount: 0,
+  omittedMemberCount: 0,
+  memberIssueCount: 0,
+  primaryIndex: -1,
+  observationSystemError: systemError,
+  executablePath: null,
+  executablePathSystemError: 0,
+  arguments: const <String>[],
+  totalArgumentCount: 0,
+  omittedArgumentCount: 0,
+  argumentsTruncated: false,
+  argumentsSystemError: 0,
+  hasExited: false,
+);
+
 Future<PtyProcess> startPty(
   PtyCommand command, {
   PtyBackend? backend,
@@ -739,7 +1041,7 @@ final class MacosPtyBackend implements PtyBackend {
   }
 }
 
-final class _MacosPtyProcess implements PtyProcess {
+final class _MacosPtyProcess implements PtyProcess, PtyForegroundJobObserver {
   _MacosPtyProcess(
     this._handle,
     this._functions, {
@@ -854,6 +1156,34 @@ final class _MacosPtyProcess implements PtyProcess {
         );
       }
     } finally {
+      calloc.free(snapshot);
+    }
+  }
+
+  @override
+  PtyForegroundJobSnapshot foregroundJobSnapshot() {
+    _requireRunning();
+    final Pointer<_NativeForegroundJobSnapshot> snapshot =
+        calloc<_NativeForegroundJobSnapshot>();
+    try {
+      snapshot.ref
+        ..structSize = sizeOf<_NativeForegroundJobSnapshot>()
+        ..abiVersion = _abiVersion;
+      _checkStatus(
+        _functions.sessionGetForegroundJobSnapshot(_handle, snapshot),
+        'PTY foreground job snapshot',
+      );
+      return _decodeForegroundJobSnapshot(snapshot.ref);
+    } on PtyException {
+      rethrow;
+    } on Object {
+      return _unavailableForegroundJobSnapshot(systemError: -1);
+    } finally {
+      final int snapshotSize = sizeOf<_NativeForegroundJobSnapshot>();
+      snapshot
+          .cast<Uint8>()
+          .asTypedList(snapshotSize)
+          .fillRange(0, snapshotSize, 0);
       calloc.free(snapshot);
     }
   }

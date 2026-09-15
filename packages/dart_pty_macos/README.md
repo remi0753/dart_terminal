@@ -5,7 +5,7 @@ applications. Native code owns only `forkpty`, the audited child `execve` path,
 master-FD readiness, bounded byte queues, resize/signals, close escalation, and
 child reaping. Dart owns session policy and terminal semantics.
 
-The v7 `dpty_*` C ABI provides:
+The v8 `dpty_*` C ABI provides:
 
 - copied argv, environment, working directory, and initial size before fork;
 - an isolated C child branch using only audited async-signal-safe operations;
@@ -18,6 +18,9 @@ The v7 `dpty_*` C ABI provides:
   echo-mode snapshot;
 - a separate, explicit owning-child working-directory snapshot which never
   enters the content-free diagnostics stream;
+- an optional, explicitly content-bearing foreground-job snapshot with at most
+  32 process members, one primary executable path, process argv without its
+  environment segment, and monotonic elapsed timing;
 - idempotent, nonblocking immediate force close before or during graceful close;
 - opt-in, content-free write/control/reap diagnostics with tracked-write IDs;
 - bounded reactor turns so continuous output cannot starve writes or close;
@@ -64,6 +67,16 @@ path-bearing capability. On macOS it reads the still-owned child identity with
 absolute path, and returns only a typed system error after exit or lookup
 failure. Product code must match that PID to its current session generation
 before treating the path as filesystem authority.
+
+Native and fake processes may also implement `PtyForegroundJobObserver`.
+`foregroundJobSnapshot()` is separate from the content-free `PtyProcess`
+contract: it only observes the session's current distinct foreground process
+group, revalidates that group before returning, and clears content when the
+identity became stale. Member, path, and argv storage is bounded. Arguments are
+the running process argv—not the original shell source—and the native parser
+never copies the environment portion exposed by `KERN_PROCARGS2`. Consumers
+must discard snapshots when their pane/session authority or privacy policy
+changes.
 
 `PtyProcess.writeTracked()` returns an opaque request ID for correlating queue
 admission, reactor dequeue, and `write(2)` completion. Passing

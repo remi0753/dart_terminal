@@ -6,6 +6,8 @@ static_assert(std::is_standard_layout_v<DptySessionConfigV1>);
 static_assert(std::is_standard_layout_v<DptySessionStatsV1>);
 static_assert(std::is_standard_layout_v<DptyProcessSnapshotV1>);
 static_assert(std::is_standard_layout_v<DptyWorkingDirectorySnapshotV1>);
+static_assert(std::is_standard_layout_v<DptyForegroundProcessV1>);
+static_assert(std::is_standard_layout_v<DptyForegroundJobSnapshotV1>);
 static_assert(std::is_standard_layout_v<DptyError>);
 
 int main() {
@@ -14,8 +16,11 @@ int main() {
   auto* get_process_snapshot = &dpty_session_get_process_snapshot;
   auto* get_working_directory_snapshot =
       &dpty_session_get_working_directory_snapshot;
+  auto* get_foreground_job_snapshot =
+      &dpty_session_get_foreground_job_snapshot;
   auto* destroy = &dpty_session_destroy;
   return create == nullptr || force_close == nullptr ||
          get_process_snapshot == nullptr ||
-         get_working_directory_snapshot == nullptr || destroy == nullptr;
+         get_working_directory_snapshot == nullptr ||
+         get_foreground_job_snapshot == nullptr || destroy == nullptr;
 }

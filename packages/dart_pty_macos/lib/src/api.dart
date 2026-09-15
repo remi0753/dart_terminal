@@ -293,6 +293,194 @@ final class PtyWorkingDirectorySnapshot {
       processId != null && path != null && systemError == 0 && !hasExited;
 }
 
+enum PtyForegroundJobDisposition {
+  available,
+  notDistinct,
+  unavailable,
+  stale,
+  exited,
+}
+
+final class PtyForegroundProcessSnapshot {
+  PtyForegroundProcessSnapshot({
+    required this.processId,
+    required this.startTimeSeconds,
+    required this.startTimeMicroseconds,
+    required this.startAbsoluteTime,
+    required this.elapsedMicroseconds,
+    required this.name,
+    this.informationSystemError = 0,
+    this.resourceUsageSystemError = 0,
+  }) {
+    if (processId <= 0) {
+      throw ArgumentError.value(processId, 'processId', 'must be positive');
+    }
+    if (startTimeSeconds < 0 ||
+        startTimeMicroseconds < 0 ||
+        startTimeMicroseconds >= Duration.microsecondsPerSecond ||
+        startAbsoluteTime < 0 ||
+        elapsedMicroseconds < 0) {
+      throw ArgumentError('foreground process timing is invalid');
+    }
+    if (name.contains('\u0000') ||
+        utf8.encode(name).length > maximumNameUtf8Bytes) {
+      throw ArgumentError.value(name, 'name', 'must be bounded without NUL');
+    }
+  }
+
+  static const int maximumNameUtf8Bytes = 256;
+
+  final int processId;
+  final int startTimeSeconds;
+  final int startTimeMicroseconds;
+  final int startAbsoluteTime;
+  final int elapsedMicroseconds;
+  final String name;
+  final int informationSystemError;
+  final int resourceUsageSystemError;
+
+  bool get hasMonotonicStart =>
+      startAbsoluteTime > 0 && resourceUsageSystemError == 0;
+}
+
+/// Explicit content-bearing observation of one distinct foreground PTY job.
+///
+/// Executable and argument content is intentionally absent from
+/// [PtyProcessSnapshot] and diagnostics. Arguments describe the process argv,
+/// not the original shell source text.
+final class PtyForegroundJobSnapshot {
+  PtyForegroundJobSnapshot({
+    required this.disposition,
+    required this.childProcessId,
+    required this.owningProcessGroup,
+    required this.foregroundProcessGroup,
+    required this.sampledAbsoluteTime,
+    required this.jobElapsedMicroseconds,
+    required Iterable<PtyForegroundProcessSnapshot> members,
+    required this.totalMemberCount,
+    required this.omittedMemberCount,
+    required this.memberIssueCount,
+    required this.primaryIndex,
+    required this.observationSystemError,
+    required this.executablePath,
+    required this.executablePathSystemError,
+    required Iterable<String> arguments,
+    required this.totalArgumentCount,
+    required this.omittedArgumentCount,
+    required this.argumentsTruncated,
+    required this.argumentsSystemError,
+    required this.hasExited,
+  }) : members = List<PtyForegroundProcessSnapshot>.unmodifiable(members),
+       arguments = List<String>.unmodifiable(arguments) {
+    if (sampledAbsoluteTime < 0 || jobElapsedMicroseconds < 0) {
+      throw ArgumentError('foreground job timing is invalid');
+    }
+    for (final MapEntry<String, int> count in <String, int>{
+      'totalMemberCount': totalMemberCount,
+      'omittedMemberCount': omittedMemberCount,
+      'memberIssueCount': memberIssueCount,
+      'totalArgumentCount': totalArgumentCount,
+      'omittedArgumentCount': omittedArgumentCount,
+    }.entries) {
+      if (count.value < 0) {
+        throw ArgumentError.value(
+          count.value,
+          count.key,
+          'must not be negative',
+        );
+      }
+    }
+    if (this.members.length > maximumMembers ||
+        totalMemberCount < this.members.length ||
+        omittedMemberCount != totalMemberCount - this.members.length) {
+      throw ArgumentError('foreground job member counts are inconsistent');
+    }
+    if (primaryIndex < -1 ||
+        primaryIndex >= this.members.length ||
+        (this.members.isEmpty && primaryIndex != -1)) {
+      throw ArgumentError.value(primaryIndex, 'primaryIndex', 'is invalid');
+    }
+    if (this.arguments.length > maximumArguments ||
+        totalArgumentCount < this.arguments.length ||
+        omittedArgumentCount != totalArgumentCount - this.arguments.length) {
+      throw ArgumentError('foreground job argument counts are inconsistent');
+    }
+    if (executablePath != null &&
+        (!executablePath!.startsWith('/') ||
+            executablePath!.contains('\u0000') ||
+            utf8.encode(executablePath!).length >
+                maximumExecutablePathUtf8Bytes)) {
+      throw ArgumentError.value(
+        executablePath,
+        'executablePath',
+        'must be a bounded absolute path without NUL',
+      );
+    }
+    var argumentBytes = 0;
+    for (final String argument in this.arguments) {
+      final int bytes = utf8.encode(argument).length;
+      if (argument.contains('\u0000') ||
+          bytes > maximumSingleArgumentUtf8Bytes) {
+        throw ArgumentError.value(
+          argument,
+          'arguments',
+          'must contain bounded values without NUL',
+        );
+      }
+      argumentBytes += bytes + 1;
+    }
+    if (argumentBytes > maximumArgumentBytes) {
+      throw ArgumentError.value(
+        argumentBytes,
+        'arguments',
+        'packed argument bytes exceed the limit',
+      );
+    }
+    if (disposition == PtyForegroundJobDisposition.available &&
+        (this.members.isEmpty || primaryIndex < 0)) {
+      throw ArgumentError('available foreground job requires a primary member');
+    }
+  }
+
+  static const int maximumMembers = 32;
+  static const int maximumArguments = 128;
+  static const int maximumExecutablePathUtf8Bytes = 16384;
+  static const int maximumArgumentBytes = 65536;
+  static const int maximumSingleArgumentUtf8Bytes = 16384;
+
+  final PtyForegroundJobDisposition disposition;
+  final int? childProcessId;
+  final int? owningProcessGroup;
+  final int? foregroundProcessGroup;
+  final int sampledAbsoluteTime;
+  final int jobElapsedMicroseconds;
+  final List<PtyForegroundProcessSnapshot> members;
+  final int totalMemberCount;
+  final int omittedMemberCount;
+  final int memberIssueCount;
+  final int primaryIndex;
+  final int observationSystemError;
+  final String? executablePath;
+  final int executablePathSystemError;
+  final List<String> arguments;
+  final int totalArgumentCount;
+  final int omittedArgumentCount;
+  final bool argumentsTruncated;
+  final int argumentsSystemError;
+  final bool hasExited;
+
+  bool get isAvailable => disposition == PtyForegroundJobDisposition.available;
+
+  PtyForegroundProcessSnapshot? get primaryProcess =>
+      primaryIndex < 0 ? null : members[primaryIndex];
+}
+
+/// Optional path/argument-bearing capability implemented by native and fake
+/// PTY processes without expanding the content-free [PtyProcess] contract.
+abstract interface class PtyForegroundJobObserver {
+  PtyForegroundJobSnapshot foregroundJobSnapshot();
+}
+
 abstract interface class PtyProcess {
   int get pid;
   Stream<Uint8List> get output;

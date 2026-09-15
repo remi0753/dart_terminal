@@ -4,8 +4,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define DPTY_ABI_VERSION 7u
+#define DPTY_ABI_VERSION 8u
 #define DPTY_WORKING_DIRECTORY_CAPACITY 4096u
+#define DPTY_FOREGROUND_PROCESS_LIMIT 32u
+#define DPTY_FOREGROUND_PROCESS_NAME_CAPACITY 257u
+#define DPTY_FOREGROUND_EXECUTABLE_PATH_CAPACITY 16385u
+#define DPTY_FOREGROUND_ARGUMENT_LIMIT 128u
+#define DPTY_FOREGROUND_ARGUMENT_BYTES_CAPACITY 65536u
+#define DPTY_FOREGROUND_SINGLE_ARGUMENT_LIMIT 16384u
 
 #if defined(__cplusplus)
 extern "C" {
@@ -169,6 +175,61 @@ typedef struct DptyWorkingDirectorySnapshotV1 {
   char path[DPTY_WORKING_DIRECTORY_CAPACITY];
 } DptyWorkingDirectorySnapshotV1;
 
+typedef enum DptyForegroundJobDisposition {
+  DPTY_FOREGROUND_JOB_AVAILABLE = 1,
+  DPTY_FOREGROUND_JOB_NOT_DISTINCT = 2,
+  DPTY_FOREGROUND_JOB_UNAVAILABLE = 3,
+  DPTY_FOREGROUND_JOB_STALE = 4,
+  DPTY_FOREGROUND_JOB_EXITED = 5,
+} DptyForegroundJobDisposition;
+
+// One bounded member of the foreground process group. Name and elapsed fields
+// remain independently unavailable when their corresponding error is nonzero.
+typedef struct DptyForegroundProcessV1 {
+  int64_t pid;
+  uint64_t start_time_seconds;
+  uint32_t start_time_microseconds;
+  uint64_t start_absolute_time;
+  uint64_t elapsed_microseconds;
+  size_t name_length;
+  int32_t information_error;
+  int32_t resource_usage_error;
+  char name[DPTY_FOREGROUND_PROCESS_NAME_CAPACITY];
+} DptyForegroundProcessV1;
+
+// Explicit content-bearing observation of the current distinct foreground job.
+// This is intentionally separate from DptyProcessSnapshotV1 and diagnostics.
+// `arguments` contains `argument_count` NUL-terminated byte strings and never
+// includes the environment segment returned by KERN_PROCARGS2.
+typedef struct DptyForegroundJobSnapshotV1 {
+  size_t struct_size;
+  uint32_t abi_version;
+  uint32_t disposition;
+  int64_t child_pid;
+  int64_t owning_process_group;
+  int64_t foreground_process_group;
+  uint64_t sampled_absolute_time;
+  uint64_t job_elapsed_microseconds;
+  uint32_t member_count;
+  uint32_t total_member_count;
+  uint32_t omitted_member_count;
+  uint32_t member_issue_count;
+  int32_t primary_index;
+  int32_t observation_error;
+  int32_t executable_path_error;
+  int32_t arguments_error;
+  int32_t has_exited;
+  uint32_t argument_count;
+  uint32_t total_argument_count;
+  uint32_t omitted_argument_count;
+  uint32_t arguments_truncated;
+  size_t executable_path_length;
+  size_t argument_bytes_length;
+  DptyForegroundProcessV1 members[DPTY_FOREGROUND_PROCESS_LIMIT];
+  char executable_path[DPTY_FOREGROUND_EXECUTABLE_PATH_CAPACITY];
+  char arguments[DPTY_FOREGROUND_ARGUMENT_BYTES_CAPACITY];
+} DptyForegroundJobSnapshotV1;
+
 typedef struct DptyError {
   int32_t status;
   int32_t system_error;
@@ -225,6 +286,10 @@ __attribute__((visibility("default"))) int32_t
 dpty_session_get_working_directory_snapshot(
     DptySessionHandle session, DptyWorkingDirectorySnapshotV1* out_snapshot);
 
+__attribute__((visibility("default"))) int32_t
+dpty_session_get_foreground_job_snapshot(
+    DptySessionHandle session, DptyForegroundJobSnapshotV1* out_snapshot);
+
 // Valid only after EXIT or ERROR and after all OUTPUT records are acknowledged.
 __attribute__((visibility("default"))) int32_t
 dpty_session_destroy(DptySessionHandle session);
@@ -240,6 +305,17 @@ dpty_debug_live_session_count(void);
 // unrelated ABI calls do not consume the fault.
 __attribute__((visibility("default"))) int32_t
 dpty_debug_fail_next_session_allocation(void);
+
+typedef enum DptyForegroundSnapshotTestFault {
+  DPTY_FOREGROUND_TEST_FAULT_PATH_PERMISSION = 1 << 0,
+  DPTY_FOREGROUND_TEST_FAULT_ARGUMENT_PERMISSION = 1 << 1,
+  DPTY_FOREGROUND_TEST_FAULT_STALE = 1 << 2,
+} DptyForegroundSnapshotTestFault;
+
+// Test artifacts only: injects field-level permission failures or the
+// post-observation stale race into the next distinct foreground snapshot.
+__attribute__((visibility("default"))) int32_t
+dpty_debug_set_foreground_snapshot_fault(uint32_t fault_flags);
 #endif
 
 #if defined(__cplusplus)

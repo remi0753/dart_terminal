@@ -61,10 +61,13 @@ struct Api {
                               DptyProcessSnapshotV1*) = nullptr;
   int32_t (*working_directory_snapshot)(
       DptySessionHandle, DptyWorkingDirectorySnapshotV1*) = nullptr;
+  int32_t (*foreground_job_snapshot)(
+      DptySessionHandle, DptyForegroundJobSnapshotV1*) = nullptr;
   int32_t (*destroy)(DptySessionHandle) = nullptr;
   int32_t (*last_error)(DptyError*) = nullptr;
   uint64_t (*live_count)() = nullptr;
   int32_t (*fail_next_allocation)() = nullptr;
+  int32_t (*set_foreground_snapshot_fault)(uint32_t) = nullptr;
 };
 
 struct PendingAck {
@@ -413,6 +416,21 @@ void TestInteractiveSession(Api* api) {
              shell_snapshot.terminal_attributes_error == 0 &&
              shell_snapshot.has_exited == 0,
          "idle shell owns its process group and starts with echo enabled");
+  DptyForegroundJobSnapshotV1 idle_job = {};
+  idle_job.struct_size = sizeof(idle_job);
+  idle_job.abi_version = DPTY_ABI_VERSION;
+  Expect(api->foreground_job_snapshot(session, &idle_job) ==
+                 DPTY_STATUS_OK &&
+             idle_job.disposition == DPTY_FOREGROUND_JOB_NOT_DISTINCT &&
+             idle_job.child_pid == shell_snapshot.child_pid &&
+             idle_job.owning_process_group ==
+                 shell_snapshot.child_process_group &&
+             idle_job.foreground_process_group ==
+                 shell_snapshot.foreground_process_group &&
+             idle_job.member_count == 0 && idle_job.primary_index == -1 &&
+             idle_job.executable_path_length == 0 &&
+             idle_job.argument_bytes_length == 0,
+         "idle shell does not expose foreground process content");
   DptyWorkingDirectorySnapshotV1 shell_cwd = {};
   shell_cwd.struct_size = sizeof(shell_cwd);
   shell_cwd.abi_version = DPTY_ABI_VERSION;
@@ -483,7 +501,7 @@ void TestInteractiveSession(Api* api) {
          "TIOCSWINSZ reaches the child");
 
   Expect(Write(api, session, "sleep 30\n") == DPTY_STATUS_OK,
-         "foreground process starts");
+         "simple foreground process starts");
   DptyProcessSnapshotV1 foreground_snapshot = {};
   foreground_snapshot.struct_size = sizeof(foreground_snapshot);
   foreground_snapshot.abi_version = DPTY_ABI_VERSION;
@@ -503,7 +521,162 @@ void TestInteractiveSession(Api* api) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   Expect(observed_distinct_foreground,
-         "distinct foreground job process group is observed");
+         "simple foreground process group is observed");
+  DptyForegroundJobSnapshotV1 simple_job = {};
+  simple_job.struct_size = sizeof(simple_job);
+  simple_job.abi_version = DPTY_ABI_VERSION;
+  Expect(api->foreground_job_snapshot(session, &simple_job) ==
+                 DPTY_STATUS_OK &&
+             simple_job.disposition == DPTY_FOREGROUND_JOB_AVAILABLE &&
+             simple_job.member_count == 1 && simple_job.primary_index == 0 &&
+             simple_job.members[0].pid == simple_job.foreground_process_group &&
+             std::strstr(simple_job.executable_path, "sleep") != nullptr &&
+             simple_job.argument_count >= 2 &&
+             std::strcmp(simple_job.arguments, "sleep") == 0,
+         "simple foreground process exposes one bounded primary");
+  Expect(api->send_signal(session, DPTY_SIGNAL_INTERRUPT) == DPTY_STATUS_OK,
+         "simple foreground process interrupt is queued");
+  Expect(Write(api, session, "print -r -- __DPTY_SIMPLE_SIGINT__${?}\n") ==
+             DPTY_STATUS_OK,
+         "simple foreground signal result probe is queued");
+  Expect(WaitForMarker(&events, "__DPTY_SIMPLE_SIGINT__130",
+                       std::chrono::seconds(3)),
+         "simple foreground process returns terminal ownership");
+
+  Expect(Write(api, session, "sleep 30 | cat\n") == DPTY_STATUS_OK,
+         "foreground pipeline starts");
+  observed_distinct_foreground = false;
+  const Clock::time_point pipeline_foreground_deadline =
+      Clock::now() + std::chrono::seconds(3);
+  while (Clock::now() < pipeline_foreground_deadline) {
+    if (api->process_snapshot(session, &foreground_snapshot) ==
+            DPTY_STATUS_OK &&
+        foreground_snapshot.child_process_group > 0 &&
+        foreground_snapshot.foreground_process_group > 0 &&
+        foreground_snapshot.foreground_process_group !=
+            foreground_snapshot.child_process_group) {
+      observed_distinct_foreground = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  Expect(observed_distinct_foreground,
+         "distinct foreground pipeline process group is observed");
+  DptyForegroundJobSnapshotV1 foreground_job = {};
+  foreground_job.struct_size = sizeof(foreground_job);
+  foreground_job.abi_version = DPTY_ABI_VERSION;
+  Expect(api->foreground_job_snapshot(session, &foreground_job) ==
+             DPTY_STATUS_OK,
+         "foreground job content snapshot is readable");
+  const bool primary_available =
+      foreground_job.primary_index >= 0 &&
+      foreground_job.primary_index <
+          static_cast<int32_t>(foreground_job.member_count);
+  const DptyForegroundProcessV1* primary =
+      primary_available
+          ? &foreground_job.members[foreground_job.primary_index]
+          : nullptr;
+  const char* second_argument =
+      foreground_job.argument_count >= 2
+          ? foreground_job.arguments +
+                std::strlen(foreground_job.arguments) + 1
+          : nullptr;
+  const bool foreground_job_valid =
+      foreground_job.disposition == DPTY_FOREGROUND_JOB_AVAILABLE &&
+             foreground_job.child_pid == shell_snapshot.child_pid &&
+             foreground_job.owning_process_group ==
+                 shell_snapshot.child_process_group &&
+             foreground_job.foreground_process_group ==
+                 foreground_snapshot.foreground_process_group &&
+             foreground_job.member_count >= 2 &&
+             foreground_job.member_count <= DPTY_FOREGROUND_PROCESS_LIMIT &&
+             foreground_job.total_member_count >=
+                 foreground_job.member_count &&
+             foreground_job.omitted_member_count ==
+                 foreground_job.total_member_count -
+                     foreground_job.member_count &&
+             primary != nullptr &&
+             primary->pid == foreground_job.foreground_process_group &&
+             primary->start_time_seconds > 0 &&
+             primary->start_absolute_time > 0 &&
+             primary->resource_usage_error == 0 &&
+             foreground_job.sampled_absolute_time >=
+                 primary->start_absolute_time &&
+             foreground_job.executable_path_error == 0 &&
+             foreground_job.executable_path_length > 0 &&
+             std::strstr(foreground_job.executable_path, "sleep") != nullptr &&
+             foreground_job.arguments_error == 0 &&
+             foreground_job.argument_count >= 2 &&
+             std::strcmp(foreground_job.arguments, "sleep") == 0 &&
+             second_argument != nullptr &&
+             std::strcmp(second_argument, "30") == 0;
+  if (!foreground_job_valid) {
+    std::cerr << "foreground job diagnostic: disposition="
+              << foreground_job.disposition
+              << " child=" << foreground_job.child_pid
+              << " owning=" << foreground_job.owning_process_group
+              << " foreground=" << foreground_job.foreground_process_group
+              << " members=" << foreground_job.member_count
+              << " total=" << foreground_job.total_member_count
+              << " omitted=" << foreground_job.omitted_member_count
+              << " issues=" << foreground_job.member_issue_count
+              << " primary=" << foreground_job.primary_index
+              << " observation_error=" << foreground_job.observation_error
+              << " path_error=" << foreground_job.executable_path_error
+              << " path=" << foreground_job.executable_path
+              << " arguments_error=" << foreground_job.arguments_error
+              << " arguments=" << foreground_job.arguments
+              << " argument_count=" << foreground_job.argument_count
+              << " total_arguments=" << foreground_job.total_argument_count
+              << " truncated=" << foreground_job.arguments_truncated;
+    if (primary != nullptr) {
+      std::cerr << " primary_pid=" << primary->pid
+                << " primary_name=" << primary->name
+                << " primary_start=" << primary->start_absolute_time
+                << " primary_rusage_error="
+                << primary->resource_usage_error;
+    }
+    if (second_argument != nullptr) {
+      std::cerr << " second_argument=" << second_argument;
+    }
+    std::cerr << '\n';
+  }
+  Expect(foreground_job_valid,
+         "foreground pipeline exposes bounded leader path argv and timing");
+  Expect(api->set_foreground_snapshot_fault(
+             DPTY_FOREGROUND_TEST_FAULT_PATH_PERMISSION |
+             DPTY_FOREGROUND_TEST_FAULT_ARGUMENT_PERMISSION) ==
+             DPTY_STATUS_OK,
+         "foreground field permission faults are armed");
+  DptyForegroundJobSnapshotV1 permission_job = {};
+  permission_job.struct_size = sizeof(permission_job);
+  permission_job.abi_version = DPTY_ABI_VERSION;
+  Expect(api->foreground_job_snapshot(session, &permission_job) ==
+                 DPTY_STATUS_OK &&
+             permission_job.disposition == DPTY_FOREGROUND_JOB_AVAILABLE &&
+             permission_job.member_count >= 2 &&
+             permission_job.executable_path_error == EPERM &&
+             permission_job.executable_path_length == 0 &&
+             permission_job.arguments_error == EPERM &&
+             permission_job.argument_count == 0 &&
+             permission_job.argument_bytes_length == 0,
+         "permission denial is field-local and content-free");
+  Expect(api->set_foreground_snapshot_fault(
+             DPTY_FOREGROUND_TEST_FAULT_STALE) == DPTY_STATUS_OK,
+         "foreground stale race is armed");
+  DptyForegroundJobSnapshotV1 stale_job = {};
+  stale_job.struct_size = sizeof(stale_job);
+  stale_job.abi_version = DPTY_ABI_VERSION;
+  Expect(api->foreground_job_snapshot(session, &stale_job) ==
+                 DPTY_STATUS_OK &&
+             stale_job.disposition == DPTY_FOREGROUND_JOB_STALE &&
+             stale_job.observation_error == ESTALE &&
+             stale_job.member_count == 0 && stale_job.primary_index == -1 &&
+             stale_job.sampled_absolute_time == 0 &&
+             stale_job.executable_path_length == 0 &&
+             stale_job.argument_count == 0 &&
+             stale_job.argument_bytes_length == 0,
+         "post-observation race clears all foreground process content");
   Expect(api->send_signal(session, DPTY_SIGNAL_INTERRUPT) == DPTY_STATUS_OK,
          "foreground interrupt is queued");
   Expect(Write(api, session, "print -r -- __DPTY_SIGINT__${?}\n") ==
@@ -511,6 +684,118 @@ void TestInteractiveSession(Api* api) {
          "signal result probe is queued");
   Expect(WaitForMarker(&events, "__DPTY_SIGINT__130", std::chrono::seconds(3)),
          "SIGINT reaches the foreground process group");
+
+  std::string large_pipeline;
+  for (int index = 0; index < 33; ++index) {
+    if (!large_pipeline.empty()) {
+      large_pipeline += " | ";
+    }
+    large_pipeline += "sleep 30";
+  }
+  large_pipeline += '\n';
+  Expect(Write(api, session, large_pipeline) == DPTY_STATUS_OK,
+         "33-process foreground pipeline starts");
+  bool observed_large_foreground = false;
+  const Clock::time_point large_foreground_deadline =
+      Clock::now() + std::chrono::seconds(3);
+  while (Clock::now() < large_foreground_deadline) {
+    if (api->process_snapshot(session, &foreground_snapshot) ==
+            DPTY_STATUS_OK &&
+        foreground_snapshot.child_process_group > 0 &&
+        foreground_snapshot.foreground_process_group > 0 &&
+        foreground_snapshot.foreground_process_group !=
+            foreground_snapshot.child_process_group) {
+      observed_large_foreground = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  Expect(observed_large_foreground,
+         "large pipeline has a distinct foreground group");
+  std::vector<int64_t> foreground_snapshot_latencies;
+  DptyForegroundJobSnapshotV1 large_job = {};
+  for (int sample = 0; sample < 64; ++sample) {
+    large_job.struct_size = sizeof(large_job);
+    large_job.abi_version = DPTY_ABI_VERSION;
+    const Clock::time_point before = Clock::now();
+    const int32_t status =
+        api->foreground_job_snapshot(session, &large_job);
+    const Clock::time_point after = Clock::now();
+    foreground_snapshot_latencies.push_back(
+        std::chrono::duration_cast<std::chrono::microseconds>(after - before)
+            .count());
+    Expect(status == DPTY_STATUS_OK &&
+               large_job.disposition == DPTY_FOREGROUND_JOB_AVAILABLE,
+           "large foreground snapshot remains available during benchmark");
+  }
+  std::sort(foreground_snapshot_latencies.begin(),
+            foreground_snapshot_latencies.end());
+  const int64_t p50_microseconds =
+      foreground_snapshot_latencies[foreground_snapshot_latencies.size() / 2];
+  const int64_t p95_microseconds = foreground_snapshot_latencies[
+      foreground_snapshot_latencies.size() * 95 / 100];
+  std::cout << "DPTY_FOREGROUND_SNAPSHOT_BENCHMARK members="
+            << large_job.member_count << " total="
+            << large_job.total_member_count << " p50_us=" << p50_microseconds
+            << " p95_us=" << p95_microseconds << '\n';
+  Expect(large_job.member_count == DPTY_FOREGROUND_PROCESS_LIMIT &&
+             large_job.total_member_count >= 33 &&
+             large_job.omitted_member_count ==
+                 large_job.total_member_count - large_job.member_count &&
+             large_job.omitted_member_count >= 1,
+         "foreground member projection is capped with explicit omissions");
+  Expect(p95_microseconds <= 5000,
+         "32-member foreground snapshot p95 stays within 5 ms");
+  Expect(api->send_signal(session, DPTY_SIGNAL_INTERRUPT) == DPTY_STATUS_OK,
+         "large foreground pipeline interrupt is queued");
+  Expect(Write(api, session, "print -r -- __DPTY_LARGE_SIGINT__${?}\n") ==
+             DPTY_STATUS_OK,
+         "large pipeline signal result probe is queued");
+  Expect(WaitForMarker(&events, "__DPTY_LARGE_SIGINT__130",
+                       std::chrono::seconds(3)),
+         "SIGINT reaches every retained and omitted pipeline process");
+
+  Expect(Write(api, session, "sleep 0.05 | sleep 30\n") == DPTY_STATUS_OK,
+         "leader-exit foreground pipeline starts");
+  bool observed_leader_exit_foreground = false;
+  const Clock::time_point leader_exit_deadline =
+      Clock::now() + std::chrono::seconds(3);
+  while (Clock::now() < leader_exit_deadline) {
+    if (api->process_snapshot(session, &foreground_snapshot) ==
+            DPTY_STATUS_OK &&
+        foreground_snapshot.child_process_group > 0 &&
+        foreground_snapshot.foreground_process_group > 0 &&
+        foreground_snapshot.foreground_process_group !=
+            foreground_snapshot.child_process_group) {
+      observed_leader_exit_foreground = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  Expect(observed_leader_exit_foreground,
+         "leader-exit pipeline has a distinct foreground group");
+  std::this_thread::sleep_for(std::chrono::milliseconds(150));
+  DptyForegroundJobSnapshotV1 leader_exit_job = {};
+  leader_exit_job.struct_size = sizeof(leader_exit_job);
+  leader_exit_job.abi_version = DPTY_ABI_VERSION;
+  Expect(api->foreground_job_snapshot(session, &leader_exit_job) ==
+                 DPTY_STATUS_OK &&
+             leader_exit_job.disposition == DPTY_FOREGROUND_JOB_AVAILABLE &&
+             leader_exit_job.member_count == 1 &&
+             leader_exit_job.primary_index == 0 &&
+             leader_exit_job.members[0].pid !=
+                 leader_exit_job.foreground_process_group &&
+             std::strstr(leader_exit_job.executable_path, "sleep") != nullptr,
+         "remaining live member becomes primary after group leader exits");
+  Expect(api->send_signal(session, DPTY_SIGNAL_INTERRUPT) == DPTY_STATUS_OK,
+         "leader-exit pipeline interrupt is queued");
+  Expect(Write(api, session,
+               "print -r -- __DPTY_LEADER_EXIT_SIGINT__${?}\n") ==
+             DPTY_STATUS_OK,
+         "leader-exit signal result probe is queued");
+  Expect(WaitForMarker(&events, "__DPTY_LEADER_EXIT_SIGINT__130",
+                       std::chrono::seconds(3)),
+         "leader-exit pipeline returns terminal ownership");
 
   const size_t partial_start = [&] {
     const std::lock_guard<std::mutex> lock(events.mutex);
@@ -627,6 +912,16 @@ void TestInteractiveSession(Api* api) {
              exited_cwd.path_length == 0 && exited_cwd.system_error == ENXIO &&
              exited_cwd.has_exited == 1,
          "exited cwd snapshot is typed unavailable without a stale path");
+  DptyForegroundJobSnapshotV1 exited_job = {};
+  exited_job.struct_size = sizeof(exited_job);
+  exited_job.abi_version = DPTY_ABI_VERSION;
+  Expect(api->foreground_job_snapshot(session, &exited_job) ==
+                 DPTY_STATUS_OK &&
+             exited_job.disposition == DPTY_FOREGROUND_JOB_EXITED &&
+             exited_job.has_exited == 1 && exited_job.member_count == 0 &&
+             exited_job.executable_path_length == 0 &&
+             exited_job.argument_bytes_length == 0,
+         "exited foreground snapshot clears process content");
   Expect(api->destroy(session) == DPTY_STATUS_OK,
          "finished session is destroyed");
   const uint8_t byte = 0;
@@ -638,6 +933,9 @@ void TestInteractiveSession(Api* api) {
   Expect(api->working_directory_snapshot(session, &exited_cwd) ==
              DPTY_STATUS_INVALID_HANDLE,
          "destroyed cwd snapshot generation is stale");
+  Expect(api->foreground_job_snapshot(session, &exited_job) ==
+             DPTY_STATUS_INVALID_HANDLE,
+         "destroyed foreground job snapshot generation is stale");
   errno = 0;
   Expect(waitpid(static_cast<pid_t>(child_pid), nullptr, WNOHANG) == -1 &&
              errno == ECHILD,
@@ -1055,6 +1353,9 @@ int main(int argc, const char* argv[]) {
   api.working_directory_snapshot =
       Lookup<decltype(api.working_directory_snapshot)>(
           image, "dpty_session_get_working_directory_snapshot");
+  api.foreground_job_snapshot =
+      Lookup<decltype(api.foreground_job_snapshot)>(
+          image, "dpty_session_get_foreground_job_snapshot");
   api.destroy = Lookup<decltype(api.destroy)>(image, "dpty_session_destroy");
   api.last_error =
       Lookup<decltype(api.last_error)>(image, "dpty_get_last_error");
@@ -1062,6 +1363,9 @@ int main(int argc, const char* argv[]) {
       Lookup<decltype(api.live_count)>(image, "dpty_debug_live_session_count");
   api.fail_next_allocation = Lookup<decltype(api.fail_next_allocation)>(
       image, "dpty_debug_fail_next_session_allocation");
+  api.set_foreground_snapshot_fault =
+      Lookup<decltype(api.set_foreground_snapshot_fault)>(
+          image, "dpty_debug_set_foreground_snapshot_fault");
   Expect(api.version() == DPTY_ABI_VERSION, "PTY ABI version");
 
   DptySessionConfigV1 invalid = {};

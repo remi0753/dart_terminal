@@ -1,17 +1,21 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <libproc.h>
+#include <mach/mach_time.h>
 #include <poll.h>
 #include <signal.h>
 #include <sys/event.h>
 #include <sys/ioctl.h>
 #include <sys/proc_info.h>
+#include <sys/resource.h>
+#include <sys/sysctl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -20,6 +24,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <optional>
 #include <string>
 #include <thread>
@@ -39,13 +44,180 @@ constexpr size_t kMaximumReadBatchesPerTurn = 8;
 constexpr size_t kMaximumWriteBatchesPerTurn = 8;
 constexpr size_t kMaximumWriteBytesPerTurn = 512 * 1024;
 constexpr uint32_t kMaximumCloseGraceMillis = 60 * 1000;
+constexpr size_t kMaximumForegroundProcessScan = 64 * 1024;
 constexpr uintptr_t kControlEventIdentifier = 1;
+
+static_assert(DPTY_FOREGROUND_PROCESS_LIMIT > 0);
+static_assert(DPTY_FOREGROUND_ARGUMENT_LIMIT > 0);
+
+uint64_t AbsoluteDeltaMicroseconds(uint64_t start, uint64_t end,
+                                   bool* available) {
+  if (available == nullptr || start == 0 || end < start) {
+    if (available != nullptr) {
+      *available = false;
+    }
+    return 0;
+  }
+  mach_timebase_info_data_t timebase = {};
+  if (mach_timebase_info(&timebase) != KERN_SUCCESS ||
+      timebase.numer == 0 || timebase.denom == 0) {
+    *available = false;
+    return 0;
+  }
+  const uint64_t delta = end - start;
+  const uint64_t whole = delta / timebase.denom;
+  const uint64_t remainder = delta % timebase.denom;
+  if (whole > std::numeric_limits<uint64_t>::max() / timebase.numer) {
+    *available = false;
+    return 0;
+  }
+  const uint64_t nanoseconds =
+      whole * timebase.numer +
+      (remainder * static_cast<uint64_t>(timebase.numer)) / timebase.denom;
+  *available = true;
+  return nanoseconds / 1000;
+}
+
+void SecureZero(void* bytes, size_t length) {
+  volatile uint8_t* cursor = static_cast<volatile uint8_t*>(bytes);
+  while (length-- != 0) {
+    *cursor++ = 0;
+  }
+}
+
+void InitializeForegroundJobSnapshot(DptyForegroundJobSnapshotV1* output) {
+  const size_t struct_size = output->struct_size;
+  const uint32_t abi_version = output->abi_version;
+  std::memset(output, 0, sizeof(*output));
+  output->struct_size = struct_size;
+  output->abi_version = abi_version;
+  output->disposition = DPTY_FOREGROUND_JOB_UNAVAILABLE;
+  output->primary_index = -1;
+}
+
+void ClearForegroundJobContent(DptyForegroundJobSnapshotV1* output) {
+  SecureZero(output->members, sizeof(output->members));
+  SecureZero(output->executable_path, sizeof(output->executable_path));
+  SecureZero(output->arguments, sizeof(output->arguments));
+  output->sampled_absolute_time = 0;
+  output->job_elapsed_microseconds = 0;
+  output->member_count = 0;
+  output->total_member_count = 0;
+  output->omitted_member_count = 0;
+  output->member_issue_count = 0;
+  output->primary_index = -1;
+  output->executable_path_error = 0;
+  output->arguments_error = 0;
+  output->argument_count = 0;
+  output->total_argument_count = 0;
+  output->omitted_argument_count = 0;
+  output->arguments_truncated = 0;
+  output->executable_path_length = 0;
+  output->argument_bytes_length = 0;
+}
+
+class SensitiveArgumentBuffer final {
+ public:
+  ~SensitiveArgumentBuffer() {
+    SecureZero(bytes.data(), bytes.size());
+  }
+
+  std::array<char, DPTY_FOREGROUND_ARGUMENT_BYTES_CAPACITY> bytes = {};
+};
+
+void ReadProcessArguments(pid_t pid, DptyForegroundJobSnapshotV1* output) {
+  int arguments_query[3] = {CTL_KERN, KERN_PROCARGS2, pid};
+  size_t required = 0;
+  errno = 0;
+  if (sysctl(arguments_query, 3, nullptr, &required, nullptr, 0) != 0) {
+    output->arguments_error = errno == 0 ? EIO : errno;
+    return;
+  }
+  if (required < sizeof(int)) {
+    output->arguments_error = EIO;
+    return;
+  }
+  if (required > DPTY_FOREGROUND_ARGUMENT_BYTES_CAPACITY) {
+    output->arguments_error = E2BIG;
+    output->arguments_truncated = 1;
+    return;
+  }
+
+  SensitiveArgumentBuffer buffer;
+  size_t copied = required;
+  errno = 0;
+  if (sysctl(arguments_query, 3, buffer.bytes.data(), &copied, nullptr, 0) !=
+      0) {
+    output->arguments_error = errno == 0 ? EIO : errno;
+    return;
+  }
+  if (copied < sizeof(int) || copied > buffer.bytes.size()) {
+    output->arguments_error = EIO;
+    return;
+  }
+
+  int argument_count = 0;
+  std::memcpy(&argument_count, buffer.bytes.data(), sizeof(argument_count));
+  if (argument_count < 0) {
+    output->arguments_error = EIO;
+    return;
+  }
+  output->total_argument_count = static_cast<uint32_t>(argument_count);
+  const char* cursor = buffer.bytes.data() + sizeof(argument_count);
+  const char* const end = buffer.bytes.data() + copied;
+  const size_t executable_length = strnlen(cursor, end - cursor);
+  if (executable_length == static_cast<size_t>(end - cursor)) {
+    output->arguments_error = EIO;
+    return;
+  }
+  cursor += executable_length + 1;
+  while (cursor < end && *cursor == '\0') {
+    ++cursor;
+  }
+
+  const uint32_t retained_limit = std::min<uint32_t>(
+      static_cast<uint32_t>(argument_count), DPTY_FOREGROUND_ARGUMENT_LIMIT);
+  for (uint32_t index = 0; index < retained_limit; ++index) {
+    if (cursor >= end) {
+      output->arguments_error = EIO;
+      break;
+    }
+    const size_t available = static_cast<size_t>(end - cursor);
+    const size_t length = strnlen(cursor, available);
+    if (length == available) {
+      output->arguments_error = EIO;
+      break;
+    }
+    const size_t retained = std::min<size_t>(
+        length, DPTY_FOREGROUND_SINGLE_ARGUMENT_LIMIT);
+    if (output->argument_bytes_length >
+        DPTY_FOREGROUND_ARGUMENT_BYTES_CAPACITY - retained - 1) {
+      output->arguments_truncated = 1;
+      break;
+    }
+    std::memcpy(output->arguments + output->argument_bytes_length, cursor,
+                retained);
+    output->argument_bytes_length += retained;
+    output->arguments[output->argument_bytes_length++] = '\0';
+    ++output->argument_count;
+    if (retained != length) {
+      output->arguments_truncated = 1;
+    }
+    cursor += length + 1;
+  }
+  output->omitted_argument_count =
+      output->total_argument_count - output->argument_count;
+  if (output->argument_count < output->total_argument_count) {
+    output->arguments_truncated = 1;
+  }
+}
 
 thread_local DptyError g_last_error = {};
 thread_local std::string g_last_error_message;
 
 #if defined(DPTY_TESTING)
 std::atomic<bool> g_fail_next_session_allocation = false;
+std::atomic<uint32_t> g_foreground_snapshot_fault = 0;
 #endif
 
 int32_t SetError(DptyStatus status, int32_t system_error, const char* message) {
@@ -498,6 +670,307 @@ class Session final : public std::enable_shared_from_this<Session> {
     std::memcpy(output->path, path, length);
     output->path[length] = '\0';
     output->path_length = length;
+    return DPTY_STATUS_OK;
+  }
+
+  int32_t GetForegroundJobSnapshot(
+      DptyForegroundJobSnapshotV1* output) const {
+    if (output == nullptr ||
+        output->struct_size < sizeof(DptyForegroundJobSnapshotV1) ||
+        output->abi_version != DPTY_ABI_VERSION) {
+      return SetError(DPTY_STATUS_INVALID_ARGUMENT, EINVAL,
+                      "PTY foreground job snapshot buffer is incompatible");
+    }
+    InitializeForegroundJobSnapshot(output);
+
+    pid_t child = 0;
+    pid_t owning_group = 0;
+    pid_t foreground_group = 0;
+#if defined(DPTY_TESTING)
+    uint32_t injected_fault = 0;
+#endif
+    {
+      const std::lock_guard<std::mutex> lock(mutex_);
+      output->has_exited = state_ == State::kFinished ? 1 : 0;
+      child = child_pid_;
+      output->child_pid = child > 0 ? child : 0;
+      if (state_ != State::kRunning || child <= 0 || master_fd_ < 0) {
+        output->disposition = output->has_exited != 0
+                                  ? DPTY_FOREGROUND_JOB_EXITED
+                                  : DPTY_FOREGROUND_JOB_UNAVAILABLE;
+        output->observation_error = ENXIO;
+        return DPTY_STATUS_OK;
+      }
+      errno = 0;
+      owning_group = getpgid(child);
+      if (owning_group <= 0) {
+        output->observation_error = errno == 0 ? ESRCH : errno;
+        return DPTY_STATUS_OK;
+      }
+      errno = 0;
+      foreground_group = tcgetpgrp(master_fd_);
+      if (foreground_group <= 0) {
+        output->observation_error = errno == 0 ? ENOTTY : errno;
+        return DPTY_STATUS_OK;
+      }
+      output->owning_process_group = owning_group;
+      output->foreground_process_group = foreground_group;
+      if (foreground_group == owning_group) {
+        output->disposition = DPTY_FOREGROUND_JOB_NOT_DISTINCT;
+        return DPTY_STATUS_OK;
+      }
+#if defined(DPTY_TESTING)
+      injected_fault = g_foreground_snapshot_fault.exchange(
+          0, std::memory_order_acq_rel);
+#endif
+    }
+
+    errno = 0;
+    const int process_capacity_hint =
+        proc_listpgrppids(foreground_group, nullptr, 0);
+    if (process_capacity_hint < 0) {
+      output->observation_error = errno == 0 ? EIO : errno;
+    } else if (static_cast<size_t>(process_capacity_hint) >
+               kMaximumForegroundProcessScan -
+                   DPTY_FOREGROUND_PROCESS_LIMIT) {
+      output->observation_error = E2BIG;
+    } else {
+      const size_t scan_capacity = std::max<size_t>(
+          DPTY_FOREGROUND_PROCESS_LIMIT + 1,
+          static_cast<size_t>(process_capacity_hint) +
+              DPTY_FOREGROUND_PROCESS_LIMIT);
+      std::unique_ptr<pid_t[]> listed_pids(
+          new (std::nothrow) pid_t[scan_capacity]);
+      if (listed_pids == nullptr) {
+        output->observation_error = ENOMEM;
+      } else {
+        errno = 0;
+        const int listed_members = proc_listpgrppids(
+            foreground_group, listed_pids.get(),
+            static_cast<int>(scan_capacity * sizeof(pid_t)));
+        if (listed_members < 0) {
+          output->observation_error = errno == 0 ? EIO : errno;
+        } else if (static_cast<size_t>(listed_members) == scan_capacity) {
+          output->observation_error = EOVERFLOW;
+        } else {
+          output->total_member_count =
+              static_cast<uint32_t>(listed_members);
+          const auto append_member = [&](pid_t pid) {
+            if (pid <= 0 ||
+                output->member_count >= DPTY_FOREGROUND_PROCESS_LIMIT) {
+              return;
+            }
+            for (uint32_t index = 0; index < output->member_count; ++index) {
+              if (output->members[index].pid == pid) {
+                return;
+              }
+            }
+            struct proc_bsdinfo information = {};
+            errno = 0;
+            const int information_bytes = proc_pidinfo(
+                pid, PROC_PIDTBSDINFO, 0, &information, sizeof(information));
+            if (information_bytes != static_cast<int>(sizeof(information)) ||
+                information.pbi_pgid !=
+                    static_cast<uint32_t>(foreground_group)) {
+              ++output->member_issue_count;
+              return;
+            }
+            DptyForegroundProcessV1* member =
+                &output->members[output->member_count++];
+            member->pid = pid;
+            member->start_time_seconds = information.pbi_start_tvsec;
+            member->start_time_microseconds =
+                static_cast<uint32_t>(information.pbi_start_tvusec);
+            const char* name = information.pbi_name[0] == '\0'
+                                   ? information.pbi_comm
+                                   : information.pbi_name;
+            const size_t name_capacity = information.pbi_name[0] == '\0'
+                                             ? sizeof(information.pbi_comm)
+                                             : sizeof(information.pbi_name);
+            const size_t name_length = strnlen(name, name_capacity);
+            member->name_length = std::min<size_t>(
+                name_length, DPTY_FOREGROUND_PROCESS_NAME_CAPACITY - 1);
+            std::memcpy(member->name, name, member->name_length);
+            member->name[member->name_length] = '\0';
+
+            struct rusage_info_v0 usage = {};
+            errno = 0;
+            if (proc_pid_rusage(
+                    pid, RUSAGE_INFO_V0,
+                    reinterpret_cast<rusage_info_t*>(&usage)) == 0 &&
+                usage.ri_proc_start_abstime != 0) {
+              member->start_absolute_time = usage.ri_proc_start_abstime;
+            } else {
+              member->resource_usage_error = errno == 0 ? EIO : errno;
+            }
+          };
+
+          append_member(foreground_group);
+          for (int index = 0; index < listed_members; ++index) {
+            const pid_t listed_pid =
+                listed_pids[static_cast<size_t>(index)];
+            if (listed_pid != foreground_group) {
+              append_member(listed_pid);
+            }
+          }
+          if (output->total_member_count <
+              output->member_count + output->member_issue_count) {
+            output->total_member_count =
+                output->member_count + output->member_issue_count;
+          }
+          output->omitted_member_count =
+              output->total_member_count - output->member_count;
+          if (output->member_count == 0) {
+            output->observation_error = ESRCH;
+          }
+        }
+        SecureZero(listed_pids.get(), scan_capacity * sizeof(pid_t));
+      }
+    }
+
+    if (output->member_count != 0) {
+      uint32_t primary = 0;
+      for (uint32_t index = 0; index < output->member_count; ++index) {
+        const DptyForegroundProcessV1& candidate = output->members[index];
+        const DptyForegroundProcessV1& selected = output->members[primary];
+        if (candidate.pid == foreground_group) {
+          primary = index;
+          break;
+        }
+        const bool candidate_has_start = candidate.start_absolute_time != 0;
+        const bool selected_has_start = selected.start_absolute_time != 0;
+        if ((candidate_has_start && !selected_has_start) ||
+            (candidate_has_start && selected_has_start &&
+             candidate.start_absolute_time < selected.start_absolute_time) ||
+            (candidate.start_absolute_time == selected.start_absolute_time &&
+             candidate.pid < selected.pid)) {
+          primary = index;
+        }
+      }
+      output->primary_index = static_cast<int32_t>(primary);
+      if (primary != 0) {
+        std::swap(output->members[0], output->members[primary]);
+      }
+      if (output->member_count > 2) {
+        std::sort(
+            output->members + 1,
+            output->members + output->member_count,
+            [](const DptyForegroundProcessV1& left,
+               const DptyForegroundProcessV1& right) {
+              const bool left_has_start = left.start_absolute_time != 0;
+              const bool right_has_start = right.start_absolute_time != 0;
+              if (left_has_start != right_has_start) {
+                return left_has_start;
+              }
+              if (left.start_absolute_time != right.start_absolute_time) {
+                return left.start_absolute_time < right.start_absolute_time;
+              }
+              return left.pid < right.pid;
+            });
+      }
+      output->primary_index = 0;
+      const pid_t primary_pid =
+          static_cast<pid_t>(output->members[0].pid);
+      errno = 0;
+      std::array<char, PROC_PIDPATHINFO_MAXSIZE> path = {};
+#if defined(DPTY_TESTING)
+      if ((injected_fault & DPTY_FOREGROUND_TEST_FAULT_PATH_PERMISSION) != 0) {
+        output->executable_path_error = EPERM;
+      } else
+#endif
+      {
+        const int path_bytes =
+            proc_pidpath(primary_pid, path.data(), path.size());
+        if (path_bytes <= 0) {
+          output->executable_path_error = errno == 0 ? EIO : errno;
+        } else {
+          const size_t path_length = strnlen(path.data(), path.size());
+          if (path_length == path.size() ||
+              path_length >= sizeof(output->executable_path)) {
+            output->executable_path_error = ENAMETOOLONG;
+          } else {
+            std::memcpy(output->executable_path, path.data(), path_length);
+            output->executable_path[path_length] = '\0';
+            output->executable_path_length = path_length;
+          }
+        }
+      }
+      SecureZero(path.data(), path.size());
+#if defined(DPTY_TESTING)
+      if ((injected_fault &
+           DPTY_FOREGROUND_TEST_FAULT_ARGUMENT_PERMISSION) != 0) {
+        output->arguments_error = EPERM;
+      } else
+#endif
+      {
+        ReadProcessArguments(primary_pid, output);
+      }
+    }
+
+    output->sampled_absolute_time = mach_absolute_time();
+    uint64_t earliest_start = 0;
+    for (uint32_t index = 0; index < output->member_count; ++index) {
+      DptyForegroundProcessV1* member = &output->members[index];
+      if (member->start_absolute_time == 0) {
+        continue;
+      }
+      bool elapsed_available = false;
+      member->elapsed_microseconds = AbsoluteDeltaMicroseconds(
+          member->start_absolute_time, output->sampled_absolute_time,
+          &elapsed_available);
+      if (!elapsed_available) {
+        member->resource_usage_error = ERANGE;
+        member->start_absolute_time = 0;
+        continue;
+      }
+      if (earliest_start == 0 || member->start_absolute_time < earliest_start) {
+        earliest_start = member->start_absolute_time;
+      }
+    }
+    if (earliest_start != 0) {
+      bool elapsed_available = false;
+      output->job_elapsed_microseconds = AbsoluteDeltaMicroseconds(
+          earliest_start, output->sampled_absolute_time, &elapsed_available);
+      if (!elapsed_available) {
+        output->job_elapsed_microseconds = 0;
+      }
+    }
+
+#if defined(DPTY_TESTING)
+    if ((injected_fault & DPTY_FOREGROUND_TEST_FAULT_STALE) != 0) {
+      ClearForegroundJobContent(output);
+      output->disposition = DPTY_FOREGROUND_JOB_STALE;
+      output->observation_error = ESTALE;
+      return DPTY_STATUS_OK;
+    }
+#endif
+
+    {
+      const std::lock_guard<std::mutex> lock(mutex_);
+      const bool exited = state_ == State::kFinished;
+      const pid_t current_child = child_pid_;
+      const int current_master = master_fd_;
+      errno = 0;
+      const pid_t current_owning =
+          current_child > 0 ? getpgid(current_child) : -1;
+      errno = 0;
+      const pid_t current_foreground =
+          current_master >= 0 ? tcgetpgrp(current_master) : -1;
+      if (exited || state_ != State::kRunning || current_child != child ||
+          current_owning != owning_group ||
+          current_foreground != foreground_group) {
+        ClearForegroundJobContent(output);
+        output->has_exited = exited ? 1 : 0;
+        output->disposition = exited ? DPTY_FOREGROUND_JOB_EXITED
+                                     : DPTY_FOREGROUND_JOB_STALE;
+        output->observation_error = exited ? ENXIO : ESTALE;
+        return DPTY_STATUS_OK;
+      }
+    }
+
+    output->disposition = output->member_count == 0
+                              ? DPTY_FOREGROUND_JOB_UNAVAILABLE
+                              : DPTY_FOREGROUND_JOB_AVAILABLE;
     return DPTY_STATUS_OK;
   }
 
@@ -1573,6 +2046,15 @@ dpty_session_get_working_directory_snapshot(
 }
 
 extern "C" __attribute__((visibility("default"))) int32_t
+dpty_session_get_foreground_job_snapshot(
+    DptySessionHandle session, DptyForegroundJobSnapshotV1* out_snapshot) {
+  ClearError();
+  const std::shared_ptr<Session> value = LookupSession(session);
+  return value == nullptr ? DPTY_STATUS_INVALID_HANDLE
+                          : value->GetForegroundJobSnapshot(out_snapshot);
+}
+
+extern "C" __attribute__((visibility("default"))) int32_t
 dpty_session_destroy(DptySessionHandle session) {
   ClearError();
   const std::shared_ptr<Session> value = LookupSession(session);
@@ -1616,6 +2098,26 @@ dpty_debug_fail_next_session_allocation(void) {
           expected, true, std::memory_order_acq_rel)) {
     return SetError(DPTY_STATUS_WRONG_STATE, 0,
                     "PTY session allocation fault is already armed");
+  }
+  return DPTY_STATUS_OK;
+}
+
+extern "C" __attribute__((visibility("default"))) int32_t
+dpty_debug_set_foreground_snapshot_fault(uint32_t fault_flags) {
+  ClearError();
+  constexpr uint32_t kKnownFaults =
+      DPTY_FOREGROUND_TEST_FAULT_PATH_PERMISSION |
+      DPTY_FOREGROUND_TEST_FAULT_ARGUMENT_PERMISSION |
+      DPTY_FOREGROUND_TEST_FAULT_STALE;
+  if (fault_flags == 0 || (fault_flags & ~kKnownFaults) != 0) {
+    return SetError(DPTY_STATUS_INVALID_ARGUMENT, EINVAL,
+                    "foreground snapshot test fault is invalid");
+  }
+  uint32_t expected = 0;
+  if (!g_foreground_snapshot_fault.compare_exchange_strong(
+          expected, fault_flags, std::memory_order_acq_rel)) {
+    return SetError(DPTY_STATUS_WRONG_STATE, 0,
+                    "foreground snapshot test fault is already armed");
   }
   return DPTY_STATUS_OK;
 }
