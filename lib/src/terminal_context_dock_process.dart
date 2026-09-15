@@ -1,0 +1,959 @@
+import 'dart:async';
+
+import 'package:dart_pty_macos/dart_pty_macos.dart';
+
+import 'terminal_application_state.dart';
+import 'terminal_context_dock.dart';
+import 'terminal_pane.dart';
+
+abstract final class TerminalContextDockProcessLimits {
+  static const Duration foregroundActivationDelay = Duration(milliseconds: 75);
+  static const Duration processStatePollInterval = Duration(milliseconds: 250);
+  static const Duration foregroundInventoryInterval = Duration(seconds: 1);
+  static const Duration terminalChangeDebounce = Duration(milliseconds: 75);
+}
+
+enum TerminalContextDockContentMode {
+  directoryNavigator,
+  foregroundJob,
+  shellOwnedCommand,
+  protected,
+  unavailable,
+}
+
+enum TerminalContextDockProcessStatus {
+  loading,
+  ready,
+  partial,
+  shellOwned,
+  unavailable,
+}
+
+final class TerminalContextDockForegroundJobIdentity {
+  const TerminalContextDockForegroundJobIdentity({
+    required this.sessionId,
+    required this.foregroundProcessGroup,
+    required this.epoch,
+  });
+
+  final TerminalSessionId sessionId;
+  final int foregroundProcessGroup;
+  final int epoch;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalContextDockForegroundJobIdentity &&
+      other.sessionId == sessionId &&
+      other.foregroundProcessGroup == foregroundProcessGroup &&
+      other.epoch == epoch;
+
+  @override
+  int get hashCode => Object.hash(sessionId, foregroundProcessGroup, epoch);
+}
+
+final class TerminalContextDockProcessMember {
+  const TerminalContextDockProcessMember({
+    required this.processId,
+    required this.startTimeSeconds,
+    required this.startTimeMicroseconds,
+    required this.startAbsoluteTime,
+    required this.elapsedMicroseconds,
+    required this.name,
+    required this.informationSystemError,
+    required this.resourceUsageSystemError,
+  });
+
+  factory TerminalContextDockProcessMember.fromPty(
+    PtyForegroundProcessSnapshot snapshot,
+  ) => TerminalContextDockProcessMember(
+    processId: snapshot.processId,
+    startTimeSeconds: snapshot.startTimeSeconds,
+    startTimeMicroseconds: snapshot.startTimeMicroseconds,
+    startAbsoluteTime: snapshot.startAbsoluteTime,
+    elapsedMicroseconds: snapshot.elapsedMicroseconds,
+    name: snapshot.name,
+    informationSystemError: snapshot.informationSystemError,
+    resourceUsageSystemError: snapshot.resourceUsageSystemError,
+  );
+
+  final int processId;
+  final int startTimeSeconds;
+  final int startTimeMicroseconds;
+  final int startAbsoluteTime;
+  final int elapsedMicroseconds;
+  final String name;
+  final int informationSystemError;
+  final int resourceUsageSystemError;
+
+  bool get isPartial =>
+      informationSystemError != 0 || resourceUsageSystemError != 0;
+}
+
+/// Content-bearing process projection retained only while its focused job
+/// identity, Dock visibility, and privacy authority remain current.
+final class TerminalContextDockProcessSnapshot {
+  TerminalContextDockProcessSnapshot({
+    required this.status,
+    required this.identity,
+    required this.observedAtMonotonicMicros,
+    required this.elapsedMicroseconds,
+    required Iterable<TerminalContextDockProcessMember> members,
+    required this.totalMemberCount,
+    required this.omittedMemberCount,
+    required this.memberIssueCount,
+    required this.primaryIndex,
+    required this.executablePath,
+    required this.executablePathSystemError,
+    required Iterable<String> arguments,
+    required this.totalArgumentCount,
+    required this.omittedArgumentCount,
+    required this.argumentsTruncated,
+    required this.argumentsSystemError,
+    required this.observationSystemError,
+  }) : members = List<TerminalContextDockProcessMember>.unmodifiable(members),
+       arguments = List<String>.unmodifiable(arguments);
+
+  factory TerminalContextDockProcessSnapshot.loading({
+    required TerminalContextDockForegroundJobIdentity identity,
+    required int observedAtMonotonicMicros,
+  }) => TerminalContextDockProcessSnapshot(
+    status: TerminalContextDockProcessStatus.loading,
+    identity: identity,
+    observedAtMonotonicMicros: observedAtMonotonicMicros,
+    elapsedMicroseconds: 0,
+    members: const <TerminalContextDockProcessMember>[],
+    totalMemberCount: 0,
+    omittedMemberCount: 0,
+    memberIssueCount: 0,
+    primaryIndex: -1,
+    executablePath: null,
+    executablePathSystemError: 0,
+    arguments: const <String>[],
+    totalArgumentCount: 0,
+    omittedArgumentCount: 0,
+    argumentsTruncated: false,
+    argumentsSystemError: 0,
+    observationSystemError: 0,
+  );
+
+  factory TerminalContextDockProcessSnapshot.shellOwned({
+    required int observedAtMonotonicMicros,
+  }) => TerminalContextDockProcessSnapshot(
+    status: TerminalContextDockProcessStatus.shellOwned,
+    identity: null,
+    observedAtMonotonicMicros: observedAtMonotonicMicros,
+    elapsedMicroseconds: 0,
+    members: const <TerminalContextDockProcessMember>[],
+    totalMemberCount: 0,
+    omittedMemberCount: 0,
+    memberIssueCount: 0,
+    primaryIndex: -1,
+    executablePath: null,
+    executablePathSystemError: 0,
+    arguments: const <String>[],
+    totalArgumentCount: 0,
+    omittedArgumentCount: 0,
+    argumentsTruncated: false,
+    argumentsSystemError: 0,
+    observationSystemError: 0,
+  );
+
+  factory TerminalContextDockProcessSnapshot.unavailable({
+    required TerminalContextDockForegroundJobIdentity identity,
+    required int observedAtMonotonicMicros,
+    required int observationSystemError,
+  }) => TerminalContextDockProcessSnapshot(
+    status: TerminalContextDockProcessStatus.unavailable,
+    identity: identity,
+    observedAtMonotonicMicros: observedAtMonotonicMicros,
+    elapsedMicroseconds: 0,
+    members: const <TerminalContextDockProcessMember>[],
+    totalMemberCount: 0,
+    omittedMemberCount: 0,
+    memberIssueCount: 0,
+    primaryIndex: -1,
+    executablePath: null,
+    executablePathSystemError: 0,
+    arguments: const <String>[],
+    totalArgumentCount: 0,
+    omittedArgumentCount: 0,
+    argumentsTruncated: false,
+    argumentsSystemError: 0,
+    observationSystemError: observationSystemError,
+  );
+
+  final TerminalContextDockProcessStatus status;
+  final TerminalContextDockForegroundJobIdentity? identity;
+  final int observedAtMonotonicMicros;
+  final int elapsedMicroseconds;
+  final List<TerminalContextDockProcessMember> members;
+  final int totalMemberCount;
+  final int omittedMemberCount;
+  final int memberIssueCount;
+  final int primaryIndex;
+  final String? executablePath;
+  final int executablePathSystemError;
+  final List<String> arguments;
+  final int totalArgumentCount;
+  final int omittedArgumentCount;
+  final bool argumentsTruncated;
+  final int argumentsSystemError;
+  final int observationSystemError;
+
+  TerminalContextDockProcessMember? get primaryProcess =>
+      primaryIndex < 0 ? null : members[primaryIndex];
+
+  TerminalContextDockProcessSnapshot withElapsed(int elapsed) =>
+      TerminalContextDockProcessSnapshot(
+        status: status,
+        identity: identity,
+        observedAtMonotonicMicros: observedAtMonotonicMicros,
+        elapsedMicroseconds: elapsed,
+        members: members,
+        totalMemberCount: totalMemberCount,
+        omittedMemberCount: omittedMemberCount,
+        memberIssueCount: memberIssueCount,
+        primaryIndex: primaryIndex,
+        executablePath: executablePath,
+        executablePathSystemError: executablePathSystemError,
+        arguments: arguments,
+        totalArgumentCount: totalArgumentCount,
+        omittedArgumentCount: omittedArgumentCount,
+        argumentsTruncated: argumentsTruncated,
+        argumentsSystemError: argumentsSystemError,
+        observationSystemError: observationSystemError,
+      );
+}
+
+final class TerminalContextDockContentSnapshot {
+  const TerminalContextDockContentSnapshot({
+    required this.windowId,
+    required this.paneId,
+    required this.sessionId,
+    required this.generation,
+    required this.mode,
+    required this.directorySuspended,
+    required this.process,
+  });
+
+  final TerminalWindowId windowId;
+  final PaneId paneId;
+  final TerminalSessionId sessionId;
+  final int generation;
+  final TerminalContextDockContentMode mode;
+  final bool directorySuspended;
+  final TerminalContextDockProcessSnapshot? process;
+}
+
+abstract interface class TerminalContextDockScheduledTask {
+  bool get isCancelled;
+  void cancel();
+}
+
+typedef TerminalContextDockScheduleTask =
+    TerminalContextDockScheduledTask Function(
+      Duration delay,
+      void Function() callback,
+    );
+typedef TerminalContextDockProcessSnapshotResolver =
+    TerminalPaneProcessSnapshot Function(PaneId paneId);
+typedef TerminalContextDockForegroundJobResolver =
+    FutureOr<PtyForegroundJobSnapshot?> Function(
+      PaneId paneId,
+      TerminalSessionId sessionId,
+    );
+typedef TerminalContextDockWindowPresentationPolicy = bool Function(
+  TerminalWindowId windowId,
+);
+typedef TerminalContextDockProcessPrivacyPolicy = bool Function(
+  PaneId paneId,
+  TerminalPaneProcessSnapshot process,
+);
+typedef TerminalContextDockProcessTerminalFocus = bool Function(
+  TerminalContextDockFocusRequest request,
+);
+
+/// Selects one Context Dock document from focused-pane process authority.
+///
+/// Rich path/argv observation is delayed until a foreground group remains
+/// stable, refreshed at most once per second, and discarded whenever any
+/// window, pane, session, PGID, visibility, or privacy identity changes.
+final class TerminalContextDockProcessController {
+  TerminalContextDockProcessController({
+    required this.applicationState,
+    required this.dockState,
+    required TerminalContextDockProcessSnapshotResolver resolveProcessSnapshot,
+    required TerminalContextDockForegroundJobResolver resolveForegroundJob,
+    TerminalContextDockWindowPresentationPolicy? canPresentWindow,
+    TerminalContextDockProcessPrivacyPolicy? canObserveProcess,
+    TerminalContextDockProcessTerminalFocus? focusTerminal,
+    TerminalContextDockScheduleTask? scheduleTask,
+    int Function()? monotonicMicros,
+    void Function()? onChanged,
+  }) : _resolveProcessSnapshot = resolveProcessSnapshot,
+       _resolveForegroundJob = resolveForegroundJob,
+       _canPresentWindow = canPresentWindow ?? _alwaysPresentWindow,
+       _canObserveProcess = canObserveProcess ?? _alwaysObserveProcess,
+       _focusTerminal = focusTerminal ?? _acceptTerminalFocus,
+       _scheduleTask = scheduleTask ?? _scheduleTimerTask,
+       _onChanged = onChanged {
+    final Stopwatch? clock = monotonicMicros == null
+        ? (Stopwatch()..start())
+        : null;
+    _monotonicMicros = monotonicMicros ?? () => clock!.elapsedMicroseconds;
+  }
+
+  final TerminalApplicationState applicationState;
+  final TerminalContextDockState dockState;
+  final TerminalContextDockProcessSnapshotResolver _resolveProcessSnapshot;
+  final TerminalContextDockForegroundJobResolver _resolveForegroundJob;
+  final TerminalContextDockWindowPresentationPolicy _canPresentWindow;
+  final TerminalContextDockProcessPrivacyPolicy _canObserveProcess;
+  final TerminalContextDockProcessTerminalFocus _focusTerminal;
+  final TerminalContextDockScheduleTask _scheduleTask;
+  final void Function()? _onChanged;
+  late final int Function() _monotonicMicros;
+  final Map<TerminalWindowId, _TerminalContextDockProcessWindowState> _windows =
+      <TerminalWindowId, _TerminalContextDockProcessWindowState>{};
+  final Set<_TerminalContextDockRichRequest> _requests =
+      <_TerminalContextDockRichRequest>{};
+  TerminalContextDockScheduledTask? _pollTask;
+  TerminalContextDockScheduledTask? _debounceTask;
+  int _nextGeneration = 0;
+  int _nextForegroundEpoch = 0;
+  int _lastMonotonicMicros = 0;
+  bool _hasObservedTime = false;
+  bool _synchronizing = false;
+  bool _isDisposed = false;
+
+  bool get isDisposed => _isDisposed;
+  int get activeOperationCount => _requests.length;
+  int get activeTimerCount =>
+      (_isActive(_pollTask) ? 1 : 0) +
+      (_isActive(_debounceTask) ? 1 : 0) +
+      _windows.values.where((state) => _isActive(state.activationTask)).length;
+
+  TerminalContextDockContentSnapshot? snapshotForWindow(
+    TerminalWindowId windowId,
+  ) {
+    if (_isDisposed) return null;
+    final _TerminalContextDockProcessWindowState? state = _windows[windowId];
+    if (state == null) return null;
+    TerminalContextDockProcessSnapshot? process = state.process;
+    final int now = _now();
+    if (process != null) {
+      final int advance = (now - process.observedAtMonotonicMicros).clamp(
+        0,
+        0x7fffffffffffffff,
+      );
+      process = process.withElapsed(process.elapsedMicroseconds + advance);
+    }
+    return TerminalContextDockContentSnapshot(
+      windowId: state.windowId,
+      paneId: state.paneId,
+      sessionId: state.sessionId,
+      generation: state.generation,
+      mode: state.mode,
+      directorySuspended: state.directorySuspended,
+      process: process,
+    );
+  }
+
+  bool canObserveDirectoryPane(PaneId paneId) =>
+      !_isDisposed &&
+      _windows.values.any(
+        (state) =>
+            state.paneId == paneId &&
+            state.mode == TerminalContextDockContentMode.directoryNavigator &&
+            !state.directorySuspended,
+      );
+
+  void scheduleSynchronize() {
+    if (_isDisposed || _debounceTask != null) return;
+    late final TerminalContextDockScheduledTask scheduled;
+    scheduled = _scheduleTask(
+      TerminalContextDockProcessLimits.terminalChangeDebounce,
+      () {
+        if (!identical(_debounceTask, scheduled)) return;
+        _debounceTask = null;
+        synchronize();
+      },
+    );
+    _debounceTask = scheduled;
+  }
+
+  void synchronize() {
+    if (_isDisposed || _synchronizing) return;
+    _synchronizing = true;
+    var changed = false;
+    try {
+      _cancelDebounce();
+      if (applicationState.isDisposed || dockState.isDisposed) {
+        changed = _clearWindows();
+        _cancelPoll();
+        return;
+      }
+      dockState.synchronize(applicationState);
+      final Set<TerminalWindowId> eligible = <TerminalWindowId>{};
+      for (final TerminalWindowState logicalWindow
+          in applicationState.windows.where(
+            (window) => window.role == TerminalWindowRole.standard,
+          )) {
+        final TerminalContextDockWindowSnapshot? dock = dockState
+            .snapshotForWindow(logicalWindow.id);
+        if (dock == null ||
+            !dock.isVisible ||
+            !_safeCanPresentWindow(logicalWindow.id)) {
+          changed = _removeWindow(logicalWindow.id) || changed;
+          continue;
+        }
+        eligible.add(logicalWindow.id);
+        final TerminalPaneProcessSnapshot process = _safeProcessSnapshot(
+          dock.targetPaneId,
+        );
+        _TerminalContextDockProcessWindowState? state =
+            _windows[logicalWindow.id];
+        if (state == null ||
+            state.paneId != dock.targetPaneId ||
+            state.sessionId != process.sessionId) {
+          if (state != null) _cancelState(state);
+          state = _TerminalContextDockProcessWindowState(
+            windowId: logicalWindow.id,
+            paneId: dock.targetPaneId,
+            sessionId: process.sessionId,
+            generation: ++_nextGeneration,
+          );
+          _windows[logicalWindow.id] = state;
+          changed = true;
+        }
+        changed = _reconcileWindow(state, dock, process) || changed;
+      }
+      for (final TerminalWindowId stale
+          in _windows.keys
+              .where((windowId) => !eligible.contains(windowId))
+              .toList(growable: false)) {
+        changed = _removeWindow(stale) || changed;
+      }
+    } finally {
+      _synchronizing = false;
+      _ensurePoll();
+      if (changed) _onChanged?.call();
+    }
+  }
+
+  void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    _cancelDebounce();
+    _cancelPoll();
+    _clearWindows();
+    _requests.clear();
+  }
+
+  bool _reconcileWindow(
+    _TerminalContextDockProcessWindowState state,
+    TerminalContextDockWindowSnapshot dock,
+    TerminalPaneProcessSnapshot process,
+  ) {
+    if (process.disposition == TerminalPaneProcessDisposition.nonLive ||
+        process.disposition == TerminalPaneProcessDisposition.unavailable) {
+      return _enterContentFree(
+        state,
+        TerminalContextDockContentMode.unavailable,
+      );
+    }
+    if (!_safeCanObserveProcess(state.paneId, process)) {
+      final bool changed = _enterContentFree(
+        state,
+        TerminalContextDockContentMode.protected,
+      );
+      _returnInputToTerminal(dock);
+      return changed;
+    }
+    switch (process.disposition) {
+      case TerminalPaneProcessDisposition.idleShell:
+        return _enterDirectory(state);
+      case TerminalPaneProcessDisposition.owningShellCommand:
+        final bool changed = _enterShellOwned(state);
+        _returnInputToTerminal(dock);
+        return changed;
+      case TerminalPaneProcessDisposition.foregroundProcess:
+        final bool changed = _enterForeground(state, process);
+        if (state.mode == TerminalContextDockContentMode.foregroundJob) {
+          _returnInputToTerminal(dock);
+        }
+        return changed;
+      case TerminalPaneProcessDisposition.nonLive:
+      case TerminalPaneProcessDisposition.unavailable:
+        throw StateError('unreachable process disposition');
+    }
+  }
+
+  bool _enterDirectory(_TerminalContextDockProcessWindowState state) {
+    final bool changed =
+        state.mode != TerminalContextDockContentMode.directoryNavigator ||
+        state.directorySuspended ||
+        state.process != null ||
+        state.candidateProcessGroup != null;
+    _cancelTransientState(state);
+    state
+      ..mode = TerminalContextDockContentMode.directoryNavigator
+      ..directorySuspended = false
+      ..shellCommandStartedMicros = null;
+    if (changed) state.generation = ++_nextGeneration;
+    return changed;
+  }
+
+  bool _enterShellOwned(_TerminalContextDockProcessWindowState state) {
+    final int now = _now();
+    final bool entering =
+        state.mode != TerminalContextDockContentMode.shellOwnedCommand;
+    _cancelTransientState(state);
+    state
+      ..mode = TerminalContextDockContentMode.shellOwnedCommand
+      ..directorySuspended = true
+      ..shellCommandStartedMicros = entering
+          ? now
+          : state.shellCommandStartedMicros
+      ..process = TerminalContextDockProcessSnapshot.shellOwned(
+        observedAtMonotonicMicros: state.shellCommandStartedMicros ?? now,
+      );
+    if (entering) state.generation = ++_nextGeneration;
+    return entering;
+  }
+
+  bool _enterForeground(
+    _TerminalContextDockProcessWindowState state,
+    TerminalPaneProcessSnapshot process,
+  ) {
+    final int? foreground = process.foregroundProcessGroup;
+    if (foreground == null || foreground <= 0) {
+      return _enterContentFree(
+        state,
+        TerminalContextDockContentMode.unavailable,
+      );
+    }
+    final int now = _now();
+    if (state.mode == TerminalContextDockContentMode.foregroundJob &&
+        state.identity?.foregroundProcessGroup == foreground) {
+      if (state.request == null &&
+          (state.lastRichRequestMicros == null ||
+              now - state.lastRichRequestMicros! >=
+                  TerminalContextDockProcessLimits
+                      .foregroundInventoryInterval
+                      .inMicroseconds)) {
+        _startRichRequest(state, process);
+      }
+      return false;
+    }
+    if (state.candidateProcessGroup != foreground) {
+      _cancelTransientState(state);
+      state
+        ..mode = TerminalContextDockContentMode.directoryNavigator
+        ..directorySuspended = true
+        ..candidateProcessGroup = foreground
+        ..candidateStartedMicros = now
+        ..generation = ++_nextGeneration;
+      _scheduleActivation(state);
+      return true;
+    }
+    final int candidateStarted = state.candidateStartedMicros ?? now;
+    final int remaining =
+        TerminalContextDockProcessLimits
+            .foregroundActivationDelay
+            .inMicroseconds -
+        (now - candidateStarted);
+    if (remaining > 0) {
+      _scheduleActivation(state, delay: Duration(microseconds: remaining));
+      return false;
+    }
+    state.activationTask?.cancel();
+    state
+      ..activationTask = null
+      ..candidateProcessGroup = null
+      ..candidateStartedMicros = null
+      ..mode = TerminalContextDockContentMode.foregroundJob
+      ..directorySuspended = true
+      ..identity = TerminalContextDockForegroundJobIdentity(
+        sessionId: state.sessionId,
+        foregroundProcessGroup: foreground,
+        epoch: ++_nextForegroundEpoch,
+      )
+      ..process = TerminalContextDockProcessSnapshot.loading(
+        identity: TerminalContextDockForegroundJobIdentity(
+          sessionId: state.sessionId,
+          foregroundProcessGroup: foreground,
+          epoch: _nextForegroundEpoch,
+        ),
+        observedAtMonotonicMicros: now,
+      )
+      ..generation = ++_nextGeneration;
+    _startRichRequest(state, process);
+    return true;
+  }
+
+  bool _enterContentFree(
+    _TerminalContextDockProcessWindowState state,
+    TerminalContextDockContentMode mode,
+  ) {
+    final bool changed =
+        state.mode != mode ||
+        !state.directorySuspended ||
+        state.process != null ||
+        state.candidateProcessGroup != null;
+    _cancelTransientState(state);
+    state
+      ..mode = mode
+      ..directorySuspended = true
+      ..shellCommandStartedMicros = null;
+    if (changed) state.generation = ++_nextGeneration;
+    return changed;
+  }
+
+  void _scheduleActivation(
+    _TerminalContextDockProcessWindowState state, {
+    Duration delay = TerminalContextDockProcessLimits.foregroundActivationDelay,
+  }) {
+    if (_isActive(state.activationTask)) return;
+    late final TerminalContextDockScheduledTask scheduled;
+    scheduled = _scheduleTask(delay, () {
+      if (_isDisposed ||
+          !_windows.containsValue(state) ||
+          !identical(state.activationTask, scheduled)) {
+        return;
+      }
+      state.activationTask = null;
+      synchronize();
+    });
+    state.activationTask = scheduled;
+  }
+
+  void _startRichRequest(
+    _TerminalContextDockProcessWindowState state,
+    TerminalPaneProcessSnapshot process,
+  ) {
+    if (_isDisposed || state.request != null || state.identity == null) return;
+    final int now = _now();
+    final _TerminalContextDockRichRequest request =
+        _TerminalContextDockRichRequest(
+          windowId: state.windowId,
+          paneId: state.paneId,
+          sessionId: state.sessionId,
+          identity: state.identity!,
+          generation: state.generation,
+        );
+    state
+      ..request = request
+      ..lastRichRequestMicros = now;
+    _requests.add(request);
+    FutureOr<PtyForegroundJobSnapshot?> result;
+    try {
+      result = _resolveForegroundJob(state.paneId, state.sessionId);
+    } on Object {
+      _completeRichRequest(request, null);
+      return;
+    }
+    unawaited(
+      Future<PtyForegroundJobSnapshot?>.value(result).then(
+        (snapshot) => _completeRichRequest(request, snapshot),
+        onError: (Object _, StackTrace _) =>
+            _completeRichRequest(request, null),
+      ),
+    );
+  }
+
+  void _completeRichRequest(
+    _TerminalContextDockRichRequest request,
+    PtyForegroundJobSnapshot? native,
+  ) {
+    _requests.remove(request);
+    if (_isDisposed || request.cancelled) return;
+    final _TerminalContextDockProcessWindowState? state =
+        _windows[request.windowId];
+    if (state == null || !identical(state.request, request)) return;
+    state.request = null;
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+      request.windowId,
+    );
+    final TerminalPaneProcessSnapshot process = _safeProcessSnapshot(
+      request.paneId,
+    );
+    if (dock == null ||
+        !dock.isVisible ||
+        dock.targetPaneId != request.paneId ||
+        !_safeCanPresentWindow(request.windowId) ||
+        process.sessionId != request.sessionId ||
+        process.disposition !=
+            TerminalPaneProcessDisposition.foregroundProcess ||
+        process.foregroundProcessGroup !=
+            request.identity.foregroundProcessGroup ||
+        !_safeCanObserveProcess(request.paneId, process) ||
+        state.generation != request.generation ||
+        state.identity != request.identity) {
+      state.process = null;
+      scheduleSynchronize();
+      _onChanged?.call();
+      return;
+    }
+    final int now = _now();
+    if (native == null ||
+        !native.isAvailable ||
+        native.childProcessId != process.childProcessId ||
+        native.owningProcessGroup != process.owningProcessGroup ||
+        native.foregroundProcessGroup != process.foregroundProcessGroup) {
+      state.process = TerminalContextDockProcessSnapshot.unavailable(
+        identity: request.identity,
+        observedAtMonotonicMicros: now,
+        observationSystemError: native?.observationSystemError ?? -1,
+      );
+      state.generation = ++_nextGeneration;
+      scheduleSynchronize();
+      _onChanged?.call();
+      return;
+    }
+    state
+      ..process = _projectNative(request.identity, native, now)
+      ..generation = ++_nextGeneration;
+    _onChanged?.call();
+  }
+
+  TerminalContextDockProcessSnapshot _projectNative(
+    TerminalContextDockForegroundJobIdentity identity,
+    PtyForegroundJobSnapshot native,
+    int now,
+  ) {
+    final List<TerminalContextDockProcessMember> members = native.members
+        .map(TerminalContextDockProcessMember.fromPty)
+        .toList(growable: false);
+    final bool partial =
+        native.observationSystemError != 0 ||
+        native.memberIssueCount != 0 ||
+        native.omittedMemberCount != 0 ||
+        native.executablePath == null ||
+        native.executablePathSystemError != 0 ||
+        native.argumentsSystemError != 0 ||
+        native.argumentsTruncated ||
+        members.any((member) => member.isPartial);
+    return TerminalContextDockProcessSnapshot(
+      status: partial
+          ? TerminalContextDockProcessStatus.partial
+          : TerminalContextDockProcessStatus.ready,
+      identity: identity,
+      observedAtMonotonicMicros: now,
+      elapsedMicroseconds: native.jobElapsedMicroseconds,
+      members: members,
+      totalMemberCount: native.totalMemberCount,
+      omittedMemberCount: native.omittedMemberCount,
+      memberIssueCount: native.memberIssueCount,
+      primaryIndex: native.primaryIndex,
+      executablePath: native.executablePath,
+      executablePathSystemError: native.executablePathSystemError,
+      arguments: native.arguments,
+      totalArgumentCount: native.totalArgumentCount,
+      omittedArgumentCount: native.omittedArgumentCount,
+      argumentsTruncated: native.argumentsTruncated,
+      argumentsSystemError: native.argumentsSystemError,
+      observationSystemError: native.observationSystemError,
+    );
+  }
+
+  void _returnInputToTerminal(TerminalContextDockWindowSnapshot dock) {
+    if (!dock.navigatorOwnsInput) return;
+    final TerminalContextDockFocusRequest request =
+        TerminalContextDockFocusRequest(
+          windowId: dock.windowId,
+          paneId: dock.targetPaneId,
+          stateGeneration: dock.generation,
+          querySelectionGeneration: dock.pane.querySelectionGeneration,
+        );
+    try {
+      if (_focusTerminal(request)) {
+        final TerminalContextDockWindowSnapshot? current = dockState
+            .snapshotForWindow(dock.windowId);
+        if (current?.targetPaneId == dock.targetPaneId &&
+            current!.navigatorOwnsInput) {
+          dockState.focusTerminal(dock.windowId, dock.targetPaneId);
+        }
+      }
+    } on Object {
+      // The existing presenter reconciliation retains native focus authority.
+    }
+  }
+
+  TerminalPaneProcessSnapshot _safeProcessSnapshot(PaneId paneId) {
+    try {
+      return _resolveProcessSnapshot(paneId);
+    } on Object {
+      return TerminalPaneProcessSnapshot.unavailable(
+        sessionId: TerminalSessionId(paneId: paneId, generation: 1),
+      );
+    }
+  }
+
+  bool _safeCanPresentWindow(TerminalWindowId windowId) {
+    try {
+      return _canPresentWindow(windowId);
+    } on Object {
+      return false;
+    }
+  }
+
+  bool _safeCanObserveProcess(
+    PaneId paneId,
+    TerminalPaneProcessSnapshot process,
+  ) {
+    try {
+      return _canObserveProcess(paneId, process);
+    } on Object {
+      return false;
+    }
+  }
+
+  void _ensurePoll() {
+    if (_isDisposed || _windows.isEmpty) {
+      _cancelPoll();
+      return;
+    }
+    if (_isActive(_pollTask)) return;
+    late final TerminalContextDockScheduledTask scheduled;
+    scheduled = _scheduleTask(
+      TerminalContextDockProcessLimits.processStatePollInterval,
+      () {
+        if (!identical(_pollTask, scheduled)) return;
+        _pollTask = null;
+        synchronize();
+      },
+    );
+    _pollTask = scheduled;
+  }
+
+  bool _removeWindow(TerminalWindowId windowId) {
+    final _TerminalContextDockProcessWindowState? state = _windows.remove(
+      windowId,
+    );
+    if (state == null) return false;
+    _cancelState(state);
+    return true;
+  }
+
+  bool _clearWindows() {
+    if (_windows.isEmpty) return false;
+    for (final _TerminalContextDockProcessWindowState state
+        in _windows.values) {
+      _cancelState(state);
+    }
+    _windows.clear();
+    return true;
+  }
+
+  void _cancelState(_TerminalContextDockProcessWindowState state) {
+    _cancelTransientState(state);
+    state.process = null;
+  }
+
+  void _cancelTransientState(_TerminalContextDockProcessWindowState state) {
+    state.activationTask?.cancel();
+    state.activationTask = null;
+    final _TerminalContextDockRichRequest? request = state.request;
+    if (request != null) {
+      request.cancelled = true;
+      _requests.remove(request);
+      state.request = null;
+    }
+    state
+      ..candidateProcessGroup = null
+      ..candidateStartedMicros = null
+      ..identity = null
+      ..process = null
+      ..lastRichRequestMicros = null;
+  }
+
+  void _cancelDebounce() {
+    _debounceTask?.cancel();
+    _debounceTask = null;
+  }
+
+  void _cancelPoll() {
+    _pollTask?.cancel();
+    _pollTask = null;
+  }
+
+  int _now() {
+    final int value = _monotonicMicros();
+    if (value < 0 || (_hasObservedTime && value < _lastMonotonicMicros)) {
+      throw StateError('Context Dock process monotonic time regressed');
+    }
+    _hasObservedTime = true;
+    _lastMonotonicMicros = value;
+    return value;
+  }
+
+  static bool _isActive(TerminalContextDockScheduledTask? task) =>
+      task != null && !task.isCancelled;
+
+  static bool _alwaysPresentWindow(TerminalWindowId _) => true;
+  static bool _alwaysObserveProcess(PaneId _, TerminalPaneProcessSnapshot __) =>
+      true;
+  static bool _acceptTerminalFocus(TerminalContextDockFocusRequest _) => true;
+  static TerminalContextDockScheduledTask _scheduleTimerTask(
+    Duration delay,
+    void Function() callback,
+  ) => _TerminalContextDockTimerTask(delay, callback);
+}
+
+final class _TerminalContextDockProcessWindowState {
+  _TerminalContextDockProcessWindowState({
+    required this.windowId,
+    required this.paneId,
+    required this.sessionId,
+    required this.generation,
+  });
+
+  final TerminalWindowId windowId;
+  final PaneId paneId;
+  final TerminalSessionId sessionId;
+  int generation;
+  TerminalContextDockContentMode mode =
+      TerminalContextDockContentMode.unavailable;
+  bool directorySuspended = true;
+  int? candidateProcessGroup;
+  int? candidateStartedMicros;
+  TerminalContextDockScheduledTask? activationTask;
+  TerminalContextDockForegroundJobIdentity? identity;
+  TerminalContextDockProcessSnapshot? process;
+  int? lastRichRequestMicros;
+  int? shellCommandStartedMicros;
+  _TerminalContextDockRichRequest? request;
+}
+
+final class _TerminalContextDockRichRequest {
+  _TerminalContextDockRichRequest({
+    required this.windowId,
+    required this.paneId,
+    required this.sessionId,
+    required this.identity,
+    required this.generation,
+  });
+
+  final TerminalWindowId windowId;
+  final PaneId paneId;
+  final TerminalSessionId sessionId;
+  final TerminalContextDockForegroundJobIdentity identity;
+  final int generation;
+  bool cancelled = false;
+}
+
+final class _TerminalContextDockTimerTask
+    implements TerminalContextDockScheduledTask {
+  _TerminalContextDockTimerTask(Duration delay, void Function() callback) {
+    _timer = Timer(delay, callback);
+  }
+
+  late final Timer _timer;
+
+  @override
+  bool get isCancelled => !_timer.isActive;
+
+  @override
+  void cancel() => _timer.cancel();
+}

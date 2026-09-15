@@ -1494,7 +1494,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase7/context-dock-foreground-process-inspector.md`](docs/phase7/context-dock-foreground-process-inspector.md)
   を参照して順に実施する）
   - [x] bounded native foreground job snapshotとDart model
-  - [ ] content coordinator、refresh、privacy lifecycle
+  - [x] content coordinator、refresh、privacy lifecycle
   - [ ] read-only native presentation、localization、accessibility
   - [ ] product privacy／performance gate、Developer JIT／Release AOT受け入れ、reference更新
 - [x] focused paneに追従するContext Dockとlocal file／folder navigator

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dart_appkit/dart_appkit.dart';
+import 'package:dart_pty_macos/dart_pty_macos.dart';
 import 'package:dart_terminal/dart_terminal.dart';
 
 Future<void> main() => runTerminalContextDockTests();
@@ -13,6 +14,7 @@ Future<void> runTerminalContextDockTests() async {
   await _testNavigatorKeyRoutingNeverFallsThrough();
   await _testDirectoryTreeFollowsPaneAndCancelsHiddenWork();
   await _testDirectoryRevealRejectsExpansionCap();
+  await _testProcessCoordinatorRefreshPrivacyAndCancellation();
   _testPrivacyPolicyDistinguishesIdleLineEditing();
   await _testPathHandoffPolicyAndExactPayload();
 }
@@ -172,6 +174,386 @@ void _testPrivacyPolicyDistinguishesIdleLineEditing() {
       ),
     ),
     'unavailable process identity fails closed for filesystem observation',
+  );
+}
+
+Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
+  final _Harness harness = _Harness();
+  final TerminalWindowState window = await harness.createWindow();
+  final PaneId firstPane = window.selectedTab.focusedPaneId;
+  final TerminalSessionId firstSession = TerminalSessionId(
+    paneId: firstPane,
+    generation: 1,
+  );
+  final TerminalContextDockState dock = TerminalContextDockState()
+    ..synchronize(harness.state)
+    ..toggleVisibility(window.id, firstPane);
+  final _ProcessScheduler scheduler = _ProcessScheduler();
+  var foregroundGroup = firstPane.value;
+  var owningShellCommand = false;
+  var privacyAllowed = true;
+  var canPresent = true;
+  var activeSession = firstSession;
+  var focusCount = 0;
+  var changedCount = 0;
+  final List<Completer<PtyForegroundJobSnapshot?>> richRequests =
+      <Completer<PtyForegroundJobSnapshot?>>[];
+
+  TerminalPaneProcessSnapshot resolveProcess(PaneId paneId) {
+    _expect(
+      paneId == activeSession.paneId,
+      'process resolver targets the current focused pane',
+    );
+    return TerminalPaneProcessSnapshot.available(
+      sessionId: activeSession,
+      childProcessId: paneId.value,
+      owningProcessGroup: paneId.value,
+      foregroundProcessGroup: foregroundGroup,
+      owningShellCommandActive: owningShellCommand,
+      terminalEchoEnabled: privacyAllowed ? true : false,
+    );
+  }
+
+  final TerminalContextDockProcessController controller =
+      TerminalContextDockProcessController(
+        applicationState: harness.state,
+        dockState: dock,
+        resolveProcessSnapshot: resolveProcess,
+        resolveForegroundJob: (PaneId paneId, TerminalSessionId sessionId) {
+          _expect(
+            paneId == activeSession.paneId && sessionId == activeSession,
+            'rich resolver receives the current session authority',
+          );
+          final Completer<PtyForegroundJobSnapshot?> request =
+              Completer<PtyForegroundJobSnapshot?>();
+          richRequests.add(request);
+          return request.future;
+        },
+        canPresentWindow: (_) => canPresent,
+        canObserveProcess: (_, _) => privacyAllowed,
+        focusTerminal: (TerminalContextDockFocusRequest request) {
+          focusCount++;
+          return request.windowId == window.id &&
+              request.paneId == activeSession.paneId;
+        },
+        scheduleTask: scheduler.schedule,
+        monotonicMicros: () => scheduler.nowMicros,
+        onChanged: () => changedCount++,
+      );
+
+  controller.synchronize();
+  _expect(
+    controller.snapshotForWindow(window.id)!.mode ==
+            TerminalContextDockContentMode.directoryNavigator &&
+        controller.canObserveDirectoryPane(firstPane) &&
+        controller.activeOperationCount == 0 &&
+        controller.activeTimerCount == 1,
+    'idle visible shell selects Directory Navigator with one bounded poll',
+  );
+  final TerminalContextDockFocusRequest navigator = dock.requestSearchFocus(
+    window.id,
+    firstPane,
+  );
+  _expect(
+    dock.confirmNavigatorInput(navigator),
+    'process test starts with Navigator input ownership',
+  );
+
+  foregroundGroup = firstPane.value + 10;
+  controller.scheduleSynchronize();
+  scheduler.elapse(TerminalContextDockProcessLimits.terminalChangeDebounce);
+  _expect(
+    controller.snapshotForWindow(window.id)!.directorySuspended &&
+        richRequests.isEmpty &&
+        dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
+    'foreground candidate immediately suspends directory work without rich observation',
+  );
+  foregroundGroup = firstPane.value;
+  controller.scheduleSynchronize();
+  scheduler.elapse(TerminalContextDockProcessLimits.terminalChangeDebounce);
+  _expect(
+    controller.snapshotForWindow(window.id)!.mode ==
+            TerminalContextDockContentMode.directoryNavigator &&
+        controller.canObserveDirectoryPane(firstPane) &&
+        richRequests.isEmpty &&
+        focusCount == 0,
+    'short command returns to Directory Navigator without Process Inspector flicker',
+  );
+
+  foregroundGroup = firstPane.value + 10;
+  scheduler.elapse(const Duration(milliseconds: 100));
+  _expect(
+    controller.snapshotForWindow(window.id)!.directorySuspended &&
+        richRequests.isEmpty,
+    'silent foreground command is discovered by the 250 ms state poll',
+  );
+  scheduler.elapse(TerminalContextDockProcessLimits.foregroundActivationDelay);
+  TerminalContextDockContentSnapshot content = controller.snapshotForWindow(
+    window.id,
+  )!;
+  _expect(
+    content.mode == TerminalContextDockContentMode.foregroundJob &&
+        content.process?.status == TerminalContextDockProcessStatus.loading &&
+        controller.activeOperationCount == 1 &&
+        richRequests.length == 1 &&
+        focusCount == 1 &&
+        !dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
+    'stable foreground command enters Process Inspector and returns input to Terminal',
+  );
+  final int firstEpoch = content.process!.identity!.epoch;
+  richRequests[0].complete(
+    _foregroundJobFixture(
+      sessionId: firstSession,
+      foregroundProcessGroup: foregroundGroup,
+      memberCount: 2,
+      elapsedMicroseconds: 1000,
+    ),
+  );
+  await Future<void>.delayed(Duration.zero);
+  content = controller.snapshotForWindow(window.id)!;
+  _expect(
+    content.process?.status == TerminalContextDockProcessStatus.ready &&
+        content.process?.members.length == 2 &&
+        content.process?.executablePath == '/bin/process-0' &&
+        content.process?.arguments.join(' ') == 'process-0 --fixture' &&
+        controller.activeOperationCount == 0,
+    'matching rich result becomes one immutable ready projection',
+  );
+
+  scheduler.elapse(const Duration(milliseconds: 500));
+  _expect(
+    richRequests.length == 1 &&
+        controller.snapshotForWindow(window.id)!.process!.elapsedMicroseconds >=
+            501000,
+    'elapsed advances from cached monotonic time without another rich call',
+  );
+  scheduler.elapse(const Duration(milliseconds: 750));
+  _expect(
+    richRequests.length == 2 && controller.activeOperationCount == 1,
+    'member inventory refresh starts no more than once per second',
+  );
+  richRequests[1].complete(
+    _foregroundJobFixture(
+      sessionId: firstSession,
+      foregroundProcessGroup: foregroundGroup,
+      memberCount: 3,
+      elapsedMicroseconds: 1250000,
+    ),
+  );
+  await Future<void>.delayed(Duration.zero);
+  _expect(
+    controller.snapshotForWindow(window.id)!.process!.members.length == 3,
+    'one-second refresh replaces a changed pipeline member inventory',
+  );
+
+  scheduler.elapse(const Duration(seconds: 1));
+  _expect(
+    richRequests.length == 3 && controller.activeOperationCount == 1,
+    'only one refresh request may be in flight for a window',
+  );
+  foregroundGroup = firstPane.value + 20;
+  controller.synchronize();
+  _expect(
+    controller.activeOperationCount == 0 &&
+        controller.snapshotForWindow(window.id)!.directorySuspended &&
+        controller.snapshotForWindow(window.id)!.process == null,
+    'PGID replacement cancels and clears the prior content generation',
+  );
+  richRequests[2].complete(
+    _foregroundJobFixture(
+      sessionId: firstSession,
+      foregroundProcessGroup: firstPane.value + 10,
+      memberCount: 1,
+      elapsedMicroseconds: 1,
+    ),
+  );
+  await Future<void>.delayed(Duration.zero);
+  _expect(
+    controller.snapshotForWindow(window.id)!.process == null,
+    'late result from a replaced foreground group is ignored',
+  );
+  scheduler.elapse(TerminalContextDockProcessLimits.foregroundActivationDelay);
+  _expect(
+    richRequests.length == 4 && controller.activeOperationCount == 1,
+    'replacement foreground group receives a fresh epoch and observation',
+  );
+  privacyAllowed = false;
+  controller.synchronize();
+  content = controller.snapshotForWindow(window.id)!;
+  _expect(
+    content.mode == TerminalContextDockContentMode.protected &&
+        content.process == null &&
+        controller.activeOperationCount == 0 &&
+        !controller.canObserveDirectoryPane(firstPane),
+    'ECHO-off privacy transition synchronously clears all process and directory content',
+  );
+  richRequests[3].complete(
+    _foregroundJobFixture(
+      sessionId: firstSession,
+      foregroundProcessGroup: foregroundGroup,
+      memberCount: 1,
+      elapsedMicroseconds: 1,
+    ),
+  );
+  await Future<void>.delayed(Duration.zero);
+  _expect(
+    controller.snapshotForWindow(window.id)!.process == null,
+    'protected state rejects a late content-bearing result',
+  );
+
+  privacyAllowed = true;
+  controller.synchronize();
+  scheduler.elapse(TerminalContextDockProcessLimits.foregroundActivationDelay);
+  richRequests[4].complete(
+    _foregroundJobFixture(
+      sessionId: firstSession,
+      foregroundProcessGroup: foregroundGroup,
+      memberCount: 1,
+      elapsedMicroseconds: 2000,
+    ),
+  );
+  await Future<void>.delayed(Duration.zero);
+  content = controller.snapshotForWindow(window.id)!;
+  _expect(
+    content.process!.identity!.epoch > firstEpoch &&
+        content.process!.identity!.foregroundProcessGroup == foregroundGroup,
+    'privacy recovery starts a new foreground identity instead of reviving stale content',
+  );
+
+  foregroundGroup = firstPane.value;
+  owningShellCommand = true;
+  controller.synchronize();
+  content = controller.snapshotForWindow(window.id)!;
+  _expect(
+    content.mode == TerminalContextDockContentMode.shellOwnedCommand &&
+        content.process?.status ==
+            TerminalContextDockProcessStatus.shellOwned &&
+        content.process?.executablePath == null &&
+        !controller.canObserveDirectoryPane(firstPane),
+    'shell-owned command has observed elapsed status without invented argv',
+  );
+  scheduler.elapse(const Duration(seconds: 1));
+  _expect(
+    controller.snapshotForWindow(window.id)!.process!.elapsedMicroseconds >=
+        Duration.microsecondsPerSecond,
+    'shell-owned elapsed time advances from observation time',
+  );
+  owningShellCommand = false;
+  controller.synchronize();
+  _expect(
+    controller.canObserveDirectoryPane(firstPane) &&
+        controller.snapshotForWindow(window.id)!.process == null,
+    'idle transition clears shell status before resuming directory work',
+  );
+
+  final TerminalPane secondPane = await harness.state.splitPane(
+    firstPane,
+    harness.configuration(),
+    axis: TerminalSplitAxis.horizontal,
+  );
+  await secondPane.start();
+  activeSession = secondPane.sessionId;
+  foregroundGroup = secondPane.id.value;
+  controller.synchronize();
+  _expect(
+    controller.snapshotForWindow(window.id)!.paneId == secondPane.id &&
+        controller.canObserveDirectoryPane(secondPane.id) &&
+        !controller.canObserveDirectoryPane(firstPane),
+    'focused pane replacement discards the previous pane projection',
+  );
+  activeSession = TerminalSessionId(
+    paneId: secondPane.id,
+    generation: activeSession.generation + 1,
+  );
+  controller.synchronize();
+  _expect(
+    controller.snapshotForWindow(window.id)!.sessionId == activeSession &&
+        controller.canObserveDirectoryPane(secondPane.id),
+    'same-pane session replacement starts a fresh content generation',
+  );
+  canPresent = false;
+  controller.synchronize();
+  _expect(
+    controller.snapshotForWindow(window.id) == null &&
+        controller.activeOperationCount == 0 &&
+        controller.activeTimerCount == 0,
+    'non-presentable window stops polling and drops retained content',
+  );
+  canPresent = true;
+  controller.synchronize();
+  dock.toggleVisibility(window.id, secondPane.id);
+  controller.synchronize();
+  _expect(
+    controller.snapshotForWindow(window.id) == null &&
+        controller.activeTimerCount == 0,
+    'hidden Context Dock owns no process timer or snapshot',
+  );
+
+  dock.toggleVisibility(window.id, secondPane.id);
+  controller.synchronize();
+  foregroundGroup = secondPane.id.value + 10;
+  controller.scheduleSynchronize();
+  scheduler.elapse(TerminalContextDockProcessLimits.terminalChangeDebounce);
+  scheduler.elapse(TerminalContextDockProcessLimits.foregroundActivationDelay);
+  _expect(
+    controller.activeOperationCount == 1 && richRequests.length == 6,
+    'dispose fixture has one generation-bound rich operation',
+  );
+  controller.dispose();
+  controller.dispose();
+  _expect(
+    controller.isDisposed &&
+        controller.activeOperationCount == 0 &&
+        controller.activeTimerCount == 0 &&
+        controller.snapshotForWindow(window.id) == null,
+    'dispose cancels every logical operation and timer idempotently',
+  );
+  richRequests[5].complete(null);
+  await Future<void>.delayed(Duration.zero);
+  _expect(changedCount > 0, 'content transitions notify their presenter');
+  dock.dispose();
+  await harness.state.shutdown();
+}
+
+PtyForegroundJobSnapshot _foregroundJobFixture({
+  required TerminalSessionId sessionId,
+  required int foregroundProcessGroup,
+  required int memberCount,
+  required int elapsedMicroseconds,
+}) {
+  final List<PtyForegroundProcessSnapshot> members =
+      <PtyForegroundProcessSnapshot>[
+        for (var index = 0; index < memberCount; ++index)
+          PtyForegroundProcessSnapshot(
+            processId: foregroundProcessGroup + index,
+            startTimeSeconds: 1,
+            startTimeMicroseconds: index,
+            startAbsoluteTime: 100 + index,
+            elapsedMicroseconds: elapsedMicroseconds,
+            name: 'process-$index',
+          ),
+      ];
+  return PtyForegroundJobSnapshot(
+    disposition: PtyForegroundJobDisposition.available,
+    childProcessId: sessionId.paneId.value,
+    owningProcessGroup: sessionId.paneId.value,
+    foregroundProcessGroup: foregroundProcessGroup,
+    sampledAbsoluteTime: 1000,
+    jobElapsedMicroseconds: elapsedMicroseconds,
+    members: members,
+    totalMemberCount: memberCount,
+    omittedMemberCount: 0,
+    memberIssueCount: 0,
+    primaryIndex: 0,
+    observationSystemError: 0,
+    executablePath: '/bin/process-0',
+    executablePathSystemError: 0,
+    arguments: const <String>['process-0', '--fixture'],
+    totalArgumentCount: 2,
+    omittedArgumentCount: 0,
+    argumentsTruncated: false,
+    argumentsSystemError: 0,
+    hasExited: false,
   );
 }
 
@@ -1567,6 +1949,64 @@ final class _PathHandoffHarness {
     clipboardText = text;
     return 1;
   }
+}
+
+final class _ProcessScheduler {
+  int nowMicros = 0;
+  final List<_ProcessScheduledTask> _tasks = <_ProcessScheduledTask>[];
+
+  TerminalContextDockScheduledTask schedule(
+    Duration delay,
+    void Function() callback,
+  ) {
+    final _ProcessScheduledTask task = _ProcessScheduledTask(
+      deadlineMicros: nowMicros + delay.inMicroseconds,
+      callback: callback,
+    );
+    _tasks.add(task);
+    return task;
+  }
+
+  void elapse(Duration duration) {
+    final int target = nowMicros + duration.inMicroseconds;
+    while (true) {
+      _ProcessScheduledTask? next;
+      for (final _ProcessScheduledTask candidate in _tasks) {
+        if (candidate.isCancelled || candidate.deadlineMicros > target) {
+          continue;
+        }
+        if (next == null || candidate.deadlineMicros < next.deadlineMicros) {
+          next = candidate;
+        }
+      }
+      if (next == null) break;
+      nowMicros = next.deadlineMicros;
+      next.fire();
+      _tasks.removeWhere((task) => task.isCancelled);
+    }
+    nowMicros = target;
+    _tasks.removeWhere((task) => task.isCancelled);
+  }
+}
+
+final class _ProcessScheduledTask implements TerminalContextDockScheduledTask {
+  _ProcessScheduledTask({required this.deadlineMicros, required this.callback});
+
+  final int deadlineMicros;
+  final void Function() callback;
+  var _cancelled = false;
+
+  @override
+  bool get isCancelled => _cancelled;
+
+  void fire() {
+    if (_cancelled) return;
+    _cancelled = true;
+    callback();
+  }
+
+  @override
+  void cancel() => _cancelled = true;
 }
 
 final class _Harness {

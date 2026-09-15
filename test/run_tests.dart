@@ -2511,6 +2511,17 @@ Future<void> _testTerminalProcessSnapshotClassification() async {
         foreground.requiresConfirmation,
     'distinct foreground process group requires confirmation',
   );
+  final PtyForegroundJobSnapshot? foregroundJob = session
+      .foregroundJobSnapshot();
+  _expect(
+    foregroundJob != null &&
+        foregroundJob.isAvailable &&
+        foregroundJob.childProcessId == process.pid &&
+        foregroundJob.foregroundProcessGroup == process.pid + 10 &&
+        foregroundJob.primaryProcess?.name == 'fake-process' &&
+        foregroundJob.executablePath == '/usr/bin/fake-process',
+    'terminal session exposes rich foreground content only through the optional observer',
+  );
   process.emitOutput(utf8.encode('\x1b]133;D\x07'));
   await _waitForSemanticShellState(session, TerminalSemanticShellState.unknown);
   _expect(
@@ -2539,6 +2550,10 @@ Future<void> _testTerminalProcessSnapshotClassification() async {
     session.processSnapshot().disposition ==
         TerminalPaneProcessDisposition.nonLive,
     'terminated terminal session no longer requires process inspection',
+  );
+  _expect(
+    session.foregroundJobSnapshot() == null,
+    'terminated terminal session releases foreground content authority',
   );
   await session.dispose();
 }

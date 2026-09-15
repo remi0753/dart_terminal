@@ -30,6 +30,7 @@ import 'terminal_configuration_reference.dart';
 import 'terminal_context_dock.dart';
 import 'terminal_context_dock_directory.dart';
 import 'terminal_context_dock_path_handoff.dart';
+import 'terminal_context_dock_process.dart';
 import 'terminal_core/terminal_desktop_signals.dart';
 import 'terminal_core/terminal_hyperlink.dart';
 import 'terminal_core/terminal_mouse_modes.dart';
@@ -2795,6 +2796,7 @@ final class TerminalApplication {
     }
     TerminalNativeHierarchyAdapter? hierarchy;
     TerminalContextDockState? contextDockState;
+    TerminalContextDockProcessController? contextDockProcessController;
     TerminalContextDockDirectoryController? contextDockDirectoryController;
     TerminalContextDockDirectoryPresenter? contextDockPresenter;
     TerminalContextDockActionCoordinator? contextDockActionCoordinator;
@@ -3098,6 +3100,7 @@ final class TerminalApplication {
               !hierarchyReconciliationInProgress) {
             nativeHierarchy.refreshPresentation();
           }
+          contextDockProcessController?.scheduleSynchronize();
           contextDockDirectoryController?.scheduleSynchronize();
           appleScriptSession?.scheduleReconcile();
           final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -3448,6 +3451,19 @@ final class TerminalApplication {
         secureInput: secureKeyboardEntryController?.status,
       );
     }
+
+    bool contextDockCanObserveProcess(
+      PaneId paneId,
+      TerminalPaneProcessSnapshot process,
+    ) => TerminalContextDockPrivacyPolicy.canObserve(
+      paneId: paneId,
+      process: process,
+      secureInput: secureKeyboardEntryController?.status,
+    );
+
+    bool contextDockCanObserveDirectoryPane(PaneId paneId) =>
+        contextDockCanObservePane(paneId) &&
+        (contextDockProcessController?.canObserveDirectoryPane(paneId) ?? true);
 
     TerminalContextDockPathTarget? contextDockPathTarget(
       TerminalWindowId windowId,
@@ -3839,6 +3855,7 @@ final class TerminalApplication {
       hierarchyReconciliationInProgress = true;
       try {
         contextDockState?.synchronize(state);
+        contextDockProcessController?.synchronize();
         enforceContextDockPrivacy();
         contextDockDirectoryController?.synchronize();
         nativeHierarchy.reconcile();
@@ -4230,6 +4247,8 @@ final class TerminalApplication {
       contextDockPathHandoffController = null;
       contextDockActionCoordinator?.dispose();
       contextDockActionCoordinator = null;
+      contextDockProcessController?.dispose();
+      contextDockProcessController = null;
       contextDockDirectoryController?.dispose();
       contextDockDirectoryController = null;
       actionCoordinator?.dispose();
@@ -4525,6 +4544,61 @@ final class TerminalApplication {
       final TerminalContextDockState createdContextDockState =
           TerminalContextDockState()..synchronize(state);
       contextDockState = createdContextDockState;
+      final TerminalContextDockProcessController createdDockProcess =
+          TerminalContextDockProcessController(
+            applicationState: state,
+            dockState: createdContextDockState,
+            resolveProcessSnapshot: (PaneId paneId) =>
+                state.paneForId(paneId)?.processSnapshot() ??
+                TerminalPaneProcessSnapshot.unavailable(
+                  sessionId: TerminalSessionId(paneId: paneId, generation: 1),
+                ),
+            resolveForegroundJob: (PaneId paneId, TerminalSessionId sessionId) {
+              final TerminalSession? session = sessions[paneId];
+              if (session == null || session.id != sessionId) return null;
+              return session.foregroundJobSnapshot();
+            },
+            canPresentWindow: (TerminalWindowId windowId) {
+              final TerminalWindowState? logicalWindow = state.windowForId(
+                windowId,
+              );
+              final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+              if (logicalWindow == null) return false;
+              if (nativeHierarchy == null || nativeHierarchy.isDisposed) {
+                return true;
+              }
+              final Window? nativeWindow = nativeHierarchy.windowForTab(
+                logicalWindow.selectedTabId,
+              );
+              return application.isActive &&
+                  nativeWindow != null &&
+                  !nativeWindow.isDisposed &&
+                  !nativeWindow.isClosed &&
+                  nativeWindow.isVisible &&
+                  nativeWindow.isFocused;
+            },
+            canObserveProcess: contextDockCanObserveProcess,
+            focusTerminal: (TerminalContextDockFocusRequest request) {
+              final TerminalContextDockDirectoryPresenter? presenter =
+                  contextDockPresenter;
+              if (presenter == null || presenter.isDisposed) return false;
+              try {
+                presenter.focusTerminal(request);
+                return true;
+              } on Object {
+                return false;
+              }
+            },
+            onChanged: () {
+              reconcileRequest?.call();
+              final TerminalAppKitMenuProjection? menu = menuProjection;
+              if (menu != null && !menu.isDisposed) menu.refresh();
+              final TerminalCommandPalettePresenter? palette = palettePresenter;
+              if (palette != null && !palette.isDisposed) palette.refresh();
+            },
+          );
+      contextDockProcessController = createdDockProcess;
+      createdDockProcess.synchronize();
       const TerminalWorkingDirectoryResolver workingDirectoryResolver =
           TerminalWorkingDirectoryResolver();
       final TerminalContextDockDirectoryController createdDockDirectory =
@@ -4545,7 +4619,7 @@ final class TerminalApplication {
                 launchWorkingDirectory: session.initialWorkingDirectory,
               );
             },
-            canObservePane: contextDockCanObservePane,
+            canObservePane: contextDockCanObserveDirectoryPane,
             onChanged: () {
               reconcileRequest?.call();
               final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -4701,6 +4775,7 @@ final class TerminalApplication {
             indicationEnabled: secureConfiguration.macosSecureInputIndication,
             applicationActive: application.isActive,
             onStatusChanged: (TerminalSecureKeyboardEntryStatus status) {
+              contextDockProcessController?.scheduleSynchronize();
               final TerminalSettingsInspectorPresenter? settings =
                   settingsPresenter;
               if (settings != null && !settings.isDisposed) settings.refresh();

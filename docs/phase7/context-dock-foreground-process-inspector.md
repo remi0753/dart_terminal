@@ -465,3 +465,64 @@ Input: Terminal
 - 最終aggregate再実行では`make dpty-native-test`成功後、sandbox内の`make dpty-dart-test`がsourceではなく
   上記telemetry session mtimeで停止した。workspace外への同じmetadata更新だけを許可して再実行し、analyze
   と全testが成功した。`git diff --check`はwhitespace errorなしだった。
+
+### 2026-09-16 — content coordinator、refresh、privacy lifecycle着手
+
+- 目的: focused paneのcontent-free process authorityとprivacyを1か所で評価し、Directory Navigator、
+  `Process Inspector`、shell-owned command、protected、unavailableを排他的に切り替える。visible windowだけ
+  boundedに再観測し、pane／session／PGID raceでcontentを残さない。
+- 背景: 現行`TerminalContextDockDirectoryController`はDock可視時にcwdを直接解決するため、foreground
+  command中の`unknown`をDirectoryのunavailableとして投影する。process表示のtriggerをcwd failureへ
+  結び付けず、`TerminalPaneProcessSnapshot`のdispositionを先に評価するcoordinatorが必要である。
+- 範囲: product-facing foreground snapshot model／observer、`TerminalSession` adapter、window-owned content
+  coordinator、250 ms state probe、1 s rich refresh／elapsed tick、foreground epoch、directory suspension、
+  focus／visibility／privacy／dispose cancellation、およびfake schedulerを使うdeterministic test。
+- 対象外: AppKit documentの表示、localization、accessibility、shortcut message。これらは次のsubtaskで行う。
+- 依存関係: `TerminalContextDockState`、`TerminalPaneProcessSnapshot`、`TerminalContextDockPrivacyPolicy`、
+  `PtyForegroundJobObserver`、application window／pane identity、既存directory operation cancellation。
+- 完了条件: idle→foreground→idle、short／silent command、pipeline member refresh、pane／window focus、Dock
+  hide、session replacement、secure input、stale result、同時rich call 1、inventory毎秒1回以下、dispose後
+  timer／operation 0をpure Dart testで固定し、foreground中にdirectory operationを保持しない。
+- 検証方針: `test/terminal_context_dock_test.dart`へmanual fake clock／schedulerとobserverを追加し、product
+  unit aggregate、format、analyze、diffを確認して単独commitにする。
+- 着手時HEADは`1f6dab9`、working treeはcleanだった。
+
+### 2026-09-16 — content coordinator実装の判明事項
+
+- `TerminalContextDockProcessController`をDirectory controllerより前段へ置き、content-freeな
+  `TerminalPaneProcessSnapshot`だけでdocument modeとfilesystem観測可否を決める構成にした。distinct
+  foreground jobは75 ms安定してから`Process Inspector`へ切り替え、短時間でidleへ戻ればrich snapshotを
+  取得せずDirectory Navigatorを維持する。terminal changeの75 ms debounceに加えて、出力しないcommandも
+  検出できる250 ms pollをvisible／focused standard windowだけに所有させた。
+- rich observationはwindow／pane／session／PGID／foreground epoch／content generationへ束縛し、同時requestを
+  windowあたり1件、inventory refreshを1秒あたり1回以下とした。elapsed表示はretained sampleとmonotonic clock
+  の差だけで進めるため、表示tickごとのnative callは発生しない。
+- Dock非表示、window非提示、pane／session／PGID変更、ECHO-off、Secure Keyboard Entry、disposeでretained
+  path／argvと論理requestを同期的に破棄する。遅れて完了したFutureは全identityを再検証して捨てる。
+  foreground中はDirectory controllerの既存`canObservePane`をfalseにして、進行中のfilesystem operationも既存の
+  cancellation経路で解放する。shell-owned commandは開始観測からのelapsedだけを表示し、path／argvを推測しない。
+- `Stopwatch()..start()`をnullable ternaryのbranchへ直接置いた最初の記述はcascadeの優先順位によりparse errorに
+  なったため括弧で囲んだ。また既存path handoffのtypedefとfocus callback名が衝突したためprocess固有名へ変更し、
+  optional observerのpromotionが保証されない箇所は明示castにした。いずれもanalyzerで解消を確認した。
+- format対象へ誤ってMarkdown task memoを含めた実行は、Dart source 6件のformatを完了した後にMarkdownのparse
+  errorで終了した。文書は変更されず、以後は`.dart`だけをformat対象にした。
+- 最初の`dart run test/run_tests.dart`はproduct application source hashの変更により
+  `compatibility/ghostty_p0_p1_gap_inventory.json`のfreshnessで停止した。これは機能失敗ではなくpinned evidenceの
+  期待された連鎖更新であり、`make ghostty-p0-p1-gap-inventory`で同じ分類・件数を保ったまま再生成した。
+- gap inventory更新後のaggregateは、そのhashを入力に持つ
+  `compatibility/release_candidate_daily_use_matrix.json`のfreshnessで停止した。
+  `make release-candidate-daily-use-matrix`で後段のpinned matrixも再生成した。
+- 続くaggregateは`terminal_application.dart`／`terminal_session.dart`／Context Dock testのsource hash更新により
+  Phase 7 AppKit acceptanceのfreshnessで停止した。`make phase7-appkit-acceptance`を実行し、その更新を入力に
+  持つdaily-use matrixも再生成した。分類やacceptance基準は変更せずsource hashだけを更新した。
+
+### 2026-09-16 — content coordinator検証結果
+
+- `dart format`（変更したDart 6件）: 成功、追加format差分なし。
+- `dart analyze lib/src/terminal_application.dart lib/src/terminal_context_dock_process.dart lib/src/terminal_session.dart test/terminal_context_dock_test.dart test/run_tests.dart`: issue 0。
+- `dart run test/terminal_context_dock_test.dart`: 成功。short／silent command、75 ms activation、250 ms poll、
+  1 s inventory refresh、同時request 1、PGID／pane／same-pane session replacement、privacy、shell-owned、Dock
+  visibility、dispose後resource 0をfake clockで確認した。
+- `dart run test/run_tests.dart`: pinned evidence再生成後に成功し、最後まで`dart_terminal tests passed`を確認した。
+  `TerminalSession` optional foreground observerのlive／terminated境界もaggregate内で通過した。
+- `git diff --check`: whitespace errorなし。

@@ -28,6 +28,7 @@ export 'src/terminal_configuration_reference.dart';
 export 'src/terminal_context_dock.dart';
 export 'src/terminal_context_dock_directory.dart';
 export 'src/terminal_context_dock_path_handoff.dart';
+export 'src/terminal_context_dock_process.dart';
 export 'src/terminal_core/streaming_utf8_decoder.dart'
     show StreamingUtf8Decoder, Utf8ScalarSink;
 export 'src/terminal_core/terminal_desktop_signals.dart'

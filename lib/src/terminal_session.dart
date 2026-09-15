@@ -506,6 +506,23 @@ final class TerminalSession implements TerminalPaneSession {
     }
   }
 
+  /// Reads content-bearing details for the current distinct foreground job.
+  ///
+  /// Callers must independently revalidate pane/session/privacy authority and
+  /// must not copy this snapshot into general diagnostics or restoration.
+  PtyForegroundJobSnapshot? foregroundJobSnapshot() {
+    if (!_live) return null;
+    final PtyProcess? process = _process;
+    if (process is! PtyForegroundJobObserver) return null;
+    final PtyForegroundJobObserver observer =
+        process as PtyForegroundJobObserver;
+    try {
+      return observer.foregroundJobSnapshot();
+    } on Object {
+      return null;
+    }
+  }
+
   Future<void> waitForTermination() => _terminated.future;
 
   @override
