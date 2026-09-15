@@ -190,8 +190,9 @@ Future<void> _testWindowPaneStateAndBounds() async {
         !snapshot.isVisible &&
         TerminalContextDockLimits.defaultWidth == 380 &&
         snapshot.width == TerminalContextDockLimits.defaultWidth &&
+        snapshot.pane.showHiddenEntries &&
         snapshot.inputOwner == TerminalContextDockInputOwner.terminal,
-    'a new window starts hidden while terminal retains input',
+    'a new window starts hidden with dotfiles shown while terminal retains input',
   );
 
   final TerminalContextDockFocusRequest request = dock.requestSearchFocus(
@@ -272,14 +273,21 @@ Future<void> _testWindowPaneStateAndBounds() async {
   _expect(dock.synchronize(harness.state), 'new focused pane is reconciled');
   _expect(
     dock.snapshotForWindow(window.id)!.targetPaneId == second.id &&
-        dock.snapshotForWindow(window.id)!.pane.query.isEmpty,
-    'the window follows its selected tab focused pane',
+        dock.snapshotForWindow(window.id)!.pane.query.isEmpty &&
+        dock.snapshotForWindow(window.id)!.pane.showHiddenEntries,
+    'the window follows its selected tab focused pane with a visible-dotfile default',
+  );
+  dock.toggleHiddenEntries(window.id, second.id);
+  _expect(
+    !dock.snapshotForWindow(window.id)!.pane.showHiddenEntries,
+    'hidden-entry visibility can be toggled for the focused pane',
   );
   harness.state.focusPane(window.selectedTab.id, firstPane);
   dock.synchronize(harness.state);
   _expect(
-    dock.snapshotForWindow(window.id)!.pane.query == 'alpha',
-    'pane-local navigation state survives focus round trips',
+    dock.snapshotForWindow(window.id)!.pane.query == 'alpha' &&
+        dock.snapshotForWindow(window.id)!.pane.showHiddenEntries,
+    'pane-local navigation and hidden-entry visibility survive focus round trips',
   );
 
   _expectThrows<TerminalContextDockLimitException>(
@@ -415,10 +423,24 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   snapshot = controller.snapshotForWindow(window.id)!;
   _expect(
     snapshot.rows.map((value) => value.entry.name).join(',') ==
-            'folder,deep,nested.txt,.hidden,readme.md' &&
-        snapshot.rows[1].depth == 1 &&
-        snapshot.rows[2].entry.metadata.size == 7,
-    'expanded folder loads one child level and retains metadata',
+            'folder,.secret,deep,nested.txt,.hidden,readme.md' &&
+        snapshot.rows
+                .firstWhere(
+                  (TerminalContextDockDirectoryRow row) =>
+                      row.entry.path == '/root/folder/.secret',
+                )
+                .depth ==
+            1 &&
+        snapshot.rows
+                .firstWhere(
+                  (TerminalContextDockDirectoryRow row) =>
+                      row.entry.path == '/root/folder/nested.txt',
+                )
+                .entry
+                .metadata
+                .size ==
+            7,
+    'expanded folder loads hidden and visible children while retaining metadata',
   );
   _expect(
     controller.handleTreeIntent(
@@ -492,7 +514,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   snapshot = controller.snapshotForWindow(window.id)!;
   _expect(
     !snapshot.isSearch &&
-        snapshot.rows.length == 5 &&
+        snapshot.rows.length == 6 &&
         snapshot.rows.first.isExpanded,
     'clearing query restores the retained tree expansion context',
   );
@@ -601,6 +623,82 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
     'Move retains mode queries while exposing only the current tree',
   );
 
+  dock.setNavigatorMode(
+    window.id,
+    TerminalContextDockNavigatorMode.search,
+    requireNavigatorInput: true,
+  );
+  dock.setQuery(window.id, 'inside');
+  controller.synchronize();
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.isSearch &&
+        snapshot.rows.length == 1 &&
+        snapshot.rows.single.entry.path == '/root/folder/.secret/inside.txt',
+    'Search includes a file below a dot-prefixed directory while hidden entries are shown',
+  );
+  dock.toggleHiddenEntries(window.id, firstPane);
+  controller.synchronize();
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    !dock.snapshotForWindow(window.id)!.pane.showHiddenEntries &&
+        snapshot.isSearch &&
+        snapshot.rows.isEmpty &&
+        dock.snapshotForWindow(window.id)!.pane.query == 'inside' &&
+        controller.activeOperationCount == 0,
+    'hiding dot entries immediately filters Search without discarding its query',
+  );
+  dock.setNavigatorMode(
+    window.id,
+    TerminalContextDockNavigatorMode.goTo,
+    requireNavigatorInput: true,
+  );
+  dock.setQuery(window.id, 'inside');
+  controller.synchronize();
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    !snapshot.isSearch &&
+        snapshot.rows.every(
+          (TerminalContextDockDirectoryRow row) =>
+              !row.entry.path.contains('/.'),
+        ),
+    'Go To neither exposes nor reveals a hidden-directory descendant while hidden entries are off',
+  );
+  dock.toggleHiddenEntries(window.id, firstPane);
+  controller.synchronize();
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  snapshot = controller.snapshotForWindow(window.id)!;
+  final int hiddenTarget = dock
+      .snapshotForWindow(window.id)!
+      .pane
+      .selectedResultIndex;
+  _expect(
+    dock.snapshotForWindow(window.id)!.pane.showHiddenEntries &&
+        snapshot.rows[hiddenTarget].entry.path ==
+            '/root/folder/.secret/inside.txt' &&
+        snapshot.rows
+            .firstWhere(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == '/root/folder/.secret',
+            )
+            .isExpanded,
+    're-enabling hidden entries lets Go To expand and select a hidden subtree',
+  );
+  dock.toggleHiddenEntries(window.id, firstPane);
+  controller.synchronize();
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    !snapshot.rows.any(
+          (TerminalContextDockDirectoryRow row) =>
+              row.entry.path.contains('/.'),
+        ) &&
+        dock.snapshotForWindow(window.id)!.pane.selectedResultIndex <
+            snapshot.rows.length,
+    'hiding a selected hidden target clamps selection to the visible tree',
+  );
+
   final TerminalPane secondPane = await harness.state.splitPane(
     firstPane,
     harness.configuration(),
@@ -614,8 +712,9 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   _expect(
     snapshot.paneId == secondPane.id &&
         snapshot.workingDirectory == '/other' &&
-        snapshot.rows.single.entry.name == 'other.txt',
-    'focused pane change cancels the old owner and projects the new pane cwd',
+        snapshot.rows.single.entry.name == 'other.txt' &&
+        dock.snapshotForWindow(window.id)!.pane.showHiddenEntries,
+    'focused pane change projects the new pane cwd with independent hidden visibility',
   );
 
   final int resolutionBaseline = resolutionCount;
@@ -707,6 +806,11 @@ final class _ContextDockDirectoryFileSystem
     }
     if (rootPath == '/root/folder') {
       yield const TerminalDirectoryFileSystemEntry(
+        name: '.secret',
+        path: '/root/folder/.secret',
+        kind: TerminalDirectoryEntryKind.directory,
+      );
+      yield const TerminalDirectoryFileSystemEntry(
         name: 'deep',
         path: '/root/folder/deep',
         kind: TerminalDirectoryEntryKind.directory,
@@ -714,6 +818,14 @@ final class _ContextDockDirectoryFileSystem
       yield const TerminalDirectoryFileSystemEntry(
         name: 'nested.txt',
         path: '/root/folder/nested.txt',
+        kind: TerminalDirectoryEntryKind.file,
+      );
+      return;
+    }
+    if (rootPath == '/root/folder/.secret') {
+      yield const TerminalDirectoryFileSystemEntry(
+        name: 'inside.txt',
+        path: '/root/folder/.secret/inside.txt',
         kind: TerminalDirectoryEntryKind.file,
       );
       return;
@@ -858,9 +970,17 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
         dispatcher
             .snapshot(TerminalActionId.moveInDirectoryNavigator)
             .isEnabled &&
+        dispatcher.snapshot(TerminalActionId.toggleHiddenFiles).isEnabled &&
         dispatcher.snapshot(TerminalActionId.toggleContextDock).isEnabled &&
         !dispatcher.snapshot(TerminalActionId.focusTerminal).isEnabled,
     'only valid initial Context Dock actions are available',
+  );
+  await _expectExecuted(dispatcher, TerminalActionId.toggleHiddenFiles);
+  _expect(
+    !dock.snapshotForWindow(window.id)!.pane.showHiddenEntries &&
+        navigatorFocus.isEmpty &&
+        terminalFocus.isEmpty,
+    'hidden-entry toggle targets the active pane without moving terminal input',
   );
   mutateDuringProjection = true;
   await _expectExecuted(dispatcher, TerminalActionId.searchFilesAndFolders);
@@ -879,6 +999,16 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
     'input exactly once',
   );
   dock.setQuery(window.id, 'retained', requireNavigatorInput: true);
+  await _expectExecuted(dispatcher, TerminalActionId.toggleHiddenFiles);
+  snapshot = dock.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.pane.showHiddenEntries &&
+        snapshot.navigatorOwnsInput &&
+        snapshot.pane.query == 'retained' &&
+        navigatorFocus.length == 1 &&
+        terminalFocus.isEmpty,
+    'hidden-entry toggle preserves Navigator ownership and its retained query',
+  );
   final int firstSelectionGeneration = snapshot.pane.querySelectionGeneration;
   await _expectExecuted(dispatcher, TerminalActionId.searchFilesAndFolders);
   snapshot = dock.snapshotForWindow(window.id)!;
@@ -958,6 +1088,7 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
   coordinator.dispose();
   _expect(
     !dispatcher.snapshot(TerminalActionId.toggleContextDock).isEnabled &&
+        !dispatcher.snapshot(TerminalActionId.toggleHiddenFiles).isEnabled &&
         changed >= 5,
     'disposed coordinator fails every retained registration closed',
   );

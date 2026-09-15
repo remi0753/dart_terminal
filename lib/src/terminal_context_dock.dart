@@ -43,6 +43,7 @@ final class TerminalContextDockPaneSnapshot {
   const TerminalContextDockPaneSnapshot({
     required this.paneId,
     required this.navigatorMode,
+    required this.showHiddenEntries,
     required this.searchQuery,
     required this.goToQuery,
     required this.resultCount,
@@ -52,6 +53,7 @@ final class TerminalContextDockPaneSnapshot {
 
   final PaneId paneId;
   final TerminalContextDockNavigatorMode navigatorMode;
+  final bool showHiddenEntries;
   final String searchQuery;
   final String goToQuery;
   final int resultCount;
@@ -292,6 +294,16 @@ final class TerminalContextDockState {
     _validate();
   }
 
+  void toggleHiddenEntries(TerminalWindowId windowId, PaneId paneId) {
+    final _TerminalContextDockWindowState window = _requireTarget(
+      windowId,
+      paneId,
+    );
+    window.targetPane.showHiddenEntries = !window.targetPane.showHiddenEntries;
+    window.generation++;
+    _validate();
+  }
+
   /// Retains one bounded native divider result for this logical window.
   void setWidth(TerminalWindowId windowId, double width) {
     if (!width.isFinite ||
@@ -461,6 +473,7 @@ final class TerminalContextDockState {
       pane: TerminalContextDockPaneSnapshot(
         paneId: pane.paneId,
         navigatorMode: pane.navigatorMode,
+        showHiddenEntries: pane.showHiddenEntries,
         searchQuery: pane.searchQuery,
         goToQuery: pane.goToQuery,
         resultCount: pane.resultCount,
@@ -566,6 +579,7 @@ final class _TerminalContextDockPaneState {
   final PaneId paneId;
   TerminalContextDockNavigatorMode navigatorMode =
       TerminalContextDockNavigatorMode.move;
+  bool showHiddenEntries = true;
   String searchQuery = '';
   String goToQuery = '';
   int resultCount = 0;
@@ -651,6 +665,11 @@ final class TerminalContextDockActionCoordinator {
           id: TerminalActionId.toggleContextDock,
           isAvailable: _canToggle,
           handler: _toggle,
+        ),
+        TerminalActionRegistration(
+          id: TerminalActionId.toggleHiddenFiles,
+          isAvailable: _canToggle,
+          handler: _toggleHiddenEntries,
         ),
       ];
 
@@ -760,6 +779,13 @@ final class TerminalContextDockActionCoordinator {
       snapshot = dockState.snapshotForWindow(target.windowId)!;
     }
     dockState.toggleVisibility(snapshot.windowId, snapshot.targetPaneId);
+    _onChanged?.call();
+  }
+
+  void _toggleHiddenEntries() {
+    synchronize();
+    final _TerminalContextDockTarget target = _requireActiveTarget();
+    dockState.toggleHiddenEntries(target.windowId, target.paneId);
     _onChanged?.call();
   }
 

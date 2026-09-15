@@ -227,7 +227,11 @@ final class TerminalContextDockDirectoryController {
           continue;
         }
         if (!_readCanObservePane(dock.targetPaneId)) {
-          _replacePrivacyUnavailable(logicalWindow.id, dock.targetPaneId);
+          _replacePrivacyUnavailable(
+            logicalWindow.id,
+            dock.targetPaneId,
+            dock.pane.showHiddenEntries,
+          );
           continue;
         }
         TerminalWorkingDirectoryResolution? resolution;
@@ -237,13 +241,18 @@ final class TerminalContextDockDirectoryController {
             ++_generation,
           );
         } on Object {
-          _replaceUnavailable(logicalWindow.id, dock.targetPaneId);
+          _replaceUnavailable(
+            logicalWindow.id,
+            dock.targetPaneId,
+            dock.pane.showHiddenEntries,
+          );
           continue;
         }
         final _TerminalContextDockDirectoryWindowState? retained =
             _windows[logicalWindow.id];
         if (retained != null && retained.matches(dock, resolution)) {
           retained.resolution = resolution;
+          _synchronizeHiddenVisibility(retained, dock.pane.showHiddenEntries);
           if (resolution.isAvailable) _recordRecentRoot(resolution.path!);
           _ensureExpandedLoads(retained);
           _ensureSearch(retained, dock);
@@ -258,6 +267,7 @@ final class TerminalContextDockDirectoryController {
               paneId: dock.targetPaneId,
               generation: ++_generation,
               resolution: resolution,
+              showHiddenEntries: dock.pane.showHiddenEntries,
             );
         _windows[logicalWindow.id] = next;
         if (resolution.isAvailable) {
@@ -384,7 +394,11 @@ final class TerminalContextDockDirectoryController {
     _recentRoots.clear();
   }
 
-  void _replaceUnavailable(TerminalWindowId windowId, PaneId paneId) {
+  void _replaceUnavailable(
+    TerminalWindowId windowId,
+    PaneId paneId,
+    bool showHiddenEntries,
+  ) {
     _windows.remove(windowId)?.cancel();
     final _TerminalContextDockDirectoryWindowState next =
         _TerminalContextDockDirectoryWindowState(
@@ -392,6 +406,7 @@ final class TerminalContextDockDirectoryController {
           paneId: paneId,
           generation: ++_generation,
           resolution: null,
+          showHiddenEntries: showHiddenEntries,
           privacyRestricted: false,
         );
     _windows[windowId] = next;
@@ -399,11 +414,16 @@ final class TerminalContextDockDirectoryController {
     _onChanged?.call();
   }
 
-  void _replacePrivacyUnavailable(TerminalWindowId windowId, PaneId paneId) {
+  void _replacePrivacyUnavailable(
+    TerminalWindowId windowId,
+    PaneId paneId,
+    bool showHiddenEntries,
+  ) {
     final _TerminalContextDockDirectoryWindowState? retained =
         _windows[windowId];
     if (retained?.paneId == paneId && retained?.privacyRestricted == true) {
-      _publishResultCount(retained!);
+      _synchronizeHiddenVisibility(retained!, showHiddenEntries);
+      _publishResultCount(retained);
       return;
     }
     retained?.cancel();
@@ -413,6 +433,7 @@ final class TerminalContextDockDirectoryController {
           paneId: paneId,
           generation: ++_generation,
           resolution: null,
+          showHiddenEntries: showHiddenEntries,
           privacyRestricted: true,
         );
     _windows[windowId] = next;
@@ -425,6 +446,29 @@ final class TerminalContextDockDirectoryController {
       return _canObservePane(paneId);
     } on Object {
       return false;
+    }
+  }
+
+  void _synchronizeHiddenVisibility(
+    _TerminalContextDockDirectoryWindowState window,
+    bool showHiddenEntries,
+  ) {
+    if (window.showHiddenEntries == showHiddenEntries) return;
+    window
+      ..showHiddenEntries = showHiddenEntries
+      ..cancelGoTo()
+      ..appliedGoToQuery = null;
+    if (showHiddenEntries) return;
+    final String? root = window.resolution?.path;
+    if (root == null) return;
+    for (final String path
+        in window.operations.keys
+            .where(
+              (String path) =>
+                  path != root && _hasHiddenPathComponent(path, root),
+            )
+            .toList(growable: false)) {
+      window.operations.remove(path)?.cancel();
     }
   }
 
@@ -495,6 +539,10 @@ final class TerminalContextDockDirectoryController {
     final Set<String> expanded = _expandedByPane[window.paneId] ?? const {};
     for (final String path in expanded) {
       if (!_isWithinRoot(path, window.resolution?.path)) continue;
+      if (!window.showHiddenEntries &&
+          _hasHiddenPathComponent(path, window.resolution!.path!)) {
+        continue;
+      }
       _startLoad(window, path, isRoot: false);
     }
   }
@@ -621,9 +669,13 @@ final class TerminalContextDockDirectoryController {
         (TerminalFileSearchSnapshot snapshot) {
           if (!_acceptsGoTo(window, operation, generation, queryText)) return;
           window.goToOperation = null;
-          final TerminalFileSearchResult? match = snapshot.results.isEmpty
-              ? null
-              : snapshot.results.first;
+          TerminalFileSearchResult? match;
+          for (final TerminalFileSearchResult candidate in snapshot.results) {
+            if (_showsSearchResult(window, candidate)) {
+              match = candidate;
+              break;
+            }
+          }
           if (match == null) {
             window.appliedGoToQuery = queryText;
           } else {
@@ -763,6 +815,8 @@ final class TerminalContextDockDirectoryController {
     if (root == null ||
         sourceQuery.isEmpty ||
         TerminalLocalPathPolicy.normalizeAbsolute(entry.path) != entry.path ||
+        (!window.showHiddenEntries &&
+            _hasHiddenPathComponent(entry.path, root)) ||
         !_isDescendant(entry.path, root)) {
       return null;
     }
@@ -805,7 +859,9 @@ final class TerminalContextDockDirectoryController {
         dock.targetPaneId != window.paneId ||
         dock.pane.navigatorMode != reveal.expectedMode ||
         retainedQuery != reveal.sourceQuery ||
-        window.resolution?.path != reveal.rootPath) {
+        window.resolution?.path != reveal.rootPath ||
+        (!dock.pane.showHiddenEntries &&
+            _hasHiddenPathComponent(reveal.target.path, reveal.rootPath))) {
       window.pendingReveal = null;
       return;
     }
@@ -963,14 +1019,15 @@ final class TerminalContextDockDirectoryController {
           <TerminalContextDockDirectoryRow>[
             for (final TerminalFileSearchResult result
                 in search?.results ?? const <TerminalFileSearchResult>[])
-              TerminalContextDockDirectoryRow(
-                entry: result.entry,
-                depth: 0,
-                isExpanded: false,
-                isLoadingChildren: false,
-                childUnavailable: false,
-                searchSource: result.source,
-              ),
+              if (_showsSearchResult(window, result))
+                TerminalContextDockDirectoryRow(
+                  entry: result.entry,
+                  depth: 0,
+                  isExpanded: false,
+                  isLoadingChildren: false,
+                  childUnavailable: false,
+                  searchSource: result.source,
+                ),
           ];
       final bool coverageIssue =
           search?.coverage.any(
@@ -1020,6 +1077,7 @@ final class TerminalContextDockDirectoryController {
         omitted += snapshot.omittedEntryCount;
         issues += snapshot.issues.length;
         for (final TerminalDirectoryEntrySnapshot entry in snapshot.entries) {
+          if (!window.showHiddenEntries && entry.isHidden) continue;
           if (rows.length >= TerminalContextDockLimits.maximumResults) {
             omitted++;
             return;
@@ -1114,6 +1172,31 @@ final class TerminalContextDockDirectoryController {
   static bool _isWithinRoot(String path, String? root) =>
       root != null && (path == root || _isDescendant(path, root));
 
+  static bool _showsSearchResult(
+    _TerminalContextDockDirectoryWindowState window,
+    TerminalFileSearchResult result,
+  ) {
+    if (window.showHiddenEntries) return true;
+    final String? root = window.resolution?.path;
+    return root == null || !_hasHiddenPathComponent(result.entry.path, root);
+  }
+
+  static bool _hasHiddenPathComponent(String path, String root) {
+    final String relative;
+    if (path == root) {
+      return false;
+    } else if (_isDescendant(path, root)) {
+      relative = root == '/'
+          ? path.substring(1)
+          : path.substring(root.length + 1);
+    } else {
+      relative = path.startsWith('/') ? path.substring(1) : path;
+    }
+    return relative
+        .split('/')
+        .any((String component) => component.startsWith('.'));
+  }
+
   static bool _isDescendant(String path, String parent) => parent == '/'
       ? path.startsWith('/') && path != '/'
       : path.startsWith('$parent/');
@@ -1136,6 +1219,7 @@ final class _TerminalContextDockDirectoryWindowState {
     required this.paneId,
     required this.generation,
     required this.resolution,
+    required this.showHiddenEntries,
     this.privacyRestricted = false,
   });
 
@@ -1143,6 +1227,7 @@ final class _TerminalContextDockDirectoryWindowState {
   final PaneId paneId;
   final int generation;
   TerminalWorkingDirectoryResolution? resolution;
+  bool showHiddenEntries;
   final bool privacyRestricted;
   TerminalDirectorySnapshot? rootSnapshot;
   final Map<String, TerminalDirectorySnapshot> childSnapshots =
@@ -1762,6 +1847,10 @@ final class _TerminalContextDockDocument {
           }
         : localization.contextDockModeTerminal;
     line('${localization.contextDockMode}: $displayedMode');
+    line(
+      '${localization.contextDockHiddenEntries}: '
+      '${dock.pane.showHiddenEntries ? localization.contextDockHiddenEntriesShown : localization.contextDockHiddenEntriesHidden}',
+    );
     final int queryStart = navigator.length;
     navigator.write(switch (dock.pane.navigatorMode) {
       TerminalContextDockNavigatorMode.search =>

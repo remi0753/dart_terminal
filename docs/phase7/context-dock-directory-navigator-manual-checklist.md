@@ -23,6 +23,7 @@
 - [ ] Terminal focus中にShift-Command-Fを1回押すと右Dockが現れ、Search query末尾にnativeの入力caretが表示され、2回以上点滅する。terminalへ文字は入らない。
 - [ ] Shift-Command-GでGo Toへ移るとtreeを保ったまま独立queryを入力でき、current subtree内の深い一致file/folderまで必要なancestorだけが開いてselectionが移る。対象folderはReturnまで閉じている。
 - [ ] Shift-Command-MでMoveへ移るとquery caretが消え、文字、Delete、Command-AはqueryもPTYも変更せず、Up/Down/Page Up/Page Downだけがselectionを動かす。
+- [ ] Terminal／Navigatorのどちらがfocus中でもShift-Command-Hを押すたびdot-prefixed file/folderとそのsubtreeが一括で非表示／表示になり、focus、query、expanded state、PTY inputは変わらない。
 - [ ] Search／Go Toの文字入力、Delete、Command-Aは現在modeのqueryだけを変え、modeを往復しても両queryを個別に保持する。
 - [ ] 空queryでReturnまたはCommand-Rightを押すとfolderがDock内で展開し、同じfolder上の再度のReturnで閉じる。自動`cd`やcommand実行は起きない。
 - [ ] Command-Leftでsubtreeを畳み、selectionがvisible parentへ戻る。
@@ -33,6 +34,7 @@
 ## Tree、search、path handoff
 
 - [ ] 空queryではdotfileを含むfile/folderがfolder-firstで表示され、選択項目のkind、permission、owner/group、size、mtime、symlink targetが読める。
+- [ ] hidden非表示中はdot-prefixed directory配下の通常名fileもtree、Search、Go Toに現れず、再表示すると同じexpanded contextから参照できる。
 - [ ] query入力直後にcurrent subtreeの結果が現れ、後からRecent locations／Chosen locations／System indexのcoverageが同じlistへ追加される。
 - [ ] current working directory配下のSearch resultでReturn／Command-Rightを押すとMove treeへrevealされ、folderは展開されて直下を続けて操作できる。外部resultではSearch、root、selectionが変わらない。
 - [ ] 数百件のtree/search resultでも上段だけがscrollし、下段のPath actions／Detailsは常に見える。Up/Down/Page移動で同じ固定領域の選択情報だけが更新される。

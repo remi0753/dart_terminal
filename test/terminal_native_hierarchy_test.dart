@@ -219,9 +219,28 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
         bindings.windowKeyEventRoutings[windowHandle] == 1 &&
         bindings.textEditorEditable[editorHandle] == true &&
         bindings.textEditorSelectionLengths[editorHandle] == 0 &&
-        bindings.texts[editorHandle]!.contains('モード: 検索'),
+        bindings.texts[editorHandle]!.contains('モード: 検索') &&
+        bindings.texts[editorHandle]!.contains('隠し項目: 表示'),
     'navigator focus sends key events only to Dart without targeting the PTY '
-    'while the native editor exposes a zero-length blinking search caret',
+    'while the native editor exposes a zero-length blinking search caret and '
+    'the default hidden-entry visibility',
+  );
+  await dispatcher.dispatch(TerminalActionId.toggleHiddenFiles);
+  _expect(
+    !dock.snapshotForWindow(logicalWindow.id)!.pane.showHiddenEntries &&
+        bindings.firstResponders[windowHandle] == editorHandle &&
+        bindings.windowKeyEventRoutings[windowHandle] == 1 &&
+        bindings.textEditorEditable[editorHandle] == true &&
+        bindings.texts[editorHandle]!.contains('モード: 検索') &&
+        bindings.texts[editorHandle]!.contains('隠し項目: 非表示'),
+    'hidden-entry toggle updates the Dock document without stealing Navigator input',
+  );
+  await dispatcher.dispatch(TerminalActionId.toggleHiddenFiles);
+  _expect(
+    dock.snapshotForWindow(logicalWindow.id)!.pane.showHiddenEntries &&
+        bindings.firstResponders[windowHandle] == editorHandle &&
+        bindings.texts[editorHandle]!.contains('隠し項目: 表示'),
+    'a second hidden-entry toggle restores the default projection in place',
   );
   final int searchCaretStart =
       bindings.textEditorSelectionStarts[editorHandle]!;

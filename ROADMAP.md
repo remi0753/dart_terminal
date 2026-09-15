@@ -1470,6 +1470,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] split layoutに基づく4方向pane focus action
   - [x] focus／divider shortcutの設定可能な既定keybindへの移行
   - [x] 通常製品へのlive投影、両runtime受け入れ、reference更新
+- [x] Context Dockの隠しfile／folder表示切替
+  （実施時に
+  [`docs/phase7/context-dock-hidden-entries-toggle.md`](docs/phase7/context-dock-hidden-entries-toggle.md)
+  を参照する）
 
 ### 追加機能
 

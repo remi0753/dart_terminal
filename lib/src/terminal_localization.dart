@@ -39,6 +39,7 @@ enum TerminalActionMessageId {
   togglePaneZoom,
   equalizeSplits,
   toggleContextDock,
+  toggleHiddenFiles,
   searchFilesAndFolders,
   goToFileOrFolder,
   moveInDirectoryNavigator,
@@ -169,6 +170,9 @@ final class TerminalLocalization {
   String get contextDockModeSearch => _ja ? '検索' : 'Search';
   String get contextDockModeGoTo => _ja ? '移動先' : 'Go To';
   String get contextDockModeMove => _ja ? 'ナビゲーション' : 'Move';
+  String get contextDockHiddenEntries => _ja ? '隠し項目' : 'Hidden entries';
+  String get contextDockHiddenEntriesShown => _ja ? '表示' : 'Shown';
+  String get contextDockHiddenEntriesHidden => _ja ? '非表示' : 'Hidden';
   String get contextDockSearch => _ja ? '検索' : 'Search';
   String get contextDockGoTo => _ja ? '移動先' : 'Go to';
   String get contextDockMoveHint =>
@@ -738,6 +742,10 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
           'Toggle Context Dock',
           <String>['show', 'hide', 'sidebar', 'navigator'],
         ),
+        TerminalActionMessageId.toggleHiddenFiles: _action(
+          'Toggle Hidden Files and Folders',
+          <String>['dotfile', 'directory', 'navigator', 'visibility'],
+        ),
         TerminalActionMessageId.searchFilesAndFolders: _action(
           'Search Files and Folders',
           <String>['directory', 'navigator', 'path', 'find'],
@@ -916,6 +924,10 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
       TerminalActionMessageId.toggleContextDock: _action(
         'コンテキストDockの表示を切り替え',
         <String>['表示', '非表示', 'サイドバー', 'ナビゲータ'],
+      ),
+      TerminalActionMessageId.toggleHiddenFiles: _action(
+        '隠しファイルとフォルダの表示を切り替え',
+        <String>['ドットファイル', 'ディレクトリ', 'ナビゲータ', '表示'],
       ),
       TerminalActionMessageId.searchFilesAndFolders: _action(
         'ファイルとフォルダを検索',

@@ -8379,6 +8379,14 @@ final class TerminalApplication {
         ..writeAsStringSync('one');
       final File secondDroppedFile = File("$fixtureRootPath/drop'2.txt")
         ..writeAsStringSync('two');
+      final File hiddenFixtureFile = File(
+        '$fixtureRootPath/.context-hidden.txt',
+      )..writeAsStringSync('hidden');
+      final Directory hiddenFixtureDirectory = Directory(
+        '$fixtureRootPath/.context-hidden-directory',
+      )..createSync();
+      File('${hiddenFixtureDirectory.path}/inside.txt')
+          .writeAsStringSync('inside');
 
       _expectLifecycle(
         state.windowCount == 1 &&
@@ -8443,11 +8451,16 @@ final class TerminalApplication {
           writeEnqueuedCounts[initialPaneId] ?? 0;
       _expectLifecycle(
         dispatcher.catalog
-                .actionForId(TerminalActionId.toggleContextDock)!
-                .shortcut!
-                .identity ==
-            'shift+option+c',
-        'Context Dock toggle did not expose its default native shortcut',
+                    .actionForId(TerminalActionId.toggleContextDock)!
+                    .shortcut!
+                    .identity ==
+                'shift+option+c' &&
+            dispatcher.catalog
+                    .actionForId(TerminalActionId.toggleHiddenFiles)!
+                    .shortcut!
+                    .identity ==
+                'shift+command+h',
+        'Context Dock actions did not expose their default native shortcuts',
       );
       final TerminalPaneProcessSnapshot navigatorProcess = initialPane
           .processSnapshot();
@@ -8470,6 +8483,14 @@ final class TerminalApplication {
             directory!.rows.any(
               (TerminalContextDockDirectoryRow row) =>
                   row.entry.path == secondDroppedFile.path,
+            ) &&
+            directory.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == hiddenFixtureFile.path,
+            ) &&
+            directory.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == hiddenFixtureDirectory.path,
             );
       }, 'Context Dock toggle did not project the real plain-sh cwd tree');
       _expectLifecycle(
@@ -8478,10 +8499,39 @@ final class TerminalApplication {
                 .nativeEditorSnapshotForWindow(initialWindow.id)!
                 .text
                 .contains('Mode: Terminal') &&
+            contextDockPresenter
+                .nativeEditorSnapshotForWindow(initialWindow.id)!
+                .text
+                .contains('Hidden entries: Shown') &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
                 dockToggleWriteBaseline,
         'Context Dock toggle did not preserve or identify terminal input '
         'ownership',
+      );
+      await dispatch(TerminalActionId.toggleHiddenFiles);
+      await waitFor(() {
+        final TerminalContextDockWindowSnapshot? dock = contextDockState
+            .snapshotForWindow(initialWindow.id);
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        return dock?.pane.showHiddenEntries == false &&
+            dock!.inputOwner == TerminalContextDockInputOwner.terminal &&
+            directory != null &&
+            !directory.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == hiddenFixtureFile.path ||
+                  row.entry.path == hiddenFixtureDirectory.path,
+            );
+      }, 'hidden-entry toggle did not filter the real plain-sh cwd tree');
+      _expectLifecycle(
+        contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            contextDockPresenter
+                .nativeEditorSnapshotForWindow(initialWindow.id)!
+                .text
+                .contains('Hidden entries: Hidden') &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                dockToggleWriteBaseline,
+        'terminal-owned hidden-entry toggle changed focus or wrote to the PTY',
       );
       final int navigatorZeroWriteBaseline =
           writeEnqueuedCounts[initialPaneId] ?? 0;
@@ -8496,8 +8546,45 @@ final class TerminalApplication {
             directory!.rows.any(
               (TerminalContextDockDirectoryRow row) =>
                   row.entry.path == secondDroppedFile.path,
+            ) &&
+            !directory.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == hiddenFixtureFile.path ||
+                  row.entry.path == hiddenFixtureDirectory.path,
             );
       }, 'Context Dock did not project the real plain-sh cwd tree');
+      await dispatch(TerminalActionId.toggleHiddenFiles);
+      await waitFor(() {
+        final TerminalContextDockWindowSnapshot? dock = contextDockState
+            .snapshotForWindow(initialWindow.id);
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        return dock?.pane.showHiddenEntries == true &&
+            dock!.navigatorOwnsInput &&
+            directory != null &&
+            directory.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == hiddenFixtureFile.path,
+            ) &&
+            directory.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == hiddenFixtureDirectory.path,
+            );
+      }, 'Navigator-owned hidden-entry toggle did not restore dot entries');
+      _expectLifecycle(
+        contextDockWindow.keyEventRouting == KeyEventRouting.dartOnly &&
+            contextDockPresenter
+                    .nativeEditorSnapshotForWindow(initialWindow.id)!
+                    .isEditable ==
+                true &&
+            contextDockPresenter
+                .nativeEditorSnapshotForWindow(initialWindow.id)!
+                .text
+                .contains('Hidden entries: Shown') &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                navigatorZeroWriteBaseline,
+        'Navigator-owned hidden-entry toggle changed focus or wrote to the PTY',
+      );
       final TerminalContextDockDirectorySnapshot treeBeforeToggle =
           contextDockDirectory.snapshotForWindow(initialWindow.id)!;
       final int treeRowCountBeforeToggle = treeBeforeToggle.rows.length;

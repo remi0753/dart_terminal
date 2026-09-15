@@ -90,6 +90,7 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `pane.split-right` | Split Pane Right | shell | `command+d` |
 | `pane.split-down` | Split Pane Down | shell | `shift+command+d` |
 | `view.toggle-context-dock` | Toggle Context Dock | view | `shift+option+c` |
+| `view.toggle-hidden-files` | Toggle Hidden Files and Folders | view | `shift+command+h` |
 | `view.search-files-and-folders` | Search Files and Folders | view | `shift+command+f` |
 | `view.goto-file-or-folder` | Go To File or Folder | view | `shift+command+g` |
 | `view.move-in-directory-navigator` | Move in Directory Navigator | view | `shift+command+m` |
@@ -131,6 +132,7 @@ AppKit consumes these standard menu shortcuts before raw terminal key routing. A
 | `command+d` | `pane.split-right` | Split Pane Right |
 | `shift+command+d` | `pane.split-down` | Split Pane Down |
 | `shift+option+c` | `view.toggle-context-dock` | Toggle Context Dock |
+| `shift+command+h` | `view.toggle-hidden-files` | Toggle Hidden Files and Folders |
 | `shift+command+f` | `view.search-files-and-folders` | Search Files and Folders |
 | `shift+command+g` | `view.goto-file-or-folder` | Go To File or Folder |
 | `shift+command+m` | `view.move-in-directory-navigator` | Move in Directory Navigator |

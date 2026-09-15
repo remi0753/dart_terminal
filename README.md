@@ -45,7 +45,7 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 42個のstable application actionを共有するbounded searchable registry、動的な
+- 43個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
@@ -65,6 +65,8 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   path操作は下段の固定read-only領域へ表示する。
   Option-Shift-CでDockだけを表示／非表示にし、terminal／Navigatorのどちらが入力中でも同じ
   shared actionを実行する。tree上のfolderはReturnで開閉でき、Command-Right／Leftでも展開／折り畳みできる。
+  Shift-Command-Hはfocused paneのdot-prefixed file/folderとそのsubtreeを、現在のinput focusを変えずに
+  tree、Search、Go Toで一括表示／非表示にする。初期状態は表示で、Dock内に現在状態を明示する。
   Shift-Command-FでSearchへ移るとquery末尾にnativeの点滅caretが現れ、同じlistがcurrent subtree、recent location、明示root、
   Spotlight metadata indexのprogressive検索結果へ切り替わる。source/coverageとpartial・
   unavailableを区別し、filesystem rootを暗黙にwalkしない。current working directory配下のSearch結果はReturn／Command-Rightで

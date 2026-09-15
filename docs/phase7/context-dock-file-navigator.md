@@ -42,7 +42,8 @@ ownershipを分離し、`Shift+Command+F`でnavigatorへ移り、`Escape`また�
 - headerは対象pane、trusted working directory、local／remote／unknown capabilityを常に示す。
   breadcrumbからparent、back、forward、working directoryへkeyboardで戻れる。
 - queryが空ならworking directoryをrootにしたfile＋folder treeを表示する。dotfileも既定で表示し、
-  folderはlazy展開する。header、query、row、coverageは上段のbounded scroll領域へ置き、名前と種類を
+  `Shift+Command+H`でfocused paneのdot-prefixed file／folderとそのsubtreeをtree、Search、Go Toから
+  一括で表示／非表示にする。folderはlazy展開する。header、query、row、coverageは上段のbounded scroll領域へ置き、名前と種類を
   優先する。選択entryのpath action、permission、owner／group、size、mtime、symlink targetなどは
   多数のrowがあっても見失わない下段の固定compact detailへ置く。読めないentryは消さず理由を示す。
 - Context Dockは後からprocessやsystem stateを載せられるmodule boundaryを持つが、空のtabや未実装の
@@ -75,6 +76,7 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 | --- | --- | --- | --- |
 | Terminal owns input | 通常のtext／navigation key | 従来どおりfocused paneへencode | 従来どおり |
 | Terminal／Navigator owns input | `Option+Shift+C` | Dock visibilityをtoggle。非表示時はterminalへfocusを戻す | 0 byte |
+| Terminal／Navigator owns input | `Shift+Command+H` | focused paneのhidden file／folder表示をfocus不変でtoggle | 0 byte |
 | Terminal owns input | `Shift+Command+F` | Dockを表示してSearchへfocusし、query末尾に点滅caretを表示 | 0 byte |
 | Terminal owns input | `Shift+Command+G` | Dockを表示してGo Toへfocusし、treeを保ったまま一致rowへ移動 | 0 byte |
 | Terminal owns input | `Shift+Command+M` | Dockを表示してMoveへfocusし、tree navigationだけを有効化 | 0 byte |
@@ -89,6 +91,9 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 
 - `Option+Shift+C`はstable action `view.toggle-context-dock`のnative menu shortcutとし、terminal／Navigatorの
   first responderより先にexactly onceで捕捉する。Navigatorからhideする場合はstill-live terminalへinputを戻してからDockを閉じる。
+- `Shift+Command+H`はstable action `view.toggle-hidden-files`としてView menu、Command Palette、keybind referenceで共有し、
+  現在のinput ownership、query、mode、expanded stateを保ったままpane-local visibilityだけを切り替える。hidden directoryのdescendantも
+  Search／Go Toから除外し、再表示時は保持snapshotからtree contextを復元する。
 - `Shift+Command+F`、`Shift+Command+G`、`Shift+Command+M`はそれぞれstable action
   `view.search-files-and-folders`、`view.goto-file-or-folder`、`view.move-in-directory-navigator`としてView menu、Command
   Palette、keybind referenceで共有する。native shortcutがどのfirst responderからもexactly onceで
@@ -228,7 +233,7 @@ first responderの間はterminal paneがlogical focusとcontext targetを保っ�
 - Navigator focus、検索、tree操作、dismiss、stale target、secure input unavailableの全経路で意図しない
   PTY writeが0である。quoted path insertionだけが明示actionのexact payloadを1回送る。
 - focused local paneのtrusted cwd、dotfileを含むtree、lazy subtree、主要metadataが表示され、pane／tab／
-  cwd changeへgeneration-safeに追従する。unknown／permission denied／remoteをlocal pathとして偽装しない。
+  cwd changeへgeneration-safeに追従する。hidden visibilityはpaneごとに独立して切り替えられ、unknown／permission denied／remoteをlocal pathとして偽装しない。
 - query入力だけでcwd subtreeからwider local searchへ結果が連続表示され、clear後は元のtree contextへ
   戻る。unindexed／denied scopeはcoverageとして利用者に分かる。
 - main-thread filesystem I/O、unbounded root walk、symlink loop、stale result適用、hidden-Dockの継続的な

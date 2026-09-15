@@ -148,6 +148,7 @@ void _testStableStandardCatalog() {
             .join(',') ==
         <TerminalActionId>[
           TerminalActionId.toggleContextDock,
+          TerminalActionId.toggleHiddenFiles,
           TerminalActionId.searchFilesAndFolders,
           TerminalActionId.goToFileOrFolder,
           TerminalActionId.moveInDirectoryNavigator,
@@ -175,6 +176,14 @@ void _testStableStandardCatalog() {
             .actionForId(TerminalActionId.searchFilesAndFolders)!
             .restoresTerminalFocusAfterInvocation &&
         catalog
+                .actionForId(TerminalActionId.toggleHiddenFiles)!
+                .shortcut!
+                .identity ==
+            'shift+command+h' &&
+        !catalog
+            .actionForId(TerminalActionId.toggleHiddenFiles)!
+            .restoresTerminalFocusAfterInvocation &&
+        catalog
                 .actionForId(TerminalActionId.goToFileOrFolder)!
                 .shortcut!
                 .identity ==
@@ -199,7 +208,11 @@ void _testStableStandardCatalog() {
         TerminalActionCatalog.standard(
               localization: TerminalLocalization.japanese,
             ).actionForId(TerminalActionId.focusTerminal)!.title ==
-            'ターミナルにフォーカス',
+            'ターミナルにフォーカス' &&
+        TerminalActionCatalog.standard(
+              localization: TerminalLocalization.japanese,
+            ).actionForId(TerminalActionId.toggleHiddenFiles)!.title ==
+            '隠しファイルとフォルダの表示を切り替え',
     'Context Dock actions own reviewed focus and distinct shortcuts',
   );
   _expect(

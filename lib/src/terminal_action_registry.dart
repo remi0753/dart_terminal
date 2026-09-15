@@ -33,6 +33,7 @@ enum TerminalActionId {
   togglePaneZoom('pane.toggle-zoom'),
   equalizeSplits('pane.equalize-splits'),
   toggleContextDock('view.toggle-context-dock'),
+  toggleHiddenFiles('view.toggle-hidden-files'),
   searchFilesAndFolders('view.search-files-and-folders'),
   goToFileOrFolder('view.goto-file-or-folder'),
   moveInDirectoryNavigator('view.move-in-directory-navigator'),
@@ -415,6 +416,16 @@ final class TerminalActionCatalog {
         ),
       ),
       action(
+        TerminalActionId.toggleHiddenFiles,
+        TerminalActionMenu.view,
+        shortcut: const TerminalActionShortcut(
+          keyEquivalent: 'h',
+          shift: true,
+          command: true,
+        ),
+        restoresTerminalFocusAfterInvocation: false,
+      ),
+      action(
         TerminalActionId.searchFilesAndFolders,
         TerminalActionMenu.view,
         shortcut: const TerminalActionShortcut(
@@ -545,6 +556,8 @@ TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
   TerminalActionId.equalizeSplits => TerminalActionMessageId.equalizeSplits,
   TerminalActionId.toggleContextDock =>
     TerminalActionMessageId.toggleContextDock,
+  TerminalActionId.toggleHiddenFiles =>
+    TerminalActionMessageId.toggleHiddenFiles,
   TerminalActionId.searchFilesAndFolders =>
     TerminalActionMessageId.searchFilesAndFolders,
   TerminalActionId.goToFileOrFolder => TerminalActionMessageId.goToFileOrFolder,
