@@ -1437,6 +1437,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 完了機能の回帰修正
 
+- [x] Xcode更新後に欠落したMetal Toolchainを復旧しRelease AOT buildを再検証する
+  （実施時に
+  [`docs/phase4/metal-toolchain-environment-recovery.md`](docs/phase4/metal-toolchain-environment-recovery.md)
+  を参照する）
 - [x] command paletteの選択境界とviewport追従の回帰修正
   （実施時に
   [`docs/phase7/command-palette-selection-viewport-regression.md`](docs/phase7/command-palette-selection-viewport-regression.md)
