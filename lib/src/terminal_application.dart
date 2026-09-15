@@ -6029,6 +6029,7 @@ final class TerminalApplication {
           writeEnqueuedCounts: nativeContentWriteEnqueuedCounts,
           quickLookTexts: nativeContentQuickLookTexts,
           contextDockState: createdContextDockState,
+          contextDockProcess: createdDockProcess,
           contextDockDirectory: createdDockDirectory,
           contextDockPresenter: createdDockPresenter,
           contextDockPathHandoff: createdPathHandoff,
@@ -8321,6 +8322,7 @@ final class TerminalApplication {
     required Map<PaneId, int> writeEnqueuedCounts,
     required List<String> quickLookTexts,
     required TerminalContextDockState contextDockState,
+    required TerminalContextDockProcessController contextDockProcess,
     required TerminalContextDockDirectoryController contextDockDirectory,
     required TerminalContextDockDirectoryPresenter contextDockPresenter,
     required TerminalContextDockPathHandoffController contextDockPathHandoff,
@@ -8489,6 +8491,33 @@ final class TerminalApplication {
       final _MemoryTerminalClipboard contextDockClipboard =
           clipboard as _MemoryTerminalClipboard;
       final Window contextDockWindow = hierarchy.windowForTab(initialTab.id)!;
+      if (!application.isActive) {
+        appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+          application.eventProtocolVersion,
+          30,
+          0,
+          0,
+          eventTimestamp++,
+          0,
+          true,
+        ]);
+      }
+      if (!contextDockWindow.isFocused) {
+        _injectFocusEventForTesting(
+          application,
+          contextDockWindow,
+          isFocused: true,
+          monotonicNanoseconds: eventTimestamp++,
+        );
+      }
+      await waitFor(
+        () =>
+            application.isActive &&
+            contextDockWindow.isVisible &&
+            contextDockWindow.isFocused,
+        'native content window did not become the focused process-inspection '
+        'target',
+      );
       final String quotedFixtureRoot =
           TerminalExternalContentAdmission.filePaths(
             <String>[fixtureRootPath],
@@ -8496,11 +8525,11 @@ final class TerminalApplication {
             appendTrailingSeparator: false,
           ).content!.text;
       initialPane.insertText(
-        "printf '\\033[?2004l\\r\\n__DT_NAV_ZSH_READY__\\r\\n'; "
+        "printf '\\033[?2004l\\r\\n__DT_NAV_%s__\\r\\n' SH_READY; "
         'stty echo icanon; exec /bin/sh -i',
       );
       await initialPane.submit();
-      await _waitForAsciiMarker(initialSession, '__DT_NAV_ZSH_READY__');
+      await _waitForAsciiMarker(initialSession, '__DT_NAV_SH_READY__');
       await waitFor(
         () => !initialSession.bracketedPasteMode,
         'plain local sh fixture retained zsh bracketed-paste mode',
@@ -8508,10 +8537,8 @@ final class TerminalApplication {
       await waitFor(() {
         final TerminalPaneProcessSnapshot process = initialPane
             .processSnapshot();
-        return process.disposition ==
-                TerminalPaneProcessDisposition.idleShell &&
-            process.terminalEchoEnabled == true;
-      }, 'plain local sh did not expose an echo-on idle-shell boundary');
+        return process.disposition == TerminalPaneProcessDisposition.idleShell;
+      }, 'plain local sh did not expose an idle-shell boundary');
       initialPane.insertText(
         "cd $quotedFixtureRoot && "
         "printf '\\r\\n__DT_NAV_CWD_READY__\\r\\n'",
@@ -8929,6 +8956,159 @@ final class TerminalApplication {
       await dispatch(TerminalActionId.focusTerminal);
 
       initialPane.insertText(
+        "/bin/sh -c 'printf \"%s%s\\n\" __DT_PROCESS_ PIPE_READY__; "
+        "sleep 4; printf \"%s%s\\n\" __DT_PROCESS_ PIPE_DONE__' | "
+        '/bin/cat',
+      );
+      await initialPane.submit();
+      await _waitForAsciiMarker(initialSession, '__DT_PROCESS_PIPE_READY__');
+      await waitFor(() {
+        final TerminalContextDockContentSnapshot? content = contextDockProcess
+            .snapshotForWindow(initialWindow.id);
+        final String? list = contextDockPresenter
+            .nativeEditorSnapshotForWindow(initialWindow.id)
+            ?.text;
+        final String? details = contextDockPresenter.nativeDetailsTextForWindow(
+          initialWindow.id,
+        );
+        return content?.mode == TerminalContextDockContentMode.foregroundJob &&
+            content?.process?.status ==
+                TerminalContextDockProcessStatus.ready &&
+            (content?.process?.totalMemberCount ?? 0) >= 2 &&
+            content?.process?.executablePath?.startsWith('/') == true &&
+            content!.process!.arguments.any(
+              (String argument) =>
+                  argument.contains('__DT_PROCESS_') &&
+                  argument.contains('PIPE_READY__'),
+            ) &&
+            list?.contains('Process Inspector') == true &&
+            list?.contains('Foreground job') == true &&
+            !list!.contains('Working directory:') &&
+            details?.contains('Command (process argv)') == true &&
+            details?.contains('__DT_PROCESS_') == true &&
+            details?.contains('PIPE_READY__') == true;
+      }, 'real pipeline did not reach the Process Inspector document');
+      final TerminalContextDockContentSnapshot pipelineBefore =
+          contextDockProcess.snapshotForWindow(initialWindow.id)!;
+      final int pipelineElapsedBefore =
+          pipelineBefore.process!.elapsedMicroseconds;
+      final int processSelectionBefore = contextDockPresenter
+          .nativeEditorSnapshotForWindow(initialWindow.id)!
+          .selection
+          .start;
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      reconcile();
+      final TerminalContextDockContentSnapshot pipelineAfter =
+          contextDockProcess.snapshotForWindow(initialWindow.id)!;
+      _expectLifecycle(
+        pipelineAfter.process!.elapsedMicroseconds > pipelineElapsedBefore &&
+            contextDockPresenter
+                    .nativeEditorSnapshotForWindow(initialWindow.id)!
+                    .selection
+                    .start ==
+                processSelectionBefore &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly,
+        'Process Inspector elapsed did not advance without disturbing terminal input',
+      );
+      final int processShortcutWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
+      await dispatch(TerminalActionId.searchFilesAndFolders);
+      _expectLifecycle(
+        contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+                TerminalContextDockContentMode.foregroundJob &&
+            !contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                processShortcutWriteBaseline,
+        'Process Inspector Navigator shortcut changed focus or wrote to the PTY',
+      );
+      await _waitForAsciiMarker(initialSession, '__DT_PROCESS_PIPE_DONE__');
+      await waitFor(() {
+        contextDockProcess.synchronize();
+        reconcile();
+        return contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+                TerminalContextDockContentMode.directoryNavigator &&
+            contextDockPresenter
+                    .nativeEditorSnapshotForWindow(initialWindow.id)
+                    ?.text
+                    .contains('Directory Navigator') ==
+                true;
+      }, 'finished pipeline did not restore a fresh Directory Navigator');
+
+      initialPane.insertText('/bin/cat');
+      await initialPane.submit();
+      await waitFor(() {
+        final TerminalContextDockContentSnapshot? content = contextDockProcess
+            .snapshotForWindow(initialWindow.id);
+        return content?.mode == TerminalContextDockContentMode.foregroundJob &&
+            content?.process?.executablePath?.endsWith('/cat') == true;
+      }, 'interactive foreground process was not inspected');
+      initialPane.sendInput(utf8.encode('__DT_PROCESS_INPUT_EXACT__\n'));
+      await _waitForAsciiMarker(initialSession, '__DT_PROCESS_INPUT_EXACT__');
+      initialPane.sendEndOfFile();
+      await waitFor(() {
+        contextDockProcess.synchronize();
+        return initialPane.processSnapshot().disposition ==
+                TerminalPaneProcessDisposition.idleShell &&
+            contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+                TerminalContextDockContentMode.directoryNavigator;
+      }, 'interactive process input did not return to the shell');
+
+      initialPane.insertText(
+        "printf '\\033]133;C\\007'; read dt_process_value; "
+        "printf '\\033]133;D;0\\007\\r\\n__DT_SHELL_OWNED_DONE__\\r\\n'",
+      );
+      await initialPane.submit();
+      await waitFor(() {
+        final TerminalContextDockContentSnapshot? content = contextDockProcess
+            .snapshotForWindow(initialWindow.id);
+        final String? list = contextDockPresenter
+            .nativeEditorSnapshotForWindow(initialWindow.id)
+            ?.text;
+        return content?.mode ==
+                TerminalContextDockContentMode.shellOwnedCommand &&
+            content?.process?.executablePath == null &&
+            content?.process?.arguments.isEmpty == true &&
+            list?.contains('Shell command running') == true;
+      }, 'OSC 133 shell-owned command did not use the content-free status');
+      initialPane.sendInput(utf8.encode('done\n'));
+      await _waitForAsciiMarker(initialSession, '__DT_SHELL_OWNED_DONE__');
+      await waitFor(() {
+        contextDockProcess.synchronize();
+        reconcile();
+        return initialPane.processSnapshot().disposition ==
+                TerminalPaneProcessDisposition.idleShell &&
+            contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+                TerminalContextDockContentMode.directoryNavigator &&
+            contextDockPresenter
+                    .nativeEditorSnapshotForWindow(initialWindow.id)
+                    ?.text
+                    .contains('Directory Navigator') ==
+                true;
+      }, 'shell-owned command did not restore Directory Navigator');
+
+      initialPane.insertText(
+        "/usr/bin/true; printf '\\r\\n__DT_PROCESS_%s__\\r\\n' SHORT_DONE",
+      );
+      await initialPane.submit();
+      await _waitForAsciiMarker(initialSession, '__DT_PROCESS_SHORT_DONE__');
+      await waitFor(() {
+        contextDockProcess.synchronize();
+        reconcile();
+        return initialPane.processSnapshot().disposition ==
+                TerminalPaneProcessDisposition.idleShell &&
+            contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+                TerminalContextDockContentMode.directoryNavigator &&
+            contextDockPresenter
+                    .nativeEditorSnapshotForWindow(initialWindow.id)
+                    ?.text
+                    .contains('Process Inspector') ==
+                false;
+      }, 'rapid command flickered into a retained Process Inspector document');
+
+      initialPane.insertText(
         "stty -echo; printf '\\r\\n__DT_NAV_ECHO_OFF__\\r\\n'; "
         "sleep 2; stty echo; printf '\\r\\n__DT_NAV_ECHO_ON__\\r\\n'",
       );
@@ -8942,11 +9122,22 @@ final class TerminalApplication {
                 TerminalPaneProcessDisposition.foregroundProcess;
       }, 'foreground command did not expose the protected ECHO-off boundary');
       reconcile();
+      contextDockProcess.synchronize();
       contextDockDirectory.synchronize();
       final TerminalContextDockDirectorySnapshot protectedDirectory =
           contextDockDirectory.snapshotForWindow(initialWindow.id)!;
       _expectLifecycle(
-        protectedDirectory.status ==
+        contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+                TerminalContextDockContentMode.protected &&
+            contextDockPresenter
+                    .nativeEditorSnapshotForWindow(initialWindow.id)
+                    ?.text
+                    .contains('Protected input') ==
+                true &&
+            !contextDockPresenter
+                .nativeDetailsTextForWindow(initialWindow.id)!
+                .contains('__DT_PROCESS_') &&
+            protectedDirectory.status ==
                 TerminalContextDockDirectoryStatus.privacyUnavailable &&
             protectedDirectory.workingDirectory == null &&
             protectedDirectory.rows.isEmpty &&
@@ -8964,6 +9155,7 @@ final class TerminalApplication {
             TerminalPaneProcessDisposition.idleShell,
         'plain sh did not restore the idle-shell Navigator boundary',
       );
+      contextDockProcess.synchronize();
       reconcile();
       await dispatch(TerminalActionId.searchFilesAndFolders);
       await waitFor(
@@ -9322,6 +9514,9 @@ final class TerminalApplication {
       _expectLifecycle(
         state.isDisposed &&
             hierarchy.isDisposed &&
+            contextDockProcess.isDisposed &&
+            contextDockProcess.activeOperationCount == 0 &&
+            contextDockProcess.activeTimerCount == 0 &&
             allSessions.length == 4 &&
             allSessions.every(
               (TerminalSession session) =>
@@ -9336,6 +9531,8 @@ final class TerminalApplication {
         'navigator_tree=true navigator_search=true navigator_copy=true '
         'navigator_insert=true navigator_zero_write=true '
         'navigator_privacy=true navigator_accessibility=true '
+        'process_inspector=true process_pipeline=true process_input=true '
+        'process_shell_owned=true process_short=true process_elapsed=true '
         'quick_look=true services_selection=true service_confirmation=true '
         'service_exact=true drop_text_exact=true drop_files_exact=true '
         'folder_tabs=true folder_windows=true cwd_exact=true focus=true '

@@ -594,3 +594,115 @@ Input: Terminal
   `make release-candidate-daily-use-matrix`: source hashを依存順に再生成し、分類／基準は変更なし。
 - `dart run test/run_tests.dart`: 全aggregateが成功し、`dart_terminal tests passed`まで確認した。
 - `git diff --check`: whitespace errorなし。
+
+### 2026-09-16 — product privacy／performance gate、両runtime受け入れ、reference着手
+
+- 目的: 実PTYと通常product compositionでProcess Inspectorの観測・表示・終了復帰を検証し、同じacceptanceを
+  arm64 Developer JIT／Release AOTへ適用する。content-bearing path／argvが一般diagnostics、restoration、
+  telemetryへ流れないことと、既存native latency／poll cadence gateを最終的な製品基準へ結び付ける。
+- 背景: native API、coordinator、presentationは個別testを通過したが、real process groupからnative viewまでの
+  end-to-end経路とbundle runtime差、および公開referenceはまだ未完了である。
+- 範囲: native-content runtime suiteへreal `sleep`／pipeline／subshell／interactive command／OSC 133 shell-owned／
+  rapid command／ECHO-off／cwd復帰を追加、privacy auditのowner追加、Developer JIT／Release AOT execution、
+  README／FEATURE_MATRIX／manual checklist／pinned evidence更新。
+- 対象外: SSH remote process introspection、process signal／kill、CPU／memory継続監視、App Sandbox変更、
+  notarization／Intel-native実機。
+- 依存関係: native snapshot p95 5 ms gate、content controllerの250 ms／1 s上限、native-content integration
+  harness、arm64 bundle builders、diagnostics privacy audit、Phase 7／daily-use generated evidence。
+- 完了条件: 実processでProcess Inspector名、executable、process argv、elapsed進行、pipeline member、terminal
+  input、shortcut zero-write、protected clear、shell-owned縮退、終了後fresh Directoryを両runtimeで確認する。
+  diagnostics auditがprocess contentを拒否し、全owner／timer／PTY／native handleをcleanに回収し、referenceと
+  ROADMAP parentを完了して単独commitする。
+- 検証方針: focused unit／native／privacy gate、native-content integrationを両runtime、aggregate `make test`、
+  native sanitizer、generated evidence freshness、format／analyze／diffを実行する。GUIの視覚・VoiceOver確認だけは
+  content-specific manual checklistへ明示する。
+- 着手時HEADは`b979e10`、working treeはcleanだった。
+
+### 2026-09-16 — product acceptance実装の判明事項
+
+- 既存native-content suiteは`--shell-integration=none`の実PTY／AppKit productをDeveloper JITとRelease AOTで
+  共通実行するため、Context Dockのend-to-end acceptanceを同suiteへ統合した。外部shell pluginなしでも
+  distinct foreground PGIDは観測でき、OSC 133 shell-owned境界はtest commandが明示sequenceを出して検証する。
+- 最初のanalyzeは、suite内の`dispatch` helperが成功を内部assertして`Future<void>`を返すにもかかわらず
+  `TerminalActionDispatchResult`へ代入した箇所を検出した。戻り値を使わずhelperの既存成功contractへ合わせた。
+- Developer JIT native-contentの最初の実行は、Process Inspector固有のassertへ到達する前に、既存の
+  plain-sh cwd tree投影待ちが10秒で失敗した。直前にはPTY capabilityからidle shell／ECHO-on／期待cwdを
+  確認できており、終了時resource回収もcleanだったため、起動直後のDock／directory非同期同期に関する一過性の
+  timing候補として再実行で再現性を確認する。再現する場合は、失敗時のprocess content mode／directory statusを
+  acceptance messageへ追加し、循環する観測許可または同期順を修正する。
+- 直後の再実行はさらに前段のplain-sh idle／ECHO-on待ちで停止し、失敗位置が固定されなかった。native
+  snapshotのdisposition、PGID、terminal attributesを次回の失敗文に含める診断を追加し、PTY状態そのものか
+  test側の待機不足かを切り分ける。診断はcontent-freeな既存`machineLine()`だけを使い、path／argvは出力しない。
+- 診断parameterの最初の追加は、同名の別acceptance helperへpatchが一致して対象helperには入らず、Kernel
+  compileがunknown named parameterとして停止した。対象functionの固有contextで追加し直し、format／analyzeで
+  signatureを確認する。
+- content-free診断では`idleShell`、owning／foreground PGID一致、errno 0だがECHO-offだった。移行完了markerの
+  全文が入力コマンド内にも存在し、zsh line editorが表示した未実行の入力を`_waitForAsciiMarker`が先に拾える
+  fixture bugと判断した。markerを`printf` formatとargumentへ分離し、実際のcommand outputでしか完全なmarkerが
+  現れないよう修正した。
+- marker同期を直した後もidle時ECHO-offは維持された。これはzsh／shのinteractive line editorがidle promptを
+  所有するときにもECHOを無効化し得る既知の状態で、製品privacy policyも明示的にidle shellを許可している。
+  fixtureだけが「plain shなら必ずECHO-on」という過剰な前提を持っていたため、同期条件をcontent-freeな
+  `idleShell`へ合わせた。ECHO-off privacyは後段のdistinct foreground processで別途検証する。
+- idle条件修正後は再びcwd tree待ちで停止した。native-content harnessはbundle executableを直接起動するため
+  AppKit applicationがinactiveのままであり、新しいprocess controllerの「visibleかつfocusedなactive windowだけ
+  観測する」privacy／resource policyによりdirectory観測も正しく停止していた。既存Secure Keyboard Entry product
+  acceptanceと同じApplicationActiveChanged eventをtestで注入し、windowがvisible／focusedであることも確認してから
+  Context Dock acceptanceを開始するようにした。通常productのinactive時clear policyは変更しない。
+- application active eventだけでは直接起動したheadless acceptance windowのfocus stateは変わらず、active／visible／
+  focused gateで停止した。window focus eventも既存native event helperで明示し、両方の製品event routeを通して
+  foreground observation authorityを確立するよう補った。
+- active／focus補完後は既存Navigator acceptanceを通過して新規pipeline fixtureまで到達したが、inner `/bin/sh -c`
+  scriptのdouble quoteをshellに対して一段過剰にescapeしており、ready markerが出ず停止した。script全体はsingle
+  quote、`printf` formatは通常のdouble quoteとし、markerは2 argumentから連結して入力echoとoutputを区別する
+  commandへ修正した。
+- 引用符修正後もmarkerが出なかったため同じpipelineをhost shellで直接確認し、macOSではfixtureが指定した
+  `/usr/bin/cat`が存在せずexit 127になることを確認した。製品が実際に対象とするmacOS標準pathの`/bin/cat`へ
+  修正した。
+- pipelineが実行された後のProcess Inspector待ちは、output markerを入力echoと区別するため2 tokenへ分けた一方、
+  argv assertionだけが分割前の連続文字列を要求していたため停止した。process argvの同一script argument内に
+  prefixとsuffixの両方が保持され、fixed detailsにも双方が投影されることを検証する条件へ合わせた。
+- Process Inspector表示とelapsed検証は通過した。続くshortcut zero-write assertionはbaselineをpipeline command送信前に
+  採って「command送信がwrite 1件」という実装詳細まで仮定していたため停止した。目的はshortcut自体がPTYへ書かない
+  ことなので、Process Inspector表示後かつshortcut dispatch直前にbaselineを採り、delta 0を直接検証するよう直した。
+- Developer JITは上記修正後にend-to-end acceptanceを成功した。Release AOTはprocess pipeline、elapsed、input、
+  shell-ownedまで通過した後、rapid commandのDirectory復帰待ちで停止した。AOTの方が速く、直前のshell-owned
+  commandがidleになった時点とnative presentationがDirectoryへ戻る時点を同一視したtest raceが露出した。
+  shell-owned後はmodeとnative documentのDirectory復帰まで待ち、rapid commandも分割markerで実行完了を同期してから
+  contentがDirectoryのまま／またはDirectoryへ戻ることを確認するようにした。
+- 最初の最終`make test`はprocess-resource、PTY、renderer、AppleScript、App Intents、parser、configuration、
+  keybind、localization、privacy、Phase 7、compatibility regression 9 caseを通過した後、
+  `terminal_compatibility_regression_coverage.json`のsource hash freshnessで停止した。新しいproduct sourceを入力に持つ
+  派生evidenceの期待された更新であり、coverageを再生成して下流inventory／matrixも依存順に更新してから再実行する。
+
+### 2026-09-16 — product gate、reference、最終検証結果
+
+- native-content product acceptanceは直接起動したappへactive／window focus eventを通し、実PTYの2-member以上の
+  pipeline、absolute executable、process argv、monotonic elapsed、fixed details、terminal input、Navigator shortcut
+  delta 0、終了後Directory復帰、interactive `cat`、OSC 133 shell-owned content-free表示、rapid command、ECHO-off
+  protected clearを同一scenarioで確認する。終了時は4 sessionがcleanで、process controllerのoperation／timer、
+  native handle、text input clientがすべて0になる。
+- Developer JIT最終実行は
+  `RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS mode=developer-jit ... process_inspector=true ... sessions=4 elapsed_ms=8608`、
+  Release AOTは
+  `RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS mode=release-aot ... process_inspector=true ... sessions=4 elapsed_ms=7482`
+  で成功した。両者は同じsourceとacceptanceを使う。
+- diagnostics privacy auditへapplication compositionとprocess content ownerを追加した。process snapshot/controller型を
+  diagnostics assemblyへ渡さず、owner sourceにserialization、machine line、stdout／stderr／log、environment、file
+  outputを追加しないことをstaticに拒否する。`make terminal-diagnostics-privacy-check`は
+  `schema_keys=190 owners=11 top_level_keys=11`で成功した。
+- `make dpty-native-test`は32 retained member／33 totalのsnapshotでp50 220 us／p95 244 usを記録し、5 ms gateを
+  満たした。最終`make test`内の再計測もp50 220 us／p95 245 usだった。250 msのcontent-free poll、75 msの
+  activation、1秒のrich refresh上限はfake clock unit testと両runtime product acceptanceで維持した。
+- `make product-native-sanitizer`はPTY、renderer、AppleScript、App Intentsの4 suite／9 artifactを通過し、PTYを含む
+  全artifactでASan、対象7 artifactでUBSan instrumentationを確認した。
+- `make phase7-appkit-acceptance`、`make terminal-compatibility-regression-coverage`、
+  `make ghostty-p0-p1-gap-inventory`、`make release-candidate-daily-use-matrix`を依存順に再生成した。最終
+  `make test`はformat 347 file、root analyze issue 0を含む全gateを通過し、`dart_terminal tests passed`を確認した。
+- READMEとFEATURE_MATRIXへ、Directory Navigatorとは別名の`Process Inspector`、表示境界、bounded content、
+  terminal focus、privacy、両runtime受け入れを反映した。視覚、VoiceOver、Full Keyboard Accessの外部確認は
+  [Process Inspector manual checklist](context-dock-process-inspector-manual-checklist.md)へ分離した。SSH／remote process
+  introspection、signal／kill、CPU／memory継続監視は引き続き対象外である。
+- `git diff --check`はwhitespace errorなし。差分reviewでは実装中のdiagnosticがcontent-freeであること、生成物が
+  source／reference hashだけを更新して分類・release blocker数を変えていないこと、build artifactや秘密情報を
+  含まないことを確認した。

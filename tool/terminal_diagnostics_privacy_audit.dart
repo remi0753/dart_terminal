@@ -147,6 +147,9 @@ runTerminalDiagnosticsPrivacyAudit({Directory? projectRoot}) async {
     '.title',
     '.command',
     '.arguments',
+    'foregroundJobSnapshot',
+    'contextDockProcessController',
+    'TerminalContextDockProcessSnapshot',
   ], 'application diagnostics assembly');
 
   final String session = _read(root, 'lib/src/terminal_session.dart');
@@ -367,9 +370,31 @@ runTerminalDiagnosticsPrivacyAudit({Directory? projectRoot}) async {
     'workingDirectorySnapshot()',
   ], 'Context Dock explicit path handoff');
 
+  final String processInspector = _read(
+    root,
+    'lib/src/terminal_context_dock_process.dart',
+  );
+  _requireAll(processInspector, const <String>[
+    'final String? executablePath;',
+    'final List<String> arguments;',
+    '_safeCanObserveProcess(request.paneId, process)',
+    'state.process = null;',
+    'request.cancelled = true;',
+    'process.foregroundProcessGroup !=',
+  ], 'Context Dock process content lifecycle');
+  _rejectAll(processInspector, const <String>[
+    'toJson()',
+    'machineLine()',
+    'stdout',
+    'stderr',
+    'developer.log',
+    'Platform.environment',
+    'File(',
+  ], 'Context Dock process content lifecycle');
+
   return TerminalDiagnosticsPrivacyAuditResult(
     schemaKeyCount: _expectedSchemaKeys.length,
-    ownerCount: 10,
+    ownerCount: 11,
     topLevelKeyCount: _expectedTopLevelKeys.length,
   );
 }
