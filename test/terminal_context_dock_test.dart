@@ -324,6 +324,13 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
   _expect(
     richRequests.length == 1 &&
         controller.snapshotForWindow(window.id)!.process!.elapsedMicroseconds >=
+            501000 &&
+        controller
+                .snapshotForWindow(window.id)!
+                .process!
+                .members
+                .first
+                .elapsedMicroseconds >=
             501000,
     'elapsed advances from cached monotonic time without another rich call',
   );

@@ -4639,6 +4639,7 @@ final class TerminalApplication {
                 hierarchy?.windowForTab(tabId),
             terminalViewForPane: (PaneId paneId) =>
                 hierarchy?.resourcesForPane(paneId)?.view,
+            contentSnapshot: createdDockProcess.snapshotForWindow,
             pathHandoffSnapshot: (TerminalWindowId windowId) =>
                 contextDockPathHandoffController?.snapshotForWindow(windowId),
           );
@@ -4912,6 +4913,8 @@ final class TerminalApplication {
             dockState: createdContextDockState,
             focusNavigator: createdDockPresenter.focusNavigator,
             focusTerminal: createdDockPresenter.focusTerminal,
+            shouldConsumeNavigatorRequest: () =>
+                createdDockPresenter.shouldConsumeNavigatorRequest,
             canFocusNavigator: () {
               final TerminalWindowState? activeWindow = state.activeWindow;
               return productResourceDisposalFuture == null &&

@@ -98,6 +98,7 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   late final TerminalNativeHierarchyAdapter adapter;
   late final TerminalContextDockDirectoryPresenter presenter;
   TerminalPaneLayoutRect? paneLayout;
+  TerminalContextDockContentSnapshot? projectedContent;
   presenter = TerminalContextDockDirectoryPresenter(
     applicationState: state,
     dockState: dock,
@@ -106,6 +107,7 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     windowForTab: (TerminalTabId tabId) => adapter.windowForTab(tabId),
     terminalViewForPane: (PaneId paneId) =>
         adapter.resourcesForPane(paneId)?.view,
+    contentSnapshot: (_) => projectedContent,
     pathHandoffSnapshot: (_) => const TerminalContextDockPathHandoffSnapshot(
       block: TerminalContextDockPathInsertionBlock.none,
       canCopy: true,
@@ -113,10 +115,7 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
       path: '/root/result-000.txt',
     ),
   );
-  final TerminalSplitLayoutSize fullSize = TerminalSplitLayoutSize(
-    width: 800,
-    height: 500,
-  );
+  var fullSize = TerminalSplitLayoutSize(width: 800, height: 500);
   void reconcile() {
     adapter.reconcile(
       tabSizes: <TerminalTabId, TerminalSplitLayoutSize>{
@@ -149,7 +148,7 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   final TwoPaneSplitView outer = nativeWindow.contentView! as TwoPaneSplitView;
   final TwoPaneSplitView content = outer.secondView! as TwoPaneSplitView;
   final TextEditor editor = content.firstView! as TextEditor;
-  final TextView details = content.secondView! as TextView;
+  final TextEditor details = content.secondView! as TextEditor;
   final int outerHandle = bindings.handleFor(outer);
   final int contentHandle = bindings.handleFor(content);
   final int editorHandle = bindings.handleFor(editor);
@@ -167,6 +166,7 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
             0.001 &&
         bindings.viewConfigurations[detailsHandle]!.acceptsFirstResponder ==
             false &&
+        bindings.textEditorEditable[detailsHandle] == false &&
         bindings.texts[editorHandle]!.contains('result-511.txt') &&
         !bindings.texts[editorHandle]!.contains('/root/result-000.txt') &&
         bindings.texts[detailsHandle]!.contains('/root/result-000.txt') &&
@@ -193,6 +193,8 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
         focusNavigator: presenter.focusNavigator,
         focusTerminal: presenter.focusTerminal,
         canFocusNavigator: () => presenter.canFocusNavigator,
+        shouldConsumeNavigatorRequest: () =>
+            presenter.shouldConsumeNavigatorRequest,
         onChanged: () {
           directory.synchronize();
           reconcile();
@@ -314,6 +316,174 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     're-entering the Navigator restores its retained mode and query',
   );
 
+  final TerminalContextDockWindowSnapshot navigatorDock = dock
+      .snapshotForWindow(logicalWindow.id)!;
+  final TerminalContextDockFocusRequest terminalFocus =
+      TerminalContextDockFocusRequest(
+        windowId: logicalWindow.id,
+        paneId: pane.id,
+        stateGeneration: navigatorDock.generation,
+        querySelectionGeneration: navigatorDock.pane.querySelectionGeneration,
+      );
+  presenter.focusTerminal(terminalFocus);
+  dock.focusTerminal(logicalWindow.id, pane.id);
+  final TerminalContextDockForegroundJobIdentity loadingIdentity =
+      TerminalContextDockForegroundJobIdentity(
+        sessionId: pane.sessionId,
+        foregroundProcessGroup: 4200,
+        epoch: 1,
+      );
+  projectedContent = TerminalContextDockContentSnapshot(
+    windowId: logicalWindow.id,
+    paneId: pane.id,
+    sessionId: pane.sessionId,
+    generation: 1,
+    mode: TerminalContextDockContentMode.foregroundJob,
+    directorySuspended: true,
+    process: TerminalContextDockProcessSnapshot.loading(
+      identity: loadingIdentity,
+      observedAtMonotonicMicros: 1,
+    ),
+  );
+  reconcile();
+  _expect(
+    bindings.texts[editorHandle]!.contains('プロセス情報を読み込み中') &&
+        !bindings.texts[editorHandle]!.contains('/root') &&
+        bindings.firstResponders[windowHandle] ==
+            bindings.handleFor(adapter.resourcesForPane(pane.id)!.view),
+    'loading foreground state switches documents without exposing stale directory content',
+  );
+  projectedContent = _hierarchyProcessContent(
+    logicalWindow.id,
+    pane.sessionId,
+    elapsedMicroseconds: 42000000,
+  );
+  reconcile();
+  final String processList = bindings.texts[editorHandle]!;
+  final String processDetails = bindings.texts[detailsHandle]!;
+  final int terminalHandle = bindings.handleFor(
+    adapter.resourcesForPane(pane.id)!.view,
+  );
+  _expect(
+    processList.contains('プロセスインスペクタ') &&
+        processList.contains('表示: プロセスインスペクタ') &&
+        processList.contains('入力: ターミナル') &&
+        processList.contains('実行中 · 00:42') &&
+        processList.contains('フォアグラウンドジョブ · 3 プロセス') &&
+        processList.contains('一部のプロセス情報を利用できません') &&
+        processList.contains(r'runner\n\u{202e}') &&
+        processList.contains('PID 4201') &&
+        processList.contains('ほか 1 プロセスを省略') &&
+        processList.contains('ディレクトリナビゲータはシェル待機中に利用できます') &&
+        !processList.contains('ディレクトリナビゲータ\n') &&
+        !processList.contains('/root') &&
+        processDetails.contains('プロセス詳細') &&
+        processDetails.contains('実行ファイル') &&
+        processDetails.contains(r'/private/tmp/tool\n\u{202e}') &&
+        processDetails.contains(r'"runner"  "line\nbreak"') &&
+        processDetails.contains(r'"\u{202e}--flag"') &&
+        processDetails.contains('シェルへ入力した元の文字列ではありません') &&
+        processDetails.contains('ほか 2 引数を省略') &&
+        processDetails.contains('引数は上限で切り詰められています') &&
+        processDetails.contains('PID 4201 · PGID 4200') &&
+        bindings.textEditorEditable[editorHandle] == false &&
+        bindings.textEditorEditable[detailsHandle] == false &&
+        bindings.firstResponders[windowHandle] == terminalHandle &&
+        bindings.windowKeyEventRoutings[windowHandle] == 2 &&
+        identical(content.firstView, editor) &&
+        identical(content.secondView, details),
+    'Process Inspector replaces the Directory document with escaped bounded '
+    'read-only process list and pinned primary details',
+  );
+  final TerminalActionDispatchResult consumedSearch = await dispatcher.dispatch(
+    TerminalActionId.searchFilesAndFolders,
+  );
+  _expect(
+    consumedSearch.disposition == TerminalActionDispatchDisposition.executed &&
+        !dock.snapshotForWindow(logicalWindow.id)!.navigatorOwnsInput &&
+        bindings.firstResponders[windowHandle] == terminalHandle &&
+        bindings.windowKeyEventRoutings[windowHandle] == 2,
+    'Navigator shortcuts are consumed during a foreground job without moving '
+    'focus to the hidden query editor',
+  );
+
+  final int retainedProcessSelection = processList.indexOf('runner');
+  final int retainedDetailSelection = processDetails.indexOf('/private/tmp');
+  editor.setSelection(TextEditorSelection(start: retainedProcessSelection));
+  details.setSelection(TextEditorSelection(start: retainedDetailSelection));
+  final int processRevealBaseline =
+      bindings.textEditorSelectionRevealCounts[editorHandle]!;
+  final int detailRevealBaseline =
+      bindings.textEditorSelectionRevealCounts[detailsHandle]!;
+  projectedContent = _hierarchyProcessContent(
+    logicalWindow.id,
+    pane.sessionId,
+    elapsedMicroseconds: 65000000,
+  );
+  reconcile();
+  _expect(
+    bindings.texts[editorHandle]!.contains('実行中 · 01:05') &&
+        bindings.textEditorSelectionStarts[editorHandle] ==
+            retainedProcessSelection &&
+        bindings.textEditorSelectionStarts[detailsHandle] ==
+            retainedDetailSelection &&
+        bindings.textEditorSelectionRevealCounts[editorHandle] ==
+            processRevealBaseline &&
+        bindings.textEditorSelectionRevealCounts[detailsHandle] ==
+            detailRevealBaseline &&
+        bindings.firstResponders[windowHandle] == terminalHandle,
+    'elapsed refresh preserves both read-only selections, scroll ownership, '
+    'and the terminal first responder',
+  );
+
+  projectedContent = TerminalContextDockContentSnapshot(
+    windowId: logicalWindow.id,
+    paneId: pane.id,
+    sessionId: pane.sessionId,
+    generation: 3,
+    mode: TerminalContextDockContentMode.shellOwnedCommand,
+    directorySuspended: true,
+    process: TerminalContextDockProcessSnapshot.shellOwned(
+      observedAtMonotonicMicros: 1,
+    ).withElapsed(3000000),
+  );
+  reconcile();
+  _expect(
+    bindings.texts[editorHandle]!.contains('シェルコマンドを実行中') &&
+        bindings.texts[editorHandle]!.contains('観測上の実行時間 · 00:03') &&
+        bindings.texts[detailsHandle]!.contains('シェル連携なしではコマンドの詳細を取得できません') &&
+        !bindings.texts[detailsHandle]!.contains('/private/tmp'),
+    'shell-owned work is a content-free status and never invents argv',
+  );
+  projectedContent = TerminalContextDockContentSnapshot(
+    windowId: logicalWindow.id,
+    paneId: pane.id,
+    sessionId: pane.sessionId,
+    generation: 4,
+    mode: TerminalContextDockContentMode.protected,
+    directorySuspended: true,
+    process: null,
+  );
+  reconcile();
+  _expect(
+    bindings.texts[editorHandle]!.contains('保護入力中') &&
+        bindings.texts[detailsHandle]!.contains('保護入力中はプロセス情報を表示しません') &&
+        !bindings.texts[editorHandle]!.contains('runner') &&
+        !bindings.texts[detailsHandle]!.contains('/private/tmp') &&
+        bindings.firstResponders[windowHandle] == terminalHandle,
+    'protected projection atomically replaces every secret-bearing native string',
+  );
+  projectedContent = null;
+  reconcile();
+  _expect(
+    bindings.texts[editorHandle]!.contains('ディレクトリナビゲータ') &&
+        bindings.texts[editorHandle]!.contains('モード: ターミナル') &&
+        bindings.texts[editorHandle]!.contains('移動先: result-2') &&
+        bindings.firstResponders[windowHandle] == terminalHandle,
+    'returning to Directory Navigator restores its retained mode and query '
+    'without changing terminal input ownership',
+  );
+
   final TerminalTabState secondTab = await state.createTab(
     logicalWindow.id,
     configuration,
@@ -406,6 +576,19 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     'an unchanged Dock reconcile does not detach its terminal child or lose '
     'the first responder',
   );
+  fullSize = TerminalSplitLayoutSize(width: 460, height: 500);
+  reconcile();
+  _expect(
+    selectedNativeWindow.contentView is! TwoPaneSplitView &&
+        paneLayout?.width == 460,
+    'a narrow window hides the Dock instead of violating terminal minimum width',
+  );
+  fullSize = TerminalSplitLayoutSize(width: 800, height: 500);
+  reconcile();
+  _expect(
+    identical(selectedNativeWindow.contentView, outer) && paneLayout != null,
+    'restoring sufficient geometry reattaches the same bounded Dock resources',
+  );
 
   actions.dispose();
   directory.dispose();
@@ -416,6 +599,67 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   await application.terminate();
   await rawEvents.close();
   _expect(bindings.objects.isEmpty, 'Context Dock native resources leaked');
+}
+
+TerminalContextDockContentSnapshot _hierarchyProcessContent(
+  TerminalWindowId windowId,
+  TerminalSessionId sessionId, {
+  required int elapsedMicroseconds,
+}) {
+  final TerminalContextDockForegroundJobIdentity identity =
+      TerminalContextDockForegroundJobIdentity(
+        sessionId: sessionId,
+        foregroundProcessGroup: 4200,
+        epoch: 1,
+      );
+  return TerminalContextDockContentSnapshot(
+    windowId: windowId,
+    paneId: sessionId.paneId,
+    sessionId: sessionId,
+    generation: 2,
+    mode: TerminalContextDockContentMode.foregroundJob,
+    directorySuspended: true,
+    process: TerminalContextDockProcessSnapshot(
+      status: TerminalContextDockProcessStatus.partial,
+      identity: identity,
+      observedAtMonotonicMicros: 1,
+      elapsedMicroseconds: elapsedMicroseconds,
+      members: <TerminalContextDockProcessMember>[
+        TerminalContextDockProcessMember(
+          processId: 4201,
+          startTimeSeconds: 1,
+          startTimeMicroseconds: 0,
+          startAbsoluteTime: 1,
+          elapsedMicroseconds: elapsedMicroseconds,
+          name: 'runner\n\u202e',
+          informationSystemError: 0,
+          resourceUsageSystemError: 0,
+        ),
+        TerminalContextDockProcessMember(
+          processId: 4202,
+          startTimeSeconds: 1,
+          startTimeMicroseconds: 1,
+          startAbsoluteTime: 2,
+          elapsedMicroseconds: elapsedMicroseconds - 1000000,
+          name: 'helper',
+          informationSystemError: 0,
+          resourceUsageSystemError: 0,
+        ),
+      ],
+      totalMemberCount: 3,
+      omittedMemberCount: 1,
+      memberIssueCount: 0,
+      primaryIndex: 0,
+      executablePath: '/private/tmp/tool\n\u202e',
+      executablePathSystemError: 0,
+      arguments: const <String>['runner', 'line\nbreak', '\u202e--flag'],
+      totalArgumentCount: 5,
+      omittedArgumentCount: 2,
+      argumentsTruncated: true,
+      argumentsSystemError: 0,
+      observationSystemError: 0,
+    ),
+  );
 }
 
 Future<void> _testCommandPaletteSelectionViewportFollow() async {

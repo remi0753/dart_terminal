@@ -279,6 +279,18 @@ void _testPresenterAndStatusMessages() {
         messages.incidentCrashSavePanelMessage.contains('ファイルパス') &&
         messages.incidentSampleSavePanelMessage.contains('1秒間') &&
         messages.incidentSavePanelPrompt == '保存して続ける' &&
+        messages.processInspectorTitle == 'プロセスインスペクタ' &&
+        messages.processInspectorForegroundJob(2).contains('2 プロセス') &&
+        messages.processInspectorCommandArgv.contains('argv') &&
+        messages.processInspectorProtectedHelp.contains('表示しません') &&
+        TerminalLocalization.english.processInspectorTitle ==
+            'Process Inspector' &&
+        TerminalLocalization.english
+            .processInspectorForegroundJob(1)
+            .endsWith('1 process') &&
+        TerminalLocalization.english
+            .processInspectorForegroundJob(2)
+            .endsWith('2 processes') &&
         messages.osc52Identity(pane: 2, session: 3, request: 4) ==
             'ペイン 2  セッション 3  要求 4' &&
         messages.osc52WriteClipboard(9).contains('9 UTF-8 bytes') &&

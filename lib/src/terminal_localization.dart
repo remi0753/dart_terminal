@@ -241,6 +241,53 @@ final class TerminalLocalization {
   String get contextDockFile => _ja ? 'ファイル' : 'File';
   String get contextDockSymbolicLink => _ja ? 'シンボリックリンク' : 'Symbolic link';
   String get contextDockOther => _ja ? 'その他' : 'Other';
+  String get processInspectorTitle => _ja ? 'プロセスインスペクタ' : 'Process Inspector';
+  String get processInspectorView => _ja ? '表示' : 'View';
+  String get processInspectorInput => _ja ? '入力' : 'Input';
+  String get processInspectorTerminal => _ja ? 'ターミナル' : 'Terminal';
+  String get processInspectorRunning => _ja ? '実行中' : 'Running';
+  String get processInspectorObservedRunning =>
+      _ja ? '観測上の実行時間' : 'Observed running';
+  String processInspectorForegroundJob(int processCount) => _ja
+      ? 'フォアグラウンドジョブ · $processCount プロセス'
+      : 'Foreground job · $processCount ${processCount == 1 ? 'process' : 'processes'}';
+  String get processInspectorLoading =>
+      _ja ? 'プロセス情報を読み込み中…' : 'Loading process information…';
+  String get processInspectorPartial =>
+      _ja ? '一部のプロセス情報を利用できません' : 'Some process information is unavailable';
+  String get processInspectorUnavailable =>
+      _ja ? 'プロセス情報を利用できません' : 'Process information is unavailable';
+  String get processInspectorProtected => _ja ? '保護入力中' : 'Protected input';
+  String get processInspectorProtectedHelp => _ja
+      ? '保護入力中はプロセス情報を表示しません'
+      : 'Process information is hidden during protected input';
+  String get processInspectorShellCommand =>
+      _ja ? 'シェルコマンドを実行中' : 'Shell command running';
+  String get processInspectorShellDetailsUnavailable => _ja
+      ? 'シェル連携なしではコマンドの詳細を取得できません'
+      : 'Command details are unavailable without shell integration';
+  String get processInspectorDirectoryIdleHint => _ja
+      ? 'ディレクトリナビゲータはシェル待機中に利用できます'
+      : 'Directory Navigator is available when the shell is idle';
+  String get processInspectorProcessList => _ja ? 'プロセス一覧' : 'Process list';
+  String get processInspectorDetails => _ja ? 'プロセス詳細' : 'Process details';
+  String get processInspectorExecutable => _ja ? '実行ファイル' : 'Executable';
+  String get processInspectorCommandArgv =>
+      _ja ? 'コマンド（プロセス argv）' : 'Command (process argv)';
+  String get processInspectorArgvNote => _ja
+      ? '各引用符は1引数を表します。シェルへ入力した元の文字列ではありません。'
+      : 'Each quoted token is one argument, not the original shell source.';
+  String get processInspectorPid => 'PID';
+  String get processInspectorPgid => 'PGID';
+  String get processInspectorFieldUnavailable => _ja ? '利用不可' : 'Unavailable';
+  String processInspectorOmittedProcesses(int count) => _ja
+      ? 'ほか $count プロセスを省略'
+      : '$count more ${count == 1 ? 'process' : 'processes'} omitted';
+  String processInspectorOmittedArguments(int count) => _ja
+      ? 'ほか $count 引数を省略'
+      : '$count more ${count == 1 ? 'argument' : 'arguments'} omitted';
+  String get processInspectorArgumentsTruncated =>
+      _ja ? '引数は上限で切り詰められています' : 'Arguments are truncated at the safety limit';
 
   String get directionalSelectionMarker =>
       textDirection == TerminalTextDirection.rightToLeft ? '‹' : '›';

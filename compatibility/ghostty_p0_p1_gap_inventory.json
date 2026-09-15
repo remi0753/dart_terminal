@@ -196,7 +196,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "9c4f4f12908d53d7e139623e109188315a270dedfe5f7a5bef0670a940ff8ce0"
+      "sha256": "25b98228adf0e98a1c2b62385ad01f8dc406db214645a3ea70648bf3caeb5478"
     },
     {
       "path": "lib/src/terminal_input/terminal_prompt_click.dart",

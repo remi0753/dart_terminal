@@ -526,3 +526,71 @@ Input: Terminal
 - `dart run test/run_tests.dart`: pinned evidence再生成後に成功し、最後まで`dart_terminal tests passed`を確認した。
   `TerminalSession` optional foreground observerのlive／terminated境界もaggregate内で通過した。
 - `git diff --check`: whitespace errorなし。
+
+### 2026-09-16 — read-only native presentation、localization、accessibility着手
+
+- 目的: 同じ右Context Dockのouter／vertical splitを保ちながら、Directory Navigatorとユーザー向け名称
+  `Process Inspector`を別documentとして排他的に表示する。foreground中の上段はbounded member summary、
+  下段は固定primary detailとし、terminal first responderを維持する。
+- 背景: coordinatorはmodeとprivacy-safe process snapshotを提供できるが、現行presenterは常にDirectory
+  documentを構築するためforeground中もDirectoryの見出し／`unknown`しか表示できない。
+- 範囲: presenterへのprocess projection接続、process／shell-owned／protected／unavailable document、
+  elapsed／process count／field-local partial表示、English／Japanese文字列、read-only native configuration、
+  accessibility label／help、process切替時のselection／scroll非破壊をnative hierarchy testで固定する。
+- 対象外: process選択、copy、signal／kill、shortcut追加、real PTYのruntime acceptance、README／
+  FEATURE_MATRIX更新。これらのうちacceptanceとreferenceは次のsubtaskで扱う。
+- 依存関係: `TerminalContextDockProcessController`、既存directory presenter、AppKit `TextEditor`／
+  `TextView`／`TwoPaneSplitView`、TerminalLocalization、terminal focus authority。
+- 完了条件: Process Inspector名とDirectory Navigator名を混在させず、cwdをprocess documentへ表示せず、
+  path／process argv／PID／PGID／elapsed／member omissionをboundedに投影する。process viewは常にread-onlyかつ
+  terminal input、1秒更新でfirst responder／scroll／selectionを変えず、protected時にsecret-bearing native
+  textを置換し、dispose後native resource 0とする。
+- 検証方針: pure document assertionsとfake AppKit hierarchyでready／partial／shell-owned／protected、
+  focus、fixed details layout、coalesced updates、localization／accessibility、cleanupを確認し、format、analyze、
+  aggregate、generated evidence、diff review後に単独commitする。
+- 着手時HEADは`99773b3`、working treeはcleanだった。
+
+### 2026-09-16 — native presentation実装の判明事項
+
+- 既存presenterへwindow別content snapshot resolverを追加し、`directoryNavigator`だけを従来documentへ、
+  foreground／shell-owned／protected／unavailableを独立したProcess Inspector documentへ投影した。外側の
+  terminal／Dock splitと、上段scroll／下段固定details splitは交換せず再利用するため、切替やelapsed更新で
+  divider位置を変えない。
+- 上段はtitle、`View: Process Inspector`、`Input: Terminal`、elapsed、total process count、bounded member
+  list、omitted countを表示する。下段はprimary executable、引用符でargument境界を示すprocess argv、
+  shell sourceではない旨、PID／PGIDを表示する。working directoryやDirectoryのpath actionはprocess
+  documentへ混在させない。
+- process name／path／argvはnative modelのbyte上限に加え、表示時にC0／C1、DEL、bidi embedding／override／
+  isolate、backslash、argv内quoteを可視escapeへ変換する。field失敗、argument truncation、member／argument
+  omissionは該当箇所でlocalizeして示し、shell-ownedはobserved elapsed以外を推測しない。
+- fixed detailsをcustom-drawn `TextView`からread-only `TextEditor`へ置き換えた。上下ともnative
+  `NSTextView`由来の読み上げ可能なtext valueを持ち、下段はfirst responderを受けず、Process Inspector中は
+  上段もeditable=falseにする。title／state／count／path／argv／omissionをdocument textとして順番に公開する。
+- process elapsed再描画では同じdocument kindのUTF-16 selectionを新text長へclampして保持し、
+  `scrollSelectionToVisible`を呼ばない。member elapsedもjob snapshotと同じmonotonic advance分を進める。
+- Search／Go To／Move actionには「現在はNavigatorへfocusできないがforeground process viewとしてkeyを消費
+  する」policyを分離した。foreground／shell-owned中はactionを実行済みとして消費し、Dock state、first
+  responder、PTYへ何も送らない。Process Inspector内のidle時利用可能hintで理由を示す。protected時は従来どおり
+  actionをdisabledにしてprivacy policyを弱めない。
+- 最初のlocalization auditは、focus guardのinternal `StateError`へ英語の製品名を直接書いたため失敗した。
+  errorをUI copyではない固定technical classificationへ変更し、ユーザーに見える名称は
+  `TerminalLocalization`だけが所有する境界へ戻した。
+
+### 2026-09-16 — native presentation検証結果
+
+- `dart analyze`（process／Dock state／directory content presenter／localization／product wiring／focused
+  test 2件）: issue 0。
+- `dart run test/terminal_context_dock_test.dart`: 成功。cached monotonic advanceがjobだけでなくmember elapsedへ
+  反映されることを追加確認した。
+- `dart run test/terminal_localization_test.dart`: 成功。English／JapaneseのProcess Inspector title、単数／複数
+  process count、argv／protected copyを確認した。
+- `make terminal-localization-check`: 最初のUI literal違反を修正後に成功し、16 source、4 resource family、
+  21 resource keyのauditを通過した。
+- `dart run test/terminal_native_hierarchy_test.dart`: 成功。loading→partial ready→elapsed update→shell-owned→
+  protected→Directory復帰、control／bidi escape、omission、固定details、terminal first responder、Navigator
+  shortcut消費、selection／scroll非破壊、460 px narrow fallback、resource cleanupをfake AppKitで確認した。
+- `dart run test/terminal_application_acceptance_test.dart`と`dart run test/terminal_action_registry_test.dart`: 成功。
+- `make phase7-appkit-acceptance`、`make ghostty-p0-p1-gap-inventory`、
+  `make release-candidate-daily-use-matrix`: source hashを依存順に再生成し、分類／基準は変更なし。
+- `dart run test/run_tests.dart`: 全aggregateが成功し、`dart_terminal tests passed`まで確認した。
+- `git diff --check`: whitespace errorなし。

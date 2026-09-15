@@ -621,10 +621,13 @@ final class TerminalContextDockActionCoordinator {
     required TerminalContextDockFocusRequester focusNavigator,
     required TerminalContextDockFocusRequester focusTerminal,
     bool Function()? canFocusNavigator,
+    bool Function()? shouldConsumeNavigatorRequest,
     void Function()? onChanged,
   }) : _focusNavigator = focusNavigator,
        _focusTerminal = focusTerminal,
        _canFocusNavigator = canFocusNavigator ?? _alwaysTrue,
+       _shouldConsumeNavigatorRequest =
+           shouldConsumeNavigatorRequest ?? _alwaysFalse,
        _onChanged = onChanged {
     synchronize();
   }
@@ -634,6 +637,7 @@ final class TerminalContextDockActionCoordinator {
   final TerminalContextDockFocusRequester _focusNavigator;
   final TerminalContextDockFocusRequester _focusTerminal;
   final bool Function() _canFocusNavigator;
+  final bool Function() _shouldConsumeNavigatorRequest;
   final void Function()? _onChanged;
   bool _isDisposed = false;
 
@@ -683,7 +687,8 @@ final class TerminalContextDockActionCoordinator {
   }
 
   bool _canEnterNavigator() =>
-      _activeTarget() != null && _readCanFocusNavigator();
+      _activeTarget() != null &&
+      (_readCanFocusNavigator() || _readShouldConsumeNavigatorRequest());
 
   bool _canReturnToTerminal() {
     final _TerminalContextDockTarget? target = _activeTarget();
@@ -706,6 +711,10 @@ final class TerminalContextDockActionCoordinator {
     synchronize();
     final _TerminalContextDockTarget target = _requireActiveTarget();
     if (!_readCanFocusNavigator()) {
+      if (_readShouldConsumeNavigatorRequest()) {
+        _onChanged?.call();
+        return;
+      }
       throw StateError('Context Dock navigator focus is unavailable');
     }
     final TerminalContextDockFocusRequest requested = dockState
@@ -823,7 +832,16 @@ final class TerminalContextDockActionCoordinator {
     }
   }
 
+  bool _readShouldConsumeNavigatorRequest() {
+    try {
+      return _shouldConsumeNavigatorRequest();
+    } on Object {
+      return false;
+    }
+  }
+
   static bool _alwaysTrue() => true;
+  static bool _alwaysFalse() => false;
 }
 
 final class _TerminalContextDockTarget {

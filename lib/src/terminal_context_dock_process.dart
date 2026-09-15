@@ -87,6 +87,18 @@ final class TerminalContextDockProcessMember {
 
   bool get isPartial =>
       informationSystemError != 0 || resourceUsageSystemError != 0;
+
+  TerminalContextDockProcessMember withElapsed(int elapsed) =>
+      TerminalContextDockProcessMember(
+        processId: processId,
+        startTimeSeconds: startTimeSeconds,
+        startTimeMicroseconds: startTimeMicroseconds,
+        startAbsoluteTime: startAbsoluteTime,
+        elapsedMicroseconds: elapsed,
+        name: name,
+        informationSystemError: informationSystemError,
+        resourceUsageSystemError: resourceUsageSystemError,
+      );
 }
 
 /// Content-bearing process projection retained only while its focused job
@@ -203,26 +215,34 @@ final class TerminalContextDockProcessSnapshot {
   TerminalContextDockProcessMember? get primaryProcess =>
       primaryIndex < 0 ? null : members[primaryIndex];
 
-  TerminalContextDockProcessSnapshot withElapsed(int elapsed) =>
-      TerminalContextDockProcessSnapshot(
-        status: status,
-        identity: identity,
-        observedAtMonotonicMicros: observedAtMonotonicMicros,
-        elapsedMicroseconds: elapsed,
-        members: members,
-        totalMemberCount: totalMemberCount,
-        omittedMemberCount: omittedMemberCount,
-        memberIssueCount: memberIssueCount,
-        primaryIndex: primaryIndex,
-        executablePath: executablePath,
-        executablePathSystemError: executablePathSystemError,
-        arguments: arguments,
-        totalArgumentCount: totalArgumentCount,
-        omittedArgumentCount: omittedArgumentCount,
-        argumentsTruncated: argumentsTruncated,
-        argumentsSystemError: argumentsSystemError,
-        observationSystemError: observationSystemError,
-      );
+  TerminalContextDockProcessSnapshot withElapsed(int elapsed) {
+    final int advance = (elapsed - elapsedMicroseconds).clamp(
+      0,
+      0x7fffffffffffffff,
+    );
+    return TerminalContextDockProcessSnapshot(
+      status: status,
+      identity: identity,
+      observedAtMonotonicMicros: observedAtMonotonicMicros,
+      elapsedMicroseconds: elapsed,
+      members: <TerminalContextDockProcessMember>[
+        for (final TerminalContextDockProcessMember member in members)
+          member.withElapsed(member.elapsedMicroseconds + advance),
+      ],
+      totalMemberCount: totalMemberCount,
+      omittedMemberCount: omittedMemberCount,
+      memberIssueCount: memberIssueCount,
+      primaryIndex: primaryIndex,
+      executablePath: executablePath,
+      executablePathSystemError: executablePathSystemError,
+      arguments: arguments,
+      totalArgumentCount: totalArgumentCount,
+      omittedArgumentCount: omittedArgumentCount,
+      argumentsTruncated: argumentsTruncated,
+      argumentsSystemError: argumentsSystemError,
+      observationSystemError: observationSystemError,
+    );
+  }
 }
 
 final class TerminalContextDockContentSnapshot {

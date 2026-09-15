@@ -5,6 +5,7 @@ import 'package:dart_appkit/dart_appkit.dart';
 import 'terminal_application_state.dart';
 import 'terminal_context_dock.dart';
 import 'terminal_context_dock_path_handoff.dart';
+import 'terminal_context_dock_process.dart';
 import 'terminal_directory_snapshot.dart';
 import 'terminal_file_search.dart';
 import 'terminal_localization.dart';
@@ -31,6 +32,8 @@ typedef TerminalContextDockWorkingDirectoryResolver =
 typedef TerminalContextDockPaneObservationPolicy = bool Function(PaneId paneId);
 typedef TerminalContextDockPathHandoffSnapshotResolver =
     TerminalContextDockPathHandoffSnapshot? Function(TerminalWindowId windowId);
+typedef TerminalContextDockContentSnapshotResolver =
+    TerminalContextDockContentSnapshot? Function(TerminalWindowId windowId);
 
 enum TerminalContextDockDirectoryStatus {
   loading,
@@ -1315,9 +1318,11 @@ final class TerminalContextDockDirectoryPresenter {
     required Window? Function(TerminalTabId tabId) windowForTab,
     required View? Function(PaneId paneId) terminalViewForPane,
     TerminalContextDockPathHandoffSnapshotResolver? pathHandoffSnapshot,
+    TerminalContextDockContentSnapshotResolver? contentSnapshot,
   }) : _windowForTab = windowForTab,
        _terminalViewForPane = terminalViewForPane,
-       _pathHandoffSnapshot = pathHandoffSnapshot ?? _noPathHandoffSnapshot;
+       _pathHandoffSnapshot = pathHandoffSnapshot ?? _noPathHandoffSnapshot,
+       _contentSnapshot = contentSnapshot ?? _noContentSnapshot;
 
   final TerminalApplicationState applicationState;
   final TerminalContextDockState dockState;
@@ -1326,6 +1331,7 @@ final class TerminalContextDockDirectoryPresenter {
   final Window? Function(TerminalTabId tabId) _windowForTab;
   final View? Function(PaneId paneId) _terminalViewForPane;
   final TerminalContextDockPathHandoffSnapshotResolver _pathHandoffSnapshot;
+  final TerminalContextDockContentSnapshotResolver _contentSnapshot;
   final Map<TerminalWindowId, _TerminalContextDockNativeResources> _resources =
       <TerminalWindowId, _TerminalContextDockNativeResources>{};
   final Map<TerminalWindowId, TerminalSplitLayoutSize> _fullSizes =
@@ -1343,8 +1349,8 @@ final class TerminalContextDockDirectoryPresenter {
 
   String? nativeDetailsTextForWindow(TerminalWindowId windowId) {
     if (_isDisposed) return null;
-    final TextView? details = _resources[windowId]?.details;
-    return details == null || details.isDisposed ? null : details.text;
+    final TextEditor? details = _resources[windowId]?.details;
+    return details == null || details.isDisposed ? null : details.snapshot.text;
   }
 
   bool get canFocusNavigator {
@@ -1355,8 +1361,37 @@ final class TerminalContextDockDirectoryPresenter {
     if (window == null || window.role != TerminalWindowRole.standard) {
       return false;
     }
+    final TerminalContextDockContentSnapshot? content = _contentSnapshot(
+      window.id,
+    );
+    if (content != null &&
+        content.mode != TerminalContextDockContentMode.directoryNavigator) {
+      return false;
+    }
     final TerminalSplitLayoutSize? fullSize = _fullSizes[window.id];
     return fullSize == null || _hasRoom(fullSize);
+  }
+
+  /// Whether a Navigator shortcut should be consumed while another Context
+  /// Dock document is active instead of moving focus to a hidden editor.
+  bool get shouldConsumeNavigatorRequest {
+    if (_isDisposed || applicationState.isDisposed || dockState.isDisposed) {
+      return false;
+    }
+    final TerminalWindowState? window = applicationState.activeWindow;
+    if (window == null || window.role != TerminalWindowRole.standard) {
+      return false;
+    }
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+      window.id,
+    );
+    final TerminalContextDockContentSnapshot? content = _contentSnapshot(
+      window.id,
+    );
+    return dock?.isVisible == true &&
+        content != null &&
+        (content.mode == TerminalContextDockContentMode.foregroundJob ||
+            content.mode == TerminalContextDockContentMode.shellOwnedCommand);
   }
 
   TerminalSplitLayoutSize resolveTerminalLayoutSize(
@@ -1478,6 +1513,13 @@ final class TerminalContextDockDirectoryPresenter {
     final TerminalContextDockWindowSnapshot dock =
         dockState.snapshotForWindow(request.windowId) ??
         (throw StateError('Context Dock state is unavailable'));
+    final TerminalContextDockContentSnapshot? content = _contentSnapshot(
+      request.windowId,
+    );
+    if (content != null &&
+        content.mode != TerminalContextDockContentMode.directoryNavigator) {
+      throw StateError('Context Dock navigator document is not active');
+    }
     _setEditorEditable(resources, dock.pane.acceptsQuery);
     window
       ..keyEventRouting = KeyEventRouting.dartOnly
@@ -1602,28 +1644,51 @@ final class TerminalContextDockDirectoryPresenter {
     TerminalContextDockWindowSnapshot dock,
     TerminalContextDockDirectorySnapshot? directory,
   ) {
-    final _TerminalContextDockDocument document =
-        _TerminalContextDockDocument.build(
-          localization,
-          dock,
-          directory,
-          _pathHandoffSnapshot(dock.windowId),
-        );
+    final TerminalContextDockContentSnapshot? content = _contentSnapshot(
+      dock.windowId,
+    );
+    final bool showsDirectory =
+        content == null ||
+        content.mode == TerminalContextDockContentMode.directoryNavigator;
+    final _TerminalContextDockDocument document = showsDirectory
+        ? _TerminalContextDockDocument.buildDirectory(
+            localization,
+            dock,
+            directory,
+            _pathHandoffSnapshot(dock.windowId),
+          )
+        : _TerminalContextDockDocument.buildProcess(localization, content);
     _setEditorEditable(
       resources,
-      dock.navigatorOwnsInput && dock.pane.acceptsQuery,
+      showsDirectory && dock.navigatorOwnsInput && dock.pane.acceptsQuery,
     );
     if (resources.document?.navigatorText != document.navigatorText ||
         resources.document?.selection != document.selection) {
+      final TextEditorSelection publicationSelection =
+          !showsDirectory && resources.document?.kind == document.kind
+          ? _retainedSelection(
+              resources.editor.snapshot.selection,
+              document.navigatorText.length,
+            )
+          : document.selection;
       resources.editor.setDocument(
         TextEditorDocument(
           text: document.navigatorText,
-          selection: document.selection,
+          selection: publicationSelection,
         ),
       );
     }
     if (resources.document?.detailsText != document.detailsText) {
-      resources.details.text = document.detailsText;
+      final TextEditorSelection retained =
+          resources.document?.kind == document.kind
+          ? _retainedSelection(
+              resources.details.snapshot.selection,
+              document.detailsText.length,
+            )
+          : const TextEditorSelection(start: 0);
+      resources.details.setDocument(
+        TextEditorDocument(text: document.detailsText, selection: retained),
+      );
     }
     final int? selectedLine = document.selectedLineStart;
     resources.editor.setLineHighlight(
@@ -1639,7 +1704,8 @@ final class TerminalContextDockDirectoryPresenter {
               ),
             ),
     );
-    if (resources.document?.selectedResultIndex !=
+    if (showsDirectory &&
+        resources.document?.selectedResultIndex !=
             document.selectedResultIndex &&
         dock.navigatorOwnsInput) {
       if (dock.pane.acceptsQuery && document.selectedLineStart != null) {
@@ -1655,7 +1721,8 @@ final class TerminalContextDockDirectoryPresenter {
         resources.editor.scrollSelectionToVisible();
       }
     }
-    if (dock.navigatorOwnsInput &&
+    if (showsDirectory &&
+        dock.navigatorOwnsInput &&
         dock.pane.acceptsQuery &&
         resources.lastAppliedQuerySelectionGeneration !=
             dock.pane.querySelectionGeneration) {
@@ -1666,6 +1733,15 @@ final class TerminalContextDockDirectoryPresenter {
           dock.pane.querySelectionGeneration;
     }
     resources.document = document;
+  }
+
+  static TextEditorSelection _retainedSelection(
+    TextEditorSelection selection,
+    int textLength,
+  ) {
+    final int start = selection.start.clamp(0, textLength);
+    final int length = selection.length.clamp(0, textLength - start);
+    return TextEditorSelection(start: start, length: length);
   }
 
   static void _setEditorEditable(
@@ -1746,6 +1822,10 @@ final class TerminalContextDockDirectoryPresenter {
   static TerminalContextDockPathHandoffSnapshot? _noPathHandoffSnapshot(
     TerminalWindowId _,
   ) => null;
+
+  static TerminalContextDockContentSnapshot? _noContentSnapshot(
+    TerminalWindowId _,
+  ) => null;
 }
 
 final class _TerminalContextDockNativeResources {
@@ -1757,8 +1837,8 @@ final class _TerminalContextDockNativeResources {
           initiallyEditable: false,
         ),
       ),
-      details = TextView(
-        configuration: const TextViewConfiguration(
+      details = TextEditor(
+        configuration: const TextEditorConfiguration(
           view: ViewConfiguration(
             acceptsFirstResponder: false,
             autoresizesWidth: true,
@@ -1766,13 +1846,14 @@ final class _TerminalContextDockNativeResources {
           ),
           font: TextViewFont.monospacedSystem(size: 12),
           padding: TextViewPadding.all(10),
+          initiallyEditable: false,
         ),
       ),
       contentSplit = TwoPaneSplitView(axis: SplitViewAxis.vertical),
       split = TwoPaneSplitView(axis: SplitViewAxis.horizontal);
 
   final TextEditor editor;
-  final TextView details;
+  final TextEditor details;
   final TwoPaneSplitView contentSplit;
   final TwoPaneSplitView split;
   _TerminalContextDockDocument? document;
@@ -1799,8 +1880,11 @@ final class _TerminalContextDockNativeResources {
   }
 }
 
+enum _TerminalContextDockDocumentKind { directory, process }
+
 final class _TerminalContextDockDocument {
   const _TerminalContextDockDocument({
+    required this.kind,
     required this.navigatorText,
     required this.detailsText,
     required this.selection,
@@ -1810,6 +1894,7 @@ final class _TerminalContextDockDocument {
     required this.selectedResultIndex,
   });
 
+  final _TerminalContextDockDocumentKind kind;
   final String navigatorText;
   final String detailsText;
   final TextEditorSelection selection;
@@ -1818,7 +1903,7 @@ final class _TerminalContextDockDocument {
   final int? selectedLineStart;
   final int selectedResultIndex;
 
-  static _TerminalContextDockDocument build(
+  static _TerminalContextDockDocument buildDirectory(
     TerminalLocalization localization,
     TerminalContextDockWindowSnapshot dock,
     TerminalContextDockDirectorySnapshot? directory,
@@ -1987,6 +2072,7 @@ final class _TerminalContextDockDocument {
         ? TextEditorSelection(start: selectedLineStart)
         : TextEditorSelection(start: queryStart);
     return _TerminalContextDockDocument(
+      kind: _TerminalContextDockDocumentKind.directory,
       navigatorText: navigator.toString(),
       detailsText: details.toString(),
       selection: selection,
@@ -1996,6 +2082,206 @@ final class _TerminalContextDockDocument {
       selectedResultIndex: selectedIndex,
     );
   }
+
+  static _TerminalContextDockDocument buildProcess(
+    TerminalLocalization localization,
+    TerminalContextDockContentSnapshot content,
+  ) {
+    final StringBuffer navigator = StringBuffer();
+    void line([String value = '']) => navigator.writeln(value);
+    line(localization.processInspectorTitle);
+    line(
+      '${localization.processInspectorView}: '
+      '${localization.processInspectorTitle}',
+    );
+    line(
+      '${localization.processInspectorInput}: '
+      '${localization.processInspectorTerminal}',
+    );
+
+    final TerminalContextDockProcessSnapshot? process = content.process;
+    switch (content.mode) {
+      case TerminalContextDockContentMode.foregroundJob:
+        if (process == null ||
+            process.status == TerminalContextDockProcessStatus.loading) {
+          line(localization.processInspectorLoading);
+        } else {
+          line(
+            '${localization.processInspectorRunning} · '
+            '${_elapsed(process.elapsedMicroseconds)}',
+          );
+          line(
+            localization.processInspectorForegroundJob(
+              process.totalMemberCount,
+            ),
+          );
+          if (process.status == TerminalContextDockProcessStatus.partial ||
+              process.status == TerminalContextDockProcessStatus.unavailable) {
+            line(localization.processInspectorPartial);
+          }
+          line();
+          line(localization.processInspectorProcessList);
+          for (var index = 0; index < process.members.length; index++) {
+            final TerminalContextDockProcessMember member =
+                process.members[index];
+            final String marker = index == process.primaryIndex ? '●' : ' ';
+            final String name = _displayValue(
+              member.name.isEmpty
+                  ? localization.processInspectorFieldUnavailable
+                  : member.name,
+            );
+            line(
+              '$marker $name  ${localization.processInspectorPid} '
+              '${member.processId} · ${_elapsed(member.elapsedMicroseconds)}',
+            );
+          }
+          if (process.omittedMemberCount > 0) {
+            line(
+              localization.processInspectorOmittedProcesses(
+                process.omittedMemberCount,
+              ),
+            );
+          }
+          if (process.members.isEmpty) {
+            line(localization.processInspectorUnavailable);
+          }
+        }
+        line();
+        line(localization.processInspectorDirectoryIdleHint);
+        break;
+      case TerminalContextDockContentMode.shellOwnedCommand:
+        line(
+          '${localization.processInspectorObservedRunning} · '
+          '${_elapsed(process?.elapsedMicroseconds ?? 0)}',
+        );
+        line(localization.processInspectorShellCommand);
+        line();
+        line(localization.processInspectorDirectoryIdleHint);
+        break;
+      case TerminalContextDockContentMode.protected:
+        line(localization.processInspectorProtected);
+        line(localization.processInspectorProtectedHelp);
+        break;
+      case TerminalContextDockContentMode.unavailable:
+        line(localization.processInspectorUnavailable);
+        break;
+      case TerminalContextDockContentMode.directoryNavigator:
+        throw StateError('Directory content requires the directory document');
+    }
+
+    final StringBuffer details = StringBuffer();
+    void detailLine([String value = '']) => details.writeln(value);
+    detailLine(localization.processInspectorDetails);
+    if (content.mode == TerminalContextDockContentMode.foregroundJob &&
+        process != null &&
+        process.status != TerminalContextDockProcessStatus.loading) {
+      detailLine(localization.processInspectorExecutable);
+      detailLine(
+        process.executablePath == null
+            ? localization.processInspectorFieldUnavailable
+            : _displayValue(process.executablePath!),
+      );
+      detailLine();
+      detailLine(localization.processInspectorCommandArgv);
+      if (process.arguments.isEmpty) {
+        detailLine(localization.processInspectorFieldUnavailable);
+      } else {
+        detailLine(process.arguments.map(_argumentToken).join('  '));
+        detailLine(localization.processInspectorArgvNote);
+      }
+      if (process.omittedArgumentCount > 0) {
+        detailLine(
+          localization.processInspectorOmittedArguments(
+            process.omittedArgumentCount,
+          ),
+        );
+      }
+      if (process.argumentsTruncated) {
+        detailLine(localization.processInspectorArgumentsTruncated);
+      }
+      detailLine();
+      final TerminalContextDockForegroundJobIdentity? identity =
+          process.identity;
+      final TerminalContextDockProcessMember? primary = process.primaryProcess;
+      detailLine(
+        '${localization.processInspectorPid} '
+        '${primary?.processId ?? '-'} · '
+        '${localization.processInspectorPgid} '
+        '${identity?.foregroundProcessGroup ?? '-'}',
+      );
+      detailLine(
+        '${localization.processInspectorInput}: '
+        '${localization.processInspectorTerminal}',
+      );
+    } else if (content.mode ==
+        TerminalContextDockContentMode.shellOwnedCommand) {
+      detailLine(localization.processInspectorShellDetailsUnavailable);
+      detailLine();
+      detailLine(localization.processInspectorDirectoryIdleHint);
+    } else if (content.mode == TerminalContextDockContentMode.protected) {
+      detailLine(localization.processInspectorProtectedHelp);
+    } else {
+      detailLine(localization.processInspectorUnavailable);
+    }
+    return _TerminalContextDockDocument(
+      kind: _TerminalContextDockDocumentKind.process,
+      navigatorText: navigator.toString(),
+      detailsText: details.toString(),
+      selection: const TextEditorSelection(start: 0),
+      queryCaret: const TextEditorSelection(start: 0),
+      querySelection: const TextEditorSelection(start: 0),
+      selectedLineStart: null,
+      selectedResultIndex: -1,
+    );
+  }
+
+  static String _elapsed(int microseconds) {
+    final int totalSeconds = microseconds < 0
+        ? 0
+        : microseconds ~/ Duration.microsecondsPerSecond;
+    final int hours = totalSeconds ~/ Duration.secondsPerHour;
+    final int minutes = (totalSeconds ~/ Duration.secondsPerMinute) % 60;
+    final int seconds = totalSeconds % 60;
+    final String mm = minutes.toString().padLeft(2, '0');
+    final String ss = seconds.toString().padLeft(2, '0');
+    return hours == 0
+        ? '$mm:$ss'
+        : '${hours.toString().padLeft(2, '0')}:$mm:$ss';
+  }
+
+  static String _argumentToken(String value) =>
+      '"${_displayValue(value, escapeQuote: true)}"';
+
+  static String _displayValue(String value, {bool escapeQuote = false}) {
+    final StringBuffer output = StringBuffer();
+    for (final int scalar in value.runes) {
+      switch (scalar) {
+        case 0x09:
+          output.write(r'\t');
+        case 0x0a:
+          output.write(r'\n');
+        case 0x0d:
+          output.write(r'\r');
+        case 0x5c:
+          output.write(r'\\');
+        case 0x22 when escapeQuote:
+          output.write(r'\"');
+        default:
+          if (_isUnsafeDisplayScalar(scalar)) {
+            output.write('\\u{${scalar.toRadixString(16)}}');
+          } else {
+            output.writeCharCode(scalar);
+          }
+      }
+    }
+    return output.toString();
+  }
+
+  static bool _isUnsafeDisplayScalar(int scalar) =>
+      scalar < 0x20 ||
+      (scalar >= 0x7f && scalar <= 0x9f) ||
+      (scalar >= 0x202a && scalar <= 0x202e) ||
+      (scalar >= 0x2066 && scalar <= 0x2069);
 
   static String _statusText(
     TerminalLocalization localization,

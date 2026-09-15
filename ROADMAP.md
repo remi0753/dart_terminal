@@ -1495,7 +1495,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] bounded native foreground job snapshotとDart model
   - [x] content coordinator、refresh、privacy lifecycle
-  - [ ] read-only native presentation、localization、accessibility
+  - [x] read-only native presentation、localization、accessibility
   - [ ] product privacy／performance gate、Developer JIT／Release AOT受け入れ、reference更新
 - [x] focused paneに追従するContext Dockとlocal file／folder navigator
   （分割、input ownership、filesystem境界、完了条件は
