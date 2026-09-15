@@ -437,8 +437,8 @@ final class TerminalTextInputClient {
     view.performCustomOperation(payload);
   }
 
-  /// Drives the fixed input-source and key-repeat corpus through the attached
-  /// native `NSTextInputClient` for bundled product acceptance only.
+  /// Drives the fixed input-source, key-repeat, and Option-arrow corpus through
+  /// the attached native `NSTextInputClient` for bundled product acceptance.
   void debugRunAcceptanceMatrix() {
     _requireLive();
     final Uint8List payload = Uint8List(_clientPayloadBytes);

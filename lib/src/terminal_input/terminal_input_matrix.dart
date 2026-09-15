@@ -123,7 +123,7 @@ final class TerminalInputAcceptanceMatrix {
     }
   }
 
-  static const int version = 1;
+  static const int version = 2;
   static const int maximumRows = 32;
   static const int maximumExpectedBytes = 4096;
 
@@ -192,6 +192,18 @@ final class TerminalInputAcceptanceMatrix {
           repetitions: 2,
           expectedBytesPerEvent: const <int>[0x1b, 0x5b, 0x43],
         ),
+        TerminalInputMatrixRow.raw(
+          id: 'option-word-left',
+          category: TerminalInputMatrixCategory.us,
+          event: _optionArrowLeft,
+          expectedBytesPerEvent: const <int>[0x1b, 0x62],
+        ),
+        TerminalInputMatrixRow.raw(
+          id: 'option-word-right',
+          category: TerminalInputMatrixCategory.us,
+          event: _optionArrowRight,
+          expectedBytesPerEvent: const <int>[0x1b, 0x66],
+        ),
       ]);
 
   static const TerminalKeyEvent _arrowRight = TerminalKeyEvent(
@@ -206,6 +218,18 @@ final class TerminalInputAcceptanceMatrix {
     unmodifiedText: '\uf703',
     modifiers: TerminalKeyModifiers(function: true),
     isRepeat: true,
+  );
+  static const TerminalKeyEvent _optionArrowLeft = TerminalKeyEvent(
+    physicalKey: TerminalPhysicalKey.arrowLeft,
+    text: '\uf702',
+    unmodifiedText: '\uf702',
+    modifiers: TerminalKeyModifiers(option: true, function: true),
+  );
+  static const TerminalKeyEvent _optionArrowRight = TerminalKeyEvent(
+    physicalKey: TerminalPhysicalKey.arrowRight,
+    text: '\uf703',
+    unmodifiedText: '\uf703',
+    modifiers: TerminalKeyModifiers(option: true, function: true),
   );
 
   final List<TerminalInputMatrixRow> rows;

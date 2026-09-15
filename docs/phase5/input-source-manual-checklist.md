@@ -31,6 +31,7 @@ method learning data into the evidence.
 | Emoji picker | Press Control-Command-Space, choose “woman technologist” (`👩‍💻`), and insert it. | The picker is anchored by AppKit and the ZWJ sequence is committed once as one visible grapheme. UTF-8 is `f0 9f 91 a9 e2 80 8d f0 9f 92 bb`. |
 | Unicode Hex Input | If `Unicode Hex Input` is already installed, select it, hold Option, and type `2318`. | Exactly `⌘` is committed. UTF-8 is `e2 8c 98`; the hexadecimal keystrokes are not separately delivered. |
 | Key repeat | Return to ABC/US. At a shell prompt, hold Right Arrow long enough to repeat. | The initial move and subsequent repeats are delivered in order; the UI stays responsive and no repeated event is coalesced into text. In normal cursor mode each event is `1b 5b 43`. |
+| Option word navigation | With the default `macos-option-key=escape`, type `alpha beta` at a shell prompt without submitting it. Press Option-Left, then Option-Right. | The cursor moves to the previous and next shell word. No `D` or `C` is inserted. The terminal sends `1b 62`, then `1b 66`, exactly once each. |
 
 “If installed” cases may be recorded as `not available`; they do not authorize
 changing a shared machine's input-source configuration. The deterministic

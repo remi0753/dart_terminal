@@ -583,8 +583,14 @@ final class TerminalKeyEncoder {
       case TerminalPhysicalKey.arrowDown:
         return _cursor('B', modifiers, modes);
       case TerminalPhysicalKey.arrowRight:
+        if (_isOptionWordNavigation(modifiers)) {
+          return const <int>[0x1b, 0x66];
+        }
         return _cursor('C', modifiers, modes);
       case TerminalPhysicalKey.arrowLeft:
+        if (_isOptionWordNavigation(modifiers)) {
+          return const <int>[0x1b, 0x62];
+        }
         return _cursor('D', modifiers, modes);
       case TerminalPhysicalKey.home:
         return _cursor('H', modifiers, modes);
@@ -714,6 +720,12 @@ final class TerminalKeyEncoder {
         return null;
     }
   }
+
+  static bool _isOptionWordNavigation(TerminalKeyModifiers modifiers) =>
+      modifiers.option &&
+      !modifiers.shift &&
+      !modifiers.control &&
+      !modifiers.command;
 
   List<int> _cursor(
     String finalByte,

@@ -174,6 +174,26 @@ void _testOptionTextBehavior() {
     encoder.encode(
       _event(
         TerminalPhysicalKey.arrowLeft,
+        modifiers: const TerminalKeyModifiers(option: true, function: true),
+      ),
+    ),
+    '\x1b[D',
+    'Option text mode preserves plain Left Arrow navigation',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.arrowRight,
+        modifiers: const TerminalKeyModifiers(option: true, function: true),
+      ),
+    ),
+    '\x1b[C',
+    'Option text mode preserves plain Right Arrow navigation',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.arrowLeft,
         modifiers: const TerminalKeyModifiers(option: true, shift: true),
       ),
     ),
@@ -208,6 +228,41 @@ void _testCursorNavigationAndModifiers() {
     ),
     '\x1bOA',
     'application cursor key uses SS3',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.arrowLeft,
+        modifiers: const TerminalKeyModifiers(option: true, function: true),
+      ),
+      modes: const TerminalKeyboardModes(applicationCursorKeys: true),
+    ),
+    '\x1bb',
+    'Option-Left emits Meta-B independent of application cursor mode',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.arrowRight,
+        modifiers: const TerminalKeyModifiers(option: true, function: true),
+      ),
+    ),
+    '\x1bf',
+    'Option-Right emits Meta-F for shell word navigation',
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.arrowLeft,
+        modifiers: const TerminalKeyModifiers(
+          shift: true,
+          option: true,
+          function: true,
+        ),
+      ),
+    ),
+    '\x1b[1;4D',
+    'Option-Shift-Left retains the xterm modifier sequence',
   );
   _expectBytes(
     encoder.encode(
@@ -423,6 +478,17 @@ void _testKittyDisambiguationAndAlternates() {
   final TerminalKeyEncoder encoder = TerminalKeyEncoder();
   const TerminalKeyboardModes disambiguate = TerminalKeyboardModes(
     kittyKeyboardFlags: TerminalKeyboardModes.kittyDisambiguateEscapeCodes,
+  );
+  _expectBytes(
+    encoder.encode(
+      _event(
+        TerminalPhysicalKey.arrowLeft,
+        modifiers: const TerminalKeyModifiers(option: true, function: true),
+      ),
+      modes: disambiguate,
+    ),
+    '\x1b[1;3D',
+    'Kitty protocol takes precedence over legacy Option word navigation',
   );
   _expectBytes(
     encoder.encode(_event(TerminalPhysicalKey.escape), modes: disambiguate),

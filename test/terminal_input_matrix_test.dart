@@ -25,13 +25,14 @@ void runTerminalInputMatrixTests() {
     }
   }
   _expect(
-    matrix.rows.length == 12 &&
-        matrix.eventCount == 13 &&
-        matrix.expectedBytes.length == 51 &&
+    TerminalInputAcceptanceMatrix.version == 2 &&
+        matrix.rows.length == 14 &&
+        matrix.eventCount == 15 &&
+        matrix.expectedBytes.length == 55 &&
         matrix.expectedHex ==
             '6141c2a55fc3a9e4b8ade69687e697a5e69cace8aa9e'
                 'ed959ceab880f09f91a9e2808df09f92bbe28c98'
-                '1b5b431b5b431b5b43' &&
+                '1b5b431b5b431b5b431b621b66' &&
         <TerminalInputMatrixCategory>{
               for (final TerminalInputMatrixRow row in matrix.rows)
                 row.category,

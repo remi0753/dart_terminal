@@ -33,14 +33,17 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   cancel、candidate rect。preeditはcanonical screenを変えず、Unicode 17の折り返し、
   選択背景、下線、composition caretをCoreText/Metal overlayとして描画
 - US/JIS、dead key、Chinese/Japanese/Korean、emoji ZWJ、Unicode Hex相当のcommitと
-  initial/repeated navigationを、実native text clientから実PTYまでexact byteで検証する
-  versioned matrix。system input sourceを変更しない実機確認票も提供
+  initial/repeated navigation、Option+Left／Rightのshell word navigationを、実native text
+  clientから実PTYまでexact byteで検証するversioned matrix。system input sourceを変更しない
+  実機確認票も提供
 - DECCKM/DECPAMを反映するbounded legacy xterm encoder（UTF-8、Control/Option、
   navigation、F1–F20、keypad）に加え、主/代替画面ごとの16段stack、query/set/push/pop、
   flags 1/2/4/8/16、canonical text/functional/keypad、alternate/base-layout、associated text、
   press/repeat/releaseを扱うKitty keyboard protocol。既定flags=0ではlegacy byteを維持し、
   xterm modifyOtherKeys 1–3とapplication Escapeも独立して処理する。query reply、画面分離、
-  Control-D releaseのexact byteは実PTY/AppKit経路をDeveloper JIT/Release AOTの両方で検証
+  Control-D releaseのexact byteは実PTY/AppKit経路をDeveloper JIT/Release AOTの両方で検証。
+  既定のOption-as-EscapeではOption+Left／Rightを`ESC b`／`ESC f`として送り、shell上で
+  `D`／`C`を入力せず前／次の単語へ移動する
 - stable action、exact chord、conflict検出、override、unbound、passthroughを備えた
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
@@ -501,6 +504,10 @@ Unicode scalar rangeごとの明示的なfont family、初期window sizeとpaddi
 exact physical key chordをpane actionまたはapplication actionへ割り当てます。構文、全key名、
 action ID、`unbind`/`passthrough`、既定binding、予約済みnative shortcutは
 [Keybindings and actions](docs/reference/keybindings-and-actions.md)を参照してください。
+
+`macos-option-key = escape`（既定）では、OptionをMeta/Escape prefixとして扱い、
+Option+Left／Rightはshellの前／次の単語へ移動します。OptionをmacOSの文字入力へ使う場合は
+`macos-option-key = text`を選べます。
 
 `background-opacity` は0（完全透過）から1（不透明）で指定し、既定値は1です。
 reload時は既存の全window/tab/split paneへ同時に反映され、その後に作るterminalや

@@ -1339,9 +1339,9 @@ Future<void> _runTerminalDisplay(
     'terminal display launch omitted exclusive IME/PTY acceptance',
   );
   final RegExp inputMatrixAcceptance = RegExp(
-    r'^TERMINAL_INPUT_MATRIX_TEST version=1 rows=12 events=13 bytes=51 '
+    r'^TERMINAL_INPUT_MATRIX_TEST version=2 rows=14 events=15 bytes=55 '
     r'categories=7 us=true jis=true dead_key=true cjk=true emoji=true '
-    r'unicode_hex=true repeat=true exact=true$',
+    r'unicode_hex=true repeat=true option_word_navigation=true exact=true$',
     multiLine: true,
   );
   _expect(

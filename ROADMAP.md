@@ -1445,6 +1445,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase7/context-dock-terminal-mode.md`](docs/phase7/context-dock-terminal-mode.md)
   を参照する）
+- [x] Option+Left／Rightによるshell word navigationの回帰修正
+  （実施時に
+  [`docs/phase5/option-arrow-word-navigation.md`](docs/phase5/option-arrow-word-navigation.md)
+  を参照する）
 
 ### 完了機能の拡張
 

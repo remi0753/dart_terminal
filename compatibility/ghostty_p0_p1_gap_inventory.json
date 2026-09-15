@@ -4,7 +4,7 @@
   "status": "closed-no-actionable-p0-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "105495d6078fda4b7558079fb11e5d5421ab851a49a6619756a4859ce62b8866",
+    "sha256": "2f8b0a88700e774ffe5c4b9a5c7d567a7bc7e5f69b8d10c245c5f4375d7c4c88",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "1232b4187deb7501593662e64da583eb692e4c20316380e7e7a4234279126c4c"
+      "sha256": "48ba5372c1529f3abb2c3d79c18ddb9a852b5b9993e574bf3044b6412ba90cc3"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -168,7 +168,7 @@
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m",
-      "sha256": "0db7b28bddbc19ebeafec8687ad7c08c11e82e21d074bff082f6c5a87621cfd9"
+      "sha256": "cce2dae44ff142a25f50d65985e4a3f9d07d378ed211af5ec8b3c0577cdc47c9"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalShaders.metal",
@@ -176,7 +176,7 @@
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/test/TerminalRendererCapabilityTests.mm",
-      "sha256": "e623d01d4412898301f99924cea6c749839a1b5997839eb64b1c122e3217ed2f"
+      "sha256": "6dc85888f41e45cb4406a52478aaf07518e7e51c92f718269ab62224a71eb0cd"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/test/font_catalog_test.dart",
@@ -196,7 +196,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "0a23714108d8d06b90a971225697756cc1d8251bf1cc222a1e967b7218550484"
+      "sha256": "50d5e5e7116bc73540b5b6b96daffcdb8cbb3225245bdee1030aa006bada5ff0"
     },
     {
       "path": "lib/src/terminal_input/terminal_prompt_click.dart",
@@ -228,7 +228,7 @@
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
-      "sha256": "9c1189eec157d0047e29e70eab6a18bfa98d74b302146f29a7f5ef27eb4841ed"
+      "sha256": "c9de2f44df79ae294cf698c5f4ddf1b311418fc91cc55344f1f6fd1fb0a55cef"
     }
   ],
   "totals": {
@@ -880,7 +880,7 @@
       "phase": "5",
       "acceptance_sha256": "d5ae5d03bbbbcc6141370aae93a4b9ec49b235d1ac00547c1f46019704e75138",
       "pinned_evidence_sha256": "e9b5115124181a00e474c03910366af957c4deb3fac4ec18816e0cc5391f4769",
-      "current_sha256": "e4384a7ee74de8f13804e1d69818e77b8b0a89526681ff0ebc37a160d3cd3199",
+      "current_sha256": "22033441fff105781374764a3214fe5aa837b516cb6d5b062014d2f0bd08fe76",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -900,7 +900,7 @@
       "phase": "5",
       "acceptance_sha256": "2025733d72ab38f747f03a3074bb79ed37a23123794e230d55e495b45f39c876",
       "pinned_evidence_sha256": "247c583e0a102b52d94c92c2fa63114c36fd28fc8c05e0e4fefa1bfc341fa66e",
-      "current_sha256": "4a2a7910ff7b24d9f73baba80f41c5c2eb8955a20c139c8727924f7ab289692c",
+      "current_sha256": "f329ad222cd4ca339e56f6cfe4d5ef3bfdc365b88035270b4fa9c5e03ff8f8aa",
       "classification": "accepted",
       "gap_ids": []
     },

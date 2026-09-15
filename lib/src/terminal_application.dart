@@ -17220,7 +17220,7 @@ keybind = command+right=pane.focus-left
       'events=${matrix.eventCount} bytes=${matrix.expectedBytes.length} '
       'categories=${TerminalInputMatrixCategory.values.length} '
       'us=true jis=true dead_key=true cjk=true emoji=true '
-      'unicode_hex=true repeat=true exact=true',
+      'unicode_hex=true repeat=true option_word_navigation=true exact=true',
     );
     return true;
   }

@@ -2458,6 +2458,24 @@ int main(int argc, const char* argv[]) {
                        "\xef\x9c\x83",
                "matrix repeat retains initial/repeated native key identity");
       }
+      const std::vector<std::string> matrix_word_characters = {
+          "\xef\x9c\x82", "\xef\x9c\x83"};
+      for (uint64_t index = 0; index < matrix_word_characters.size(); index++) {
+        std::vector<uint8_t> packet =
+            take_text_input_event(text_client.client_id);
+        DtrTextInputEventHeaderV1 header = text_input_header(packet);
+        Expect(header.kind == DTR_TEXT_INPUT_EVENT_RAW_KEY_DOWN &&
+                   header.event_generation == 14 + index &&
+                   header.key_code == 123 + index && header.flags == 0 &&
+                   header.modifiers == ((1u << 3) | (1u << 6)) &&
+                   packet_string(packet, header.text_offset,
+                                 header.text_length) ==
+                       matrix_word_characters[index] &&
+                   packet_string(packet, header.unmodified_text_offset,
+                                 header.unmodified_text_length) ==
+                       matrix_word_characters[index],
+               "matrix Option-arrow retains physical key and modifiers");
+      }
       Expect(text_input_take(text_client.client_id, nullptr, 0,
                              &no_event_required) == DTR_STATUS_NOT_FOUND,
              "input-source matrix leaves no queued event");

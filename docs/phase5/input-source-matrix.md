@@ -2,6 +2,7 @@
 
 - Status: complete
 - Date: 2026-09-06
+- Updated: 2026-09-15
 - Scope: third Phase 5 production-input roadmap item
 - Related: IN-01, IN-02, IN-03, IN-04, TXT-01, TXT-03
 
@@ -35,7 +36,8 @@ the user's global input state.
   native event kind/count, and exact UTF-8 or xterm bytes.
 - Cover US lower/upper output, JIS yen/underscore output, composed dead-key
   Latin, Chinese and Korean commits, emoji ZWJ, Unicode Hex-style scalar output,
-  and first/subsequent repeated navigation input.
+  first/subsequent repeated navigation input, and Option-Left／Right shell word
+  navigation.
 - Drive final text through `insertText:replacementRange:` and repeated raw
   navigation through the product view's raw command path.
 - Read the concatenated result from a real no-echo/raw PTY and require exact
@@ -52,8 +54,9 @@ the user's global input state.
   input sources from a test process.
 - Assuming that a particular keyboard, locale, Chinese/Korean IME, or Unicode
   Hex Input is installed on every build host.
-- Changing terminal key encoding, IME ownership, font fallback, or preedit
-  layout semantics already accepted by the preceding tasks.
+- Changing terminal key encoding beyond the bounded Option-Left／Right word
+  navigation correction, IME ownership, font fallback, or preedit layout
+  semantics already accepted by the preceding tasks.
 - Kitty keyboard, Secure Input, accessibility, mouse, selection, and paste.
 
 ## Dependencies and risks
@@ -126,6 +129,10 @@ the user's global input state.
   common callback/PTY boundary, while
   [`input-source-manual-checklist.md`](input-source-manual-checklist.md) covers
   physical hardware, system pickers, candidates, and restoration.
+- 2026-09-15: matrix version 2 extends the fixed corpus with Option-Left and
+  Option-Right native raw-key events. The events retain physical key codes
+  123/124, Option+Function modifiers, and AppKit private-use characters before
+  the product encoder writes exact `ESC b`／`ESC f` bytes to the PTY.
 - 2026-09-06: the first Developer JIT display run delivered all 13 native
   events but timed out while searching for a marker containing the complete
   102-character hex result. The marker soft-wrapped beyond one screen row, and
@@ -143,8 +150,8 @@ the user's global input state.
   the unchanged byte-exact 51-byte PTY payload; missing or duplicate fixture
   input therefore still fails closed.
 
-- Matrix identity: version 1, 12 immutable rows, 13 events, seven required
-  categories, and 51 exact PTY bytes. Unit tests also reject duplicate/invalid
+- Current matrix identity: version 2, 14 immutable rows, 15 events, seven required
+  categories, and 55 exact PTY bytes. Unit tests also reject duplicate/invalid
   IDs, missing categories, unbounded repeat, and collection mutation.
 - `CI=true make test` in `dart_terminal`: passed. The parser table freshness
   check, formatter (118 files, zero changes), analyzer, build hooks, and full
@@ -156,7 +163,7 @@ the user's global input state.
 - `CI=true make RUNTIME_ARCH=arm64 runtime-terminal-display-integration`:
   passed for Developer JIT and Release AOT. Each real AppKit window accepted the
   complete native matrix through the product router into a raw real PTY, whose
-  shell-side comparison required all 51 bytes to match exactly. Earlier IME,
+  shell-side comparison now requires all 55 bytes to match exactly. Earlier IME,
   Metal, SGR, wrap, bottom-prompt, font, and newest-frame assertions remained
   required and passed.
 - `CI=true make RUNTIME_ARCH=arm64 runtime-source-check
@@ -174,3 +181,15 @@ the user's global input state.
   cache and was rerun with the normal approved build environment. The two new
   Dart files also needed one write-mode formatter pass before the format gate
   accepted them. Neither issue changed product behavior or acceptance scope.
+
+### 2026-09-15 — Option-arrow matrix extension verification
+
+- `make terminal-renderer-native-test` passed with ten ordered commits, three
+  Right Arrow repeat events, and two ordered Option-Left／Right events. The new
+  events preserve key codes 123/124, Option+Function modifiers, private-use
+  text fields, and empty-queue cleanup.
+- Developer JIT and Release AOT display integration both passed the version 2
+  real-PTY comparison: 14 rows, 15 native events, and 55 exact bytes including
+  final `1b 62 1b 66`.
+- The complete `make test` gate passed after regenerating all dependent
+  compatibility evidence.

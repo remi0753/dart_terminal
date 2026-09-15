@@ -3281,6 +3281,28 @@ static NSString* TextInputPlainString(id value) {
     self.terminalActiveKeyEvent = nil;
     self.terminalRawKeyPosted = NO;
   }
+  NSArray<NSString*>* wordNavigationCharacters = @[@"\uf702", @"\uf703"];
+  for (NSUInteger index = 0; index < wordNavigationCharacters.count; index++) {
+    NSEvent* navigation =
+        [NSEvent keyEventWithType:NSEventTypeKeyDown
+                         location:NSZeroPoint
+                    modifierFlags:(NSEventModifierFlagOption |
+                                   NSEventModifierFlagFunction)
+                        timestamp:NSProcessInfo.processInfo.systemUptime
+                     windowNumber:self.window.windowNumber
+                          context:nil
+                       characters:wordNavigationCharacters[index]
+      charactersIgnoringModifiers:wordNavigationCharacters[index]
+                        isARepeat:NO
+                          keyCode:123 + index];
+    self.terminalActiveKeyEvent = navigation;
+    self.terminalRawKeyPosted = NO;
+    SEL selector = index == 0 ? @selector(moveWordLeft:)
+                              : @selector(moveWordRight:);
+    [self doCommandBySelector:selector];
+    self.terminalActiveKeyEvent = nil;
+    self.terminalRawKeyPosted = NO;
+  }
   return ![self hasMarkedText];
 }
 
