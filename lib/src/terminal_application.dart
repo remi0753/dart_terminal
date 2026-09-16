@@ -4403,6 +4403,10 @@ final class TerminalApplication {
         configurationAuthority.applyReload(result);
         final TerminalProductConfiguration configuration =
             configurationAuthority.newSessionConfiguration;
+        contextDockState?.configureDefaults(
+          initiallyVisible: configuration.contextDockVisible,
+          width: configuration.contextDockWidth,
+        );
         for (final _TerminalHierarchyProductPane owner in owners.values.toList(
           growable: false,
         )) {
@@ -4538,7 +4542,13 @@ final class TerminalApplication {
       )!;
 
       final TerminalContextDockState createdContextDockState =
-          TerminalContextDockState()..synchronize(state);
+          TerminalContextDockState(
+            initiallyVisible: configurationAuthority
+                .newSessionConfiguration
+                .contextDockVisible,
+            initialWidth:
+                configurationAuthority.newSessionConfiguration.contextDockWidth,
+          )..synchronize(state);
       contextDockState = createdContextDockState;
       final TerminalContextDockProcessController createdDockProcess =
           TerminalContextDockProcessController(
@@ -6201,6 +6211,7 @@ final class TerminalApplication {
           configurationReloads: configurationReloads,
           configurationReloadController: configurationReloadController,
           configurationAuthority: configurationAuthority,
+          contextDockState: createdContextDockState,
           paneConfigurations: paneConfigurations,
           launchWorkingDirectories: launchWorkingDirectories,
           terminalInputDeliveryCount: () => terminalInputDeliveryCount,
@@ -8580,6 +8591,24 @@ final class TerminalApplication {
         'presenter=${contextDockPresenter.canFocusNavigator} '
         'process=${navigatorProcess.disposition.name} '
         'echo=${navigatorProcess.terminalEchoEnabled}',
+      );
+      _expectLifecycle(
+        contextDockState.snapshotForWindow(initialWindow.id)?.isVisible ==
+                true &&
+            contextDockState.snapshotForWindow(initialWindow.id)?.width ==
+                TerminalProductConfiguration.defaults.contextDockWidth &&
+            !contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput,
+        'default Context Dock visibility or width did not reach the native window',
+      );
+      await dispatch(TerminalActionId.toggleContextDock);
+      _expectLifecycle(
+        contextDockState.snapshotForWindow(initialWindow.id)?.isVisible ==
+                false &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                dockToggleWriteBaseline,
+        'default-visible Context Dock did not hide without writing to the PTY',
       );
       await dispatch(TerminalActionId.toggleContextDock);
       await waitFor(() {
@@ -11186,6 +11215,7 @@ final class TerminalApplication {
     required List<TerminalConfigReloadResult> configurationReloads,
     required TerminalConfigReloadController? configurationReloadController,
     required TerminalProductConfigurationAuthority configurationAuthority,
+    required TerminalContextDockState contextDockState,
     required Map<PaneId, TerminalProductConfiguration> paneConfigurations,
     required Map<PaneId, String?> launchWorkingDirectories,
     required int Function() terminalInputDeliveryCount,
@@ -11303,6 +11333,12 @@ final class TerminalApplication {
     final _TerminalHierarchyProductPane stableOwner = initialOwner;
     final Window stableWindow = nativeWindow;
     final int nativeHandleBaseline = application.debugLiveObjectCount;
+    _expectLifecycle(
+      !contextDockState.snapshotForWindow(initialWindow.id)!.isVisible &&
+          contextDockState.snapshotForWindow(initialWindow.id)!.width == 380,
+      'configuration fixture did not preserve its explicit Dock opt-out',
+    );
+    contextDockState.setWidth(initialWindow.id, 500);
     final int settingsResponderBaseline =
         settings.terminalResponderRestoreCount;
     final TerminalConfigSnapshot recoveredStartupSnapshot =
@@ -11504,7 +11540,7 @@ final class TerminalApplication {
           actionDispatches.last.disposition ==
               TerminalActionDispatchDisposition.executed &&
           application.debugLiveObjectCount == nativeHandleBaseline + 6 &&
-          reloadController.effectiveSnapshot.schema.options.length == 53 &&
+          reloadController.effectiveSnapshot.schema.options.length == 55 &&
           settings.state.occurrences
                   .map(
                     (TerminalSettingsOptionOccurrence occurrence) =>
@@ -11512,7 +11548,7 @@ final class TerminalApplication {
                   )
                   .toSet()
                   .length ==
-              53 &&
+              55 &&
           initialFont.draftValue(settings.state.text) == 'SF Mono Terminal' &&
           reloadController.effectiveSnapshot.value(
                 TerminalProductConfigSchema.theme,
@@ -11994,6 +12030,7 @@ window-height = 640
 window-padding-horizontal = 9
 window-padding-vertical = 7
 background-opacity = 0.45
+context-dock-width = 460
 macos-option-key = escape
 scrollback-lines = 12
 scrollback-bytes = 2MiB
@@ -12048,11 +12085,13 @@ keybind = command+right=pane.focus-left
     _expectLifecycle(
       appliedReload.disposition == TerminalConfigReloadDisposition.applied &&
           appliedReload.diagnostics.isEmpty &&
-          appliedReload.changePlan!.liveChanges.length == 3 &&
+          appliedReload.changePlan!.liveChanges.length == 4 &&
           appliedReload.changePlan!.newSessionChanges.length == 16 &&
           reloadController.acceptedGeneration == 1 &&
           configurationAuthority.acceptedGeneration == 1 &&
           configurationAuthority.liveGeneration == 1 &&
+          !contextDockState.snapshotForWindow(initialWindow.id)!.isVisible &&
+          contextDockState.snapshotForWindow(initialWindow.id)!.width == 460 &&
           actionDispatches.last.id == TerminalActionId.reloadConfiguration &&
           actionDispatches.last.disposition ==
               TerminalActionDispatchDisposition.executed &&
@@ -12423,6 +12462,14 @@ keybind = command+right=pane.focus-left
             finalBackgroundOpacity,
           ),
       'application-wide opacity reload was not one deduplicated live change',
+    );
+    _expectLifecycle(
+      state.windows.every(
+        (TerminalWindowState window) =>
+            !contextDockState.snapshotForWindow(window.id)!.isVisible &&
+            contextDockState.snapshotForWindow(window.id)!.width == 460,
+      ),
+      'Dock width did not reach existing and later windows without changing visibility',
     );
     final PaneId contractedPaneId = reloadedPaneIds.first;
     final TerminalPaneLocation contractedLocation = state.locationForPane(

@@ -1093,6 +1093,8 @@ final Map<String, String> _japaneseSettingsOptionDescriptions =
       'window-height': 'ターミナルウインドウの初期高さ（論理ポイント）。',
       'window-padding-horizontal': 'ターミナル内容の左右余白（論理ポイント）。',
       'window-padding-vertical': 'ターミナル内容の上下余白（論理ポイント）。',
+      'context-dock-visible': '新しい標準ウインドウでContext Dockを初期表示する。',
+      'context-dock-width': 'Context Dockの幅（論理ポイント）。設定変更は既存Dockにも適用する。',
       'quick-terminal-shortcut':
           'クイックターミナル切り替え専用のmacOSグローバルショートカット、または `none`。',
       'quick-terminal-screen': 'クイックターミナルを表示する画面: キーボードフォーカス、マウス、macOSメニューバー。',

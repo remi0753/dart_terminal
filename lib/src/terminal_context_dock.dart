@@ -114,12 +114,52 @@ final class TerminalContextDockFocusRequest {
 /// A visible Dock may leave terminal input active. Navigator ownership always
 /// implies visibility, but visibility never implies navigator ownership.
 final class TerminalContextDockState {
+  TerminalContextDockState({
+    bool initiallyVisible = false,
+    double initialWidth = TerminalContextDockLimits.defaultWidth,
+  }) : _initiallyVisible = initiallyVisible,
+       _initialWidth = initialWidth {
+    _validateWidth(initialWidth);
+  }
+
+  bool _initiallyVisible;
+  double _initialWidth;
   final Map<TerminalWindowId, _TerminalContextDockWindowState> _windows =
       <TerminalWindowId, _TerminalContextDockWindowState>{};
   bool _isDisposed = false;
 
   bool get isDisposed => _isDisposed;
   int get windowCount => _windows.length;
+
+  /// Updates future window defaults without undoing manual visibility choices.
+  /// A changed configured width also supersedes existing window drag widths.
+  void configureDefaults({
+    required bool initiallyVisible,
+    required double width,
+  }) {
+    _ensureAlive();
+    _validateWidth(width);
+    final bool widthChanged = _initialWidth != width;
+    _initiallyVisible = initiallyVisible;
+    _initialWidth = width;
+    if (widthChanged) {
+      for (final _TerminalContextDockWindowState window in _windows.values) {
+        setWidth(window.windowId, width);
+      }
+    }
+  }
+
+  static void _validateWidth(double width) {
+    if (!width.isFinite ||
+        width < TerminalContextDockLimits.minimumWidth ||
+        width > TerminalContextDockLimits.maximumWidth) {
+      throw ArgumentError.value(
+        width,
+        'width',
+        'must be within the Dock width bounds',
+      );
+    }
+  }
 
   TerminalContextDockWindowSnapshot? snapshotForWindow(
     TerminalWindowId windowId,
@@ -168,6 +208,8 @@ final class TerminalContextDockState {
           windowId: applicationWindow.id,
           targetPaneId: targetPaneId,
           paneIds: paneIds,
+          isVisible: _initiallyVisible,
+          width: _initialWidth,
         );
         changed = true;
         continue;
@@ -554,6 +596,8 @@ final class _TerminalContextDockWindowState {
     required this.windowId,
     required this.targetPaneId,
     required Set<PaneId> paneIds,
+    required this.isVisible,
+    required this.width,
   }) : panes = <PaneId, _TerminalContextDockPaneState>{
          for (final PaneId paneId in paneIds)
            paneId: _TerminalContextDockPaneState(paneId),
@@ -562,8 +606,8 @@ final class _TerminalContextDockWindowState {
   final TerminalWindowId windowId;
   final Map<PaneId, _TerminalContextDockPaneState> panes;
   PaneId targetPaneId;
-  bool isVisible = false;
-  double width = TerminalContextDockLimits.defaultWidth;
+  bool isVisible;
+  double width;
   TerminalContextDockInputOwner inputOwner =
       TerminalContextDockInputOwner.terminal;
   int generation = 1;

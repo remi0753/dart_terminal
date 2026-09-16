@@ -8,6 +8,7 @@ Future<void> main() => runTerminalProductConfigurationTests();
 
 Future<void> runTerminalProductConfigurationTests() async {
   _testDefaultsAndSchemaInventory();
+  _testContextDockConfiguration();
   _testBuiltInThemePairAndCustomOverlay();
   _testCompleteFileProfile();
   _testInvalidValuesRecoverIndependently();
@@ -17,6 +18,114 @@ Future<void> runTerminalProductConfigurationTests() async {
   _testConsumerResourceFactoriesAndMappings();
   _testApplicationPoliciesAndSemanticChangePlan();
   await _testAcceptedConfigurationAuthority();
+}
+
+void _testContextDockConfiguration() {
+  final TerminalProductConfiguration defaults =
+      TerminalProductConfiguration.defaults;
+  _expect(
+    defaults.contextDockVisible &&
+        defaults.contextDockWidth == TerminalContextDockLimits.defaultWidth,
+    'product defaults show Context Dock at its existing bounded width',
+  );
+  final TerminalConfigLoader loader = TerminalConfigLoader();
+  final TerminalConfigSnapshot snapshot = loader.resolve(const <String>[
+    '--no-config',
+    '--context-dock-visible=false',
+    '--context-dock-width=420.5',
+  ], environment: const <String, String>{}).snapshot;
+  final TerminalProductConfiguration profile =
+      TerminalProductConfiguration.fromSnapshot(snapshot);
+  _expect(
+    !profile.contextDockVisible && profile.contextDockWidth == 420.5,
+    'Dock configuration projects boolean visibility and fractional logical width',
+  );
+  for (final String option in <String>[
+    '--context-dock-visible=yes',
+    '--context-dock-visible=1',
+    '--context-dock-width=219.9',
+    '--context-dock-width=640.1',
+    '--context-dock-width=NaN',
+    '--context-dock-width=Infinity',
+  ]) {
+    _expectThrows(
+      () => loader.resolve(<String>[
+        '--no-config',
+        option,
+      ], environment: const <String, String>{}),
+      'invalid Dock CLI value is a usage failure',
+    );
+    final TerminalConfigResolution invalid =
+        TerminalConfigLoader(
+          fileSystem: _ProfileMemoryFileSystem(<String, String>{
+            '/config/invalid': '${option.substring(2)}\n',
+          }),
+        ).resolve(const <String>[
+          '--config=/config/invalid',
+        ], environment: const <String, String>{});
+    _expect(
+      invalid.snapshot.diagnostics.any(
+            (TerminalConfigDiagnostic diagnostic) =>
+                diagnostic.severity == TerminalConfigDiagnosticSeverity.error,
+          ) &&
+          invalid.snapshot.value(
+            TerminalProductConfigSchema.contextDockVisible,
+          ) &&
+          invalid.snapshot.value(
+                TerminalProductConfigSchema.contextDockWidth,
+              ) ==
+              380,
+      'invalid Dock values fail validation and retain safe defaults',
+    );
+  }
+  for (final double width in <double>[
+    TerminalContextDockLimits.minimumWidth,
+    TerminalContextDockLimits.maximumWidth,
+  ]) {
+    final TerminalConfigResolution valid = loader.resolve(<String>[
+      '--no-config',
+      '--context-dock-width=$width',
+    ], environment: const <String, String>{});
+    _expect(
+      valid.snapshot.diagnostics.isEmpty &&
+          valid.snapshot.value(TerminalProductConfigSchema.contextDockWidth) ==
+              width,
+      'configuration and pure Dock authority share inclusive width bounds',
+    );
+  }
+  final _ProfileMemoryFileSystem files = _ProfileMemoryFileSystem(
+    <String, String>{
+      '/config/root': 'context-dock-visible = false\ncontext-dock-width = 410\ninclude = /config/child\n',
+      '/config/child': 'context-dock-width = 430\n',
+    },
+  );
+  final TerminalConfigResolution precedence =
+      TerminalConfigLoader(fileSystem: files).resolve(const <String>[
+        '--config=/config/root',
+        '--context-dock-visible=true',
+        '--context-dock-width=450',
+      ], environment: const <String, String>{});
+  final TerminalConfigSnapshot fromFile =
+      TerminalConfigLoader(fileSystem: files).resolve(const <String>[
+        '--config=/config/root',
+      ], environment: const <String, String>{}).snapshot;
+  _expect(
+    fromFile.diagnostics.isEmpty &&
+        !fromFile.value(TerminalProductConfigSchema.contextDockVisible) &&
+        fromFile.value(TerminalProductConfigSchema.contextDockWidth) == 410,
+    'including file overrides included Dock values before CLI projection',
+  );
+  _expect(
+    precedence.snapshot.diagnostics.isEmpty &&
+        precedence.snapshot.value(
+          TerminalProductConfigSchema.contextDockVisible,
+        ) &&
+        precedence.snapshot.value(
+              TerminalProductConfigSchema.contextDockWidth,
+            ) ==
+            450,
+    'Dock options use the existing file/include/CLI precedence',
+  );
 }
 
 void _testMacosFontAvailabilityFallback() {
@@ -365,13 +474,13 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
       .toList(growable: false);
   _expect(
     live.map((TerminalConfigOptionBase option) => option.name).join(',') ==
-            'background-opacity,quick-terminal-shortcut,quick-terminal-screen,'
+            'background-opacity,context-dock-width,quick-terminal-shortcut,quick-terminal-screen,'
                 'quick-terminal-animation-duration,quick-terminal-autohide,'
                 'macos-app-intents,macos-notifications,'
                 'macos-applescript,'
                 'macos-secure-input-auto,macos-secure-input-indication,'
                 'macos-option-key,keybind' &&
-        schema.options.length == 53 &&
+        schema.options.length == 55 &&
         schema.options.every(
           (TerminalConfigOptionBase option) =>
               option.applicationPolicy ==
@@ -396,6 +505,7 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
       '--no-config',
       '--font-size=18',
       '--background-opacity=0.5',
+      '--context-dock-width=420',
       '--font-variation-regular=wght=800',
       '--quick-terminal-shortcut=command+grave',
       '--quick-terminal-screen=mouse',
@@ -419,7 +529,7 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
     plan.changes
             .map((TerminalConfigChange change) => change.option.name)
             .join(',') ==
-        'background-opacity,font-size,font-variation-regular,'
+        'background-opacity,font-size,font-variation-regular,context-dock-width,'
             'quick-terminal-shortcut,'
             'quick-terminal-screen,'
             'quick-terminal-animation-duration,quick-terminal-autohide,'
@@ -433,7 +543,7 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
     plan.liveChanges
                 .map((TerminalConfigChange change) => change.option.name)
                 .join(',') ==
-            'background-opacity,quick-terminal-shortcut,quick-terminal-screen,'
+            'background-opacity,context-dock-width,quick-terminal-shortcut,quick-terminal-screen,'
                 'quick-terminal-animation-duration,quick-terminal-autohide,'
                 'macos-app-intents,macos-notifications,'
                 'macos-applescript,'
@@ -529,16 +639,16 @@ void _testDefaultsAndSchemaInventory() {
   final TerminalProductConfiguration defaults =
       TerminalProductConfiguration.defaults;
   _expect(
-    TerminalProductConfigSchema.instance.options.length == 53 &&
+    TerminalProductConfigSchema.instance.options.length == 55 &&
         TerminalProductConfigSchema.instance.options
                 .map((TerminalConfigOptionBase option) => option.name)
                 .toSet()
                 .length ==
-            53 &&
+            55 &&
         TerminalProductConfigSchema.instance.options.every(
           (TerminalConfigOptionBase option) => option.description.isNotEmpty,
         ),
-    'product schema has 53 unique documented options',
+    'product schema has 55 unique documented options',
   );
   _expect(
     defaults.workingDirectory == null &&

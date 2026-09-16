@@ -15,12 +15,15 @@
 2. password、token、private filenameを含まないfixtureだけを使う。SSH／remote providerは本確認の対象外とする。
 3. Developer JITとRelease AOTで同じ項目を実行する。AppKit Accessibility InspectorまたはVoiceOverを使う場合も
    内容のscreen recordingや診断exportは保存しない。
+4. default設定では初期表示true／380 ptでterminalがinput ownerになる。
+   `context-dock-visible = false`なら新規windowは非表示、`context-dock-width = 420`なら420 ptで表示されることも確認する。
+   visibleのreloadは既存windowの手動開閉を変えず、width値を変更すると既存windowもresizeされる。
 
 ## Keyboard-onlyとfocus ownership
 
 - [ ] Terminal focus中にOption-Shift-Cを押すたびDockだけが表示／非表示になり、terminalへ文字や制御byteが入らない。
 - [ ] Navigator focus中のOption-Shift-Cはterminalへfocusを安全に戻してDockを閉じ、再度押すとquery／tree contextを保持して表示する。
-- [ ] Terminal focus中にShift-Command-Fを1回押すと右Dockが現れ、Search query末尾にnativeの入力caretが表示され、2回以上点滅する。terminalへ文字は入らない。
+- [ ] Terminal focus中にShift-Command-Fを1回押すと右DockへSearch focusが移り（非表示なら表示され）、query末尾にnativeの入力caretが表示され、2回以上点滅する。terminalへ文字は入らない。
 - [ ] Shift-Command-GでGo Toへ移るとtreeを保ったまま独立queryを入力でき、current subtree内の深い一致file/folderまで必要なancestorだけが開いてselectionが移る。対象folderはReturnまで閉じている。
 - [ ] Shift-Command-MでMoveへ移るとquery caretが消え、文字、Delete、Command-AはqueryもPTYも変更せず、Up/Down/Page Up/Page Downだけがselectionを動かす。
 - [ ] Terminal／Navigatorのどちらがfocus中でもShift-Command-Hを押すたびdot-prefixed file/folderとそのsubtreeが一括で非表示／表示になり、focus、query、expanded state、PTY inputは変わらない。

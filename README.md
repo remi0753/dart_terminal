@@ -62,7 +62,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   有効になる。実製品gateではmenuとpaletteから2 window/3 tab/5 paneを生成し、Retina
   scale継承、divider command後の固定font metricsとgrid resize、terminal write 0、
   各paneの入力分離を両runtimeで検証する
-- terminalに重ならない、既定380 pt幅の右側Context DockとDirectory Navigator。通常時はfocused
+- terminalに重ならない、初期表示true／既定380 pt幅の右側Context DockとDirectory Navigator。
+  `context-dock-visible = false`で新しいwindowの初期表示を無効にでき、
+  `context-dock-width = 420`のように220–640 ptの幅を指定できる。幅の設定変更は既存windowにも反映する。
+  通常時はfocused
   local paneのtrusted working directory、dotfileを含むfile/folder tree、lazy subtreeを上段の
   bounded scroll領域へ表示し、選択file/folderのpermission・owner・size・mtime・symlink metadataと
   path操作は下段の固定read-only領域へ表示する。
@@ -563,7 +566,7 @@ scrollback、font、padding、window frameは書き換えません。自動file 
 
 Applicationメニューの`Settings…`（Command-,）、command palette、または非予約chordへ設定した
 `application.open-settings` actionから、root設定ファイルを編集するnative modal editorを開けます。
-最初のkey入力を待たず、新規・空・疎なファイルでも全53 optionを同じdocument内へ補完して表示し、
+最初のkey入力を待たず、新規・空・疎なファイルでも全55 optionを同じdocument内へ補完して表示し、
 右のcontext panelはcaret位置の
 current/draft value、構文、説明と、保存後に既存terminalへ即時反映されるか新規terminalから使われるかを
 表示します。line/source行や別のvalue入力欄は持たず、panelを閉じても右端の細いrailが残ります。

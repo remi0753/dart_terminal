@@ -4,7 +4,7 @@
   "status": "closed-no-actionable-p0-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "56fbc92a271e8c9c2810b4ce6de1a1276a31aea4ec23179513fddb3d268fc577",
+    "sha256": "a662d388b26bd6ee26f032f761cda7e76ca77635fd0ae95fffc931b47b088d9c",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "f9e19fb75888ded182735defd451a5f6dac801b8668724cbd94d34c4f2b7d42d"
+      "sha256": "0f3bd457a6842210358bf95adb7a9b729f12901aff2aa8bc86b29e244b67a542"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -184,11 +184,11 @@
     },
     {
       "path": "lib/src/terminal_config.dart",
-      "sha256": "36f80cc9c6cb97f1ce136914379a07977635ca4e1e0930cae24a97ca6c4a2402"
+      "sha256": "9fc3110185ec540eba80b2798619979542df68311ca458619a4fd7d78927311d"
     },
     {
       "path": "lib/src/terminal_product_configuration.dart",
-      "sha256": "2893b82e1a527641462e0cb65646313a13715a1d1599672d8b200169db6fb6c6"
+      "sha256": "2ddc832ef78673e6cf63474b35e513cb7baa123aa213b46183639565ad36a289"
     },
     {
       "path": "lib/src/terminal_diagnostics.dart",
@@ -196,7 +196,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "0bb6d056682ca94e5067f2e1cb228eca4999cbffbaaf7bc1e6f3929eb48a8bff"
+      "sha256": "0aac6099f9d0d2d463c1444cf2a3c901031fb855579f75778311ff861507b4dd"
     },
     {
       "path": "lib/src/terminal_input/terminal_prompt_click.dart",
@@ -216,7 +216,7 @@
     },
     {
       "path": "test/terminal_product_configuration_test.dart",
-      "sha256": "1e736a55e3baa5580bedf57a0efe57efe33662c11b556ac5f8ba163da9fa9471"
+      "sha256": "109a114ae0ed128d5fff6bad99d53737a913fb5d490c43ec9a1a7c38610b638a"
     },
     {
       "path": "test/terminal_diagnostics_test.dart",
@@ -228,7 +228,7 @@
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
-      "sha256": "73448a1a782d104f028cde27454a4da310441608f3b3f9f7f0ebed6faaa1d980"
+      "sha256": "d4fd384747c3b71ca7a11d165cc8b7a4c9dc69ccd7a57d16bfc894a77f942409"
     }
   ],
   "totals": {
@@ -980,7 +980,7 @@
       "phase": "7",
       "acceptance_sha256": "86c812860101d538069d21ea622ee7e1492a50281a409617f3555d61a1621cf8",
       "pinned_evidence_sha256": "d06b113165de042a70c8650386ba0118223e7e40c23fc3c96b5f541d1a712c80",
-      "current_sha256": "4366d3bf59fee9bec8e31428a0181083f0a5d940b370fc548c94e9f0eb2f2478",
+      "current_sha256": "3551f6af0ed015f4c296d0e1657e9b6e6057be58e5cd3e95adbed4bc9b9c0a8f",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -1050,7 +1050,7 @@
       "phase": "8/10",
       "acceptance_sha256": "6584c37c28f8ba7259838f2998b7b39a79b43b155daf39e6ac9f5935e0754b2d",
       "pinned_evidence_sha256": "ac336d9e6755c35fca45f8f3632ec2cfb7cb44e6e425c00c3b94917d4c41dc25",
-      "current_sha256": "abc1ffc2f10339f3e2af413c4a2c00b8010a84c11ea4f9f2c98e01e3e44b9153",
+      "current_sha256": "d3285f45f150365ed3c1f31f6cd0bcd0006e7080ec8de35354c1f40e2e63ab11",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -1090,7 +1090,7 @@
       "phase": "8/10",
       "acceptance_sha256": "57fb81269d34c0d7efd1e3ed3ff1a3964fc5fc9a60592d4bf705dca55b612466",
       "pinned_evidence_sha256": "3231d3e055f5f5a6c28f853b187c617394540a5135f6718322cfb20573ae0205",
-      "current_sha256": "45836bbb862eb7387e011278aaf1a24a997d122aec876a6caaebf750f0b0e518",
+      "current_sha256": "a317f3d903e2db5879785cf748adbd5e089e902d42aa8f0731db5780278d1ded",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -1120,7 +1120,7 @@
       "phase": "8/10",
       "acceptance_sha256": "964bf094986b0be1fa60a1a30fe13c3b6525d44b1cf951c6efb7d08e4e459bbf",
       "pinned_evidence_sha256": "ae24e3cba64ac97560537bade728a8c5513e50f071719f0a48877c6ab8e5605f",
-      "current_sha256": "ba7805abe37f3892e2ddff4398d6ad71501ed7d85051102a20652ed538f6aa0a",
+      "current_sha256": "5b43a1a64b498a500e223014ad8431f6e2bb52d2a4bb75125c1d93a596c6e999",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -1160,7 +1160,7 @@
       "phase": "10/11",
       "acceptance_sha256": "25d57b12eb3f56e44bf6fa4c25a91ccaa18c1d1b7d5c08bc23828041e5911b6a",
       "pinned_evidence_sha256": "ac336d9e6755c35fca45f8f3632ec2cfb7cb44e6e425c00c3b94917d4c41dc25",
-      "current_sha256": "2cf3667fe662f453c183fe1b8b39a39d5fd0e8a3ad72df2f62be106bb6d76b6a",
+      "current_sha256": "257293374c7fd63ea8427a1a9df09bb5945fe2b5daf2ed24375532c39c26764b",
       "classification": "accepted",
       "gap_ids": []
     },

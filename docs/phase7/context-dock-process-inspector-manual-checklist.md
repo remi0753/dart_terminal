@@ -14,7 +14,8 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
 1. token、password、個人情報を含まないlocal fixtureだけを使う。SSH／remote process introspectionは対象外とする。
 2. Developer JITは`make RUNTIME_ARCH=arm64 developer-jit-run`、Release AOTは
    `make RUNTIME_ARCH=arm64 release-aot-run`で起動し、両方で同じ項目を確認する。
-3. Option-Shift-Cで右側のContext Dockを表示し、idle時に`Directory Navigator`が表示されることを確認する。
+3. 初期表示trueの右側Context Dockでidle時に`Directory Navigator`が表示されることを確認する。
+   非表示設定の場合だけOption-Shift-Cで表示する。
 4. VoiceOverまたはAccessibility Inspectorを使う場合も、画面収録、terminal diagnostics export、argvの転記は
    行わない。
 

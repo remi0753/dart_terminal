@@ -452,9 +452,14 @@ Future<_ProcessObservation> _launch(
   bool activateAfterLaunch = false,
   Set<String> milestonePrefixes = const <String>{},
 }) async {
-  final List<String> invocationArguments = invocation.arguments(
-    applicationArguments,
-  );
+  final List<String> invocationArguments = invocation.arguments(<String>[
+    // Non-Dock acceptance fixtures retain their full-width terminal geometry.
+    if (!applicationArguments.contains('--runtime-native-content-test') &&
+        !applicationArguments.contains('--help') &&
+        !applicationArguments.contains('--show-config'))
+      '--context-dock-visible=false',
+    ...applicationArguments,
+  ]);
   final Directory diagnosticsDirectory = await Directory.systemTemp.createTemp(
     'dart-terminal-runtime-diagnostics-',
   );
@@ -2850,8 +2855,8 @@ keybind = command+d=pane.focus-next
           effectiveObservation.stderrText.isEmpty &&
           effectiveObservation.workerProcesses.isEmpty &&
           effectiveLines.first ==
-              'dart-terminal-effective-config version=1 options=53 '
-                  'entries=56 diagnostics=3' &&
+              'dart-terminal-effective-config version=1 options=55 '
+                  'entries=58 diagnostics=3' &&
           effectiveLines[1] == 'root path=${jsonEncode(configurationPath)}' &&
           effectiveTheme.contains('value="system"') &&
           effectiveTheme.contains('policy=new-session') &&
@@ -2931,7 +2936,7 @@ keybind = command+d=pane.focus-next
               0 &&
           RegExp(
                 r'^TERMINAL_CONFIG_RELOAD disposition=applied generation=1 '
-                r'changes=19 live=3 new_session=16 diagnostics=0$',
+                r'changes=20 live=4 new_session=16 diagnostics=0$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
               1 &&

@@ -167,6 +167,8 @@ final class TerminalProductConfiguration {
     required this.windowHeight,
     required this.windowPaddingHorizontal,
     required this.windowPaddingVertical,
+    required this.contextDockVisible,
+    required this.contextDockWidth,
     required this.quickTerminalShortcut,
     required this.quickTerminalScreen,
     required this.quickTerminalAnimationDuration,
@@ -204,6 +206,12 @@ final class TerminalProductConfiguration {
       TerminalProductConfigSchema.backgroundOpacity,
     ),
     fontFamily: snapshot.value(TerminalProductConfigSchema.fontFamily),
+    contextDockVisible: snapshot.value(
+      TerminalProductConfigSchema.contextDockVisible,
+    ),
+    contextDockWidth: snapshot.value(
+      TerminalProductConfigSchema.contextDockWidth,
+    ),
     fontSize: snapshot.value(TerminalProductConfigSchema.fontSize),
     fontSyntheticStyle: snapshot.value(
       TerminalProductConfigSchema.fontSyntheticStyle,
@@ -284,6 +292,8 @@ final class TerminalProductConfiguration {
   final double windowHeight;
   final double windowPaddingHorizontal;
   final double windowPaddingVertical;
+  final bool contextDockVisible;
+  final double contextDockWidth;
   final TerminalKeyBindingChord? quickTerminalShortcut;
   final TerminalConfiguredQuickTerminalScreen quickTerminalScreen;
   final double quickTerminalAnimationDuration;

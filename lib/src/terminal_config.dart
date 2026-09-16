@@ -972,6 +972,30 @@ abstract final class TerminalProductConfigSchema {
     formatter: _formatQuickTerminalShortcut,
   );
 
+  static final TerminalConfigOption<bool> contextDockVisible =
+      TerminalConfigOption<bool>(
+        name: 'context-dock-visible',
+        description:
+            'Initial Context Dock visibility for new standard windows.',
+        valueSyntax: 'true|false',
+        applicationPolicy: TerminalConfigApplicationPolicy.newSession,
+        defaultValue: true,
+        parser: _parseBoolean,
+        formatter: _formatBoolean,
+      );
+
+  static final TerminalConfigOption<double>
+  contextDockWidth = TerminalConfigOption<double>(
+    name: 'context-dock-width',
+    description:
+        'Context Dock width in logical points; changes resize existing docks.',
+    valueSyntax: '<220..640>',
+    applicationPolicy: TerminalConfigApplicationPolicy.live,
+    defaultValue: 380,
+    parser: _parseContextDockWidth,
+    formatter: _formatDouble,
+  );
+
   static final TerminalConfigOption<TerminalConfiguredQuickTerminalScreen>
   quickTerminalScreen =
       TerminalConfigOption<TerminalConfiguredQuickTerminalScreen>(
@@ -1179,6 +1203,8 @@ abstract final class TerminalProductConfigSchema {
       windowHeight,
       windowPaddingHorizontal,
       windowPaddingVertical,
+      contextDockVisible,
+      contextDockWidth,
       quickTerminalShortcut,
       quickTerminalScreen,
       quickTerminalAnimationDuration,
@@ -2384,6 +2410,17 @@ TerminalConfigDecodeResult<int> _parseScrollbackLines(String value) =>
       maximum: 1000000,
       description: 'scrollback lines',
     );
+
+TerminalConfigDecodeResult<double> _parseContextDockWidth(String value) {
+  final double? width = double.tryParse(value);
+  if (width == null || !width.isFinite || width < 220 || width > 640) {
+    return const TerminalConfigDecodeResult<double>.failure(
+      'Context Dock width must be finite and between 220 and 640 points',
+      hint: 'for example, use `context-dock-width = 380`',
+    );
+  }
+  return TerminalConfigDecodeResult<double>.success(width);
+}
 
 TerminalConfigDecodeResult<int> _parseScrollbackBytes(String value) {
   final RegExpMatch? match = RegExp(r'^([0-9]+)(B|KiB|MiB|GiB)?$')

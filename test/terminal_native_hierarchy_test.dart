@@ -2095,7 +2095,7 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
                   .view
                   .acceptsFirstResponder ==
               false &&
-          settings.state.occurrences.length == 53 &&
+          settings.state.occurrences.length == 55 &&
           settings.state.syntaxSpans.isNotEmpty &&
           disabled.isCommented &&
           disabledSpans.length == 1 &&
@@ -2681,13 +2681,13 @@ TerminalDiagnosticsSnapshot _diagnosticsPresenterSnapshot(
   ),
   renderer: TerminalDiagnosticsRendererSnapshot.unavailable(),
   configuration: TerminalDiagnosticsConfigurationSnapshot(
-    schemaOptionCount: 53,
+    schemaOptionCount: 55,
     effectiveGeneration: 0,
     attemptGeneration: 0,
     warningCount: 0,
     errorCount: 0,
-    liveOptionCount: 11,
-    newSessionOptionCount: 41,
+    liveOptionCount: 13,
+    newSessionOptionCount: 42,
   ),
   features: TerminalDiagnosticsFeaturesSnapshot(
     secureInput: TerminalDiagnosticsFeatureState.disabled,

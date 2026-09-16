@@ -10,6 +10,7 @@ Future<void> main() => runTerminalContextDockTests();
 
 Future<void> runTerminalContextDockTests() async {
   await _testWindowPaneStateAndBounds();
+  await _testConfiguredWindowDefaultsAndReload();
   await _testActionFocusOwnershipAndAvailability();
   await _testNavigatorKeyRoutingNeverFallsThrough();
   await _testDirectoryTreeFollowsPaneAndCancelsHiddenWork();
@@ -18,6 +19,68 @@ Future<void> runTerminalContextDockTests() async {
   await _testProcessArgumentVisibility();
   _testPrivacyPolicyDistinguishesIdleLineEditing();
   await _testPathHandoffPolicyAndExactPayload();
+}
+
+Future<void> _testConfiguredWindowDefaultsAndReload() async {
+  final _Harness harness = _Harness();
+  final TerminalWindowState first = await harness.createWindow();
+  final TerminalContextDockState dock = TerminalContextDockState(
+    initiallyVisible: true,
+    initialWidth: 420.5,
+  )..synchronize(harness.state);
+  _expect(
+    dock.snapshotForWindow(first.id)!.isVisible &&
+        dock.snapshotForWindow(first.id)!.width == 420.5 &&
+        !dock.snapshotForWindow(first.id)!.navigatorOwnsInput,
+    'configured visible Dock does not steal terminal input',
+  );
+  dock
+    ..toggleVisibility(first.id, first.selectedTab.focusedPaneId)
+    ..setWidth(first.id, 500)
+    ..configureDefaults(initiallyVisible: false, width: 420.5);
+  _expect(
+    !dock.snapshotForWindow(first.id)!.isVisible &&
+        dock.snapshotForWindow(first.id)!.width == 500,
+    'unchanged configured width and new visibility default preserve manual choices',
+  );
+  final TerminalWindowState second = await harness.createWindow();
+  dock.synchronize(harness.state);
+  _expect(
+    !dock.snapshotForWindow(second.id)!.isVisible &&
+        dock.snapshotForWindow(second.id)!.width == 420.5,
+    'next standard window uses reloaded defaults',
+  );
+  final TerminalContextDockFocusRequest request = dock.requestSearchFocus(
+    second.id,
+    second.selectedTab.focusedPaneId,
+  );
+  _expect(dock.confirmNavigatorInput(request), 'fixture owns Navigator input');
+  dock.configureDefaults(initiallyVisible: true, width: 460);
+  _expect(
+    !dock.snapshotForWindow(first.id)!.isVisible &&
+        dock.snapshotForWindow(second.id)!.isVisible &&
+        dock.snapshotForWindow(first.id)!.width == 460 &&
+        dock.snapshotForWindow(second.id)!.width == 460 &&
+        dock.snapshotForWindow(second.id)!.navigatorOwnsInput,
+    'changed live width resizes existing windows without altering visibility or input',
+  );
+  _expectThrows(
+    () => dock.configureDefaults(initiallyVisible: false, width: double.nan),
+    'nonfinite configured width is rejected atomically',
+  );
+  _expect(
+    dock.snapshotForWindow(first.id)!.width == 460,
+    'invalid default update leaves retained widths unchanged',
+  );
+  final TerminalWindowState third = await harness.createWindow();
+  dock.synchronize(harness.state);
+  _expect(
+    dock.snapshotForWindow(third.id)!.isVisible &&
+        dock.snapshotForWindow(third.id)!.width == 460,
+    'invalid update does not replace future visibility or width defaults',
+  );
+  dock.dispose();
+  await harness.state.shutdown();
 }
 
 Future<void> _testDirectoryRevealRejectsExpansionCap() async {
