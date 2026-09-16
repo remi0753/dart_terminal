@@ -1497,6 +1497,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] content coordinator、refresh、privacy lifecycle
   - [x] read-only native presentation、localization、accessibility
   - [x] product privacy／performance gate、Developer JIT／Release AOT受け入れ、reference更新
+- [ ] Process Inspectorの入力保護と情報表示を分離する
+  （分割、境界、完了条件は
+  [`docs/phase7/context-dock-process-input-privacy.md`](docs/phase7/context-dock-process-input-privacy.md)
+  を参照して順に実施する）
+  - [x] ECHO-off／Secure Keyboard Entry中のprocess表示と既存入力保護の分離
+  - [ ] 入力保護から独立したargv表示切替、localization、reference、両runtime受け入れ
 - [x] focused paneに追従するContext Dockとlocal file／folder navigator
   （分割、input ownership、filesystem境界、完了条件は
   [`docs/phase7/context-dock-file-navigator.md`](docs/phase7/context-dock-file-navigator.md)

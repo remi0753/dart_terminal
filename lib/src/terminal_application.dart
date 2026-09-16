@@ -3455,11 +3455,7 @@ final class TerminalApplication {
     bool contextDockCanObserveProcess(
       PaneId paneId,
       TerminalPaneProcessSnapshot process,
-    ) => TerminalContextDockPrivacyPolicy.canObserve(
-      paneId: paneId,
-      process: process,
-      secureInput: secureKeyboardEntryController?.status,
-    );
+    ) => TerminalContextDockPrivacyPolicy.canObserveProcess(process);
 
     bool contextDockCanObserveDirectoryPane(PaneId paneId) =>
         contextDockCanObservePane(paneId) &&
@@ -6030,6 +6026,7 @@ final class TerminalApplication {
           quickLookTexts: nativeContentQuickLookTexts,
           contextDockState: createdContextDockState,
           contextDockProcess: createdDockProcess,
+          secureKeyboardEntry: createdSecureKeyboardEntry,
           contextDockDirectory: createdDockDirectory,
           contextDockPresenter: createdDockPresenter,
           contextDockPathHandoff: createdPathHandoff,
@@ -8323,6 +8320,7 @@ final class TerminalApplication {
     required List<String> quickLookTexts,
     required TerminalContextDockState contextDockState,
     required TerminalContextDockProcessController contextDockProcess,
+    required TerminalSecureKeyboardEntryController secureKeyboardEntry,
     required TerminalContextDockDirectoryController contextDockDirectory,
     required TerminalContextDockDirectoryPresenter contextDockPresenter,
     required TerminalContextDockPathHandoffController contextDockPathHandoff,
@@ -9110,7 +9108,7 @@ final class TerminalApplication {
 
       initialPane.insertText(
         "stty -echo; printf '\\r\\n__DT_NAV_ECHO_OFF__\\r\\n'; "
-        "sleep 2; stty echo; printf '\\r\\n__DT_NAV_ECHO_ON__\\r\\n'",
+        "sleep 4; stty echo; printf '\\r\\n__DT_NAV_ECHO_ON__\\r\\n'",
       );
       await initialPane.submit();
       await _waitForAsciiMarker(initialSession, '__DT_NAV_ECHO_OFF__');
@@ -9120,33 +9118,57 @@ final class TerminalApplication {
         return process.terminalEchoEnabled == false &&
             process.disposition ==
                 TerminalPaneProcessDisposition.foregroundProcess;
-      }, 'foreground command did not expose the protected ECHO-off boundary');
+      }, 'foreground command did not expose the ECHO-off input boundary');
       reconcile();
       contextDockProcess.synchronize();
       contextDockDirectory.synchronize();
+      await waitFor(() {
+        final TerminalContextDockContentSnapshot? content = contextDockProcess
+            .snapshotForWindow(initialWindow.id);
+        return content?.mode == TerminalContextDockContentMode.foregroundJob &&
+            content?.process?.executablePath?.endsWith('/sleep') == true &&
+            contextDockPresenter
+                    .nativeDetailsTextForWindow(initialWindow.id)
+                    ?.contains('Command (process argv)') ==
+                true;
+      }, 'ECHO-off command did not retain the read-only Process Inspector');
+      await dispatch(TerminalActionId.toggleSecureKeyboardEntry);
+      reconcile();
+      contextDockProcess.synchronize();
+      await waitFor(() {
+        reconcile();
+        return secureKeyboardEntry.manualRequested &&
+            secureKeyboardEntry.status.ownedEnabled;
+      }, 'Process Inspector disabled manual Secure Keyboard Entry protection');
+      final int secureProcessWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
+      await dispatch(TerminalActionId.searchFilesAndFolders);
       final TerminalContextDockDirectorySnapshot protectedDirectory =
           contextDockDirectory.snapshotForWindow(initialWindow.id)!;
       _expectLifecycle(
         contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
-                TerminalContextDockContentMode.protected &&
+                TerminalContextDockContentMode.foregroundJob &&
             contextDockPresenter
                     .nativeEditorSnapshotForWindow(initialWindow.id)
                     ?.text
                     .contains('Protected input') ==
-                true &&
-            !contextDockPresenter
+                false &&
+            contextDockPresenter
                 .nativeDetailsTextForWindow(initialWindow.id)!
-                .contains('__DT_PROCESS_') &&
+                .contains('/sleep') &&
+            !contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput &&
             protectedDirectory.status ==
                 TerminalContextDockDirectoryStatus.privacyUnavailable &&
             protectedDirectory.workingDirectory == null &&
             protectedDirectory.rows.isEmpty &&
             contextDockDirectory.activeOperationCount == 0 &&
-            !dispatcher
-                .snapshot(TerminalActionId.searchFilesAndFolders)
-                .isEnabled,
-        'protected input retained filesystem state or Navigator focus access',
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                secureProcessWriteBaseline,
+        'manual secure input hid process metadata or enabled Navigator input',
       );
+      await dispatch(TerminalActionId.toggleSecureKeyboardEntry);
 
       await _waitForAsciiMarker(initialSession, '__DT_NAV_ECHO_ON__');
       await waitFor(
@@ -9162,7 +9184,7 @@ final class TerminalApplication {
         () => contextDockState
             .snapshotForWindow(initialWindow.id)!
             .navigatorOwnsInput,
-        'Navigator focus did not recover after protected input',
+        'Navigator focus did not recover after ECHO-off process exit',
       );
       final int focusWriteBaseline = writeEnqueuedCounts[initialPaneId] ?? 0;
       _injectKeyEventForTesting(

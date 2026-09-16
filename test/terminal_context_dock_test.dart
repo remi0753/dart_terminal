@@ -166,6 +166,15 @@ void _testPrivacyPolicyDistinguishesIdleLineEditing() {
     'manual secure input hides filesystem context even at an idle shell',
   );
   _expect(
+    TerminalContextDockPrivacyPolicy.canObserveProcess(
+          process(foreground: true),
+        ) &&
+        TerminalContextDockPrivacyPolicy.canObserveProcess(
+          process(foreground: false),
+        ),
+    'read-only process metadata remains available with ECHO-off, independently of secure input',
+  );
+  _expect(
     !TerminalContextDockPrivacyPolicy.canObserve(
       paneId: paneId,
       process: TerminalPaneProcessSnapshot.unavailable(
@@ -174,6 +183,34 @@ void _testPrivacyPolicyDistinguishesIdleLineEditing() {
       ),
     ),
     'unavailable process identity fails closed for filesystem observation',
+  );
+  _expect(
+    TerminalContextDockPrivacyPolicy.canObserveProcess(
+      TerminalPaneProcessSnapshot.available(
+        sessionId: sessionId,
+        childProcessId: 10,
+        owningProcessGroup: 10,
+        foregroundProcessGroup: 10,
+        owningShellCommandActive: true,
+        terminalEchoEnabled: false,
+      ),
+    ),
+    'ECHO-off shell-owned command keeps its content-free process status',
+  );
+  _expect(
+    !TerminalContextDockPrivacyPolicy.canObserveProcess(
+      TerminalPaneProcessSnapshot.nonLive(sessionId),
+    ),
+    'non-live process identity never authorizes metadata observation',
+  );
+  _expect(
+    !TerminalContextDockPrivacyPolicy.canObserveProcess(
+      TerminalPaneProcessSnapshot.unavailable(
+        sessionId: sessionId,
+        terminalEchoEnabled: false,
+      ),
+    ),
+    'unavailable process identity still fails closed for process metadata',
   );
 }
 
@@ -210,7 +247,7 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
       owningProcessGroup: paneId.value,
       foregroundProcessGroup: foregroundGroup,
       owningShellCommandActive: owningShellCommand,
-      terminalEchoEnabled: privacyAllowed ? true : false,
+      terminalEchoEnabled: false,
     );
   }
 
@@ -230,7 +267,9 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
           return request.future;
         },
         canPresentWindow: (_) => canPresent,
-        canObserveProcess: (_, _) => privacyAllowed,
+        canObserveProcess: (_, process) =>
+            privacyAllowed &&
+            TerminalContextDockPrivacyPolicy.canObserveProcess(process),
         focusTerminal: (TerminalContextDockFocusRequest request) {
           focusCount++;
           return request.windowId == window.id &&
@@ -392,7 +431,7 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
         content.process == null &&
         controller.activeOperationCount == 0 &&
         !controller.canObserveDirectoryPane(firstPane),
-    'ECHO-off privacy transition synchronously clears all process and directory content',
+    'explicit observation veto synchronously clears all process and directory content',
   );
   richRequests[3].complete(
     _foregroundJobFixture(

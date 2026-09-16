@@ -1,5 +1,10 @@
 # Phase 7 — Context Dock foreground process inspector feasibility and design
 
+入力保護についての当初設計・受け入れ記録はhistoricalである。ECHO-off／manual secure時の
+process metadata非表示は、後続の
+[`入力保護と情報表示の分離`](context-dock-process-input-privacy.md)で改訂する。
+Navigator／path insertionの入力保護とprocess情報表示は別のauthorityになる。
+
 ## 目的
 
 focused terminal paneでcommandが実行中の間、working directoryが`unknown`になる領域を

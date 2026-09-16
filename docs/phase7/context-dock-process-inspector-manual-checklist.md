@@ -44,10 +44,11 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
 
 ## Privacy、focus、lifecycle
 
-- [ ] `stty -echo; /bin/sleep 3; stty echo`のECHO-off foreground区間では`Protected input`へ切り替わり、
-  直前のexecutable／argv／process listが上下どちらにも残らない。ECHO復帰後はDirectory Navigatorを再取得する。
-- [ ] manual Secure Keyboard Entryを有効にした場合も同様にcontentを破棄し、解除までNavigator shortcutを
-  利用できない。
+- [ ] `stty -echo; /bin/sleep 3; stty echo`のECHO-off foreground区間でもProcess Inspectorを表示し、
+  executable／argv／process listを確認できる。終了後はDirectory Navigatorを再取得する。
+  Nodeを利用できる場合は`node`のREPLでも同じ表示を確認する。
+- [ ] manual Secure Keyboard Entryを有効にしても実行中process情報は表示され、入力保護indicatorは維持される。
+  秘密入力中にNavigator shortcutで入力を奪ったり、pathを挿入したりしない。
 - [ ] command実行中に別pane、tab、windowへfocusを移すと、Dockは新しいfocused paneだけを反映し、旧jobの
   executable／argvを表示しない。appを非activeにした間も旧contentを保持・再表示しない。
 - [ ] pipeline leaderが先に終了する、process数が上限を超える、権限によりpath／argvの一部が読めない場合も、

@@ -5,14 +5,23 @@ import 'terminal_native_content.dart';
 import 'terminal_pane.dart';
 import 'terminal_secure_keyboard_entry.dart';
 
-/// Distinguishes ordinary shell line editing from protected process input.
+/// Separates read-only process metadata from protected filesystem/path input.
 ///
 /// Interactive zsh and sh may disable terminal echo while they own an idle
 /// prompt. Treating ECHO-off alone as protected would disable the Navigator at
 /// exactly the point where a path is useful. Explicit manual secure input is
-/// always private; automatic ECHO-off becomes private once a command or a
+/// always private for filesystem/path operations; automatic ECHO-off becomes
+/// private for those operations once a command or a
 /// different foreground process owns the terminal.
 abstract final class TerminalContextDockPrivacyPolicy {
+  /// Read-only process metadata is independent of keyboard-input protection.
+  ///
+  /// ECHO-off also occurs in REPLs and TUIs, and does not tell us whether argv
+  /// contains secrets. This authority never reads stdin or keyboard input.
+  static bool canObserveProcess(TerminalPaneProcessSnapshot process) =>
+      process.disposition != TerminalPaneProcessDisposition.nonLive &&
+      process.disposition != TerminalPaneProcessDisposition.unavailable;
+
   static bool canObserve({
     required PaneId paneId,
     required TerminalPaneProcessSnapshot process,

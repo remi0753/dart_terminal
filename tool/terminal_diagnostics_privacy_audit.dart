@@ -361,6 +361,9 @@ runTerminalDiagnosticsPrivacyAudit({Directory? projectRoot}) async {
     '_pasteController.submit(',
     'process.disposition == TerminalPaneProcessDisposition.idleShell',
     'secureInput!.manualRequested',
+    'static bool canObserveProcess(TerminalPaneProcessSnapshot process)',
+    'process.disposition != TerminalPaneProcessDisposition.nonLive',
+    'process.disposition != TerminalPaneProcessDisposition.unavailable',
   ], 'Context Dock explicit path handoff');
   _rejectAll(pathHandoff, const <String>[
     'Process.run(',
