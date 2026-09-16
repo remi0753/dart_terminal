@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "eca72e3c40aad300d220d718cd847746ea71a3ab0b9df2a59e0afdb164e1cc52"
+      "sha256": "de48c403577e7a5d44ab1ac438b418b9f5fcc5b8f3d70214c3b50e63c6f79dc9"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -196,7 +196,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "b59d6bcad97eecd83658cfc0985d0b7487682debea1cbd44dc787016fb308de7"
+      "sha256": "7dce82a10adcfcf9cedf2cb3d87b9c4f7cb7c5997ef6d1e601420c1dbb4dab8f"
     },
     {
       "path": "lib/src/terminal_input/terminal_prompt_click.dart",

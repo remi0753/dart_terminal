@@ -11508,6 +11508,7 @@ final class TerminalApplication {
         settings.activeView!.snapshot;
     _expectLifecycle(
       initialSettingsSnapshot.text == settings.state.text &&
+          settings.activeView!.suppressesUnhandledEscape &&
           initialSettingsSnapshot.selection.start ==
               settings.state.selection.start &&
           !initialSettingsSnapshot.isEditable &&
@@ -12223,6 +12224,13 @@ keybind = command+right=pane.focus-left
           initialScreens.activeScreen.cursorShape == TerminalCursorShape.bar,
       'accepted reload did not preserve existing new-session resources',
     );
+    final String escapeDraft =
+        '$correctedDraft# unsaved immediately before Esc\n';
+    final TextEditorSelection escapeSelection =
+        settings.activeView!.snapshot.selection;
+    settings.activeView!.setDocument(
+      TextEditorDocument(text: escapeDraft, selection: escapeSelection),
+    );
     _injectKeyEventForTesting(
       application,
       reloadSettingsWindow,
@@ -12239,6 +12247,17 @@ keybind = command+right=pane.focus-left
           settings.activeView!.lineHighlight?.location ==
               settings.state.selection.start,
       'Settings Escape did not leave INSERT without changing surfaces',
+    );
+    _expectLifecycle(
+      settings.state.text == escapeDraft &&
+          settings.activeView!.snapshot.text == escapeDraft &&
+          settings.state.isDirty &&
+          settings.activeView!.snapshot.selection == escapeSelection &&
+          settings.activeView!.suppressesUnhandledEscape &&
+          File(configurationPath).readAsStringSync() == correctedDraft &&
+          settings.saveRequestCount == 3 &&
+          settings.reloadRequestCount == 1,
+      'native Settings Escape lost or persisted the last unsaved draft',
     );
     _injectKeyEventForTesting(
       application,

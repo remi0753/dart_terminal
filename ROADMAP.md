@@ -1437,12 +1437,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 完了機能の回帰修正
 
-- [ ] SettingsのEscによるモード切替／閉じる操作でビープを鳴らさない
+- [x] SettingsのEscによるモード切替／閉じる操作でビープを鳴らさない
   （実施時に
   [`docs/phase8/settings-escape-beep.md`](docs/phase8/settings-escape-beep.md)
   を参照して順に実施する）
   - [x] 汎用text editorのDart-owned Escape fallbackとネイティブ回帰検証
-  - [ ] Settingsへの限定適用、モード／draft同期、両runtimeと全体の検証
+  - [x] Settingsへの限定適用、モード／draft同期、両runtimeと全体の検証
 - [x] 設定済みControl+Tabがtab切替へ届かない原因の特定
   （実施時に
   [`docs/phase7/control-tab-routing-diagnosis.md`](docs/phase7/control-tab-routing-diagnosis.md)

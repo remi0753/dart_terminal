@@ -2203,6 +2203,8 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
               terminalSettingsCurrentLineColor.green &&
           initialLineHighlight?.blue == terminalSettingsCurrentLineColor.blue &&
           bindings.textEditorSelectionRevealCounts[settingsViewHandle] == 0 &&
+          settingsView.suppressesUnhandledEscape &&
+          bindings.textEditorEscapeSuppressed[settingsViewHandle] == true &&
           settings.activeStatusView!.text.contains('NORMAL') &&
           settings.activeDetailView!.text.contains('Current value') &&
           !settings.renderedText!.contains('Config Lens') &&
@@ -2461,6 +2463,8 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
       'Settings did not persist and refresh the accepted controller snapshot',
     );
 
+    final String escapeDraft = '$editedText# unsaved immediately before Esc\n';
+    bindings.texts[settingsViewHandle] = escapeDraft;
     _injectHierarchyKey(
       rawEvents,
       application,
@@ -2474,6 +2478,21 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
           bindings.textEditorEditable[settingsViewHandle] == false &&
           bindings.windowKeyEventRoutings[settingsWindowHandle] == 1,
       'Settings Escape did not return INSERT to NORMAL',
+    );
+    _expect(
+      settings.state.text == escapeDraft &&
+          bindings.texts[settingsViewHandle] == escapeDraft &&
+          settings.state.isDirty &&
+          settings.state.selection.start == editedCaret &&
+          settingsView.suppressesUnhandledEscape &&
+          bindings.textEditorEscapeSuppressed[settingsViewHandle] == true &&
+          identical(settings.activeView, settingsView) &&
+          settings.saveRequestCount == 2 &&
+          settings.reloadRequestCount == 1 &&
+          !fileSystem
+              .readText('/settings.conf')
+              .contains('unsaved immediately before Esc'),
+      'INSERT Escape lost the final native draft, saved it, or changed owners',
     );
     _injectHierarchyKey(
       rawEvents,
@@ -2523,6 +2542,8 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
           settings.state.mode == TerminalSettingsEditorMode.normal &&
           settings.activeView!.configuration ==
               terminalSettingsHighContrastPresentation.editorConfiguration &&
+          settings.activeView!.suppressesUnhandledEscape &&
+          bindings.textEditorEscapeSuppressed[accessibleEditorHandle] == true &&
           settings.activeStatusView!.configuration ==
               terminalSettingsHighContrastPresentation.statusConfiguration &&
           settings.activeDetailView!.configuration ==
@@ -4976,6 +4997,7 @@ final class _HierarchyNativeBindings
         NativeBindings,
         NativeTextEditorBindings,
         NativeTextEditorPresentationBindings,
+        NativeTextEditorEscapeBindings,
         NativeSplitViewAppearanceBindings,
         NativeSavePanelBindings,
         NativeSplitViewPositionBindings {
@@ -5014,6 +5036,7 @@ final class _HierarchyNativeBindings
   final Map<int, int> textEditorSelectionStarts = <int, int>{};
   final Map<int, int> textEditorSelectionLengths = <int, int>{};
   final Map<int, bool> textEditorEditable = <int, bool>{};
+  final Map<int, bool> textEditorEscapeSuppressed = <int, bool>{};
   final Map<int, bool> textEditorHasMarkedText = <int, bool>{};
   final Map<int, int> textEditorSelectionRevealCounts = <int, int>{};
   final Map<int, String> texts = <int, String>{};
@@ -5398,6 +5421,15 @@ final class _HierarchyNativeBindings
   }
 
   @override
+  NativeCallResult textEditorSetUnhandledEscapeSuppressed(
+    int handle,
+    bool suppressed,
+  ) {
+    textEditorEscapeSuppressed[handle] = suppressed;
+    return const NativeCallResult.success();
+  }
+
+  @override
   NativeCallResult textEditorSetEditable(int handle, bool editable) {
     textEditorEditable[handle] = editable;
     return const NativeCallResult.success();
@@ -5520,6 +5552,7 @@ final class _HierarchyNativeBindings
     textEditorSelectionStarts.remove(handle);
     textEditorSelectionLengths.remove(handle);
     textEditorEditable.remove(handle);
+    textEditorEscapeSuppressed.remove(handle);
     textEditorHasMarkedText.remove(handle);
     textEditorSelectionRevealCounts.remove(handle);
     texts.remove(handle);

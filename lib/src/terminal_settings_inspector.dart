@@ -640,7 +640,7 @@ final class TerminalSettingsInspectorPresenter {
       state.open();
       editor = TextEditor(
         configuration: _settingsPresentation.editorConfiguration,
-      );
+      )..suppressesUnhandledEscape = true;
       statusView = TextView(
         configuration: _settingsPresentation.statusConfiguration,
       );
@@ -753,7 +753,8 @@ final class TerminalSettingsInspectorPresenter {
     final List<TextEditorStyleRun> oldPublishedStyleRuns = _publishedStyleRuns;
     final bool? oldPublishedDetailsExpanded = _publishedDetailsExpanded;
     try {
-      editor = TextEditor(configuration: next.editorConfiguration);
+      editor = TextEditor(configuration: next.editorConfiguration)
+        ..suppressesUnhandledEscape = true;
       statusView = TextView(configuration: next.statusConfiguration);
       detailView = TextView(configuration: next.detailConfiguration);
       editorStatusSplit = TwoPaneSplitView(axis: SplitViewAxis.vertical)
@@ -854,6 +855,14 @@ final class TerminalSettingsInspectorPresenter {
 
   Future<void> _handleKey(AppKitKeyEvent event) async {
     try {
+      if (state.mode == TerminalSettingsEditorMode.insert &&
+          event.kind == AppKitKeyEventKind.down &&
+          TerminalAppKitKeyAdapter.adapt(event).physicalKey ==
+              TerminalPhysicalKey.escape) {
+        // The native edit may precede its queued synchronization. Pull it before
+        // leaving INSERT so NORMAL rendering cannot replace the latest draft.
+        synchronizeNativeEditor();
+      }
       final TerminalSettingsEditorKeyDisposition disposition = _keys.handle(
         event,
       );

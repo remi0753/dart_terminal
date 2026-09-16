@@ -581,6 +581,7 @@ editorのviewportも自動で追従します。行背景とviewport移動はsynt
 起動時は`NORMAL`で、`i`または`a`が同じsyntax-highlight済みsurfaceを`INSERT`へ切り替え、
 `Esc`が`NORMAL`へ戻します。両modeのdocument、font、色、syntax styleは同一です。`/`だけが
 明示的に`SEARCH`を開始し、`↑`/`↓`で候補を移動、`]`でcontext panelを開閉します。
+SettingsのEscはビープを鳴らさず、INSERTを抜ける直前の未保存draftも保持します。
 `Fn＋↑`/`Fn＋↓`（Page Up/Down）はNORMALで10行、SEARCHで10件ずつ移動し、
 移動先を表示範囲へスクロールします。端では止まり、通常の上下キーは1行／1件移動のままです。
 INSERTのページ移動はmacOS標準の編集操作に委ねます。
