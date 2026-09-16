@@ -1551,6 +1551,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     [`docs/phase7/context-dock-navigator-modes.md`](docs/phase7/context-dock-navigator-modes.md)
     を参照する）
 
+### 変更の統合
+
+- [ ] Context Dock作業ブランチをmainへ統合し、統合済みのローカルブランチを削除する
+  （実施時に
+  [`docs/phase7/context-dock-main-integration.md`](docs/phase7/context-dock-main-integration.md)
+  を参照する）
+
 ### 主要ゴール後の低優先 follow-up
 
 - [ ] 公開・未改変 runtime の Intel-native no-rebuild runtime handoff と追加互換性証跡
