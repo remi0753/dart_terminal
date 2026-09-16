@@ -1353,6 +1353,12 @@ final class TerminalContextDockDirectoryPresenter {
     return details == null || details.isDisposed ? null : details.snapshot.text;
   }
 
+  bool nativeProcessUsesFullHeightForWindow(TerminalWindowId windowId) =>
+      !_isDisposed &&
+      _resources[windowId]?.document?.kind ==
+          _TerminalContextDockDocumentKind.process &&
+      _resources[windowId]?.contentSplit.zoomedChild == SplitViewChild.first;
+
   bool get canFocusNavigator {
     if (_isDisposed || applicationState.isDisposed || dockState.isDisposed) {
       return false;
@@ -1459,6 +1465,13 @@ final class TerminalContextDockDirectoryPresenter {
       visibleDock,
       directoryController.snapshotForWindow(window.id),
     );
+    final SplitViewChild? zoomedChild =
+        resources.document!.kind == _TerminalContextDockDocumentKind.process
+        ? SplitViewChild.first
+        : null;
+    if (resources.contentSplit.zoomedChild != zoomedChild) {
+      resources.contentSplit.zoomedChild = zoomedChild;
+    }
     if (rootAttachmentChanged) {
       resources.split.setChildren(
         first: terminalRoot,
@@ -2146,8 +2159,6 @@ final class _TerminalContextDockDocument {
             line(localization.processInspectorUnavailable);
           }
         }
-        line();
-        line(localization.processInspectorDirectoryIdleHint);
         break;
       case TerminalContextDockContentMode.shellOwnedCommand:
         line(
@@ -2155,8 +2166,6 @@ final class _TerminalContextDockDocument {
           '${_elapsed(process?.elapsedMicroseconds ?? 0)}',
         );
         line(localization.processInspectorShellCommand);
-        line();
-        line(localization.processInspectorDirectoryIdleHint);
         break;
       case TerminalContextDockContentMode.protected:
         line(localization.processInspectorProtected);
@@ -2169,34 +2178,34 @@ final class _TerminalContextDockDocument {
         throw StateError('Directory content requires the directory document');
     }
 
-    final StringBuffer details = StringBuffer();
-    void detailLine([String value = '']) => details.writeln(value);
-    detailLine(localization.processInspectorDetails);
+    // Process metadata belongs to the same scrollable document as the job
+    // summary. Only Directory Navigator keeps a pinned details document.
     if (content.mode == TerminalContextDockContentMode.foregroundJob &&
         process != null &&
         process.status != TerminalContextDockProcessStatus.loading) {
-      detailLine(localization.processInspectorExecutable);
-      detailLine(
+      line();
+      line(localization.processInspectorExecutable);
+      line(
         process.executablePath == null
             ? localization.processInspectorFieldUnavailable
             : _displayValue(process.executablePath!),
       );
-      detailLine();
-      detailLine(localization.processInspectorCommandArgv);
+      line();
+      line(localization.processInspectorCommandArgv);
       if (!content.argumentsVisible) {
-        detailLine(localization.processInspectorArgumentsHidden);
+        line(localization.processInspectorArgumentsHidden);
       } else if (process.argumentsHidden) {
-        detailLine(localization.processInspectorArgumentsRefreshing);
+        line(localization.processInspectorArgumentsRefreshing);
       } else if (process.arguments.isEmpty) {
-        detailLine(localization.processInspectorFieldUnavailable);
+        line(localization.processInspectorFieldUnavailable);
       } else {
-        detailLine(process.arguments.map(_argumentToken).join('  '));
-        detailLine(localization.processInspectorArgvNote);
+        line(process.arguments.map(_argumentToken).join('  '));
+        line(localization.processInspectorArgvNote);
       }
       if (content.argumentsVisible &&
           !process.argumentsHidden &&
           process.omittedArgumentCount > 0) {
-        detailLine(
+        line(
           localization.processInspectorOmittedArguments(
             process.omittedArgumentCount,
           ),
@@ -2205,36 +2214,27 @@ final class _TerminalContextDockDocument {
       if (content.argumentsVisible &&
           !process.argumentsHidden &&
           process.argumentsTruncated) {
-        detailLine(localization.processInspectorArgumentsTruncated);
+        line(localization.processInspectorArgumentsTruncated);
       }
-      detailLine();
+      line();
       final TerminalContextDockForegroundJobIdentity? identity =
           process.identity;
       final TerminalContextDockProcessMember? primary = process.primaryProcess;
-      detailLine(
+      line(
         '${localization.processInspectorPid} '
         '${primary?.processId ?? '-'} · '
         '${localization.processInspectorPgid} '
         '${identity?.foregroundProcessGroup ?? '-'}',
       );
-      detailLine(
-        '${localization.processInspectorInput}: '
-        '${localization.processInspectorTerminal}',
-      );
     } else if (content.mode ==
         TerminalContextDockContentMode.shellOwnedCommand) {
-      detailLine(localization.processInspectorShellDetailsUnavailable);
-      detailLine();
-      detailLine(localization.processInspectorDirectoryIdleHint);
-    } else if (content.mode == TerminalContextDockContentMode.protected) {
-      detailLine(localization.processInspectorProtectedHelp);
-    } else {
-      detailLine(localization.processInspectorUnavailable);
+      line();
+      line(localization.processInspectorShellDetailsUnavailable);
     }
     return _TerminalContextDockDocument(
       kind: _TerminalContextDockDocumentKind.process,
       navigatorText: navigator.toString(),
-      detailsText: details.toString(),
+      detailsText: '',
       selection: const TextEditorSelection(start: 0),
       queryCaret: const TextEditorSelection(start: 0),
       querySelection: const TextEditorSelection(start: 0),

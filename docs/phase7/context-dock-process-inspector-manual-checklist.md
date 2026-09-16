@@ -22,13 +22,15 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
 
 - [ ] `/bin/sleep 5`を実行すると75 ms後に見出しが`Directory Navigator`から`Process Inspector`へ変わり、
   command終了後はfreshなDirectory Navigatorへ戻る。短い`/usr/bin/true`では表示が点滅しない。
-- [ ] Process Inspector上段には`Foreground job`、経過時間、process数、process名が表示され、経過時間が
+- [ ] Process Inspectorには`Foreground job`、経過時間、process数、process名が表示され、経過時間が
   およそ1秒ごとに進む。更新のたびに選択、scroll位置、divider位置が飛ばない。
-- [ ] `/bin/sh -c 'sleep 5' | /bin/cat`では複数processを同じjobとして表示し、上段だけがscrollする。
-  下段のDetailsは固定されたままで、primary executable、process argv、PID、PGIDを確認できる。
+- [ ] `/bin/sh -c 'sleep 5' | /bin/cat`では複数processを同じjobとして表示し、同じ全高のscroll領域で
+  primary executable、process argv、PID、PGIDも確認できる。独立したProcess Details欄と上下dividerはない。
+  `Directory Navigator is available...`の案内はEnglish／Japaneseのどちらにも表示しない。
+  command終了後はDirectory Navigatorの一覧と下端の固定file／directory詳細欄が復元される。
 - [ ] Process Inspectorにはworking directory、Directory Navigatorのtree、Path actions、Search queryを混在させない。
-- [ ] 狭いwindow、Dock幅変更、上下divider移動、fullscreenでもterminalへ重ならず、上段と固定detailsの最小高を
-  保つ。長いargvはDock外へ描画せず、truncation／partial／omitted状態を文字で区別できる。
+- [ ] 狭いwindow、Dock幅変更、fullscreenでもterminalへ重ならず、Process InspectorだけがDock全高を使う。
+  長いargvはDock外へ描画せず、truncation／partial／omitted状態を文字で区別できる。
 - [ ] command実行中にDockを隠して再表示すると、非表示中の古い内容を一瞬復元せず、現在のjobを再観測する。
 
 ## Terminal inputとkeyboard-only操作
@@ -45,7 +47,7 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
   VoiceOverでも非表示のargvや引数の省略／truncation情報を読み上げない。
 - [ ] terminalの通常入力、Control-C、scroll、selectionはProcess Inspector表示中も従来どおり機能する。
 - [ ] shell builtinまたはshell integrationがprocess argvを安全に特定できないcommandでは、`Shell command running`
-  と観測経過時間だけを表示し、shell入力文字列を推測してDetailsへ出さない。
+  と観測経過時間を表示し、shell入力文字列を推測して出さない。
 
 ## Privacy、focus、lifecycle
 
@@ -63,9 +65,9 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
 
 ## VoiceOverと記録
 
-- [ ] VoiceOverは`Process Inspector`をterminalと別のsiblingとして読み、上段でstate、elapsed、process countと
-  member、下段でexecutable、process argv、PID／PGIDをvisual orderどおり読める。
-- [ ] 上下ともread-onlyと伝わり、terminalだけがinput focusを持つ。1秒更新ごとにfocus通知や文書全体の
+- [ ] VoiceOverは`Process Inspector`をterminalと別のsiblingとして読み、一つの文書でstate、elapsed、process countと
+  member、executable、process argv、PID／PGIDをvisual orderどおり読める。空の下段詳細文書を読み上げない。
+- [ ] Process Inspectorがread-onlyと伝わり、terminalだけがinput focusを持つ。1秒更新ごとにfocus通知や文書全体の
   読み上げを強制せず、利用者が現在位置を保てる。
 - [ ] Englishでは`Process Inspector`、Japaneseでは`プロセスインスペクタ`と表示され、
   `Directory Navigator`／`ディレクトリナビゲータ`とは別の名前として区別できる。

@@ -267,11 +267,7 @@ final class TerminalLocalization {
   String get processInspectorShellDetailsUnavailable => _ja
       ? 'シェル連携なしではコマンドの詳細を取得できません'
       : 'Command details are unavailable without shell integration';
-  String get processInspectorDirectoryIdleHint => _ja
-      ? 'ディレクトリナビゲータはシェル待機中に利用できます'
-      : 'Directory Navigator is available when the shell is idle';
   String get processInspectorProcessList => _ja ? 'プロセス一覧' : 'Process list';
-  String get processInspectorDetails => _ja ? 'プロセス詳細' : 'Process details';
   String get processInspectorExecutable => _ja ? '実行ファイル' : 'Executable';
   String get processInspectorCommandArgv =>
       _ja ? 'コマンド（プロセス argv）' : 'Command (process argv)';

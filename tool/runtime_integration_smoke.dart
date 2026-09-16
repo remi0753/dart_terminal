@@ -2425,6 +2425,7 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
     ],
     environment: const <String, String>{'DT_RUNTIME_NATIVE_CONTENT_TEST': '1'},
     timeout: const Duration(seconds: 60),
+    throughLaunchServices: true,
   );
   _expect(
     observation.status == 0,

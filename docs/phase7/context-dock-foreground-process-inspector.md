@@ -5,6 +5,10 @@ process metadata非表示は、後続の
 [`入力保護と情報表示の分離`](context-dock-process-input-privacy.md)で改訂する。
 Navigator／path insertionの入力保護とprocess情報表示は別のauthorityになる。
 
+当初の上下分割UIもhistoricalである。Process Inspectorの一覧と詳細は後続の
+[`単一表示への統合`](context-dock-process-inspector-unified-layout.md)で一つの全高文書へまとめる。
+Directory Navigatorの固定詳細欄は変更しない。
+
 ## 目的
 
 focused terminal paneでcommandが実行中の間、working directoryが`unknown`になる領域を

@@ -8960,6 +8960,10 @@ final class TerminalApplication {
       initialSession.terminalScreenSet.setAlternateMode1049(false);
       await dispatch(TerminalActionId.focusTerminal);
 
+      String? processDocumentText() => contextDockPresenter
+          .nativeEditorSnapshotForWindow(initialWindow.id)
+          ?.text;
+
       initialPane.insertText(
         "/bin/sh -c 'printf \"%s%s\\n\" __DT_PROCESS_ PIPE_READY__; "
         "sleep 4; printf \"%s%s\\n\" __DT_PROCESS_ PIPE_DONE__' | "
@@ -8973,9 +8977,6 @@ final class TerminalApplication {
         final String? list = contextDockPresenter
             .nativeEditorSnapshotForWindow(initialWindow.id)
             ?.text;
-        final String? details = contextDockPresenter.nativeDetailsTextForWindow(
-          initialWindow.id,
-        );
         return content?.mode == TerminalContextDockContentMode.foregroundJob &&
             content?.process?.status ==
                 TerminalContextDockProcessStatus.ready &&
@@ -8989,9 +8990,18 @@ final class TerminalApplication {
             list?.contains('Process Inspector') == true &&
             list?.contains('Foreground job') == true &&
             !list!.contains('Working directory:') &&
-            details?.contains('Command (process argv)') == true &&
-            details?.contains('__DT_PROCESS_') == true &&
-            details?.contains('PIPE_READY__') == true;
+            !list.contains('Directory Navigator is available') &&
+            !list.contains('Process details') &&
+            contextDockPresenter.nativeDetailsTextForWindow(initialWindow.id) ==
+                '' &&
+            contextDockPresenter.nativeProcessUsesFullHeightForWindow(
+              initialWindow.id,
+            ) &&
+            list.contains('Command (process argv)') &&
+            list.contains('Executable') &&
+            list.contains('PGID') &&
+            list.contains('__DT_PROCESS_') &&
+            list.contains('PIPE_READY__');
       }, 'real pipeline did not reach the Process Inspector document');
       final TerminalContextDockContentSnapshot pipelineBefore =
           contextDockProcess.snapshotForWindow(initialWindow.id)!;
@@ -9023,16 +9033,9 @@ final class TerminalApplication {
                     ?.arguments
                     .isEmpty ==
                 true &&
-            contextDockPresenter
-                    .nativeDetailsTextForWindow(initialWindow.id)
-                    ?.contains('Arguments are hidden') ==
-                true &&
-            !contextDockPresenter
-                .nativeDetailsTextForWindow(initialWindow.id)!
-                .contains('PIPE_READY__') &&
-            contextDockPresenter
-                .nativeDetailsTextForWindow(initialWindow.id)!
-                .contains('Executable') &&
+            processDocumentText()?.contains('Arguments are hidden') == true &&
+            !processDocumentText()!.contains('PIPE_READY__') &&
+            processDocumentText()!.contains('Executable') &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) == argumentsWriteBaseline,
         'hiding process argv retained argument text or wrote to the PTY',
       );
@@ -9058,11 +9061,7 @@ final class TerminalApplication {
         'command palette did not restore process argument visibility',
       );
       await waitFor(
-        () =>
-            contextDockPresenter
-                .nativeDetailsTextForWindow(initialWindow.id)
-                ?.contains('PIPE_READY__') ==
-            true,
+        () => processDocumentText()?.contains('PIPE_READY__') == true,
         'revealing process argv did not obtain a fresh native document',
       );
       _expectLifecycle(
@@ -9111,6 +9110,13 @@ final class TerminalApplication {
                     .nativeEditorSnapshotForWindow(initialWindow.id)
                     ?.text
                     .contains('Directory Navigator') ==
+                true &&
+            !contextDockPresenter.nativeProcessUsesFullHeightForWindow(
+              initialWindow.id,
+            ) &&
+            contextDockPresenter
+                    .nativeDetailsTextForWindow(initialWindow.id)
+                    ?.contains('Path actions') ==
                 true;
       }, 'finished pipeline did not restore a fresh Directory Navigator');
 
@@ -9206,10 +9212,7 @@ final class TerminalApplication {
             .snapshotForWindow(initialWindow.id);
         return content?.mode == TerminalContextDockContentMode.foregroundJob &&
             content?.process?.executablePath?.endsWith('/sleep') == true &&
-            contextDockPresenter
-                    .nativeDetailsTextForWindow(initialWindow.id)
-                    ?.contains('Command (process argv)') ==
-                true;
+            processDocumentText()?.contains('Command (process argv)') == true;
       }, 'ECHO-off command did not retain the read-only Process Inspector');
       await dispatch(TerminalActionId.toggleSecureKeyboardEntry);
       reconcile();
@@ -9232,9 +9235,7 @@ final class TerminalApplication {
                     ?.text
                     .contains('Protected input') ==
                 false &&
-            contextDockPresenter
-                .nativeDetailsTextForWindow(initialWindow.id)!
-                .contains('/sleep') &&
+            processDocumentText()!.contains('/sleep') &&
             !contextDockState
                 .snapshotForWindow(initialWindow.id)!
                 .navigatorOwnsInput &&

@@ -1503,6 +1503,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   を参照して順に実施する）
   - [x] ECHO-off／Secure Keyboard Entry中のprocess表示と既存入力保護の分離
   - [x] 入力保護から独立したargv表示切替、localization、reference、両runtime受け入れ
+- [x] Process Inspectorの一覧と詳細を単一表示へ統合し、Directory Navigatorの待機案内を除去する
+  （実施時に
+  [`docs/phase7/context-dock-process-inspector-unified-layout.md`](docs/phase7/context-dock-process-inspector-unified-layout.md)
+  を参照する）
 - [x] focused paneに追従するContext Dockとlocal file／folder navigator
   （分割、input ownership、filesystem境界、完了条件は
   [`docs/phase7/context-dock-file-navigator.md`](docs/phase7/context-dock-file-navigator.md)

@@ -85,8 +85,8 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   Full Keyboard Accessの実機確認は
   [Directory Navigator manual checklist](docs/phase7/context-dock-directory-navigator-manual-checklist.md)を参照
 - Context Dockを表示したままlocalのforeground process groupを実行すると、Directory Navigatorとは別名の
-  read-only `Process Inspector`へ自動で切り替わる。上段には最大32 processの名前と経過時間、下段の固定detailsには
-  primary executable、shell sourceではなくprocessから観測したargv、PID／PGIDを表示し、pipelineも同じjobとして扱う。
+  read-only `Process Inspector`へ自動で切り替わる。Dock全高を使う一つのscrollable表示に最大32 processの名前と経過時間、
+  primary executable、shell sourceではなくprocessから観測したargv、PID／PGIDをまとめ、pipelineも同じjobとして扱う。
   terminalが入力を所有したままなのでinteractive commandを操作でき、Shift-Command-F/G/MはPTYへ送らず消費する。
   75 ms未満の短いcommandは表示を切り替えず、silent commandも250 ms以内に検出し、詳細情報の再取得は最大1秒に
   1回とする。shell builtinは推測したargvを出さず実行中statusだけを示す。ECHO-offやmanual／automatic

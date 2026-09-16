@@ -349,6 +349,8 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   _expect(
     bindings.texts[editorHandle]!.contains('プロセス情報を読み込み中') &&
         !bindings.texts[editorHandle]!.contains('/root') &&
+        bindings.texts[detailsHandle]!.isEmpty &&
+        bindings.splitViewZoomedChildren[contentHandle] == 0 &&
         bindings.firstResponders[windowHandle] ==
             bindings.handleFor(adapter.resourcesForPane(pane.id)!.view),
     'loading foreground state switches documents without exposing stale directory content',
@@ -360,7 +362,6 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   );
   reconcile();
   final String processList = bindings.texts[editorHandle]!;
-  final String processDetails = bindings.texts[detailsHandle]!;
   final int terminalHandle = bindings.handleFor(
     adapter.resourcesForPane(pane.id)!.view,
   );
@@ -374,18 +375,21 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
         processList.contains(r'runner\n\u{202e}') &&
         processList.contains('PID 4201') &&
         processList.contains('ほか 1 プロセスを省略') &&
-        processList.contains('ディレクトリナビゲータはシェル待機中に利用できます') &&
+        !processList.contains('ディレクトリナビゲータはシェル待機中に利用できます') &&
         !processList.contains('ディレクトリナビゲータ\n') &&
         !processList.contains('/root') &&
-        processDetails.contains('プロセス詳細') &&
-        processDetails.contains('実行ファイル') &&
-        processDetails.contains(r'/private/tmp/tool\n\u{202e}') &&
-        processDetails.contains(r'"runner"  "line\nbreak"') &&
-        processDetails.contains(r'"\u{202e}--flag"') &&
-        processDetails.contains('シェルへ入力した元の文字列ではありません') &&
-        processDetails.contains('ほか 2 引数を省略') &&
-        processDetails.contains('引数は上限で切り詰められています') &&
-        processDetails.contains('PID 4201 · PGID 4200') &&
+        !processList.contains('プロセス詳細') &&
+        bindings.texts[detailsHandle]!.isEmpty &&
+        bindings.splitViewZoomedChildren[contentHandle] == 0 &&
+        presenter.nativeProcessUsesFullHeightForWindow(logicalWindow.id) &&
+        processList.contains('実行ファイル') &&
+        processList.contains(r'/private/tmp/tool\n\u{202e}') &&
+        processList.contains(r'"runner"  "line\nbreak"') &&
+        processList.contains(r'"\u{202e}--flag"') &&
+        processList.contains('シェルへ入力した元の文字列ではありません') &&
+        processList.contains('ほか 2 引数を省略') &&
+        processList.contains('引数は上限で切り詰められています') &&
+        processList.contains('PID 4201 · PGID 4200') &&
         bindings.textEditorEditable[editorHandle] == false &&
         bindings.textEditorEditable[detailsHandle] == false &&
         bindings.firstResponders[windowHandle] == terminalHandle &&
@@ -393,7 +397,7 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
         identical(content.firstView, editor) &&
         identical(content.secondView, details),
     'Process Inspector replaces the Directory document with escaped bounded '
-    'read-only process list and pinned primary details',
+    'read-only full-height process document',
   );
   final TerminalActionDispatchResult consumedSearch = await dispatcher.dispatch(
     TerminalActionId.searchFilesAndFolders,
@@ -407,10 +411,8 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     'focus to the hidden query editor',
   );
 
-  final int retainedProcessSelection = processList.indexOf('runner');
-  final int retainedDetailSelection = processDetails.indexOf('/private/tmp');
+  final int retainedProcessSelection = processList.indexOf('/private/tmp');
   editor.setSelection(TextEditorSelection(start: retainedProcessSelection));
-  details.setSelection(TextEditorSelection(start: retainedDetailSelection));
   final int processRevealBaseline =
       bindings.textEditorSelectionRevealCounts[editorHandle]!;
   final int detailRevealBaseline =
@@ -425,14 +427,13 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     bindings.texts[editorHandle]!.contains('実行中 · 01:05') &&
         bindings.textEditorSelectionStarts[editorHandle] ==
             retainedProcessSelection &&
-        bindings.textEditorSelectionStarts[detailsHandle] ==
-            retainedDetailSelection &&
+        bindings.textEditorSelectionStarts[detailsHandle] == 0 &&
         bindings.textEditorSelectionRevealCounts[editorHandle] ==
             processRevealBaseline &&
         bindings.textEditorSelectionRevealCounts[detailsHandle] ==
             detailRevealBaseline &&
         bindings.firstResponders[windowHandle] == terminalHandle,
-    'elapsed refresh preserves both read-only selections, scroll ownership, '
+    'elapsed refresh preserves the unified read-only selection, scroll ownership, '
     'and the terminal first responder',
   );
 
@@ -444,16 +445,17 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   );
   reconcile();
   _expect(
-    bindings.texts[detailsHandle]!.contains('引数は非表示です') &&
-        !bindings.texts[detailsHandle]!.contains('line') &&
-        !bindings.texts[detailsHandle]!.contains('--flag') &&
-        !bindings.texts[detailsHandle]!.contains('ほか 2 引数') &&
-        !bindings.texts[detailsHandle]!.contains('引数は上限') &&
-        bindings.texts[detailsHandle]!.contains(
+    bindings.texts[editorHandle]!.contains('引数は非表示です') &&
+        !bindings.texts[editorHandle]!.contains('line') &&
+        !bindings.texts[editorHandle]!.contains('--flag') &&
+        !bindings.texts[editorHandle]!.contains('ほか 2 引数') &&
+        !bindings.texts[editorHandle]!.contains('引数は上限') &&
+        bindings.texts[editorHandle]!.contains(
           r'/private/tmp/tool\n\u{202e}',
         ) &&
-        bindings.texts[detailsHandle]!.contains('PID 4201 · PGID 4200') &&
+        bindings.texts[editorHandle]!.contains('PID 4201 · PGID 4200') &&
         bindings.texts[editorHandle]!.contains('実行中 · 01:05') &&
+        bindings.texts[detailsHandle]!.isEmpty &&
         bindings.firstResponders[windowHandle] == terminalHandle,
     'hidden argv never reaches the native visual/accessibility document while other process information and focus remain',
   );
@@ -465,9 +467,10 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   );
   reconcile();
   _expect(
-    bindings.texts[detailsHandle]!.contains('引数を再取得しています') &&
-        !bindings.texts[detailsHandle]!.contains('--flag') &&
-        !bindings.texts[detailsHandle]!.contains('line'),
+    bindings.texts[editorHandle]!.contains('引数を再取得しています') &&
+        !bindings.texts[editorHandle]!.contains('--flag') &&
+        !bindings.texts[editorHandle]!.contains('line') &&
+        bindings.texts[detailsHandle]!.isEmpty,
     'revealing waits for fresh argv instead of displaying a scrubbed or stale list',
   );
   projectedContent = TerminalContextDockContentSnapshot(
@@ -485,8 +488,11 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   _expect(
     bindings.texts[editorHandle]!.contains('シェルコマンドを実行中') &&
         bindings.texts[editorHandle]!.contains('観測上の実行時間 · 00:03') &&
-        bindings.texts[detailsHandle]!.contains('シェル連携なしではコマンドの詳細を取得できません') &&
-        !bindings.texts[detailsHandle]!.contains('/private/tmp'),
+        bindings.texts[editorHandle]!.contains('シェル連携なしではコマンドの詳細を取得できません') &&
+        !bindings.texts[editorHandle]!.contains('/private/tmp') &&
+        !bindings.texts[editorHandle]!.contains('ディレクトリナビゲータはシェル待機中に利用できます') &&
+        bindings.texts[detailsHandle]!.isEmpty &&
+        bindings.splitViewZoomedChildren[contentHandle] == 0,
     'shell-owned work is a content-free status and never invents argv',
   );
   projectedContent = TerminalContextDockContentSnapshot(
@@ -501,11 +507,30 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   reconcile();
   _expect(
     bindings.texts[editorHandle]!.contains('保護入力中') &&
-        bindings.texts[detailsHandle]!.contains('保護入力中はプロセス情報を表示しません') &&
+        bindings.texts[editorHandle]!.contains('保護入力中はプロセス情報を表示しません') &&
         !bindings.texts[editorHandle]!.contains('runner') &&
-        !bindings.texts[detailsHandle]!.contains('/private/tmp') &&
+        !bindings.texts[editorHandle]!.contains('/private/tmp') &&
+        bindings.texts[detailsHandle]!.isEmpty &&
         bindings.firstResponders[windowHandle] == terminalHandle,
     'protected projection atomically replaces every secret-bearing native string',
+  );
+  projectedContent = TerminalContextDockContentSnapshot(
+    windowId: logicalWindow.id,
+    paneId: pane.id,
+    sessionId: pane.sessionId,
+    generation: 5,
+    mode: TerminalContextDockContentMode.unavailable,
+    directorySuspended: true,
+    process: null,
+  );
+  reconcile();
+  _expect(
+    bindings.texts[editorHandle]!.contains('プロセス情報を利用できません') &&
+        !bindings.texts[editorHandle]!.contains('プロセス詳細') &&
+        bindings.texts[detailsHandle]!.isEmpty &&
+        bindings.splitViewZoomedChildren[contentHandle] == 0 &&
+        bindings.firstResponders[windowHandle] == terminalHandle,
+    'unavailable process content also uses the single full-height document',
   );
   projectedContent = null;
   reconcile();
@@ -513,6 +538,13 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     bindings.texts[editorHandle]!.contains('ディレクトリナビゲータ') &&
         bindings.texts[editorHandle]!.contains('モード: ターミナル') &&
         bindings.texts[editorHandle]!.contains('移動先: result-2') &&
+        bindings.texts[detailsHandle]!.contains('パス操作') &&
+        !bindings.texts[detailsHandle]!.contains('プロセス') &&
+        bindings.splitViewZoomedChildren[contentHandle] == -1 &&
+        !presenter.nativeProcessUsesFullHeightForWindow(logicalWindow.id) &&
+        (bindings.splitViewFractions[contentHandle]! - expectedContentFraction)
+                .abs() <
+            0.001 &&
         bindings.firstResponders[windowHandle] == terminalHandle,
     'returning to Directory Navigator restores its retained mode and query '
     'without changing terminal input ownership',
