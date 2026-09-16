@@ -2824,6 +2824,7 @@ final class TerminalApplication {
     TerminalAppIntentsProductController? appIntentsController;
     Timer? appIntentsPollTimer;
     Future<void> Function(PaneId? paneId)? closePaneRequest;
+    Future<void> Function(TerminalWindowId windowId)? closeWindowRequest;
     TerminalPaneCloseCoordinator? paneCloseCoordinator;
     Future<void> Function(PaneId paneId, TerminalExternalContent content)?
     externalContentRequest;
@@ -3889,11 +3890,11 @@ final class TerminalApplication {
         case WindowClosedEvent():
           dividerGestureController?.cancel(tabId);
           synchronizePaneFocusPresentation();
-          final Future<void> Function(PaneId? paneId)? request =
-              closePaneRequest;
+          final Future<void> Function(TerminalWindowId windowId)? request =
+              closeWindowRequest;
           if (request != null) {
             unawaited(
-              request(tab.focusedPaneId)
+              request(logicalWindow.id)
                   .then<void>((_) {}, onError: recordAsynchronousError),
             );
           }
@@ -3906,14 +3907,11 @@ final class TerminalApplication {
               paneCloseCoordinator?.applicationQuitInProgress == true) {
             return;
           }
-          state
-            ..activateWindow(logicalWindow.id)
-            ..selectTab(logicalWindow.id, tabId);
-          final Future<void> Function(PaneId? paneId)? request =
-              closePaneRequest;
+          final Future<void> Function(TerminalWindowId windowId)? request =
+              closeWindowRequest;
           if (request != null) {
             unawaited(
-              request(tab.focusedPaneId)
+              request(logicalWindow.id)
                   .then<void>((_) {}, onError: recordAsynchronousError),
             );
           }
@@ -5049,6 +5047,22 @@ final class TerminalApplication {
         final TerminalPaneRemovalResult? removal = result.removal;
         if (removal != null) {
           stdout.writeln(removal.shutdown.machineLine());
+        }
+        final TerminalAppKitMenuProjection? menu = menuProjection;
+        if (menu != null && !menu.isDisposed) menu.refresh();
+        final TerminalCommandPalettePresenter? palette = palettePresenter;
+        if (palette != null && !palette.isDisposed) palette.refresh();
+      };
+      closeWindowRequest = (TerminalWindowId windowId) async {
+        final TerminalWindowCloseResult result =
+            await createdPaneCloseCoordinator.requestWindowClose(windowId);
+        stdout.writeln(result.machineLine());
+        final TerminalWindowRemovalResult? removal = result.removal;
+        if (removal != null) {
+          for (final TerminalPaneSessionShutdownResult shutdown
+              in removal.shutdown.sessions) {
+            stdout.writeln(shutdown.machineLine());
+          }
         }
         final TerminalAppKitMenuProjection? menu = menuProjection;
         if (menu != null && !menu.isDisposed) menu.refresh();
@@ -13286,68 +13300,145 @@ keybind = command+right=pane.focus-left
       'menu Close did not cleanly release its exact pane session',
     );
 
-    var tabbedNativeClose = false;
-    var singleNativeClose = false;
+    final TerminalWindowState retainedWindow = state.windows.singleWhere(
+      (TerminalWindowState window) => window.id != firstWindow.id,
+    );
+    final PaneId retainedPaneId = retainedWindow.selectedTab.focusedPaneId;
+    final TerminalSession retainedSession = sessions[retainedPaneId]!;
+    final Window retainedNativeWindow = hierarchy.windowForTab(
+      retainedWindow.selectedTabId,
+    )!;
+    final List<PaneId> windowPaneIds = <PaneId>[
+      for (final TerminalTabState tab in firstWindow.tabs) ...tab.paneIds,
+    ];
+    final List<Window> windowNativeTabs = <Window>[
+      for (final TerminalTabId id in firstWindow.tabIds)
+        hierarchy.windowForTab(id)!,
+    ];
+    _expectLifecycle(
+      firstWindow.tabs.length == 2 && windowPaneIds.length == 3,
+      'window Close fixture must retain two tabs including a split after Command-W',
+    );
+    final PaneId hiddenProcessPaneId = firstWindow.tabs.last.focusedPaneId;
+    final TerminalPane hiddenProcessPane = state.paneForId(
+      hiddenProcessPaneId,
+    )!;
+    hiddenProcessPane.insertText('/bin/sleep 30');
+    await hiddenProcessPane.submit();
+    await waitFor(
+      () =>
+          hiddenProcessPane.processSnapshot().disposition ==
+          TerminalPaneProcessDisposition.foregroundProcess,
+      'hidden-tab foreground process did not become observable',
+    );
+    state
+      ..activateWindow(retainedWindow.id)
+      ..selectTab(retainedWindow.id, retainedWindow.selectedTabId);
+    reconcile();
+    retainedNativeWindow
+      ..show()
+      ..selectTab();
+    final Window windowButtonTarget = hierarchy.windowForTab(
+      firstWindow.selectedTabId,
+    )!;
+    var nativeCloseRequests = 0;
+    final StreamSubscription<WindowEvent> closeObservation = windowButtonTarget
+        .events
+        .listen((WindowEvent event) {
+          if (event is WindowCloseRequestedEvent) nativeCloseRequests++;
+        });
     var focusDuringClose = false;
-    while (state.paneCount > 0) {
-      final TerminalWindowState closingWindow = state.activeWindow!;
-      final TerminalTabState closingTab = closingWindow.selectedTab;
-      final PaneId closingPaneId = closingTab.focusedPaneId;
-      final int previousPaneCount = state.paneCount;
-      tabbedNativeClose |= closingWindow.tabs.length > 1;
-      singleNativeClose |= previousPaneCount == 1;
-      final Window nativeWindow = hierarchy.windowForTab(closingTab.id)!;
-      nativeWindow
-        ..show()
-        ..selectTab();
-      await _waitForAsciiMarker(sessions[closingPaneId]!, prompt);
-      final Window? neighborWindow = hierarchy.windows.entries
-          .where(
-            (MapEntry<TerminalTabId, Window> entry) =>
-                entry.key != closingTab.id,
-          )
-          .map((MapEntry<TerminalTabId, Window> entry) => entry.value)
-          .firstOrNull;
-      final Timer focusTimer = Timer.periodic(const Duration(milliseconds: 1), (
-        Timer timer,
-      ) {
-        if (!focusDuringClose &&
-            state.mutationInProgress &&
-            neighborWindow != null &&
-            !neighborWindow.isDisposed &&
-            !neighborWindow.isClosed) {
-          focusDuringClose = true;
-          _injectFocusEventForTesting(
-            application,
-            neighborWindow,
-            isFocused: true,
-            monotonicNanoseconds: eventTimestamp++,
-          );
-        }
-      });
-      try {
-        // Uses the deferred native Close path also used by the red button.
-        nativeWindow.requestClose();
-        await waitFor(
-          () =>
-              state.paneForId(closingPaneId) == null &&
-              state.paneCount == previousPaneCount - 1 &&
-              hierarchy.paneResourceCount == previousPaneCount - 1,
-          'native Close did not remove exactly the targeted pane',
+    final Timer focusTimer = Timer.periodic(const Duration(milliseconds: 1), (
+      Timer timer,
+    ) {
+      if (!focusDuringClose &&
+          state.mutationInProgress &&
+          !retainedNativeWindow.isDisposed) {
+        focusDuringClose = true;
+        _injectFocusEventForTesting(
+          application,
+          retainedNativeWindow,
+          isFocused: true,
+          monotonicNanoseconds: eventTimestamp++,
         );
-      } finally {
-        focusTimer.cancel();
       }
-      _expectLifecycle(
-        !closed.isCompleted && !state.isDisposed && !application.isTerminated,
-        'normal native Close terminated the running application',
+    });
+    try {
+      // Uses the deferred native Close path also used by the red button.
+      windowButtonTarget.requestClose();
+      await waitFor(
+        () => windowPaneIds.every(
+          (PaneId id) => state.paneForId(id)!.closeConfirmationPending,
+        ),
+        'hidden-tab risk did not request whole-window confirmation',
       );
+      _expectLifecycle(
+        state.windowCount == 2 &&
+            state.tabCount == 3 &&
+            state.paneCount == 4 &&
+            windowPaneIds.every(
+              (PaneId id) =>
+                  sessions[id]!.isLive && sessions[id]!.shutdownResult == null,
+            ) &&
+            sessions[firstTab.focusedPaneId]!.buffer.outputText.contains(
+              'window close button again to close all tabs',
+            ) &&
+            retainedSession.shutdownResult == null &&
+            !closed.isCompleted,
+        'first window-button request partially closed a risky window or omitted its visible warning',
+      );
+      windowButtonTarget.requestClose();
+      await waitFor(
+        () =>
+            state.windowForId(firstWindow.id) == null &&
+            state.windowCount == 1 &&
+            state.tabCount == 1 &&
+            state.paneCount == 1 &&
+            hierarchy.nativeWindowCount == 1 &&
+            hierarchy.paneResourceCount == 1,
+        'confirmed window-button request did not close every target tab/split',
+      );
+    } finally {
+      focusTimer.cancel();
+      await closeObservation.cancel();
     }
+    _expectLifecycle(
+      nativeCloseRequests == 2 &&
+          focusDuringClose &&
+          windowNativeTabs.every((Window window) => window.isDisposed) &&
+          allSessions
+              .where(
+                (TerminalSession session) =>
+                    windowPaneIds.contains(session.id.paneId),
+              )
+              .every(
+                (TerminalSession session) =>
+                    session.shutdownResult?.isClean == true,
+              ) &&
+          identical(state.windowForId(retainedWindow.id), retainedWindow) &&
+          retainedSession.isLive &&
+          retainedSession.shutdownResult == null &&
+          !retainedNativeWindow.isDisposed &&
+          !closed.isCompleted &&
+          !application.isTerminated,
+      'window-button Close retargeted another window or did not clean all captured sessions',
+    );
+    stdout.writeln(
+      'TERMINAL_LOGICAL_WINDOW_CLOSE_TEST tabs=2 panes=3 requests=2 '
+      'all_tabs=true all_splits=true hidden_process_confirmation=true '
+      'other_window_alive=true command_w_pane_only=true',
+    );
+    retainedNativeWindow.requestClose();
+    await waitFor(
+      () =>
+          state.windowCount == 0 &&
+          hierarchy.nativeWindowCount == 0 &&
+          state.paneCount == 0,
+      'single final-window Close did not remove its pane',
+    );
     await Future<void>.delayed(const Duration(milliseconds: 50));
     _expectLifecycle(
-      tabbedNativeClose &&
-          singleNativeClose &&
-          focusDuringClose &&
+      focusDuringClose &&
           state.windowCount == 0 &&
           hierarchy.nativeWindowCount == 0 &&
           !closed.isCompleted &&

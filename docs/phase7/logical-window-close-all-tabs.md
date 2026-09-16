@@ -1,6 +1,6 @@
 # Phase 7 — Close all tabs in the logical window
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-17
 - Environment: macOS / Apple M1, stock Dart Developer JIT and Release AOT
 - Starting state: clean `main` at `1efd606`
@@ -106,3 +106,75 @@ the existing focused-pane operation. Explicit application Quit is independent.
 
 Native product wiring and JIT/AOT acceptance are not started until the first
 subtask is verified and committed.
+
+### Product wiring and real-window acceptance
+
+- Model subtask committed as `ab0c4ef` (`Add whole-window close admission and
+  teardown`) before product wiring began.
+- Native Close requests now capture the source tab's logical window ID and use
+  `requestWindowClose`, without selecting/activating the source tab. Existing
+  Command-W/menu/palette action still calls `closePaneRequest`; no action/keybind
+  catalog changes. Programmatic Closed notifications for removed identities
+  are ignored by the existing event coordinator/router liveness guards.
+- The product wrapper reports window disposition and every removed session's
+  cleanup, then refreshes menus/palette. It does not signal application Quit.
+- Revised normal-product actions acceptance keeps the earlier pane-only
+  Command-W proof, then starts `/bin/sleep 30` in a hidden tab. The first native
+  button request must mark the entire two-tab/three-pane window for confirmation,
+  show the explicit all-tabs warning, and leave every owner live. A second
+  request closes the captured window's complete hierarchy while a separate
+  window remains live, including injected focus during removal. The actual
+  deferred native request count must be two (admission plus confirmation).
+- The remaining one-pane window then closes with one request, the app remains
+  attached with no windows, and menu New Window succeeds. Final explicit Quit
+  still cleans six total session generations with zero native/text-input owners.
+  Driver requires the new exact `TERMINAL_LOGICAL_WINDOW_CLOSE_TEST` marker.
+- Product/driver formatting and full static analysis passed. JIT/AOT and full
+  gates are pending; roadmap/product subtask and parent remain incomplete.
+- First rebuilt JIT actions attempt stopped before any hierarchy action or new
+  window-close fixture: initial terminal never became the sole active surface.
+  Initial application status was nonactive; only one pane existed, and teardown
+  still returned clean owners. This is a foreground/focus admission failure in
+  the unchanged start of the UI fixture, not evidence of a window Close result.
+  Preserve the assertion and retry the fresh bundle without relaxing focus
+  acceptance. The command stopped before AOT build/acceptance.
+- Immediate direct rerun of the same fresh JIT bundle passed unchanged,
+  `elapsed_ms=2685`. Exact driver checks proved two requests for window-wide
+  foreground admission/confirmation, all target tabs and splits removed,
+  other-window session retained, Command-W still pane-only, deferred focus,
+  final single-window Close leaving the app alive, reopen, and six clean sessions.
+- Rebuilt Release AOT actions passed with identical required markers and owner
+  checks, `elapsed_ms=5082`. No focus assertion, confirmation requirement, or
+  cleanup condition was relaxed. Existing hierarchy suites run sequentially
+  afterward; the full gate follows those real-process tests to avoid unnecessary
+  PTY/build contention.
+- Existing four-pane hierarchy suites passed unchanged on both fresh bundles:
+  JIT `elapsed_ms=59662`, AOT `elapsed_ms=64648`. Their process-risk Close,
+  aggregate Quit, flood/input fairness, and zero-owner checks remain intact.
+- README and UI-04 feature matrix now explicitly distinguish window-button
+  all-tabs Close from focused-pane Command-W. Evidence regeneration and the full
+  project gate follow the completed native suites. No native bridge/capability
+  code or adjacent-repository user changes were touched.
+
+### Final verification and handoff
+
+- Regenerated Phase 7 acceptance, terminal compatibility coverage, Ghostty gap
+  inventory, and daily-use matrix in dependency order after the product/docs
+  changes. All source-freshness checks passed.
+- `make test` passed in full: native PTY/process/resource and renderer contracts,
+  desktop integrations, compatibility/security/distribution audits, all Dart
+  unit/regression tests, format (348 files, zero changes), and static analysis
+  (no issues). The final runner reported `dart_terminal tests passed` with exit 0.
+  The existing competing-reaper fixture also passed unchanged; its separate
+  low-priority stabilization follow-up remains outside this request.
+- Both ordered subtasks and the parent acceptance are complete. The results
+  above supersede the chronological pending/not-started notes. No required work
+  remains for whole-window Close. The initial JIT foreground-admission failure
+  remains recorded; the same assertions passed on the unchanged rerun and AOT.
+- Reviewed the final diff and checked it for whitespace errors: only this task's
+  product/driver wiring, documentation/progress, and four refreshed evidence
+  artifacts are included in the second completion commit. The three pre-existing
+  adjacent `dart_appkit` user changes remain untouched.
+- Fresh arm64 Developer JIT and Release AOT bundles have been built and verified.
+  An already running app must be restarted to load this change, for example with
+  `make RUNTIME_ARCH=arm64 developer-jit-run`; no user app was forcibly stopped.

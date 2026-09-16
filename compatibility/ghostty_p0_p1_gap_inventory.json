@@ -4,7 +4,7 @@
   "status": "closed-no-actionable-p0-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "c49340ffa2fac278cf68b659e4d7fa6cc764302de914bcd30aca965cf20e0310",
+    "sha256": "65ab5e92cea7f1c10141232325a8cc587b6bedb5513e26aeb90003f05622e470",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "ac6d6ded4b6029816bd3f048a99a50c5be8ec1cb9bb30322f4c26b55ff29381c"
+      "sha256": "59cfad36151305bcf441d67467d67f68f0f87bedadc84c0169ee64b877c919ef"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -196,7 +196,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "67dea4317e3a53ae461d85b0847940354806f2162f8d8585c371b4756c4c855c"
+      "sha256": "cb60e3a762bcdba0ac689b85a48dd825a19b26bc4209ff4436901376b1ceb6e2"
     },
     {
       "path": "lib/src/terminal_input/terminal_prompt_click.dart",
@@ -228,7 +228,7 @@
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
-      "sha256": "d8cc5b5a07802076a3fa1aa8275ce6703a130f80c318fb37ba93454acff1105b"
+      "sha256": "a16d37b62260893516bec230366214feaad10336508c8fc37912daaae611afc8"
     }
   ],
   "totals": {
@@ -1000,7 +1000,7 @@
       "phase": "7",
       "acceptance_sha256": "405189b9538a5132e8ca2b2288832bdd3be67e091acf30f2aec1cd906ae99258",
       "pinned_evidence_sha256": "b6b0f3edd037019a97d7dcfb8d94bc13a7e1f70fea01526d5d364aa94342de32",
-      "current_sha256": "d34dfabefa23d25bfeaf750d0349f89ab5f2fa8bd3f8cefc7bf7cd866fc8af29",
+      "current_sha256": "9702cbc60d0d5c0f502fe5aa4f205d5b35d64b544bd681ab94efe9eae0aac67f",
       "classification": "accepted",
       "gap_ids": []
     },

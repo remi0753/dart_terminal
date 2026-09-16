@@ -1955,6 +1955,16 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
   );
   _expect(
     RegExp(
+          r'^TERMINAL_LOGICAL_WINDOW_CLOSE_TEST tabs=2 panes=3 requests=2 '
+          r'all_tabs=true all_splits=true hidden_process_confirmation=true '
+          r'other_window_alive=true command_w_pane_only=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted whole-window Close, background risk, or pane-only Command-W acceptance',
+  );
+  _expect(
+    RegExp(
           r'^TERMINAL_ACTIVE_PANE_FOCUS_TEST active_count=1 '
           r'inactive_cursor=true inactive_background=true '
           r'application_focus=true window_focus=true tab_focus=true '

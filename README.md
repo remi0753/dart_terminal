@@ -62,8 +62,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   有効になる。実製品gateではmenuとpaletteから2 window/3 tab/5 paneを生成し、Retina
   scale継承、divider command後の固定font metricsとgrid resize、terminal write 0、
   各paneの入力分離を両runtimeで検証する
-- 通常のCloseはfocused paneと空になったtab/windowだけを閉じ、最後のwindowを
-  閉じてもappを終了しない。複数native tabのClose中に届くfocus通知は非同期の
+- windowの閉じるボタンは、そのwindow内の全tab／split paneをまとめて閉じる。
+  背景tabを含む実行中processを先に確認し、確認前に一部だけ閉じない。
+  Command-W／menu／paletteのCloseはfocused paneだけを閉じる既存操作を維持する。
+  最後のwindowを閉じてもappを終了しない。複数native tabのClose中に届くfocus通知は非同期の
   pane終了後へ順序づけ、削除済みtabの通知を捨てる。windowがない状態からも
   Command-N／Dock reopenで新しいterminalを開け、明示Quitは別処理として扱う
 - terminalに重ならない、初期表示true／既定380 pt幅の右側Context DockとDirectory Navigator。
