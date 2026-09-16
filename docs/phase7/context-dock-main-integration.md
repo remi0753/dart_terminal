@@ -1,6 +1,6 @@
 # Context Dock branch integration
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-16
 
 ## 目的、背景、範囲
@@ -27,3 +27,16 @@ remoteへのpush／branch削除、隣接dart_appkitへの変更、低優先follo
 - README、ROADMAP、FEATURE_MATRIX、AGENTS、ADR-005と直前の検証メモを確認した。
 - repository規約に従って統合taskとこのメモを先に登録し、計画commit後にmerge／削除を実施する。
   完了の記録commitはmainに作り、未実施のmerge／削除を先に完了扱いにしない。
+
+## 完了と検証
+
+- 計画commitはbeb25f8、Prepare Context Dock branch integration。mainを31d6634からbeb25f8へfast-forwardした。
+- git merge --ff-onlyは成功し競合なし。0b3261fとbeb25f8がmainのancestorであることを確認した。
+- git branch -dでcodex/context-file-navigator-roadmapを削除し、当該local refが存在しないことを確認した。
+  commitはmainに保持されているため内容は失われず、必要なら当該commitからbranchを再作成できる。
+- ROADMAPとこの記録以外のtreeは検証済み0b3261fと同一（git diff --exit-code成功）。
+- Phase7 AppKit acceptance、compatibility regression coverage、P0/P1 gap inventory、daily-use matrixの
+  freshness checkは全てexit0。code変更がないため直前のfull make test／両runtime結果を維持し、今回は再実行していない。
+- mainへのswitch、source同一性、branch不存在、clean treeの確認は全て成功した。
+- 最終記録だけをmainにcommitする。remote push／remote ref削除、dependency tree変更、未完了follow-upへの着手は行っていない。
+  新しい阻害要因や未完了実装項目はない。

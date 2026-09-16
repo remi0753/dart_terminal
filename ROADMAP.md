@@ -1553,7 +1553,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 変更の統合
 
-- [ ] Context Dock作業ブランチをmainへ統合し、統合済みのローカルブランチを削除する
+- [x] Context Dock作業ブランチをmainへ統合し、統合済みのローカルブランチを削除する
   （実施時に
   [`docs/phase7/context-dock-main-integration.md`](docs/phase7/context-dock-main-integration.md)
   を参照する）
