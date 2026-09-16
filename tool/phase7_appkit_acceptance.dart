@@ -171,6 +171,13 @@ const List<_CriterionRequirement> _requirements = <_CriterionRequirement>[
     id: 'pane-resource-cleanup',
     summary: 'pane close and restoration reclaim PTY, Metal, text, native, and worker owners',
     sources: <_SourceRequirement>[
+      _SourceRequirement(
+        'lib/src/terminal_window_event_coordinator.dart',
+        <String>[
+          'final class TerminalWindowEventCoordinator',
+          'await state.mutationSettled',
+        ],
+      ),
       _SourceRequirement('lib/src/terminal_pane.dart', <String>[
         'final class TerminalPaneOwner',
       ]),

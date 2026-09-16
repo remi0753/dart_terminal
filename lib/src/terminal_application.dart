@@ -97,6 +97,7 @@ import 'terminal_tab_presentation.dart';
 import 'terminal_terminfo_environment.dart';
 import 'terminal_update_controller.dart';
 import 'terminal_update_feed.dart';
+import 'terminal_window_event_coordinator.dart';
 
 final String terminalUsage = TerminalConfigurationReference().generateUsage();
 
@@ -2823,6 +2824,7 @@ final class TerminalApplication {
     TerminalAppIntentsProductController? appIntentsController;
     Timer? appIntentsPollTimer;
     Future<void> Function(PaneId? paneId)? closePaneRequest;
+    TerminalPaneCloseCoordinator? paneCloseCoordinator;
     Future<void> Function(PaneId paneId, TerminalExternalContent content)?
     externalContentRequest;
     void Function(PaneId paneId, TerminalNativeContentCell cell)?
@@ -3900,6 +3902,10 @@ final class TerminalApplication {
           if (window != null && !window.isClosed && !window.isDisposed) {
             window.replyToCloseRequest(event, allow: false);
           }
+          if (paneCloseCoordinator?.removalInProgress == true ||
+              paneCloseCoordinator?.applicationQuitInProgress == true) {
+            return;
+          }
           state
             ..activateWindow(logicalWindow.id)
             ..selectTab(logicalWindow.id, tabId);
@@ -4150,6 +4156,19 @@ final class TerminalApplication {
       }
     }
 
+    final TerminalWindowEventCoordinator windowEventCoordinator =
+        TerminalWindowEventCoordinator(
+          state: state,
+          route: routeWindowEvent,
+          refuseClose: (TerminalTabId tabId, WindowCloseRequestedEvent event) {
+            final Window? window = hierarchy?.windowForTab(tabId);
+            if (window != null && !window.isClosed && !window.isDisposed) {
+              window.replyToCloseRequest(event, allow: false);
+            }
+          },
+          onError: recordAsynchronousError,
+        );
+
     synchronizeWindowSubscriptions = () {
       final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
       if (nativeHierarchy == null || nativeHierarchy.isDisposed) return;
@@ -4167,7 +4186,8 @@ final class TerminalApplication {
         windowSubscriptions.putIfAbsent(
           entry.key,
           () => entry.value.events.listen(
-            (WindowEvent event) => routeWindowEvent(entry.key, event),
+            (WindowEvent event) =>
+                windowEventCoordinator.handle(entry.key, event),
             onError: recordAsynchronousError,
           ),
         );
@@ -4175,6 +4195,7 @@ final class TerminalApplication {
     };
 
     Future<void> disposeProductResourcesOnce() async {
+      windowEventCoordinator.dispose();
       Object? disposalError;
       StackTrace? disposalStackTrace;
       appIntentsPollTimer?.cancel();
@@ -4920,6 +4941,7 @@ final class TerminalApplication {
               diagnosticsPresenter?.refresh();
             },
           );
+      paneCloseCoordinator = createdPaneCloseCoordinator;
       final TerminalProductHierarchyActionCoordinator createdActions =
           TerminalProductHierarchyActionCoordinator(
             state: state,
@@ -13264,6 +13286,89 @@ keybind = command+right=pane.focus-left
       'menu Close did not cleanly release its exact pane session',
     );
 
+    var tabbedNativeClose = false;
+    var singleNativeClose = false;
+    var focusDuringClose = false;
+    while (state.paneCount > 0) {
+      final TerminalWindowState closingWindow = state.activeWindow!;
+      final TerminalTabState closingTab = closingWindow.selectedTab;
+      final PaneId closingPaneId = closingTab.focusedPaneId;
+      final int previousPaneCount = state.paneCount;
+      tabbedNativeClose |= closingWindow.tabs.length > 1;
+      singleNativeClose |= previousPaneCount == 1;
+      final Window nativeWindow = hierarchy.windowForTab(closingTab.id)!;
+      nativeWindow
+        ..show()
+        ..selectTab();
+      await _waitForAsciiMarker(sessions[closingPaneId]!, prompt);
+      final Window? neighborWindow = hierarchy.windows.entries
+          .where(
+            (MapEntry<TerminalTabId, Window> entry) =>
+                entry.key != closingTab.id,
+          )
+          .map((MapEntry<TerminalTabId, Window> entry) => entry.value)
+          .firstOrNull;
+      final Timer focusTimer = Timer.periodic(const Duration(milliseconds: 1), (
+        Timer timer,
+      ) {
+        if (!focusDuringClose &&
+            state.mutationInProgress &&
+            neighborWindow != null &&
+            !neighborWindow.isDisposed &&
+            !neighborWindow.isClosed) {
+          focusDuringClose = true;
+          _injectFocusEventForTesting(
+            application,
+            neighborWindow,
+            isFocused: true,
+            monotonicNanoseconds: eventTimestamp++,
+          );
+        }
+      });
+      try {
+        // Uses the deferred native Close path also used by the red button.
+        nativeWindow.requestClose();
+        await waitFor(
+          () =>
+              state.paneForId(closingPaneId) == null &&
+              state.paneCount == previousPaneCount - 1 &&
+              hierarchy.paneResourceCount == previousPaneCount - 1,
+          'native Close did not remove exactly the targeted pane',
+        );
+      } finally {
+        focusTimer.cancel();
+      }
+      _expectLifecycle(
+        !closed.isCompleted && !state.isDisposed && !application.isTerminated,
+        'normal native Close terminated the running application',
+      );
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    _expectLifecycle(
+      tabbedNativeClose &&
+          singleNativeClose &&
+          focusDuringClose &&
+          state.windowCount == 0 &&
+          hierarchy.nativeWindowCount == 0 &&
+          !closed.isCompleted &&
+          !application.isTerminated,
+      'tabbed/single Close did not preserve an empty running application',
+    );
+    await performMenuAction(
+      TerminalActionId.newWindow,
+      keyEquivalent: 'n',
+      modifiers: ModifierKeys.commandBit,
+      completed: () =>
+          state.windowCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1,
+    );
+    await _waitForAsciiMarker(sessions.values.single, prompt);
+    stdout.writeln(
+      'TERMINAL_WINDOW_CLOSE_FOCUS_TEST tabbed=true single=true '
+      'deferred_focus=true empty_alive=true reopen=true',
+    );
+
     final MenuItem quitItem = menu.itemForAction(
       TerminalActionId.quitApplication,
     );
@@ -13288,7 +13393,7 @@ keybind = command+right=pane.focus-left
               TerminalActionId.quitApplication &&
           state.isDisposed &&
           hierarchy.isDisposed &&
-          allSessions.length == 5 &&
+          allSessions.length == 6 &&
           allSessions.every(
             (TerminalSession session) =>
                 session.shutdownResult?.isClean == true,
@@ -13311,13 +13416,13 @@ keybind = command+right=pane.focus-left
     );
     stdout.writeln(
       'TERMINAL_USER_ACTIONS_TEST windows=2 tabs=3 panes=4 '
-      'created_panes=5 split_right=true split_down=true new_tab=true '
+      'created_panes=6 split_right=true split_down=true new_tab=true '
       'new_window=true palette=true command_availability=true '
       'update=true update_plain_text=true update_zero_write=true '
       'retina_scale=true divider_command=true fixed_cell_metrics=true '
       'grid_resize=true '
       'menu_zero_write=true input_isolated=true close=true quit=true '
-      'sessions_clean=5 text_clients=0 native_handles=0',
+      'sessions_clean=6 text_clients=0 native_handles=0',
     );
   }
 

@@ -1437,6 +1437,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 完了機能の回帰修正
 
+- [x] 複数タブの通常Closeでフォーカス更新の衝突を防ぎ、最後のwindowを閉じてもappを保持する
+  （実施時に
+  [`docs/phase7/tabbed-window-close-focus-regression.md`](docs/phase7/tabbed-window-close-focus-regression.md)
+  を参照する）
 - [x] SettingsのEscによるモード切替／閉じる操作でビープを鳴らさない
   （実施時に
   [`docs/phase8/settings-escape-beep.md`](docs/phase8/settings-escape-beep.md)
@@ -1574,6 +1578,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 主要ゴール後の低優先 follow-up
 
+- [ ] 既存PTYのcompeting-reaper回帰fixtureの非決定性を調査し、実external-reap検証を安定化する
+  （実施時に
+  [`docs/phase2/pty-competing-reaper-fixture-determinism.md`](docs/phase2/pty-competing-reaper-fixture-determinism.md)
+  を参照する）
 - [ ] 公開・未改変 runtime の Intel-native no-rebuild runtime handoff と追加互換性証跡
   （主要ゴール達成後に実施し、
   [`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)

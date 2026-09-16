@@ -1932,17 +1932,26 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
   _expect(
     RegExp(
           r'^TERMINAL_USER_ACTIONS_TEST windows=2 tabs=3 panes=4 '
-          r'created_panes=5 split_right=true split_down=true new_tab=true '
+          r'created_panes=6 split_right=true split_down=true new_tab=true '
           r'new_window=true palette=true command_availability=true '
           r'update=true update_plain_text=true update_zero_write=true '
           r'retina_scale=true divider_command=true fixed_cell_metrics=true '
           r'grid_resize=true '
           r'menu_zero_write=true input_isolated=true close=true quit=true '
-          r'sessions_clean=5 text_clients=0 native_handles=0$',
+          r'sessions_clean=6 text_clients=0 native_handles=0$',
           multiLine: true,
         ).allMatches(observation.stdoutText).length ==
         1,
     'ordinary product omitted exact user-action hierarchy acceptance',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_WINDOW_CLOSE_FOCUS_TEST tabbed=true single=true '
+          r'deferred_focus=true empty_alive=true reopen=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted native Close/focus and empty-app reopen acceptance',
   );
   _expect(
     RegExp(
@@ -1967,19 +1976,19 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
   );
   _expect(
     RegExp(
-              r'^TERMINAL_SESSION_SHUTDOWN pane=[1-5] session=[1-5]:1 '
+              r'^TERMINAL_SESSION_SHUTDOWN pane=[1-6] session=[1-6]:1 '
               r'process_id=[1-9][0-9]* disposition=clean '
               r'termination_observed=true cleanup_completed=true$',
               multiLine: true,
             ).allMatches(observation.stdoutText).length ==
-            5 &&
+            6 &&
         RegExp(
-              r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=4 disposition=clean$',
+              r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=1 disposition=clean$',
               multiLine: true,
             ).allMatches(observation.stdoutText).length ==
             1 &&
         observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
-    'ordinary product did not cleanly release five created pane generations',
+    'ordinary product did not cleanly release six created pane generations',
   );
   _expect(
     !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&

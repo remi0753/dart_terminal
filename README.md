@@ -62,6 +62,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   有効になる。実製品gateではmenuとpaletteから2 window/3 tab/5 paneを生成し、Retina
   scale継承、divider command後の固定font metricsとgrid resize、terminal write 0、
   各paneの入力分離を両runtimeで検証する
+- 通常のCloseはfocused paneと空になったtab/windowだけを閉じ、最後のwindowを
+  閉じてもappを終了しない。複数native tabのClose中に届くfocus通知は非同期の
+  pane終了後へ順序づけ、削除済みtabの通知を捨てる。windowがない状態からも
+  Command-N／Dock reopenで新しいterminalを開け、明示Quitは別処理として扱う
 - terminalに重ならない、初期表示true／既定380 pt幅の右側Context DockとDirectory Navigator。
   `context-dock-visible = false`で新しいwindowの初期表示を無効にでき、
   `context-dock-width = 420`のように220–640 ptの幅を指定できる。幅の設定変更は既存windowにも反映する。

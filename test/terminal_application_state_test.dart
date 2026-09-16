@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dart_appkit/dart_appkit.dart';
 import 'package:dart_terminal/dart_terminal.dart';
+import 'package:dart_terminal/src/terminal_window_event_coordinator.dart';
 
 Future<void> main() => runTerminalApplicationStateTests();
 
@@ -18,9 +19,128 @@ Future<void> runTerminalApplicationStateTests() async {
   await _testApplicationLayoutMutations();
   await _testPaneRemovalAndOrderedShutdown();
   await _testPaneCloseCoordinator();
+  await _testWindowEventsDuringPaneRemoval();
   await _testApplicationQuitCoordinator();
   await _testApplicationTotalPaneAdmission();
   await _testApplicationLimitsAndDisposedState();
+}
+
+Future<void> _testWindowEventsDuringPaneRemoval() async {
+  final List<_StateFakeSession> sessions = <_StateFakeSession>[];
+  final TerminalPaneConfiguration configuration = _configuration(sessions);
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalWindowState window = await state.createWindow(configuration);
+  final TerminalTabState first = window.selectedTab;
+  final TerminalTabState removed = await state.createTab(
+    window.id,
+    configuration,
+  );
+  final TerminalTabState neighbor = await state.createTab(
+    window.id,
+    configuration,
+  );
+  state.selectTab(window.id, removed.id);
+  final List<(TerminalTabId, WindowEvent)> routed =
+      <(TerminalTabId, WindowEvent)>[];
+  final List<Object> errors = <Object>[];
+  var refusedCloses = 0;
+  final TerminalWindowEventCoordinator events = TerminalWindowEventCoordinator(
+    state: state,
+    route: (TerminalTabId tabId, WindowEvent event) {
+      routed.add((tabId, event));
+      if (event is WindowFocusChangedEvent && event.isFocused) {
+        state
+          ..activateWindow(window.id)
+          ..selectTab(window.id, tabId);
+      }
+    },
+    refuseClose: (_, _) => refusedCloses++,
+    onError: (Object error, StackTrace stackTrace) => errors.add(error),
+  );
+  WindowFocusChangedEvent focus(bool focused) => WindowFocusChangedEvent(
+    windowHandle: 1,
+    monotonicMicros: 0,
+    isFocused: focused,
+  );
+  sessions[1].shutdownBarrier = Completer<void>();
+  final Future<TerminalPaneRemovalResult> closing = state.removePane(
+    removed.focusedPaneId,
+  );
+  _expect(
+    state.mutationInProgress,
+    'removal must reserve its async transaction',
+  );
+  // Reproduce the exact reported failure without weakening the model guard.
+  _expectThrows<StateError>(
+    () => state.activateWindow(window.id),
+    'direct focus activation must remain forbidden during removal',
+  );
+  final Future<void> settled = state.mutationSettled;
+  for (var index = 0; index < 100; index++) {
+    events.handle(first.id, focus(true));
+  }
+  events.handle(first.id, focus(false));
+  events.handle(neighbor.id, focus(true));
+  events.handle(removed.id, focus(true));
+  events.handle(
+    removed.id,
+    const WindowCloseRequestedEvent(
+      windowHandle: 1,
+      monotonicMicros: 0,
+      operationId: 1,
+    ),
+  );
+  events.handle(
+    neighbor.id,
+    const AppKitMouseEvent(
+      windowHandle: 1,
+      monotonicMicros: 0,
+      kind: AppKitMouseEventKind.down,
+      x: 0,
+      y: 0,
+      button: 0,
+      modifiers: ModifierKeys(0),
+      clickCount: 1,
+    ),
+  );
+  _expect(
+    routed.isEmpty &&
+        refusedCloses == 1 &&
+        events.pendingNotificationCount == 3,
+    'busy events coalesce, input is discarded, and repeated Close is refused',
+  );
+  sessions[1].shutdownBarrier!.complete();
+  await closing;
+  await settled;
+  await Future<void>.delayed(Duration.zero);
+  _expect(
+    errors.isEmpty &&
+        routed.length == 2 &&
+        (routed.first.$2 as WindowFocusChangedEvent).isFocused == false &&
+        window.selectedTabId == neighbor.id &&
+        state.tabForId(removed.id) == null &&
+        events.pendingNotificationCount == 0,
+    'only live final focus notifications replay after the committed removal',
+  );
+
+  sessions[2].shutdownBarrier = Completer<void>();
+  final Future<TerminalPaneRemovalResult> secondClose = state.removePane(
+    neighbor.focusedPaneId,
+  );
+  events.handle(first.id, focus(true));
+  events.dispose();
+  sessions[2].shutdownBarrier!.complete();
+  await secondClose;
+  await Future<void>.delayed(Duration.zero);
+  _expect(routed.length == 2, 'disposed event owners discard pending focus');
+  await state.removePane(first.focusedPaneId);
+  _expect(
+    state.windowCount == 0 && !state.isDisposed,
+    'last-pane Close does not dispose the application',
+  );
+  await state.createWindow(configuration);
+  _expect(state.windowCount == 1, 'a window can reopen after last-pane Close');
+  await state.shutdown();
 }
 
 Future<void> _testQuickTerminalWindowRole() async {

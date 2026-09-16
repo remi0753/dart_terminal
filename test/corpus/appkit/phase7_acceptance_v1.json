@@ -10,7 +10,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application_state.dart",
-          "sha256": "4d3f30d125c900f011633824e2ed93065490f010d68abe71dad7ff015e1dd411"
+          "sha256": "d914fad78cff6f7905600395e371b8ea34ab1ead26e742dbc931b1a17d5d2c4c"
         },
         {
           "path": "lib/src/terminal_restoration.dart",
@@ -25,7 +25,7 @@
         {
           "path": "test/terminal_application_state_test.dart",
           "entrypoint": "runTerminalApplicationStateTests",
-          "sha256": "6315a18c19dc22e39e1d1ec9a02d4275a6fca50f4b608d27526da7c8b7f2a296"
+          "sha256": "45d28b887cdf0237907e1e1467f7de606eb0a58dfa2d44e3d13544c619245d74"
         },
         {
           "path": "test/terminal_restoration_test.dart",
@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "7dce82a10adcfcf9cedf2cb3d87b9c4f7cb7c5997ef6d1e601420c1dbb4dab8f"
+          "sha256": "67dea4317e3a53ae461d85b0847940354806f2162f8d8585c371b4756c4c855c"
         },
         {
           "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
@@ -147,6 +147,10 @@
       "status": "covered",
       "sources": [
         {
+          "path": "lib/src/terminal_window_event_coordinator.dart",
+          "sha256": "2c5f6296e4b43bdaddf10836029ca2d0a0be1224e17e64660e1b7735e49d93f1"
+        },
+        {
           "path": "lib/src/terminal_pane.dart",
           "sha256": "b28d57a36376d602d97455fb339dfd0683c02e25fe9acb4f82bac1713603b362"
         },
@@ -163,7 +167,7 @@
         {
           "path": "test/terminal_application_state_test.dart",
           "entrypoint": "runTerminalApplicationStateTests",
-          "sha256": "6315a18c19dc22e39e1d1ec9a02d4275a6fca50f4b608d27526da7c8b7f2a296"
+          "sha256": "45d28b887cdf0237907e1e1467f7de606eb0a58dfa2d44e3d13544c619245d74"
         },
         {
           "path": "test/runtime_lifecycle_test.dart",
@@ -211,7 +215,7 @@
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "7dce82a10adcfcf9cedf2cb3d87b9c4f7cb7c5997ef6d1e601420c1dbb4dab8f"
+          "sha256": "67dea4317e3a53ae461d85b0847940354806f2162f8d8585c371b4756c4c855c"
         }
       ],
       "unit_tests": [
@@ -307,7 +311,7 @@
   ],
   "totals": {
     "criteria": 5,
-    "source_references": 19,
+    "source_references": 20,
     "unit_tests": 16,
     "integration_tests": 5,
     "ui_assertions": 11,

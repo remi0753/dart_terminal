@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'terminal_pane.dart';
 import 'terminal_tab_metadata.dart';
 
@@ -826,6 +828,7 @@ final class TerminalApplicationState {
   int _nextSplitNodeId;
   TerminalWindowId? _activeWindowId;
   bool _mutationInProgress = false;
+  Completer<void>? _mutationCompletion;
   bool _disposed = false;
   Future<TerminalPaneOwnerShutdownResult>? _shutdownFuture;
   TerminalPaneOwnerShutdownResult? _shutdownResult;
@@ -850,6 +853,12 @@ final class TerminalApplicationState {
 
   TerminalPaneOwnerShutdownResult? get shutdownResult => _shutdownResult;
   bool get isDisposed => _disposed;
+  bool get mutationInProgress => _mutationInProgress;
+
+  /// Completes after the current hierarchy transaction, including failed ones.
+  /// Consumers must recheck liveness and admission after awaiting this boundary.
+  Future<void> get mutationSettled =>
+      _mutationCompletion?.future ?? Future<void>.value();
 
   TerminalWindowState? windowForId(TerminalWindowId windowId) =>
       _windows[windowId];
@@ -927,7 +936,7 @@ final class TerminalApplicationState {
       }
       rethrow;
     } finally {
-      _mutationInProgress = false;
+      _endMutation();
     }
   }
 
@@ -974,7 +983,7 @@ final class TerminalApplicationState {
       }
       rethrow;
     } finally {
-      _mutationInProgress = false;
+      _endMutation();
     }
   }
 
@@ -1038,7 +1047,7 @@ final class TerminalApplicationState {
       }
       rethrow;
     } finally {
-      _mutationInProgress = false;
+      _endMutation();
     }
   }
 
@@ -1224,7 +1233,7 @@ final class TerminalApplicationState {
         shutdown: shutdown,
       );
     } finally {
-      _mutationInProgress = false;
+      _endMutation();
     }
   }
 
@@ -1233,9 +1242,8 @@ final class TerminalApplicationState {
     if (existing != null) {
       return existing;
     }
-    _ensureCanMutate();
+    _beginMutation();
     _disposed = true;
-    _mutationInProgress = true;
     return _shutdownFuture = _shutdown();
   }
 
@@ -1265,7 +1273,7 @@ final class TerminalApplicationState {
       _tabs.clear();
       _windows.clear();
       _activeWindowId = null;
-      _mutationInProgress = false;
+      _endMutation();
     }
   }
 
@@ -1404,6 +1412,14 @@ final class TerminalApplicationState {
   void _beginMutation() {
     _ensureCanMutate();
     _mutationInProgress = true;
+    _mutationCompletion = Completer<void>();
+  }
+
+  void _endMutation() {
+    _mutationInProgress = false;
+    final Completer<void>? completion = _mutationCompletion;
+    _mutationCompletion = null;
+    completion?.complete();
   }
 
   void _ensureCanMutate() {
