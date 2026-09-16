@@ -384,6 +384,8 @@ runTerminalDiagnosticsPrivacyAudit({Directory? projectRoot}) async {
     'state.process = null;',
     'request.cancelled = true;',
     'process.foregroundProcessGroup !=',
+    'state.process = state.process?.withoutArguments();',
+    'arguments: _argumentsVisible ? native.arguments : const <String>[]',
   ], 'Context Dock process content lifecycle');
   _rejectAll(processInspector, const <String>[
     'toJson()',

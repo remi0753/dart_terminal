@@ -48,7 +48,7 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 43個のstable application actionを共有するbounded searchable registry、動的な
+- 44個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
@@ -94,6 +94,12 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   focus変更では保持したpath／argvを即時破棄する。終了後はfreshな
   Directory Navigatorへ戻る。SSH先のremote process introspectionは対象外。視覚・VoiceOverの実機確認は
   [Process Inspector manual checklist](docs/phase7/context-dock-process-inspector-manual-checklist.md)を参照
+- View > Show Process Arguments（日本語: プロセスの引数を表示）は、入力保護とは独立して
+  Process Inspectorのargvだけを表示／非表示にする。既定は表示で、menuのcheckが現在状態を示す。
+  Shift-Command-Pのcommand paletteからも検索でき、任意の`view.toggle-process-arguments` keybindへ
+  割り当てられる（既定shortcutなし）。非表示時もprocess名／executable／PID／PGID／elapsedは表示し、
+  native visual／accessibility documentとretained snapshotからargvを除く。再表示は次のfresh inventoryを待つ。
+  この選択はwindow／pane／command間で共有し、app終了まで保持するが設定やrestorationへ保存しない
 - focused live paneだけを追跡するsingle-windowのread-only Terminal Inspector。
   printable textはcountのみ、string payloadはlengthのみを保持し、focus移譲時とclose時に
   旧captureをclearする。View > Open Terminal Inspector（Option-Command-I）と

@@ -436,6 +436,40 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     'and the terminal first responder',
   );
 
+  projectedContent = _hierarchyProcessContent(
+    logicalWindow.id,
+    pane.sessionId,
+    elapsedMicroseconds: 65000000,
+    argumentsVisible: false,
+  );
+  reconcile();
+  _expect(
+    bindings.texts[detailsHandle]!.contains('引数は非表示です') &&
+        !bindings.texts[detailsHandle]!.contains('line') &&
+        !bindings.texts[detailsHandle]!.contains('--flag') &&
+        !bindings.texts[detailsHandle]!.contains('ほか 2 引数') &&
+        !bindings.texts[detailsHandle]!.contains('引数は上限') &&
+        bindings.texts[detailsHandle]!.contains(
+          r'/private/tmp/tool\n\u{202e}',
+        ) &&
+        bindings.texts[detailsHandle]!.contains('PID 4201 · PGID 4200') &&
+        bindings.texts[editorHandle]!.contains('実行中 · 01:05') &&
+        bindings.firstResponders[windowHandle] == terminalHandle,
+    'hidden argv never reaches the native visual/accessibility document while other process information and focus remain',
+  );
+  projectedContent = _hierarchyProcessContent(
+    logicalWindow.id,
+    pane.sessionId,
+    elapsedMicroseconds: 65000000,
+    argumentsHidden: true,
+  );
+  reconcile();
+  _expect(
+    bindings.texts[detailsHandle]!.contains('引数を再取得しています') &&
+        !bindings.texts[detailsHandle]!.contains('--flag') &&
+        !bindings.texts[detailsHandle]!.contains('line'),
+    'revealing waits for fresh argv instead of displaying a scrubbed or stale list',
+  );
   projectedContent = TerminalContextDockContentSnapshot(
     windowId: logicalWindow.id,
     paneId: pane.id,
@@ -605,6 +639,8 @@ TerminalContextDockContentSnapshot _hierarchyProcessContent(
   TerminalWindowId windowId,
   TerminalSessionId sessionId, {
   required int elapsedMicroseconds,
+  bool argumentsVisible = true,
+  bool argumentsHidden = false,
 }) {
   final TerminalContextDockForegroundJobIdentity identity =
       TerminalContextDockForegroundJobIdentity(
@@ -619,6 +655,7 @@ TerminalContextDockContentSnapshot _hierarchyProcessContent(
     generation: 2,
     mode: TerminalContextDockContentMode.foregroundJob,
     directorySuspended: true,
+    argumentsVisible: argumentsVisible,
     process: TerminalContextDockProcessSnapshot(
       status: TerminalContextDockProcessStatus.partial,
       identity: identity,
@@ -653,6 +690,7 @@ TerminalContextDockContentSnapshot _hierarchyProcessContent(
       executablePath: '/private/tmp/tool\n\u202e',
       executablePathSystemError: 0,
       arguments: const <String>['runner', 'line\nbreak', '\u202e--flag'],
+      argumentsHidden: argumentsHidden,
       totalArgumentCount: 5,
       omittedArgumentCount: 2,
       argumentsTruncated: true,

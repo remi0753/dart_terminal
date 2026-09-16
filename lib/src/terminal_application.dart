@@ -5658,6 +5658,7 @@ final class TerminalApplication {
           ...promptNavigationActions.registrations(),
           ...createdActions.registrations(),
           ...createdDockActions.registrations(),
+          ...createdDockProcess.registrations(),
         ],
       );
       actionDispatcher = dispatcher;
@@ -5809,6 +5810,8 @@ final class TerminalApplication {
         checkedReaders: <TerminalActionId, TerminalMenuCheckedReader>{
           TerminalActionId.toggleSecureKeyboardEntry: () =>
               createdSecureKeyboardEntry.manualRequested,
+          TerminalActionId.toggleProcessArguments: () =>
+              createdDockProcess.argumentsVisible,
         },
         onNativeInvocation: (TerminalActionId id, MenuItemInvokedEvent event) {
           if (runUserActionAcceptance ||
@@ -6027,6 +6030,8 @@ final class TerminalApplication {
           contextDockState: createdContextDockState,
           contextDockProcess: createdDockProcess,
           secureKeyboardEntry: createdSecureKeyboardEntry,
+          menu: menuProjection,
+          palette: installedPalette,
           contextDockDirectory: createdDockDirectory,
           contextDockPresenter: createdDockPresenter,
           contextDockPathHandoff: createdPathHandoff,
@@ -8321,6 +8326,8 @@ final class TerminalApplication {
     required TerminalContextDockState contextDockState,
     required TerminalContextDockProcessController contextDockProcess,
     required TerminalSecureKeyboardEntryController secureKeyboardEntry,
+    required TerminalAppKitMenuProjection menu,
+    required TerminalCommandPalettePresenter palette,
     required TerminalContextDockDirectoryController contextDockDirectory,
     required TerminalContextDockDirectoryPresenter contextDockPresenter,
     required TerminalContextDockPathHandoffController contextDockPathHandoff,
@@ -8994,6 +9001,78 @@ final class TerminalApplication {
           .nativeEditorSnapshotForWindow(initialWindow.id)!
           .selection
           .start;
+      final int argumentsWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
+      final MenuItem argumentsItem = menu.itemForAction(
+        TerminalActionId.toggleProcessArguments,
+      );
+      menu.refresh();
+      _expectLifecycle(
+        argumentsItem.isChecked,
+        'process argv was not shown by default',
+      );
+      argumentsItem.performAction();
+      await waitFor(
+        () => !contextDockProcess.argumentsVisible && !argumentsItem.isChecked,
+        'native menu did not hide process arguments',
+      );
+      _expectLifecycle(
+        contextDockProcess
+                    .snapshotForWindow(initialWindow.id)
+                    ?.process
+                    ?.arguments
+                    .isEmpty ==
+                true &&
+            contextDockPresenter
+                    .nativeDetailsTextForWindow(initialWindow.id)
+                    ?.contains('Arguments are hidden') ==
+                true &&
+            !contextDockPresenter
+                .nativeDetailsTextForWindow(initialWindow.id)!
+                .contains('PIPE_READY__') &&
+            contextDockPresenter
+                .nativeDetailsTextForWindow(initialWindow.id)!
+                .contains('Executable') &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) == argumentsWriteBaseline,
+        'hiding process argv retained argument text or wrote to the PTY',
+      );
+      await palette.open();
+      palette
+        ..refresh()
+        ..state.setQuery('process arguments')
+        ..refresh();
+      _expectLifecycle(
+        palette.state.selectedAction?.definition.id ==
+                TerminalActionId.toggleProcessArguments &&
+            palette.state.selectedAction!.isEnabled,
+        'command palette did not expose the shared process argv display action',
+      );
+      final TerminalActionDispatchResult argumentsResult = await palette.state
+          .invokeSelected();
+      await palette.dismiss();
+      menu.refresh();
+      _expectLifecycle(
+        argumentsResult.disposition ==
+                TerminalActionDispatchDisposition.executed &&
+            argumentsItem.isChecked,
+        'command palette did not restore process argument visibility',
+      );
+      await waitFor(
+        () =>
+            contextDockPresenter
+                .nativeDetailsTextForWindow(initialWindow.id)
+                ?.contains('PIPE_READY__') ==
+            true,
+        'revealing process argv did not obtain a fresh native document',
+      );
+      _expectLifecycle(
+        !contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) == argumentsWriteBaseline,
+        'process argument visibility changed terminal input ownership or wrote to the PTY',
+      );
       await Future<void>.delayed(const Duration(milliseconds: 1100));
       reconcile();
       final TerminalContextDockContentSnapshot pipelineAfter =

@@ -15,6 +15,7 @@ Future<void> runTerminalContextDockTests() async {
   await _testDirectoryTreeFollowsPaneAndCancelsHiddenWork();
   await _testDirectoryRevealRejectsExpansionCap();
   await _testProcessCoordinatorRefreshPrivacyAndCancellation();
+  await _testProcessArgumentVisibility();
   _testPrivacyPolicyDistinguishesIdleLineEditing();
   await _testPathHandoffPolicyAndExactPayload();
 }
@@ -212,6 +213,143 @@ void _testPrivacyPolicyDistinguishesIdleLineEditing() {
     ),
     'unavailable process identity still fails closed for process metadata',
   );
+}
+
+Future<void> _testProcessArgumentVisibility() async {
+  final _Harness harness = _Harness();
+  final TerminalWindowState window = await harness.createWindow();
+  final PaneId paneId = window.selectedTab.focusedPaneId;
+  final TerminalSessionId sessionId = TerminalSessionId(
+    paneId: paneId,
+    generation: 1,
+  );
+  final TerminalContextDockState dock = TerminalContextDockState()
+    ..synchronize(harness.state)
+    ..toggleVisibility(window.id, paneId);
+  final _ProcessScheduler scheduler = _ProcessScheduler();
+  final List<Completer<PtyForegroundJobSnapshot?>> requests =
+      <Completer<PtyForegroundJobSnapshot?>>[];
+  final TerminalContextDockProcessController controller =
+      TerminalContextDockProcessController(
+        applicationState: harness.state,
+        dockState: dock,
+        resolveProcessSnapshot: (_) => TerminalPaneProcessSnapshot.available(
+          sessionId: sessionId,
+          childProcessId: paneId.value,
+          owningProcessGroup: paneId.value,
+          foregroundProcessGroup: paneId.value + 10,
+          terminalEchoEnabled: false,
+        ),
+        resolveForegroundJob: (_, _) {
+          final Completer<PtyForegroundJobSnapshot?> request =
+              Completer<PtyForegroundJobSnapshot?>();
+          requests.add(request);
+          return request.future;
+        },
+        scheduleTask: scheduler.schedule,
+        monotonicMicros: () => scheduler.nowMicros,
+      );
+  final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+    catalog: TerminalActionCatalog.standard(),
+    registrations: controller.registrations(),
+  );
+  Future<void> toggle() async {
+    final TerminalActionDispatchResult result = await dispatcher.dispatch(
+      TerminalActionId.toggleProcessArguments,
+    );
+    _expect(
+      result.disposition == TerminalActionDispatchDisposition.executed,
+      'shared argv visibility action executes',
+    );
+  }
+
+  Future<void> complete(int index) async {
+    requests[index].complete(
+      _foregroundJobFixture(
+        sessionId: sessionId,
+        foregroundProcessGroup: paneId.value + 10,
+        memberCount: 2,
+        elapsedMicroseconds: 1000,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+  }
+
+  controller.synchronize();
+  scheduler.elapse(TerminalContextDockProcessLimits.foregroundActivationDelay);
+  await complete(0);
+  final TerminalContextDockProcessSnapshot initial = controller
+      .snapshotForWindow(window.id)!
+      .process!;
+  _expect(
+    controller.argumentsVisible && initial.arguments.isNotEmpty,
+    'argv is shown by default even with ECHO-off',
+  );
+  await toggle();
+  TerminalContextDockContentSnapshot content = controller.snapshotForWindow(
+    window.id,
+  )!;
+  _expect(
+    !content.argumentsVisible &&
+        content.process!.arguments.isEmpty &&
+        content.process!.argumentsHidden &&
+        content.process!.executablePath == initial.executablePath &&
+        content.process!.members.length == 2 &&
+        content.process!.identity == initial.identity &&
+        requests.length == 1 &&
+        !dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
+    'hiding immediately drops argv without changing job identity, process details, sampling, or input',
+  );
+  scheduler.elapse(const Duration(milliseconds: 1250));
+  await complete(1);
+  _expect(
+    controller.snapshotForWindow(window.id)!.process!.arguments.isEmpty,
+    'inventory refresh never retains argv while hidden',
+  );
+  await toggle();
+  content = controller.snapshotForWindow(window.id)!;
+  _expect(
+    content.argumentsVisible &&
+        content.process!.argumentsHidden &&
+        content.process!.arguments.isEmpty &&
+        requests.length == 2,
+    'revealing does not resurrect old argv or bypass the one-second sampling limit',
+  );
+  scheduler.elapse(const Duration(milliseconds: 1250));
+  await complete(2);
+  _expect(
+    controller.snapshotForWindow(window.id)!.process!.arguments.isNotEmpty &&
+        !controller.snapshotForWindow(window.id)!.process!.argumentsHidden,
+    'revealing obtains fresh argv on the next inventory',
+  );
+  scheduler.elapse(const Duration(milliseconds: 1250));
+  await toggle();
+  await complete(3);
+  _expect(
+    controller.snapshotForWindow(window.id)!.process!.arguments.isEmpty,
+    'an in-flight completion respects the current hidden preference',
+  );
+  dock.toggleVisibility(window.id, paneId);
+  controller.synchronize();
+  _expect(
+    controller.snapshotForWindow(window.id) == null &&
+        !controller.argumentsVisible,
+    'Dock hide clears content without resetting the display preference',
+  );
+  controller.dispose();
+  _expect(
+    !dispatcher.snapshot(TerminalActionId.toggleProcessArguments).isEnabled,
+    'disposed process controller makes its display action unavailable',
+  );
+  controller.toggleArgumentsVisibility();
+  _expect(
+    !controller.argumentsVisible &&
+        controller.activeOperationCount == 0 &&
+        controller.activeTimerCount == 0,
+    'disposed controller cannot mutate visibility or retain work',
+  );
+  dock.dispose();
+  await harness.state.shutdown();
 }
 
 Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {

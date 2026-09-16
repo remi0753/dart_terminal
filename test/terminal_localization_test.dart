@@ -283,6 +283,12 @@ void _testPresenterAndStatusMessages() {
         messages.processInspectorForegroundJob(2).contains('2 プロセス') &&
         messages.processInspectorCommandArgv.contains('argv') &&
         messages.processInspectorProtectedHelp.contains('表示しません') &&
+        messages.processInspectorArgumentsHidden == '引数は非表示です' &&
+        messages.processInspectorArgumentsRefreshing.contains('再取得') &&
+        TerminalLocalization.english.processInspectorArgumentsHidden ==
+            'Arguments are hidden' &&
+        TerminalLocalization.english.processInspectorArgumentsRefreshing ==
+            'Refreshing arguments…' &&
         TerminalLocalization.english.processInspectorTitle ==
             'Process Inspector' &&
         TerminalLocalization.english

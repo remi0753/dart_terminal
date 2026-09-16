@@ -2183,20 +2183,28 @@ final class _TerminalContextDockDocument {
       );
       detailLine();
       detailLine(localization.processInspectorCommandArgv);
-      if (process.arguments.isEmpty) {
+      if (!content.argumentsVisible) {
+        detailLine(localization.processInspectorArgumentsHidden);
+      } else if (process.argumentsHidden) {
+        detailLine(localization.processInspectorArgumentsRefreshing);
+      } else if (process.arguments.isEmpty) {
         detailLine(localization.processInspectorFieldUnavailable);
       } else {
         detailLine(process.arguments.map(_argumentToken).join('  '));
         detailLine(localization.processInspectorArgvNote);
       }
-      if (process.omittedArgumentCount > 0) {
+      if (content.argumentsVisible &&
+          !process.argumentsHidden &&
+          process.omittedArgumentCount > 0) {
         detailLine(
           localization.processInspectorOmittedArguments(
             process.omittedArgumentCount,
           ),
         );
       }
-      if (process.argumentsTruncated) {
+      if (content.argumentsVisible &&
+          !process.argumentsHidden &&
+          process.argumentsTruncated) {
         detailLine(localization.processInspectorArgumentsTruncated);
       }
       detailLine();

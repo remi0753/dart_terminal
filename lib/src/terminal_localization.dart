@@ -40,6 +40,7 @@ enum TerminalActionMessageId {
   equalizeSplits,
   toggleContextDock,
   toggleHiddenFiles,
+  toggleProcessArguments,
   searchFilesAndFolders,
   goToFileOrFolder,
   moveInDirectoryNavigator,
@@ -288,6 +289,10 @@ final class TerminalLocalization {
       : '$count more ${count == 1 ? 'argument' : 'arguments'} omitted';
   String get processInspectorArgumentsTruncated =>
       _ja ? '引数は上限で切り詰められています' : 'Arguments are truncated at the safety limit';
+  String get processInspectorArgumentsHidden =>
+      _ja ? '引数は非表示です' : 'Arguments are hidden';
+  String get processInspectorArgumentsRefreshing =>
+      _ja ? '引数を再取得しています…' : 'Refreshing arguments…';
 
   String get directionalSelectionMarker =>
       textDirection == TerminalTextDirection.rightToLeft ? '‹' : '›';
@@ -793,6 +798,10 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
           'Toggle Hidden Files and Folders',
           <String>['dotfile', 'directory', 'navigator', 'visibility'],
         ),
+        TerminalActionMessageId.toggleProcessArguments: _action(
+          'Show Process Arguments',
+          <String>['argv', 'command', 'privacy', 'hide', 'show'],
+        ),
         TerminalActionMessageId.searchFilesAndFolders: _action(
           'Search Files and Folders',
           <String>['directory', 'navigator', 'path', 'find'],
@@ -975,6 +984,10 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
       TerminalActionMessageId.toggleHiddenFiles: _action(
         '隠しファイルとフォルダの表示を切り替え',
         <String>['ドットファイル', 'ディレクトリ', 'ナビゲータ', '表示'],
+      ),
+      TerminalActionMessageId.toggleProcessArguments: _action(
+        'プロセスの引数を表示',
+        <String>['argv', 'コマンド', 'プライバシー', '非表示', '表示'],
       ),
       TerminalActionMessageId.searchFilesAndFolders: _action(
         'ファイルとフォルダを検索',

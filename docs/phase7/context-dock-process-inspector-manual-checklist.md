@@ -38,6 +38,11 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
 - [ ] Process Inspector表示中のShift-Command-F、Shift-Command-G、Shift-Command-Mはbeepせず、query caretを出さず、
   terminalへ文字やescape sequenceを送らない。command終了後は同じshortcutでNavigatorへ移れる。
 - [ ] Option-Shift-CはProcess Inspector表示中もDockだけを開閉し、foreground commandを停止・変更しない。
+- [ ] View > Show Process Arguments（日本語: プロセスの引数を表示）のcheckを外すとargvだけが非表示となり、
+  process名、実行ファイル、PID／PGID、経過時間は維持される。Shift-Command-Pから同じactionを検索し、
+  Returnで再表示できる。再取得中の表示後にfreshなargvが戻り、terminalに文字を送らない。
+- [ ] argv非表示はECHO状態／Secure Keyboard Entryから独立し、新commandや別paneでも維持される。
+  VoiceOverでも非表示のargvや引数の省略／truncation情報を読み上げない。
 - [ ] terminalの通常入力、Control-C、scroll、selectionはProcess Inspector表示中も従来どおり機能する。
 - [ ] shell builtinまたはshell integrationがprocess argvを安全に特定できないcommandでは、`Shell command running`
   と観測経過時間だけを表示し、shell入力文字列を推測してDetailsへ出さない。

@@ -34,6 +34,7 @@ enum TerminalActionId {
   equalizeSplits('pane.equalize-splits'),
   toggleContextDock('view.toggle-context-dock'),
   toggleHiddenFiles('view.toggle-hidden-files'),
+  toggleProcessArguments('view.toggle-process-arguments'),
   searchFilesAndFolders('view.search-files-and-folders'),
   goToFileOrFolder('view.goto-file-or-folder'),
   moveInDirectoryNavigator('view.move-in-directory-navigator'),
@@ -425,6 +426,7 @@ final class TerminalActionCatalog {
         ),
         restoresTerminalFocusAfterInvocation: false,
       ),
+      action(TerminalActionId.toggleProcessArguments, TerminalActionMenu.view),
       action(
         TerminalActionId.searchFilesAndFolders,
         TerminalActionMenu.view,
@@ -558,6 +560,8 @@ TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
     TerminalActionMessageId.toggleContextDock,
   TerminalActionId.toggleHiddenFiles =>
     TerminalActionMessageId.toggleHiddenFiles,
+  TerminalActionId.toggleProcessArguments =>
+    TerminalActionMessageId.toggleProcessArguments,
   TerminalActionId.searchFilesAndFolders =>
     TerminalActionMessageId.searchFilesAndFolders,
   TerminalActionId.goToFileOrFolder => TerminalActionMessageId.goToFileOrFolder,

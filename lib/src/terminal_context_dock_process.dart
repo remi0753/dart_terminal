@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dart_pty_macos/dart_pty_macos.dart';
 
+import 'terminal_action_registry.dart';
 import 'terminal_application_state.dart';
 import 'terminal_context_dock.dart';
 import 'terminal_pane.dart';
@@ -122,6 +123,7 @@ final class TerminalContextDockProcessSnapshot {
     required this.argumentsTruncated,
     required this.argumentsSystemError,
     required this.observationSystemError,
+    this.argumentsHidden = false,
   }) : members = List<TerminalContextDockProcessMember>.unmodifiable(members),
        arguments = List<String>.unmodifiable(arguments);
 
@@ -211,6 +213,7 @@ final class TerminalContextDockProcessSnapshot {
   final bool argumentsTruncated;
   final int argumentsSystemError;
   final int observationSystemError;
+  final bool argumentsHidden;
 
   TerminalContextDockProcessMember? get primaryProcess =>
       primaryIndex < 0 ? null : members[primaryIndex];
@@ -241,8 +244,31 @@ final class TerminalContextDockProcessSnapshot {
       argumentsTruncated: argumentsTruncated,
       argumentsSystemError: argumentsSystemError,
       observationSystemError: observationSystemError,
+      argumentsHidden: argumentsHidden,
     );
   }
+
+  TerminalContextDockProcessSnapshot withoutArguments() =>
+      TerminalContextDockProcessSnapshot(
+        status: status,
+        identity: identity,
+        observedAtMonotonicMicros: observedAtMonotonicMicros,
+        elapsedMicroseconds: elapsedMicroseconds,
+        members: members,
+        totalMemberCount: totalMemberCount,
+        omittedMemberCount: omittedMemberCount,
+        memberIssueCount: memberIssueCount,
+        primaryIndex: primaryIndex,
+        executablePath: executablePath,
+        executablePathSystemError: executablePathSystemError,
+        arguments: const <String>[],
+        totalArgumentCount: 0,
+        omittedArgumentCount: 0,
+        argumentsTruncated: false,
+        argumentsSystemError: 0,
+        observationSystemError: observationSystemError,
+        argumentsHidden: true,
+      );
 }
 
 final class TerminalContextDockContentSnapshot {
@@ -254,6 +280,7 @@ final class TerminalContextDockContentSnapshot {
     required this.mode,
     required this.directorySuspended,
     required this.process,
+    this.argumentsVisible = true,
   });
 
   final TerminalWindowId windowId;
@@ -263,6 +290,7 @@ final class TerminalContextDockContentSnapshot {
   final TerminalContextDockContentMode mode;
   final bool directorySuspended;
   final TerminalContextDockProcessSnapshot? process;
+  final bool argumentsVisible;
 }
 
 abstract interface class TerminalContextDockScheduledTask {
@@ -345,8 +373,43 @@ final class TerminalContextDockProcessController {
   bool _hasObservedTime = false;
   bool _synchronizing = false;
   bool _isDisposed = false;
+  bool _argumentsVisible = true;
 
   bool get isDisposed => _isDisposed;
+  bool get argumentsVisible => _argumentsVisible;
+
+  List<TerminalActionRegistration> registrations() =>
+      <TerminalActionRegistration>[
+        TerminalActionRegistration(
+          id: TerminalActionId.toggleProcessArguments,
+          isAvailable: () {
+            final TerminalWindowState? window = applicationState.activeWindow;
+            return !_isDisposed &&
+                window?.role == TerminalWindowRole.standard &&
+                applicationState
+                        .paneForId(window!.selectedTab.focusedPaneId)
+                        ?.isLive ==
+                    true;
+          },
+          handler: toggleArgumentsVisibility,
+        ),
+      ];
+
+  /// Application-lifetime display preference, unrelated to Secure Input.
+  /// Hiding immediately drops retained argv. Revealing waits for the next
+  /// bounded inventory refresh rather than resurrecting an old argument list.
+  void toggleArgumentsVisibility() {
+    if (_isDisposed) return;
+    _argumentsVisible = !_argumentsVisible;
+    if (!_argumentsVisible) {
+      for (final _TerminalContextDockProcessWindowState state
+          in _windows.values) {
+        state.process = state.process?.withoutArguments();
+      }
+    }
+    _onChanged?.call();
+  }
+
   int get activeOperationCount => _requests.length;
   int get activeTimerCount =>
       (_isActive(_pollTask) ? 1 : 0) +
@@ -376,6 +439,7 @@ final class TerminalContextDockProcessController {
       mode: state.mode,
       directorySuspended: state.directorySuspended,
       process: process,
+      argumentsVisible: _argumentsVisible,
     );
   }
 
@@ -768,12 +832,13 @@ final class TerminalContextDockProcessController {
       primaryIndex: native.primaryIndex,
       executablePath: native.executablePath,
       executablePathSystemError: native.executablePathSystemError,
-      arguments: native.arguments,
-      totalArgumentCount: native.totalArgumentCount,
-      omittedArgumentCount: native.omittedArgumentCount,
-      argumentsTruncated: native.argumentsTruncated,
-      argumentsSystemError: native.argumentsSystemError,
+      arguments: _argumentsVisible ? native.arguments : const <String>[],
+      totalArgumentCount: _argumentsVisible ? native.totalArgumentCount : 0,
+      omittedArgumentCount: _argumentsVisible ? native.omittedArgumentCount : 0,
+      argumentsTruncated: _argumentsVisible && native.argumentsTruncated,
+      argumentsSystemError: _argumentsVisible ? native.argumentsSystemError : 0,
       observationSystemError: native.observationSystemError,
+      argumentsHidden: !_argumentsVisible,
     );
   }
 

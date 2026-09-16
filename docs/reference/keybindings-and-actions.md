@@ -91,6 +91,7 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `pane.split-down` | Split Pane Down | shell | `shift+command+d` |
 | `view.toggle-context-dock` | Toggle Context Dock | view | `shift+option+c` |
 | `view.toggle-hidden-files` | Toggle Hidden Files and Folders | view | `shift+command+h` |
+| `view.toggle-process-arguments` | Show Process Arguments | view | — |
 | `view.search-files-and-folders` | Search Files and Folders | view | `shift+command+f` |
 | `view.goto-file-or-folder` | Go To File or Folder | view | `shift+command+g` |
 | `view.move-in-directory-navigator` | Move in Directory Navigator | view | `shift+command+m` |
