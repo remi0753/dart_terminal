@@ -1437,6 +1437,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 完了機能の回帰修正
 
+- [x] 設定済みControl+Tabがtab切替へ届かない原因の特定
+  （実施時に
+  [`docs/phase7/control-tab-routing-diagnosis.md`](docs/phase7/control-tab-routing-diagnosis.md)
+  を参照する）
+- [ ] SettingsのFn+Up／Downによる高速移動
+  （実施時に
+  [`docs/phase8/settings-function-page-navigation.md`](docs/phase8/settings-function-page-navigation.md)
+  を参照する）
 - [x] Context Dockの背景透過度をterminalと同じ単一背景合成へ揃える
   （実施時に
   [`docs/phase7/context-dock-background-compositing.md`](docs/phase7/context-dock-background-compositing.md)
