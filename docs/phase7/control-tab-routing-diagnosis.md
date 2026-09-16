@@ -80,6 +80,9 @@ The user was asked asynchronously whether to authorize the routing fix.
 Until authorized, this task changes diagnosis records only; terminal behavior
 is unchanged.
 
+The user's subsequent explicit answer was “今回は原因の報告だけ”. The routing
+fix is therefore intentionally not implemented or added as an authorized task.
+
 ## Verification
 
 - Native AppKit event probe: reproduced the four-case table above, exit 0.

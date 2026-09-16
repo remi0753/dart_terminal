@@ -12,6 +12,141 @@ void runTerminalSettingsEditorTests() {
   _testContextDetailOutcomesAndDiagnostics();
   _testJapaneseProjection();
   _testSelectionAndBounds();
+  _testFunctionPageNavigation();
+}
+
+void _testFunctionPageNavigation() {
+  final _EditorFixture fixture = _EditorFixture.create();
+  final TerminalSettingsEditorState state = fixture.state..open();
+  final TerminalSettingsEditorKeyController keys =
+      TerminalSettingsEditorKeyController(state);
+  try {
+    final List<String> lines = List<String>.generate(
+      35,
+      (int index) => 'font-size = 14 # 😀 ${index.toString().padLeft(2, '0')}',
+    );
+    final String document = lines.join('\n');
+    int startOf(int line) => lines
+        .take(line)
+        .fold(0, (int offset, String text) => offset + text.length + 1);
+    state.enterInsert(append: false);
+    state.synchronizeNativeDocument(
+      text: document,
+      selection: const TerminalSettingsTextSelection(start: 3),
+    );
+    state.enterNormal();
+    final List<TerminalSettingsSyntaxSpan> syntax = state.syntaxSpans;
+    final bool dirty = state.isDirty;
+    final bool details = state.detailsExpanded;
+    const ModifierKeys function = ModifierKeys(
+      ModifierKeys.functionBit | ModifierKeys.numericPadBit,
+    );
+    _expect(
+      keys.handle(_key(keyCode: 121, modifiers: function)) ==
+              TerminalSettingsEditorKeyDisposition.updated &&
+          state.selection.start == startOf(10) + 3,
+      'PageDown did not move ten lines while preserving column',
+    );
+    keys.handle(_key(keyCode: 116, modifiers: function));
+    _expect(state.selection.start == 3, 'PageUp did not return ten lines');
+    keys.handle(_key(keyCode: 125, characters: '\uf72d', modifiers: function));
+    _expect(
+      state.selection.start == startOf(10) + 3,
+      'translated Fn+Down with arrow hardware code was not a page command',
+    );
+    keys.handle(_key(keyCode: 126, characters: '\uf72c', modifiers: function));
+    _expect(state.selection.start == 3, 'translated Fn+Up did not page up');
+    keys.handle(_key(keyCode: 125, characters: '\uf701', modifiers: function));
+    _expect(
+      state.selection.start == startOf(1) + 3,
+      'ordinary arrow carrying Function became a page command',
+    );
+    for (final int modifier in <int>[
+      ModifierKeys.shiftBit,
+      ModifierKeys.commandBit,
+      ModifierKeys.controlBit,
+      ModifierKeys.optionBit,
+    ]) {
+      _expect(
+        keys.handle(_key(keyCode: 121, modifiers: ModifierKeys(modifier))) ==
+                TerminalSettingsEditorKeyDisposition.ignored &&
+            state.selection.start == startOf(1) + 3,
+        'modified PageDown unexpectedly changed NORMAL selection',
+      );
+    }
+    for (var repeat = 0; repeat < 6; repeat++) {
+      keys.handle(_key(keyCode: 121, modifiers: function));
+    }
+    _expect(
+      state.selection.start == startOf(34) + 3,
+      'repeated page down did not clamp at final line',
+    );
+    for (var repeat = 0; repeat < 6; repeat++) {
+      keys.handle(_key(keyCode: 116, modifiers: function));
+    }
+    _expect(state.selection.start == 3, 'page up did not clamp at first line');
+    state.enterSearch();
+    state.appendSearch('font-size');
+    keys.handle(_key(keyCode: 121, modifiers: function));
+    _expect(
+      state.selection.start == startOf(10) && state.query == 'font-size',
+      'SEARCH page down did not advance ten matches with query intact',
+    );
+    for (var repeat = 0; repeat < 6; repeat++) {
+      keys.handle(_key(keyCode: 121, modifiers: function));
+    }
+    _expect(state.selection.start == startOf(34), 'SEARCH page down wrapped');
+    for (var repeat = 0; repeat < 6; repeat++) {
+      keys.handle(_key(keyCode: 116, modifiers: function));
+    }
+    _expect(state.selection.start == 0, 'SEARCH page up wrapped');
+    keys.handle(_key(keyCode: 125, modifiers: function));
+    _expect(
+      state.selection.start == startOf(1),
+      'SEARCH arrow did not move one match',
+    );
+    state.deleteSearchScalar();
+    state.appendSearch('___missing___');
+    final TerminalSettingsTextSelection beforeEmptyPage = state.selection;
+    keys.handle(_key(keyCode: 121, modifiers: function));
+    _expect(
+      state.selection == beforeEmptyPage,
+      'empty SEARCH page command moved the selection',
+    );
+    state.enterNormal();
+    state.enterInsert(append: false);
+    final TerminalSettingsTextSelection beforeInsertPage = state.selection;
+    _expect(
+      keys.handle(_key(keyCode: 121, modifiers: function)) ==
+              TerminalSettingsEditorKeyDisposition.nativeEditing &&
+          state.selection == beforeInsertPage &&
+          state.mode == TerminalSettingsEditorMode.insert,
+      'INSERT page command was not delegated to AppKit',
+    );
+    _expect(
+      state.text == document &&
+          identical(state.syntaxSpans, syntax) &&
+          state.isDirty == dirty &&
+          state.detailsExpanded == details,
+      'page navigation changed the document, syntax, dirty state or details',
+    );
+    final int emoji = lines.first.indexOf('😀');
+    final String scalarDocument = document.replaceFirst('😀', 'xy');
+    state.synchronizeNativeDocument(
+      text: scalarDocument,
+      selection: TerminalSettingsTextSelection(start: emoji + 1),
+    );
+    state.enterNormal();
+    keys.handle(_key(keyCode: 121, modifiers: function));
+    _expect(
+      state.selection.start == startOf(10) + emoji,
+      'page navigation split a target-line surrogate pair',
+    );
+  } finally {
+    state.enterNormal();
+    state.dismiss();
+    fixture.dispose();
+  }
 }
 
 void _testJapaneseProjection() {

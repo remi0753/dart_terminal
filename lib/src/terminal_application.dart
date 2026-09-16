@@ -11531,14 +11531,62 @@ final class TerminalApplication {
       'Settings did not publish its initial document and visual state',
     );
     final int lastSettingsLocation = settings.state.occurrences.last.nameStart;
-    for (var step = 0; step < 64; step++) {
+    final int beforeSettingsPageCaret = settings.state.selection.start;
+    final String beforeSettingsPageText = settings.state.text;
+    final List<String> settingsPageLines = beforeSettingsPageText.split('\n');
+    final int beforeSettingsPageLine =
+        beforeSettingsPageText
+            .substring(0, beforeSettingsPageCaret)
+            .split('\n')
+            .length -
+        1;
+    _injectKeyEventForTesting(
+      application,
+      initialSettingsWindow,
+      keyCode: 121,
+      modifiers: ModifierKeys.functionBit,
+      characters: '\uf72d',
+      charactersIgnoringModifiers: '\uf72d',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () =>
+          settings.state.text
+                  .substring(0, settings.state.selection.start)
+                  .split('\n')
+                  .length ==
+              beforeSettingsPageLine + 11 &&
+          settings.activeView!.snapshot.selection.start ==
+              settings.state.selection.start,
+      'native Settings Fn+Down did not move and publish ten lines',
+    );
+    _injectKeyEventForTesting(
+      application,
+      initialSettingsWindow,
+      keyCode: 116,
+      modifiers: ModifierKeys.functionBit,
+      characters: '\uf72c',
+      charactersIgnoringModifiers: '\uf72c',
+      monotonicNanoseconds: eventTimestamp++,
+    );
+    await waitFor(
+      () => settings.state.selection.start == beforeSettingsPageCaret,
+      'native Settings Fn+Up did not return ten lines',
+    );
+    _expectLifecycle(
+      settings.state.text == beforeSettingsPageText &&
+          settings.activeView!.snapshot.text == beforeSettingsPageText &&
+          identical(settings.activeWindow, initialSettingsWindow),
+      'native Settings page navigation changed document or window owner',
+    );
+    for (var step = 0; step <= settingsPageLines.length ~/ 10; step++) {
       _injectKeyEventForTesting(
         application,
         initialSettingsWindow,
-        keyCode: 125,
-        modifiers: 0,
-        characters: '',
-        charactersIgnoringModifiers: '',
+        keyCode: 121,
+        modifiers: ModifierKeys.functionBit,
+        characters: '\uf72d',
+        charactersIgnoringModifiers: '\uf72d',
         monotonicNanoseconds: eventTimestamp++,
       );
     }

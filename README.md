@@ -581,6 +581,9 @@ editorのviewportも自動で追従します。行背景とviewport移動はsynt
 起動時は`NORMAL`で、`i`または`a`が同じsyntax-highlight済みsurfaceを`INSERT`へ切り替え、
 `Esc`が`NORMAL`へ戻します。両modeのdocument、font、色、syntax styleは同一です。`/`だけが
 明示的に`SEARCH`を開始し、`↑`/`↓`で候補を移動、`]`でcontext panelを開閉します。
+`Fn＋↑`/`Fn＋↓`（Page Up/Down）はNORMALで10行、SEARCHで10件ずつ移動し、
+移動先を表示範囲へスクロールします。端では止まり、通常の上下キーは1行／1件移動のままです。
+INSERTのページ移動はmacOS標準の編集操作に委ねます。
 Command-Sはroot全体を既存schemaで事前検証します。invalid draftはeditorとlast-known-good設定を保持し、
 該当箇所を下線表示してファイルもreload controllerも変更しません。valid draftだけを同一directoryで
 atomic保存し、上記のshared reload actionを1回実行します。NORMALの`Esc`またはwindow closeは全native

@@ -1441,7 +1441,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase7/control-tab-routing-diagnosis.md`](docs/phase7/control-tab-routing-diagnosis.md)
   を参照する）
-- [ ] SettingsのFn+Up／Downによる高速移動
+- [x] SettingsのFn+Up／Downによる高速移動
   （実施時に
   [`docs/phase8/settings-function-page-navigation.md`](docs/phase8/settings-function-page-navigation.md)
   を参照する）

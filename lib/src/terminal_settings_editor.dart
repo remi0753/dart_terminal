@@ -369,6 +369,16 @@ final class TerminalSettingsEditorState {
     _selectOccurrence(_searchMatches[_searchMatchIndex]);
   }
 
+  void moveSearchPage(int direction) {
+    _ensureSearch();
+    if (_searchMatches.isEmpty) return;
+    _searchMatchIndex = (_searchMatchIndex + direction * 10).clamp(
+      0,
+      _searchMatches.length - 1,
+    );
+    _selectOccurrence(_searchMatches[_searchMatchIndex]);
+  }
+
   void toggleDetails() {
     _ensureOpen();
     _detailsExpanded = !_detailsExpanded;
@@ -800,6 +810,14 @@ final class TerminalSettingsEditorKeyController {
   }
 
   TerminalSettingsEditorKeyDisposition _handleSearch(TerminalKeyEvent key) {
+    final int? pageDirection = _pageDirection(key);
+    if (pageDirection != null) {
+      if (!_hasPlainPageModifiers(key)) {
+        return TerminalSettingsEditorKeyDisposition.ignored;
+      }
+      state.moveSearchPage(pageDirection);
+      return TerminalSettingsEditorKeyDisposition.updated;
+    }
     switch (key.physicalKey) {
       case TerminalPhysicalKey.escape:
         state.enterNormal();
@@ -839,6 +857,14 @@ final class TerminalSettingsEditorKeyController {
         key.modifiers.option) {
       return TerminalSettingsEditorKeyDisposition.ignored;
     }
+    final int? pageDirection = _pageDirection(key);
+    if (pageDirection != null) {
+      if (!_hasPlainPageModifiers(key)) {
+        return TerminalSettingsEditorKeyDisposition.ignored;
+      }
+      state.moveCaretVertical(pageDirection * 10);
+      return TerminalSettingsEditorKeyDisposition.updated;
+    }
     switch (key.physicalKey) {
       case TerminalPhysicalKey.escape:
         state.dismiss();
@@ -876,6 +902,29 @@ final class TerminalSettingsEditorKeyController {
       default:
         return TerminalSettingsEditorKeyDisposition.ignored;
     }
+  }
+
+  static bool _hasPlainPageModifiers(TerminalKeyEvent key) =>
+      !key.modifiers.shift &&
+      !key.modifiers.command &&
+      !key.modifiers.control &&
+      !key.modifiers.option;
+
+  static int? _pageDirection(TerminalKeyEvent key) {
+    if (key.physicalKey == TerminalPhysicalKey.pageUp) return -1;
+    if (key.physicalKey == TerminalPhysicalKey.pageDown) return 1;
+    // Some Fn+arrow events retain their arrow hardware code but translate the
+    // function character. The Function flag alone is insufficient because
+    // ordinary arrow events also carry it.
+    if (key.physicalKey == TerminalPhysicalKey.arrowUp &&
+        (key.text == '\uf72c' || key.unmodifiedText == '\uf72c')) {
+      return -1;
+    }
+    if (key.physicalKey == TerminalPhysicalKey.arrowDown &&
+        (key.text == '\uf72d' || key.unmodifiedText == '\uf72d')) {
+      return 1;
+    }
+    return null;
   }
 }
 

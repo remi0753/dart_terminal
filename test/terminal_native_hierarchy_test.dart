@@ -2231,6 +2231,58 @@ Future<void> _testSettingsInspectorPresenterLifecycle() async {
       'NORMAL navigation did not move and reveal the current-line highlight',
     );
 
+    final int beforePageCaret = settings.state.selection.start;
+    final String beforePageText = settings.state.text;
+    final int beforePageRevealCount =
+        bindings.textEditorSelectionRevealCounts[settingsViewHandle]!;
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 121,
+      characters: '\uf72d',
+      modifiers: ModifierKeys.functionBit,
+    );
+    await _waitForHierarchy(
+      () =>
+          settings.state.text
+                  .substring(0, settings.state.selection.start)
+                  .split('\n')
+                  .length ==
+              beforePageText.substring(0, beforePageCaret).split('\n').length +
+                  10 &&
+          bindings.textEditorSelectionRevealCounts[settingsViewHandle] ==
+              beforePageRevealCount + 1 &&
+          bindings.textEditorLineHighlights[settingsViewHandle]?.location ==
+              settings.state.selection.start,
+      'Settings page down did not move ten lines and reveal selection',
+    );
+    _injectHierarchyKey(
+      rawEvents,
+      application,
+      settingsWindowHandle,
+      keyCode: 116,
+      characters: '\uf72c',
+      modifiers: ModifierKeys.functionBit,
+    );
+    await _waitForHierarchy(
+      () =>
+          settings.state.selection.start == beforePageCaret &&
+          bindings.textEditorSelectionRevealCounts[settingsViewHandle] ==
+              beforePageRevealCount + 2,
+      'Settings page up did not restore and reveal selection',
+    );
+    _expect(
+      settings.state.text == beforePageText &&
+          identical(settings.activeView, settingsView) &&
+          bindings.objects.length == 8 &&
+          bindings.firstResponders[settingsWindowHandle] ==
+              settingsViewHandle &&
+          bindings.textEditorStyleRuns[settingsViewHandle]!.length ==
+              normalStyles.length,
+      'Settings page navigation changed document, styles, focus or owners',
+    );
+
     final Window firstSettingsWindow = settingsWindow;
     _expect(
       (await dispatcher.dispatch(TerminalActionId.openSettings)).disposition ==
