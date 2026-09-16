@@ -3033,7 +3033,10 @@ final class TerminalApplication {
                   .createPaletteForPane(
                     key: id.paneId,
                     configuration: capturedConfiguration,
-                    onChanged: () => owners[id.paneId]?.notifyScreenChanged(),
+                    onChanged: () {
+                      owners[id.paneId]?.notifyScreenChanged();
+                      contextDockPresenter?.refreshAppearance();
+                    },
                     onAppearanceChanged: (TerminalThemeBrightness brightness) {
                       sessions[id.paneId]?.projectColorScheme(
                         _terminalColorScheme(brightness),
@@ -3102,6 +3105,7 @@ final class TerminalApplication {
           }
           contextDockProcessController?.scheduleSynchronize();
           contextDockDirectoryController?.scheduleSynchronize();
+          contextDockPresenter?.refreshAppearance();
           appleScriptSession?.scheduleReconcile();
           final TerminalAppKitMenuProjection? menu = menuProjection;
           if (menu != null && !menu.isDisposed) menu.refresh();
@@ -4416,6 +4420,7 @@ final class TerminalApplication {
             );
           }
         }
+        contextDockPresenter?.refreshAppearance();
         final TerminalSecureKeyboardEntryController? secure =
             secureKeyboardEntryController;
         if (secure != null && !secure.isDisposed) {
@@ -4646,6 +4651,29 @@ final class TerminalApplication {
             terminalViewForPane: (PaneId paneId) =>
                 hierarchy?.resourcesForPane(paneId)?.view,
             contentSnapshot: createdDockProcess.snapshotForWindow,
+            appearanceForPane: (PaneId paneId) {
+              final _TerminalHierarchyProductPane? owner = owners[paneId];
+              if (owner == null || owner.surface.isDisposed) return null;
+              final TerminalLiveMetalSurface surface = owner.surface;
+              final TerminalPalette palette =
+                  owner.session.terminalScreenSet.palette;
+              return TerminalContextDockAppearance.fromTerminal(
+                foreground: palette.defaultForeground,
+                background: palette.defaultBackground,
+                fontFamily: surface.fontFamily,
+                fontSize: surface.fontMetrics.pointSize,
+                backgroundOpacity: surface.backgroundOpacity,
+                horizontalPadding: surface.horizontalPadding,
+                verticalPadding: surface.verticalPadding,
+                fontVariations: <TextEditorFontVariation>[
+                  for (final TerminalFontVariationAxis axis
+                      in surface.fontCatalogConfiguration.variationsFor(
+                        TerminalFontStyle.regular,
+                      ))
+                    TextEditorFontVariation(axis.tag, axis.value),
+                ],
+              );
+            },
             pathHandoffSnapshot: (TerminalWindowId windowId) =>
                 contextDockPathHandoffController?.snapshotForWindow(windowId),
           );
@@ -8632,6 +8660,31 @@ final class TerminalApplication {
                   row.entry.path == hiddenFixtureDirectory.path,
             );
       }, 'Context Dock toggle did not project the real plain-sh cwd tree');
+      void expectContextDockAppearance() {
+        final TerminalContextDockAppearance? appearance = contextDockPresenter
+            .nativeAppearanceForWindow(initialWindow.id);
+        final TextViewColor foreground = TextViewColor.sRgb(
+          red: 0xc0 / 255,
+          green: 0xd0 / 255,
+          blue: 0xe0 / 255,
+        );
+        _expectLifecycle(
+          appearance != null &&
+              appearance.font == TextViewFont.named('Menlo', size: 16) &&
+              appearance.foregroundColor == foreground &&
+              appearance.dividerColor == foreground &&
+              appearance.backgroundColor ==
+                  TextViewColor.sRgb(
+                    red: 0x10 / 255,
+                    green: 0x20 / 255,
+                    blue: 0x30 / 255,
+                    alpha: 0.8,
+                  ),
+          'Context Dock did not borrow the real custom terminal font, palette and opacity',
+        );
+      }
+
+      expectContextDockAppearance();
       _expectLifecycle(
         contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
             contextDockPresenter
@@ -9033,6 +9086,10 @@ final class TerminalApplication {
             list.contains('__DT_PROCESS_') &&
             list.contains('PIPE_READY__');
       }, 'real pipeline did not reach the Process Inspector document');
+      expectContextDockAppearance();
+      stdout.writeln(
+        'TERMINAL_CONTEXT_DOCK_APPEARANCE_TEST palette=true font=true opacity=true divider=true directory=true process=true',
+      );
       final TerminalContextDockContentSnapshot pipelineBefore =
           contextDockProcess.snapshotForWindow(initialWindow.id)!;
       final int pipelineElapsedBefore =

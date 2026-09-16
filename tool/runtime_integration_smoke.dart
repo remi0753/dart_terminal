@@ -2427,6 +2427,11 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
       '--no-config',
       '--shell-integration=none',
       '--runtime-native-content-test',
+      '--font-family=Menlo',
+      '--font-size=16',
+      '--palette-foreground=#c0d0e0',
+      '--palette-background=#102030',
+      '--background-opacity=0.8',
     ],
     environment: const <String, String>{'DT_RUNTIME_NATIVE_CONTENT_TEST': '1'},
     timeout: const Duration(seconds: 60),
@@ -2461,6 +2466,14 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
         ).allMatches(observation.stdoutText).length ==
         1,
     'ordinary product omitted exact native content acceptance',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_CONTEXT_DOCK_APPEARANCE_TEST palette=true font=true opacity=true divider=true directory=true process=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'native Context Dock omitted custom terminal appearance acceptance',
   );
   _expect(
     RegExp(

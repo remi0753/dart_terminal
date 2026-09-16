@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:dart_appkit/dart_appkit.dart';
 
@@ -34,6 +35,82 @@ typedef TerminalContextDockPathHandoffSnapshotResolver =
     TerminalContextDockPathHandoffSnapshot? Function(TerminalWindowId windowId);
 typedef TerminalContextDockContentSnapshotResolver =
     TerminalContextDockContentSnapshot? Function(TerminalWindowId windowId);
+typedef TerminalContextDockAppearanceResolver =
+    TerminalContextDockAppearance? Function(PaneId paneId);
+
+/// Presentation borrowed from the focused terminal, never from process data.
+final class TerminalContextDockAppearance {
+  factory TerminalContextDockAppearance.fromTerminal({
+    required int foreground,
+    required int background,
+    required String fontFamily,
+    required double fontSize,
+    required double backgroundOpacity,
+    required double horizontalPadding,
+    required double verticalPadding,
+    Iterable<TextEditorFontVariation> fontVariations =
+        const <TextEditorFontVariation>[],
+  }) {
+    TextViewColor color(int rgb, {double alpha = 1}) => TextViewColor.sRgb(
+      red: ((rgb >> 16) & 0xff) / 255,
+      green: ((rgb >> 8) & 0xff) / 255,
+      blue: (rgb & 0xff) / 255,
+      alpha: alpha,
+    );
+    final double backdrop = _luminance(background);
+    final double text = _luminance(foreground);
+    final double contrast =
+        (math.max(backdrop, text) + 0.05) / (math.min(backdrop, text) + 0.05);
+    final int divider = contrast >= 3
+        ? foreground
+        : ((1.05 / (backdrop + 0.05)) >= ((backdrop + 0.05) / 0.05)
+              ? 0xffffff
+              : 0x000000);
+    return TerminalContextDockAppearance._(
+      font: fontFamily.isEmpty
+          ? TextViewFont.monospacedSystem(size: fontSize)
+          : TextViewFont.named(fontFamily, size: fontSize),
+      foregroundColor: color(foreground),
+      backgroundColor: color(background, alpha: backgroundOpacity),
+      dividerColor: color(divider),
+      padding: TextViewPadding(
+        top: verticalPadding,
+        bottom: verticalPadding,
+        left: horizontalPadding,
+        right: horizontalPadding,
+      ),
+      fontVariations: List<TextEditorFontVariation>.unmodifiable(
+        fontVariations,
+      ),
+    );
+  }
+
+  const TerminalContextDockAppearance._({
+    required this.font,
+    required this.foregroundColor,
+    required this.backgroundColor,
+    required this.dividerColor,
+    required this.padding,
+    required this.fontVariations,
+  });
+  final TextViewFont font;
+  final TextViewColor foregroundColor;
+  final TextViewColor backgroundColor;
+  final TextViewColor dividerColor;
+  final TextViewPadding padding;
+  final List<TextEditorFontVariation> fontVariations;
+
+  static double _luminance(int rgb) {
+    double channel(int shift) {
+      final double value = ((rgb >> shift) & 0xff) / 255;
+      return value <= 0.04045
+          ? value / 12.92
+          : math.pow((value + 0.055) / 1.055, 2.4).toDouble();
+    }
+
+    return 0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0);
+  }
+}
 
 enum TerminalContextDockDirectoryStatus {
   loading,
@@ -1319,10 +1396,12 @@ final class TerminalContextDockDirectoryPresenter {
     required View? Function(PaneId paneId) terminalViewForPane,
     TerminalContextDockPathHandoffSnapshotResolver? pathHandoffSnapshot,
     TerminalContextDockContentSnapshotResolver? contentSnapshot,
+    TerminalContextDockAppearanceResolver? appearanceForPane,
   }) : _windowForTab = windowForTab,
        _terminalViewForPane = terminalViewForPane,
        _pathHandoffSnapshot = pathHandoffSnapshot ?? _noPathHandoffSnapshot,
-       _contentSnapshot = contentSnapshot ?? _noContentSnapshot;
+       _contentSnapshot = contentSnapshot ?? _noContentSnapshot,
+       _appearanceForPane = appearanceForPane;
 
   final TerminalApplicationState applicationState;
   final TerminalContextDockState dockState;
@@ -1332,6 +1411,7 @@ final class TerminalContextDockDirectoryPresenter {
   final View? Function(PaneId paneId) _terminalViewForPane;
   final TerminalContextDockPathHandoffSnapshotResolver _pathHandoffSnapshot;
   final TerminalContextDockContentSnapshotResolver _contentSnapshot;
+  final TerminalContextDockAppearanceResolver? _appearanceForPane;
   final Map<TerminalWindowId, _TerminalContextDockNativeResources> _resources =
       <TerminalWindowId, _TerminalContextDockNativeResources>{};
   final Map<TerminalWindowId, TerminalSplitLayoutSize> _fullSizes =
@@ -1340,6 +1420,48 @@ final class TerminalContextDockDirectoryPresenter {
 
   bool get isDisposed => _isDisposed;
   int get resourceCount => _resources.length;
+
+  TerminalContextDockAppearance? nativeAppearanceForWindow(
+    TerminalWindowId windowId,
+  ) => _isDisposed ? null : _resources[windowId]?.appearance;
+
+  /// Theme/OSC/live-opacity updates do not need a geometry or focus handoff.
+  void refreshAppearance() {
+    if (_isDisposed) return;
+    for (final MapEntry<TerminalWindowId, _TerminalContextDockNativeResources>
+        entry
+        in _resources.entries) {
+      final TerminalContextDockWindowSnapshot? dock = dockState
+          .snapshotForWindow(entry.key);
+      if (dock?.isVisible == true)
+        _applyAppearance(entry.value, dock!.targetPaneId);
+    }
+  }
+
+  void _applyAppearance(
+    _TerminalContextDockNativeResources resources,
+    PaneId paneId,
+  ) {
+    final TerminalContextDockAppearance? appearance = _appearanceForPane?.call(
+      paneId,
+    );
+    if (appearance == null) return;
+    for (final TextEditor editor in <TextEditor>[
+      resources.editor,
+      resources.details,
+    ]) {
+      editor.updatePresentation(
+        font: appearance.font,
+        foregroundColor: appearance.foregroundColor,
+        backgroundColor: appearance.backgroundColor,
+        padding: appearance.padding,
+        fontVariations: appearance.fontVariations,
+      );
+    }
+    resources.split.dividerColor = appearance.dividerColor;
+    resources.contentSplit.dividerColor = appearance.dividerColor;
+    resources.appearance = appearance;
+  }
 
   TextEditorSnapshot? nativeEditorSnapshotForWindow(TerminalWindowId windowId) {
     if (_isDisposed) return null;
@@ -1451,6 +1573,7 @@ final class TerminalContextDockDirectoryPresenter {
     final _TerminalContextDockNativeResources resources = _resources
         .putIfAbsent(window.id, _TerminalContextDockNativeResources.new);
     resources.attachContent();
+    _applyAppearance(resources, visibleDock.targetPaneId);
     final bool rootAttachmentChanged =
         !resources.projectedVisible ||
         !identical(resources.split.firstView, terminalRoot) ||
@@ -1870,6 +1993,7 @@ final class _TerminalContextDockNativeResources {
   final TwoPaneSplitView contentSplit;
   final TwoPaneSplitView split;
   _TerminalContextDockDocument? document;
+  TerminalContextDockAppearance? appearance;
   TerminalTabId? attachedTabId;
   PaneId? attachedPaneId;
   TerminalTabId? navigatorTabId;

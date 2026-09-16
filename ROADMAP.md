@@ -1511,12 +1511,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase7/context-dock-process-argv-note-removal.md`](docs/phase7/context-dock-process-argv-note-removal.md)
   を参照する）
-- [ ] Context Dockの表示・幅設定とterminal styleの共有
+- [x] Context Dockの表示・幅設定とterminal styleの共有
   （実施時に
   [`docs/phase7/context-dock-configuration-and-appearance.md`](docs/phase7/context-dock-configuration-and-appearance.md)
   を参照して順に実施する）
   - [x] 初期表示trueと幅のtyped設定、state／reload接続、Settings／reference、両runtime検証
-  - [ ] focused terminalの配色・フォント・style追従と常に見える境界、native部品対応、両runtime検証
+  - [x] focused terminalの配色・フォント・style追従と常に見える境界、native部品対応、両runtime検証
 - [x] focused paneに追従するContext Dockとlocal file／folder navigator
   （分割、input ownership、filesystem境界、完了条件は
   [`docs/phase7/context-dock-file-navigator.md`](docs/phase7/context-dock-file-navigator.md)

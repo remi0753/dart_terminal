@@ -9,6 +9,7 @@ import 'package:dart_terminal/dart_terminal.dart';
 Future<void> main() => runTerminalContextDockTests();
 
 Future<void> runTerminalContextDockTests() async {
+  _testAppearanceProjectionAndBoundary();
   await _testWindowPaneStateAndBounds();
   await _testConfiguredWindowDefaultsAndReload();
   await _testActionFocusOwnershipAndAvailability();
@@ -19,6 +20,65 @@ Future<void> runTerminalContextDockTests() async {
   await _testProcessArgumentVisibility();
   _testPrivacyPolicyDistinguishesIdleLineEditing();
   await _testPathHandoffPolicyAndExactPayload();
+}
+
+void _testAppearanceProjectionAndBoundary() {
+  for (final (int foreground, int background) in <(int, int)>[
+    (0x80e5e5e5, 0x80000000),
+    (0x8024292f, 0x80f6f8fa),
+    (0x80a0b0c0, 0x80202122),
+  ]) {
+    final TerminalContextDockAppearance appearance =
+        TerminalContextDockAppearance.fromTerminal(
+          foreground: foreground,
+          background: background,
+          fontFamily: 'Menlo',
+          fontSize: 20,
+          backgroundOpacity: 0.45,
+          horizontalPadding: 9,
+          verticalPadding: 7,
+          fontVariations: <TextEditorFontVariation>[
+            TextEditorFontVariation('wght', 650),
+          ],
+        );
+    _expect(
+      appearance.font == TextViewFont.named('Menlo', size: 20) &&
+          appearance.foregroundColor.red == ((foreground >> 16) & 0xff) / 255 &&
+          appearance.backgroundColor.blue == (background & 0xff) / 255 &&
+          appearance.backgroundColor.alpha == 0.45 &&
+          appearance.dividerColor == appearance.foregroundColor &&
+          appearance.dividerColor.alpha == 1 &&
+          appearance.padding ==
+              const TextViewPadding(top: 7, bottom: 7, left: 9, right: 9) &&
+          appearance.fontVariations.single.value == 650,
+      'light, dark and custom palettes borrow regular typography and opacity with opaque foreground divider',
+    );
+  }
+  for (final (int background, double expected) in <(int, double)>[
+    (0x202020, 1),
+    (0x808080, 0),
+    (0xf0f0f0, 0),
+  ]) {
+    final TerminalContextDockAppearance appearance =
+        TerminalContextDockAppearance.fromTerminal(
+          foreground: background,
+          background: background,
+          fontFamily: '',
+          fontSize: 14,
+          backgroundOpacity: 0,
+          horizontalPadding: 0,
+          verticalPadding: 0,
+        );
+    _expect(
+      appearance.font.kind == TextViewFontKind.monospacedSystem &&
+          appearance.backgroundColor.alpha == 0 &&
+          appearance.dividerColor.alpha == 1 &&
+          appearance.dividerColor.red == expected &&
+          appearance.dividerColor.green == expected &&
+          appearance.dividerColor.blue == expected,
+      'invisible foreground falls back to an opaque contrasting divider even with transparent background',
+    );
+  }
 }
 
 Future<void> _testConfiguredWindowDefaultsAndReload() async {

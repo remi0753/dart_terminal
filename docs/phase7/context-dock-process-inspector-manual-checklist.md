@@ -33,6 +33,8 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
 - [ ] Process Inspectorにはworking directory、Directory Navigatorのtree、Path actions、Search queryを混在させない。
 - [ ] 狭いwindow、Dock幅変更、fullscreenでもterminalへ重ならず、Process InspectorだけがDock全高を使う。
   長いargvはDock外へ描画せず、truncation／partial／omitted状態を文字で区別できる。
+- [ ] Process Inspectorのfont／size／background／foreground／opacityもfocused terminalと一致し、通常文字色のopaqueな境界は常に見える。
+  Light／Dark／custom palette／pane切替／live opacity更新でscrollやinput ownerがリセットされない。
 - [ ] command実行中にDockを隠して再表示すると、非表示中の古い内容を一瞬復元せず、現在のjobを再観測する。
 
 ## Terminal inputとkeyboard-only操作

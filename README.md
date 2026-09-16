@@ -65,6 +65,9 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
 - terminalに重ならない、初期表示true／既定380 pt幅の右側Context DockとDirectory Navigator。
   `context-dock-visible = false`で新しいwindowの初期表示を無効にでき、
   `context-dock-width = 420`のように220–640 ptの幅を指定できる。幅の設定変更は既存windowにも反映する。
+  Directory Navigator／Process Inspectorの背景・文字色・通常フォント・サイズ・余白はfocused terminalと揃え、
+  appearance／palette／live opacityへ追従する。境界線は透過しない通常文字色で、背景とのcontrastが不足する場合だけ
+  明確に見えるblack／whiteへ切り替える。
   通常時はfocused
   local paneのtrusted working directory、dotfileを含むfile/folder tree、lazy subtreeを上段の
   bounded scroll領域へ表示し、選択file/folderのpermission・owner・size・mtime・symlink metadataと

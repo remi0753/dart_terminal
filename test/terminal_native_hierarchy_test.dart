@@ -99,6 +99,21 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   late final TerminalContextDockDirectoryPresenter presenter;
   TerminalPaneLayoutRect? paneLayout;
   TerminalContextDockContentSnapshot? projectedContent;
+  final TerminalContextDockAppearance firstAppearance =
+      TerminalContextDockAppearance.fromTerminal(
+        foreground: 0x80aabbcc,
+        background: 0x80101112,
+        fontFamily: 'Menlo',
+        fontSize: 18,
+        backgroundOpacity: 0.6,
+        horizontalPadding: 9,
+        verticalPadding: 7,
+        fontVariations: <TextEditorFontVariation>[
+          TextEditorFontVariation('wght', 650),
+        ],
+      );
+  final Map<PaneId, TerminalContextDockAppearance> appearances =
+      <PaneId, TerminalContextDockAppearance>{pane.id: firstAppearance};
   presenter = TerminalContextDockDirectoryPresenter(
     applicationState: state,
     dockState: dock,
@@ -108,6 +123,7 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     terminalViewForPane: (PaneId paneId) =>
         adapter.resourcesForPane(paneId)?.view,
     contentSnapshot: (_) => projectedContent,
+    appearanceForPane: (PaneId id) => appearances[id],
     pathHandoffSnapshot: (_) => const TerminalContextDockPathHandoffSnapshot(
       block: TerminalContextDockPathInsertionBlock.none,
       canCopy: true,
@@ -153,6 +169,19 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   final int contentHandle = bindings.handleFor(content);
   final int editorHandle = bindings.handleFor(editor);
   final int detailsHandle = bindings.handleFor(details);
+  _expect(
+    editor.configuration.font == firstAppearance.font &&
+        details.configuration.font == firstAppearance.font &&
+        editor.configuration.foregroundColor ==
+            firstAppearance.foregroundColor &&
+        details.configuration.backgroundColor ==
+            firstAppearance.backgroundColor &&
+        outer.dividerColor == firstAppearance.dividerColor &&
+        content.dividerColor == firstAppearance.dividerColor &&
+        bindings.textEditorFontVariations[editorHandle]!.single.value == 650 &&
+        bindings.textEditorFontVariations[detailsHandle]!.single.value == 650,
+    'both Dock documents borrow terminal font, palette, padding and opaque divider colors',
+  );
   final double expectedContentFraction =
       (499 - TerminalContextDockDirectoryLimits.preferredDetailsHeight) / 499;
   _expect(
@@ -314,6 +343,41 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
         bindings.texts[editorHandle]!.contains('モード: 移動先') &&
         bindings.texts[editorHandle]!.contains('移動先: result-2'),
     're-entering the Navigator restores its retained mode and query',
+  );
+  final TextEditorSnapshot beforeAppearanceChange = editor.snapshot;
+  final int responderBeforeAppearanceChange =
+      bindings.firstResponders[windowHandle]!;
+  final TerminalContextDockAppearance secondAppearance =
+      TerminalContextDockAppearance.fromTerminal(
+        foreground: 0x8024292f,
+        background: 0x80f6f8fa,
+        fontFamily: '',
+        fontSize: 20,
+        backgroundOpacity: 0.3,
+        horizontalPadding: 11,
+        verticalPadding: 8,
+      );
+  appearances[pane.id] = secondAppearance;
+  presenter.refreshAppearance();
+  _expect(
+    identical(content.firstView, editor) &&
+        identical(content.secondView, details) &&
+        editor.snapshot.text == beforeAppearanceChange.text &&
+        editor.snapshot.selection == beforeAppearanceChange.selection &&
+        editor.snapshot.isEditable == beforeAppearanceChange.isEditable &&
+        bindings.firstResponders[windowHandle] ==
+            responderBeforeAppearanceChange &&
+        editor.configuration.font == secondAppearance.font &&
+        details.configuration.font == secondAppearance.font &&
+        editor.configuration.backgroundColor.alpha == 0.3 &&
+        outer.dividerColor == secondAppearance.dividerColor,
+    'live appearance keeps Navigator query caret, selection, input owner and all view identities',
+  );
+  final int updateBaseline = bindings.textPresentationUpdateCount;
+  presenter.refreshAppearance();
+  _expect(
+    bindings.textPresentationUpdateCount == updateBaseline,
+    'unchanged appearance does not repeatedly call native presentation APIs',
   );
 
   final TerminalContextDockWindowSnapshot navigatorDock = dock
@@ -555,6 +619,7 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     logicalWindow.id,
     configuration,
   );
+  appearances[secondTab.focusedPaneId] = firstAppearance;
   await state.paneForId(secondTab.focusedPaneId)!.start();
   state.selectTab(logicalWindow.id, secondTab.id);
   dock.synchronize(state);
@@ -565,7 +630,10 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     identical(selectedNativeWindow.contentView, outer) &&
         !identical(nativeWindow.contentView, outer) &&
         dock.snapshotForWindow(logicalWindow.id)!.targetPaneId ==
-            secondTab.focusedPaneId,
+            secondTab.focusedPaneId &&
+        editor.configuration.font == firstAppearance.font &&
+        details.configuration.backgroundColor ==
+            firstAppearance.backgroundColor,
     'one logical Dock is reparented only to the selected native tab',
   );
 
@@ -4832,6 +4900,8 @@ final class _HierarchyNativeBindings
     implements
         NativeBindings,
         NativeTextEditorBindings,
+        NativeTextEditorPresentationBindings,
+        NativeSplitViewAppearanceBindings,
         NativeSavePanelBindings,
         NativeSplitViewPositionBindings {
   int _nextHandle = (1 << 32) | 100;
@@ -4858,6 +4928,10 @@ final class _HierarchyNativeBindings
       <int, NativeTextViewConfiguration>{};
   final Map<int, NativeTextEditorConfiguration> textEditorConfigurations =
       <int, NativeTextEditorConfiguration>{};
+  final Map<int, List<NativeTextEditorFontVariation>> textEditorFontVariations =
+      <int, List<NativeTextEditorFontVariation>>{};
+  final Map<int, List<double>> splitDividerColors = <int, List<double>>{};
+  int textPresentationUpdateCount = 0;
   final Map<int, List<NativeTextEditorStyleRun>> textEditorStyleRuns =
       <int, List<NativeTextEditorStyleRun>>{};
   final Map<int, NativeTextEditorLineHighlight?> textEditorLineHighlights =
@@ -5179,6 +5253,41 @@ final class _HierarchyNativeBindings
   }
 
   @override
+  NativeCallResult textEditorUpdatePresentation(
+    int handle,
+    NativeTextViewConfiguration presentation,
+    List<NativeTextEditorFontVariation> variations,
+  ) {
+    textPresentationUpdateCount++;
+    textEditorConfigurations[handle] = NativeTextEditorConfiguration(
+      presentation: presentation,
+      initiallyEditable: textEditorConfigurations[handle]!.initiallyEditable,
+    );
+    textEditorFontVariations[handle] =
+        List<NativeTextEditorFontVariation>.unmodifiable(variations);
+    return const NativeCallResult.success();
+  }
+
+  @override
+  NativeCallResult splitViewSetDividerColor(
+    int handle, {
+    required int kind,
+    required double red,
+    required double green,
+    required double blue,
+    required double alpha,
+  }) {
+    splitDividerColors[handle] = <double>[
+      kind.toDouble(),
+      red,
+      green,
+      blue,
+      alpha,
+    ];
+    return const NativeCallResult.success();
+  }
+
+  @override
   NativeCallResult textEditorSetDocument(
     int handle,
     NativeTextEditorDocument document,
@@ -5329,6 +5438,8 @@ final class _HierarchyNativeBindings
     viewConfigurations.remove(handle);
     textViewConfigurations.remove(handle);
     textEditorConfigurations.remove(handle);
+    textEditorFontVariations.remove(handle);
+    splitDividerColors.remove(handle);
     textEditorStyleRuns.remove(handle);
     textEditorLineHighlights.remove(handle);
     textEditorSelectionStarts.remove(handle);

@@ -1,6 +1,6 @@
 # Context Dock configuration and terminal appearance
 
-- Status: in progress
+- Status: complete
 - Date: 2026-09-16
 - Scope: Phase 7 Context Dock、Phase 8 configuration、terminal theme projection
 
@@ -85,3 +85,54 @@ Directory Navigator／Process Inspectorともfocused terminalと同じ背景、�
 - README、FEATURE_MATRIX、設定reference、両manual checklistと関連schema countを更新した。CLIは`--context-dock-visible=false`／`--context-dock-width=420`、fileは同名assignmentを使う。
 - git diff --checkと対象差分を確認し、無関係な変更、debug出力、生成build artifacts、秘密情報がないことを確認した。
 - 次はappearance subtask。設定部分は完了、配色／font／境界はまだ未実装。主観的外観／VoiceOver確認はmanual checklistの未完了項目として残る。
+
+### appearance subtask着手
+
+- 設定完了commitはb49fb42、Configure Context Dock visibility and width。terminal working treeはcleanになった。
+- 隣接dart_appkitとparent directoriesに追加AGENTS.mdはない。README／ROADMAP、公開API、native bindings、FFI、bridge／objects、tests／Makefileを確認した。
+  dependency既存変更はdocs/BUILDING_DART_ENGINE.mdとscripts/bootstrap_dart_engine.sh／build_dart_engine.shだけで、本taskは変更しない。
+- 実コードのpresenterは上下とも12 ptのsystem monospaceだった（初回メモの上段14 ptという記述を訂正）。focused terminalのregular face／sizeとpaletteへ両段を揃える。
+- native部品を再生成する案はfocus／selection／scroll／ownershipを不安定にするため採用しない。optional追加APIで既存TextEditorのbase presentationを更新し、TwoPaneSplitViewのdivider色を指定する。
+  既存ABI structs／event protocol、defaultの他application外観は変更せず、旧bridgeはunsupportedを明示する。terminal固有policyはDart presenterへ残す。
+- 境界はopaqueな通常文字色、backgroundとのcontrastが3:1未満の場合だけblack／whiteの高contrast側へfallbackする。Dock背景はterminalと同じlive opacity、caretは通常文字色とする。
+- APIはtext／editable／selection／marked text／scroll／line highlight／明示style runsを保持し、parameter validationとmain-thread／generation-safe handle checksを通す。
+  隣接repoへの必要最小限の編集はsandbox escalationで権限を確認して行う。
+- escalationは許可され、隣接repoにoptional汎用APIとtaskメモ／ROADMAP subitemを追加した。16個までのregular OpenType font descriptor coordinateも渡せる。
+  明示foreground runをprivate attributed markerで保持しbase更新後に再適用する。透明editorはopaqueと誤申告しない。
+- initial native／Dart API testsはpass、公開export listの新variation型不足を修正しfull Dart API／launcher testsもpassした。
+  真にscrolled viewport、marked text、stale handle、off-thread、color validationのnative確認も追加した。
+- Dart presenterはfocused surfaceのfont selection／size／regular coordinates／padding、実paletteのforeground／backgroundと最新opacityを参照する。
+  decorate時、theme／OSC／session変更、accepted live opacityで既存上下editorとdividerをin-place更新する。同じ値はnative no-opとしfont IOは追加しない。
+- pure projectionはlight／dark／custom／同色fg-bg／opacity 0 fallbackをpassした。fake nativeは上下style一致、query caret／selection／focus／resource identity保持、no-op、selected tabの別fontへの追従をpassしanalysis問題0。
+- native-content fixtureにはMenlo16、custom foreground/background、opacity0.8を明示し、default true／380を保ったままDirectory NavigatorとProcess Inspectorの両方でterminal style共有を直接検証する。
+- custom styleのnative-contentはDeveloper JIT（11128 ms）／Release AOT（10387 ms）ともpassした。全height process切替、caret、tree／search、exact PTYと4 session／全native handle cleanupも維持した。
+- generic APIのnative／Dart API／launcher／FFI／legacy smokeもpassした。全dependency gateは新task文書の製品用語をownership auditが検出して停止したため、汎用boundaryの説明へ変更しaudit条件を維持して再実行する。
+- depot_toolsのclang-format wrapperはChromium checkoutを要求して無変更で失敗した。Xcode実バイナリを特定し、変更native範囲だけをformatした。
+- 最終reviewでvariation数の上限超過を既存LimitExceeded statusへ揃え、C側の17件拒否testを追加した。公開Dart側は引き続きnative mutation前にRangeErrorを返す。
+- tool outputのcontext切替で終了済みdependency test sessionを再pollできなかったため、成功を推測せず、編集を止めてmake testを再実行する。
+  process一覧はsandboxのps制限で取得できなかった。生成reportは既存generatorを直列で再実行し4件ともpassした。
+- native／Dart変更範囲の最終diffを確認した。不要なdocument wrapperは削除し既存setDocument本体を維持した。
+  配色refreshは同値ならnative no-opであり、query入力の文書／focus mutationや追加font filesystem IOを行わない。
+- dependencyの最終make testはexit 0。ownership／scaffold、native bridge／runner／runtime、assembly／publication、Dart API／launcher／example、FFI／legacy smokeを全てpassした。
+  変更した8 Dart filesのformat差分0、native変更範囲format、diff checkもpassした。既存Engine文書／scriptの3変更はステージ対象から除外した。
+- dependency完了commitはf711731、Support live text presentation and divider colors。
+  汎用APIの目的、契約と検証は隣接repoのdocs/DYNAMIC_TEXT_PRESENTATION.mdに記録し、当該subitemだけを完了とした。
+- 最終reference確認で推測したdocs/configuration-reference.mdは存在しなかった。codeのreference generatorはlib/src/terminal_configuration_reference.dartであり、最終報告は確認済みtaskメモを参照する。
+- dependency完了commit後の最新sourceをarm64で再buildし、native-contentはDeveloper JIT（11149 ms）／Release AOT（10006 ms）ともpassした。
+  true／380のinitial state、Menlo16／custom palette／opacity0.8、Directory Navigator／Process Inspector、exact PTY／caret／tree／search／privacy／4 session cleanupを再確認した。
+
+### appearance subtaskの完了
+
+- 再buildした両runtimeのconfiguration suiteはDeveloper JIT（2036 ms）／Release AOT（1171 ms）でpassした。
+  width460のaccepted reload、manual width保持、future window、Settings／atomic rejection、input ownershipと全native cleanupを確認した。
+- theme suiteはDeveloper JIT（2086 ms）／Release AOT（1277 ms）でpassした。
+  3 pane、3 appearance／accessibility preference、Japanese localizationとlive palette／opacityの既存経路を維持した。
+- 最終make testはexit 0。347 Dart filesのformat差分0、dart analyze問題0、全Dart／native capability testsと
+  configuration／keybind／localization／privacy／AppKit acceptance／compatibility／distribution／generated freshness gatesをpassした。
+- README、FEATURE_MATRIX、Directory Navigator／Process Inspectorのmanual checklist、4 generated reportsを更新した。
+  境界は通常文字色のopaque divider、configured backgroundとの3:1未満のcontrastだけblack／whiteへfallbackする。
+  regular font／size／variation／padding、foreground／background、live opacityをfocused terminalから共有する。
+- diff checkと対象変更のreviewはpass。不要なwrapper、debug用変更、秘密入力／argvの追加log、無関係な生成物は含まれない。
+  隣接repoの既存Engine文書／script変更は保持し、先のAPI commitにも含めていない。
+- 親taskと両subtaskの実装・自動検証は完了。追加の未完了実装項目や阻害要因はない。
+  主観的な外観／VoiceOver品質は両manual checklistの未完了項目で追跡し、Intel実機／配布署名等の後続項目へは着手しない。
