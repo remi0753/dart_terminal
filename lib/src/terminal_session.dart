@@ -146,7 +146,8 @@ typedef TerminalSessionNativeObserver = void Function(
 );
 
 /// One persistent interactive shell generation owned by a terminal pane.
-final class TerminalSession implements TerminalPaneSession {
+final class TerminalSession
+    implements TerminalPaneSession, TerminalWindowCloseConfirmationSession {
   TerminalSession({
     required this.id,
     required void Function() onChanged,
@@ -924,6 +925,15 @@ final class TerminalSession implements TerminalPaneSession {
     }
     buffer.appendStatusLine(
       '[shell is still running — repeat Close or Quit to terminate it]',
+    );
+    _notifyChanged();
+  }
+
+  @override
+  void showWindowCloseConfirmation() {
+    if (_disposed) return;
+    buffer.appendStatusLine(
+      '[a process is still running in this window — press the window close button again to close all tabs and terminate their processes]',
     );
     _notifyChanged();
   }

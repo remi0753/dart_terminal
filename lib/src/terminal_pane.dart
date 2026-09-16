@@ -337,6 +337,11 @@ typedef TerminalPaneSessionFactory = TerminalPaneSession Function(
   required void Function() onTerminated,
 });
 
+/// Optional session presentation for window-wide (not pane-only) Close risk.
+abstract interface class TerminalWindowCloseConfirmationSession {
+  void showWindowCloseConfirmation();
+}
+
 /// Application-owned collection that is the sole creator/remover of panes.
 final class TerminalPaneOwner {
   TerminalPaneOwner({int initialPaneId = 0}) : _nextPaneId = initialPaneId {
@@ -436,6 +441,29 @@ final class TerminalPaneOwner {
     final TerminalPaneSessionShutdownResult result = await pane.shutdown();
     _panes.remove(pane.id);
     return result;
+  }
+
+  /// Keeps the owned registry intact until every supplied pane has shut down.
+  /// The application must serialize this with other ownership mutations.
+  Future<TerminalPaneOwnerShutdownResult> disposePanes(
+    List<TerminalPane> panes,
+  ) async {
+    final Set<PaneId> identities = <PaneId>{};
+    for (final TerminalPane pane in panes) {
+      if (!identical(_panes[pane.id], pane) || !identities.add(pane.id)) {
+        throw StateError('batch contains an unowned or duplicate pane');
+      }
+    }
+    final List<TerminalPane> captured = List<TerminalPane>.unmodifiable(panes);
+    final List<TerminalPaneSessionShutdownResult> results =
+        <TerminalPaneSessionShutdownResult>[];
+    for (final TerminalPane pane in captured) {
+      results.add(await pane.shutdown());
+    }
+    for (final TerminalPane pane in captured) {
+      _panes.remove(pane.id);
+    }
+    return TerminalPaneOwnerShutdownResult(results);
   }
 
   Future<TerminalPaneOwnerShutdownResult> shutdown() =>
@@ -663,6 +691,22 @@ final class TerminalPane {
     _setState(TerminalPaneState.confirmationPending);
     _session.showCloseConfirmation();
     return TerminalPaneCloseDecision.confirmationRequired;
+  }
+
+  /// Marks admission pending even when this pane is idle/non-live and risk is
+  /// in a different tab. Interaction with any marked pane invalidates admission.
+  void showWindowCloseConfirmation() {
+    if (_state == TerminalPaneState.closing ||
+        _state == TerminalPaneState.closed)
+      return;
+    _setState(TerminalPaneState.confirmationPending);
+    final TerminalPaneSession session = _session;
+    if (session is TerminalWindowCloseConfirmationSession) {
+      (session as TerminalWindowCloseConfirmationSession)
+          .showWindowCloseConfirmation();
+    } else {
+      session.showCloseConfirmation();
+    }
   }
 
   void cancelCloseConfirmation() {

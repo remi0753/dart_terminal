@@ -67,7 +67,7 @@
     },
     {
       "path": "test/corpus/appkit/phase7_acceptance_v1.json",
-      "sha256": "acd1790157e8ba006918e18e50cf20530c59ff62464fb8fb1bdbb4e52882bb8b"
+      "sha256": "0d93c9b450b7cebc90ce3de62b0e7077436cba35a0295e9848338e2f1e3703ca"
     },
     {
       "path": "test/corpus/fuzz/phase11_v1.json",
@@ -111,7 +111,7 @@
     },
     {
       "path": "test/run_tests.dart",
-      "sha256": "a20fd5a0dc4c6780c00ea188eea7bfe3d1d7c2b8411f8e23802f230f501f41c6"
+      "sha256": "3c629b18bd616e3d10d30eeeba61077e81fb549ecaef0d85ded3edfacfd104d6"
     },
     {
       "path": "tool/release_candidate_daily_use.dart",

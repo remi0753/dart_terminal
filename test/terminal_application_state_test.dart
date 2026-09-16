@@ -20,6 +20,8 @@ Future<void> runTerminalApplicationStateTests() async {
   await _testPaneRemovalAndOrderedShutdown();
   await _testPaneCloseCoordinator();
   await _testWindowEventsDuringPaneRemoval();
+  await _testWholeWindowCloseAndOwnership();
+  await _testWholeWindowCloseConfirmation();
   await _testApplicationQuitCoordinator();
   await _testApplicationTotalPaneAdmission();
   await _testApplicationLimitsAndDisposedState();
@@ -141,6 +143,262 @@ Future<void> _testWindowEventsDuringPaneRemoval() async {
   await state.createWindow(configuration);
   _expect(state.windowCount == 1, 'a window can reopen after last-pane Close');
   await state.shutdown();
+}
+
+Future<void> _testWholeWindowCloseAndOwnership() async {
+  final List<_StateFakeSession> sessions = <_StateFakeSession>[];
+  final TerminalPaneConfiguration configuration = _configuration(sessions);
+  final TerminalPaneOwner owner = TerminalPaneOwner();
+  final TerminalApplicationState state = TerminalApplicationState(
+    paneOwner: owner,
+  );
+  final TerminalWindowState target = await state.createWindow(configuration);
+  final TerminalTabState firstTab = target.selectedTab;
+  await state.splitPane(
+    firstTab.focusedPaneId,
+    configuration,
+    axis: TerminalSplitAxis.horizontal,
+  );
+  await state.createTab(target.id, configuration);
+  await state.createTab(target.id, configuration);
+  final TerminalWindowState retained = await state.createWindow(configuration);
+  await state.createTab(retained.id, configuration);
+  for (final PaneId paneId in state.paneIds)
+    await state.paneForId(paneId)!.start();
+  final List<PaneId> targetIds = <PaneId>[
+    for (final TerminalTabState tab in target.tabs) ...tab.paneIds,
+  ];
+  final List<TerminalTabId> targetTabs = target.tabIds;
+  final List<PaneId> retainedIds = <PaneId>[
+    for (final TerminalTabState tab in retained.tabs) ...tab.paneIds,
+  ];
+  _StateFakeSession session(PaneId id) =>
+      sessions.singleWhere((session) => session.id.paneId == id);
+  await _expectFutureThrows<StateError>(
+    () => owner.disposePanes(<TerminalPane>[
+      state.paneForId(targetIds.first)!,
+      state.paneForId(targetIds.first)!,
+    ]),
+    'duplicate batch identities are rejected before any shutdown',
+  );
+  final List<PaneId> prepared = <PaneId>[];
+  var reconciles = 0;
+  final TerminalPaneCloseCoordinator close = TerminalPaneCloseCoordinator(
+    state: state,
+    onBeforePaneRemoved: (PaneId id) async => prepared.add(id),
+    onHierarchyChanged: () => reconciles++,
+  );
+  // Let the last pane finish, then hold the next: owner/model indexes must
+  // remain mutually consistent even between successive session shutdowns.
+  session(targetIds[targetIds.length - 2]).shutdownBarrier = Completer<void>();
+  final Future<TerminalWindowCloseResult> closing = close.requestWindowClose(
+    target.id,
+  );
+  await Future<void>.delayed(Duration.zero);
+  state.validate();
+  _expect(
+    state.mutationInProgress &&
+        close.removalInProgress &&
+        session(targetIds.last).shutdownCount == 1 &&
+        state.paneCount == 6 &&
+        owner.livePaneCount == 6 &&
+        prepared.length == 4 &&
+        (await close.requestWindowClose(target.id)).disposition ==
+            TerminalWindowCloseDisposition.busy &&
+        (await close.requestWindowClose(retained.id)).disposition ==
+            TerminalWindowCloseDisposition.busy &&
+        (await close.requestClose(paneId: retainedIds.first)).disposition ==
+            TerminalPaneCloseDisposition.busy &&
+        !close.beginApplicationQuit(),
+    'one whole-window transaction excludes duplicates, pane Close, and Quit without partial registry publication',
+  );
+  final List<Object> errors = <Object>[];
+  final TerminalWindowEventCoordinator events = TerminalWindowEventCoordinator(
+    state: state,
+    route: (TerminalTabId tabId, WindowEvent event) {
+      if (event is WindowFocusChangedEvent && event.isFocused)
+        state.selectTab(retained.id, tabId);
+    },
+    refuseClose: (_, _) {},
+    onError: (Object error, StackTrace _) => errors.add(error),
+  );
+  const WindowFocusChangedEvent gained = WindowFocusChangedEvent(
+    windowHandle: 1,
+    monotonicMicros: 0,
+    isFocused: true,
+  );
+  events.handle(targetTabs.first, gained);
+  events.handle(retained.selectedTabId, gained);
+  session(targetIds[targetIds.length - 2]).shutdownBarrier!.complete();
+  final TerminalWindowCloseResult result = await closing;
+  await Future<void>.delayed(Duration.zero);
+  _expect(
+    result.disposition == TerminalWindowCloseDisposition.removed &&
+        result.removal!.shutdown.sessions.length == 4 &&
+        targetIds.every(
+          (id) =>
+              state.paneForId(id) == null &&
+              state.locationForPane(id) == null &&
+              session(id).shutdownCount == 1,
+        ) &&
+        targetTabs.every((id) => state.tabForId(id) == null) &&
+        state.windowForId(target.id) == null &&
+        state.windowCount == 1 &&
+        state.paneCount == 2 &&
+        owner.livePaneCount == 2 &&
+        retainedIds.every(
+          (id) => session(id).live && session(id).shutdownCount == 0,
+        ) &&
+        errors.isEmpty &&
+        state.activeWindowId == retained.id &&
+        reconciles == 1,
+    'all tabs/splits close exactly once; only surviving focus replays and other-window sessions stay live',
+  );
+  _expect(
+    (await close.requestWindowClose(target.id)).disposition ==
+        TerminalWindowCloseDisposition.noTarget,
+    'stale native target never closes a neighboring window',
+  );
+  await close.requestWindowClose(retained.id);
+  _expect(
+    state.windowCount == 0 && !state.isDisposed,
+    'closing the final whole window keeps application state reusable',
+  );
+  final TerminalWindowState reopened = await state.createWindow(configuration);
+  sessions.last.failShutdown = true;
+  final TerminalWindowCloseResult failed = await close.requestWindowClose(
+    reopened.id,
+  );
+  _expect(
+    failed.disposition ==
+            TerminalWindowCloseDisposition.removedWithCleanupFailure &&
+        state.windowCount == 0 &&
+        !close.removalInProgress,
+    'window shutdown failure is classified without leaking hierarchy or admission',
+  );
+  events.dispose();
+  await state.shutdown();
+}
+
+Future<void> _testWholeWindowCloseConfirmation() async {
+  final List<_StateFakeSession> sessions = <_StateFakeSession>[];
+  final TerminalPaneConfiguration configuration = _configuration(sessions);
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalWindowState target = await state.createWindow(configuration);
+  final PaneId selectedId = target.selectedTab.focusedPaneId;
+  await state.splitPane(
+    selectedId,
+    configuration,
+    axis: TerminalSplitAxis.horizontal,
+  );
+  final TerminalTabState hidden = await state.createTab(
+    target.id,
+    configuration,
+  );
+  state.selectTab(target.id, target.tabs.first.id);
+  final TerminalWindowState other = await state.createWindow(configuration);
+  for (final PaneId id in state.paneIds) await state.paneForId(id)!.start();
+  sessions[2].processDisposition =
+      TerminalPaneProcessDisposition.foregroundProcess;
+  final TerminalPaneCloseCoordinator close = TerminalPaneCloseCoordinator(
+    state: state,
+  );
+  final TerminalWindowCloseResult initial = await close.requestWindowClose(
+    target.id,
+  );
+  _expect(
+    initial.disposition ==
+            TerminalWindowCloseDisposition.confirmationRequired &&
+        initial.confirmation!.paneIds.length == 3 &&
+        sessions.every((session) => session.shutdownCount == 0) &&
+        target.tabs.every(
+          (tab) => tab.paneIds.every(
+            (id) => state.paneForId(id)!.closeConfirmationPending,
+          ),
+        ) &&
+        !state
+            .paneForId(other.selectedTab.focusedPaneId)!
+            .closeConfirmationPending,
+    'hidden foreground process warns the whole target window before any pane closes',
+  );
+  state.paneForId(selectedId)!.insertText('x');
+  final TerminalWindowCloseResult interacted = await close.requestWindowClose(
+    target.id,
+  );
+  _expect(
+    interacted.disposition ==
+            TerminalWindowCloseDisposition.confirmationRequired &&
+        interacted.confirmation!.operationId !=
+            initial.confirmation!.operationId,
+    'interaction in an idle selected pane cancels hidden-tab window admission',
+  );
+  sessions[2].failProcessSnapshot = true;
+  final TerminalWindowCloseResult changed = await close.requestWindowClose(
+    target.id,
+  );
+  _expect(
+    changed.disposition ==
+            TerminalWindowCloseDisposition.confirmationRequired &&
+        changed.confirmation!.operationId !=
+            interacted.confirmation!.operationId &&
+        state.paneCount == 4,
+    'changed/unavailable process evidence requires fresh confirmation with no partial removal',
+  );
+  await state.createTab(target.id, configuration);
+  final TerminalWindowCloseResult expanded = await close.requestWindowClose(
+    target.id,
+  );
+  _expect(
+    expanded.disposition ==
+            TerminalWindowCloseDisposition.confirmationRequired &&
+        expanded.confirmation!.paneIds.length == 4,
+    'new tab invalidates a previous aggregate membership snapshot',
+  );
+  close.cancelPending();
+  _expect(
+    close.pendingWindowConfirmation == null &&
+        state.paneIds.every(
+          (id) => !state.paneForId(id)!.closeConfirmationPending,
+        ),
+    'explicit cancellation clears every window notice marker',
+  );
+  await close.requestWindowClose(target.id);
+  _expect(
+    close.beginApplicationQuit() &&
+        close.pendingWindowConfirmation == null &&
+        (await close.requestWindowClose(target.id)).disposition ==
+            TerminalWindowCloseDisposition.busy,
+    'Quit cancels window confirmation and reserves the shared admission gate',
+  );
+  close.endApplicationQuit();
+  await close.requestWindowClose(target.id);
+  final TerminalPaneCloseResult paneOnly = await close.requestClose(
+    paneId: selectedId,
+  );
+  _expect(
+    paneOnly.disposition == TerminalPaneCloseDisposition.removed &&
+        state.windowForId(target.id) != null &&
+        state.tabForId(hidden.id) != null &&
+        sessions[2].shutdownCount == 0 &&
+        close.pendingWindowConfirmation == null,
+    'pane Close cancels window confirmation and removes only its own idle pane',
+  );
+  await close.requestWindowClose(target.id);
+  final TerminalWindowCloseResult accepted = await close.requestWindowClose(
+    target.id,
+  );
+  _expect(
+    accepted.disposition == TerminalWindowCloseDisposition.removed &&
+        state.windowCount == 1 &&
+        state.windowForId(other.id) != null &&
+        sessions.last.shutdownCount == 1 &&
+        sessions[3].shutdownCount == 0,
+    'one repeated window request confirms all risky/idle remaining tabs but not another window',
+  );
+  _expect(
+    (await state.shutdown()).isClean,
+    'remaining other-window owners shut down cleanly',
+  );
 }
 
 Future<void> _testQuickTerminalWindowRole() async {

@@ -1437,6 +1437,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 完了機能の回帰修正
 
+- [ ] windowの閉じるボタンで配下の全tab／paneを閉じ、pane Closeと分離する
+  （実施時に
+  [`docs/phase7/logical-window-close-all-tabs.md`](docs/phase7/logical-window-close-all-tabs.md)
+  を参照して順に実施する）
+  - [x] window単位の終了・aggregate確認・排他制御とモデル回帰検証
+  - [ ] 閉じるボタンへの接続、Command-Wの維持、両runtimeと全体の検証
 - [x] 複数タブの通常Closeでフォーカス更新の衝突を防ぎ、最後のwindowを閉じてもappを保持する
   （実施時に
   [`docs/phase7/tabbed-window-close-focus-regression.md`](docs/phase7/tabbed-window-close-focus-regression.md)

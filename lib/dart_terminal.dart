@@ -245,6 +245,7 @@ export 'src/terminal_pane.dart'
         TerminalPaneSessionExitDisposition,
         TerminalPaneSessionFactory,
         TerminalPaneSessionShutdownResult,
+        TerminalWindowCloseConfirmationSession,
         TerminalPaneState,
         TerminalSessionShutdownDisposition,
         TerminalSessionId;

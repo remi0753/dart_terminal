@@ -1935,6 +1935,15 @@ Future<void> _testPersistentCommandSession() async {
         session.buffer.outputText.contains('repeat Close or Quit'),
     'split UTF-8 output and close notice reach the projection',
   );
+  final int windowNoticeWrites = process.writes.length;
+  session.showWindowCloseConfirmation();
+  _expect(
+    session.buffer.outputText.contains(
+          'window close button again to close all tabs',
+        ) &&
+        process.writes.length == windowNoticeWrites,
+    'window-wide notice names the button/all-tabs scope and never writes to the PTY',
+  );
   process.finish(exitCode: 0);
   await session.waitForTermination();
   _expect(!session.isLive && terminationCount == 1, 'shell exit is observed');

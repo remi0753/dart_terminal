@@ -786,6 +786,17 @@ final class TerminalPaneRemovalResult {
   final TerminalPaneSessionShutdownResult shutdown;
 }
 
+/// Result of tearing down all panes and tabs in one logical window.
+final class TerminalWindowRemovalResult {
+  const TerminalWindowRemovalResult({
+    required this.windowId,
+    required this.shutdown,
+  });
+
+  final TerminalWindowId windowId;
+  final TerminalPaneOwnerShutdownResult shutdown;
+}
+
 /// Sole owner of the logical application/window/tab/split/pane hierarchy.
 final class TerminalApplicationState {
   TerminalApplicationState({
@@ -1230,6 +1241,47 @@ final class TerminalApplicationState {
         windowId: location.windowId,
         removedTab: removedTab,
         removedWindow: removedWindow,
+        shutdown: shutdown,
+      );
+    } finally {
+      _endMutation();
+    }
+  }
+
+  /// Tears down one whole logical window under a single mutation reservation.
+  /// Other windows remain owned; the application remains reusable when empty.
+  Future<TerminalWindowRemovalResult> removeWindow(
+    TerminalWindowId windowId,
+  ) async {
+    _beginMutation();
+    try {
+      final TerminalWindowState window = _requireWindow(windowId);
+      final List<TerminalWindowId> previousWindowIds = windowIds;
+      final List<PaneId> paneIds = <PaneId>[
+        for (final TerminalTabState tab in window.tabs) ...tab.paneIds,
+      ];
+      final TerminalPaneOwnerShutdownResult shutdown = await _paneOwner
+          .disposePanes(<TerminalPane>[
+            for (final PaneId paneId in paneIds.reversed) _panes[paneId]!,
+          ]);
+      for (final PaneId paneId in paneIds) {
+        _panes.remove(paneId);
+        _paneLocations.remove(paneId);
+      }
+      for (final TerminalTabId tabId in window.tabIds) {
+        _tabs.remove(tabId);
+      }
+      _windows.remove(windowId);
+      if (_activeWindowId == windowId) {
+        _activeWindowId = _neighborAt(
+          previousWindowIds,
+          previousWindowIds.indexOf(windowId),
+          removed: windowId,
+        );
+      }
+      validate();
+      return TerminalWindowRemovalResult(
+        windowId: windowId,
         shutdown: shutdown,
       );
     } finally {
