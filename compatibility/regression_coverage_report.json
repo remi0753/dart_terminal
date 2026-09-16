@@ -33,11 +33,11 @@
     },
     {
       "path": "README.md",
-      "sha256": "fd3ec55906d79509b231da9cf29d0716461cfc1d8d92d722ac0947d75d242e0c"
+      "sha256": "ef3c6febd82b60ddcbddd7cbf303dfb8374e76c9794612e59a5af38cbc717c70"
     },
     {
       "path": "FEATURE_MATRIX.md",
-      "sha256": "e148537f55623bb52c931d806396d3af4814d58eb9ef5df96c29efebbd75ba39"
+      "sha256": "c49340ffa2fac278cf68b659e4d7fa6cc764302de914bcd30aca965cf20e0310"
     }
   ],
   "fix_families": [

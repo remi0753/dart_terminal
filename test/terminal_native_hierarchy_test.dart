@@ -379,6 +379,29 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     bindings.textPresentationUpdateCount == updateBaseline,
     'unchanged appearance does not repeatedly call native presentation APIs',
   );
+  for (final double opacity in <double>[0, 0.5, 1, 0.3]) {
+    appearances[pane.id] = TerminalContextDockAppearance.fromTerminal(
+      foreground: 0x8024292f,
+      background: 0x80f6f8fa,
+      fontFamily: '',
+      fontSize: 20,
+      backgroundOpacity: opacity,
+      horizontalPadding: 11,
+      verticalPadding: 8,
+    );
+    presenter.refreshAppearance();
+    _expect(
+      editor.configuration.backgroundColor.alpha == opacity &&
+          details.configuration.backgroundColor.alpha == opacity &&
+          editor.configuration.foregroundColor.alpha == 1 &&
+          outer.dividerColor!.alpha == 1 &&
+          editor.snapshot.selection == beforeAppearanceChange.selection &&
+          editor.snapshot.text == beforeAppearanceChange.text &&
+          bindings.firstResponders[windowHandle] ==
+              responderBeforeAppearanceChange,
+      'live opacity affects both backgrounds, never query text, caret ownership or opaque border',
+    );
+  }
 
   final TerminalContextDockWindowSnapshot navigatorDock = dock
       .snapshotForWindow(logicalWindow.id)!;

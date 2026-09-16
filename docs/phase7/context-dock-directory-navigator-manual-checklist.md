@@ -59,6 +59,8 @@
 
 ## Appearance、cleanup、記録
 
+- [ ] background-opacityを0／0.5／1へreloadし、一覧・固定detailsの空白と余白がterminalと同じ透過度になる。
+  長いtreeをscrollしても背景が濃くならず、文字／caret／境界線は薄くならない。
 - [ ] custom foreground／background、font-family／font-size／regular variation／padding、live opacityで上下ともterminalと揃う。
   Light／Darkやfocused pane変更で追従し、背景と文字を同色にしてもopaqueな境界が見える。query caret／selection／scroll／focusはstyle更新でリセットされない。
 - [ ] Light/Dark、Increase Contrast、Differentiate Without Colorでselection/focus/disabled stateを色だけに依存せず区別できる。

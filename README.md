@@ -533,7 +533,8 @@ Option+Left／Rightはshellの前／次の単語へ移動します。Optionをma
 
 `background-opacity` は0（完全透過）から1（不透明）で指定し、既定値は1です。
 reload時は既存の全window/tab/split paneへ同時に反映され、その後に作るterminalや
-Quick Terminalも同じ値を使います。透過するのはterminalの既定backgroundのみで、
+Quick Terminalも同じ値を使います。Context Dockの一覧・固定details・Process Inspectorの背景にも
+同じ値を一度だけ合成し、余白やスクロール位置によって濃くならないようにします。透過するのは既定backgroundのみで、
 文字、cursor、selection、明示ANSI cell background、画像、Settings、Command Paletteには
 透過度を適用しません。
 `font-variation-{regular,bold,italic,bold-italic}`は4-byte OpenType tagごとに最大16件、
