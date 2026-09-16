@@ -8991,6 +8991,7 @@ final class TerminalApplication {
             list?.contains('Foreground job') == true &&
             !list!.contains('Working directory:') &&
             !list.contains('Directory Navigator is available') &&
+            !list.contains('Each quoted token is') &&
             !list.contains('Process details') &&
             contextDockPresenter.nativeDetailsTextForWindow(initialWindow.id) ==
                 '' &&

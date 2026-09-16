@@ -27,6 +27,7 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
 - [ ] `/bin/sh -c 'sleep 5' | /bin/cat`では複数processを同じjobとして表示し、同じ全高のscroll領域で
   primary executable、process argv、PID、PGIDも確認できる。独立したProcess Details欄と上下dividerはない。
   `Directory Navigator is available...`の案内はEnglish／Japaneseのどちらにも表示しない。
+  `Each quoted token is...`の引数説明もEnglish／Japaneseのどちらにも表示せず、argvの引用符自体は維持する。
   command終了後はDirectory Navigatorの一覧と下端の固定file／directory詳細欄が復元される。
 - [ ] Process Inspectorにはworking directory、Directory Navigatorのtree、Path actions、Search queryを混在させない。
 - [ ] 狭いwindow、Dock幅変更、fullscreenでもterminalへ重ならず、Process InspectorだけがDock全高を使う。

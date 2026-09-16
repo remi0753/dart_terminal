@@ -386,7 +386,8 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
         processList.contains(r'/private/tmp/tool\n\u{202e}') &&
         processList.contains(r'"runner"  "line\nbreak"') &&
         processList.contains(r'"\u{202e}--flag"') &&
-        processList.contains('シェルへ入力した元の文字列ではありません') &&
+        !processList.contains('各引用符は1引数を表します') &&
+        !processList.contains('シェルへ入力した元の文字列ではありません') &&
         processList.contains('ほか 2 引数を省略') &&
         processList.contains('引数は上限で切り詰められています') &&
         processList.contains('PID 4201 · PGID 4200') &&

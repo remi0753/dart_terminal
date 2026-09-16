@@ -2200,7 +2200,6 @@ final class _TerminalContextDockDocument {
         line(localization.processInspectorFieldUnavailable);
       } else {
         line(process.arguments.map(_argumentToken).join('  '));
-        line(localization.processInspectorArgvNote);
       }
       if (content.argumentsVisible &&
           !process.argumentsHidden &&

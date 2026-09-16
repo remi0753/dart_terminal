@@ -271,9 +271,6 @@ final class TerminalLocalization {
   String get processInspectorExecutable => _ja ? '実行ファイル' : 'Executable';
   String get processInspectorCommandArgv =>
       _ja ? 'コマンド（プロセス argv）' : 'Command (process argv)';
-  String get processInspectorArgvNote => _ja
-      ? '各引用符は1引数を表します。シェルへ入力した元の文字列ではありません。'
-      : 'Each quoted token is one argument, not the original shell source.';
   String get processInspectorPid => 'PID';
   String get processInspectorPgid => 'PGID';
   String get processInspectorFieldUnavailable => _ja ? '利用不可' : 'Unavailable';

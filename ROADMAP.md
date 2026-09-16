@@ -1507,6 +1507,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase7/context-dock-process-inspector-unified-layout.md`](docs/phase7/context-dock-process-inspector-unified-layout.md)
   を参照する）
+- [x] Process Inspectorの引用符付き引数に関する説明メッセージを除去する
+  （実施時に
+  [`docs/phase7/context-dock-process-argv-note-removal.md`](docs/phase7/context-dock-process-argv-note-removal.md)
+  を参照する）
 - [x] focused paneに追従するContext Dockとlocal file／folder navigator
   （分割、input ownership、filesystem境界、完了条件は
   [`docs/phase7/context-dock-file-navigator.md`](docs/phase7/context-dock-file-navigator.md)
