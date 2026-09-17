@@ -401,6 +401,44 @@ Future<void> _testModeAwareAppKitKeyRoute() async {
     onExitRequested: () {},
   );
   await pane.start();
+  final List<TerminalActionId> boundaryActions = <TerminalActionId>[];
+  session.keyboardModes = const TerminalKeyboardModes(
+    kittyKeyboardFlags:
+        TerminalKeyboardModes.kittyReportEventTypes |
+        TerminalKeyboardModes.kittyReportAllKeys,
+  );
+  final TerminalKeyEventRouter boundaryRouter = TerminalKeyEventRouter(
+    onApplicationAction: boundaryActions.add,
+  );
+  final int boundaryWriteBaseline = session.inputWrites.length;
+  for (final int keyCode in <int>[123, 124]) {
+    boundaryRouter.handleKeyEvent(
+      _appKitKeyEvent(
+        keyCode: keyCode,
+        characters: '',
+        unmodifiedCharacters: '',
+        modifierBits: ModifierKeys.controlBit,
+      ),
+      pane,
+    );
+    boundaryRouter.handleKeyEvent(
+      _appKitKeyEvent(
+        keyCode: keyCode,
+        characters: '',
+        unmodifiedCharacters: '',
+        modifierBits: ModifierKeys.controlBit,
+        kind: AppKitKeyEventKind.up,
+      ),
+      pane,
+    );
+  }
+  _expect(
+    boundaryActions.length == 2 &&
+        boundaryActions.first == TerminalActionId.moveContextDockBoundaryLeft &&
+        boundaryActions.last == TerminalActionId.moveContextDockBoundaryRight &&
+        session.inputWrites.length == boundaryWriteBaseline,
+    'boundary Control-arrows dispatch once and never write Kitty down/release bytes',
+  );
   session.keyboardModes = const TerminalKeyboardModes(
     applicationCursorKeys: true,
   );

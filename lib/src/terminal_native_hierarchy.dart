@@ -324,6 +324,19 @@ final class TerminalNativeHierarchyAdapter {
   TerminalNativePaneResources? resourcesForPane(PaneId paneId) =>
       _paneResources[paneId];
 
+  /// Pure geometry bound shared with external sibling-layout decorators.
+  TerminalSplitLayoutSize minimumLayoutSizeForTab(TerminalTabId tabId) {
+    _ensureAlive();
+    final TerminalTabState? tab = _state.tabForId(tabId);
+    if (tab == null) throw StateError('tab $tabId is not live');
+    if (tab.zoomedPaneId != null) return _cellSize;
+    final _TerminalNativeMinimumSize minimum = _minimumSize(tab.splitTree.root);
+    return TerminalSplitLayoutSize(
+      width: minimum.width,
+      height: minimum.height,
+    );
+  }
+
   /// Returns the deepest visible divider whose native hit area contains a
   /// window-content point.
   TerminalSplitNodeId? dividerAt(

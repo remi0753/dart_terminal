@@ -385,7 +385,7 @@ final class TerminalKeyBindingEngine {
 
   static const int maximumDefinitionCount =
       TerminalKeyBindingLimits.maximumDefinitionCount;
-  static const int standardDefinitionCount = 9;
+  static const int standardDefinitionCount = 11;
   static const List<TerminalKeyBindingDefinition> standardDefinitions =
       <TerminalKeyBindingDefinition>[
         TerminalKeyBindingDefinition.action(
@@ -454,6 +454,20 @@ final class TerminalKeyBindingEngine {
             command: true,
           ),
           applicationAction: TerminalActionId.moveDividerDown,
+        ),
+        TerminalKeyBindingDefinition.applicationAction(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.arrowLeft,
+            control: true,
+          ),
+          applicationAction: TerminalActionId.moveContextDockBoundaryLeft,
+        ),
+        TerminalKeyBindingDefinition.applicationAction(
+          chord: TerminalKeyBindingChord(
+            physicalKey: TerminalPhysicalKey.arrowRight,
+            control: true,
+          ),
+          applicationAction: TerminalActionId.moveContextDockBoundaryRight,
         ),
       ];
 

@@ -1397,11 +1397,16 @@ final class TerminalContextDockDirectoryPresenter {
     TerminalContextDockPathHandoffSnapshotResolver? pathHandoffSnapshot,
     TerminalContextDockContentSnapshotResolver? contentSnapshot,
     TerminalContextDockAppearanceResolver? appearanceForPane,
+    double Function(PaneId paneId)? cellWidthForPane,
+    TerminalSplitLayoutSize Function(TerminalTabId tabId)?
+    minimumTerminalSizeForTab,
   }) : _windowForTab = windowForTab,
        _terminalViewForPane = terminalViewForPane,
        _pathHandoffSnapshot = pathHandoffSnapshot ?? _noPathHandoffSnapshot,
        _contentSnapshot = contentSnapshot ?? _noContentSnapshot,
-       _appearanceForPane = appearanceForPane;
+       _appearanceForPane = appearanceForPane,
+       _cellWidthForPane = cellWidthForPane ?? _defaultCellWidth,
+       _minimumTerminalSizeForTab = minimumTerminalSizeForTab;
 
   final TerminalApplicationState applicationState;
   final TerminalContextDockState dockState;
@@ -1412,6 +1417,9 @@ final class TerminalContextDockDirectoryPresenter {
   final TerminalContextDockPathHandoffSnapshotResolver _pathHandoffSnapshot;
   final TerminalContextDockContentSnapshotResolver _contentSnapshot;
   final TerminalContextDockAppearanceResolver? _appearanceForPane;
+  final double Function(PaneId paneId) _cellWidthForPane;
+  final TerminalSplitLayoutSize Function(TerminalTabId tabId)?
+  _minimumTerminalSizeForTab;
   final Map<TerminalWindowId, _TerminalContextDockNativeResources> _resources =
       <TerminalWindowId, _TerminalContextDockNativeResources>{};
   final Map<TerminalWindowId, TerminalSplitLayoutSize> _fullSizes =
@@ -1497,7 +1505,7 @@ final class TerminalContextDockDirectoryPresenter {
       return false;
     }
     final TerminalSplitLayoutSize? fullSize = _fullSizes[window.id];
-    return fullSize == null || _hasRoom(fullSize);
+    return fullSize == null || _hasRoom(fullSize, window.selectedTab);
   }
 
   /// Whether a Navigator shortcut should be consumed while another Context
@@ -1529,7 +1537,7 @@ final class TerminalContextDockDirectoryPresenter {
   ) {
     _ensureAlive();
     _fullSizes[window.id] = fullSize;
-    TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
       window.id,
     );
     if (!_shouldShow(window, tab, fullSize, dock)) {
@@ -1540,15 +1548,7 @@ final class TerminalContextDockDirectoryPresenter {
       }
       return fullSize;
     }
-    final _TerminalContextDockNativeResources? resources =
-        _resources[window.id];
-    if (resources != null &&
-        resources.positioned &&
-        resources.projectedVisible) {
-      _captureNativeWidth(window.id, resources, fullSize);
-      dock = dockState.snapshotForWindow(window.id);
-    }
-    final double dockWidth = _effectiveDockWidth(dock!.width, fullSize);
+    final double dockWidth = _effectiveDockWidth(dock!.width, fullSize, tab);
     return TerminalSplitLayoutSize(
       width:
           fullSize.width -
@@ -1613,15 +1613,17 @@ final class TerminalContextDockDirectoryPresenter {
     );
     final double usable =
         fullSize.width - TerminalContextDockDirectoryLimits.dividerThickness;
-    final double dockWidth = _effectiveDockWidth(visibleDock.width, fullSize);
+    final double dockWidth = _effectiveDockWidth(
+      visibleDock.width,
+      fullSize,
+      tab,
+    );
     resources.split.setPosition(
       fraction: (usable - dockWidth) / usable,
-      firstMinimumExtent:
-          TerminalContextDockDirectoryLimits.minimumTerminalWidth,
+      firstMinimumExtent: _minimumTerminalWidth(tab),
       secondMinimumExtent: TerminalContextDockLimits.minimumWidth,
     );
     resources
-      ..positioned = true
       ..projectedVisible = true
       ..attachedTabId = tab.id
       ..attachedPaneId = visibleDock.targetPaneId
@@ -1889,26 +1891,68 @@ final class TerminalContextDockDirectoryPresenter {
     resources.editorEditable = editable;
   }
 
-  void _captureNativeWidth(
-    TerminalWindowId windowId,
-    _TerminalContextDockNativeResources resources,
-    TerminalSplitLayoutSize fullSize,
-  ) {
-    try {
-      final double fraction = resources.split.refreshFraction();
-      final double usable =
-          fullSize.width - TerminalContextDockDirectoryLimits.dividerThickness;
-      final double observed = usable * (1 - fraction);
-      if (observed >= TerminalContextDockLimits.minimumWidth &&
-          observed <= TerminalContextDockLimits.maximumWidth) {
-        dockState.setWidth(windowId, observed);
-      }
-    } on AppKitNativeException catch (error) {
-      if (error.status != 8) rethrow;
-    }
+  bool canMoveBoundary(TerminalContextDockBoundaryDirection direction) =>
+      _boundaryMovement(direction) != null;
+
+  bool moveBoundary(TerminalContextDockBoundaryDirection direction) {
+    final (TerminalWindowId, double)? movement = _boundaryMovement(direction);
+    if (movement == null) return false;
+    dockState.setWidth(movement.$1, movement.$2);
+    return true;
   }
 
-  static bool _shouldShow(
+  (TerminalWindowId, double)? _boundaryMovement(
+    TerminalContextDockBoundaryDirection direction,
+  ) {
+    if (_isDisposed ||
+        applicationState.isDisposed ||
+        dockState.isDisposed ||
+        applicationState.mutationInProgress)
+      return null;
+    final TerminalWindowState? window = applicationState.activeWindow;
+    if (window == null || window.role != TerminalWindowRole.standard)
+      return null;
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+      window.id,
+    );
+    final TerminalSplitLayoutSize? fullSize = _fullSizes[window.id];
+    final _TerminalContextDockNativeResources? resources =
+        _resources[window.id];
+    if (dock?.isVisible != true ||
+        fullSize == null ||
+        !_hasRoom(fullSize, window.selectedTab) ||
+        resources?.projectedVisible != true ||
+        resources!.attachedTabId != window.selectedTabId)
+      return null;
+    final double step = _cellWidthForPane(dock!.targetPaneId);
+    if (!step.isFinite || step <= 0) return null;
+    final double current = _effectiveDockWidth(
+      dock.width,
+      fullSize,
+      window.selectedTab,
+    );
+    final double maximum =
+        (fullSize.width -
+                _minimumTerminalWidth(window.selectedTab) -
+                TerminalContextDockDirectoryLimits.dividerThickness)
+            .clamp(
+              TerminalContextDockLimits.minimumWidth,
+              TerminalContextDockLimits.maximumWidth,
+            )
+            .toDouble();
+    final double next =
+        (current +
+                (direction == TerminalContextDockBoundaryDirection.left
+                    ? step
+                    : -step))
+            .clamp(TerminalContextDockLimits.minimumWidth, maximum)
+            .toDouble();
+    return (next - current).abs() <= 1e-9 ? null : (window.id, next);
+  }
+
+  static double _defaultCellWidth(PaneId _) => 8;
+
+  bool _shouldShow(
     TerminalWindowState window,
     TerminalTabState tab,
     TerminalSplitLayoutSize fullSize,
@@ -1917,29 +1961,40 @@ final class TerminalContextDockDirectoryPresenter {
       window.role == TerminalWindowRole.standard &&
       window.selectedTabId == tab.id &&
       dock?.isVisible == true &&
-      _hasRoom(fullSize);
+      _hasRoom(fullSize, tab);
 
-  static bool _hasRoom(TerminalSplitLayoutSize fullSize) =>
+  bool _hasRoom(TerminalSplitLayoutSize fullSize, TerminalTabState tab) =>
       fullSize.width >=
-          TerminalContextDockDirectoryLimits.minimumTerminalWidth +
+          _minimumTerminalWidth(tab) +
               TerminalContextDockLimits.minimumWidth +
               TerminalContextDockDirectoryLimits.dividerThickness &&
+      fullSize.height >=
+          (_minimumTerminalSizeForTab?.call(tab.id).height ?? 0) &&
       fullSize.height >=
           TerminalContextDockDirectoryLimits.minimumNavigatorHeight +
               TerminalContextDockDirectoryLimits.minimumDetailsHeight +
               TerminalContextDockDirectoryLimits.dividerThickness;
 
-  static double _effectiveDockWidth(
+  double _effectiveDockWidth(
     double requested,
     TerminalSplitLayoutSize fullSize,
+    TerminalTabState tab,
   ) => requested
       .clamp(
         TerminalContextDockLimits.minimumWidth,
         fullSize.width -
-            TerminalContextDockDirectoryLimits.minimumTerminalWidth -
+            _minimumTerminalWidth(tab) -
             TerminalContextDockDirectoryLimits.dividerThickness,
       )
       .toDouble();
+
+  double _minimumTerminalWidth(TerminalTabState tab) =>
+      (_minimumTerminalSizeForTab?.call(tab.id).width ?? 0)
+          .clamp(
+            TerminalContextDockDirectoryLimits.minimumTerminalWidth,
+            double.infinity,
+          )
+          .toDouble();
 
   static double _effectiveDetailsHeight(TerminalSplitLayoutSize fullSize) =>
       TerminalContextDockDirectoryLimits.preferredDetailsHeight
@@ -1986,7 +2041,8 @@ final class _TerminalContextDockNativeResources {
         ),
       ),
       contentSplit = TwoPaneSplitView(axis: SplitViewAxis.vertical),
-      split = TwoPaneSplitView(axis: SplitViewAxis.horizontal);
+      split = (TwoPaneSplitView(axis: SplitViewAxis.horizontal)
+        ..dividerDraggable = false);
 
   final TextEditor editor;
   final TextEditor details;
@@ -1999,7 +2055,6 @@ final class _TerminalContextDockNativeResources {
   TerminalTabId? navigatorTabId;
   int lastAppliedQuerySelectionGeneration = -1;
   bool editorEditable = false;
-  bool positioned = false;
   bool projectedVisible = false;
   bool inputOwnerProjectionPending = false;
 

@@ -1,6 +1,6 @@
 # Context Dock keyboard boundary resize
 
-- Status: in progress
+- Status: complete
 - Started: 2026-09-17
 - Environment: macOS / Apple M1 / arm64 Developer JIT and Release AOT
 - Starting terminal state: clean main at 919ccf4
@@ -103,3 +103,103 @@ Each subtask is verified and committed before the next is implemented.
   dragging. Its three pre-existing user edits remain unchanged and unstaged.
   The first subtask is complete; terminal keyboard/layout integration follows
   this progress-record completion commit. Parent remains incomplete.
+
+## Keyboard/layout integration
+
+- First subtask recorded in terminal commit c99b2c1 before integration started.
+- Removed unconditional native-width capture and its positioned flag. Width is
+  explicit Dock state; reconciliation always computes terminal content width
+  from it, projects native divider position, and calls every affected surface's
+  resizeViewport/pane.resize at unchanged cell metrics and window backing scale.
+  No renderer font/zoom/scale algorithm change is needed.
+- Disabled only the outer native split's dividerDraggable. Navigator/details
+  and terminal split dividers keep their existing interaction policy.
+- Added two localized stable boundary actions with false focus-restoration
+  metadata and overrideable Control-arrow defaults. Navigator consults the live
+  keybind engine for only these actions; query/tree keys remain unchanged.
+  Releases do not repeat the action or emit unmatched Kitty release bytes.
+- Movement is one focused terminal logical cell, based on effective projected
+  width and finite viewport bounds. Hidden/small-window/unprojected Dock and
+  mutation states are unavailable; endpoints are consumed without PTY writes.
+- Initial analysis reported import order, then test-helper missing required
+  characters and a terminal handle declared later; corrected only those test/
+  directive mistakes. One patch included an absent trailing context and was
+  rejected atomically; reapplied the intended chunks without that context.
+- Focused Dock/hierarchy/keybind tests passed, then action catalog test caught
+  its explicit View menu order missing the new actions. Updated that expected
+  ordered list without removing the order assertion. Static analysis is clean.
+- Real native-content acceptance now exercises terminal raw-key routing and
+  Navigator window routing, exact one-cell steps, fixed typography/scale,
+  native root identities/focus, fresh narrower Metal frame/grid, shell-observed
+  stty winsize, then restored wider columns. A fixed exact marker is required
+  by the outer driver. The explicit test command has its own PTY-write baseline,
+  separate from zero-write keyboard operations.
+- System-wide macOS Spaces Control-arrow may be consumed before delivery to
+  the application. Do not install a global key monitor or alter user system
+  preferences; document system unbinding or alternate configured application
+  chord. Test injection verifies application delivery, not system interception.
+
+- First rebuilt JIT native-content acceptance passed (11432 ms), including
+  exact required Dock resize marker, fixed font/scale/frame/grid, shell-observed
+  PTY winsize, Navigator ownership and four clean sessions.
+- Final boundary review found 240 pt alone can be less than a large/padded
+  split subtree's required width. Added a read-only hierarchy minimum-size query
+  sharing its existing recursive geometry policy. Dock effective width, native
+  minimum, hide-for-small-window admission and keyboard clamp use that bound;
+  zoom uses one leaf's minimum. This is necessary for safe width-following, not
+  a change to terminal split semantics. Added large-subtree clamp/hide tests.
+  Rebuild and repeat both runtimes after this final source adjustment. A first
+  patch attempt had out-of-order repeated context; rejected without changes,
+  then reapplied with exact selected source and task-specific chunks.
+- Pre-final-minimum Release AOT native-content acceptance also passed (10043 ms).
+  Added exact nested-subtree (26x33 pt) and zoomed-leaf (8x16 pt) minimum-query
+  assertions to the existing split geometry test. Focused large-subtree Dock
+  clamp/hide tests and clean static analysis passed. Evidence is regenerated and
+  native-content runtimes rebuilt again for the final source, not reused from
+  the earlier bundles.
+- Final-source native-content integration passed after rebuilding both bundles:
+  Developer JIT 11197 ms, Release AOT 10014 ms. Each required the exact new
+  resize marker plus all existing filesystem/process/native-content/privacy
+  assertions, four clean session shutdowns, zero text clients/native handles.
+  One-cell terminal and Navigator keys, fixed cell/font/scale, viewport/grid,
+  fresh frame and actual stty winsize converged without keyboard PTY writes.
+  Existing user-action and configuration integrations, then full make test,
+  follow sequentially to avoid unnecessary PTY/build contention.
+- Existing user-action and configuration smoke suites passed in both JIT and
+  AOT: the sequential `&&` command advanced through all four suites to the full
+  terminal gate. The first full gate then stopped at configuration-reference-
+  check: adding two standard keybindings changes the maximum custom declaration
+  count, and configuration-and-command-line.md had not yet been regenerated.
+  Regenerate that reference without changing its freshness check, then rerun
+  the full gate. Earlier native/parser/static gates reached before it passed.
+
+## Final verification and handoff
+
+- Focused `dart analyze`, Context Dock, native hierarchy, keybinding, and action
+  registry tests passed after the final subtree-minimum adjustment. The router
+  regression in the full runner checks exactly-once down/release dispatch and
+  no unmatched Kitty key bytes; existing Kitty release behavior stays covered.
+- Rebuilt `make RUNTIME_ARCH=arm64 runtime-native-content-integration` passed
+  both runtimes at final source as recorded above. Existing smoke driver suites
+  `--suite=actions` and `--suite=configuration` also passed for developer-jit and
+  release-aot, including normal split, aggregate window Close, and live width
+  configuration behavior. Bundles are under build/runtime/arm64/{developer-jit,
+  release-aot}/DartTerminal.app. These are application-delivered key tests, not
+  a claim that macOS system-wide Spaces shortcuts have been intercepted.
+- Regenerated configuration/action references and acceptance/regression/gap/
+  daily-use evidence. After correcting the stale configuration reference,
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test` exited 0: native capability
+  and package suites, generated freshness/privacy/localization/compatibility/
+  distribution gates, formatting of 348 files with zero changes, static analysis
+  with no issues, and the complete dart_terminal regression runner all passed.
+- Final diff review and `git diff --check` passed. Only this task's source,
+  tests, references/evidence, manual checklist, and progress records are included;
+  no temporary debug files or generated native binaries are tracked. The adjacent
+  dependency still has exactly its three pre-existing user edits, untouched.
+- Both ordered subtasks and parent acceptance are satisfied. There is no new
+  required follow-up or blocker; previously scheduled low-priority work is not
+  part of this request. Physical keyboard/manual accessibility checks remain
+  explicit in the existing manual checklist rather than claimed as automated.
+- Restart/rebuild with `make RUNTIME_ARCH=arm64 developer-jit-run` to use the
+  updated product. If macOS consumes Control-arrow for Spaces, remove that
+  system assignment or bind these two stable actions to another exact chord.

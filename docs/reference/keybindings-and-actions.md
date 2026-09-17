@@ -14,7 +14,7 @@ keybind = shift+control+k=pane.focus-next
 
 The left side is one physical key plus zero or more exact modifiers. Each modifier may appear once; the canonical order is `shift`, `control`, `option`, `command`. Names and action IDs are case-sensitive.
 
-Bindings are applied in include, including file, then command-line order. A later declaration of the same exact chord replaces an earlier declaration. Up to 1015 configured declarations are retained, in addition to 9 standard bindings. One keybind value is limited to 512 UTF-16 units; the enclosing configuration also limits a line to 16384 units and all assignments to 4096.
+Bindings are applied in include, including file, then command-line order. A later declaration of the same exact chord replaces an earlier declaration. Up to 1013 configured declarations are retained, in addition to 11 standard bindings. One keybind value is limited to 512 UTF-16 units; the enclosing configuration also limits a line to 16384 units and all assignments to 4096.
 
 Invalid declarations are diagnosed independently and omitted. Application actions are dispatched without blocking key delivery. Busy, unavailable, or failed actions are consumed and never fall through as terminal bytes.
 
@@ -43,6 +43,8 @@ make RUNTIME_ARCH=arm64 developer-jit-run \
 | `shift+command+right` | `pane.move-divider-right` |
 | `shift+command+up` | `pane.move-divider-up` |
 | `shift+command+down` | `pane.move-divider-down` |
+| `control+left` | `view.move-context-dock-boundary-left` |
+| `control+right` | `view.move-context-dock-boundary-right` |
 
 ## Physical keys
 
@@ -91,6 +93,8 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `pane.split-down` | Split Pane Down | shell | `shift+command+d` |
 | `view.toggle-context-dock` | Toggle Context Dock | view | `shift+option+c` |
 | `view.toggle-hidden-files` | Toggle Hidden Files and Folders | view | `shift+command+h` |
+| `view.move-context-dock-boundary-left` | Move Context Dock Boundary Left | view | — |
+| `view.move-context-dock-boundary-right` | Move Context Dock Boundary Right | view | — |
 | `view.toggle-process-arguments` | Show Process Arguments | view | — |
 | `view.search-files-and-folders` | Search Files and Folders | view | `shift+command+f` |
 | `view.goto-file-or-folder` | Go To File or Folder | view | `shift+command+g` |

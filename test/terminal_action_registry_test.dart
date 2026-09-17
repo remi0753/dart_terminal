@@ -149,6 +149,8 @@ void _testStableStandardCatalog() {
         <TerminalActionId>[
           TerminalActionId.toggleContextDock,
           TerminalActionId.toggleHiddenFiles,
+          TerminalActionId.moveContextDockBoundaryLeft,
+          TerminalActionId.moveContextDockBoundaryRight,
           TerminalActionId.toggleProcessArguments,
           TerminalActionId.searchFilesAndFolders,
           TerminalActionId.goToFileOrFolder,

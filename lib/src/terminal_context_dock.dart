@@ -3,6 +3,7 @@ import 'package:dart_appkit/dart_appkit.dart';
 import 'terminal_action_registry.dart';
 import 'terminal_application_state.dart';
 import 'terminal_input/terminal_appkit_key_adapter.dart';
+import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_event.dart';
 import 'terminal_pane.dart';
 
@@ -37,6 +38,8 @@ enum TerminalContextDockInputOwner { terminal, navigator }
 enum TerminalContextDockNavigatorMode { search, goTo, move }
 
 enum TerminalContextDockTreeIntent { collapse, expand, toggle }
+
+enum TerminalContextDockBoundaryDirection { left, right }
 
 /// Immutable search/list state retained independently for one terminal pane.
 final class TerminalContextDockPaneSnapshot {
@@ -132,7 +135,7 @@ final class TerminalContextDockState {
   int get windowCount => _windows.length;
 
   /// Updates future window defaults without undoing manual visibility choices.
-  /// A changed configured width also supersedes existing window drag widths.
+  /// A changed configured width also supersedes window-owned keyboard widths.
   void configureDefaults({
     required bool initiallyVisible,
     required double width,
@@ -346,7 +349,7 @@ final class TerminalContextDockState {
     _validate();
   }
 
-  /// Retains one bounded native divider result for this logical window.
+  /// Retains one bounded explicit width for this logical window.
   void setWidth(TerminalWindowId windowId, double width) {
     if (!width.isFinite ||
         width < TerminalContextDockLimits.minimumWidth ||
@@ -666,12 +669,17 @@ final class TerminalContextDockActionCoordinator {
     required TerminalContextDockFocusRequester focusTerminal,
     bool Function()? canFocusNavigator,
     bool Function()? shouldConsumeNavigatorRequest,
+    bool Function(TerminalContextDockBoundaryDirection direction)?
+    canMoveBoundary,
+    bool Function(TerminalContextDockBoundaryDirection direction)? moveBoundary,
     void Function()? onChanged,
   }) : _focusNavigator = focusNavigator,
        _focusTerminal = focusTerminal,
        _canFocusNavigator = canFocusNavigator ?? _alwaysTrue,
        _shouldConsumeNavigatorRequest =
            shouldConsumeNavigatorRequest ?? _alwaysFalse,
+       _canMoveBoundary = canMoveBoundary,
+       _moveBoundary = moveBoundary,
        _onChanged = onChanged {
     synchronize();
   }
@@ -682,6 +690,10 @@ final class TerminalContextDockActionCoordinator {
   final TerminalContextDockFocusRequester _focusTerminal;
   final bool Function() _canFocusNavigator;
   final bool Function() _shouldConsumeNavigatorRequest;
+  final bool Function(TerminalContextDockBoundaryDirection direction)?
+  _canMoveBoundary;
+  final bool Function(TerminalContextDockBoundaryDirection direction)?
+  _moveBoundary;
   final void Function()? _onChanged;
   bool _isDisposed = false;
 
@@ -719,6 +731,20 @@ final class TerminalContextDockActionCoordinator {
           isAvailable: _canToggle,
           handler: _toggleHiddenEntries,
         ),
+        TerminalActionRegistration(
+          id: TerminalActionId.moveContextDockBoundaryLeft,
+          isAvailable: () =>
+              _canMove(TerminalContextDockBoundaryDirection.left),
+          handler: () =>
+              _moveBoundaryIn(TerminalContextDockBoundaryDirection.left),
+        ),
+        TerminalActionRegistration(
+          id: TerminalActionId.moveContextDockBoundaryRight,
+          isAvailable: () =>
+              _canMove(TerminalContextDockBoundaryDirection.right),
+          handler: () =>
+              _moveBoundaryIn(TerminalContextDockBoundaryDirection.right),
+        ),
       ];
 
   void synchronize() {
@@ -744,6 +770,17 @@ final class TerminalContextDockActionCoordinator {
   }
 
   bool _canToggle() => _activeTarget() != null;
+
+  bool _canMove(TerminalContextDockBoundaryDirection direction) =>
+      !applicationState.mutationInProgress &&
+      _activeTarget() != null &&
+      _moveBoundary != null &&
+      (_canMoveBoundary?.call(direction) ?? false);
+
+  void _moveBoundaryIn(TerminalContextDockBoundaryDirection direction) {
+    if (!_canMove(direction)) return;
+    if (_moveBoundary!(direction)) _onChanged?.call();
+  }
 
   void _search() => _focusMode(TerminalContextDockNavigatorMode.search);
 
@@ -905,6 +942,7 @@ enum TerminalContextDockKeyDisposition {
   pathCopyDispatched,
   pathInsertionRequested,
   terminalFocusDispatched,
+  boundaryMoveDispatched,
   overflow,
 }
 
@@ -934,7 +972,8 @@ final class TerminalContextDockKeyController {
     required this.dispatcher,
     this.onChanged,
     this.pageStep = TerminalContextDockLimits.defaultPageStep,
-  }) {
+    TerminalKeyBindingEngine Function()? keyBindings,
+  }) : _keyBindings = keyBindings ?? TerminalKeyBindingEngine.standard {
     if (pageStep <= 0 || pageStep > TerminalContextDockLimits.maximumResults) {
       throw ArgumentError.value(pageStep, 'pageStep', 'must be in bounds');
     }
@@ -944,6 +983,7 @@ final class TerminalContextDockKeyController {
   final TerminalActionDispatcher dispatcher;
   final void Function()? onChanged;
   final int pageStep;
+  final TerminalKeyBindingEngine Function() _keyBindings;
 
   Future<TerminalContextDockKeyResult> handle(
     TerminalWindowId windowId,
@@ -963,6 +1003,19 @@ final class TerminalContextDockKeyController {
       );
     }
     final TerminalKeyEvent key = TerminalAppKitKeyAdapter.adapt(event);
+    final TerminalActionId? boundAction = _keyBindings()
+        .resolve(key)
+        .applicationAction;
+    if (boundAction == TerminalActionId.moveContextDockBoundaryLeft ||
+        boundAction == TerminalActionId.moveContextDockBoundaryRight) {
+      final TerminalActionDispatchResult result = await dispatcher.dispatch(
+        boundAction!,
+      );
+      return TerminalContextDockKeyResult(
+        disposition: TerminalContextDockKeyDisposition.boundaryMoveDispatched,
+        dispatchResult: result,
+      );
+    }
     if (key.physicalKey == TerminalPhysicalKey.escape) {
       final TerminalActionDispatchResult result = await dispatcher.dispatch(
         TerminalActionId.focusTerminal,

@@ -99,6 +99,7 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   late final TerminalContextDockDirectoryPresenter presenter;
   TerminalPaneLayoutRect? paneLayout;
   TerminalContextDockContentSnapshot? projectedContent;
+  var minimumTerminalSize = TerminalSplitLayoutSize(width: 8, height: 16);
   final TerminalContextDockAppearance firstAppearance =
       TerminalContextDockAppearance.fromTerminal(
         foreground: 0x80aabbcc,
@@ -123,6 +124,7 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     terminalViewForPane: (PaneId paneId) =>
         adapter.resourcesForPane(paneId)?.view,
     contentSnapshot: (_) => projectedContent,
+    minimumTerminalSizeForTab: (_) => minimumTerminalSize,
     appearanceForPane: (PaneId id) => appearances[id],
     pathHandoffSnapshot: (_) => const TerminalContextDockPathHandoffSnapshot(
       block: TerminalContextDockPathInsertionBlock.none,
@@ -221,6 +223,8 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
         dockState: dock,
         focusNavigator: presenter.focusNavigator,
         focusTerminal: presenter.focusTerminal,
+        canMoveBoundary: presenter.canMoveBoundary,
+        moveBoundary: presenter.moveBoundary,
         canFocusNavigator: () => presenter.canFocusNavigator,
         shouldConsumeNavigatorRequest: () =>
             presenter.shouldConsumeNavigatorRequest,
@@ -239,6 +243,27 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
         dispatcher: dispatcher,
         onChanged: reconcile,
       );
+  _expect(
+    !outer.dividerDraggable &&
+        content.dividerDraggable &&
+        bindings.splitDividerDraggable[outerHandle] == false,
+    'only the outer Dock divider disables native mouse interaction',
+  );
+  await dispatcher.dispatch(TerminalActionId.moveContextDockBoundaryLeft);
+  _expect(
+    dock.snapshotForWindow(logicalWindow.id)!.width == 388 &&
+        paneLayout!.width == 411 &&
+        bindings.firstResponders[windowHandle] ==
+            bindings.handleFor(adapter.resourcesForPane(pane.id)!.view) &&
+        identical(nativeWindow.contentView, outer),
+    'left boundary action widens Dock and recomputes terminal width in place',
+  );
+  await dispatcher.dispatch(TerminalActionId.moveContextDockBoundaryRight);
+  _expect(
+    dock.snapshotForWindow(logicalWindow.id)!.width == 380 &&
+        paneLayout!.width == 419,
+    'right boundary action restores one logical cell without native-width overwrite',
+  );
   _expect(
     (await dispatcher.dispatch(TerminalActionId.searchFilesAndFolders))
             .disposition ==
@@ -663,9 +688,9 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
   bindings.splitViewFractions[bindings.handleFor(outer)] = 0.5;
   reconcile();
   _expect(
-    (dock.snapshotForWindow(logicalWindow.id)!.width - 399.5).abs() < 0.001 &&
-        (paneLayout!.width - 399.5).abs() < 0.001,
-    'native divider observation is retained as bounded logical Dock width '
+    dock.snapshotForWindow(logicalWindow.id)!.width == 380 &&
+        paneLayout!.width == 419,
+    'stale native divider position cannot overwrite explicit Dock width '
     '(dock=${dock.snapshotForWindow(logicalWindow.id)!.width}, '
     'pane=${paneLayout!.width})',
   );
@@ -683,8 +708,7 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
     identical(selectedNativeWindow.contentView, outer) &&
         bindings.splitViewChildrenSetCounts[outerHandle] ==
             childAttachmentCountBeforeHide + 1 &&
-        (dock.snapshotForWindow(logicalWindow.id)!.width - 399.5).abs() <
-            0.001 &&
+        dock.snapshotForWindow(logicalWindow.id)!.width == 380 &&
         dock.snapshotForWindow(logicalWindow.id)!.navigatorOwnsInput &&
         bindings.textEditorEditable[editorHandle] == true &&
         bindings.textEditorSelectionLengths[editorHandle] == 0 &&
@@ -741,11 +765,65 @@ Future<void> _testContextDockNativeSiblingFocusAndWidth() async {
         paneLayout?.width == 460,
     'a narrow window hides the Dock instead of violating terminal minimum width',
   );
+  _expect(
+    !presenter.canMoveBoundary(TerminalContextDockBoundaryDirection.left),
+    'unprojected narrow Dock cannot be resized',
+  );
   fullSize = TerminalSplitLayoutSize(width: 800, height: 500);
   reconcile();
   _expect(
     identical(selectedNativeWindow.contentView, outer) && paneLayout != null,
     'restoring sufficient geometry reattaches the same bounded Dock resources',
+  );
+  for (var index = 0; index < 100; index++) {
+    await dispatcher.dispatch(TerminalActionId.moveContextDockBoundaryLeft);
+  }
+  _expect(
+    dock.snapshotForWindow(logicalWindow.id)!.width == 559 &&
+        paneLayout!.width == 240 &&
+        !presenter.canMoveBoundary(TerminalContextDockBoundaryDirection.left),
+    'boundary clamps at the terminal minimum before the configured Dock maximum',
+  );
+  for (var index = 0; index < 100; index++) {
+    await dispatcher.dispatch(TerminalActionId.moveContextDockBoundaryRight);
+  }
+  _expect(
+    dock.snapshotForWindow(logicalWindow.id)!.width == 220 &&
+        paneLayout!.width == 579 &&
+        !presenter.canMoveBoundary(TerminalContextDockBoundaryDirection.right),
+    'boundary clamps at the Dock minimum',
+  );
+  fullSize = TerminalSplitLayoutSize(width: 1200, height: 500);
+  reconcile();
+  for (var index = 0; index < 100; index++) {
+    await dispatcher.dispatch(TerminalActionId.moveContextDockBoundaryLeft);
+  }
+  _expect(
+    dock.snapshotForWindow(logicalWindow.id)!.width == 640 &&
+        paneLayout!.width == 559 &&
+        !outer.dividerDraggable &&
+        content.dividerDraggable,
+    'wide-window boundary stops at maximum without changing other divider policy',
+  );
+  dock.setWidth(logicalWindow.id, 380);
+  reconcile();
+  minimumTerminalSize = TerminalSplitLayoutSize(width: 750, height: 16);
+  reconcile();
+  for (var index = 0; index < 100; index++) {
+    await dispatcher.dispatch(TerminalActionId.moveContextDockBoundaryLeft);
+  }
+  _expect(
+    dock.snapshotForWindow(logicalWindow.id)!.width == 449 &&
+        paneLayout!.width == 750 &&
+        !presenter.canMoveBoundary(TerminalContextDockBoundaryDirection.left),
+    'boundary honors a large split-tree minimum instead of invalidating pane layout',
+  );
+  fullSize = TerminalSplitLayoutSize(width: 950, height: 500);
+  reconcile();
+  _expect(
+    selectedNativeWindow.contentView is! TwoPaneSplitView &&
+        paneLayout!.width == 950,
+    'Dock hides when there is insufficient room beside the split subtree',
   );
 
   actions.dispose();
@@ -1625,6 +1703,12 @@ Future<void> _testFocusedDividerCommandsUseCellGeometry() async {
   try {
     adapter.reconcile();
     final double initialFirstWidth = layouts[firstPane]!.width;
+    final TerminalSplitLayoutSize subtreeMinimum = adapter
+        .minimumLayoutSizeForTab(tab.id);
+    _expect(
+      subtreeMinimum.width == 26 && subtreeMinimum.height == 33,
+      'read-only minimum query composes nested horizontal and vertical subtree bounds',
+    );
     final double initialThirdWidth = layouts[third.id]!.width;
     final double initialFourthWidth = layouts[fourth.id]!.width;
     _expect(
@@ -1673,6 +1757,13 @@ Future<void> _testFocusedDividerCommandsUseCellGeometry() async {
     );
     state.setPaneZoom(tab.id, fourth.id);
     adapter.reconcile();
+    final TerminalSplitLayoutSize zoomMinimum = adapter.minimumLayoutSizeForTab(
+      tab.id,
+    );
+    _expect(
+      zoomMinimum.width == 8 && zoomMinimum.height == 16,
+      'zoomed external layout requires only one pane minimum',
+    );
     _expect(
       TerminalSplitDividerDirection.values.every(
         (TerminalSplitDividerDirection direction) =>
@@ -4999,6 +5090,7 @@ final class _HierarchyNativeBindings
         NativeTextEditorPresentationBindings,
         NativeTextEditorEscapeBindings,
         NativeSplitViewAppearanceBindings,
+        NativeSplitViewInteractionBindings,
         NativeSavePanelBindings,
         NativeSplitViewPositionBindings {
   int _nextHandle = (1 << 32) | 100;
@@ -5051,6 +5143,7 @@ final class _HierarchyNativeBindings
   final Map<int, List<int>> splitViewChildren = <int, List<int>>{};
   final Map<int, int> splitViewChildrenSetCounts = <int, int>{};
   final Map<int, double> splitViewFractions = <int, double>{};
+  final Map<int, bool> splitDividerDraggable = <int, bool>{};
   final Map<int, int> splitViewZoomedChildren = <int, int>{};
   final List<int> releaseOrder = <int>[];
   final List<String> terminationReplies = <String>[];
@@ -5513,6 +5606,12 @@ final class _HierarchyNativeBindings
   }
 
   @override
+  NativeCallResult splitViewSetDividerDraggable(int handle, bool draggable) {
+    splitDividerDraggable[handle] = draggable;
+    return const NativeCallResult.success();
+  }
+
+  @override
   NativeCallResult splitViewEqualize(int handle) {
     splitViewFractions[handle] = 0.5;
     return const NativeCallResult.success();
@@ -5562,6 +5661,7 @@ final class _HierarchyNativeBindings
     splitViewAxes.remove(handle);
     splitViewChildren.remove(handle);
     splitViewFractions.remove(handle);
+    splitDividerDraggable.remove(handle);
     splitViewZoomedChildren.remove(handle);
     return const NativeCallResult.success();
   }

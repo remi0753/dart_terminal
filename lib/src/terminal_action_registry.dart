@@ -33,6 +33,8 @@ enum TerminalActionId {
   togglePaneZoom('pane.toggle-zoom'),
   equalizeSplits('pane.equalize-splits'),
   toggleContextDock('view.toggle-context-dock'),
+  moveContextDockBoundaryLeft('view.move-context-dock-boundary-left'),
+  moveContextDockBoundaryRight('view.move-context-dock-boundary-right'),
   toggleHiddenFiles('view.toggle-hidden-files'),
   toggleProcessArguments('view.toggle-process-arguments'),
   searchFilesAndFolders('view.search-files-and-folders'),
@@ -426,6 +428,16 @@ final class TerminalActionCatalog {
         ),
         restoresTerminalFocusAfterInvocation: false,
       ),
+      action(
+        TerminalActionId.moveContextDockBoundaryLeft,
+        TerminalActionMenu.view,
+        restoresTerminalFocusAfterInvocation: false,
+      ),
+      action(
+        TerminalActionId.moveContextDockBoundaryRight,
+        TerminalActionMenu.view,
+        restoresTerminalFocusAfterInvocation: false,
+      ),
       action(TerminalActionId.toggleProcessArguments, TerminalActionMenu.view),
       action(
         TerminalActionId.searchFilesAndFolders,
@@ -558,6 +570,10 @@ TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
   TerminalActionId.equalizeSplits => TerminalActionMessageId.equalizeSplits,
   TerminalActionId.toggleContextDock =>
     TerminalActionMessageId.toggleContextDock,
+  TerminalActionId.moveContextDockBoundaryLeft =>
+    TerminalActionMessageId.moveContextDockBoundaryLeft,
+  TerminalActionId.moveContextDockBoundaryRight =>
+    TerminalActionMessageId.moveContextDockBoundaryRight,
   TerminalActionId.toggleHiddenFiles =>
     TerminalActionMessageId.toggleHiddenFiles,
   TerminalActionId.toggleProcessArguments =>

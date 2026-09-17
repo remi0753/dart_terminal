@@ -14,6 +14,7 @@ Future<void> runTerminalContextDockTests() async {
   await _testConfiguredWindowDefaultsAndReload();
   await _testActionFocusOwnershipAndAvailability();
   await _testNavigatorKeyRoutingNeverFallsThrough();
+  await _testBoundaryActionKeyRouting();
   await _testDirectoryTreeFollowsPaneAndCancelsHiddenWork();
   await _testDirectoryRevealRejectsExpansionCap();
   await _testProcessCoordinatorRefreshPrivacyAndCancellation();
@@ -2010,6 +2011,147 @@ Future<void> _testNavigatorKeyRoutingNeverFallsThrough() async {
     'only a later terminal-owned key may reach the terminal route',
   );
 
+  coordinator.dispose();
+  dock.dispose();
+  await harness.state.shutdown();
+}
+
+Future<void> _testBoundaryActionKeyRouting() async {
+  final _Harness harness = _Harness();
+  final TerminalWindowState window = await harness.createWindow();
+  final TerminalContextDockState dock = TerminalContextDockState(
+    initiallyVisible: true,
+  )..synchronize(harness.state);
+  var moveCount = 0;
+  var focusCount = 0;
+  var changeCount = 0;
+  final TerminalContextDockActionCoordinator coordinator =
+      TerminalContextDockActionCoordinator(
+        applicationState: harness.state,
+        dockState: dock,
+        focusNavigator: (_) => focusCount++,
+        focusTerminal: (_) => focusCount++,
+        canMoveBoundary: (direction) {
+          final TerminalContextDockWindowSnapshot snapshot = dock
+              .snapshotForWindow(window.id)!;
+          return snapshot.isVisible &&
+              (direction == TerminalContextDockBoundaryDirection.left
+                  ? snapshot.width < 640
+                  : snapshot.width > 220);
+        },
+        moveBoundary: (direction) {
+          final double width = dock.snapshotForWindow(window.id)!.width;
+          dock.setWidth(
+            window.id,
+            (width +
+                    (direction == TerminalContextDockBoundaryDirection.left
+                        ? 8
+                        : -8))
+                .clamp(220.0, 640.0)
+                .toDouble(),
+          );
+          moveCount++;
+          return true;
+        },
+        onChanged: () => changeCount++,
+      );
+  final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+    catalog: TerminalActionCatalog.standard(),
+    registrations: coordinator.registrations(),
+  );
+  await _expectExecuted(
+    dispatcher,
+    TerminalActionId.moveContextDockBoundaryLeft,
+  );
+  _expect(
+    dock.snapshotForWindow(window.id)!.width == 388 && focusCount == 0,
+    'terminal-owned boundary action changes only width',
+  );
+  await _expectExecuted(dispatcher, TerminalActionId.searchFilesAndFolders);
+  dock.appendQuery(window.id, 'keep');
+  dock.setResultCount(window.id, 30);
+  dock.setSelectedResultIndex(window.id, 9);
+  final int focusBaseline = focusCount;
+  TerminalKeyBindingEngine engine = TerminalKeyBindingEngine.standard();
+  final TerminalContextDockKeyController keys =
+      TerminalContextDockKeyController(
+        state: dock,
+        dispatcher: dispatcher,
+        keyBindings: () => engine,
+      );
+  const ModifierKeys control = ModifierKeys(ModifierKeys.controlBit);
+  final TerminalContextDockKeyResult right = await keys.handle(
+    window.id,
+    _key(keyCode: 124, modifiers: control),
+  );
+  final TerminalContextDockWindowSnapshot snapshot = dock.snapshotForWindow(
+    window.id,
+  )!;
+  _expect(
+    right.disposition ==
+            TerminalContextDockKeyDisposition.boundaryMoveDispatched &&
+        snapshot.width == 380 &&
+        snapshot.navigatorOwnsInput &&
+        snapshot.pane.query == 'keep' &&
+        snapshot.pane.selectedResultIndex == 9 &&
+        focusCount == focusBaseline &&
+        moveCount == 2,
+    'Navigator Control-arrow shares action without query, row, focus, or PTY input mutation',
+  );
+  await keys.handle(
+    window.id,
+    _key(keyCode: 123, modifiers: control, kind: AppKitKeyEventKind.up),
+  );
+  _expect(moveCount == 2, 'boundary key release must not move again');
+  engine = TerminalKeyBindingEngine.standard(
+    overrides: const <TerminalKeyBindingDefinition>[
+      TerminalKeyBindingDefinition.unbind(
+        chord: TerminalKeyBindingChord(
+          physicalKey: TerminalPhysicalKey.arrowLeft,
+          control: true,
+        ),
+      ),
+      TerminalKeyBindingDefinition.applicationAction(
+        chord: TerminalKeyBindingChord(
+          physicalKey: TerminalPhysicalKey.keyK,
+          control: true,
+        ),
+        applicationAction: TerminalActionId.moveContextDockBoundaryLeft,
+      ),
+    ],
+  );
+  await keys.handle(window.id, _key(keyCode: 123, modifiers: control));
+  _expect(moveCount == 2, 'Navigator respects unbound boundary default');
+  await keys.handle(window.id, _key(keyCode: 40, modifiers: control));
+  _expect(
+    moveCount == 3 && dock.snapshotForWindow(window.id)!.width == 388,
+    'Navigator honors alternate configured boundary chord',
+  );
+  dock.setWidth(window.id, 640);
+  _expect(
+    (await dispatcher.dispatch(TerminalActionId.moveContextDockBoundaryLeft))
+                .disposition ==
+            TerminalActionDispatchDisposition.unavailable &&
+        moveCount == 3,
+    'maximum endpoint is unavailable without changing width',
+  );
+  dock.setWidth(window.id, 220);
+  _expect(
+    (await dispatcher.dispatch(TerminalActionId.moveContextDockBoundaryRight))
+                .disposition ==
+            TerminalActionDispatchDisposition.unavailable &&
+        moveCount == 3,
+    'minimum endpoint is unavailable without changing width',
+  );
+  await _expectExecuted(dispatcher, TerminalActionId.toggleContextDock);
+  _expect(
+    (await dispatcher.dispatch(TerminalActionId.moveContextDockBoundaryLeft))
+                .disposition ==
+            TerminalActionDispatchDisposition.unavailable &&
+        moveCount == 3 &&
+        changeCount >= 3,
+    'hidden Dock is not resized or implicitly shown',
+  );
   coordinator.dispose();
   dock.dispose();
   await harness.state.shutdown();

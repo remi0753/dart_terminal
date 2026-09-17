@@ -27,12 +27,14 @@
 - [ ] Shift-Command-GでGo Toへ移るとtreeを保ったまま独立queryを入力でき、current subtree内の深い一致file/folderまで必要なancestorだけが開いてselectionが移る。対象folderはReturnまで閉じている。
 - [ ] Shift-Command-MでMoveへ移るとquery caretが消え、文字、Delete、Command-AはqueryもPTYも変更せず、Up/Down/Page Up/Page Downだけがselectionを動かす。
 - [ ] Terminal／Navigatorのどちらがfocus中でもShift-Command-Hを押すたびdot-prefixed file/folderとそのsubtreeが一括で非表示／表示になり、focus、query、expanded state、PTY inputは変わらない。
+- [ ] Terminal／Navigatorのどちらがfocus中でもControl-LeftでDockが1文字幅ずつ広がり、Control-Rightで狭まる。境界のmouse dragとresize cursorは無効で、terminalのfont／倍率は変わらず、列数と折り返しが横幅に追従する。query／selection／focusは保たれ、上下限では停止する。
+  macOSの操作スペース移動にControl-arrowが割り当てられている場合はシステム側を解除するかapplication keybindを変更して確認する。
 - [ ] Search／Go Toの文字入力、Delete、Command-Aは現在modeのqueryだけを変え、modeを往復しても両queryを個別に保持する。
 - [ ] 空queryでReturnまたはCommand-Rightを押すとfolderがDock内で展開し、同じfolder上の再度のReturnで閉じる。自動`cd`やcommand実行は起きない。
 - [ ] Command-Leftでsubtreeを畳み、selectionがvisible parentへ戻る。
 - [ ] Escapeを1回押すとquery/resultを保持したままterminalへ戻り、Dockが`Mode: Terminal`を表示する。再度Shift-Command-Fで同じcontextへ戻る。
 - [ ] Dock表示中でもterminal focusなら通常のterminal key、selection、scrollが従来どおり動作する。
-- [ ] 初回表示のDockは従来より広い380 ptで、狭いwindow、resize、divider drag、fullscreen、tab/pane切替、Dock hide/showでもterminalと重ならず、focused paneのcwdへ追従する。
+- [ ] 初回表示のDockは従来より広い380 ptで、狭いwindow、resize、keyboard境界操作、fullscreen、tab/pane切替、Dock hide/showでもterminalと重ならず、focused paneのcwdへ追従する。
 
 ## Tree、search、path handoff
 

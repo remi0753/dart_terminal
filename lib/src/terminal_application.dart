@@ -4670,6 +4670,11 @@ final class TerminalApplication {
             terminalViewForPane: (PaneId paneId) =>
                 hierarchy?.resourcesForPane(paneId)?.view,
             contentSnapshot: createdDockProcess.snapshotForWindow,
+            cellWidthForPane: (PaneId paneId) =>
+                owners[paneId]?.surface.fontMetrics.cellWidth ?? double.nan,
+            minimumTerminalSizeForTab: (TerminalTabId tabId) =>
+                hierarchy?.minimumLayoutSizeForTab(tabId) ??
+                TerminalSplitLayoutSize(width: 240, height: 16),
             appearanceForPane: (PaneId paneId) {
               final _TerminalHierarchyProductPane? owner = owners[paneId];
               if (owner == null || owner.surface.isDisposed) return null;
@@ -4967,6 +4972,8 @@ final class TerminalApplication {
             dockState: createdContextDockState,
             focusNavigator: createdDockPresenter.focusNavigator,
             focusTerminal: createdDockPresenter.focusTerminal,
+            canMoveBoundary: createdDockPresenter.canMoveBoundary,
+            moveBoundary: createdDockPresenter.moveBoundary,
             shouldConsumeNavigatorRequest: () =>
                 createdDockPresenter.shouldConsumeNavigatorRequest,
             canFocusNavigator: () {
@@ -5739,6 +5746,7 @@ final class TerminalApplication {
       contextDockKeyController = TerminalContextDockKeyController(
         state: createdContextDockState,
         dispatcher: dispatcher,
+        keyBindings: () => configurationAuthority.keyBindingEngine,
         onChanged: () {
           createdDockDirectory.synchronize();
           reconcileInteractiveHierarchy();
@@ -8721,6 +8729,101 @@ final class TerminalApplication {
       }
 
       expectContextDockAppearance();
+      final TwoPaneSplitView dockOuter =
+          contextDockWindow.contentView! as TwoPaneSplitView;
+      final View dockTerminalRoot = dockOuter.firstView!;
+      final View dockContentRoot = dockOuter.secondView!;
+      final double dockWidthBeforeKeys = contextDockState
+          .snapshotForWindow(initialWindow.id)!
+          .width;
+      final TerminalFontCatalogMetrics dockFontBefore =
+          initialOwner.surface.fontMetrics;
+      final TerminalLiveMetalSurfaceSnapshot dockSurfaceBefore = initialOwner
+          .surface
+          .snapshot();
+      final int dockResizeWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
+      for (var index = 0; index < 3; index++) {
+        final TerminalTextInputRouteResult routed = initialOwner.textRouter
+            .route(
+              TerminalTextInputKeyEvent(
+                clientId: initialOwner.client.clientId,
+                generation: initialOwner.textRouter.lastGeneration + 1,
+                monotonicNanoseconds: eventTimestamp++,
+                kind: TerminalTextInputKeyKind.down,
+                keyCode: 123,
+                modifiers: const ModifierKeys(ModifierKeys.controlBit),
+                isRepeat: index > 0,
+                characters: '\uF702',
+                charactersIgnoringModifiers: '\uF702',
+              ),
+            );
+        _expectLifecycle(
+          routed.disposition == TerminalTextInputRouteDisposition.rawKey,
+          'terminal Control+Left did not cross the ordinary raw-key router',
+        );
+        await waitFor(
+          () =>
+              (contextDockState.snapshotForWindow(initialWindow.id)!.width -
+                      (dockWidthBeforeKeys +
+                          dockFontBefore.cellWidth * (index + 1)))
+                  .abs() <
+              0.000001,
+          'terminal Control+Left did not move the Dock boundary by one fixed logical cell',
+        );
+      }
+      await waitFor(
+        () {
+          final TerminalLiveMetalSurfaceSnapshot current = initialOwner.surface
+              .snapshot();
+          final TerminalGridSize expected = initialOwner.surface.gridSizeFor(
+            logicalWidth: initialOwner.layout!.width,
+            logicalHeight: initialOwner.layout!.height,
+          );
+          return current.columns == expected.columns &&
+              current.rows == expected.rows &&
+              current.columns < dockSurfaceBefore.columns &&
+              current.acceptedFrameCount > dockSurfaceBefore.acceptedFrameCount;
+        },
+        'Dock resize did not converge to a narrower grid and fresh Metal frame',
+      );
+      final TerminalLiveMetalSurfaceSnapshot dockSurfaceNarrow = initialOwner
+          .surface
+          .snapshot();
+      _expectLifecycle(
+        !dockOuter.dividerDraggable &&
+            initialOwner.surface.fontMetrics.cellWidth ==
+                dockFontBefore.cellWidth &&
+            initialOwner.surface.fontMetrics.cellHeight ==
+                dockFontBefore.cellHeight &&
+            initialOwner.surface.fontMetrics.pointSize ==
+                dockFontBefore.pointSize &&
+            dockSurfaceNarrow.scale16_16 == dockSurfaceBefore.scale16_16 &&
+            dockSurfaceNarrow.rows == dockSurfaceBefore.rows &&
+            dockSurfaceNarrow.viewportWidth < dockSurfaceBefore.viewportWidth &&
+            dockSurfaceNarrow.viewportWidth ==
+                (initialOwner.layout!.width *
+                        dockSurfaceNarrow.scale16_16 /
+                        65536)
+                    .ceil() &&
+            identical(contextDockWindow.contentView, dockOuter) &&
+            identical(dockOuter.firstView, dockTerminalRoot) &&
+            identical(dockOuter.secondView, dockContentRoot) &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                dockResizeWriteBaseline,
+        'Dock resize stretched typography, changed focus/owners, or wrote key bytes',
+      );
+      initialOwner.pane.insertText(
+        r'test "$(stty size)" = "' +
+            '${dockSurfaceNarrow.rows} ${dockSurfaceNarrow.columns}' +
+            r'" && printf "\n__DT_DOCK_RESIZE_%s__\n" PTY_EXACT',
+      );
+      await initialOwner.pane.submit();
+      await _waitForAsciiMarker(initialSession, '__DT_DOCK_RESIZE_PTY_EXACT__');
+      await _waitForAsciiMarker(initialSession, prompt);
+      final int dockPostResizeWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
       _expectLifecycle(
         contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
             contextDockPresenter
@@ -8732,7 +8835,7 @@ final class TerminalApplication {
                 .text
                 .contains('Hidden entries: Shown') &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
-                dockToggleWriteBaseline,
+                dockPostResizeWriteBaseline,
         'Context Dock toggle did not preserve or identify terminal input '
         'ownership',
       );
@@ -8758,7 +8861,7 @@ final class TerminalApplication {
                 .text
                 .contains('Hidden entries: Hidden') &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
-                dockToggleWriteBaseline,
+                dockPostResizeWriteBaseline,
         'terminal-owned hidden-entry toggle changed focus or wrote to the PTY',
       );
       final int navigatorZeroWriteBaseline =
@@ -8812,6 +8915,65 @@ final class TerminalApplication {
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
                 navigatorZeroWriteBaseline,
         'Navigator-owned hidden-entry toggle changed focus or wrote to the PTY',
+      );
+      final TerminalContextDockWindowSnapshot navigatorBeforeResize =
+          contextDockState.snapshotForWindow(initialWindow.id)!;
+      final TextEditorSnapshot navigatorEditorBeforeResize =
+          contextDockPresenter.nativeEditorSnapshotForWindow(initialWindow.id)!;
+      for (var index = 0; index < 3; index++) {
+        _injectKeyEventForTesting(
+          application,
+          contextDockWindow,
+          keyCode: 124,
+          modifiers: ModifierKeys.controlBit,
+          characters: '\uF703',
+          charactersIgnoringModifiers: '\uF703',
+          monotonicNanoseconds: eventTimestamp++,
+        );
+        await waitFor(
+          () =>
+              (contextDockState.snapshotForWindow(initialWindow.id)!.width -
+                      (dockWidthBeforeKeys +
+                          dockFontBefore.cellWidth * (2 - index)))
+                  .abs() <
+              0.000001,
+          'Navigator Control+Right did not move the same Dock boundary',
+        );
+      }
+      await waitFor(
+        () =>
+            initialOwner.surface.snapshot().columns ==
+            dockSurfaceBefore.columns,
+        'Navigator boundary resize did not restore the terminal columns',
+      );
+      final TerminalContextDockWindowSnapshot navigatorAfterResize =
+          contextDockState.snapshotForWindow(initialWindow.id)!;
+      _expectLifecycle(
+        navigatorAfterResize.navigatorOwnsInput &&
+            navigatorAfterResize.pane.query ==
+                navigatorBeforeResize.pane.query &&
+            navigatorAfterResize.pane.selectedResultIndex ==
+                navigatorBeforeResize.pane.selectedResultIndex &&
+            navigatorAfterResize.pane.navigatorMode ==
+                navigatorBeforeResize.pane.navigatorMode &&
+            contextDockPresenter
+                    .nativeEditorSnapshotForWindow(initialWindow.id)!
+                    .selection ==
+                navigatorEditorBeforeResize.selection &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.dartOnly &&
+            initialOwner.surface.snapshot().scale16_16 ==
+                dockSurfaceBefore.scale16_16 &&
+            initialOwner.surface.fontMetrics.cellWidth ==
+                dockFontBefore.cellWidth &&
+            identical(contextDockWindow.contentView, dockOuter) &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                navigatorZeroWriteBaseline,
+        'Navigator boundary resize changed query, selection, focus, font, scale, owners, or PTY input',
+      );
+      stdout.writeln(
+        'TERMINAL_CONTEXT_DOCK_RESIZE_TEST drag_disabled=true terminal_keys=true '
+        'navigator_keys=true fixed_font=true fixed_scale=true viewport=true columns=true '
+        'pty_size=true focus=true zero_key_writes=true',
       );
       final TerminalContextDockDirectorySnapshot treeBeforeToggle =
           contextDockDirectory.snapshotForWindow(initialWindow.id)!;
@@ -22677,13 +22839,19 @@ final class TerminalKeyEventRouter {
     TerminalKeyEvent event,
     TerminalPane pane,
   ) {
-    if (event.eventType == TerminalKeyEventType.release) {
-      return _encode(event, pane);
-    }
     final TerminalKeyBindingResolution resolution =
         (_configurationAuthority?.keyBindingEngine ?? _bindingEngine).resolve(
           event,
         );
+    if (event.eventType == TerminalKeyEventType.release) {
+      if (resolution.applicationAction ==
+              TerminalActionId.moveContextDockBoundaryLeft ||
+          resolution.applicationAction ==
+              TerminalActionId.moveContextDockBoundaryRight) {
+        return TerminalKeyRouteResult.ignored;
+      }
+      return _encode(event, pane);
+    }
     switch (resolution.kind) {
       case TerminalKeyBindingResolutionKind.action:
         final TerminalActionId? applicationAction =

@@ -39,6 +39,8 @@ enum TerminalActionMessageId {
   togglePaneZoom,
   equalizeSplits,
   toggleContextDock,
+  moveContextDockBoundaryLeft,
+  moveContextDockBoundaryRight,
   toggleHiddenFiles,
   toggleProcessArguments,
   searchFilesAndFolders,
@@ -791,6 +793,14 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
           'Toggle Hidden Files and Folders',
           <String>['dotfile', 'directory', 'navigator', 'visibility'],
         ),
+        TerminalActionMessageId.moveContextDockBoundaryLeft: _action(
+          'Move Context Dock Boundary Left',
+          <String>['sidebar', 'resize', 'widen', 'navigator'],
+        ),
+        TerminalActionMessageId.moveContextDockBoundaryRight: _action(
+          'Move Context Dock Boundary Right',
+          <String>['sidebar', 'resize', 'narrow', 'navigator'],
+        ),
         TerminalActionMessageId.toggleProcessArguments: _action(
           'Show Process Arguments',
           <String>['argv', 'command', 'privacy', 'hide', 'show'],
@@ -977,6 +987,14 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
       TerminalActionMessageId.toggleHiddenFiles: _action(
         '隠しファイルとフォルダの表示を切り替え',
         <String>['ドットファイル', 'ディレクトリ', 'ナビゲータ', '表示'],
+      ),
+      TerminalActionMessageId.moveContextDockBoundaryLeft: _action(
+        'コンテキストDock境界を左へ移動',
+        <String>['サイドバー', 'サイズ変更', '広げる', 'ナビゲータ'],
+      ),
+      TerminalActionMessageId.moveContextDockBoundaryRight: _action(
+        'コンテキストDock境界を右へ移動',
+        <String>['サイドバー', 'サイズ変更', '狭める', 'ナビゲータ'],
       ),
       TerminalActionMessageId.toggleProcessArguments: _action(
         'プロセスの引数を表示',

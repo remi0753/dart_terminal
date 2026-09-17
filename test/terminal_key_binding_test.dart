@@ -40,7 +40,7 @@ void _testOrderedConfigurationOverrides() {
         ],
       );
   _expect(
-    engine.definitionCount == 13 &&
+    engine.definitionCount == 15 &&
         engine.resolve(_event(TerminalPhysicalKey.keyD, control: true)).kind ==
             TerminalKeyBindingResolutionKind.noMatch &&
         engine
@@ -228,7 +228,7 @@ void _testOverrideUnbindAndPassthrough() {
     ],
   );
   _expect(
-    unbound.activeBindingCount == 8 &&
+    unbound.activeBindingCount == 10 &&
         unbound.resolve(_event(TerminalPhysicalKey.keyD, control: true)).kind ==
             TerminalKeyBindingResolutionKind.noMatch,
     'unbind removes the inherited binding and leaves no match',

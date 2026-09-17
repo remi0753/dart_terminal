@@ -2496,6 +2496,16 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
   );
   _expect(
     RegExp(
+          r'^TERMINAL_CONTEXT_DOCK_RESIZE_TEST drag_disabled=true terminal_keys=true '
+          r'navigator_keys=true fixed_font=true fixed_scale=true viewport=true columns=true '
+          r'pty_size=true focus=true zero_key_writes=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'native Context Dock omitted keyboard boundary resize and fixed-scale PTY/Metal acceptance',
+  );
+  _expect(
+    RegExp(
               r'^TERMINAL_SESSION_SHUTDOWN pane=[1-4] session=[1-4]:1 '
               r'process_id=[1-9][0-9]* disposition=clean '
               r'termination_observed=true cleanup_completed=true$',
